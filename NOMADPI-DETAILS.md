@@ -466,6 +466,25 @@ ctl.!default {
 | 1 | vc4-hdmi-0 | HDMI port 1 (disconnected) | `hw:vc4hdmi0,0` |
 | 2 | vc4-hdmi-1 | HDMI port 2 (touchscreen) | `hdmiout` (default) |
 
+### Switching Audio Output
+
+**Per-app (VLC command line):**
+```bash
+# Play through HDMI (default)
+ssh nomadpi '/usr/local/bin/vlc-root-wrapper /path/to/video.mp4'
+
+# Play through HDMI (explicit)
+ssh nomadpi '/usr/local/bin/vlc-root-wrapper --aout alsa --alsa-audio-device hdmiout /path/to/video.mp4'
+
+# Play through Yamaha USB mixer
+ssh nomadpi '/usr/local/bin/vlc-root-wrapper --aout alsa --alsa-audio-device usbmixer /path/to/video.mp4'
+```
+
+**VLC GUI:** Audio → Audio Device menu lets you switch output while playing.
+
+**System-wide default** (changes what all apps use when no device is specified):
+Edit `/etc/asound.conf` and change the `pcm.!default` slave from `hdmiout_raw` to `"hw:MGXU,0"` (or vice versa).
+
 ### Testing Audio
 ```bash
 # Test HDMI audio
