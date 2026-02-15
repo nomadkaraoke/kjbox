@@ -1,8 +1,13 @@
-# Claude Code Instructions for kj-tools
+# Claude Code Instructions for kjbox
 
-## NomadPi Raspberry Pi Device
+## Overview
 
-This repository contains documentation and configuration for **NomadPi**, a Raspberry Pi 4 running DietPi and configured for Nomad Karaoke live events (video playback and AV equipment connection).
+This repository (`kjbox`) contains documentation and software for **NomadPi**, a Raspberry Pi 4 running DietPi configured for Nomad Karaoke live events (video playback, AV equipment connection, and karaoke show management).
+
+### Repository Contents
+- **NOMADPI-DETAILS.md** - Complete device configuration reference (hardware, network, audio, display, services)
+- **NETWORK-CONFIG-BACKUP.md** - Tailscale VPN and Cloudflare tunnel configuration backup
+- **kj-controller/** - KJ Remote Controller web app for managing karaoke playback
 
 ### 📋 Documentation Maintenance - CRITICAL
 

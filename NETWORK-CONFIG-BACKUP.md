@@ -1,7 +1,7 @@
 # NomadPi Network Configuration Backup
 
 **Date:** 2026-02-15
-**Source:** Extracted from FoxTag1 configuration before cleanup
+**Source:** Extracted from FoxTag1 configuration before device repurposing for Nomad Karaoke
 
 ---
 
@@ -9,15 +9,15 @@
 
 ### Current Status
 - **Installed:** System-wide (DietPi package, not Docker)
-- **Service:** `tailscaled.service` (already running)
-- **Current IP:** `[Private Tailscale IP]`
+- **Service:** `tailscaled.service` (running)
+- **Current IP:** `[Private Tailscale IP]` (see NOMADPI-DETAILS.md for actual IP)
 - **Account:** beveradb@github
-- **Status:** ✅ Active and will persist after FoxTag cleanup
+- **Status:** Active - persisted through FoxTag cleanup and device repurposing
 
 ### Configuration
-Tailscale is installed at the system level via DietPi and is **not** affected by removing the FoxTag Docker containers. No action needed - it will continue working.
+Tailscale is installed at the system level via DietPi. It was **not** affected by removing the FoxTag Docker containers.
 
-**Note:** The hostname in Tailscale will automatically update once we change the system hostname from "foxtag1" to "nomadpi".
+**Note:** The hostname in Tailscale updated automatically when the system hostname was changed from "foxtag1" to "nomadpi" on 2026-02-15.
 
 ### Useful Commands
 ```bash
@@ -35,10 +35,10 @@ ssh nomadpi 'systemctl status tailscaled'
 
 ## ☁️ Cloudflare Tunnel
 
-### Current Configuration (FoxTag)
+### Previous Configuration (FoxTag - now removed)
 - **Tunnel ID:** `[REDACTED - stored securely]`
-- **Domain:** kiosk-1.foxtag.us
-- **Service:** Forwarding to http://127.0.0.1:3000
+- **Domain:** kiosk-1.foxtag.us (no longer in use)
+- **Service:** Was forwarding to http://127.0.0.1:3000
 
 ### Tunnel Token
 ```
@@ -97,9 +97,9 @@ ssh nomadpi 'systemctl enable --now cloudflared'
 
 ## 🔑 Important Notes
 
-1. **Tailscale is safe** - It's installed system-wide and will continue working after we remove FoxTag containers.
+1. **Tailscale** - Installed system-wide and continued working through the FoxTag cleanup. Currently active on NomadPi.
 
-2. **Cloudflare Tunnel will stop** when we remove the `foxtag-cloudflared` container. You can:
+2. **Cloudflare Tunnel** - The `foxtag-cloudflared` container was removed on 2026-02-15 during device repurposing. To restore remote access:
    - Reuse the same token/tunnel by updating the Cloudflare dashboard configuration
    - Or create a new tunnel specifically for Nomad Karaoke
 

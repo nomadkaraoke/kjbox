@@ -240,25 +240,34 @@ ExecStart=-/sbin/agetty -a root -J %I $TERM
 @lxpanel --profile LXDE
 @pcmanfm --desktop --profile LXDE
 @xscreensaver -no-splash
+xhost +SI:localuser:dietpi
 ```
+**Note:** The `xhost` line grants the `dietpi` user X11 display access, required for VLC (which runs as `dietpi` via the root-user workaround).
 
 ### Boot Configuration
-File: `/boot/config.txt`
+File: `/boot/config.txt` (active settings, comments removed)
 ```
-hdmi_drive=2              # Use HDMI audio
-hdmi_blanking=1           # Enable screen blanking
-disable_overscan=1        # Disable overscan
+hdmi_blanking=1           # Enable screen blanking (standby after 10 min)
+disable_overscan=1        # No overscan borders
 gpu_mem_256=76            # GPU memory allocation
 gpu_mem_512=76
 gpu_mem_1024=76
-disable_splash=1          # No splash screen
+disable_splash=1          # No boot splash screen
 dtparam=audio=on          # Enable audio
-enable_uart=0             # UART disabled
+enable_uart=0             # UART disabled (saves power, avoids WiFi freq conflict)
+dtparam=sd_poll_once      # Reduce SD card polling (less CPU usage)
+temp_limit=75             # Thermal throttle at 75C
+initial_turbo=20          # 20 second turbo at boot
 arm_64bit=1               # 64-bit kernel
 dtoverlay=vc4-kms-v3d     # KMS video driver
-temp_limit=75             # Temperature limit
-initial_turbo=20          # Initial turbo boost
 ```
+
+File: `/boot/cmdline.txt` (appended parameters)
+```
+drm.edid_firmware=HDMI-A-2:edid/nomadpi-hdmi.bin  # Custom EDID for HDMI audio
+```
+
+**Note:** The firmware prepends its own parameters to cmdline.txt. Our custom parameters are appended after the firmware defaults.
 
 ### X11 Session
 - **Started via:** xinit/startx (via wrapper script)
@@ -366,8 +375,13 @@ VLC refuses to run as root user for security reasons. On NomadPi (which runs des
 #!/bin/bash
 # Wrapper to run VLC as dietpi user from root desktop
 export DISPLAY=:0
-export XAUTHORITY=/home/dietpi/.Xauthority
-exec sudo -u dietpi /usr/bin/vlc "$@"
+xhost +SI:localuser:dietpi 2>/dev/null || true
+if [ ! -d /run/user/1000 ]; then
+    mkdir -p /run/user/1000
+    chown dietpi:dietpi /run/user/1000
+    chmod 700 /run/user/1000
+fi
+exec sg render -c "sudo -u dietpi XDG_RUNTIME_DIR=/run/user/1000 DISPLAY=:0 /usr/bin/vlc \"$@\""
 ```
 
 **Desktop Launcher:** `/usr/share/applications/vlc.desktop` is configured to use the wrapper.
@@ -377,14 +391,92 @@ exec sudo -u dietpi /usr/bin/vlc "$@"
 # From desktop/terminal as root
 ssh nomadpi '/usr/local/bin/vlc-root-wrapper'
 
-# Direct as dietpi user
-ssh nomadpi 'sudo -u dietpi DISPLAY=:0 XAUTHORITY=/home/dietpi/.Xauthority vlc'
+# Direct as dietpi user (need xhost grant first)
+ssh nomadpi 'DISPLAY=:0 xhost +SI:localuser:dietpi && sg render -c "sudo -u dietpi XDG_RUNTIME_DIR=/run/user/1000 DISPLAY=:0 vlc"'
 ```
 
 **User Configuration:**
 - VLC runs as: `dietpi` user
-- Groups: `dietpi`, `video`, `audio`
-- X Authority: `/home/dietpi/.Xauthority` (copied from root)
+- Groups: `dietpi`, `video`, `audio`, `render`
+- X11 access via `xhost +SI:localuser:dietpi` (granted at LXDE autostart)
+- XDG_RUNTIME_DIR: `/run/user/1000` (created by wrapper if missing)
+
+## 🔊 Audio Configuration
+
+### HDMI Audio Setup
+HDMI audio requires a custom EDID file because the 7" touchscreen provides corrupt EDID data (bad checksum), which prevents the kernel from detecting HDMI audio capabilities.
+
+**Custom EDID:** `/lib/firmware/edid/nomadpi-hdmi.bin`
+- 256-byte EDID (128-byte base + 128-byte CEA extension)
+- Declares 1920x1080@60 preferred timing, monitor name "NomadPi"
+- **Critical:** Includes HDMI Vendor Specific Data Block (VSDB) with IEEE OUI 0x000C03
+  - Without VSDB, kernel treats output as DVI (no audio support)
+  - With VSDB, kernel sets `VC4_HDMI_RAM_PACKET_ENABLE` bit for HDMI audio
+- Audio: LPCM 2ch (32/44.1/48kHz, 16/20/24bit), Speaker Allocation FL/FR
+- Loaded via kernel parameter: `drm.edid_firmware=HDMI-A-2:edid/nomadpi-hdmi.bin`
+
+### ALSA Configuration
+File: `/etc/asound.conf`
+```
+# HDMI audio output via vc4-hdmi-1 (HDMI-A-2 port)
+pcm.hdmiout_raw {
+    type iec958
+    slave {
+        pcm "hw:vc4hdmi1,0"
+        format IEC958_SUBFRAME_LE
+    }
+    status [ 0x04 0x00 0x00 0x01 ]
+}
+
+pcm.hdmiout {
+    type plug
+    slave {
+        pcm hdmiout_raw
+    }
+}
+
+# Yamaha MG-XU USB mixer
+pcm.usbmixer {
+    type plug
+    slave {
+        pcm "hw:MGXU,0"
+    }
+}
+
+# Default: HDMI output
+pcm.!default {
+    type plug
+    slave {
+        pcm hdmiout_raw
+    }
+}
+
+ctl.!default {
+    type hw
+    card vc4hdmi1
+}
+```
+
+**Why the iec958 plugin is needed:** On kernel 6.12+, the vc4-hdmi MAI PCM device only exposes `IEC958_SUBFRAME_LE` format (raw HDMI audio frames). The `iec958` ALSA plugin handles encoding standard PCM audio (S16_LE etc.) into IEC958 subframes. The `plug` plugin on top handles sample rate and format conversion.
+
+### Audio Devices
+| Card | Name | Type | ALSA Device |
+|------|------|------|-------------|
+| 0 | MG-XU | Yamaha USB mixer | `usbmixer` or `hw:MGXU,0` |
+| 1 | vc4-hdmi-0 | HDMI port 1 (disconnected) | `hw:vc4hdmi0,0` |
+| 2 | vc4-hdmi-1 | HDMI port 2 (touchscreen) | `hdmiout` (default) |
+
+### Testing Audio
+```bash
+# Test HDMI audio
+ssh nomadpi 'speaker-test -D hdmiout -c 2 -t sine -f 440 -l 1'
+
+# Test USB mixer audio
+ssh nomadpi 'speaker-test -D usbmixer -c 2 -t sine -f 440 -l 1'
+
+# Test default output (HDMI)
+ssh nomadpi 'speaker-test -c 2 -t sine -f 440 -l 1'
+```
 
 ## 📦 Installed DietPi Software
 
@@ -459,9 +551,21 @@ NomadPi is configured for Nomad Karaoke live events:
 ### Hardware
 - **7" Touchscreen Display:**
   - **Touch Input:** WingCool Inc. TouchScreen (USB HID device, ID 27c6:0818)
-  - **Video Output:** Connected via HDMI-2 at 1024x768
-  - **Note:** This is a USB touchscreen, not a DSI ribbon cable display
+  - **Video Output:** Connected via HDMI-2 (micro-HDMI port) at 1920x1080 (via custom EDID)
+  - **Built-in speakers:** Yes (small, via HDMI audio)
+  - **Note:** This is a USB touchscreen with HDMI video, not a DSI ribbon cable display
+  - **Note:** The touchscreen has corrupt EDID data; custom EDID override is required (see Audio Configuration)
+- **External Display/Projector:** Connects to HDMI-1 (main full-size HDMI) for audience-facing output with speakers/soundbar
+- **Yamaha MG-XU USB Mixer:** For professional audio output
 - **USB Hub:** VIA Labs Hub (for peripherals)
+
+### KJ Controller
+A web-based karaoke show management app is available in this repo at `kj-controller/`. It provides:
+- Remote control interface accessible from any browser on the local network
+- YouTube video downloading via yt-dlp
+- Dual VLC instance management (karaoke + filler music with crossfading)
+- External screen synchronization via WebSocket
+- See [kj-controller/README.md](kj-controller/README.md) for full documentation
 
 ### Chromium Kiosk Watchdog (DISABLED)
 **Status:** **DISABLED** as of 2026-02-15
@@ -541,7 +645,9 @@ ssh nomadpi 'apt update && apt upgrade -y'
 ```
 
 **Docker Container Updates:**
-Automatic via Watchtower (checks every 60 seconds)
+```bash
+ssh nomadpi 'docker compose pull && docker compose up -d'
+```
 
 ### Backup & Restore
 ```bash
@@ -619,10 +725,10 @@ ssh nomadpi 'DISPLAY=:0 xrandr --listmonitors'
 ssh nomadpi 'DISPLAY=:0 scrot /tmp/screenshot.png'
 
 # Copy to local machine
-scp foxtag1:/tmp/screenshot.png ~/Desktop/
+scp nomadpi:/tmp/screenshot.png ~/Desktop/
 
 # Take screenshot and copy in one command
-ssh nomadpi 'DISPLAY=:0 scrot /tmp/screen.png' && scp foxtag1:/tmp/screen.png ~/Desktop/
+ssh nomadpi 'DISPLAY=:0 scrot /tmp/screen.png' && scp nomadpi:/tmp/screen.png ~/Desktop/
 ```
 
 ### VNC Not Working
@@ -661,11 +767,13 @@ ssh nomadpi 'systemctl status docker'
 ssh nomadpi 'docker ps -a'
 
 # Restart containers
-ssh nomadpi 'cd /opt/foxtag && docker compose restart'
+ssh nomadpi 'docker compose restart'
 
 # View container logs
-ssh nomadpi 'docker logs --tail 100 foxtag-backend'
+ssh nomadpi 'docker logs --tail 100 <container-name>'
 ```
+
+**Note:** As of 2026-02-15, no Docker containers are running. Docker is available for future services.
 
 ### Network Issues
 ```bash
@@ -736,10 +844,16 @@ ssh nomadpi 'journalctl -u bluetooth -f'
 
 ### Display & Desktop
 - `/etc/X11/xinit/xinitrc` - X session startup
-- `/etc/xdg/lxsession/LXDE/autostart` - LXDE autostart
+- `/etc/xdg/lxsession/LXDE/autostart` - LXDE autostart (includes xhost grant for dietpi)
 - `/var/log/Xorg.0.log` - X server log
 - `/usr/local/bin/startx-single` - Custom X startup wrapper (prevents multiple sessions)
 - `/boot/dietpi/dietpi-login` - DietPi login script (modified to use startx-single)
+
+### Audio & Video
+- `/etc/asound.conf` - ALSA configuration (HDMI default, iec958 plugin chain)
+- `/lib/firmware/edid/nomadpi-hdmi.bin` - Custom EDID with HDMI VSDB for audio support
+- `/usr/local/bin/vlc-root-wrapper` - VLC launcher wrapper (runs VLC as dietpi user)
+- `/usr/share/applications/vlc.desktop` - VLC desktop launcher (uses wrapper)
 
 ### VNC
 - `/root/.vnc/config.d/vncserver-x11` - Service Mode config
@@ -747,11 +861,15 @@ ssh nomadpi 'journalctl -u bluetooth -f'
 - `/lib/systemd/system/vncserver-x11-serviced.service` - Service Mode systemd unit
 - `/etc/systemd/system/vncserver.service` - Virtual Mode systemd unit (DietPi wrapper)
 
-
 ### Docker
 - `/var/run/docker.sock` - Docker socket
 - `/mnt/dietpi_userdata/docker-data` - Docker data root
 - `/etc/systemd/system/docker.service.d/` - Docker service overrides
+
+### Data & Content
+- `/opt/nomad/` - Nomad Karaoke data directory (~19GB)
+  - `NomadBranding/` - Branding assets
+  - `Tracks-PublicShare/` - Karaoke video tracks (MP4-720p)
 
 ## 🎓 Common Tasks
 
@@ -767,7 +885,7 @@ sudo systemctl restart vncserver-x11-serviced
 # On your local machine
 cat ~/.ssh/id_ed25519.pub
 
-# On FoxTag1
+# On NomadPi
 ssh nomadpi
 echo "your-public-key-here" >> ~/.ssh/authorized_keys
 ```
@@ -789,8 +907,8 @@ SOFTWARE_CHROMIUM_RES_Y=1080
 # System logs
 ssh nomadpi 'journalctl -f'
 
-# Docker container logs
-ssh nomadpi 'docker logs -f foxtag-backend'
+# Docker container logs (if any containers running)
+ssh nomadpi 'docker logs -f <container-name>'
 
 # DietPi logs
 ssh nomadpi 'ls /var/tmp/dietpi/logs/'
@@ -816,6 +934,24 @@ ssh nomadpi 'ls /var/tmp/dietpi/logs/'
 
 ## 📋 Change Log
 
+### 2026-02-15 - HDMI Audio Configuration
+**Issue:** VLC and all ALSA apps could not play audio via HDMI. Error: `cannot open ALSA device "default": Unknown error 524` (-ENOTSUPP).
+
+**Root Cause (multi-layered):**
+1. The 7" touchscreen provides corrupt EDID data (invalid checksum), so the kernel couldn't detect HDMI audio capabilities
+2. Created custom EDID override, but initial version was missing the HDMI Vendor Specific Data Block (VSDB)
+3. Without VSDB, kernel treated the output as DVI mode (no audio), even though ELD data was populated
+4. The `VC4_HDMI_RAM_PACKET_ENABLE` bit (bit 16 of `HDMI_RAM_PACKET_CONFIG`) was not set in DVI mode
+5. On kernel 6.12+, the vc4-hdmi PCM device only exposes `IEC958_SUBFRAME_LE` format, requiring the `iec958` ALSA plugin
+
+**Solution Implemented:**
+1. Generated custom EDID at `/lib/firmware/edid/nomadpi-hdmi.bin` with HDMI VSDB (IEEE OUI 0x000C03)
+2. Added `drm.edid_firmware=HDMI-A-2:edid/nomadpi-hdmi.bin` to `/boot/cmdline.txt`
+3. Configured `/etc/asound.conf` with `iec958` plugin chain for HDMI audio
+4. Set HDMI audio as default ALSA output
+
+**Result:** HDMI audio works. VLC plays karaoke videos with audio via HDMI. USB mixer (Yamaha MG-XU) also available as `usbmixer` device.
+
 ### 2026-02-15 - VLC Media Player Configuration
 **Issue:** VLC launcher icon wasn't working when clicked from desktop.
 
@@ -823,12 +959,12 @@ ssh nomadpi 'ls /var/tmp/dietpi/logs/'
 
 **Solution Implemented:**
 1. Created wrapper script at `/usr/local/bin/vlc-root-wrapper` that runs VLC as `dietpi` user
-2. Added `dietpi` user to `video` and `audio` groups
-3. Copied X authority file to `/home/dietpi/.Xauthority` for X11 access
+2. Added `dietpi` user to `video`, `audio`, and `render` groups
+3. Used `xhost +SI:localuser:dietpi` for X11 access (added to LXDE autostart)
 4. Modified `/usr/share/applications/vlc.desktop` launcher to use wrapper
-5. Restarted desktop environment to apply changes
+5. Wrapper uses `sg render` for GPU access and creates `/run/user/1000` for XDG runtime
 
-**Result:** VLC now launches successfully from desktop icon.
+**Result:** VLC now launches successfully from desktop icon with video (hardware-accelerated) and audio.
 
 ### 2026-02-15 - Device Repurposed for Nomad Karaoke
 **Changes Made:**
@@ -884,7 +1020,7 @@ ssh nomadpi 'ls /var/tmp/dietpi/logs/'
 2. **Permanent Discovery Mode**
    - Set `DiscoverableTimeout = 0` in `/etc/bluetooth/main.conf`
    - Device stays discoverable indefinitely (no 3-minute timeout)
-   - "FoxTag1" is always visible to nearby Bluetooth devices
+   - "NomadPi" is always visible to nearby Bluetooth devices
 
 3. **Enabled Bluetooth Services**
    - Bluetooth service running and enabled on boot
@@ -904,7 +1040,7 @@ ssh nomadpi 'ls /var/tmp/dietpi/logs/'
 
 **Changes Made:**
 1. **Disabled Chromium Kiosk Watchdog**
-   - Renamed `/etc/cron.d/foxtag-watchdog` → `/etc/cron.d/foxtag-watchdog.disabled`
+   - Removed the kiosk watchdog cron file (previously at `/etc/cron.d/foxtag-watchdog`)
    - Watchdog was designed for kiosk mode only; incompatible with desktop mode
 
 2. **Implemented Single X Session Enforcement**
@@ -921,7 +1057,7 @@ ssh nomadpi 'ls /var/tmp/dietpi/logs/'
 - Single X server on `:0`
 - All video outputs mirrored/synchronized
 - VNC Service Mode shares physical HDMI display
-- 7" touchscreen connected via HDMI-2 at 1024x768
+- 7" touchscreen connected via HDMI-2 at 1920x1080 (via custom EDID override)
 
 ---
 
