@@ -356,6 +356,36 @@ SOFTWARE_VNCSERVER_DISPLAY_INDEX=1
 SOFTWARE_VNCSERVER_SHARE_DESKTOP=0
 ```
 
+## 🎬 VLC Media Player Configuration
+
+### Running as Root Workaround
+VLC refuses to run as root user for security reasons. On NomadPi (which runs desktop as root), a wrapper script allows VLC to run as the `dietpi` user with proper X11 access.
+
+**Wrapper Location:** `/usr/local/bin/vlc-root-wrapper`
+```bash
+#!/bin/bash
+# Wrapper to run VLC as dietpi user from root desktop
+export DISPLAY=:0
+export XAUTHORITY=/home/dietpi/.Xauthority
+exec sudo -u dietpi /usr/bin/vlc "$@"
+```
+
+**Desktop Launcher:** `/usr/share/applications/vlc.desktop` is configured to use the wrapper.
+
+**Manual Launch:**
+```bash
+# From desktop/terminal as root
+ssh nomadpi '/usr/local/bin/vlc-root-wrapper'
+
+# Direct as dietpi user
+ssh nomadpi 'sudo -u dietpi DISPLAY=:0 XAUTHORITY=/home/dietpi/.Xauthority vlc'
+```
+
+**User Configuration:**
+- VLC runs as: `dietpi` user
+- Groups: `dietpi`, `video`, `audio`
+- X Authority: `/home/dietpi/.Xauthority` (copied from root)
+
 ## 📦 Installed DietPi Software
 
 Software installed via `dietpi-software`:
@@ -377,6 +407,7 @@ Software installed via `dietpi-software`:
 
 ### Additional Installed Packages (via apt)
 - **scrot** - Screenshot utility for X11 (installed 2026-02-15)
+- **vlc** - VLC media player 3.0.23 (installed via DietPi, runs as dietpi user)
 
 ### Installing Additional Software
 ```bash
@@ -784,6 +815,20 @@ ssh nomadpi 'ls /var/tmp/dietpi/logs/'
 ---
 
 ## 📋 Change Log
+
+### 2026-02-15 - VLC Media Player Configuration
+**Issue:** VLC launcher icon wasn't working when clicked from desktop.
+
+**Root Cause:** VLC refuses to run as root user for security reasons. Desktop environment runs as root on NomadPi.
+
+**Solution Implemented:**
+1. Created wrapper script at `/usr/local/bin/vlc-root-wrapper` that runs VLC as `dietpi` user
+2. Added `dietpi` user to `video` and `audio` groups
+3. Copied X authority file to `/home/dietpi/.Xauthority` for X11 access
+4. Modified `/usr/share/applications/vlc.desktop` launcher to use wrapper
+5. Restarted desktop environment to apply changes
+
+**Result:** VLC now launches successfully from desktop icon.
 
 ### 2026-02-15 - Device Repurposed for Nomad Karaoke
 **Changes Made:**
