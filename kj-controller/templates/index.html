@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KJ Remote</title>
+    <style>
+        body { font-family: sans-serif; background-color: #282c34; color: #abb2bf; }
+        .container { background-color: #353a42; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.2); }
+        h2 { color: #61afef; border-bottom: 2px solid #61afef; padding-bottom: 0.5rem; margin-top: 0; }
+        input[type="text"], input[type="url"] { width: calc(100% - 22px); padding: 10px; margin-bottom: 10px; border-radius: 4px; border: 1px solid #4f5661; background-color: #2c313a; color: #abb2bf; }
+        button { background-color: #61afef; color: #282c34; border: none; padding: 12px 18px; border-radius: 4px; cursor: pointer; font-weight: bold; transition: background-color 0.2s; }
+        button:hover { background-color: #529bdf; }
+        .button-group button { margin-right: 10px; }
+        .log-entry { padding: 2px 0; border-bottom: 1px solid #353a42; }
+        .log-entry.error { color: #e06c75; }
+        .log-entry.success { color: #98c379; }
+        .hidden { display: none; }
+        #video-list { list-style-type: none; padding: 0; border: 1px solid #4f5661; border-radius: 4px; }
+        #video-list li { padding: 10px; cursor: pointer; border-bottom: 1px solid #4f5661; display: flex; justify-content: space-between; align-items: center; transition: background-color 0.2s; }
+        #video-list li:last-child { border-bottom: none; }
+        #video-list li:hover { background-color: #4f5661; }
+        #video-list li.playing { background-color: #98c379; color: #282c34; }
+        .delete-btn { background-color: #e06c75; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; }
+        .delete-btn:hover { background-color: #d15c66; }
+        .volume-slider { width: 100%; }
+        
+        /* New Compact Layout Styles */
+        body {
+            max-width: 1400px;
+            margin: 1rem auto;
+            padding: 1rem;
+        }
+        .main-layout {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            grid-template-rows: auto 1fr;
+            grid-template-areas:
+                "col1 col2"
+                "footer footer";
+            gap: 1rem;
+            height: calc(100vh - 4rem);
+        }
+        .column {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            min-height: 0;
+        }
+        .container {
+            margin: 0;
+            padding: 1rem;
+            display: flex;
+            flex-direction: column;
+        }
+        .available-songs {
+            flex-grow: 1;
+            min-height: 0;
+        }
+        #video-list {
+            flex-grow: 1;
+            overflow-y: auto;
+            min-height: 0;
+        }
+        .footer-area {
+            grid-area: footer;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+            max-height: 200px;
+        }
+        #status-bar, #log-area {
+            padding: 1rem;
+            background-color: #2c313a;
+            border-radius: 4px;
+        }
+        #log-area {
+            height: auto;
+            max-height: 200px;
+            overflow-y: scroll;
+            font-family: monospace;
+            font-size: 0.9em;
+        }
+    </style>
+</head>
+<body>
+    <div class="main-layout">
+        <div class="column" id="col1">
+            <div class="container">
+                <h2>📥 Download Song</h2>
+                <input type="url" id="youtube-url" placeholder="Enter YouTube URL" onkeyup="if(event.keyCode === 13) downloadSong()">
+                <button id="download-btn" onclick="downloadSong()">Download</button>
+                <div id="download-status" class="hidden" style="margin-top: 10px;">Downloading... please wait.</div>
+            </div>
+            <div class="container">
+                <h2>⏯️ Playback Controls</h2>
+                <div class="button-group">
+                    <button onclick="controlPlayback('pause_resume')">Pause / Resume</button>
+                    <button onclick="controlPlayback('restart')">Restart</button>
+                    <button onclick="controlPlayback('stop')">Stop & Play Music</button>
+                </div>
+                <div style="margin-top: 1rem;">
+                    <label for="seek-slider">Seek: <span id="seek-value">0:00</span></label>
+                    <input type="range" id="seek-slider" class="volume-slider" min="0" max="1" value="0" step="0.001" onchange="seekVideo(this.value)" oninput="updateSeekLabel(this.value)">
+                </div>
+                <div style="margin-top: 1rem;">
+                    <label for="karaoke-volume">Karaoke Volume:</label>
+                    <input type="range" id="karaoke-volume" class="volume-slider" min="0" max="256" value="200" oninput="setVolume('karaoke', this.value)">
+                </div>
+                <div style="margin-top: 1rem;">
+                    <label for="filler-volume">Filler Music Volume:</label>
+                    <input type="range" id="filler-volume" class="volume-slider" min="0" max="256" value="100" oninput="setVolume('filler', this.value)">
+                </div>
+                <div style="margin-top: 1rem;">
+                    <label for="sync-offset">External Screen Offset (ms): <span id="sync-offset-value">0</span></label>
+                    <input type="range" id="sync-offset" class="volume-slider" min="-500" max="500" value="0" oninput="setSyncOffset(this.value)">
+                </div>
+                <div style="margin-top: 1rem;">
+                    <label for="filler-selector">Filler Music:</label>
+                    <select id="filler-selector" onchange="setFillerMusic(this.value)" style="width: 100%; padding: 8px;"></select>
+                </div>
+                <div style="margin-top: 1rem;">
+                    <label>
+                        <input type="checkbox" id="wait-for-external" onchange="toggleWaitForExternal(this.checked)">
+                        Wait for external screen before play
+                    </label>
+                </div>
+            </div>
+        </div>
+
+        <div class="column" id="col2">
+            <div class="container available-songs">
+                <h2>🎵 Available Songs</h2>
+                <ul id="video-list">
+                    <li>No songs downloaded yet.</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="footer-area">
+            <div id="status-bar">
+                <strong>Status:</strong> <span id="player-state">Unknown</span> | 
+                <strong>Playing:</strong> <span id="current-video">None</span> |
+                <strong>Filler:</strong> <span id="current-filler">wii.mp3</span> |
+                <strong>Time:</strong> <span id="current-time">0:00</span> / <span id="total-time">0:00</span>
+            </div>
+            <div id="log-area"></div>
+        </div>
+    </div>
+
+    <script>
+        const logArea = document.getElementById('log-area');
+
+        function log(message, type = 'info') {
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${type}`;
+            entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            logArea.prepend(entry);
+        }
+
+        async function apiCall(endpoint, body) {
+            try {
+                const response = await fetch(endpoint, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+                const data = await response.json();
+                if (!response.ok) {
+                    let errorMessage = data.error || 'API request failed';
+                    if (data.vlc_status) {
+                        errorMessage += ` | VLC Status: ${JSON.stringify(data.vlc_status)}`;
+                    }
+                    throw new Error(errorMessage);
+                }
+                return data;
+            } catch (error) {
+                log(`API Error: ${error.message}`, 'error');
+                return null;
+            }
+        }
+
+        async function downloadSong() {
+            const urlInput = document.getElementById('youtube-url');
+            const downloadBtn = document.getElementById('download-btn');
+            const downloadStatus = document.getElementById('download-status');
+            const url = urlInput.value;
+            if (!url) {
+                log('Please enter a YouTube URL.', 'error');
+                return;
+            }
+            log(`Downloading: ${url}`);
+            downloadBtn.disabled = true;
+            downloadStatus.classList.remove('hidden');
+            const data = await apiCall('/download', { url });
+            downloadBtn.disabled = false;
+            downloadStatus.classList.add('hidden');
+            if (data && data.success) {
+                log(`Downloaded "${data.title}" successfully! ID: ${data.video_id}`, 'success');
+                urlInput.value = '';
+                await updateVideoList();
+            }
+        }
+
+        async function playSong(videoId) {
+            if (!videoId) {
+                log('Cannot play song: videoId is missing.', 'error');
+                return;
+            }
+            log(`Playing video ID: ${videoId}`);
+            await apiCall('/play', { video_id: videoId });
+        }
+
+        async function deleteSong(videoId, videoTitle) {
+            if (!confirm(`Are you sure you want to delete "${videoTitle}"?`)) {
+                return;
+            }
+            log(`Deleting video ID: ${videoId}`);
+            const data = await apiCall('/delete', { video_id: videoId });
+            if (data && data.success) {
+                log(`Successfully deleted "${videoTitle}"`, 'success');
+                await updateVideoList();
+            }
+        }
+
+        async function controlPlayback(action) {
+            log(`Sending control: ${action}`);
+            await apiCall('/control', { action });
+        }
+
+        async function setVolume(target, level) {
+            log(`Setting ${target} volume to ${level}`);
+            await apiCall('/volume', { target, level: parseInt(level) });
+        }
+
+        async function setSyncOffset(offset) {
+            document.getElementById('sync-offset-value').textContent = offset;
+            log(`Setting sync offset to ${offset}ms`);
+            await apiCall('/sync_offset', { offset: parseInt(offset) });
+        }
+
+        async function toggleWaitForExternal(enabled) {
+            log(`Wait for external set to ${enabled}`);
+            await apiCall('/settings/wait_for_external', { enabled });
+        }
+
+        let totalVideoLength = 0; // Store the total length of the current video
+        let isSeeking = false;
+
+        function updateSeekLabel(position) {
+            if (totalVideoLength > 0) {
+                const seekTime = parseFloat(position) * totalVideoLength;
+                document.getElementById('seek-value').textContent = formatTime(seekTime);
+            }
+        }
+
+        async function seekVideo(position) {
+            if (totalVideoLength > 0) {
+                const seekTime = parseFloat(position) * totalVideoLength;
+                log(`Seeking to ${formatTime(seekTime)}`);
+                await apiCall('/seek', { time: seekTime });
+            }
+        }
+
+        async function setFillerMusic(trackName) {
+            log(`Setting filler music to: ${trackName}`);
+            await apiCall('/filler_music', { track_name: trackName });
+        }
+
+        async function updateFillerMusicList() {
+            try {
+                const response = await fetch('/filler_music');
+                const tracks = await response.json();
+                const selector = document.getElementById('filler-selector');
+                selector.innerHTML = '';
+                tracks.forEach(track => {
+                    const option = document.createElement('option');
+                    option.value = track;
+                    option.textContent = track;
+                    selector.appendChild(option);
+                });
+            } catch (error) {
+                log('Could not update filler music list.', 'error');
+            }
+        }
+
+        async function updateVideoList() {
+            try {
+                const response = await fetch('/videos');
+                const videos = await response.json();
+                const videoList = document.getElementById('video-list');
+                videoList.innerHTML = '';
+                if (videos.length === 0) {
+                    const li = document.createElement('li');
+                    li.textContent = 'No songs downloaded yet.';
+                    li.style.cursor = 'default';
+                    videoList.appendChild(li);
+                    return;
+                }
+                videos.forEach(video => {
+                    const li = document.createElement('li');
+                    li.id = `video-item-${video.id}`;
+                    
+                    // Extract YouTube ID from URL
+                    let youtubeId = '';
+                    if (video.url) {
+                        const match = video.url.match(/(?:v=)([\w-]+)/);
+                        if (match) {
+                            youtubeId = `(${match[1]})`;
+                        }
+                    }
+
+                    const titleSpan = document.createElement('span');
+                    titleSpan.textContent = `${video.title} ${youtubeId}`;
+                    
+                    const deleteBtn = document.createElement('button');
+                    deleteBtn.textContent = 'Delete';
+                    deleteBtn.className = 'delete-btn';
+                    deleteBtn.onclick = (e) => {
+                        e.stopPropagation();
+                        deleteSong(video.id, video.title);
+                    };
+                    li.appendChild(titleSpan);
+                    li.appendChild(deleteBtn);
+                    li.onclick = () => {
+                        document.querySelectorAll('#video-list li').forEach(item => item.classList.remove('playing'));
+                        li.classList.add('playing');
+                        playSong(video.id);
+                    };
+                    videoList.appendChild(li);
+                });
+            } catch (error) {
+                log('Could not update video list.', 'error');
+            }
+        }
+
+        function formatTime(seconds) {
+            if (isNaN(seconds) || seconds < 0) return "0:00";
+            const min = Math.floor(seconds / 60);
+            const sec = Math.floor(seconds % 60).toString().padStart(2, '0');
+            return `${min}:${sec}`;
+        }
+
+        async function updateStatus() {
+            try {
+                const response = await fetch('/status');
+                const data = await response.json();
+                if (response.ok) {
+                    document.getElementById('player-state').textContent = data.state || 'unknown';
+                    document.getElementById('current-video').textContent = data.current_video_id || 'None';
+                    document.getElementById('current-filler').textContent = data.current_filler_track || 'None';
+                    document.getElementById('current-time').textContent = formatTime(data.time);
+                    document.getElementById('total-time').textContent = formatTime(data.length);
+
+                    const waitCheckbox = document.getElementById('wait-for-external');
+                    if (typeof data.wait_for_external_enabled === 'boolean') {
+                        waitCheckbox.checked = data.wait_for_external_enabled;
+                    }
+
+                    totalVideoLength = data.length || 0;
+                    const seekSlider = document.getElementById('seek-slider');
+                    if (!isSeeking) {
+                        if (totalVideoLength > 0) {
+                            seekSlider.value = data.time / totalVideoLength;
+                            updateSeekLabel(seekSlider.value);
+                        } else {
+                            seekSlider.value = 0;
+                            updateSeekLabel(0);
+                        }
+                    }
+                }
+            } catch (error) {
+                // Don't log periodic status check errors to avoid clutter
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const seekSlider = document.getElementById('seek-slider');
+            seekSlider.addEventListener('mousedown', () => { isSeeking = true; });
+            seekSlider.addEventListener('mouseup', () => { isSeeking = false; });
+            seekSlider.addEventListener('touchstart', () => { isSeeking = true; });
+            seekSlider.addEventListener('touchend', () => { isSeeking = false; });
+
+            updateStatus();
+            updateVideoList();
+            updateFillerMusicList();
+            log('KJ Remote initialized.');
+        });
+
+        setInterval(updateStatus, 2000);
+    </script>
+</body>
+</html>
