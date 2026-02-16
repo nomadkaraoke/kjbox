@@ -23,7 +23,7 @@ vlc_processes = {
     "filler": None
 }
 current_playing_path = None
-current_filler_track = "wii.mp3"
+current_filler_track = None  # Set from config in start_app()
 media_index = {}
 app_config = {}
 filler_music_target_volume = 100
@@ -56,6 +56,7 @@ def load_config():
             "usbmixer": "USB Mixer",
         },
         "default_audio_device": "hdmiout",
+        "default_filler_track": "",
         "flask_port": 5000,
     }
     if os.path.exists(CONFIG_FILE):
@@ -248,7 +249,11 @@ def launch_vlc_instance(name, port, password, media_file=None, loop=False):
         full_command = command
 
     try:
-        process = subprocess.Popen(full_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        log_dir = os.path.dirname(app_config.get('log_file', '')) or APP_DIR
+        vlc_log = open(os.path.join(log_dir, f'vlc-{name}.log'), 'a')
+        vlc_log.write(f"\n--- VLC '{name}' starting at {time.strftime('%Y-%m-%d %H:%M:%S')} ---\n")
+        vlc_log.flush()
+        process = subprocess.Popen(full_command, stdout=vlc_log, stderr=vlc_log)
         vlc_processes[name] = process
         log_message(f"VLC instance '{name}' launched with PID {process.pid}.")
         time.sleep(2)
@@ -803,6 +808,7 @@ def set_audio_device():
 
     log_message(f"Switching audio device from '{current_audio_device}' to '{device}'...")
     current_audio_device = device
+    save_config_value('default_audio_device', device)
     threading.Thread(target=restart_vlc_instances).start()
     return jsonify({"success": True, "message": f"Switching to {available[device]}. VLC restarting..."})
 
@@ -828,15 +834,45 @@ def monitor_karaoke_player():
             current_playing_path = None
             fade_in_filler()
 
+def save_config_value(key, value):
+    """Persists a runtime setting to config.json so it survives restarts."""
+    try:
+        config_data = {}
+        if os.path.exists(CONFIG_FILE):
+            with open(CONFIG_FILE, 'r') as f:
+                config_data = json.load(f)
+        config_data[key] = value
+        with open(CONFIG_FILE, 'w') as f:
+            json.dump(config_data, f, indent=2)
+            f.write('\n')
+    except Exception as e:
+        log_message(f"Error saving config value {key}: {e}")
+
 def start_app():
     """Initializes and starts the application components."""
-    global app_config, vlc_enabled, current_audio_device
+    global app_config, vlc_enabled, current_audio_device, current_filler_track
     log_message("--- KJ Controller Starting Up ---")
 
     # Load config
     app_config = load_config()
     current_audio_device = app_config.get('default_audio_device', 'hdmiout')
     os.makedirs(app_config['download_folder'], exist_ok=True)
+
+    # Set default filler track from config, or auto-detect from filler music dir
+    configured_filler = app_config.get('default_filler_track', '')
+    filler_dir = app_config.get('filler_music_dir', '')
+    if configured_filler:
+        current_filler_track = configured_filler
+    elif filler_dir and os.path.isdir(filler_dir):
+        # Pick first audio file found
+        for f in sorted(os.listdir(filler_dir)):
+            if os.path.splitext(f)[1].lower() in {'.mp3', '.wav', '.flac', '.ogg'}:
+                current_filler_track = f
+                break
+    if current_filler_track:
+        log_message(f"Default filler track: {current_filler_track}")
+    else:
+        log_message("WARNING: No filler music track configured or found.")
 
     # Pi-specific setup
     if is_pi():
@@ -862,8 +898,7 @@ def start_app():
         filler_pw = app_config.get('filler_vlc_password', 'filler')
 
         launch_vlc_instance("karaoke", karaoke_port, karaoke_pw)
-        filler_dir = app_config.get('filler_music_dir', '')
-        filler_path = os.path.join(filler_dir, current_filler_track) if filler_dir else ''
+        filler_path = os.path.join(filler_dir, current_filler_track) if filler_dir and current_filler_track else ''
         launch_vlc_instance("filler", filler_port, filler_pw, filler_path, True)
 
         time.sleep(3)
