@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Fetch karaoke rotation data and output conky-formatted text.
 
-Called by conky via ${execi}. Fetches the singer rotation from a public
+Called by conky via ${execpi}. Fetches the singer rotation from a public
 Google Sheet CSV endpoint, filters out completed entries, and prints
 conky markup to stdout.
 
@@ -35,15 +35,24 @@ MAX_ENTRIES = 10
 FETCH_TIMEOUT = 10
 
 # Colors (hex without #)
-COLOR_NOW = "e63946"       # red — now singing
-COLOR_NEXT = "f4a623"      # gold — up next
-COLOR_DEFAULT = "8892a4"   # muted gray — queued
+COLOR_NAME = "ffdf6b"      # gold for all singer names
+COLOR_NOW_PILL = "2d8a4e"  # dark green for "Now" badge
+COLOR_NEXT_PILL = "d4720a" # darker orange for "Next" badge
+COLOR_DEFAULT = "8892a4"   # muted gray — queued number
 COLOR_TEXT = "e0e6f0"      # light gray body text
-COLOR_WHITE = "ffffff"     # white for names/header
+
+# Layout
+MARGIN = "${goto 90}"       # left margin for all lines
+SONG_INDENT = "${goto 115}" # song line indent
+
+# Font shortcuts
+FONT_NAME = "DejaVu Sans:bold:size=36"
+FONT_SONG = "DejaVu Sans:size=20"
+FONT_BADGE = "DejaVu Sans:bold:size=18"
 
 
 # ---------------------------------------------------------------------------
-# Data fetching (reused from rotation_display.py)
+# Data fetching
 # ---------------------------------------------------------------------------
 
 def fetch_rotation():
@@ -80,44 +89,35 @@ def fetch_rotation():
 # Conky output formatting
 # ---------------------------------------------------------------------------
 
-def status_color(status):
-    """Return hex color based on status text."""
-    s = status.lower()
-    if "next" in s:
-        return COLOR_NEXT
-    if "singing" in s or "now" in s:
-        return COLOR_NOW
-    return COLOR_DEFAULT
+def badge(text, bg_color):
+    """Render a colored badge."""
+    return f"  ${{color {bg_color}}}${{font {FONT_BADGE}}} {text} ${{font}}${{color}}"
 
 
 def format_conky(entries):
     """Format entries as conky markup text."""
-    G = "${goto 70}"  # left margin for all content lines
-
     if not entries:
-        print(f"{G}${{color {COLOR_DEFAULT}}}${{font DejaVu Sans:size=28}}No singers in queue${{font}}${{color}}")
+        print(f"{MARGIN}${{color {COLOR_DEFAULT}}}${{font DejaVu Sans:size=28}}No singers in queue${{font}}${{color}}")
         return
 
-    # Current singer
-    now = entries[0]
-    status_text = (now["status"] if now["status"] else "Now Singing").upper()
-    print(f"{G}${{color {COLOR_NOW}}}${{font DejaVu Sans:bold:size=28}}{status_text}${{font}}${{color}}")
-    print(f"{G}${{color {COLOR_WHITE}}}${{font DejaVu Sans:bold:size=52}}{now['singer']}${{font}}${{color}}")
-    if now["song_artist"]:
-        print(f"{G}${{color {COLOR_TEXT}}}${{font DejaVu Sans:size=28}}{now['song_artist']}${{font}}${{color}}")
+    for idx, entry in enumerate(entries, start=1):
+        status_lower = entry["status"].lower()
 
-    # Queue
-    for idx, entry in enumerate(entries[1:], start=2):
-        color = status_color(entry["status"])
-        # Status badge for non-generic statuses
-        status_badge = ""
-        if entry["status"] and entry["status"].lower() not in ("queued", "waiting", ""):
-            status_badge = f"  ${{color {color}}}${{font DejaVu Sans:size=24}}{entry['status']}${{font}}${{color}}"
+        # Determine badge
+        if idx == 1 or "singing" in status_lower or "now" in status_lower:
+            entry_badge = badge("Now", COLOR_NOW_PILL)
+        elif "next" in status_lower:
+            entry_badge = badge("Next", COLOR_NEXT_PILL)
+        else:
+            entry_badge = ""
 
-        print()
-        print(f"{G}${{color {color}}}${{font DejaVu Sans:bold:size=32}}{idx}.${{font}} ${{font DejaVu Sans:bold:size=40}}{entry['singer']}${{font}}${{color}}{status_badge}")
+        # Singer line: single font block so number and name share baseline
+        print(f"{MARGIN}${{font {FONT_NAME}}}${{color ffffff}}{idx}) ${{color}}"
+              f"${{color {COLOR_NAME}}}{entry['singer']}${{color}}${{font}}{entry_badge}")
+
+        # Song line
         if entry["song_artist"]:
-            print(f"{G}${{color {COLOR_TEXT}}}${{font DejaVu Sans:size=20}}{entry['song_artist']}${{font}}${{color}}")
+            print(f"{SONG_INDENT}${{color {COLOR_TEXT}}}${{font {FONT_SONG}}}{entry['song_artist']}${{font}}${{color}}")
 
 
 # ---------------------------------------------------------------------------
@@ -130,7 +130,7 @@ def main():
     try:
         entries = fetch_rotation()
     except (URLError, OSError, ValueError, csv.Error):
-        print("0" if count_only else f"${{goto 70}}${{color {COLOR_DEFAULT}}}${{font DejaVu Sans:size=28}}Offline${{font}}${{color}}")
+        print("0" if count_only else f"{MARGIN}${{color {COLOR_DEFAULT}}}${{font DejaVu Sans:size=28}}Offline${{font}}${{color}}")
         return
 
     if count_only:
