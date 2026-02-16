@@ -45,7 +45,7 @@ SCREEN_HEIGHT = 1080
 # Margins — space between window and screen edges (pixels)
 MARGIN_TOP = 60
 MARGIN_BOTTOM = 105
-MARGIN_LEFT = 50
+MARGIN_LEFT = 70
 
 # Window width (independent of margins)
 WINDOW_WIDTH = 600
