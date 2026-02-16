@@ -135,6 +135,8 @@
         .format-badge.mp4 { background-color: #61afef; color: #282c34; }
         .format-badge.other { background-color: #5c6370; color: #abb2bf; }
         .artist-name { color: #c678dd; }
+        .catalog-detail { display: flex; flex-direction: column; gap: 2px; }
+        .catalog-folder { font-size: 0.75em; color: #5c6370; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
         .section-header { background-color: #2c313a; color: #5c6370; font-size: 0.8em; padding: 6px 10px; text-transform: uppercase; letter-spacing: 0.5px; cursor: default; }
         .section-header:hover { background-color: #2c313a; }
     </style>
@@ -662,21 +664,33 @@
                 }
                 catalogResults.forEach(item => {
                     const li = document.createElement('li');
-                    const titleSpan = document.createElement('span');
-                    if (item.artist) {
-                        const artistSpan = document.createElement('span');
-                        artistSpan.className = 'artist-name';
-                        artistSpan.textContent = item.artist;
-                        titleSpan.appendChild(artistSpan);
-                        titleSpan.appendChild(document.createTextNode(' - ' + item.title));
-                    } else {
-                        titleSpan.textContent = item.title || item.filename;
-                    }
+                    const detail = document.createElement('div');
+                    detail.className = 'catalog-detail';
+
+                    const titleRow = document.createElement('span');
+                    // Show full filename with format badge
+                    const nameText = item.filename.replace(/\.\w+$/, '');
+                    titleRow.textContent = nameText + ' ';
                     const badge = document.createElement('span');
                     badge.className = `format-badge ${getFormatBadgeClass(item.format)}`;
                     badge.textContent = item.format;
-                    titleSpan.appendChild(badge);
-                    li.appendChild(titleSpan);
+                    titleRow.appendChild(badge);
+                    detail.appendChild(titleRow);
+
+                    // Show folder path (strip common mount prefix for brevity)
+                    if (item.folder) {
+                        const folderSpan = document.createElement('div');
+                        folderSpan.className = 'catalog-folder';
+                        let folderDisplay = item.folder;
+                        // Strip common prefixes to show meaningful path
+                        folderDisplay = folderDisplay.replace(/^\/mnt\/[^/]+\//, '');
+                        folderDisplay = folderDisplay.replace(/^\/Volumes\/[^/]+\//, '');
+                        folderSpan.textContent = folderDisplay;
+                        folderSpan.title = item.folder;
+                        detail.appendChild(folderSpan);
+                    }
+
+                    li.appendChild(detail);
                     li.onclick = () => {
                         document.querySelectorAll('#media-list li').forEach(el => el.classList.remove('playing'));
                         li.classList.add('playing');
