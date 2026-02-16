@@ -117,7 +117,7 @@ A stateful class holding process handles, volume levels, and playback state. All
 `ExternalCatalog` provides instant full-text search over ~415K external karaoke files without keeping them in memory. The SQLite database lives on the SD card (`external_media.db`), indexed from a file list (`all-karaoke-files-*.txt`). FTS5 tokenizes artist, title, and disc_id fields. Queries are sanitized to prevent FTS5 syntax errors. The catalog is built once via `POST /catalog/build` and persists across restarts.
 
 ### CDG+MP3 ZIP Playback
-`ZipPlayback` extracts CDG+MP3 ZIP files to a temp directory. VLC auto-discovers the matching `.mp3` when given a `.cdg` path. ZIP entries are validated against path traversal (`..` or absolute paths). The temp dir is cleaned up before each new extraction.
+`ZipPlayback` extracts CDG+MP3 ZIP files to a temp directory. VLC is given the `.mp3` path and auto-discovers the matching `.cdg` in the same directory for lyrics/graphics overlay. ZIP entries are validated against path traversal (`..` or absolute paths). Extracted files are chmod'd world-readable so VLC (running as `dietpi` user) can access them. The temp dir is cleaned up before each new extraction.
 
 ## Frontend Architecture
 

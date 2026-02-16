@@ -22,6 +22,22 @@ NomadPi system configuration changes. For current configuration details, see [ar
 
 **Setup on a new device:** See [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md) § Rotation Display for full setup instructions.
 
+## 2026-02-16 - Search UI: Full Filename & Folder Path
+
+**Problem:** Catalog search results showed only parsed `Artist - Title` which was identical for popular songs with versions from many producers (e.g., 15+ "Queen - Killer Queen" entries).
+
+**Fix:** Search results now show the full filename (preserving disc ID prefix like `SC8231-07`) and an abbreviated folder path below each result. Mount prefix (`/mnt/...`) is stripped for brevity; full path available on hover.
+
+## 2026-02-16 - ZIP Playback Fix (MP3 + Permissions)
+
+**Problem:** CDG+MP3 ZIP playback failed with two issues:
+1. **Permission denied** — VLC runs as `dietpi` user but temp extraction dir was created by root with restrictive permissions
+2. **Played wrong file** — VLC was given the `.cdg` file (no audio, instant "finish") instead of the `.mp3`
+
+**Fix:**
+1. Extracted files are now chmod'd world-readable (`S_IROTH | S_IXOTH | S_IRGRP | S_IXGRP` on dirs, `S_IROTH | S_IRGRP` on files)
+2. `extract_and_get_mp3()` now returns the `.mp3` path — VLC plays it and auto-discovers the matching `.cdg` for lyrics overlay
+
 ## 2026-02-16 - External Media Catalog & Search
 
 **Changes Made:**
