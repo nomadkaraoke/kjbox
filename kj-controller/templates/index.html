@@ -81,6 +81,26 @@
             background-color: #2c313a;
             border-radius: 4px;
         }
+        #audio-warning {
+            display: none;
+            background-color: #e74c3c;
+            color: white;
+            padding: 0.75rem 1rem;
+            border-radius: 4px;
+            margin-bottom: 0.5rem;
+            text-align: center;
+            grid-column: 1 / -1;
+        }
+        #audio-warning button {
+            background: white;
+            color: #e74c3c;
+            border: none;
+            padding: 0.3rem 1rem;
+            border-radius: 4px;
+            margin-left: 1rem;
+            cursor: pointer;
+            font-weight: bold;
+        }
         #log-area {
             height: auto;
             max-height: 200px;
@@ -144,6 +164,10 @@
         </div>
 
         <div class="footer-area">
+            <div id="audio-warning">
+                Audio device issue detected - playback may be silent.
+                <button onclick="fixAudio()">Fix Audio</button>
+            </div>
             <div id="status-bar">
                 <strong>Status:</strong> <span id="player-state">Unknown</span> |
                 <strong>Playing:</strong> <span id="current-video">None</span> |
@@ -241,6 +265,14 @@
             if (data && data.success) {
                 log(`Rescan complete: ${data.count} files found.`, 'success');
                 await updateMediaList();
+            }
+        }
+
+        async function fixAudio() {
+            log('Restarting VLC instances to fix audio...');
+            const data = await apiCall('/fix_audio', {});
+            if (data && data.success) {
+                log('Audio fix applied - VLC instances restarted.', 'success');
             }
         }
 
@@ -398,6 +430,10 @@
                     document.getElementById('current-filler').textContent = data.current_filler_track || 'None';
                     document.getElementById('current-time').textContent = formatTime(data.time);
                     document.getElementById('total-time').textContent = formatTime(data.length);
+
+                    // Show/hide audio warning
+                    const audioWarning = document.getElementById('audio-warning');
+                    audioWarning.style.display = data.audio_error ? 'block' : 'none';
 
                     // Sync audio device dropdown with server state
                     if (data.audio_device) {

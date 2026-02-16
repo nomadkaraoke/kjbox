@@ -30,6 +30,7 @@ filler_music_target_volume = 100
 karaoke_music_target_volume = 200
 karaoke_player_is_active = False
 last_seek_time = 0
+audio_error = False
 current_audio_device = "hdmiout"
 vlc_enabled = False
 
@@ -318,17 +319,15 @@ def fade_in_filler():
     threading.Thread(target=fade_music, args=(filler_port, filler_pw, 0, filler_music_target_volume)).start()
 
 def fade_out_filler():
-    """Fades out the filler music and then pauses it."""
+    """Fades out the filler music and stops it (releases audio device for karaoke)."""
     if not vlc_enabled:
         return
     log_message("Fading out filler music...")
     filler_port = app_config.get('filler_vlc_port', 8081)
     filler_pw = app_config.get('filler_vlc_password', 'filler')
-    def fade_and_pause():
-        fade_music(filler_port, filler_pw, filler_music_target_volume, 0)
-        send_vlc_command(filler_port, filler_pw, "pl_pause")
-        log_message("Filler music faded out and paused.")
-    threading.Thread(target=fade_and_pause).start()
+    fade_music(filler_port, filler_pw, filler_music_target_volume, 0)
+    send_vlc_command(filler_port, filler_pw, "pl_stop")
+    log_message("Filler music faded out and stopped.")
 
 
 # --- YouTube Downloader ---
@@ -427,9 +426,22 @@ def download_video(youtube_url):
         return None, None
 
 # --- Video Playback ---
+def ensure_filler_stopped():
+    """Verifies filler VLC has released the audio device."""
+    filler_port = app_config.get('filler_vlc_port', 8081)
+    filler_pw = app_config.get('filler_vlc_password', 'filler')
+    for attempt in range(5):
+        status = send_vlc_command(filler_port, filler_pw, "")
+        if status and status.get('state') == 'stopped':
+            return True
+        send_vlc_command(filler_port, filler_pw, "pl_stop")
+        time.sleep(0.5)
+    log_message("WARNING: Could not confirm filler VLC stopped after 5 attempts")
+    return False
+
 def play_video(file_path):
-    """Plays a video on the karaoke VLC instance (fade out filler, load, play)."""
-    global karaoke_player_is_active
+    """Plays a video on the karaoke VLC instance (stop filler, load, play)."""
+    global karaoke_player_is_active, audio_error
     karaoke_port = app_config.get('karaoke_vlc_port', 8080)
     karaoke_pw = app_config.get('karaoke_vlc_password', 'karaoke')
 
@@ -441,9 +453,12 @@ def play_video(file_path):
         log_message(f"VLC disabled - cannot play {os.path.basename(file_path)}")
         return
 
-    # Fade out filler music
+    audio_error = False
+
+    # Fade out and stop filler music (releases audio device)
     fade_out_filler()
-    time.sleep(3.5)
+    time.sleep(0.5)
+    ensure_filler_stopped()
 
     # Load and play the video
     send_vlc_command(karaoke_port, karaoke_pw, "pl_empty")
@@ -456,6 +471,18 @@ def play_video(file_path):
 
     karaoke_player_is_active = True
     log_message(f"Playback started for {os.path.basename(file_path)}.")
+
+    # Verify audio is actually working after a brief delay
+    def verify_playback():
+        global audio_error
+        time.sleep(3)
+        status = send_vlc_command(karaoke_port, karaoke_pw, "")
+        if status and status.get('state') == 'playing':
+            audio_error = False
+        elif karaoke_player_is_active:
+            log_message("WARNING: Karaoke VLC not in 'playing' state - possible audio device issue")
+            audio_error = True
+    threading.Thread(target=verify_playback, daemon=True).start()
 
 # --- Audio Device Switching ---
 def restart_vlc_instances():
@@ -580,8 +607,9 @@ def handle_control():
         send_vlc_command(karaoke_port, karaoke_pw, "pl_stop")
         send_vlc_command(karaoke_port, karaoke_pw, "pl_empty")
         karaoke_player_is_active = False
-        global current_playing_path
+        global current_playing_path, audio_error
         current_playing_path = None
+        audio_error = False
         fade_in_filler()
 
     return jsonify({"success": True, "message": f"Action '{action}' executed."})
@@ -765,8 +793,6 @@ def get_status():
         current_playing = os.path.basename(current_playing_path)
 
     if status:
-        filler_status = send_vlc_command(filler_port, filler_pw, "")
-
         return jsonify({
             "state": status.get('state'),
             "current_playing": current_playing,
@@ -776,6 +802,7 @@ def get_status():
             "length": status.get('length'),
             "audio_device": current_audio_device,
             "vlc_enabled": vlc_enabled,
+            "audio_error": audio_error,
         })
 
     # VLC not running - return status without VLC data
@@ -789,6 +816,15 @@ def get_status():
         "audio_device": current_audio_device,
         "vlc_enabled": vlc_enabled,
     })
+
+@app.route('/fix_audio', methods=['POST'])
+def fix_audio():
+    """Emergency recovery: restarts both VLC instances to fix audio device conflicts."""
+    global audio_error
+    log_message("Fix audio requested - restarting VLC instances...")
+    audio_error = False
+    restart_vlc_instances()
+    return jsonify({"success": True, "message": "VLC instances restarted."})
 
 @app.route('/audio_device', methods=['GET'])
 def get_audio_device():
