@@ -6,18 +6,22 @@ singers as a persistent overlay on the left third of the screen. Designed for
 venue visibility during live karaoke events.
 
 Requires: python3-tk (apt-get install -y python3-tk)
+For transparency: xcompmgr (apt-get install -y xcompmgr)
 No pip dependencies — stdlib only.
 """
 
 import csv
 import io
+import threading
 import tkinter as tk
 from datetime import datetime
 from urllib.error import URLError
 from urllib.request import urlopen
 
 # ---------------------------------------------------------------------------
-# Configuration
+# Configuration — edit these values and restart the service to apply
+#   ssh nomadpi 'nano /opt/nomad/kjbox/desktop/rotation_display.py'
+#   ssh nomadpi 'systemctl restart rotation-display'
 # ---------------------------------------------------------------------------
 
 # Google Sheet published URL — replace SHEET_ID with your sheet's ID.
@@ -35,11 +39,21 @@ COL_SINGER = 1       # Singer name
 COL_SONG_ARTIST = 2  # Combined "Artist - Song" field
 COL_STATUS = 3       # Status text (e.g. "Done", "Now Singing", "Up Next", "Waiting")
 
-# Display geometry — left 1/3 of a 1920×1080 screen
+# Screen dimensions (used to calculate window size with margins)
+SCREEN_WIDTH = 1920
+SCREEN_HEIGHT = 1080
+
+# Margins — space between window and screen edges (pixels)
+MARGIN_TOP = 100
+MARGIN_BOTTOM = 100
+MARGIN_LEFT = 100
+
+# Window width (independent of margins)
 WINDOW_WIDTH = 640
-WINDOW_HEIGHT = 1080
-WINDOW_X = 0
-WINDOW_Y = 0
+
+# Background opacity (0.0 = fully transparent, 1.0 = fully opaque)
+# Requires a compositor (xcompmgr) for transparency to work.
+BG_OPACITY = 0.5
 
 # How many queue entries to show (including the current singer)
 MAX_ENTRIES = 10
@@ -59,18 +73,22 @@ ACCENT_NEXT = "#f4a623"        # gold — up next
 ACCENT_DEFAULT = "#8892a4"     # muted gray — queued
 DIVIDER_COLOR = "#1e2d4a"      # subtle divider
 OFFLINE_COLOR = "#e6893a"      # orange for offline indicator
+LOADING_COLOR = "#5a9bf5"      # blue for loading indicator
 
-# Fonts (family, size, weight)
-FONT_HEADER = ("Helvetica", 28, "bold")
-FONT_NOW_LABEL = ("Helvetica", 14, "bold")
-FONT_NOW_NAME = ("Helvetica", 32, "bold")
-FONT_NOW_SONG = ("Helvetica", 18)
-FONT_QUEUE_NUM = ("Helvetica", 16, "bold")
-FONT_QUEUE_NAME = ("Helvetica", 20, "bold")
-FONT_QUEUE_SONG = ("Helvetica", 14)
-FONT_QUEUE_STATUS = ("Helvetica", 12)
-FONT_STATUS_BAR = ("Helvetica", 11)
-FONT_EMPTY = ("Helvetica", 20)
+# Font scale — multiply all font sizes by this factor
+FONT_SCALE = 2
+
+# Base font sizes (multiplied by FONT_SCALE)
+FONT_HEADER = ("Helvetica", 28 * FONT_SCALE, "bold")
+FONT_NOW_LABEL = ("Helvetica", 14 * FONT_SCALE, "bold")
+FONT_NOW_NAME = ("Helvetica", 32 * FONT_SCALE, "bold")
+FONT_NOW_SONG = ("Helvetica", 18 * FONT_SCALE)
+FONT_QUEUE_NUM = ("Helvetica", 16 * FONT_SCALE, "bold")
+FONT_QUEUE_NAME = ("Helvetica", 20 * FONT_SCALE, "bold")
+FONT_QUEUE_SONG = ("Helvetica", 14 * FONT_SCALE)
+FONT_QUEUE_STATUS = ("Helvetica", 12 * FONT_SCALE)
+FONT_STATUS_BAR = ("Helvetica", 11 * FONT_SCALE)
+FONT_EMPTY = ("Helvetica", 20 * FONT_SCALE)
 
 
 # ---------------------------------------------------------------------------
@@ -122,39 +140,43 @@ class RotationDisplay:
         self.root = tk.Tk()
         self.root.title("Rotation")
         self.root.configure(bg=BG_COLOR)
+
+        # Calculate window geometry with margins
+        win_height = SCREEN_HEIGHT - MARGIN_TOP - MARGIN_BOTTOM
         self.root.geometry(
-            f"{WINDOW_WIDTH}x{WINDOW_HEIGHT}+{WINDOW_X}+{WINDOW_Y}"
+            f"{WINDOW_WIDTH}x{win_height}+{MARGIN_LEFT}+{MARGIN_TOP}"
         )
         self.root.overrideredirect(True)
         self.root.attributes("-topmost", True)
+        self.root.attributes("-alpha", BG_OPACITY)
 
         self.cached_entries = []
         self.is_offline = False
+        self.is_loading = False
 
-        # Scrollable content area
-        self.canvas = tk.Canvas(
-            self.root, bg=BG_COLOR, highlightthickness=0,
-            width=WINDOW_WIDTH, height=WINDOW_HEIGHT,
-        )
-        self.canvas.pack(fill=tk.BOTH, expand=True)
-
-        self.content = tk.Frame(self.canvas, bg=BG_COLOR)
-        self.canvas.create_window(
-            (0, 0), window=self.content, anchor="nw", width=WINDOW_WIDTH,
-        )
+        # Content frame
+        self.content = tk.Frame(self.root, bg=BG_COLOR)
+        self.content.pack(fill=tk.BOTH, expand=True)
 
         self._build_ui([])
         self._refresh()
 
     def _build_ui(self, entries):
-        """Rebuild the entire UI with the given entries."""
-        for widget in self.content.winfo_children():
-            widget.destroy()
+        """Rebuild the UI by swapping in a new content frame (no flicker)."""
+        new_content = tk.Frame(self.root, bg=BG_COLOR)
+        self._populate(new_content, entries)
 
+        # Atomic swap — new frame appears before old is destroyed
+        new_content.pack(fill=tk.BOTH, expand=True)
+        self.content.destroy()
+        self.content = new_content
+
+    def _populate(self, parent, entries):
+        """Populate a frame with the rotation display widgets."""
         pad_x = 24
 
         # --- Header ---
-        header_frame = tk.Frame(self.content, bg=BG_COLOR)
+        header_frame = tk.Frame(parent, bg=BG_COLOR)
         header_frame.pack(fill=tk.X, padx=pad_x, pady=(24, 4))
 
         tk.Label(
@@ -162,28 +184,36 @@ class RotationDisplay:
             fg=HEADER_COLOR, bg=BG_COLOR, anchor="w",
         ).pack(side=tk.LEFT)
 
-        count_text = f"{len(entries)} singer{'s' if len(entries) != 1 else ''}"
-        tk.Label(
-            header_frame, text=count_text, font=FONT_STATUS_BAR,
-            fg=ACCENT_DEFAULT, bg=BG_COLOR, anchor="e",
-        ).pack(side=tk.RIGHT)
+        # Loading indicator or singer count on the right
+        if self.is_loading:
+            self.loading_label = tk.Label(
+                header_frame, text="\u21bb", font=FONT_STATUS_BAR,
+                fg=LOADING_COLOR, bg=BG_COLOR, anchor="e",
+            )
+            self.loading_label.pack(side=tk.RIGHT)
+        else:
+            count_text = f"{len(entries)} singer{'s' if len(entries) != 1 else ''}"
+            tk.Label(
+                header_frame, text=count_text, font=FONT_STATUS_BAR,
+                fg=ACCENT_DEFAULT, bg=BG_COLOR, anchor="e",
+            ).pack(side=tk.RIGHT)
 
         # Divider
         tk.Frame(
-            self.content, bg=DIVIDER_COLOR, height=2,
+            parent, bg=DIVIDER_COLOR, height=2,
         ).pack(fill=tk.X, padx=pad_x, pady=(8, 16))
 
         if not entries:
             tk.Label(
-                self.content, text="No singers in queue",
+                parent, text="No singers in queue",
                 font=FONT_EMPTY, fg=ACCENT_DEFAULT, bg=BG_COLOR,
             ).pack(pady=60)
-            self._build_status_bar(pad_x)
+            self._build_status_bar(parent, pad_x)
             return
 
         # --- Now Singing (first entry) ---
         now = entries[0]
-        now_frame = tk.Frame(self.content, bg=BG_COLOR)
+        now_frame = tk.Frame(parent, bg=BG_COLOR)
         now_frame.pack(fill=tk.X, padx=pad_x, pady=(0, 8))
 
         status_text = now["status"] if now["status"] else "Now Singing"
@@ -206,12 +236,12 @@ class RotationDisplay:
 
         # Divider after now singing
         tk.Frame(
-            self.content, bg=DIVIDER_COLOR, height=1,
+            parent, bg=DIVIDER_COLOR, height=1,
         ).pack(fill=tk.X, padx=pad_x, pady=(16, 12))
 
-        # --- Queue (entries 2–N) ---
+        # --- Queue (entries 2-N) ---
         for i, entry in enumerate(entries[1:], start=2):
-            row = tk.Frame(self.content, bg=BG_COLOR)
+            row = tk.Frame(parent, bg=BG_COLOR)
             row.pack(fill=tk.X, padx=pad_x, pady=(0, 10))
 
             # Number + name on same line
@@ -254,21 +284,21 @@ class RotationDisplay:
                     anchor="w", wraplength=WINDOW_WIDTH - pad_x * 2 - 40,
                 ).pack(fill=tk.X)
 
-        self._build_status_bar(pad_x)
+        self._build_status_bar(parent, pad_x)
 
-    def _build_status_bar(self, pad_x):
+    def _build_status_bar(self, parent, pad_x):
         """Add the status/update time bar at the bottom."""
         # Spacer to push status bar down
-        spacer = tk.Frame(self.content, bg=BG_COLOR)
+        spacer = tk.Frame(parent, bg=BG_COLOR)
         spacer.pack(fill=tk.BOTH, expand=True)
 
         # Divider
         tk.Frame(
-            self.content, bg=DIVIDER_COLOR, height=1,
+            parent, bg=DIVIDER_COLOR, height=1,
         ).pack(fill=tk.X, padx=pad_x, pady=(8, 4))
 
         if self.is_offline:
-            status_text = "Offline — showing cached data"
+            status_text = "Offline \u2014 showing cached data"
             status_color = OFFLINE_COLOR
         else:
             now = datetime.now().strftime("%I:%M %p").lstrip("0")
@@ -276,20 +306,31 @@ class RotationDisplay:
             status_color = ACCENT_DEFAULT
 
         tk.Label(
-            self.content, text=status_text, font=FONT_STATUS_BAR,
+            parent, text=status_text, font=FONT_STATUS_BAR,
             fg=status_color, bg=BG_COLOR, anchor="w",
         ).pack(fill=tk.X, padx=pad_x, pady=(0, 12))
 
     def _refresh(self):
-        """Fetch new data and rebuild the UI, then schedule the next refresh."""
+        """Kick off a background fetch, then update the UI when done."""
+        self.is_loading = True
+        self._build_ui(self.cached_entries)
+
+        thread = threading.Thread(target=self._fetch_and_update, daemon=True)
+        thread.start()
+
+    def _fetch_and_update(self):
+        """Fetch data in a background thread, then schedule UI update."""
         try:
             entries = fetch_rotation()
-            self.cached_entries = entries
-            self.is_offline = False
+            self.root.after(0, self._apply_data, entries, False)
         except (URLError, OSError, ValueError, csv.Error):
-            entries = self.cached_entries
-            self.is_offline = True
+            self.root.after(0, self._apply_data, self.cached_entries, True)
 
+    def _apply_data(self, entries, offline):
+        """Apply fetched data to the UI (called on the main thread)."""
+        self.cached_entries = entries
+        self.is_offline = offline
+        self.is_loading = False
         self._build_ui(entries)
         self.root.after(REFRESH_MS, self._refresh)
 
