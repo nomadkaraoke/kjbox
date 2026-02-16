@@ -566,6 +566,65 @@ ssh nomadpi 'cd /opt/nomad/kjbox && git pull && systemctl restart kj-controller'
 
 See [kj-controller/](kj-controller/) for source code
 
+### Rotation Display
+A standalone Python/tkinter overlay that fetches the singer rotation from a public Google Sheet and displays the next 10 singers on the left 1/3 of the screen. No pip dependencies (stdlib only). Designed for venue visibility during live karaoke events.
+
+**Service:** `rotation-display.service` (enabled, starts on boot)
+```bash
+# Check service status
+ssh nomadpi 'systemctl status rotation-display'
+
+# View logs
+ssh nomadpi 'journalctl -u rotation-display -f'
+
+# Restart service
+ssh nomadpi 'systemctl restart rotation-display'
+
+# Stop overlay (e.g. when not running karaoke)
+ssh nomadpi 'systemctl stop rotation-display'
+```
+
+**Configuration:** All tunables are constants at the top of `desktop/rotation_display.py`:
+- `SHEET_ID` — Google Sheet ID (must be published to web)
+- `SHEET_GID` — Tab index (default: `0`)
+- `COL_*` — Column indices for position, singer, song, artist, status
+- `WINDOW_WIDTH/HEIGHT` — Overlay geometry (default: `640x1080`, left 1/3 of 1920x1080)
+- `REFRESH_MS` — Refresh interval in milliseconds (default: `30000`)
+- `MAX_ENTRIES` — Number of queue entries to show (default: `10`)
+
+**Setup on a new device:**
+```bash
+# 1. Install tkinter
+apt-get install -y python3-tk
+
+# 2. Create systemd service
+cat > /etc/systemd/system/rotation-display.service << 'EOF'
+[Unit]
+Description=Karaoke Rotation Display Overlay
+After=graphical.target
+
+[Service]
+Type=simple
+ExecStartPre=/bin/bash -c "xhost +SI:localuser:root"
+ExecStart=/usr/bin/python3 /opt/nomad/kjbox/desktop/rotation_display.py
+Environment=DISPLAY=:0
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=graphical.target
+EOF
+
+# 3. Enable and start
+systemctl daemon-reload && systemctl enable --now rotation-display
+```
+
+**Google Sheet requirements:**
+- Sheet must be published to web (File > Share > Publish to web)
+- Expected columns (0-indexed): `#`, `Singer`, `Song`, `Artist`, `Status`
+- Rows with Status = "Done" are filtered out
+- First non-done entry is highlighted as "Now Singing"
+
 ### Chromium Kiosk Watchdog (DISABLED)
 **Status:** **DISABLED** as of 2026-02-15
 
@@ -582,6 +641,7 @@ docker.service                 - Docker engine
 getty@tty1.service             - Console on tty1
 kj-autodeploy.service          - Auto-deploy kj-controller from GitHub (polls every 60s)
 kj-controller.service          - KJ Controller (karaoke show management, port 5000)
+rotation-display.service       - Singer rotation overlay (Google Sheets → tkinter)
 NetworkManager.service         - Network management
 ssh.service                    - SSH server
 systemd-journald.service       - System logging
@@ -714,6 +774,10 @@ ssh nomadpi 'docker system prune -a'
 - `/root/.vnc/config.d/Xvnc` - Virtual Mode config
 - `/lib/systemd/system/vncserver-x11-serviced.service` - Service Mode systemd unit
 - `/etc/systemd/system/vncserver.service` - Virtual Mode systemd unit (DietPi wrapper)
+
+### Rotation Display
+- `/opt/nomad/kjbox/desktop/rotation_display.py` - Rotation display app (source, auto-deployed)
+- `/etc/systemd/system/rotation-display.service` - systemd service unit
 
 ### KJ Controller
 - `/opt/nomad/kjbox/` - Git clone of kjbox repo (app runs directly from here)

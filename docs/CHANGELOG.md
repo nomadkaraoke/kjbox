@@ -15,15 +15,12 @@ NomadPi system configuration changes. For current configuration details, see [ar
 - 30-second auto-refresh with offline fallback (shows cached data)
 - Dark navy background with large readable fonts for venue visibility
 
-**Deployment (on Pi):**
-```bash
-apt-get install -y python3-tk
-# Create /etc/systemd/system/rotation-display.service
-# ExecStart=/usr/bin/python3 /opt/nomad/kjbox/desktop/rotation_display.py
-# Environment=DISPLAY=:0
-# After=graphical.target, Restart=always
-systemctl daemon-reload && systemctl enable --now rotation-display
-```
+**Deployed to NomadPi:**
+- Installed `python3-tk` (libtcl8.6, libtk8.6, tk8.6-blt2.5, blt)
+- Created `/etc/systemd/system/rotation-display.service` (ExecStart=python3, DISPLAY=:0, After=graphical.target, Restart=always)
+- Service enabled and running
+
+**Setup on a new device:** See [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md) § Rotation Display for full setup instructions.
 
 ## 2026-02-16 - External Media Catalog & Search
 
