@@ -1,0 +1,263 @@
+"""VLCManager class: launch, control, and manage dual VLC instances."""
+
+import os
+import subprocess
+import threading
+import time
+
+import requests
+
+from config import APP_DIR, is_pi
+from utils import log_message
+
+
+class VLCManager:
+    """Manages dual VLC instances (karaoke + filler) for audio/video playback."""
+
+    def __init__(self, config, enabled=None):
+        self.config = config
+        self.enabled = enabled if enabled is not None else is_pi()
+        self.processes = {"karaoke": None, "filler": None}
+        self.current_playing_path = None
+        self.current_filler_track = None
+        self.filler_volume = 100
+        self.karaoke_volume = 200
+        self.karaoke_active = False
+        self.last_seek_time = 0
+        self.audio_error = False
+        self.audio_device = config.get('default_audio_device', 'hdmiout')
+
+    def launch_instance(self, name, port, password, media_file=None, loop=False):
+        """Launches a VLC instance with the HTTP interface enabled."""
+        if not self.enabled:
+            return
+
+        if self.processes[name] and self.processes[name].poll() is None:
+            log_message(f"VLC instance '{name}' is already running.", self.config)
+            return
+
+        log_message(f"Launching VLC instance '{name}' on port {port} with audio device '{self.audio_device}'...", self.config)
+        command = [
+            'cvlc',
+            '--extraintf', 'http',
+            '--http-host', '0.0.0.0',
+            '--http-port', str(port),
+            '--http-password', password,
+            '--no-video-title-show',
+            '--aout', 'alsa',
+            '--alsa-audio-device', self.audio_device,
+        ]
+        if name == 'karaoke':
+            command.append('--fullscreen')
+
+        if media_file:
+            command.append(media_file)
+        if loop:
+            command.extend(['--loop'])
+
+        # On Pi: VLC refuses to run as root; wrap with sudo -u dietpi and set display env
+        if is_pi():
+            wrapper = [
+                'sudo', '-u', 'dietpi', 'env',
+                'DISPLAY=:0',
+                'XDG_RUNTIME_DIR=/run/user/1000',
+            ]
+            full_command = wrapper + command
+        else:
+            full_command = command
+
+        vlc_log = None
+        try:
+            log_dir = os.path.dirname(self.config.get('log_file', '')) or APP_DIR
+            vlc_log = open(os.path.join(log_dir, f'vlc-{name}.log'), 'a')
+            vlc_log.write(f"\n--- VLC '{name}' starting at {time.strftime('%Y-%m-%d %H:%M:%S')} ---\n")
+            vlc_log.flush()
+            process = subprocess.Popen(full_command, stdout=vlc_log, stderr=vlc_log)
+            self.processes[name] = process
+            log_message(f"VLC instance '{name}' launched with PID {process.pid}.", self.config)
+            time.sleep(2)
+        except FileNotFoundError:
+            log_message(f"VLC not found - '{name}' instance not launched.", self.config)
+            if vlc_log:
+                vlc_log.close()
+
+    def send_command(self, port, password, command, is_path=False, debug=False):
+        """Sends a command to a VLC HTTP interface."""
+        if not self.enabled:
+            return None
+
+        if '&' in command and not is_path:
+            url = f"http://localhost:{port}/requests/status.json?command={command}"
+        else:
+            parts = command.split('&input=', 1)
+            cmd_part = parts[0]
+            input_part = parts[1] if len(parts) > 1 else ''
+            encoded_input = requests.utils.quote(input_part)
+            url = f"http://localhost:{port}/requests/status.json?command={cmd_part}&input={encoded_input}"
+
+        if debug:
+            log_message(f"DEBUG: Sending VLC command to {url}", self.config)
+
+        try:
+            s = requests.Session()
+            s.auth = ('', password)
+            response = s.get(url, timeout=5)
+            response.raise_for_status()
+            response_json = response.json()
+            if debug:
+                log_message(f"DEBUG: VLC response status: {response.status_code}", self.config)
+                log_message(f"DEBUG: VLC response body: {response_json}", self.config)
+            return response_json
+        except requests.exceptions.RequestException as e:
+            if debug:
+                log_message(f"Error sending command to VLC on port {port}: {e}", self.config)
+            return None
+        except Exception as e:
+            log_message(f"An unexpected error occurred when calling VLC: {e}", self.config)
+            return None
+
+    def fade_music(self, port, password, start_vol, end_vol, duration_s=3):
+        """Gradually fades volume over a set duration."""
+        steps = 20
+        delay = duration_s / steps
+        for i in range(steps + 1):
+            volume = int(start_vol + (end_vol - start_vol) * (i / steps))
+            self.send_command(port, password, f"volume&val={volume}")
+            time.sleep(delay)
+
+    def fade_in_filler(self):
+        """Fades in the filler music."""
+        if not self.enabled:
+            return
+        log_message("Fading in filler music...", self.config)
+        filler_port = self.config.get('filler_vlc_port', 8081)
+        filler_pw = self.config.get('filler_vlc_password', 'filler')
+        self.send_command(filler_port, filler_pw, "volume&val=0")
+        self.send_command(filler_port, filler_pw, "pl_play")
+        threading.Thread(target=self.fade_music, args=(filler_port, filler_pw, 0, self.filler_volume)).start()
+
+    def fade_out_filler(self):
+        """Fades out the filler music and stops it (releases audio device for karaoke)."""
+        if not self.enabled:
+            return
+        log_message("Fading out filler music...", self.config)
+        filler_port = self.config.get('filler_vlc_port', 8081)
+        filler_pw = self.config.get('filler_vlc_password', 'filler')
+        self.fade_music(filler_port, filler_pw, self.filler_volume, 0)
+        self.send_command(filler_port, filler_pw, "pl_stop")
+        log_message("Filler music faded out and stopped.", self.config)
+
+    def ensure_filler_stopped(self):
+        """Verifies filler VLC has released the audio device."""
+        filler_port = self.config.get('filler_vlc_port', 8081)
+        filler_pw = self.config.get('filler_vlc_password', 'filler')
+        for attempt in range(5):
+            status = self.send_command(filler_port, filler_pw, "")
+            if status and status.get('state') == 'stopped':
+                return True
+            self.send_command(filler_port, filler_pw, "pl_stop")
+            time.sleep(0.5)
+        log_message("WARNING: Could not confirm filler VLC stopped after 5 attempts", self.config)
+        return False
+
+    def play_video(self, file_path):
+        """Plays a video on the karaoke VLC instance (stop filler, load, play)."""
+        karaoke_port = self.config.get('karaoke_vlc_port', 8080)
+        karaoke_pw = self.config.get('karaoke_vlc_password', 'karaoke')
+
+        if not os.path.exists(file_path):
+            log_message(f"ERROR: File not found: {file_path}", self.config)
+            return
+
+        if not self.enabled:
+            log_message(f"VLC disabled - cannot play {os.path.basename(file_path)}", self.config)
+            return
+
+        self.audio_error = False
+
+        # Fade out and stop filler music (releases audio device)
+        self.fade_out_filler()
+        time.sleep(0.5)
+        self.ensure_filler_stopped()
+
+        # Load and play the video
+        self.send_command(karaoke_port, karaoke_pw, "pl_empty")
+        time.sleep(0.1)
+        self.send_command(karaoke_port, karaoke_pw, f"in_enqueue&input={file_path}", is_path=True)
+        time.sleep(0.1)
+        self.send_command(karaoke_port, karaoke_pw, f"volume&val={self.karaoke_volume}")
+        time.sleep(0.1)
+        self.send_command(karaoke_port, karaoke_pw, "pl_play")
+
+        self.karaoke_active = True
+        log_message(f"Playback started for {os.path.basename(file_path)}.", self.config)
+
+        # Verify audio is actually working after a brief delay
+        def verify_playback():
+            time.sleep(3)
+            status = self.send_command(karaoke_port, karaoke_pw, "")
+            if status and status.get('state') == 'playing':
+                self.audio_error = False
+            elif self.karaoke_active:
+                log_message("WARNING: Karaoke VLC not in 'playing' state - possible audio device issue", self.config)
+                self.audio_error = True
+        threading.Thread(target=verify_playback, daemon=True).start()
+
+    def restart_instances(self):
+        """Terminates both VLC processes and relaunches them with the current audio device."""
+        if not self.enabled:
+            return
+
+        karaoke_port = self.config.get('karaoke_vlc_port', 8080)
+        karaoke_pw = self.config.get('karaoke_vlc_password', 'karaoke')
+        filler_port = self.config.get('filler_vlc_port', 8081)
+        filler_pw = self.config.get('filler_vlc_password', 'filler')
+
+        log_message(f"Restarting VLC instances with audio device '{self.audio_device}'...", self.config)
+
+        # Terminate existing VLC processes
+        for name, proc in self.processes.items():
+            if proc and proc.poll() is None:
+                proc.terminate()
+                try:
+                    proc.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    proc.kill()
+                log_message(f"Terminated VLC instance '{name}'.", self.config)
+            self.processes[name] = None
+
+        self.karaoke_active = False
+        self.current_playing_path = None
+        time.sleep(1)
+
+        # Relaunch both instances
+        self.launch_instance("karaoke", karaoke_port, karaoke_pw)
+        filler_dir = self.config.get('filler_music_dir', '')
+        filler_path = os.path.join(filler_dir, self.current_filler_track) if filler_dir and self.current_filler_track else ''
+        self.launch_instance("filler", filler_port, filler_pw, filler_path, True)
+        time.sleep(3)
+        self.fade_in_filler()
+        log_message("VLC instances restarted successfully.", self.config)
+
+    def monitor_karaoke(self):
+        """Background thread loop: checks if a karaoke song has ended."""
+        karaoke_port = self.config.get('karaoke_vlc_port', 8080)
+        karaoke_pw = self.config.get('karaoke_vlc_password', 'karaoke')
+        while True:
+            time.sleep(2)
+            if not self.karaoke_active:
+                continue
+
+            # Skip check briefly after a seek - VLC may report 'stopped' transiently
+            if time.time() - self.last_seek_time < 5:
+                continue
+
+            status = self.send_command(karaoke_port, karaoke_pw, "", debug=False)
+            if not status:
+                continue
+
+            if status.get('state') == 'stopped':
+                log_message("Karaoke video finished playing.", self.config)
+                self.karaoke_active = False
+                self.current_playing_path = None
+                self.fade_in_filler()

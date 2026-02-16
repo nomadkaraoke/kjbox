@@ -30,16 +30,28 @@ NomadPi is a portable karaoke rig built on a Raspberry Pi 4 running DietPi. It c
 
 ```
 kjbox/
-  README.md                  # This file
-  NOMADPI-DETAILS.md         # Complete device configuration reference
-  NETWORK-CONFIG-BACKUP.md   # Tailscale & Cloudflare tunnel backup
-  CLAUDE.md                  # Claude Code agent instructions
-  LICENSE                    # MIT License
-  kj-controller/             # KJ Remote Controller web app
-    app.py                   # Flask backend (VLC control, yt-dlp downloads)
-    requirements.txt         # Python dependencies
-    templates/               # Web UI templates
-    README.md                # Controller-specific documentation
+  README.md                    # This file
+  CLAUDE.md                    # Claude Code agent instructions
+  LICENSE                      # MIT License
+  docs/
+    ARCHITECTURE.md            # System architecture and API reference
+    DEVELOPMENT.md             # Local setup and dev workflow
+    TESTING.md                 # Test conventions and coverage
+    archive/
+      NOMADPI-DETAILS.md       # Complete device configuration reference
+      NETWORK-CONFIG-BACKUP.md # Tailscale & Cloudflare tunnel backup
+  kj-controller/               # KJ Remote Controller web app
+    app.py                     # App factory (create_app) + entry point
+    config.py                  # Constants, platform detection, config loading
+    utils.py                   # Logging and filename utilities
+    media.py                   # MediaIndex class (scan, validate, download)
+    vlc.py                     # VLCManager class (dual VLC instance control)
+    routes.py                  # Flask Blueprint with REST API handlers
+    pyproject.toml             # Project metadata and tool config
+    requirements.txt           # Production dependencies
+    requirements-dev.txt       # Test dependencies
+    templates/                 # Web UI templates
+    tests/                     # pytest test suite (91 tests, 73% coverage)
 ```
 
 ## KJ Remote Controller
@@ -56,7 +68,7 @@ See [kj-controller/README.md](kj-controller/README.md) for setup and usage.
 
 ## Device Documentation
 
-**[NOMADPI-DETAILS.md](NOMADPI-DETAILS.md)** is the comprehensive reference for the Pi's configuration, covering:
+**[docs/archive/NOMADPI-DETAILS.md](docs/archive/NOMADPI-DETAILS.md)** is the comprehensive reference for the Pi's configuration, covering:
 
 - Hardware specs and connected peripherals
 - Network configuration (WiFi, Tailscale VPN, SSH access)

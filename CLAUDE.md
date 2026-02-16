@@ -5,15 +5,18 @@
 This repository (`kjbox`) contains documentation and software for **NomadPi**, a Raspberry Pi 4 running DietPi configured for Nomad Karaoke live events (video playback, AV equipment connection, and karaoke show management).
 
 ### Repository Contents
-- **NOMADPI-DETAILS.md** - Complete device configuration reference (hardware, network, audio, display, services)
-- **NETWORK-CONFIG-BACKUP.md** - Tailscale VPN and Cloudflare tunnel configuration backup
+- **docs/ARCHITECTURE.md** - System architecture, API reference, design decisions
+- **docs/DEVELOPMENT.md** - Local setup, dev workflow, running tests
+- **docs/TESTING.md** - Test conventions, coverage targets, fixtures
+- **docs/archive/NOMADPI-DETAILS.md** - Complete device configuration reference (hardware, network, audio, display, services)
+- **docs/archive/NETWORK-CONFIG-BACKUP.md** - Tailscale VPN and Cloudflare tunnel configuration backup
 - **kj-controller/** - KJ Remote Controller web app for managing karaoke playback
 
 ### 📋 Documentation Maintenance - CRITICAL
 
 **IMPORTANT:** When working with the NomadPi device, you MUST maintain comprehensive documentation:
 
-1. **Always update NOMADPI-DETAILS.md** whenever you:
+1. **Always update docs/archive/NOMADPI-DETAILS.md** whenever you:
    - Configure or change system settings
    - Install new software or services
    - Troubleshoot and resolve issues
@@ -46,7 +49,7 @@ This repository (`kjbox`) contains documentation and software for **NomadPi**, a
 
 ### 🎯 Goal
 
-The NOMADPI-DETAILS.md file should be a **complete, comprehensive reference** that contains everything needed to:
+The `docs/archive/NOMADPI-DETAILS.md` file should be a **complete, comprehensive reference** that contains everything needed to:
 - Understand the current device configuration
 - Troubleshoot any issues
 - Replicate the setup if needed

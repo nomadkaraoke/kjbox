@@ -57,6 +57,11 @@ config.local.*
 kj-controller/config.json
 kj-controller/media_index.json
 
+# Testing / Coverage
+.pytest_cache/
+htmlcov/
+.coverage
+
 # Temporary files
 tmp/
 temp/
