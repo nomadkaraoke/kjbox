@@ -44,12 +44,15 @@ SCREEN_WIDTH = 1920
 SCREEN_HEIGHT = 1080
 
 # Margins — space between window and screen edges (pixels)
-MARGIN_TOP = 100
-MARGIN_BOTTOM = 100
-MARGIN_LEFT = 100
+MARGIN_TOP = 60
+MARGIN_BOTTOM = 105
+MARGIN_LEFT = 30
 
 # Window width (independent of margins)
-WINDOW_WIDTH = 640
+WINDOW_WIDTH = 600
+
+# Internal padding (pixels) — space between window edge and content
+PAD_X = 10
 
 # Background opacity (0.0 = fully transparent, 1.0 = fully opaque)
 # Requires a compositor (xcompmgr) for transparency to work.
@@ -79,13 +82,13 @@ LOADING_COLOR = "#5a9bf5"      # blue for loading indicator
 FONT_SCALE = 2
 
 # Base font sizes (multiplied by FONT_SCALE)
-FONT_HEADER = ("Helvetica", 28 * FONT_SCALE, "bold")
+FONT_HEADER = ("Helvetica", 20 * FONT_SCALE, "bold")
 FONT_NOW_LABEL = ("Helvetica", 14 * FONT_SCALE, "bold")
-FONT_NOW_NAME = ("Helvetica", 32 * FONT_SCALE, "bold")
-FONT_NOW_SONG = ("Helvetica", 18 * FONT_SCALE)
+FONT_NOW_NAME = ("Helvetica", 26 * FONT_SCALE, "bold")
+FONT_NOW_SONG = ("Helvetica", 14 * FONT_SCALE)
 FONT_QUEUE_NUM = ("Helvetica", 16 * FONT_SCALE, "bold")
 FONT_QUEUE_NAME = ("Helvetica", 20 * FONT_SCALE, "bold")
-FONT_QUEUE_SONG = ("Helvetica", 14 * FONT_SCALE)
+FONT_QUEUE_SONG = ("Helvetica", 10 * FONT_SCALE)
 FONT_QUEUE_STATUS = ("Helvetica", 12 * FONT_SCALE)
 FONT_STATUS_BAR = ("Helvetica", 11 * FONT_SCALE)
 FONT_EMPTY = ("Helvetica", 20 * FONT_SCALE)
@@ -136,6 +139,8 @@ def fetch_rotation():
 # ---------------------------------------------------------------------------
 
 class RotationDisplay:
+    """Flicker-free rotation overlay using in-place label updates."""
+
     def __init__(self):
         self.root = tk.Tk()
         self.root.title("Rotation")
@@ -152,169 +157,199 @@ class RotationDisplay:
 
         self.cached_entries = []
         self.is_offline = False
-        self.is_loading = False
 
-        # Content frame
-        self.content = tk.Frame(self.root, bg=BG_COLOR)
-        self.content.pack(fill=tk.BOTH, expand=True)
-
-        self._build_ui([])
+        # Pre-build all widgets once — updates change text/color in place
+        self._create_widgets()
+        self._apply_entries([])
         self._refresh()
 
-    def _build_ui(self, entries):
-        """Rebuild the UI by swapping in a new content frame (no flicker)."""
-        new_content = tk.Frame(self.root, bg=BG_COLOR)
-        self._populate(new_content, entries)
+    def _create_widgets(self):
+        """Create all widgets once. They are reused across refreshes."""
+        content_width = WINDOW_WIDTH - PAD_X * 2
 
-        # Atomic swap — new frame appears before old is destroyed
-        new_content.pack(fill=tk.BOTH, expand=True)
-        self.content.destroy()
-        self.content = new_content
+        # --- Header row ---
+        header_frame = tk.Frame(self.root, bg=BG_COLOR)
+        header_frame.pack(fill=tk.X, padx=PAD_X, pady=(12, 0))
 
-    def _populate(self, parent, entries):
-        """Populate a frame with the rotation display widgets."""
-        pad_x = 24
-
-        # --- Header ---
-        header_frame = tk.Frame(parent, bg=BG_COLOR)
-        header_frame.pack(fill=tk.X, padx=pad_x, pady=(24, 4))
-
-        tk.Label(
+        self.header_label = tk.Label(
             header_frame, text="ROTATION", font=FONT_HEADER,
             fg=HEADER_COLOR, bg=BG_COLOR, anchor="w",
-        ).pack(side=tk.LEFT)
+        )
+        self.header_label.pack(side=tk.LEFT)
 
-        # Loading indicator or singer count on the right
-        if self.is_loading:
-            self.loading_label = tk.Label(
-                header_frame, text="\u21bb", font=FONT_STATUS_BAR,
-                fg=LOADING_COLOR, bg=BG_COLOR, anchor="e",
-            )
-            self.loading_label.pack(side=tk.RIGHT)
-        else:
-            count_text = f"{len(entries)} singer{'s' if len(entries) != 1 else ''}"
-            tk.Label(
-                header_frame, text=count_text, font=FONT_STATUS_BAR,
-                fg=ACCENT_DEFAULT, bg=BG_COLOR, anchor="e",
-            ).pack(side=tk.RIGHT)
+        self.count_label = tk.Label(
+            header_frame, text="", font=FONT_STATUS_BAR,
+            fg=ACCENT_DEFAULT, bg=BG_COLOR, anchor="e",
+        )
+        self.count_label.pack(side=tk.RIGHT)
 
         # Divider
-        tk.Frame(
-            parent, bg=DIVIDER_COLOR, height=2,
-        ).pack(fill=tk.X, padx=pad_x, pady=(8, 16))
+        tk.Frame(self.root, bg=DIVIDER_COLOR, height=2).pack(
+            fill=tk.X, padx=PAD_X, pady=(6, 8),
+        )
 
-        if not entries:
-            tk.Label(
-                parent, text="No singers in queue",
-                font=FONT_EMPTY, fg=ACCENT_DEFAULT, bg=BG_COLOR,
-            ).pack(pady=60)
-            self._build_status_bar(parent, pad_x)
-            return
+        # --- "Now singing" section ---
+        self.now_frame = tk.Frame(self.root, bg=BG_COLOR)
+        self.now_frame.pack(fill=tk.X, padx=PAD_X)
 
-        # --- Now Singing (first entry) ---
-        now = entries[0]
-        now_frame = tk.Frame(parent, bg=BG_COLOR)
-        now_frame.pack(fill=tk.X, padx=pad_x, pady=(0, 8))
+        self.now_status_label = tk.Label(
+            self.now_frame, text="", font=FONT_NOW_LABEL,
+            fg=ACCENT_NOW, bg=BG_COLOR, anchor="w",
+        )
+        self.now_status_label.pack(fill=tk.X)
 
-        status_text = now["status"] if now["status"] else "Now Singing"
-        tk.Label(
-            now_frame, text=f"  {status_text.upper()}",
-            font=FONT_NOW_LABEL, fg=ACCENT_NOW, bg=BG_COLOR, anchor="w",
-        ).pack(fill=tk.X)
+        self.now_name_label = tk.Label(
+            self.now_frame, text="", font=FONT_NOW_NAME,
+            fg=HEADER_COLOR, bg=BG_COLOR, anchor="w",
+            wraplength=content_width,
+        )
+        self.now_name_label.pack(fill=tk.X)
 
-        tk.Label(
-            now_frame, text=now["singer"],
-            font=FONT_NOW_NAME, fg=HEADER_COLOR, bg=BG_COLOR, anchor="w",
-            wraplength=WINDOW_WIDTH - pad_x * 2,
-        ).pack(fill=tk.X)
-
-        tk.Label(
-            now_frame, text=now["song_artist"],
-            font=FONT_NOW_SONG, fg=TEXT_COLOR, bg=BG_COLOR, anchor="w",
-            wraplength=WINDOW_WIDTH - pad_x * 2,
-        ).pack(fill=tk.X)
+        self.now_song_label = tk.Label(
+            self.now_frame, text="", font=FONT_NOW_SONG,
+            fg=TEXT_COLOR, bg=BG_COLOR, anchor="w",
+            wraplength=content_width,
+        )
+        self.now_song_label.pack(fill=tk.X)
 
         # Divider after now singing
-        tk.Frame(
-            parent, bg=DIVIDER_COLOR, height=1,
-        ).pack(fill=tk.X, padx=pad_x, pady=(16, 12))
+        self.now_divider = tk.Frame(self.root, bg=DIVIDER_COLOR, height=1)
+        self.now_divider.pack(fill=tk.X, padx=PAD_X, pady=(10, 6))
 
-        # --- Queue (entries 2-N) ---
-        for i, entry in enumerate(entries[1:], start=2):
-            row = tk.Frame(parent, bg=BG_COLOR)
-            row.pack(fill=tk.X, padx=pad_x, pady=(0, 10))
+        # --- Queue slots (pre-create MAX_ENTRIES-1 rows) ---
+        self.queue_rows = []
+        for _ in range(MAX_ENTRIES - 1):
+            row_frame = tk.Frame(self.root, bg=BG_COLOR)
+            row_frame.pack(fill=tk.X, padx=PAD_X, pady=(0, 2))
 
-            # Number + name on same line
-            top_line = tk.Frame(row, bg=BG_COLOR)
+            top_line = tk.Frame(row_frame, bg=BG_COLOR)
             top_line.pack(fill=tk.X)
 
-            # Determine status color
-            status_lower = entry["status"].lower()
-            if "next" in status_lower:
-                num_color = ACCENT_NEXT
-            elif "singing" in status_lower or "now" in status_lower:
-                num_color = ACCENT_NOW
-            else:
-                num_color = ACCENT_DEFAULT
+            num_label = tk.Label(
+                top_line, text="", font=FONT_QUEUE_NUM,
+                fg=ACCENT_DEFAULT, bg=BG_COLOR, anchor="w",
+            )
+            num_label.pack(side=tk.LEFT)
 
-            tk.Label(
-                top_line, text=f"{i}.", font=FONT_QUEUE_NUM,
-                fg=num_color, bg=BG_COLOR, width=3, anchor="e",
-            ).pack(side=tk.LEFT)
+            name_label = tk.Label(
+                top_line, text="", font=FONT_QUEUE_NAME,
+                fg=HEADER_COLOR, bg=BG_COLOR, anchor="w",
+            )
+            name_label.pack(side=tk.LEFT, fill=tk.X, expand=True)
 
-            tk.Label(
-                top_line, text=f"  {entry['singer']}",
-                font=FONT_QUEUE_NAME, fg=HEADER_COLOR, bg=BG_COLOR,
-                anchor="w",
-            ).pack(side=tk.LEFT, fill=tk.X, expand=True)
+            status_label = tk.Label(
+                top_line, text="", font=FONT_QUEUE_STATUS,
+                fg=ACCENT_DEFAULT, bg=BG_COLOR, anchor="e",
+            )
+            status_label.pack(side=tk.RIGHT)
 
-            # Status badge (if present and not generic)
-            if entry["status"] and entry["status"].lower() not in ("queued", ""):
-                tk.Label(
-                    top_line, text=f" {entry['status']} ",
-                    font=FONT_QUEUE_STATUS, fg=num_color, bg=BG_COLOR,
-                    anchor="e",
-                ).pack(side=tk.RIGHT)
+            song_label = tk.Label(
+                row_frame, text="", font=FONT_QUEUE_SONG,
+                fg=TEXT_COLOR, bg=BG_COLOR, anchor="w",
+                wraplength=content_width - 20,
+            )
+            song_label.pack(fill=tk.X, padx=(4, 0))
 
-            # Song + artist line
-            if entry["song_artist"]:
-                tk.Label(
-                    row, text=f"      {entry['song_artist']}",
-                    font=FONT_QUEUE_SONG, fg=TEXT_COLOR, bg=BG_COLOR,
-                    anchor="w", wraplength=WINDOW_WIDTH - pad_x * 2 - 40,
-                ).pack(fill=tk.X)
+            self.queue_rows.append({
+                "frame": row_frame,
+                "num": num_label,
+                "name": name_label,
+                "status": status_label,
+                "song": song_label,
+            })
 
-        self._build_status_bar(parent, pad_x)
+        # --- Empty queue message (hidden by default) ---
+        self.empty_label = tk.Label(
+            self.root, text="No singers in queue",
+            font=FONT_EMPTY, fg=ACCENT_DEFAULT, bg=BG_COLOR,
+        )
 
-    def _build_status_bar(self, parent, pad_x):
-        """Add the status/update time bar at the bottom."""
-        # Spacer to push status bar down
-        spacer = tk.Frame(parent, bg=BG_COLOR)
+        # --- Status bar at bottom ---
+        spacer = tk.Frame(self.root, bg=BG_COLOR)
         spacer.pack(fill=tk.BOTH, expand=True)
 
-        # Divider
-        tk.Frame(
-            parent, bg=DIVIDER_COLOR, height=1,
-        ).pack(fill=tk.X, padx=pad_x, pady=(8, 4))
+        tk.Frame(self.root, bg=DIVIDER_COLOR, height=1).pack(
+            fill=tk.X, padx=PAD_X, pady=(4, 2),
+        )
 
+        self.status_label = tk.Label(
+            self.root, text="", font=FONT_STATUS_BAR,
+            fg=ACCENT_DEFAULT, bg=BG_COLOR, anchor="w",
+        )
+        self.status_label.pack(fill=tk.X, padx=PAD_X, pady=(0, 8))
+
+    def _apply_entries(self, entries):
+        """Update all widget text/colors in place — no widget destruction."""
+        has_entries = len(entries) > 0
+
+        # Header count / loading indicator
+        if has_entries:
+            count_text = f"{len(entries)} singer{'s' if len(entries) != 1 else ''}"
+            self.count_label.configure(text=count_text, fg=ACCENT_DEFAULT)
+        else:
+            self.count_label.configure(text="")
+
+        # Now singing section
+        if has_entries:
+            now = entries[0]
+            status_text = now["status"] if now["status"] else "Now Singing"
+            self.now_status_label.configure(text=status_text.upper())
+            self.now_name_label.configure(text=now["singer"])
+            self.now_song_label.configure(text=now["song_artist"])
+            self.now_frame.pack(fill=tk.X, padx=PAD_X)
+            self.now_divider.pack(fill=tk.X, padx=PAD_X, pady=(10, 6))
+            self.empty_label.pack_forget()
+        else:
+            self.now_frame.pack_forget()
+            self.now_divider.pack_forget()
+            self.empty_label.pack(pady=60, before=self.status_label)
+
+        # Queue rows
+        queue = entries[1:] if has_entries else []
+        for idx, row_widgets in enumerate(self.queue_rows):
+            if idx < len(queue):
+                entry = queue[idx]
+                num = idx + 2
+
+                # Status color
+                status_lower = entry["status"].lower()
+                if "next" in status_lower:
+                    color = ACCENT_NEXT
+                elif "singing" in status_lower or "now" in status_lower:
+                    color = ACCENT_NOW
+                else:
+                    color = ACCENT_DEFAULT
+
+                row_widgets["num"].configure(text=f"{num}. ", fg=color)
+                row_widgets["name"].configure(text=entry["singer"])
+
+                # Status badge
+                if entry["status"] and entry["status"].lower() not in ("queued", "waiting", ""):
+                    row_widgets["status"].configure(text=entry["status"], fg=color)
+                else:
+                    row_widgets["status"].configure(text="")
+
+                row_widgets["song"].configure(text=entry["song_artist"])
+                row_widgets["frame"].pack(fill=tk.X, padx=PAD_X, pady=(0, 2))
+            else:
+                row_widgets["frame"].pack_forget()
+
+        # Status bar
         if self.is_offline:
-            status_text = "Offline \u2014 showing cached data"
-            status_color = OFFLINE_COLOR
+            self.status_label.configure(
+                text="Offline \u2014 showing cached data", fg=OFFLINE_COLOR,
+            )
         else:
             now = datetime.now().strftime("%I:%M %p").lstrip("0")
-            status_text = f"Updated {now}"
-            status_color = ACCENT_DEFAULT
+            self.status_label.configure(text=f"Updated {now}", fg=ACCENT_DEFAULT)
 
-        tk.Label(
-            parent, text=status_text, font=FONT_STATUS_BAR,
-            fg=status_color, bg=BG_COLOR, anchor="w",
-        ).pack(fill=tk.X, padx=pad_x, pady=(0, 12))
+    def _show_loading(self):
+        """Show loading indicator in header."""
+        self.count_label.configure(text="\u21bb", fg=LOADING_COLOR)
 
     def _refresh(self):
         """Kick off a background fetch, then update the UI when done."""
-        self.is_loading = True
-        self._build_ui(self.cached_entries)
-
+        self._show_loading()
         thread = threading.Thread(target=self._fetch_and_update, daemon=True)
         thread.start()
 
@@ -330,8 +365,7 @@ class RotationDisplay:
         """Apply fetched data to the UI (called on the main thread)."""
         self.cached_entries = entries
         self.is_offline = offline
-        self.is_loading = False
-        self._build_ui(entries)
+        self._apply_entries(entries)
         self.root.after(REFRESH_MS, self._refresh)
 
     def run(self):
