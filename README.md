@@ -37,8 +37,11 @@ kjbox/
     ARCHITECTURE.md            # System architecture and API reference
     DEVELOPMENT.md             # Local setup and dev workflow
     TESTING.md                 # Test conventions and coverage
+    AUDIO.md                   # Audio config: HDMI/ALSA, device switching, live event routing
+    TROUBLESHOOTING.md         # Operations runbook: troubleshooting, common tasks
+    CHANGELOG.md               # NomadPi system configuration change log
     archive/
-      NOMADPI-DETAILS.md       # Complete device configuration reference
+      NOMADPI-DETAILS.md       # Device reference: hardware, network, display, services
       NETWORK-CONFIG-BACKUP.md # Tailscale & Cloudflare tunnel backup
   kj-controller/               # KJ Remote Controller web app
     app.py                     # App factory (create_app) + entry point
@@ -51,7 +54,7 @@ kjbox/
     requirements.txt           # Production dependencies
     requirements-dev.txt       # Test dependencies
     templates/                 # Web UI templates
-    tests/                     # pytest test suite (91 tests, 73% coverage)
+    tests/                     # pytest test suite (115 tests, 88% coverage)
 ```
 
 ## KJ Remote Controller
@@ -68,16 +71,12 @@ See [kj-controller/README.md](kj-controller/README.md) for setup and usage.
 
 ## Device Documentation
 
-**[docs/archive/NOMADPI-DETAILS.md](docs/archive/NOMADPI-DETAILS.md)** is the comprehensive reference for the Pi's configuration, covering:
+NomadPi documentation is split by topic:
 
-- Hardware specs and connected peripherals
-- Network configuration (WiFi, Tailscale VPN, SSH access)
-- Audio setup (HDMI audio with custom EDID, USB mixer, ALSA config)
-- Display and graphics (KMS, custom EDID for corrupt touchscreen, VNC)
-- VLC configuration (root-user workaround, wrapper script)
-- Boot configuration and system services
-- Troubleshooting guides
-- Complete change log
+- **[docs/AUDIO.md](docs/AUDIO.md)** - Audio configuration (HDMI with custom EDID, ALSA, USB mixer, live event routing)
+- **[docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)** - Troubleshooting guides and common Pi tasks
+- **[docs/CHANGELOG.md](docs/CHANGELOG.md)** - System configuration change log
+- **[docs/archive/NOMADPI-DETAILS.md](docs/archive/NOMADPI-DETAILS.md)** - Hardware specs, network, display, boot, VNC, services, config file paths
 
 ## Quick Start
 
