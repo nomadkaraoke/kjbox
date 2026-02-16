@@ -70,10 +70,10 @@ def handle_play():
     actual_play_path = validated
     if validated.lower().endswith('.zip'):
         zip_playback = current_app.zip_playback
-        cdg_path = zip_playback.extract_and_get_cdg(validated)
-        if not cdg_path:
-            return jsonify({"error": "ZIP file does not contain a playable .cdg file"}), 400
-        actual_play_path = cdg_path
+        mp3_path = zip_playback.extract_and_get_mp3(validated)
+        if not mp3_path:
+            return jsonify({"error": "ZIP file does not contain a playable .mp3 file"}), 400
+        actual_play_path = mp3_path
 
     log_message(f"Received play request for {os.path.basename(validated)}.", cfg)
     vlc.current_playing_path = validated

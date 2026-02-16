@@ -163,12 +163,12 @@ class TestPlayWithZip:
         data = json.loads(response.data)
         assert data['success'] is True
 
-    def test_play_zip_no_cdg(self, flask_test_client, flask_app, tmp_media_dir):
-        """POST /play with ZIP missing .cdg returns 400."""
+    def test_play_zip_no_mp3(self, flask_test_client, flask_app, tmp_media_dir):
+        """POST /play with ZIP missing .mp3 returns 400."""
         media_dir = tmp_media_dir / "media"
-        zip_path = media_dir / "nocdg.zip"
+        zip_path = media_dir / "nomp3.zip"
         with zipfile.ZipFile(str(zip_path), 'w') as zf:
-            zf.writestr("song.mp3", b"fake mp3")
+            zf.writestr("song.cdg", b"fake cdg")
 
         flask_app.vlc.enabled = True
 
