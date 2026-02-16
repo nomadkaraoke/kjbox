@@ -1,0 +1,381 @@
+"""Tests for MediaIndex: scan, validate, list, delete."""
+
+import json
+import os
+
+from media import MediaIndex
+
+
+def test_validate_media_path_valid(mock_config, tmp_media_dir):
+    mi = MediaIndex(mock_config)
+    media_dir = tmp_media_dir / "media"
+    test_file = media_dir / "song.mp4"
+    test_file.write_text("fake video")
+
+    result = mi.validate_path(str(test_file))
+    assert result == os.path.realpath(str(test_file))
+
+
+def test_validate_media_path_outside_media_folders(mock_config, tmp_path):
+    mi = MediaIndex(mock_config)
+    outside_file = tmp_path / "outside" / "song.mp4"
+    outside_file.parent.mkdir()
+    outside_file.write_text("fake video")
+
+    result = mi.validate_path(str(outside_file))
+    assert result is None
+
+
+def test_validate_media_path_nonexistent_file(mock_config, tmp_media_dir):
+    mi = MediaIndex(mock_config)
+    result = mi.validate_path(str(tmp_media_dir / "media" / "missing.mp4"))
+    assert result is None
+
+
+def test_validate_media_path_symlink_traversal(mock_config, tmp_media_dir, tmp_path):
+    """Symlink inside media folder pointing outside should be rejected."""
+    mi = MediaIndex(mock_config)
+    outside_file = tmp_path / "secret.txt"
+    outside_file.write_text("secret data")
+
+    symlink = tmp_media_dir / "media" / "sneaky.mp4"
+    symlink.symlink_to(outside_file)
+
+    result = mi.validate_path(str(symlink))
+    assert result is None
+
+
+def test_is_in_download_folder_true(mock_config, tmp_media_dir):
+    mi = MediaIndex(mock_config)
+    download_dir = tmp_media_dir / "downloads"
+    test_file = download_dir / "video.mp4"
+    test_file.write_text("fake video")
+
+    result = mi.is_in_download_folder(str(test_file))
+    assert result is True
+
+
+def test_is_in_download_folder_false(mock_config, tmp_media_dir):
+    mi = MediaIndex(mock_config)
+    media_dir = tmp_media_dir / "media"
+    test_file = media_dir / "video.mp4"
+    test_file.write_text("fake video")
+
+    result = mi.is_in_download_folder(str(test_file))
+    assert result is False
+
+
+def test_is_in_download_folder_subfolder(mock_config, tmp_media_dir):
+    mi = MediaIndex(mock_config)
+    subfolder = tmp_media_dir / "downloads" / "subdir"
+    subfolder.mkdir()
+    test_file = subfolder / "video.mp4"
+    test_file.write_text("fake video")
+
+    result = mi.is_in_download_folder(str(test_file))
+    assert result is True
+
+
+def test_scan_empty_folder(mock_config, tmp_media_dir):
+    """Scan with no media files returns empty index."""
+    mi = MediaIndex(mock_config)
+    mi.scan()
+    assert len(mi.index) == 0
+
+
+def test_scan_finds_media_files(mock_config, tmp_media_dir):
+    """Create files in media folders, verify they appear in the index."""
+    mi = MediaIndex(mock_config)
+    media_dir = tmp_media_dir / "media"
+    (media_dir / "song1.mp4").write_text("fake1")
+    (media_dir / "song2.mkv").write_text("fake2")
+    (media_dir / "readme.txt").write_text("not media")
+
+    mi.scan()
+    assert len(mi.index) == 2
+    paths = [entry["filename"] for entry in mi.index.values()]
+    assert "song1.mp4" in paths
+    assert "song2.mkv" in paths
+
+
+def test_scan_preserves_metadata(mock_config, tmp_media_dir):
+    """Existing index metadata (duration, upload_date) survives rescan."""
+    mi = MediaIndex(mock_config)
+    media_dir = tmp_media_dir / "media"
+    test_file = media_dir / "song.mp4"
+    test_file.write_text("fake video")
+    real_path = os.path.realpath(str(test_file))
+
+    # Pre-populate index file with metadata
+    existing = {real_path: {"duration": 180, "upload_date": "20240101"}}
+    index_path = mock_config["media_index_path"]
+    with open(index_path, 'w') as f:
+        json.dump(existing, f)
+
+    mi.scan()
+    assert mi.index[real_path]["duration"] == 180
+    assert mi.index[real_path]["upload_date"] == "20240101"
+
+
+def test_list_items_format(mock_config, tmp_media_dir):
+    """Verify list_items() output shape."""
+    mi = MediaIndex(mock_config)
+    media_dir = tmp_media_dir / "media"
+    (media_dir / "song.mp4").write_text("fake")
+    mi.scan()
+
+    items = mi.list_items()
+    assert len(items) == 1
+    item = items[0]
+    assert "file_path" in item
+    assert "display_name" in item
+    assert "filename" in item
+    assert "folder_name" in item
+    assert "is_download" in item
+    assert "mtime" in item
+    assert "size" in item
+
+
+def test_delete_removes_file_and_sidecars(mock_config, tmp_media_dir):
+    """Delete with sidecar cleanup."""
+    mi = MediaIndex(mock_config)
+    download_dir = tmp_media_dir / "downloads"
+    main_file = download_dir / "video.mp4"
+    sidecar_json = download_dir / "video.json"
+    sidecar_webp = download_dir / "video.webp"
+    main_file.write_text("fake video")
+    sidecar_json.write_text("{}")
+    sidecar_webp.write_text("fake image")
+
+    real_path = os.path.realpath(str(main_file))
+    mi.index[real_path] = {"path": real_path, "filename": "video.mp4"}
+
+    mi.delete_file(real_path)
+
+    assert not main_file.exists()
+    assert not sidecar_json.exists()
+    assert not sidecar_webp.exists()
+    assert real_path not in mi.index
+
+
+def test_load_from_file(mock_config, tmp_media_dir):
+    """load() reads from existing index file instead of scanning."""
+    mi = MediaIndex(mock_config)
+    index_path = mock_config["media_index_path"]
+
+    # Write a pre-existing index
+    data = {"/fake/path.mp4": {"path": "/fake/path.mp4", "filename": "path.mp4"}}
+    with open(index_path, 'w') as f:
+        json.dump(data, f)
+
+    mi.load()
+    assert len(mi.index) == 1
+    assert "/fake/path.mp4" in mi.index
+
+
+def test_load_triggers_scan_when_no_file(mock_config, tmp_media_dir):
+    """load() triggers scan when no index file exists."""
+    mi = MediaIndex(mock_config)
+    media_dir = tmp_media_dir / "media"
+    (media_dir / "song.mp4").write_text("fake")
+
+    mi.load()
+    assert len(mi.index) == 1
+
+
+def test_save_and_load_roundtrip(mock_config, tmp_media_dir):
+    """Save index to disk and load it back."""
+    mi1 = MediaIndex(mock_config)
+    media_dir = tmp_media_dir / "media"
+    (media_dir / "track.mp4").write_text("fake")
+    mi1.scan()
+
+    mi2 = MediaIndex(mock_config)
+    mi2.load()
+    assert len(mi2.index) == len(mi1.index)
+
+
+def test_scan_skips_nonexistent_folder(mock_config, tmp_media_dir):
+    """Scan skips media folders that don't exist."""
+    mock_config["media_folders"].append("/nonexistent/folder")
+    mi = MediaIndex(mock_config)
+    mi.scan()
+    # Should not crash, still works for valid folders
+    assert isinstance(mi.index, dict)
+
+
+def test_scan_handles_stat_error(mock_config, tmp_media_dir, mocker):
+    """Scan skips files that raise OSError on stat."""
+    mi = MediaIndex(mock_config)
+    media_dir = tmp_media_dir / "media"
+    (media_dir / "good.mp4").write_text("fake")
+    (media_dir / "bad.mp4").write_text("fake")
+
+    original_stat = os.stat
+    def patched_stat(path, *args, **kwargs):
+        if "bad.mp4" in str(path):
+            raise OSError("Permission denied")
+        return original_stat(path, *args, **kwargs)
+
+    mocker.patch('media.os.stat', side_effect=patched_stat)
+    mi.scan()
+    assert len(mi.index) == 1
+    filenames = [e["filename"] for e in mi.index.values()]
+    assert "good.mp4" in filenames
+
+
+def test_scan_parses_youtube_filename(mock_config, tmp_media_dir):
+    """Scan correctly parses youtube-format filenames."""
+    mi = MediaIndex(mock_config)
+    media_dir = tmp_media_dir / "media"
+    (media_dir / "dQw4w9WgXcQ__RickAstley__Never Gonna Give You Up.mp4").write_text("fake")
+
+    mi.scan()
+    assert len(mi.index) == 1
+    entry = list(mi.index.values())[0]
+    assert entry["youtube_id"] == "dQw4w9WgXcQ"
+    assert entry["channel"] == "RickAstley"
+    assert entry["title"] == "Never Gonna Give You Up"
+    assert entry["display_name"] == "Never Gonna Give You Up"
+
+
+def test_list_items_with_youtube_metadata(mock_config, tmp_media_dir):
+    """list_items includes youtube fields when present."""
+    mi = MediaIndex(mock_config)
+    media_dir = tmp_media_dir / "media"
+    (media_dir / "dQw4w9WgXcQ__RickAstley__Never Gonna.mp4").write_text("fake")
+    mi.scan()
+
+    # Add duration metadata
+    path = list(mi.index.keys())[0]
+    mi.index[path]["duration"] = 212
+
+    items = mi.list_items()
+    assert len(items) == 1
+    item = items[0]
+    assert item["channel"] == "RickAstley"
+    assert item["youtube_id"] == "dQw4w9WgXcQ"
+    assert item["duration"] == 212
+
+
+def test_save_handles_write_error(mock_config, tmp_media_dir):
+    """save() logs error when write fails."""
+    mi = MediaIndex(mock_config)
+    mi.index = {"key": "value"}
+    mock_config["media_index_path"] = "/nonexistent/dir/index.json"
+    mi.save()
+    # Should not raise, just log error
+
+
+def test_load_file_handles_corrupt_json(mock_config, tmp_media_dir):
+    """_load_file returns empty dict on corrupt JSON."""
+    mi = MediaIndex(mock_config)
+    index_path = mock_config["media_index_path"]
+    with open(index_path, 'w') as f:
+        f.write("{corrupt json!!!")
+
+    result = mi._load_file()
+    assert result == {}
+
+
+def test_delete_handles_sidecar_error(mock_config, tmp_media_dir, mocker):
+    """delete_file handles errors when deleting sidecars."""
+    mi = MediaIndex(mock_config)
+    download_dir = tmp_media_dir / "downloads"
+    main_file = download_dir / "video.mp4"
+    sidecar = download_dir / "video.json"
+    main_file.write_text("fake video")
+    sidecar.write_text("{}")
+
+    real_path = os.path.realpath(str(main_file))
+    mi.index[real_path] = {"path": real_path, "filename": "video.mp4"}
+
+    # Make sidecar removal fail
+    original_remove = os.remove
+    def patched_remove(path):
+        if "video.json" in str(path):
+            raise PermissionError("denied")
+        return original_remove(path)
+
+    mocker.patch('media.os.remove', side_effect=patched_remove)
+    mi.delete_file(real_path)
+
+    # Main file deleted, sidecar still exists due to error
+    assert not main_file.exists()
+    assert sidecar.exists()
+
+
+def test_download_video_success(mock_config, tmp_media_dir, mocker):
+    """download_video with mocked yt_dlp extracts info and downloads."""
+    mi = MediaIndex(mock_config)
+    download_dir = tmp_media_dir / "downloads"
+
+    # Mock yt_dlp
+    mock_ydl_instance = mocker.MagicMock()
+    mock_ydl_instance.extract_info.return_value = {
+        'title': 'Test Song',
+        'channel': 'TestChannel',
+        'id': 'abc12345678',
+        'duration': 180,
+        'upload_date': '20240101',
+    }
+    mock_ydl_class = mocker.MagicMock()
+    mock_ydl_class.return_value.__enter__ = mocker.MagicMock(return_value=mock_ydl_instance)
+    mock_ydl_class.return_value.__exit__ = mocker.MagicMock(return_value=False)
+
+    mock_yt_dlp = mocker.MagicMock()
+    mock_yt_dlp.YoutubeDL = mock_ydl_class
+    mocker.patch.dict('sys.modules', {'yt_dlp': mock_yt_dlp})
+
+    # Create the expected output file (simulating yt_dlp download)
+    expected_file = download_dir / "abc12345678__TestChannel__Test Song.mp4"
+    expected_file.write_text("fake video data")
+
+    file_path, title = mi.download_video("https://youtube.com/watch?v=abc12345678")
+    assert title == "Test Song"
+    assert file_path is not None
+    assert "abc12345678" in file_path
+    assert file_path in mi.index
+    assert mi.index[file_path]["youtube_id"] == "abc12345678"
+    assert mi.index[file_path]["duration"] == 180
+
+
+def test_download_video_extract_error(mock_config, tmp_media_dir, mocker):
+    """download_video returns None on extraction error."""
+    mi = MediaIndex(mock_config)
+
+    mock_ydl_instance = mocker.MagicMock()
+    mock_ydl_instance.extract_info.side_effect = Exception("Network error")
+    mock_ydl_class = mocker.MagicMock()
+    mock_ydl_class.return_value.__enter__ = mocker.MagicMock(return_value=mock_ydl_instance)
+    mock_ydl_class.return_value.__exit__ = mocker.MagicMock(return_value=False)
+
+    mock_yt_dlp = mocker.MagicMock()
+    mock_yt_dlp.YoutubeDL = mock_ydl_class
+    mocker.patch.dict('sys.modules', {'yt_dlp': mock_yt_dlp})
+
+    file_path, title = mi.download_video("https://youtube.com/watch?v=bad")
+    assert file_path is None
+    assert title is None
+
+
+def test_download_video_file_not_found(mock_config, tmp_media_dir, mocker):
+    """download_video returns None when downloaded file can't be located."""
+    mi = MediaIndex(mock_config)
+
+    mock_ydl_instance = mocker.MagicMock()
+    mock_ydl_instance.extract_info.return_value = {
+        'title': 'Test', 'channel': 'Ch', 'id': 'abc12345678',
+    }
+    mock_ydl_class = mocker.MagicMock()
+    mock_ydl_class.return_value.__enter__ = mocker.MagicMock(return_value=mock_ydl_instance)
+    mock_ydl_class.return_value.__exit__ = mocker.MagicMock(return_value=False)
+
+    mock_yt_dlp = mocker.MagicMock()
+    mock_yt_dlp.YoutubeDL = mock_ydl_class
+    mocker.patch.dict('sys.modules', {'yt_dlp': mock_yt_dlp})
+
+    # Don't create any file - simulating download failure
+    file_path, title = mi.download_video("https://youtube.com/watch?v=abc12345678")
+    assert file_path is None
+    assert title is None
