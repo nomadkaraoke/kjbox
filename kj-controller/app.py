@@ -7,11 +7,13 @@ import time
 
 from flask import Flask
 
+from catalog import ExternalCatalog
 from config import is_pi, load_config
 from media import MediaIndex
 from routes import routes_bp
 from utils import log_message
 from vlc import VLCManager
+from zip_playback import ZipPlayback
 
 
 def create_app(config=None):
@@ -21,6 +23,8 @@ def create_app(config=None):
     flask_app.kj_config = cfg
     flask_app.media = MediaIndex(cfg)
     flask_app.vlc = VLCManager(cfg, enabled=False if config else None)
+    flask_app.catalog = ExternalCatalog(cfg)
+    flask_app.zip_playback = ZipPlayback(cfg)
     flask_app.register_blueprint(routes_bp)
     return flask_app
 
@@ -67,7 +71,15 @@ def start_app():  # pragma: no cover
     media.load()
     flask_app.media = media
     flask_app.vlc = vlc
+    flask_app.catalog = ExternalCatalog(cfg)
+    flask_app.zip_playback = ZipPlayback(cfg)
     flask_app.register_blueprint(routes_bp)
+
+    # Log external catalog status
+    if flask_app.catalog.is_available():
+        log_message(f"External catalog available: {flask_app.catalog.count()} entries.", cfg)
+    else:
+        log_message("External catalog not yet built. Use POST /catalog/build to create.", cfg)
 
     # Launch VLC instances (only on Pi)
     if vlc.enabled:

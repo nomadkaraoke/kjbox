@@ -56,6 +56,7 @@ config.local.*
 *.local.yml
 kj-controller/config.json
 kj-controller/media_index.json
+kj-controller/external_media.db
 
 # Testing / Coverage
 .pytest_cache/

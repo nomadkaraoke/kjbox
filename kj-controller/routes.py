@@ -39,7 +39,7 @@ def handle_download():
 
 @routes_bp.route('/play', methods=['POST'])
 def handle_play():
-    """Plays a media file by path."""
+    """Plays a media file by path (supports local media, external media, and ZIP files)."""
     file_path = request.json.get('file_path')
     if not file_path:
         return jsonify({"error": "file_path is required"}), 400
@@ -48,16 +48,36 @@ def handle_play():
     vlc = current_app.vlc
     cfg = current_app.kj_config
 
+    # Try local media folders first
     validated = media.validate_path(file_path)
+
+    # If not in local folders, check if it's under the external media mount
+    if not validated:
+        mount = cfg.get('external_media_mount', '')
+        if mount:
+            real = os.path.realpath(file_path)
+            real_mount = os.path.realpath(mount)
+            if real.startswith(real_mount + os.sep) and os.path.exists(real):
+                validated = real
+
     if not validated:
         return jsonify({"error": "Invalid or inaccessible file path"}), 400
 
     if not vlc.enabled:
         return jsonify({"error": "VLC not available (running in local/dev mode)"}), 503
 
+    # Handle ZIP files (CDG+MP3)
+    actual_play_path = validated
+    if validated.lower().endswith('.zip'):
+        zip_playback = current_app.zip_playback
+        cdg_path = zip_playback.extract_and_get_cdg(validated)
+        if not cdg_path:
+            return jsonify({"error": "ZIP file does not contain a playable .cdg file"}), 400
+        actual_play_path = cdg_path
+
     log_message(f"Received play request for {os.path.basename(validated)}.", cfg)
     vlc.current_playing_path = validated
-    threading.Thread(target=vlc.play_video, args=(validated,)).start()
+    threading.Thread(target=vlc.play_video, args=(actual_play_path,)).start()
     return jsonify({"success": True, "message": "Playback initiated."})
 
 
@@ -313,6 +333,73 @@ def get_audio_device():
         "current": current_app.vlc.audio_device,
         "available": current_app.kj_config.get('audio_devices', {}),
     })
+
+
+@routes_bp.route('/search')
+def search_catalog():
+    """Full-text search across the external media catalog."""
+    catalog = current_app.catalog
+    if not catalog.is_available():
+        return jsonify({"error": "Catalog not available. Build it first via POST /catalog/build"}), 503
+
+    query = request.args.get('q', '').strip()
+    if not query:
+        return jsonify([])
+
+    try:
+        limit = min(int(request.args.get('limit', 50)), 200)
+    except (ValueError, TypeError):
+        limit = 50
+    try:
+        offset = max(int(request.args.get('offset', 0)), 0)
+    except (ValueError, TypeError):
+        offset = 0
+
+    results = catalog.search(query, limit=limit, offset=offset)
+    return jsonify(results)
+
+
+@routes_bp.route('/catalog/stats')
+def catalog_stats():
+    """Return catalog statistics."""
+    catalog = current_app.catalog
+    available = catalog.is_available()
+    if available:
+        stats = catalog.stats()
+        return jsonify({"available": True, **stats})
+    return jsonify({"available": False, "total": 0, "by_format": {}})
+
+
+@routes_bp.route('/catalog/build', methods=['POST'])
+def catalog_build():
+    """Build or rebuild the external media catalog from a file list."""
+    catalog = current_app.catalog
+    cfg = current_app.kj_config
+
+    # Accept path from request body or fall back to config
+    data = request.get_json(silent=True) or {}
+    file_list_path = data.get('file_list_path') or cfg.get('external_file_list', '')
+
+    if not file_list_path:
+        return jsonify({"error": "No file_list_path provided and external_file_list not configured"}), 400
+    if not os.path.isfile(file_list_path):
+        return jsonify({"error": f"File list not found: {file_list_path}"}), 404
+
+    # Auto-detect mount prefix rewriting
+    mount_replace = None
+    mount = cfg.get('external_media_mount', '').rstrip('/')
+    if mount:
+        # Common pattern: Mac uses /Volumes/X, Pi uses /mnt/X
+        volume_name = os.path.basename(mount)
+        if volume_name:
+            mac_prefix = f'/Volumes/{volume_name}/'
+            pi_prefix = mount + '/'
+            mount_replace = (mac_prefix, pi_prefix)
+
+    log_message(f"Building external catalog from {file_list_path}...", cfg)
+    count = catalog.build_from_file_list(file_list_path, mount_replace=mount_replace)
+    log_message(f"External catalog built: {count} entries.", cfg)
+    return jsonify({"success": True, "count": count})
 
 
 @routes_bp.route('/audio_device', methods=['POST'])

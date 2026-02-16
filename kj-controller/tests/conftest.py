@@ -42,7 +42,31 @@ def mock_config(tmp_media_dir):
         "default_audio_device": "hdmiout",
         "default_filler_track": "",
         "flask_port": 5000,
+        "external_catalog_db": str(tmp_media_dir / "test_catalog.db"),
+        "external_file_list": "",
+        "external_media_mount": "",
     }
+
+
+@pytest.fixture
+def catalog_db_path(tmp_path):
+    """Temporary path for a test catalog database."""
+    return str(tmp_path / "test_catalog.db")
+
+
+@pytest.fixture
+def sample_file_list(tmp_path):
+    """Create a sample file list for catalog building."""
+    lines = [
+        "/Volumes/Nomad4TBOne/HyperMule/Karaoke/SC2411-08 - Rascal Flatts - Life Is A Highway.zip",
+        "/Volumes/Nomad4TBOne/HyperMule/Karaoke/PHK004 - Bon Jovi - Livin On A Prayer.zip",
+        "/Volumes/Nomad4TBOne/HyperMule/Videos/Michael Jackson - Billie Jean.mp4",
+        "/Volumes/Nomad4TBOne/HyperMule/Karaoke/Journey - Don't Stop Believin.zip",
+        "/Volumes/Nomad4TBOne/HyperMule/Videos/Queen - Bohemian Rhapsody.mp4",
+    ]
+    file_list = tmp_path / "file_list.txt"
+    file_list.write_text('\n'.join(lines) + '\n')
+    return str(file_list)
 
 
 @pytest.fixture
@@ -51,7 +75,9 @@ def flask_app(mock_config):
     from app import create_app
     app = create_app(config=mock_config)
     app.config['TESTING'] = True
-    return app
+    yield app
+    # Close catalog DB connection to avoid ResourceWarning
+    app.catalog.close()
 
 
 @pytest.fixture

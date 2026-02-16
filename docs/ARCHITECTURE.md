@@ -33,20 +33,24 @@ KJ Controller is a web-based karaoke show management application. A Flask backen
 
 | Module | Lines | Responsibility |
 |--------|-------|----------------|
-| `app.py` | ~60 | `create_app()` factory, `start_app()` entry point |
-| `config.py` | ~65 | Constants, `is_pi()`, `load_config()`, `save_config_value()` |
+| `app.py` | ~70 | `create_app()` factory, `start_app()` entry point |
+| `config.py` | ~70 | Constants, `is_pi()`, `load_config()`, `save_config_value()` |
 | `utils.py` | ~40 | `log_message()`, `sanitize_filename_part()`, `parse_youtube_filename()` |
 | `media.py` | ~260 | `MediaIndex` class: scan, validate, download, delete, list |
 | `vlc.py` | ~260 | `VLCManager` class: launch, command, fade, play, restart, monitor |
-| `routes.py` | ~280 | Flask Blueprint with all 15 route handlers |
+| `catalog.py` | ~230 | `ExternalCatalog` class: SQLite FTS5 search over external media |
+| `zip_playback.py` | ~50 | `ZipPlayback` class: CDG+MP3 ZIP extraction for VLC |
+| `routes.py` | ~350 | Flask Blueprint with all 18 route handlers |
 
 ### Dependency Flow
 
 ```
-app.py → config.py, media.py, vlc.py, routes.py, utils.py
-routes.py → config.py, utils.py (accesses media/vlc via current_app)
+app.py → config.py, media.py, vlc.py, catalog.py, zip_playback.py, routes.py, utils.py
+routes.py → config.py, utils.py (accesses media/vlc/catalog/zip_playback via current_app)
 media.py → config.py, utils.py
 vlc.py → config.py, utils.py
+catalog.py → (stdlib only: sqlite3, os, re)
+zip_playback.py → (stdlib only: zipfile, tempfile, shutil)
 config.py → (stdlib only)
 utils.py → (stdlib only)
 ```
@@ -60,6 +64,8 @@ utils.py → (stdlib only)
 | VLC processes | `VLCManager.processes` | `current_app.vlc` |
 | Playback state | `VLCManager` attributes | `current_app.vlc` |
 | Audio device | `VLCManager.audio_device` | `current_app.vlc` |
+| External catalog | `ExternalCatalog` (SQLite DB) | `current_app.catalog` |
+| ZIP extraction | `ZipPlayback._temp_dir` | `current_app.zip_playback` |
 
 ## REST API
 
@@ -80,6 +86,9 @@ utils.py → (stdlib only)
 | POST | `/fix_audio` | Emergency: restart VLC instances |
 | GET | `/audio_device` | Get current and available audio devices |
 | POST | `/audio_device` | Switch audio output device |
+| GET | `/search` | FTS5 full-text search over external catalog |
+| GET | `/catalog/stats` | Catalog availability, total count, format breakdown |
+| POST | `/catalog/build` | Build/rebuild catalog from file list |
 
 ## Key Design Decisions
 
@@ -102,7 +111,13 @@ A stateful class holding process handles, volume levels, and playback state. All
 `is_pi()` checks for `/boot/dietpi.txt`. On non-Pi platforms, VLC is disabled and the app runs in dev mode (web UI + media scanning only).
 
 ### Path Validation
-`MediaIndex.validate_path()` resolves symlinks and verifies files are within configured media folders, preventing directory traversal. `is_in_download_folder()` restricts deletion to downloaded files only.
+`MediaIndex.validate_path()` resolves symlinks and verifies files are within configured media folders, preventing directory traversal. `is_in_download_folder()` restricts deletion to downloaded files only. The `/play` route also accepts paths under `external_media_mount` for external catalog files.
+
+### External Catalog (SQLite FTS5)
+`ExternalCatalog` provides instant full-text search over ~415K external karaoke files without keeping them in memory. The SQLite database lives on the SD card (`external_media.db`), indexed from a file list (`all-karaoke-files-*.txt`). FTS5 tokenizes artist, title, and disc_id fields. Queries are sanitized to prevent FTS5 syntax errors. The catalog is built once via `POST /catalog/build` and persists across restarts.
+
+### CDG+MP3 ZIP Playback
+`ZipPlayback` extracts CDG+MP3 ZIP files to a temp directory. VLC auto-discovers the matching `.mp3` when given a `.cdg` path. ZIP entries are validated against path traversal (`..` or absolute paths). The temp dir is cleaned up before each new extraction.
 
 ## Frontend Architecture
 

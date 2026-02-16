@@ -4,7 +4,7 @@ import json
 import os
 
 # --- Constants ---
-MEDIA_EXTENSIONS = {'.mp4', '.mkv', '.avi', '.webm', '.mov', '.mp3', '.wav', '.flac', '.ogg'}
+MEDIA_EXTENSIONS = {'.mp4', '.mkv', '.avi', '.webm', '.mov', '.mp3', '.wav', '.flac', '.ogg', '.zip', '.cdg'}
 CONFIG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'config.json')
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -36,6 +36,9 @@ def load_config(config_file=None):
         "default_audio_device": "hdmiout",
         "default_filler_track": "",
         "flask_port": 5000,
+        "external_catalog_db": os.path.join(APP_DIR, 'external_media.db'),
+        "external_file_list": "",
+        "external_media_mount": "",
     }
     if os.path.exists(config_file):
         try:
