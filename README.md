@@ -21,6 +21,7 @@ NomadPi is a portable karaoke rig built on a Raspberry Pi 4 running DietPi. It c
 | DietPi (Debian 12) | Lightweight OS for Raspberry Pi |
 | VLC | Video/audio playback with hardware acceleration |
 | KJ Controller | Web-based karaoke show management (Flask + yt-dlp + VLC) |
+| Rotation Display | Singer queue overlay from Google Sheets (Python/tkinter) |
 | LXDE | Desktop environment with touchscreen support |
 | Tailscale | VPN for remote access in variable network environments |
 | Docker | Container runtime (available for future services) |
@@ -43,6 +44,8 @@ kjbox/
     archive/
       NOMADPI-DETAILS.md       # Device reference: hardware, network, display, services
       NETWORK-CONFIG-BACKUP.md # Tailscale & Cloudflare tunnel backup
+  desktop/
+    rotation_display.py        # Singer queue overlay (tkinter, stdlib only)
   kj-controller/               # KJ Remote Controller web app
     app.py                     # App factory (create_app) + entry point
     config.py                  # Constants, platform detection, config loading
