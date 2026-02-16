@@ -579,12 +579,85 @@ NomadPi is configured for Nomad Karaoke live events:
 - **USB Hub:** VIA Labs Hub (for peripherals)
 
 ### KJ Controller
-A web-based karaoke show management app is available in this repo at `kj-controller/`. It provides:
-- Remote control interface accessible from any browser on the local network
+A web-based karaoke show management app deployed at `/opt/kj-controller/`. It provides:
+- Remote control interface at `http://192.168.1.84:5000/` (accessible from any browser on the local network)
 - YouTube video downloading via yt-dlp
-- Dual VLC instance management (karaoke + filler music with crossfading)
-- External screen synchronization via WebSocket
-- See [kj-controller/README.md](kj-controller/README.md) for full documentation
+- Dual VLC instance management (karaoke player + filler music with crossfading)
+- Audio output switching between HDMI and USB mixer (restarts VLC instances)
+- VLC runs as `dietpi` user (wrapped with `sudo -u dietpi`) since VLC refuses root
+
+**Service:** `kj-controller.service` (enabled, starts on boot)
+```bash
+# Check service status
+ssh nomadpi 'systemctl status kj-controller'
+
+# View logs
+ssh nomadpi 'journalctl -u kj-controller -f'
+
+# Restart service
+ssh nomadpi 'systemctl restart kj-controller'
+
+# View app log
+ssh nomadpi 'tail -f /root/kj-controller.log'
+```
+
+**Configuration:**
+- `/opt/kj-controller/config.json` - Media folders, download folder, index path
+- `/opt/kj-controller/media_index.json` - Central index of all scanned media files
+
+**Data Directories:**
+- `/opt/nomad/YTDownloads/` - YouTube downloads (named `{youtube_id}__{channel}__{title}.mp4`)
+- `/opt/nomad/Tracks-PublicShare/` - Karaoke video tracks (scanned, not deletable from UI)
+- `/root/kjdata/videos/` - Legacy download location (scanned for backwards compatibility)
+- `/root/kjdata/` - Filler music files (mp3, wav, ogg, flac)
+- `/root/kjdata/youtube_cookies.txt` - Optional YouTube cookies for yt-dlp
+
+**config.json:**
+```json
+{
+  "download_folder": "/opt/nomad/YTDownloads",
+  "media_folders": [
+    "/opt/nomad/YTDownloads",
+    "/opt/nomad/Tracks-PublicShare",
+    "/root/kjdata/videos"
+  ],
+  "media_index_path": "/opt/kj-controller/media_index.json"
+}
+```
+
+**Auto-Deploy:** `kj-autodeploy.service` (enabled, starts on boot)
+- Polls GitHub every 60 seconds for new commits on `main`
+- On change: pulls, copies `app.py`, `index.html`, `requirements.txt` to `/opt/kj-controller/`, restarts service
+- Repo clone at `/opt/kjbox/` (read-only, used only for pulling)
+- **Workflow:** edit on Mac → `git push` → deployed to Pi within ~60 seconds
+```bash
+# View auto-deploy logs
+ssh nomadpi 'journalctl -u kj-autodeploy -f'
+
+# Disable auto-deploy (stops polling, won't start on boot)
+ssh nomadpi 'systemctl disable --now kj-autodeploy'
+
+# Re-enable auto-deploy
+ssh nomadpi 'systemctl enable --now kj-autodeploy'
+
+# Manual deploy (if auto-deploy is disabled)
+scp kj-controller/app.py nomadpi:/opt/kj-controller/
+scp kj-controller/templates/index.html nomadpi:/opt/kj-controller/templates/
+scp kj-controller/requirements.txt nomadpi:/opt/kj-controller/
+ssh nomadpi 'systemctl restart kj-controller'
+```
+
+**Architecture:**
+- Flask app on port 5000 (threaded mode)
+- Karaoke VLC on port 8080 (HTTP control interface, fullscreen)
+- Filler VLC on port 8081 (HTTP control interface, looping)
+- Both VLC instances use `--aout alsa --alsa-audio-device <device>` for audio routing
+- Audio device switching restarts both VLC instances (~5 seconds)
+- Media index (`media_index.json`) caches file metadata; rebuilt on rescan or first startup
+- Multi-folder scanning: walks all configured `media_folders` recursively
+- Delete restricted to `download_folder` only (prevents deleting shared media)
+
+See [kj-controller/](kj-controller/) for source code
 
 ### Chromium Kiosk Watchdog (DISABLED)
 **Status:** **DISABLED** as of 2026-02-15
@@ -600,6 +673,8 @@ cron.service                   - Background tasks
 dbus.service                   - System message bus
 docker.service                 - Docker engine
 getty@tty1.service             - Console on tty1
+kj-autodeploy.service          - Auto-deploy kj-controller from GitHub (polls every 60s)
+kj-controller.service          - KJ Controller (karaoke show management, port 5000)
 NetworkManager.service         - Network management
 ssh.service                    - SSH server
 systemd-journald.service       - System logging
@@ -880,6 +955,22 @@ ssh nomadpi 'journalctl -u bluetooth -f'
 - `/lib/systemd/system/vncserver-x11-serviced.service` - Service Mode systemd unit
 - `/etc/systemd/system/vncserver.service` - Virtual Mode systemd unit (DietPi wrapper)
 
+### KJ Controller
+- `/opt/kj-controller/app.py` - Main Flask application
+- `/opt/kj-controller/templates/index.html` - Web UI template
+- `/opt/kj-controller/requirements.txt` - Python dependencies
+- `/opt/kj-controller/config.json` - Media folder configuration
+- `/opt/kj-controller/media_index.json` - Central media file index
+- `/opt/kj-controller/venv/` - Python virtual environment
+- `/etc/systemd/system/kj-controller.service` - systemd service unit
+- `/opt/kj-controller/auto-deploy.sh` - Auto-deploy script (polls GitHub)
+- `/etc/systemd/system/kj-autodeploy.service` - Auto-deploy systemd unit
+- `/opt/kjbox/` - Git clone of kjbox repo (read-only, for auto-deploy)
+- `/root/kj-controller.log` - Application log file
+- `/opt/nomad/YTDownloads/` - YouTube downloads
+- `/root/kjdata/videos/` - Legacy downloads (read-only scan)
+- `/root/kjdata/` - Filler music files
+
 ### Docker
 - `/var/run/docker.sock` - Docker socket
 - `/mnt/dietpi_userdata/docker-data` - Docker data root
@@ -1024,11 +1115,59 @@ ssh nomadpi 'ls /var/tmp/dietpi/logs/'
 - Ready for Nomad Karaoke application installation
 - All remote access methods working (Tailscale at 100.66.53.104, local at 192.168.1.84)
 
-**Next Steps:**
-- Configure video playback software for karaoke
-- Set up AV output configuration
-- Install Nomad Karaoke-specific applications
-- Optionally configure new Cloudflare tunnel for remote access
+### 2026-02-15 - Auto-Deploy from GitHub
+**Changes Made:**
+1. **Cloned kjbox repo** to `/opt/kjbox/` for auto-deploy source
+2. **Created auto-deploy script** at `/opt/kj-controller/auto-deploy.sh`
+   - Polls `origin/main` every 60 seconds via `git fetch`
+   - Compares local HEAD to remote; on difference: pulls, copies changed files, restarts kj-controller
+   - Only copies `app.py`, `templates/index.html`, `requirements.txt` (preserves config.json, media_index.json, venv)
+   - Auto-installs new pip dependencies if requirements.txt changes
+3. **Created systemd service** `kj-autodeploy.service` (enabled, starts on boot)
+
+**Workflow:** Edit code on Mac → `git push` → Pi auto-deploys within ~15 seconds
+
+### 2026-02-15 - Multi-Folder Media Scanning & Descriptive Downloads
+**Changes Made:**
+1. **New YouTube download naming** - Files now saved as `{youtube_id}__{channel}__{title}.mp4` instead of random 8-char IDs
+2. **Central media index** - Single `media_index.json` replaces per-video `.json` sidecar files
+3. **Config file** - `config.json` defines download folder and media folders to scan
+4. **Multi-folder recursive scanning** - Scans `/opt/nomad/YTDownloads/`, `/opt/nomad/Tracks-PublicShare/`, and `/root/kjdata/videos/`
+5. **Path-based playback** - Play/delete by file path instead of opaque video ID
+6. **Rescan button** - UI button to rescan all media folders
+7. **Delete restrictions** - Only files in download folder can be deleted from UI
+8. **Folder grouping** - Media list shows folder headers when files come from multiple folders
+9. **New download location** - YouTube downloads now go to `/opt/nomad/YTDownloads/`
+
+**Media count after initial scan:** 2,434 files from Tracks-PublicShare
+
+### 2026-02-15 - KJ Controller Deployed
+**Changes Made:**
+1. **Deployed KJ Controller** to `/opt/kj-controller/`
+   - Simplified app.py: removed SocketIO/external screen sync (no longer needed)
+   - Added audio device switching (HDMI ↔ USB mixer) via dropdown in web UI
+   - VLC instances run as `dietpi` user via `sudo -u dietpi env DISPLAY=:0 XDG_RUNTIME_DIR=/run/user/1000`
+   - Flask server on port 5000, karaoke VLC on 8080, filler VLC on 8081
+
+2. **Created systemd service** (`kj-controller.service`)
+   - Runs as root, VLC subprocesses as dietpi
+   - ExecStartPre grants X11 access (`xhost +SI:localuser:dietpi`) and creates `/run/user/1000`
+   - After=graphical.target ensures X11 display is available
+   - Restart=always with 5-second delay
+
+3. **Installed dependencies**
+   - Installed `python3.11-venv` package (was missing)
+   - Created venv at `/opt/kj-controller/venv/`
+   - Installed Flask, requests, yt-dlp
+
+4. **Set file permissions**
+   - Made `/root/kjdata/` readable by dietpi user (VLC needs access to video/music files)
+
+**Verification:**
+- Service running: `systemctl status kj-controller` shows active
+- Two VLC processes running as dietpi user
+- Flask API responding at `http://192.168.1.84:5000/`
+- Web UI accessible from browser on local network
 
 ### 2026-02-15 - Bluetooth Configuration
 **Changes Made:**

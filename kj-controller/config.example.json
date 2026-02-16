@@ -1,0 +1,8 @@
+{
+  "download_folder": "/opt/nomad/YTDownloads",
+  "media_folders": [
+    "/opt/nomad/YTDownloads",
+    "/opt/nomad/Tracks-PublicShare"
+  ],
+  "media_index_path": "/opt/kj-controller/media_index.json"
+}

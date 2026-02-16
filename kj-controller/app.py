@@ -1,41 +1,66 @@
 import os
+import json
+import re
 import subprocess
 import threading
 import time
 import random
 import requests
-from flask import Flask, render_template, request, jsonify, send_from_directory
-from flask_socketio import SocketIO
-import yt_dlp
+from flask import Flask, render_template, request, jsonify
 
 # --- Configuration ---
 KARAOKE_VLC_PORT = 8080
 FILLER_VLC_PORT = 8081
 KARAOKE_VLC_PASSWORD = "karaoke"
 FILLER_VLC_PASSWORD = "filler"
-VIDEO_DIR = os.path.expanduser("~/kjdata/videos")
 FILLER_MUSIC_DIR = os.path.expanduser("~/kjdata")
 LOG_FILE = os.path.expanduser("~/kj-controller.log")
 YOUTUBE_COOKIES_FILE = os.path.expanduser("~/kjdata/youtube_cookies.txt")
+MEDIA_EXTENSIONS = {'.mp4', '.mkv', '.avi', '.webm', '.mov', '.mp3', '.wav', '.flac', '.ogg'}
+CONFIG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'config.json')
 
 # --- Flask App Initialization ---
 app = Flask(__name__)
-socketio = SocketIO(app, async_mode='threading')
+
+# --- Audio Device Configuration ---
+AVAILABLE_AUDIO_DEVICES = {
+    "hdmiout": "HDMI Output",
+    "usbmixer": "USB Mixer",
+}
+current_audio_device = "hdmiout"
 
 # --- Global State ---
-# This will hold the subprocess objects for our VLC instances
 vlc_processes = {
     "karaoke": None,
     "filler": None
 }
-current_video_id = None
-current_filler_track = "wii.mp3" # Default
-downloaded_videos = {} # Cache for video titles
-filler_music_target_volume = 100 # Default volume for filler music (0-256)
-karaoke_music_target_volume = 200 # Default volume for karaoke video (0-256, 256 is 100%)
-karaoke_player_is_active = False # Tracks if a karaoke song is supposed to be playing
-sync_offset_ms = 0 # Manual sync offset in milliseconds
-wait_for_external_enabled = False # If False, do not wait for external screen readiness
+current_playing_path = None
+current_filler_track = "wii.mp3"
+media_index = {}
+app_config = {}
+filler_music_target_volume = 100
+karaoke_music_target_volume = 200
+karaoke_player_is_active = False
+
+# --- Config Loading ---
+def load_config():
+    """Loads config from config.json, falling back to defaults."""
+    defaults = {
+        "download_folder": os.path.expanduser("~/kjdata/videos"),
+        "media_folders": [os.path.expanduser("~/kjdata/videos")],
+        "media_index_path": os.path.join(os.path.dirname(os.path.abspath(__file__)), 'media_index.json'),
+    }
+    if os.path.exists(CONFIG_FILE):
+        try:
+            with open(CONFIG_FILE, 'r') as f:
+                user_config = json.load(f)
+            defaults.update(user_config)
+            log_message(f"Loaded config from {CONFIG_FILE}")
+        except Exception as e:
+            log_message(f"Error loading config file, using defaults: {e}")
+    else:
+        log_message(f"No config file at {CONFIG_FILE}, using defaults.")
+    return defaults
 
 # --- Logging ---
 def log_message(message):
@@ -44,39 +69,168 @@ def log_message(message):
         f.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} - {message}\n")
     print(message)
 
+# --- Utility Functions ---
+def sanitize_filename_part(text):
+    """Replace filesystem-unsafe chars and __ (our separator) with _. Truncate to 100 chars."""
+    text = re.sub(r'[<>:"/\\|?*\x00-\x1f]', '_', text)
+    text = re.sub(r'__', '_', text)
+    text = re.sub(r'\s+', ' ', text).strip()
+    text = text[:100]
+    return text
+
+def parse_youtube_filename(filename):
+    """Parse youtube_id, channel, title from filename like {id}__{channel}__{title}.ext.
+    Returns (youtube_id, channel, title) or None if not in this format."""
+    stem = os.path.splitext(filename)[0]
+    parts = stem.split('__', 2)
+    if len(parts) == 3 and len(parts[0]) == 11:
+        return (parts[0], parts[1], parts[2])
+    return None
+
+# --- Media Index Functions ---
+def scan_media_folders():
+    """Walk all configured media_folders, build index, persist to disk."""
+    global media_index
+    new_index = {}
+    download_folder = os.path.realpath(app_config.get('download_folder', ''))
+
+    # Load existing index to preserve download-time metadata (duration, upload_date)
+    existing = load_media_index_file()
+
+    for folder in app_config.get('media_folders', []):
+        folder = os.path.realpath(folder)
+        if not os.path.isdir(folder):
+            log_message(f"Media folder not found, skipping: {folder}")
+            continue
+        for dirpath, _dirnames, filenames in os.walk(folder):
+            for fname in filenames:
+                ext = os.path.splitext(fname)[1].lower()
+                if ext not in MEDIA_EXTENSIONS:
+                    continue
+                full_path = os.path.join(dirpath, fname)
+                real_path = os.path.realpath(full_path)
+                try:
+                    stat = os.stat(real_path)
+                except OSError:
+                    continue
+
+                is_download = real_path.startswith(download_folder + os.sep) or real_path == download_folder
+                parsed = parse_youtube_filename(fname)
+
+                entry = {
+                    "path": real_path,
+                    "filename": fname,
+                    "folder": folder,
+                    "size": stat.st_size,
+                    "mtime": stat.st_mtime,
+                    "is_download": is_download,
+                }
+
+                if parsed:
+                    entry["youtube_id"] = parsed[0]
+                    entry["channel"] = parsed[1]
+                    entry["title"] = parsed[2]
+                    entry["display_name"] = parsed[2]
+                else:
+                    entry["display_name"] = os.path.splitext(fname)[0]
+
+                # Preserve duration and upload_date from existing index
+                if real_path in existing:
+                    for key in ('duration', 'upload_date', 'original_url'):
+                        if key in existing[real_path]:
+                            entry[key] = existing[real_path][key]
+
+                new_index[real_path] = entry
+
+    media_index = new_index
+    save_media_index()
+    log_message(f"Media scan complete: {len(media_index)} files indexed.")
+    return media_index
+
+def save_media_index():
+    """Persist media_index to disk."""
+    index_path = app_config.get('media_index_path', 'media_index.json')
+    try:
+        with open(index_path, 'w') as f:
+            json.dump(media_index, f, indent=2)
+    except Exception as e:
+        log_message(f"Error saving media index: {e}")
+
+def load_media_index_file():
+    """Read media_index.json from disk, return dict."""
+    index_path = app_config.get('media_index_path', 'media_index.json')
+    if os.path.exists(index_path):
+        try:
+            with open(index_path, 'r') as f:
+                return json.load(f)
+        except Exception as e:
+            log_message(f"Error reading media index file: {e}")
+    return {}
+
+def load_media_index():
+    """Load index into memory; if no file exists, do initial full scan."""
+    global media_index
+    loaded = load_media_index_file()
+    if loaded:
+        media_index = loaded
+        log_message(f"Loaded media index with {len(media_index)} entries.")
+    else:
+        log_message("No media index found, performing initial scan...")
+        scan_media_folders()
+
+def validate_media_path(filepath):
+    """Verify path resolves to within a configured media_folders entry. Returns real path or None."""
+    real = os.path.realpath(filepath)
+    for folder in app_config.get('media_folders', []):
+        real_folder = os.path.realpath(folder)
+        if real.startswith(real_folder + os.sep) or real == real_folder:
+            if os.path.exists(real):
+                return real
+    return None
+
+def is_in_download_folder(filepath):
+    """Check if file is in the download folder (eligible for deletion)."""
+    real = os.path.realpath(filepath)
+    download_folder = os.path.realpath(app_config.get('download_folder', ''))
+    return real.startswith(download_folder + os.sep)
+
 # --- VLC Management ---
 def launch_vlc_instance(name, port, password, media_file=None, loop=False):
-    """Launches a VLC instance with the HTTP interface enabled."""
+    """Launches a VLC instance with the HTTP interface enabled, running as dietpi user."""
     if vlc_processes[name] and vlc_processes[name].poll() is None:
         log_message(f"VLC instance '{name}' is already running.")
         return
 
-    log_message(f"Launching VLC instance '{name}' on port {port}...")
+    log_message(f"Launching VLC instance '{name}' on port {port} with audio device '{current_audio_device}'...")
     command = [
         'cvlc',
         '--extraintf', 'http',
         '--http-host', '0.0.0.0',
         '--http-port', str(port),
         '--http-password', password,
-        '--no-video-title-show', # Hide title overlay
+        '--no-video-title-show',
+        '--aout', 'alsa',
+        '--alsa-audio-device', current_audio_device,
     ]
-    # Make the karaoke player always start in fullscreen
     if name == 'karaoke':
         command.append('--fullscreen')
-        
+
     if media_file:
         command.append(media_file)
     if loop:
         command.extend(['--loop'])
 
-    # For Linux, ensure the display is set correctly
-    env = os.environ.copy()
-    env['DISPLAY'] = ':0'
+    # VLC refuses to run as root; wrap with sudo -u dietpi and set display env
+    wrapper = [
+        'sudo', '-u', 'dietpi', 'env',
+        'DISPLAY=:0',
+        'XDG_RUNTIME_DIR=/run/user/1000',
+    ]
+    full_command = wrapper + command
 
-    process = subprocess.Popen(command, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    process = subprocess.Popen(full_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     vlc_processes[name] = process
     log_message(f"VLC instance '{name}' launched with PID {process.pid}.")
-    # Give VLC a moment to start up
     time.sleep(2)
 
 def send_vlc_command(port, password, command, is_path=False, debug=False):
@@ -123,7 +277,6 @@ def fade_music(port, password, start_vol, end_vol, duration_s=3):
 def fade_in_filler():
     """Fades in the filler music."""
     log_message("Fading in filler music...")
-    # Ensure it's playing, but at 0 volume first
     send_vlc_command(FILLER_VLC_PORT, FILLER_VLC_PASSWORD, "volume&val=0")
     send_vlc_command(FILLER_VLC_PORT, FILLER_VLC_PASSWORD, "pl_play")
     threading.Thread(target=fade_music, args=(FILLER_VLC_PORT, FILLER_VLC_PASSWORD, 0, filler_music_target_volume)).start()
@@ -140,10 +293,37 @@ def fade_out_filler():
 
 # --- YouTube Downloader ---
 def download_video(youtube_url):
-    """Downloads a YouTube video, saves metadata, and returns ID and title."""
-    video_id = ''.join(random.choices('abcdefghijklmnopqrstuvwxyz0123456789', k=8))
-    # Note: The final extension is determined by yt-dlp, so we handle it later.
-    output_template = os.path.join(VIDEO_DIR, f"{video_id}")
+    """Downloads a YouTube video with descriptive filename, updates media index."""
+    import yt_dlp
+
+    download_folder = app_config.get('download_folder', os.path.expanduser("~/kjdata/videos"))
+    os.makedirs(download_folder, exist_ok=True)
+
+    # Phase 1: Extract metadata without downloading
+    extract_opts = {
+        'quiet': True,
+        'noplaylist': True,
+    }
+    if os.path.exists(YOUTUBE_COOKIES_FILE):
+        extract_opts['cookiefile'] = YOUTUBE_COOKIES_FILE
+
+    try:
+        with yt_dlp.YoutubeDL(extract_opts) as ydl:
+            info = ydl.extract_info(youtube_url, download=False)
+            title = info.get('title', 'Unknown Title')
+            channel = info.get('channel', info.get('uploader', 'Unknown'))
+            youtube_id = info.get('id', 'unknown')
+            duration = info.get('duration')
+            upload_date = info.get('upload_date')
+    except Exception as e:
+        log_message(f"Error extracting video info: {e}")
+        return None, None
+
+    # Phase 2: Build descriptive filename and download
+    safe_channel = sanitize_filename_part(channel)
+    safe_title = sanitize_filename_part(title)
+    basename = f"{youtube_id}__{safe_channel}__{safe_title}"
+    output_template = os.path.join(download_folder, basename)
 
     ydl_opts = {
         'format': 'bestvideo+bestaudio/best',
@@ -152,39 +332,112 @@ def download_video(youtube_url):
         'force_overwrites': True,
         'quiet': True,
         'noplaylist': True,
-        'writethumbnail': True, # Save thumbnail
+        'writethumbnail': True,
     }
-    
-    # Add cookies file if it exists
     if os.path.exists(YOUTUBE_COOKIES_FILE):
         ydl_opts['cookiefile'] = YOUTUBE_COOKIES_FILE
         log_message(f"Using YouTube cookies file: {YOUTUBE_COOKIES_FILE}")
 
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(youtube_url, download=True)
-            title = info.get('title', 'Unknown Title')
-            # The actual downloaded file path
-            downloaded_file = ydl.prepare_filename(info)
+            ydl.extract_info(youtube_url, download=True)
 
-            # Save metadata to a .json file
-            metadata = {
-                "id": video_id,
-                "title": title,
-                "original_url": youtube_url,
-                "download_date": time.time()
-            }
-            with open(f"{output_template}.json", "w") as f:
-                import json
-                json.dump(metadata, f)
+        # Find the actual downloaded file (might be .mp4, .mkv, etc.)
+        file_path = None
+        for ext in ['.mp4', '.mkv', '.webm', '.avi', '.mov']:
+            candidate = output_template + ext
+            if os.path.exists(candidate):
+                file_path = candidate
+                break
 
-            log_message(f"Successfully downloaded '{title}' with ID {video_id}")
-            # Update our in-memory cache
-            downloaded_videos[video_id] = title
-            return video_id, title
+        if not file_path:
+            log_message(f"ERROR: Downloaded file not found for {basename}")
+            return None, None
+
+        real_path = os.path.realpath(file_path)
+
+        # Add to media index
+        stat = os.stat(real_path)
+        entry = {
+            "path": real_path,
+            "filename": os.path.basename(real_path),
+            "folder": os.path.realpath(download_folder),
+            "size": stat.st_size,
+            "mtime": stat.st_mtime,
+            "is_download": True,
+            "youtube_id": youtube_id,
+            "channel": safe_channel,
+            "title": safe_title,
+            "display_name": safe_title,
+            "original_url": youtube_url,
+        }
+        if duration is not None:
+            entry["duration"] = duration
+        if upload_date is not None:
+            entry["upload_date"] = upload_date
+
+        media_index[real_path] = entry
+        save_media_index()
+
+        log_message(f"Successfully downloaded '{title}' as {os.path.basename(real_path)}")
+        return real_path, title
     except Exception as e:
         log_message(f"Error downloading video: {e}")
         return None, None
+
+# --- Video Playback ---
+def play_video(file_path):
+    """Plays a video on the karaoke VLC instance (fade out filler, load, play)."""
+    global karaoke_player_is_active
+
+    if not os.path.exists(file_path):
+        log_message(f"ERROR: File not found: {file_path}")
+        return
+
+    # Fade out filler music
+    fade_out_filler()
+    time.sleep(3.5)
+
+    # Load and play the video
+    send_vlc_command(KARAOKE_VLC_PORT, KARAOKE_VLC_PASSWORD, "pl_empty")
+    time.sleep(0.1)
+    send_vlc_command(KARAOKE_VLC_PORT, KARAOKE_VLC_PASSWORD, f"in_enqueue&input={file_path}", is_path=True)
+    time.sleep(0.1)
+    send_vlc_command(KARAOKE_VLC_PORT, KARAOKE_VLC_PASSWORD, f"volume&val={karaoke_music_target_volume}")
+    time.sleep(0.1)
+    send_vlc_command(KARAOKE_VLC_PORT, KARAOKE_VLC_PASSWORD, "pl_play")
+
+    karaoke_player_is_active = True
+    log_message(f"Playback started for {os.path.basename(file_path)}.")
+
+# --- Audio Device Switching ---
+def restart_vlc_instances():
+    """Terminates both VLC processes and relaunches them with the current audio device."""
+    global karaoke_player_is_active, current_playing_path
+    log_message(f"Restarting VLC instances with audio device '{current_audio_device}'...")
+
+    # Terminate existing VLC processes
+    for name, proc in vlc_processes.items():
+        if proc and proc.poll() is None:
+            proc.terminate()
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+            log_message(f"Terminated VLC instance '{name}'.")
+        vlc_processes[name] = None
+
+    karaoke_player_is_active = False
+    current_playing_path = None
+    time.sleep(1)
+
+    # Relaunch both instances
+    launch_vlc_instance("karaoke", KARAOKE_VLC_PORT, KARAOKE_VLC_PASSWORD)
+    filler_path = os.path.join(FILLER_MUSIC_DIR, current_filler_track)
+    launch_vlc_instance("filler", FILLER_VLC_PORT, FILLER_VLC_PASSWORD, filler_path, True)
+    time.sleep(3)
+    fade_in_filler()
+    log_message("VLC instances restarted successfully.")
 
 # --- Flask Routes ---
 @app.route('/')
@@ -200,166 +453,29 @@ def handle_download():
         return jsonify({"error": "URL is required"}), 400
 
     log_message(f"Received download request for URL: {url}")
-    video_id, title = download_video(url)
+    file_path, title = download_video(url)
 
-    if video_id:
-        return jsonify({"success": True, "video_id": video_id, "title": title})
+    if file_path:
+        return jsonify({"success": True, "file_path": file_path, "title": title})
     else:
         return jsonify({"error": "Failed to download video"}), 500
 
-@app.route('/externalscreen')
-def external_screen():
-    """Serves the external player page."""
-    return render_template('external_screen.html')
-
-@app.route('/video/<video_id>')
-def video_stream(video_id):
-    """Streams the video file."""
-    # Find the video file, ignoring the specific extension
-    video_path = None
-    found_filename = None
-    for f in os.listdir(VIDEO_DIR):
-        if f.startswith(video_id) and not f.endswith(('.json', '.webp', '.jpg')):
-            video_path = VIDEO_DIR
-            found_filename = f
-            break
-    if not video_path:
-        return "Video not found", 404
-    return send_from_directory(video_path, found_filename)
-
-# --- New Sync Logic State ---
-external_client_ready = threading.Event()
-master_vlc_ready = threading.Event()
-
-def preload_and_trigger_playback(video_id):
-    """
-    Coordinates the entire preload and sync-play process in the background.
-    """
-    # --- 1. Preload on Master VLC (in a paused state) ---
-    video_path = None
-    for f in os.listdir(VIDEO_DIR):
-        if f.startswith(video_id) and not f.endswith(('.json', '.webp', '.jpg')):
-            video_path = os.path.join(VIDEO_DIR, f)
-            break
-    
-    if not video_path:
-        log_message(f"ERROR: Could not find video path for {video_id} during preload.")
-        return
-
-    # Fade out filler music before loading
-    status = send_vlc_command(KARAOKE_VLC_PORT, KARAOKE_VLC_PASSWORD, "")
-    if not (status and status.get('state') != 'stopped'):
-        fade_out_filler()
-        time.sleep(3.5) # Wait for fade
-
-    # Load the video, set the volume, and then pause
-    send_vlc_command(KARAOKE_VLC_PORT, KARAOKE_VLC_PASSWORD, "pl_empty")
-    time.sleep(0.1)
-    send_vlc_command(KARAOKE_VLC_PORT, KARAOKE_VLC_PASSWORD, f"in_enqueue&input={video_path}", is_path=True)
-    time.sleep(0.1)
-    send_vlc_command(KARAOKE_VLC_PORT, KARAOKE_VLC_PASSWORD, f"volume&val={karaoke_music_target_volume}")
-    time.sleep(0.1)
-    send_vlc_command(KARAOKE_VLC_PORT, KARAOKE_VLC_PASSWORD, "pl_play")
-    time.sleep(0.5) # Give VLC time to load and enter the 'playing' state
-    send_vlc_command(KARAOKE_VLC_PORT, KARAOKE_VLC_PASSWORD, "pl_pause") # Immediately pause it
-    
-    # Check that VLC is now paused
-    time.sleep(0.2)
-    vlc_status = send_vlc_command(KARAOKE_VLC_PORT, KARAOKE_VLC_PASSWORD, "")
-    if vlc_status and vlc_status.get('state') == 'paused':
-        log_message("Master VLC is preloaded and paused.")
-        master_vlc_ready.set() # Signal that the master is ready
-    else:
-        log_message(f"ERROR: Master VLC failed to enter paused state. Status: {vlc_status}")
-        return # Abort if master VLC isn't ready
-
-    # --- 2. Wait for both players to be ready (optional for external) ---
-    if wait_for_external_enabled:
-        log_message(f"Waiting for players to be ready for {video_id}...")
-        external_ready = external_client_ready.wait(timeout=10)
-        master_ready = master_vlc_ready.wait(timeout=10) # This should already be set, but we wait just in case
-
-        if not external_ready or not master_ready:
-            log_message(f"ERROR: Timed out waiting for players. External: {external_ready}, Master: {master_ready}")
-            return
-    else:
-        log_message("Wait for external disabled. Proceeding with master-only readiness.")
-        master_ready = master_vlc_ready.wait(timeout=10)
-        if not master_ready:
-            log_message("ERROR: Timed out waiting for master VLC readiness.")
-            return
-
-    # --- 3. Trigger simultaneous playback with offset ---
-    log_message(f"All players ready. Triggering playback with {sync_offset_ms}ms offset.")
-    
-    offset_seconds = sync_offset_ms / 1000.0
-
-    if offset_seconds >= 0:
-        # Positive offset: External screen starts first
-        socketio.emit('player_action', {'action': 'play_now'})
-        time.sleep(offset_seconds)
-        send_vlc_command(KARAOKE_VLC_PORT, KARAOKE_VLC_PASSWORD, "pl_pause")
-    else:
-        # Negative offset: Master VLC starts first
-        send_vlc_command(KARAOKE_VLC_PORT, KARAOKE_VLC_PASSWORD, "pl_pause")
-        time.sleep(abs(offset_seconds))
-        socketio.emit('player_action', {'action': 'play_now'})
-
-    global karaoke_player_is_active
-    karaoke_player_is_active = True
-    log_message(f"Playback started for {video_id}.")
-
-    # --- 4. Clean up events ---
-    external_client_ready.clear()
-    master_vlc_ready.clear()
-
 @app.route('/play', methods=['POST'])
 def handle_play():
-    """
-    Receives the play request and kicks off the background preload and sync process.
-    """
-    global current_video_id
-    video_id = request.json.get('video_id')
-    if not video_id:
-        return jsonify({"error": "Video ID is required"}), 400
+    """Plays a media file by path."""
+    global current_playing_path
+    file_path = request.json.get('file_path')
+    if not file_path:
+        return jsonify({"error": "file_path is required"}), 400
 
-    log_message(f"Received play request for {video_id}. Starting background sync process.")
-    current_video_id = video_id
-    
-    # Clear any stale ready signals from a previous run
-    external_client_ready.clear()
-    master_vlc_ready.clear()
+    validated = validate_media_path(file_path)
+    if not validated:
+        return jsonify({"error": "Invalid or inaccessible file path"}), 400
 
-    # --- Preload on External Client (only if we care to sync external) --- 
-    if wait_for_external_enabled:
-        socketio.emit('player_action', {'action': 'preload', 'video_id': video_id})
-
-    # --- Start the background thread to manage the whole process ---
-    threading.Thread(target=preload_and_trigger_playback, args=(video_id,)).start()
-
-    return jsonify({"success": True, "message": "Preload initiated."})
-
-@socketio.on('video_ready')
-def on_video_ready(data):
-    """
-    This event is triggered by the external screen when it has buffered
-    and is ready to play.
-    """
-    video_id = data.get('video_id')
-    log_message(f"External client is ready to play {video_id}.")
-    external_client_ready.set() # Signal that the external client is ready
-
-@app.route('/sync_offset', methods=['POST'])
-def handle_sync_offset():
-    """Handles updating the manual sync offset."""
-    global sync_offset_ms
-    offset = request.json.get('offset')
-    if offset is None:
-        return jsonify({"error": "Offset is required"}), 400
-    
-    sync_offset_ms = int(offset)
-    log_message(f"Set sync offset to {sync_offset_ms}ms.")
-    return jsonify({"success": True})
+    log_message(f"Received play request for {os.path.basename(validated)}.")
+    current_playing_path = validated
+    threading.Thread(target=play_video, args=(validated,)).start()
+    return jsonify({"success": True, "message": "Playback initiated."})
 
 @app.route('/seek', methods=['POST'])
 def handle_seek():
@@ -370,7 +486,6 @@ def handle_seek():
 
     log_message(f"Received seek request to time: {seek_time}")
     send_vlc_command(KARAOKE_VLC_PORT, KARAOKE_VLC_PASSWORD, f"seek&val={seek_time}")
-    socketio.emit('player_action', {'action': 'seek', 'time': float(seek_time)})
     return jsonify({"success": True})
 
 
@@ -385,27 +500,22 @@ def handle_control():
     global karaoke_player_is_active
     if action == 'pause_resume':
         send_vlc_command(KARAOKE_VLC_PORT, KARAOKE_VLC_PASSWORD, "pl_pause")
-        # Check if we should resume filler music
-        time.sleep(0.5) # Give vlc time to process
+        time.sleep(0.5)
         status = send_vlc_command(KARAOKE_VLC_PORT, KARAOKE_VLC_PASSWORD, "")
         if status and status.get('state') == 'paused':
             karaoke_player_is_active = False
             fade_in_filler()
-            socketio.emit('player_action', {'action': 'pause'})
         else:
             karaoke_player_is_active = True
             fade_out_filler()
-            socketio.emit('player_action', {'action': 'resume'})
     elif action == 'restart':
         send_vlc_command(KARAOKE_VLC_PORT, KARAOKE_VLC_PASSWORD, "seek&val=0")
-        socketio.emit('player_action', {'action': 'restart'})
     elif action == 'stop':
         send_vlc_command(KARAOKE_VLC_PORT, KARAOKE_VLC_PASSWORD, "pl_stop")
         karaoke_player_is_active = False
-        global current_video_id
-        current_video_id = None
+        global current_playing_path
+        current_playing_path = None
         fade_in_filler()
-        socketio.emit('player_action', {'action': 'stop'})
 
     return jsonify({"success": True, "message": f"Action '{action}' executed."})
 
@@ -413,7 +523,7 @@ def handle_control():
 def handle_volume():
     """Handles volume control for karaoke or filler music."""
     target = request.json.get('target')
-    level = int(request.json.get('level')) # Should be 0-256 for VLC
+    level = int(request.json.get('level'))
     if not all([target, level is not None]):
         return jsonify({"error": "Target and level are required"}), 400
 
@@ -432,66 +542,91 @@ def handle_volume():
     log_message(f"Set volume for '{target}' to {level}")
     return jsonify({"success": True})
 
-@app.route('/videos')
-def list_videos():
-    """Returns a list of all downloaded videos, sorted by download date."""
-    video_details = []
-    for video_id, title in downloaded_videos.items():
-        json_path = os.path.join(VIDEO_DIR, f"{video_id}.json")
-        if os.path.exists(json_path):
-            try:
-                with open(json_path, 'r') as f:
-                    import json
-                    metadata = json.load(f)
-                    video_details.append({
-                        "id": video_id,
-                        "title": title,
-                        "date": metadata.get("download_date", 0),
-                        "url": metadata.get("original_url", "")
-                    })
-            except Exception as e:
-                log_message(f"Could not read metadata for {video_id}: {e}")
-    
-    # Sort by date, newest first
-    sorted_videos = sorted(video_details, key=lambda x: x['date'], reverse=True)
-    return jsonify(sorted_videos)
+@app.route('/media')
+def list_media():
+    """Returns the media index with display info, grouped by folder."""
+    items = []
+    for path, entry in media_index.items():
+        folder = entry.get('folder', '')
+        folder_name = os.path.basename(folder) if folder else 'Unknown'
+        item = {
+            "file_path": entry["path"],
+            "display_name": entry.get("display_name", entry.get("filename", "")),
+            "filename": entry.get("filename", ""),
+            "folder_name": folder_name,
+            "folder": folder,
+            "is_download": entry.get("is_download", False),
+            "mtime": entry.get("mtime", 0),
+            "size": entry.get("size", 0),
+        }
+        if "channel" in entry:
+            item["channel"] = entry["channel"]
+        if "youtube_id" in entry:
+            item["youtube_id"] = entry["youtube_id"]
+        if "duration" in entry:
+            item["duration"] = entry["duration"]
+        items.append(item)
+
+    # Sort by mtime descending (newest first) within each folder
+    items.sort(key=lambda x: x['mtime'], reverse=True)
+    return jsonify(items)
 
 @app.route('/delete', methods=['POST'])
-def delete_video():
-    """Deletes a video and its associated files."""
-    video_id = request.json.get('video_id')
-    if not video_id:
-        return jsonify({"error": "Video ID is required"}), 400
+def delete_media():
+    """Deletes a media file (only from download folder)."""
+    file_path = request.json.get('file_path')
+    if not file_path:
+        return jsonify({"error": "file_path is required"}), 400
 
-    log_message(f"Received delete request for video ID: {video_id}")
-    
-    # Remove from cache
-    if video_id in downloaded_videos:
-        del downloaded_videos[video_id]
+    validated = validate_media_path(file_path)
+    if not validated:
+        return jsonify({"error": "Invalid file path"}), 400
 
-    # Find and delete all associated files
-    files_deleted = False
-    for filename in os.listdir(VIDEO_DIR):
-        if filename.startswith(video_id):
+    if not is_in_download_folder(validated):
+        return jsonify({"error": "Can only delete files from the download folder"}), 403
+
+    log_message(f"Received delete request for: {os.path.basename(validated)}")
+
+    # Delete the main file
+    try:
+        os.remove(validated)
+        log_message(f"Deleted file: {os.path.basename(validated)}")
+    except Exception as e:
+        log_message(f"Error deleting file: {e}")
+        return jsonify({"error": f"Error deleting file: {e}"}), 500
+
+    # Delete same-basename sidecar files (.json, .webp, .jpg, etc.)
+    basename_no_ext = os.path.splitext(validated)[0]
+    parent_dir = os.path.dirname(validated)
+    for fname in os.listdir(parent_dir):
+        full = os.path.join(parent_dir, fname)
+        if full != validated and os.path.splitext(full)[0] == basename_no_ext:
             try:
-                os.remove(os.path.join(VIDEO_DIR, filename))
-                log_message(f"Deleted file: {filename}")
-                files_deleted = True
+                os.remove(full)
+                log_message(f"Deleted sidecar: {fname}")
             except Exception as e:
-                log_message(f"Error deleting file {filename}: {e}")
-                return jsonify({"error": f"Error deleting file {filename}"}), 500
-    
-    if files_deleted:
-        return jsonify({"success": True, "message": f"Deleted video {video_id}"})
-    else:
-        return jsonify({"error": "Video not found"}), 404
+                log_message(f"Error deleting sidecar {fname}: {e}")
+
+    # Remove from index
+    if validated in media_index:
+        del media_index[validated]
+        save_media_index()
+
+    return jsonify({"success": True, "message": f"Deleted {os.path.basename(validated)}"})
+
+@app.route('/rescan', methods=['POST'])
+def handle_rescan():
+    """Triggers a full media folder rescan."""
+    log_message("Rescan requested...")
+    scan_media_folders()
+    return jsonify({"success": True, "count": len(media_index)})
 
 @app.route('/filler_music', methods=['GET'])
 def list_filler_music():
     """Returns a list of available filler music files."""
     try:
         files = [
-            f for f in os.listdir(FILLER_MUSIC_DIR) 
+            f for f in os.listdir(FILLER_MUSIC_DIR)
             if f.endswith(('.mp3', '.wav', '.ogg', '.flac'))
         ]
         return jsonify(files)
@@ -509,11 +644,10 @@ def set_filler_music():
     new_track_path = os.path.join(FILLER_MUSIC_DIR, track_name)
     if not os.path.exists(new_track_path):
         return jsonify({"error": "Track not found"}), 404
-    
+
     current_filler_track = track_name
     log_message(f"Changing filler music to: {track_name}")
 
-    # Stop current filler, clear playlist, add new track, and play
     send_vlc_command(FILLER_VLC_PORT, FILLER_VLC_PASSWORD, "pl_stop")
     time.sleep(0.1)
     send_vlc_command(FILLER_VLC_PORT, FILLER_VLC_PASSWORD, "pl_empty")
@@ -521,15 +655,12 @@ def set_filler_music():
     send_vlc_command(FILLER_VLC_PORT, FILLER_VLC_PASSWORD, f"in_enqueue&input={new_track_path}", is_path=True)
     time.sleep(0.1)
     send_vlc_command(FILLER_VLC_PORT, FILLER_VLC_PASSWORD, "pl_play")
-    
-    # Let it play for a moment to get metadata
-    time.sleep(0.5) 
-    
-    # Get duration and seek to a random spot
+
+    time.sleep(0.5)
+
     status = send_vlc_command(FILLER_VLC_PORT, FILLER_VLC_PASSWORD, "")
     if status and 'length' in status and status['length'] > 0:
         duration = status['length']
-        # Seek to a random time, leaving a little buffer at the end
         random_time = random.randint(0, max(0, int(duration) - 5))
         log_message(f"Seeking filler music to {random_time}s (duration: {duration}s)")
         send_vlc_command(FILLER_VLC_PORT, FILLER_VLC_PASSWORD, f"seek&val={random_time}")
@@ -543,97 +674,103 @@ def get_status():
     """Gets the status of the karaoke player."""
     status = send_vlc_command(KARAOKE_VLC_PORT, KARAOKE_VLC_PASSWORD, "")
     if status:
-        # Add current volume to the status response
         status['karaoke_volume'] = status.get('volume', 0)
         filler_status = send_vlc_command(FILLER_VLC_PORT, FILLER_VLC_PASSWORD, "")
         status['filler_volume'] = filler_status.get('volume', 0) if filler_status else 0
-        
+
+        # Get display name for currently playing file
+        current_playing = None
+        if current_playing_path and current_playing_path in media_index:
+            current_playing = media_index[current_playing_path].get('display_name')
+        elif current_playing_path:
+            current_playing = os.path.basename(current_playing_path)
+
         return jsonify({
             "state": status.get('state'),
-            "current_video_id": current_video_id,
+            "current_playing": current_playing,
+            "current_playing_path": current_playing_path,
             "current_filler_track": current_filler_track,
             "time": status.get('time'),
             "length": status.get('length'),
-            "wait_for_external_enabled": wait_for_external_enabled
+            "audio_device": current_audio_device,
         })
     return jsonify({"error": "Could not get status"}), 500
 
-@app.route('/settings/wait_for_external', methods=['POST'])
-def set_wait_for_external():
-    """Enable/disable waiting for external player readiness."""
-    global wait_for_external_enabled
-    value = request.json.get('enabled')
-    if value is None:
-        return jsonify({"error": "'enabled' is required"}), 400
-    wait_for_external_enabled = bool(value)
-    log_message(f"Wait for external set to {wait_for_external_enabled}")
-    return jsonify({"success": True, "wait_for_external_enabled": wait_for_external_enabled})
+@app.route('/audio_device', methods=['GET'])
+def get_audio_device():
+    """Returns the current audio device and available devices."""
+    return jsonify({
+        "current": current_audio_device,
+        "available": AVAILABLE_AUDIO_DEVICES,
+    })
+
+@app.route('/audio_device', methods=['POST'])
+def set_audio_device():
+    """Switches the audio output device by restarting VLC instances."""
+    global current_audio_device
+    device = request.json.get('device')
+    if not device:
+        return jsonify({"error": "Device is required"}), 400
+    if device not in AVAILABLE_AUDIO_DEVICES:
+        return jsonify({"error": f"Unknown device '{device}'. Available: {list(AVAILABLE_AUDIO_DEVICES.keys())}"}), 400
+    if device == current_audio_device:
+        return jsonify({"success": True, "message": "Already using that device."})
+
+    log_message(f"Switching audio device from '{current_audio_device}' to '{device}'...")
+    current_audio_device = device
+    threading.Thread(target=restart_vlc_instances).start()
+    return jsonify({"success": True, "message": f"Switching to {AVAILABLE_AUDIO_DEVICES[device]}. VLC restarting..."})
 
 
 # --- Main Execution ---
-def load_video_cache():
-    """Scans the video directory and populates the title cache."""
-    log_message("Loading video cache...")
-    os.makedirs(VIDEO_DIR, exist_ok=True)
-    for filename in os.listdir(VIDEO_DIR):
-        if filename.endswith(".json"):
-            try:
-                with open(os.path.join(VIDEO_DIR, filename), 'r') as f:
-                    import json
-                    metadata = json.load(f)
-                    downloaded_videos[metadata['id']] = metadata['title']
-            except Exception as e:
-                log_message(f"Could not load metadata from {filename}: {e}")
-    log_message(f"Loaded {len(downloaded_videos)} videos into cache.")
-
 def monitor_karaoke_player():
-    """A background thread to check if a song has ended and broadcast sync events."""
-    global karaoke_player_is_active, current_video_id
+    """A background thread to check if a song has ended."""
+    global karaoke_player_is_active, current_playing_path
     while True:
-        time.sleep(2) # Sync interval
+        time.sleep(2)
         if not karaoke_player_is_active:
             continue
 
-        # If a song is supposed to be active, get its status.
         status = send_vlc_command(KARAOKE_VLC_PORT, KARAOKE_VLC_PASSWORD, "", debug=False)
         if not status:
             continue
 
-        # If VLC reports it's playing, send a sync event with the current time.
-        if status.get('state') == 'playing':
-            current_time = status.get('time', 0)
-            socketio.emit('sync', {'time': current_time})
-        # If VLC reports it's stopped, the song has ended.
-        elif status.get('state') == 'stopped':
+        if status.get('state') == 'stopped':
             log_message("Karaoke video finished playing.")
             karaoke_player_is_active = False
-            current_video_id = None
+            current_playing_path = None
             fade_in_filler()
-            socketio.emit('player_action', {'action': 'stop'})
 
 def start_app():
     """Initializes and starts the application components."""
+    global app_config
     log_message("--- KJ Controller Starting Up ---")
-    load_video_cache()
+
+    # Grant X11 access to dietpi user and ensure runtime dir exists
+    subprocess.run(['xhost', '+SI:localuser:dietpi'], env={**os.environ, 'DISPLAY': ':0'}, capture_output=True)
+    os.makedirs('/run/user/1000', exist_ok=True)
+    subprocess.run(['chown', 'dietpi:dietpi', '/run/user/1000'], capture_output=True)
+
+    # Load config and media index
+    app_config = load_config()
+    os.makedirs(app_config['download_folder'], exist_ok=True)
+    load_media_index()
 
     # Launch VLC instances
     launch_vlc_instance("karaoke", KARAOKE_VLC_PORT, KARAOKE_VLC_PASSWORD)
     filler_path = os.path.join(FILLER_MUSIC_DIR, current_filler_track)
     launch_vlc_instance("filler", FILLER_VLC_PORT, FILLER_VLC_PASSWORD, filler_path, True)
 
-    # Wait for VLC instances to be ready
     time.sleep(3)
-
-    # Start filler music
     fade_in_filler()
 
     # Start the karaoke player monitor in a background thread
     monitor_thread = threading.Thread(target=monitor_karaoke_player, daemon=True)
     monitor_thread.start()
 
-    # Start Flask app using SocketIO
-    log_message("Starting Flask-SocketIO server...")
-    socketio.run(app, host='0.0.0.0', port=5000)
+    # Start Flask app
+    log_message("Starting Flask server...")
+    app.run(host='0.0.0.0', port=5000, threaded=True)
 
 if __name__ == '__main__':
     start_app()
