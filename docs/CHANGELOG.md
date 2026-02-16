@@ -2,6 +2,29 @@
 
 NomadPi system configuration changes. For current configuration details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md).
 
+## 2026-02-16 - Karaoke Rotation Display Overlay
+
+**Changes Made:**
+1. **Created `desktop/rotation_display.py`** — standalone Python/tkinter app that fetches the singer rotation from a public Google Sheet and displays the next 10 singers as a persistent overlay on the left 1/3 of the screen (640×1080). Uses only stdlib (no pip deps).
+2. **Auto-deploy restart** — `kj-controller/auto-deploy.sh` now restarts the `rotation-display` systemd service on deploy (no-op if service isn't set up yet).
+
+**Features:**
+- Fetches Google Sheet data as CSV via `gviz/tq?tqx=out:csv` endpoint
+- Filters out "Done" entries, shows current singer + next 9 in queue
+- Color-coded status: red (Now Singing), gold (Up Next), gray (queued)
+- 30-second auto-refresh with offline fallback (shows cached data)
+- Dark navy background with large readable fonts for venue visibility
+
+**Deployment (on Pi):**
+```bash
+apt-get install -y python3-tk
+# Create /etc/systemd/system/rotation-display.service
+# ExecStart=/usr/bin/python3 /opt/nomad/kjbox/desktop/rotation_display.py
+# Environment=DISPLAY=:0
+# After=graphical.target, Restart=always
+systemctl daemon-reload && systemctl enable --now rotation-display
+```
+
 ## 2026-02-16 - External Media Catalog & Search
 
 **Changes Made:**
