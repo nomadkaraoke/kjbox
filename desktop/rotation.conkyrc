@@ -1,13 +1,12 @@
 -- Karaoke Rotation Display — conky configuration
--- Displays singer queue overlay with true transparent background.
--- Requires: conky-all, a compositor (xcompmgr or picom) for ARGB.
+-- Uses a cropped wallpaper section as background for faux transparency.
+-- Requires: conky-all
 
 conky.config = {
     background = false,
     own_window = true,
     own_window_type = 'dock',
-    own_window_argb_visual = true,
-    own_window_argb_value = 0,
+    own_window_transparent = true,
     own_window_hints = 'undecorated,below,skip_taskbar,skip_pager',
     double_buffer = true,
 
@@ -19,18 +18,22 @@ conky.config = {
     gap_y = 60,
     minimum_width = 600,
     maximum_width = 600,
+    minimum_height = 1020,
 
     update_interval = 30,
     use_xft = true,
     xftalpha = 1.0,
 
-    -- Disable default bars/graphs
+    -- Disable default decorations
     draw_shades = false,
     draw_outline = false,
     draw_borders = false,
+
+    -- Padding inside the window
+    border_inner_margin = 10,
 }
 
 conky.text = [[
-${font DejaVu Sans:bold:size=40}${color ffffff}ROTATION${color}${font}${alignr}${font DejaVu Sans:size=22}${color 8892a4}${execi 30 /usr/bin/python3 /opt/nomad/kjbox/desktop/rotation_data.py --count-only} singers${color}${font}
-${execi 30 /usr/bin/python3 /opt/nomad/kjbox/desktop/rotation_data.py}
+${image /opt/nomad/kjbox/desktop/rotation-bg.png -p 0,0 -s 600x1020}${font DejaVu Sans:bold:size=40}${color ffffff}ROTATION${color}${font}${alignr}${font DejaVu Sans:size=22}${color 8892a4}${execpi 30 /usr/bin/python3 /opt/nomad/kjbox/desktop/rotation_data.py --count-only} singers${color}${font}
+${execpi 30 /usr/bin/python3 /opt/nomad/kjbox/desktop/rotation_data.py}
 ]]
