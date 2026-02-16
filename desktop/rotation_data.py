@@ -93,16 +93,16 @@ def status_color(status):
 def format_conky(entries):
     """Format entries as conky markup text."""
     if not entries:
-        print(f"${{color {COLOR_DEFAULT}}}${{font Helvetica:size=28}}No singers in queue${{font}}${{color}}")
+        print(f"${{color {COLOR_DEFAULT}}}${{font DejaVu Sans:size=28}}No singers in queue${{font}}${{color}}")
         return
 
     # Current singer
     now = entries[0]
     status_text = (now["status"] if now["status"] else "Now Singing").upper()
-    print(f"${{color {COLOR_NOW}}}${{font Helvetica:bold:size=28}}{status_text}${{font}}${{color}}")
-    print(f"${{color {COLOR_WHITE}}}${{font Helvetica:bold:size=52}}{now['singer']}${{font}}${{color}}")
+    print(f"${{color {COLOR_NOW}}}${{font DejaVu Sans:bold:size=28}}{status_text}${{font}}${{color}}")
+    print(f"${{color {COLOR_WHITE}}}${{font DejaVu Sans:bold:size=52}}{now['singer']}${{font}}${{color}}")
     if now["song_artist"]:
-        print(f"${{color {COLOR_TEXT}}}${{font Helvetica:size=28}}{now['song_artist']}${{font}}${{color}}")
+        print(f"${{color {COLOR_TEXT}}}${{font DejaVu Sans:size=28}}{now['song_artist']}${{font}}${{color}}")
 
     # Queue
     for idx, entry in enumerate(entries[1:], start=2):
@@ -110,12 +110,12 @@ def format_conky(entries):
         # Status badge (right-aligned) for non-generic statuses
         status_badge = ""
         if entry["status"] and entry["status"].lower() not in ("queued", "waiting", ""):
-            status_badge = f"${{alignr}}${{color {color}}}${{font Helvetica:size=24}}{entry['status']}${{font}}${{color}}"
+            status_badge = f"${{alignr}}${{color {color}}}${{font DejaVu Sans:size=24}}{entry['status']}${{font}}${{color}}"
 
         print()
-        print(f"${{color {color}}}${{font Helvetica:bold:size=32}}{idx}.${{font}} ${{font Helvetica:bold:size=40}}{entry['singer']}${{font}}${{color}}{status_badge}")
+        print(f"${{color {color}}}${{font DejaVu Sans:bold:size=32}}{idx}.${{font}} ${{font DejaVu Sans:bold:size=40}}{entry['singer']}${{font}}${{color}}{status_badge}")
         if entry["song_artist"]:
-            print(f"${{color {COLOR_TEXT}}}${{font Helvetica:size=20}}{entry['song_artist']}${{font}}${{color}}")
+            print(f"${{color {COLOR_TEXT}}}${{font DejaVu Sans:size=20}}{entry['song_artist']}${{font}}${{color}}")
 
 
 # ---------------------------------------------------------------------------
@@ -128,7 +128,7 @@ def main():
     try:
         entries = fetch_rotation()
     except (URLError, OSError, ValueError, csv.Error):
-        print("0" if count_only else f"${{color {COLOR_DEFAULT}}}${{font Helvetica:size=28}}Offline${{font}}${{color}}")
+        print("0" if count_only else f"${{color {COLOR_DEFAULT}}}${{font DejaVu Sans:size=28}}Offline${{font}}${{color}}")
         return
 
     if count_only:
