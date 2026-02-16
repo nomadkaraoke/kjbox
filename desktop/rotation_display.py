@@ -278,7 +278,7 @@ class RotationDisplay:
             status_text = "Offline — showing cached data"
             status_color = OFFLINE_COLOR
         else:
-            now = datetime.now().strftime("%-I:%M %p")
+            now = datetime.now().strftime("%I:%M %p").lstrip("0")
             status_text = f"Updated {now}"
             status_color = ACCENT_DEFAULT
 
@@ -293,7 +293,7 @@ class RotationDisplay:
             entries = fetch_rotation()
             self.cached_entries = entries
             self.is_offline = False
-        except (URLError, OSError, ValueError):
+        except (URLError, OSError, ValueError, csv.Error):
             entries = self.cached_entries
             self.is_offline = True
 
