@@ -38,6 +38,7 @@ FETCH_TIMEOUT = 10
 COLOR_NAME = "ffdf6b"      # gold for all singer names
 COLOR_NOW_PILL = "2d8a4e"  # dark green for "Now" badge
 COLOR_NEXT_PILL = "d4720a" # darker orange for "Next" badge
+COLOR_WIP_PILL = "cc3333"  # red for "WIP" badge
 COLOR_DEFAULT = "8892a4"   # muted gray — queued number
 COLOR_TEXT = "e0e6f0"      # light gray body text
 
@@ -55,8 +56,8 @@ FONT_BADGE = "DejaVu Sans:bold:size=18"
 # Data fetching
 # ---------------------------------------------------------------------------
 
-def fetch_rotation():
-    """Fetch rotation from Google Sheet CSV. Returns list of dicts."""
+def fetch_all_rows():
+    """Fetch all rows from the Google Sheet CSV. Returns (all_rows, queue, stats)."""
     with urlopen(SHEET_CSV_URL, timeout=FETCH_TIMEOUT) as response:
         text = response.read().decode("utf-8")
     reader = csv.reader(io.StringIO(text))
@@ -64,25 +65,55 @@ def fetch_rotation():
     try:
         next(reader)  # skip header
     except StopIteration:
-        return []
+        return [], {}, {}
 
-    entries = []
+    all_singers = set()
+    done_count = 0
+    queue = []
+    earliest_ts = None
+
     for row in reader:
         if len(row) <= COL_STATUS:
             continue
         status = row[COL_STATUS].strip()
         singer = row[COL_SINGER].strip()
-        if status.lower() == "done" or not singer:
+        if not singer:
             continue
-        entries.append({
-            "singer": singer,
-            "song_artist": row[COL_SONG_ARTIST].strip() if COL_SONG_ARTIST < len(row) else "",
-            "status": status,
-        })
-        if len(entries) >= MAX_ENTRIES:
-            break
 
-    return entries
+        # Track earliest timestamp (column 0, format "M/D/YYYY HH:MM:SS")
+        ts_raw = row[0].strip() if row[0].strip() else None
+        if ts_raw and earliest_ts is None:
+            earliest_ts = ts_raw
+
+        all_singers.add(singer)
+
+        if status.lower() == "done":
+            done_count += 1
+        else:
+            if len(queue) < MAX_ENTRIES:
+                queue.append({
+                    "singer": singer,
+                    "song_artist": row[COL_SONG_ARTIST].strip() if COL_SONG_ARTIST < len(row) else "",
+                    "status": status,
+                })
+
+    # Format earliest timestamp as M/D HH:MM
+    started = ""
+    if earliest_ts:
+        try:
+            from datetime import datetime
+            dt = datetime.strptime(earliest_ts, "%m/%d/%Y %H:%M:%S")
+            started = dt.strftime("%-m/%-d %-H:%M")
+        except ValueError:
+            started = earliest_ts
+
+    stats = {
+        "singers": len(all_singers),
+        "sung": done_count,
+        "queued": len(queue),
+        "started": started,
+    }
+    return queue, stats
 
 
 # ---------------------------------------------------------------------------
@@ -105,9 +136,11 @@ def format_conky(entries):
 
         # Determine badge
         if idx == 1 or "singing" in status_lower or "now" in status_lower:
-            entry_badge = badge("Now", COLOR_NOW_PILL)
+            entry_badge = badge("NOW", COLOR_NOW_PILL)
         elif "next" in status_lower:
-            entry_badge = badge("Next", COLOR_NEXT_PILL)
+            entry_badge = badge("NEXT", COLOR_NEXT_PILL)
+        elif "being made" in status_lower or "wip" in status_lower:
+            entry_badge = badge("WIP", COLOR_WIP_PILL)
         else:
             entry_badge = ""
 
@@ -125,18 +158,22 @@ def format_conky(entries):
 # ---------------------------------------------------------------------------
 
 def main():
-    count_only = "--count-only" in sys.argv
+    stats_only = "--stats" in sys.argv
 
     try:
-        entries = fetch_rotation()
+        queue, stats = fetch_all_rows()
     except (URLError, OSError, ValueError, csv.Error):
-        print("0" if count_only else f"{MARGIN}${{color {COLOR_DEFAULT}}}${{font DejaVu Sans:size=28}}Offline${{font}}${{color}}")
+        print("--" if stats_only else f"{MARGIN}${{color {COLOR_DEFAULT}}}${{font DejaVu Sans:size=28}}Offline${{font}}${{color}}")
         return
 
-    if count_only:
-        print(len(entries))
+    if stats_only:
+        parts = []
+        if stats["started"]:
+            parts.append(f"Started: {stats['started']}")
+        parts.append(f"{stats['singers']} singers | {stats['sung']} sung | {stats['queued']} queued")
+        print("    ".join(parts))
     else:
-        format_conky(entries)
+        format_conky(queue)
 
 
 if __name__ == "__main__":
