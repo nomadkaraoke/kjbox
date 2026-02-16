@@ -435,11 +435,21 @@ pcm.hdmiout {
     }
 }
 
-# Yamaha MG-XU USB mixer
+# Yamaha MG-XU USB mixer (shared via dmix for multiple simultaneous streams)
+pcm.usbmixer_dmix {
+    type dmix
+    ipc_key 1024
+    slave {
+        pcm "hw:MGXU,0"
+        rate 48000
+        channels 2
+    }
+}
+
 pcm.usbmixer {
     type plug
     slave {
-        pcm "hw:MGXU,0"
+        pcm usbmixer_dmix
     }
 }
 

@@ -682,8 +682,10 @@ def delete_media():
 
 @app.route('/rescan', methods=['POST'])
 def handle_rescan():
-    """Triggers a full media folder rescan."""
-    log_message("Rescan requested...")
+    """Reloads config and triggers a full media folder rescan."""
+    global app_config
+    log_message("Rescan requested - reloading config...")
+    app_config = load_config()
     scan_media_folders()
     return jsonify({"success": True, "count": len(media_index)})
 
