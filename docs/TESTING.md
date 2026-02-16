@@ -48,15 +48,30 @@ Shared fixtures live in `tests/conftest.py`:
 - `flask_test_client` - Flask test client for route testing
 
 ### Mocking Strategy
-- **VLC**: Disabled via `create_app(config=...)` which sets `VLCManager(enabled=False)`
+- **VLC (integration tests)**: Disabled via `create_app(config=...)` which sets `VLCManager(enabled=False)`
+- **VLC (unit tests)**: Enabled with `VLCManager(config, enabled=True)`, mock `send_command` or `requests` to test logic without a real VLC binary
 - **Filesystem**: Use `tmp_path` / `tmp_media_dir` fixtures for real file operations
 - **Config**: Pass test config dict to `create_app(config=mock_config)`
 - **Platform detection**: Mock `vlc.is_pi()` to return False (auto in tests via enabled=False)
 
 ## Coverage Targets
 
-- Overall: 70%+ (focusing on testable pure functions and route handlers)
+- Overall: 70%+
 - Utility functions: 90%+
 - Config loading: 80%+
-- Media validation: 90%+
-- VLC/subprocess code: excluded (requires real VLC)
+- Media index: 90%+
+- Routes: 70%+
+- VLC logic (HTTP, state machine, orchestration): 70%+
+- VLC subprocess launching: excluded (requires real `cvlc` binary)
+
+## VLC Testing Strategy
+
+VLC code is testable at three levels:
+
+| Level | What to mock | What you're testing |
+|-------|-------------|---------------------|
+| **HTTP layer** | `vlc.requests.Session` | URL construction, encoding, error handling in `send_command` |
+| **Orchestration** | `vm.send_command` (patch on instance) | State transitions in `play_video`, `monitor_karaoke`, `ensure_filler_stopped`, `fade_music` |
+| **Process mgmt** | Mock process objects in `vm.processes` | Terminate/wait/kill logic in `restart_instances` |
+
+Only `launch_instance` truly requires a VLC binary (it calls `subprocess.Popen` with `cvlc`). Everything else is testable through mocking.
