@@ -29,6 +29,7 @@ app_config = {}
 filler_music_target_volume = 100
 karaoke_music_target_volume = 200
 karaoke_player_is_active = False
+last_seek_time = 0
 current_audio_device = "hdmiout"
 vlc_enabled = False
 
@@ -538,14 +539,16 @@ def handle_play():
 @app.route('/seek', methods=['POST'])
 def handle_seek():
     """Handles seeking within the karaoke video."""
+    global last_seek_time
     seek_time = request.json.get('time')
     if seek_time is None:
         return jsonify({"error": "Time is required"}), 400
 
     karaoke_port = app_config.get('karaoke_vlc_port', 8080)
     karaoke_pw = app_config.get('karaoke_vlc_password', 'karaoke')
-    log_message(f"Received seek request to time: {seek_time}")
-    send_vlc_command(karaoke_port, karaoke_pw, f"seek&val={seek_time}")
+    log_message(f"Received seek request to time: {int(seek_time)}s")
+    last_seek_time = time.time()
+    send_vlc_command(karaoke_port, karaoke_pw, f"seek&val={int(seek_time)}")
     return jsonify({"success": True})
 
 
@@ -824,6 +827,10 @@ def monitor_karaoke_player():
     while True:
         time.sleep(2)
         if not karaoke_player_is_active:
+            continue
+
+        # Skip check briefly after a seek - VLC may report 'stopped' transiently
+        if time.time() - last_seek_time < 5:
             continue
 
         status = send_vlc_command(karaoke_port, karaoke_pw, "", debug=False)
