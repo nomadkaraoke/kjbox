@@ -112,7 +112,7 @@ def format_conky(entries):
             entry_badge = ""
 
         # Singer line: single font block so number and name share baseline
-        print(f"{MARGIN}${{font {FONT_NAME}}}${{color ffffff}}{idx}) ${{color}}"
+        print(f"{MARGIN}${{font {FONT_NAME}}}${{color ffffff}}{idx}. ${{color}}"
               f"${{color {COLOR_NAME}}}{entry['singer']}${{color}}${{font}}{entry_badge}")
 
         # Song line
