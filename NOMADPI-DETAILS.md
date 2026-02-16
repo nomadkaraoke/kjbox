@@ -1,6 +1,6 @@
 # NomadPi - Raspberry Pi Configuration Guide
 
-**Last Updated:** 2026-02-15
+**Last Updated:** 2026-02-16
 **Purpose:** Nomad Karaoke live events - video playback and AV equipment connection
 **Location:** Local network at 192.168.1.84
 
@@ -579,7 +579,7 @@ NomadPi is configured for Nomad Karaoke live events:
 - **USB Hub:** VIA Labs Hub (for peripherals)
 
 ### KJ Controller
-A web-based karaoke show management app deployed at `/opt/kj-controller/`. It provides:
+A web-based karaoke show management app. Runs directly from the git clone at `/opt/nomad/kjbox/kj-controller/`. It provides:
 - Remote control interface at `http://192.168.1.84:5000/` (accessible from any browser on the local network)
 - YouTube video downloading via yt-dlp
 - Dual VLC instance management (karaoke player + filler music with crossfading)
@@ -598,19 +598,17 @@ ssh nomadpi 'journalctl -u kj-controller -f'
 ssh nomadpi 'systemctl restart kj-controller'
 
 # View app log
-ssh nomadpi 'tail -f /root/kj-controller.log'
+ssh nomadpi 'tail -f /opt/nomad/kjbox/kj-controller/kj-controller.log'
 ```
 
 **Configuration:**
-- `/opt/kj-controller/config.json` - Media folders, download folder, index path
-- `/opt/kj-controller/media_index.json` - Central index of all scanned media files
+- `/opt/nomad/kjbox/kj-controller/config.json` - All app settings (media folders, ports, audio devices, etc.)
+- `/opt/nomad/kjbox/kj-controller/media_index.json` - Central index of all scanned media files
 
 **Data Directories:**
 - `/opt/nomad/YTDownloads/` - YouTube downloads (named `{youtube_id}__{channel}__{title}.mp4`)
 - `/opt/nomad/Tracks-PublicShare/` - Karaoke video tracks (scanned, not deletable from UI)
-- `/root/kjdata/videos/` - Legacy download location (scanned for backwards compatibility)
-- `/root/kjdata/` - Filler music files (mp3, wav, ogg, flac)
-- `/root/kjdata/youtube_cookies.txt` - Optional YouTube cookies for yt-dlp
+- `/opt/nomad/FillerMusic/` - Filler music files (mp3, wav, ogg, flac)
 
 **config.json:**
 ```json
@@ -618,17 +616,19 @@ ssh nomadpi 'tail -f /root/kj-controller.log'
   "download_folder": "/opt/nomad/YTDownloads",
   "media_folders": [
     "/opt/nomad/YTDownloads",
-    "/opt/nomad/Tracks-PublicShare",
-    "/root/kjdata/videos"
+    "/opt/nomad/Tracks-PublicShare/MP4"
   ],
-  "media_index_path": "/opt/kj-controller/media_index.json"
+  "filler_music_dir": "/opt/nomad/FillerMusic",
+  "media_index_path": "/opt/nomad/kjbox/kj-controller/media_index.json",
+  "log_file": "/opt/nomad/kjbox/kj-controller/kj-controller.log",
+  "youtube_cookies_file": "/opt/nomad/kjbox/kj-controller/youtube_cookies.txt",
+  "flask_port": 5000
 }
 ```
 
 **Auto-Deploy:** `kj-autodeploy.service` (enabled, starts on boot)
 - Polls GitHub every 60 seconds for new commits on `main`
-- On change: pulls, copies `app.py`, `index.html`, `requirements.txt` to `/opt/kj-controller/`, restarts service
-- Repo clone at `/opt/kjbox/` (read-only, used only for pulling)
+- On change: `git pull` and restart kj-controller (app runs from git clone, no file copying)
 - **Workflow:** edit on Mac → `git push` → deployed to Pi within ~60 seconds
 ```bash
 # View auto-deploy logs
@@ -641,10 +641,7 @@ ssh nomadpi 'systemctl disable --now kj-autodeploy'
 ssh nomadpi 'systemctl enable --now kj-autodeploy'
 
 # Manual deploy (if auto-deploy is disabled)
-scp kj-controller/app.py nomadpi:/opt/kj-controller/
-scp kj-controller/templates/index.html nomadpi:/opt/kj-controller/templates/
-scp kj-controller/requirements.txt nomadpi:/opt/kj-controller/
-ssh nomadpi 'systemctl restart kj-controller'
+ssh nomadpi 'cd /opt/nomad/kjbox && git pull && systemctl restart kj-controller'
 ```
 
 **Architecture:**
@@ -956,20 +953,18 @@ ssh nomadpi 'journalctl -u bluetooth -f'
 - `/etc/systemd/system/vncserver.service` - Virtual Mode systemd unit (DietPi wrapper)
 
 ### KJ Controller
-- `/opt/kj-controller/app.py` - Main Flask application
-- `/opt/kj-controller/templates/index.html` - Web UI template
-- `/opt/kj-controller/requirements.txt` - Python dependencies
-- `/opt/kj-controller/config.json` - Media folder configuration
-- `/opt/kj-controller/media_index.json` - Central media file index
-- `/opt/kj-controller/venv/` - Python virtual environment
+- `/opt/nomad/kjbox/` - Git clone of kjbox repo (app runs directly from here)
+- `/opt/nomad/kjbox/kj-controller/app.py` - Main Flask application
+- `/opt/nomad/kjbox/kj-controller/templates/index.html` - Web UI template
+- `/opt/nomad/kjbox/kj-controller/requirements.txt` - Python dependencies
+- `/opt/nomad/kjbox/kj-controller/config.json` - App configuration (gitignored)
+- `/opt/nomad/kjbox/kj-controller/media_index.json` - Central media file index (gitignored)
+- `/opt/nomad/kjbox/kj-controller/venv/` - Python virtual environment
+- `/opt/nomad/kjbox/kj-controller/auto-deploy.sh` - Auto-deploy script (polls GitHub)
 - `/etc/systemd/system/kj-controller.service` - systemd service unit
-- `/opt/kj-controller/auto-deploy.sh` - Auto-deploy script (polls GitHub)
 - `/etc/systemd/system/kj-autodeploy.service` - Auto-deploy systemd unit
-- `/opt/kjbox/` - Git clone of kjbox repo (read-only, for auto-deploy)
-- `/root/kj-controller.log` - Application log file
 - `/opt/nomad/YTDownloads/` - YouTube downloads
-- `/root/kjdata/videos/` - Legacy downloads (read-only scan)
-- `/root/kjdata/` - Filler music files
+- `/opt/nomad/FillerMusic/` - Filler music files
 
 ### Docker
 - `/var/run/docker.sock` - Docker socket
@@ -977,9 +972,12 @@ ssh nomadpi 'journalctl -u bluetooth -f'
 - `/etc/systemd/system/docker.service.d/` - Docker service overrides
 
 ### Data & Content
-- `/opt/nomad/` - Nomad Karaoke data directory (~19GB)
-  - `NomadBranding/` - Branding assets
+- `/opt/nomad/` - Nomad Karaoke root directory
+  - `kjbox/` - Git clone (app + docs)
+  - `YTDownloads/` - YouTube downloads
   - `Tracks-PublicShare/` - Karaoke video tracks (MP4-720p)
+  - `FillerMusic/` - Filler music files
+  - `NomadBranding/` - Branding assets
 
 ## 🎓 Common Tasks
 
@@ -1043,6 +1041,33 @@ ssh nomadpi 'ls /var/tmp/dietpi/logs/'
 ---
 
 ## 📋 Change Log
+
+### 2026-02-16 - Directory Restructure
+**Changes Made:**
+1. **Consolidated to single directory** - App now runs directly from git clone at `/opt/nomad/kjbox/kj-controller/`
+2. **Eliminated file-copying deploy** - Auto-deploy now just does `git pull` + restart (no separate deploy dir)
+3. **Moved git clone** from `/opt/kjbox/` to `/opt/nomad/kjbox/` (everything under `/opt/nomad/`)
+4. **Moved venv + config** into git clone directory (venv and config.json are gitignored)
+5. **Removed old directories** - `/opt/nomad/KJController/` and `/opt/kjbox/` deleted
+6. **Updated systemd services** - Both `kj-controller.service` and `kj-autodeploy.service` point to new paths
+7. **Updated config.json paths** - media_index_path, log_file, youtube_cookies_file now under `/opt/nomad/kjbox/kj-controller/`
+
+**Directory structure:**
+```
+/opt/nomad/
+├── kjbox/                    # Git clone (app runs from here)
+│   └── kj-controller/
+│       ├── app.py
+│       ├── templates/
+│       ├── config.json       # gitignored
+│       ├── media_index.json  # gitignored
+│       ├── venv/             # gitignored
+│       └── auto-deploy.sh
+├── YTDownloads/
+├── Tracks-PublicShare/
+├── FillerMusic/
+└── NomadBranding/
+```
 
 ### 2026-02-15 - HDMI Audio Configuration
 **Issue:** VLC and all ALSA apps could not play audio via HDMI. Error: `cannot open ALSA device "default": Unknown error 524` (-ENOTSUPP).
@@ -1117,15 +1142,13 @@ ssh nomadpi 'ls /var/tmp/dietpi/logs/'
 
 ### 2026-02-15 - Auto-Deploy from GitHub
 **Changes Made:**
-1. **Cloned kjbox repo** to `/opt/kjbox/` for auto-deploy source
-2. **Created auto-deploy script** at `/opt/kj-controller/auto-deploy.sh`
+1. **Created auto-deploy script** at `/opt/nomad/kjbox/kj-controller/auto-deploy.sh`
    - Polls `origin/main` every 60 seconds via `git fetch`
-   - Compares local HEAD to remote; on difference: pulls, copies changed files, restarts kj-controller
-   - Only copies `app.py`, `templates/index.html`, `requirements.txt` (preserves config.json, media_index.json, venv)
+   - Compares local HEAD to remote; on difference: `git pull` + restart kj-controller
    - Auto-installs new pip dependencies if requirements.txt changes
-3. **Created systemd service** `kj-autodeploy.service` (enabled, starts on boot)
+2. **Created systemd service** `kj-autodeploy.service` (enabled, starts on boot)
 
-**Workflow:** Edit code on Mac → `git push` → Pi auto-deploys within ~15 seconds
+**Workflow:** Edit code on Mac → `git push` → Pi auto-deploys within ~60 seconds
 
 ### 2026-02-15 - Multi-Folder Media Scanning & Descriptive Downloads
 **Changes Made:**
