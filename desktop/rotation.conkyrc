@@ -5,7 +5,7 @@
 conky.config = {
     background = false,
     own_window = true,
-    own_window_type = 'override',
+    own_window_type = 'dock',
     own_window_argb_visual = true,
     own_window_argb_value = 0,
     own_window_hints = 'undecorated,below,skip_taskbar,skip_pager',
