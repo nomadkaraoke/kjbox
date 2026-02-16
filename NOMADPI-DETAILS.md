@@ -428,10 +428,22 @@ pcm.hdmiout_raw {
     status [ 0x04 0x00 0x00 0x01 ]
 }
 
+## Shared HDMI output via dmix (allows multiple simultaneous streams)
+pcm.hdmiout_dmix {
+    type dmix
+    ipc_key 2048
+    slave {
+        pcm hdmiout_raw
+        rate 48000
+        channels 2
+        format S16_LE
+    }
+}
+
 pcm.hdmiout {
     type plug
     slave {
-        pcm hdmiout_raw
+        pcm hdmiout_dmix
     }
 }
 
@@ -447,7 +459,7 @@ pcm.usbmixer {
 pcm.!default {
     type plug
     slave {
-        pcm hdmiout_raw
+        pcm hdmiout_dmix
     }
 }
 
@@ -458,6 +470,8 @@ ctl.!default {
 ```
 
 **Why the iec958 plugin is needed:** On kernel 6.12+, the vc4-hdmi MAI PCM device only exposes `IEC958_SUBFRAME_LE` format (raw HDMI audio frames). The `iec958` ALSA plugin handles encoding standard PCM audio (S16_LE etc.) into IEC958 subframes. The `plug` plugin on top handles sample rate and format conversion.
+
+**Why dmix is needed:** The KJ Controller runs two VLC instances simultaneously (karaoke + filler music), both outputting to HDMI. Without `dmix`, only one process can open the ALSA device at a time - the second gets "Device or resource busy". The `dmix` plugin mixes multiple audio streams in software before passing them to the hardware device.
 
 ### Audio Devices
 | Card | Name | Type | ALSA Device |
