@@ -570,6 +570,7 @@ def handle_control():
         send_vlc_command(karaoke_port, karaoke_pw, "seek&val=0")
     elif action == 'stop':
         send_vlc_command(karaoke_port, karaoke_pw, "pl_stop")
+        send_vlc_command(karaoke_port, karaoke_pw, "pl_empty")
         karaoke_player_is_active = False
         global current_playing_path
         current_playing_path = None
