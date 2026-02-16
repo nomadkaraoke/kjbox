@@ -2,6 +2,26 @@
 
 NomadPi system configuration changes. For current configuration details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md).
 
+## 2026-02-16 - External Media Catalog & Search
+
+**Changes Made:**
+1. **SQLite FTS5 catalog** (`catalog.py`) — indexes ~415K karaoke files from a text file list into a searchable SQLite database on the SD card. Full-text search across artist, title, and disc_id fields with prefix matching.
+2. **CDG+MP3 ZIP playback** (`zip_playback.py`) — extracts CDG+MP3 ZIP files to a temp directory for VLC playback. Validates against path traversal attacks.
+3. **Search UI** — added search input to the web UI with 300ms debounce, result rendering with artist (purple) + title + format badge (zip=yellow, mp4=blue), and click-to-play.
+4. **New routes** — `GET /search`, `GET /catalog/stats`, `POST /catalog/build`
+5. **Extended `/play`** — now accepts external media mount paths and handles ZIP file extraction
+
+**New config keys** (in `config.json`):
+- `external_file_list` — path to text file listing external media
+- `external_media_mount` — mount point for external media drive
+
+**Catalog build (one-time):**
+```bash
+curl -X POST http://localhost:5000/catalog/build \
+  -H 'Content-Type: application/json' \
+  -d '{"file_list_path": "/mnt/Nomad4TBOne/HyperMule/all-karaoke-files-2025.02.28.txt"}'
+```
+
 ## 2026-02-16 - Directory Restructure
 
 **Changes Made:**

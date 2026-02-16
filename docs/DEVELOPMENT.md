@@ -29,6 +29,8 @@ Key settings in `config.json`:
 - `media_folders` - list of directories to scan for media
 - `filler_music_dir` - directory containing filler music files
 - `flask_port` - web server port (default: 5000)
+- `external_file_list` - path to text file listing external media (one path per line)
+- `external_media_mount` - mount point for external media drive (e.g. `/mnt/Nomad4TBOne`)
 
 ## Running the App
 
@@ -85,7 +87,9 @@ kj-controller/
   utils.py               # log_message(), filename utilities
   media.py               # MediaIndex class (scan, validate, download, delete)
   vlc.py                 # VLCManager class (launch, command, fade, play)
-  routes.py              # Flask Blueprint with all 15 route handlers
+  catalog.py             # ExternalCatalog class (SQLite FTS5 search)
+  zip_playback.py        # ZipPlayback class (CDG+MP3 ZIP extraction)
+  routes.py              # Flask Blueprint with all 18 route handlers
   config.example.json    # Example configuration
   requirements.txt       # Production dependencies
   requirements-dev.txt   # Test dependencies
@@ -99,6 +103,9 @@ kj-controller/
       test_utils.py      # Utility function tests
       test_media.py      # MediaIndex class tests
       test_vlc.py        # VLCManager tests (disabled mode)
+      test_catalog.py    # ExternalCatalog + filename parser tests
+      test_zip_playback.py # ZipPlayback extraction tests
     integration/
       test_routes.py     # Flask route tests via test client
+      test_search_routes.py # Search, catalog, ZIP playback route tests
 ```

@@ -21,8 +21,18 @@
         #media-list li:last-child { border-bottom: none; }
         #media-list li:hover { background-color: #4f5661; }
         #media-list li.playing { background-color: #98c379; color: #282c34; }
-        #media-list li.folder-header { background-color: #2c313a; color: #61afef; font-weight: bold; cursor: default; font-size: 0.85em; padding: 6px 10px; text-transform: uppercase; letter-spacing: 0.5px; }
-        #media-list li.folder-header:hover { background-color: #2c313a; }
+        #media-list li.folder-header { background-color: #2c313a; color: #61afef; font-weight: bold; cursor: pointer; user-select: none; font-size: 0.85em; padding: 6px 10px; text-transform: uppercase; letter-spacing: 0.5px; }
+        #media-list li.folder-header:hover { background-color: #3a3f47; }
+        .folder-chevron { display: inline-block; transition: transform 0.15s; margin-right: 0.5rem; font-size: 0.75em; }
+        .folder-chevron.expanded { transform: rotate(90deg); }
+        .folder-items.collapsed { display: none; }
+        .folder-items li { padding: 10px; cursor: pointer; border-bottom: 1px solid #4f5661; display: flex; justify-content: space-between; align-items: center; transition: background-color 0.2s; }
+        .folder-items li:last-child { border-bottom: none; }
+        .folder-items li:hover { background-color: #4f5661; }
+        .folder-items li.playing { background-color: #98c379; color: #282c34; }
+        .folder-controls { display: flex; gap: 0.25rem; margin-bottom: 0.5rem; }
+        .folder-btn { font-size: 0.75em; padding: 4px 10px; background-color: #4f5661; }
+        .folder-btn:hover { background-color: #5c6370; }
         .delete-btn { background-color: #e06c75; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; }
         .delete-btn:hover { background-color: #d15c66; }
         .rescan-btn { background-color: #98c379; font-size: 0.8em; padding: 6px 12px; margin-left: 10px; }
@@ -110,6 +120,23 @@
         }
         .header-row { display: flex; align-items: center; justify-content: space-between; }
         .header-row h2 { flex-grow: 1; margin-bottom: 0; }
+
+        /* Search UI */
+        .search-box { position: relative; margin-bottom: 8px; }
+        .search-box input { width: calc(100% - 22px); padding: 10px; border-radius: 4px; border: 1px solid #4f5661; background-color: #2c313a; color: #abb2bf; font-size: 0.95em; }
+        .search-box input::placeholder { color: #5c6370; }
+        .search-clear { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); background: none; border: none; color: #5c6370; cursor: pointer; font-size: 1.2em; padding: 4px 8px; }
+        .search-clear:hover { color: #abb2bf; }
+        .search-meta { font-size: 0.8em; color: #5c6370; margin-bottom: 4px; }
+        .search-meta a { color: #61afef; cursor: pointer; text-decoration: none; }
+        .search-meta a:hover { text-decoration: underline; }
+        .format-badge { font-size: 0.75em; padding: 2px 6px; border-radius: 3px; margin-left: 6px; font-weight: bold; }
+        .format-badge.zip { background-color: #e5c07b; color: #282c34; }
+        .format-badge.mp4 { background-color: #61afef; color: #282c34; }
+        .format-badge.other { background-color: #5c6370; color: #abb2bf; }
+        .artist-name { color: #c678dd; }
+        .section-header { background-color: #2c313a; color: #5c6370; font-size: 0.8em; padding: 6px 10px; text-transform: uppercase; letter-spacing: 0.5px; cursor: default; }
+        .section-header:hover { background-color: #2c313a; }
     </style>
 </head>
 <body>
@@ -156,6 +183,15 @@
                 <div class="header-row">
                     <h2>Available Songs<span id="media-count" class="media-count"></span></h2>
                     <button class="rescan-btn" id="rescan-btn" onclick="rescanMedia()">Rescan Media</button>
+                </div>
+                <div class="search-box">
+                    <input type="text" id="catalog-search" placeholder="Search your library and catalog..." autocomplete="off">
+                    <button class="search-clear hidden" id="search-clear" onclick="clearSearch()">&times;</button>
+                </div>
+                <div id="search-meta" class="search-meta hidden"></div>
+                <div id="folder-controls" class="folder-controls hidden">
+                    <button class="folder-btn" onclick="expandAll()">Expand All</button>
+                    <button class="folder-btn" onclick="collapseAll()">Collapse All</button>
                 </div>
                 <ul id="media-list">
                     <li>Loading media...</li>
@@ -331,83 +367,161 @@
             }
         }
 
-        async function updateMediaList() {
+        let localMediaItems = [];
+
+        function loadFolderStates() {
             try {
-                const response = await fetch('/media');
-                const items = await response.json();
-                const mediaList = document.getElementById('media-list');
-                const mediaCount = document.getElementById('media-count');
-                mediaList.innerHTML = '';
+                return JSON.parse(localStorage.getItem('kj-folder-state') || '{}');
+            } catch { return {}; }
+        }
 
-                if (items.length === 0) {
-                    const li = document.createElement('li');
-                    li.textContent = 'No media files found. Try downloading a song or clicking Rescan.';
-                    li.style.cursor = 'default';
-                    mediaList.appendChild(li);
-                    mediaCount.textContent = '';
-                    return;
-                }
+        function saveFolderStates(states) {
+            localStorage.setItem('kj-folder-state', JSON.stringify(states));
+        }
 
-                mediaCount.textContent = `(${items.length})`;
+        function toggleFolder(folderName) {
+            const escapedName = CSS.escape(folderName);
+            const container = document.getElementById('folder-' + escapedName);
+            const chevron = document.getElementById('chevron-' + escapedName);
+            if (!container) return;
+            const isCollapsed = container.classList.toggle('collapsed');
+            chevron.classList.toggle('expanded', !isCollapsed);
+            const states = loadFolderStates();
+            states[folderName] = !isCollapsed;
+            saveFolderStates(states);
+        }
 
-                // Group by folder_name
-                const groups = {};
-                items.forEach(item => {
-                    const folder = item.folder_name || 'Unknown';
-                    if (!groups[folder]) groups[folder] = [];
-                    groups[folder].push(item);
-                });
+        function expandAll() {
+            document.querySelectorAll('.folder-items').forEach(el => el.classList.remove('collapsed'));
+            document.querySelectorAll('.folder-chevron').forEach(el => el.classList.add('expanded'));
+            const states = {};
+            document.querySelectorAll('.folder-items').forEach(el => {
+                states[el.dataset.folder] = true;
+            });
+            saveFolderStates(states);
+        }
 
-                // Render groups with headers
-                const folderNames = Object.keys(groups).sort();
-                const showHeaders = folderNames.length > 1;
+        function collapseAll() {
+            document.querySelectorAll('.folder-items').forEach(el => el.classList.add('collapsed'));
+            document.querySelectorAll('.folder-chevron').forEach(el => el.classList.remove('expanded'));
+            const states = {};
+            document.querySelectorAll('.folder-items').forEach(el => {
+                states[el.dataset.folder] = false;
+            });
+            saveFolderStates(states);
+        }
 
-                folderNames.forEach(folderName => {
-                    if (showHeaders) {
-                        const header = document.createElement('li');
-                        header.className = 'folder-header';
-                        header.textContent = `${folderName} (${groups[folderName].length})`;
-                        mediaList.appendChild(header);
-                    }
+        function createMediaItemLi(item) {
+            const li = document.createElement('li');
+
+            const titleSpan = document.createElement('span');
+            if (item.channel) {
+                const channelSpan = document.createElement('span');
+                channelSpan.className = 'channel-tag';
+                channelSpan.textContent = `(${item.channel})`;
+                titleSpan.textContent = item.display_name + ' ';
+                titleSpan.appendChild(channelSpan);
+            } else {
+                titleSpan.textContent = item.display_name;
+            }
+
+            const rightSide = document.createElement('span');
+            if (item.is_download) {
+                const deleteBtn = document.createElement('button');
+                deleteBtn.textContent = 'Delete';
+                deleteBtn.className = 'delete-btn';
+                deleteBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    deleteMedia(item.file_path, item.display_name);
+                };
+                rightSide.appendChild(deleteBtn);
+            }
+
+            li.appendChild(titleSpan);
+            li.appendChild(rightSide);
+            li.onclick = () => {
+                document.querySelectorAll('#media-list li').forEach(el => el.classList.remove('playing'));
+                li.classList.add('playing');
+                playMedia(item.file_path);
+            };
+            return li;
+        }
+
+        function renderFolderView(items) {
+            const mediaList = document.getElementById('media-list');
+            const mediaCount = document.getElementById('media-count');
+            const folderControls = document.getElementById('folder-controls');
+            mediaList.innerHTML = '';
+
+            if (items.length === 0) {
+                const li = document.createElement('li');
+                li.textContent = 'No media files found. Try downloading a song or clicking Rescan.';
+                li.style.cursor = 'default';
+                mediaList.appendChild(li);
+                mediaCount.textContent = '';
+                folderControls.classList.add('hidden');
+                return;
+            }
+
+            mediaCount.textContent = `(${items.length})`;
+
+            const groups = {};
+            items.forEach(item => {
+                const folder = item.folder_name || 'Unknown';
+                if (!groups[folder]) groups[folder] = [];
+                groups[folder].push(item);
+            });
+
+            const folderNames = Object.keys(groups).sort();
+            const showHeaders = folderNames.length > 1;
+            folderControls.classList.toggle('hidden', !showHeaders);
+
+            const savedStates = loadFolderStates();
+
+            folderNames.forEach(folderName => {
+                if (showHeaders) {
+                    const isExpanded = savedStates[folderName] !== undefined ? savedStates[folderName] : false;
+
+                    const header = document.createElement('li');
+                    header.className = 'folder-header';
+                    header.onclick = () => toggleFolder(folderName);
+
+                    const chevron = document.createElement('span');
+                    chevron.className = 'folder-chevron' + (isExpanded ? ' expanded' : '');
+                    chevron.id = 'chevron-' + CSS.escape(folderName);
+                    chevron.textContent = '▶';
+
+                    header.appendChild(chevron);
+                    header.appendChild(document.createTextNode(`${folderName} (${groups[folderName].length})`));
+                    mediaList.appendChild(header);
+
+                    const wrapper = document.createElement('li');
+                    wrapper.style.cssText = 'padding:0; border-bottom:none; display:block;';
+                    const container = document.createElement('ul');
+                    container.style.cssText = 'list-style:none; padding:0; margin:0;';
+                    container.className = 'folder-items' + (isExpanded ? '' : ' collapsed');
+                    container.id = 'folder-' + CSS.escape(folderName);
+                    container.dataset.folder = folderName;
 
                     groups[folderName].forEach(item => {
-                        const li = document.createElement('li');
-
-                        const titleSpan = document.createElement('span');
-                        let displayText = item.display_name;
-                        if (item.channel) {
-                            displayText += ` `;
-                            const channelSpan = document.createElement('span');
-                            channelSpan.className = 'channel-tag';
-                            channelSpan.textContent = `(${item.channel})`;
-                            titleSpan.textContent = item.display_name + ' ';
-                            titleSpan.appendChild(channelSpan);
-                        } else {
-                            titleSpan.textContent = displayText;
-                        }
-
-                        const rightSide = document.createElement('span');
-                        if (item.is_download) {
-                            const deleteBtn = document.createElement('button');
-                            deleteBtn.textContent = 'Delete';
-                            deleteBtn.className = 'delete-btn';
-                            deleteBtn.onclick = (e) => {
-                                e.stopPropagation();
-                                deleteMedia(item.file_path, item.display_name);
-                            };
-                            rightSide.appendChild(deleteBtn);
-                        }
-
-                        li.appendChild(titleSpan);
-                        li.appendChild(rightSide);
-                        li.onclick = () => {
-                            document.querySelectorAll('#media-list li').forEach(el => el.classList.remove('playing'));
-                            li.classList.add('playing');
-                            playMedia(item.file_path);
-                        };
-                        mediaList.appendChild(li);
+                        container.appendChild(createMediaItemLi(item));
                     });
-                });
+                    wrapper.appendChild(container);
+                    mediaList.appendChild(wrapper);
+                } else {
+                    groups[folderName].forEach(item => {
+                        mediaList.appendChild(createMediaItemLi(item));
+                    });
+                }
+            });
+        }
+
+        async function updateMediaList() {
+            if (searchActive) return;
+            try {
+                const response = await fetch('/media');
+                localMediaItems = await response.json();
+                renderFolderView(localMediaItems);
             } catch (error) {
                 log('Could not update media list.', 'error');
             }
@@ -478,6 +592,155 @@
             }
         }
 
+        // --- Catalog Search ---
+        let searchActive = false;
+        let searchDebounceTimer = null;
+
+        function getFormatBadgeClass(format) {
+            if (format === 'cdg+mp3') return 'zip';
+            if (format === 'mp4') return 'mp4';
+            return 'other';
+        }
+
+        function filterLocalMedia(query) {
+            const terms = query.toLowerCase().split(/\s+/).filter(t => t);
+            return localMediaItems.filter(item => {
+                const text = ((item.display_name || '') + ' ' + (item.channel || '')).toLowerCase();
+                return terms.every(term => text.includes(term));
+            });
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function renderUnifiedResults(localResults, catalogResults, query) {
+            const mediaList = document.getElementById('media-list');
+            const mediaCount = document.getElementById('media-count');
+            const searchMeta = document.getElementById('search-meta');
+            const folderControls = document.getElementById('folder-controls');
+            mediaList.innerHTML = '';
+            folderControls.classList.add('hidden');
+
+            const safeQuery = escapeHtml(query);
+            const totalCount = localResults.length + catalogResults.length;
+            searchMeta.classList.remove('hidden');
+            if (totalCount === 0) {
+                searchMeta.innerHTML = `No results for "<strong>${safeQuery}</strong>". <a onclick="clearSearch()">Clear search</a>`;
+                mediaCount.textContent = '';
+                return;
+            }
+
+            const parts = [];
+            if (localResults.length > 0) parts.push(`${localResults.length} local`);
+            if (catalogResults.length > 0) parts.push(`${catalogResults.length} catalog`);
+            searchMeta.innerHTML = `${parts.join(' + ')} result${totalCount !== 1 ? 's' : ''} for "<strong>${safeQuery}</strong>" <a onclick="clearSearch()">Clear</a>`;
+            mediaCount.textContent = `(${totalCount})`;
+
+            // Local results first
+            if (localResults.length > 0) {
+                if (catalogResults.length > 0) {
+                    const sectionHeader = document.createElement('li');
+                    sectionHeader.className = 'section-header';
+                    sectionHeader.textContent = `Your Library (${localResults.length})`;
+                    mediaList.appendChild(sectionHeader);
+                }
+                localResults.forEach(item => {
+                    mediaList.appendChild(createMediaItemLi(item));
+                });
+            }
+
+            // Catalog results
+            if (catalogResults.length > 0) {
+                if (localResults.length > 0) {
+                    const sectionHeader = document.createElement('li');
+                    sectionHeader.className = 'section-header';
+                    sectionHeader.textContent = `Catalog (${catalogResults.length})`;
+                    mediaList.appendChild(sectionHeader);
+                }
+                catalogResults.forEach(item => {
+                    const li = document.createElement('li');
+                    const titleSpan = document.createElement('span');
+                    if (item.artist) {
+                        const artistSpan = document.createElement('span');
+                        artistSpan.className = 'artist-name';
+                        artistSpan.textContent = item.artist;
+                        titleSpan.appendChild(artistSpan);
+                        titleSpan.appendChild(document.createTextNode(' - ' + item.title));
+                    } else {
+                        titleSpan.textContent = item.title || item.filename;
+                    }
+                    const badge = document.createElement('span');
+                    badge.className = `format-badge ${getFormatBadgeClass(item.format)}`;
+                    badge.textContent = item.format;
+                    titleSpan.appendChild(badge);
+                    li.appendChild(titleSpan);
+                    li.onclick = () => {
+                        document.querySelectorAll('#media-list li').forEach(el => el.classList.remove('playing'));
+                        li.classList.add('playing');
+                        playMedia(item.path);
+                    };
+                    mediaList.appendChild(li);
+                });
+            }
+        }
+
+        async function catalogSearch(query) {
+            if (!query || query.length < 2) {
+                if (searchActive) clearSearch();
+                return;
+            }
+            searchActive = true;
+            document.getElementById('search-clear').classList.remove('hidden');
+
+            // Client-side: filter local media instantly
+            const localResults = filterLocalMedia(query);
+
+            // Show local results immediately while catalog loads
+            renderUnifiedResults(localResults, [], query);
+
+            // Server-side: fetch catalog results
+            let catalogResults = [];
+            try {
+                const response = await fetch(`/search?q=${encodeURIComponent(query)}&limit=50`);
+                if (response.ok) {
+                    catalogResults = await response.json();
+                }
+            } catch (error) {
+                // Catalog unavailable, show local results only
+            }
+
+            // Re-render with both result sets (if still on same search)
+            if (searchActive && document.getElementById('catalog-search').value.trim() === query) {
+                renderUnifiedResults(localResults, catalogResults, query);
+            }
+        }
+
+        function clearSearch() {
+            searchActive = false;
+            document.getElementById('catalog-search').value = '';
+            document.getElementById('search-clear').classList.add('hidden');
+            document.getElementById('search-meta').classList.add('hidden');
+            renderFolderView(localMediaItems);
+        }
+
+        async function checkCatalogAvailability() {
+            try {
+                const response = await fetch('/catalog/stats');
+                const data = await response.json();
+                const searchInput = document.getElementById('catalog-search');
+                if (data.available) {
+                    searchInput.placeholder = `Search your library + ${data.total.toLocaleString()} catalog songs...`;
+                } else {
+                    searchInput.placeholder = 'Search your library...';
+                }
+            } catch (error) {
+                // Catalog not available - local search still works
+            }
+        }
+
         document.addEventListener('DOMContentLoaded', () => {
             const seekSlider = document.getElementById('seek-slider');
             seekSlider.addEventListener('mousedown', () => { isSeeking = true; });
@@ -485,10 +748,23 @@
             seekSlider.addEventListener('touchstart', () => { isSeeking = true; });
             seekSlider.addEventListener('touchend', () => { isSeeking = false; });
 
+            // Debounced catalog search
+            const searchInput = document.getElementById('catalog-search');
+            searchInput.addEventListener('input', () => {
+                clearTimeout(searchDebounceTimer);
+                searchDebounceTimer = setTimeout(() => {
+                    catalogSearch(searchInput.value.trim());
+                }, 300);
+            });
+            searchInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape') clearSearch();
+            });
+
             updateStatus();
             updateMediaList();
             updateFillerMusicList();
             loadAudioDevices();
+            checkCatalogAvailability();
             log('KJ Remote initialized.');
         });
 

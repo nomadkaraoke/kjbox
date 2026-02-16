@@ -43,7 +43,9 @@ pytest --cov --cov-report=html
 ### Fixtures
 Shared fixtures live in `tests/conftest.py`:
 - `tmp_media_dir` - temp directory with `downloads/` and `media/` subdirs
-- `mock_config` - test config dict with temp paths
+- `mock_config` - test config dict with temp paths (includes catalog config)
+- `catalog_db_path` - temporary path for a test catalog database
+- `sample_file_list` - sample karaoke file list for catalog building
 - `flask_app` - Flask app via `create_app(config=mock_config)` with VLC disabled
 - `flask_test_client` - Flask test client for route testing
 
@@ -61,6 +63,8 @@ Shared fixtures live in `tests/conftest.py`:
 - Config loading: 80%+
 - Media index: 90%+
 - Routes: 70%+
+- Catalog: 90%+
+- ZIP playback: 90%+
 - VLC logic (HTTP, state machine, orchestration): 70%+
 - VLC subprocess launching: excluded (requires real `cvlc` binary)
 
