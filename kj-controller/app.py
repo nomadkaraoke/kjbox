@@ -1,4 +1,5 @@
 import os
+import sys
 import json
 import re
 import subprocess
@@ -8,26 +9,13 @@ import random
 import requests
 from flask import Flask, render_template, request, jsonify
 
-# --- Configuration ---
-KARAOKE_VLC_PORT = 8080
-FILLER_VLC_PORT = 8081
-KARAOKE_VLC_PASSWORD = "karaoke"
-FILLER_VLC_PASSWORD = "filler"
-FILLER_MUSIC_DIR = os.path.expanduser("~/kjdata")
-LOG_FILE = os.path.expanduser("~/kj-controller.log")
-YOUTUBE_COOKIES_FILE = os.path.expanduser("~/kjdata/youtube_cookies.txt")
+# --- Constants ---
 MEDIA_EXTENSIONS = {'.mp4', '.mkv', '.avi', '.webm', '.mov', '.mp3', '.wav', '.flac', '.ogg'}
 CONFIG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'config.json')
+APP_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # --- Flask App Initialization ---
 app = Flask(__name__)
-
-# --- Audio Device Configuration ---
-AVAILABLE_AUDIO_DEVICES = {
-    "hdmiout": "HDMI Output",
-    "usbmixer": "USB Mixer",
-}
-current_audio_device = "hdmiout"
 
 # --- Global State ---
 vlc_processes = {
@@ -41,14 +29,34 @@ app_config = {}
 filler_music_target_volume = 100
 karaoke_music_target_volume = 200
 karaoke_player_is_active = False
+current_audio_device = "hdmiout"
+vlc_enabled = False
+
+# --- Environment Detection ---
+def is_pi():
+    """Detect if running on NomadPi (DietPi on Linux ARM)."""
+    return os.path.exists('/boot/dietpi.txt')
 
 # --- Config Loading ---
 def load_config():
-    """Loads config from config.json, falling back to defaults."""
+    """Loads config from config.json, falling back to platform-appropriate defaults."""
     defaults = {
         "download_folder": os.path.expanduser("~/kjdata/videos"),
         "media_folders": [os.path.expanduser("~/kjdata/videos")],
-        "media_index_path": os.path.join(os.path.dirname(os.path.abspath(__file__)), 'media_index.json'),
+        "media_index_path": os.path.join(APP_DIR, 'media_index.json'),
+        "filler_music_dir": os.path.expanduser("~/kjdata"),
+        "log_file": os.path.expanduser("~/kj-controller.log"),
+        "youtube_cookies_file": os.path.expanduser("~/kjdata/youtube_cookies.txt"),
+        "karaoke_vlc_port": 8080,
+        "filler_vlc_port": 8081,
+        "karaoke_vlc_password": "karaoke",
+        "filler_vlc_password": "filler",
+        "audio_devices": {
+            "hdmiout": "HDMI Output",
+            "usbmixer": "USB Mixer",
+        },
+        "default_audio_device": "hdmiout",
+        "flask_port": 5000,
     }
     if os.path.exists(CONFIG_FILE):
         try:
@@ -64,9 +72,14 @@ def load_config():
 
 # --- Logging ---
 def log_message(message):
-    """Appends a message to the log file."""
-    with open(LOG_FILE, "a") as f:
-        f.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} - {message}\n")
+    """Appends a message to the log file and prints to stdout."""
+    log_file = app_config.get('log_file') if app_config else None
+    if log_file:
+        try:
+            with open(log_file, "a") as f:
+                f.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} - {message}\n")
+        except Exception:
+            pass
     print(message)
 
 # --- Utility Functions ---
@@ -196,7 +209,10 @@ def is_in_download_folder(filepath):
 
 # --- VLC Management ---
 def launch_vlc_instance(name, port, password, media_file=None, loop=False):
-    """Launches a VLC instance with the HTTP interface enabled, running as dietpi user."""
+    """Launches a VLC instance with the HTTP interface enabled."""
+    if not vlc_enabled:
+        return
+
     if vlc_processes[name] and vlc_processes[name].poll() is None:
         log_message(f"VLC instance '{name}' is already running.")
         return
@@ -220,21 +236,30 @@ def launch_vlc_instance(name, port, password, media_file=None, loop=False):
     if loop:
         command.extend(['--loop'])
 
-    # VLC refuses to run as root; wrap with sudo -u dietpi and set display env
-    wrapper = [
-        'sudo', '-u', 'dietpi', 'env',
-        'DISPLAY=:0',
-        'XDG_RUNTIME_DIR=/run/user/1000',
-    ]
-    full_command = wrapper + command
+    # On Pi: VLC refuses to run as root; wrap with sudo -u dietpi and set display env
+    if is_pi():
+        wrapper = [
+            'sudo', '-u', 'dietpi', 'env',
+            'DISPLAY=:0',
+            'XDG_RUNTIME_DIR=/run/user/1000',
+        ]
+        full_command = wrapper + command
+    else:
+        full_command = command
 
-    process = subprocess.Popen(full_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    vlc_processes[name] = process
-    log_message(f"VLC instance '{name}' launched with PID {process.pid}.")
-    time.sleep(2)
+    try:
+        process = subprocess.Popen(full_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        vlc_processes[name] = process
+        log_message(f"VLC instance '{name}' launched with PID {process.pid}.")
+        time.sleep(2)
+    except FileNotFoundError:
+        log_message(f"VLC not found - '{name}' instance not launched.")
 
 def send_vlc_command(port, password, command, is_path=False, debug=False):
     """Sends a command to a VLC HTTP interface, with optional verbose logging."""
+    if not vlc_enabled:
+        return None
+
     if '&' in command and not is_path:
         url = f"http://localhost:{port}/requests/status.json?command={command}"
     else:
@@ -258,7 +283,8 @@ def send_vlc_command(port, password, command, is_path=False, debug=False):
         response.raise_for_status()
         return response_json
     except requests.exceptions.RequestException as e:
-        log_message(f"Error sending command to VLC on port {port}: {e}")
+        if debug:
+            log_message(f"Error sending command to VLC on port {port}: {e}")
         return None
     except Exception as e:
         log_message(f"An unexpected error occurred when calling VLC: {e}")
@@ -276,17 +302,25 @@ def fade_music(port, password, start_vol, end_vol, duration_s=3):
 
 def fade_in_filler():
     """Fades in the filler music."""
+    if not vlc_enabled:
+        return
     log_message("Fading in filler music...")
-    send_vlc_command(FILLER_VLC_PORT, FILLER_VLC_PASSWORD, "volume&val=0")
-    send_vlc_command(FILLER_VLC_PORT, FILLER_VLC_PASSWORD, "pl_play")
-    threading.Thread(target=fade_music, args=(FILLER_VLC_PORT, FILLER_VLC_PASSWORD, 0, filler_music_target_volume)).start()
+    filler_port = app_config.get('filler_vlc_port', 8081)
+    filler_pw = app_config.get('filler_vlc_password', 'filler')
+    send_vlc_command(filler_port, filler_pw, "volume&val=0")
+    send_vlc_command(filler_port, filler_pw, "pl_play")
+    threading.Thread(target=fade_music, args=(filler_port, filler_pw, 0, filler_music_target_volume)).start()
 
 def fade_out_filler():
     """Fades out the filler music and then pauses it."""
+    if not vlc_enabled:
+        return
     log_message("Fading out filler music...")
+    filler_port = app_config.get('filler_vlc_port', 8081)
+    filler_pw = app_config.get('filler_vlc_password', 'filler')
     def fade_and_pause():
-        fade_music(FILLER_VLC_PORT, FILLER_VLC_PASSWORD, filler_music_target_volume, 0)
-        send_vlc_command(FILLER_VLC_PORT, FILLER_VLC_PASSWORD, "pl_pause")
+        fade_music(filler_port, filler_pw, filler_music_target_volume, 0)
+        send_vlc_command(filler_port, filler_pw, "pl_pause")
         log_message("Filler music faded out and paused.")
     threading.Thread(target=fade_and_pause).start()
 
@@ -298,14 +332,15 @@ def download_video(youtube_url):
 
     download_folder = app_config.get('download_folder', os.path.expanduser("~/kjdata/videos"))
     os.makedirs(download_folder, exist_ok=True)
+    cookies_file = app_config.get('youtube_cookies_file', '')
 
     # Phase 1: Extract metadata without downloading
     extract_opts = {
         'quiet': True,
         'noplaylist': True,
     }
-    if os.path.exists(YOUTUBE_COOKIES_FILE):
-        extract_opts['cookiefile'] = YOUTUBE_COOKIES_FILE
+    if cookies_file and os.path.exists(cookies_file):
+        extract_opts['cookiefile'] = cookies_file
 
     try:
         with yt_dlp.YoutubeDL(extract_opts) as ydl:
@@ -334,9 +369,9 @@ def download_video(youtube_url):
         'noplaylist': True,
         'writethumbnail': True,
     }
-    if os.path.exists(YOUTUBE_COOKIES_FILE):
-        ydl_opts['cookiefile'] = YOUTUBE_COOKIES_FILE
-        log_message(f"Using YouTube cookies file: {YOUTUBE_COOKIES_FILE}")
+    if cookies_file and os.path.exists(cookies_file):
+        ydl_opts['cookiefile'] = cookies_file
+        log_message(f"Using YouTube cookies file: {cookies_file}")
 
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -389,9 +424,15 @@ def download_video(youtube_url):
 def play_video(file_path):
     """Plays a video on the karaoke VLC instance (fade out filler, load, play)."""
     global karaoke_player_is_active
+    karaoke_port = app_config.get('karaoke_vlc_port', 8080)
+    karaoke_pw = app_config.get('karaoke_vlc_password', 'karaoke')
 
     if not os.path.exists(file_path):
         log_message(f"ERROR: File not found: {file_path}")
+        return
+
+    if not vlc_enabled:
+        log_message(f"VLC disabled - cannot play {os.path.basename(file_path)}")
         return
 
     # Fade out filler music
@@ -399,13 +440,13 @@ def play_video(file_path):
     time.sleep(3.5)
 
     # Load and play the video
-    send_vlc_command(KARAOKE_VLC_PORT, KARAOKE_VLC_PASSWORD, "pl_empty")
+    send_vlc_command(karaoke_port, karaoke_pw, "pl_empty")
     time.sleep(0.1)
-    send_vlc_command(KARAOKE_VLC_PORT, KARAOKE_VLC_PASSWORD, f"in_enqueue&input={file_path}", is_path=True)
+    send_vlc_command(karaoke_port, karaoke_pw, f"in_enqueue&input={file_path}", is_path=True)
     time.sleep(0.1)
-    send_vlc_command(KARAOKE_VLC_PORT, KARAOKE_VLC_PASSWORD, f"volume&val={karaoke_music_target_volume}")
+    send_vlc_command(karaoke_port, karaoke_pw, f"volume&val={karaoke_music_target_volume}")
     time.sleep(0.1)
-    send_vlc_command(KARAOKE_VLC_PORT, KARAOKE_VLC_PASSWORD, "pl_play")
+    send_vlc_command(karaoke_port, karaoke_pw, "pl_play")
 
     karaoke_player_is_active = True
     log_message(f"Playback started for {os.path.basename(file_path)}.")
@@ -414,6 +455,14 @@ def play_video(file_path):
 def restart_vlc_instances():
     """Terminates both VLC processes and relaunches them with the current audio device."""
     global karaoke_player_is_active, current_playing_path
+    if not vlc_enabled:
+        return
+
+    karaoke_port = app_config.get('karaoke_vlc_port', 8080)
+    karaoke_pw = app_config.get('karaoke_vlc_password', 'karaoke')
+    filler_port = app_config.get('filler_vlc_port', 8081)
+    filler_pw = app_config.get('filler_vlc_password', 'filler')
+
     log_message(f"Restarting VLC instances with audio device '{current_audio_device}'...")
 
     # Terminate existing VLC processes
@@ -432,9 +481,10 @@ def restart_vlc_instances():
     time.sleep(1)
 
     # Relaunch both instances
-    launch_vlc_instance("karaoke", KARAOKE_VLC_PORT, KARAOKE_VLC_PASSWORD)
-    filler_path = os.path.join(FILLER_MUSIC_DIR, current_filler_track)
-    launch_vlc_instance("filler", FILLER_VLC_PORT, FILLER_VLC_PASSWORD, filler_path, True)
+    launch_vlc_instance("karaoke", karaoke_port, karaoke_pw)
+    filler_dir = app_config.get('filler_music_dir', '')
+    filler_path = os.path.join(filler_dir, current_filler_track) if filler_dir else ''
+    launch_vlc_instance("filler", filler_port, filler_pw, filler_path, True)
     time.sleep(3)
     fade_in_filler()
     log_message("VLC instances restarted successfully.")
@@ -472,6 +522,9 @@ def handle_play():
     if not validated:
         return jsonify({"error": "Invalid or inaccessible file path"}), 400
 
+    if not vlc_enabled:
+        return jsonify({"error": "VLC not available (running in local/dev mode)"}), 503
+
     log_message(f"Received play request for {os.path.basename(validated)}.")
     current_playing_path = validated
     threading.Thread(target=play_video, args=(validated,)).start()
@@ -484,8 +537,10 @@ def handle_seek():
     if seek_time is None:
         return jsonify({"error": "Time is required"}), 400
 
+    karaoke_port = app_config.get('karaoke_vlc_port', 8080)
+    karaoke_pw = app_config.get('karaoke_vlc_password', 'karaoke')
     log_message(f"Received seek request to time: {seek_time}")
-    send_vlc_command(KARAOKE_VLC_PORT, KARAOKE_VLC_PASSWORD, f"seek&val={seek_time}")
+    send_vlc_command(karaoke_port, karaoke_pw, f"seek&val={seek_time}")
     return jsonify({"success": True})
 
 
@@ -496,12 +551,15 @@ def handle_control():
     if not action:
         return jsonify({"error": "Action is required"}), 400
 
+    karaoke_port = app_config.get('karaoke_vlc_port', 8080)
+    karaoke_pw = app_config.get('karaoke_vlc_password', 'karaoke')
+
     log_message(f"Received control action: {action}")
     global karaoke_player_is_active
     if action == 'pause_resume':
-        send_vlc_command(KARAOKE_VLC_PORT, KARAOKE_VLC_PASSWORD, "pl_pause")
+        send_vlc_command(karaoke_port, karaoke_pw, "pl_pause")
         time.sleep(0.5)
-        status = send_vlc_command(KARAOKE_VLC_PORT, KARAOKE_VLC_PASSWORD, "")
+        status = send_vlc_command(karaoke_port, karaoke_pw, "")
         if status and status.get('state') == 'paused':
             karaoke_player_is_active = False
             fade_in_filler()
@@ -509,9 +567,9 @@ def handle_control():
             karaoke_player_is_active = True
             fade_out_filler()
     elif action == 'restart':
-        send_vlc_command(KARAOKE_VLC_PORT, KARAOKE_VLC_PASSWORD, "seek&val=0")
+        send_vlc_command(karaoke_port, karaoke_pw, "seek&val=0")
     elif action == 'stop':
-        send_vlc_command(KARAOKE_VLC_PORT, KARAOKE_VLC_PASSWORD, "pl_stop")
+        send_vlc_command(karaoke_port, karaoke_pw, "pl_stop")
         karaoke_player_is_active = False
         global current_playing_path
         current_playing_path = None
@@ -528,11 +586,13 @@ def handle_volume():
         return jsonify({"error": "Target and level are required"}), 400
 
     if target == 'karaoke':
-        port, password = KARAOKE_VLC_PORT, KARAOKE_VLC_PASSWORD
+        port = app_config.get('karaoke_vlc_port', 8080)
+        password = app_config.get('karaoke_vlc_password', 'karaoke')
         global karaoke_music_target_volume
         karaoke_music_target_volume = level
     elif target == 'filler':
-        port, password = FILLER_VLC_PORT, FILLER_VLC_PASSWORD
+        port = app_config.get('filler_vlc_port', 8081)
+        password = app_config.get('filler_vlc_password', 'filler')
         global filler_music_target_volume
         filler_music_target_volume = level
     else:
@@ -624,9 +684,12 @@ def handle_rescan():
 @app.route('/filler_music', methods=['GET'])
 def list_filler_music():
     """Returns a list of available filler music files."""
+    filler_dir = app_config.get('filler_music_dir', '')
+    if not filler_dir:
+        return jsonify([])
     try:
         files = [
-            f for f in os.listdir(FILLER_MUSIC_DIR)
+            f for f in os.listdir(filler_dir)
             if f.endswith(('.mp3', '.wav', '.ogg', '.flac'))
         ]
         return jsonify(files)
@@ -641,49 +704,57 @@ def set_filler_music():
     if not track_name:
         return jsonify({"error": "Track name is required"}), 400
 
-    new_track_path = os.path.join(FILLER_MUSIC_DIR, track_name)
+    filler_dir = app_config.get('filler_music_dir', '')
+    new_track_path = os.path.join(filler_dir, track_name)
     if not os.path.exists(new_track_path):
         return jsonify({"error": "Track not found"}), 404
+
+    filler_port = app_config.get('filler_vlc_port', 8081)
+    filler_pw = app_config.get('filler_vlc_password', 'filler')
 
     current_filler_track = track_name
     log_message(f"Changing filler music to: {track_name}")
 
-    send_vlc_command(FILLER_VLC_PORT, FILLER_VLC_PASSWORD, "pl_stop")
+    send_vlc_command(filler_port, filler_pw, "pl_stop")
     time.sleep(0.1)
-    send_vlc_command(FILLER_VLC_PORT, FILLER_VLC_PASSWORD, "pl_empty")
+    send_vlc_command(filler_port, filler_pw, "pl_empty")
     time.sleep(0.1)
-    send_vlc_command(FILLER_VLC_PORT, FILLER_VLC_PASSWORD, f"in_enqueue&input={new_track_path}", is_path=True)
+    send_vlc_command(filler_port, filler_pw, f"in_enqueue&input={new_track_path}", is_path=True)
     time.sleep(0.1)
-    send_vlc_command(FILLER_VLC_PORT, FILLER_VLC_PASSWORD, "pl_play")
+    send_vlc_command(filler_port, filler_pw, "pl_play")
 
     time.sleep(0.5)
 
-    status = send_vlc_command(FILLER_VLC_PORT, FILLER_VLC_PASSWORD, "")
+    status = send_vlc_command(filler_port, filler_pw, "")
     if status and 'length' in status and status['length'] > 0:
         duration = status['length']
         random_time = random.randint(0, max(0, int(duration) - 5))
         log_message(f"Seeking filler music to {random_time}s (duration: {duration}s)")
-        send_vlc_command(FILLER_VLC_PORT, FILLER_VLC_PASSWORD, f"seek&val={random_time}")
+        send_vlc_command(filler_port, filler_pw, f"seek&val={random_time}")
 
-    send_vlc_command(FILLER_VLC_PORT, FILLER_VLC_PASSWORD, f"volume&val={filler_music_target_volume}")
+    send_vlc_command(filler_port, filler_pw, f"volume&val={filler_music_target_volume}")
 
     return jsonify({"success": True})
 
 @app.route('/status')
 def get_status():
     """Gets the status of the karaoke player."""
-    status = send_vlc_command(KARAOKE_VLC_PORT, KARAOKE_VLC_PASSWORD, "")
-    if status:
-        status['karaoke_volume'] = status.get('volume', 0)
-        filler_status = send_vlc_command(FILLER_VLC_PORT, FILLER_VLC_PASSWORD, "")
-        status['filler_volume'] = filler_status.get('volume', 0) if filler_status else 0
+    karaoke_port = app_config.get('karaoke_vlc_port', 8080)
+    karaoke_pw = app_config.get('karaoke_vlc_password', 'karaoke')
+    filler_port = app_config.get('filler_vlc_port', 8081)
+    filler_pw = app_config.get('filler_vlc_password', 'filler')
 
-        # Get display name for currently playing file
-        current_playing = None
-        if current_playing_path and current_playing_path in media_index:
-            current_playing = media_index[current_playing_path].get('display_name')
-        elif current_playing_path:
-            current_playing = os.path.basename(current_playing_path)
+    status = send_vlc_command(karaoke_port, karaoke_pw, "")
+
+    # Get display name for currently playing file
+    current_playing = None
+    if current_playing_path and current_playing_path in media_index:
+        current_playing = media_index[current_playing_path].get('display_name')
+    elif current_playing_path:
+        current_playing = os.path.basename(current_playing_path)
+
+    if status:
+        filler_status = send_vlc_command(filler_port, filler_pw, "")
 
         return jsonify({
             "state": status.get('state'),
@@ -693,15 +764,27 @@ def get_status():
             "time": status.get('time'),
             "length": status.get('length'),
             "audio_device": current_audio_device,
+            "vlc_enabled": vlc_enabled,
         })
-    return jsonify({"error": "Could not get status"}), 500
+
+    # VLC not running - return status without VLC data
+    return jsonify({
+        "state": "stopped",
+        "current_playing": current_playing,
+        "current_playing_path": current_playing_path,
+        "current_filler_track": current_filler_track,
+        "time": 0,
+        "length": 0,
+        "audio_device": current_audio_device,
+        "vlc_enabled": vlc_enabled,
+    })
 
 @app.route('/audio_device', methods=['GET'])
 def get_audio_device():
     """Returns the current audio device and available devices."""
     return jsonify({
         "current": current_audio_device,
-        "available": AVAILABLE_AUDIO_DEVICES,
+        "available": app_config.get('audio_devices', {}),
     })
 
 @app.route('/audio_device', methods=['POST'])
@@ -709,29 +792,32 @@ def set_audio_device():
     """Switches the audio output device by restarting VLC instances."""
     global current_audio_device
     device = request.json.get('device')
+    available = app_config.get('audio_devices', {})
     if not device:
         return jsonify({"error": "Device is required"}), 400
-    if device not in AVAILABLE_AUDIO_DEVICES:
-        return jsonify({"error": f"Unknown device '{device}'. Available: {list(AVAILABLE_AUDIO_DEVICES.keys())}"}), 400
+    if device not in available:
+        return jsonify({"error": f"Unknown device '{device}'. Available: {list(available.keys())}"}), 400
     if device == current_audio_device:
         return jsonify({"success": True, "message": "Already using that device."})
 
     log_message(f"Switching audio device from '{current_audio_device}' to '{device}'...")
     current_audio_device = device
     threading.Thread(target=restart_vlc_instances).start()
-    return jsonify({"success": True, "message": f"Switching to {AVAILABLE_AUDIO_DEVICES[device]}. VLC restarting..."})
+    return jsonify({"success": True, "message": f"Switching to {available[device]}. VLC restarting..."})
 
 
 # --- Main Execution ---
 def monitor_karaoke_player():
     """A background thread to check if a song has ended."""
     global karaoke_player_is_active, current_playing_path
+    karaoke_port = app_config.get('karaoke_vlc_port', 8080)
+    karaoke_pw = app_config.get('karaoke_vlc_password', 'karaoke')
     while True:
         time.sleep(2)
         if not karaoke_player_is_active:
             continue
 
-        status = send_vlc_command(KARAOKE_VLC_PORT, KARAOKE_VLC_PASSWORD, "", debug=False)
+        status = send_vlc_command(karaoke_port, karaoke_pw, "", debug=False)
         if not status:
             continue
 
@@ -743,34 +829,53 @@ def monitor_karaoke_player():
 
 def start_app():
     """Initializes and starts the application components."""
-    global app_config
+    global app_config, vlc_enabled, current_audio_device
     log_message("--- KJ Controller Starting Up ---")
 
-    # Grant X11 access to dietpi user and ensure runtime dir exists
-    subprocess.run(['xhost', '+SI:localuser:dietpi'], env={**os.environ, 'DISPLAY': ':0'}, capture_output=True)
-    os.makedirs('/run/user/1000', exist_ok=True)
-    subprocess.run(['chown', 'dietpi:dietpi', '/run/user/1000'], capture_output=True)
-
-    # Load config and media index
+    # Load config
     app_config = load_config()
+    current_audio_device = app_config.get('default_audio_device', 'hdmiout')
     os.makedirs(app_config['download_folder'], exist_ok=True)
+
+    # Pi-specific setup
+    if is_pi():
+        log_message("Running on NomadPi - enabling VLC and X11 setup.")
+        vlc_enabled = True
+
+        # Grant X11 access to dietpi user and ensure runtime dir exists
+        subprocess.run(['xhost', '+SI:localuser:dietpi'], env={**os.environ, 'DISPLAY': ':0'}, capture_output=True)
+        os.makedirs('/run/user/1000', exist_ok=True)
+        subprocess.run(['chown', 'dietpi:dietpi', '/run/user/1000'], capture_output=True)
+    else:
+        log_message("Running in local/dev mode - VLC disabled, web UI and media scanning only.")
+        vlc_enabled = False
+
+    # Load media index
     load_media_index()
 
-    # Launch VLC instances
-    launch_vlc_instance("karaoke", KARAOKE_VLC_PORT, KARAOKE_VLC_PASSWORD)
-    filler_path = os.path.join(FILLER_MUSIC_DIR, current_filler_track)
-    launch_vlc_instance("filler", FILLER_VLC_PORT, FILLER_VLC_PASSWORD, filler_path, True)
+    # Launch VLC instances (only on Pi)
+    if vlc_enabled:
+        karaoke_port = app_config.get('karaoke_vlc_port', 8080)
+        karaoke_pw = app_config.get('karaoke_vlc_password', 'karaoke')
+        filler_port = app_config.get('filler_vlc_port', 8081)
+        filler_pw = app_config.get('filler_vlc_password', 'filler')
 
-    time.sleep(3)
-    fade_in_filler()
+        launch_vlc_instance("karaoke", karaoke_port, karaoke_pw)
+        filler_dir = app_config.get('filler_music_dir', '')
+        filler_path = os.path.join(filler_dir, current_filler_track) if filler_dir else ''
+        launch_vlc_instance("filler", filler_port, filler_pw, filler_path, True)
 
-    # Start the karaoke player monitor in a background thread
-    monitor_thread = threading.Thread(target=monitor_karaoke_player, daemon=True)
-    monitor_thread.start()
+        time.sleep(3)
+        fade_in_filler()
+
+        # Start the karaoke player monitor in a background thread
+        monitor_thread = threading.Thread(target=monitor_karaoke_player, daemon=True)
+        monitor_thread.start()
 
     # Start Flask app
-    log_message("Starting Flask server...")
-    app.run(host='0.0.0.0', port=5000, threaded=True)
+    flask_port = app_config.get('flask_port', 5000)
+    log_message(f"Starting Flask server on port {flask_port}...")
+    app.run(host='0.0.0.0', port=flask_port, threaded=True)
 
 if __name__ == '__main__':
     start_app()

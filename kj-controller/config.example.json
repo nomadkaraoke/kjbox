@@ -4,5 +4,18 @@
     "/opt/nomad/YTDownloads",
     "/opt/nomad/Tracks-PublicShare"
   ],
-  "media_index_path": "/opt/kj-controller/media_index.json"
+  "media_index_path": "/opt/kj-controller/media_index.json",
+  "filler_music_dir": "/root/kjdata",
+  "log_file": "/root/kj-controller.log",
+  "youtube_cookies_file": "/root/kjdata/youtube_cookies.txt",
+  "karaoke_vlc_port": 8080,
+  "filler_vlc_port": 8081,
+  "karaoke_vlc_password": "karaoke",
+  "filler_vlc_password": "filler",
+  "audio_devices": {
+    "hdmiout": "HDMI Output",
+    "usbmixer": "USB Mixer"
+  },
+  "default_audio_device": "hdmiout",
+  "flask_port": 5000
 }

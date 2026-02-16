@@ -51,6 +51,8 @@ logs/
 # Local configuration
 config.local.*
 *.local.yml
+kj-controller/config.json
+kj-controller/media_index.json
 
 # Temporary files
 tmp/
