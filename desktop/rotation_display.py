@@ -55,7 +55,7 @@ PAD_X = 10
 
 # Background opacity (0.0 = fully transparent, 1.0 = fully opaque)
 # Requires a compositor (xcompmgr) for transparency to work.
-BG_OPACITY = 0.5
+BG_OPACITY = 0.85
 
 # How many queue entries to show (including the current singer)
 MAX_ENTRIES = 10
