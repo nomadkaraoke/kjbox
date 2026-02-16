@@ -14,7 +14,6 @@ import csv
 import io
 import threading
 import tkinter as tk
-from datetime import datetime
 from urllib.error import URLError
 from urllib.request import urlopen
 
@@ -46,7 +45,7 @@ SCREEN_HEIGHT = 1080
 # Margins — space between window and screen edges (pixels)
 MARGIN_TOP = 60
 MARGIN_BOTTOM = 105
-MARGIN_LEFT = 30
+MARGIN_LEFT = 50
 
 # Window width (independent of margins)
 WINDOW_WIDTH = 600
@@ -68,14 +67,13 @@ REFRESH_MS = 30_000
 FETCH_TIMEOUT = 10
 
 # Colors
-BG_COLOR = "#0a1628"           # dark navy background
+BG_COLOR = "#000000"           # black (invisible when alpha < 1.0)
 TEXT_COLOR = "#e0e6f0"         # light gray text
 HEADER_COLOR = "#ffffff"       # white header
 ACCENT_NOW = "#e63946"         # red — now singing
 ACCENT_NEXT = "#f4a623"        # gold — up next
 ACCENT_DEFAULT = "#8892a4"     # muted gray — queued
 DIVIDER_COLOR = "#1e2d4a"      # subtle divider
-OFFLINE_COLOR = "#e6893a"      # orange for offline indicator
 LOADING_COLOR = "#5a9bf5"      # blue for loading indicator
 
 # Font scale — multiply all font sizes by this factor
@@ -153,6 +151,11 @@ class RotationDisplay:
         )
         self.root.overrideredirect(True)
         self.root.attributes("-topmost", True)
+
+        # Alpha must be set AFTER the window is visible for the compositor
+        # to apply it. wait_visibility() blocks until the window is mapped.
+        self.root.update_idletasks()
+        self.root.wait_visibility()
         self.root.attributes("-alpha", BG_OPACITY)
 
         self.cached_entries = []
@@ -264,19 +267,6 @@ class RotationDisplay:
             font=FONT_EMPTY, fg=ACCENT_DEFAULT, bg=BG_COLOR,
         )
 
-        # --- Status bar at bottom ---
-        spacer = tk.Frame(self.root, bg=BG_COLOR)
-        spacer.pack(fill=tk.BOTH, expand=True)
-
-        tk.Frame(self.root, bg=DIVIDER_COLOR, height=1).pack(
-            fill=tk.X, padx=PAD_X, pady=(4, 2),
-        )
-
-        self.status_label = tk.Label(
-            self.root, text="", font=FONT_STATUS_BAR,
-            fg=ACCENT_DEFAULT, bg=BG_COLOR, anchor="w",
-        )
-        self.status_label.pack(fill=tk.X, padx=PAD_X, pady=(0, 8))
 
     def _apply_entries(self, entries):
         """Update all widget text/colors in place — no widget destruction."""
@@ -302,7 +292,7 @@ class RotationDisplay:
         else:
             self.now_frame.pack_forget()
             self.now_divider.pack_forget()
-            self.empty_label.pack(pady=60, before=self.status_label)
+            self.empty_label.pack(pady=60)
 
         # Queue rows
         queue = entries[1:] if has_entries else []
@@ -334,14 +324,6 @@ class RotationDisplay:
             else:
                 row_widgets["frame"].pack_forget()
 
-        # Status bar
-        if self.is_offline:
-            self.status_label.configure(
-                text="Offline \u2014 showing cached data", fg=OFFLINE_COLOR,
-            )
-        else:
-            now = datetime.now().strftime("%I:%M %p").lstrip("0")
-            self.status_label.configure(text=f"Updated {now}", fg=ACCENT_DEFAULT)
 
     def _show_loading(self):
         """Show loading indicator in header."""
