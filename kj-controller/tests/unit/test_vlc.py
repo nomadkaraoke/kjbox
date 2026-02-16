@@ -552,3 +552,80 @@ def test_restart_instances_kills_on_timeout(mock_config, mocker):
 
     mock_proc.terminate.assert_called_once()
     mock_proc.kill.assert_called_once()
+
+
+# --- fade_in_filler / fade_out_filler with enabled=True ---
+
+def test_fade_in_filler_sends_commands_when_enabled(mock_config, mocker):
+    """fade_in_filler sets volume to 0, plays, and starts fade thread."""
+    vm = VLCManager(mock_config, enabled=True)
+    vm.filler_volume = 100
+    send_mock = mocker.patch.object(vm, 'send_command')
+    thread_mock = mocker.patch('vlc.threading.Thread')
+
+    vm.fade_in_filler()
+
+    # Should set volume to 0, then play
+    calls = send_mock.call_args_list
+    assert any("volume&val=0" in str(c) for c in calls)
+    assert any("pl_play" in str(c) for c in calls)
+    # Should start a fade thread
+    thread_mock.assert_called_once()
+    thread_mock.return_value.start.assert_called_once()
+
+
+def test_fade_out_filler_fades_and_stops_when_enabled(mock_config, mocker):
+    """fade_out_filler calls fade_music then sends pl_stop."""
+    vm = VLCManager(mock_config, enabled=True)
+    vm.filler_volume = 100
+    send_mock = mocker.patch.object(vm, 'send_command')
+    fade_mock = mocker.patch.object(vm, 'fade_music')
+
+    vm.fade_out_filler()
+
+    # Should call fade_music with filler_volume -> 0
+    fade_mock.assert_called_once()
+    args = fade_mock.call_args[0]
+    assert args[2] == 100  # start_vol = filler_volume
+    assert args[3] == 0    # end_vol = 0
+    # Should send pl_stop after fade
+    assert any("pl_stop" in str(c) for c in send_mock.call_args_list)
+
+
+# --- send_command debug mode ---
+
+def test_send_command_debug_logging(mock_config, mocker):
+    """send_command with debug=True logs URL and response."""
+    vm = VLCManager(mock_config, enabled=True)
+    mock_response = mocker.MagicMock()
+    mock_response.json.return_value = {"state": "playing"}
+    mock_response.status_code = 200
+    mock_response.raise_for_status = mocker.MagicMock()
+
+    mock_session = mocker.MagicMock()
+    mock_session.get.return_value = mock_response
+    mocker.patch('vlc.requests.Session', return_value=mock_session)
+    log_mock = mocker.patch('vlc.log_message')
+
+    result = vm.send_command(8080, "karaoke", "pl_play", debug=True)
+    assert result == {"state": "playing"}
+    # debug=True should have logged the URL and response
+    assert log_mock.call_count >= 2
+    log_messages = [str(c) for c in log_mock.call_args_list]
+    assert any("DEBUG" in m for m in log_messages)
+
+
+def test_send_command_debug_logs_on_connection_error(mock_config, mocker):
+    """send_command with debug=True logs errors."""
+    import requests as req
+    vm = VLCManager(mock_config, enabled=True)
+
+    mock_session = mocker.MagicMock()
+    mock_session.get.side_effect = req.exceptions.ConnectionError("refused")
+    mocker.patch('vlc.requests.Session', return_value=mock_session)
+    log_mock = mocker.patch('vlc.log_message')
+
+    result = vm.send_command(8080, "karaoke", "pl_play", debug=True)
+    assert result is None
+    # Should log the debug URL and the error
+    assert any("DEBUG" in str(c) for c in log_mock.call_args_list)

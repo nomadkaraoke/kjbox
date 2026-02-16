@@ -389,3 +389,149 @@ def test_audio_device_switch(flask_test_client, flask_app, mocker):
     data = json.loads(response.data)
     assert data["success"] is True
     assert flask_app.vlc.audio_device == "usbmixer"
+
+
+# --- Additional coverage tests ---
+
+def test_download_success(flask_test_client, flask_app, tmp_media_dir, mocker):
+    """POST /download with valid URL returns success when download works."""
+    mocker.patch.object(flask_app.media, 'download_video',
+        return_value=("/path/to/video.mp4", "My Video"))
+
+    response = flask_test_client.post('/download',
+        data=json.dumps({"url": "https://youtube.com/watch?v=abc123"}),
+        content_type='application/json')
+    assert response.status_code == 200
+    data = json.loads(response.data)
+    assert data["success"] is True
+    assert data["title"] == "My Video"
+
+
+def test_download_failure(flask_test_client, flask_app, mocker):
+    """POST /download returns 500 when download fails."""
+    mocker.patch.object(flask_app.media, 'download_video',
+        return_value=(None, None))
+
+    response = flask_test_client.post('/download',
+        data=json.dumps({"url": "https://youtube.com/watch?v=bad"}),
+        content_type='application/json')
+    assert response.status_code == 500
+    data = json.loads(response.data)
+    assert "error" in data
+
+
+def test_volume_non_numeric_level(flask_test_client):
+    """POST /volume with non-numeric level returns 400."""
+    response = flask_test_client.post('/volume',
+        data=json.dumps({"target": "karaoke", "level": "not-a-number"}),
+        content_type='application/json')
+    assert response.status_code == 400
+    data = json.loads(response.data)
+    assert "number" in data["error"].lower()
+
+
+def test_volume_requires_both_params(flask_test_client):
+    """POST /volume without level returns 400."""
+    response = flask_test_client.post('/volume',
+        data=json.dumps({"target": "karaoke"}),
+        content_type='application/json')
+    assert response.status_code == 400
+
+
+def test_filler_music_list_missing_dir(flask_test_client, flask_app):
+    """GET /filler_music returns empty when dir doesn't exist."""
+    flask_app.kj_config['filler_music_dir'] = '/nonexistent/dir'
+    response = flask_test_client.get('/filler_music')
+    assert response.status_code == 200
+    data = json.loads(response.data)
+    assert data == []
+
+
+def test_play_with_vlc_enabled(flask_test_client, flask_app, tmp_media_dir, mocker):
+    """POST /play with VLC enabled starts playback thread."""
+    media_dir = tmp_media_dir / "media"
+    test_file = media_dir / "song.mp4"
+    test_file.write_text("fake video")
+
+    flask_app.vlc.enabled = True
+    mocker.patch.object(flask_app.vlc, 'play_video')
+
+    response = flask_test_client.post('/play',
+        data=json.dumps({"file_path": str(test_file)}),
+        content_type='application/json')
+    assert response.status_code == 200
+    data = json.loads(response.data)
+    assert data["success"] is True
+
+
+def test_control_pause_resume_paused_state(flask_test_client, flask_app, mocker):
+    """POST /control pause_resume when VLC returns paused fades in filler."""
+    flask_app.vlc.enabled = True
+    # send_command returns paused state on the status check
+    mocker.patch.object(flask_app.vlc, 'send_command',
+        return_value={"state": "paused"})
+    mocker.patch.object(flask_app.vlc, 'fade_in_filler')
+
+    response = flask_test_client.post('/control',
+        data=json.dumps({"action": "pause_resume"}),
+        content_type='application/json')
+    assert response.status_code == 200
+    assert flask_app.vlc.karaoke_active is False
+    flask_app.vlc.fade_in_filler.assert_called_once()
+
+
+def test_control_pause_resume_playing_state(flask_test_client, flask_app, mocker):
+    """POST /control pause_resume when VLC returns playing fades out filler."""
+    flask_app.vlc.enabled = True
+    mocker.patch.object(flask_app.vlc, 'send_command',
+        return_value={"state": "playing"})
+    mocker.patch.object(flask_app.vlc, 'fade_out_filler')
+
+    response = flask_test_client.post('/control',
+        data=json.dumps({"action": "pause_resume"}),
+        content_type='application/json')
+    assert response.status_code == 200
+    assert flask_app.vlc.karaoke_active is True
+    flask_app.vlc.fade_out_filler.assert_called_once()
+
+
+def test_delete_invalid_path(flask_test_client):
+    """POST /delete with path outside media folders returns 400."""
+    response = flask_test_client.post('/delete',
+        data=json.dumps({"file_path": "/tmp/not-in-media-folders/file.mp4"}),
+        content_type='application/json')
+    assert response.status_code == 400
+
+
+def test_filler_music_set_with_seek(flask_test_client, flask_app, tmp_media_dir, mocker):
+    """POST /filler_music with VLC enabled seeks to random position."""
+    (tmp_media_dir / "song.mp3").write_text("fake audio")
+    flask_app.vlc.enabled = True
+
+    # send_command returns status with length for the status check
+    mocker.patch.object(flask_app.vlc, 'send_command',
+        return_value={"state": "playing", "length": 300})
+
+    response = flask_test_client.post('/filler_music',
+        data=json.dumps({"track_name": "song.mp3"}),
+        content_type='application/json')
+    assert response.status_code == 200
+    # Verify seek command was sent (one of the send_command calls should contain "seek")
+    calls = flask_app.vlc.send_command.call_args_list
+    seek_calls = [c for c in calls if "seek" in str(c)]
+    assert len(seek_calls) > 0
+
+
+def test_status_with_vlc_enabled(flask_test_client, flask_app, mocker):
+    """GET /status with VLC enabled returns full status data."""
+    flask_app.vlc.enabled = True
+    mocker.patch.object(flask_app.vlc, 'send_command',
+        return_value={"state": "playing", "time": 42, "length": 200})
+
+    response = flask_test_client.get('/status')
+    assert response.status_code == 200
+    data = json.loads(response.data)
+    assert data["state"] == "playing"
+    assert data["time"] == 42
+    assert data["length"] == 200
+    assert data["vlc_enabled"] is True
