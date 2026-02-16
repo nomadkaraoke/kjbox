@@ -497,6 +497,68 @@ ssh nomadpi 'speaker-test -D usbmixer -c 2 -t sine -f 440 -l 1'
 ssh nomadpi 'speaker-test -c 2 -t sine -f 440 -l 1'
 ```
 
+## 🎤 Live Event Audio Routing
+
+### Current Setup (as of 2026-02-16)
+
+The karaoke event setup uses two separate audio paths to avoid latency issues:
+
+**Path 1 - Instrumental Playback (Pi → AV Unit → Stereo Speakers):**
+- Pi outputs karaoke video + audio via **HDMI** (`hdmiout` ALSA device)
+- Single HDMI cable runs to the AV unit (receiver/TV)
+- AV unit drives full-size stereo speakers for instrumental/backing tracks
+- Filler music between songs also goes through this path
+
+**Path 2 - Vocal/Mic Audio (Mics → Mixer → Monitor Speaker):**
+- **Shure SLX-D** wireless microphones connect to **Yamaha MG-XU** USB mixer
+- Mixer's main output hard-wired to **Bose S1 Pro** powered monitor speaker
+- Provides amplified singer vocals with zero additional latency
+- Mixer handles all mic levels, EQ, and effects independently of the Pi
+
+**Why two separate paths:** Karaoke is extremely latency-sensitive for vocals. Singers hearing even slight delay of their own voice causes confusion and poor performance. Keeping the mic audio path fully analog (mixer → speaker) guarantees zero digital latency.
+
+### Equipment List
+| Equipment | Role | Connection |
+|-----------|------|------------|
+| Raspberry Pi 4 | Video + instrumental audio playback | HDMI to AV unit |
+| Shure SLX-D (x2) | Wireless microphones | Analog to mixer inputs |
+| Yamaha MG-XU | USB mixer for mic audio | USB to Pi (available but unused), analog out to Bose |
+| Bose S1 Pro | Amplified monitor speaker for vocals | Analog from mixer main out |
+| AV unit + stereo speakers | Instrumental/video playback | HDMI from Pi |
+| 7" Touchscreen | KJ Controller UI | HDMI-2 + USB to Pi |
+
+### Abandoned: USB Mixer → HDMI Audio Mirroring
+
+**Goal:** Eliminate the Bose S1 Pro by routing the mixer's mixed output (instrumentals + vocals) back through the Pi to HDMI, so the AV unit/stereo speakers would carry everything.
+
+**What worked:**
+- The Yamaha MG-XU sends its full stereo mix back to the Pi via USB capture (`hw:MGXU,0` capture device, S32_LE format, 48kHz)
+- `alsaloop` successfully captured the mixer return and played it to HDMI output
+- Required `dmix` ALSA plugin for the USB mixer so both VLC instances (karaoke + filler) could share the USB playback device simultaneously
+- Audio was audible on the TV via HDMI
+
+**Technical implementation that was working:**
+```bash
+# alsaloop command (ran as systemd service "audio-mirror")
+alsaloop -C hw:MGXU,0 -P hdmiout -t 200000 -f S32_LE -r 48000 -c 2 --sync=0 -T -1 -A 5 -S 3
+
+# dmix ALSA config was needed for USB mixer sharing:
+# pcm.usbmixer_dmix { type dmix; ipc_key 1024; slave { pcm "hw:MGXU,0"; rate 48000; channels 2 } }
+# pcm.usbmixer { type plug; slave { pcm usbmixer_dmix } }
+```
+
+**Why it was abandoned:**
+1. **Latency:** ~200ms minimum buffer needed to avoid underruns. Singers would hear their own voice delayed through the stereo speakers, causing confusion/echo effect
+2. **Audio dropouts:** With smaller buffers (`-t 50000`), `alsaloop` consumed 12% CPU and produced frequent `underrun for playback hdmiout` errors. The HDMI output path involves CPU-intensive format conversion (S32_LE → IEC958 subframes via the `iec958` ALSA plugin)
+3. **Complexity:** Required dmix layer, alsaloop service management, and coordination with audio device switching in the app
+4. **Reliability:** Even with tuned 200ms buffers and zero underruns, the additional latency and processing made it unsuitable for live vocal monitoring
+
+**If revisiting in future:**
+- A hardware solution (mixer aux send → AV unit analog input) would avoid all digital latency
+- A more powerful Pi (or x86 device) might handle the format conversion without underruns at lower latency
+- PulseAudio/PipeWire might handle the routing more gracefully than raw ALSA, but adds its own latency
+- The fundamental issue is that the HDMI output requires IEC958 subframe encoding in software, which is CPU-intensive on the Pi 4
+
 ## 📦 Installed DietPi Software
 
 Software installed via `dietpi-software`:
@@ -574,8 +636,10 @@ NomadPi is configured for Nomad Karaoke live events:
   - **Built-in speakers:** Yes (small, via HDMI audio)
   - **Note:** This is a USB touchscreen with HDMI video, not a DSI ribbon cable display
   - **Note:** The touchscreen has corrupt EDID data; custom EDID override is required (see Audio Configuration)
-- **External Display/Projector:** Connects to HDMI-1 (main full-size HDMI) for audience-facing output with speakers/soundbar
-- **Yamaha MG-XU USB Mixer:** For professional audio output
+- **External Display/Projector:** Connects to HDMI-1 (main full-size HDMI) for audience-facing output via AV unit
+- **Yamaha MG-XU USB Mixer:** For microphone audio mixing (connected via USB but VLC outputs to HDMI, not mixer)
+- **Shure SLX-D Wireless Mics (x2):** Vocal microphones, analog input to Yamaha mixer
+- **Bose S1 Pro:** Powered monitor speaker for amplified vocal audio (from mixer main out)
 - **USB Hub:** VIA Labs Hub (for peripherals)
 
 ### KJ Controller
