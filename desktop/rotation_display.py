@@ -85,8 +85,8 @@ def fetch_rotation():
     Filters out rows where status is "Done". Returns at most MAX_ENTRIES.
     Raises on network/parse errors (caller handles).
     """
-    response = urlopen(SHEET_CSV_URL, timeout=FETCH_TIMEOUT)
-    text = response.read().decode("utf-8")
+    with urlopen(SHEET_CSV_URL, timeout=FETCH_TIMEOUT) as response:
+        text = response.read().decode("utf-8")
     reader = csv.reader(io.StringIO(text))
 
     # Skip header row
