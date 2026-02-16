@@ -6,18 +6,32 @@ NomadPi system configuration changes. For current configuration details, see [ar
 
 **Problem:** tkinter cannot render a transparent background on X11 — every widget has a solid fill. The `-alpha` attribute makes the entire window (text included) uniformly transparent, washing out text readability.
 
-**Solution:** Rewrote the rotation display using **conky**, which natively supports ARGB transparent backgrounds on X11 with a compositor, giving fully opaque text over a see-through window.
+**Solution:** Rewrote the rotation display using **conky** with a faux-transparency approach — a full-screen window with a scaled copy of the desktop wallpaper as the background image, so the overlay blends seamlessly with the desktop.
 
 **Changes Made:**
-1. **Created `desktop/rotation_data.py`** — standalone data-fetching script (extracted from old tkinter app). Called by conky via `${execi}`, outputs pre-formatted text with conky markup to stdout. Supports `--count-only` flag for the header singer count.
-2. **Created `desktop/rotation.conkyrc`** — conky configuration with `own_window_argb_visual = true` and `own_window_argb_value = 0` for true transparent background, `use_xft = true` for anti-aliased fonts, `xftalpha = 1.0` for fully opaque text.
-3. **Deleted `desktop/rotation_display.py`** — old tkinter app fully replaced.
+1. **Created `desktop/rotation_data.py`** — standalone data-fetching script (extracted from old tkinter app). Called by conky via `${execpi}` (parsed exec), outputs conky markup to stdout. Supports `--stats` flag for header stats.
+2. **Created `desktop/rotation.conkyrc`** — full-screen conky window (1920x1080) with wallpaper background image, XFT anti-aliased fonts, 30-second refresh.
+3. **Created `desktop/rotation-bg.png`** — 1920x1080 background image generated from the 4K wallpaper source.
+4. **Deleted `desktop/rotation_display.py`** — old tkinter app fully replaced.
+
+**Display features:**
+- Header stats: `Started: M/D HH:MM  N singers | N sung | N queued`
+- Up to 10 queue entries with gold singer names and light gray song text
+- Color-coded badges: NOW (green), NEXT (orange), WIP (red)
+- Faux-transparent background using cropped wallpaper (full ARGB transparency doesn't work reliably on the Pi's physical display)
+
+**Key decisions / lessons learned:**
+- `${execpi}` not `${execi}` — the "p" variant parses conky `${color}`/`${font}` tags in script output
+- `own_window_type = 'dock'` not `'override'` — PCManFM's desktop window in LXDE sits above override-type windows
+- `DejaVu Sans` not `Helvetica` — Helvetica is not installed on DietPi
+- ARGB transparency (`own_window_argb_visual`) doesn't work on the Pi's physical display even with xcompmgr compositor — faux transparency with a wallpaper background image is more reliable
+- Full-screen window (1920x1080 at gap 0,0) avoids background alignment issues vs. a smaller positioned window
 
 **Dependencies changed:**
 - Added: `conky-all` (apt)
 - Removed: `python3-tk` (no longer needed)
 
-**Deployment:** Update the systemd service ExecStart from `python3 rotation_display.py` to `conky -c rotation.conkyrc`. See [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md) § Rotation Display for full setup instructions.
+**Deployment:** See [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md) § Rotation Display for full setup and troubleshooting.
 
 ## 2026-02-16 - Karaoke Rotation Display Overlay (initial)
 

@@ -567,9 +567,11 @@ ssh nomadpi 'cd /opt/nomad/kjbox && git pull && systemctl restart kj-controller'
 See [kj-controller/](kj-controller/) for source code
 
 ### Rotation Display
-A conky-based overlay that fetches the singer rotation from a public Google Sheet and displays the next 10 singers on the left side of the screen. Uses `desktop/rotation_data.py` (stdlib only, no pip deps) as the data source, called by conky via `${execi}`. Designed for venue visibility during live karaoke events.
+A conky-based full-screen overlay that fetches the singer rotation from a public Google Sheet and displays the next 10 singers on the left side of the screen. Uses `desktop/rotation_data.py` (stdlib only, no pip deps) as the data source, called by conky via `${execpi}` (parsed exec — output is interpreted as conky markup). Designed for venue visibility during live karaoke events.
 
-**Key advantage:** Conky supports true ARGB transparent backgrounds on X11, so text is fully opaque while the background is see-through — wallpaper/video visible behind the overlay.
+**How it works:** The conky window covers the entire 1920x1080 screen. A cropped version of the desktop wallpaper (`rotation-bg.png`) is drawn as the background image, creating faux transparency — the overlay blends seamlessly with the desktop. Text is positioned in the left ~600px via `${goto}` commands. The data script is called every 30 seconds to refresh.
+
+**Previously:** Built with Python/tkinter, which cannot render transparent backgrounds on X11 (the `-alpha` attribute makes text transparent too). Replaced with conky on 2026-02-16.
 
 **Service:** `rotation-display.service` (enabled, starts on boot)
 ```bash
@@ -586,20 +588,56 @@ ssh nomadpi 'systemctl restart rotation-display'
 ssh nomadpi 'systemctl stop rotation-display'
 ```
 
-**Configuration:**
-- `desktop/rotation.conkyrc` — conky layout settings (margins, width, refresh interval, fonts)
-- `desktop/rotation_data.py` — data fetcher settings (Sheet ID, column mapping, max entries, colors)
+**Display features:**
+- **Header:** "ROTATION" title with stats line: `Started: M/D HH:MM  N singers | N sung | N queued`
+- **Queue entries:** Up to 10 rows, each showing `N. Singer Name` + song line below
+- **Color-coded badges:**
+  - **NOW** (dark green) — currently singing (first non-done entry, or explicit "Now Singing" status)
+  - **NEXT** (dark orange) — up next (explicit "Up Next" status)
+  - **WIP** (red) — song is being generated (explicit "Being Made" status)
+- **Singer names** in gold (`#ffdf6b`) for readability against the dark wallpaper
+- **Song text** in light gray (`#e0e6f0`)
+- **Numbers** in white
 
-Key tunables in `rotation_data.py`:
-- `SHEET_ID` — Google Sheet ID (must be published to web)
-- `SHEET_GID` — Tab index (default: `0`)
-- `COL_*` — Column indices for singer, song/artist, status
-- `MAX_ENTRIES` — Number of queue entries to show (default: `10`)
+**Configuration files:**
+- `desktop/rotation.conkyrc` — conky window and layout (full-screen 1920x1080, font defaults, refresh interval, background image path)
+- `desktop/rotation_data.py` — data fetching, filtering, and conky markup formatting
+- `desktop/rotation-bg.png` — 1920x1080 background image (generated from `nomad-kjbox-desktop-background-4k.jpg`)
 
-Key tunables in `rotation.conkyrc`:
-- `gap_x` / `gap_y` — Margins from screen edge (default: `70` / `60`)
-- `minimum_width` / `maximum_width` — Window width (default: `600`)
-- `update_interval` — Refresh interval in seconds (default: `30`)
+**Key tunables in `rotation_data.py`:**
+- `SHEET_ID` / `SHEET_GID` — Google Sheet ID and tab index
+- `COL_SINGER`, `COL_SONG_ARTIST`, `COL_STATUS` — column indices (0-indexed)
+- `MAX_ENTRIES` — number of queue entries to display (default: `10`)
+- `FETCH_TIMEOUT` — HTTP timeout in seconds (default: `10`)
+- `COLOR_*` — hex colors for names, badges, text (6 constants)
+- `MARGIN` / `SONG_INDENT` — horizontal positioning via `${goto}` (default: `90` / `115`)
+- `FONT_NAME` / `FONT_SONG` / `FONT_BADGE` — font family and size strings
+
+**Key tunables in `rotation.conkyrc`:**
+- `update_interval` — refresh cycle in seconds (default: `30`)
+- `gap_x` / `gap_y` — window position (default: `0` / `0` for full-screen)
+- `minimum_width` / `maximum_width` — window dimensions (default: `1920`)
+- `minimum_height` — window height (default: `1080`)
+
+**CLI usage (for debugging):**
+```bash
+# Full conky-formatted rotation (shows markup tags)
+ssh nomadpi 'python3 /opt/nomad/kjbox/desktop/rotation_data.py'
+
+# Header stats only
+ssh nomadpi 'python3 /opt/nomad/kjbox/desktop/rotation_data.py --stats'
+# Output: "Started: 2/12 21:25    26 singers | 57 sung | 10 queued"
+```
+
+**Updating the background image:**
+When the desktop wallpaper (`desktop/nomad-kjbox-desktop-background-4k.jpg`) changes, `rotation-bg.png` must be regenerated:
+```python
+# Run locally (requires Pillow)
+from PIL import Image
+img = Image.open('desktop/nomad-kjbox-desktop-background-4k.jpg')
+img.resize((1920, 1080), Image.LANCZOS).save('desktop/rotation-bg.png', 'PNG')
+```
+Commit both files and deploy. The conky overlay will pick up the new background on next service restart.
 
 **Setup on a new device:**
 ```bash
@@ -630,9 +668,19 @@ systemctl daemon-reload && systemctl enable --now rotation-display
 
 **Google Sheet requirements:**
 - Sheet must be published to web (File > Share > Publish to web)
-- Expected columns (0-indexed): `#`, `Singer`, `Song & Artist`, `Status`
-- Rows with Status = "Done" are filtered out
-- First non-done entry is highlighted as "Now Singing"
+- Expected columns: `Timestamp` (col 0), `Singer` (col 1), `Song & Artist` (col 2), `Status` (col 3)
+- Recognized statuses: `Done`, `Now Singing`, `Up Next`, `Being Made (!)`, `Waiting`
+- Rows with Status = "Done" are filtered out of the queue (but counted in "sung" stat)
+- First non-done entry automatically gets the "NOW" badge
+- Earliest timestamp in the sheet is shown as "Started: M/D HH:MM"
+
+**Troubleshooting:**
+- **Overlay not visible:** Check `systemctl status rotation-display`. If conky is running but invisible, the window type may be wrong — must be `own_window_type = 'dock'` (not `'override'`) because PCManFM's desktop window in LXDE sits above override-type windows.
+- **Text shows raw `${color}` / `${font}` tags:** The conkyrc must use `${execpi}` (not `${execi}`) — the "p" means "parse output for conky variables."
+- **Background misaligned:** Ensure `rotation-bg.png` is exactly 1920x1080 and was regenerated from the current wallpaper. The conky window must be full-screen (`gap_x=0, gap_y=0, 1920x1080`).
+- **No data / "Offline":** Check network connectivity on the Pi. The script fetches from `docs.google.com` — requires internet access. Verify the Sheet is published to web.
+- **Font rendering issues:** The Pi uses `DejaVu Sans` (not Helvetica, which is not installed). Check available fonts with `fc-list | grep -i dejavu`.
+- **Stale data after deploy:** The auto-deploy script restarts `rotation-display` on new commits, but the `${execpi 30}` cache means data may take up to 30 seconds to refresh after restart.
 
 ### Chromium Kiosk Watchdog (DISABLED)
 **Status:** **DISABLED** as of 2026-02-15
@@ -785,8 +833,10 @@ ssh nomadpi 'docker system prune -a'
 - `/etc/systemd/system/vncserver.service` - Virtual Mode systemd unit (DietPi wrapper)
 
 ### Rotation Display
-- `/opt/nomad/kjbox/desktop/rotation.conkyrc` - Conky configuration (layout, margins, refresh)
-- `/opt/nomad/kjbox/desktop/rotation_data.py` - Data fetcher script (Google Sheet → conky markup)
+- `/opt/nomad/kjbox/desktop/rotation.conkyrc` - Conky configuration (full-screen layout, background image, refresh interval)
+- `/opt/nomad/kjbox/desktop/rotation_data.py` - Data fetcher script (Google Sheet → conky markup, --stats flag)
+- `/opt/nomad/kjbox/desktop/rotation-bg.png` - 1920x1080 background image (faux transparency)
+- `/opt/nomad/kjbox/desktop/nomad-kjbox-desktop-background-4k.jpg` - 4K source wallpaper (rotation-bg.png is generated from this)
 - `/etc/systemd/system/rotation-display.service` - systemd service unit (ExecStart=conky)
 
 ### KJ Controller

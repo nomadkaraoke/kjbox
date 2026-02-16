@@ -45,8 +45,10 @@ kjbox/
       NOMADPI-DETAILS.md       # Device reference: hardware, network, display, services
       NETWORK-CONFIG-BACKUP.md # Tailscale & Cloudflare tunnel backup
   desktop/
-    rotation.conkyrc           # Conky config for singer queue overlay
+    rotation.conkyrc           # Conky config for singer queue overlay (full-screen layout)
     rotation_data.py           # Data fetcher: Google Sheet → conky markup (stdlib only)
+    rotation-bg.png            # 1920x1080 wallpaper background (faux transparency)
+    nomad-kjbox-desktop-background-4k.jpg  # 4K source wallpaper
   kj-controller/               # KJ Remote Controller web app
     app.py                     # App factory (create_app) + entry point
     config.py                  # Constants, platform detection, config loading
