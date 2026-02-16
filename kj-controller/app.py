@@ -9,7 +9,7 @@ import random
 import requests
 from flask import Flask, render_template, request, jsonify
 
-# --- Constants ---
+# --- Constants (all overridable via config.json) ---
 MEDIA_EXTENSIONS = {'.mp4', '.mkv', '.avi', '.webm', '.mov', '.mp3', '.wav', '.flac', '.ogg'}
 CONFIG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'config.json')
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
