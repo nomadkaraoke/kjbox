@@ -603,8 +603,8 @@ Key tunables in `rotation.conkyrc`:
 
 **Setup on a new device:**
 ```bash
-# 1. Install conky and compositor
-apt-get install -y conky-all xcompmgr
+# 1. Install conky
+apt-get install -y conky-all
 
 # 2. Create systemd service
 cat > /etc/systemd/system/rotation-display.service << 'EOF'
@@ -616,7 +616,6 @@ After=graphical.target
 Type=simple
 Environment=DISPLAY=:0
 ExecStartPre=/bin/bash -c "xhost +SI:localuser:root"
-ExecStartPre=/bin/bash -c "pgrep xcompmgr || xcompmgr &"
 ExecStart=/usr/bin/conky -c /opt/nomad/kjbox/desktop/rotation.conkyrc
 Restart=always
 RestartSec=5
