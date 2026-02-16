@@ -2,10 +2,27 @@
 
 NomadPi system configuration changes. For current configuration details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md).
 
-## 2026-02-16 - Karaoke Rotation Display Overlay
+## 2026-02-16 - Rotation Display Rewrite: tkinter → Conky
+
+**Problem:** tkinter cannot render a transparent background on X11 — every widget has a solid fill. The `-alpha` attribute makes the entire window (text included) uniformly transparent, washing out text readability.
+
+**Solution:** Rewrote the rotation display using **conky**, which natively supports ARGB transparent backgrounds on X11 with a compositor, giving fully opaque text over a see-through window.
 
 **Changes Made:**
-1. **Created `desktop/rotation_display.py`** — standalone Python/tkinter app that fetches the singer rotation from a public Google Sheet and displays the next 10 singers as a persistent overlay on the left 1/3 of the screen (640×1080). Uses only stdlib (no pip deps).
+1. **Created `desktop/rotation_data.py`** — standalone data-fetching script (extracted from old tkinter app). Called by conky via `${execi}`, outputs pre-formatted text with conky markup to stdout. Supports `--count-only` flag for the header singer count.
+2. **Created `desktop/rotation.conkyrc`** — conky configuration with `own_window_argb_visual = true` and `own_window_argb_value = 0` for true transparent background, `use_xft = true` for anti-aliased fonts, `xftalpha = 1.0` for fully opaque text.
+3. **Deleted `desktop/rotation_display.py`** — old tkinter app fully replaced.
+
+**Dependencies changed:**
+- Added: `conky-all` (apt)
+- Removed: `python3-tk` (no longer needed)
+
+**Deployment:** Update the systemd service ExecStart from `python3 rotation_display.py` to `conky -c rotation.conkyrc`. See [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md) § Rotation Display for full setup instructions.
+
+## 2026-02-16 - Karaoke Rotation Display Overlay (initial)
+
+**Changes Made:**
+1. **Created rotation display** — fetches singer rotation from a public Google Sheet and displays the next 10 singers as a persistent overlay on the left side of the screen. No pip dependencies (stdlib only).
 2. **Auto-deploy restart** — `kj-controller/auto-deploy.sh` now restarts the `rotation-display` systemd service on deploy (no-op if service isn't set up yet).
 
 **Features:**
@@ -13,12 +30,6 @@ NomadPi system configuration changes. For current configuration details, see [ar
 - Filters out "Done" entries, shows current singer + next 9 in queue
 - Color-coded status: red (Now Singing), gold (Up Next), gray (queued)
 - 30-second auto-refresh with offline fallback (shows cached data)
-- Dark navy background with large readable fonts for venue visibility
-
-**Deployed to NomadPi:**
-- Installed `python3-tk` (libtcl8.6, libtk8.6, tk8.6-blt2.5, blt)
-- Created `/etc/systemd/system/rotation-display.service` (ExecStart=python3, DISPLAY=:0, After=graphical.target, Restart=always)
-- Service enabled and running
 
 **Setup on a new device:** See [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md) § Rotation Display for full setup instructions.
 
