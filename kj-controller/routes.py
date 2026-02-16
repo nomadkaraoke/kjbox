@@ -387,13 +387,14 @@ def catalog_build():
 
     # Auto-detect mount prefix rewriting
     mount_replace = None
-    mount = cfg.get('external_media_mount', '')
+    mount = cfg.get('external_media_mount', '').rstrip('/')
     if mount:
         # Common pattern: Mac uses /Volumes/X, Pi uses /mnt/X
         volume_name = os.path.basename(mount)
-        mac_prefix = f'/Volumes/{volume_name}/'
-        pi_prefix = mount.rstrip('/') + '/'
-        mount_replace = (mac_prefix, pi_prefix)
+        if volume_name:
+            mac_prefix = f'/Volumes/{volume_name}/'
+            pi_prefix = mount + '/'
+            mount_replace = (mac_prefix, pi_prefix)
 
     log_message(f"Building external catalog from {file_list_path}...", cfg)
     count = catalog.build_from_file_list(file_list_path, mount_replace=mount_replace)
