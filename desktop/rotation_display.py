@@ -22,7 +22,7 @@ from urllib.request import urlopen
 
 # Google Sheet published URL — replace SHEET_ID with your sheet's ID.
 # The sheet must be published to the web (File > Share > Publish to web).
-SHEET_ID = "1sNR3KTYaxRj0MwqpSPyS42MBCz2VIQQdye-HLHZ8hTY"
+SHEET_ID = "1OzNxqJB-pYHhI0VJkkPjJc1Ba242TL6Kadov52GHWl8"
 SHEET_GID = "0"  # first tab
 SHEET_CSV_URL = (
     f"https://docs.google.com/spreadsheets/d/{SHEET_ID}"
@@ -30,11 +30,10 @@ SHEET_CSV_URL = (
 )
 
 # Expected column layout (0-indexed). Adjust if your sheet differs.
-COL_POSITION = 0   # "#" or position number
-COL_SINGER = 1     # Singer name
-COL_SONG = 2       # Song title
-COL_ARTIST = 3     # Artist
-COL_STATUS = 4     # Status text (e.g. "Done", "Now Singing", "Up Next")
+# Columns: Timestamp | Singer | Song & Artist | Status | Round | Link Notes | URL
+COL_SINGER = 1       # Singer name
+COL_SONG_ARTIST = 2  # Combined "Artist - Song" field
+COL_STATUS = 3       # Status text (e.g. "Done", "Now Singing", "Up Next", "Waiting")
 
 # Display geometry — left 1/3 of a 1920×1080 screen
 WINDOW_WIDTH = 640
@@ -81,7 +80,7 @@ FONT_EMPTY = ("Helvetica", 20)
 def fetch_rotation():
     """Fetch the rotation from the Google Sheet CSV endpoint.
 
-    Returns a list of dicts with keys: singer, song, artist, status.
+    Returns a list of dicts with keys: singer, song_artist, status.
     Filters out rows where status is "Done". Returns at most MAX_ENTRIES.
     Raises on network/parse errors (caller handles).
     """
@@ -97,15 +96,15 @@ def fetch_rotation():
 
     entries = []
     for row in reader:
-        if len(row) <= max(COL_SINGER, COL_STATUS):
+        if len(row) <= COL_STATUS:
             continue
-        status = row[COL_STATUS].strip() if COL_STATUS < len(row) else ""
-        if status.lower() == "done":
+        status = row[COL_STATUS].strip()
+        singer = row[COL_SINGER].strip()
+        if status.lower() == "done" or not singer:
             continue
         entries.append({
-            "singer": row[COL_SINGER].strip() if COL_SINGER < len(row) else "",
-            "song": row[COL_SONG].strip() if COL_SONG < len(row) else "",
-            "artist": row[COL_ARTIST].strip() if COL_ARTIST < len(row) else "",
+            "singer": singer,
+            "song_artist": row[COL_SONG_ARTIST].strip() if COL_SONG_ARTIST < len(row) else "",
             "status": status,
         })
         if len(entries) >= MAX_ENTRIES:
@@ -199,11 +198,8 @@ class RotationDisplay:
             wraplength=WINDOW_WIDTH - pad_x * 2,
         ).pack(fill=tk.X)
 
-        song_line = now["song"]
-        if now["artist"]:
-            song_line += f"  —  {now['artist']}"
         tk.Label(
-            now_frame, text=song_line,
+            now_frame, text=now["song_artist"],
             font=FONT_NOW_SONG, fg=TEXT_COLOR, bg=BG_COLOR, anchor="w",
             wraplength=WINDOW_WIDTH - pad_x * 2,
         ).pack(fill=tk.X)
@@ -251,12 +247,9 @@ class RotationDisplay:
                 ).pack(side=tk.RIGHT)
 
             # Song + artist line
-            song_line = entry["song"]
-            if entry["artist"]:
-                song_line += f"  —  {entry['artist']}"
-            if song_line:
+            if entry["song_artist"]:
                 tk.Label(
-                    row, text=f"      {song_line}",
+                    row, text=f"      {entry['song_artist']}",
                     font=FONT_QUEUE_SONG, fg=TEXT_COLOR, bg=BG_COLOR,
                     anchor="w", wraplength=WINDOW_WIDTH - pad_x * 2 - 40,
                 ).pack(fill=tk.X)
