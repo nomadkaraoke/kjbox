@@ -6,7 +6,6 @@ singers as a persistent overlay on the left third of the screen. Designed for
 venue visibility during live karaoke events.
 
 Requires: python3-tk (apt-get install -y python3-tk)
-For transparency: xcompmgr (apt-get install -y xcompmgr)
 No pip dependencies — stdlib only.
 """
 
@@ -53,10 +52,6 @@ WINDOW_WIDTH = 600
 # Internal padding (pixels) — space between window edge and content
 PAD_X = 10
 
-# Background opacity (0.0 = fully transparent, 1.0 = fully opaque)
-# Requires a compositor (xcompmgr) for transparency to work.
-BG_OPACITY = 0.85
-
 # How many queue entries to show (including the current singer)
 MAX_ENTRIES = 10
 
@@ -67,13 +62,11 @@ REFRESH_MS = 30_000
 FETCH_TIMEOUT = 10
 
 # Colors
-BG_COLOR = "#000000"           # black (invisible when alpha < 1.0)
 TEXT_COLOR = "#e0e6f0"         # light gray text
 HEADER_COLOR = "#ffffff"       # white header
 ACCENT_NOW = "#e63946"         # red — now singing
 ACCENT_NEXT = "#f4a623"        # gold — up next
 ACCENT_DEFAULT = "#8892a4"     # muted gray — queued
-DIVIDER_COLOR = "#1e2d4a"      # subtle divider
 LOADING_COLOR = "#5a9bf5"      # blue for loading indicator
 
 # Font scale — multiply all font sizes by this factor
@@ -142,7 +135,6 @@ class RotationDisplay:
     def __init__(self):
         self.root = tk.Tk()
         self.root.title("Rotation")
-        self.root.configure(bg=BG_COLOR)
 
         # Calculate window geometry with margins
         win_height = SCREEN_HEIGHT - MARGIN_TOP - MARGIN_BOTTOM
@@ -151,12 +143,6 @@ class RotationDisplay:
         )
         self.root.overrideredirect(True)
         self.root.attributes("-topmost", True)
-
-        # Alpha must be set AFTER the window is visible for the compositor
-        # to apply it. wait_visibility() blocks until the window is mapped.
-        self.root.update_idletasks()
-        self.root.wait_visibility()
-        self.root.attributes("-alpha", BG_OPACITY)
 
         self.cached_entries = []
         self.is_offline = False
@@ -171,84 +157,79 @@ class RotationDisplay:
         content_width = WINDOW_WIDTH - PAD_X * 2
 
         # --- Header row ---
-        header_frame = tk.Frame(self.root, bg=BG_COLOR)
+        header_frame = tk.Frame(self.root)
         header_frame.pack(fill=tk.X, padx=PAD_X, pady=(12, 0))
 
         self.header_label = tk.Label(
             header_frame, text="ROTATION", font=FONT_HEADER,
-            fg=HEADER_COLOR, bg=BG_COLOR, anchor="w",
+            fg=HEADER_COLOR, anchor="w",
         )
         self.header_label.pack(side=tk.LEFT)
 
         self.count_label = tk.Label(
             header_frame, text="", font=FONT_STATUS_BAR,
-            fg=ACCENT_DEFAULT, bg=BG_COLOR, anchor="e",
+            fg=ACCENT_DEFAULT, anchor="e",
         )
         self.count_label.pack(side=tk.RIGHT)
 
-        # Divider
-        tk.Frame(self.root, bg=DIVIDER_COLOR, height=2).pack(
-            fill=tk.X, padx=PAD_X, pady=(6, 8),
-        )
-
         # --- "Now singing" section ---
-        self.now_frame = tk.Frame(self.root, bg=BG_COLOR)
+        self.now_frame = tk.Frame(self.root)
         self.now_frame.pack(fill=tk.X, padx=PAD_X)
 
         self.now_status_label = tk.Label(
             self.now_frame, text="", font=FONT_NOW_LABEL,
-            fg=ACCENT_NOW, bg=BG_COLOR, anchor="w",
+            fg=ACCENT_NOW, anchor="w",
         )
         self.now_status_label.pack(fill=tk.X)
 
         self.now_name_label = tk.Label(
             self.now_frame, text="", font=FONT_NOW_NAME,
-            fg=HEADER_COLOR, bg=BG_COLOR, anchor="w",
+            fg=HEADER_COLOR, anchor="w",
             wraplength=content_width,
         )
         self.now_name_label.pack(fill=tk.X)
 
         self.now_song_label = tk.Label(
             self.now_frame, text="", font=FONT_NOW_SONG,
-            fg=TEXT_COLOR, bg=BG_COLOR, anchor="w",
+            fg=TEXT_COLOR, anchor="w",
             wraplength=content_width,
         )
         self.now_song_label.pack(fill=tk.X)
 
         # Divider after now singing
-        self.now_divider = tk.Frame(self.root, bg=DIVIDER_COLOR, height=1)
+        self.now_divider = tk.Frame(self.root, height=1)
         self.now_divider.pack(fill=tk.X, padx=PAD_X, pady=(10, 6))
 
         # --- Queue slots (pre-create MAX_ENTRIES-1 rows) ---
         self.queue_rows = []
         for _ in range(MAX_ENTRIES - 1):
-            row_frame = tk.Frame(self.root, bg=BG_COLOR)
+            row_frame = tk.Frame(self.root)
             row_frame.pack(fill=tk.X, padx=PAD_X, pady=(0, 2))
 
-            top_line = tk.Frame(row_frame, bg=BG_COLOR)
+            top_line = tk.Frame(row_frame)
             top_line.pack(fill=tk.X)
 
             num_label = tk.Label(
                 top_line, text="", font=FONT_QUEUE_NUM,
-                fg=ACCENT_DEFAULT, bg=BG_COLOR, anchor="w",
+                fg=ACCENT_DEFAULT, anchor="w",
             )
             num_label.pack(side=tk.LEFT)
 
             name_label = tk.Label(
                 top_line, text="", font=FONT_QUEUE_NAME,
-                fg=HEADER_COLOR, bg=BG_COLOR, anchor="w",
+                fg=HEADER_COLOR, anchor="w",
             )
             name_label.pack(side=tk.LEFT, fill=tk.X, expand=True)
 
             status_label = tk.Label(
                 top_line, text="", font=FONT_QUEUE_STATUS,
-                fg=ACCENT_DEFAULT, bg=BG_COLOR, anchor="e",
+                fg=ACCENT_DEFAULT, anchor="e",
             )
             status_label.pack(side=tk.RIGHT)
 
             song_label = tk.Label(
                 row_frame, text="", font=FONT_QUEUE_SONG,
-                fg=TEXT_COLOR, bg=BG_COLOR, anchor="w",
+                fg=TEXT_COLOR, anchor="w",
                 wraplength=content_width - 20,
             )
             song_label.pack(fill=tk.X, padx=(4, 0))
@@ -264,9 +245,8 @@ class RotationDisplay:
         # --- Empty queue message (hidden by default) ---
         self.empty_label = tk.Label(
             self.root, text="No singers in queue",
-            font=FONT_EMPTY, fg=ACCENT_DEFAULT, bg=BG_COLOR,
+            font=FONT_EMPTY, fg=ACCENT_DEFAULT,
         )
-
 
     def _apply_entries(self, entries):
         """Update all widget text/colors in place — no widget destruction."""
@@ -323,7 +303,6 @@ class RotationDisplay:
                 row_widgets["frame"].pack(fill=tk.X, padx=PAD_X, pady=(0, 2))
             else:
                 row_widgets["frame"].pack_forget()
-
 
     def _show_loading(self):
         """Show loading indicator in header."""
