@@ -814,16 +814,6 @@ def set_audio_device():
     log_message(f"Switching audio device from '{current_audio_device}' to '{device}'...")
     current_audio_device = device
     save_config_value('default_audio_device', device)
-
-    # Manage audio mirror: when using USB mixer, mirror to HDMI for TV output
-    if is_pi():
-        if device == 'usbmixer':
-            subprocess.run(['systemctl', 'start', 'audio-mirror'], capture_output=True)
-            log_message("Started audio mirror (USB mixer → HDMI)")
-        else:
-            subprocess.run(['systemctl', 'stop', 'audio-mirror'], capture_output=True)
-            log_message("Stopped audio mirror (VLC using HDMI directly)")
-
     threading.Thread(target=restart_vlc_instances).start()
     return jsonify({"success": True, "message": f"Switching to {available[device]}. VLC restarting..."})
 
@@ -922,11 +912,6 @@ def start_app():
 
         time.sleep(3)
         fade_in_filler()
-
-        # Start audio mirror if using USB mixer
-        if current_audio_device == 'usbmixer':
-            subprocess.run(['systemctl', 'start', 'audio-mirror'], capture_output=True)
-            log_message("Started audio mirror (USB mixer → HDMI)")
 
         # Start the karaoke player monitor in a background thread
         monitor_thread = threading.Thread(target=monitor_karaoke_player, daemon=True)
