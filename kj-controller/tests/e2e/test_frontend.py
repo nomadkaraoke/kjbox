@@ -1,8 +1,5 @@
 """End-to-end Playwright tests for the KJ Controller frontend."""
 
-import re
-
-import pytest
 from playwright.sync_api import expect
 
 
