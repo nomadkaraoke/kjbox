@@ -6,6 +6,8 @@ import sys
 
 import pytest
 
+from tests.fixtures import ASCII_ENTRIES, KARAOKE_CATALOG_ENTRIES
+
 # Ensure kj-controller directory is on sys.path
 app_dir = os.path.join(os.path.dirname(__file__), '..')
 if app_dir not in sys.path:
@@ -56,16 +58,22 @@ def catalog_db_path(tmp_path):
 
 @pytest.fixture
 def sample_file_list(tmp_path):
-    """Create a sample file list for catalog building."""
-    lines = [
-        "/Volumes/Nomad4TBOne/HyperMule/Karaoke/SC2411-08 - Rascal Flatts - Life Is A Highway.zip",
-        "/Volumes/Nomad4TBOne/HyperMule/Karaoke/PHK004 - Bon Jovi - Livin On A Prayer.zip",
-        "/Volumes/Nomad4TBOne/HyperMule/Videos/Michael Jackson - Billie Jean.mp4",
-        "/Volumes/Nomad4TBOne/HyperMule/Karaoke/Journey - Don't Stop Believin.zip",
-        "/Volumes/Nomad4TBOne/HyperMule/Videos/Queen - Bohemian Rhapsody.mp4",
-    ]
+    """Create a sample file list with ASCII-only entries for basic tests."""
     file_list = tmp_path / "file_list.txt"
-    file_list.write_text('\n'.join(lines) + '\n')
+    file_list.write_text('\n'.join(ASCII_ENTRIES) + '\n')
+    return str(file_list)
+
+
+@pytest.fixture
+def full_catalog_file_list(tmp_path):
+    """Create a file list with the full real-world karaoke catalog fixtures.
+
+    Includes ASCII, combining diacritics, non-decomposable Latin chars,
+    Cyrillic, Greek, CJK/Kana, fullwidth, smart punctuation, and symbols.
+    See tests/fixtures.py for the complete list and documentation.
+    """
+    file_list = tmp_path / "full_catalog.txt"
+    file_list.write_text('\n'.join(KARAOKE_CATALOG_ENTRIES) + '\n')
     return str(file_list)
 
 

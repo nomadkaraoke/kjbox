@@ -2,10 +2,16 @@
 
 import os
 import sqlite3
+import unicodedata
 
 import pytest
 
 from catalog import ExternalCatalog, parse_karaoke_filename, _fts5_safe_query, _detect_format, _normalize_for_search
+from tests.fixtures import (
+    KARAOKE_CATALOG_ENTRIES,
+    SEARCH_NORMALIZATION_CASES,
+    FILENAME_PARSE_CASES,
+)
 
 
 # --- parse_karaoke_filename tests ---
@@ -50,6 +56,16 @@ class TestParseKaraokeFilename:
     def test_empty_stem(self):
         """Extension-only filename: splitext treats '.mp4' as stem with no ext."""
         assert parse_karaoke_filename(".mp4") == ("", "", ".mp4")
+
+    @pytest.mark.parametrize("filename,expected", FILENAME_PARSE_CASES,
+                             ids=[c[0][:40] for c in FILENAME_PARSE_CASES])
+    def test_real_world_filenames(self, filename, expected):
+        """Parse real karaoke filenames with special characters."""
+        result = parse_karaoke_filename(filename)
+        # Normalize to NFC for comparison — input may be NFD (decomposed)
+        # but expected values use NFC (precomposed)
+        nfc = lambda t: tuple(unicodedata.normalize('NFC', s) for s in t)
+        assert nfc(result) == nfc(expected)
 
 
 # --- _fts5_safe_query tests ---
@@ -322,62 +338,32 @@ class TestExternalCatalog:
         catalog.close()
         catalog.close()  # Should not raise
 
-    def test_search_diacritics_combining_marks(self, mock_config, tmp_path):
-        """FTS5 matches ASCII queries against combining diacritical marks (é, ï, ñ, etc.)."""
-        file_list = tmp_path / "diacritics.txt"
-        file_list.write_text(
-            "/path/KCD-102989 - Maxïmo Park - Books From Boxes.zip\n"
-            "/path/VEVO-2392 - Beyoncé - Halo.mp4\n"
-            "/path/PHK-001 - Señor Coconut - Smoke On The Water.zip\n"
-            "/path/RWND-028 - Fresno - Convicção.mp4\n"
-            "/path/GMRO-198 - Soweto - Derê.mp4\n"
-            "/path/PMK-0439 - Ska-P - Ñapa Es.zip\n"
-        )
+    @pytest.mark.parametrize("ascii_query,expected_match", SEARCH_NORMALIZATION_CASES,
+                             ids=[c[0] for c in SEARCH_NORMALIZATION_CASES])
+    def test_search_normalization_real_catalog(self, mock_config, full_catalog_file_list,
+                                               ascii_query, expected_match):
+        """ASCII query finds entries with special characters in full catalog."""
         catalog = ExternalCatalog(mock_config)
-        catalog.build_from_file_list(str(file_list))
-        # ASCII query matches diacritical names
-        assert len(catalog.search("Maximo Park")) >= 1
-        assert len(catalog.search("Beyonce")) >= 1
-        assert len(catalog.search("Senor")) >= 1
-        assert len(catalog.search("Conviccao")) >= 1
-        assert len(catalog.search("Dere")) >= 1
-        assert len(catalog.search("Napa")) >= 1
-        # Diacritical query also matches
-        assert len(catalog.search("Maxïmo")) >= 1
-        assert len(catalog.search("Beyoncé")) >= 1
+        catalog.build_from_file_list(full_catalog_file_list)
+        results = catalog.search(ascii_query)
+        # Normalize to NFC for comparison — DB may store NFD form
+        all_text = unicodedata.normalize('NFC', ' '.join(
+            f"{r.get('artist', '')} {r.get('title', '')} {r.get('disc_id', '')}"
+            for r in results
+        ))
+        expected_nfc = unicodedata.normalize('NFC', expected_match)
+        assert expected_nfc in all_text, (
+            f"Searching '{ascii_query}' should find '{expected_match}', "
+            f"got {len(results)} results: {all_text[:200]}"
+        )
         catalog.close()
 
-    def test_search_diacritics_non_decomposable(self, mock_config, tmp_path):
-        """FTS5 matches ASCII queries against ø, æ, ß, ð, ł, ı (non-NFD chars)."""
-        file_list = tmp_path / "latin_special.txt"
-        file_list.write_text(
-            # Real examples from karaoke catalog
-            "/path/BEN-036 - MØ - Blur.mp4\n"
-            "/path/BALKA-0058 - Eivør - Slør.mp4\n"
-            "/path/CARITASD-0376 - Tool - Ænima.mp4\n"
-            "/path/AEK15-03 - Nik & Jay - Lækker.zip\n"
-            "/path/ALERNUS-001 - 187 Straßenbande - Millionär.mp4\n"
-            "/path/KVD-60923 - Daði Freyr - Think About Things.zip\n"
-            "/path/SARUX-406 - Cypis - Gdzie jest biały węgorz.mp4\n"
-            "/path/ALERNUS-019 - Aleyna Tilki - Yalnız Çiçek.mp4\n"
-        )
+    def test_full_catalog_builds_successfully(self, mock_config, full_catalog_file_list):
+        """Full real-world catalog fixture builds without errors."""
         catalog = ExternalCatalog(mock_config)
-        catalog.build_from_file_list(str(file_list))
-        # ø → o
-        assert len(catalog.search("MO Blur")) >= 1, "ø should match o"
-        assert len(catalog.search("Eivor")) >= 1, "ø should match o"
-        assert len(catalog.search("Slor")) >= 1, "ø should match o"
-        # æ → ae
-        assert len(catalog.search("Aenima")) >= 1, "æ should match ae"
-        assert len(catalog.search("Laekker")) >= 1, "æ should match ae"
-        # ß → ss
-        assert len(catalog.search("Strassenbande")) >= 1, "ß should match ss"
-        # ð → d
-        assert len(catalog.search("Dadi Freyr")) >= 1, "ð should match d"
-        # ł → l
-        assert len(catalog.search("bialy")) >= 1, "ł should match l"
-        # ı → i
-        assert len(catalog.search("Yalniz")) >= 1, "ı should match i"
+        count = catalog.build_from_file_list(full_catalog_file_list)
+        assert count == len(KARAOKE_CATALOG_ENTRIES)
+        assert catalog.is_available() is True
         catalog.close()
 
     def test_search_special_chars_safe(self, mock_config, sample_file_list):
