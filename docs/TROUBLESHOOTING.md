@@ -58,7 +58,7 @@ scp nomadpi:/tmp/screenshot.png ~/Desktop/
 ssh nomadpi 'DISPLAY=:0 scrot /tmp/screen.png' && scp nomadpi:/tmp/screen.png ~/Desktop/
 ```
 
-## VNC Not Working
+## VNC Not Working (Native Client)
 
 ```bash
 # Check VNC service status
@@ -73,6 +73,56 @@ ssh nomadpi 'journalctl -u vncserver-x11-serviced -f'
 # Restart VNC service
 ssh nomadpi 'systemctl restart vncserver-x11-serviced'
 ```
+
+## VNC Browser Preview Not Working
+
+The web UI includes a VNC screen preview (noVNC → websockify → RealVNC). If it's not connecting:
+
+**Check websockify is running:**
+```bash
+ssh nomadpi 'ss -tlnp | grep 6080'
+# Should show websockify listening on :6080
+```
+
+**If websockify isn't running**, check the kj-controller logs:
+```bash
+ssh nomadpi 'journalctl -u kj-controller --no-pager | grep -i websock'
+# Look for "websockify not found" or startup errors
+```
+
+**Test websockify directly** (should return HTTP 405 — that's correct, it expects WebSocket upgrades):
+```bash
+curl -k https://nomadpi.local:6080/
+```
+
+**"Connecting..." hangs indefinitely:**
+- This usually means RA2ne server verification isn't being handled. Ensure the `serververification` event handler is present in the noVNC script (auto-approves the server's RSA key).
+- Check browser console for errors. The noVNC module requires HTTPS (`crypto.subtle` is only available in secure contexts).
+
+**TLS certificate issues:**
+```bash
+# Check certs exist on Pi
+ssh nomadpi 'ls -la /opt/nomad/kjbox/kj-controller/certs/'
+# Should have cert.pem and key.pem
+
+# If certs are missing or expired, regenerate with mkcert on your Mac:
+mkcert nomadpi.local nomadpi 192.168.8.106 localhost 127.0.0.1
+scp cert.pem key.pem nomadpi:/opt/nomad/kjbox/kj-controller/certs/
+ssh nomadpi 'systemctl restart kj-controller'
+```
+
+**RealVNC encryption mismatch:**
+```bash
+# Ensure Encryption=PreferOff is set
+ssh nomadpi 'grep Encryption /root/.vnc/config.d/vncserver-x11'
+# If not set:
+ssh nomadpi 'echo "Encryption=PreferOff" >> /root/.vnc/config.d/vncserver-x11'
+ssh nomadpi 'systemctl restart vncserver-x11-serviced'
+```
+
+**Authentication failed:**
+- Click "Forget Password" in the VNC preview UI, then re-enter the VNC password
+- Verify the VNC password is correct: `ssh nomadpi 'vncpasswd -print'`
 
 ## Desktop Not Starting
 

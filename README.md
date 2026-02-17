@@ -18,7 +18,7 @@ NomadPi is a portable karaoke rig built on a Raspberry Pi 4 running DietPi. It c
 
 | Component | Purpose |
 |-----------|---------|
-| DietPi (Debian 12) | Lightweight OS for Raspberry Pi |
+| DietPi (Debian 13 Trixie) | Lightweight OS for Raspberry Pi |
 | VLC | Video/audio playback with hardware acceleration |
 | KJ Controller | Web-based karaoke show management (Flask + yt-dlp + VLC) |
 | Rotation Display | Singer queue overlay from Google Sheets (Conky + Python) |
@@ -71,7 +71,8 @@ The `kj-controller/` directory contains a web-based karaoke show management app.
 - **One-click playback** of karaoke videos via VLC
 - **YouTube downloading** with yt-dlp for building a song library
 - **Filler music** with intelligent crossfading between songs
-- **External screen sync** for audience-facing displays via WebSocket
+- **VNC screen preview** — live thumbnail of the Pi's HDMI output in the browser (noVNC + websockify)
+- **Dynamic overlays** — scrolling tickers, countdown timers, QR codes, and more on the display
 - **Remote control** from any device on the local network
 
 See [kj-controller/README.md](kj-controller/README.md) for setup and usage.
@@ -100,8 +101,11 @@ ssh nomadpihomewifi
 # Via Tailscale VPN (from anywhere)
 ssh root@100.66.53.104
 
-# VNC (shares physical display)
+# VNC (native client — shares physical display)
 # Connect to 192.168.8.106:5900
+
+# VNC (browser preview — built into KJ Controller web UI)
+# Open https://nomadpi.local and enter VNC password in "Screen Preview"
 ```
 
 ### Playing Karaoke Videos

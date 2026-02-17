@@ -15,12 +15,21 @@ Added a live VNC screen preview thumbnail to the KJ Controller web UI. The KJ ca
 1. **websockify subprocess** — started during app startup on Pi only (`is_pi()` = true); resolves the binary from the venv's bin directory (`sys.executable` parent), falling back to system PATH
 2. **noVNC vendored** — ~56 ES6 module files in `static/novnc/` (core library + pako compression vendor)
 3. **VNC preview UI** — password input (stored in `localStorage`), connect/disconnect controls, auto-reconnect on disconnect (5-second delay)
-4. **New config keys** — `websockify_port` (default: 6080), `vnc_target` (default: `localhost:5900`), `websockify_enabled` (default: true)
-5. **New dependency** — `websockify` added to `requirements.txt`
+4. **TLS/HTTPS support** — Flask and websockify serve over HTTPS/WSS when TLS certs are present. Required because RealVNC's RA2ne authentication uses `crypto.subtle` which is only available in secure contexts (HTTPS). Certs generated via `mkcert` (locally-trusted CA). When certs are present, Flask auto-switches from port 80 to 443.
+5. **RA2ne auth handling** — noVNC's `serververification` event is auto-approved (similar to SSH host key acceptance) since this is a trusted local Pi. Without this handler, the RA2ne handshake hangs indefinitely.
+6. **New config keys** — `websockify_port` (default: 6080), `vnc_target` (default: `localhost:5900`), `websockify_enabled` (default: true), `tls_cert` (default: `certs/cert.pem`), `tls_key` (default: `certs/key.pem`)
+7. **New dependency** — `websockify` added to `requirements.txt`
 
-**RealVNC device configuration applied:**
-- Added `Encryption=PreferOff` to `/root/.vnc/config.d/vncserver-x11` — required for noVNC/websockify compatibility since noVNC does not support RealVNC's proprietary encryption
-- Restarted `vncserver-x11-serviced` to apply the change
+**TLS certificate setup (one-time per dev machine):**
+```bash
+brew install mkcert && mkcert -install  # install local CA
+mkcert nomadpi.local nomadpi 192.168.8.106 localhost 127.0.0.1
+# Copy cert.pem and key.pem to kj-controller/certs/ on the Pi
+```
+
+**RealVNC device configuration applied** (`/root/.vnc/config.d/vncserver-x11`):
+- Added `Encryption=PreferOff` — allows unencrypted connections (websockify handles TLS termination)
+- Restarted `vncserver-x11-serviced` to apply changes
 
 ## 2026-02-17 - KJ Controller: Dynamic Overlay System
 

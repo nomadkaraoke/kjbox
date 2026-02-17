@@ -21,6 +21,14 @@ def test_index_returns_html(flask_test_client):
     assert b'html' in response.data.lower()
 
 
+def test_index_contains_vnc_preview(flask_test_client):
+    """GET / includes the VNC Screen Preview section."""
+    response = flask_test_client.get('/')
+    assert b'vnc-preview-container' in response.data
+    assert b'Screen Preview' in response.data
+    assert b'vnc-password' in response.data
+
+
 def test_media_list_empty(flask_test_client):
     """GET /media returns empty list when no media files exist."""
     response = flask_test_client.get('/media')

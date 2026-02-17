@@ -34,6 +34,8 @@ Key settings in `config.json`:
 - `websockify_port` - WebSocket proxy port for VNC preview (default: 6080)
 - `vnc_target` - RealVNC host:port to proxy to (default: `localhost:5900`)
 - `websockify_enabled` - enable/disable websockify subprocess (default: true, Pi-only)
+- `tls_cert` - path to TLS certificate (default: `certs/cert.pem`); enables HTTPS when present
+- `tls_key` - path to TLS private key (default: `certs/key.pem`); enables HTTPS when present
 
 ## Running the App
 
