@@ -289,7 +289,8 @@
             const pw = password || passwordInput.value;
             if (!pw) return;
 
-            const wsUrl = 'ws://' + location.hostname + ':6080';
+            const wsProto = location.protocol === 'https:' ? 'wss://' : 'ws://';
+            const wsUrl = wsProto + location.hostname + ':6080';
             setStatus('Connecting...', '');
 
             try {

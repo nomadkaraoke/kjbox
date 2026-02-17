@@ -42,6 +42,8 @@ def load_config(config_file=None):
         "websockify_port": 6080,
         "vnc_target": "localhost:5900",
         "websockify_enabled": True,
+        "tls_cert": os.path.join(APP_DIR, 'certs', 'cert.pem'),
+        "tls_key": os.path.join(APP_DIR, 'certs', 'key.pem'),
     }
     if os.path.exists(config_file):
         try:
