@@ -32,20 +32,26 @@ body::after {
 h2 {
     color: #ff7acc;
     border-bottom: 2px solid rgba(255, 91, 184, 0.4);
-    padding-bottom: 0.4rem;
+    padding-bottom: 0.35rem;
     margin-top: 0;
-    margin-bottom: 0.5rem;
+    margin-bottom: 0.6rem;
     font-weight: 600;
     font-size: 1.05em;
     letter-spacing: 0.01em;
+}
+/* When h2 is inside a header-row, the row owns the underline instead */
+.header-row h2 {
+    border-bottom: none;
+    padding-bottom: 0;
+    margin-bottom: 0;
 }
 
 /* --- Form Controls --- */
 
 input[type="text"], input[type="url"] {
-    width: calc(100% - 22px);
+    width: 100%;
     padding: 10px 12px;
-    margin-bottom: 10px;
+    margin-bottom: 0;
     border-radius: 8px;
     border: 1px solid #2a2a2a;
     background-color: #0f0f0f;
@@ -146,7 +152,7 @@ button:active { transform: scale(0.97); }
 /* --- Search --- */
 
 .search-box { position: relative; margin-bottom: 8px; }
-.search-box input { width: calc(100% - 22px); padding: 10px 12px; border-radius: 8px; border: 1px solid #2a2a2a; background-color: #0f0f0f; color: #e5e5e5; font-size: 0.9em; }
+.search-box input { width: 100%; padding: 10px 12px; border-radius: 8px; border: 1px solid #2a2a2a; background-color: #0f0f0f; color: #e5e5e5; font-size: 0.9em; }
 .search-box input::placeholder { color: #666; }
 .search-clear { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); background: none; border: none; color: #666; cursor: pointer; font-size: 1.2em; padding: 4px 8px; box-shadow: none; }
 .search-clear:hover { color: #e5e5e5; background: none; box-shadow: none; }
@@ -173,19 +179,13 @@ body {
 .main-layout {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    grid-template-rows: 1fr auto;
-    grid-template-areas:
-        "col1 col2"
-        "footer footer";
     gap: 0.75rem;
-    height: calc(100vh - 3rem);
+    align-items: start;
 }
 .column {
     display: flex;
     flex-direction: column;
     gap: 0.75rem;
-    min-height: 0;
-    overflow-y: auto;
 }
 .container {
     margin: 0;
@@ -193,16 +193,14 @@ body {
     display: flex;
     flex-direction: column;
     flex-shrink: 0;
+    gap: 0.5rem;
 }
-.available-songs {
-    flex-grow: 1;
-    min-height: 0;
-    flex-shrink: 1;
-}
+/* Remove individual margins when container gap handles spacing */
+.container > h2 { margin-bottom: 0; }
+.container > .header-row { margin-bottom: 0; }
 #media-list {
-    flex-grow: 1;
     overflow-y: auto;
-    min-height: 0;
+    max-height: 60vh;
 }
 #media-list::-webkit-scrollbar { width: 6px; }
 #media-list::-webkit-scrollbar-track { background: transparent; }
@@ -212,26 +210,42 @@ body {
 .controls-row { display: flex; gap: 0.75rem; }
 .control-half { flex: 1; min-width: 0; }
 .control-half select { margin-top: 4px; }
-.header-row { display: flex; align-items: center; justify-content: space-between; }
-.header-row h2 { flex-grow: 1; margin-bottom: 0; }
-
-/* --- Footer --- */
-
-.footer-area {
-    grid-area: footer;
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 0.75rem;
-    max-height: 160px;
+.header-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    border-bottom: 2px solid rgba(255, 91, 184, 0.4);
+    padding-bottom: 0.35rem;
+    margin-bottom: 0.6rem;
 }
-#status-bar, #log-area {
-    padding: 0.75rem;
-    background-color: #1a1a1a;
+.header-row h2 { flex-grow: 1; }
+
+/* --- Status & Logs (inside System section) --- */
+
+#status-bar {
+    padding: 0.6rem 0.75rem;
+    background-color: #0f0f0f;
     border: 1px solid #2a2a2a;
     border-radius: 8px;
     font-size: 0.8em;
 }
 #status-bar strong { color: #ff7acc; }
+#log-area {
+    padding: 0.6rem 0.75rem;
+    background-color: #0f0f0f;
+    border: 1px solid #2a2a2a;
+    border-radius: 8px;
+    height: auto;
+    max-height: 150px;
+    overflow-y: scroll;
+    font-family: "SF Mono", Monaco, "Cascadia Code", "Roboto Mono", monospace;
+    font-size: 0.8em;
+    color: #888;
+}
+
+/* --- Audio Warning Banner --- */
+
 #audio-warning {
     display: none;
     background: linear-gradient(135deg, #ef4444, #dc2626);
@@ -240,8 +254,10 @@ body {
     border-radius: 8px;
     margin-bottom: 0.5rem;
     text-align: center;
-    grid-column: 1 / -1;
     font-weight: 500;
+    max-width: 1400px;
+    margin-left: auto;
+    margin-right: auto;
 }
 #audio-warning button {
     background: rgba(255,255,255,0.9);
@@ -255,18 +271,10 @@ body {
     box-shadow: none;
 }
 #audio-warning button:hover { background: white; box-shadow: none; }
-#log-area {
-    height: auto;
-    max-height: 200px;
-    overflow-y: scroll;
-    font-family: "SF Mono", Monaco, "Cascadia Code", "Roboto Mono", monospace;
-    font-size: 0.8em;
-    color: #888;
-}
 
 /* --- Overlay Management --- */
 
-.overlay-panel { max-height: 45vh; display: flex; flex-direction: column; }
+.overlay-panel { display: flex; flex-direction: column; }
 .overlay-add-btn { font-size: 0.75em; padding: 4px 12px; background-color: #252525; border: 1px solid #2a2a2a; color: #888; box-shadow: none; }
 .overlay-add-btn:hover { background-color: #333; color: #e5e5e5; box-shadow: none; }
 .overlay-list { overflow-y: auto; flex: 1; min-height: 0; }
@@ -338,13 +346,30 @@ body {
 
 /* --- VNC Preview --- */
 
+.vnc-size-buttons { display: flex; gap: 4px; }
+.vnc-size-btn {
+    font-size: 0.65em; padding: 3px 8px;
+    background-color: #252525; border: 1px solid #2a2a2a; color: #888;
+    box-shadow: none; border-radius: 4px;
+}
+.vnc-size-btn:hover { background-color: #333; color: #e5e5e5; box-shadow: none; }
+.vnc-size-btn.vnc-size-active { background-color: rgba(255, 91, 184, 0.2); color: #ff7acc; border-color: rgba(255, 91, 184, 0.4); }
+
 .vnc-thumbnail {
-    width: 200px;
-    height: 112px;
+    width: 100%;
+    aspect-ratio: 16 / 9;
     background-color: #0f0f0f;
     border: 1px solid #2a2a2a;
     border-radius: 6px;
     overflow: hidden;
+}
+.vnc-thumbnail.vnc-fixed { width: 200px; }
+.vnc-thumbnail.vnc-fixed-400 { width: 400px; }
+.vnc-thumbnail.vnc-fit { width: 100%; }
+.vnc-thumbnail.vnc-max {
+    position: fixed; inset: 0; z-index: 9999;
+    width: 100vw; height: 100vh;
+    aspect-ratio: auto; border-radius: 0; border: none;
 }
 .vnc-thumbnail canvas {
     width: 100% !important;
@@ -405,29 +430,18 @@ body {
 
 @media (max-width: 1024px) {
     body { padding: 0.75rem; margin: 0.5rem auto; }
-    .main-layout { gap: 0.5rem; height: calc(100vh - 2rem); }
+    .main-layout { gap: 0.5rem; }
     .column { gap: 0.5rem; }
     .container { padding: 0.75rem; }
-    .footer-area { gap: 0.5rem; }
 }
 
 @media (max-width: 768px) {
     body { padding: 0.5rem; margin: 0; max-width: 100%; }
     .main-layout {
-        display: flex;
-        flex-direction: column;
-        height: auto;
-        min-height: 100vh;
+        grid-template-columns: 1fr;
         gap: 0.5rem;
     }
-    .column { overflow-y: visible; }
-    .available-songs { min-height: 300px; max-height: 50vh; }
-    #media-list { max-height: 40vh; }
-    .footer-area {
-        grid-template-columns: 1fr;
-        max-height: none;
-    }
-    #audio-warning { grid-column: auto; }
+    #media-list { max-height: 50vh; }
     .button-group { flex-direction: row; }
     .button-group button { flex: 1; min-width: 0; padding: 12px 8px; }
     .controls-row { flex-direction: column; gap: 0.5rem; }

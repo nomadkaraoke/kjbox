@@ -11,14 +11,13 @@
     <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
+    <div id="audio-warning">
+        Audio device issue detected - playback may be silent.
+        <button onclick="fixAudio()">Fix Audio</button>
+    </div>
+
     <div class="main-layout">
         <div class="column" id="col1">
-            <div class="container">
-                <h2>Download Song</h2>
-                <input type="url" id="youtube-url" placeholder="Enter YouTube URL" onkeyup="if(event.keyCode === 13) downloadSong()">
-                <button id="download-btn" onclick="downloadSong()" style="align-self: flex-start;">Download</button>
-                <div id="download-status" class="hidden" style="margin-top: 10px;">Downloading... please wait.</div>
-            </div>
             <div class="container">
                 <h2>Playback Controls</h2>
                 <div class="button-group">
@@ -26,19 +25,19 @@
                     <button onclick="controlPlayback('restart')">Restart</button>
                     <button onclick="controlPlayback('stop')">Stop</button>
                 </div>
-                <div style="margin-top: 0.6rem;">
+                <div>
                     <label for="seek-slider">Seek: <span id="seek-value">0:00</span></label>
                     <input type="range" id="seek-slider" class="volume-slider" min="0" max="1" value="0" step="0.001" onchange="seekVideo(this.value)" oninput="updateSeekLabel(this.value)">
                 </div>
-                <div style="margin-top: 0.6rem;">
+                <div>
                     <label for="karaoke-volume">Karaoke Volume:</label>
                     <input type="range" id="karaoke-volume" class="volume-slider" min="0" max="256" value="200" oninput="setVolume('karaoke', this.value)">
                 </div>
-                <div style="margin-top: 0.6rem;">
+                <div>
                     <label for="filler-volume">Filler Volume:</label>
                     <input type="range" id="filler-volume" class="volume-slider" min="0" max="256" value="100" oninput="setVolume('filler', this.value)">
                 </div>
-                <div class="controls-row" style="margin-top: 0.6rem;">
+                <div class="controls-row">
                     <div class="control-half">
                         <label for="filler-selector">Filler Music:</label>
                         <select id="filler-selector" onchange="setFillerMusic(this.value)"></select>
@@ -49,30 +48,6 @@
                     </div>
                 </div>
             </div>
-            <div class="container" id="vnc-preview-container">
-                <h2>Screen Preview</h2>
-                <div id="vnc-screen" class="vnc-thumbnail"></div>
-                <div id="vnc-status" class="vnc-status">Disconnected</div>
-                <div id="vnc-password-form" class="vnc-password-form">
-                    <input type="password" id="vnc-password" placeholder="VNC password"
-                           onkeyup="if(event.keyCode === 13) connectVnc()">
-                    <button onclick="connectVnc()">Connect</button>
-                </div>
-                <div id="vnc-controls" class="vnc-controls hidden">
-                    <button class="vnc-btn" onclick="disconnectVnc()">Disconnect</button>
-                    <button class="vnc-btn" onclick="forgetVncPassword()">Forget Password</button>
-                </div>
-            </div>
-            <div class="container system-controls">
-                <h2>System</h2>
-                <div class="button-group">
-                    <button class="system-btn" onclick="restartApp()">Restart App</button>
-                    <button class="system-btn system-btn-warn" onclick="rebootSystem()">Reboot</button>
-                    <button class="system-btn system-btn-danger" onclick="shutdownSystem()">Shut Down</button>
-                </div>
-            </div>
-        </div>
-
             <div class="container overlay-panel">
                 <div class="header-row">
                     <h2>Overlays</h2>
@@ -212,9 +187,52 @@
                     </div>
                 </div>
             </div>
+            <div class="container" id="vnc-preview-container">
+                <div class="header-row">
+                    <h2>Screen Preview</h2>
+                    <div class="vnc-size-buttons">
+                        <button class="vnc-size-btn" onclick="setVncSize('200px')" title="200px wide">200px</button>
+                        <button class="vnc-size-btn vnc-size-active" onclick="setVncSize('400px')" title="400px wide">400px</button>
+                        <button class="vnc-size-btn" onclick="setVncSize('fit')" title="Fit column width">Fit</button>
+                        <button class="vnc-size-btn" onclick="setVncSize('max')" title="Fullscreen">Max</button>
+                    </div>
+                </div>
+                <div id="vnc-screen" class="vnc-thumbnail vnc-fixed-400"></div>
+                <div id="vnc-status" class="vnc-status">Disconnected</div>
+                <div id="vnc-password-form" class="vnc-password-form">
+                    <input type="password" id="vnc-password" placeholder="VNC password"
+                           onkeyup="if(event.keyCode === 13) connectVnc()">
+                    <button onclick="connectVnc()">Connect</button>
+                </div>
+                <div id="vnc-controls" class="vnc-controls hidden">
+                    <button class="vnc-btn" onclick="disconnectVnc()">Disconnect</button>
+                    <button class="vnc-btn" onclick="forgetVncPassword()">Forget Password</button>
+                </div>
+            </div>
+            <div class="container system-controls">
+                <h2>System</h2>
+                <div class="button-group">
+                    <button class="system-btn" onclick="restartApp()">Restart App</button>
+                    <button class="system-btn system-btn-warn" onclick="rebootSystem()">Reboot</button>
+                    <button class="system-btn system-btn-danger" onclick="shutdownSystem()">Shut Down</button>
+                </div>
+                <div id="status-bar">
+                    <strong>Status:</strong> <span id="player-state">Unknown</span> |
+                    <strong>Playing:</strong> <span id="current-video">None</span> |
+                    <strong>Filler:</strong> <span id="current-filler">wii.mp3</span> |
+                    <strong>Time:</strong> <span id="current-time">0:00</span> / <span id="total-time">0:00</span>
+                </div>
+                <div id="log-area"></div>
+            </div>
         </div>
 
         <div class="column" id="col2">
+            <div class="container">
+                <h2>Download Song</h2>
+                <input type="url" id="youtube-url" placeholder="Enter YouTube URL" onkeyup="if(event.keyCode === 13) downloadSong()">
+                <button id="download-btn" onclick="downloadSong()" style="align-self: flex-start;">Download</button>
+                <div id="download-status" class="hidden">Downloading... please wait.</div>
+            </div>
             <div class="container available-songs">
                 <div class="header-row">
                     <h2>Available Songs<span id="media-count" class="media-count"></span></h2>
@@ -233,20 +251,6 @@
                     <li>Loading media...</li>
                 </ul>
             </div>
-        </div>
-
-        <div class="footer-area">
-            <div id="audio-warning">
-                Audio device issue detected - playback may be silent.
-                <button onclick="fixAudio()">Fix Audio</button>
-            </div>
-            <div id="status-bar">
-                <strong>Status:</strong> <span id="player-state">Unknown</span> |
-                <strong>Playing:</strong> <span id="current-video">None</span> |
-                <strong>Filler:</strong> <span id="current-filler">wii.mp3</span> |
-                <strong>Time:</strong> <span id="current-time">0:00</span> / <span id="total-time">0:00</span>
-            </div>
-            <div id="log-area"></div>
         </div>
     </div>
 

@@ -817,6 +817,38 @@ async function toggleOverlayEnabled(id) {
     await loadOverlays();
 }
 
+// --- VNC Size Control ---
+
+function setVncSize(size) {
+    const el = document.getElementById('vnc-screen');
+    el.classList.remove('vnc-fixed', 'vnc-fixed-400', 'vnc-fit', 'vnc-max');
+
+    if (size === 'max') {
+        el.classList.add('vnc-max');
+        // Press Escape to exit max
+        const handler = (e) => {
+            if (e.key === 'Escape') {
+                setVncSize('fit');
+                document.removeEventListener('keydown', handler);
+            }
+        };
+        document.addEventListener('keydown', handler);
+    } else if (size === '200px') {
+        el.classList.add('vnc-fixed');
+    } else if (size === '400px') {
+        el.classList.add('vnc-fixed-400');
+    } else {
+        el.classList.add('vnc-fit');
+    }
+
+    // Update active button
+    document.querySelectorAll('.vnc-size-btn').forEach(btn => {
+        btn.classList.toggle('vnc-size-active', btn.textContent.trim() === (size === 'fit' ? 'Fit' : size === 'max' ? 'Max' : size));
+    });
+
+    localStorage.setItem('kj-vnc-size', size);
+}
+
 // --- System Control ---
 
 async function systemAction(action, label, extraWarning) {
@@ -879,6 +911,10 @@ document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('overlay-opacity-label').textContent = Math.round(opacitySlider.value * 100) + '%';
         });
     }
+
+    // Restore VNC size preference
+    const savedVncSize = localStorage.getItem('kj-vnc-size');
+    if (savedVncSize) setVncSize(savedVncSize);
 
     updateStatus();
     updateMediaList();
