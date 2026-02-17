@@ -21,8 +21,9 @@ while true; do
     if [ "$LOCAL" != "$REMOTE" ]; then
         log "New commit detected: ${REMOTE:0:7}"
 
-        # Check if requirements.txt changed before pulling
+        # Check what changed before pulling
         REQ_CHANGED=$(git diff HEAD origin/main -- kj-controller/requirements.txt)
+        CATALOG_CHANGED=$(git diff HEAD origin/main -- kj-controller/catalog.py)
 
         git reset --hard origin/main --quiet
 
@@ -36,6 +37,13 @@ while true; do
         systemctl restart kj-controller
         systemctl is-active --quiet rotation-display && systemctl restart rotation-display
         log "Deploy complete (${REMOTE:0:7})"
+
+        # Rebuild external catalog if catalog code changed
+        if [ -n "$CATALOG_CHANGED" ]; then
+            log "catalog.py changed, rebuilding external catalog..."
+            # Wait for Flask to start, then trigger rebuild in background
+            (sleep 15 && curl -s -X POST http://localhost:80/catalog/build > /dev/null 2>&1 && log "Catalog rebuild complete.") &
+        fi
     fi
 
     sleep "$POLL_INTERVAL"
