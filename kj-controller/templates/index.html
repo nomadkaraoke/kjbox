@@ -604,10 +604,14 @@
             return 'other';
         }
 
+        function stripDiacritics(str) {
+            return str.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        }
+
         function filterLocalMedia(query) {
-            const terms = query.toLowerCase().split(/\s+/).filter(t => t);
+            const terms = stripDiacritics(query.toLowerCase()).split(/\s+/).filter(t => t);
             return localMediaItems.filter(item => {
-                const text = ((item.display_name || '') + ' ' + (item.channel || '')).toLowerCase();
+                const text = stripDiacritics(((item.display_name || '') + ' ' + (item.channel || '')).toLowerCase());
                 return terms.every(term => text.includes(term));
             });
         }

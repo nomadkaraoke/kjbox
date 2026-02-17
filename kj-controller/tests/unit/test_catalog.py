@@ -254,6 +254,25 @@ class TestExternalCatalog:
         catalog.close()
         catalog.close()  # Should not raise
 
+    def test_search_diacritics_match(self, mock_config, tmp_path):
+        """FTS5 unicode61 tokenizer matches diacritics to ASCII equivalents."""
+        file_list = tmp_path / "diacritics.txt"
+        file_list.write_text(
+            "/path/KCD-102989 - Maxïmo Park - Books From Boxes.zip\n"
+            "/path/VEVO-2392 - Beyoncé - Halo.mp4\n"
+            "/path/PHK-001 - Señor Coconut - Smoke On The Water.zip\n"
+        )
+        catalog = ExternalCatalog(mock_config)
+        catalog.build_from_file_list(str(file_list))
+        # ASCII query should match diacritical artist names
+        assert len(catalog.search("Maximo Park")) >= 1
+        assert len(catalog.search("Beyonce")) >= 1
+        assert len(catalog.search("Senor")) >= 1
+        # Diacritical query should also match
+        assert len(catalog.search("Maxïmo")) >= 1
+        assert len(catalog.search("Beyoncé")) >= 1
+        catalog.close()
+
     def test_search_special_chars_safe(self, mock_config, sample_file_list):
         """FTS5 special characters in query don't cause errors."""
         catalog = ExternalCatalog(mock_config)
