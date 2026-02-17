@@ -2,6 +2,32 @@
 
 NomadPi system configuration changes. For current configuration details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md).
 
+## 2026-02-17 - KJ Controller: Port 5000 → 80
+
+Changed the KJ Controller Flask server default port from 5000 to 80 so it's accessible at `http://nomadpi.local` without specifying a port number.
+
+**Changes Made:**
+1. Updated default `flask_port` from 5000 → 80 in `config.py` and `app.py`
+2. Updated Pi's `config.json` (which had an explicit `flask_port: 5000` override)
+3. Restarted `kj-controller` service — confirmed responding on port 80
+
+**Why:** With mDNS now broadcasting `nomadpi.local`, using the standard HTTP port means `http://nomadpi.local` just works — no need to remember `:5000`.
+
+**Note:** The service runs as root, so binding to port 80 (privileged port) works without extra configuration.
+
+## 2026-02-17 - mDNS / Avahi: `nomadpi.local` Hostname
+
+Installed `avahi-daemon` and `libnss-mdns` so the Pi broadcasts its hostname via mDNS (multicast DNS). Any device on the same LAN can now reach the Pi at `nomadpi.local` without any DNS configuration — works automatically via Bonjour on macOS.
+
+**Changes Made:**
+1. `apt-get install -y avahi-daemon libnss-mdns`
+2. Restricted Avahi to `eth0` only (`allow-interfaces=eth0` in `/etc/avahi/avahi-daemon.conf`) to avoid advertising Docker bridge IPs
+3. Service enabled and starts on boot automatically
+
+**Usage:** `ssh root@nomadpi.local`, `http://nomadpi.local`, `ping nomadpi.local`
+
+**Why:** Provides reliable hostname-based access that survives IP changes — no need to know the current DHCP IP. Works without internet (pure LAN multicast). Complements static DHCP reservation (Layer 1) and Tailscale (Layer 3) as the middle layer of the connectivity strategy.
+
 ## 2026-02-17 - DietPi Upgrade: Debian 12 (Bookworm) → Debian 13 (Trixie)
 
 Upgraded DietPi to the latest Debian release following the [official upgrade guide](https://dietpi.com/blog/?p=4014). The upgrade completed successfully but required several post-upgrade fixes.

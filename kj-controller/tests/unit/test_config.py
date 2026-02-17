@@ -26,7 +26,7 @@ def test_load_config_missing_file_returns_defaults(tmp_path):
     assert 'download_folder' in config
     assert 'media_folders' in config
     assert 'flask_port' in config
-    assert config['flask_port'] == 5000
+    assert config['flask_port'] == 80
 
 
 def test_load_config_merges_user_config(tmp_path):
@@ -44,7 +44,7 @@ def test_load_config_handles_corrupt_json(tmp_path):
     config_file.write_text('not valid json{{{')
     config = load_config(config_file=str(config_file))
     # Falls back to defaults
-    assert config['flask_port'] == 5000
+    assert config['flask_port'] == 80
 
 
 def test_save_config_value(tmp_path):

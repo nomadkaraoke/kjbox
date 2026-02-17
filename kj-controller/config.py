@@ -35,7 +35,7 @@ def load_config(config_file=None):
         },
         "default_audio_device": "hdmiout",
         "default_filler_track": "",
-        "flask_port": 5000,
+        "flask_port": 80,
         "external_catalog_db": os.path.join(APP_DIR, 'external_media.db'),
         "external_file_list": "",
         "external_media_mount": "",

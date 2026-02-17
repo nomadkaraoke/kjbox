@@ -170,10 +170,11 @@ ssh nomadpi 'iwconfig wlan0'
 ```
 
 **Can't find the Pi on the network?**
-1. Check the router's DHCP client list for MAC `E4:5F:01:B5:5D:C0` (Ethernet) or `E4:5F:01:B5:5D:C1` (WiFi)
-2. Scan the subnet: `nmap -sn 192.168.X.0/24`
-3. Try Tailscale: `ssh root@100.66.53.104`
-4. If the Pi is on a different subnet, add a temporary IP alias on your Mac to reach it (see Changelog 2026-02-17)
+1. Try mDNS: `ping nomadpi.local` (works on any LAN via Avahi/Bonjour, no config needed)
+2. Check the router's DHCP client list for MAC `E4:5F:01:B5:5D:C0` (Ethernet) or `E4:5F:01:B5:5D:C1` (WiFi)
+3. Scan the subnet: `nmap -sn 192.168.X.0/24`
+4. Try Tailscale: `ssh root@100.66.53.104`
+5. If the Pi is on a different subnet, add a temporary IP alias on your Mac to reach it (see Changelog 2026-02-17)
 
 ## SSH Connection Issues
 

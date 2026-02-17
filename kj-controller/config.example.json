@@ -18,7 +18,7 @@
   },
   "default_audio_device": "hdmiout",
   "default_filler_track": "WiiShop-yyjUmv1gJEg.mp3",
-  "flask_port": 5000,
+  "flask_port": 80,
   "external_file_list": "/mnt/Nomad4TBOne/HyperMule/all-karaoke-files-2025.02.28.txt",
   "external_media_mount": "/mnt/Nomad4TBOne"
 }

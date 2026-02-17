@@ -129,7 +129,7 @@ ssh nomadpi
 cd ~/kj-controller
 source venv/bin/activate
 python3 app.py
-# Access from browser: http://<nomadpi-ip>:5000
+# Access from browser: http://nomadpi.local
 ```
 
 ## Key Technical Notes

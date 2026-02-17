@@ -95,12 +95,43 @@ The GL.inet karaoke router has a DHCP reservation for the Pi's Ethernet MAC:
 - **Status:** Connected, managed by beveradb@github
 - **Interface:** tailscale0
 
+### mDNS / Avahi (`.local` hostname)
+
+The Pi broadcasts `nomadpi.local` via mDNS (multicast DNS), allowing any device on the same LAN to reach it by hostname without any DNS server or configuration.
+
+- **Package:** `avahi-daemon` + `libnss-mdns`
+- **Hostname:** `nomadpi.local` (derived from `/etc/hostname`)
+- **Config:** `/etc/avahi/avahi-daemon.conf` (restricted to `eth0` via `allow-interfaces=eth0`)
+- **Service:** `avahi-daemon.service` (enabled, starts on boot)
+- **Works on:** macOS (natively via Bonjour), Linux (with avahi/nss-mdns), Windows (with Bonjour Print Services or iTunes)
+- **No internet required** — pure LAN multicast, works even if the router has no internet
+
+**Usage:**
+```bash
+ssh root@nomadpi.local
+curl http://nomadpi.local/status
+# Browser: http://nomadpi.local
+```
+
+**Troubleshooting:**
+```bash
+# Check avahi is running
+ssh nomadpi 'systemctl status avahi-daemon'
+
+# Check what hostname is being advertised
+ssh nomadpi 'avahi-browse -at | head -20'
+
+# Restart avahi
+ssh nomadpi 'systemctl restart avahi-daemon'
+```
+
 ### SSH Access Methods
 
 **Via Ethernet (preferred — GL.inet network):**
 ```bash
 ssh nomadpi               # Using local .ssh/config (points to 192.168.8.106)
 ssh root@192.168.8.106    # Direct IP
+ssh root@nomadpi.local    # Via mDNS (works on any LAN, no config needed)
 ```
 
 **Via WiFi (fallback — Ubiquiti network):**
@@ -112,6 +143,7 @@ ssh root@192.168.1.84     # Direct IP
 **Via Tailscale (from anywhere):**
 ```bash
 ssh root@100.66.53.104
+ssh root@nomadpi           # Via Tailscale MagicDNS (if enabled)
 ```
 
 ### Networking Management Commands
@@ -612,6 +644,7 @@ Software installed via `dietpi-software`:
 | 162 | Tailscale | Installed |
 
 ### Additional Installed Packages (via apt)
+- **avahi-daemon** + **libnss-mdns** - mDNS/DNS-SD stack, broadcasts `nomadpi.local` on LAN (installed 2026-02-17)
 - **scrot** - Screenshot utility for X11 (installed 2026-02-15)
 - **vlc** - VLC media player 3.0.23 (installed via DietPi, runs as dietpi user)
 
@@ -677,7 +710,7 @@ NomadPi is configured for Nomad Karaoke live events:
 
 ### KJ Controller
 A web-based karaoke show management app. Runs directly from the git clone at `/opt/nomad/kjbox/kj-controller/`. It provides:
-- Remote control interface at `http://192.168.8.106:5000/` (accessible from any browser on the local network)
+- Remote control interface at `http://192.168.8.106/` (accessible from any browser on the local network)
 - YouTube video downloading via yt-dlp
 - Dual VLC instance management (karaoke player + filler music with crossfading)
 - Audio output switching between HDMI and USB mixer (restarts VLC instances)
@@ -719,7 +752,7 @@ ssh nomadpi 'tail -f /opt/nomad/kjbox/kj-controller/kj-controller.log'
   "media_index_path": "/opt/nomad/kjbox/kj-controller/media_index.json",
   "log_file": "/opt/nomad/kjbox/kj-controller/kj-controller.log",
   "youtube_cookies_file": "/opt/nomad/kjbox/kj-controller/youtube_cookies.txt",
-  "flask_port": 5000
+  "flask_port": 80
 }
 ```
 
@@ -742,7 +775,7 @@ ssh nomadpi 'cd /opt/nomad/kjbox && git pull && systemctl restart kj-controller'
 ```
 
 **Architecture:**
-- Flask app on port 5000 (threaded mode)
+- Flask app on port 80 (threaded mode)
 - Karaoke VLC on port 8080 (HTTP control interface, fullscreen)
 - Filler VLC on port 8081 (HTTP control interface, looping)
 - Both VLC instances use `--aout alsa --alsa-audio-device <device>` for audio routing
@@ -883,8 +916,9 @@ cron.service                   - Background tasks
 dbus.service                   - System message bus
 docker.service                 - Docker engine
 getty@tty1.service             - Console on tty1
+avahi-daemon.service            - mDNS/DNS-SD (broadcasts nomadpi.local on LAN)
 kj-autodeploy.service          - Auto-deploy kj-controller from GitHub (polls every 60s)
-kj-controller.service          - KJ Controller (karaoke show management, port 5000)
+kj-controller.service          - KJ Controller (karaoke show management, port 80)
 rotation-display.service       - Singer rotation overlay (Google Sheets → conky)
 NetworkManager.service         - Network management
 ssh.service                    - SSH server

@@ -100,7 +100,7 @@ def start_app():  # pragma: no cover
         monitor_thread.start()
 
     # Start Flask app
-    flask_port = cfg.get('flask_port', 5000)
+    flask_port = cfg.get('flask_port', 80)
     log_message(f"Starting Flask server on port {flask_port}...", cfg)
     flask_app.run(host='0.0.0.0', port=flask_port, threaded=True)
 

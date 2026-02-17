@@ -24,7 +24,7 @@ python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 python3 app.py
-# Access at http://localhost:5000
+# Access at http://localhost
 ```
 
 On non-Pi platforms, the app runs in **dev mode** (VLC disabled, web UI and media management work normally). See [docs/DEVELOPMENT.md](../docs/DEVELOPMENT.md) for details.
@@ -41,7 +41,7 @@ Key settings in `config.json`:
 - `download_folder` - where yt-dlp saves videos
 - `media_folders` - list of directories to scan for media
 - `filler_music_dir` - directory containing filler music files
-- `flask_port` - web server port (default: 5000)
+- `flask_port` - web server port (default: 80)
 
 ## Testing
 

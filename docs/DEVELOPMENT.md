@@ -28,7 +28,7 @@ Key settings in `config.json`:
 - `download_folder` - where yt-dlp saves videos
 - `media_folders` - list of directories to scan for media
 - `filler_music_dir` - directory containing filler music files
-- `flask_port` - web server port (default: 5000)
+- `flask_port` - web server port (default: 80)
 - `external_file_list` - path to text file listing external media (one path per line)
 - `external_media_mount` - mount point for external media drive (e.g. `/mnt/Nomad4TBOne`)
 
@@ -44,7 +44,7 @@ On non-Pi platforms, the app starts in **dev mode**:
 - Media scanning and indexing work
 - Download functionality works (if yt-dlp is installed)
 
-Access the UI at `http://localhost:5000`.
+Access the UI at `http://localhost`.
 
 ## Dev Mode Behavior
 

@@ -43,7 +43,7 @@ def mock_config(tmp_media_dir):
         "audio_devices": {"hdmiout": "HDMI Output"},
         "default_audio_device": "hdmiout",
         "default_filler_track": "",
-        "flask_port": 5000,
+        "flask_port": 80,
         "external_catalog_db": str(tmp_media_dir / "test_catalog.db"),
         "external_file_list": "",
         "external_media_mount": "",
