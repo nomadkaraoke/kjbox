@@ -539,6 +539,22 @@ exec /usr/bin/startx "$@"
 - **Service:** `vncserver-x11-serviced.service`
 - **Status:** Enabled and running
 
+### websockify (WebSocket Proxy for Browser VNC)
+
+The KJ Controller web UI includes a live VNC screen preview powered by noVNC. Since browsers cannot make raw TCP connections, **websockify** bridges the gap — it accepts WebSocket connections from the browser and proxies them to RealVNC's TCP port.
+
+- **Started by:** `kj-controller` app startup (subprocess, Pi-only)
+- **Listen port:** 6080 (configurable via `websockify_port` in config.json)
+- **Proxy target:** `localhost:5900` (configurable via `vnc_target` in config.json)
+- **Package:** `websockify` (installed via pip in kj-controller venv)
+- **Browser client:** noVNC v1.6.0 (vendored ES6 library in `kj-controller/static/novnc/`)
+
+**RealVNC compatibility:** noVNC does not support RealVNC's proprietary encryption. If VNC preview fails to connect, ensure RealVNC has `Encryption=PreferOff` set:
+```bash
+ssh nomadpi 'grep -i encryption /root/.vnc/config.d/vncserver-x11'
+# Should show: Encryption=PreferOff
+```
+
 ### VNC Configuration Files
 - **Service Mode Config:** `/root/.vnc/config.d/vncserver-x11`
 - **Virtual Mode Config:** `/root/.vnc/config.d/Xvnc` (not used)
@@ -647,6 +663,9 @@ Software installed via `dietpi-software`:
 - **avahi-daemon** + **libnss-mdns** - mDNS/DNS-SD stack, broadcasts `nomadpi.local` on LAN (installed 2026-02-17)
 - **scrot** - Screenshot utility for X11 (installed 2026-02-15)
 - **vlc** - VLC media player 3.0.23 (installed via DietPi, runs as dietpi user)
+
+### Additional Installed Packages (via pip, in kj-controller venv)
+- **websockify** - WebSocket-to-TCP proxy for VNC screen preview in browser (installed 2026-02-17)
 
 ### Installing Additional Software
 ```bash
@@ -780,6 +799,7 @@ ssh nomadpi 'cd /opt/nomad/kjbox && git pull && systemctl restart kj-controller'
 - Flask app on port 80 (threaded mode)
 - Karaoke VLC on port 8080 (HTTP control interface, fullscreen)
 - Filler VLC on port 8081 (HTTP control interface, looping)
+- websockify on port 6080 (WebSocket proxy to RealVNC on 5900, for browser VNC preview)
 - Both VLC instances use `--aout alsa --alsa-audio-device <device>` for audio routing
 - Audio device switching restarts both VLC instances (~5 seconds)
 - Media index (`media_index.json`) caches file metadata; rebuilt on rescan or first startup
@@ -1123,7 +1143,10 @@ ssh nomadpi 'docker system prune -a'
 - `/opt/nomad/kjbox/` - Git clone of kjbox repo (app runs directly from here)
 - `/opt/nomad/kjbox/kj-controller/app.py` - Main Flask application
 - `/opt/nomad/kjbox/kj-controller/templates/index.html` - Web UI template
-- `/opt/nomad/kjbox/kj-controller/requirements.txt` - Python dependencies
+- `/opt/nomad/kjbox/kj-controller/static/style.css` - Extracted CSS (Nomad branding)
+- `/opt/nomad/kjbox/kj-controller/static/app.js` - Extracted JS (controls, polling)
+- `/opt/nomad/kjbox/kj-controller/static/novnc/` - noVNC v1.6.0 vendored ES6 library (~56 files, WebSocket VNC client)
+- `/opt/nomad/kjbox/kj-controller/requirements.txt` - Python dependencies (includes websockify)
 - `/opt/nomad/kjbox/kj-controller/config.json` - App configuration (gitignored)
 - `/opt/nomad/kjbox/kj-controller/media_index.json` - Central media file index (gitignored)
 - `/opt/nomad/kjbox/kj-controller/venv/` - Python virtual environment

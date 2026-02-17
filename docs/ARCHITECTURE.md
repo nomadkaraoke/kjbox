@@ -143,6 +143,43 @@ A stateful class holding process handles, volume levels, and playback state. All
 ### Dynamic Overlay System
 The overlay system uses a three-component architecture: (1) the KJ Controller web UI for configuration, (2) the Flask backend (`overlay.py`) for CRUD and state management, and (3) a standalone overlay engine (`desktop/overlay_engine.py`) for rendering. The engine runs as a separate systemd service (`overlay-display.service`) with a 30fps pygame-ce render loop, creating one borderless always-on-top X11 window per enabled overlay. Communication between the Flask backend and the engine is via a shared JSON file (`data/overlays.json`) polled by mtime every ~1 second. This avoids coupling the render loop to Flask's request-response model and matches the existing pattern of the rotation-display service. Five overlay types are supported: `ticker` (scrolling text bar), `static_text`, `image`, `countdown`, and `qr_code`. Each overlay has an independent `show_over_video` flag — when false, it auto-hides during karaoke playback and auto-shows when playback stops. The `karaoke_playing` state is set by the play/control routes and a `VLCManager.on_karaoke_end` callback.
 
+## VNC Screen Preview
+
+The KJ Controller web UI includes a live thumbnail of the Pi's screen via an embedded VNC viewer. This lets the KJ see what's on the HDMI output without a direct line of sight to the display.
+
+```
+┌──────────────┐   WebSocket   ┌─────────────┐   TCP    ┌──────────────┐
+│  Browser     │◄─────────────►│ websockify  │◄────────►│  RealVNC     │
+│  (noVNC)     │   :6080       │ (Python)    │          │  Server      │
+│              │               │ Pi-only     │          │  :5900       │
+└──────────────┘               └─────────────┘          └──────────────┘
+```
+
+### How It Works
+
+1. **websockify** (Python package, added to `requirements.txt`) runs on the Pi as a WebSocket-to-TCP proxy. It listens on port 6080 and forwards traffic to RealVNC on port 5900.
+2. **noVNC** v1.6.0 (vendored ES6 library in `static/novnc/`) runs in the browser as an `<script type="module">` import. It connects to websockify via WebSocket and renders the VNC framebuffer into a `<canvas>` element.
+3. The thumbnail is **200px wide**, **view-only**, and positioned in the left column of the web UI.
+4. The VNC password is entered once and stored in `localStorage` for subsequent sessions.
+5. On disconnect, the client auto-reconnects after a 5-second delay.
+
+### Configuration
+
+| Config Key | Default | Description |
+|------------|---------|-------------|
+| `websockify_port` | `6080` | Port websockify listens on (WebSocket) |
+| `vnc_target` | `localhost:5900` | RealVNC host:port to proxy to |
+| `websockify_enabled` | `true` | Set `false` to disable websockify |
+
+### Platform Behavior
+
+- **Pi (`is_pi()` = true):** websockify is started as a subprocess during app startup. If the `websockify` binary is not found, a warning is logged and the VNC preview is unavailable.
+- **Dev mode (`is_pi()` = false):** websockify is not started. The VNC preview section appears in the UI but cannot connect.
+
+### RealVNC Compatibility
+
+RealVNC may need `Encryption=PreferOff` set in its configuration for noVNC compatibility, since noVNC does not support RealVNC's proprietary encryption.
+
 ## Frontend Architecture
 
-Single-page vanilla JavaScript app (`templates/index.html`). No build step, no framework. Communicates with the backend via `fetch()` REST calls. Polls `/status` for live player state updates.
+Single-page vanilla JavaScript app (`templates/index.html`). No build step, no framework. Communicates with the backend via `fetch()` REST calls. Polls `/status` for live player state updates. The VNC screen preview uses noVNC (ES6 module imported from `static/novnc/core/rfb.js`) to render a live thumbnail of the Pi's display.

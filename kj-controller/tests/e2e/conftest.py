@@ -40,6 +40,9 @@ def live_server(tmp_path_factory, flask_port):
         "external_catalog_db": str(tmp / "test_catalog.db"),
         "external_file_list": "",
         "external_media_mount": "",
+        "websockify_port": 6080,
+        "vnc_target": "localhost:5900",
+        "websockify_enabled": False,
     }
 
     app = create_app(config=config)
