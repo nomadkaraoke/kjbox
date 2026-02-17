@@ -2,6 +2,52 @@
 
 NomadPi system configuration changes. For current configuration details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md).
 
+## 2026-02-17 - WiFi Disabled
+
+Disabled WiFi to save power and avoid confusion about which network interface is active. The Pi now connects exclusively via Ethernet.
+
+**What was done:**
+- `nmcli radio wifi off` — disables WiFi radio via NetworkManager (persists across reboots)
+- `nmcli connection modify "Moominvalley" connection.autoconnect no` — prevents auto-connecting
+- `systemctl disable wpa_supplicant` — prevents wpa_supplicant starting on boot
+- Commented out wlan0 in `/etc/network/interfaces`
+
+**Note:** NetworkManager manages wlan0 on this system, not ifupdown. Commenting out wlan0 in `/etc/network/interfaces` and disabling `wpa_supplicant` alone was NOT sufficient — NM brought WiFi back up on every reboot. The key command is `nmcli radio wifi off`.
+
+**To re-enable:**
+```bash
+ssh nomadpi 'nmcli radio wifi on && nmcli connection modify "Moominvalley" connection.autoconnect yes'
+```
+
+## 2026-02-17 - Network Reconfiguration: Dual-Interface with Ethernet Priority
+
+**Problem:** Pi was configured with Ethernet disabled (`AUTO_SETUP_NET_ETHERNET_ENABLED=0` in dietpi.txt) and WiFi as the sole network interface. The `/etc/network/interfaces` file had contradictory config — `iface eth0 inet dhcp` with stale static IP lines (`address 192.168.0.100`, `gateway 192.168.0.1`) that overrode DHCP. When connecting the Pi via Ethernet to a new GL.inet karaoke router (192.168.8.0/24), it couldn't obtain a DHCP lease on the new subnet.
+
+**Root Cause:**
+1. Ethernet was disabled in DietPi config (`AUTO_SETUP_NET_ETHERNET_ENABLED=0`)
+2. `/etc/network/interfaces` had orphaned static IP lines under the `dhcp` stanza (leftover from original FoxTag device config), which interfered with DHCP
+3. No metric was configured, so there was no defined priority between interfaces
+
+**Changes Made:**
+1. **Enabled Ethernet** — set `AUTO_SETUP_NET_ETHERNET_ENABLED=1` in `/boot/dietpi.txt`
+2. **Cleaned `/etc/network/interfaces`** — removed stale static IP/gateway/netmask lines from both eth0 and wlan0 stanzas, leaving pure DHCP
+3. **Added routing metrics** — eth0 gets metric 100 (preferred), wlan0 gets metric 200 (fallback)
+4. **DHCP reservation** — configured GL.inet router to reserve `192.168.8.106` for Pi's Ethernet MAC (`E4:5F:01:B5:5D:C0`)
+
+**Current Network State:**
+- **eth0:** 192.168.8.106/24 via DHCP (GL.inet router, metric 100 — preferred)
+- **wlan0:** 192.168.1.84/24 via DHCP (Ubiquiti home network, SSID: Moominvalley, metric 200 — fallback)
+- **Tailscale:** 100.66.53.104 (reconnects automatically once Pi has internet)
+
+**SSH config updated:** `nomadpi` alias now points to `192.168.8.106`, `nomadpihomewifi` alias points to `192.168.1.84`.
+
+**Troubleshooting technique learned:** When a Pi has a static/stale IP on a different subnet, you can add a temporary IP alias on your Mac to reach it across the same physical switch:
+```bash
+sudo ifconfig en10 alias 192.168.1.100 netmask 255.255.255.0  # Add alias
+# ... SSH in and fix config ...
+sudo ifconfig en10 -alias 192.168.1.100                        # Remove alias
+```
+
 ## 2026-02-16 - Rotation Display Rewrite: tkinter → Conky
 
 **Problem:** tkinter cannot render a transparent background on X11 — every widget has a solid fill. The `-alpha` attribute makes the entire window (text included) uniformly transparent, washing out text readability.

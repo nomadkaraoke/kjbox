@@ -89,14 +89,17 @@ NomadPi documentation is split by topic:
 ### Accessing NomadPi
 
 ```bash
-# Via local network
+# Via Ethernet (preferred — GL.inet karaoke router, 192.168.8.x)
 ssh nomadpi
+
+# Via WiFi (fallback — Ubiquiti home network, 192.168.1.x)
+ssh nomadpihomewifi
 
 # Via Tailscale VPN (from anywhere)
 ssh root@100.66.53.104
 
 # VNC (shares physical display)
-# Connect to 192.168.1.84:5900
+# Connect to 192.168.8.106:5900
 ```
 
 ### Playing Karaoke Videos

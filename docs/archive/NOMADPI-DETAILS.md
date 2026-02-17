@@ -1,8 +1,8 @@
 # NomadPi - Raspberry Pi Configuration Guide
 
-**Last Updated:** 2026-02-16
+**Last Updated:** 2026-02-17
 **Purpose:** Nomad Karaoke live events - video playback and AV equipment connection
-**Location:** Local network at 192.168.1.84
+**Location:** Local network at 192.168.8.106 (Ethernet) / 192.168.1.84 (WiFi fallback)
 
 ---
 
@@ -17,16 +17,76 @@
   - **Root:** 230 GB total, 9.0 GB used, 212 GB available (5% used)
   - **Boot:** 127 MB partition at `/boot/firmware`
 - **WiFi:** Onboard WiFi enabled (MAC: e4:5f:01:b5:5d:c1)
-- **Ethernet:** Onboard, currently disabled (MAC: e4:5f:01:b5:5d:c0)
+- **Ethernet:** Onboard, enabled (MAC: e4:5f:01:b5:5d:c0)
 
 ## 🌐 Network Configuration
 
-### Primary Network Access
-- **Hostname:** `nomadpi` / `NomadPi`
-- **Local IP:** 192.168.1.84/24 (via WiFi)
-- **Gateway:** 192.168.1.1
-- **DNS:** Provided via DHCP
-- **WiFi SSID:** Configured via `/boot/dietpi-wifi.txt`
+### Dual-Interface Setup
+
+NomadPi uses both Ethernet and WiFi simultaneously, with **Ethernet preferred** (lower metric). Both interfaces use DHCP. This allows the Pi to work in different network environments without reconfiguration — plug in Ethernet at a venue and it becomes the primary connection; WiFi stays as a fallback.
+
+| Interface | IP | Subnet | Gateway | Metric | Purpose |
+|-----------|-----|--------|---------|--------|---------|
+| eth0 (Ethernet) | 192.168.8.106 (DHCP, reserved) | 192.168.8.0/24 | 192.168.8.1 | 100 (preferred) | Primary — GL.inet karaoke router |
+| wlan0 (WiFi) | Disabled | — | — | 200 (fallback) | Disabled as of 2026-02-17 (see below) |
+| tailscale0 | 100.66.53.104 | Tailscale mesh | — | — | Remote access from anywhere |
+
+**Hostname:** `nomadpi` / `NomadPi`
+**DNS:** Provided via DHCP
+
+### WiFi — Currently Disabled
+
+As of 2026-02-17, WiFi is disabled to save power and avoid confusion about which interface is active. The Pi connects exclusively via Ethernet.
+
+**What was done:**
+- `nmcli radio wifi off` — disables WiFi radio via NetworkManager (persists across reboots)
+- `nmcli connection modify "Moominvalley" connection.autoconnect no` — prevents auto-connecting to the saved WiFi network
+- `wpa_supplicant` service disabled
+- wlan0 commented out in `/etc/network/interfaces`
+
+**Important:** NetworkManager controls wlan0, not ifupdown. Commenting out wlan0 in `/etc/network/interfaces` alone is not sufficient — NM will still bring it up. The `nmcli radio wifi off` command is what actually keeps WiFi disabled.
+
+**To re-enable WiFi:**
+```bash
+ssh nomadpi 'nmcli radio wifi on && nmcli connection modify "Moominvalley" connection.autoconnect yes'
+```
+Also uncomment the wlan0 block in `/etc/network/interfaces` if ifupdown integration is needed.
+
+The WiFi credentials (SSID: Moominvalley) are preserved in both NetworkManager's connection profile and `/etc/wpa_supplicant/wpa_supplicant.conf`.
+
+### Network Configuration Files
+
+| File | Purpose |
+|------|---------|
+| `/etc/network/interfaces` | Interface definitions, DHCP settings, metrics (primary config) |
+| `/boot/dietpi.txt` | DietPi network flags (`ETHERNET_ENABLED`, `WIFI_ENABLED`, `USESTATIC`) |
+| `/etc/wpa_supplicant/wpa_supplicant.conf` | WiFi SSID and credentials |
+| `/boot/dietpi-wifi.txt` | DietPi WiFi setup (used at first boot) |
+| `/var/lib/dhcp/dhclient.leases` | DHCP lease history |
+
+### Current `/etc/network/interfaces`
+
+```
+# Ethernet (preferred - lower metric = higher priority)
+allow-hotplug eth0
+iface eth0 inet dhcp
+metric 100
+
+# WiFi (fallback - higher metric = lower priority)
+allow-hotplug wlan0
+iface wlan0 inet dhcp
+metric 200
+pre-up iw dev wlan0 set power_save off
+post-down iw dev wlan0 set power_save on
+wpa-conf /etc/wpa_supplicant/wpa_supplicant.conf
+```
+
+### DHCP Reservation
+
+The GL.inet karaoke router has a DHCP reservation for the Pi's Ethernet MAC:
+- **MAC:** `E4:5F:01:B5:5D:C0`
+- **Reserved IP:** `192.168.8.106`
+- Configure at: GL.inet admin panel → LAN → Static IP Address Binding
 
 ### Tailscale VPN
 - **Enabled:** Yes
@@ -34,20 +94,135 @@
 - **IPv6:** fd7a:115c:a1e0::d601:356d
 - **Status:** Connected, managed by beveradb@github
 - **Interface:** tailscale0
-- **Other devices on network:**
-  - andrewbeveridgembpm3 (macOS) - offline
 
 ### SSH Access Methods
 
-**Local Network:**
+**Via Ethernet (preferred — GL.inet network):**
 ```bash
-ssh nomadpi               # Using local .ssh/config
+ssh nomadpi               # Using local .ssh/config (points to 192.168.8.106)
+ssh root@192.168.8.106    # Direct IP
+```
+
+**Via WiFi (fallback — Ubiquiti network):**
+```bash
+ssh nomadpihomewifi           # Using local .ssh/config (points to 192.168.1.84)
 ssh root@192.168.1.84     # Direct IP
 ```
 
-**Via Tailscale:**
+**Via Tailscale (from anywhere):**
 ```bash
 ssh root@100.66.53.104
+```
+
+### Networking Management Commands
+
+```bash
+# Check current IP addresses and interface status
+ssh nomadpi 'ip -4 addr show eth0; ip -4 addr show wlan0'
+
+# Check routing table (lower metric = preferred)
+ssh nomadpi 'ip route show'
+
+# Check which interface is handling default traffic
+ssh nomadpi 'ip route get 8.8.8.8'
+
+# Test internet connectivity
+ssh nomadpi 'ping -c 3 8.8.8.8'
+
+# View DHCP leases
+ssh nomadpi 'cat /var/lib/dhcp/dhclient.leases'
+
+# Renew DHCP lease on eth0 (e.g. after changing router)
+ssh nomadpi 'dhclient -r eth0 && dhclient eth0'
+
+# Renew DHCP lease on wlan0
+ssh nomadpi 'dhclient -r wlan0 && dhclient wlan0'
+
+# Restart all networking
+ssh nomadpi 'systemctl restart networking'
+
+# View current interfaces config
+ssh nomadpi 'cat /etc/network/interfaces'
+
+# View DietPi network settings
+ssh nomadpi 'grep "NET_" /boot/dietpi.txt'
+```
+
+### Changing WiFi Network
+
+```bash
+# Edit WiFi credentials
+ssh nomadpi 'wpa_passphrase "NewSSID" "password" > /etc/wpa_supplicant/wpa_supplicant.conf'
+# Or edit manually:
+ssh nomadpi 'nano /etc/wpa_supplicant/wpa_supplicant.conf'
+
+# Restart WiFi
+ssh nomadpi 'ifdown wlan0 && ifup wlan0'
+```
+
+### Switching to a Different Ethernet Network
+
+The Pi uses DHCP on Ethernet, so simply plugging into a different router should work automatically. If the new router uses a different subnet, the Pi will get a new IP via DHCP. To find it:
+
+```bash
+# From a Mac on the same network:
+nmap -sn 192.168.X.0/24  # Replace X with the new subnet
+
+# Or check the router's DHCP client list for MAC E4:5F:01:B5:5D:C0
+```
+
+If the Pi doesn't get an IP on the new network, SSH via WiFi (if available) or Tailscale and run:
+```bash
+dhclient -r eth0 && dhclient eth0
+```
+
+### Setting a Static IP (if needed)
+
+Edit `/etc/network/interfaces` and change the eth0 block:
+```bash
+ssh nomadpi 'cat > /etc/network/interfaces << "EOF"
+source interfaces.d/*
+
+# Ethernet (static)
+allow-hotplug eth0
+iface eth0 inet static
+address 192.168.X.84
+netmask 255.255.255.0
+gateway 192.168.X.1
+dns-nameservers 8.8.8.8 8.8.4.4
+metric 100
+
+# WiFi (fallback)
+allow-hotplug wlan0
+iface wlan0 inet dhcp
+metric 200
+pre-up iw dev wlan0 set power_save off
+post-down iw dev wlan0 set power_save on
+wpa-conf /etc/wpa_supplicant/wpa_supplicant.conf
+EOF'
+ssh nomadpi 'systemctl restart networking'
+```
+
+### Reverting to DHCP (from static)
+
+```bash
+ssh nomadpi 'cat > /etc/network/interfaces << "EOF"
+source interfaces.d/*
+
+# Ethernet (preferred - lower metric = higher priority)
+allow-hotplug eth0
+iface eth0 inet dhcp
+metric 100
+
+# WiFi (fallback - higher metric = lower priority)
+allow-hotplug wlan0
+iface wlan0 inet dhcp
+metric 200
+pre-up iw dev wlan0 set power_save off
+post-down iw dev wlan0 set power_save on
+wpa-conf /etc/wpa_supplicant/wpa_supplicant.conf
+EOF'
+ssh nomadpi 'systemctl restart networking'
 ```
 
 **Authorized SSH Key:**
@@ -315,7 +490,7 @@ exec /usr/bin/startx "$@"
 **Service Mode** shares the physical HDMI display - what you see in VNC is identical to the physical screen.
 
 ### Connection Details
-- **Address:** `192.168.1.84` (no port needed for Service Mode)
+- **Address:** `192.168.8.106` (no port needed for Service Mode)
 - **Password:** Set via `vncpasswd` (stored encrypted in VNC config)
 - **Service:** `vncserver-x11-serviced.service`
 - **Status:** Enabled and running
@@ -331,13 +506,13 @@ exec /usr/bin/startx "$@"
 - **Shares physical display** - same desktop on HDMI and VNC
 - **Service:** `vncserver-x11-serviced.service`
 - **Requires:** Desktop running on physical display (autostart mode 2 or 16)
-- **Connection:** `192.168.1.84` (port 5900)
+- **Connection:** `192.168.8.106` (port 5900)
 
 #### Virtual Mode
 - **Separate virtual desktop** - independent from HDMI
 - **Service:** `vncserver.service` (DietPi wrapper)
 - **Resolution:** 1024x600x16 (configured in `/boot/dietpi.txt`)
-- **Connection:** `192.168.1.84:1` (port 5901)
+- **Connection:** `192.168.8.106:1` (port 5901)
 
 ### Switching VNC Modes
 
@@ -490,7 +665,7 @@ NomadPi is configured for Nomad Karaoke live events:
 
 ### KJ Controller
 A web-based karaoke show management app. Runs directly from the git clone at `/opt/nomad/kjbox/kj-controller/`. It provides:
-- Remote control interface at `http://192.168.1.84:5000/` (accessible from any browser on the local network)
+- Remote control interface at `http://192.168.8.106:5000/` (accessible from any browser on the local network)
 - YouTube video downloading via yt-dlp
 - Dual VLC instance management (karaoke player + filler music with crossfading)
 - Audio output switching between HDMI and USB mixer (restarts VLC instances)

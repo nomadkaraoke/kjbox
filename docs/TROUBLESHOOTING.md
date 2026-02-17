@@ -107,17 +107,33 @@ ssh nomadpi 'docker logs --tail 100 <container-name>'
 
 ## Network Issues
 
+NomadPi uses dual-interface networking: Ethernet (preferred, metric 100) and WiFi (fallback, metric 200). Both use DHCP. See [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md) § Network Configuration for full details and management commands.
+
 ```bash
-# Check network status
-ssh nomadpi 'ip addr show'
+# Check IP addresses on both interfaces
+ssh nomadpi 'ip -4 addr show eth0; ip -4 addr show wlan0'
+
+# Check routing table (lower metric = preferred route)
+ssh nomadpi 'ip route show'
+
+# Test internet connectivity
 ssh nomadpi 'ping -c 3 8.8.8.8'
 
-# Restart NetworkManager
-ssh nomadpi 'systemctl restart NetworkManager'
+# Renew DHCP lease (e.g. after switching routers)
+ssh nomadpi 'dhclient -r eth0 && dhclient eth0'
+
+# Restart all networking
+ssh nomadpi 'systemctl restart networking'
 
 # Check WiFi status
 ssh nomadpi 'iwconfig wlan0'
 ```
+
+**Can't find the Pi on the network?**
+1. Check the router's DHCP client list for MAC `E4:5F:01:B5:5D:C0` (Ethernet) or `E4:5F:01:B5:5D:C1` (WiFi)
+2. Scan the subnet: `nmap -sn 192.168.X.0/24`
+3. Try Tailscale: `ssh root@100.66.53.104`
+4. If the Pi is on a different subnet, add a temporary IP alias on your Mac to reach it (see Changelog 2026-02-17)
 
 ## SSH Connection Issues
 
