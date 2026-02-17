@@ -51,6 +51,8 @@ def mock_config(tmp_media_dir):
         "websockify_port": 6080,
         "vnc_target": "localhost:5900",
         "websockify_enabled": False,
+        "tls_cert": "",
+        "tls_key": "",
     }
 
 

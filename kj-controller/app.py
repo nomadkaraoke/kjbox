@@ -82,8 +82,13 @@ def start_app():  # pragma: no cover
                 ws_bin = shutil.which('websockify')
             if ws_bin:
                 log_message(f"Starting websockify on :{ws_port} -> {vnc_target}...", cfg)
+                ws_cmd = [ws_bin, str(ws_port), vnc_target]
+                tls_cert = cfg.get('tls_cert', '')
+                tls_key = cfg.get('tls_key', '')
+                if tls_cert and tls_key and os.path.isfile(tls_cert) and os.path.isfile(tls_key):
+                    ws_cmd[1:1] = ['--cert', tls_cert, '--key', tls_key]
                 subprocess.Popen(
-                    [ws_bin, str(ws_port), vnc_target],
+                    ws_cmd,
                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                 )
             else:
@@ -129,8 +134,17 @@ def start_app():  # pragma: no cover
 
     # Start Flask app
     flask_port = cfg.get('flask_port', 80)
-    log_message(f"Starting Flask server on port {flask_port}...", cfg)
-    flask_app.run(host='0.0.0.0', port=flask_port, threaded=True)
+    tls_cert = cfg.get('tls_cert', '')
+    tls_key = cfg.get('tls_key', '')
+    ssl_ctx = None
+    if tls_cert and tls_key and os.path.isfile(tls_cert) and os.path.isfile(tls_key):
+        ssl_ctx = (tls_cert, tls_key)
+        if flask_port == 80:
+            flask_port = 443
+        log_message(f"Starting Flask server on port {flask_port} (HTTPS)...", cfg)
+    else:
+        log_message(f"Starting Flask server on port {flask_port}...", cfg)
+    flask_app.run(host='0.0.0.0', port=flask_port, ssl_context=ssl_ctx, threaded=True)
 
 
 if __name__ == '__main__':
