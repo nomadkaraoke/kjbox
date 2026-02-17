@@ -2,6 +2,63 @@
 
 NomadPi system configuration changes. For current configuration details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md).
 
+## 2026-02-17 - DietPi Upgrade: Debian 12 (Bookworm) → Debian 13 (Trixie)
+
+Upgraded DietPi to the latest Debian release following the [official upgrade guide](https://dietpi.com/blog/?p=4014). The upgrade completed successfully but required several post-upgrade fixes.
+
+**Upgrade process:**
+- Ran `dietpi-update` which handled the Bookworm → Trixie transition
+- Hit a dependency blocker: `chromium` and other GTK3 packages depended on `libgtk-3-0` which was renamed to `libgtk-3-0t64` in Trixie (64-bit time_t transition)
+- Resolved by removing blocking packages (`apt-get remove -y lxde chromium chromium-browser galculator libgspell-1-2 libgtksourceview-4-0 libmousepad0 libvte-2.91-0 lxterminal mousepad xarchiver zenity zenoty chromium-common`) then retrying the upgrade
+- Upgrade completed, system rebooted, ran `apt autopurge`
+
+**Post-upgrade fixes required:**
+
+1. **Reinstalled LXDE** — the desktop meta-package and all its components were removed during the GTK3 dependency cleanup
+   ```bash
+   apt-get install -y lxde
+   ```
+
+2. **LightDM autologin** — the upgrade switched from startx-based autologin to LightDM, but autologin wasn't configured
+   ```bash
+   # /etc/lightdm/lightdm.conf
+   [Seat:*]
+   autologin-user=root
+   autologin-session=LXDE
+   user-session=LXDE
+   ```
+
+3. **PAM root autologin** — Trixie's default `/etc/pam.d/lightdm-autologin` blocks root from auto-login. Commented out the blocking line:
+   ```
+   # Was: auth required pam_succeed_if.so user != root quiet_success
+   ```
+
+4. **LXDE autostart** — re-added `@xhost +SI:localuser:dietpi` (lost during LXDE reinstall)
+
+5. **Python venv rebuilt** — Python upgraded from 3.11 to 3.13, breaking the kj-controller venv
+   ```bash
+   apt-get install -y python3.13-venv
+   cd /opt/nomad/kjbox/kj-controller && rm -rf venv && python3 -m venv venv
+   venv/bin/pip install -r requirements.txt
+   ```
+
+6. **auto-deploy.sh execute permission** — git didn't preserve the execute bit (was `100644`, fixed to `100755` in git index)
+
+7. **kj-controller service boot ordering** — changed `WantedBy=multi-user.target` to `WantedBy=graphical.target` in `/etc/systemd/system/kj-controller.service`. The service has `After=graphical.target` ordering, so it needs to be pulled in by `graphical.target` (not `multi-user.target` which starts earlier). This matches `rotation-display.service` which already used `WantedBy=graphical.target`.
+
+**Post-upgrade state:**
+- OS: Debian 13 (Trixie), DietPi v10.0.1
+- Kernel: 6.12.62+rpt-rpi-v8
+- Python: 3.13.5
+- Display manager: LightDM (was startx/xinit)
+- All services boot correctly: kj-controller, rotation-display, kj-autodeploy
+
+**Known issue — USB touchscreen flapping:**
+The Goodix touchscreen controller (WingCool Inc., VID `27c6` PID `0818`) on USB port 1-1.4 disconnects and reconnects every ~5 seconds under kernel 6.12. This was initially mistaken for an HDMI issue (the screen would blank during USB reconnect events). Likely a `hid-multitouch` driver regression or power management change in the new kernel. Workaround: use USB power-only cable (no data) for the touchscreen display. Touch input is not currently needed.
+
+**Power supply issue:**
+The Pi was also experiencing instability (crashes, unreachable via SSH) due to the power supply being shared with too many peripherals. Resolved by adding dedicated power supplies for peripherals.
+
 ## 2026-02-17 - WiFi Disabled
 
 Disabled WiFi to save power and avoid confusion about which network interface is active. The Pi now connects exclusively via Ethernet.

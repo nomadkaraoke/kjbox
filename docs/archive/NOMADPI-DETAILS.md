@@ -243,8 +243,9 @@ ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKlZs39JlgHhMNmr730g5F9ASz5e6JhbOA3Vp+O1+P89
 
 ## 🐧 Operating System
 
-- **Distribution:** DietPi (Debian 12 Bookworm)
+- **Distribution:** DietPi v10.0.1 (Debian 13 Trixie) — upgraded from Debian 12 Bookworm on 2026-02-17
 - **Kernel:** 6.12.62+rpt-rpi-v8 #1 SMP PREEMPT
+- **Python:** 3.13.5 (system)
 - **Architecture:** aarch64 (64-bit ARM)
 - **Init System:** systemd
 
@@ -405,9 +406,20 @@ ExecStart=-/sbin/agetty -a root -J %I $TERM
 
 ### Display Manager
 - **Window Manager:** LXDE (Lightweight X11 Desktop Environment)
-- **Display Manager:** None (direct X session via xinit/startx)
+- **Display Manager:** LightDM (with root autologin) — changed from startx/xinit during Trixie upgrade
 - **X Server:** Xorg
-- **X Display:** :0 on vt1
+- **X Display:** :0 on vt7
+
+### LightDM Configuration
+File: `/etc/lightdm/lightdm.conf`
+```
+[Seat:*]
+autologin-user=root
+autologin-session=LXDE
+user-session=LXDE
+```
+
+**PAM autologin:** Trixie's default `/etc/pam.d/lightdm-autologin` blocks root autologin. The line `auth required pam_succeed_if.so user != root quiet_success` must be commented out for root autologin to work.
 
 ### LXDE Desktop Components
 **Autostart:** `/etc/xdg/lxsession/LXDE/autostart`
@@ -415,7 +427,7 @@ ExecStart=-/sbin/agetty -a root -J %I $TERM
 @lxpanel --profile LXDE
 @pcmanfm --desktop --profile LXDE
 @xscreensaver -no-splash
-xhost +SI:localuser:dietpi
+@xhost +SI:localuser:dietpi
 ```
 **Note:** The `xhost` line grants the `dietpi` user X11 display access, required for VLC (which runs as `dietpi` via the root-user workaround).
 
@@ -989,6 +1001,8 @@ ssh nomadpi 'docker system prune -a'
 - `/etc/bluetooth/main.conf` - Bluetooth configuration
 
 ### Display & Desktop
+- `/etc/lightdm/lightdm.conf` - LightDM config (autologin-user=root, session=LXDE)
+- `/etc/pam.d/lightdm-autologin` - PAM autologin policy (root autologin requires commenting out user!=root line)
 - `/etc/X11/xinit/xinitrc` - X session startup
 - `/etc/xdg/lxsession/LXDE/autostart` - LXDE autostart (includes xhost grant for dietpi)
 - `/var/log/Xorg.0.log` - X server log

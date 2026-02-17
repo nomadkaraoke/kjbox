@@ -76,6 +76,28 @@ ssh nomadpi 'systemctl restart vncserver-x11-serviced'
 
 ## Desktop Not Starting
 
+**Check LightDM (display manager):**
+```bash
+# Check if LightDM is running
+ssh nomadpi 'systemctl status lightdm'
+
+# Check LightDM logs for auth failures
+ssh nomadpi 'cat /var/log/lightdm/lightdm.log | tail -30'
+
+# Check xsession errors
+ssh nomadpi 'tail -20 /root/.xsession-errors'
+
+# Restart LightDM
+ssh nomadpi 'systemctl restart lightdm'
+```
+
+**Common causes after OS upgrade:**
+- LightDM autologin not configured: check `/etc/lightdm/lightdm.conf` has `autologin-user=root` and `autologin-session=LXDE`
+- PAM blocks root autologin (Trixie default): check `/etc/pam.d/lightdm-autologin` — the line `auth required pam_succeed_if.so user != root quiet_success` must be commented out
+- LXDE not installed: `apt-get install -y lxde`
+- xsession-errors says "no session managers, no window managers": LXDE packages missing
+
+**Check DietPi autostart mode:**
 ```bash
 # Check autostart mode
 ssh nomadpi 'cat /boot/dietpi/.dietpi-autostart_index'
@@ -86,6 +108,24 @@ ssh nomadpi '/boot/dietpi/dietpi-autostart 2'
 # Restart getty to apply changes
 ssh nomadpi 'systemctl restart getty@tty1'
 ```
+
+## Services Not Starting After OS Upgrade
+
+**Python venv broken (ModuleNotFoundError):**
+Major Python version upgrades (e.g., 3.11 → 3.13) invalidate the virtual environment. Rebuild it:
+```bash
+ssh nomadpi 'apt-get install -y python3-venv && cd /opt/nomad/kjbox/kj-controller && rm -rf venv && python3 -m venv venv && venv/bin/pip install -r requirements.txt'
+ssh nomadpi 'systemctl restart kj-controller'
+```
+
+**auto-deploy.sh permission denied:**
+Git doesn't preserve execute bits unless explicitly set. After a `git pull`:
+```bash
+ssh nomadpi 'chmod +x /opt/nomad/kjbox/kj-controller/auto-deploy.sh && systemctl restart kj-autodeploy'
+```
+
+**kj-controller not auto-starting at boot (no journal entries):**
+Check `WantedBy=` in the service file. Services with `After=graphical.target` should use `WantedBy=graphical.target` (not `multi-user.target`), otherwise systemd may not start them correctly.
 
 ## Docker Containers Not Running
 
