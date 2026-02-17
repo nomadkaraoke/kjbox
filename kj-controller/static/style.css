@@ -329,6 +329,71 @@ body {
 .overlay-cancel-btn { background-color: #252525; border: 1px solid #2a2a2a; color: #888; box-shadow: none; }
 .overlay-cancel-btn:hover { background-color: #333; color: #e5e5e5; box-shadow: none; }
 
+/* --- VNC Preview --- */
+
+.vnc-thumbnail {
+    width: 200px;
+    height: 112px;
+    background-color: #0f0f0f;
+    border: 1px solid #2a2a2a;
+    border-radius: 6px;
+    overflow: hidden;
+}
+.vnc-thumbnail canvas {
+    width: 100% !important;
+    height: 100% !important;
+}
+.vnc-status {
+    font-size: 0.75em;
+    color: #666;
+    margin-top: 4px;
+}
+.vnc-status.connected { color: #22c55e; }
+.vnc-status.error { color: #ef4444; }
+.vnc-password-form {
+    display: flex;
+    gap: 6px;
+    margin-top: 6px;
+    align-items: center;
+}
+.vnc-password-form input[type="password"] {
+    width: 140px;
+    padding: 6px 8px;
+    border-radius: 6px;
+    border: 1px solid #2a2a2a;
+    background-color: #0f0f0f;
+    color: #e5e5e5;
+    font-size: 0.8em;
+}
+.vnc-password-form input[type="password"]:focus {
+    border-color: #ff7acc;
+    box-shadow: 0 0 0 2px rgba(255, 122, 204, 0.15);
+    outline: none;
+}
+.vnc-password-form button {
+    font-size: 0.7em;
+    padding: 5px 10px;
+    background-color: #252525;
+    border: 1px solid #2a2a2a;
+    color: #888;
+    box-shadow: none;
+}
+.vnc-password-form button:hover { background-color: #333; color: #e5e5e5; box-shadow: none; }
+.vnc-controls {
+    display: flex;
+    gap: 6px;
+    margin-top: 6px;
+}
+.vnc-btn {
+    font-size: 0.7em;
+    padding: 4px 10px;
+    background-color: #252525;
+    border: 1px solid #2a2a2a;
+    color: #888;
+    box-shadow: none;
+}
+.vnc-btn:hover { background-color: #333; color: #e5e5e5; box-shadow: none; }
+
 /* --- Responsive --- */
 
 @media (max-width: 1024px) {

@@ -49,6 +49,20 @@
                     </div>
                 </div>
             </div>
+            <div class="container" id="vnc-preview-container">
+                <h2>Screen Preview</h2>
+                <div id="vnc-screen" class="vnc-thumbnail"></div>
+                <div id="vnc-status" class="vnc-status">Disconnected</div>
+                <div id="vnc-password-form" class="vnc-password-form">
+                    <input type="password" id="vnc-password" placeholder="VNC password"
+                           onkeyup="if(event.keyCode === 13) connectVnc()">
+                    <button onclick="connectVnc()">Connect</button>
+                </div>
+                <div id="vnc-controls" class="vnc-controls hidden">
+                    <button class="vnc-btn" onclick="disconnectVnc()">Disconnect</button>
+                    <button class="vnc-btn" onclick="forgetVncPassword()">Forget Password</button>
+                </div>
+            </div>
         </div>
 
             <div class="container overlay-panel">
@@ -235,5 +249,121 @@
         };
     </script>
     <script src="/static/app.js"></script>
+
+    <!-- VNC Preview (noVNC ES6 module) -->
+    <script type="module">
+        import RFB from '/static/novnc/core/rfb.js';
+
+        const STORAGE_KEY = 'kj-vnc-password';
+        const RECONNECT_DELAY = 5000;
+        let rfb = null;
+        let reconnectTimer = null;
+
+        const statusEl = document.getElementById('vnc-status');
+        const passwordForm = document.getElementById('vnc-password-form');
+        const passwordInput = document.getElementById('vnc-password');
+        const controlsEl = document.getElementById('vnc-controls');
+
+        function setStatus(text, cls) {
+            statusEl.textContent = text;
+            statusEl.className = 'vnc-status' + (cls ? ' ' + cls : '');
+        }
+
+        function showPasswordForm() {
+            passwordForm.classList.remove('hidden');
+            controlsEl.classList.add('hidden');
+        }
+
+        function showControls() {
+            passwordForm.classList.add('hidden');
+            controlsEl.classList.remove('hidden');
+        }
+
+        window.connectVnc = function(password) {
+            if (rfb) {
+                rfb.disconnect();
+                rfb = null;
+            }
+            clearTimeout(reconnectTimer);
+
+            const pw = password || passwordInput.value;
+            if (!pw) return;
+
+            const wsUrl = 'ws://' + location.hostname + ':6080';
+            setStatus('Connecting...', '');
+
+            try {
+                rfb = new RFB(document.getElementById('vnc-screen'), wsUrl, {
+                    credentials: { password: pw },
+                });
+            } catch (e) {
+                setStatus('Failed to create connection', 'error');
+                showPasswordForm();
+                return;
+            }
+
+            rfb.viewOnly = true;
+            rfb.scaleViewport = true;
+            rfb.qualityLevel = 3;
+            rfb.compressionLevel = 9;
+
+            rfb.addEventListener('connect', function() {
+                setStatus('Connected', 'connected');
+                localStorage.setItem(STORAGE_KEY, pw);
+                showControls();
+                passwordInput.value = '';
+            });
+
+            rfb.addEventListener('disconnect', function(e) {
+                const wasClean = e.detail.clean;
+                rfb = null;
+                if (wasClean) {
+                    setStatus('Disconnected', '');
+                } else {
+                    setStatus('Connection lost - reconnecting...', 'error');
+                    scheduleReconnect();
+                }
+            });
+
+            rfb.addEventListener('securityfailure', function() {
+                localStorage.removeItem(STORAGE_KEY);
+                rfb = null;
+                setStatus('Authentication failed', 'error');
+                showPasswordForm();
+            });
+        };
+
+        window.disconnectVnc = function() {
+            clearTimeout(reconnectTimer);
+            if (rfb) {
+                rfb.disconnect();
+                rfb = null;
+            }
+            setStatus('Disconnected', '');
+            showPasswordForm();
+        };
+
+        window.forgetVncPassword = function() {
+            localStorage.removeItem(STORAGE_KEY);
+            window.disconnectVnc();
+        };
+
+        function scheduleReconnect() {
+            const saved = localStorage.getItem(STORAGE_KEY);
+            if (!saved) {
+                showPasswordForm();
+                return;
+            }
+            reconnectTimer = setTimeout(function() {
+                window.connectVnc(saved);
+            }, RECONNECT_DELAY);
+        }
+
+        // Auto-connect on load if password is saved
+        const saved = localStorage.getItem(STORAGE_KEY);
+        if (saved) {
+            window.connectVnc(saved);
+        }
+    </script>
 </body>
 </html>

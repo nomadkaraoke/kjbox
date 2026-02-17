@@ -39,6 +39,9 @@ def load_config(config_file=None):
         "external_catalog_db": os.path.join(APP_DIR, 'external_media.db'),
         "external_file_list": "",
         "external_media_mount": "",
+        "websockify_port": 6080,
+        "vnc_target": "localhost:5900",
+        "websockify_enabled": True,
     }
     if os.path.exists(config_file):
         try:
