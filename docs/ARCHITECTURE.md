@@ -12,6 +12,7 @@ KJ Controller is a web-based karaoke show management application. A Flask backen
 └─────────────────┘                    │  routes.py (Blueprint)           │
                                        │  media.py (MediaIndex)           │
                                        │  vlc.py (VLCManager)             │
+                                       │  overlay.py (OverlayManager)     │
                                        │  config.py / utils.py            │
                                        │                                  │
                                        │  ┌────────────┐ ┌────────────┐  │
@@ -26,7 +27,16 @@ KJ Controller is a web-based karaoke show management application. A Flask backen
                                                 │
                                        ┌────────▼──────────────┐
                                        │  Display (Fullscreen)  │
-                                       └────────────────────────┘
+                                       └───────────────┬────────┘
+                                                       │
+                           ┌───────────────────────────┘
+                           │  overlays.json
+                           ▼
+                  ┌─────────────────────┐
+                  │  Overlay Engine      │  Separate process (systemd)
+                  │  desktop/            │  pygame-ce, 30fps render loop
+                  │  overlay_engine.py   │  One X11 window per overlay
+                  └─────────────────────┘
 ```
 
 ## Module Structure
@@ -40,13 +50,15 @@ KJ Controller is a web-based karaoke show management application. A Flask backen
 | `vlc.py` | ~260 | `VLCManager` class: launch, command, fade, play, restart, monitor |
 | `catalog.py` | ~230 | `ExternalCatalog` class: SQLite FTS5 search over external media |
 | `zip_playback.py` | ~50 | `ZipPlayback` class: CDG+MP3 ZIP extraction for VLC |
-| `routes.py` | ~350 | Flask Blueprint with all 18 route handlers |
+| `overlay.py` | ~100 | `OverlayManager` class: CRUD, toggle, karaoke_playing state, JSON persistence |
+| `routes.py` | ~420 | Flask Blueprint with all 25 route handlers |
 
 ### Dependency Flow
 
 ```
-app.py → config.py, media.py, vlc.py, catalog.py, zip_playback.py, routes.py, utils.py
-routes.py → config.py, utils.py (accesses media/vlc/catalog/zip_playback via current_app)
+app.py → config.py, media.py, vlc.py, catalog.py, zip_playback.py, overlay.py, routes.py, utils.py
+routes.py → config.py, utils.py (accesses media/vlc/catalog/zip_playback/overlay_manager via current_app)
+overlay.py → (stdlib only: json, os, uuid, tempfile)
 media.py → config.py, utils.py
 vlc.py → config.py, utils.py
 catalog.py → (stdlib only: sqlite3, os, re)
@@ -66,6 +78,8 @@ utils.py → (stdlib only)
 | Audio device | `VLCManager.audio_device` | `current_app.vlc` |
 | External catalog | `ExternalCatalog` (SQLite DB) | `current_app.catalog` |
 | ZIP extraction | `ZipPlayback._temp_dir` | `current_app.zip_playback` |
+| Overlay configs | `OverlayManager` (overlays.json) | `current_app.overlay_manager` |
+| Karaoke playing flag | `OverlayManager.karaoke_playing` | `current_app.overlay_manager` |
 
 ## REST API
 
@@ -89,6 +103,13 @@ utils.py → (stdlib only)
 | GET | `/search` | FTS5 full-text search over external catalog |
 | GET | `/catalog/stats` | Catalog availability, total count, format breakdown |
 | POST | `/catalog/build` | Build/rebuild catalog from file list |
+| GET | `/overlays` | List all configured overlays |
+| POST | `/overlays` | Create a new overlay |
+| GET | `/overlays/<id>` | Get a single overlay by ID |
+| PUT | `/overlays/<id>` | Update an existing overlay |
+| DELETE | `/overlays/<id>` | Delete an overlay |
+| POST | `/overlays/<id>/toggle` | Toggle overlay enabled state |
+| POST | `/overlays/<id>/toggle-video` | Toggle overlay show-over-video state |
 
 ## Key Design Decisions
 
@@ -118,6 +139,9 @@ A stateful class holding process handles, volume levels, and playback state. All
 
 ### CDG+MP3 ZIP Playback
 `ZipPlayback` extracts CDG+MP3 ZIP files to a temp directory. VLC is given the `.mp3` path and auto-discovers the matching `.cdg` in the same directory for lyrics/graphics overlay. ZIP entries are validated against path traversal (`..` or absolute paths). Extracted files are chmod'd world-readable so VLC (running as `dietpi` user) can access them. The temp dir is cleaned up before each new extraction.
+
+### Dynamic Overlay System
+The overlay system uses a three-component architecture: (1) the KJ Controller web UI for configuration, (2) the Flask backend (`overlay.py`) for CRUD and state management, and (3) a standalone overlay engine (`desktop/overlay_engine.py`) for rendering. The engine runs as a separate systemd service (`overlay-display.service`) with a 30fps pygame-ce render loop, creating one borderless always-on-top X11 window per enabled overlay. Communication between the Flask backend and the engine is via a shared JSON file (`data/overlays.json`) polled by mtime every ~1 second. This avoids coupling the render loop to Flask's request-response model and matches the existing pattern of the rotation-display service. Five overlay types are supported: `ticker` (scrolling text bar), `static_text`, `image`, `countdown`, and `qr_code`. Each overlay has an independent `show_over_video` flag — when false, it auto-hides during karaoke playback and auto-shows when playback stops. The `karaoke_playing` state is set by the play/control routes and a `VLCManager.on_karaoke_end` callback.
 
 ## Frontend Architecture
 
