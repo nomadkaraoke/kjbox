@@ -39,6 +39,7 @@ kjbox/
     DEVELOPMENT.md             # Local setup and dev workflow
     TESTING.md                 # Test conventions and coverage
     AUDIO.md                   # Audio config: HDMI/ALSA, device switching, live event routing
+    MINIPC-SETUP.md            # Setup guide for deploying to a new x86 mini PC
     TROUBLESHOOTING.md         # Operations runbook: troubleshooting, common tasks
     CHANGELOG.md               # NomadPi system configuration change log
     archive/
@@ -79,6 +80,7 @@ See [kj-controller/README.md](kj-controller/README.md) for setup and usage.
 
 NomadPi documentation is split by topic:
 
+- **[docs/MINIPC-SETUP.md](docs/MINIPC-SETUP.md)** - Setup guide for deploying to a new x86 mini PC
 - **[docs/AUDIO.md](docs/AUDIO.md)** - Audio configuration (HDMI with custom EDID, ALSA, USB mixer, live event routing)
 - **[docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)** - Troubleshooting guides and common Pi tasks
 - **[docs/CHANGELOG.md](docs/CHANGELOG.md)** - System configuration change log
