@@ -2,6 +2,7 @@
 
 import os
 import random
+import subprocess
 import threading
 import time
 
@@ -495,3 +496,47 @@ def toggle_overlay_video(overlay_id):
     if not overlay:
         return jsonify({"error": "Overlay not found"}), 404
     return jsonify(overlay)
+
+
+# --- System Control ---
+
+@routes_bp.route('/system/restart-app', methods=['POST'])
+def restart_app():
+    """Restarts the kj-controller service via systemctl."""
+    cfg = current_app.kj_config
+    log_message("System: restart-app requested from web UI.", cfg)
+
+    def do_restart():
+        time.sleep(1)
+        subprocess.run(['systemctl', 'restart', 'kj-controller'])
+
+    threading.Thread(target=do_restart, daemon=True).start()
+    return jsonify({"success": True, "message": "Restarting KJ Controller..."})
+
+
+@routes_bp.route('/system/reboot', methods=['POST'])
+def system_reboot():
+    """Reboots the entire system."""
+    cfg = current_app.kj_config
+    log_message("System: reboot requested from web UI.", cfg)
+
+    def do_reboot():
+        time.sleep(1)
+        subprocess.run(['reboot'])
+
+    threading.Thread(target=do_reboot, daemon=True).start()
+    return jsonify({"success": True, "message": "Rebooting system..."})
+
+
+@routes_bp.route('/system/shutdown', methods=['POST'])
+def system_shutdown():
+    """Shuts down the entire system."""
+    cfg = current_app.kj_config
+    log_message("System: shutdown requested from web UI.", cfg)
+
+    def do_shutdown():
+        time.sleep(1)
+        subprocess.run(['shutdown', '-h', 'now'])
+
+    threading.Thread(target=do_shutdown, daemon=True).start()
+    return jsonify({"success": True, "message": "Shutting down system..."})

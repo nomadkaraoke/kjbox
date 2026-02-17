@@ -114,7 +114,7 @@ class TestPlaybackControls:
         expect(app_page.locator("button", has_text="Pause / Resume")).to_be_visible()
 
     def test_restart_button(self, app_page):
-        expect(app_page.locator("button", has_text="Restart")).to_be_visible()
+        expect(app_page.get_by_role("button", name="Restart", exact=True)).to_be_visible()
 
     def test_stop_button(self, app_page):
         expect(app_page.locator("button", has_text="Stop")).to_be_visible()

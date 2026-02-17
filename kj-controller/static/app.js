@@ -817,6 +817,35 @@ async function toggleOverlayEnabled(id) {
     await loadOverlays();
 }
 
+// --- System Control ---
+
+async function systemAction(action, label, extraWarning) {
+    const message = extraWarning
+        ? `${label}\n\n${extraWarning}\n\nAre you sure?`
+        : `${label}\n\nAre you sure?`;
+    if (!confirm(message)) return;
+    log(`System: ${label}...`);
+    const data = await apiCall(`/system/${action}`, {});
+    if (data && data.success) {
+        log(data.message, 'success');
+    }
+}
+
+function restartApp() {
+    systemAction('restart-app', 'Restart KJ Controller',
+        'The web UI will be briefly unavailable while the service restarts.');
+}
+
+function rebootSystem() {
+    systemAction('reboot', 'Reboot System',
+        'The entire system will reboot. This will take about a minute.');
+}
+
+function shutdownSystem() {
+    systemAction('shutdown', 'Shut Down System',
+        'The system will power off completely. You will need physical access to turn it back on.');
+}
+
 // --- Initialization ---
 
 document.addEventListener('DOMContentLoaded', () => {

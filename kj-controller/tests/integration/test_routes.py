@@ -543,3 +543,39 @@ def test_status_with_vlc_enabled(flask_test_client, flask_app, mocker):
     assert data["time"] == 42
     assert data["length"] == 200
     assert data["vlc_enabled"] is True
+
+
+# --- System Control Tests ---
+
+def test_system_restart_app(flask_test_client, mocker):
+    """POST /system/restart-app returns success and spawns restart thread."""
+    mock_run = mocker.patch('routes.subprocess.run')
+    mock_thread = mocker.patch('routes.threading.Thread')
+    response = flask_test_client.post('/system/restart-app')
+    assert response.status_code == 200
+    data = json.loads(response.data)
+    assert data["success"] is True
+    mock_thread.assert_called_once()
+    mock_thread.return_value.start.assert_called_once()
+
+
+def test_system_reboot(flask_test_client, mocker):
+    """POST /system/reboot returns success and spawns reboot thread."""
+    mock_run = mocker.patch('routes.subprocess.run')
+    mock_thread = mocker.patch('routes.threading.Thread')
+    response = flask_test_client.post('/system/reboot')
+    assert response.status_code == 200
+    data = json.loads(response.data)
+    assert data["success"] is True
+    mock_thread.assert_called_once()
+
+
+def test_system_shutdown(flask_test_client, mocker):
+    """POST /system/shutdown returns success and spawns shutdown thread."""
+    mock_run = mocker.patch('routes.subprocess.run')
+    mock_thread = mocker.patch('routes.threading.Thread')
+    response = flask_test_client.post('/system/shutdown')
+    assert response.status_code == 200
+    data = json.loads(response.data)
+    assert data["success"] is True
+    mock_thread.assert_called_once()

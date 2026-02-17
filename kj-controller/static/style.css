@@ -100,6 +100,13 @@ button:active { transform: scale(0.97); }
 .rescan-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 .folder-btn { font-size: 0.7em; padding: 4px 10px; background-color: #252525; border: 1px solid #2a2a2a; color: #888; box-shadow: none; }
 .folder-btn:hover { background-color: #333; color: #e5e5e5; box-shadow: none; }
+.system-controls .button-group { justify-content: flex-start; }
+.system-btn { background-color: #252525; color: #888; border: 1px solid #2a2a2a; font-size: 0.8em; padding: 7px 14px; box-shadow: none; }
+.system-btn:hover { background-color: #333; color: #e5e5e5; box-shadow: none; }
+.system-btn-warn { color: #f59e0b; border-color: rgba(245, 158, 11, 0.3); }
+.system-btn-warn:hover { background-color: rgba(245, 158, 11, 0.15); color: #fbbf24; }
+.system-btn-danger { color: #ef4444; border-color: rgba(239, 68, 68, 0.3); }
+.system-btn-danger:hover { background-color: rgba(239, 68, 68, 0.15); color: #f87171; }
 
 /* --- Range Sliders --- */
 
