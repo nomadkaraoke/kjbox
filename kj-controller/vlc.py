@@ -26,6 +26,7 @@ class VLCManager:
         self.last_seek_time = 0
         self.audio_error = False
         self.audio_device = config.get('default_audio_device', 'hdmiout')
+        self.on_karaoke_end = None  # Optional callback when karaoke ends
 
     def launch_instance(self, name, port, password, media_file=None, loop=False):
         """Launches a VLC instance with the HTTP interface enabled."""
@@ -260,4 +261,9 @@ class VLCManager:
                 log_message("Karaoke video finished playing.", self.config)
                 self.karaoke_active = False
                 self.current_playing_path = None
+                if self.on_karaoke_end:
+                    try:
+                        self.on_karaoke_end()
+                    except Exception:
+                        pass
                 self.fade_in_filler()

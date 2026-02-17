@@ -10,6 +10,7 @@ from flask import Flask
 from catalog import ExternalCatalog
 from config import is_pi, load_config
 from media import MediaIndex
+from overlay import OverlayManager
 from routes import routes_bp
 from utils import log_message
 from vlc import VLCManager
@@ -25,6 +26,8 @@ def create_app(config=None):
     flask_app.vlc = VLCManager(cfg, enabled=False if config else None)
     flask_app.catalog = ExternalCatalog(cfg)
     flask_app.zip_playback = ZipPlayback(cfg)
+    overlay_path = cfg.get('overlays_path') if config else None
+    flask_app.overlay_manager = OverlayManager(config_path=overlay_path)
     flask_app.register_blueprint(routes_bp)
     return flask_app
 
@@ -55,6 +58,10 @@ def start_app():  # pragma: no cover
     else:
         log_message("WARNING: No filler music track configured or found.", cfg)
 
+    # Create shared overlay manager
+    overlay_mgr = OverlayManager()
+    vlc.on_karaoke_end = lambda: overlay_mgr.set_karaoke_playing(False)
+
     # Pi-specific setup
     if is_pi():
         log_message("Running on NomadPi - enabling VLC and X11 setup.", cfg)
@@ -73,6 +80,7 @@ def start_app():  # pragma: no cover
     flask_app.vlc = vlc
     flask_app.catalog = ExternalCatalog(cfg)
     flask_app.zip_playback = ZipPlayback(cfg)
+    flask_app.overlay_manager = overlay_mgr
     flask_app.register_blueprint(routes_bp)
 
     # Log external catalog status

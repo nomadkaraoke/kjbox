@@ -1,0 +1,17 @@
+[Unit]
+Description=NomadPi Overlay Display Engine
+After=graphical.target
+Wants=graphical.target
+
+[Service]
+Type=simple
+User=root
+Environment=DISPLAY=:0
+Environment=SDL_VIDEODRIVER=x11
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/usr/bin/python3 /opt/nomad/kjbox/desktop/overlay_engine.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=graphical.target

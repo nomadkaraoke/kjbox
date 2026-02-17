@@ -47,6 +47,7 @@ def mock_config(tmp_media_dir):
         "external_catalog_db": str(tmp_media_dir / "test_catalog.db"),
         "external_file_list": "",
         "external_media_mount": "",
+        "overlays_path": str(tmp_media_dir / "overlays.json"),
     }
 
 
