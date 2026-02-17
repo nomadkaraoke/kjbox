@@ -31,6 +31,9 @@ Key settings in `config.json`:
 - `flask_port` - web server port (default: 80)
 - `external_file_list` - path to text file listing external media (one path per line)
 - `external_media_mount` - mount point for external media drive (e.g. `/mnt/Nomad4TBOne`)
+- `websockify_port` - WebSocket proxy port for VNC preview (default: 6080)
+- `vnc_target` - RealVNC host:port to proxy to (default: `localhost:5900`)
+- `websockify_enabled` - enable/disable websockify subprocess (default: true, Pi-only)
 
 ## Running the App
 
@@ -40,6 +43,7 @@ python3 app.py
 
 On non-Pi platforms, the app starts in **dev mode**:
 - VLC is disabled (no playback)
+- websockify is not started (VNC preview unavailable)
 - Web UI is served normally
 - Media scanning and indexing work
 - Download functionality works (if yt-dlp is installed)
@@ -94,8 +98,14 @@ kj-controller/
   requirements.txt       # Production dependencies
   requirements-dev.txt   # Test dependencies
   pyproject.toml         # Project metadata and tool config
+  static/
+    style.css            # Extracted CSS (Nomad branding)
+    app.js               # Extracted JS (controls, status polling)
+    novnc/               # noVNC v1.6.0 vendored ES6 library (~56 files)
+      core/rfb.js        # Main RFB client (imported by index.html)
+      vendor/pako/       # Compression library used by noVNC
   templates/
-    index.html           # Web UI (vanilla JS)
+    index.html           # Web UI (vanilla JS + noVNC module)
   tests/
     conftest.py          # Shared fixtures (create_app with test config)
     unit/

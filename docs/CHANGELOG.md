@@ -2,6 +2,24 @@
 
 NomadPi system configuration changes. For current configuration details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md).
 
+## 2026-02-17 - KJ Controller: VNC Screen Preview
+
+Added a live VNC screen preview thumbnail to the KJ Controller web UI. The KJ can now see what's on the Pi's HDMI output directly in the browser without a direct line of sight to the display.
+
+**Architecture:**
+- **websockify** (Python package) runs on the Pi as a WebSocket-to-TCP proxy, listening on port 6080 and forwarding to RealVNC on port 5900
+- **noVNC** v1.6.0 (vendored ES6 library) runs in the browser, connecting via WebSocket to render the VNC framebuffer into a canvas element
+- The thumbnail is 200px wide, view-only, positioned in the left column of the web UI
+
+**Changes Made:**
+1. **websockify subprocess** — started during app startup on Pi only (`is_pi()` = true); logs a warning if the binary is not found
+2. **noVNC vendored** — ~56 ES6 module files in `static/novnc/` (core library + pako compression vendor)
+3. **VNC preview UI** — password input (stored in `localStorage`), connect/disconnect controls, auto-reconnect on disconnect (5-second delay)
+4. **New config keys** — `websockify_port` (default: 6080), `vnc_target` (default: `localhost:5900`), `websockify_enabled` (default: true)
+5. **New dependency** — `websockify` added to `requirements.txt`
+
+**RealVNC compatibility note:** RealVNC may need `Encryption=PreferOff` for noVNC to connect, since noVNC does not support RealVNC's proprietary encryption.
+
 ## 2026-02-17 - KJ Controller: Dynamic Overlay System
 
 Added a configurable overlay system for the NomadPi display, managed entirely from the KJ Controller web UI.

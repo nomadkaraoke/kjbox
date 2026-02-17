@@ -48,6 +48,9 @@ def mock_config(tmp_media_dir):
         "external_file_list": "",
         "external_media_mount": "",
         "overlays_path": str(tmp_media_dir / "overlays.json"),
+        "websockify_port": 6080,
+        "vnc_target": "localhost:5900",
+        "websockify_enabled": False,
     }
 
 

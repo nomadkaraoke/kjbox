@@ -68,6 +68,19 @@ def start_app():  # pragma: no cover
         subprocess.run(['xhost', '+SI:localuser:dietpi'], env={**os.environ, 'DISPLAY': ':0'}, capture_output=True)
         os.makedirs('/run/user/1000', exist_ok=True)
         subprocess.run(['chown', 'dietpi:dietpi', '/run/user/1000'], capture_output=True)
+
+        # Start websockify (WebSocket-to-TCP proxy for VNC preview in browser)
+        if cfg.get('websockify_enabled', True):
+            ws_port = cfg.get('websockify_port', 6080)
+            vnc_target = cfg.get('vnc_target', 'localhost:5900')
+            log_message(f"Starting websockify on :{ws_port} -> {vnc_target}...", cfg)
+            try:
+                subprocess.Popen(
+                    ['websockify', str(ws_port), vnc_target],
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                )
+            except FileNotFoundError:
+                log_message("WARNING: websockify not found - VNC preview unavailable.", cfg)
     else:
         log_message("Running in local/dev mode - VLC disabled, web UI and media scanning only.", cfg)
 
