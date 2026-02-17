@@ -2,6 +2,25 @@
 
 NomadPi system configuration changes. For current configuration details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md).
 
+## 2026-02-17 - KJ Controller: Dynamic Overlay System
+
+Added a configurable overlay system for the NomadPi display, managed entirely from the KJ Controller web UI.
+
+**New Components:**
+1. **Overlay Engine** (`desktop/overlay_engine.py`, `overlay_types.py`, `overlay_config.py`) — standalone pygame-ce process that renders overlays as borderless always-on-top X11 windows at 30fps. Supports 5 overlay types: scrolling ticker, static text, image/logo, countdown timer, and QR code.
+2. **Overlay Manager** (`kj-controller/overlay.py`) — CRUD operations and state persistence for overlay configurations via `data/overlays.json`.
+3. **Overlay REST API** — 7 new routes (`GET/POST /overlays`, `GET/PUT/DELETE /overlays/<id>`, `POST /overlays/<id>/toggle`, `POST /overlays/<id>/toggle-video`)
+4. **Web UI panel** — "Overlays" panel in the KJ Controller interface with add/edit/delete forms, toggle switches, type-specific config fields
+5. **Systemd service** (`desktop/overlay-display.service`) — runs the overlay engine as `overlay-display.service`
+
+**Architecture:**
+- KJ Controller backend writes overlay configuration to `data/overlays.json`
+- Overlay engine polls the JSON file (mtime check every ~1s) and syncs overlay windows
+- Each overlay has an independent `show_over_video` toggle: when off, overlays auto-hide during karaoke video playback
+- `karaoke_playing` state is set by the play/control/stop routes and the `VLCManager.on_karaoke_end` callback
+
+**Dependencies:** `pygame-ce`, `qrcode` (pip, overlay engine only)
+
 ## 2026-02-17 - KJ Controller: UI Redesign with Nomad Branding
 
 Redesigned the KJ Controller web interface with Nomad brand identity, responsive layout, and modular file structure.

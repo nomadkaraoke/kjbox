@@ -78,6 +78,7 @@ def handle_play():
 
     log_message(f"Received play request for {os.path.basename(validated)}.", cfg)
     vlc.current_playing_path = validated
+    current_app.overlay_manager.set_karaoke_playing(True)
     threading.Thread(target=vlc.play_video, args=(actual_play_path,)).start()
     return jsonify({"success": True, "message": "Playback initiated."})
 
@@ -112,15 +113,18 @@ def handle_control():
     karaoke_pw = cfg.get('karaoke_vlc_password', 'karaoke')
 
     log_message(f"Received control action: {action}", cfg)
+    overlay_mgr = current_app.overlay_manager
     if action == 'pause_resume':
         vlc.send_command(karaoke_port, karaoke_pw, "pl_pause")
         time.sleep(0.5)
         status = vlc.send_command(karaoke_port, karaoke_pw, "")
         if status and status.get('state') == 'paused':
             vlc.karaoke_active = False
+            overlay_mgr.set_karaoke_playing(False)
             vlc.fade_in_filler()
         else:
             vlc.karaoke_active = True
+            overlay_mgr.set_karaoke_playing(True)
             vlc.fade_out_filler()
     elif action == 'restart':
         vlc.send_command(karaoke_port, karaoke_pw, "seek&val=0")
@@ -130,6 +134,7 @@ def handle_control():
         vlc.karaoke_active = False
         vlc.current_playing_path = None
         vlc.audio_error = False
+        overlay_mgr.set_karaoke_playing(False)
         vlc.fade_in_filler()
 
     return jsonify({"success": True, "message": f"Action '{action}' executed."})
@@ -422,3 +427,71 @@ def set_audio_device():
     save_config_value('default_audio_device', device)
     threading.Thread(target=vlc.restart_instances).start()
     return jsonify({"success": True, "message": f"Switching to {available[device]}. VLC restarting..."})
+
+
+# --- Overlay Management ---
+
+@routes_bp.route('/overlays', methods=['GET'])
+def list_overlays():
+    """Returns all configured overlays."""
+    return jsonify(current_app.overlay_manager.list_overlays())
+
+
+@routes_bp.route('/overlays', methods=['POST'])
+def create_overlay():
+    """Creates a new overlay."""
+    data = request.get_json(silent=True)
+    if not data or 'type' not in data:
+        return jsonify({"error": "type is required"}), 400
+    try:
+        overlay = current_app.overlay_manager.create_overlay(data)
+        return jsonify(overlay), 201
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+
+
+@routes_bp.route('/overlays/<overlay_id>', methods=['GET'])
+def get_overlay(overlay_id):
+    """Returns a single overlay by ID."""
+    overlay = current_app.overlay_manager.get_overlay(overlay_id)
+    if not overlay:
+        return jsonify({"error": "Overlay not found"}), 404
+    return jsonify(overlay)
+
+
+@routes_bp.route('/overlays/<overlay_id>', methods=['PUT'])
+def update_overlay(overlay_id):
+    """Updates an existing overlay."""
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"error": "Request body required"}), 400
+    overlay = current_app.overlay_manager.update_overlay(overlay_id, data)
+    if not overlay:
+        return jsonify({"error": "Overlay not found"}), 404
+    return jsonify(overlay)
+
+
+@routes_bp.route('/overlays/<overlay_id>', methods=['DELETE'])
+def delete_overlay(overlay_id):
+    """Deletes an overlay."""
+    if current_app.overlay_manager.delete_overlay(overlay_id):
+        return jsonify({"success": True})
+    return jsonify({"error": "Overlay not found"}), 404
+
+
+@routes_bp.route('/overlays/<overlay_id>/toggle', methods=['POST'])
+def toggle_overlay(overlay_id):
+    """Toggles the enabled state of an overlay."""
+    overlay = current_app.overlay_manager.toggle_enabled(overlay_id)
+    if not overlay:
+        return jsonify({"error": "Overlay not found"}), 404
+    return jsonify(overlay)
+
+
+@routes_bp.route('/overlays/<overlay_id>/toggle-video', methods=['POST'])
+def toggle_overlay_video(overlay_id):
+    """Toggles the show_over_video state of an overlay."""
+    overlay = current_app.overlay_manager.toggle_show_over_video(overlay_id)
+    if not overlay:
+        return jsonify({"error": "Overlay not found"}), 404
+    return jsonify(overlay)

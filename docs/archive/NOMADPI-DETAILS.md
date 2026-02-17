@@ -714,6 +714,7 @@ A web-based karaoke show management app. Runs directly from the git clone at `/o
 - YouTube video downloading via yt-dlp
 - Dual VLC instance management (karaoke player + filler music with crossfading)
 - Audio output switching between HDMI and USB mixer (restarts VLC instances)
+- Display overlay management (ticker, text, image, countdown, QR code) via 7 REST API routes
 - VLC runs as `dietpi` user (wrapped with `sudo -u dietpi`) since VLC refuses root
 
 **Service:** `kj-controller.service` (enabled, starts on boot)
@@ -759,6 +760,7 @@ ssh nomadpi 'tail -f /opt/nomad/kjbox/kj-controller/kj-controller.log'
 **Auto-Deploy:** `kj-autodeploy.service` (enabled, starts on boot)
 - Polls GitHub every 60 seconds for new commits on `main`
 - On change: `git pull` and restart kj-controller (app runs from git clone, no file copying)
+- Also restarts `overlay-display` service if running
 - **Workflow:** edit on Mac → `git push` → deployed to Pi within ~60 seconds
 ```bash
 # View auto-deploy logs
@@ -902,6 +904,60 @@ systemctl daemon-reload && systemctl enable --now rotation-display
 - **Font rendering issues:** The Pi uses `DejaVu Sans` (not Helvetica, which is not installed). Check available fonts with `fc-list | grep -i dejavu`.
 - **Stale data after deploy:** The auto-deploy script restarts `rotation-display` on new commits, but the `${execpi 30}` cache means data may take up to 30 seconds to refresh after restart.
 
+### Overlay Display
+A pygame-ce based overlay engine that renders configurable overlays (text, images, QR codes, countdowns, scrolling tickers) on the NomadPi display. Managed entirely from the KJ Controller web UI.
+
+**How it works:** The engine runs as a separate process at 30fps. Each enabled overlay gets its own borderless, always-on-top X11 window. Configuration is read from `data/overlays.json`, which is written by the KJ Controller Flask backend and polled by the engine every ~1 second (mtime check). When karaoke video plays, overlays without `show_over_video` are automatically hidden; they reappear when playback stops.
+
+**Overlay types:**
+| Type | Description |
+|------|-------------|
+| `ticker` | Full-width scrolling text bar (configurable speed, position top/bottom) |
+| `static_text` | Fixed text block at any screen position |
+| `image` | PNG/JPG image at any position (aspect-ratio preserved) |
+| `countdown` | Live countdown to a target time with label and expired text |
+| `qr_code` | QR code generated from a URL, with optional label |
+
+**Service:** `overlay-display.service` (must be enabled manually on first setup)
+```bash
+# Check service status
+ssh nomadpi 'systemctl status overlay-display'
+
+# View logs
+ssh nomadpi 'journalctl -u overlay-display -f'
+
+# Restart service
+ssh nomadpi 'systemctl restart overlay-display'
+```
+
+**Dependencies:** `pygame-ce`, `qrcode` (pip)
+
+**Configuration files:**
+- `desktop/overlay_engine.py` — main engine: render loop, config polling, lifecycle management
+- `desktop/overlay_types.py` — overlay type implementations
+- `desktop/overlay_config.py` — schema, defaults, validation, position calculation
+- `data/overlays.json` — overlay configurations (shared state between KJ Controller and engine)
+- `desktop/overlay-display.service` — systemd unit file template
+
+**Setup on a new device:**
+```bash
+# 1. Install dependencies
+pip3 install pygame-ce qrcode[pil]
+
+# 2. Install systemd service
+cp /opt/nomad/kjbox/desktop/overlay-display.service /etc/systemd/system/
+systemctl daemon-reload && systemctl enable --now overlay-display
+```
+
+**CLI usage (for debugging):**
+```bash
+# Run with demo overlays (creates temp config with one of each type)
+ssh nomadpi 'DISPLAY=:0 python3 /opt/nomad/kjbox/desktop/overlay_engine.py --demo'
+
+# Run with a specific config file
+ssh nomadpi 'DISPLAY=:0 python3 /opt/nomad/kjbox/desktop/overlay_engine.py --config /path/to/overlays.json'
+```
+
 ### Chromium Kiosk Watchdog (DISABLED)
 **Status:** **DISABLED** as of 2026-02-15
 
@@ -919,6 +975,7 @@ getty@tty1.service             - Console on tty1
 avahi-daemon.service            - mDNS/DNS-SD (broadcasts nomadpi.local on LAN)
 kj-autodeploy.service          - Auto-deploy kj-controller from GitHub (polls every 60s)
 kj-controller.service          - KJ Controller (karaoke show management, port 80)
+overlay-display.service        - Display overlay engine (pygame-ce, ticker/text/QR/countdown)
 rotation-display.service       - Singer rotation overlay (Google Sheets → conky)
 NetworkManager.service         - Network management
 ssh.service                    - SSH server

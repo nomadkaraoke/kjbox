@@ -553,6 +553,270 @@ async function checkCatalogAvailability() {
     }
 }
 
+// --- Overlays ---
+
+const OVERLAY_TYPE_LABELS = {
+    ticker: 'Ticker',
+    static_text: 'Text',
+    image: 'Image',
+    countdown: 'Timer',
+    qr_code: 'QR',
+};
+
+async function loadOverlays() {
+    try {
+        const response = await fetch('/overlays');
+        const overlays = await response.json();
+        renderOverlayList(overlays);
+    } catch (error) {
+        // Overlay API not available
+    }
+}
+
+function renderOverlayList(overlays) {
+    const list = document.getElementById('overlay-list');
+    list.innerHTML = '';
+    overlays.forEach(overlay => {
+        const item = document.createElement('div');
+        item.className = 'overlay-item';
+
+        // Toggle switch
+        const toggle = document.createElement('label');
+        toggle.className = 'overlay-toggle';
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.checked = overlay.enabled;
+        checkbox.onchange = () => toggleOverlayEnabled(overlay.id);
+        const slider = document.createElement('span');
+        slider.className = 'slider';
+        toggle.appendChild(checkbox);
+        toggle.appendChild(slider);
+
+        // Info
+        const info = document.createElement('div');
+        info.className = 'overlay-item-info';
+        const name = document.createElement('div');
+        name.className = 'overlay-item-name';
+        name.textContent = overlay.name || '(unnamed)';
+        if (overlay.show_over_video) {
+            const icon = document.createElement('span');
+            icon.className = 'overlay-video-icon';
+            icon.textContent = '\u25B6';
+            icon.title = 'Visible over video';
+            name.appendChild(icon);
+        }
+        const meta = document.createElement('div');
+        meta.className = 'overlay-item-meta';
+        const badge = document.createElement('span');
+        badge.className = 'overlay-type-badge';
+        badge.textContent = OVERLAY_TYPE_LABELS[overlay.type] || overlay.type;
+        meta.appendChild(badge);
+        // Show preview text for text-based overlays
+        const previewText = overlay.config?.text || overlay.config?.url || overlay.config?.label || '';
+        if (previewText) {
+            const preview = document.createTextNode(' ' + (previewText.length > 40 ? previewText.slice(0, 40) + '...' : previewText));
+            meta.appendChild(preview);
+        }
+        info.appendChild(name);
+        info.appendChild(meta);
+
+        // Actions
+        const actions = document.createElement('div');
+        actions.className = 'overlay-item-actions';
+        const editBtn = document.createElement('button');
+        editBtn.className = 'overlay-edit-btn';
+        editBtn.textContent = 'Edit';
+        editBtn.onclick = () => editOverlay(overlay);
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'overlay-delete-btn';
+        deleteBtn.textContent = '\u00D7';
+        deleteBtn.onclick = () => deleteOverlay(overlay.id, overlay.name);
+        actions.appendChild(editBtn);
+        actions.appendChild(deleteBtn);
+
+        item.appendChild(toggle);
+        item.appendChild(info);
+        item.appendChild(actions);
+        list.appendChild(item);
+    });
+}
+
+function onOverlayTypeChange() {
+    const type = document.getElementById('overlay-type').value;
+    document.querySelectorAll('.overlay-field').forEach(el => {
+        const types = el.dataset.types.split(',');
+        el.classList.toggle('hidden', !types.includes(type));
+    });
+    // Set sensible default position based on type
+    const posSelect = document.getElementById('overlay-position');
+    if (type === 'ticker') {
+        posSelect.value = 'bottom';
+    } else if (type === 'qr_code') {
+        posSelect.value = 'bottom-right';
+    } else if (type === 'countdown') {
+        posSelect.value = 'top-center';
+    } else if (type === 'static_text') {
+        posSelect.value = 'top-right';
+    } else if (type === 'image') {
+        posSelect.value = 'top-right';
+    }
+}
+
+function onOverlayPositionChange() {
+    const pos = document.getElementById('overlay-position').value;
+    document.getElementById('overlay-custom-pos').classList.toggle('hidden', pos !== 'custom');
+}
+
+function showOverlayForm(overlay) {
+    const form = document.getElementById('overlay-form');
+    form.classList.remove('hidden');
+    document.getElementById('overlay-add-btn').classList.add('hidden');
+
+    // Reset form
+    document.getElementById('overlay-edit-id').value = overlay ? overlay.id : '';
+    document.getElementById('overlay-name').value = overlay ? overlay.name : '';
+    document.getElementById('overlay-type').value = overlay ? overlay.type : 'ticker';
+    document.getElementById('overlay-type').disabled = !!overlay;  // Can't change type when editing
+    document.getElementById('overlay-enabled').checked = overlay ? overlay.enabled : true;
+    document.getElementById('overlay-show-video').checked = overlay ? overlay.show_over_video : false;
+
+    const cfg = overlay ? overlay.config : {};
+    document.getElementById('overlay-text').value = cfg.text || '';
+    document.getElementById('overlay-speed').value = cfg.speed || 2;
+    document.getElementById('overlay-speed-label').textContent = (cfg.speed || 2) + 'x';
+    document.getElementById('overlay-position').value = cfg.position || 'bottom';
+    document.getElementById('overlay-custom-x').value = cfg.custom_x || '';
+    document.getElementById('overlay-custom-y').value = cfg.custom_y || '';
+    document.getElementById('overlay-font-size').value = cfg.font_size || 28;
+    document.getElementById('overlay-text-color').value = cfg.text_color || '#FFFFFF';
+    document.getElementById('overlay-bg-color').value = cfg.bg_color || '#000000';
+    document.getElementById('overlay-bg-opacity').value = cfg.bg_opacity != null ? cfg.bg_opacity : 0.85;
+    document.getElementById('overlay-opacity-label').textContent = Math.round((cfg.bg_opacity != null ? cfg.bg_opacity : 0.85) * 100) + '%';
+    document.getElementById('overlay-image-path').value = cfg.image_path || '';
+    document.getElementById('overlay-image-width').value = cfg.width || 150;
+    document.getElementById('overlay-target-time').value = cfg.target_time || '';
+    document.getElementById('overlay-countdown-label').value = cfg.label || 'Time remaining';
+    document.getElementById('overlay-expired-text').value = cfg.expired_text || 'TIME!';
+    document.getElementById('overlay-qr-url').value = cfg.url || '';
+    document.getElementById('overlay-qr-label').value = cfg.label || '';
+    document.getElementById('overlay-qr-size').value = cfg.size || 180;
+
+    onOverlayTypeChange();
+    onOverlayPositionChange();
+}
+
+function hideOverlayForm() {
+    document.getElementById('overlay-form').classList.add('hidden');
+    document.getElementById('overlay-add-btn').classList.remove('hidden');
+}
+
+function editOverlay(overlay) {
+    showOverlayForm(overlay);
+}
+
+function buildOverlayConfig() {
+    const type = document.getElementById('overlay-type').value;
+    const config = {
+        position: document.getElementById('overlay-position').value,
+    };
+
+    if (config.position === 'custom') {
+        config.custom_x = parseInt(document.getElementById('overlay-custom-x').value) || 0;
+        config.custom_y = parseInt(document.getElementById('overlay-custom-y').value) || 0;
+    }
+
+    if (type === 'ticker' || type === 'static_text') {
+        config.text = document.getElementById('overlay-text').value;
+    }
+    if (type === 'ticker') {
+        config.speed = parseFloat(document.getElementById('overlay-speed').value);
+    }
+    if (type === 'ticker' || type === 'static_text' || type === 'countdown') {
+        config.font_size = parseInt(document.getElementById('overlay-font-size').value) || 28;
+        config.text_color = document.getElementById('overlay-text-color').value;
+        config.bg_color = document.getElementById('overlay-bg-color').value;
+        config.bg_opacity = parseFloat(document.getElementById('overlay-bg-opacity').value);
+        config.padding = 12;
+    }
+    if (type === 'image') {
+        config.image_path = document.getElementById('overlay-image-path').value;
+        config.width = parseInt(document.getElementById('overlay-image-width').value) || 150;
+    }
+    if (type === 'countdown') {
+        config.target_time = document.getElementById('overlay-target-time').value;
+        config.label = document.getElementById('overlay-countdown-label').value;
+        config.expired_text = document.getElementById('overlay-expired-text').value;
+    }
+    if (type === 'qr_code') {
+        config.url = document.getElementById('overlay-qr-url').value;
+        config.label = document.getElementById('overlay-qr-label').value;
+        config.size = parseInt(document.getElementById('overlay-qr-size').value) || 180;
+        config.padding = 10;
+    }
+
+    return config;
+}
+
+async function saveOverlay() {
+    const editId = document.getElementById('overlay-edit-id').value;
+    const data = {
+        type: document.getElementById('overlay-type').value,
+        name: document.getElementById('overlay-name').value,
+        enabled: document.getElementById('overlay-enabled').checked,
+        show_over_video: document.getElementById('overlay-show-video').checked,
+        config: buildOverlayConfig(),
+    };
+
+    let result;
+    if (editId) {
+        // Update existing
+        try {
+            const response = await fetch(`/overlays/${editId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data),
+            });
+            result = await response.json();
+            if (response.ok) {
+                log(`Overlay "${data.name}" updated.`, 'success');
+            } else {
+                log(`Error updating overlay: ${result.error}`, 'error');
+                return;
+            }
+        } catch (error) {
+            log(`Error updating overlay: ${error.message}`, 'error');
+            return;
+        }
+    } else {
+        // Create new
+        result = await apiCall('/overlays', data);
+        if (result && !result.error) {
+            log(`Overlay "${data.name}" created.`, 'success');
+        }
+    }
+
+    hideOverlayForm();
+    await loadOverlays();
+}
+
+async function deleteOverlay(id, name) {
+    if (!confirm(`Delete overlay "${name || id}"?`)) return;
+    try {
+        const response = await fetch(`/overlays/${id}`, { method: 'DELETE' });
+        if (response.ok) {
+            log(`Overlay "${name}" deleted.`, 'success');
+        }
+    } catch (error) {
+        log(`Error deleting overlay: ${error.message}`, 'error');
+    }
+    await loadOverlays();
+}
+
+async function toggleOverlayEnabled(id) {
+    await apiCall(`/overlays/${id}/toggle`, {});
+    await loadOverlays();
+}
+
 // --- Initialization ---
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -573,10 +837,25 @@ document.addEventListener('DOMContentLoaded', () => {
         if (e.key === 'Escape') clearSearch();
     });
 
+    // Overlay slider labels
+    const speedSlider = document.getElementById('overlay-speed');
+    if (speedSlider) {
+        speedSlider.addEventListener('input', () => {
+            document.getElementById('overlay-speed-label').textContent = speedSlider.value + 'x';
+        });
+    }
+    const opacitySlider = document.getElementById('overlay-bg-opacity');
+    if (opacitySlider) {
+        opacitySlider.addEventListener('input', () => {
+            document.getElementById('overlay-opacity-label').textContent = Math.round(opacitySlider.value * 100) + '%';
+        });
+    }
+
     updateStatus();
     updateMediaList();
     updateFillerMusicList();
     loadAudioDevices();
+    loadOverlays();
     checkCatalogAvailability();
     log('Nomad KJ Control initialized.');
 });

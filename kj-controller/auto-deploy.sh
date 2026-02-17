@@ -36,6 +36,7 @@ while true; do
         log "Restarting kj-controller..."
         systemctl restart kj-controller
         systemctl is-active --quiet rotation-display && systemctl restart rotation-display
+        systemctl is-active --quiet overlay-display && systemctl restart overlay-display
         log "Deploy complete (${REMOTE:0:7})"
 
         # Rebuild external catalog if catalog code changed
