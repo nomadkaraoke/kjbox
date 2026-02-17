@@ -197,13 +197,13 @@ class TestNormalizationConsistency:
         assert self._js_normalize(text) == _normalize_for_search(text)
 
     def test_map_injected_to_template(self, flask_test_client):
-        """LATIN_SPECIAL_MAP is rendered into the page as JSON."""
+        """LATIN_SPECIAL_MAP is rendered into the page via KJ_CONFIG."""
         import json, re
         response = flask_test_client.get('/')
         html = response.data.decode('utf-8')
-        # Extract the JSON object assigned to _latinSpecialMap
-        match = re.search(r'const _latinSpecialMap = ({.*?});', html)
-        assert match, "_latinSpecialMap not found in rendered template"
+        # Extract the JSON object from window.KJ_CONFIG = { latinSpecialMap: ... }
+        match = re.search(r'latinSpecialMap:\s*({.*?})\s*\n', html)
+        assert match, "latinSpecialMap not found in rendered template"
         rendered_map = json.loads(match.group(1))
         assert rendered_map == LATIN_SPECIAL_MAP
 
