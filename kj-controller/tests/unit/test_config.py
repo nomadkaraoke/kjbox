@@ -29,6 +29,16 @@ def test_load_config_missing_file_returns_defaults(tmp_path):
     assert config['flask_port'] == 80
 
 
+def test_load_config_includes_vnc_defaults(tmp_path):
+    """VNC and TLS config keys have sensible defaults."""
+    config = load_config(config_file=str(tmp_path / 'nonexistent.json'))
+    assert config['websockify_port'] == 6080
+    assert config['vnc_target'] == 'localhost:5900'
+    assert config['websockify_enabled'] is True
+    assert 'tls_cert' in config
+    assert 'tls_key' in config
+
+
 def test_load_config_merges_user_config(tmp_path):
     config_file = tmp_path / 'config.json'
     config_file.write_text(json.dumps({"flask_port": 9999, "custom_key": "value"}))

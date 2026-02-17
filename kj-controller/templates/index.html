@@ -291,13 +291,16 @@
 
             const wsProto = location.protocol === 'https:' ? 'wss://' : 'ws://';
             const wsUrl = wsProto + location.hostname + ':6080';
+            localStorage.setItem(STORAGE_KEY, pw);
             setStatus('Connecting...', '');
 
             try {
                 rfb = new RFB(document.getElementById('vnc-screen'), wsUrl, {
                     credentials: { password: pw },
+                    wsProtocols: ['binary'],
                 });
             } catch (e) {
+                console.error('[VNC] Connection failed:', e);
                 setStatus('Failed to create connection', 'error');
                 showPasswordForm();
                 return;
@@ -308,17 +311,23 @@
             rfb.qualityLevel = 3;
             rfb.compressionLevel = 9;
 
+            // RA2ne auth requires server key approval (like SSH host key).
+            // Auto-approve since this is a trusted local Pi.
+            rfb.addEventListener('serververification', function() {
+                if (rfb._rfbRSAAESAuthenticationState) {
+                    rfb._rfbRSAAESAuthenticationState.approveServer();
+                }
+            });
+
             rfb.addEventListener('connect', function() {
                 setStatus('Connected', 'connected');
-                localStorage.setItem(STORAGE_KEY, pw);
                 showControls();
                 passwordInput.value = '';
             });
 
             rfb.addEventListener('disconnect', function(e) {
-                const wasClean = e.detail.clean;
                 rfb = null;
-                if (wasClean) {
+                if (e.detail.clean) {
                     setStatus('Disconnected', '');
                 } else {
                     setStatus('Connection lost - reconnecting...', 'error');
@@ -332,6 +341,7 @@
                 setStatus('Authentication failed', 'error');
                 showPasswordForm();
             });
+
         };
 
         window.disconnectVnc = function() {

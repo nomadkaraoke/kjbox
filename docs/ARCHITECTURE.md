@@ -170,6 +170,17 @@ The KJ Controller web UI includes a live thumbnail of the Pi's screen via an emb
 | `websockify_port` | `6080` | Port websockify listens on (WebSocket) |
 | `vnc_target` | `localhost:5900` | RealVNC host:port to proxy to |
 | `websockify_enabled` | `true` | Set `false` to disable websockify |
+| `tls_cert` | `certs/cert.pem` | TLS certificate path (enables HTTPS + WSS) |
+| `tls_key` | `certs/key.pem` | TLS private key path |
+
+### TLS / HTTPS
+
+When `tls_cert` and `tls_key` point to valid files, both Flask and websockify serve over TLS:
+- Flask auto-switches from port 80 to 443 (HTTPS)
+- websockify gets `--cert` and `--key` flags (WSS on port 6080)
+- The browser uses `wss://` instead of `ws://` (auto-detected from `location.protocol`)
+
+TLS is required because RealVNC's RA2ne authentication uses `crypto.subtle`, which browsers only expose in secure contexts (HTTPS). Certificates are generated via `mkcert` for locally-trusted development/LAN use.
 
 ### Platform Behavior
 
@@ -178,7 +189,8 @@ The KJ Controller web UI includes a live thumbnail of the Pi's screen via an emb
 
 ### RealVNC Compatibility
 
-RealVNC may need `Encryption=PreferOff` set in its configuration for noVNC compatibility, since noVNC does not support RealVNC's proprietary encryption.
+- `Encryption=PreferOff` must be set in RealVNC config (`/root/.vnc/config.d/vncserver-x11`) — websockify handles TLS termination, so the VNC-level connection between websockify and RealVNC is unencrypted localhost traffic.
+- RealVNC uses RA2ne (RSA-AES, auth type 6) even with `Authentication=VncAuth` set — the setting doesn't remove RA2ne from the offered auth types. The noVNC client handles this via a `serververification` event handler that auto-approves the server's RSA key (similar to SSH host key acceptance on a trusted LAN).
 
 ## Frontend Architecture
 
