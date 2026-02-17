@@ -3,6 +3,7 @@
 import os
 import re
 import sqlite3
+import unicodedata
 
 
 def parse_karaoke_filename(filename):
@@ -59,6 +60,29 @@ def _detect_format(filename):
         '.cdg': 'cdg',
     }
     return format_map.get(ext, ext.lstrip('.') if ext else 'unknown')
+
+
+_LATIN_SPECIAL = {
+    'ø': 'o', 'Ø': 'O', 'æ': 'ae', 'Æ': 'AE', 'ß': 'ss',
+    'ð': 'd', 'Ð': 'D', 'ł': 'l', 'Ł': 'L', 'ı': 'i',
+    'đ': 'd', 'Đ': 'D', 'þ': 'th', 'Þ': 'Th',
+}
+_LATIN_SPECIAL_RE = re.compile('[' + re.escape(''.join(_LATIN_SPECIAL)) + ']')
+
+
+def _normalize_for_search(text):
+    """Normalize text for search: strip diacritics and map special Latin chars.
+
+    Handles two categories:
+    1. NFD-decomposable diacritics (é→e, ï→i, ñ→n, ç→c, etc.)
+    2. Non-decomposable Latin chars (ø→o, æ→ae, ß→ss, ð→d, ł→l, ı→i, etc.)
+    """
+    if not text:
+        return text
+    s = unicodedata.normalize('NFD', text)
+    s = re.sub(r'[\u0300-\u036f]', '', s)
+    s = _LATIN_SPECIAL_RE.sub(lambda m: _LATIN_SPECIAL[m.group()], s)
+    return s
 
 
 class ExternalCatalog:
@@ -152,6 +176,9 @@ class ExternalCatalog:
         conn = self._get_conn()
         self.init_schema()
 
+        # Drop INSERT trigger — we populate FTS manually with normalized text
+        conn.execute("DROP TRIGGER IF EXISTS media_ai")
+
         # Clear existing data
         conn.execute("DELETE FROM media")
         conn.execute("DELETE FROM media_fts")
@@ -180,36 +207,55 @@ class ExternalCatalog:
                 batch.append((file_path, filename, folder, disc_id, artist, title, fmt))
 
                 if len(batch) >= batch_size:
-                    conn.executemany(
-                        "INSERT OR IGNORE INTO media (path, filename, folder, disc_id, artist, title, format) "
-                        "VALUES (?, ?, ?, ?, ?, ?, ?)",
-                        batch
-                    )
-                    conn.commit()
+                    self._flush_batch(conn, batch)
                     total += len(batch)
                     if callback:
                         callback(total)
                     batch = []
 
         if batch:
-            conn.executemany(
-                "INSERT OR IGNORE INTO media (path, filename, folder, disc_id, artist, title, format) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?)",
-                batch
-            )
-            conn.commit()
+            self._flush_batch(conn, batch)
             total += len(batch)
             if callback:
                 callback(total)
 
+        # Recreate INSERT trigger for any future individual inserts
+        conn.execute("""
+            CREATE TRIGGER IF NOT EXISTS media_ai AFTER INSERT ON media BEGIN
+                INSERT INTO media_fts(rowid, artist, title, disc_id)
+                VALUES (new.id, new.artist, new.title, new.disc_id);
+            END
+        """)
+
         return total
+
+    def _flush_batch(self, conn, batch):
+        """Insert batch into media table and normalized text into FTS index."""
+        conn.executemany(
+            "INSERT OR IGNORE INTO media (path, filename, folder, disc_id, artist, title, format) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            batch
+        )
+        # Get IDs and insert normalized text into FTS
+        paths = [row[0] for row in batch]
+        placeholders = ','.join('?' * len(paths))
+        rows = conn.execute(
+            f"SELECT id, artist, title, disc_id FROM media WHERE path IN ({placeholders})",
+            paths
+        ).fetchall()
+        conn.executemany(
+            "INSERT INTO media_fts(rowid, artist, title, disc_id) VALUES (?, ?, ?, ?)",
+            [(r[0], _normalize_for_search(r[1] or ''), _normalize_for_search(r[2] or ''),
+              _normalize_for_search(r[3] or '')) for r in rows]
+        )
+        conn.commit()
 
     def search(self, query, limit=50, offset=0):
         """Full-text search using FTS5 MATCH.
 
         Returns list of dicts with path, filename, folder, disc_id, artist, title, format.
         """
-        fts_query = _fts5_safe_query(query)
+        fts_query = _fts5_safe_query(_normalize_for_search(query))
         if not fts_query:
             return []
 

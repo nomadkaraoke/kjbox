@@ -604,14 +604,21 @@
             return 'other';
         }
 
-        function stripDiacritics(str) {
-            return str.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        function normalizeForSearch(str) {
+            // NFD decompose + strip combining marks (handles é→e, ï→i, ñ→n, etc.)
+            let s = str.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+            // Handle non-decomposable Latin characters (ø→o, æ→ae, ß→ss, etc.)
+            s = s.replace(/[øØæÆßðÐłŁıđĐþÞ]/g, m => ({
+                'ø':'o','Ø':'O','æ':'ae','Æ':'AE','ß':'ss',
+                'ð':'d','Ð':'D','ł':'l','Ł':'L','ı':'i','đ':'d','Đ':'D','þ':'th','Þ':'Th'
+            })[m]);
+            return s;
         }
 
         function filterLocalMedia(query) {
-            const terms = stripDiacritics(query.toLowerCase()).split(/\s+/).filter(t => t);
+            const terms = normalizeForSearch(query.toLowerCase()).split(/\s+/).filter(t => t);
             return localMediaItems.filter(item => {
-                const text = stripDiacritics(((item.display_name || '') + ' ' + (item.channel || '')).toLowerCase());
+                const text = normalizeForSearch(((item.display_name || '') + ' ' + (item.channel || '')).toLowerCase());
                 return terms.every(term => text.includes(term));
             });
         }

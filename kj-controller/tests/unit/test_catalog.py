@@ -5,7 +5,7 @@ import sqlite3
 
 import pytest
 
-from catalog import ExternalCatalog, parse_karaoke_filename, _fts5_safe_query, _detect_format
+from catalog import ExternalCatalog, parse_karaoke_filename, _fts5_safe_query, _detect_format, _normalize_for_search
 
 
 # --- parse_karaoke_filename tests ---
@@ -75,6 +75,74 @@ class TestFts5SafeQuery:
         result = _fts5_safe_query("bon! jovi?")
         assert '"bon"' in result
         assert '"jovi"' in result
+
+
+# --- _normalize_for_search tests (real karaoke catalog examples) ---
+
+class TestNormalizeForSearch:
+    """Test search normalization using real artist/song names from karaoke catalog."""
+
+    # NFD-decomposable diacritics (combining marks)
+    def test_diaeresis(self):
+        assert _normalize_for_search("Maxïmo Park") == "Maximo Park"
+
+    def test_acute(self):
+        assert _normalize_for_search("Beyoncé") == "Beyonce"
+
+    def test_tilde(self):
+        assert _normalize_for_search("Señor Coconut") == "Senor Coconut"
+
+    def test_cedilla(self):
+        assert _normalize_for_search("Convicção") == "Conviccao"
+
+    def test_circumflex(self):
+        assert _normalize_for_search("Derê") == "Dere"
+
+    def test_ring_above(self):
+        assert _normalize_for_search("Blå Øjne") == "Bla Ojne"
+
+    def test_grave(self):
+        assert _normalize_for_search("Phèdre") == "Phedre"
+
+    def test_caron(self):
+        assert _normalize_for_search("Netšajeva") == "Netsajeva"
+
+    # Non-decomposable Latin characters
+    def test_o_stroke(self):
+        assert _normalize_for_search("MØ") == "MO"
+        assert _normalize_for_search("Eivør") == "Eivor"
+        assert _normalize_for_search("Kyrkjebø") == "Kyrkjebo"
+
+    def test_ae_ligature(self):
+        assert _normalize_for_search("Ænima") == "AEnima"
+        assert _normalize_for_search("Lækker") == "Laekker"
+
+    def test_sharp_s(self):
+        assert _normalize_for_search("Straßenbande") == "Strassenbande"
+
+    def test_eth(self):
+        assert _normalize_for_search("Daði Freyr") == "Dadi Freyr"
+
+    def test_l_stroke(self):
+        assert _normalize_for_search("biały") == "bialy"
+
+    def test_dotless_i(self):
+        assert _normalize_for_search("Yalnız") == "Yalniz"
+
+    # Combined: diacritics + non-decomposable in same string
+    def test_mixed(self):
+        assert _normalize_for_search("Millionär") == "Millionar"  # ä decomposes, no special chars
+        assert _normalize_for_search("Süsser") == "Susser"  # ü decomposes
+
+    # Edge cases
+    def test_empty(self):
+        assert _normalize_for_search("") == ""
+
+    def test_none(self):
+        assert _normalize_for_search(None) is None
+
+    def test_ascii_passthrough(self):
+        assert _normalize_for_search("Bon Jovi") == "Bon Jovi"
 
 
 # --- _detect_format tests ---
@@ -254,23 +322,62 @@ class TestExternalCatalog:
         catalog.close()
         catalog.close()  # Should not raise
 
-    def test_search_diacritics_match(self, mock_config, tmp_path):
-        """FTS5 unicode61 tokenizer matches diacritics to ASCII equivalents."""
+    def test_search_diacritics_combining_marks(self, mock_config, tmp_path):
+        """FTS5 matches ASCII queries against combining diacritical marks (é, ï, ñ, etc.)."""
         file_list = tmp_path / "diacritics.txt"
         file_list.write_text(
             "/path/KCD-102989 - Maxïmo Park - Books From Boxes.zip\n"
             "/path/VEVO-2392 - Beyoncé - Halo.mp4\n"
             "/path/PHK-001 - Señor Coconut - Smoke On The Water.zip\n"
+            "/path/RWND-028 - Fresno - Convicção.mp4\n"
+            "/path/GMRO-198 - Soweto - Derê.mp4\n"
+            "/path/PMK-0439 - Ska-P - Ñapa Es.zip\n"
         )
         catalog = ExternalCatalog(mock_config)
         catalog.build_from_file_list(str(file_list))
-        # ASCII query should match diacritical artist names
+        # ASCII query matches diacritical names
         assert len(catalog.search("Maximo Park")) >= 1
         assert len(catalog.search("Beyonce")) >= 1
         assert len(catalog.search("Senor")) >= 1
-        # Diacritical query should also match
+        assert len(catalog.search("Conviccao")) >= 1
+        assert len(catalog.search("Dere")) >= 1
+        assert len(catalog.search("Napa")) >= 1
+        # Diacritical query also matches
         assert len(catalog.search("Maxïmo")) >= 1
         assert len(catalog.search("Beyoncé")) >= 1
+        catalog.close()
+
+    def test_search_diacritics_non_decomposable(self, mock_config, tmp_path):
+        """FTS5 matches ASCII queries against ø, æ, ß, ð, ł, ı (non-NFD chars)."""
+        file_list = tmp_path / "latin_special.txt"
+        file_list.write_text(
+            # Real examples from karaoke catalog
+            "/path/BEN-036 - MØ - Blur.mp4\n"
+            "/path/BALKA-0058 - Eivør - Slør.mp4\n"
+            "/path/CARITASD-0376 - Tool - Ænima.mp4\n"
+            "/path/AEK15-03 - Nik & Jay - Lækker.zip\n"
+            "/path/ALERNUS-001 - 187 Straßenbande - Millionär.mp4\n"
+            "/path/KVD-60923 - Daði Freyr - Think About Things.zip\n"
+            "/path/SARUX-406 - Cypis - Gdzie jest biały węgorz.mp4\n"
+            "/path/ALERNUS-019 - Aleyna Tilki - Yalnız Çiçek.mp4\n"
+        )
+        catalog = ExternalCatalog(mock_config)
+        catalog.build_from_file_list(str(file_list))
+        # ø → o
+        assert len(catalog.search("MO Blur")) >= 1, "ø should match o"
+        assert len(catalog.search("Eivor")) >= 1, "ø should match o"
+        assert len(catalog.search("Slor")) >= 1, "ø should match o"
+        # æ → ae
+        assert len(catalog.search("Aenima")) >= 1, "æ should match ae"
+        assert len(catalog.search("Laekker")) >= 1, "æ should match ae"
+        # ß → ss
+        assert len(catalog.search("Strassenbande")) >= 1, "ß should match ss"
+        # ð → d
+        assert len(catalog.search("Dadi Freyr")) >= 1, "ð should match d"
+        # ł → l
+        assert len(catalog.search("bialy")) >= 1, "ł should match l"
+        # ı → i
+        assert len(catalog.search("Yalniz")) >= 1, "ı should match i"
         catalog.close()
 
     def test_search_special_chars_safe(self, mock_config, sample_file_list):
