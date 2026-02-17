@@ -62,12 +62,12 @@ def _detect_format(filename):
     return format_map.get(ext, ext.lstrip('.') if ext else 'unknown')
 
 
-_LATIN_SPECIAL = {
+LATIN_SPECIAL_MAP = {
     'ø': 'o', 'Ø': 'O', 'æ': 'ae', 'Æ': 'AE', 'ß': 'ss',
     'ð': 'd', 'Ð': 'D', 'ł': 'l', 'Ł': 'L', 'ı': 'i',
     'đ': 'd', 'Đ': 'D', 'þ': 'th', 'Þ': 'Th',
 }
-_LATIN_SPECIAL_RE = re.compile('[' + re.escape(''.join(_LATIN_SPECIAL)) + ']')
+LATIN_SPECIAL_MAP_RE = re.compile('[' + re.escape(''.join(LATIN_SPECIAL_MAP)) + ']')
 
 
 def _normalize_for_search(text):
@@ -81,7 +81,7 @@ def _normalize_for_search(text):
         return text
     s = unicodedata.normalize('NFD', text)
     s = re.sub(r'[\u0300-\u036f]', '', s)
-    s = _LATIN_SPECIAL_RE.sub(lambda m: _LATIN_SPECIAL[m.group()], s)
+    s = LATIN_SPECIAL_MAP_RE.sub(lambda m: LATIN_SPECIAL_MAP[m.group()], s)
     return s
 
 

@@ -7,6 +7,7 @@ import time
 
 from flask import Blueprint, current_app, jsonify, render_template, request
 
+from catalog import LATIN_SPECIAL_MAP
 from config import load_config, save_config_value
 from utils import log_message
 
@@ -16,7 +17,7 @@ routes_bp = Blueprint('routes', __name__)
 @routes_bp.route('/')
 def index():
     """Serves the main remote control page."""
-    return render_template('index.html')
+    return render_template('index.html', latin_special_map=LATIN_SPECIAL_MAP)
 
 
 @routes_bp.route('/download', methods=['POST'])

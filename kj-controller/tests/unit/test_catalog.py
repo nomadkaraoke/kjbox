@@ -6,7 +6,7 @@ import unicodedata
 
 import pytest
 
-from catalog import ExternalCatalog, parse_karaoke_filename, _fts5_safe_query, _detect_format, _normalize_for_search
+from catalog import ExternalCatalog, parse_karaoke_filename, _fts5_safe_query, _detect_format, _normalize_for_search, LATIN_SPECIAL_MAP
 from tests.fixtures import (
     KARAOKE_CATALOG_ENTRIES,
     SEARCH_NORMALIZATION_CASES,
@@ -159,6 +159,53 @@ class TestNormalizeForSearch:
 
     def test_ascii_passthrough(self):
         assert _normalize_for_search("Bon Jovi") == "Bon Jovi"
+
+
+class TestNormalizationConsistency:
+    """Verify the JS normalizeForSearch (built from LATIN_SPECIAL_MAP) matches Python."""
+
+    def _js_normalize(self, text):
+        """Pure-Python reimplementation of the JS normalizeForSearch logic.
+
+        This mirrors exactly what the browser does:
+        1. NFD decompose + strip combining marks (regex [\u0300-\u036f])
+        2. Replace chars in LATIN_SPECIAL_MAP
+        """
+        import re
+        s = unicodedata.normalize('NFD', text)
+        s = re.sub(r'[\u0300-\u036f]', '', s)
+        for char, replacement in LATIN_SPECIAL_MAP.items():
+            s = s.replace(char, replacement)
+        return s
+
+    @pytest.mark.parametrize("text", [
+        # Combining diacritics
+        "Chance Peña", "Beyoncé", "Maxïmo Park", "Jürgens",
+        "congrès", "Måneskin", "Netšajeva", "Barūn",
+        # Non-decomposable Latin
+        "MØ", "Eivør", "Ænima", "Lækker", "Straßenbande",
+        "Daði Freyr", "biały", "Yalnız", "Kyrkjebø",
+        # Mixed
+        "187 Straßenbande - Millionär",
+        # ASCII passthrough
+        "Bon Jovi", "Queen",
+        # Empty
+        "",
+    ])
+    def test_js_matches_python(self, text):
+        """JS implementation (from LATIN_SPECIAL_MAP) produces same output as Python."""
+        assert self._js_normalize(text) == _normalize_for_search(text)
+
+    def test_map_injected_to_template(self, flask_test_client):
+        """LATIN_SPECIAL_MAP is rendered into the page as JSON."""
+        import json, re
+        response = flask_test_client.get('/')
+        html = response.data.decode('utf-8')
+        # Extract the JSON object assigned to _latinSpecialMap
+        match = re.search(r'const _latinSpecialMap = ({.*?});', html)
+        assert match, "_latinSpecialMap not found in rendered template"
+        rendered_map = json.loads(match.group(1))
+        assert rendered_map == LATIN_SPECIAL_MAP
 
 
 # --- _detect_format tests ---
