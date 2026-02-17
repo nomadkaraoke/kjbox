@@ -12,13 +12,15 @@ Added a live VNC screen preview thumbnail to the KJ Controller web UI. The KJ ca
 - The thumbnail is 200px wide, view-only, positioned in the left column of the web UI
 
 **Changes Made:**
-1. **websockify subprocess** — started during app startup on Pi only (`is_pi()` = true); logs a warning if the binary is not found
+1. **websockify subprocess** — started during app startup on Pi only (`is_pi()` = true); resolves the binary from the venv's bin directory (`sys.executable` parent), falling back to system PATH
 2. **noVNC vendored** — ~56 ES6 module files in `static/novnc/` (core library + pako compression vendor)
 3. **VNC preview UI** — password input (stored in `localStorage`), connect/disconnect controls, auto-reconnect on disconnect (5-second delay)
 4. **New config keys** — `websockify_port` (default: 6080), `vnc_target` (default: `localhost:5900`), `websockify_enabled` (default: true)
 5. **New dependency** — `websockify` added to `requirements.txt`
 
-**RealVNC compatibility note:** RealVNC may need `Encryption=PreferOff` for noVNC to connect, since noVNC does not support RealVNC's proprietary encryption.
+**RealVNC device configuration applied:**
+- Added `Encryption=PreferOff` to `/root/.vnc/config.d/vncserver-x11` — required for noVNC/websockify compatibility since noVNC does not support RealVNC's proprietary encryption
+- Restarted `vncserver-x11-serviced` to apply the change
 
 ## 2026-02-17 - KJ Controller: Dynamic Overlay System
 

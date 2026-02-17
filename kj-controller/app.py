@@ -1,7 +1,9 @@
 """KJ Controller - app factory and entry point."""
 
 import os
+import shutil
 import subprocess
+import sys
 import threading
 import time
 
@@ -73,13 +75,18 @@ def start_app():  # pragma: no cover
         if cfg.get('websockify_enabled', True):
             ws_port = cfg.get('websockify_port', 6080)
             vnc_target = cfg.get('vnc_target', 'localhost:5900')
-            log_message(f"Starting websockify on :{ws_port} -> {vnc_target}...", cfg)
-            try:
+            # Find websockify binary: check venv bin dir first, then system PATH
+            venv_bin = os.path.dirname(sys.executable)
+            ws_bin = os.path.join(venv_bin, 'websockify')
+            if not os.path.isfile(ws_bin):
+                ws_bin = shutil.which('websockify')
+            if ws_bin:
+                log_message(f"Starting websockify on :{ws_port} -> {vnc_target}...", cfg)
                 subprocess.Popen(
-                    ['websockify', str(ws_port), vnc_target],
+                    [ws_bin, str(ws_port), vnc_target],
                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                 )
-            except FileNotFoundError:
+            else:
                 log_message("WARNING: websockify not found - VNC preview unavailable.", cfg)
     else:
         log_message("Running in local/dev mode - VLC disabled, web UI and media scanning only.", cfg)
