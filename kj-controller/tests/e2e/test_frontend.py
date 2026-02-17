@@ -1,0 +1,306 @@
+"""End-to-end Playwright tests for the KJ Controller frontend."""
+
+from playwright.sync_api import expect
+
+
+# ---------------------------------------------------------------------------
+# Page load & metadata
+# ---------------------------------------------------------------------------
+
+class TestPageLoad:
+    """Basic page load, title, and static asset tests."""
+
+    def test_page_loads_with_correct_title(self, app_page):
+        expect(app_page).to_have_title("Nomad KJ Control")
+
+    def test_css_loaded(self, app_page):
+        """External stylesheet is linked and loaded."""
+        link = app_page.locator('link[rel="stylesheet"][href="/static/style.css"]')
+        expect(link).to_have_count(1)
+        # Verify body has dark background from our CSS
+        bg = app_page.evaluate("getComputedStyle(document.body).backgroundColor")
+        assert bg in ("rgb(15, 15, 15)", "#0f0f0f"), f"Unexpected body background: {bg}"
+
+    def test_js_loaded_and_initialized(self, app_page):
+        """app.js loaded and DOMContentLoaded handler ran."""
+        log_area = app_page.locator("#log-area")
+        expect(log_area).to_contain_text("Nomad KJ Control initialized.")
+
+    def test_favicon_links_present(self, app_page):
+        """Favicon <link> tags point to static assets."""
+        assert app_page.locator('link[href="/static/favicon.ico"]').count() == 1
+        assert app_page.locator('link[href="/static/favicon-16x16.png"]').count() == 1
+        assert app_page.locator('link[href="/static/favicon-32x32.png"]').count() == 1
+        assert app_page.locator('link[href="/static/apple-touch-icon.png"]').count() == 1
+
+    def test_static_css_served(self, page, live_server):
+        """GET /static/style.css returns 200 with CSS content."""
+        resp = page.request.get(f"{live_server}/static/style.css")
+        assert resp.status == 200
+        assert "text/css" in resp.headers.get("content-type", "")
+        body = resp.text()
+        assert "#ff5bb8" in body  # brand pink
+
+    def test_static_js_served(self, page, live_server):
+        """GET /static/app.js returns 200 with JS content."""
+        resp = page.request.get(f"{live_server}/static/app.js")
+        assert resp.status == 200
+        body = resp.text()
+        assert "DOMContentLoaded" in body
+
+    def test_favicon_ico_served(self, page, live_server):
+        """GET /static/favicon.ico returns 200."""
+        resp = page.request.get(f"{live_server}/static/favicon.ico")
+        assert resp.status == 200
+
+
+# ---------------------------------------------------------------------------
+# Layout structure
+# ---------------------------------------------------------------------------
+
+class TestLayoutStructure:
+    """Verify the main layout containers are present and visible."""
+
+    def test_two_column_layout(self, app_page):
+        expect(app_page.locator("#col1")).to_be_visible()
+        expect(app_page.locator("#col2")).to_be_visible()
+
+    def test_footer_area(self, app_page):
+        expect(app_page.locator(".footer-area")).to_be_visible()
+
+    def test_status_bar(self, app_page):
+        expect(app_page.locator("#status-bar")).to_be_visible()
+
+    def test_log_area(self, app_page):
+        expect(app_page.locator("#log-area")).to_be_visible()
+
+
+# ---------------------------------------------------------------------------
+# Download section
+# ---------------------------------------------------------------------------
+
+class TestDownloadSection:
+    """Download Song card."""
+
+    def test_download_heading(self, app_page):
+        expect(app_page.locator("h2", has_text="Download Song")).to_be_visible()
+
+    def test_url_input(self, app_page):
+        url_input = app_page.locator("#youtube-url")
+        expect(url_input).to_be_visible()
+        expect(url_input).to_have_attribute("placeholder", "Enter YouTube URL")
+
+    def test_download_button(self, app_page):
+        btn = app_page.locator("#download-btn")
+        expect(btn).to_be_visible()
+        expect(btn).to_have_text("Download")
+
+    def test_download_status_hidden_initially(self, app_page):
+        status = app_page.locator("#download-status")
+        expect(status).to_be_hidden()
+
+
+# ---------------------------------------------------------------------------
+# Playback controls
+# ---------------------------------------------------------------------------
+
+class TestPlaybackControls:
+    """Playback Controls card."""
+
+    def test_playback_heading(self, app_page):
+        expect(app_page.locator("h2", has_text="Playback Controls")).to_be_visible()
+
+    def test_pause_resume_button(self, app_page):
+        expect(app_page.locator("button", has_text="Pause / Resume")).to_be_visible()
+
+    def test_restart_button(self, app_page):
+        expect(app_page.locator("button", has_text="Restart")).to_be_visible()
+
+    def test_stop_button(self, app_page):
+        expect(app_page.locator("button", has_text="Stop")).to_be_visible()
+
+    def test_seek_slider(self, app_page):
+        slider = app_page.locator("#seek-slider")
+        expect(slider).to_be_visible()
+        expect(slider).to_have_attribute("type", "range")
+
+    def test_karaoke_volume_slider(self, app_page):
+        slider = app_page.locator("#karaoke-volume")
+        expect(slider).to_be_visible()
+        expect(slider).to_have_attribute("max", "256")
+
+    def test_filler_volume_slider(self, app_page):
+        slider = app_page.locator("#filler-volume")
+        expect(slider).to_be_visible()
+
+    def test_filler_selector(self, app_page):
+        expect(app_page.locator("#filler-selector")).to_be_visible()
+
+    def test_audio_device_selector(self, app_page):
+        select = app_page.locator("#audio-device")
+        expect(select).to_be_visible()
+        # Should have our two test audio devices
+        options = select.locator("option")
+        expect(options).to_have_count(2)
+
+
+# ---------------------------------------------------------------------------
+# Available Songs section
+# ---------------------------------------------------------------------------
+
+class TestAvailableSongs:
+    """Available Songs card."""
+
+    def test_available_songs_heading(self, app_page):
+        expect(app_page.locator("h2", has_text="Available Songs")).to_be_visible()
+
+    def test_rescan_button(self, app_page):
+        btn = app_page.locator("#rescan-btn")
+        expect(btn).to_be_visible()
+        expect(btn).to_have_text("Rescan Media")
+
+    def test_search_input(self, app_page):
+        search = app_page.locator("#catalog-search")
+        expect(search).to_be_visible()
+
+    def test_search_clear_hidden_initially(self, app_page):
+        expect(app_page.locator("#search-clear")).to_be_hidden()
+
+    def test_media_list_shows_empty_message(self, app_page):
+        media_list = app_page.locator("#media-list")
+        expect(media_list).to_contain_text("No media files found")
+
+    def test_folder_controls_hidden_when_no_folders(self, app_page):
+        expect(app_page.locator("#folder-controls")).to_be_hidden()
+
+
+# ---------------------------------------------------------------------------
+# Status bar
+# ---------------------------------------------------------------------------
+
+class TestStatusBar:
+    """Status bar at the bottom."""
+
+    def test_shows_status_label(self, app_page):
+        expect(app_page.locator("#status-bar")).to_contain_text("Status:")
+
+    def test_shows_stopped_state(self, app_page):
+        # The status poll should have run and set "stopped"
+        expect(app_page.locator("#player-state")).to_have_text("stopped")
+
+    def test_shows_playing_none(self, app_page):
+        expect(app_page.locator("#current-video")).to_have_text("None")
+
+    def test_shows_time_zero(self, app_page):
+        expect(app_page.locator("#current-time")).to_have_text("0:00")
+
+    def test_audio_warning_hidden(self, app_page):
+        """Audio warning should be hidden when no audio error."""
+        warning = app_page.locator("#audio-warning")
+        # display: none via CSS
+        expect(warning).not_to_be_visible()
+
+
+# ---------------------------------------------------------------------------
+# Interactions
+# ---------------------------------------------------------------------------
+
+class TestInteractions:
+    """Test basic user interactions work correctly."""
+
+    def test_search_shows_clear_button(self, app_page):
+        """Typing in search shows the clear button."""
+        search = app_page.locator("#catalog-search")
+        search.fill("test query")
+        # Wait for debounce (300ms) + processing
+        app_page.wait_for_timeout(500)
+        expect(app_page.locator("#search-clear")).to_be_visible()
+
+    def test_search_clear_resets(self, app_page):
+        """Clicking clear resets search state."""
+        search = app_page.locator("#catalog-search")
+        search.fill("test query")
+        app_page.wait_for_timeout(500)
+        app_page.locator("#search-clear").click()
+        expect(search).to_have_value("")
+        expect(app_page.locator("#search-clear")).to_be_hidden()
+
+    def test_escape_clears_search(self, app_page):
+        """Pressing Escape in search field clears it."""
+        search = app_page.locator("#catalog-search")
+        search.fill("something")
+        app_page.wait_for_timeout(500)
+        search.press("Escape")
+        expect(search).to_have_value("")
+
+    def test_download_empty_url_logs_error(self, app_page):
+        """Clicking download with empty URL shows error in log."""
+        app_page.locator("#download-btn").click()
+        expect(app_page.locator("#log-area")).to_contain_text("Please enter a YouTube URL")
+
+
+# ---------------------------------------------------------------------------
+# Responsive layout
+# ---------------------------------------------------------------------------
+
+class TestResponsiveLayout:
+    """Test responsive breakpoints."""
+
+    def test_mobile_layout_single_column(self, page, live_server):
+        """At mobile width, layout switches to single column."""
+        page.set_viewport_size({"width": 375, "height": 812})
+        page.goto(live_server)
+        page.wait_for_load_state("networkidle")
+
+        # In mobile, main-layout should be flex column (not grid)
+        display = page.evaluate(
+            "getComputedStyle(document.querySelector('.main-layout')).display"
+        )
+        assert display == "flex"
+
+        # Both columns should still be visible
+        expect(page.locator("#col1")).to_be_visible()
+        expect(page.locator("#col2")).to_be_visible()
+
+    def test_desktop_layout_grid(self, page, live_server):
+        """At desktop width, layout uses CSS grid."""
+        page.set_viewport_size({"width": 1400, "height": 900})
+        page.goto(live_server)
+        page.wait_for_load_state("networkidle")
+
+        display = page.evaluate(
+            "getComputedStyle(document.querySelector('.main-layout')).display"
+        )
+        assert display == "grid"
+
+
+# ---------------------------------------------------------------------------
+# Brand / visual identity
+# ---------------------------------------------------------------------------
+
+class TestBrandIdentity:
+    """Verify Nomad brand colors are applied."""
+
+    def test_heading_color(self, app_page):
+        """h2 headings use the brand pink."""
+        color = app_page.evaluate(
+            "getComputedStyle(document.querySelector('h2')).color"
+        )
+        # #ff7acc = rgb(255, 122, 204)
+        assert color == "rgb(255, 122, 204)"
+
+    def test_button_background_color(self, app_page):
+        """Primary buttons use brand pink background."""
+        bg = app_page.evaluate(
+            "getComputedStyle(document.getElementById('download-btn')).backgroundColor"
+        )
+        # #ff5bb8 = rgb(255, 91, 184)
+        assert bg == "rgb(255, 91, 184)"
+
+    def test_dark_theme_background(self, app_page):
+        """Cards use the dark card background."""
+        bg = app_page.evaluate(
+            "getComputedStyle(document.querySelector('.container')).backgroundColor"
+        )
+        # #1a1a1a = rgb(26, 26, 26)
+        assert bg == "rgb(26, 26, 26)"

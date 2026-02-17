@@ -47,8 +47,10 @@ Key settings in `config.json`:
 
 ```bash
 pip install -r requirements-dev.txt
-pytest                              # run all 115 tests
-pytest --cov --cov-report=term      # with coverage (88%)
+pytest                              # run all tests (~319)
+pytest tests/unit tests/integration  # unit + integration only
+pytest tests/e2e                    # Playwright browser e2e tests
+pytest --cov --cov-report=term      # with coverage
 ```
 
 See [docs/TESTING.md](../docs/TESTING.md) for conventions and strategy.
@@ -63,9 +65,14 @@ media.py            # MediaIndex class (scan, validate, download, delete)
 vlc.py              # VLCManager class (dual VLC instance control)
 routes.py           # Flask Blueprint with 15 REST API handlers
 templates/
-  index.html        # Web UI (vanilla JS, no build step)
+  index.html        # HTML template (links to static CSS/JS)
+static/
+  style.css         # Nomad brand styles + responsive breakpoints
+  app.js            # Vanilla JS application logic (no build step)
+  favicon*.png/ico  # Favicons in multiple sizes
 tests/
   conftest.py       # Shared fixtures
   unit/             # Pure function and class tests
   integration/      # Flask route tests via test client
+  e2e/              # Playwright browser automation tests (44 tests)
 ```

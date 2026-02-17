@@ -2,6 +2,18 @@
 
 NomadPi system configuration changes. For current configuration details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md).
 
+## 2026-02-17 - KJ Controller: UI Redesign with Nomad Branding
+
+Redesigned the KJ Controller web interface with Nomad brand identity, responsive layout, and modular file structure.
+
+**Changes Made:**
+1. **Brand Identity** — Applied Nomad color palette: pink (#ff5bb8/#ff7acc), gold (#ffdf6b), purple (#8b5cf6) on dark backgrounds (#0f0f0f/#1a1a1a) with ambient radial gradients
+2. **Static Asset Extraction** — Separated inline CSS/JS into `static/style.css` and `static/app.js`; Jinja2 variable bridged via `window.KJ_CONFIG`
+3. **Favicons** — Added favicon.ico, 16x16, 32x32, apple-touch-icon (from karaoke-gen)
+4. **Responsive Design** — Three breakpoints: 1024px (tablet), 768px (single-column mobile), 480px (compact mobile)
+5. **Title** — Changed from "KJ Remote" to "Nomad KJ Control"
+6. **E2E Tests** — 44 Playwright browser automation tests covering layout, controls, interactions, responsive behavior, and brand colors
+
 ## 2026-02-17 - KJ Controller: Port 5000 → 80
 
 Changed the KJ Controller Flask server default port from 5000 to 80 so it's accessible at `http://nomadpi.local` without specifying a port number.
