@@ -1071,6 +1071,11 @@ async function searchKaraokeNerds() {
     }
 }
 
+function clearKNResults() {
+    document.getElementById('kn-results').innerHTML = '';
+    document.getElementById('kn-query').value = '';
+}
+
 function sortKNTracks(tracks) {
     const prefUpper = knPreferredBrands.map(b => b.toUpperCase());
     return [...tracks].sort((a, b) => {
@@ -1164,7 +1169,7 @@ function renderKNResults(songs) {
             dlBtn.textContent = 'Download';
             dlBtn.onclick = (e) => {
                 e.stopPropagation();
-                downloadKNTrack(track.youtube_url, track.brand_name, song.title, dlBtn);
+                downloadKNTrack(track.youtube_url);
             };
 
             trackEl.appendChild(info);
@@ -1186,22 +1191,12 @@ function toggleKNSong(songId) {
     if (chevron) chevron.classList.toggle('expanded', !isCollapsed);
 }
 
-async function downloadKNTrack(youtubeUrl, brandName, songTitle, btn) {
-    btn.disabled = true;
-    btn.textContent = '...';
-    log(`Downloading ${songTitle} (${brandName})...`);
-
-    const data = await apiCall('/download', { url: youtubeUrl });
-
-    if (data && data.success) {
-        log(`Downloaded "${data.title}" (${brandName}) successfully!`, 'success');
-        btn.textContent = '\u2713';
-        btn.className = 'kn-download-btn downloaded';
-        await updateMediaList();
-    } else {
-        btn.disabled = false;
-        btn.textContent = 'Retry';
-    }
+function downloadKNTrack(youtubeUrl) {
+    // Inject into existing Download Song section and trigger its download flow
+    const urlInput = document.getElementById('youtube-url');
+    urlInput.value = youtubeUrl;
+    clearKNResults();
+    downloadSong();
 }
 
 function toggleKNPrefs() {
