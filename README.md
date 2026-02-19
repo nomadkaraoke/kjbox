@@ -67,7 +67,8 @@ kjbox/
     requirements.txt           # Production dependencies
     requirements-dev.txt       # Test dependencies
     templates/                 # Web UI templates
-    tests/                     # pytest test suite (115 tests, 88% coverage)
+    karaoke_nerds.py           # Karaoke Nerds web search scraper
+    tests/                     # pytest test suite
 ```
 
 ## KJ Remote Controller
@@ -75,6 +76,7 @@ kjbox/
 The `kj-controller/` directory contains a web-based karaoke show management app. It provides:
 
 - **One-click playback** of karaoke videos via VLC
+- **Karaoke Nerds search** — find web-only karaoke tracks with community/brand highlighting and one-click download
 - **YouTube downloading** with yt-dlp for building a song library
 - **Filler music** with intelligent crossfading between songs
 - **VNC screen preview** — live thumbnail of the Pi's HDMI output in the browser (noVNC + websockify)

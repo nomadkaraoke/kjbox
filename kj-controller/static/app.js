@@ -1237,6 +1237,101 @@ async function saveKNPrefs() {
     }
 }
 
+// --- YouTube Search ---
+
+async function searchYouTube() {
+    const input = document.getElementById('yt-query');
+    const btn = document.getElementById('yt-search-btn');
+    const status = document.getElementById('yt-status');
+    let query = input.value.trim();
+    if (!query || query.length < 2) {
+        log('Enter at least 2 characters to search.', 'error');
+        return;
+    }
+    const karaokePrefix = document.getElementById('yt-karaoke-prefix').checked;
+    if (karaokePrefix) query = 'karaoke ' + query;
+
+    log(`Searching YouTube: ${query}`);
+    btn.disabled = true;
+    status.classList.remove('hidden');
+    document.getElementById('yt-stage').textContent = 'Searching YouTube...';
+
+    const data = await apiCall('/youtube/search', { query });
+
+    btn.disabled = false;
+    status.classList.add('hidden');
+    if (data) {
+        if (Array.isArray(data) && data.length === 0) {
+            log('No results found on YouTube.', 'error');
+            document.getElementById('yt-results').innerHTML =
+                '<div class="yt-no-results">No results found.</div>';
+        } else if (data.error) {
+            log(`Search error: ${data.error}`, 'error');
+        } else {
+            log(`Found ${data.length} result${data.length !== 1 ? 's' : ''} on YouTube.`, 'success');
+            renderYTResults(data);
+        }
+    }
+}
+
+function clearYTResults() {
+    document.getElementById('yt-results').innerHTML = '';
+    document.getElementById('yt-query').value = '';
+}
+
+function renderYTResults(results) {
+    const container = document.getElementById('yt-results');
+    container.innerHTML = '';
+
+    results.forEach(r => {
+        const row = document.createElement('div');
+        row.className = 'yt-result';
+
+        const info = document.createElement('div');
+        info.className = 'yt-result-info';
+
+        const title = document.createElement('div');
+        title.className = 'yt-result-title';
+        title.textContent = r.title;
+        info.appendChild(title);
+
+        const meta = document.createElement('div');
+        meta.className = 'yt-result-meta';
+        const parts = [];
+        if (r.channel) parts.push(r.channel);
+        if (r.duration_str) parts.push(r.duration_str);
+        if (r.view_count_str) parts.push(r.view_count_str + ' views');
+        meta.textContent = parts.join(' · ');
+        info.appendChild(meta);
+
+        const dlBtn = document.createElement('button');
+        dlBtn.className = 'yt-download-btn';
+        dlBtn.textContent = 'Download';
+        dlBtn.onclick = () => downloadYTTrack(r.url);
+
+        row.appendChild(info);
+        row.appendChild(dlBtn);
+        container.appendChild(row);
+    });
+}
+
+function downloadYTTrack(url) {
+    const urlInput = document.getElementById('youtube-url');
+    urlInput.value = url;
+    clearYTResults();
+    downloadSong();
+}
+
+function saveYTKaraokeToggle() {
+    const checked = document.getElementById('yt-karaoke-prefix').checked;
+    localStorage.setItem('ytKaraokePrefix', checked ? '1' : '0');
+}
+
+function loadYTKaraokeToggle() {
+    const saved = localStorage.getItem('ytKaraokePrefix');
+    document.getElementById('yt-karaoke-prefix').checked = saved === '1';
+}
+
 // --- Initialization ---
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -1291,6 +1386,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const savedVncSize = localStorage.getItem('kj-vnc-size');
     if (savedVncSize) setVncSize(savedVncSize);
 
+    loadYTKaraokeToggle();
     updateStatus();
     updateMediaList();
     updateFillerMusicList();

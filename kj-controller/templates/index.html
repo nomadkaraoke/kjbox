@@ -132,6 +132,23 @@
                 </div>
                 <div id="kn-results"></div>
             </div>
+            <div class="container yt-search-section">
+                <h2>Search YouTube</h2>
+                <div class="yt-search-row">
+                    <input type="text" id="yt-query" placeholder="Search YouTube for videos..." onkeyup="if(event.keyCode === 13) searchYouTube()">
+                    <button id="yt-search-btn" onclick="searchYouTube()">Search</button>
+                    <button id="yt-clear-btn" onclick="clearYTResults()">Clear</button>
+                </div>
+                <label class="yt-karaoke-toggle">
+                    <input type="checkbox" id="yt-karaoke-prefix" onchange="saveYTKaraokeToggle()">
+                    <span>Prefix "karaoke" to search</span>
+                </label>
+                <div id="yt-status" class="download-progress hidden">
+                    <span class="download-spinner"></span>
+                    <span id="yt-stage">Searching YouTube...</span>
+                </div>
+                <div id="yt-results"></div>
+            </div>
             <div class="container download-section">
                 <h2>Download Song</h2>
                 <input type="url" id="youtube-url" placeholder="Enter YouTube URL" onkeyup="if(event.keyCode === 13) downloadSong()">

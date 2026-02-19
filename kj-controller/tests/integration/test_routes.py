@@ -686,3 +686,57 @@ def test_kn_set_config_empty_body(flask_test_client):
         data=json.dumps({}),
         content_type='application/json')
     assert response.status_code == 400
+
+
+# --- YouTube Search ---
+
+@patch('youtube_search.search')
+def test_yt_search_returns_results(mock_search, flask_test_client):
+    """POST /youtube/search returns search results."""
+    mock_search.return_value = [
+        {'id': 'abc', 'title': 'Test Song Karaoke', 'channel': 'Singer',
+         'duration': 200, 'duration_str': '3:20', 'view_count': 50000,
+         'view_count_str': '50.0K', 'url': 'https://www.youtube.com/watch?v=abc'},
+    ]
+    response = flask_test_client.post('/youtube/search',
+        data=json.dumps({'query': 'test song'}),
+        content_type='application/json')
+    assert response.status_code == 200
+    data = json.loads(response.data)
+    assert len(data) == 1
+    assert data[0]['id'] == 'abc'
+
+
+@patch('youtube_search.search')
+def test_yt_search_empty_results(mock_search, flask_test_client):
+    """POST /youtube/search with no matches returns empty array."""
+    mock_search.return_value = []
+    response = flask_test_client.post('/youtube/search',
+        data=json.dumps({'query': 'xyznonesense'}),
+        content_type='application/json')
+    assert response.status_code == 200
+    data = json.loads(response.data)
+    assert data == []
+
+
+def test_yt_search_short_query(flask_test_client):
+    """POST /youtube/search with too-short query returns 400."""
+    response = flask_test_client.post('/youtube/search',
+        data=json.dumps({'query': 'a'}),
+        content_type='application/json')
+    assert response.status_code == 400
+
+
+def test_yt_search_empty_query(flask_test_client):
+    """POST /youtube/search with empty query returns 400."""
+    response = flask_test_client.post('/youtube/search',
+        data=json.dumps({'query': ''}),
+        content_type='application/json')
+    assert response.status_code == 400
+
+
+def test_yt_search_no_body(flask_test_client):
+    """POST /youtube/search with no body returns 400."""
+    response = flask_test_client.post('/youtube/search',
+        content_type='application/json')
+    assert response.status_code == 400

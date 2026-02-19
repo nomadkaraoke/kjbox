@@ -9,6 +9,7 @@ import time
 from flask import Blueprint, current_app, jsonify, render_template, request
 
 import karaoke_nerds
+import youtube_search
 from catalog import LATIN_SPECIAL_MAP
 from config import load_config, save_config_value
 from utils import log_message
@@ -542,6 +543,20 @@ def kn_set_config():
     save_config_value('kn_preferred_brands', preferred)
     log_message(f"Updated KN preferred brands: {preferred}", current_app.kj_config)
     return jsonify({"preferred_brands": preferred})
+
+
+# --- YouTube Search ---
+
+@routes_bp.route('/youtube/search', methods=['POST'])
+def yt_search():
+    """Searches YouTube for videos matching the query."""
+    data = request.get_json(silent=True) or {}
+    query = (data.get('query') or '').strip()
+    if len(query) < 2:
+        return jsonify({"error": "Query must be at least 2 characters"}), 400
+
+    results = youtube_search.search(query, current_app.kj_config)
+    return jsonify(results)
 
 
 # --- System Control ---
