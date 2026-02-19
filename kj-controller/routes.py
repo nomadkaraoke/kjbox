@@ -569,7 +569,7 @@ def restart_app():
 
     def do_restart():
         time.sleep(1)
-        subprocess.run(['systemctl', 'restart', 'kj-controller'])
+        subprocess.run(['sudo', 'systemctl', 'restart', 'kj-controller'])
 
     threading.Thread(target=do_restart, daemon=True).start()
     return jsonify({"success": True, "message": "Restarting KJ Controller..."})
@@ -583,7 +583,7 @@ def system_reboot():
 
     def do_reboot():
         time.sleep(1)
-        subprocess.run(['reboot'])
+        subprocess.run(['sudo', 'reboot'])
 
     threading.Thread(target=do_reboot, daemon=True).start()
     return jsonify({"success": True, "message": "Rebooting system..."})
@@ -597,7 +597,7 @@ def system_shutdown():
 
     def do_shutdown():
         time.sleep(1)
-        subprocess.run(['shutdown', '-h', 'now'])
+        subprocess.run(['sudo', 'shutdown', '-h', 'now'])
 
     threading.Thread(target=do_shutdown, daemon=True).start()
     return jsonify({"success": True, "message": "Shutting down system..."})
