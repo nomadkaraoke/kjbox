@@ -52,14 +52,16 @@ KJ Controller is a web-based karaoke show management application. A Flask backen
 | `zip_playback.py` | ~50 | `ZipPlayback` class: CDG+MP3 ZIP extraction for VLC |
 | `overlay.py` | ~100 | `OverlayManager` class: CRUD, toggle, karaoke_playing state, JSON persistence |
 | `karaoke_nerds.py` | ~140 | Karaoke Nerds web scraper: search, parse HTML results, extract YouTube URLs |
-| `routes.py` | ~590 | Flask Blueprint with all 28 route handlers |
+| `youtube_search.py` | ~80 | YouTube search via yt-dlp: ytsearch with extract_flat for fast metadata |
+| `routes.py` | ~600 | Flask Blueprint with all 32 route handlers |
 
 ### Dependency Flow
 
 ```
 app.py → config.py, media.py, vlc.py, catalog.py, zip_playback.py, overlay.py, routes.py, utils.py
-routes.py → config.py, utils.py, karaoke_nerds (accesses media/vlc/catalog/zip_playback/overlay_manager via current_app)
+routes.py → config.py, utils.py, karaoke_nerds, youtube_search (accesses media/vlc/catalog/zip_playback/overlay_manager via current_app)
 karaoke_nerds.py → config.py, utils.py (requests, beautifulsoup4)
+youtube_search.py → config.py, utils.py (yt_dlp)
 overlay.py → (stdlib only: json, os, uuid, tempfile)
 media.py → config.py, utils.py
 vlc.py → config.py, utils.py
@@ -115,6 +117,7 @@ utils.py → (stdlib only)
 | POST | `/karaoke-nerds/search` | Search karaokenerds.com for web-only tracks |
 | GET | `/karaoke-nerds/config` | Get preferred brand codes for KN result sorting |
 | POST | `/karaoke-nerds/config` | Set preferred brand codes for KN result sorting |
+| POST | `/youtube/search` | Search YouTube via yt-dlp (extract_flat metadata) |
 
 ## Key Design Decisions
 
