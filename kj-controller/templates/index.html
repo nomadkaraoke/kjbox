@@ -257,7 +257,9 @@
     <!-- Server-injected config (Jinja2 template variable) -->
     <script>
         window.KJ_CONFIG = {
-            latinSpecialMap: {{ latin_special_map | tojson }}
+            latinSpecialMap: {{ latin_special_map | tojson }},
+            websockifyPort: {{ config.get('websockify_port', 6080) | tojson }},
+            websockifyHost: {{ config.get('websockify_host', '') | tojson }}
         };
     </script>
     <script src="/static/app.js"></script>
@@ -302,7 +304,9 @@
             if (!pw) return;
 
             const wsProto = location.protocol === 'https:' ? 'wss://' : 'ws://';
-            const wsUrl = wsProto + location.hostname + ':6080';
+            // When accessed via Cloudflare tunnel, websockify is on a separate hostname
+            const wsHost = window.KJ_CONFIG.websockifyHost || (location.hostname + ':' + (window.KJ_CONFIG.websockifyPort || 6080));
+            const wsUrl = wsProto + wsHost;
             localStorage.setItem(STORAGE_KEY, pw);
             setStatus('Connecting...', '');
 
