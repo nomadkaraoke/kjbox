@@ -298,9 +298,9 @@ cat > /opt/nomad/kjbox/kj-controller/config.json << 'EOF'
   "flask_port": 80,
   "enable_vlc": true,
   "audio_devices": {
-    "default": "Default HDMI"
+    "hdmiout": "HDMI Output (TV)"
   },
-  "default_audio_device": "default",
+  "default_audio_device": "hdmiout",
   "tls_cert": "/opt/nomad/kjbox/kj-controller/certs/cert.pem",
   "tls_key": "/opt/nomad/kjbox/kj-controller/certs/key.pem",
   "external_file_list": "/media/nomad/Nomad4TBOne/HyperMule/all-karaoke-files-2025.02.28.txt",
@@ -316,7 +316,7 @@ EOF
 - `tls_cert` / `tls_key` — when present, Flask serves HTTPS on port 443 instead of HTTP on port 80. See [Phase 5.6](#56-tls-certificates-configured).
 - `websockify_host` — tunnel hostname for VNC WebSocket. When accessing via tunnel (e.g., `kjbox.nomadkaraoke.com`), the noVNC client connects to this hostname. When accessing locally (`.local`, `localhost`, or IP), it connects directly to `hostname:6080`. Leave empty if not using a tunnel.
 
-**Audio note:** This mini PC uses **PipeWire** as the audio server (not raw ALSA like the Pi). PipeWire provides ALSA compatibility via `pipewire-alsa`, so VLC's `--aout alsa` should work transparently. The default PipeWire sink is already HDMI stereo (`alsa_output.pci-0000_00_1f.3.hdmi-stereo`). No custom ALSA config (`/etc/asound.conf`) is needed.
+**Audio note:** This mini PC has PipeWire installed, but VLC bypasses it and uses ALSA directly for HDMI audio. PipeWire's HDMI routing doesn't reliably produce sound on this hardware. The `hdmiout` ALSA device (defined in `/etc/asound.conf`) maps directly to `hw:0,7`. See [AUDIO.md](AUDIO.md) for the full NomadPC audio setup and troubleshooting.
 
 ### 3.5 Create Data Directories
 
@@ -456,21 +456,37 @@ sudo systemctl start kj-controller kj-autodeploy rotation-display overlay-displa
 
 ### 5.1 HDMI Audio (VERIFIED WORKING)
 
-Audio works out of the box via PipeWire → HDMI.
+Audio uses direct ALSA to HDMI, bypassing PipeWire. PipeWire's HDMI routing does not reliably produce sound on this hardware (audio flows through PipeWire's pipeline but nothing comes out of the TV).
 
+**Step 1: Create `/etc/asound.conf`:**
 ```bash
-# Audio pipeline
-wpctl status  # Shows PipeWire sinks
-# Default sink: "Built-in Audio Digital Stereo (HDMI)"
-# Device: alsa_output.pci-0000_00_1f.3.hdmi-stereo
+sudo tee /etc/asound.conf << 'EOF'
+# HDMI audio output via Intel HDA HDMI 1 (connected to TV)
+pcm.hdmiout {
+    type plug
+    slave {
+        pcm "hw:0,7"
+    }
+}
 
-# Test audio
-speaker-test -c 2 -t sine -f 440 -l 1
+ctl.hdmiout {
+    type hw
+    card 0
+}
+EOF
 ```
 
-**No custom ALSA config needed.** Unlike the Pi (which requires `iec958` plugin + custom EDID), the Intel HDA driver exposes standard PCM formats and PipeWire handles routing.
+**Step 2: Keep PipeWire on analog profile** (so it doesn't lock the HDMI device):
+```bash
+sudo -u nomad XDG_RUNTIME_DIR=/run/user/1000 pactl set-card-profile alsa_card.pci-0000_00_1f.3 "output:analog-stereo+input:analog-stereo"
+```
 
-**VLC audio:** VLC should use PipeWire automatically via its PulseAudio output module (`--aout pulse`) or ALSA module (`--aout alsa`). PipeWire's ALSA compatibility layer handles both. Test which works better.
+**Step 3: Test audio:**
+```bash
+speaker-test -D hdmiout -c 2 -t sine -f 440 -l 1
+```
+
+**VLC audio:** VLC uses `--aout alsa --alsa-audio-device hdmiout` (configured via `default_audio_device` in config.json). See [AUDIO.md](AUDIO.md) for full details and troubleshooting.
 
 ### 5.2 Display (VERIFIED)
 
@@ -796,7 +812,7 @@ curl -sk https://nomadpc.local/status
 | **OS** | DietPi (Debian 13 Trixie) | Linux Mint 22.1 Xia (Ubuntu Noble) |
 | **Desktop** | LXDE (via LightDM) | XFCE (via LightDM) |
 | **User** | root (VLC wrapped as dietpi) | `nomad` (VLC runs directly) |
-| **Audio** | Raw ALSA + custom EDID + iec958 plugin | PipeWire → HDMI (works out of the box) |
+| **Audio** | Raw ALSA + custom EDID + iec958 plugin | Direct ALSA `hw:0,7` (bypasses PipeWire) |
 | **VLC launch** | `sudo -u dietpi env DISPLAY=:0 cvlc` | `cvlc` directly |
 | **VNC** | RealVNC (proprietary, RA2ne auth) | x11vnc (open source, standard VNC auth) |
 | **Platform detection** | `is_pi()` = True | Needs `enable_vlc: true` in config |
@@ -821,7 +837,7 @@ curl -sk https://nomadpc.local/status
 - [x] Set desktop wallpaper to Nomad background (Phase 5.3)
 - [x] Install and configure x11vnc for VNC preview (Phase 5.5)
 - [x] Set HDMI output to 1920x1080 with boot persistence
-- [x] Verify HDMI audio works via PipeWire (speaker-test + VLC)
+- [x] Verify HDMI audio works via direct ALSA `hdmiout` device (speaker-test + VLC)
 - [x] Mount USB SSD and add to fstab (Phase 6.1-6.2)
 - [x] Copy filler music (Phase 6.3)
 - [x] Migrate 697 legacy YouTube downloads to new naming convention (Phase 6.4)

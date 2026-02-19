@@ -1,8 +1,110 @@
 # Audio Configuration
 
-> Extracted from [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For hardware specs, network, display, and other system config, see that file.
+Audio setup for both NomadPi (Raspberry Pi 4) and NomadPC (Intel Mini PC).
 
-## HDMI Audio Setup
+---
+
+## NomadPC (Intel Mini PC)
+
+### Overview
+
+The mini PC has an Intel HDA sound card with multiple HDMI outputs. **PipeWire** runs as the audio server but is **not used for HDMI audio** — VLC bypasses PipeWire and talks directly to ALSA `hw:0,7`.
+
+**Why bypass PipeWire:** PipeWire 1.0.5 on this hardware fails to output audio through its HDMI sink even when properly configured (sink shows RUNNING, audio flows through pw-top, but no sound at the TV). Direct ALSA works reliably.
+
+### ALSA Configuration
+
+File: `/etc/asound.conf`
+```
+# HDMI audio output via Intel HDA HDMI 1 (connected to TV)
+pcm.hdmiout {
+    type plug
+    slave {
+        pcm "hw:0,7"
+    }
+}
+
+ctl.hdmiout {
+    type hw
+    card 0
+}
+```
+
+**Note:** PipeWire installs `/etc/alsa/conf.d/99-pipewire-default.conf` which redirects `pcm.!default` to PipeWire. We do NOT override `pcm.!default` — instead, VLC is configured to use the named `hdmiout` device explicitly, bypassing PipeWire entirely.
+
+### Audio Devices
+
+| Device | Name | Type | ALSA Device |
+|--------|------|------|-------------|
+| hw:0,0 | SN6140 Analog | Headphone/speaker jack | `default` (via PipeWire) |
+| hw:0,3 | HDMI 0 | HDMI port (disconnected) | `hw:0,3` |
+| hw:0,7 | HDMI 1 | HDMI port (TV "Z3") | `hdmiout` or `hw:0,7` |
+| hw:0,8 | HDMI 2 | HDMI port (disconnected) | `hw:0,8` |
+| hw:0,9 | HDMI 3 | HDMI port (disconnected) | `hw:0,9` |
+
+### KJ Controller Config
+
+In `config.json`:
+```json
+{
+  "default_audio_device": "hdmiout",
+  "audio_devices": {
+    "hdmiout": "HDMI Output (TV)"
+  }
+}
+```
+
+VLC launches with `--aout alsa --alsa-audio-device hdmiout`.
+
+### PipeWire Coexistence
+
+PipeWire must stay on the **analog stereo profile** so it doesn't lock the HDMI device:
+```bash
+# Verify PipeWire isn't holding HDMI (should show analog profile active)
+sudo -u nomad XDG_RUNTIME_DIR=/run/user/1000 pactl list cards | grep "Active Profile"
+# Expected: output:analog-stereo+input:analog-stereo
+
+# If PipeWire grabbed HDMI (e.g., after plugging in a new display), switch back:
+sudo -u nomad XDG_RUNTIME_DIR=/run/user/1000 pactl set-card-profile alsa_card.pci-0000_00_1f.3 "output:analog-stereo+input:analog-stereo"
+```
+
+### Testing Audio
+
+```bash
+# Test HDMI (direct ALSA, bypasses PipeWire)
+ssh nomadpc 'speaker-test -D hdmiout -c 2 -t sine -f 440 -l 1'
+
+# Test default (goes through PipeWire → analog jack)
+ssh nomadpc 'speaker-test -c 2 -t sine -f 440 -l 1'
+```
+
+### Troubleshooting: No HDMI Audio After Reboot
+
+If HDMI audio stops working after reboot:
+
+1. **Check if PipeWire grabbed the HDMI device:**
+   ```bash
+   ssh nomadpc 'sudo -u nomad XDG_RUNTIME_DIR=/run/user/1000 pactl list cards | grep "Active Profile"'
+   ```
+   If it shows `hdmi-stereo-extra1`, PipeWire has the device locked. Switch it back to analog (see above) and restart kj-controller.
+
+2. **Check if VLC is using the right device:**
+   ```bash
+   ssh nomadpc 'ps aux | grep vlc'
+   # Should show: --alsa-audio-device hdmiout
+   ```
+
+3. **Test the ALSA device directly:**
+   ```bash
+   ssh nomadpc 'speaker-test -D hdmiout -c 2 -t sine -f 440 -l 1'
+   ```
+   If this fails with "Device or resource busy", PipeWire has the device — see step 1.
+
+---
+
+## NomadPi (Raspberry Pi 4)
+
+### HDMI Audio Setup
 
 HDMI audio requires a custom EDID file because the 7" touchscreen provides corrupt EDID data (bad checksum), which prevents the kernel from detecting HDMI audio capabilities.
 

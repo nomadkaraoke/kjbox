@@ -2,6 +2,23 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-02-19 - NomadPC: Fix HDMI Audio After Reboot
+
+HDMI audio stopped working after reboot. Root cause: VLC was configured to use ALSA device `default`, which PipeWire redirects to the analog stereo output — not HDMI.
+
+**Investigation:**
+- PipeWire 1.0.5 defaults to analog stereo profile on boot
+- Even after switching PipeWire to the HDMI profile, audio flowed through PipeWire (confirmed via `pw-top`) but produced no sound at the TV
+- Direct ALSA access to `hw:0,7` (bypassing PipeWire) worked reliably
+
+**Fix applied:**
+- Created `/etc/asound.conf` defining `hdmiout` as `plug` → `hw:0,7` (direct ALSA, bypasses PipeWire)
+- Updated `config.json`: `default_audio_device: "hdmiout"`, `audio_devices: {"hdmiout": "HDMI Output (TV)"}`
+- PipeWire left on analog profile so it doesn't lock the HDMI device
+- VLC now launches with `--alsa-audio-device hdmiout`
+
+**Docs updated:** `AUDIO.md` (added NomadPC section), `MINIPC-SETUP.md` (corrected audio config and instructions).
+
 ## 2026-02-19 - NomadPC: TLS, Cloudflare Tunnel, Remote Access & Code Fixes
 
 Set up HTTPS, Cloudflare tunnel for remote access, Zero Trust authentication, and committed several code fixes to the repo.
@@ -57,7 +74,7 @@ Set up the USB external drive, migrated legacy video files, and built the full k
 
 **Filler music:** Copied from legacy KJ data folder, playing successfully through HDMI.
 
-**HDMI audio verified:** PipeWire routes VLC audio through HDMI correctly. `speaker-test` and VLC both produce sound. No ALSA config needed.
+**HDMI audio verified:** `speaker-test` and VLC both produce sound via HDMI. Later found to require direct ALSA config (see 2026-02-19 audio fix entry).
 
 **HDMI display:** Set to 1920x1080@60Hz via `xrandr`, persisted with XFCE autostart entry.
 
