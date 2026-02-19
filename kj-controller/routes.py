@@ -8,6 +8,7 @@ import time
 
 from flask import Blueprint, current_app, jsonify, render_template, request
 
+import karaoke_nerds
 from catalog import LATIN_SPECIAL_MAP
 from config import load_config, save_config_value
 from utils import log_message
@@ -18,8 +19,10 @@ routes_bp = Blueprint('routes', __name__)
 @routes_bp.route('/')
 def index():
     """Serves the main remote control page."""
+    cfg = current_app.kj_config
     return render_template('index.html', latin_special_map=LATIN_SPECIAL_MAP,
-                           config=current_app.kj_config)
+                           config=cfg,
+                           kn_preferred_brands=cfg.get('kn_preferred_brands', []))
 
 
 @routes_bp.route('/download', methods=['POST'])
@@ -497,6 +500,48 @@ def toggle_overlay_video(overlay_id):
     if not overlay:
         return jsonify({"error": "Overlay not found"}), 404
     return jsonify(overlay)
+
+
+# --- Karaoke Nerds Search ---
+
+@routes_bp.route('/karaoke-nerds/search', methods=['POST'])
+def kn_search():
+    """Search karaokenerds.com for web-only karaoke tracks."""
+    data = request.get_json(silent=True) or {}
+    query = data.get('query', '').strip()
+    if not query or len(query) < 2:
+        return jsonify({"error": "Query must be at least 2 characters"}), 400
+
+    cfg = current_app.kj_config
+    log_message(f"Karaoke Nerds search: {query}", cfg)
+    results = karaoke_nerds.search(query, config=cfg)
+    return jsonify(results)
+
+
+@routes_bp.route('/karaoke-nerds/config', methods=['GET'])
+def kn_get_config():
+    """Returns Karaoke Nerds preferred brands config."""
+    cfg = current_app.kj_config
+    return jsonify({
+        "preferred_brands": cfg.get('kn_preferred_brands', []),
+    })
+
+
+@routes_bp.route('/karaoke-nerds/config', methods=['POST'])
+def kn_set_config():
+    """Updates Karaoke Nerds preferred brands config."""
+    data = request.get_json(silent=True) or {}
+    preferred = data.get('preferred_brands')
+    if preferred is None or not isinstance(preferred, list):
+        return jsonify({"error": "preferred_brands must be a list"}), 400
+
+    # Sanitize: uppercase, strip whitespace, remove empties
+    preferred = [b.strip().upper() for b in preferred if b.strip()]
+
+    current_app.kj_config['kn_preferred_brands'] = preferred
+    save_config_value('kn_preferred_brands', preferred)
+    log_message(f"Updated KN preferred brands: {preferred}", current_app.kj_config)
+    return jsonify({"preferred_brands": preferred})
 
 
 # --- System Control ---

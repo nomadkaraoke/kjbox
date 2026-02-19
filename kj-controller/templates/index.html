@@ -108,6 +108,29 @@
         </div>
 
         <div class="column" id="col2">
+            <div class="container kn-search-section">
+                <div class="header-row">
+                    <h2>Search Karaoke Nerds</h2>
+                    <button class="kn-prefs-btn" id="kn-prefs-toggle" onclick="toggleKNPrefs()" title="Preferred brands settings">Prefs</button>
+                </div>
+                <div id="kn-prefs-panel" class="kn-prefs hidden">
+                    <label for="kn-prefs-input">Preferred brand codes (comma-separated):</label>
+                    <div class="kn-prefs-row">
+                        <input type="text" id="kn-prefs-input" placeholder="e.g. KV, KFN">
+                        <button class="kn-prefs-save" onclick="saveKNPrefs()">Save</button>
+                    </div>
+                    <div id="kn-prefs-tags" class="kn-prefs-tags"></div>
+                </div>
+                <div class="kn-search-row">
+                    <input type="text" id="kn-query" placeholder="Search for karaoke tracks..." onkeyup="if(event.keyCode === 13) searchKaraokeNerds()">
+                    <button id="kn-search-btn" onclick="searchKaraokeNerds()">Search</button>
+                </div>
+                <div id="kn-status" class="download-progress hidden">
+                    <span class="download-spinner"></span>
+                    <span id="kn-stage">Searching karaokenerds.com...</span>
+                </div>
+                <div id="kn-results"></div>
+            </div>
             <div class="container download-section">
                 <h2>Download Song</h2>
                 <input type="url" id="youtube-url" placeholder="Enter YouTube URL" onkeyup="if(event.keyCode === 13) downloadSong()">
@@ -285,7 +308,8 @@
         window.KJ_CONFIG = {
             latinSpecialMap: {{ latin_special_map | tojson }},
             websockifyPort: {{ config.get('websockify_port', 6080) | tojson }},
-            websockifyHost: {{ config.get('websockify_host', '') | tojson }}
+            websockifyHost: {{ config.get('websockify_host', '') | tojson }},
+            knPreferredBrands: {{ kn_preferred_brands | tojson }}
         };
     </script>
     <script src="/static/app.js"></script>

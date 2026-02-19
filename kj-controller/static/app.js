@@ -1034,6 +1034,214 @@ function restartApp() {
         'The web UI will be briefly unavailable while the service restarts.');
 }
 
+// --- Karaoke Nerds Search ---
+
+let knPreferredBrands = window.KJ_CONFIG.knPreferredBrands || [];
+let knExpandedSongs = {};
+
+async function searchKaraokeNerds() {
+    const input = document.getElementById('kn-query');
+    const btn = document.getElementById('kn-search-btn');
+    const status = document.getElementById('kn-status');
+    const query = input.value.trim();
+    if (!query || query.length < 2) {
+        log('Enter at least 2 characters to search.', 'error');
+        return;
+    }
+    log(`Searching Karaoke Nerds: ${query}`);
+    btn.disabled = true;
+    status.classList.remove('hidden');
+    document.getElementById('kn-stage').textContent = 'Searching karaokenerds.com...';
+
+    const data = await apiCall('/karaoke-nerds/search', { query });
+
+    btn.disabled = false;
+    status.classList.add('hidden');
+    if (data) {
+        if (Array.isArray(data) && data.length === 0) {
+            log('No results found on Karaoke Nerds.', 'error');
+            document.getElementById('kn-results').innerHTML =
+                '<div class="kn-no-results">No results found.</div>';
+        } else if (data.error) {
+            log(`Search error: ${data.error}`, 'error');
+        } else {
+            log(`Found ${data.length} song${data.length !== 1 ? 's' : ''} on Karaoke Nerds.`, 'success');
+            renderKNResults(data);
+        }
+    }
+}
+
+function sortKNTracks(tracks) {
+    const prefUpper = knPreferredBrands.map(b => b.toUpperCase());
+    return [...tracks].sort((a, b) => {
+        const tierA = a.is_community ? 0 : prefUpper.includes(a.brand_code.toUpperCase()) ? 1 : 2;
+        const tierB = b.is_community ? 0 : prefUpper.includes(b.brand_code.toUpperCase()) ? 1 : 2;
+        if (tierA !== tierB) return tierA - tierB;
+        // Within preferred tier, sort by config order
+        if (tierA === 1) {
+            return prefUpper.indexOf(a.brand_code.toUpperCase()) - prefUpper.indexOf(b.brand_code.toUpperCase());
+        }
+        return a.brand_name.localeCompare(b.brand_name);
+    });
+}
+
+function renderKNResults(songs) {
+    const container = document.getElementById('kn-results');
+    container.innerHTML = '';
+    knExpandedSongs = {};
+
+    songs.forEach((song, idx) => {
+        const songId = `kn-song-${idx}`;
+        const trackCount = song.tracks.length;
+        const isExpanded = idx === 0; // auto-expand first
+        knExpandedSongs[songId] = isExpanded;
+
+        // Song header
+        const header = document.createElement('div');
+        header.className = 'kn-song-header';
+        header.onclick = () => toggleKNSong(songId);
+
+        const chevron = document.createElement('span');
+        chevron.className = 'folder-chevron' + (isExpanded ? ' expanded' : '');
+        chevron.id = 'kn-chevron-' + idx;
+        chevron.textContent = '\u25B6';
+
+        const titleText = document.createElement('span');
+        titleText.className = 'kn-song-title';
+        titleText.textContent = `${song.title} \u2014 ${song.artist}`;
+
+        const count = document.createElement('span');
+        count.className = 'kn-track-count';
+        count.textContent = `${trackCount} track${trackCount !== 1 ? 's' : ''}`;
+
+        header.appendChild(chevron);
+        header.appendChild(titleText);
+        header.appendChild(count);
+        container.appendChild(header);
+
+        // Track list
+        const trackList = document.createElement('div');
+        trackList.className = 'kn-track-list' + (isExpanded ? '' : ' collapsed');
+        trackList.id = songId;
+
+        const sorted = sortKNTracks(song.tracks);
+        sorted.forEach(track => {
+            const trackEl = document.createElement('div');
+            const prefUpper = knPreferredBrands.map(b => b.toUpperCase());
+            const isPreferred = prefUpper.includes(track.brand_code.toUpperCase());
+            trackEl.className = 'kn-track' +
+                (track.is_community ? ' community' : '') +
+                (isPreferred ? ' preferred' : '');
+
+            const info = document.createElement('span');
+            info.className = 'kn-track-info';
+
+            const brandSpan = document.createElement('span');
+            brandSpan.className = 'kn-brand-name';
+            brandSpan.textContent = track.brand_name;
+            info.appendChild(brandSpan);
+
+            const codeSpan = document.createElement('span');
+            codeSpan.className = 'kn-brand-code';
+            codeSpan.textContent = track.brand_code;
+            info.appendChild(codeSpan);
+
+            if (track.is_community) {
+                const badge = document.createElement('span');
+                badge.className = 'kn-community-badge';
+                badge.textContent = 'Community';
+                info.appendChild(badge);
+            } else if (isPreferred) {
+                const badge = document.createElement('span');
+                badge.className = 'kn-preferred-badge';
+                badge.textContent = '\u2605';
+                badge.title = 'Preferred brand';
+                info.appendChild(badge);
+            }
+
+            const dlBtn = document.createElement('button');
+            dlBtn.className = 'kn-download-btn';
+            dlBtn.textContent = 'Download';
+            dlBtn.onclick = (e) => {
+                e.stopPropagation();
+                downloadKNTrack(track.youtube_url, track.brand_name, song.title, dlBtn);
+            };
+
+            trackEl.appendChild(info);
+            trackEl.appendChild(dlBtn);
+            trackList.appendChild(trackEl);
+        });
+
+        container.appendChild(trackList);
+    });
+}
+
+function toggleKNSong(songId) {
+    const el = document.getElementById(songId);
+    if (!el) return;
+    const isCollapsed = el.classList.toggle('collapsed');
+    // Find chevron by matching index
+    const idx = songId.replace('kn-song-', '');
+    const chevron = document.getElementById('kn-chevron-' + idx);
+    if (chevron) chevron.classList.toggle('expanded', !isCollapsed);
+}
+
+async function downloadKNTrack(youtubeUrl, brandName, songTitle, btn) {
+    btn.disabled = true;
+    btn.textContent = '...';
+    log(`Downloading ${songTitle} (${brandName})...`);
+
+    const data = await apiCall('/download', { url: youtubeUrl });
+
+    if (data && data.success) {
+        log(`Downloaded "${data.title}" (${brandName}) successfully!`, 'success');
+        btn.textContent = '\u2713';
+        btn.className = 'kn-download-btn downloaded';
+        await updateMediaList();
+    } else {
+        btn.disabled = false;
+        btn.textContent = 'Retry';
+    }
+}
+
+function toggleKNPrefs() {
+    const panel = document.getElementById('kn-prefs-panel');
+    panel.classList.toggle('hidden');
+    if (!panel.classList.contains('hidden')) {
+        document.getElementById('kn-prefs-input').value = knPreferredBrands.join(', ');
+        renderKNPrefsTags();
+    }
+}
+
+function renderKNPrefsTags() {
+    const container = document.getElementById('kn-prefs-tags');
+    container.innerHTML = '';
+    knPreferredBrands.forEach(code => {
+        const tag = document.createElement('span');
+        tag.className = 'kn-brand-tag';
+        tag.textContent = code;
+        container.appendChild(tag);
+    });
+}
+
+async function saveKNPrefs() {
+    const input = document.getElementById('kn-prefs-input').value;
+    const brands = input.split(',').map(s => s.trim().toUpperCase()).filter(s => s);
+
+    const data = await apiCall('/karaoke-nerds/config', { preferred_brands: brands });
+    if (data && data.preferred_brands) {
+        knPreferredBrands = data.preferred_brands;
+        renderKNPrefsTags();
+        log(`Updated preferred brands: ${knPreferredBrands.join(', ')}`, 'success');
+        // Re-render results if we have them
+        const results = document.getElementById('kn-results');
+        if (results.children.length > 0) {
+            // Trigger a fresh search to re-sort
+            searchKaraokeNerds();
+        }
+    }
+}
+
 // --- Initialization ---
 
 document.addEventListener('DOMContentLoaded', () => {

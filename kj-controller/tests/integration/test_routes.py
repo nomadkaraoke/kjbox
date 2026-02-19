@@ -1,6 +1,7 @@
 """Integration tests for Flask routes via test client."""
 
 import json
+from unittest.mock import patch
 
 from app import create_app
 
@@ -579,3 +580,109 @@ def test_system_shutdown(flask_test_client, mocker):
     data = json.loads(response.data)
     assert data["success"] is True
     mock_thread.assert_called_once()
+
+
+# --- Karaoke Nerds Search Tests ---
+
+def test_kn_search_requires_query(flask_test_client):
+    """POST /karaoke-nerds/search without query returns 400."""
+    response = flask_test_client.post('/karaoke-nerds/search',
+        data=json.dumps({}),
+        content_type='application/json')
+    assert response.status_code == 400
+
+
+def test_kn_search_short_query(flask_test_client):
+    """POST /karaoke-nerds/search with 1-char query returns 400."""
+    response = flask_test_client.post('/karaoke-nerds/search',
+        data=json.dumps({"query": "a"}),
+        content_type='application/json')
+    assert response.status_code == 400
+
+
+@patch('karaoke_nerds.requests.get')
+def test_kn_search_returns_results(mock_get, flask_test_client):
+    """POST /karaoke-nerds/search returns parsed results."""
+    from unittest.mock import MagicMock
+    mock_resp = MagicMock()
+    mock_resp.text = """
+    <table class="table"><tbody>
+        <tr class="group">
+            <td><a>Test Song</a></td>
+            <td><a>Test Artist</a></td>
+            <td><a href="#">1 Brand</a></td>
+        </tr>
+        <tr class="details d-none">
+            <td colspan="30"><ul class="list-group">
+                <li class="track list-group-item d-flex p-0">
+                    <a class="pr-1">Brand Name</a>
+                    <div class="ml-auto">
+                        <a href="https://www.youtube.com/watch?v=test123"><img class="web"></a>
+                        <a><span class="badge badge-primary badge-pill">BN</span></a>
+                    </div>
+                </li>
+            </ul></td>
+        </tr>
+    </tbody></table>
+    """
+    mock_resp.raise_for_status = MagicMock()
+    mock_get.return_value = mock_resp
+
+    response = flask_test_client.post('/karaoke-nerds/search',
+        data=json.dumps({"query": "test song"}),
+        content_type='application/json')
+    assert response.status_code == 200
+    data = json.loads(response.data)
+    assert len(data) == 1
+    assert data[0]["title"] == "Test Song"
+    assert len(data[0]["tracks"]) == 1
+
+
+@patch('karaoke_nerds.requests.get')
+def test_kn_search_handles_error(mock_get, flask_test_client):
+    """POST /karaoke-nerds/search returns empty on network error."""
+    mock_get.side_effect = Exception("Connection refused")
+
+    response = flask_test_client.post('/karaoke-nerds/search',
+        data=json.dumps({"query": "test song"}),
+        content_type='application/json')
+    assert response.status_code == 200
+    data = json.loads(response.data)
+    assert data == []
+
+
+def test_kn_get_config(flask_test_client):
+    """GET /karaoke-nerds/config returns preferred brands."""
+    response = flask_test_client.get('/karaoke-nerds/config')
+    assert response.status_code == 200
+    data = json.loads(response.data)
+    assert "preferred_brands" in data
+    assert isinstance(data["preferred_brands"], list)
+
+
+def test_kn_set_config(flask_test_client, flask_app, tmp_media_dir):
+    """POST /karaoke-nerds/config saves preferred brands."""
+    response = flask_test_client.post('/karaoke-nerds/config',
+        data=json.dumps({"preferred_brands": ["kv", " kfn ", "sk"]}),
+        content_type='application/json')
+    assert response.status_code == 200
+    data = json.loads(response.data)
+    # Should be uppercased and trimmed
+    assert data["preferred_brands"] == ["KV", "KFN", "SK"]
+    assert flask_app.kj_config["kn_preferred_brands"] == ["KV", "KFN", "SK"]
+
+
+def test_kn_set_config_invalid(flask_test_client):
+    """POST /karaoke-nerds/config with non-list returns 400."""
+    response = flask_test_client.post('/karaoke-nerds/config',
+        data=json.dumps({"preferred_brands": "not a list"}),
+        content_type='application/json')
+    assert response.status_code == 400
+
+
+def test_kn_set_config_empty_body(flask_test_client):
+    """POST /karaoke-nerds/config without preferred_brands returns 400."""
+    response = flask_test_client.post('/karaoke-nerds/config',
+        data=json.dumps({}),
+        content_type='application/json')
+    assert response.status_code == 400

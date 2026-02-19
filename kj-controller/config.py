@@ -44,6 +44,7 @@ def load_config(config_file=None):
         "websockify_enabled": True,
         "tls_cert": os.path.join(APP_DIR, 'certs', 'cert.pem'),
         "tls_key": os.path.join(APP_DIR, 'certs', 'key.pem'),
+        "kn_preferred_brands": ["KV", "KFN"],
     }
     if os.path.exists(config_file):
         try:

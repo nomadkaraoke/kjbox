@@ -202,7 +202,7 @@ class TestNormalizationConsistency:
         response = flask_test_client.get('/')
         html = response.data.decode('utf-8')
         # Extract the JSON object from window.KJ_CONFIG = { latinSpecialMap: ... }
-        match = re.search(r'latinSpecialMap:\s*({.*?})\s*\n', html)
+        match = re.search(r'latinSpecialMap:\s*({.*?})\s*[,\n]', html)
         assert match, "latinSpecialMap not found in rendered template"
         rendered_map = json.loads(match.group(1))
         assert rendered_map == LATIN_SPECIAL_MAP
