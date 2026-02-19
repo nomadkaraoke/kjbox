@@ -200,6 +200,8 @@ class ExternalCatalog:
                         file_path = new_prefix + file_path[len(old_prefix):]
 
                 filename = os.path.basename(file_path)
+                if not os.path.splitext(filename)[1]:
+                    continue  # Skip directories and extensionless entries
                 folder = os.path.dirname(file_path)
                 fmt = _detect_format(filename)
                 disc_id, artist, title = parse_karaoke_filename(filename)

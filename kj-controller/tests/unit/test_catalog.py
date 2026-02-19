@@ -301,6 +301,24 @@ class TestExternalCatalog:
         assert count == 1
         catalog.close()
 
+    def test_build_skips_directories(self, mock_config, tmp_path):
+        """Entries without file extensions (directories) are excluded."""
+        file_list = tmp_path / "with_dirs.txt"
+        file_list.write_text(
+            "/media/Karaoke/Andrew The Nomad MP4/MP4\n"
+            "/media/Karaoke/Andrew The Nomad MP4/CDG\n"
+            "/media/Karaoke/NOMAD 0501-\n"
+            "/media/Karaoke/NOMAD-0001-0099\n"
+            "/media/Karaoke/SC2411-08 - Rascal Flatts - Life Is A Highway.zip\n"
+            "/media/Karaoke/Queen - Bohemian Rhapsody.mp4\n"
+        )
+        catalog = ExternalCatalog(mock_config)
+        count = catalog.build_from_file_list(str(file_list))
+        assert count == 2
+        stats = catalog.stats()
+        assert 'unknown' not in stats['by_format']
+        catalog.close()
+
     def test_search_basic(self, mock_config, sample_file_list):
         catalog = ExternalCatalog(mock_config)
         catalog.build_from_file_list(sample_file_list)

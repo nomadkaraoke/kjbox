@@ -863,6 +863,14 @@ async function systemAction(action, label, extraWarning) {
     }
 }
 
+async function rebuildCatalog() {
+    log('Rebuilding catalog...');
+    const data = await apiCall('/catalog/build', {});
+    if (data && data.success) {
+        log(`Catalog rebuilt: ${data.count} entries indexed.`, 'success');
+    }
+}
+
 function restartApp() {
     systemAction('restart-app', 'Restart KJ Controller',
         'The web UI will be briefly unavailable while the service restarts.');
