@@ -1,79 +1,61 @@
 # Claude Code Instructions for kjbox
 
-## Overview
+**Read [README.md](README.md) first** for device info, SSH access, repo structure, and development workflow.
 
-This repository (`kjbox`) contains documentation and software for Nomad Karaoke live event devices:
+## What This Is
 
-- **NomadPi** — Raspberry Pi 4 running DietPi (the original device)
-- **NomadPC** — Intel N97 mini PC running Linux Mint 22.1 (more powerful replacement)
+KJ Controller (`kj-controller/`) is a Flask + vanilla JS web app for managing live karaoke shows. It runs on physical devices (NomadPi, NomadPC) controlling dual VLC instances, YouTube downloading, song catalog search (~415K songs), display overlays, and VNC screen preview.
 
-Both run the same KJ Controller software stack for video playback, AV equipment connection, and karaoke show management.
+## Key Files
 
-### Repository Contents
+**Frontend** (vanilla JS — no framework, no build step):
+- `kj-controller/templates/index.html` — single-page HTML (Jinja2 template)
+- `kj-controller/static/style.css` — dark theme, Nomad branding, responsive
+- `kj-controller/static/app.js` — all UI logic, fetch() REST calls, 2s status polling
 
+**Backend** (Flask):
+- `kj-controller/routes.py` — 25 REST API endpoints
+- `kj-controller/vlc.py` — VLCManager (dual VLC process control)
+- `kj-controller/media.py` — MediaIndex (scan, validate, download, delete)
+- `kj-controller/overlay.py` — OverlayManager (CRUD, JSON persistence)
+- `kj-controller/catalog.py` — ExternalCatalog (SQLite FTS5 search)
+- `kj-controller/app.py` — app factory + entry point
+- `kj-controller/config.py` — constants, platform detection, config loading
+
+**Detailed architecture**: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) (module diagram, full API reference, design decisions)
+
+## Deployment
+
+Push to `main` → auto-deployed to devices within ~60s (no build step).
+
+```bash
+ssh nomadpc                          # Mini PC (primary device)
+ssh nomadpi                          # Raspberry Pi
+ssh nomadpc 'sudo systemctl restart kj-controller'   # restart after Python changes
+ssh nomadpc 'journalctl -u kj-controller -f'         # tail logs
 ```
-docs/
-  ARCHITECTURE.md              # KJ Controller system architecture, API reference, design decisions
-  DEVELOPMENT.md               # Local setup, dev workflow, running tests
-  TESTING.md                   # Test conventions, coverage targets, fixtures
-  AUDIO.md                     # Audio configuration: HDMI/ALSA, device switching, live event routing
-  MINIPC-SETUP.md              # Setup guide for deploying to the x86 mini PC (NomadPC)
-  TROUBLESHOOTING.md           # Operations runbook: troubleshooting guides, common tasks
-  CHANGELOG.md                 # Device configuration change log (dated entries)
-  archive/
-    NOMADPI-DETAILS.md         # Pi-specific device reference: hardware, network, display, boot, services
-    NETWORK-CONFIG-BACKUP.md   # Tailscale VPN and Cloudflare tunnel configuration backup
-    2026-02-15-phase2-*.md     # Completed plan files (historical)
-kj-controller/                 # KJ Remote Controller web app for managing karaoke playback
+
+Web UI: `http://nomadpc.local` (LAN) or `https://kjbox.nomadkaraoke.com` (tunnel)
+
+## Testing
+
+```bash
+cd kj-controller && pytest                         # all tests
+cd kj-controller && pytest --cov --cov-report=term # with coverage (target: 70%+)
 ```
 
-### Documentation Structure
+See [docs/TESTING.md](docs/TESTING.md) for conventions and fixtures.
 
-Documentation is split by audience and purpose:
+## Documentation Maintenance
 
-| File | Audience | Content |
-|------|----------|---------|
-| `docs/MINIPC-SETUP.md` | System admins | Step-by-step setup guide for the mini PC (NomadPC) |
-| `docs/AUDIO.md` | Developers + system admins | ALSA config, HDMI audio, device switching, live event routing |
-| `docs/TROUBLESHOOTING.md` | System admins | Troubleshooting guides, common tasks |
-| `docs/CHANGELOG.md` | Everyone | Dated log of all device configuration changes |
-| `docs/archive/NOMADPI-DETAILS.md` | System admins | Pi-specific hardware specs, network, display, boot, VNC, services |
+When making **system/device changes** (not just code), update docs:
 
-### Documentation Maintenance - CRITICAL
+| Change Type | File to Update |
+|---|---|
+| Audio / ALSA / VLC audio | `docs/AUDIO.md` |
+| Troubleshooting / common tasks | `docs/TROUBLESHOOTING.md` |
+| Hardware, network, display, services | `docs/archive/NOMADPI-DETAILS.md` |
+| Mini PC setup or config | `docs/MINIPC-SETUP.md` |
+| **Any system change** | Add dated entry to `docs/CHANGELOG.md` |
 
-**IMPORTANT:** When working with either device (NomadPi or NomadPC), you MUST maintain comprehensive documentation:
-
-1. **Update the right file** based on what changed:
-   - Audio/ALSA/VLC audio changes → `docs/AUDIO.md`
-   - Troubleshooting steps or common tasks → `docs/TROUBLESHOOTING.md`
-   - Hardware, network, display, boot, services, or config file paths → `docs/archive/NOMADPI-DETAILS.md`
-   - **Always** add a dated entry to `docs/CHANGELOG.md` for any system change
-
-2. **What to document:**
-   - Exact configuration changes made (with file paths)
-   - Commands used to make changes
-   - Before/after states
-   - Troubleshooting steps that worked
-   - Any gotchas or important notes discovered
-
-3. **Documentation format:**
-   - Add new sections for new features/services in the appropriate file
-   - Update existing sections when changing configurations
-   - Include complete command examples with SSH prefix
-   - Document both the "what" and the "why"
-   - Add dated entries to the Change Log
-
-4. **Why this matters:**
-   - These devices are physical hardware setups that are difficult to replicate
-   - Configuration knowledge would be lost between sessions without documentation
-   - Future troubleshooting depends on understanding current state
-   - The documentation serves as the single source of truth for device configuration
-
-### Archive Convention
-
-- Files in `docs/archive/` are either **living reference docs** (e.g., `NOMADPI-DETAILS.md`) or **historical artifacts** with date prefixes (e.g., `2026-02-15-phase2-solid-refactor.plan.md`)
-- Date prefixes (`YYYY-MM-DD-`) are for completed/point-in-time documents only, not for actively maintained references
-
----
-
-**Remember:** If you configure it, document it. If you learn it, document it. If you fix it, document it.
+These are physical devices — configuration knowledge must be documented or it's lost between sessions.

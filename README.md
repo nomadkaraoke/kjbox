@@ -127,6 +127,52 @@ ssh nomadpi 'speaker-test -D hdmiout -c 2 -t sine -f 440 -l 1'
 ssh nomadpc 'speaker-test -c 2 -t sine -f 440 -l 1'
 ```
 
+## Development
+
+### Frontend Architecture
+
+The KJ Controller UI is a **single-page vanilla JavaScript app** — no framework, no build step:
+
+- `kj-controller/templates/index.html` — HTML structure (Jinja2 template)
+- `kj-controller/static/style.css` — all styles (dark theme, responsive)
+- `kj-controller/static/app.js` — all UI logic (`fetch()` REST calls, DOM manipulation)
+
+The UI polls `/status` every 2 seconds for live player state. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full module diagram, API reference, and design decisions.
+
+### Auto-Deploy
+
+The `kj-autodeploy` service on each device polls `origin/main` and pulls changes automatically within ~60 seconds. For static files (HTML, CSS, JS), the change takes effect on the next browser refresh. For Python changes, the service needs a restart:
+
+```bash
+ssh nomadpc 'sudo systemctl restart kj-controller'
+```
+
+### Quick Iteration
+
+```bash
+# Edit locally, push to main, auto-deploys in ~60s
+git add <files> && git commit -m "message" && git push
+
+# Or pull manually on device
+ssh nomadpc 'cd /opt/nomad/kjbox && git pull origin main'
+
+# Restart service if Python files changed
+ssh nomadpc 'sudo systemctl restart kj-controller'
+
+# Tail service logs
+ssh nomadpc 'journalctl -u kj-controller -f'
+```
+
+### Testing
+
+```bash
+cd kj-controller
+pytest                              # all tests
+pytest --cov --cov-report=term      # with coverage
+```
+
+See [docs/TESTING.md](docs/TESTING.md) for conventions, fixtures, and coverage targets. See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for local setup details.
+
 ## Key Technical Notes
 
 - **Pi HDMI Audio** requires a custom EDID override and `iec958` ALSA plugin due to the 7" touchscreen's corrupt EDID and kernel 6.12's IEC958 subframe format. See [docs/AUDIO.md](docs/AUDIO.md).
