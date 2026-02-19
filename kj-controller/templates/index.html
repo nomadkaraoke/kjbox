@@ -212,7 +212,7 @@
             <div class="container system-controls">
                 <h2>System</h2>
                 <div class="button-group">
-                    <button class="system-btn" onclick="rebuildCatalog()" title="Re-index the external USB drive karaoke library (~415K files) from the pre-built file list">Rebuild Catalog</button>
+                    <button class="system-btn" onclick="rebuildCatalog()" title="Re-index the external USB drive karaoke library from the file list configured in external_file_list, mounted at external_media_mount">Rebuild Catalog</button>
                     <button class="system-btn" onclick="restartApp()">Restart App</button>
                     <button class="system-btn system-btn-warn" onclick="rebootSystem()">Reboot</button>
                     <button class="system-btn system-btn-danger" onclick="shutdownSystem()">Shut Down</button>
@@ -237,7 +237,7 @@
             <div class="container available-songs">
                 <div class="header-row">
                     <h2>Available Songs<span id="media-count" class="media-count"></span></h2>
-                    <button class="rescan-btn" id="rescan-btn" onclick="rescanMedia()" title="Scan local media folders on this device for downloaded and imported files">Rescan Media</button>
+                    <button class="rescan-btn" id="rescan-btn" onclick="rescanMedia()" title="Scan the local directories listed in media_folders for downloaded and imported files">Rescan Media</button>
                 </div>
                 <div class="search-box">
                     <input type="text" id="catalog-search" placeholder="Search your library and catalog..." autocomplete="off">
