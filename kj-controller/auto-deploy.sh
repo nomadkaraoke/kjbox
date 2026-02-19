@@ -34,16 +34,16 @@ while true; do
         fi
 
         log "Restarting kj-controller..."
-        systemctl restart kj-controller
-        systemctl is-active --quiet rotation-display && systemctl restart rotation-display
-        systemctl is-active --quiet overlay-display && systemctl restart overlay-display
+        sudo systemctl restart kj-controller
+        systemctl is-active --quiet rotation-display && sudo systemctl restart rotation-display
+        systemctl is-active --quiet overlay-display && sudo systemctl restart overlay-display
         log "Deploy complete (${REMOTE:0:7})"
 
         # Rebuild external catalog if catalog code changed
         if [ -n "$CATALOG_CHANGED" ]; then
             log "catalog.py changed, rebuilding external catalog..."
             # Wait for Flask to start, then trigger rebuild in background
-            (sleep 15 && curl -s -X POST http://localhost:80/catalog/build > /dev/null 2>&1 && log "Catalog rebuild complete.") &
+            (sleep 15 && curl -sk -X POST https://localhost/catalog/build > /dev/null 2>&1 || curl -s -X POST http://localhost/catalog/build > /dev/null 2>&1; log "Catalog rebuild complete.") &
         fi
     fi
 
