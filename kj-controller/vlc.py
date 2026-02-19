@@ -16,7 +16,7 @@ class VLCManager:
 
     def __init__(self, config, enabled=None):
         self.config = config
-        self.enabled = enabled if enabled is not None else is_pi()
+        self.enabled = enabled if enabled is not None else (is_pi() or config.get('enable_vlc', False))
         self.processes = {"karaoke": None, "filler": None}
         self.current_playing_path = None
         self.current_filler_track = None

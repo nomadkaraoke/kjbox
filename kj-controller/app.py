@@ -64,37 +64,39 @@ def start_app():  # pragma: no cover
     overlay_mgr = OverlayManager()
     vlc.on_karaoke_end = lambda: overlay_mgr.set_karaoke_playing(False)
 
-    # Pi-specific setup
+    # Platform-specific setup
     if is_pi():
         log_message("Running on NomadPi - enabling VLC and X11 setup.", cfg)
         subprocess.run(['xhost', '+SI:localuser:dietpi'], env={**os.environ, 'DISPLAY': ':0'}, capture_output=True)
         os.makedirs('/run/user/1000', exist_ok=True)
         subprocess.run(['chown', 'dietpi:dietpi', '/run/user/1000'], capture_output=True)
-
-        # Start websockify (WebSocket-to-TCP proxy for VNC preview in browser)
-        if cfg.get('websockify_enabled', True):
-            ws_port = cfg.get('websockify_port', 6080)
-            vnc_target = cfg.get('vnc_target', 'localhost:5900')
-            # Find websockify binary: check venv bin dir first, then system PATH
-            venv_bin = os.path.dirname(sys.executable)
-            ws_bin = os.path.join(venv_bin, 'websockify')
-            if not os.path.isfile(ws_bin):
-                ws_bin = shutil.which('websockify')
-            if ws_bin:
-                log_message(f"Starting websockify on :{ws_port} -> {vnc_target}...", cfg)
-                ws_cmd = [ws_bin, str(ws_port), vnc_target]
-                tls_cert = cfg.get('tls_cert', '')
-                tls_key = cfg.get('tls_key', '')
-                if tls_cert and tls_key and os.path.isfile(tls_cert) and os.path.isfile(tls_key):
-                    ws_cmd[1:1] = ['--cert', tls_cert, '--key', tls_key]
-                subprocess.Popen(
-                    ws_cmd,
-                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                )
-            else:
-                log_message("WARNING: websockify not found - VNC preview unavailable.", cfg)
+    elif cfg.get('enable_vlc', False):
+        log_message("Running on karaoke device (non-Pi) - VLC enabled via config.", cfg)
     else:
         log_message("Running in local/dev mode - VLC disabled, web UI and media scanning only.", cfg)
+
+    # Start websockify on any karaoke device (Pi or mini PC with enable_vlc)
+    if (is_pi() or cfg.get('enable_vlc', False)) and cfg.get('websockify_enabled', True):
+        ws_port = cfg.get('websockify_port', 6080)
+        vnc_target = cfg.get('vnc_target', 'localhost:5900')
+        # Find websockify binary: check venv bin dir first, then system PATH
+        venv_bin = os.path.dirname(sys.executable)
+        ws_bin = os.path.join(venv_bin, 'websockify')
+        if not os.path.isfile(ws_bin):
+            ws_bin = shutil.which('websockify')
+        if ws_bin:
+            log_message(f"Starting websockify on :{ws_port} -> {vnc_target}...", cfg)
+            ws_cmd = [ws_bin, str(ws_port), vnc_target]
+            tls_cert = cfg.get('tls_cert', '')
+            tls_key = cfg.get('tls_key', '')
+            if tls_cert and tls_key and os.path.isfile(tls_cert) and os.path.isfile(tls_key):
+                ws_cmd[1:1] = ['--cert', tls_cert, '--key', tls_key]
+            subprocess.Popen(
+                ws_cmd,
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            )
+        else:
+            log_message("WARNING: websockify not found - VNC preview unavailable.", cfg)
 
     # Create Flask app with services
     flask_app = Flask(__name__)
