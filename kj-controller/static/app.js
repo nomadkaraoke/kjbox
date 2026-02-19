@@ -1098,7 +1098,7 @@ function renderKNResults(songs) {
     songs.forEach((song, idx) => {
         const songId = `kn-song-${idx}`;
         const trackCount = song.tracks.length;
-        const isExpanded = idx === 0; // auto-expand first
+        const isExpanded = false;
         knExpandedSongs[songId] = isExpanded;
 
         // Song header
