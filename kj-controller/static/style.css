@@ -214,7 +214,7 @@ button:disabled:hover {
 
 #media-list { list-style-type: none; padding: 0; border: 1px solid #2a2a2a; border-radius: 8px; overflow: hidden; }
 #media-list li { padding: 10px 12px; cursor: pointer; border-bottom: 1px solid #2a2a2a; display: flex; justify-content: space-between; align-items: center; transition: background-color 0.15s; font-size: 0.9em; text-align: left; min-width: 0; }
-#media-list li > span:first-of-type { min-width: 0; word-wrap: break-word; }
+#media-list li > span:first-of-type { flex: 1; min-width: 0; word-wrap: break-word; }
 #media-list li:last-child { border-bottom: none; }
 #media-list li:hover { background-color: #252525; }
 #media-list li.playing { background-color: rgba(255, 223, 107, 0.15); color: #ffdf6b; }
@@ -224,7 +224,7 @@ button:disabled:hover {
 .folder-chevron.expanded { transform: rotate(90deg); }
 .folder-items.collapsed { display: none; }
 .folder-items li { padding: 10px 12px; cursor: pointer; border-bottom: 1px solid #2a2a2a; display: flex; justify-content: space-between; align-items: center; transition: background-color 0.15s; font-size: 0.9em; text-align: left; min-width: 0; }
-.folder-items li > span:first-of-type { min-width: 0; word-wrap: break-word; }
+.folder-items li > span:first-of-type { flex: 1; min-width: 0; word-wrap: break-word; }
 .folder-items li:last-child { border-bottom: none; }
 .folder-items li:hover { background-color: #252525; }
 .folder-items li.playing { background-color: rgba(255, 223, 107, 0.15); color: #ffdf6b; }
@@ -271,7 +271,7 @@ button:disabled:hover {
 .format-badge.mp4 { background-color: #ff5bb8; color: white; }
 .format-badge.other { background-color: #333; color: #888; }
 .artist-name { color: #8b5cf6; }
-.catalog-detail { display: flex; flex-direction: column; gap: 2px; min-width: 0; overflow: hidden; }
+.catalog-detail { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; overflow: hidden; }
 .catalog-folder { font-size: 0.75em; color: #666; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .section-header { background-color: #141414; color: #666; font-size: 0.8em; padding: 6px 12px; text-transform: uppercase; letter-spacing: 0.5px; cursor: default; }
 .section-header:hover { background-color: #141414; }
