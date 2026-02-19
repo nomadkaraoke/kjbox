@@ -51,16 +51,6 @@
                     <label for="filler-volume">Filler Volume: <span id="filler-volume-label" class="range-label">39%</span></label>
                     <input type="range" id="filler-volume" class="volume-slider" min="0" max="256" value="100" oninput="updateFillerVolume(this.value)">
                 </div>
-                <div class="controls-row">
-                    <div class="control-half">
-                        <label for="filler-selector">Filler Music:</label>
-                        <select id="filler-selector" onchange="setFillerMusic(this.value)"></select>
-                    </div>
-                    <div class="control-half">
-                        <label for="audio-device">Audio Output:</label>
-                        <select id="audio-device" onchange="setAudioDevice(this.value)"></select>
-                    </div>
-                </div>
             </div>
             <div class="container overlay-panel">
                 <div class="header-row">
@@ -98,6 +88,16 @@
                     <button class="system-btn" onclick="restartApp()">Restart App</button>
                     <button class="system-btn system-btn-warn" onclick="dangerousAction(this, 'reboot', 'Reboot', 'The entire system will reboot. This will take about a minute.')">Reboot</button>
                     <button class="system-btn system-btn-danger" onclick="dangerousAction(this, 'shutdown', 'Shut Down', 'The system will power off completely. You will need physical access to turn it back on.')">Shut Down</button>
+                </div>
+                <div class="controls-row">
+                    <div class="control-half">
+                        <label for="filler-selector">Filler Music:</label>
+                        <select id="filler-selector" onchange="setFillerMusic(this.value)"></select>
+                    </div>
+                    <div class="control-half">
+                        <label for="audio-device">Audio Output:</label>
+                        <select id="audio-device" onchange="setAudioDevice(this.value)"></select>
+                    </div>
                 </div>
                 <div id="status-bar">
                     <strong>Status:</strong> <span id="player-state">Unknown</span> |

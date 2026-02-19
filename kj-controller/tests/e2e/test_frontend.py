@@ -157,15 +157,6 @@ class TestPlaybackControls:
         # Default value 100 = ~39%
         expect(label).to_have_text("39%")
 
-    def test_filler_selector(self, app_page):
-        expect(app_page.locator("#filler-selector")).to_be_visible()
-
-    def test_audio_device_selector(self, app_page):
-        select = app_page.locator("#audio-device")
-        expect(select).to_be_visible()
-        # Should have our two test audio devices
-        options = select.locator("option")
-        expect(options).to_have_count(2)
 
 
 # ---------------------------------------------------------------------------
@@ -214,6 +205,20 @@ class TestStatusBar:
 
     def test_shows_filler_info(self, app_page):
         expect(app_page.locator("#status-bar")).to_contain_text("Filler:")
+
+    def test_filler_selector_in_system(self, app_page):
+        """Filler selector is in the System section."""
+        system = app_page.locator(".system-controls")
+        expect(system.locator("#filler-selector")).to_be_visible()
+
+    def test_audio_device_selector_in_system(self, app_page):
+        """Audio device selector is in the System section."""
+        system = app_page.locator(".system-controls")
+        select = system.locator("#audio-device")
+        expect(select).to_be_visible()
+        # Should have our two test audio devices
+        options = select.locator("option")
+        expect(options).to_have_count(2)
 
     def test_audio_warning_hidden(self, app_page):
         """Audio warning should be hidden when no audio error."""

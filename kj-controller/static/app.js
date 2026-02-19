@@ -458,6 +458,13 @@ async function updateStatus() {
                 }
             }
 
+            if (data.current_filler_track) {
+                const fillerSelect = document.getElementById('filler-selector');
+                if (fillerSelect.value !== data.current_filler_track) {
+                    fillerSelect.value = data.current_filler_track;
+                }
+            }
+
             // Track current playing path for delete protection (#6)
             currentPlayingPath = data.current_playing_path || null;
 
