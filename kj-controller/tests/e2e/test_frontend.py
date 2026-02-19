@@ -65,14 +65,15 @@ class TestLayoutStructure:
         expect(app_page.locator("#col1")).to_be_visible()
         expect(app_page.locator("#col2")).to_be_visible()
 
-    def test_footer_area(self, app_page):
-        expect(app_page.locator(".footer-area")).to_be_visible()
-
     def test_status_bar(self, app_page):
         expect(app_page.locator("#status-bar")).to_be_visible()
 
     def test_log_area(self, app_page):
         expect(app_page.locator("#log-area")).to_be_visible()
+
+    def test_now_playing_bar_hidden_initially(self, app_page):
+        """Now-playing bar should be hidden when nothing is playing."""
+        expect(app_page.locator("#now-playing-bar")).to_be_hidden()
 
 
 # ---------------------------------------------------------------------------
@@ -111,13 +112,22 @@ class TestPlaybackControls:
         expect(app_page.locator("h2", has_text="Playback Controls")).to_be_visible()
 
     def test_pause_resume_button(self, app_page):
-        expect(app_page.locator("button", has_text="Pause / Resume")).to_be_visible()
+        btn = app_page.locator("#btn-pause")
+        expect(btn).to_be_visible()
+        # Default idle state shows "Pause / Resume"
+        expect(btn).to_have_text("Pause / Resume")
 
-    def test_restart_button(self, app_page):
-        expect(app_page.get_by_role("button", name="Restart", exact=True)).to_be_visible()
+    def test_restart_button_disabled_when_stopped(self, app_page):
+        """Restart is disabled when nothing is playing."""
+        btn = app_page.locator("#btn-restart")
+        expect(btn).to_be_visible()
+        expect(btn).to_be_disabled()
 
-    def test_stop_button(self, app_page):
-        expect(app_page.locator("button", has_text="Stop")).to_be_visible()
+    def test_stop_button_disabled_when_stopped(self, app_page):
+        """Stop is disabled when nothing is playing."""
+        btn = app_page.locator("#btn-stop")
+        expect(btn).to_be_visible()
+        expect(btn).to_be_disabled()
 
     def test_seek_slider(self, app_page):
         slider = app_page.locator("#seek-slider")
@@ -129,9 +139,23 @@ class TestPlaybackControls:
         expect(slider).to_be_visible()
         expect(slider).to_have_attribute("max", "256")
 
+    def test_karaoke_volume_label(self, app_page):
+        """Volume slider shows percentage label."""
+        label = app_page.locator("#karaoke-volume-label")
+        expect(label).to_be_visible()
+        # Default value 200 = ~78%
+        expect(label).to_have_text("78%")
+
     def test_filler_volume_slider(self, app_page):
         slider = app_page.locator("#filler-volume")
         expect(slider).to_be_visible()
+
+    def test_filler_volume_label(self, app_page):
+        """Filler volume slider shows percentage label."""
+        label = app_page.locator("#filler-volume-label")
+        expect(label).to_be_visible()
+        # Default value 100 = ~39%
+        expect(label).to_have_text("39%")
 
     def test_filler_selector(self, app_page):
         expect(app_page.locator("#filler-selector")).to_be_visible()
@@ -188,17 +212,48 @@ class TestStatusBar:
         # The status poll should have run and set "stopped"
         expect(app_page.locator("#player-state")).to_have_text("stopped")
 
-    def test_shows_playing_none(self, app_page):
-        expect(app_page.locator("#current-video")).to_have_text("None")
-
-    def test_shows_time_zero(self, app_page):
-        expect(app_page.locator("#current-time")).to_have_text("0:00")
+    def test_shows_filler_info(self, app_page):
+        expect(app_page.locator("#status-bar")).to_contain_text("Filler:")
 
     def test_audio_warning_hidden(self, app_page):
         """Audio warning should be hidden when no audio error."""
         warning = app_page.locator("#audio-warning")
         # display: none via CSS
         expect(warning).not_to_be_visible()
+
+
+# ---------------------------------------------------------------------------
+# Overlay modal
+# ---------------------------------------------------------------------------
+
+class TestOverlayModal:
+    """Overlay form is in a modal dialog."""
+
+    def test_overlay_modal_hidden_initially(self, app_page):
+        expect(app_page.locator("#overlay-modal")).to_be_hidden()
+
+    def test_add_button_opens_modal(self, app_page):
+        app_page.locator("#overlay-add-btn").click()
+        expect(app_page.locator("#overlay-modal")).to_be_visible()
+        expect(app_page.locator("#overlay-modal-title")).to_have_text("Add Overlay")
+
+    def test_cancel_closes_modal(self, app_page):
+        app_page.locator("#overlay-add-btn").click()
+        expect(app_page.locator("#overlay-modal")).to_be_visible()
+        app_page.locator(".overlay-cancel-btn").click()
+        expect(app_page.locator("#overlay-modal")).to_be_hidden()
+
+    def test_escape_closes_modal(self, app_page):
+        app_page.locator("#overlay-add-btn").click()
+        expect(app_page.locator("#overlay-modal")).to_be_visible()
+        app_page.keyboard.press("Escape")
+        expect(app_page.locator("#overlay-modal")).to_be_hidden()
+
+    def test_close_button_closes_modal(self, app_page):
+        app_page.locator("#overlay-add-btn").click()
+        expect(app_page.locator("#overlay-modal")).to_be_visible()
+        app_page.locator(".modal-close").click()
+        expect(app_page.locator("#overlay-modal")).to_be_hidden()
 
 
 # ---------------------------------------------------------------------------
@@ -238,6 +293,14 @@ class TestInteractions:
         app_page.locator("#download-btn").click()
         expect(app_page.locator("#log-area")).to_contain_text("Please enter a YouTube URL")
 
+    def test_slash_focuses_search(self, app_page):
+        """Pressing '/' focuses the search input."""
+        # Click body first to ensure no input is focused
+        app_page.locator("h2", has_text="Playback").click()
+        app_page.keyboard.press("/")
+        focused_id = app_page.evaluate("document.activeElement.id")
+        assert focused_id == "catalog-search"
+
 
 # ---------------------------------------------------------------------------
 # Responsive layout
@@ -247,7 +310,7 @@ class TestResponsiveLayout:
     """Test responsive breakpoints."""
 
     def test_mobile_layout_single_column(self, page, live_server):
-        """At mobile width, layout switches to single column."""
+        """At mobile width, layout switches to single column with reordered sections."""
         page.set_viewport_size({"width": 375, "height": 812})
         page.goto(live_server)
         page.wait_for_load_state("networkidle")
@@ -258,9 +321,26 @@ class TestResponsiveLayout:
         )
         assert display == "flex"
 
-        # Both columns should still be visible
-        expect(page.locator("#col1")).to_be_visible()
-        expect(page.locator("#col2")).to_be_visible()
+        # Columns use display:contents so sections are reordered
+        col1_display = page.evaluate(
+            "getComputedStyle(document.querySelector('#col1')).display"
+        )
+        assert col1_display == "contents"
+
+    def test_mobile_section_order(self, page, live_server):
+        """On mobile, song library comes before overlays and system."""
+        page.set_viewport_size({"width": 375, "height": 812})
+        page.goto(live_server)
+        page.wait_for_load_state("networkidle")
+
+        # Available songs should have order 2, system should have order 6
+        songs_order = page.evaluate(
+            "getComputedStyle(document.querySelector('.available-songs')).order"
+        )
+        system_order = page.evaluate(
+            "getComputedStyle(document.querySelector('.system-controls')).order"
+        )
+        assert int(songs_order) < int(system_order)
 
     def test_desktop_layout_grid(self, page, live_server):
         """At desktop width, layout uses CSS grid."""

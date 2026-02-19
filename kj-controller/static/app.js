@@ -11,6 +11,14 @@ function log(message, type = 'info') {
     logArea.prepend(entry);
 }
 
+// --- Feedback (#12) ---
+
+function flashElement(el, type = 'success') {
+    el.classList.remove('flash-success', 'flash-error');
+    void el.offsetWidth; // force reflow to restart animation
+    el.classList.add(type === 'success' ? 'flash-success' : 'flash-error');
+}
+
 // --- API ---
 
 async function apiCall(endpoint, body) {
@@ -35,12 +43,15 @@ async function apiCall(endpoint, body) {
     }
 }
 
-// --- Download ---
+// --- Download (#9 progress stages) ---
+
+let downloadStageTimers = [];
 
 async function downloadSong() {
     const urlInput = document.getElementById('youtube-url');
     const downloadBtn = document.getElementById('download-btn');
     const downloadStatus = document.getElementById('download-status');
+    const downloadStage = document.getElementById('download-stage');
     const url = urlInput.value;
     if (!url) {
         log('Please enter a YouTube URL.', 'error');
@@ -49,17 +60,39 @@ async function downloadSong() {
     log(`Downloading: ${url}`);
     downloadBtn.disabled = true;
     downloadStatus.classList.remove('hidden');
+
+    // Staged progress messages
+    downloadStageTimers.forEach(t => clearTimeout(t));
+    downloadStageTimers = [];
+    const stages = [
+        { time: 0, text: 'Fetching video info...' },
+        { time: 3000, text: 'Downloading video...' },
+        { time: 15000, text: 'Still downloading (large file)...' },
+        { time: 30000, text: 'Almost there...' },
+    ];
+    stages.forEach(s => {
+        downloadStageTimers.push(setTimeout(() => {
+            downloadStage.textContent = s.text;
+        }, s.time));
+    });
+
     const data = await apiCall('/download', { url });
+
+    downloadStageTimers.forEach(t => clearTimeout(t));
+    downloadStageTimers = [];
     downloadBtn.disabled = false;
     downloadStatus.classList.add('hidden');
     if (data && data.success) {
         log(`Downloaded "${data.title}" successfully!`, 'success');
         urlInput.value = '';
+        flashElement(urlInput, 'success');
         await updateMediaList();
     }
 }
 
 // --- Playback ---
+
+let currentPlayingPath = null;
 
 async function playMedia(filePath) {
     if (!filePath) {
@@ -72,6 +105,11 @@ async function playMedia(filePath) {
 }
 
 async function deleteMedia(filePath, displayName) {
+    // Prevent deletion of currently-playing song (#6)
+    if (filePath === currentPlayingPath) {
+        log('Cannot delete the currently playing song. Stop it first.', 'error');
+        return;
+    }
     if (!confirm(`Are you sure you want to delete "${displayName}"?`)) {
         return;
     }
@@ -110,16 +148,32 @@ async function controlPlayback(action) {
     await apiCall('/control', { action });
 }
 
-// --- Volume & Seek ---
+// --- Volume & Seek (#2 volume labels) ---
+
+function volumePercent(val) {
+    return Math.round(val / 256 * 100) + '%';
+}
+
+function updateKaraokeVolume(value) {
+    document.getElementById('karaoke-volume-label').textContent = volumePercent(value);
+    setVolume('karaoke', value);
+}
+
+function updateFillerVolume(value) {
+    document.getElementById('filler-volume-label').textContent = volumePercent(value);
+    setVolume('filler', value);
+}
 
 async function setVolume(target, level) {
-    log(`Setting ${target} volume to ${level}`);
     await apiCall('/volume', { target, level: parseInt(level) });
 }
 
 async function setAudioDevice(device) {
-    log(`Switching audio device to: ${device}`);
-    await apiCall('/audio_device', { device });
+    log(`Switching audio device to: ${device} (VLC will restart)`);
+    const data = await apiCall('/audio_device', { device });
+    if (data) {
+        flashElement(document.getElementById('audio-device'), 'success');
+    }
 }
 
 let totalVideoLength = 0;
@@ -142,7 +196,10 @@ async function seekVideo(position) {
 
 async function setFillerMusic(trackName) {
     log(`Setting filler music to: ${trackName}`);
-    await apiCall('/filler_music', { track_name: trackName });
+    const data = await apiCall('/filler_music', { track_name: trackName });
+    if (data) {
+        flashElement(document.getElementById('filler-selector'), 'success');
+    }
 }
 
 async function updateFillerMusicList() {
@@ -236,6 +293,7 @@ function createMediaItemLi(item) {
 
     li.appendChild(titleSpan);
     li.appendChild(rightSide);
+    li.title = 'Click to play';
     li.onclick = () => {
         document.querySelectorAll('#media-list li').forEach(el => el.classList.remove('playing'));
         li.classList.add('playing');
@@ -324,7 +382,7 @@ async function updateMediaList() {
     }
 }
 
-// --- Status ---
+// --- Status (#1 now-playing, #3 button states) ---
 
 function formatTime(seconds) {
     if (isNaN(seconds) || seconds < 0) return "0:00";
@@ -333,16 +391,62 @@ function formatTime(seconds) {
     return `${min}:${sec}`;
 }
 
+function updateNowPlaying(data) {
+    const bar = document.getElementById('now-playing-bar');
+    const npState = document.getElementById('np-state');
+    const npTitle = document.getElementById('np-title');
+    const npTime = document.getElementById('np-time');
+    const npLength = document.getElementById('np-length');
+    const npPause = document.getElementById('np-pause');
+
+    const state = data.state || 'stopped';
+    const isActive = state === 'playing' || state === 'paused';
+
+    if (isActive && data.current_playing) {
+        bar.classList.remove('hidden');
+        npTitle.textContent = data.current_playing;
+        npTime.textContent = formatTime(data.time);
+        npLength.textContent = formatTime(data.length);
+
+        npState.textContent = state === 'playing' ? 'Playing' : 'Paused';
+        npState.className = 'now-playing-state ' + (state === 'playing' ? 'state-playing' : 'state-paused');
+        npPause.textContent = state === 'playing' ? 'Pause' : 'Resume';
+    } else {
+        bar.classList.add('hidden');
+    }
+}
+
+function updatePlaybackButtons(state) {
+    const btnPause = document.getElementById('btn-pause');
+    const btnRestart = document.getElementById('btn-restart');
+    const btnStop = document.getElementById('btn-stop');
+
+    if (state === 'playing') {
+        btnPause.textContent = 'Pause';
+        btnPause.disabled = false;
+        btnRestart.disabled = false;
+        btnStop.disabled = false;
+    } else if (state === 'paused') {
+        btnPause.textContent = 'Resume';
+        btnPause.disabled = false;
+        btnRestart.disabled = false;
+        btnStop.disabled = false;
+    } else {
+        btnPause.textContent = 'Pause / Resume';
+        btnPause.disabled = false; // Keep enabled so user can always try
+        btnRestart.disabled = true;
+        btnStop.disabled = true;
+    }
+}
+
 async function updateStatus() {
     try {
         const response = await fetch('/status');
         const data = await response.json();
         if (response.ok) {
-            document.getElementById('player-state').textContent = data.state || 'unknown';
-            document.getElementById('current-video').textContent = data.current_playing || 'None';
+            const state = data.state || 'stopped';
+            document.getElementById('player-state').textContent = state;
             document.getElementById('current-filler').textContent = data.current_filler_track || 'None';
-            document.getElementById('current-time').textContent = formatTime(data.time);
-            document.getElementById('total-time').textContent = formatTime(data.length);
 
             const audioWarning = document.getElementById('audio-warning');
             audioWarning.style.display = data.audio_error ? 'block' : 'none';
@@ -353,6 +457,9 @@ async function updateStatus() {
                     deviceSelect.value = data.audio_device;
                 }
             }
+
+            // Track current playing path for delete protection (#6)
+            currentPlayingPath = data.current_playing_path || null;
 
             totalVideoLength = data.length || 0;
             const seekSlider = document.getElementById('seek-slider');
@@ -365,6 +472,10 @@ async function updateStatus() {
                     updateSeekLabel(0);
                 }
             }
+
+            // Update now-playing bar (#1) and button states (#3)
+            updateNowPlaying(data);
+            updatePlaybackButtons(state);
         }
     } catch (error) {
         // Don't log periodic status check errors to avoid clutter
@@ -470,6 +581,7 @@ function renderUnifiedResults(localResults, catalogResults, query) {
         }
         catalogResults.forEach(item => {
             const li = document.createElement('li');
+            li.title = 'Click to play from external drive';
             const detail = document.createElement('div');
             detail.className = 'catalog-detail';
 
@@ -543,17 +655,23 @@ async function checkCatalogAvailability() {
         const response = await fetch('/catalog/stats');
         const data = await response.json();
         const searchInput = document.getElementById('catalog-search');
+        let placeholder;
         if (data.available) {
-            searchInput.placeholder = `Search your library + ${data.total.toLocaleString()} catalog songs...`;
+            placeholder = `Search your library + ${data.total.toLocaleString()} catalog songs...`;
         } else {
-            searchInput.placeholder = 'Search your library...';
+            placeholder = 'Search your library...';
         }
+        // Add keyboard shortcut hint on non-touch devices (#8)
+        if (!('ontouchstart' in window)) {
+            placeholder += '  (press /)';
+        }
+        searchInput.placeholder = placeholder;
     } catch (error) {
         // Catalog not available - local search still works
     }
 }
 
-// --- Overlays ---
+// --- Overlays (modal #10) ---
 
 const OVERLAY_TYPE_LABELS = {
     ticker: 'Ticker',
@@ -668,9 +786,10 @@ function onOverlayPositionChange() {
 }
 
 function showOverlayForm(overlay) {
-    const form = document.getElementById('overlay-form');
-    form.classList.remove('hidden');
-    document.getElementById('overlay-add-btn').classList.add('hidden');
+    const modal = document.getElementById('overlay-modal');
+    const title = document.getElementById('overlay-modal-title');
+    modal.classList.remove('hidden');
+    title.textContent = overlay ? 'Edit Overlay' : 'Add Overlay';
 
     // Reset form
     document.getElementById('overlay-edit-id').value = overlay ? overlay.id : '';
@@ -706,8 +825,7 @@ function showOverlayForm(overlay) {
 }
 
 function hideOverlayForm() {
-    document.getElementById('overlay-form').classList.add('hidden');
-    document.getElementById('overlay-add-btn').classList.remove('hidden');
+    document.getElementById('overlay-modal').classList.add('hidden');
 }
 
 function editOverlay(overlay) {
@@ -849,7 +967,40 @@ function setVncSize(size) {
     localStorage.setItem('kj-vnc-size', size);
 }
 
-// --- System Control ---
+// --- System Control (#4 dangerous action protection) ---
+
+function dangerousAction(btn, action, label, extraWarning) {
+    if (btn.dataset.armed) {
+        // Second click — execute
+        clearInterval(btn._confirmTimer);
+        delete btn.dataset.armed;
+        btn.textContent = label;
+        btn.classList.remove('system-btn-armed');
+        log(`System: ${label}...`);
+        apiCall(`/system/${action}`, {}).then(data => {
+            if (data && data.success) {
+                log(data.message, 'success');
+            }
+        });
+        return;
+    }
+    // First click — arm the button
+    btn.dataset.armed = 'true';
+    btn.classList.add('system-btn-armed');
+    let remaining = 3;
+    btn.textContent = `Confirm? (${remaining}s)`;
+    btn._confirmTimer = setInterval(() => {
+        remaining--;
+        if (remaining <= 0) {
+            clearInterval(btn._confirmTimer);
+            delete btn.dataset.armed;
+            btn.textContent = label;
+            btn.classList.remove('system-btn-armed');
+        } else {
+            btn.textContent = `Confirm? (${remaining}s)`;
+        }
+    }, 1000);
+}
 
 async function systemAction(action, label, extraWarning) {
     const message = extraWarning
@@ -876,16 +1027,6 @@ function restartApp() {
         'The web UI will be briefly unavailable while the service restarts.');
 }
 
-function rebootSystem() {
-    systemAction('reboot', 'Reboot System',
-        'The entire system will reboot. This will take about a minute.');
-}
-
-function shutdownSystem() {
-    systemAction('shutdown', 'Shut Down System',
-        'The system will power off completely. You will need physical access to turn it back on.');
-}
-
 // --- Initialization ---
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -906,6 +1047,18 @@ document.addEventListener('DOMContentLoaded', () => {
         if (e.key === 'Escape') clearSearch();
     });
 
+    // Keyboard shortcut: '/' to focus search (#8)
+    document.addEventListener('keydown', (e) => {
+        if (e.key === '/' && !['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName)) {
+            e.preventDefault();
+            document.getElementById('catalog-search').focus();
+        }
+        // Escape closes overlay modal
+        if (e.key === 'Escape' && !document.getElementById('overlay-modal').classList.contains('hidden')) {
+            hideOverlayForm();
+        }
+    });
+
     // Overlay slider labels
     const speedSlider = document.getElementById('overlay-speed');
     if (speedSlider) {
@@ -919,6 +1072,10 @@ document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('overlay-opacity-label').textContent = Math.round(opacitySlider.value * 100) + '%';
         });
     }
+
+    // Initialize volume labels (#2)
+    document.getElementById('karaoke-volume-label').textContent = volumePercent(document.getElementById('karaoke-volume').value);
+    document.getElementById('filler-volume-label').textContent = volumePercent(document.getElementById('filler-volume').value);
 
     // Restore VNC size preference
     const savedVncSize = localStorage.getItem('kj-vnc-size');

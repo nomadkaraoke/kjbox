@@ -16,26 +16,40 @@
         <button onclick="fixAudio()">Fix Audio</button>
     </div>
 
+    <div id="now-playing-bar" class="now-playing-bar hidden">
+        <div class="now-playing-info">
+            <span class="now-playing-state" id="np-state">Playing</span>
+            <span class="now-playing-title" id="np-title"></span>
+        </div>
+        <div class="now-playing-time">
+            <span id="np-time">0:00</span> / <span id="np-length">0:00</span>
+        </div>
+        <div class="now-playing-controls">
+            <button class="np-btn" id="np-pause" onclick="controlPlayback('pause_resume')">Pause</button>
+            <button class="np-btn np-btn-stop" id="np-stop" onclick="controlPlayback('stop')">Stop</button>
+        </div>
+    </div>
+
     <div class="main-layout">
         <div class="column" id="col1">
-            <div class="container">
+            <div class="container playback-controls">
                 <h2>Playback Controls</h2>
                 <div class="button-group">
-                    <button onclick="controlPlayback('pause_resume')">Pause / Resume</button>
-                    <button onclick="controlPlayback('restart')">Restart</button>
-                    <button onclick="controlPlayback('stop')">Stop</button>
+                    <button id="btn-pause" onclick="controlPlayback('pause_resume')">Pause / Resume</button>
+                    <button id="btn-restart" onclick="controlPlayback('restart')" disabled>Restart</button>
+                    <button id="btn-stop" onclick="controlPlayback('stop')" disabled>Stop</button>
                 </div>
                 <div>
                     <label for="seek-slider">Seek: <span id="seek-value">0:00</span></label>
                     <input type="range" id="seek-slider" class="volume-slider" min="0" max="1" value="0" step="0.001" onchange="seekVideo(this.value)" oninput="updateSeekLabel(this.value)">
                 </div>
                 <div>
-                    <label for="karaoke-volume">Karaoke Volume:</label>
-                    <input type="range" id="karaoke-volume" class="volume-slider" min="0" max="256" value="200" oninput="setVolume('karaoke', this.value)">
+                    <label for="karaoke-volume">Karaoke Volume: <span id="karaoke-volume-label" class="range-label">78%</span></label>
+                    <input type="range" id="karaoke-volume" class="volume-slider" min="0" max="256" value="200" oninput="updateKaraokeVolume(this.value)">
                 </div>
                 <div>
-                    <label for="filler-volume">Filler Volume:</label>
-                    <input type="range" id="filler-volume" class="volume-slider" min="0" max="256" value="100" oninput="setVolume('filler', this.value)">
+                    <label for="filler-volume">Filler Volume: <span id="filler-volume-label" class="range-label">39%</span></label>
+                    <input type="range" id="filler-volume" class="volume-slider" min="0" max="256" value="100" oninput="updateFillerVolume(this.value)">
                 </div>
                 <div class="controls-row">
                     <div class="control-half">
@@ -54,138 +68,6 @@
                     <button class="overlay-add-btn" id="overlay-add-btn" onclick="showOverlayForm()">+ Add</button>
                 </div>
                 <div id="overlay-list" class="overlay-list"></div>
-                <div id="overlay-form" class="overlay-form hidden">
-                    <input type="hidden" id="overlay-edit-id">
-                    <div class="overlay-form-row">
-                        <label for="overlay-name">Name</label>
-                        <input type="text" id="overlay-name" placeholder="e.g. Welcome Message">
-                    </div>
-                    <div class="overlay-form-row">
-                        <label for="overlay-type">Type</label>
-                        <select id="overlay-type" onchange="onOverlayTypeChange()">
-                            <option value="ticker">Scrolling Ticker</option>
-                            <option value="static_text">Static Text</option>
-                            <option value="image">Image / Logo</option>
-                            <option value="countdown">Countdown Timer</option>
-                            <option value="qr_code">QR Code</option>
-                        </select>
-                    </div>
-
-                    <!-- Ticker & Static Text: text -->
-                    <div class="overlay-form-row overlay-field" data-types="ticker,static_text">
-                        <label for="overlay-text">Text</label>
-                        <textarea id="overlay-text" rows="2" placeholder="Enter overlay text..."></textarea>
-                    </div>
-
-                    <!-- Ticker: speed -->
-                    <div class="overlay-form-row overlay-field" data-types="ticker">
-                        <label for="overlay-speed">Speed</label>
-                        <input type="range" id="overlay-speed" class="volume-slider" min="0.5" max="5" step="0.5" value="2">
-                        <span id="overlay-speed-label" class="range-label">2x</span>
-                    </div>
-
-                    <!-- Image: path -->
-                    <div class="overlay-form-row overlay-field" data-types="image">
-                        <label for="overlay-image-path">Image Path</label>
-                        <input type="text" id="overlay-image-path" placeholder="/path/to/image.png">
-                    </div>
-                    <div class="overlay-form-row overlay-field" data-types="image">
-                        <label for="overlay-image-width">Width (px)</label>
-                        <input type="number" id="overlay-image-width" value="150" min="50" max="800">
-                    </div>
-
-                    <!-- Countdown: target time + label -->
-                    <div class="overlay-form-row overlay-field" data-types="countdown">
-                        <label for="overlay-target-time">Target Time</label>
-                        <input type="datetime-local" id="overlay-target-time">
-                    </div>
-                    <div class="overlay-form-row overlay-field" data-types="countdown">
-                        <label for="overlay-countdown-label">Label</label>
-                        <input type="text" id="overlay-countdown-label" placeholder="Last call in" value="Time remaining">
-                    </div>
-                    <div class="overlay-form-row overlay-field" data-types="countdown">
-                        <label for="overlay-expired-text">Expired Text</label>
-                        <input type="text" id="overlay-expired-text" placeholder="TIME!" value="TIME!">
-                    </div>
-
-                    <!-- QR: url + label -->
-                    <div class="overlay-form-row overlay-field" data-types="qr_code">
-                        <label for="overlay-qr-url">URL</label>
-                        <input type="url" id="overlay-qr-url" placeholder="https://example.com">
-                    </div>
-                    <div class="overlay-form-row overlay-field" data-types="qr_code">
-                        <label for="overlay-qr-label">Label</label>
-                        <input type="text" id="overlay-qr-label" placeholder="Scan me!">
-                    </div>
-                    <div class="overlay-form-row overlay-field" data-types="qr_code">
-                        <label for="overlay-qr-size">Size (px)</label>
-                        <input type="number" id="overlay-qr-size" value="180" min="80" max="400">
-                    </div>
-
-                    <!-- Common: position -->
-                    <div class="overlay-form-row">
-                        <label for="overlay-position">Position</label>
-                        <select id="overlay-position" onchange="onOverlayPositionChange()">
-                            <option value="bottom">Bottom (full-width bar)</option>
-                            <option value="top">Top (full-width bar)</option>
-                            <option value="top-left">Top Left</option>
-                            <option value="top-center">Top Center</option>
-                            <option value="top-right">Top Right</option>
-                            <option value="center">Center</option>
-                            <option value="bottom-left">Bottom Left</option>
-                            <option value="bottom-center">Bottom Center</option>
-                            <option value="bottom-right">Bottom Right</option>
-                            <option value="custom">Custom (x, y)</option>
-                        </select>
-                    </div>
-                    <div class="overlay-form-row overlay-custom-pos hidden" id="overlay-custom-pos">
-                        <label>Custom Position</label>
-                        <div class="controls-row">
-                            <input type="number" id="overlay-custom-x" placeholder="X" min="0" max="1920" style="width:48%">
-                            <input type="number" id="overlay-custom-y" placeholder="Y" min="0" max="1080" style="width:48%">
-                        </div>
-                    </div>
-
-                    <!-- Common: colors (text overlays) -->
-                    <div class="overlay-form-row overlay-field" data-types="ticker,static_text,countdown">
-                        <label>Font Size</label>
-                        <input type="number" id="overlay-font-size" value="28" min="12" max="120">
-                    </div>
-                    <div class="overlay-form-row overlay-field" data-types="ticker,static_text,countdown">
-                        <div class="controls-row">
-                            <div class="control-half">
-                                <label for="overlay-text-color">Text Color</label>
-                                <input type="color" id="overlay-text-color" value="#FFFFFF">
-                            </div>
-                            <div class="control-half">
-                                <label for="overlay-bg-color">Background</label>
-                                <input type="color" id="overlay-bg-color" value="#000000">
-                            </div>
-                        </div>
-                    </div>
-                    <div class="overlay-form-row overlay-field" data-types="ticker,static_text,countdown">
-                        <label for="overlay-bg-opacity">BG Opacity</label>
-                        <input type="range" id="overlay-bg-opacity" class="volume-slider" min="0" max="1" step="0.05" value="0.85">
-                        <span id="overlay-opacity-label" class="range-label">85%</span>
-                    </div>
-
-                    <!-- Common: toggles -->
-                    <div class="overlay-form-row">
-                        <label class="overlay-toggle-label">
-                            <input type="checkbox" id="overlay-enabled" checked> Enabled
-                        </label>
-                    </div>
-                    <div class="overlay-form-row">
-                        <label class="overlay-toggle-label">
-                            <input type="checkbox" id="overlay-show-video"> Show over video
-                        </label>
-                    </div>
-
-                    <div class="overlay-form-actions">
-                        <button onclick="saveOverlay()">Save</button>
-                        <button class="overlay-cancel-btn" onclick="hideOverlayForm()">Cancel</button>
-                    </div>
-                </div>
             </div>
             <div class="container" id="vnc-preview-container">
                 <div class="header-row">
@@ -206,7 +88,7 @@
                 </div>
                 <div id="vnc-controls" class="vnc-controls hidden">
                     <button class="vnc-btn" onclick="disconnectVnc()">Disconnect</button>
-                    <button class="vnc-btn" onclick="forgetVncPassword()">Forget Password</button>
+                    <a class="vnc-forget-link" onclick="forgetVncPassword()">Forget password</a>
                 </div>
             </div>
             <div class="container system-controls">
@@ -214,25 +96,26 @@
                 <div class="button-group">
                     <button class="system-btn" onclick="rebuildCatalog()" title="Re-index the external USB drive karaoke library from the file list configured in external_file_list, mounted at external_media_mount">Rebuild Catalog</button>
                     <button class="system-btn" onclick="restartApp()">Restart App</button>
-                    <button class="system-btn system-btn-warn" onclick="rebootSystem()">Reboot</button>
-                    <button class="system-btn system-btn-danger" onclick="shutdownSystem()">Shut Down</button>
+                    <button class="system-btn system-btn-warn" onclick="dangerousAction(this, 'reboot', 'Reboot', 'The entire system will reboot. This will take about a minute.')">Reboot</button>
+                    <button class="system-btn system-btn-danger" onclick="dangerousAction(this, 'shutdown', 'Shut Down', 'The system will power off completely. You will need physical access to turn it back on.')">Shut Down</button>
                 </div>
                 <div id="status-bar">
                     <strong>Status:</strong> <span id="player-state">Unknown</span> |
-                    <strong>Playing:</strong> <span id="current-video">None</span> |
-                    <strong>Filler:</strong> <span id="current-filler">wii.mp3</span> |
-                    <strong>Time:</strong> <span id="current-time">0:00</span> / <span id="total-time">0:00</span>
+                    <strong>Filler:</strong> <span id="current-filler">wii.mp3</span>
                 </div>
                 <div id="log-area"></div>
             </div>
         </div>
 
         <div class="column" id="col2">
-            <div class="container">
+            <div class="container download-section">
                 <h2>Download Song</h2>
                 <input type="url" id="youtube-url" placeholder="Enter YouTube URL" onkeyup="if(event.keyCode === 13) downloadSong()">
                 <button id="download-btn" onclick="downloadSong()" style="align-self: flex-start;">Download</button>
-                <div id="download-status" class="hidden">Downloading... please wait.</div>
+                <div id="download-status" class="download-progress hidden">
+                    <span class="download-spinner"></span>
+                    <span id="download-stage">Fetching video info...</span>
+                </div>
             </div>
             <div class="container available-songs">
                 <div class="header-row">
@@ -251,6 +134,148 @@
                 <ul id="media-list">
                     <li>Loading media...</li>
                 </ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- Overlay Form Modal -->
+    <div id="overlay-modal" class="modal-backdrop hidden" onclick="if(event.target===this) hideOverlayForm()">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="overlay-modal-title">Add Overlay</h3>
+                <button class="modal-close" onclick="hideOverlayForm()">&times;</button>
+            </div>
+            <div class="overlay-form">
+                <input type="hidden" id="overlay-edit-id">
+                <div class="overlay-form-row">
+                    <label for="overlay-name">Name</label>
+                    <input type="text" id="overlay-name" placeholder="e.g. Welcome Message">
+                </div>
+                <div class="overlay-form-row">
+                    <label for="overlay-type">Type</label>
+                    <select id="overlay-type" onchange="onOverlayTypeChange()">
+                        <option value="ticker">Scrolling Ticker</option>
+                        <option value="static_text">Static Text</option>
+                        <option value="image">Image / Logo</option>
+                        <option value="countdown">Countdown Timer</option>
+                        <option value="qr_code">QR Code</option>
+                    </select>
+                </div>
+
+                <!-- Ticker & Static Text: text -->
+                <div class="overlay-form-row overlay-field" data-types="ticker,static_text">
+                    <label for="overlay-text">Text</label>
+                    <textarea id="overlay-text" rows="2" placeholder="Enter overlay text..."></textarea>
+                </div>
+
+                <!-- Ticker: speed -->
+                <div class="overlay-form-row overlay-field" data-types="ticker">
+                    <label for="overlay-speed">Speed</label>
+                    <input type="range" id="overlay-speed" class="volume-slider" min="0.5" max="5" step="0.5" value="2">
+                    <span id="overlay-speed-label" class="range-label">2x</span>
+                </div>
+
+                <!-- Image: path -->
+                <div class="overlay-form-row overlay-field" data-types="image">
+                    <label for="overlay-image-path">Image Path</label>
+                    <input type="text" id="overlay-image-path" placeholder="/path/to/image.png">
+                </div>
+                <div class="overlay-form-row overlay-field" data-types="image">
+                    <label for="overlay-image-width">Width (px)</label>
+                    <input type="number" id="overlay-image-width" value="150" min="50" max="800">
+                </div>
+
+                <!-- Countdown: target time + label -->
+                <div class="overlay-form-row overlay-field" data-types="countdown">
+                    <label for="overlay-target-time">Target Time</label>
+                    <input type="datetime-local" id="overlay-target-time">
+                </div>
+                <div class="overlay-form-row overlay-field" data-types="countdown">
+                    <label for="overlay-countdown-label">Label</label>
+                    <input type="text" id="overlay-countdown-label" placeholder="Last call in" value="Time remaining">
+                </div>
+                <div class="overlay-form-row overlay-field" data-types="countdown">
+                    <label for="overlay-expired-text">Expired Text</label>
+                    <input type="text" id="overlay-expired-text" placeholder="TIME!" value="TIME!">
+                </div>
+
+                <!-- QR: url + label -->
+                <div class="overlay-form-row overlay-field" data-types="qr_code">
+                    <label for="overlay-qr-url">URL</label>
+                    <input type="url" id="overlay-qr-url" placeholder="https://example.com">
+                </div>
+                <div class="overlay-form-row overlay-field" data-types="qr_code">
+                    <label for="overlay-qr-label">Label</label>
+                    <input type="text" id="overlay-qr-label" placeholder="Scan me!">
+                </div>
+                <div class="overlay-form-row overlay-field" data-types="qr_code">
+                    <label for="overlay-qr-size">Size (px)</label>
+                    <input type="number" id="overlay-qr-size" value="180" min="80" max="400">
+                </div>
+
+                <!-- Common: position -->
+                <div class="overlay-form-row">
+                    <label for="overlay-position">Position</label>
+                    <select id="overlay-position" onchange="onOverlayPositionChange()">
+                        <option value="bottom">Bottom (full-width bar)</option>
+                        <option value="top">Top (full-width bar)</option>
+                        <option value="top-left">Top Left</option>
+                        <option value="top-center">Top Center</option>
+                        <option value="top-right">Top Right</option>
+                        <option value="center">Center</option>
+                        <option value="bottom-left">Bottom Left</option>
+                        <option value="bottom-center">Bottom Center</option>
+                        <option value="bottom-right">Bottom Right</option>
+                        <option value="custom">Custom (x, y)</option>
+                    </select>
+                </div>
+                <div class="overlay-form-row overlay-custom-pos hidden" id="overlay-custom-pos">
+                    <label>Custom Position</label>
+                    <div class="controls-row">
+                        <input type="number" id="overlay-custom-x" placeholder="X" min="0" max="1920" style="width:48%">
+                        <input type="number" id="overlay-custom-y" placeholder="Y" min="0" max="1080" style="width:48%">
+                    </div>
+                </div>
+
+                <!-- Common: colors (text overlays) -->
+                <div class="overlay-form-row overlay-field" data-types="ticker,static_text,countdown">
+                    <label>Font Size</label>
+                    <input type="number" id="overlay-font-size" value="28" min="12" max="120">
+                </div>
+                <div class="overlay-form-row overlay-field" data-types="ticker,static_text,countdown">
+                    <div class="controls-row">
+                        <div class="control-half">
+                            <label for="overlay-text-color">Text Color</label>
+                            <input type="color" id="overlay-text-color" value="#FFFFFF">
+                        </div>
+                        <div class="control-half">
+                            <label for="overlay-bg-color">Background</label>
+                            <input type="color" id="overlay-bg-color" value="#000000">
+                        </div>
+                    </div>
+                </div>
+                <div class="overlay-form-row overlay-field" data-types="ticker,static_text,countdown">
+                    <label for="overlay-bg-opacity">BG Opacity</label>
+                    <input type="range" id="overlay-bg-opacity" class="volume-slider" min="0" max="1" step="0.05" value="0.85">
+                    <span id="overlay-opacity-label" class="range-label">85%</span>
+                </div>
+
+                <!-- Common: toggles -->
+                <div class="overlay-form-row">
+                    <label class="overlay-toggle-label">
+                        <input type="checkbox" id="overlay-enabled" checked> Enabled
+                    </label>
+                </div>
+                <div class="overlay-form-row">
+                    <label class="overlay-toggle-label">
+                        <input type="checkbox" id="overlay-show-video"> Show over video
+                    </label>
+                </div>
+
+                <div class="overlay-form-actions">
+                    <button onclick="saveOverlay()">Save</button>
+                    <button class="overlay-cancel-btn" onclick="hideOverlayForm()">Cancel</button>
+                </div>
             </div>
         </div>
     </div>
