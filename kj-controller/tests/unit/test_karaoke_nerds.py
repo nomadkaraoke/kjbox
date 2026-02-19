@@ -140,6 +140,64 @@ class TestParseResults:
         songs = parse_results(html)
         assert len(songs) == 0
 
+    def test_table_without_tbody(self):
+        """Table with no <tbody> returns empty."""
+        html = '<table><thead><tr><th>Title</th></tr></thead></table>'
+        assert parse_results(html) == []
+
+    def test_group_row_as_last_row(self):
+        """Group row at end of table with no following details row."""
+        html = """
+        <table><tbody>
+            <tr class="group">
+                <td><a href="/Song/Test/A/">Solo Song</a></td>
+                <td><a href="/Artist/A/">Solo Artist</a></td>
+                <td>0</td>
+            </tr>
+        </tbody></table>
+        """
+        songs = parse_results(html)
+        assert len(songs) == 1
+        assert songs[0]["title"] == "Solo Song"
+        assert songs[0]["tracks"] == []
+
+    def test_group_followed_by_another_group(self):
+        """Group row followed by another group (no details) still parses."""
+        html = """
+        <table><tbody>
+            <tr class="group">
+                <td><a href="/Song/A/X/">Song A</a></td>
+                <td><a href="/Artist/X/">Artist X</a></td>
+                <td>0</td>
+            </tr>
+            <tr class="group">
+                <td><a href="/Song/B/Y/">Song B</a></td>
+                <td><a href="/Artist/Y/">Artist Y</a></td>
+                <td>0</td>
+            </tr>
+        </tbody></table>
+        """
+        songs = parse_results(html)
+        assert len(songs) == 2
+        assert songs[0]["tracks"] == []
+        assert songs[1]["tracks"] == []
+
+
+class TestParseSingleTrack:
+    def test_no_youtube_url_returns_none(self):
+        """Track li without a YouTube link returns None."""
+        from bs4 import BeautifulSoup
+        html = """
+        <li class="track list-group-item">
+            <a href="/Song/Test/Artist/BR/">Brand Name</a>
+            <div class="ml-auto">
+                <span class="badge badge-primary badge-pill">BR</span>
+            </div>
+        </li>
+        """
+        li = BeautifulSoup(html, 'html.parser').find('li')
+        assert _parse_single_track(li) is None
+
 
 class TestCleanYoutubeUrl:
     def test_strips_list_param(self):
