@@ -305,8 +305,10 @@
             if (!pw) return;
 
             const wsProto = location.protocol === 'https:' ? 'wss://' : 'ws://';
-            // When accessed via Cloudflare tunnel, websockify is on a separate hostname
-            const wsHost = window.KJ_CONFIG.websockifyHost || (location.hostname + ':' + (window.KJ_CONFIG.websockifyPort || 6080));
+            // Use tunnel hostname for websockify when accessed via tunnel, direct port otherwise
+            const tunnelWsHost = window.KJ_CONFIG.websockifyHost;
+            const isTunnel = tunnelWsHost && !location.hostname.endsWith('.local') && location.hostname !== 'localhost' && !location.hostname.match(/^[\d.]+$/);
+            const wsHost = isTunnel ? tunnelWsHost : (location.hostname + ':' + (window.KJ_CONFIG.websockifyPort || 6080));
             const wsUrl = wsProto + wsHost;
             localStorage.setItem(STORAGE_KEY, pw);
             setStatus('Connecting...', '');
