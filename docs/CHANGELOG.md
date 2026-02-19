@@ -1,6 +1,81 @@
 # Change Log
 
-NomadPi system configuration changes. For current configuration details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md).
+Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
+
+## 2026-02-19 - NomadPC: Media Setup & External Catalog
+
+Set up the USB external drive, migrated legacy video files, and built the full karaoke catalog.
+
+**USB SSD mounted:**
+- SanDisk Extreme Pro 4TB (`/dev/sda1`, exFAT, label "Nomad4TBOne")
+- Mounted at `/media/nomad/Nomad4TBOne` with fstab persistence (`nofail,uid=1000,gid=1000`)
+- Contains HyperMule karaoke catalog (~415K files)
+
+**Legacy video migration:**
+- Migrated 697 MP4 files from `/home/nomad/kjdata/videos/` (old KJ software) to `/opt/nomad/YTDownloads/`
+- Renamed from legacy format (`{random_id}.mp4` + JSON sidecar) to new convention (`{youtube_id}__Unknown__{safe_title}.mp4`)
+- YouTube IDs extracted from `original_url` in JSON metadata; channel set to "Unknown" (not in legacy data)
+- 6 files skipped (no YouTube ID), 1 error (malformed JSON)
+
+**External catalog built:**
+- 414,933 entries indexed into SQLite FTS5 database (`external_media.db`)
+- Manifest file: `/media/nomad/Nomad4TBOne/HyperMule/all-karaoke-files-2025.02.28.txt`
+- Path rewriting: `/Volumes/Nomad4TBOne/` → `/media/nomad/Nomad4TBOne/` (macOS → Linux)
+- Search verified working (e.g., "bohemian rhapsody" returns Queen results from multiple publishers)
+- Config keys added: `external_file_list`, `external_media_mount`
+
+**Filler music:** Copied from legacy KJ data folder, playing successfully through HDMI.
+
+**HDMI audio verified:** PipeWire routes VLC audio through HDMI correctly. `speaker-test` and VLC both produce sound. No ALSA config needed.
+
+**HDMI display:** Set to 1920x1080@60Hz via `xrandr`, persisted with XFCE autostart entry.
+
+**x11vnc fixes:**
+- Added `-shared` flag (without it, new connections kick existing ones)
+- Changed to `After=display-manager.service` + `WantedBy=multi-user.target` (avoids ordering cycle on shutdown)
+
+**Documentation:** Updated MINIPC-SETUP.md with new Phase 6 (USB drive, filler music, legacy migration, external catalog), corrected x11vnc service definition, and updated checklist.
+
+## 2026-02-18 - NomadPC: Initial Hardware Audit
+
+Performed initial audit of the x86 mini PC that will serve as a more powerful replacement/companion for the Raspberry Pi at live events.
+
+**Hardware discovered:**
+- **CPU:** Intel N97 (4 cores, up to 3.6GHz, x86_64)
+- **RAM:** 16GB
+- **Storage:** 476GB NVMe SSD (ext4, 411GB free)
+- **GPU:** Intel Alder Lake-N UHD Graphics
+- **Display outputs:** 2x HDMI + 2x DisplayPort (HDMI-1 connected at 1920x1080)
+- **Audio:** HDA Intel PCH, HDMI stereo via PipeWire (verified working)
+- **Ethernet:** `enp2s0` (MAC: `84:47:09:5a:1d:13`)
+- **WiFi:** `wlp1s0` (MAC: `9c:12:21:3f:39:43`)
+
+**Software state:**
+- **OS:** Linux Mint 22.1 Xia (Ubuntu 24.04 Noble), kernel 6.8.0-71-generic
+- **Desktop:** XFCE via LightDM (autologin as `nomad` user)
+- **Audio:** PipeWire 1.0.5 (not raw ALSA like the Pi)
+- **Pre-installed:** VLC 3.0.20, conky 1.19.6, yt-dlp 2025.07.21, git 2.43.0, avahi-daemon
+- **Cloudflared:** Running with SSH tunnel to `kjbox.nomadkaraoke.com`
+- **Hostname:** `nomad-karaoke` (to be renamed to `nomadpc`)
+- **User:** `nomad` (UID 1000, zsh shell)
+- **SSH key:** `andrew@beveridge.uk` already authorized
+
+**Not yet done:**
+- Hostname rename to `nomadpc`
+- Sleep/screensaver not disabled (lock=true, idle=900s)
+- Tailscale not installed
+- KJ Controller not deployed (/opt is empty)
+- Avahi not restricted to ethernet interface
+- BIOS "Power On After Power Loss" not verified
+
+**Key differences from Pi that affect setup:**
+1. PipeWire audio (not raw ALSA) — VLC needs `XDG_RUNTIME_DIR` for PipeWire socket access
+2. XFCE desktop (not LXDE) — screensaver/power commands differ, conky `own_window_type` may need adjustment
+3. VLC runs directly as `nomad` user — no root wrapper or `sudo -u dietpi` needed
+4. `enable_vlc: true` config flag needed (no `/boot/dietpi.txt` sentinel)
+5. x11vnc instead of RealVNC for VNC preview
+
+Updated `docs/MINIPC-SETUP.md` with all verified details. Updated `README.md` and `CLAUDE.md` to reference both devices.
 
 ## 2026-02-17 - KJ Controller: VNC Screen Preview
 

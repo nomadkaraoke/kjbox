@@ -1,32 +1,56 @@
 # Mini PC Setup Guide
 
-Step-by-step guide to set up a new mini PC (x86_64, Linux Mint or similar) to run the same karaoke software stack as NomadPi. This guide assumes you're working from a Mac with SSH access to the mini PC.
+Step-by-step guide to set up the Nomad Karaoke mini PC to run the same karaoke software stack as NomadPi. This guide assumes you're working from a Mac with SSH access to the mini PC.
 
 **Target state:** The mini PC boots straight into a desktop with KJ Controller and the rotation display running automatically — identical behavior to the Pi.
 
-**Hardware assumptions:**
-- x86_64 mini PC (e.g., Intel N95, 16GB RAM, 512GB SSD)
-- Single HDMI output (split to 7" monitor, projector, and singer screen)
-- Ethernet connection to GL.iNet router (no WiFi needed)
-- No USB mixer connection (mics are mixed separately to PA)
+## Device Specs (Verified 2026-02-18)
+
+| Spec | Value |
+|------|-------|
+| **CPU** | Intel N97 (4 cores, up to 3.6GHz, x86_64) |
+| **RAM** | 16GB |
+| **Storage** | 476GB NVMe SSD (ext4), 411GB free |
+| **GPU** | Intel Alder Lake-N UHD Graphics |
+| **OS** | Linux Mint 22.1 (Xia), based on Ubuntu 24.04 Noble |
+| **Kernel** | 6.8.0-71-generic |
+| **Desktop** | XFCE (via LightDM) |
+| **Audio** | HDA Intel PCH via PipeWire (HDMI stereo output) |
+| **Hostname** | `nomadpc` |
+| **User** | `nomad` (UID 1000, shell: zsh, autologin enabled) |
+| **Display outputs** | HDMI-1, HDMI-2, DP-1, DP-2 |
+| **Ethernet** | `enp2s0` (MAC: `84:47:09:5a:1d:13`) |
+| **WiFi** | `wlp1s0` (MAC: `9c:12:21:3f:39:43`) |
+
+### Pre-Installed Software
+
+| Package | Version | Notes |
+|---------|---------|-------|
+| Python | 3.12.3 | System python |
+| VLC | 3.0.20 | Already installed |
+| conky | 1.19.6 | Already installed |
+| yt-dlp | 2025.07.21 | Already installed |
+| git | 2.43.0 | Already installed |
+| avahi-daemon | — | Already running, broadcasting `nomadpc.local` |
+| cloudflared | — | Already running, tunnel to `kjbox.nomadkaraoke.com` (SSH) |
+| PipeWire | 1.0.5 | Audio server (replaces PulseAudio/raw ALSA) |
+
+### Not Installed (Need to Set Up)
+
+- Tailscale
+- Docker (not needed unless future services require it)
+- KJ Controller app stack (the repo clone, venv, services)
 
 ---
 
 ## Phase 1: OS & Base System
 
-### 1.1 Review Current OS
+### 1.1 Review Current OS (DONE)
 
-If the mini PC already has Linux Mint (or similar Ubuntu/Debian-based distro), keep it. No need to reinstall.
+The mini PC runs Linux Mint 22.1 (Xia) with XFCE desktop. No reinstall needed.
 
 ```bash
-# SSH in (you may need to find the IP from the router's DHCP client list first)
-ssh user@<minipc-ip>
-
-# Check what's installed
-cat /etc/os-release
-uname -a
-free -h
-df -h
+ssh nomadlocalkinodirect  # 192.168.8.170 via GL.iNet router
 ```
 
 ### 1.2 Update to Latest
@@ -38,134 +62,129 @@ sudo reboot
 
 ### 1.3 Set Hostname
 
+Currently `nomad-karaoke`, needs to be changed to `nomadpc`:
+
 ```bash
 sudo hostnamectl set-hostname nomadpc
-# Also update /etc/hosts — replace any old hostname with nomadpc
 sudo sed -i 's/127\.0\.1\.1.*/127.0.1.1\tnomadpc/' /etc/hosts
+sudo systemctl restart avahi-daemon
+# Avahi will now broadcast nomadpc.local
 ```
 
-### 1.4 Create a Dedicated User (if needed)
+### 1.4 User (DONE)
 
-On Linux Mint, you likely already have a regular user. The KJ Controller can run as that user (unlike the Pi where root was the primary user and VLC needed a wrapper). Note which user you'll use:
+User `nomad` (UID 1000) exists with autologin enabled. KJ Controller runs as this user — no root wrapper needed (unlike the Pi).
 
+### 1.5 SSH Key Access (DONE)
+
+SSH key `andrew@beveridge.uk` is already authorized in `/home/nomad/.ssh/authorized_keys`.
+
+Password authentication is still enabled (the `#PasswordAuthentication yes` line is commented out, meaning default=yes). To harden:
 ```bash
-whoami  # e.g., "nomad" or whatever was set up at install
-```
-
-### 1.5 SSH Key Access
-
-```bash
-# From your Mac:
-ssh-copy-id user@<minipc-ip>
-
-# On the mini PC, optionally disable password auth for security:
-sudo sed -i 's/#PasswordAuthentication yes/PasswordAuthentication no/' /etc/ssh/sshd_config
-sudo systemctl restart ssh
+ssh nomadlocalkinodirect 'sudo sed -i "s/#PasswordAuthentication yes/PasswordAuthentication no/" /etc/ssh/sshd_config && sudo systemctl restart ssh'
 ```
 
 ### 1.6 Disable Sleep/Screensaver/Power Management
 
-Critical for a live event machine — it must never sleep or lock.
+**NOT YET DONE.** Currently: screensaver lock is ON, idle timeout is 900s (15min).
 
 ```bash
-# Disable screen blanking and sleep
-gsettings set org.cinnamon.desktop.screensaver lock-enabled false 2>/dev/null || true
-gsettings set org.cinnamon.desktop.session idle-delay 0 2>/dev/null || true
+# XFCE power management — disable all sleep/blank
+xfconf-query -c xfce4-power-manager -p /xfce4-power-manager/dpms-enabled -s false
+xfconf-query -c xfce4-power-manager -p /xfce4-power-manager/blank-on-ac -s 0
+xfconf-query -c xfce4-power-manager -p /xfce4-power-manager/dpms-on-ac-sleep -s 0
+xfconf-query -c xfce4-power-manager -p /xfce4-power-manager/dpms-on-ac-off -s 0
 
-# For MATE/XFCE, adapt the gsettings keys as needed
+# XFCE screensaver — disable lock
+xfconf-query -c xfce4-screensaver -p /lock/enabled -s false
+xfconf-query -c xfce4-screensaver -p /saver/enabled -s false
 
 # Disable systemd sleep targets
 sudo systemctl mask sleep.target suspend.target hibernate.target hybrid-sleep.target
 
-# Disable DPMS (display power management) — add to autostart
+# Disable DPMS at X11 level — add to autostart
 echo 'xset s off -dpms' >> ~/.xprofile
 ```
 
 ### 1.7 Graceful Power Loss Handling
 
-Configure the system to boot automatically after power loss and handle unclean shutdowns:
+Configure the BIOS to boot automatically after power loss:
 
 ```bash
-# Set BIOS to "Power On After Power Loss" (AC Recovery = Power On)
-# This is a BIOS setting — access it during boot (usually DEL or F2)
-# Look for: Advanced > Power Management > AC Power Loss > "Power On"
+# BIOS setting (access during boot, usually DEL or F2):
+# Advanced > Power Management > AC Power Loss > "Power On"
 
-# Ensure filesystem is resilient (ext4 journaling is default — just verify)
+# Verify filesystem is ext4 with journaling (already confirmed: NVMe ext4)
 mount | grep ' / '
-# Should show ext4 (or similar journaling FS)
+# /dev/nvme0n1p2 on / type ext4 (rw,relatime,errors=remount-ro)
 ```
 
-### 1.8 Auto-Login to Desktop
+### 1.8 Auto-Login to Desktop (DONE)
 
-Linux Mint typically has auto-login configured during install. Verify:
-
-```bash
-# For LightDM (Mint default)
-cat /etc/lightdm/lightdm.conf | grep -i autologin
-# Should show: autologin-user=<your-username>
-
-# If not set:
-sudo tee -a /etc/lightdm/lightdm.conf.d/50-autologin.conf << 'EOF'
-[Seat:*]
+Already configured in `/etc/lightdm/lightdm.conf`:
+```
+autologin-guest=false
 autologin-user=nomad
-autologin-session=cinnamon
-EOF
+autologin-user-timeout=0
 ```
 
-Replace `nomad` with your actual username, and `cinnamon` with your desktop session (e.g., `mate`, `xfce`).
+Desktop session is XFCE (`/usr/share/xsessions/xfce.desktop`).
 
 ---
 
 ## Phase 2: Network
 
-### 2.1 Disable WiFi
+### 2.1 Current Network State
+
+The mini PC has both Ethernet and WiFi connected:
+
+| Interface | IP | Subnet | Gateway | Metric | Purpose |
+|-----------|-----|--------|---------|--------|---------|
+| `enp2s0` (Ethernet) | `192.168.8.170` (DHCP) | 192.168.8.0/24 | 192.168.8.1 | 100 (preferred) | GL.iNet karaoke router |
+| `wlp1s0` (WiFi) | `192.168.1.87` (DHCP) | 192.168.1.0/24 | 192.168.1.1 | 600 (fallback) | Home WiFi |
+
+Ethernet already has the lower metric and carries the default route. Good.
+
+### 2.2 Disable WiFi (at venue)
+
+WiFi is useful at home for fallback access. At the venue, disable it:
 
 ```bash
-# Turn off WiFi radio
+# Disable WiFi radio (persists across reboots)
 nmcli radio wifi off
 
 # Verify
 nmcli general status
 # Should show wifi: disabled
+
+# To re-enable:
+nmcli radio wifi on
 ```
 
-### 2.2 Configure Ethernet
-
-Ethernet via DHCP should work automatically. Set up a DHCP reservation on the GL.iNet router:
+### 2.3 Set DHCP Reservation on GL.iNet Router
 
 1. Log into GL.iNet admin panel (http://192.168.8.1)
 2. Go to LAN → Static IP Address Binding
-3. Find the mini PC's MAC address: `ip link show eth0 | grep ether`
-4. Bind it to a fixed IP (e.g., `192.168.8.120`)
+3. Bind MAC `84:47:09:5a:1d:13` to a fixed IP (e.g., `192.168.8.170`)
 
-### 2.3 Install Avahi (mDNS)
+### 2.4 Avahi / mDNS (DONE)
 
-This lets you access the mini PC as `nomadpc.local` on any LAN.
+Already installed and running. Broadcasting `nomadpc.local`.
 
+**Recommended:** Restrict Avahi to the ethernet interface only:
 ```bash
-sudo apt install -y avahi-daemon libnss-mdns
-```
-
-Restrict to ethernet only to avoid advertising Docker/VPN IPs:
-
-```bash
-sudo sed -i 's/^#allow-interfaces=eth0/allow-interfaces=eth0/' /etc/avahi/avahi-daemon.conf
-# If the line doesn't exist, add it under [server]:
-# allow-interfaces=eth0
-
-# Check your interface name (might be enp1s0, eno1, etc. instead of eth0)
-ip link show | grep 'state UP'
-# Use whatever interface name is shown
+# Edit /etc/avahi/avahi-daemon.conf, add under [server]:
+# allow-interfaces=enp2s0
 
 sudo systemctl restart avahi-daemon
 ```
 
-Verify from your Mac:
+Verify from Mac:
 ```bash
 ping nomadpc.local
 ```
 
-### 2.4 Install Tailscale
+### 2.5 Install Tailscale
 
 ```bash
 curl -fsSL https://tailscale.com/install.sh | sh
@@ -173,12 +192,29 @@ sudo tailscale up
 # Follow the auth URL to add to your tailnet
 ```
 
-### 2.5 Update SSH Config on Mac
+### 2.6 Cloudflared (ALREADY RUNNING)
+
+A Cloudflare tunnel is already configured and running as a systemd service:
+- **Tunnel:** `1e86a7f5-04e7-4527-b624-49447450443e`
+- **Hostname:** `kjbox.nomadkaraoke.com` → SSH (port 22)
+- **Config:** `/etc/cloudflared/config.yml`
+
+This provides remote SSH access from anywhere without Tailscale. To also expose the KJ Controller web UI, add an ingress rule:
+```yaml
+ingress:
+  - hostname: kjbox.nomadkaraoke.com
+    service: ssh://localhost:22
+  - hostname: kjcontrol.nomadkaraoke.com
+    service: http://localhost:80
+  - service: http_status:404
+```
+
+### 2.7 Update SSH Config on Mac
 
 Add to `~/.ssh/config`:
 ```
 Host nomadpc
-    HostName 192.168.8.120
+    HostName 192.168.8.170
     User nomad
 ```
 
@@ -188,22 +224,23 @@ Host nomadpc
 
 ### 3.1 Install System Dependencies
 
+Most are already installed. Install any missing ones:
+
 ```bash
 sudo apt install -y \
-    git \
     python3-venv \
     python3-pip \
-    vlc \
-    conky-all \
-    yt-dlp \
+    fonts-dejavu \
     curl
 ```
+
+**Already present:** git, vlc, conky-all, yt-dlp, avahi-daemon.
 
 ### 3.2 Clone the Repository
 
 ```bash
 sudo mkdir -p /opt/nomad
-sudo chown $(whoami):$(whoami) /opt/nomad
+sudo chown nomad:nomad /opt/nomad
 git clone https://github.com/nomadkaraoke/kjbox.git /opt/nomad/kjbox
 ```
 
@@ -231,15 +268,22 @@ cat > /opt/nomad/kjbox/kj-controller/config.json << 'EOF'
   "log_file": "/opt/nomad/kjbox/kj-controller/kj-controller.log",
   "youtube_cookies_file": "/opt/nomad/kjbox/kj-controller/youtube_cookies.txt",
   "flask_port": 80,
+  "enable_vlc": true,
   "audio_devices": {
     "default": "Default HDMI"
   },
-  "default_audio_device": "default"
+  "default_audio_device": "default",
+  "external_file_list": "/media/nomad/Nomad4TBOne/HyperMule/all-karaoke-files-2025.02.28.txt",
+  "external_media_mount": "/media/nomad/Nomad4TBOne"
 }
 EOF
 ```
 
-**Note:** Audio device names will differ from the Pi. Run `aplay -L` to list available devices and update `audio_devices` accordingly. On x86 with HDMI, the default ALSA device usually works without the custom `iec958` plugin chain the Pi needs.
+**Config notes:**
+- `media_folders` — scanned into a local JSON index (`media_index.json`). Good for small collections like YTDownloads. **Do NOT add large external drives here** — use the external catalog instead.
+- `external_file_list` / `external_media_mount` — used by the SQLite FTS5 external catalog system for large collections like HyperMule (~415K files). See [Phase 7: Media & External Catalog](#phase-7-media--external-catalog) for details.
+
+**Audio note:** This mini PC uses **PipeWire** as the audio server (not raw ALSA like the Pi). PipeWire provides ALSA compatibility via `pipewire-alsa`, so VLC's `--aout alsa` should work transparently. The default PipeWire sink is already HDMI stereo (`alsa_output.pci-0000_00_1f.3.hdmi-stereo`). No custom ALSA config (`/etc/asound.conf`) is needed.
 
 ### 3.5 Create Data Directories
 
@@ -252,40 +296,11 @@ mkdir -p /opt/nomad/FillerMusic
 
 ### 3.6 Platform Detection Fix
 
-The app uses `is_pi()` to decide whether to enable VLC. On the mini PC, this returns `False` because there's no `/boot/dietpi.txt`. You have two options:
+The app uses `is_pi()` to decide whether to enable VLC. On the mini PC, this returns `False` because there's no `/boot/dietpi.txt`. The fix is a config flag.
 
-**Option A: Touch the sentinel file (quick hack)**
-```bash
-sudo touch /boot/dietpi.txt
-```
-This makes `is_pi()` return `True`. The Pi-specific VLC wrapper (`sudo -u dietpi`) will fail, so you also need Option B.
+Add `"enable_vlc": true` to `config.json` (already included in 3.4 above).
 
-**Option B: Modify the code (proper fix)**
-
-The `is_pi()` check gates two things:
-1. Whether VLC is enabled (`vlc.py` line 18)
-2. Whether to use the `sudo -u dietpi` wrapper (`vlc.py` line 59, `app.py` line 59)
-
-The cleanest approach: create a config flag. In `config.json`, add:
-```json
-"enable_vlc": true
-```
-
-Then update `config.py`:
-```python
-def is_pi():
-    """Detect if running on NomadPi (DietPi on Linux ARM)."""
-    return os.path.exists('/boot/dietpi.txt')
-
-def is_karaoke_device():
-    """Detect if this is a karaoke playback device (Pi or mini PC)."""
-    return is_pi() or os.path.exists('/opt/nomad/kjbox/kj-controller/config.json')
-```
-
-And update `vlc.py` to use `is_karaoke_device()` for the `enabled` check but keep `is_pi()` for the `sudo -u dietpi` wrapper. **This is a code change that should be planned and tested properly** — see the note at the end of this guide.
-
-**For now, the simplest path:**
-On the mini PC, VLC can run directly as your user (no root issue, no wrapper needed). The `is_pi()` = `False` path just needs to not disable VLC. A minimal patch to `vlc.py`:
+Then apply a minimal code patch to `vlc.py`:
 
 In `VLCManager.__init__`:
 ```python
@@ -297,7 +312,9 @@ self.enabled = enabled if enabled is not None else (is_pi() or config.get('enabl
 
 In `VLCManager.launch_instance`, the `is_pi()` block wraps with `sudo -u dietpi`. The `else` branch already runs `cvlc` directly, which is what we want on the mini PC.
 
-In `app.py` `start_app()`, the `is_pi()` block does `xhost` and `/run/user/1000` setup. The mini PC doesn't need this since VLC runs as the logged-in user.
+In `app.py` `start_app()`, the `is_pi()` block does `xhost` and `/run/user/1000` setup. The mini PC doesn't need this since VLC runs as the logged-in `nomad` user directly.
+
+**This is a code change that should be planned and tested properly** — implement via `/plan` and `/shipit` workflow.
 
 ---
 
@@ -318,6 +335,7 @@ User=nomad
 WorkingDirectory=/opt/nomad/kjbox/kj-controller
 Environment=DISPLAY=:0
 Environment=HOME=/home/nomad
+Environment=XDG_RUNTIME_DIR=/run/user/1000
 # Port 80 requires this capability (or run as root)
 AmbientCapabilities=CAP_NET_BIND_SERVICE
 ExecStart=/opt/nomad/kjbox/kj-controller/venv/bin/python /opt/nomad/kjbox/kj-controller/app.py
@@ -329,9 +347,7 @@ WantedBy=graphical.target
 EOF
 ```
 
-**Note:** Replace `nomad` with your actual username. If `CAP_NET_BIND_SERVICE` doesn't work for port 80, you can either:
-- Run the service as root (remove the `User=` line)
-- Use port 8080 instead and update `config.json`
+**Note:** `XDG_RUNTIME_DIR` is needed for PipeWire audio access (PipeWire runs as the `nomad` user and its socket is at `/run/user/1000/pipewire-0`). If `CAP_NET_BIND_SERVICE` doesn't work for port 80, use port 8080 instead.
 
 ### 4.2 Auto-Deploy Service
 
@@ -344,6 +360,7 @@ Wants=network-online.target
 
 [Service]
 Type=simple
+User=nomad
 ExecStart=/opt/nomad/kjbox/kj-controller/auto-deploy.sh
 Restart=always
 RestartSec=30
@@ -370,6 +387,7 @@ After=graphical.target
 Type=simple
 User=nomad
 Environment=DISPLAY=:0
+Environment=XAUTHORITY=/home/nomad/.Xauthority
 ExecStart=/usr/bin/conky -c /opt/nomad/kjbox/desktop/rotation.conkyrc
 Restart=always
 RestartSec=5
@@ -379,86 +397,102 @@ WantedBy=graphical.target
 EOF
 ```
 
-### 4.4 Enable All Services
+**Note:** XFCE uses `own_window_type = 'desktop'` or `'dock'` for conky. The LXDE-specific `'dock'` workaround for PCManFM may not be needed — test and adjust `rotation.conkyrc` if the overlay doesn't appear correctly.
+
+### 4.4 Overlay Display Service
+
+```bash
+sudo tee /etc/systemd/system/overlay-display.service << 'EOF'
+[Unit]
+Description=Karaoke Overlay Display Engine
+After=graphical.target
+
+[Service]
+Type=simple
+User=nomad
+Environment=DISPLAY=:0
+Environment=XAUTHORITY=/home/nomad/.Xauthority
+ExecStart=/opt/nomad/kjbox/kj-controller/venv/bin/python /opt/nomad/kjbox/desktop/overlay_engine.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=graphical.target
+EOF
+```
+
+### 4.5 Enable All Services
 
 ```bash
 sudo systemctl daemon-reload
-sudo systemctl enable kj-controller kj-autodeploy rotation-display
-sudo systemctl start kj-controller kj-autodeploy rotation-display
+sudo systemctl enable kj-controller kj-autodeploy rotation-display overlay-display
+sudo systemctl start kj-controller kj-autodeploy rotation-display overlay-display
 ```
 
 ---
 
 ## Phase 5: Display & Audio
 
-### 5.1 HDMI Audio
+### 5.1 HDMI Audio (VERIFIED WORKING)
 
-On x86, HDMI audio typically works out of the box without the custom EDID and `iec958` plugin the Pi needs.
+Audio works out of the box via PipeWire → HDMI.
 
 ```bash
-# List audio devices
-aplay -L
+# Audio pipeline
+wpctl status  # Shows PipeWire sinks
+# Default sink: "Built-in Audio Digital Stereo (HDMI)"
+# Device: alsa_output.pci-0000_00_1f.3.hdmi-stereo
 
-# Test HDMI audio (find the right device name from aplay -L)
+# Test audio
 speaker-test -c 2 -t sine -f 440 -l 1
-
-# If HDMI audio doesn't work with the default device, check:
-aplay -l
-# Note the card/device numbers and update config.json audio_devices accordingly
 ```
 
-### 5.2 ALSA Configuration
+**No custom ALSA config needed.** Unlike the Pi (which requires `iec958` plugin + custom EDID), the Intel HDA driver exposes standard PCM formats and PipeWire handles routing.
 
-If the default ALSA output isn't HDMI, create `/etc/asound.conf`:
+**VLC audio:** VLC should use PipeWire automatically via its PulseAudio output module (`--aout pulse`) or ALSA module (`--aout alsa`). PipeWire's ALSA compatibility layer handles both. Test which works better.
+
+### 5.2 Display (VERIFIED)
+
+Currently connected: HDMI-1 at 1920x1080@60Hz.
+
+Available outputs: HDMI-1, HDMI-2, DP-1, DP-2.
 
 ```bash
-# Only needed if HDMI isn't the default audio output
-# Find the card number from: aplay -l
-sudo tee /etc/asound.conf << 'EOF'
-pcm.!default {
-    type plug
-    slave {
-        pcm "hw:0,0"
-    }
-}
-
-ctl.!default {
-    type hw
-    card 0
-}
-EOF
+DISPLAY=:0 xrandr
+# HDMI-1 connected 1920x1080+0+0
+# HDMI-2 disconnected
+# DP-1 disconnected
+# DP-2 disconnected
 ```
 
-Replace `hw:0,0` with the correct card/device for your HDMI output.
-
-### 5.3 Display Resolution
-
-The HDMI splitter should handle resolution negotiation. Verify:
-
+For multi-display (e.g., HDMI splitter or separate outputs):
 ```bash
-xrandr
-# Should show 1920x1080 (or your target resolution)
+# Mirror HDMI-1 to HDMI-2
+xrandr --output HDMI-2 --same-as HDMI-1 --auto
+
+# Or extend desktop
+xrandr --output HDMI-2 --right-of HDMI-1 --auto
 ```
 
-### 5.4 Rotation Display Background
+### 5.3 Rotation Display Background
 
-The conky overlay uses a 1920x1080 background image for faux transparency. If the desktop wallpaper differs from the Pi:
+The conky overlay uses a 1920x1080 background image for faux transparency:
 
 ```bash
-# Set the desktop wallpaper to match the rotation background
-# Or regenerate rotation-bg.png from the 4K source:
+# Set the XFCE desktop wallpaper to the Nomad background
+xfconf-query -c xfce4-desktop -p /backdrop/screen0/monitorHDMI-1/workspace0/last-image \
+  -s /opt/nomad/kjbox/desktop/nomad-kjbox-desktop-background-4k.jpg
+
+# Regenerate rotation-bg.png if needed (requires Pillow)
 cd /opt/nomad/kjbox/desktop
 python3 -c "
 from PIL import Image
 img = Image.open('nomad-kjbox-desktop-background-4k.jpg')
 img.resize((1920, 1080), Image.LANCZOS).save('rotation-bg.png', 'PNG')
 "
-# You may need: pip3 install Pillow
 ```
 
-Set the desktop wallpaper to `nomad-kjbox-desktop-background-4k.jpg` via the desktop environment's settings.
-
-### 5.5 Conky Font Check
+### 5.4 Conky Font Check
 
 ```bash
 # Verify DejaVu Sans is available (used by rotation display)
@@ -467,20 +501,186 @@ fc-list | grep -i "dejavu sans"
 sudo apt install -y fonts-dejavu
 ```
 
+### 5.5 VNC Screen Preview
+
+For the browser-based VNC preview in KJ Controller, you'll need a VNC server:
+
+```bash
+# Install x11vnc (lightweight, shares physical display like RealVNC on the Pi)
+sudo apt install -y x11vnc
+
+# Set a VNC password
+x11vnc -storepasswd
+
+# Create a systemd service
+sudo tee /etc/systemd/system/x11vnc.service << 'EOF'
+[Unit]
+Description=x11vnc VNC Server
+After=display-manager.service
+
+[Service]
+Type=simple
+User=nomad
+Environment=DISPLAY=:0
+Environment=XAUTHORITY=/home/nomad/.Xauthority
+ExecStart=/usr/bin/x11vnc -display :0 -auth /home/nomad/.Xauthority -forever -shared -rfbport 5900 -rfbauth /home/nomad/.vnc/passwd
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+sudo systemctl daemon-reload
+sudo systemctl enable --now x11vnc
+```
+
+**Important flags:**
+- `-shared` — allows multiple simultaneous VNC connections. Without this, a new connection kicks the existing one.
+- `After=display-manager.service` + `WantedBy=multi-user.target` — avoids ordering cycle with `graphical.target` during shutdown.
+
+**Note:** The Pi uses RealVNC (proprietary, RA2ne auth). The mini PC uses x11vnc (open source, standard VNC auth). The websockify + noVNC browser preview should work with either — the key difference is the auth type. x11vnc uses standard VNC password auth which noVNC handles natively (no `serververification` workaround needed).
+
+TLS certificates (for HTTPS/WSS) are still needed if you want the VNC preview in the browser. Generate with `mkcert`:
+```bash
+# On Mac:
+mkcert nomadpc.local nomadpc 192.168.8.170 localhost 127.0.0.1
+scp cert.pem key.pem nomadpc:/opt/nomad/kjbox/kj-controller/certs/
+```
+
 ---
 
-## Phase 6: Verification
+## Phase 6: USB External Drive
 
-### 6.1 Service Status
+### 6.1 Mount the Drive
+
+The 4TB SanDisk Extreme Pro SSD contains the full karaoke catalog (HyperMule) and is shared between devices. It uses exFAT for cross-platform compatibility.
+
+```bash
+# Check the drive is detected
+lsblk -o NAME,SIZE,FSTYPE,LABEL
+# Should show: sda1  3.6T  exfat  Nomad4TBOne
+
+# Create mount point and mount
+sudo mkdir -p /media/nomad/Nomad4TBOne
+sudo mount -t exfat /dev/sda1 /media/nomad/Nomad4TBOne
+
+# Verify
+ls /media/nomad/Nomad4TBOne/HyperMule/
+```
+
+### 6.2 Persist in fstab
+
+Add an fstab entry so the drive auto-mounts on boot:
+
+```bash
+# Get the UUID
+sudo blkid /dev/sda1
+# UUID="907E-816F" (will vary per drive)
+
+# Add to fstab — nofail prevents boot hang if drive is unplugged
+echo 'UUID=907E-816F /media/nomad/Nomad4TBOne exfat defaults,nofail,uid=1000,gid=1000 0 0' | sudo tee -a /etc/fstab
+```
+
+**Notes:**
+- `nofail` — system boots normally even if the drive isn't plugged in
+- `uid=1000,gid=1000` — files owned by `nomad` user (exFAT doesn't support Unix permissions)
+- Replace the UUID with the actual value from `blkid`
+
+### 6.3 Filler Music
+
+Copy filler music tracks to `/opt/nomad/FillerMusic/`. These play between karaoke songs.
+
+```bash
+# Example: copy from legacy KJ software data folder
+cp /home/nomad/kjdata/filler/*.mp3 /opt/nomad/FillerMusic/
+# Or from an external source
+```
+
+### 6.4 Migrate Legacy YouTube Downloads
+
+If the device has videos from a previous KJ software (e.g., in `/home/nomad/kjdata/videos/`), they need to be renamed to match our naming convention: `{youtube_id}__{channel}__{title}.mp4`.
+
+The legacy format uses random 8-char IDs with JSON sidecar files containing metadata:
+```
+# Legacy: 03rwuq20.mp4 + 03rwuq20.json
+# JSON:   {"id": "03rwuq20", "title": "...", "original_url": "https://youtube.com/watch?v=..."}
+#
+# New:    gkBGrVCd4uc__Unknown__Megan Moroney - 6 Months Later (Karaoke Version).mp4
+```
+
+A migration script extracts the YouTube ID from `original_url` and the title from each JSON file. The channel is set to "Unknown" since the legacy format doesn't store it. The script is idempotent (skips files that already exist in the destination).
+
+See `scripts/migrate_legacy_videos.py` in this repo (or write one using the pattern in `kj-controller/utils.py:sanitize_filename_part`).
+
+### 6.5 Build External Catalog (HyperMule)
+
+The KJ Controller has **two separate indexing systems** — understanding this is critical:
+
+| System | Storage | Scan Method | Best For |
+|--------|---------|-------------|----------|
+| **Local Media Index** | JSON file (`media_index.json`) | Directory walk via `POST /rescan` | Small collections (YTDownloads, <10K files) |
+| **External Catalog** | SQLite + FTS5 (`external_media.db`) | Manifest file via `POST /catalog/build` | Large catalogs (HyperMule, 400K+ files) |
+
+**Do NOT add large external drives to `media_folders`** — the directory walk is slow and the JSON index will be huge. Use the external catalog instead.
+
+The external catalog reads from a text manifest file (one file path per line). HyperMule ships with one:
+
+```bash
+ls /media/nomad/Nomad4TBOne/HyperMule/all-karaoke-files-2025.02.28.txt
+# ~415K lines
+```
+
+The manifest was generated on macOS, so paths start with `/Volumes/Nomad4TBOne/`. The catalog builder auto-rewrites these to the Linux mount point using `external_media_mount` from config.json (`/Volumes/Nomad4TBOne/` → `/media/nomad/Nomad4TBOne/`).
+
+**Build the catalog** (one-time, takes ~10 seconds for 415K entries):
+
+```bash
+# Restart controller to pick up config changes first
+sudo systemctl restart kj-controller
+sleep 5
+
+# Trigger the build
+curl -s -X POST http://localhost/catalog/build
+# {"success": true, "count": 414933}
+
+# Verify search works
+curl -s 'http://localhost/search?q=bohemian+rhapsody' | python3 -m json.tool | head -20
+```
+
+The catalog is also rebuilt automatically by `auto-deploy.sh` after each code deploy (15-second delay).
+
+**To regenerate the manifest** (if files change on the drive):
+```bash
+# From Mac (where the drive is /Volumes/Nomad4TBOne):
+find /Volumes/Nomad4TBOne/HyperMule -type f > /Volumes/Nomad4TBOne/HyperMule/all-karaoke-files-$(date +%Y.%m.%d).txt
+
+# Then rebuild the catalog on the device:
+curl -s -X POST http://localhost/catalog/build
+```
+
+**How search works in the UI:**
+- The search box searches both systems simultaneously
+- Local results: filtered in-browser from the JSON index
+- Catalog results: FTS5 full-text search with diacritics normalization (é→e, ø→o, etc.)
+- Results shown in unified list with "Your Library" vs "Catalog" sections
+
+---
+
+## Phase 7: Verification
+
+### 7.1 Service Status
 
 ```bash
 systemctl status kj-controller
 systemctl status kj-autodeploy
 systemctl status rotation-display
+systemctl status overlay-display
 systemctl status avahi-daemon
+systemctl status cloudflared
 ```
 
-### 6.2 KJ Controller Web UI
+### 7.2 KJ Controller Web UI
 
 From your Mac:
 ```bash
@@ -491,14 +691,14 @@ curl -s http://nomadpc.local/status
 # http://nomadpc.local
 ```
 
-### 6.3 VLC Playback
+### 7.3 VLC Playback
 
 Test from the web UI — download a test video and play it. Verify:
 - Video displays fullscreen on the HDMI output
 - Audio comes through HDMI
 - Filler music fades out before karaoke and fades back in after
 
-### 6.4 Rotation Display
+### 7.4 Rotation Display
 
 Check if the conky overlay is visible on the desktop. If not:
 ```bash
@@ -507,16 +707,17 @@ journalctl -u rotation-display --no-pager -l | tail -20
 # - Wrong DISPLAY variable
 # - Font not found
 # - Background image path incorrect
+# - XFCE may need different own_window_type than LXDE
 ```
 
-### 6.5 Auto-Deploy
+### 7.5 Auto-Deploy
 
 ```bash
 journalctl -u kj-autodeploy --no-pager | tail -10
 # Should show "Auto-deploy started (polling every 60s)"
 ```
 
-### 6.6 mDNS
+### 7.6 mDNS
 
 ```bash
 # From Mac:
@@ -524,15 +725,15 @@ ping nomadpc.local
 ssh nomadpc  # via your .ssh/config
 ```
 
-### 6.7 Reboot Test
+### 7.7 Reboot Test
 
 The most important test — verify everything comes back after a cold boot:
 
 ```bash
 sudo reboot
-# Wait for it to come back up (30-60 seconds)
+# Wait for it to come back up (15-30 seconds — SSD is much faster than Pi's SD card)
 # Then verify all services are running:
-ssh nomadpc 'systemctl is-active kj-controller kj-autodeploy rotation-display avahi-daemon'
+ssh nomadpc 'systemctl is-active kj-controller kj-autodeploy rotation-display overlay-display avahi-daemon cloudflared'
 curl http://nomadpc.local/status
 ```
 
@@ -540,23 +741,53 @@ curl http://nomadpc.local/status
 
 ## Differences from Pi Setup
 
-| Aspect | NomadPi (Raspberry Pi 4) | Mini PC (x86_64) |
-|--------|--------------------------|-------------------|
-| **OS** | DietPi (Debian Trixie) | Linux Mint (Ubuntu-based) |
-| **User** | root (VLC wrapped as dietpi) | Regular user (VLC runs directly) |
-| **Display manager** | LightDM + LXDE | LightDM + Cinnamon/MATE |
-| **HDMI audio** | Custom EDID + iec958 ALSA plugin | Works out of the box |
+| Aspect | NomadPi (Raspberry Pi 4) | Mini PC (`nomadpc`) |
+|--------|--------------------------|---------------------------|
+| **CPU** | 4-core ARM (BCM2711) | Intel N97 (4-core x86_64, 3.6GHz) |
+| **RAM** | 2GB | 16GB |
+| **Storage** | 256GB SD card | 476GB NVMe SSD |
+| **OS** | DietPi (Debian 13 Trixie) | Linux Mint 22.1 Xia (Ubuntu Noble) |
+| **Desktop** | LXDE (via LightDM) | XFCE (via LightDM) |
+| **User** | root (VLC wrapped as dietpi) | `nomad` (VLC runs directly) |
+| **Audio** | Raw ALSA + custom EDID + iec958 plugin | PipeWire → HDMI (works out of the box) |
 | **VLC launch** | `sudo -u dietpi env DISPLAY=:0 cvlc` | `cvlc` directly |
+| **VNC** | RealVNC (proprietary, RA2ne auth) | x11vnc (open source, standard VNC auth) |
 | **Platform detection** | `is_pi()` = True | Needs `enable_vlc: true` in config |
-| **Performance** | 2GB RAM, SD card, ARM | 16GB RAM, SSD, x86_64 |
-| **Power** | SD card corruption risk | SSD is more resilient |
+| **Remote access** | Tailscale | Cloudflare tunnel (`kjbox.nomadkaraoke.com`) |
+| **Boot time** | ~45 seconds | ~15 seconds |
+| **HDMI ports** | 2 (micro-HDMI) | 2 HDMI + 2 DisplayPort |
 
 ---
 
-## TODO After Initial Setup
+## Setup Checklist
 
-- [ ] Copy media files (YTDownloads, Tracks-PublicShare, FillerMusic) from Pi or external drive
-- [ ] Build external catalog if using external media: `curl -X POST http://nomadpc.local/catalog/build -H 'Content-Type: application/json' -d '{"file_list_path": "/path/to/file-list.txt"}'`
-- [ ] Copy `youtube_cookies.txt` from Pi if needed for yt-dlp authentication
-- [ ] Test with actual HDMI splitter + projector + 7" screen at venue
-- [ ] Implement proper `enable_vlc` config flag (see Phase 3.6) as a code change in the repo
+### Completed (2026-02-18/19)
+
+- [x] Set hostname to `nomadpc` (Phase 1.3)
+- [x] Disable sleep/screensaver (Phase 1.6)
+- [x] Restrict Avahi to `enp2s0` only (Phase 2.4)
+- [x] Install Tailscale (Phase 2.5)
+- [x] Clone repo and set up KJ Controller venv (Phase 3.2-3.3)
+- [x] Create `config.json` with `enable_vlc` flag (Phase 3.4)
+- [x] Apply platform detection patches to `app.py` and `vlc.py` (Phase 3.6)
+- [x] Create and enable systemd services (Phase 4)
+- [x] Set desktop wallpaper to Nomad background (Phase 5.3)
+- [x] Install and configure x11vnc for VNC preview (Phase 5.5)
+- [x] Set HDMI output to 1920x1080 with boot persistence
+- [x] Verify HDMI audio works via PipeWire (speaker-test + VLC)
+- [x] Mount USB SSD and add to fstab (Phase 6.1-6.2)
+- [x] Copy filler music (Phase 6.3)
+- [x] Migrate 697 legacy YouTube downloads to new naming convention (Phase 6.4)
+- [x] Build external catalog — 414,933 entries indexed (Phase 6.5)
+- [x] Reboot test — all services survive (Phase 7.7)
+- [x] Add NOPASSWD sudo for `nomad` user
+
+### Remaining
+
+- [ ] Run `sudo apt update && sudo apt upgrade -y` (341 packages pending, mirror hash issue)
+- [ ] Check BIOS for "Power On After Power Loss" setting (Phase 1.7) — requires physical access
+- [ ] Set DHCP reservation on GL.iNet router for `84:47:09:5a:1d:13` (Phase 2.3)
+- [ ] Generate TLS certs for HTTPS/WSS VNC browser preview (Phase 5.5)
+- [ ] Copy `youtube_cookies.txt` from Pi if needed
+- [ ] Test with HDMI splitter + projector at venue
+- [ ] Harden SSH: disable password authentication (Phase 1.5)
