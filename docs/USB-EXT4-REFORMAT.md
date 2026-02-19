@@ -19,101 +19,131 @@ Two independent backups before reformatting:
 
 Once both backups are verified, reformat USB to ext4 and restore from the physical HDD (fastest).
 
-## Prerequisites
-
-- [ ] 4TB portable HDD connected to NomadPC
-- [ ] `gcloud` CLI installed on NomadPC
-- [ ] Authenticated to `nomadkaraoke` GCP project
-- [ ] `tmux` installed (for resumable sessions)
-
 ---
 
-## Phase 1: Setup
+## AFTER A REBOOT: Restart the GCS Upload
 
-### 1.1 Install gcloud CLI
-
-```bash
-# On NomadPC
-curl -fsSL https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-cli-linux-x86_64.tar.gz -o /tmp/gcloud.tar.gz
-tar -xf /tmp/gcloud.tar.gz -C /opt/nomad/
-/opt/nomad/google-cloud-sdk/install.sh --quiet --path-update true
-source ~/.zshrc
-```
-
-### 1.2 Authenticate
+The upload runs in a tmux session which does **not** survive reboots. After any reboot:
 
 ```bash
-gcloud auth login
-gcloud config set project nomadkaraoke
+# SSH into nomadpc, then:
+/opt/nomad/gcs-upload.sh
 ```
 
-### 1.3 Create GCS bucket
+That's it. The script:
+- Starts a new tmux session
+- Resumes the `gcloud storage rsync` (skips already-uploaded files automatically)
+- Logs to `/opt/nomad/gcs-upload.log`
+
+### Other script commands
 
 ```bash
-gcloud storage buckets create gs://nomad-usb-backup \
-  --location=us-central1 \
-  --storage-class=STANDARD \
-  --uniform-bucket-level-access
+/opt/nomad/gcs-upload.sh status   # check progress (log tail + bucket size)
+/opt/nomad/gcs-upload.sh attach   # attach to the running tmux session
 ```
 
-> Standard storage at $0.020/GB/month. 3.3 TB ≈ $66/month.
-> Switch to Nearline ($0.010/GB) or Coldline ($0.004/GB) after reformat if keeping long-term.
+### If the script is missing
 
-### 1.4 Install tmux (if needed)
-
-```bash
-sudo apt install -y tmux
-```
-
----
-
-## Phase 2: Cloud Backup (GCS Upload)
-
-All commands run inside a tmux session so they survive SSH disconnections.
-
-### 2.1 Start tmux session
+If `/opt/nomad/gcs-upload.sh` doesn't exist (e.g. drive got wiped), run manually:
 
 ```bash
 tmux new-session -s gcs-upload
-```
 
-To reattach later: `tmux attach -t gcs-upload`
-
-### 2.2 Upload to GCS
-
-```bash
-gcloud storage rsync \
+/opt/nomad/google-cloud-sdk/bin/gcloud storage rsync \
   /media/nomad/Nomad4TBOne \
   gs://nomad-usb-backup \
   --recursive \
   --checksums-only \
   --no-clobber \
-  -v \
-  2>&1 | tee /opt/nomad/gcs-upload.log
+  2>&1 | tee -a /opt/nomad/gcs-upload.log
 ```
 
-**Key flags:**
-- `--recursive` — all subdirectories
-- `--checksums-only` — skip files that already exist with matching checksums (enables resume)
-- `--no-clobber` — never overwrite existing files (safe resume)
-- `-v` — verbose progress
+---
 
-**Resuming after interruption:** Just re-run the same command. It skips already-uploaded files automatically.
+## Progress Checklist
 
-**Estimated time:** ~6 days at 50 Mbps upload. Monitor with:
+- [x] `gcloud` CLI installed at `/opt/nomad/google-cloud-sdk/`
+- [x] Authenticated as `andrew.d.beveridge@gmail.com` (credentials copied from Mac)
+- [x] GCS bucket created: `gs://nomad-usb-backup` (us-central1, Standard)
+- [x] Upload script installed: `/opt/nomad/gcs-upload.sh`
+- [x] Upload started: 2026-02-19
+- [ ] Upload complete (~6 days, ETA ~2026-02-25)
+- [ ] Cloud backup verified (file counts match)
+- [ ] 4TB portable HDD connected and mounted
+- [ ] Physical backup complete (rsync to HDD)
+- [ ] Physical backup verified (file counts match)
+- [ ] USB drive reformatted to ext4
+- [ ] Data restored from HDD
+- [ ] fstab updated
+- [ ] Services restarted and verified
+- [ ] GCS storage class downgraded to Coldline
+
+---
+
+## Phase 1: Setup (DONE)
+
+### 1.1 Install gcloud CLI (done)
 
 ```bash
-# Check progress (file count in bucket)
-gcloud storage ls gs://nomad-usb-backup --recursive 2>/dev/null | wc -l
+# Already installed at /opt/nomad/google-cloud-sdk/
+# Added to PATH via ~/.zshrc
+```
 
-# Check bucket size
+### 1.2 Authenticate (done)
+
+Credentials copied from Mac (`~/.config/gcloud/credentials.db`).
+Active account: `andrew.d.beveridge@gmail.com`, project: `nomadkaraoke`.
+
+If credentials expire, re-copy from Mac:
+```bash
+# From Mac:
+scp ~/.config/gcloud/credentials.db ~/.config/gcloud/application_default_credentials.json nomadpc:~/.config/gcloud/
+# Then on nomadpc:
+gcloud config set account andrew.d.beveridge@gmail.com
+gcloud config set project nomadkaraoke
+```
+
+### 1.3 Create GCS bucket (done)
+
+Bucket: `gs://nomad-usb-backup` (us-central1, Standard, uniform bucket-level access).
+
+> Standard storage at $0.020/GB/month. 3.3 TB ≈ $66/month.
+> Switch to Coldline ($0.004/GB) after reformat for long-term archive (~$13/month).
+
+---
+
+## Phase 2: Cloud Backup (GCS Upload) — IN PROGRESS
+
+**Started:** 2026-02-19 17:52 EST
+**Estimated completion:** ~2026-02-25 (6 days at 50 Mbps upload)
+
+### Start / resume
+
+```bash
+/opt/nomad/gcs-upload.sh           # start or resume (idempotent)
+/opt/nomad/gcs-upload.sh status    # check progress
+/opt/nomad/gcs-upload.sh attach    # watch live
+```
+
+### Monitor
+
+```bash
+# Quick: bucket size vs expected 3.3 TB
 gcloud storage du gs://nomad-usb-backup --summarize
 
-# Tail the log
+# Detailed: tail the log
 tail -f /opt/nomad/gcs-upload.log
 ```
 
-### 2.3 Verify cloud backup
+### How resume works
+
+`gcloud storage rsync` with `--checksums-only --no-clobber`:
+- Scans local files and remote bucket (takes ~5 min for 413K files)
+- Skips any file already in the bucket with a matching checksum
+- Only uploads files that are missing or different
+- Safe to kill and re-run at any time
+
+### 2.1 Verify cloud backup (after upload completes)
 
 ```bash
 # Compare file counts
@@ -121,7 +151,7 @@ LOCAL_COUNT=$(find /media/nomad/Nomad4TBOne -type f | wc -l)
 CLOUD_COUNT=$(gcloud storage ls gs://nomad-usb-backup --recursive | grep -v '/$' | wc -l)
 echo "Local: $LOCAL_COUNT  Cloud: $CLOUD_COUNT"
 
-# Dry-run rsync to find any differences
+# Dry-run rsync to confirm nothing left to sync
 gcloud storage rsync \
   /media/nomad/Nomad4TBOne \
   gs://nomad-usb-backup \
@@ -141,7 +171,7 @@ Can run in parallel with Phase 2, or sequentially.
 ### 3.1 Mount the portable HDD
 
 ```bash
-# Identify the drive
+# Identify the drive (will show as /dev/sdX)
 lsblk -f
 
 # Mount (adjust device name as needed)
@@ -160,7 +190,7 @@ rsync -avh --progress \
   2>&1 | tee /opt/nomad/hdd-copy.log
 ```
 
-**Resuming:** Re-run the same `rsync` command — it skips matching files.
+**Resuming after reboot:** `tmux new-session -s hdd-copy` then re-run the same rsync command.
 
 ### 3.3 Verify physical backup
 
@@ -257,7 +287,7 @@ sudo systemctl start kj-controller
 sudo umount /media/nomad/BackupHDD
 ```
 
-### 6.2 Downgrade GCS storage class (optional, for long-term archive)
+### 6.2 Downgrade GCS storage class (for long-term archive)
 
 ```bash
 # Move to Coldline ($0.004/GB/month ≈ $13/month for 3.3TB, vs $66 Standard)
@@ -265,20 +295,13 @@ gcloud storage buckets update gs://nomad-usb-backup \
   --default-storage-class=COLDLINE
 ```
 
+Note: changing the default class only affects new objects. To move existing objects:
+```bash
+gcloud storage objects update gs://nomad-usb-backup/** --storage-class=COLDLINE
+```
+
 ### 6.3 Clean up logs
 
 ```bash
 rm /opt/nomad/gcs-upload.log /opt/nomad/hdd-copy.log /opt/nomad/restore.log
 ```
-
----
-
-## Quick Reference: Resume Any Step
-
-| Phase | Resume command |
-|-------|---------------|
-| GCS upload | `tmux attach -t gcs-upload` — if dead, re-run the rsync command |
-| HDD copy | `tmux attach -t hdd-copy` — if dead, re-run the rsync command |
-| Restore | `tmux attach -t restore` — if dead, re-run the rsync command |
-
-All rsync commands are idempotent. Re-running skips completed files.
