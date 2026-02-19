@@ -192,24 +192,52 @@ sudo tailscale up
 # Follow the auth URL to add to your tailnet
 ```
 
-### 2.6 Cloudflared (ALREADY RUNNING)
+### 2.6 Cloudflare Tunnel (CONFIGURED)
 
-A Cloudflare tunnel is already configured and running as a systemd service:
-- **Tunnel:** `1e86a7f5-04e7-4527-b624-49447450443e`
-- **Hostname:** `kjbox.nomadkaraoke.com` → SSH (port 22)
+A Cloudflare tunnel exposes the KJ Controller web UI and VNC websocket remotely:
+- **Tunnel:** `1e86a7f5-04e7-4527-b624-49447450443e` (name: `kjbox`)
 - **Config:** `/etc/cloudflared/config.yml`
+- **Credentials:** `/etc/cloudflared/1e86a7f5-04e7-4527-b624-49447450443e.json`
 
-This provides remote SSH access from anywhere without Tailscale. To also expose the KJ Controller web UI, add an ingress rule:
+**Hostnames:**
+| Hostname | Service | Purpose |
+|----------|---------|---------|
+| `kjbox.nomadkaraoke.com` | `https://localhost:443` | KJ Controller web UI |
+| `kjvnc.nomadkaraoke.com` | `http://localhost:6080` | Websockify (VNC preview WebSocket) |
+
+**Current config:**
 ```yaml
+tunnel: 1e86a7f5-04e7-4527-b624-49447450443e
+credentials-file: /etc/cloudflared/1e86a7f5-04e7-4527-b624-49447450443e.json
+
 ingress:
+  - hostname: kjvnc.nomadkaraoke.com
+    service: http://localhost:6080
   - hostname: kjbox.nomadkaraoke.com
-    service: ssh://localhost:22
-  - hostname: kjcontrol.nomadkaraoke.com
-    service: http://localhost:80
+    service: https://localhost:443
+    originRequest:
+      noTLSVerify: true
   - service: http_status:404
 ```
 
-### 2.7 Update SSH Config on Mac
+**Notes:**
+- `noTLSVerify: true` is needed because the origin uses a mkcert certificate (not publicly trusted)
+- The websockify hostname (`kjvnc`) is on a separate ingress because Cloudflare tunnels don't support path-based routing on the same hostname
+- The DNS CNAME for `kjvnc.nomadkaraoke.com` was created with: `sudo cloudflared tunnel route dns <tunnel-id> kjvnc.nomadkaraoke.com`
+
+### 2.7 Cloudflare Access (Zero Trust Auth)
+
+Cloudflare Access protects the tunnel endpoints so only authorized users can access the controller remotely. This is configured in the Cloudflare Zero Trust dashboard (not on the device).
+
+**Setup:** https://one.dash.cloudflare.com/ → Access → Applications
+- **Application:** Self-hosted, covers both `kjbox.nomadkaraoke.com` and `kjvnc.nomadkaraoke.com`
+- **Auth method:** Email OTP — user enters email, receives one-time code
+- **Policy:** Allow list of authorized email addresses
+- **Session duration:** 24 hours
+
+When someone visits `https://kjbox.nomadkaraoke.com`, Cloudflare shows a login page before any traffic reaches the device.
+
+### 2.8 Update SSH Config on Mac
 
 Add to `~/.ssh/config`:
 ```
@@ -273,15 +301,20 @@ cat > /opt/nomad/kjbox/kj-controller/config.json << 'EOF'
     "default": "Default HDMI"
   },
   "default_audio_device": "default",
+  "tls_cert": "/opt/nomad/kjbox/kj-controller/certs/cert.pem",
+  "tls_key": "/opt/nomad/kjbox/kj-controller/certs/key.pem",
   "external_file_list": "/media/nomad/Nomad4TBOne/HyperMule/all-karaoke-files-2025.02.28.txt",
-  "external_media_mount": "/media/nomad/Nomad4TBOne"
+  "external_media_mount": "/media/nomad/Nomad4TBOne",
+  "websockify_host": "kjvnc.nomadkaraoke.com"
 }
 EOF
 ```
 
 **Config notes:**
 - `media_folders` — scanned into a local JSON index (`media_index.json`). Good for small collections like YTDownloads. **Do NOT add large external drives here** — use the external catalog instead.
-- `external_file_list` / `external_media_mount` — used by the SQLite FTS5 external catalog system for large collections like HyperMule (~415K files). See [Phase 7: Media & External Catalog](#phase-7-media--external-catalog) for details.
+- `external_file_list` / `external_media_mount` — used by the SQLite FTS5 external catalog system for large collections like HyperMule (~415K files). See [Phase 6: USB External Drive](#phase-6-usb-external-drive) for details.
+- `tls_cert` / `tls_key` — when present, Flask serves HTTPS on port 443 instead of HTTP on port 80. See [Phase 5.6](#56-tls-certificates-configured).
+- `websockify_host` — tunnel hostname for VNC WebSocket. When accessing via tunnel (e.g., `kjbox.nomadkaraoke.com`), the noVNC client connects to this hostname. When accessing locally (`.local`, `localhost`, or IP), it connects directly to `hostname:6080`. Leave empty if not using a tunnel.
 
 **Audio note:** This mini PC uses **PipeWire** as the audio server (not raw ALSA like the Pi). PipeWire provides ALSA compatibility via `pipewire-alsa`, so VLC's `--aout alsa` should work transparently. The default PipeWire sink is already HDMI stereo (`alsa_output.pci-0000_00_1f.3.hdmi-stereo`). No custom ALSA config (`/etc/asound.conf`) is needed.
 
@@ -294,27 +327,15 @@ mkdir -p /opt/nomad/FillerMusic
 # mkdir -p /opt/nomad/Tracks-PublicShare
 ```
 
-### 3.6 Platform Detection Fix
+### 3.6 Platform Detection (DONE — in repo)
 
-The app uses `is_pi()` to decide whether to enable VLC. On the mini PC, this returns `False` because there's no `/boot/dietpi.txt`. The fix is a config flag.
+The app uses `is_pi()` to decide whether to enable VLC. On the mini PC, this returns `False` because there's no `/boot/dietpi.txt`. The `enable_vlc` config flag was added to support non-Pi devices.
 
 Add `"enable_vlc": true` to `config.json` (already included in 3.4 above).
 
-Then apply a minimal code patch to `vlc.py`:
-
-In `VLCManager.__init__`:
-```python
-# Change from:
-self.enabled = enabled if enabled is not None else is_pi()
-# To:
-self.enabled = enabled if enabled is not None else (is_pi() or config.get('enable_vlc', False))
-```
-
-In `VLCManager.launch_instance`, the `is_pi()` block wraps with `sudo -u dietpi`. The `else` branch already runs `cvlc` directly, which is what we want on the mini PC.
-
-In `app.py` `start_app()`, the `is_pi()` block does `xhost` and `/run/user/1000` setup. The mini PC doesn't need this since VLC runs as the logged-in `nomad` user directly.
-
-**This is a code change that should be planned and tested properly** — implement via `/plan` and `/shipit` workflow.
+The code changes are already committed to the repo:
+- **`vlc.py`**: `self.enabled` checks `config.get('enable_vlc', False)` alongside `is_pi()`
+- **`app.py`**: Platform setup restructured — Pi-specific setup (xhost, dietpi user) is separate from shared device setup (websockify). Websockify starts on any device with `enable_vlc: true`.
 
 ---
 
@@ -541,12 +562,37 @@ sudo systemctl enable --now x11vnc
 
 **Note:** The Pi uses RealVNC (proprietary, RA2ne auth). The mini PC uses x11vnc (open source, standard VNC auth). The websockify + noVNC browser preview should work with either — the key difference is the auth type. x11vnc uses standard VNC password auth which noVNC handles natively (no `serververification` workaround needed).
 
-TLS certificates (for HTTPS/WSS) are still needed if you want the VNC preview in the browser. Generate with `mkcert`:
+### 5.6 TLS Certificates (CONFIGURED)
+
+TLS is required for HTTPS (the VNC preview uses `crypto.subtle` which needs a secure context).
+
 ```bash
-# On Mac:
+# On Mac (one-time CA install):
+brew install mkcert && mkcert -install
+
+# Generate cert for all access methods:
 mkcert nomadpc.local nomadpc 192.168.8.170 localhost 127.0.0.1
-scp cert.pem key.pem nomadpc:/opt/nomad/kjbox/kj-controller/certs/
+
+# Deploy to device:
+ssh nomadpc 'mkdir -p /opt/nomad/kjbox/kj-controller/certs'
+scp nomadpc.local+4.pem nomadpc:/opt/nomad/kjbox/kj-controller/certs/cert.pem
+scp nomadpc.local+4-key.pem nomadpc:/opt/nomad/kjbox/kj-controller/certs/key.pem
 ```
+
+Add to `config.json`:
+```json
+{
+  "tls_cert": "/opt/nomad/kjbox/kj-controller/certs/cert.pem",
+  "tls_key": "/opt/nomad/kjbox/kj-controller/certs/key.pem"
+}
+```
+
+When TLS certs are present, Flask auto-switches from port 80 to **port 443** (HTTPS). Websockify also uses the certs for WSS on port 6080.
+
+**Trusting the cert on other devices:**
+- **Mac:** `mkcert -install` (adds CA to macOS keychain, one-time)
+- **Android:** Copy `$(mkcert -CAROOT)/rootCA.pem` to the phone, install via Settings → Security → Install CA certificate
+- **Via tunnel:** Not needed — `kjbox.nomadkaraoke.com` uses Cloudflare's own trusted cert
 
 ---
 
@@ -684,11 +730,12 @@ systemctl status cloudflared
 
 From your Mac:
 ```bash
-curl -s http://nomadpc.local/status
+curl -sk https://nomadpc.local/status
 # Should return JSON with player state
 
 # Open in browser:
-# http://nomadpc.local
+# https://nomadpc.local      (local network)
+# https://kjbox.nomadkaraoke.com  (remote, via Cloudflare tunnel + Access)
 ```
 
 ### 7.3 VLC Playback
@@ -734,7 +781,7 @@ sudo reboot
 # Wait for it to come back up (15-30 seconds — SSD is much faster than Pi's SD card)
 # Then verify all services are running:
 ssh nomadpc 'systemctl is-active kj-controller kj-autodeploy rotation-display overlay-display avahi-daemon cloudflared'
-curl http://nomadpc.local/status
+curl -sk https://nomadpc.local/status
 ```
 
 ---
@@ -753,7 +800,7 @@ curl http://nomadpc.local/status
 | **VLC launch** | `sudo -u dietpi env DISPLAY=:0 cvlc` | `cvlc` directly |
 | **VNC** | RealVNC (proprietary, RA2ne auth) | x11vnc (open source, standard VNC auth) |
 | **Platform detection** | `is_pi()` = True | Needs `enable_vlc: true` in config |
-| **Remote access** | Tailscale | Cloudflare tunnel (`kjbox.nomadkaraoke.com`) |
+| **Remote access** | Tailscale + Cloudflare tunnel | Tailscale + Cloudflare tunnel (`kjbox.nomadkaraoke.com`) |
 | **Boot time** | ~45 seconds | ~15 seconds |
 | **HDMI ports** | 2 (micro-HDMI) | 2 HDMI + 2 DisplayPort |
 
@@ -781,13 +828,18 @@ curl http://nomadpc.local/status
 - [x] Build external catalog — 414,933 entries indexed (Phase 6.5)
 - [x] Reboot test — all services survive (Phase 7.7)
 - [x] Add NOPASSWD sudo for `nomad` user
+- [x] Generate and deploy TLS certs with mkcert (Phase 5.6)
+- [x] Configure Cloudflare tunnel for web UI + VNC (Phase 2.6)
+- [x] Configure Cloudflare Access (Zero Trust auth) (Phase 2.7)
+- [x] Commit platform detection patches to repo (Phase 3.6)
+- [x] Fix auto-deploy sudo for systemctl (auto-deploy.sh)
+- [x] Smart websockify routing — LAN direct, tunnel via hostname (templates/index.html)
 
 ### Remaining
 
 - [ ] Run `sudo apt update && sudo apt upgrade -y` (341 packages pending, mirror hash issue)
 - [ ] Check BIOS for "Power On After Power Loss" setting (Phase 1.7) — requires physical access
 - [ ] Set DHCP reservation on GL.iNet router for `84:47:09:5a:1d:13` (Phase 2.3)
-- [ ] Generate TLS certs for HTTPS/WSS VNC browser preview (Phase 5.5)
 - [ ] Copy `youtube_cookies.txt` from Pi if needed
 - [ ] Test with HDMI splitter + projector at venue
 - [ ] Harden SSH: disable password authentication (Phase 1.5)

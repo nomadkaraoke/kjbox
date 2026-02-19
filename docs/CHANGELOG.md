@@ -2,6 +2,37 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-02-19 - NomadPC: TLS, Cloudflare Tunnel, Remote Access & Code Fixes
+
+Set up HTTPS, Cloudflare tunnel for remote access, Zero Trust authentication, and committed several code fixes to the repo.
+
+**TLS/HTTPS:**
+- Generated mkcert certificates for `nomadpc.local`, `nomadpc`, `192.168.8.170`, `localhost`, `127.0.0.1`
+- Deployed to `/opt/nomad/kjbox/kj-controller/certs/` on device
+- Flask auto-switches to port 443 (HTTPS) when certs are present
+- Websockify also uses certs for WSS on port 6080
+- Config keys added: `tls_cert`, `tls_key`
+
+**Cloudflare tunnel reconfigured:**
+- Changed from SSH-only tunnel to web UI + VNC WebSocket
+- `kjbox.nomadkaraoke.com` → `https://localhost:443` (KJ Controller web UI, `noTLSVerify: true` for mkcert)
+- `kjvnc.nomadkaraoke.com` → `http://localhost:6080` (websockify for VNC preview)
+- Two hostnames needed because Cloudflare tunnels don't support path-based routing
+
+**Cloudflare Access (Zero Trust):**
+- Configured via Cloudflare Zero Trust dashboard
+- Email OTP authentication on both `kjbox` and `kjvnc` hostnames
+- 24-hour session duration
+
+**Code committed to repo:**
+- **`vlc.py`**: Platform detection — `self.enabled` checks `config.get('enable_vlc', False)` alongside `is_pi()`
+- **`app.py`**: Restructured platform setup — Pi-specific (xhost, dietpi) separate from shared (websockify). Websockify starts on any device with `enable_vlc: true`, with configurable host/port and TLS support
+- **`auto-deploy.sh`**: Added `sudo` prefix to all `systemctl restart` commands (non-root `nomad` user needs it). Fixed catalog rebuild URL to try HTTPS first
+- **`templates/index.html`**: Smart websockify routing — detects LAN vs tunnel from `location.hostname`. `.local`/`localhost`/IP → direct `hostname:6080`; anything else → `websockify_host` config value (`kjvnc.nomadkaraoke.com`)
+- **`routes.py`**: Pass `config` dict to template for websockify settings
+
+**Config keys added:** `websockify_host` (tunnel hostname for VNC WebSocket)
+
 ## 2026-02-19 - NomadPC: Media Setup & External Catalog
 
 Set up the USB external drive, migrated legacy video files, and built the full karaoke catalog.
