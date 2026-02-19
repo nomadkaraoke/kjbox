@@ -38,6 +38,8 @@ kjbox/
   README.md                    # This file
   CLAUDE.md                    # Claude Code agent instructions
   LICENSE                      # MIT License
+  certs/
+    rootCA.pem                 # mkcert root CA (install to trust LAN HTTPS certs)
   docs/
     ARCHITECTURE.md            # System architecture and API reference
     DEVELOPMENT.md             # Local setup and dev workflow
@@ -126,6 +128,57 @@ ssh nomadpi 'speaker-test -D hdmiout -c 2 -t sine -f 440 -l 1'
 # Mini PC (PipeWire, default HDMI)
 ssh nomadpc 'speaker-test -c 2 -t sine -f 440 -l 1'
 ```
+
+## Trusting the LAN HTTPS Certificate
+
+KJ Controller uses HTTPS on the local network (required for VNC preview's `crypto.subtle`). The TLS cert is signed by a private root CA created with [mkcert](https://github.com/nicely/mkcert). To avoid browser warnings when accessing `https://nomadpc.local`, install the root CA on your device.
+
+The CA certificate is at `certs/rootCA.pem` in this repo.
+
+> **Via Cloudflare tunnel:** No CA install needed — `kjbox.nomadkaraoke.com` uses Cloudflare's publicly trusted certificate.
+
+### Mac
+
+```bash
+# Option 1: Using mkcert (recommended)
+brew install mkcert
+CAROOT=./certs mkcert -install
+
+# Option 2: Manual
+sudo security add-trusted-cert -d -r trustRoot \
+  -k /Library/Keychains/System.keychain certs/rootCA.pem
+```
+
+After either method, restart your browser.
+
+### Windows
+
+1. Double-click `certs/rootCA.pem`
+2. Click **Install Certificate...**
+3. Select **Local Machine**, click Next
+4. Choose **Place all certificates in the following store** → **Browse** → **Trusted Root Certification Authorities**
+5. Click Next → Finish
+6. Restart your browser
+
+Or via PowerShell (admin):
+```powershell
+Import-Certificate -FilePath certs\rootCA.pem -CertStoreLocation Cert:\LocalMachine\Root
+```
+
+### Android
+
+1. Copy `certs/rootCA.pem` to the phone (AirDrop, email, USB, etc.)
+2. Go to **Settings → Security → Encryption & credentials → Install a certificate → CA certificate**
+3. Select the `rootCA.pem` file and confirm
+
+> The exact path varies by Android version/manufacturer. Search Settings for "certificate" if the above doesn't match.
+
+### iOS
+
+1. AirDrop or email `certs/rootCA.pem` to the device
+2. Tap the file → **Install Profile** → enter passcode → **Install**
+3. Go to **Settings → General → About → Certificate Trust Settings**
+4. Toggle on full trust for the mkcert root CA
 
 ## Development
 
