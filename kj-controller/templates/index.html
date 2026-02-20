@@ -96,7 +96,11 @@
                     </div>
                     <div class="control-half">
                         <label for="audio-device">Audio Output:</label>
-                        <select id="audio-device" onchange="setAudioDevice(this.value)"></select>
+                        <div class="audio-device-row">
+                            <select id="audio-device" onchange="setAudioDevice(this.value)"></select>
+                            <button class="hdmi-scan-btn" onclick="scanHdmiDevices()" title="Scan ALSA for HDMI devices and their connection status">Scan HDMI</button>
+                        </div>
+                        <div id="hdmi-scan-results" class="hdmi-scan-results hidden"></div>
                     </div>
                 </div>
                 <div id="status-bar">

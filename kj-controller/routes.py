@@ -2,6 +2,7 @@
 
 import os
 import random
+import re
 import subprocess
 import threading
 import time
@@ -433,6 +434,110 @@ def set_audio_device():
     save_config_value('default_audio_device', device)
     threading.Thread(target=vlc.restart_instances).start()
     return jsonify({"success": True, "message": f"Switching to {available[device]}. VLC restarting..."})
+
+
+@routes_bp.route('/audio/scan', methods=['POST'])
+def scan_hdmi_audio():
+    """Scans ALSA for HDMI audio devices and their jack connection state."""
+    cfg = current_app.kj_config
+    devices = {}
+
+    # Parse aplay -l for HDMI device names (e.g. "card 0: ... device 3: HDMI 0 ...")
+    try:
+        aplay_out = subprocess.run(
+            ['aplay', '-l'], capture_output=True, text=True, timeout=5,
+        ).stdout
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        aplay_out = ''
+
+    hdmi_pcms = {}  # dev_num -> name, e.g. {3: "HDMI 0", 7: "HDMI 1"}
+    for m in re.finditer(
+        r'card 0: .+device (\d+): (.+?) \[', aplay_out,
+    ):
+        dev_num, dev_name = m.group(1), m.group(2).strip()
+        if 'HDMI' in dev_name.upper():
+            hdmi_pcms[dev_num] = dev_name
+
+    if not hdmi_pcms:
+        # Fallback: assume standard Intel HDA HDMI devices
+        for num, name in [('3', 'HDMI 0'), ('7', 'HDMI 1'),
+                          ('8', 'HDMI 2'), ('9', 'HDMI 3')]:
+            hdmi_pcms[num] = name
+
+    # Parse amixer -c 0 contents for jack state
+    try:
+        amixer_out = subprocess.run(
+            ['amixer', '-c', '0', 'contents'], capture_output=True, text=True, timeout=5,
+        ).stdout
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        amixer_out = ''
+
+    for dev_num, dev_name in hdmi_pcms.items():
+        hw_id = f'hw:0,{dev_num}'
+        # Check jack state: look for "HDMI/DP,pcm=N Jack" then "values=on/off"
+        pattern = rf'HDMI/DP,pcm={dev_num} Jack.*?values=(on|off)'
+        match = re.search(pattern, amixer_out, re.DOTALL)
+        connected = match.group(1) == 'on' if match else False
+        devices[hw_id] = {'name': dev_name, 'connected': connected}
+
+    # Parse current hw device from /etc/asound.conf
+    current_hw = None
+    try:
+        asound_conf = open('/etc/asound.conf').read()
+        hw_match = re.search(r'"(hw:\d+,\d+)"', asound_conf)
+        if hw_match:
+            current_hw = hw_match.group(1)
+    except FileNotFoundError:
+        pass
+
+    log_message(f"HDMI scan: {devices}", cfg)
+    return jsonify({
+        'devices': devices,
+        'current': current_app.vlc.audio_device,
+        'current_hw': current_hw,
+    })
+
+
+@routes_bp.route('/audio/switch-hdmi', methods=['POST'])
+def switch_hdmi_audio():
+    """Switches the HDMI audio output by rewriting /etc/asound.conf and restarting VLC."""
+    device = (request.json or {}).get('device', '').strip()
+    if not re.match(r'^hw:\d+,\d+$', device):
+        return jsonify({'error': f'Invalid device format: {device}'}), 400
+
+    cfg = current_app.kj_config
+    vlc = current_app.vlc
+
+    asound_conf = f"""# HDMI audio output — configured from web UI
+# Active device: {device}
+pcm.hdmiout {{
+    type plug
+    slave {{
+        pcm "{device}"
+    }}
+}}
+
+ctl.hdmiout {{
+    type hw
+    card 0
+}}
+"""
+
+    log_message(f"Switching HDMI audio to {device}...", cfg)
+    result = subprocess.run(
+        ['sudo', 'tee', '/etc/asound.conf'],
+        input=asound_conf, capture_output=True, text=True, timeout=5,
+    )
+    if result.returncode != 0:
+        return jsonify({'error': f'Failed to write asound.conf: {result.stderr}'}), 500
+
+    # Ensure VLC uses hdmiout (the ALSA alias we just updated)
+    if vlc.audio_device != 'hdmiout':
+        vlc.audio_device = 'hdmiout'
+        save_config_value('default_audio_device', 'hdmiout')
+
+    threading.Thread(target=vlc.restart_instances).start()
+    return jsonify({'success': True, 'message': f'Switched HDMI to {device}. VLC restarting...'})
 
 
 # --- Overlay Management ---

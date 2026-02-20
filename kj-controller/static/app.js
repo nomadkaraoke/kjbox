@@ -507,6 +507,88 @@ async function loadAudioDevices() {
     }
 }
 
+// --- HDMI Scan ---
+
+async function scanHdmiDevices() {
+    const btn = document.querySelector('.hdmi-scan-btn');
+    const resultsEl = document.getElementById('hdmi-scan-results');
+    btn.disabled = true;
+    btn.textContent = 'Scanning...';
+    resultsEl.classList.remove('hidden');
+    resultsEl.innerHTML = '<div style="padding:6px 8px;color:#888;">Scanning HDMI devices...</div>';
+
+    const data = await apiCall('/audio/scan', {});
+    btn.disabled = false;
+    btn.textContent = 'Scan HDMI';
+
+    if (!data || !data.devices) {
+        resultsEl.innerHTML = '<div style="padding:6px 8px;color:#ef4444;">Scan failed</div>';
+        return;
+    }
+
+    resultsEl.innerHTML = '';
+    const entries = Object.entries(data.devices);
+    if (entries.length === 0) {
+        resultsEl.innerHTML = '<div style="padding:6px 8px;color:#888;">No HDMI devices found</div>';
+        return;
+    }
+
+    entries.forEach(([hwId, info]) => {
+        const row = document.createElement('div');
+        row.className = 'hdmi-device' + (hwId === data.current_hw ? ' active' : '');
+
+        const infoDiv = document.createElement('div');
+        infoDiv.className = 'hdmi-device-info';
+
+        const dot = document.createElement('span');
+        dot.className = 'hdmi-dot ' + (info.connected ? 'connected' : 'disconnected');
+        dot.title = info.connected ? 'Connected' : 'Disconnected';
+
+        const name = document.createElement('span');
+        name.className = 'hdmi-device-name';
+        name.textContent = info.name;
+
+        const hw = document.createElement('span');
+        hw.className = 'hdmi-device-hw';
+        hw.textContent = hwId + (hwId === data.current_hw ? ' (current)' : '');
+
+        infoDiv.appendChild(dot);
+        infoDiv.appendChild(name);
+        infoDiv.appendChild(hw);
+        row.appendChild(infoDiv);
+
+        if (hwId !== data.current_hw) {
+            const useBtn = document.createElement('button');
+            useBtn.className = 'hdmi-use-btn';
+            useBtn.textContent = 'Use';
+            useBtn.onclick = (e) => {
+                e.stopPropagation();
+                switchHdmiDevice(hwId);
+            };
+            row.appendChild(useBtn);
+        }
+
+        row.onclick = () => {
+            if (hwId !== data.current_hw) switchHdmiDevice(hwId);
+        };
+
+        resultsEl.appendChild(row);
+    });
+
+    log(`HDMI scan: ${entries.length} devices found`, 'success');
+}
+
+async function switchHdmiDevice(hwId) {
+    log(`Switching HDMI to ${hwId}...`);
+    const data = await apiCall('/audio/switch-hdmi', { device: hwId });
+    if (data && data.success) {
+        log(data.message, 'success');
+        // Refresh the scan results after a brief delay for VLC restart
+        document.getElementById('hdmi-scan-results').classList.add('hidden');
+        await loadAudioDevices();
+    }
+}
+
 // --- Catalog Search ---
 
 let searchActive = false;
