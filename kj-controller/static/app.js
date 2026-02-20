@@ -507,6 +507,42 @@ async function loadAudioDevices() {
     }
 }
 
+// --- Display Resolution ---
+
+async function loadDisplayResolutions() {
+    try {
+        const response = await fetch('/display/resolution');
+        const data = await response.json();
+        const selector = document.getElementById('display-resolution');
+        selector.innerHTML = '';
+        if (!data.available || data.available.length === 0) {
+            const option = document.createElement('option');
+            option.textContent = 'N/A';
+            option.disabled = true;
+            selector.appendChild(option);
+            return;
+        }
+        data.available.forEach(mode => {
+            const option = document.createElement('option');
+            option.value = mode;
+            option.textContent = mode;
+            if (mode === data.current) option.selected = true;
+            selector.appendChild(option);
+        });
+    } catch (error) {
+        log('Could not load display resolutions.', 'error');
+    }
+}
+
+async function setDisplayResolution(resolution) {
+    log(`Setting display resolution to ${resolution}...`);
+    const data = await apiCall('/display/resolution', { resolution });
+    if (data && data.success) {
+        log(data.message, 'success');
+        flashElement(document.getElementById('display-resolution'), 'success');
+    }
+}
+
 // --- HDMI Scan ---
 
 async function scanHdmiDevices() {
@@ -1473,6 +1509,7 @@ document.addEventListener('DOMContentLoaded', () => {
     updateMediaList();
     updateFillerMusicList();
     loadAudioDevices();
+    loadDisplayResolutions();
     loadOverlays();
     checkCatalogAvailability();
     log('Nomad KJ Control initialized.');

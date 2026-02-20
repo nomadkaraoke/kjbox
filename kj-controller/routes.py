@@ -664,6 +664,86 @@ def yt_search():
     return jsonify(results)
 
 
+# --- Display Resolution ---
+
+def _query_xrandr():
+    """Parse xrandr output for connected output, available modes, and current mode."""
+    try:
+        result = subprocess.run(
+            ['xrandr'], capture_output=True, text=True, timeout=5,
+            env={**os.environ, 'DISPLAY': ':0'},
+        )
+        output = result.stdout
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        return None
+
+    connected_output = None
+    modes = []
+    current = None
+
+    for line in output.splitlines():
+        # Match connected output line, e.g. "HDMI-1 connected primary 1920x1080+0+0 ..."
+        if ' connected' in line and not ' disconnected' in line:
+            connected_output = line.split()[0]
+        # Match mode lines, e.g. "   1920x1080     60.00*+  50.00  ..."
+        elif connected_output and line.startswith('   '):
+            parts = line.split()
+            if parts and re.match(r'^\d+x\d+$', parts[0]):
+                mode = parts[0]
+                if mode not in modes:
+                    modes.append(mode)
+                if '*' in line and current is None:
+                    current = mode
+
+    if not connected_output:
+        return None
+
+    return {'output': connected_output, 'modes': modes, 'current': current}
+
+
+@routes_bp.route('/display/resolution', methods=['GET'])
+def get_display_resolution():
+    """Returns the current display resolution and available modes."""
+    info = _query_xrandr()
+    if not info:
+        return jsonify({'current': '', 'available': [], 'output': '', 'error': 'xrandr not available'})
+    return jsonify({
+        'current': info['current'] or '',
+        'available': info['modes'],
+        'output': info['output'],
+    })
+
+
+@routes_bp.route('/display/resolution', methods=['POST'])
+def set_display_resolution():
+    """Sets the display resolution via xrandr and persists to config."""
+    resolution = (request.json or {}).get('resolution', '').strip()
+    if not resolution:
+        return jsonify({'error': 'Resolution is required'}), 400
+
+    info = _query_xrandr()
+    if not info:
+        return jsonify({'error': 'xrandr not available'}), 503
+
+    if resolution not in info['modes']:
+        return jsonify({'error': f"Resolution '{resolution}' not available. Options: {info['modes']}"}), 400
+
+    cfg = current_app.kj_config
+    log_message(f"Setting display resolution to {resolution} on {info['output']}...", cfg)
+
+    result = subprocess.run(
+        ['xrandr', '--output', info['output'], '--mode', resolution],
+        capture_output=True, text=True, timeout=10,
+        env={**os.environ, 'DISPLAY': ':0'},
+    )
+    if result.returncode != 0:
+        return jsonify({'error': f'xrandr failed: {result.stderr.strip()}'}), 500
+
+    save_config_value('display_resolution', resolution)
+    cfg['display_resolution'] = resolution
+    return jsonify({'success': True, 'message': f'Resolution set to {resolution}'})
+
+
 # --- System Control ---
 
 @routes_bp.route('/system/restart-app', methods=['POST'])

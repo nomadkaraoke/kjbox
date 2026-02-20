@@ -75,6 +75,35 @@ def start_app():  # pragma: no cover
     else:
         log_message("Running in local/dev mode - VLC disabled, web UI and media scanning only.", cfg)
 
+    # Apply configured display resolution on startup
+    display_res = cfg.get('display_resolution', '')
+    if display_res:
+        try:
+            xrandr_out = subprocess.run(
+                ['xrandr'], capture_output=True, text=True, timeout=5,
+                env={**os.environ, 'DISPLAY': ':0'},
+            ).stdout
+            # Find the connected output name
+            xrandr_output = None
+            for line in xrandr_out.splitlines():
+                if ' connected' in line and ' disconnected' not in line:
+                    xrandr_output = line.split()[0]
+                    break
+            if xrandr_output:
+                result = subprocess.run(
+                    ['xrandr', '--output', xrandr_output, '--mode', display_res],
+                    capture_output=True, text=True, timeout=10,
+                    env={**os.environ, 'DISPLAY': ':0'},
+                )
+                if result.returncode == 0:
+                    log_message(f"Display resolution set to {display_res} on {xrandr_output}.", cfg)
+                else:
+                    log_message(f"WARNING: Failed to set display resolution: {result.stderr.strip()}", cfg)
+            else:
+                log_message("WARNING: No connected display output found for resolution setting.", cfg)
+        except Exception as e:
+            log_message(f"WARNING: Could not set display resolution: {e}", cfg)
+
     # Start websockify on any karaoke device (Pi or mini PC with enable_vlc)
     if (is_pi() or cfg.get('enable_vlc', False)) and cfg.get('websockify_enabled', True):
         ws_port = cfg.get('websockify_port', 6080)

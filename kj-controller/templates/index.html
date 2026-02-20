@@ -103,6 +103,12 @@
                         <div id="hdmi-scan-results" class="hdmi-scan-results hidden"></div>
                     </div>
                 </div>
+                <div class="controls-row">
+                    <div class="control-half">
+                        <label for="display-resolution">Display Resolution:</label>
+                        <select id="display-resolution" onchange="setDisplayResolution(this.value)"></select>
+                    </div>
+                </div>
                 <div id="status-bar">
                     <strong>Status:</strong> <span id="player-state">Unknown</span> |
                     <strong>Filler:</strong> <span id="current-filler">wii.mp3</span>
