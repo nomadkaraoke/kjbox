@@ -32,12 +32,12 @@ Step-by-step guide to set up the Nomad Karaoke mini PC to run the same karaoke s
 | yt-dlp | 2025.07.21 | Already installed |
 | git | 2.43.0 | Already installed |
 | avahi-daemon | — | Already running, broadcasting `nomadpc.local` |
-| cloudflared | — | Already running, tunnel to `kjbox.nomadkaraoke.com` (SSH) |
+| cloudflared | — | Already running, tunnel to `kjbox.nomadkaraoke.com` (web), `kjssh.nomadkaraoke.com` (SSH) |
+| Tailscale | — | Already installed, IP `100.82.90.111` |
 | PipeWire | 1.0.5 | Audio server (replaces PulseAudio/raw ALSA) |
 
 ### Not Installed (Need to Set Up)
 
-- Tailscale
 - Docker (not needed unless future services require it)
 - KJ Controller app stack (the repo clone, venv, services)
 
@@ -184,9 +184,12 @@ Verify from Mac:
 ping nomadpc.local
 ```
 
-### 2.5 Install Tailscale
+### 2.5 Install Tailscale (DONE)
+
+Tailscale is installed and running. NomadPC's Tailscale IP: **`100.82.90.111`**
 
 ```bash
+# If reinstalling:
 curl -fsSL https://tailscale.com/install.sh | sh
 sudo tailscale up
 # Follow the auth URL to add to your tailnet
@@ -194,7 +197,7 @@ sudo tailscale up
 
 ### 2.6 Cloudflare Tunnel (CONFIGURED)
 
-A Cloudflare tunnel exposes the KJ Controller web UI and VNC websocket remotely:
+A Cloudflare tunnel exposes the KJ Controller web UI, VNC websocket, and SSH remotely:
 - **Tunnel:** `1e86a7f5-04e7-4527-b624-49447450443e` (name: `kjbox`)
 - **Config:** `/etc/cloudflared/config.yml`
 - **Credentials:** `/etc/cloudflared/1e86a7f5-04e7-4527-b624-49447450443e.json`
@@ -204,13 +207,16 @@ A Cloudflare tunnel exposes the KJ Controller web UI and VNC websocket remotely:
 |----------|---------|---------|
 | `kjbox.nomadkaraoke.com` | `https://localhost:443` | KJ Controller web UI |
 | `kjvnc.nomadkaraoke.com` | `http://localhost:6080` | Websockify (VNC preview WebSocket) |
+| `kjssh.nomadkaraoke.com` | `ssh://localhost:22` | SSH remote access |
 
-**Current config:**
+**Current config (`/etc/cloudflared/config.yml`):**
 ```yaml
 tunnel: 1e86a7f5-04e7-4527-b624-49447450443e
 credentials-file: /etc/cloudflared/1e86a7f5-04e7-4527-b624-49447450443e.json
 
 ingress:
+  - hostname: kjssh.nomadkaraoke.com
+    service: ssh://localhost:22
   - hostname: kjvnc.nomadkaraoke.com
     service: http://localhost:6080
   - hostname: kjbox.nomadkaraoke.com
@@ -223,7 +229,7 @@ ingress:
 **Notes:**
 - `noTLSVerify: true` is needed because the origin uses a mkcert certificate (not publicly trusted)
 - The websockify hostname (`kjvnc`) is on a separate ingress because Cloudflare tunnels don't support path-based routing on the same hostname
-- The DNS CNAME for `kjvnc.nomadkaraoke.com` was created with: `sudo cloudflared tunnel route dns <tunnel-id> kjvnc.nomadkaraoke.com`
+- DNS CNAMEs created with: `sudo cloudflared tunnel route dns <tunnel-id> <hostname>`
 
 ### 2.7 Cloudflare Access (Zero Trust Auth)
 
@@ -239,12 +245,33 @@ When someone visits `https://kjbox.nomadkaraoke.com`, Cloudflare shows a login p
 
 ### 2.8 Update SSH Config on Mac
 
-Add to `~/.ssh/config`:
+Add to `~/.ssh/config` (all three entries for LAN, Tailscale, and Cloudflare tunnel):
 ```
+# LAN (mDNS — works when on same network)
 Host nomadpc
-    HostName 192.168.8.170
+    HostName nomadpc.local
     User nomad
+    Port 22
+
+# Tailscale (works from anywhere when Mac Tailscale is running)
+Host nomadpcts
+    HostName 100.82.90.111
+    User nomad
+    Port 22
+
+# Cloudflare tunnel (works from anywhere, no Tailscale needed)
+# Requires: brew install cloudflare/cloudflare/cloudflared
+Host nomadpctunnel
+    HostName kjssh.nomadkaraoke.com
+    User nomad
+    Port 22
+    ProxyCommand cloudflared access ssh --hostname %h
 ```
+
+**Which to use:**
+- On the same LAN: `ssh nomadpc`
+- Remote with Tailscale running: `ssh nomadpcts` (start Tailscale app on Mac first)
+- Remote without Tailscale: `ssh nomadpctunnel` (opens browser auth on first use)
 
 ---
 

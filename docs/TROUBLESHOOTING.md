@@ -226,6 +226,19 @@ ssh nomadpi 'iwconfig wlan0'
 4. Try Tailscale: `ssh root@100.66.53.104`
 5. If the Pi is on a different subnet, add a temporary IP alias on your Mac to reach it (see Changelog 2026-02-17)
 
+**Can't reach NomadPC remotely (not on same LAN)?**
+
+| Method | Command | Works remotely? | Requirement |
+|--------|---------|-----------------|-------------|
+| LAN/mDNS | `ssh nomadpc` | ❌ No — mDNS doesn't cross networks | Same LAN only |
+| Tailscale | `ssh nomadpcts` | ✅ Yes | Tailscale app running on Mac |
+| Cloudflare tunnel | `ssh nomadpctunnel` | ✅ Yes | `cloudflared` installed on Mac; browser auth on first use |
+
+Verified 2026-02-22: both `nomadpcts` and `nomadpctunnel` confirmed working from a different network.
+
+- Install cloudflared if needed: `brew install cloudflare/cloudflare/cloudflared`
+- Start Tailscale: open the Tailscale menu bar app
+
 ## SSH Connection Issues
 
 ```bash

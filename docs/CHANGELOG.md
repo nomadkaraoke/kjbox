@@ -2,6 +2,23 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-02-22 - NomadPC: Remote SSH Access (Tailscale + Cloudflare Tunnel)
+
+Enabled SSH access to NomadPC from outside the LAN via two paths.
+
+**What was done:**
+- Confirmed Tailscale is already installed and running on NomadPC — IP `100.82.90.111`
+- Added SSH ingress to the Cloudflare tunnel config (`/etc/cloudflared/config.yml`): `kjssh.nomadkaraoke.com → ssh://localhost:22`
+- Created DNS CNAME for `kjssh.nomadkaraoke.com` in Cloudflare
+- Restarted cloudflared service to pick up the new config
+- Added `nomadpcts` (Tailscale) and `nomadpctunnel` (Cloudflare) SSH aliases to `~/.ssh/config` on Mac
+
+**How to SSH remotely:**
+- `ssh nomadpcts` — via Tailscale (Mac Tailscale must be running)
+- `ssh nomadpctunnel` — via Cloudflare tunnel (browser auth on first use, `cloudflared` must be installed)
+
+**Docs updated:** `MINIPC-SETUP.md` (sections 2.5, 2.6, 2.8), `TROUBLESHOOTING.md`
+
 ## 2026-02-19 - NomadPC: Fix HDMI Audio After Reboot
 
 HDMI audio stopped working after reboot. Root cause: VLC was configured to use ALSA device `default`, which PipeWire redirects to the analog stereo output — not HDMI.
