@@ -10,6 +10,7 @@ Filler music stopped playing after karaoke songs ended. Root cause: the karaoke 
 - Added `ensure_karaoke_released()` — explicitly sends `pl_stop` + `pl_empty` to karaoke VLC before filler resumes, forcing ALSA device release
 - Added `_play_lock` to serialize concurrent `play_video()` calls (prevents race conditions when rapidly clicking different tracks)
 - Added `last_play_time` grace period to prevent the monitor thread from falsely detecting "stopped" during song transitions
+- Skipped the 3s filler fade-out when switching between karaoke songs (filler is already stopped), making song switches near-instant
 
 ## 2026-02-22 - NomadPC: Remote SSH Access (Tailscale + Cloudflare Tunnel)
 
