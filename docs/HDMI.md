@@ -2,7 +2,30 @@
 
 > Living document for understanding, configuring, and troubleshooting HDMI video and audio output from the NomadPC karaoke controller.
 
-**Last updated:** 2026-02-23
+**Last updated:** 2026-02-24
+
+---
+
+## Quick Troubleshooting (start here)
+
+**Run the diagnostic script:**
+```bash
+ssh nomadpc '/opt/nomad/kjbox/kj-controller/hdmi-diag.sh'
+```
+
+This checks video (connector, resolution, EDID), audio (jack detection, ALSA config, IEC958 mute switch, PipeWire profile, VLC status, PCM streaming state, ELD audio capabilities) and gives a clear pass/fail summary. If something fails, the script prints the fix command inline.
+
+**Common fixes if the diagnostic shows failures:**
+
+| Symptom | Fix |
+|---------|-----|
+| IEC958 Playback Switch: OFF | `ssh nomadpc 'amixer -c 0 cset iface=MIXER,name="IEC958 Playback Switch",index=0 on'` (adjust index for active PCM) |
+| PipeWire grabbed HDMI | `ssh nomadpc 'sudo -u nomad XDG_RUNTIME_DIR=/run/user/1000 pactl set-card-profile alsa_card.pci-0000_00_1f.3 "output:analog-stereo+input:analog-stereo"'` |
+| asound.conf mismatch | `ssh nomadpc 'sudo systemctl restart kj-controller'` (re-runs fix-hdmi-audio.sh) |
+| No HDMI jack detected | Check cable, check splitter power, try restarting: `ssh nomadpc 'sudo systemctl restart kj-controller'` |
+| Audio still silent after all green | Try the J-Tech audio extractor inline as a backup (3.5mm out) |
+
+**Backup audio plan for venue:** The J-Tech Digital JTD-3193 audio extractor can sit inline between a splitter output and the 50ft cable. It passes video through and provides a 3.5mm audio feed. Set its toggle to "2CH".
 
 ---
 

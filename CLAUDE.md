@@ -48,12 +48,27 @@ cd kj-controller && pytest --cov --cov-report=term # with coverage (target: 70%+
 
 See [docs/TESTING.md](docs/TESTING.md) for conventions and fixtures.
 
+## HDMI Troubleshooting
+
+If the user reports HDMI video or audio issues on NomadPC, **read [docs/HDMI.md](docs/HDMI.md) first**. It contains:
+- Full signal chain diagram (NomadPC → OREI splitter → venue displays)
+- How HDMI, EDID, and Linux audio routing work
+- EDID captures and test results for every HDMI device owned
+- Known issues and fixes (especially the IEC958 mute switch)
+
+**Quick diagnostic:** `ssh nomadpc '/opt/nomad/kjbox/kj-controller/hdmi-diag.sh'`
+
+Key scripts:
+- `kj-controller/hdmi-diag.sh` — pass/fail diagnostic with inline fix commands
+- `kj-controller/fix-hdmi-audio.sh` — runs at boot (ExecStartPre), auto-detects HDMI audio device, enables IEC958 switches
+
 ## Documentation Maintenance
 
 When making **system/device changes** (not just code), update docs:
 
 | Change Type | File to Update |
 |---|---|
+| HDMI / display / video output | `docs/HDMI.md` |
 | Audio / ALSA / VLC audio | `docs/AUDIO.md` |
 | Troubleshooting / common tasks | `docs/TROUBLESHOOTING.md` |
 | Hardware, network, display, services | `docs/archive/NOMADPI-DETAILS.md` |
