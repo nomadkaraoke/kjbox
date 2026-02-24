@@ -2,6 +2,15 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-02-24 - Fix: Filler Music Audio Device Contention
+
+Filler music stopped playing after karaoke songs ended. Root cause: the karaoke VLC held the exclusive ALSA device (`hw:0,3` via `hdmiout`) even after reaching "stopped" state, so the filler VLC got "Device or resource busy" when trying to resume.
+
+**Fix:**
+- Added `ensure_karaoke_released()` — explicitly sends `pl_stop` + `pl_empty` to karaoke VLC before filler resumes, forcing ALSA device release
+- Added `_play_lock` to serialize concurrent `play_video()` calls (prevents race conditions when rapidly clicking different tracks)
+- Added `last_play_time` grace period to prevent the monitor thread from falsely detecting "stopped" during song transitions
+
 ## 2026-02-22 - NomadPC: Remote SSH Access (Tailscale + Cloudflare Tunnel)
 
 Enabled SSH access to NomadPC from outside the LAN via two paths.
