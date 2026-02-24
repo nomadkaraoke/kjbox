@@ -245,8 +245,53 @@ def test_play_video_sets_karaoke_active(mock_config, tmp_media_dir, mocker):
     assert vm.audio_error is False
 
 
+def test_play_video_skips_filler_fade_when_already_stopped(mock_config, tmp_media_dir, mocker):
+    """play_video skips the 3s fade when filler is already stopped (e.g. switching songs)."""
+    vm = VLCManager(mock_config, enabled=True)
+    test_file = tmp_media_dir / "media" / "song.mp4"
+    test_file.write_text("fake video")
+
+    # send_command returns "stopped" — filler is already off
+    mocker.patch.object(vm, 'send_command', return_value={"state": "stopped"})
+    fade_out_mock = mocker.patch.object(vm, 'fade_out_filler')
+    ensure_mock = mocker.patch.object(vm, 'ensure_filler_stopped', return_value=True)
+    mocker.patch('vlc.time.sleep')
+    mocker.patch('vlc.threading.Thread')
+
+    vm.play_video(str(test_file))
+
+    fade_out_mock.assert_not_called()
+    ensure_mock.assert_not_called()
+
+
+def test_play_video_fades_filler_when_playing(mock_config, tmp_media_dir, mocker):
+    """play_video does the full 3s fade when filler is currently playing."""
+    vm = VLCManager(mock_config, enabled=True)
+    test_file = tmp_media_dir / "media" / "song.mp4"
+    test_file.write_text("fake video")
+
+    call_count = [0]
+    def mock_send(*args, **kwargs):
+        call_count[0] += 1
+        # First call is filler status check — report playing
+        if call_count[0] == 1:
+            return {"state": "playing"}
+        return {"state": "stopped"}
+
+    mocker.patch.object(vm, 'send_command', side_effect=mock_send)
+    fade_out_mock = mocker.patch.object(vm, 'fade_out_filler')
+    ensure_mock = mocker.patch.object(vm, 'ensure_filler_stopped', return_value=True)
+    mocker.patch('vlc.time.sleep')
+    mocker.patch('vlc.threading.Thread')
+
+    vm.play_video(str(test_file))
+
+    fade_out_mock.assert_called_once()
+    ensure_mock.assert_called_once()
+
+
 def test_play_video_sends_correct_command_sequence(mock_config, tmp_media_dir, mocker):
-    """play_video sends pl_empty, enqueue, volume, pl_play in order."""
+    """play_video sends filler check, pl_empty, enqueue, volume, pl_play in order."""
     vm = VLCManager(mock_config, enabled=True)
     test_file = tmp_media_dir / "media" / "song.mp4"
     test_file.write_text("fake video")
@@ -260,11 +305,12 @@ def test_play_video_sends_correct_command_sequence(mock_config, tmp_media_dir, m
     vm.play_video(str(test_file))
 
     commands = [call.args[2] for call in send_mock.call_args_list]
-    assert commands[0] == "pl_empty"
-    assert commands[1].startswith("in_enqueue&input=")
-    assert str(test_file) in commands[1]
-    assert commands[2] == f"volume&val={vm.karaoke_volume}"
-    assert commands[3] == "pl_play"
+    assert commands[0] == ""  # filler status check
+    assert commands[1] == "pl_empty"
+    assert commands[2].startswith("in_enqueue&input=")
+    assert str(test_file) in commands[2]
+    assert commands[3] == f"volume&val={vm.karaoke_volume}"
+    assert commands[4] == "pl_play"
 
 
 def test_play_video_nonexistent_file_aborts(mock_config, mocker):
@@ -317,8 +363,9 @@ def test_play_video_verify_playback_clears_on_success(mock_config, tmp_media_dir
     call_count = [0]
     def mock_send(*args, **kwargs):
         call_count[0] += 1
-        # First 4 calls are play_video commands, 5th is verify_playback status check
-        if call_count[0] <= 4:
+        # First 5 calls are play_video commands (filler check + 4 karaoke),
+        # 6th is verify_playback status check
+        if call_count[0] <= 5:
             return {"state": "stopped"}
         return {"state": "playing"}
 

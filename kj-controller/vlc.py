@@ -196,9 +196,14 @@ class VLCManager:
             self.audio_error = False
 
             # Fade out and stop filler music (releases audio device)
-            self.fade_out_filler()
-            time.sleep(0.5)
-            self.ensure_filler_stopped()
+            # Skip the 3s fade if filler is already stopped (e.g. switching songs)
+            filler_port = self.config.get('filler_vlc_port', 8081)
+            filler_pw = self.config.get('filler_vlc_password', 'filler')
+            filler_status = self.send_command(filler_port, filler_pw, "")
+            if not filler_status or filler_status.get('state') != 'stopped':
+                self.fade_out_filler()
+                time.sleep(0.5)
+                self.ensure_filler_stopped()
 
             # Load and play the video
             self.send_command(karaoke_port, karaoke_pw, "pl_empty")
