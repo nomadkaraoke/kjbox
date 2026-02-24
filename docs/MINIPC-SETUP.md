@@ -108,7 +108,7 @@ echo 'xset s off -dpms' >> ~/.xprofile
 
 ### 1.7 Graceful Power Loss Handling (CONFIGURED)
 
-The mini PC gets unplugged at the end of gigs without a clean shutdown. All four layers of power-loss hardening are applied:
+The mini PC gets unplugged at the end of gigs without a clean shutdown. All five layers of power-loss hardening are applied:
 
 **1. BIOS: Auto-power-on after power loss**
 ```bash

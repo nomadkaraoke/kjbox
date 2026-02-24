@@ -104,7 +104,8 @@ class TestMediaIndexAtomicWrite:
         mi.index = {"path/to/file.mp4": {"filename": "file.mp4"}}
         mi.save()
 
-        data = json.loads(open(mock_config['media_index_path']).read())
+        with open(mock_config['media_index_path'], 'r') as f:
+            data = json.load(f)
         assert "path/to/file.mp4" in data
 
     def test_save_no_temp_files_left(self, mock_config):
@@ -132,7 +133,8 @@ class TestMediaIndexAtomicWrite:
             mi.save()
 
         # Original data should be intact
-        data = json.loads(open(mock_config['media_index_path']).read())
+        with open(mock_config['media_index_path'], 'r') as f:
+            data = json.load(f)
         assert "original" in data
         assert "corrupted" not in data
 
