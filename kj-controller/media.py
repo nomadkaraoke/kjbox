@@ -2,6 +2,7 @@
 
 import json
 import os
+import tempfile
 
 from config import MEDIA_EXTENSIONS
 from utils import log_message, sanitize_filename_part, parse_youtube_filename
@@ -71,11 +72,27 @@ class MediaIndex:
         return self.index
 
     def save(self):
-        """Persist index to disk."""
+        """Persist index to disk.
+
+        Uses atomic write (temp file + fsync + rename) so power loss mid-write
+        cannot corrupt the index file.
+        """
         index_path = self.config.get('media_index_path', 'media_index.json')
         try:
-            with open(index_path, 'w') as f:
-                json.dump(self.index, f, indent=2)
+            dir_name = os.path.dirname(os.path.abspath(index_path))
+            fd, tmp_path = tempfile.mkstemp(dir=dir_name, suffix='.json')
+            try:
+                with os.fdopen(fd, 'w') as f:
+                    json.dump(self.index, f, indent=2)
+                    f.flush()
+                    os.fsync(f.fileno())
+                os.replace(tmp_path, index_path)
+            except Exception:
+                try:
+                    os.unlink(tmp_path)
+                except OSError:
+                    pass
+                raise
         except Exception as e:
             log_message(f"Error saving media index: {e}", self.config)
 

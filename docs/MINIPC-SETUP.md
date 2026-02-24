@@ -106,18 +106,46 @@ sudo systemctl mask sleep.target suspend.target hibernate.target hybrid-sleep.ta
 echo 'xset s off -dpms' >> ~/.xprofile
 ```
 
-### 1.7 Graceful Power Loss Handling
+### 1.7 Graceful Power Loss Handling (CONFIGURED)
 
-Configure the BIOS to boot automatically after power loss:
+The mini PC gets unplugged at the end of gigs without a clean shutdown. All five layers of power-loss hardening are applied:
 
+**1. BIOS: Auto-power-on after power loss**
 ```bash
 # BIOS setting (access during boot, usually DEL or F2):
 # Advanced > Power Management > AC Power Loss > "Power On"
+```
 
-# Verify filesystem is ext4 with journaling (already confirmed: NVMe ext4)
+**2. Filesystems: ext4 with journaling**
+```bash
+# Root (NVMe)
 mount | grep ' / '
 # /dev/nvme0n1p2 on / type ext4 (rw,relatime,errors=remount-ro)
+
+# SSD (USB) — reformatted from exFAT to ext4 (2026-02-24)
+mount | grep Nomad4TBOne
+# /dev/sda1 on /media/nomad/Nomad4TBOne type ext4 (rw,noatime,stripe=512)
 ```
+The SSD uses `noatime` to reduce unnecessary metadata writes.
+
+**3. Kernel: Auto-reboot on panic**
+```bash
+# /etc/sysctl.d/99-power-loss.conf
+kernel.panic = 10
+# Reboots automatically 10s after kernel panic (default 0 = hang forever)
+```
+
+**4. Journal size cap**
+```bash
+# /etc/systemd/journald.conf.d/size-limit.conf
+[Journal]
+SystemMaxUse=200M
+# Caps journal at 200M — faster flush after unclean shutdown
+```
+
+**5. Atomic writes in application code**
+
+Config and media index files use atomic writes (temp file + fsync + rename) so power loss mid-write cannot corrupt them. See `config.py:save_config_value()` and `media.py:MediaIndex.save()`.
 
 ### 1.8 Auto-Login to Desktop (DONE)
 
@@ -643,16 +671,17 @@ When TLS certs are present, Flask auto-switches from port 80 to **port 443** (HT
 
 ### 6.1 Mount the Drive
 
-The 4TB SanDisk Extreme Pro SSD contains the full karaoke catalog (HyperMule) and is shared between devices. It uses exFAT for cross-platform compatibility.
+The 4TB SanDisk Extreme Pro SSD contains the full karaoke catalog (HyperMule). It uses **ext4** (reformatted from exFAT on 2026-02-24 for power-loss safety — exFAT has no journal).
 
 ```bash
 # Check the drive is detected
 lsblk -o NAME,SIZE,FSTYPE,LABEL
-# Should show: sda1  3.6T  exfat  Nomad4TBOne
+# Should show: sda1  3.6T  ext4  Nomad4TBOne
 
 # Create mount point and mount
 sudo mkdir -p /media/nomad/Nomad4TBOne
-sudo mount -t exfat /dev/sda1 /media/nomad/Nomad4TBOne
+sudo mount /dev/sda1 /media/nomad/Nomad4TBOne
+sudo chown nomad:nomad /media/nomad/Nomad4TBOne
 
 # Verify
 ls /media/nomad/Nomad4TBOne/HyperMule/
@@ -665,15 +694,16 @@ Add an fstab entry so the drive auto-mounts on boot:
 ```bash
 # Get the UUID
 sudo blkid /dev/sda1
-# UUID="907E-816F" (will vary per drive)
+# UUID="b5ec3a27-4477-467e-a002-fd7ab8b3b755" (will vary per drive)
 
-# Add to fstab — nofail prevents boot hang if drive is unplugged
-echo 'UUID=907E-816F /media/nomad/Nomad4TBOne exfat defaults,nofail,uid=1000,gid=1000 0 0' | sudo tee -a /etc/fstab
+# Add to fstab — nofail prevents boot hang if drive is unplugged, noatime reduces metadata writes
+echo 'UUID=b5ec3a27-4477-467e-a002-fd7ab8b3b755 /media/nomad/Nomad4TBOne ext4 defaults,noatime,nofail 0 2' | sudo tee -a /etc/fstab
 ```
 
 **Notes:**
 - `nofail` — system boots normally even if the drive isn't plugged in
-- `uid=1000,gid=1000` — files owned by `nomad` user (exFAT doesn't support Unix permissions)
+- `noatime` — skips access-time metadata updates on reads (reduces writes, extends SSD life)
+- `0 2` — enables fsck on boot (after root filesystem)
 - Replace the UUID with the actual value from `blkid`
 
 ### 6.3 Filler Music
@@ -877,6 +907,12 @@ curl -sk https://nomadpc.local/status
 - [x] Commit platform detection patches to repo (Phase 3.6)
 - [x] Fix auto-deploy sudo for systemctl (auto-deploy.sh)
 - [x] Smart websockify routing — LAN direct, tunnel via hostname (templates/index.html)
+
+### Completed (2026-02-24)
+
+- [x] Reformat USB SSD from exFAT to ext4 for power-loss safety (Phase 6.1)
+- [x] Restore 413,670 files (3.44 TB) from HDD backup to reformatted SSD
+- [x] Power-loss hardening (Phase 1.7): kernel.panic=10, journal cap 200M, SSD noatime, atomic JSON writes
 
 ### Remaining
 

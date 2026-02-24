@@ -2,6 +2,33 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-02-24 - Power-Loss Hardening (SSD reformat + system config)
+
+NomadPC gets unplugged at venues without clean shutdown. Applied four layers of hardening so power loss never prevents healthy startup.
+
+**1. SSD reformatted: exFAT → ext4**
+- exFAT has no journal — power loss can silently corrupt data
+- Reformatted `/dev/sda1` (4TB SanDisk SSD) to ext4 with journaling
+- Restored 413,670 files (3.44 TB) from verified HDD backup via rsync
+- Updated fstab: `UUID=b5ec3a27-4477-467e-a002-fd7ab8b3b755`, `ext4`, `noatime,nofail`
+- `noatime` reduces unnecessary metadata writes (fewer things to journal)
+
+**2. Atomic JSON writes (code change)**
+- `config.py:save_config_value()` and `media.py:MediaIndex.save()` previously used `open(path, 'w')` + `json.dump()` — power loss mid-write would truncate/empty the file
+- Now use atomic write pattern: write to temp file → fsync → `os.replace()` (rename is atomic on ext4)
+- `overlay.py` already used this pattern — no change needed
+- Added 10 tests in `tests/test_atomic_writes.py` verifying crash safety
+
+**3. Kernel panic auto-reboot**
+- `/etc/sysctl.d/99-power-loss.conf`: `kernel.panic = 10`
+- Default was 0 (hang forever on panic) — now reboots after 10 seconds
+
+**4. Journal size cap**
+- `/etc/systemd/journald.conf.d/size-limit.conf`: `SystemMaxUse=200M`
+- Was unbounded (890MB and growing) — faster flush after unclean shutdown
+
+**Docs updated:** `MINIPC-SETUP.md` (Phase 1.7 rewritten, Phase 6.1-6.2 updated for ext4, checklist updated)
+
 ## 2026-02-24 - Fix: 5 VLC Management Bugs (v0.8.2)
 
 Follow-up to the ALSA contention fix (v0.8.1). Comprehensive audit found 5 additional bugs in VLC state management where the code didn't properly account for ALSA device exclusivity or made incorrect assumptions about state.
