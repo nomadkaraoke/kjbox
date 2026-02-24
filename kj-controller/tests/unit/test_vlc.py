@@ -419,6 +419,63 @@ def test_monitor_karaoke_detects_song_end(mock_config, mocker):
     vm.fade_in_filler.assert_called_once()
 
 
+def test_monitor_karaoke_calls_on_karaoke_end_callback(mock_config, mocker):
+    """monitor invokes on_karaoke_end callback when song finishes."""
+    vm = VLCManager(mock_config, enabled=True)
+    vm.karaoke_active = True
+    vm.current_playing_path = "/some/video.mp4"
+
+    callback = mocker.MagicMock()
+    vm.on_karaoke_end = callback
+
+    mocker.patch.object(vm, 'send_command', return_value={"state": "stopped"})
+    mocker.patch.object(vm, 'ensure_karaoke_released')
+    mocker.patch.object(vm, 'fade_in_filler')
+
+    call_count = [0]
+    def mock_sleep(seconds):
+        call_count[0] += 1
+        if call_count[0] > 1:
+            raise StopIteration("break loop")
+    mocker.patch('vlc.time.sleep', side_effect=mock_sleep)
+
+    try:
+        vm.monitor_karaoke()
+    except StopIteration:
+        pass
+
+    callback.assert_called_once()
+
+
+def test_monitor_karaoke_survives_callback_exception(mock_config, mocker):
+    """monitor continues even if on_karaoke_end callback raises."""
+    vm = VLCManager(mock_config, enabled=True)
+    vm.karaoke_active = True
+    vm.current_playing_path = "/some/video.mp4"
+
+    vm.on_karaoke_end = mocker.MagicMock(side_effect=RuntimeError("callback boom"))
+
+    mocker.patch.object(vm, 'send_command', return_value={"state": "stopped"})
+    release_mock = mocker.patch.object(vm, 'ensure_karaoke_released')
+    fade_mock = mocker.patch.object(vm, 'fade_in_filler')
+
+    call_count = [0]
+    def mock_sleep(seconds):
+        call_count[0] += 1
+        if call_count[0] > 1:
+            raise StopIteration("break loop")
+    mocker.patch('vlc.time.sleep', side_effect=mock_sleep)
+
+    try:
+        vm.monitor_karaoke()
+    except StopIteration:
+        pass
+
+    # Exception didn't prevent the rest of the flow
+    release_mock.assert_called_once()
+    fade_mock.assert_called_once()
+
+
 def test_monitor_karaoke_skips_during_seek_grace_period(mock_config, mocker):
     """monitor skips status check within 5s of a seek."""
     vm = VLCManager(mock_config, enabled=True)
