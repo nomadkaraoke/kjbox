@@ -24,8 +24,10 @@ class VLCManager:
         self.karaoke_volume = 200
         self.karaoke_active = False
         self.last_seek_time = 0
+        self.last_play_time = 0
         self.audio_error = False
         self.audio_device = config.get('default_audio_device', 'hdmiout')
+        self._play_lock = threading.Lock()
         self.on_karaoke_end = None  # Optional callback when karaoke ends
 
     def launch_instance(self, name, port, password, media_file=None, loop=False):
@@ -161,11 +163,23 @@ class VLCManager:
         log_message("WARNING: Could not confirm filler VLC stopped after 5 attempts", self.config)
         return False
 
-    def play_video(self, file_path):
-        """Plays a video on the karaoke VLC instance (stop filler, load, play)."""
+    def ensure_karaoke_released(self):
+        """Stops karaoke VLC and verifies it has released the audio device."""
         karaoke_port = self.config.get('karaoke_vlc_port', 8080)
         karaoke_pw = self.config.get('karaoke_vlc_password', 'karaoke')
+        self.send_command(karaoke_port, karaoke_pw, "pl_stop")
+        self.send_command(karaoke_port, karaoke_pw, "pl_empty")
+        for attempt in range(5):
+            status = self.send_command(karaoke_port, karaoke_pw, "")
+            if status and status.get('state') == 'stopped':
+                return True
+            self.send_command(karaoke_port, karaoke_pw, "pl_stop")
+            time.sleep(0.5)
+        log_message("WARNING: Could not confirm karaoke VLC released audio device after 5 attempts", self.config)
+        return False
 
+    def play_video(self, file_path):
+        """Plays a video on the karaoke VLC instance (stop filler, load, play)."""
         if not os.path.exists(file_path):
             log_message(f"ERROR: File not found: {file_path}", self.config)
             return
@@ -174,26 +188,31 @@ class VLCManager:
             log_message(f"VLC disabled - cannot play {os.path.basename(file_path)}", self.config)
             return
 
-        self.audio_error = False
+        with self._play_lock:
+            self.last_play_time = time.time()
+            karaoke_port = self.config.get('karaoke_vlc_port', 8080)
+            karaoke_pw = self.config.get('karaoke_vlc_password', 'karaoke')
 
-        # Fade out and stop filler music (releases audio device)
-        self.fade_out_filler()
-        time.sleep(0.5)
-        self.ensure_filler_stopped()
+            self.audio_error = False
 
-        # Load and play the video
-        self.send_command(karaoke_port, karaoke_pw, "pl_empty")
-        time.sleep(0.1)
-        self.send_command(karaoke_port, karaoke_pw, f"in_enqueue&input={file_path}", is_path=True)
-        time.sleep(0.1)
-        self.send_command(karaoke_port, karaoke_pw, f"volume&val={self.karaoke_volume}")
-        time.sleep(0.1)
-        self.send_command(karaoke_port, karaoke_pw, "pl_play")
+            # Fade out and stop filler music (releases audio device)
+            self.fade_out_filler()
+            time.sleep(0.5)
+            self.ensure_filler_stopped()
 
-        self.karaoke_active = True
-        log_message(f"Playback started for {os.path.basename(file_path)}.", self.config)
+            # Load and play the video
+            self.send_command(karaoke_port, karaoke_pw, "pl_empty")
+            time.sleep(0.1)
+            self.send_command(karaoke_port, karaoke_pw, f"in_enqueue&input={file_path}", is_path=True)
+            time.sleep(0.1)
+            self.send_command(karaoke_port, karaoke_pw, f"volume&val={self.karaoke_volume}")
+            time.sleep(0.1)
+            self.send_command(karaoke_port, karaoke_pw, "pl_play")
 
-        # Verify audio is actually working after a brief delay
+            self.karaoke_active = True
+            log_message(f"Playback started for {os.path.basename(file_path)}.", self.config)
+
+        # Verify audio is actually working after a brief delay (outside lock)
         def verify_playback():
             time.sleep(3)
             status = self.send_command(karaoke_port, karaoke_pw, "")
@@ -253,6 +272,10 @@ class VLCManager:
             if time.time() - self.last_seek_time < 5:
                 continue
 
+            # Skip check briefly after a play request - VLC may report 'stopped' transiently
+            if time.time() - self.last_play_time < 5:
+                continue
+
             status = self.send_command(karaoke_port, karaoke_pw, "", debug=False)
             if not status:
                 continue
@@ -266,4 +289,5 @@ class VLCManager:
                         self.on_karaoke_end()
                     except Exception:
                         pass
+                self.ensure_karaoke_released()
                 self.fade_in_filler()

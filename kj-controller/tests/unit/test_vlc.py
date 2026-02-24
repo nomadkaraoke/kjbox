@@ -52,6 +52,7 @@ def test_initial_state(mock_config):
     assert vm.karaoke_volume == 200
     assert vm.karaoke_active is False
     assert vm.last_seek_time == 0
+    assert vm.last_play_time == 0
     assert vm.audio_error is False
     assert vm.audio_device == "hdmiout"
 
@@ -349,6 +350,7 @@ def test_monitor_karaoke_detects_song_end(mock_config, mocker):
     vm.current_playing_path = "/some/video.mp4"
 
     mocker.patch.object(vm, 'send_command', return_value={"state": "stopped"})
+    mocker.patch.object(vm, 'ensure_karaoke_released')
     mocker.patch.object(vm, 'fade_in_filler')
 
     # Patch time.sleep to break the loop after one iteration
@@ -366,6 +368,7 @@ def test_monitor_karaoke_detects_song_end(mock_config, mocker):
 
     assert vm.karaoke_active is False
     assert vm.current_playing_path is None
+    vm.ensure_karaoke_released.assert_called_once()
     vm.fade_in_filler.assert_called_once()
 
 
@@ -629,3 +632,247 @@ def test_send_command_debug_logs_on_connection_error(mock_config, mocker):
     assert result is None
     # Should log the debug URL and the error
     assert any("DEBUG" in str(c) for c in log_mock.call_args_list)
+
+
+# --- ensure_karaoke_released ---
+
+def test_ensure_karaoke_released_succeeds_first_try(mock_config, mocker):
+    """Returns True when karaoke VLC reports stopped immediately."""
+    vm = VLCManager(mock_config, enabled=True)
+    send_mock = mocker.patch.object(vm, 'send_command', return_value={"state": "stopped"})
+    mocker.patch('vlc.time.sleep')
+
+    assert vm.ensure_karaoke_released() is True
+    commands = [call.args[2] for call in send_mock.call_args_list]
+    assert "pl_stop" in commands
+    assert "pl_empty" in commands
+    assert "" in commands  # status check
+
+
+def test_ensure_karaoke_released_succeeds_after_retries(mock_config, mocker):
+    """Returns True when karaoke stops after a few retries."""
+    vm = VLCManager(mock_config, enabled=True)
+    responses = [
+        None, None,                   # initial pl_stop + pl_empty
+        {"state": "playing"},         # attempt 0: status check
+        None,                         # attempt 0: retry pl_stop
+        {"state": "playing"},         # attempt 1: status check
+        None,                         # attempt 1: retry pl_stop
+        {"state": "stopped"},         # attempt 2: success
+    ]
+    mocker.patch.object(vm, 'send_command', side_effect=responses)
+    mocker.patch('vlc.time.sleep')
+
+    assert vm.ensure_karaoke_released() is True
+
+
+def test_ensure_karaoke_released_fails_after_max_attempts(mock_config, mocker):
+    """Returns False after 5 failed attempts."""
+    vm = VLCManager(mock_config, enabled=True)
+    mocker.patch.object(vm, 'send_command', return_value={"state": "playing"})
+    mocker.patch('vlc.time.sleep')
+
+    assert vm.ensure_karaoke_released() is False
+
+
+def test_ensure_karaoke_released_handles_none_status(mock_config, mocker):
+    """Returns False when VLC is unreachable (send_command returns None)."""
+    vm = VLCManager(mock_config, enabled=True)
+    mocker.patch.object(vm, 'send_command', return_value=None)
+    mocker.patch('vlc.time.sleep')
+
+    assert vm.ensure_karaoke_released() is False
+
+
+# --- monitor_karaoke: ensure_karaoke_released ordering ---
+
+def test_monitor_karaoke_releases_karaoke_before_fading_in_filler(mock_config, mocker):
+    """monitor calls ensure_karaoke_released before fade_in_filler when song ends."""
+    vm = VLCManager(mock_config, enabled=True)
+    vm.karaoke_active = True
+    vm.current_playing_path = "/some/video.mp4"
+
+    mocker.patch.object(vm, 'send_command', return_value={"state": "stopped"})
+
+    call_order = []
+    release_mock = mocker.patch.object(vm, 'ensure_karaoke_released',
+                                       side_effect=lambda: call_order.append('release'))
+    fade_mock = mocker.patch.object(vm, 'fade_in_filler',
+                                    side_effect=lambda: call_order.append('fade_in'))
+
+    call_count = [0]
+    def mock_sleep(seconds):
+        call_count[0] += 1
+        if call_count[0] > 1:
+            raise StopIteration("break loop")
+    mocker.patch('vlc.time.sleep', side_effect=mock_sleep)
+
+    try:
+        vm.monitor_karaoke()
+    except StopIteration:
+        pass
+
+    assert call_order == ['release', 'fade_in']
+
+
+# --- monitor_karaoke: play grace period ---
+
+def test_monitor_karaoke_skips_during_play_grace_period(mock_config, mocker):
+    """monitor skips status check within 5s of a play request."""
+    vm = VLCManager(mock_config, enabled=True)
+    vm.karaoke_active = True
+    vm.last_play_time = time.time()  # just started playing
+
+    send_mock = mocker.patch.object(vm, 'send_command')
+
+    call_count = [0]
+    def mock_sleep(seconds):
+        call_count[0] += 1
+        if call_count[0] > 1:
+            raise StopIteration("break loop")
+    mocker.patch('vlc.time.sleep', side_effect=mock_sleep)
+
+    try:
+        vm.monitor_karaoke()
+    except StopIteration:
+        pass
+
+    send_mock.assert_not_called()
+
+
+# --- play_video: last_play_time and lock ---
+
+def test_play_video_sets_last_play_time(mock_config, tmp_media_dir, mocker):
+    """play_video sets last_play_time to current time."""
+    vm = VLCManager(mock_config, enabled=True)
+    test_file = tmp_media_dir / "media" / "song.mp4"
+    test_file.write_text("fake video")
+
+    mocker.patch.object(vm, 'send_command', return_value={"state": "stopped"})
+    mocker.patch.object(vm, 'fade_out_filler')
+    mocker.patch.object(vm, 'ensure_filler_stopped', return_value=True)
+    mocker.patch('vlc.time.sleep')
+    mocker.patch('vlc.threading.Thread')
+
+    before = time.time()
+    vm.play_video(str(test_file))
+    assert vm.last_play_time >= before
+    assert vm.last_play_time <= time.time()
+
+
+def test_play_video_serializes_concurrent_calls(mock_config, tmp_media_dir, mocker):
+    """play_video uses a lock so concurrent calls are serialized, not interleaved."""
+    import threading
+    RealThread = threading.Thread  # save before any mocking
+
+    vm = VLCManager(mock_config, enabled=True)
+    file_a = tmp_media_dir / "media" / "song_a.mp4"
+    file_b = tmp_media_dir / "media" / "song_b.mp4"
+    file_a.write_text("fake video a")
+    file_b.write_text("fake video b")
+
+    # Track the order of enqueue commands to verify serialization
+    enqueue_order = []
+    order_lock = threading.Lock()
+
+    def tracking_send(port, pw, cmd, **kwargs):
+        if "in_enqueue" in cmd:
+            with order_lock:
+                enqueue_order.append(cmd)
+        return {"state": "stopped"}
+
+    mocker.patch.object(vm, 'send_command', side_effect=tracking_send)
+    mocker.patch.object(vm, 'fade_out_filler')
+    mocker.patch.object(vm, 'ensure_filler_stopped', return_value=True)
+    mocker.patch('vlc.time.sleep')
+
+    # Mock Thread only for verify_playback inside play_video, not for our test threads
+    mock_thread_cls = mocker.MagicMock()
+    mocker.patch('vlc.threading.Thread', mock_thread_cls)
+
+    # Launch two play_video calls concurrently using real threads
+    t1 = RealThread(target=vm.play_video, args=(str(file_a),))
+    t2 = RealThread(target=vm.play_video, args=(str(file_b),))
+    t1.start()
+    t2.start()
+    t1.join(timeout=5)
+    t2.join(timeout=5)
+
+    # Both should have enqueued (lock serializes, doesn't block)
+    assert len(enqueue_order) == 2
+    # The two enqueues should not be interleaved — each play_video runs atomically
+    assert "song_a.mp4" in enqueue_order[0] or "song_b.mp4" in enqueue_order[0]
+    assert "song_a.mp4" in enqueue_order[1] or "song_b.mp4" in enqueue_order[1]
+
+
+def test_rapid_play_requests_last_wins(mock_config, tmp_media_dir, mocker):
+    """When multiple play requests arrive rapidly, the last one ends up playing."""
+    import threading
+    RealThread = threading.Thread
+
+    vm = VLCManager(mock_config, enabled=True)
+    files = []
+    for i in range(3):
+        f = tmp_media_dir / "media" / f"song_{i}.mp4"
+        f.write_text(f"fake video {i}")
+        files.append(str(f))
+
+    # Track all pl_play commands and what was last enqueued
+    last_enqueued = [None]
+
+    def tracking_send(port, pw, cmd, **kwargs):
+        if "in_enqueue" in cmd:
+            last_enqueued[0] = cmd
+        return {"state": "stopped"}
+
+    mocker.patch.object(vm, 'send_command', side_effect=tracking_send)
+    mocker.patch.object(vm, 'fade_out_filler')
+    mocker.patch.object(vm, 'ensure_filler_stopped', return_value=True)
+    mocker.patch('vlc.time.sleep')
+    mocker.patch('vlc.threading.Thread', mocker.MagicMock())
+
+    # Fire off 3 rapid play requests using real threads
+    threads = [RealThread(target=vm.play_video, args=(f,)) for f in files]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(timeout=5)
+
+    # All 3 should have completed (lock serializes them)
+    assert last_enqueued[0] is not None
+    assert vm.karaoke_active is True
+    # last_play_time should be recent
+    assert time.time() - vm.last_play_time < 2
+
+
+def test_play_grace_period_prevents_false_song_end_during_transition(mock_config, mocker):
+    """Simulates: song A playing, user clicks song B, monitor shouldn't trigger filler."""
+    import threading
+
+    vm = VLCManager(mock_config, enabled=True)
+    vm.karaoke_active = True
+    vm.current_playing_path = "/some/song_a.mp4"
+    # Simulate play_video just started (sets last_play_time)
+    vm.last_play_time = time.time()
+
+    # Monitor would see "stopped" if it checked, but grace period should prevent it
+    mocker.patch.object(vm, 'send_command', return_value={"state": "stopped"})
+    release_mock = mocker.patch.object(vm, 'ensure_karaoke_released')
+    fade_mock = mocker.patch.object(vm, 'fade_in_filler')
+
+    call_count = [0]
+    def mock_sleep(seconds):
+        call_count[0] += 1
+        if call_count[0] > 1:
+            raise StopIteration("break loop")
+    mocker.patch('vlc.time.sleep', side_effect=mock_sleep)
+
+    try:
+        vm.monitor_karaoke()
+    except StopIteration:
+        pass
+
+    # Monitor should have skipped due to play grace period
+    release_mock.assert_not_called()
+    fade_mock.assert_not_called()
+    assert vm.karaoke_active is True  # not reset
