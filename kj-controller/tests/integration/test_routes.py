@@ -474,34 +474,36 @@ def test_play_with_vlc_enabled(flask_test_client, flask_app, tmp_media_dir, mock
 
 
 def test_control_pause_resume_paused_state(flask_test_client, flask_app, mocker):
-    """POST /control pause_resume when VLC returns paused fades in filler."""
+    """POST /control pause_resume when paused does NOT start filler (ALSA held)."""
     flask_app.vlc.enabled = True
     # send_command returns paused state on the status check
     mocker.patch.object(flask_app.vlc, 'send_command',
         return_value={"state": "paused"})
-    mocker.patch.object(flask_app.vlc, 'fade_in_filler')
+    fade_in_mock = mocker.patch.object(flask_app.vlc, 'fade_in_filler')
 
     response = flask_test_client.post('/control',
         data=json.dumps({"action": "pause_resume"}),
         content_type='application/json')
     assert response.status_code == 200
     assert flask_app.vlc.karaoke_active is False
-    flask_app.vlc.fade_in_filler.assert_called_once()
+    # Filler must NOT start — paused karaoke still holds the ALSA device
+    fade_in_mock.assert_not_called()
 
 
 def test_control_pause_resume_playing_state(flask_test_client, flask_app, mocker):
-    """POST /control pause_resume when VLC returns playing fades out filler."""
+    """POST /control resume does NOT fade out filler (karaoke reclaims ALSA)."""
     flask_app.vlc.enabled = True
     mocker.patch.object(flask_app.vlc, 'send_command',
         return_value={"state": "playing"})
-    mocker.patch.object(flask_app.vlc, 'fade_out_filler')
+    fade_out_mock = mocker.patch.object(flask_app.vlc, 'fade_out_filler')
 
     response = flask_test_client.post('/control',
         data=json.dumps({"action": "pause_resume"}),
         content_type='application/json')
     assert response.status_code == 200
     assert flask_app.vlc.karaoke_active is True
-    flask_app.vlc.fade_out_filler.assert_called_once()
+    # Filler should NOT be faded out — it was never started during pause
+    fade_out_mock.assert_not_called()
 
 
 def test_delete_invalid_path(flask_test_client):
@@ -740,3 +742,91 @@ def test_yt_search_no_body(flask_test_client):
     response = flask_test_client.post('/youtube/search',
         content_type='application/json')
     assert response.status_code == 400
+
+
+# --- Bug fix: stop uses ensure_karaoke_released ---
+
+def test_control_stop_calls_ensure_karaoke_released(flask_test_client, flask_app, mocker):
+    """POST /control stop uses ensure_karaoke_released (not manual pl_stop/pl_empty)."""
+    flask_app.vlc.enabled = True
+    flask_app.vlc.karaoke_active = True
+    flask_app.vlc.current_playing_path = "/some/path.mp4"
+    ensure_mock = mocker.patch.object(flask_app.vlc, 'ensure_karaoke_released')
+    mocker.patch.object(flask_app.vlc, 'fade_in_filler')
+
+    response = flask_test_client.post('/control',
+        data=json.dumps({"action": "stop"}),
+        content_type='application/json')
+    assert response.status_code == 200
+    ensure_mock.assert_called_once()
+    assert flask_app.vlc.karaoke_active is False
+    assert flask_app.vlc.current_playing_path is None
+
+
+# --- Bug fix: filler music skips playback during karaoke ---
+
+def test_filler_music_set_skips_play_during_karaoke(flask_test_client, flask_app, tmp_media_dir, mocker):
+    """POST /filler_music queues track but skips pl_play when karaoke is active."""
+    (tmp_media_dir / "song.mp3").write_text("fake audio")
+    flask_app.vlc.enabled = True
+    flask_app.vlc.karaoke_active = True
+
+    send_mock = mocker.patch.object(flask_app.vlc, 'send_command',
+        return_value={"state": "stopped"})
+
+    response = flask_test_client.post('/filler_music',
+        data=json.dumps({"track_name": "song.mp3"}),
+        content_type='application/json')
+    assert response.status_code == 200
+    assert flask_app.vlc.current_filler_track == "song.mp3"
+
+    # Should have enqueued but NOT called pl_play
+    commands = [str(c) for c in send_mock.call_args_list]
+    assert any("in_enqueue" in c for c in commands)
+    assert not any("pl_play" in c for c in commands)
+
+
+def test_filler_music_set_plays_when_karaoke_inactive(flask_test_client, flask_app, tmp_media_dir, mocker):
+    """POST /filler_music starts playback when karaoke is not active."""
+    (tmp_media_dir / "song.mp3").write_text("fake audio")
+    flask_app.vlc.enabled = True
+    flask_app.vlc.karaoke_active = False
+
+    send_mock = mocker.patch.object(flask_app.vlc, 'send_command',
+        return_value={"state": "playing", "length": 300})
+
+    response = flask_test_client.post('/filler_music',
+        data=json.dumps({"track_name": "song.mp3"}),
+        content_type='application/json')
+    assert response.status_code == 200
+
+    # Should have called pl_play
+    commands = [str(c) for c in send_mock.call_args_list]
+    assert any("pl_play" in c for c in commands)
+
+
+# --- Bug fix: play route passes display_path to play_video ---
+
+def test_play_passes_display_path_and_overlay(flask_test_client, flask_app, tmp_media_dir, mocker):
+    """POST /play passes display_path and overlay_manager to play_video."""
+    media_dir = tmp_media_dir / "media"
+    test_file = media_dir / "song.mp4"
+    test_file.write_text("fake video")
+
+    flask_app.vlc.enabled = True
+    play_mock = mocker.patch.object(flask_app.vlc, 'play_video')
+
+    response = flask_test_client.post('/play',
+        data=json.dumps({"file_path": str(test_file)}),
+        content_type='application/json')
+    assert response.status_code == 200
+
+    # play_video should NOT have been called directly (it's threaded)
+    # but we can check the Thread was created with the right kwargs
+    # Since play_video is mocked, it captures the call from the thread
+    import time
+    time.sleep(0.2)  # let the thread call the mock
+    play_mock.assert_called_once()
+    kwargs = play_mock.call_args[1]
+    assert 'display_path' in kwargs
+    assert 'overlay_manager' in kwargs
