@@ -84,9 +84,9 @@ def handle_play():
         actual_play_path = mp3_path
 
     log_message(f"Received play request for {os.path.basename(validated)}.", cfg)
-    vlc.current_playing_path = validated
-    current_app.overlay_manager.set_karaoke_playing(True)
-    threading.Thread(target=vlc.play_video, args=(actual_play_path,)).start()
+    threading.Thread(target=vlc.play_video, args=(actual_play_path,),
+                     kwargs={'display_path': validated,
+                             'overlay_manager': current_app.overlay_manager}).start()
     return jsonify({"success": True, "message": "Playback initiated."})
 
 
@@ -128,16 +128,14 @@ def handle_control():
         if status and status.get('state') == 'paused':
             vlc.karaoke_active = False
             overlay_mgr.set_karaoke_playing(False)
-            vlc.fade_in_filler()
+            # Don't start filler — paused karaoke still holds the ALSA device
         else:
             vlc.karaoke_active = True
             overlay_mgr.set_karaoke_playing(True)
-            vlc.fade_out_filler()
     elif action == 'restart':
         vlc.send_command(karaoke_port, karaoke_pw, "seek&val=0")
     elif action == 'stop':
-        vlc.send_command(karaoke_port, karaoke_pw, "pl_stop")
-        vlc.send_command(karaoke_port, karaoke_pw, "pl_empty")
+        vlc.ensure_karaoke_released()
         vlc.karaoke_active = False
         vlc.current_playing_path = None
         vlc.audio_error = False
@@ -261,12 +259,20 @@ def set_filler_music():
     vlc.current_filler_track = track_name
     log_message(f"Changing filler music to: {track_name}", cfg)
 
+    # Enqueue the new track (always — updates playlist for when filler resumes)
     vlc.send_command(filler_port, filler_pw, "pl_stop")
     time.sleep(0.1)
     vlc.send_command(filler_port, filler_pw, "pl_empty")
     time.sleep(0.1)
     vlc.send_command(filler_port, filler_pw, f"in_enqueue&input={new_track_path}", is_path=True)
     time.sleep(0.1)
+
+    # Skip playback if karaoke is active — ALSA device is held by karaoke VLC.
+    # The track will start when karaoke ends and fade_in_filler is called.
+    if vlc.karaoke_active:
+        log_message(f"Filler track queued (karaoke active, not starting playback).", cfg)
+        return jsonify({"success": True})
+
     vlc.send_command(filler_port, filler_pw, "pl_play")
 
     time.sleep(0.5)

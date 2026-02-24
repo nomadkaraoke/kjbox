@@ -28,6 +28,7 @@ class VLCManager:
         self.audio_error = False
         self.audio_device = config.get('default_audio_device', 'hdmiout')
         self._play_lock = threading.Lock()
+        self._fade_cancel = threading.Event()
         self.on_karaoke_end = None  # Optional callback when karaoke ends
 
     def launch_instance(self, name, port, password, media_file=None, loop=False):
@@ -119,34 +120,47 @@ class VLCManager:
             log_message(f"An unexpected error occurred when calling VLC: {e}", self.config)
             return None
 
-    def fade_music(self, port, password, start_vol, end_vol, duration_s=3):
-        """Gradually fades volume over a set duration."""
+    def fade_music(self, port, password, start_vol, end_vol, duration_s=3, cancel_event=None):
+        """Gradually fades volume over a set duration. Stops early if cancel_event is set."""
         steps = 20
         delay = duration_s / steps
         for i in range(steps + 1):
+            if cancel_event and cancel_event.is_set():
+                return
             volume = int(start_vol + (end_vol - start_vol) * (i / steps))
             self.send_command(port, password, f"volume&val={volume}")
             time.sleep(delay)
 
     def fade_in_filler(self):
-        """Fades in the filler music."""
+        """Fades in the filler music. Cancels any in-progress fade-out first."""
         if not self.enabled:
             return
+        # Cancel any in-progress fade before starting a new one
+        self._fade_cancel.set()
+        self._fade_cancel = threading.Event()
+        cancel = self._fade_cancel
         log_message("Fading in filler music...", self.config)
         filler_port = self.config.get('filler_vlc_port', 8081)
         filler_pw = self.config.get('filler_vlc_password', 'filler')
         self.send_command(filler_port, filler_pw, "volume&val=0")
         self.send_command(filler_port, filler_pw, "pl_play")
-        threading.Thread(target=self.fade_music, args=(filler_port, filler_pw, 0, self.filler_volume)).start()
+        threading.Thread(target=self.fade_music, args=(filler_port, filler_pw, 0, self.filler_volume),
+                         kwargs={'cancel_event': cancel}).start()
 
     def fade_out_filler(self):
         """Fades out the filler music and stops it (releases audio device for karaoke)."""
         if not self.enabled:
             return
+        # Cancel any in-progress fade before starting a new one
+        self._fade_cancel.set()
+        self._fade_cancel = threading.Event()
         log_message("Fading out filler music...", self.config)
         filler_port = self.config.get('filler_vlc_port', 8081)
         filler_pw = self.config.get('filler_vlc_password', 'filler')
-        self.fade_music(filler_port, filler_pw, self.filler_volume, 0)
+        # Read actual current volume instead of assuming filler_volume
+        status = self.send_command(filler_port, filler_pw, "")
+        current_vol = status.get('volume', self.filler_volume) if status else self.filler_volume
+        self.fade_music(filler_port, filler_pw, current_vol, 0)
         self.send_command(filler_port, filler_pw, "pl_stop")
         log_message("Filler music faded out and stopped.", self.config)
 
@@ -178,8 +192,15 @@ class VLCManager:
         log_message("WARNING: Could not confirm karaoke VLC released audio device after 5 attempts", self.config)
         return False
 
-    def play_video(self, file_path):
-        """Plays a video on the karaoke VLC instance (stop filler, load, play)."""
+    def play_video(self, file_path, display_path=None, overlay_manager=None):
+        """Plays a video on the karaoke VLC instance (stop filler, load, play).
+
+        Args:
+            file_path: Path to the actual media file to play (may be extracted MP3).
+            display_path: Path to show in status/UI (original file the user selected).
+                         If None, not set (caller manages current_playing_path).
+            overlay_manager: If provided, set karaoke_playing(True) inside the lock.
+        """
         if not os.path.exists(file_path):
             log_message(f"ERROR: File not found: {file_path}", self.config)
             return
@@ -194,6 +215,12 @@ class VLCManager:
             karaoke_pw = self.config.get('karaoke_vlc_password', 'karaoke')
 
             self.audio_error = False
+
+            # Set display state inside the lock so it's atomic with playback start
+            if display_path is not None:
+                self.current_playing_path = display_path
+            if overlay_manager is not None:
+                overlay_manager.set_karaoke_playing(True)
 
             # Fade out and stop filler music (releases audio device)
             # Skip the 3s fade if filler is already stopped (e.g. switching songs)

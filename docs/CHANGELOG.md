@@ -2,6 +2,22 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-02-24 - Fix: 5 VLC Management Bugs (v0.8.2)
+
+Follow-up to the ALSA contention fix (v0.8.1). Comprehensive audit found 5 additional bugs in VLC state management where the code didn't properly account for ALSA device exclusivity or made incorrect assumptions about state.
+
+**Bug fixes:**
+
+1. **Fade cancel (concurrent fade-in/fade-out race)** — If `fade_in_filler` and `fade_out_filler` ran close together, both fade threads would compete to set volume simultaneously. Added `_fade_cancel` event that each fade operation sets before starting, causing any in-progress fade to abort. `fade_out_filler` now also reads actual VLC volume instead of assuming `filler_volume`.
+
+2. **Pause no longer starts filler** — Pausing karaoke was calling `fade_in_filler()`, but the paused karaoke VLC still holds the exclusive ALSA device. Filler would get "Device or resource busy". Removed filler fade-in/out from pause_resume — the KJ should just hear silence during pause.
+
+3. **Stop uses ensure_karaoke_released** — The stop action was sending raw `pl_stop`/`pl_empty` without verifying the device was actually released before starting filler. Replaced with `ensure_karaoke_released()` which retries up to 5 times with status verification.
+
+4. **Filler music change during karaoke** — `set_filler_music` unconditionally called `pl_play`, which would fail with "Device or resource busy" when karaoke was active. Now enqueues the track but skips playback — the track will start when karaoke ends and `fade_in_filler()` is called.
+
+5. **Play state set atomically** — `current_playing_path` and overlay state were set in the route handler *before* `play_video` acquired the lock, creating a race where status could show song B's name while song A was still playing. Moved state-setting inside `play_video`'s `_play_lock` via new `display_path` and `overlay_manager` parameters.
+
 ## 2026-02-24 - Fix: Filler Music Audio Device Contention
 
 Filler music stopped playing after karaoke songs ended. Root cause: the karaoke VLC held the exclusive ALSA device (`hw:0,3` via `hdmiout`) even after reaching "stopped" state, so the filler VLC got "Device or resource busy" when trying to resume.

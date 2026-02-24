@@ -682,19 +682,21 @@ def test_fade_in_filler_sends_commands_when_enabled(mock_config, mocker):
 
 
 def test_fade_out_filler_fades_and_stops_when_enabled(mock_config, mocker):
-    """fade_out_filler calls fade_music then sends pl_stop."""
+    """fade_out_filler reads actual volume, calls fade_music, then sends pl_stop."""
     vm = VLCManager(mock_config, enabled=True)
     vm.filler_volume = 100
-    send_mock = mocker.patch.object(vm, 'send_command')
+    # send_command returns volume status, then None for pl_stop
+    send_mock = mocker.patch.object(vm, 'send_command',
+        return_value={"state": "playing", "volume": 80})
     fade_mock = mocker.patch.object(vm, 'fade_music')
 
     vm.fade_out_filler()
 
-    # Should call fade_music with filler_volume -> 0
+    # Should call fade_music starting from actual volume (80), not filler_volume (100)
     fade_mock.assert_called_once()
     args = fade_mock.call_args[0]
-    assert args[2] == 100  # start_vol = filler_volume
-    assert args[3] == 0    # end_vol = 0
+    assert args[2] == 80  # start_vol = actual VLC volume
+    assert args[3] == 0   # end_vol = 0
     # Should send pl_stop after fade
     assert any("pl_stop" in str(c) for c in send_mock.call_args_list)
 
@@ -980,3 +982,147 @@ def test_play_grace_period_prevents_false_song_end_during_transition(mock_config
     release_mock.assert_not_called()
     fade_mock.assert_not_called()
     assert vm.karaoke_active is True  # not reset
+
+
+# --- Bug 8: fade cancel prevents concurrent fade-in/fade-out ---
+
+def test_fade_cancel_event_in_init(mock_config):
+    """VLCManager initializes with a _fade_cancel Event."""
+    vm = VLCManager(mock_config, enabled=True)
+    import threading
+    assert isinstance(vm._fade_cancel, threading.Event)
+    assert not vm._fade_cancel.is_set()
+
+
+def test_fade_music_stops_when_cancel_set(mock_config, mocker):
+    """fade_music exits early when cancel_event is set."""
+    vm = VLCManager(mock_config, enabled=True)
+    import threading
+    cancel = threading.Event()
+    cancel.set()  # pre-cancelled
+
+    send_mock = mocker.patch.object(vm, 'send_command')
+    mocker.patch('vlc.time.sleep')
+
+    vm.fade_music(8081, "filler", 0, 100, cancel_event=cancel)
+
+    # Should not have sent any volume commands (cancelled before first step)
+    send_mock.assert_not_called()
+
+
+def test_fade_in_cancels_previous_fade(mock_config, mocker):
+    """fade_in_filler sets the old _fade_cancel and creates a new one."""
+    vm = VLCManager(mock_config, enabled=True)
+    old_cancel = vm._fade_cancel
+
+    mocker.patch.object(vm, 'send_command')
+    mocker.patch('vlc.threading.Thread')
+
+    vm.fade_in_filler()
+
+    # Old cancel should be set (stopping any in-progress fade)
+    assert old_cancel.is_set()
+    # New cancel should be a fresh, unset Event
+    assert vm._fade_cancel is not old_cancel
+    assert not vm._fade_cancel.is_set()
+
+
+def test_fade_out_cancels_previous_fade(mock_config, mocker):
+    """fade_out_filler sets the old _fade_cancel and creates a new one."""
+    vm = VLCManager(mock_config, enabled=True)
+    old_cancel = vm._fade_cancel
+
+    mocker.patch.object(vm, 'send_command', return_value={"volume": 100})
+    mocker.patch.object(vm, 'fade_music')
+
+    vm.fade_out_filler()
+
+    assert old_cancel.is_set()
+    assert vm._fade_cancel is not old_cancel
+
+
+def test_fade_out_reads_actual_volume(mock_config, mocker):
+    """fade_out_filler starts from VLC's actual volume, not filler_volume."""
+    vm = VLCManager(mock_config, enabled=True)
+    vm.filler_volume = 100
+
+    mocker.patch.object(vm, 'send_command', return_value={"state": "playing", "volume": 60})
+    fade_mock = mocker.patch.object(vm, 'fade_music')
+
+    vm.fade_out_filler()
+
+    args = fade_mock.call_args[0]
+    assert args[2] == 60  # start from actual volume, not 100
+
+
+def test_fade_out_falls_back_to_filler_volume_on_none(mock_config, mocker):
+    """fade_out_filler uses filler_volume when send_command returns None."""
+    vm = VLCManager(mock_config, enabled=True)
+    vm.filler_volume = 100
+
+    mocker.patch.object(vm, 'send_command', return_value=None)
+    fade_mock = mocker.patch.object(vm, 'fade_music')
+
+    vm.fade_out_filler()
+
+    args = fade_mock.call_args[0]
+    assert args[2] == 100  # falls back to filler_volume
+
+
+def test_fade_in_passes_cancel_event_to_thread(mock_config, mocker):
+    """fade_in_filler passes cancel_event kwarg to the fade thread."""
+    vm = VLCManager(mock_config, enabled=True)
+    mocker.patch.object(vm, 'send_command')
+    thread_mock = mocker.patch('vlc.threading.Thread')
+
+    vm.fade_in_filler()
+
+    kwargs = thread_mock.call_args[1]
+    assert 'cancel_event' in kwargs.get('kwargs', {})
+    assert not kwargs['kwargs']['cancel_event'].is_set()
+
+
+# --- Bug 7: play_video display_path and overlay_manager ---
+
+def test_play_video_sets_display_path_inside_lock(mock_config, tmp_media_dir, mocker):
+    """play_video sets current_playing_path from display_path arg."""
+    vm = VLCManager(mock_config, enabled=True)
+    test_file = tmp_media_dir / "media" / "song.mp4"
+    test_file.write_text("fake video")
+
+    mocker.patch.object(vm, 'send_command', return_value={"state": "stopped"})
+    mocker.patch('vlc.time.sleep')
+    mocker.patch('vlc.threading.Thread')
+
+    vm.play_video(str(test_file), display_path="/original/path.zip")
+    assert vm.current_playing_path == "/original/path.zip"
+
+
+def test_play_video_calls_overlay_manager(mock_config, tmp_media_dir, mocker):
+    """play_video calls overlay_manager.set_karaoke_playing(True) inside the lock."""
+    vm = VLCManager(mock_config, enabled=True)
+    test_file = tmp_media_dir / "media" / "song.mp4"
+    test_file.write_text("fake video")
+
+    mocker.patch.object(vm, 'send_command', return_value={"state": "stopped"})
+    mocker.patch('vlc.time.sleep')
+    mocker.patch('vlc.threading.Thread')
+
+    mock_overlay = mocker.MagicMock()
+    vm.play_video(str(test_file), overlay_manager=mock_overlay)
+    mock_overlay.set_karaoke_playing.assert_called_once_with(True)
+
+
+def test_play_video_without_display_path_leaves_current_playing(mock_config, tmp_media_dir, mocker):
+    """play_video without display_path does not change current_playing_path."""
+    vm = VLCManager(mock_config, enabled=True)
+    vm.current_playing_path = "/old/path.mp4"
+    test_file = tmp_media_dir / "media" / "song.mp4"
+    test_file.write_text("fake video")
+
+    mocker.patch.object(vm, 'send_command', return_value={"state": "stopped"})
+    mocker.patch('vlc.time.sleep')
+    mocker.patch('vlc.threading.Thread')
+
+    vm.play_video(str(test_file))
+    assert vm.current_playing_path == "/old/path.mp4"
