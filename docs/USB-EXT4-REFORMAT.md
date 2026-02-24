@@ -71,8 +71,8 @@ tmux new-session -s gcs-upload
 - [ ] Cloud backup verified (file counts match)
 - [x] 4TB portable HDD connected and mounted (Seagate Portable 4TB, `/dev/sdb1`, ext4, UUID `e284a15a-2f8b-407d-8f3d-d96dfb949816`)
 - [x] HDD formatted: GPT → ext4, label `BackupHDD`, mounted at `/media/nomad/BackupHDD`
-- [ ] Physical backup complete (rsync to HDD) — started 2026-02-21
-- [ ] Physical backup verified (file counts match)
+- [x] Physical backup complete (rsync to HDD) — completed 2026-02-22
+- [x] Physical backup verified (file counts match: 413,670 files on both)
 - [ ] USB drive reformatted to ext4
 - [ ] Data restored from HDD
 - [ ] fstab updated
