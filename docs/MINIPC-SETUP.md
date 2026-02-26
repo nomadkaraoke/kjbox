@@ -414,6 +414,7 @@ Environment=HOME=/home/nomad
 Environment=XDG_RUNTIME_DIR=/run/user/1000
 # Port 80 requires this capability (or run as root)
 AmbientCapabilities=CAP_NET_BIND_SERVICE
+ExecStartPre=+/opt/nomad/kjbox/kj-controller/fix-hdmi-audio.sh
 ExecStart=/opt/nomad/kjbox/kj-controller/venv/bin/python /opt/nomad/kjbox/kj-controller/app.py
 Restart=always
 RestartSec=5
@@ -424,6 +425,8 @@ EOF
 ```
 
 **Note:** `XDG_RUNTIME_DIR` is needed for PipeWire audio access (PipeWire runs as the `nomad` user and its socket is at `/run/user/1000/pipewire-0`). If `CAP_NET_BIND_SERVICE` doesn't work for port 80, use port 8080 instead.
+
+The `+` prefix on `ExecStartPre` makes `fix-hdmi-audio.sh` run as root (needed to write `/etc/asound.conf` and enable ALSA mixer controls), even though the main service runs as `nomad`.
 
 ### 4.2 Auto-Deploy Service
 

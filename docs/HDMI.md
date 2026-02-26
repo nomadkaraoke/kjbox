@@ -543,7 +543,9 @@ amixer -c 0 cset numid=24 on
 
 **2026-02-23 Root Cause**: HDMI audio was silent because this switch was `off` for HDMI 0 (the active device). All other configuration was correct. Likely toggled during a previous debugging session. Turning it `on` immediately restored audio.
 
-**This switch does NOT persist across reboots** — `fix-hdmi-audio.sh` must ensure it's enabled at startup.
+**2026-02-25 Root Cause (venue, confirmed)**: IEC958 Playback Switch was `off` because `fix-hdmi-audio.sh` was never being called — the systemd service file was missing the `ExecStartPre` line. The switch defaults to `off` on every boot, and nothing was setting it `on`. Fixed by adding `ExecStartPre=+/opt/nomad/kjbox/kj-controller/fix-hdmi-audio.sh` to the service file (the `+` prefix runs it as root).
+
+**This switch does NOT persist across reboots** — `fix-hdmi-audio.sh` must ensure it's enabled at startup via `ExecStartPre`.
 
 ### PipeWire vs Direct ALSA
 
@@ -963,7 +965,19 @@ For each device connected to the NomadPC, fill in:
 
 **Key observation**: Works as a standalone audio extractor even with no HDMI output connected. Built-in 1080p EDID means the NomadPC always outputs at full resolution. This is the best fallback device for venue audio — sits inline, passes video through, and provides a separate audio feed if HDMI audio to the Denon AVR fails.
 
-### Test: Full Chain at Venue (TODO — 2026-02-24)
+### Test: Full Chain at Venue (2026-02-25)
+
+**Setup**: NomadPC HDMI-1 → OREI UHDS-104 (STD) → Out 1: 50ft cable → Denon AVR-3311CI → projector + venue speakers. Touchscreen on another output.
+
+| Test | Result | Notes |
+|------|--------|-------|
+| NomadPC EDID | "HDMI Splitter", 1920x1080 | STD mode unchanged by adding Denon |
+| Video on projector? | **Yes** | Full 1080p via Denon AVR |
+| Audio from venue speakers? | **Yes (after fix)** | IEC958 switch was off — fixed by enabling in service |
+| Audio from touchscreen? | **Yes** | Both outputs working |
+| ALSA PCM device? | hw:0,3 | Unchanged from home testing |
+
+**Root cause of no audio at venue**: `ExecStartPre` was missing from the service file — `fix-hdmi-audio.sh` never ran at boot. Fixed by adding `ExecStartPre=+/opt/nomad/kjbox/kj-controller/fix-hdmi-audio.sh` to `/etc/systemd/system/kj-controller.service`. See CHANGELOG 2026-02-25.
 
 ---
 
@@ -971,48 +985,31 @@ For each device connected to the NomadPC, fill in:
 
 ### Active Issues
 
-1. **No audio from touchscreen** (2026-02-23)
-   - VLC streams to correct PCM device, device shows RUNNING, but no sound
-   - Need to rule out: touchscreen speaker wiring, ALSA format mismatch, broken config from previous session
+*(none — all prior issues resolved)*
 
-2. **Desktop shows only top-left quarter** (2026-02-23)
-   - Happened after HDMI cable reconnect
-   - Wallpaper is 4K, display is 1024x600
-   - XFCE's xfdesktop may not have re-rendered
-   - May self-resolve on reboot, or may need `xfdesktop --reload` or similar
+~~1. **No audio from touchscreen** (2026-02-23)~~
+**RESOLVED (2026-02-25)**: Root cause was missing `ExecStartPre` in service file — IEC958 Playback Switch never enabled at boot. Fixed by adding `ExecStartPre=+fix-hdmi-audio.sh` to the service unit.
 
-3. **Resolution not matching XFCE saved profile**
-   - XFCE displays.xml has HDMI-1 saved at 1920x1080
-   - But current resolution is 1024x600 (touchscreen preferred)
-   - EDID hash in saved profile may not match current touchscreen
+~~2. **Desktop shows only top-left quarter** (2026-02-23)~~
+**RESOLVED**: Happens when NomadPC outputs at 1024x600 (touchscreen native). With OREI splitter in STD mode, NomadPC outputs at 1920x1080 and the touchscreen downscales — full desktop is visible.
 
-### Concerns for Full Setup
+~~3. **Resolution not matching XFCE saved profile** (2026-02-23)~~
+**RESOLVED**: Splitter in STD mode forces 1920x1080 EDID, which XFCE applies correctly.
 
-4. **Splitter EDID behavior unknown**
-   - Which EDID does the splitter present to the NomadPC?
-   - Does it change based on which outputs are connected? In what order?
-   - Will it include audio capabilities?
+### Resolved Concerns for Full Setup
 
-5. **50ft HDMI cable signal integrity**
-   - At the edge of reliable passive HDMI range for 1080p
-   - Need to test: clean picture? audio? any dropouts?
+4. **Splitter EDID behavior** — **Confirmed**: STD mode presents fixed "HDMI Splitter" 1080p EDID regardless of downstream devices. NomadPC always sees 1920x1080 + LPCM 2ch audio.
 
-6. **Pin-to-PCM shuffling with splitter**
-   - Currently `hw:0,3` with touchscreen direct
-   - May change when splitter is in the chain (different EDID → different pin assignment)
-   - `fix-hdmi-audio.sh` should handle this, but need to verify
+5. **50ft HDMI cable signal integrity** — **Confirmed working** at venue (2026-02-25). Clean picture and audio through Denon AVR.
 
-7. **What happens when devices are connected/disconnected from splitter?**
-   - HPD signal behavior through splitter is unknown
-   - Does disconnecting one output from the splitter trigger an HPD event at the source?
-   - Or does the splitter maintain HPD as long as at least one output is connected?
+6. **Pin-to-PCM shuffling with splitter** — **Confirmed stable**: `hw:0,3` is used consistently whether direct or through the splitter.
+
+7. **HPD signal behavior through splitter** — Adding/removing outputs from the OREI splitter in STD mode does not change the EDID or disrupt the NomadPC's signal.
 
 ### Open Questions
 
-- Does the touchscreen's HDMI audio actually work with Linux, or only with macOS/Windows?
-- Does the EDID emulator need to be used with the splitter?
-- Can we force the NomadPC to always output 1920x1080 regardless of what's connected? (Kernel parameter `video=HDMI-A-1:1920x1080@60e` or similar)
-- Should we create a custom EDID (like we did on the NomadPi) to guarantee consistent behavior?
+- Does the EDID emulator need to be used with the splitter? **Likely not — STD mode is sufficient.**
+- Should we create a custom EDID? **Not needed with the OREI UHDS-104 in STD mode.**
 
 ---
 

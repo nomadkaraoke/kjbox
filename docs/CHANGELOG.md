@@ -2,6 +2,22 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-02-25 - Fix: HDMI audio silent at boot (missing ExecStartPre)
+
+**Root cause:** `fix-hdmi-audio.sh` was never being called at service start. The `ExecStartPre` line was documented in `HDMI.md` but was missing from `MINIPC-SETUP.md` (the actual setup guide used to configure the device). As a result, every boot left the IEC958 Playback Switch `off` (its hardware default), silencing all HDMI audio.
+
+**What the IEC958 switch does:** It's the digital audio enable/disable at the HDA codec level. When `off`, the ALSA PCM stream runs normally (state: RUNNING, data flowing) but no audio packets are transmitted over HDMI. This is an HDA hardware default that must be explicitly enabled — it doesn't survive reboots.
+
+**Fix:**
+- Added `ExecStartPre=+/opt/nomad/kjbox/kj-controller/fix-hdmi-audio.sh` to `/etc/systemd/system/kj-controller.service` on NomadPC
+- The `+` prefix makes it run as root (needed to write `/etc/asound.conf`), even though the main service runs as `nomad`
+- Updated `MINIPC-SETUP.md` to include `ExecStartPre` so future reinstalls are correct
+
+**Also confirmed at first venue test (2026-02-25):**
+- OREI splitter in STD mode presenting "HDMI Splitter" EDID to NomadPC — correct 1920x1080
+- Denon AVR on splitter Out 1 (50ft cable) — video and audio working after IEC958 fix
+- 7" touchscreen on another output — working simultaneously
+
 ## 2026-02-24 - Power-Loss Hardening (SSD reformat + system config)
 
 NomadPC gets unplugged at venues without clean shutdown. Applied four layers of hardening so power loss never prevents healthy startup.
