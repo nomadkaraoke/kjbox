@@ -495,7 +495,12 @@ async function avRefresh() {
         const data = await response.json();
         renderAvModal(data);
     } catch (e) {
-        document.getElementById('av-loading').innerHTML = `<span style="color:#ef4444;">Error loading AV status: ${e.message}</span>`;
+        const errEl = document.getElementById('av-loading');
+        errEl.textContent = '';
+        const span = document.createElement('span');
+        span.style.color = '#ef4444';
+        span.textContent = `Error loading AV status: ${e.message}`;
+        errEl.appendChild(span);
     }
 }
 
@@ -544,13 +549,13 @@ function renderAvVideoSection(video) {
         div.className = 'av-connector' + (info.connected ? '' : ' av-connector-disconnected');
 
         const dotCls = info.connected ? (name === video.active_output ? 'av-dot-ok' : 'av-dot-warn') : 'av-dot-off';
-        let html = `${avDot(dotCls)} <span class="av-connector-name">${name}</span>`;
+        let html = `${avDot(dotCls)} <span class="av-connector-name">${escapeHtml(name)}</span>`;
 
         if (info.connected) {
             if (info.current_resolution) {
-                html += ` <span class="av-connector-resolution">${info.current_resolution}</span>`;
+                html += ` <span class="av-connector-resolution">${escapeHtml(info.current_resolution)}</span>`;
                 if (info.current_refresh) {
-                    html += ` <span class="av-connector-refresh">@ ${info.current_refresh}Hz</span>`;
+                    html += ` <span class="av-connector-refresh">@ ${escapeHtml(info.current_refresh)}Hz</span>`;
                 }
             } else {
                 html += ` <span style="color:#555;font-size:0.85em;">(no mode set)</span>`;
@@ -559,7 +564,7 @@ function renderAvVideoSection(video) {
                 html += ` <span class="av-connector-active-badge">active</span>`;
             }
             if (info.edid_name) {
-                html += ` <span class="av-connector-edid" title="Monitor name from EDID">${info.edid_name}</span>`;
+                html += ` <span class="av-connector-edid" title="Monitor name from EDID">${escapeHtml(info.edid_name)}</span>`;
             }
         } else {
             html += ` <span style="color:#444;font-size:0.82em;">disconnected</span>`;
@@ -580,23 +585,23 @@ function renderAvAudioSection(audio) {
         <div class="av-info-row">
             <span class="av-info-label">VLC device</span>
             ${avDot(vlcDotCls)}
-            <span class="av-info-value">${audio.vlc_device || '—'}</span>
+            <span class="av-info-value">${escapeHtml(audio.vlc_device || '—')}</span>
         </div>
         <div class="av-info-row">
             <span class="av-info-label">hdmiout alias</span>
             ${avDot(asDotCls)}
-            <span class="av-info-value">${audio.asound_hw || '(not set)'}</span>
+            <span class="av-info-value">${escapeHtml(audio.asound_hw || '(not set)')}</span>
         </div>`;
 
     if (audio.eld_names && audio.eld_names.length > 0) {
-        html += `<div class="av-eld-names">Connected display audio: ${audio.eld_names.join(', ')}</div>`;
+        html += `<div class="av-eld-names">Connected display audio: ${audio.eld_names.map(escapeHtml).join(', ')}</div>`;
     }
 
     html += `
         <div class="av-info-row" style="margin-top:4px;">
             <span class="av-info-label">PipeWire profile</span>
             ${avDot(pwDotCls)}
-            <span class="av-info-value" style="font-size:0.8em;">${audio.pipewire_profile || '(unknown)'}</span>
+            <span class="av-info-value" style="font-size:0.8em;">${escapeHtml(audio.pipewire_profile || '(unknown)')}</span>
         </div>`;
 
     if (!audio.pipewire_ok && audio.pipewire_profile) {
@@ -617,8 +622,8 @@ function renderAvAudioSection(audio) {
         const iec958Dot = info.iec958 ? avDot('av-dot-ok') : avDot('av-dot-error');
 
         tr.innerHTML = `
-            <td>${hwId}${isAlias ? '<span class="av-alias-badge">hdmiout</span>' : ''}</td>
-            <td>${info.name}</td>
+            <td>${escapeHtml(hwId)}${isAlias ? '<span class="av-alias-badge">hdmiout</span>' : ''}</td>
+            <td>${escapeHtml(info.name)}</td>
             <td>${jackDot} ${info.connected ? 'on' : 'off'}</td>
             <td>${iec958Dot} ${info.iec958 ? 'on' : 'off'}</td>`;
         tbody.appendChild(tr);
