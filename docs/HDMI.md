@@ -21,7 +21,7 @@ This checks video (connector, resolution, EDID), audio (jack detection, ALSA con
 |---------|-----|
 | IEC958 Playback Switch: OFF | `ssh nomadpc 'amixer -c 0 cset iface=MIXER,name="IEC958 Playback Switch",index=0 on'` (adjust index for active PCM) |
 | PipeWire grabbed HDMI | `ssh nomadpc 'sudo -u nomad XDG_RUNTIME_DIR=/run/user/1000 pactl set-card-profile alsa_card.pci-0000_00_1f.3 "output:analog-stereo+input:analog-stereo"'` |
-| asound.conf mismatch | `ssh nomadpc 'sudo systemctl restart kj-controller'` (re-runs fix-hdmi-audio.sh) |
+| asound.conf mismatch | `ssh nomadpc 'sudo systemctl restart kj-controller'` (re-runs fix-hdmi-audio.sh) — or use **AV Output → Reset All** in the web UI |
 | No HDMI jack detected | Check cable, check splitter power, try restarting: `ssh nomadpc 'sudo systemctl restart kj-controller'` |
 | Audio still silent after all green | Try the J-Tech audio extractor inline as a backup (3.5mm out) |
 
@@ -1069,7 +1069,7 @@ systemctl restart kj-controller
 | File | Purpose |
 |------|---------|
 | `/etc/asound.conf` | ALSA config — written by fix-hdmi-audio.sh |
-| `/opt/nomad/kjbox/kj-controller/fix-hdmi-audio.sh` | Auto-detect HDMI audio device at boot |
+| `/opt/nomad/kjbox/kj-controller/fix-hdmi-audio.sh` | Restore full AV state at boot: ALSA hdmiout alias, IEC958 switches, PipeWire analog profile, display 1920x1080 |
 | `/opt/nomad/kjbox/kj-controller/config.json` | KJ Controller config (audio_devices, default_audio_device) |
 | `/etc/systemd/system/kj-controller.service` | Systemd service unit |
 | `~/.config/xfce4/xfconf/xfce-perchannel-xml/displays.xml` | XFCE saved display profiles |

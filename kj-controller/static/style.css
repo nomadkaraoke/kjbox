@@ -802,3 +802,239 @@ body {
     .now-playing-bar { flex-wrap: wrap; }
     .now-playing-info { flex-basis: 100%; }
 }
+
+/* ============================================================
+   AV Output Modal
+   ============================================================ */
+
+.av-modal-content {
+    max-width: 600px;
+}
+
+.av-section {
+    margin-bottom: 1rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid #2a2a2a;
+}
+.av-section:last-child { border-bottom: none; }
+
+.av-section-title {
+    color: #ff7acc;
+    font-size: 0.8em;
+    font-weight: 700;
+    margin: 0 0 0.6rem 0;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+.av-help {
+    font-size: 0.75em;
+    color: #555;
+    margin: 2px 0 6px 0;
+    line-height: 1.4;
+}
+
+.av-control-row {
+    margin-top: 0.75rem;
+}
+.av-control-row label {
+    display: block;
+    font-size: 0.8em;
+    margin-bottom: 2px;
+    color: #aaa;
+}
+.av-control-row select {
+    margin-top: 2px;
+}
+
+/* Connector list */
+.av-connector-list {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.av-connector {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.82em;
+    padding: 4px 0;
+}
+.av-connector.av-connector-disconnected {
+    opacity: 0.45;
+}
+
+.av-connector-name {
+    font-weight: 600;
+    color: #e5e5e5;
+    min-width: 64px;
+}
+
+.av-connector-resolution { color: #aaa; }
+.av-connector-refresh { color: #666; font-size: 0.9em; }
+
+.av-connector-active-badge {
+    font-size: 0.7em;
+    padding: 1px 6px;
+    border-radius: 3px;
+    background-color: rgba(255, 220, 107, 0.15);
+    color: #ffdf6b;
+    font-weight: 600;
+}
+
+.av-connector-edid {
+    color: #555;
+    font-size: 0.85em;
+    margin-left: 2px;
+}
+
+/* Health dots */
+.av-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    display: inline-block;
+}
+.av-dot-ok    { background-color: #22c55e; box-shadow: 0 0 5px rgba(34,197,94,0.5); }
+.av-dot-warn  { background-color: #f59e0b; box-shadow: 0 0 5px rgba(245,158,11,0.5); }
+.av-dot-error { background-color: #ef4444; box-shadow: 0 0 5px rgba(239,68,68,0.5); }
+.av-dot-off   { background-color: #444; }
+
+/* PCM table */
+.av-pcm-table {
+    width: 100%;
+    font-size: 0.78em;
+    border-collapse: collapse;
+    margin-top: 6px;
+}
+.av-pcm-table th {
+    text-align: left;
+    color: #555;
+    font-weight: 500;
+    padding: 3px 8px 3px 0;
+    border-bottom: 1px solid #2a2a2a;
+    white-space: nowrap;
+}
+.av-pcm-table td {
+    padding: 5px 8px 5px 0;
+    border-bottom: 1px solid #1e1e1e;
+    color: #777;
+    vertical-align: middle;
+}
+.av-pcm-table tr:last-child td { border-bottom: none; }
+.av-pcm-table tr.av-pcm-active td { color: #ccc; }
+.av-pcm-table tr.av-pcm-active td:first-child { color: #ff7acc; font-weight: 600; }
+
+.av-alias-badge {
+    font-size: 0.65em;
+    padding: 1px 5px;
+    border-radius: 3px;
+    background-color: rgba(255, 91, 184, 0.2);
+    color: #ff7acc;
+    font-weight: 600;
+    margin-left: 5px;
+    white-space: nowrap;
+}
+
+/* Audio info rows */
+.av-info-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.82em;
+    padding: 3px 0;
+}
+.av-info-label {
+    color: #555;
+    min-width: 120px;
+    flex-shrink: 0;
+}
+.av-info-value {
+    color: #ccc;
+    font-family: monospace;
+    font-size: 0.95em;
+}
+.av-info-warn {
+    font-size: 0.75em;
+    color: #f59e0b;
+    margin-top: 2px;
+    padding-left: 128px;
+}
+
+/* ELD names */
+.av-eld-names {
+    font-size: 0.78em;
+    color: #666;
+    margin-top: 3px;
+    font-style: italic;
+}
+
+/* Loading state */
+.av-loading {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 1.5rem 0;
+    color: #666;
+    font-size: 0.85em;
+    justify-content: center;
+}
+
+/* Modal footer */
+.av-modal-footer {
+    display: flex;
+    gap: 8px;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 1rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid #2a2a2a;
+}
+
+.av-reset-btn {
+    font-size: 0.8em;
+    padding: 7px 14px;
+    background-color: rgba(245, 158, 11, 0.12);
+    border: 1px solid rgba(245, 158, 11, 0.3);
+    color: #f59e0b;
+    box-shadow: none;
+}
+.av-reset-btn:hover {
+    background-color: rgba(245, 158, 11, 0.22);
+    color: #fbbf24;
+    box-shadow: none;
+}
+.av-reset-btn:disabled { opacity: 0.45; cursor: default; }
+
+.av-refresh-btn {
+    font-size: 0.8em;
+    padding: 7px 14px;
+}
+
+/* AV Output button in system section */
+.av-output-btn {
+    width: 100%;
+}
+
+/* Health summary bar at top of modal */
+.av-health-bar {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    padding: 8px 10px;
+    background-color: #0e0e0e;
+    border-radius: 6px;
+    margin-bottom: 0.75rem;
+    font-size: 0.75em;
+}
+.av-health-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    color: #888;
+}
+.av-health-item.av-health-ok    { color: #22c55e; }
+.av-health-item.av-health-warn  { color: #f59e0b; }
+.av-health-item.av-health-error { color: #ef4444; }

@@ -211,14 +211,12 @@ class TestStatusBar:
         system = app_page.locator(".system-controls")
         expect(system.locator("#filler-selector")).to_be_visible()
 
-    def test_audio_device_selector_in_system(self, app_page):
-        """Audio device selector is in the System section."""
+    def test_av_output_button_in_system(self, app_page):
+        """AV Output button is in the System section."""
         system = app_page.locator(".system-controls")
-        select = system.locator("#audio-device")
-        expect(select).to_be_visible()
-        # Should have our two test audio devices
-        options = select.locator("option")
-        expect(options).to_have_count(2)
+        btn = system.locator(".av-output-btn")
+        expect(btn).to_be_visible()
+        expect(btn).to_have_text("AV Output")
 
     def test_audio_warning_hidden(self, app_page):
         """Audio warning should be hidden when no audio error."""

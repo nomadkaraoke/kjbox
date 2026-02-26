@@ -94,19 +94,8 @@
                         <label for="filler-selector">Filler Music:</label>
                         <select id="filler-selector" onchange="setFillerMusic(this.value)"></select>
                     </div>
-                    <div class="control-half">
-                        <label for="audio-device">Audio Output:</label>
-                        <div class="audio-device-row">
-                            <select id="audio-device" onchange="setAudioDevice(this.value)"></select>
-                            <button class="hdmi-scan-btn" onclick="scanHdmiDevices()" title="Scan ALSA for HDMI devices and their connection status">Scan HDMI</button>
-                        </div>
-                        <div id="hdmi-scan-results" class="hdmi-scan-results hidden"></div>
-                    </div>
-                </div>
-                <div class="controls-row">
-                    <div class="control-half">
-                        <label for="display-resolution">Display Resolution:</label>
-                        <select id="display-resolution" onchange="setDisplayResolution(this.value)"></select>
+                    <div class="control-half" style="display:flex;align-items:flex-end;">
+                        <button class="system-btn av-output-btn" onclick="openAvModal()">AV Output</button>
                     </div>
                 </div>
                 <div id="status-bar">
@@ -328,6 +317,73 @@
                     <button onclick="saveOverlay()">Save</button>
                     <button class="overlay-cancel-btn" onclick="hideOverlayForm()">Cancel</button>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- AV Output Modal -->
+    <div id="av-modal" class="modal-backdrop hidden" onclick="if(event.target===this) closeAvModal()">
+        <div class="modal-content av-modal-content">
+            <div class="modal-header">
+                <h3>AV Output</h3>
+                <button class="modal-close" onclick="closeAvModal()">&times;</button>
+            </div>
+
+            <!-- Loading state -->
+            <div id="av-loading" class="av-loading">
+                <span class="download-spinner"></span> Loading AV status&hellip;
+            </div>
+
+            <!-- Content (hidden while loading) -->
+            <div id="av-content" class="hidden">
+
+                <!-- Health summary -->
+                <div id="av-health-bar" class="av-health-bar"></div>
+
+                <!-- Video section -->
+                <div class="av-section">
+                    <div class="av-section-title">Video Output</div>
+                    <div id="av-video-connectors" class="av-connector-list"></div>
+                    <div class="av-control-row">
+                        <label for="av-resolution-select">Display Resolution</label>
+                        <p class="av-help">Changes the output resolution immediately via xrandr. Temporary &mdash; resets to 1920x1080 on service restart.</p>
+                        <select id="av-resolution-select" onchange="avSetResolution(this.value)"></select>
+                    </div>
+                </div>
+
+                <!-- Audio section -->
+                <div class="av-section">
+                    <div class="av-section-title">Audio Output</div>
+                    <div id="av-audio-info"></div>
+                    <table class="av-pcm-table" id="av-pcm-table">
+                        <thead>
+                            <tr>
+                                <th>Device</th>
+                                <th>HDA Name</th>
+                                <th>Jack</th>
+                                <th>IEC958</th>
+                            </tr>
+                        </thead>
+                        <tbody id="av-pcm-tbody"></tbody>
+                    </table>
+                    <div class="av-control-row">
+                        <label for="av-hdmi-pcm-select">HDMI PCM Device (hdmiout alias target)</label>
+                        <p class="av-help">Rewrites /etc/asound.conf so the <code>hdmiout</code> ALSA alias points to this device. Use when the auto-detected device is wrong. Temporary &mdash; reset on restart.</p>
+                        <select id="av-hdmi-pcm-select" onchange="avSwitchHdmiPcm(this.value)"></select>
+                    </div>
+                    <div class="av-control-row">
+                        <label for="av-vlc-device-select">VLC Audio Output Device</label>
+                        <p class="av-help">Overrides which ALSA device VLC uses directly. <strong>hdmiout</strong> (ALSA alias) is correct for normal operation. Temporary &mdash; reset on restart.</p>
+                        <select id="av-vlc-device-select" onchange="avSetVlcDevice(this.value)"></select>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- Footer -->
+            <div class="av-modal-footer">
+                <button class="av-reset-btn" onclick="avReset()" id="av-reset-btn">Reset All to Known-Good State</button>
+                <button class="system-btn av-refresh-btn" onclick="avRefresh()">Refresh</button>
             </div>
         </div>
     </div>
