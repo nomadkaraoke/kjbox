@@ -1241,8 +1241,8 @@ function renderKNResults(songs) {
     knExpandedSongs = {};
     knSongData = {};
 
-    const downloadedIds = new Set(
-        localMediaItems.filter(i => i.youtube_id).map(i => i.youtube_id)
+    const downloadedIdToPath = new Map(
+        localMediaItems.filter(i => i.youtube_id).map(i => [i.youtube_id, i.file_path])
     );
 
     songs.forEach((song, idx) => {
@@ -1316,21 +1316,38 @@ function renderKNResults(songs) {
             }
 
             const videoId = extractYouTubeId(track.youtube_url);
-            const isDownloaded = videoId && downloadedIds.has(videoId);
+            const downloadedPath = videoId ? downloadedIdToPath.get(videoId) : null;
 
-            const dlBtn = document.createElement('button');
-            dlBtn.className = 'kn-download-btn' + (isDownloaded ? ' downloaded' : '');
-            dlBtn.textContent = isDownloaded ? 'Downloaded \u2713' : 'Download';
-            dlBtn.disabled = isDownloaded;
-            if (!isDownloaded) {
+            const actions = document.createElement('span');
+            actions.className = 'kn-track-actions';
+
+            if (downloadedPath) {
+                const badge = document.createElement('span');
+                badge.className = 'kn-downloaded-badge';
+                badge.textContent = '\u2713 Downloaded';
+                actions.appendChild(badge);
+
+                const playBtn = document.createElement('button');
+                playBtn.className = 'kn-play-btn';
+                playBtn.textContent = 'Play';
+                playBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    playMedia(downloadedPath);
+                };
+                actions.appendChild(playBtn);
+            } else {
+                const dlBtn = document.createElement('button');
+                dlBtn.className = 'kn-download-btn';
+                dlBtn.textContent = 'Download';
                 dlBtn.onclick = (e) => {
                     e.stopPropagation();
                     downloadKNTrack(track.youtube_url);
                 };
+                actions.appendChild(dlBtn);
             }
 
             trackEl.appendChild(info);
-            trackEl.appendChild(dlBtn);
+            trackEl.appendChild(actions);
             trackList.appendChild(trackEl);
         });
 
@@ -1380,13 +1397,28 @@ async function loadKNCatalogMatches(songId) {
         const row = document.createElement('div');
         row.className = 'kn-local-match';
 
-        const label = document.createElement('span');
-        label.className = 'kn-local-filename';
-        const displayName = (match.artist && match.title)
-            ? `${match.artist} \u2014 ${match.title}`
-            : match.filename;
-        label.textContent = displayName;
-        label.title = match.filename;
+        const detail = document.createElement('div');
+        detail.className = 'catalog-detail';
+
+        const titleRow = document.createElement('span');
+        titleRow.textContent = match.filename.replace(/\.\w+$/, '') + ' ';
+        if (match.format) {
+            const badge = document.createElement('span');
+            badge.className = `format-badge ${getFormatBadgeClass(match.format)}`;
+            badge.textContent = match.format;
+            titleRow.appendChild(badge);
+        }
+        detail.appendChild(titleRow);
+
+        if (match.folder) {
+            const folderSpan = document.createElement('div');
+            folderSpan.className = 'catalog-folder';
+            folderSpan.textContent = match.folder
+                .replace(/^\/mnt\/[^/]+\//, '')
+                .replace(/^\/Volumes\/[^/]+\//, '');
+            folderSpan.title = match.folder;
+            detail.appendChild(folderSpan);
+        }
 
         const playBtn = document.createElement('button');
         playBtn.className = 'kn-play-btn';
@@ -1396,7 +1428,7 @@ async function loadKNCatalogMatches(songId) {
             playMedia(match.path);
         };
 
-        row.appendChild(label);
+        row.appendChild(detail);
         row.appendChild(playBtn);
         section.appendChild(row);
     });
