@@ -155,6 +155,8 @@ button:disabled:hover {
 .rescan-btn { background-color: #252525; color: #888; border: 1px solid #2a2a2a; font-size: 0.7em; padding: 5px 10px; margin-left: 10px; box-shadow: none; }
 .rescan-btn:hover { background-color: #333; color: #e5e5e5; box-shadow: none; }
 .rescan-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.rescan-btn.active { background-color: rgba(255, 90, 180, 0.12); color: #ff7acc; border-color: rgba(255, 90, 180, 0.3); }
+.rescan-btn.active:hover { background-color: rgba(255, 90, 180, 0.22); box-shadow: none; }
 .folder-btn { font-size: 0.7em; padding: 4px 10px; background-color: #252525; border: 1px solid #2a2a2a; color: #888; box-shadow: none; }
 .folder-btn:hover { background-color: #333; color: #e5e5e5; box-shadow: none; }
 .system-controls .button-group { justify-content: flex-start; }
@@ -703,6 +705,26 @@ body {
     border-color: rgba(34, 197, 94, 0.3); cursor: default;
 }
 .kn-download-btn.downloaded:hover { background-color: rgba(34, 197, 94, 0.15); box-shadow: none; }
+
+.kn-local-section { border-bottom: 1px solid #2a2a2a; background-color: rgba(34, 197, 94, 0.04); }
+.kn-local-header {
+    padding: 5px 12px 3px 28px;
+    font-size: 0.7em; color: #22c55e; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;
+}
+.kn-local-match {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 5px 12px 5px 28px; border-top: 1px solid rgba(34, 197, 94, 0.1);
+}
+.kn-local-filename {
+    flex: 1; min-width: 0; color: #a8e6a8; font-size: 0.8em;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.kn-play-btn {
+    font-size: 0.75em; padding: 4px 10px;
+    background-color: rgba(34, 197, 94, 0.15); border: 1px solid rgba(34, 197, 94, 0.3); color: #22c55e;
+    box-shadow: none; flex-shrink: 0; margin-left: 6px;
+}
+.kn-play-btn:hover { background-color: rgba(34, 197, 94, 0.25); color: #4ade80; box-shadow: none; }
 
 /* --- YouTube Search --- */
 

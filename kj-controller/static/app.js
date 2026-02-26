@@ -222,6 +222,27 @@ async function updateFillerMusicList() {
 // --- Media List ---
 
 let localMediaItems = [];
+let mp4OnlyFilter = localStorage.getItem('kj-mp4-only') === 'true';
+
+function applyMediaFilter(items) {
+    if (!mp4OnlyFilter) return items;
+    return items.filter(item => {
+        const ext = item.filename.split('.').pop().toLowerCase();
+        return ext !== 'zip' && ext !== 'cdg';
+    });
+}
+
+function toggleMp4Only() {
+    mp4OnlyFilter = !mp4OnlyFilter;
+    localStorage.setItem('kj-mp4-only', mp4OnlyFilter);
+    document.getElementById('mp4-only-btn').classList.toggle('active', mp4OnlyFilter);
+    if (searchActive) {
+        const query = document.getElementById('catalog-search').value.trim();
+        if (query) catalogSearch(query);
+    } else {
+        renderFolderView(applyMediaFilter(localMediaItems));
+    }
+}
 
 function loadFolderStates() {
     try {
@@ -376,7 +397,7 @@ async function updateMediaList() {
     try {
         const response = await fetch('/media');
         localMediaItems = await response.json();
-        renderFolderView(localMediaItems);
+        renderFolderView(applyMediaFilter(localMediaItems));
     } catch (error) {
         log('Could not update media list.', 'error');
     }
@@ -650,7 +671,7 @@ function normalizeForSearch(str) {
 
 function filterLocalMedia(query) {
     const terms = normalizeForSearch(query.toLowerCase()).split(/\s+/).filter(t => t);
-    return localMediaItems.filter(item => {
+    return applyMediaFilter(localMediaItems).filter(item => {
         const text = normalizeForSearch(((item.display_name || '') + ' ' + (item.channel || '')).toLowerCase());
         return terms.every(term => text.includes(term));
     });
@@ -772,7 +793,7 @@ function clearSearch() {
     document.getElementById('catalog-search').value = '';
     document.getElementById('search-clear').classList.add('hidden');
     document.getElementById('search-meta').classList.add('hidden');
-    renderFolderView(localMediaItems);
+    renderFolderView(applyMediaFilter(localMediaItems));
 }
 
 async function checkCatalogAvailability() {
@@ -1154,8 +1175,14 @@ function restartApp() {
 
 // --- Karaoke Nerds Search ---
 
+function extractYouTubeId(url) {
+    const m = url.match(/(?:youtube\.com\/watch\?.*v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
+    return m ? m[1] : null;
+}
+
 let knPreferredBrands = window.KJ_CONFIG.knPreferredBrands || [];
 let knExpandedSongs = {};
+let knSongData = {};
 
 async function searchKaraokeNerds() {
     const input = document.getElementById('kn-query');
@@ -1212,12 +1239,18 @@ function renderKNResults(songs) {
     const container = document.getElementById('kn-results');
     container.innerHTML = '';
     knExpandedSongs = {};
+    knSongData = {};
+
+    const downloadedIds = new Set(
+        localMediaItems.filter(i => i.youtube_id).map(i => i.youtube_id)
+    );
 
     songs.forEach((song, idx) => {
         const songId = `kn-song-${idx}`;
         const trackCount = song.tracks.length;
         const isExpanded = false;
         knExpandedSongs[songId] = isExpanded;
+        knSongData[songId] = { song, catalogLoaded: false };
 
         // Song header
         const header = document.createElement('div');
@@ -1282,13 +1315,19 @@ function renderKNResults(songs) {
                 info.appendChild(badge);
             }
 
+            const videoId = extractYouTubeId(track.youtube_url);
+            const isDownloaded = videoId && downloadedIds.has(videoId);
+
             const dlBtn = document.createElement('button');
-            dlBtn.className = 'kn-download-btn';
-            dlBtn.textContent = 'Download';
-            dlBtn.onclick = (e) => {
-                e.stopPropagation();
-                downloadKNTrack(track.youtube_url);
-            };
+            dlBtn.className = 'kn-download-btn' + (isDownloaded ? ' downloaded' : '');
+            dlBtn.textContent = isDownloaded ? 'Downloaded \u2713' : 'Download';
+            dlBtn.disabled = isDownloaded;
+            if (!isDownloaded) {
+                dlBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    downloadKNTrack(track.youtube_url);
+                };
+            }
 
             trackEl.appendChild(info);
             trackEl.appendChild(dlBtn);
@@ -1307,6 +1346,62 @@ function toggleKNSong(songId) {
     const idx = songId.replace('kn-song-', '');
     const chevron = document.getElementById('kn-chevron-' + idx);
     if (chevron) chevron.classList.toggle('expanded', !isCollapsed);
+    if (!isCollapsed) loadKNCatalogMatches(songId);
+}
+
+async function loadKNCatalogMatches(songId) {
+    const data = knSongData[songId];
+    if (!data || data.catalogLoaded) return;
+    data.catalogLoaded = true;
+
+    const { song } = data;
+    const query = `${song.artist} ${song.title}`.trim();
+
+    let results = [];
+    try {
+        const resp = await fetch(`/search?q=${encodeURIComponent(query)}&limit=5`);
+        if (resp.ok) results = await resp.json();
+    } catch (_) { /* catalog unavailable */ }
+
+    if (!Array.isArray(results) || results.length === 0) return;
+
+    const trackList = document.getElementById(songId);
+    if (!trackList) return;
+
+    const section = document.createElement('div');
+    section.className = 'kn-local-section';
+
+    const header = document.createElement('div');
+    header.className = 'kn-local-header';
+    header.textContent = `In your collection (${results.length})`;
+    section.appendChild(header);
+
+    results.forEach(match => {
+        const row = document.createElement('div');
+        row.className = 'kn-local-match';
+
+        const label = document.createElement('span');
+        label.className = 'kn-local-filename';
+        const displayName = (match.artist && match.title)
+            ? `${match.artist} \u2014 ${match.title}`
+            : match.filename;
+        label.textContent = displayName;
+        label.title = match.filename;
+
+        const playBtn = document.createElement('button');
+        playBtn.className = 'kn-play-btn';
+        playBtn.textContent = 'Play';
+        playBtn.onclick = (e) => {
+            e.stopPropagation();
+            playMedia(match.path);
+        };
+
+        row.appendChild(label);
+        row.appendChild(playBtn);
+        section.appendChild(row);
+    });
+
+    trackList.insertBefore(section, trackList.firstChild);
 }
 
 function downloadKNTrack(youtubeUrl) {
@@ -1503,6 +1598,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // Restore VNC size preference
     const savedVncSize = localStorage.getItem('kj-vnc-size');
     if (savedVncSize) setVncSize(savedVncSize);
+
+    document.getElementById('mp4-only-btn').classList.toggle('active', mp4OnlyFilter);
 
     loadYTKaraokeToggle();
     updateStatus();
