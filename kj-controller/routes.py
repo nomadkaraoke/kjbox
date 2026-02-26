@@ -914,13 +914,15 @@ def _get_av_audio_status(vlc_device):
     except (subprocess.TimeoutExpired, FileNotFoundError):
         amixer_out = ''
 
-    # Parse IEC958 Playback Switch states (indexed 0-3)
+    # Parse IEC958 Playback Switch states (indexed 0-3).
+    # Note: amixer omits ",index=0" for the first entry — treat no-index as 0.
     iec958_states = {}
     for m in re.finditer(
-        r"iface=MIXER,name='IEC958 Playback Switch',index=(\d+).*?values=(on|off)",
+        r"iface=MIXER,name='IEC958 Playback Switch'(?:,index=(\d+))?.*?values=(on|off)",
         amixer_out, re.DOTALL,
     ):
-        iec958_states[int(m.group(1))] = m.group(2) == 'on'
+        idx = int(m.group(1)) if m.group(1) is not None else 0
+        iec958_states[idx] = m.group(2) == 'on'
 
     # Build per-PCM-device info
     hdmi_pcm_info = {}

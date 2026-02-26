@@ -62,8 +62,9 @@ def test_av_status_audio_section_has_required_fields(flask_test_client, mocker):
         'card 0: PCH [HDA Intel PCH], device 7: HDMI 1 [HDMI 1]\n'
         '  Subdevices: 1/1\n'
     )
+    # Real amixer output: first IEC958 entry has no ",index=0" suffix
     amixer_output = (
-        "numid=24,iface=MIXER,name='IEC958 Playback Switch',index=0\n"
+        "numid=24,iface=MIXER,name='IEC958 Playback Switch'\n"
         "  ; type=BOOLEAN,access=rw------,values=1\n"
         "  : values=on\n"
         "numid=30,iface=MIXER,name='IEC958 Playback Switch',index=1\n"
@@ -104,6 +105,8 @@ def test_av_status_audio_section_has_required_fields(flask_test_client, mocker):
     assert 'pipewire_profile' in audio
     assert 'hw:0,3' in audio['hdmi_pcms']
     assert audio['hdmi_pcms']['hw:0,3']['connected'] is True
+    # IEC958 index=0 (no ",index=0" suffix in amixer output) must be captured as True
+    assert audio['hdmi_pcms']['hw:0,3']['iec958'] is True
     assert 'hw:0,7' in audio['hdmi_pcms']
     assert audio['hdmi_pcms']['hw:0,7']['connected'] is False
 
