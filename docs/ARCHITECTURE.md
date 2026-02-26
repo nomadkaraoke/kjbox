@@ -103,7 +103,10 @@ utils.py → (stdlib only)
 | GET | `/status` | Get player state, current track, timing |
 | POST | `/fix_audio` | Emergency: restart VLC instances |
 | GET | `/audio_device` | Get current and available audio devices |
-| POST | `/audio_device` | Switch audio output device |
+| POST | `/audio_device` | Switch audio output device (temporary, not persisted) |
+| GET | `/av/status` | Full AV output status: video connectors, HDMI PCMs, IEC958, ELD, PipeWire |
+| POST | `/av/reset` | Run fix-hdmi-audio.sh to restore known-good AV state, restart VLC |
+| POST | `/av/vlc-device` | Temporarily switch VLC audio device (hw:X,Y or named device) |
 | GET | `/search` | FTS5 full-text search over external catalog |
 | GET | `/catalog/stats` | Catalog availability, total count, format breakdown |
 | POST | `/catalog/build` | Build/rebuild catalog from file list |

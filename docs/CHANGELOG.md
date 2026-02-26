@@ -2,6 +2,18 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-02-25 - AV Output Modal (replaces Audio/Display dropdowns)
+
+**Motivation:** The old Audio Output and Display Resolution dropdowns in the System section were a liability — changing them from their known-good values could undo the hard-won HDMI/audio configuration, and changes persisted to `config.json` without a clear "reset to safe state" path.
+
+**Changes:**
+- Replaced Audio Output dropdown + Display Resolution dropdown + Scan HDMI button with a single **AV Output** button (opens a modal)
+- Modal shows full AV status: video connectors (connected/resolution/EDID name), HDMI PCM devices (jack state, IEC958 switch, ELD monitor name), PipeWire profile, VLC device, ALSA alias, and overall health indicators
+- **Reset All** button runs `POST /av/reset` → `fix-hdmi-audio.sh` → restores the full known-good AV state (ALSA, IEC958, PipeWire, display 1920x1080) then restarts VLC
+- AV settings no longer persisted to `config.json` — `fix-hdmi-audio.sh` is the single source of truth for the known-good state
+- `fix-hdmi-audio.sh` extended: now also resets PipeWire to `output:analog-stereo+input:analog-stereo` and xrandr to 1920x1080 after fixing ALSA/IEC958. This means service restart always fully restores AV state.
+- New routes: `GET /av/status`, `POST /av/reset`, `POST /av/vlc-device`
+
 ## 2026-02-25 - Fix: HDMI audio silent at boot (missing ExecStartPre)
 
 **Root cause:** `fix-hdmi-audio.sh` was never being called at service start. The `ExecStartPre` line was documented in `HDMI.md` but was missing from `MINIPC-SETUP.md` (the actual setup guide used to configure the device). As a result, every boot left the IEC958 Playback Switch `off` (its hardware default), silencing all HDMI audio.
