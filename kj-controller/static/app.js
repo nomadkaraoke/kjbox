@@ -168,13 +168,6 @@ async function setVolume(target, level) {
     await apiCall('/volume', { target, level: parseInt(level) });
 }
 
-async function setAudioDevice(device) {
-    log(`Switching audio device to: ${device} (VLC will restart)`);
-    const data = await apiCall('/audio_device', { device });
-    if (data) {
-        flashElement(document.getElementById('audio-device'), 'success');
-    }
-}
 
 let totalVideoLength = 0;
 let isSeeking = false;
@@ -451,13 +444,6 @@ async function updateStatus() {
             const audioWarning = document.getElementById('audio-warning');
             audioWarning.style.display = data.audio_error ? 'block' : 'none';
 
-            if (data.audio_device) {
-                const deviceSelect = document.getElementById('audio-device');
-                if (deviceSelect.value !== data.audio_device) {
-                    deviceSelect.value = data.audio_device;
-                }
-            }
-
             if (data.current_filler_track) {
                 const fillerSelect = document.getElementById('filler-selector');
                 if (fillerSelect.value !== data.current_filler_track) {
@@ -489,139 +475,258 @@ async function updateStatus() {
     }
 }
 
-async function loadAudioDevices() {
+// --- AV Output Modal ---
+
+async function openAvModal() {
+    document.getElementById('av-modal').classList.remove('hidden');
+    await avRefresh();
+}
+
+function closeAvModal() {
+    document.getElementById('av-modal').classList.add('hidden');
+}
+
+async function avRefresh() {
+    document.getElementById('av-loading').classList.remove('hidden');
+    document.getElementById('av-content').classList.add('hidden');
     try {
-        const response = await fetch('/audio_device');
+        const response = await fetch('/av/status');
+        if (!response.ok) throw new Error('AV status fetch failed');
         const data = await response.json();
-        const selector = document.getElementById('audio-device');
-        selector.innerHTML = '';
-        for (const [key, label] of Object.entries(data.available)) {
-            const option = document.createElement('option');
-            option.value = key;
-            option.textContent = label;
-            if (key === data.current) option.selected = true;
-            selector.appendChild(option);
-        }
-    } catch (error) {
-        log('Could not load audio devices.', 'error');
+        renderAvModal(data);
+    } catch (e) {
+        document.getElementById('av-loading').innerHTML = `<span style="color:#ef4444;">Error loading AV status: ${e.message}</span>`;
     }
 }
 
-// --- Display Resolution ---
+function renderAvModal(data) {
+    renderAvHealthBar(data.health);
+    renderAvVideoSection(data.video);
+    renderAvAudioSection(data.audio);
+    populateAvResolutionSelect(data.video);
+    populateAvHdmiPcmSelect(data.audio);
+    populateAvVlcDeviceSelect(data.audio);
+    document.getElementById('av-loading').classList.add('hidden');
+    document.getElementById('av-content').classList.remove('hidden');
+}
 
-async function loadDisplayResolutions() {
-    try {
-        const response = await fetch('/display/resolution');
-        const data = await response.json();
-        const selector = document.getElementById('display-resolution');
-        selector.innerHTML = '';
-        if (!data.available || data.available.length === 0) {
-            const option = document.createElement('option');
-            option.textContent = 'N/A';
-            option.disabled = true;
-            selector.appendChild(option);
-            return;
+function avDot(cls) {
+    return `<span class="av-dot ${cls}"></span>`;
+}
+
+function renderAvHealthBar(health) {
+    const items = [
+        { key: 'video_ok',              label: 'Video' },
+        { key: 'audio_ok',              label: 'Audio' },
+        { key: 'asound_matches_active_jack', label: 'ALSA jack' },
+        { key: 'iec958_ok',             label: 'IEC958' },
+        { key: 'pipewire_profile_ok',   label: 'PipeWire' },
+    ];
+    const bar = document.getElementById('av-health-bar');
+    bar.innerHTML = items.map(({ key, label }) => {
+        const ok = health[key];
+        const cls = ok ? 'av-health-ok' : 'av-health-error';
+        const dotCls = ok ? 'av-dot-ok' : 'av-dot-error';
+        return `<span class="av-health-item ${cls}">${avDot(dotCls)} ${label}</span>`;
+    }).join('');
+}
+
+function renderAvVideoSection(video) {
+    const list = document.getElementById('av-video-connectors');
+    list.innerHTML = '';
+    const connectors = video.connectors || {};
+    if (Object.keys(connectors).length === 0) {
+        list.innerHTML = '<div style="color:#555;font-size:0.82em;">No display connectors found (xrandr not available)</div>';
+        return;
+    }
+    for (const [name, info] of Object.entries(connectors)) {
+        const div = document.createElement('div');
+        div.className = 'av-connector' + (info.connected ? '' : ' av-connector-disconnected');
+
+        const dotCls = info.connected ? (name === video.active_output ? 'av-dot-ok' : 'av-dot-warn') : 'av-dot-off';
+        let html = `${avDot(dotCls)} <span class="av-connector-name">${name}</span>`;
+
+        if (info.connected) {
+            if (info.current_resolution) {
+                html += ` <span class="av-connector-resolution">${info.current_resolution}</span>`;
+                if (info.current_refresh) {
+                    html += ` <span class="av-connector-refresh">@ ${info.current_refresh}Hz</span>`;
+                }
+            } else {
+                html += ` <span style="color:#555;font-size:0.85em;">(no mode set)</span>`;
+            }
+            if (name === video.active_output) {
+                html += ` <span class="av-connector-active-badge">active</span>`;
+            }
+            if (info.edid_name) {
+                html += ` <span class="av-connector-edid" title="Monitor name from EDID">${info.edid_name}</span>`;
+            }
+        } else {
+            html += ` <span style="color:#444;font-size:0.82em;">disconnected</span>`;
         }
-        data.available.forEach(mode => {
-            const option = document.createElement('option');
-            option.value = mode;
-            option.textContent = mode;
-            if (mode === data.current) option.selected = true;
-            selector.appendChild(option);
-        });
-    } catch (error) {
-        log('Could not load display resolutions.', 'error');
+
+        div.innerHTML = html;
+        list.appendChild(div);
     }
 }
 
-async function setDisplayResolution(resolution) {
+function renderAvAudioSection(audio) {
+    const infoEl = document.getElementById('av-audio-info');
+    const vlcDotCls = audio.vlc_device === 'hdmiout' || audio.vlc_device === audio.asound_hw ? 'av-dot-ok' : 'av-dot-warn';
+    const asDotCls = audio.asound_hw ? 'av-dot-ok' : 'av-dot-warn';
+    const pwDotCls = audio.pipewire_ok ? 'av-dot-ok' : 'av-dot-error';
+
+    let html = `
+        <div class="av-info-row">
+            <span class="av-info-label">VLC device</span>
+            ${avDot(vlcDotCls)}
+            <span class="av-info-value">${audio.vlc_device || '—'}</span>
+        </div>
+        <div class="av-info-row">
+            <span class="av-info-label">hdmiout alias</span>
+            ${avDot(asDotCls)}
+            <span class="av-info-value">${audio.asound_hw || '(not set)'}</span>
+        </div>`;
+
+    if (audio.eld_names && audio.eld_names.length > 0) {
+        html += `<div class="av-eld-names">Connected display audio: ${audio.eld_names.join(', ')}</div>`;
+    }
+
+    html += `
+        <div class="av-info-row" style="margin-top:4px;">
+            <span class="av-info-label">PipeWire profile</span>
+            ${avDot(pwDotCls)}
+            <span class="av-info-value" style="font-size:0.8em;">${audio.pipewire_profile || '(unknown)'}</span>
+        </div>`;
+
+    if (!audio.pipewire_ok && audio.pipewire_profile) {
+        html += `<div class="av-info-warn">PipeWire may be locking the HDMI device. Reset All will fix this.</div>`;
+    }
+
+    infoEl.innerHTML = html;
+
+    // PCM table
+    const tbody = document.getElementById('av-pcm-tbody');
+    tbody.innerHTML = '';
+    for (const [hwId, info] of Object.entries(audio.hdmi_pcms || {})) {
+        const isAlias = hwId === audio.asound_hw;
+        const tr = document.createElement('tr');
+        if (isAlias) tr.className = 'av-pcm-active';
+
+        const jackDot = info.connected ? avDot('av-dot-ok') : avDot('av-dot-off');
+        const iec958Dot = info.iec958 ? avDot('av-dot-ok') : avDot('av-dot-error');
+
+        tr.innerHTML = `
+            <td>${hwId}${isAlias ? '<span class="av-alias-badge">hdmiout</span>' : ''}</td>
+            <td>${info.name}</td>
+            <td>${jackDot} ${info.connected ? 'on' : 'off'}</td>
+            <td>${iec958Dot} ${info.iec958 ? 'on' : 'off'}</td>`;
+        tbody.appendChild(tr);
+    }
+}
+
+function populateAvResolutionSelect(video) {
+    const sel = document.getElementById('av-resolution-select');
+    sel.innerHTML = '';
+    const activeConn = video.connectors && video.active_output
+        ? video.connectors[video.active_output]
+        : null;
+    const modes = activeConn ? activeConn.available_modes : [];
+    const current = activeConn ? activeConn.current_resolution : null;
+
+    if (modes.length === 0) {
+        sel.innerHTML = '<option disabled>N/A</option>';
+        return;
+    }
+    modes.forEach(mode => {
+        const opt = document.createElement('option');
+        opt.value = mode;
+        opt.textContent = mode;
+        if (mode === current) opt.selected = true;
+        sel.appendChild(opt);
+    });
+}
+
+function populateAvHdmiPcmSelect(audio) {
+    const sel = document.getElementById('av-hdmi-pcm-select');
+    sel.innerHTML = '';
+    for (const [hwId, info] of Object.entries(audio.hdmi_pcms || {})) {
+        const opt = document.createElement('option');
+        opt.value = hwId;
+        const jackLabel = info.connected ? ' [connected]' : '';
+        opt.textContent = `${hwId} — ${info.name}${jackLabel}`;
+        if (hwId === audio.asound_hw) opt.selected = true;
+        sel.appendChild(opt);
+    }
+}
+
+function populateAvVlcDeviceSelect(audio) {
+    const sel = document.getElementById('av-vlc-device-select');
+    sel.innerHTML = '';
+
+    const devices = [
+        { value: 'hdmiout', label: 'hdmiout — ALSA alias (normal operation)' },
+    ];
+    // Add individual HDMI PCM devices
+    for (const [hwId, info] of Object.entries(audio.hdmi_pcms || {})) {
+        const jackLabel = info.connected ? ' [connected]' : '';
+        devices.push({ value: hwId, label: `${hwId} — ${info.name}${jackLabel}` });
+    }
+    // Analog / 3.5mm jack
+    devices.push({ value: 'hw:0,0', label: 'hw:0,0 — Analog / 3.5mm jack' });
+    // USB mixer if configured
+    devices.push({ value: 'usbmixer', label: 'usbmixer — USB Mixer' });
+
+    devices.forEach(({ value, label }) => {
+        const opt = document.createElement('option');
+        opt.value = value;
+        opt.textContent = label;
+        if (value === audio.vlc_device) opt.selected = true;
+        sel.appendChild(opt);
+    });
+}
+
+async function avSetResolution(resolution) {
+    if (!resolution) return;
     log(`Setting display resolution to ${resolution}...`);
     const data = await apiCall('/display/resolution', { resolution });
     if (data && data.success) {
         log(data.message, 'success');
-        flashElement(document.getElementById('display-resolution'), 'success');
+        setTimeout(avRefresh, 1000);
     }
 }
 
-// --- HDMI Scan ---
-
-async function scanHdmiDevices() {
-    const btn = document.querySelector('.hdmi-scan-btn');
-    const resultsEl = document.getElementById('hdmi-scan-results');
-    btn.disabled = true;
-    btn.textContent = 'Scanning...';
-    resultsEl.classList.remove('hidden');
-    resultsEl.innerHTML = '<div style="padding:6px 8px;color:#888;">Scanning HDMI devices...</div>';
-
-    const data = await apiCall('/audio/scan', {});
-    btn.disabled = false;
-    btn.textContent = 'Scan HDMI';
-
-    if (!data || !data.devices) {
-        resultsEl.innerHTML = '<div style="padding:6px 8px;color:#ef4444;">Scan failed</div>';
-        return;
-    }
-
-    resultsEl.innerHTML = '';
-    const entries = Object.entries(data.devices);
-    if (entries.length === 0) {
-        resultsEl.innerHTML = '<div style="padding:6px 8px;color:#888;">No HDMI devices found</div>';
-        return;
-    }
-
-    entries.forEach(([hwId, info]) => {
-        const row = document.createElement('div');
-        row.className = 'hdmi-device' + (hwId === data.current_hw ? ' active' : '');
-
-        const infoDiv = document.createElement('div');
-        infoDiv.className = 'hdmi-device-info';
-
-        const dot = document.createElement('span');
-        dot.className = 'hdmi-dot ' + (info.connected ? 'connected' : 'disconnected');
-        dot.title = info.connected ? 'Connected' : 'Disconnected';
-
-        const name = document.createElement('span');
-        name.className = 'hdmi-device-name';
-        name.textContent = info.name;
-
-        const hw = document.createElement('span');
-        hw.className = 'hdmi-device-hw';
-        hw.textContent = hwId + (hwId === data.current_hw ? ' (current)' : '');
-
-        infoDiv.appendChild(dot);
-        infoDiv.appendChild(name);
-        infoDiv.appendChild(hw);
-        row.appendChild(infoDiv);
-
-        if (hwId !== data.current_hw) {
-            const useBtn = document.createElement('button');
-            useBtn.className = 'hdmi-use-btn';
-            useBtn.textContent = 'Use';
-            useBtn.onclick = (e) => {
-                e.stopPropagation();
-                switchHdmiDevice(hwId);
-            };
-            row.appendChild(useBtn);
-        }
-
-        row.onclick = () => {
-            if (hwId !== data.current_hw) switchHdmiDevice(hwId);
-        };
-
-        resultsEl.appendChild(row);
-    });
-
-    log(`HDMI scan: ${entries.length} devices found`, 'success');
-}
-
-async function switchHdmiDevice(hwId) {
-    log(`Switching HDMI to ${hwId}...`);
-    const data = await apiCall('/audio/switch-hdmi', { device: hwId });
+async function avSwitchHdmiPcm(device) {
+    if (!device) return;
+    log(`Switching hdmiout alias to ${device}...`);
+    const data = await apiCall('/audio/switch-hdmi', { device });
     if (data && data.success) {
         log(data.message, 'success');
-        // Refresh the scan results after a brief delay for VLC restart
-        document.getElementById('hdmi-scan-results').classList.add('hidden');
-        await loadAudioDevices();
+        setTimeout(avRefresh, 3500);
+    }
+}
+
+async function avSetVlcDevice(device) {
+    if (!device) return;
+    log(`Switching VLC audio device to ${device}...`);
+    const data = await apiCall('/av/vlc-device', { device });
+    if (data && data.success) {
+        log(data.message, 'success');
+        setTimeout(avRefresh, 3500);
+    }
+}
+
+async function avReset() {
+    const btn = document.getElementById('av-reset-btn');
+    btn.disabled = true;
+    btn.textContent = 'Resetting…';
+    log('Running AV reset (fix-hdmi-audio.sh + display + PipeWire + VLC)…');
+    const data = await apiCall('/av/reset', {});
+    btn.disabled = false;
+    btn.textContent = 'Reset All to Known-Good State';
+    if (data && data.success) {
+        log('AV reset complete.', 'success');
+        setTimeout(avRefresh, 4500);
     }
 }
 
@@ -1476,9 +1581,14 @@ document.addEventListener('DOMContentLoaded', () => {
             e.preventDefault();
             document.getElementById('catalog-search').focus();
         }
-        // Escape closes overlay modal
-        if (e.key === 'Escape' && !document.getElementById('overlay-modal').classList.contains('hidden')) {
-            hideOverlayForm();
+        // Escape closes modals
+        if (e.key === 'Escape') {
+            if (!document.getElementById('overlay-modal').classList.contains('hidden')) {
+                hideOverlayForm();
+            }
+            if (!document.getElementById('av-modal').classList.contains('hidden')) {
+                closeAvModal();
+            }
         }
     });
 
@@ -1508,8 +1618,6 @@ document.addEventListener('DOMContentLoaded', () => {
     updateStatus();
     updateMediaList();
     updateFillerMusicList();
-    loadAudioDevices();
-    loadDisplayResolutions();
     loadOverlays();
     checkCatalogAvailability();
     log('Nomad KJ Control initialized.');

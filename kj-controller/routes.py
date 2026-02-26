@@ -1,8 +1,10 @@
 """Flask Blueprint with all route handlers."""
 
+import glob
 import os
 import random
 import re
+import struct
 import subprocess
 import threading
 import time
@@ -12,7 +14,7 @@ from flask import Blueprint, current_app, jsonify, render_template, request
 import karaoke_nerds
 import youtube_search
 from catalog import LATIN_SPECIAL_MAP
-from config import load_config, save_config_value
+from config import APP_DIR, load_config, save_config_value
 from utils import log_message
 
 routes_bp = Blueprint('routes', __name__)
@@ -437,7 +439,6 @@ def set_audio_device():
 
     log_message(f"Switching audio device from '{vlc.audio_device}' to '{device}'...", cfg)
     vlc.audio_device = device
-    save_config_value('default_audio_device', device)
     threading.Thread(target=vlc.restart_instances).start()
     return jsonify({"success": True, "message": f"Switching to {available[device]}. VLC restarting..."})
 
@@ -540,7 +541,6 @@ ctl.hdmiout {{
     # Ensure VLC uses hdmiout (the ALSA alias we just updated)
     if vlc.audio_device != 'hdmiout':
         vlc.audio_device = 'hdmiout'
-        save_config_value('default_audio_device', 'hdmiout')
 
     threading.Thread(target=vlc.restart_instances).start()
     return jsonify({'success': True, 'message': f'Switched HDMI to {device}. VLC restarting...'})
@@ -722,7 +722,7 @@ def get_display_resolution():
 
 @routes_bp.route('/display/resolution', methods=['POST'])
 def set_display_resolution():
-    """Sets the display resolution via xrandr and persists to config."""
+    """Sets the display resolution via xrandr (temporary — not persisted to config)."""
     resolution = (request.json or {}).get('resolution', '').strip()
     if not resolution:
         return jsonify({'error': 'Resolution is required'}), 400
@@ -745,9 +745,318 @@ def set_display_resolution():
     if result.returncode != 0:
         return jsonify({'error': f'xrandr failed: {result.stderr.strip()}'}), 500
 
-    save_config_value('display_resolution', resolution)
-    cfg['display_resolution'] = resolution
     return jsonify({'success': True, 'message': f'Resolution set to {resolution}'})
+
+
+# --- AV Status Helpers ---
+
+def _get_edid_monitor_name(connector):
+    """Read EDID binary from sysfs and extract the monitor name descriptor (tag 0xFC)."""
+    # Map xrandr connector names to DRM sysfs names
+    drm_name = connector.replace('HDMI-', 'HDMI-A-')  # HDMI-1 -> HDMI-A-1, DP-1 stays DP-1
+    paths = glob.glob(f'/sys/class/drm/card*-{drm_name}/edid')
+    if not paths:
+        return None
+    try:
+        with open(paths[0], 'rb') as f:
+            edid = f.read()
+        if len(edid) < 128:
+            return None
+        # Verify EDID header: 00 FF FF FF FF FF FF 00
+        if edid[:8] != b'\x00\xff\xff\xff\xff\xff\xff\x00':
+            return None
+        # Parse four 18-byte descriptor blocks starting at byte 54
+        for i in range(4):
+            offset = 54 + i * 18
+            block = edid[offset:offset + 18]
+            if len(block) < 18:
+                break
+            # Monitor Name descriptor: first two bytes 0x00 0x00, byte 3 = 0xFC
+            if block[0] == 0 and block[1] == 0 and block[2] == 0 and block[3] == 0xFC:
+                name = block[5:18].decode('ascii', errors='replace')
+                return name.replace('\n', '').strip()
+    except Exception:
+        pass
+    return None
+
+
+def _get_eld_info():
+    """Read all valid ELD (EDID-Like Data) entries from /proc/asound for audio capabilities."""
+    results = []
+    try:
+        for eld_path in sorted(glob.glob('/proc/asound/card*/eld#*')):
+            try:
+                with open(eld_path) as f:
+                    content = f.read()
+                info = {'path': eld_path}
+                for line in content.splitlines():
+                    # ELD files use tab-separated key/value
+                    if '\t' in line:
+                        k, v = line.split('\t', 1)
+                        info[k.strip()] = v.strip()
+                if info.get('monitor_present') == '1':
+                    results.append(info)
+            except Exception:
+                pass
+    except Exception:
+        pass
+    return results
+
+
+def _get_pipewire_profile():
+    """Get the active PipeWire card profile for the Intel PCH audio card."""
+    try:
+        result = subprocess.run(
+            ['sudo', '-u', 'nomad', 'env', 'XDG_RUNTIME_DIR=/run/user/1000',
+             'pactl', 'list', 'cards'],
+            capture_output=True, text=True, timeout=5,
+        )
+        output = result.stdout
+        # Find the Intel PCH card section and extract Active Profile
+        # The card name contains 'pci-0000_00_1f' for Intel PCH
+        in_target_card = False
+        for line in output.splitlines():
+            if 'pci-0000_00_1f' in line or 'alsa_card' in line.lower():
+                in_target_card = True
+            if in_target_card and 'Active Profile:' in line:
+                return line.split('Active Profile:', 1)[1].strip()
+    except Exception:
+        pass
+    return None
+
+
+def _get_av_video_status():
+    """Get comprehensive video output status from xrandr."""
+    try:
+        result = subprocess.run(
+            ['xrandr'], capture_output=True, text=True, timeout=5,
+            env={**os.environ, 'DISPLAY': ':0'},
+        )
+        output = result.stdout
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        return {'connectors': {}, 'active_output': None}
+
+    connectors = {}
+    current_connector = None
+    current_connected = False
+
+    for line in output.splitlines():
+        # Connector status line: "HDMI-1 connected 1920x1080+0+0 ..."
+        # or "HDMI-2 disconnected" or "HDMI-1 connected primary 1920x1080+0+0 ..."
+        conn_match = re.match(r'^(\S+)\s+(connected|disconnected)', line)
+        if conn_match:
+            name = conn_match.group(1)
+            connected = conn_match.group(2) == 'connected'
+            current_connector = name
+            current_connected = connected
+            connectors[name] = {
+                'connected': connected,
+                'current_resolution': None,
+                'current_refresh': None,
+                'available_modes': [],
+                'edid_name': None,
+            }
+        elif current_connector and current_connected and line.startswith('   '):
+            # Mode line: "   1920x1080     60.00*+  50.00 ..."
+            parts = line.split()
+            if parts and re.match(r'^\d+x\d+$', parts[0]):
+                mode = parts[0]
+                if mode not in connectors[current_connector]['available_modes']:
+                    connectors[current_connector]['available_modes'].append(mode)
+                if '*' in line and connectors[current_connector]['current_resolution'] is None:
+                    for part in parts[1:]:
+                        if '*' in part:
+                            refresh = part.replace('*', '').replace('+', '')
+                            connectors[current_connector]['current_resolution'] = mode
+                            connectors[current_connector]['current_refresh'] = refresh
+                            break
+
+    # Get EDID monitor names for connected outputs
+    for conn_name, conn_info in connectors.items():
+        if conn_info['connected']:
+            conn_info['edid_name'] = _get_edid_monitor_name(conn_name)
+
+    # Active output: first connected one with a current resolution
+    active_output = None
+    for conn_name, conn_info in connectors.items():
+        if conn_info['connected'] and conn_info['current_resolution']:
+            active_output = conn_name
+            break
+
+    return {'connectors': connectors, 'active_output': active_output}
+
+
+def _get_av_audio_status(vlc_device):
+    """Get comprehensive audio output status from ALSA, ELD, and PipeWire."""
+    # Get HDMI PCM device names from aplay
+    try:
+        aplay_out = subprocess.run(
+            ['aplay', '-l'], capture_output=True, text=True, timeout=5,
+        ).stdout
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        aplay_out = ''
+
+    hdmi_pcms = {}
+    for m in re.finditer(r'card 0: .+device (\d+): (.+?) \[', aplay_out):
+        dev_num, dev_name = m.group(1), m.group(2).strip()
+        if 'HDMI' in dev_name.upper():
+            hdmi_pcms[dev_num] = dev_name
+
+    if not hdmi_pcms:
+        for num, name in [('3', 'HDMI 0'), ('7', 'HDMI 1'), ('8', 'HDMI 2'), ('9', 'HDMI 3')]:
+            hdmi_pcms[num] = name
+
+    # Get jack states and IEC958 switch states from amixer
+    try:
+        amixer_out = subprocess.run(
+            ['amixer', '-c', '0', 'contents'], capture_output=True, text=True, timeout=5,
+        ).stdout
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        amixer_out = ''
+
+    # Parse IEC958 Playback Switch states (indexed 0-3)
+    iec958_states = {}
+    for m in re.finditer(
+        r"iface=MIXER,name='IEC958 Playback Switch',index=(\d+).*?values=(on|off)",
+        amixer_out, re.DOTALL,
+    ):
+        iec958_states[int(m.group(1))] = m.group(2) == 'on'
+
+    # Build per-PCM-device info
+    hdmi_pcm_info = {}
+    iec958_idx = 0
+    for dev_num in sorted(hdmi_pcms.keys(), key=int):
+        dev_name = hdmi_pcms[dev_num]
+        hw_id = f'hw:0,{dev_num}'
+
+        jack_pattern = rf'HDMI/DP,pcm={dev_num} Jack.*?values=(on|off)'
+        jack_match = re.search(jack_pattern, amixer_out, re.DOTALL)
+        connected = jack_match.group(1) == 'on' if jack_match else False
+
+        hdmi_pcm_info[hw_id] = {
+            'name': dev_name,
+            'connected': connected,
+            'iec958': iec958_states.get(iec958_idx, False),
+        }
+        iec958_idx += 1
+
+    # Get ELD info (monitor names from connected HDMI audio)
+    eld_entries = _get_eld_info()
+    eld_names = [e.get('monitor_name', '') for e in eld_entries if e.get('eld_valid') == '1']
+
+    # Parse current hw device from /etc/asound.conf
+    asound_hw = None
+    try:
+        with open('/etc/asound.conf') as f:
+            asound_conf = f.read()
+        hw_match = re.search(r'"(hw:\d+,\d+)"', asound_conf)
+        if hw_match:
+            asound_hw = hw_match.group(1)
+    except FileNotFoundError:
+        pass
+
+    pipewire_profile = _get_pipewire_profile()
+    pipewire_ok = pipewire_profile is not None and 'analog-stereo' in pipewire_profile
+
+    return {
+        'vlc_device': vlc_device,
+        'asound_hw': asound_hw,
+        'hdmi_pcms': hdmi_pcm_info,
+        'eld_names': eld_names,
+        'analog_device': 'hw:0,0',
+        'pipewire_profile': pipewire_profile,
+        'pipewire_ok': pipewire_ok,
+        'iec958_states': iec958_states,
+    }
+
+
+# --- AV Output Routes ---
+
+@routes_bp.route('/av/status', methods=['GET'])
+def av_status():
+    """Returns comprehensive AV output status: video connectors, audio devices, health."""
+    vlc = current_app.vlc
+    video = _get_av_video_status()
+    audio = _get_av_audio_status(vlc.audio_device)
+
+    # Health checks
+    active_pcm = audio.get('asound_hw')
+    active_pcm_info = audio['hdmi_pcms'].get(active_pcm, {}) if active_pcm else {}
+    any_iec958_on = any(audio['iec958_states'].values()) if audio['iec958_states'] else False
+
+    health = {
+        'video_ok': video['active_output'] is not None,
+        'audio_ok': bool(active_pcm_info.get('connected') and active_pcm_info.get('iec958')),
+        'asound_matches_active_jack': bool(active_pcm_info.get('connected')),
+        'pipewire_profile_ok': audio['pipewire_ok'],
+        'iec958_ok': any_iec958_on,
+    }
+
+    return jsonify({'video': video, 'audio': audio, 'health': health})
+
+
+@routes_bp.route('/av/reset', methods=['POST'])
+def av_reset():
+    """Runs fix-hdmi-audio.sh to restore the full known-good AV state.
+
+    Resets: ALSA hdmiout alias, IEC958 switches, PipeWire profile, display resolution.
+    Then resets VLC audio device to 'hdmiout' and restarts VLC instances.
+    No state is persisted to config.json.
+    """
+    cfg = current_app.kj_config
+    vlc = current_app.vlc
+
+    script_path = os.path.join(APP_DIR, 'fix-hdmi-audio.sh')
+    log_message("AV reset requested — running fix-hdmi-audio.sh...", cfg)
+
+    try:
+        result = subprocess.run(
+            ['/bin/bash', script_path],
+            capture_output=True, text=True, timeout=30,
+        )
+        script_output = result.stdout + result.stderr
+        log_message(f"fix-hdmi-audio.sh output: {script_output.strip()}", cfg)
+
+        if result.returncode != 0:
+            return jsonify({'error': f'fix-hdmi-audio.sh failed (exit {result.returncode}): {script_output.strip()}'}), 500
+    except Exception as e:
+        return jsonify({'error': f'Could not run fix-hdmi-audio.sh: {e}'}), 500
+
+    # Reset VLC to use hdmiout (not persisted to config)
+    vlc.audio_device = 'hdmiout'
+    threading.Thread(target=vlc.restart_instances).start()
+
+    log_message("AV reset complete — VLC restarting with hdmiout.", cfg)
+    return jsonify({'success': True, 'message': 'AV reset complete. VLC restarting...'})
+
+
+@routes_bp.route('/av/vlc-device', methods=['POST'])
+def av_set_vlc_device():
+    """Temporarily sets VLC's audio output device without persisting to config.
+
+    Accepts any valid ALSA device string (hw:X,Y format) or named device
+    from the audio_devices config. Restarts VLC with the new device.
+    """
+    vlc = current_app.vlc
+    cfg = current_app.kj_config
+    device = (request.json or {}).get('device', '').strip()
+
+    if not device:
+        return jsonify({'error': 'device is required'}), 400
+
+    # Accept hw:X,Y format directly, or named devices from config
+    if not re.match(r'^hw:\d+,\d+$', device):
+        available = cfg.get('audio_devices', {})
+        if device not in available:
+            return jsonify({'error': f"Unknown device '{device}'. Use hw:X,Y format or a configured device name."}), 400
+
+    if device == vlc.audio_device:
+        return jsonify({'success': True, 'message': 'Already using that device.'})
+
+    log_message(f"AV: switching VLC audio to '{device}' (temporary)...", cfg)
+    vlc.audio_device = device
+    threading.Thread(target=vlc.restart_instances).start()
+    return jsonify({'success': True, 'message': f'Switching VLC to {device}. Restarting...'})
 
 
 # --- System Control ---
