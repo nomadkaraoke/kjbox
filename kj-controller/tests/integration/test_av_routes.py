@@ -142,9 +142,11 @@ def test_av_reset_runs_script_and_restarts_vlc(flask_test_client, flask_app, moc
     data = json.loads(response.data)
     assert data['success'] is True
 
-    # Script was called
+    # Script was called with sudo (needed to write /etc/asound.conf as root)
     script_calls = [c for c in mock_run.call_args_list if 'fix-hdmi-audio' in str(c)]
     assert len(script_calls) == 1
+    cmd = script_calls[0].args[0]
+    assert cmd[0] == 'sudo', f"fix-hdmi-audio.sh must be called via sudo, got: {cmd}"
 
     # VLC restart was threaded
     mock_thread.assert_called_once()

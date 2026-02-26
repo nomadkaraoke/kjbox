@@ -428,6 +428,15 @@ EOF
 
 The `+` prefix on `ExecStartPre` makes `fix-hdmi-audio.sh` run as root (needed to write `/etc/asound.conf` and enable ALSA mixer controls), even though the main service runs as `nomad`.
 
+The web UI **AV Output → Reset All** button also runs this script (via `POST /av/reset`). That call comes from the Flask process (running as `nomad`), so a separate sudoers entry is required:
+
+```bash
+echo 'nomad ALL=(root) NOPASSWD: /opt/nomad/kjbox/kj-controller/fix-hdmi-audio.sh' \
+    | sudo tee /etc/sudoers.d/kj-fix-hdmi
+sudo chmod 440 /etc/sudoers.d/kj-fix-hdmi
+sudo visudo -c  # verify no syntax errors
+```
+
 ### 4.2 Auto-Deploy Service
 
 ```bash

@@ -2,6 +2,15 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-02-26 - Fix: AV Reset button failed with Permission denied on /etc/asound.conf
+
+**Root cause:** `POST /av/reset` calls `fix-hdmi-audio.sh` from within the Flask process (running as user `nomad`). The script needs to write `/etc/asound.conf` and call `amixer`, both requiring root. The `ExecStartPre=+` mechanism that gives root at service start doesn't apply to this in-process call.
+
+**Fix:**
+- `routes.py`: Changed subprocess call from `['/bin/bash', script_path]` to `['sudo', script_path]`
+- Added `/etc/sudoers.d/kj-fix-hdmi` on NomadPC: `nomad ALL=(root) NOPASSWD: /opt/nomad/kjbox/kj-controller/fix-hdmi-audio.sh`
+- Updated `docs/MINIPC-SETUP.md` to document this sudoers requirement (needed for fresh installs)
+
 ## 2026-02-25 - AV Output Modal (replaces Audio/Display dropdowns)
 
 **Motivation:** The old Audio Output and Display Resolution dropdowns in the System section were a liability — changing them from their known-good values could undo the hard-won HDMI/audio configuration, and changes persisted to `config.json` without a clear "reset to safe state" path.

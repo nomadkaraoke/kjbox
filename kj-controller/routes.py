@@ -1011,7 +1011,7 @@ def av_reset():
 
     try:
         result = subprocess.run(
-            ['/bin/bash', script_path],
+            ['sudo', script_path],  # must run as root to write /etc/asound.conf
             capture_output=True, text=True, timeout=30,
         )
         script_output = result.stdout + result.stderr
