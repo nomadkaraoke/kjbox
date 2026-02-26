@@ -227,6 +227,26 @@ def test_media_list_with_files(flask_test_client, flask_app, tmp_media_dir):
     assert data[0]["filename"] == "song.mp4"
 
 
+def test_media_list_includes_youtube_id(flask_test_client, flask_app, tmp_media_dir):
+    """GET /media includes youtube_id for YouTube-format filenames.
+
+    The KN downloaded-state detection in the frontend (renderKNResults) reads
+    item.youtube_id from the /media response to build the set of downloaded IDs.
+    This test ensures the field is present so that detection works end-to-end.
+    """
+    media_dir = tmp_media_dir / "media"
+    (media_dir / "dQw4w9WgXcQ__RickAstley__Never Gonna Give You Up.mp4").write_text("fake")
+    flask_app.media.scan()
+
+    response = flask_test_client.get('/media')
+    assert response.status_code == 200
+    data = json.loads(response.data)
+    assert len(data) == 1
+    item = data[0]
+    assert "youtube_id" in item, "youtube_id must be present for KN downloaded-state detection"
+    assert item["youtube_id"] == "dQw4w9WgXcQ"
+
+
 def test_fix_audio(flask_test_client):
     """POST /fix_audio returns success (VLC disabled, no-op)."""
     response = flask_test_client.post('/fix_audio')
