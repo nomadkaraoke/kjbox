@@ -2,6 +2,39 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-02-26 - YouTube Download Resilience & Async Downloads
+
+**Motivation:** YouTube downloads via yt-dlp would fail after several tracks in quick succession during a live karaoke show (YouTube rate limiting/bot detection). Also, refreshing the page during a download lost the completion notification since the download was synchronous (blocking 25+ seconds).
+
+**New module: `youtube_health.py`**
+- Health checks: yt-dlp version, EJS solver (yt-dlp-ejs) installed/version, Deno runtime available/version, cookie file status and validation
+- Cookie management: Netscape-format validation, atomic file writes with 0o600 permissions
+
+**Anti-detection settings in `media.py`**
+- New `_ytdlp_base_opts(config)` helper used by both `download_video()` and `youtube_search.py`
+- Sleep intervals between requests (`sleep_interval: 1`, `max_sleep_interval: 5`, `sleep_interval_requests: 1`) — main mitigation for rapid successive downloads
+- Retries (`retries: 3`, `fragment_retries: 3`, `extractor_retries: 3`)
+- Cookie support via `youtube_cookies_file` config key
+
+**Async downloads**
+- `POST /download` now starts download in a background thread, returns immediately
+- Server-side `download_state` tracking: `idle → downloading → completed/error`
+- Frontend detects completion via existing 2-second `/status` poll — survives page refresh
+- `POST /download/ack` resets state after frontend handles notification
+- Concurrent download protection (409 if already downloading)
+
+**YouTube Settings modal (web UI)**
+- Health dot next to "Download Song" header (green/yellow/red)
+- Modal shows yt-dlp version, EJS solver status, Deno runtime status, cookie status
+- Paste Netscape-format cookies from browser extension → Upload → validates and saves
+- Delete cookies button with confirmation
+
+**New API endpoints:** `GET /youtube/status`, `POST /youtube/cookies`, `DELETE /youtube/cookies`, `POST /download/ack`
+
+**Dependencies:** Changed `yt-dlp` → `yt-dlp[default]` in requirements.txt (includes yt-dlp-ejs solver plugin). Deno runtime installed on NomadPC for EJS solver.
+
+**NomadPC setup:** Installed yt-dlp-ejs 0.5.0, Deno 2.7.1 (symlinked to `/usr/local/bin/deno`), verified via `/youtube/status` endpoint.
+
 ## 2026-02-26 - Fix: AV Reset button failed with Permission denied on /etc/asound.conf
 
 **Root cause:** `POST /av/reset` calls `fix-hdmi-audio.sh` from within the Flask process (running as user `nomad`). The script needs to write `/etc/asound.conf` and call `amixer`, both requiring root. The `ExecStartPre=+` mechanism that gives root at service start doesn't apply to this in-process call.

@@ -66,6 +66,7 @@ Shared fixtures live in `tests/conftest.py`:
 - Catalog: 90%+
 - ZIP playback: 90%+
 - VLC logic (HTTP, state machine, orchestration): 70%+
+- YouTube health: 90%+
 - VLC subprocess launching: excluded (requires real `cvlc` binary)
 
 ## VLC Testing Strategy

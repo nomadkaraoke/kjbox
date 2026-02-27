@@ -53,15 +53,17 @@ KJ Controller is a web-based karaoke show management application. A Flask backen
 | `overlay.py` | ~100 | `OverlayManager` class: CRUD, toggle, karaoke_playing state, JSON persistence |
 | `karaoke_nerds.py` | ~140 | Karaoke Nerds web scraper: search, parse HTML results, extract YouTube URLs |
 | `youtube_search.py` | ~80 | YouTube search via yt-dlp: ytsearch with extract_flat for fast metadata |
-| `routes.py` | ~600 | Flask Blueprint with all 32 route handlers |
+| `youtube_health.py` | ~120 | YouTube health checks: yt-dlp/EJS/Deno version detection, cookie validation and management |
+| `routes.py` | ~680 | Flask Blueprint with all 37 route handlers |
 
 ### Dependency Flow
 
 ```
 app.py → config.py, media.py, vlc.py, catalog.py, zip_playback.py, overlay.py, routes.py, utils.py
-routes.py → config.py, utils.py, karaoke_nerds, youtube_search (accesses media/vlc/catalog/zip_playback/overlay_manager via current_app)
+routes.py → config.py, utils.py, karaoke_nerds, youtube_search, youtube_health (accesses media/vlc/catalog/zip_playback/overlay_manager via current_app)
 karaoke_nerds.py → config.py, utils.py (requests, beautifulsoup4)
-youtube_search.py → config.py, utils.py (yt_dlp)
+youtube_search.py → media._ytdlp_base_opts, config.py, utils.py (yt_dlp)
+youtube_health.py → (yt_dlp, importlib.metadata, shutil, subprocess)
 overlay.py → (stdlib only: json, os, uuid, tempfile)
 media.py → config.py, utils.py
 vlc.py → config.py, utils.py
@@ -84,13 +86,15 @@ utils.py → (stdlib only)
 | ZIP extraction | `ZipPlayback._temp_dir` | `current_app.zip_playback` |
 | Overlay configs | `OverlayManager` (overlays.json) | `current_app.overlay_manager` |
 | Karaoke playing flag | `OverlayManager.karaoke_playing` | `current_app.overlay_manager` |
+| Download state | `app.download_state` dict | `current_app.download_state` |
 
 ## REST API
 
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/` | Serve remote control UI |
-| POST | `/download` | Download YouTube video via yt-dlp |
+| POST | `/download` | Start async YouTube download via yt-dlp (returns immediately) |
+| POST | `/download/ack` | Acknowledge download completion (resets state to idle) |
 | POST | `/play` | Play a media file (path validated) |
 | POST | `/seek` | Seek to position in karaoke video |
 | POST | `/control` | Playback control (pause_resume, restart, stop) |
@@ -121,6 +125,9 @@ utils.py → (stdlib only)
 | GET | `/karaoke-nerds/config` | Get preferred brand codes for KN result sorting |
 | POST | `/karaoke-nerds/config` | Set preferred brand codes for KN result sorting |
 | POST | `/youtube/search` | Search YouTube via yt-dlp (extract_flat metadata) |
+| GET | `/youtube/status` | YouTube health: yt-dlp/EJS/Deno versions, cookie status |
+| POST | `/youtube/cookies` | Upload Netscape-format cookies for authenticated downloads |
+| DELETE | `/youtube/cookies` | Remove YouTube cookies file |
 
 ## Key Design Decisions
 

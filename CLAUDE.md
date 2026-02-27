@@ -14,13 +14,14 @@ KJ Controller (`kj-controller/`) is a Flask + vanilla JS web app for managing li
 - `kj-controller/static/app.js` — all UI logic, fetch() REST calls, 2s status polling
 
 **Backend** (Flask):
-- `kj-controller/routes.py` — 32 REST API endpoints
+- `kj-controller/routes.py` — 37 REST API endpoints
 - `kj-controller/vlc.py` — VLCManager (dual VLC process control)
 - `kj-controller/media.py` — MediaIndex (scan, validate, download, delete)
 - `kj-controller/overlay.py` — OverlayManager (CRUD, JSON persistence)
 - `kj-controller/catalog.py` — ExternalCatalog (SQLite FTS5 search)
 - `kj-controller/karaoke_nerds.py` — Karaoke Nerds web scraper (search, parse, YouTube URLs)
 - `kj-controller/youtube_search.py` — YouTube search via yt-dlp (fast metadata-only)
+- `kj-controller/youtube_health.py` — YouTube health checks, cookie validation, EJS/Deno detection
 - `kj-controller/app.py` — app factory + entry point
 - `kj-controller/config.py` — constants, platform detection, config loading
 
