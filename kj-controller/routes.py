@@ -32,20 +32,48 @@ def index():
 
 @routes_bp.route('/download', methods=['POST'])
 def handle_download():
-    """Handles the video download request."""
+    """Starts a video download in the background. Poll /status for progress."""
     url = request.json.get('url')
     if not url:
         return jsonify({"error": "URL is required"}), 400
 
+    state = current_app.download_state
+    if state.get('status') == 'downloading':
+        return jsonify({"error": "A download is already in progress"}), 409
+
     media = current_app.media
     cfg = current_app.kj_config
+    app = current_app._get_current_object()
     log_message(f"Received download request for URL: {url}", cfg)
-    file_path, title = media.download_video(url)
 
-    if file_path:
-        return jsonify({"success": True, "file_path": file_path, "title": title})
-    else:
-        return jsonify({"error": "Failed to download video"}), 500
+    app.download_state = {'status': 'downloading', 'url': url}
+
+    def _do_download():
+        file_path, title = media.download_video(url)
+        if file_path:
+            app.download_state = {
+                'status': 'completed',
+                'url': url,
+                'title': title,
+                'file_path': file_path,
+                'completed_at': time.time(),
+            }
+        else:
+            app.download_state = {
+                'status': 'error',
+                'url': url,
+                'error': 'Download failed',
+            }
+
+    threading.Thread(target=_do_download, daemon=True).start()
+    return jsonify({"success": True, "message": "Download started"})
+
+
+@routes_bp.route('/download/ack', methods=['POST'])
+def ack_download():
+    """Acknowledges a completed/errored download, resetting state to idle."""
+    current_app.download_state = {'status': 'idle'}
+    return jsonify({"success": True})
 
 
 @routes_bp.route('/play', methods=['POST'])
@@ -311,6 +339,8 @@ def get_status():
     elif cpp:
         current_playing = os.path.basename(cpp)
 
+    dl_state = current_app.download_state
+
     if status:
         return jsonify({
             "state": status.get('state'),
@@ -322,6 +352,7 @@ def get_status():
             "audio_device": vlc.audio_device,
             "vlc_enabled": vlc.enabled,
             "audio_error": vlc.audio_error,
+            "download": dl_state,
         })
 
     # VLC not running - return status without VLC data
@@ -334,6 +365,7 @@ def get_status():
         "length": 0,
         "audio_device": vlc.audio_device,
         "vlc_enabled": vlc.enabled,
+        "download": dl_state,
     })
 
 

@@ -422,9 +422,9 @@ def test_audio_device_switch(flask_test_client, flask_app, mocker):
 
 # --- Additional coverage tests ---
 
-def test_download_success(flask_test_client, flask_app, tmp_media_dir, mocker):
-    """POST /download with valid URL returns success when download works."""
-    mocker.patch.object(flask_app.media, 'download_video',
+def test_download_starts_async(flask_test_client, flask_app, mocker):
+    """POST /download starts a background download and returns immediately."""
+    mock_dl = mocker.patch.object(flask_app.media, 'download_video',
         return_value=("/path/to/video.mp4", "My Video"))
 
     response = flask_test_client.post('/download',
@@ -433,20 +433,65 @@ def test_download_success(flask_test_client, flask_app, tmp_media_dir, mocker):
     assert response.status_code == 200
     data = json.loads(response.data)
     assert data["success"] is True
-    assert data["title"] == "My Video"
+    assert "message" in data
+
+    # Wait for background thread to finish
+    import time
+    for _ in range(50):
+        if flask_app.download_state.get('status') != 'downloading':
+            break
+        time.sleep(0.05)
+
+    assert flask_app.download_state['status'] == 'completed'
+    assert flask_app.download_state['title'] == 'My Video'
 
 
-def test_download_failure(flask_test_client, flask_app, mocker):
-    """POST /download returns 500 when download fails."""
+def test_download_failure_tracked(flask_test_client, flask_app, mocker):
+    """POST /download tracks failure state when download fails."""
     mocker.patch.object(flask_app.media, 'download_video',
         return_value=(None, None))
 
     response = flask_test_client.post('/download',
         data=json.dumps({"url": "https://youtube.com/watch?v=bad"}),
         content_type='application/json')
-    assert response.status_code == 500
+    assert response.status_code == 200  # Returns 200, tracks error in state
+
+    # Wait for background thread
+    import time
+    for _ in range(50):
+        if flask_app.download_state.get('status') != 'downloading':
+            break
+        time.sleep(0.05)
+
+    assert flask_app.download_state['status'] == 'error'
+
+
+def test_download_rejects_concurrent(flask_test_client, flask_app):
+    """POST /download rejects a second download while one is in progress."""
+    flask_app.download_state = {'status': 'downloading', 'url': 'https://example.com'}
+    response = flask_test_client.post('/download',
+        data=json.dumps({"url": "https://youtube.com/watch?v=abc123"}),
+        content_type='application/json')
+    assert response.status_code == 409
+    flask_app.download_state = {'status': 'idle'}
+
+
+def test_download_state_in_status(flask_test_client, flask_app):
+    """GET /status includes download state."""
+    flask_app.download_state = {'status': 'downloading', 'url': 'https://example.com'}
+    response = flask_test_client.get('/status')
     data = json.loads(response.data)
-    assert "error" in data
+    assert 'download' in data
+    assert data['download']['status'] == 'downloading'
+    flask_app.download_state = {'status': 'idle'}
+
+
+def test_download_ack(flask_test_client, flask_app):
+    """POST /download/ack resets download state to idle."""
+    flask_app.download_state = {'status': 'completed', 'title': 'Test'}
+    response = flask_test_client.post('/download/ack')
+    assert response.status_code == 200
+    assert flask_app.download_state['status'] == 'idle'
 
 
 def test_volume_non_numeric_level(flask_test_client):

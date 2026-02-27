@@ -43,7 +43,7 @@ async function apiCall(endpoint, body) {
     }
 }
 
-// --- Download (#9 progress stages) ---
+// --- Download (async with status polling) ---
 
 let downloadStageTimers = [];
 
@@ -76,18 +76,52 @@ async function downloadSong() {
         }, s.time));
     });
 
+    // Kick off background download — completion detected via status polling
     const data = await apiCall('/download', { url });
+    if (!data || !data.success) {
+        downloadStageTimers.forEach(t => clearTimeout(t));
+        downloadStageTimers = [];
+        downloadBtn.disabled = false;
+        downloadStatus.classList.add('hidden');
+    }
+    // If started OK, UI stays in "downloading" state until updateStatus detects completion
+}
 
-    downloadStageTimers.forEach(t => clearTimeout(t));
-    downloadStageTimers = [];
-    downloadBtn.disabled = false;
-    downloadStatus.classList.add('hidden');
-    if (data && data.success) {
-        log(`Downloaded "${data.title}" successfully!`, 'success');
+function handleDownloadState(dl) {
+    const downloadBtn = document.getElementById('download-btn');
+    const downloadStatus = document.getElementById('download-status');
+    const downloadStage = document.getElementById('download-stage');
+    const urlInput = document.getElementById('youtube-url');
+
+    if (!dl) return;
+
+    if (dl.status === 'downloading') {
+        // Show download progress if not already visible (e.g., after page refresh)
+        if (downloadStatus.classList.contains('hidden')) {
+            downloadBtn.disabled = true;
+            downloadStatus.classList.remove('hidden');
+            downloadStage.textContent = 'Downloading video...';
+        }
+    } else if (dl.status === 'completed') {
+        downloadStageTimers.forEach(t => clearTimeout(t));
+        downloadStageTimers = [];
+        downloadBtn.disabled = false;
+        downloadStatus.classList.add('hidden');
+        log(`Downloaded "${dl.title}" successfully!`, 'success');
         urlInput.value = '';
         flashElement(urlInput, 'success');
-        await updateMediaList();
+        updateMediaList();
+        // Acknowledge so we don't re-trigger on next poll
+        fetch('/download/ack', { method: 'POST' });
+    } else if (dl.status === 'error') {
+        downloadStageTimers.forEach(t => clearTimeout(t));
+        downloadStageTimers = [];
+        downloadBtn.disabled = false;
+        downloadStatus.classList.add('hidden');
+        log(`Download failed: ${dl.error || 'Unknown error'}`, 'error');
+        fetch('/download/ack', { method: 'POST' });
     }
+    // 'idle' — nothing to do
 }
 
 // --- Playback ---
@@ -490,6 +524,9 @@ async function updateStatus() {
             // Update now-playing bar (#1) and button states (#3)
             updateNowPlaying(data);
             updatePlaybackButtons(state);
+
+            // Track background download progress
+            if (data.download) handleDownloadState(data.download);
         }
     } catch (error) {
         // Don't log periodic status check errors to avoid clutter
