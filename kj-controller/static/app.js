@@ -87,7 +87,7 @@ async function downloadSong() {
     // If started OK, UI stays in "downloading" state until updateStatus detects completion
 }
 
-function handleDownloadState(dl) {
+async function handleDownloadState(dl) {
     const downloadBtn = document.getElementById('download-btn');
     const downloadStatus = document.getElementById('download-status');
     const downloadStage = document.getElementById('download-stage');
@@ -110,8 +110,18 @@ function handleDownloadState(dl) {
         log(`Downloaded "${dl.title}" successfully!`, 'success');
         urlInput.value = '';
         flashElement(urlInput, 'success');
-        updateMediaList();
-        // Acknowledge so we don't re-trigger on next poll
+
+        // Always refresh underlying media data so new track is available
+        await refreshMediaData();
+
+        if (searchActive) {
+            // Re-run current search so downloaded track shows with "Play" button
+            const query = document.getElementById('catalog-search').value.trim();
+            if (query) catalogSearch(query);
+        } else {
+            renderFolderView(applyMediaFilter(localMediaItems));
+        }
+
         fetch('/download/ack', { method: 'POST' });
     } else if (dl.status === 'error') {
         downloadStageTimers.forEach(t => clearTimeout(t));
@@ -165,7 +175,13 @@ async function rescanMedia() {
     btn.textContent = 'Rescan Media';
     if (data && data.success) {
         log(`Rescan complete: ${data.count} files found.`, 'success');
-        await updateMediaList();
+        await refreshMediaData();
+        if (searchActive) {
+            const query = document.getElementById('catalog-search').value.trim();
+            if (query) catalogSearch(query);
+        } else {
+            renderFolderView(applyMediaFilter(localMediaItems));
+        }
     }
 }
 
@@ -419,11 +435,15 @@ function renderFolderView(items) {
     });
 }
 
+async function refreshMediaData() {
+    const response = await fetch('/media');
+    localMediaItems = await response.json();
+}
+
 async function updateMediaList() {
     if (searchActive) return;
     try {
-        const response = await fetch('/media');
-        localMediaItems = await response.json();
+        await refreshMediaData();
         renderFolderView(applyMediaFilter(localMediaItems));
     } catch (error) {
         log('Could not update media list.', 'error');
@@ -526,7 +546,7 @@ async function updateStatus() {
             updatePlaybackButtons(state);
 
             // Track background download progress
-            if (data.download) handleDownloadState(data.download);
+            if (data.download) await handleDownloadState(data.download);
         }
     } catch (error) {
         // Don't log periodic status check errors to avoid clutter

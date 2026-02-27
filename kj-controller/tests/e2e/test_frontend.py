@@ -1,5 +1,7 @@
 """End-to-end Playwright tests for the KJ Controller frontend."""
 
+import json
+
 from playwright.sync_api import expect
 
 
@@ -387,3 +389,100 @@ class TestBrandIdentity:
         )
         # #1a1a1a = rgb(26, 26, 26)
         assert bg == "rgb(26, 26, 26)"
+
+
+# ---------------------------------------------------------------------------
+# Download completion → media refresh
+# ---------------------------------------------------------------------------
+
+class TestDownloadCompletionRefresh:
+    """Download completion refreshes media data even when search is active."""
+
+    def test_download_complete_shows_new_track(self, page, live_server):
+        """Completed download refreshes media list and track appears."""
+        test_media = [
+            {
+                "file_path": "downloads/Test Song - Artist.mp4",
+                "display_name": "Test Song - Artist",
+                "filename": "Test Song - Artist.mp4",
+                "folder_name": "downloads",
+                "folder": "/tmp/downloads",
+                "is_download": True,
+                "mtime": 9999999999,
+                "size": 50000000,
+            }
+        ]
+
+        page.goto(live_server)
+        page.wait_for_load_state("networkidle")
+
+        # Intercept /media to return our test track
+        page.route(
+            "**/media",
+            lambda route: route.fulfill(
+                status=200,
+                content_type="application/json",
+                body=json.dumps(test_media),
+            ),
+        )
+
+        # Directly call handleDownloadState with a completed download
+        page.evaluate(
+            """async () => {
+                await handleDownloadState({status: 'completed', title: 'Test Song - Artist'});
+            }"""
+        )
+
+        # Verify the success log message
+        expect(page.locator("#log-area")).to_contain_text(
+            'Downloaded "Test Song - Artist" successfully!'
+        )
+
+        # Verify the track appears in the media list
+        expect(page.locator("#media-list")).to_contain_text("Test Song - Artist")
+
+    def test_download_complete_during_search_refreshes_data(self, page, live_server):
+        """When download completes during active search, localMediaItems is still refreshed."""
+        test_media = [
+            {
+                "file_path": "downloads/Bohemian Rhapsody - Queen.mp4",
+                "display_name": "Bohemian Rhapsody - Queen",
+                "filename": "Bohemian Rhapsody - Queen.mp4",
+                "folder_name": "downloads",
+                "folder": "/tmp/downloads",
+                "is_download": True,
+                "mtime": 9999999999,
+                "size": 50000000,
+            }
+        ]
+
+        page.goto(live_server)
+        page.wait_for_load_state("networkidle")
+
+        # Activate search so searchActive = true
+        page.locator("#catalog-search").fill("bohemian")
+        page.wait_for_timeout(500)  # debounce
+
+        # Intercept /media to return the downloaded track
+        page.route(
+            "**/media",
+            lambda route: route.fulfill(
+                status=200,
+                content_type="application/json",
+                body=json.dumps(test_media),
+            ),
+        )
+
+        # Simulate download completion while search is active
+        page.evaluate(
+            """async () => {
+                await handleDownloadState({status: 'completed', title: 'Bohemian Rhapsody - Queen'});
+            }"""
+        )
+
+        # Verify localMediaItems was updated despite searchActive being true
+        item_count = page.evaluate("localMediaItems.length")
+        assert item_count == 1, f"Expected localMediaItems to have 1 item, got {item_count}"
+
+        display_name = page.evaluate("localMediaItems[0].display_name")
+        assert display_name == "Bohemian Rhapsody - Queen"
