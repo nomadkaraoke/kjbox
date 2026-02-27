@@ -19,6 +19,23 @@ function flashElement(el, type = 'success') {
     el.classList.add(type === 'success' ? 'flash-success' : 'flash-error');
 }
 
+// --- Clipboard ---
+
+function createCopyBtn(text) {
+    const btn = document.createElement('button');
+    btn.className = 'copy-btn';
+    btn.textContent = 'Copy';
+    btn.title = 'Copy name to clipboard';
+    btn.onclick = (e) => {
+        e.stopPropagation();
+        navigator.clipboard.writeText(text).then(() => {
+            btn.textContent = 'Copied!';
+            setTimeout(() => { btn.textContent = 'Copy'; }, 1500);
+        });
+    };
+    return btn;
+}
+
 // --- API ---
 
 async function apiCall(endpoint, body) {
@@ -114,13 +131,12 @@ async function handleDownloadState(dl) {
         // Always refresh underlying media data so new track is available
         await refreshMediaData();
 
-        if (searchActive) {
-            // Re-run current search so downloaded track shows with "Play" button
-            const query = document.getElementById('catalog-search').value.trim();
-            if (query) catalogSearch(query);
-        } else {
-            renderFolderView(applyMediaFilter(localMediaItems));
-        }
+        // Clear any active search so user sees the folder view with new track
+        if (searchActive) clearSearch();
+        else renderFolderView(applyMediaFilter(localMediaItems));
+
+        // Ensure downloads folder is expanded so new track is visible
+        expandDownloadsFolder();
 
         fetch('/download/ack', { method: 'POST' });
     } else if (dl.status === 'error') {
@@ -329,6 +345,21 @@ function collapseAll() {
     saveFolderStates(states);
 }
 
+function expandDownloadsFolder() {
+    // Find the downloads folder by checking is_download items
+    const dlItem = localMediaItems.find(i => i.is_download);
+    if (!dlItem) return;
+    const folderName = dlItem.folder_name;
+    const escapedName = CSS.escape(folderName);
+    const container = document.getElementById('folder-' + escapedName);
+    const chevron = document.getElementById('chevron-' + escapedName);
+    if (container) container.classList.remove('collapsed');
+    if (chevron) chevron.classList.add('expanded');
+    const states = loadFolderStates();
+    states[folderName] = true;
+    saveFolderStates(states);
+}
+
 function createMediaItemLi(item) {
     const li = document.createElement('li');
 
@@ -344,6 +375,7 @@ function createMediaItemLi(item) {
     }
 
     const rightSide = document.createElement('span');
+    rightSide.appendChild(createCopyBtn(item.display_name));
     if (item.is_download) {
         const deleteBtn = document.createElement('button');
         deleteBtn.textContent = 'Delete';
@@ -391,7 +423,13 @@ function renderFolderView(items) {
         groups[folder].push(item);
     });
 
-    const folderNames = Object.keys(groups).sort();
+    // Sort folder names alphabetically, but pin the download folder to the top
+    const downloadFolderName = items.find(i => i.is_download)?.folder_name;
+    const folderNames = Object.keys(groups).sort((a, b) => {
+        if (a === downloadFolderName) return -1;
+        if (b === downloadFolderName) return 1;
+        return a.localeCompare(b);
+    });
     const showHeaders = folderNames.length > 1;
     folderControls.classList.toggle('hidden', !showHeaders);
 
@@ -1070,6 +1108,7 @@ function renderUnifiedResults(localResults, catalogResults, query) {
             }
 
             li.appendChild(detail);
+            li.appendChild(createCopyBtn(nameText));
             li.onclick = () => {
                 document.querySelectorAll('#media-list li').forEach(el => el.classList.remove('playing'));
                 li.classList.add('playing');
@@ -1590,6 +1629,7 @@ function renderKNResults(songs) {
 
         header.appendChild(chevron);
         header.appendChild(titleText);
+        header.appendChild(createCopyBtn(`${song.artist} - ${song.title}`));
         header.appendChild(count);
         container.appendChild(header);
 
@@ -1873,6 +1913,7 @@ function renderYTResults(results) {
         dlBtn.onclick = () => downloadYTTrack(r.url);
 
         row.appendChild(info);
+        row.appendChild(createCopyBtn(r.title));
         row.appendChild(dlBtn);
         container.appendChild(row);
     });

@@ -150,6 +150,8 @@ button:disabled:hover {
 .button-group { display: flex; flex-wrap: wrap; gap: 8px; }
 .button-group button { margin-right: 0; }
 .button-group button:disabled { opacity: 0.35; }
+.copy-btn { background-color: #252525; color: #888; border: 1px solid #2a2a2a; padding: 3px 8px; border-radius: 4px; cursor: pointer; font-size: 0.7em; box-shadow: none; flex-shrink: 0; margin-right: 4px; }
+.copy-btn:hover { background-color: #333; color: #e5e5e5; box-shadow: none; }
 .delete-btn { background-color: #ef4444; color: white; border: none; padding: 5px 10px; border-radius: 6px; cursor: pointer; font-size: 0.8em; box-shadow: none; }
 .delete-btn:hover { background-color: #dc2626; box-shadow: none; }
 .rescan-btn { background-color: #252525; color: #888; border: 1px solid #2a2a2a; font-size: 0.7em; padding: 5px 10px; margin-left: 10px; box-shadow: none; }
