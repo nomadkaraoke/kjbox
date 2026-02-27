@@ -255,7 +255,7 @@ class TestOverlayModal:
     def test_close_button_closes_modal(self, app_page):
         app_page.locator("#overlay-add-btn").click()
         expect(app_page.locator("#overlay-modal")).to_be_visible()
-        app_page.locator(".modal-close").click()
+        app_page.locator("#overlay-modal .modal-close").click()
         expect(app_page.locator("#overlay-modal")).to_be_hidden()
 
 

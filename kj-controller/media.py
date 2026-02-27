@@ -8,6 +8,24 @@ from config import MEDIA_EXTENSIONS
 from utils import log_message, sanitize_filename_part, parse_youtube_filename
 
 
+def _ytdlp_base_opts(config):
+    """Common yt-dlp options with anti-detection and cookie support."""
+    opts = {
+        'quiet': True,
+        'noplaylist': True,
+        'retries': 3,
+        'fragment_retries': 3,
+        'extractor_retries': 3,
+        'sleep_interval': 1,
+        'max_sleep_interval': 5,
+        'sleep_interval_requests': 1,
+    }
+    cookies_file = config.get('youtube_cookies_file', '')
+    if cookies_file and os.path.exists(cookies_file):
+        opts['cookiefile'] = cookies_file
+    return opts
+
+
 class MediaIndex:
     """Manages the media file index (scan, persist, validate, delete, download)."""
 
@@ -189,15 +207,9 @@ class MediaIndex:
 
         download_folder = self.config.get('download_folder', os.path.expanduser("~/kjdata/videos"))
         os.makedirs(download_folder, exist_ok=True)
-        cookies_file = self.config.get('youtube_cookies_file', '')
 
         # Phase 1: Extract metadata without downloading
-        extract_opts = {
-            'quiet': True,
-            'noplaylist': True,
-        }
-        if cookies_file and os.path.exists(cookies_file):
-            extract_opts['cookiefile'] = cookies_file
+        extract_opts = _ytdlp_base_opts(self.config)
 
         try:
             with yt_dlp.YoutubeDL(extract_opts) as ydl:
@@ -217,18 +229,16 @@ class MediaIndex:
         basename = f"{youtube_id}__{safe_channel}__{safe_title}"
         output_template = os.path.join(download_folder, basename)
 
-        ydl_opts = {
+        ydl_opts = _ytdlp_base_opts(self.config)
+        ydl_opts.update({
             'format': 'bestvideo+bestaudio/best',
             'outtmpl': output_template,
             'merge_output_format': 'mp4',
             'force_overwrites': True,
-            'quiet': True,
-            'noplaylist': True,
             'writethumbnail': True,
-        }
-        if cookies_file and os.path.exists(cookies_file):
-            ydl_opts['cookiefile'] = cookies_file
-            log_message(f"Using YouTube cookies file: {cookies_file}", self.config)
+        })
+        if ydl_opts.get('cookiefile'):
+            log_message(f"Using YouTube cookies file: {ydl_opts['cookiefile']}", self.config)
 
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:

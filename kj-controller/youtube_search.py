@@ -1,9 +1,8 @@
 """YouTube search integration — uses yt-dlp to search YouTube for videos."""
 
-import os
-
 import yt_dlp
 
+from media import _ytdlp_base_opts
 from utils import log_message
 
 SEARCH_TIMEOUT = 15
@@ -15,17 +14,13 @@ def search(query, config=None, max_results=10):
     Uses yt-dlp's ytsearch with extract_flat for fast metadata-only results.
     Returns a list of result dicts with id, title, channel, duration, views, and url.
     """
-    ydl_opts = {
-        'quiet': True,
+    ydl_opts = _ytdlp_base_opts(config or {})
+    ydl_opts.update({
         'no_warnings': True,
         'extract_flat': True,
         'skip_download': True,
         'socket_timeout': SEARCH_TIMEOUT,
-    }
-
-    cookies_file = (config or {}).get('youtube_cookies_file', '')
-    if cookies_file and os.path.exists(cookies_file):
-        ydl_opts['cookiefile'] = cookies_file
+    })
 
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:

@@ -149,7 +149,10 @@
                 <div id="yt-results"></div>
             </div>
             <div class="container download-section">
-                <h2>Download Song</h2>
+                <div class="header-row">
+                    <h2>Download Song <span id="yt-health-dot" class="yt-health-dot"></span></h2>
+                    <button class="rescan-btn" onclick="openYtModal()" title="YouTube download engine settings, cookies, and health">Settings</button>
+                </div>
                 <input type="url" id="youtube-url" placeholder="Enter YouTube URL" onkeyup="if(event.keyCode === 13) downloadSong()">
                 <button id="download-btn" onclick="downloadSong()" style="align-self: flex-start;">Download</button>
                 <div id="download-status" class="download-progress hidden">
@@ -384,6 +387,55 @@
             <div class="av-modal-footer">
                 <button class="av-reset-btn" onclick="avReset()" id="av-reset-btn">Reset All to Known-Good State</button>
                 <button class="system-btn av-refresh-btn" onclick="avRefresh()">Refresh</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- YouTube Settings Modal -->
+    <div id="yt-modal" class="modal-backdrop hidden" onclick="if(event.target===this) closeYtModal()">
+        <div class="modal-content yt-modal-content">
+            <div class="modal-header">
+                <h3>YouTube Settings</h3>
+                <button class="modal-close" onclick="closeYtModal()">&times;</button>
+            </div>
+
+            <!-- Loading state -->
+            <div id="yt-loading" class="av-loading">
+                <span class="download-spinner"></span> Loading YouTube status&hellip;
+            </div>
+
+            <!-- Content (hidden while loading) -->
+            <div id="yt-content" class="hidden">
+
+                <!-- Health summary -->
+                <div id="yt-health-bar" class="av-health-bar"></div>
+
+                <!-- Download Engine section -->
+                <div class="av-section">
+                    <div class="av-section-title">Download Engine</div>
+                    <div id="yt-engine-info"></div>
+                </div>
+
+                <!-- YouTube Cookies section -->
+                <div class="av-section">
+                    <div class="av-section-title">YouTube Cookies</div>
+                    <div id="yt-cookie-status"></div>
+                    <p class="av-help">Paste Netscape-format cookies exported from a browser with an active YouTube login. This helps avoid rate limiting during shows.</p>
+                    <div class="yt-cookie-actions">
+                        <textarea id="yt-cookie-textarea" rows="6" placeholder="Paste Netscape cookie content here..."></textarea>
+                        <div class="yt-cookie-buttons">
+                            <button class="system-btn" onclick="uploadYtCookies()" id="yt-upload-btn">Upload Cookies</button>
+                            <button class="system-btn system-btn-warn" onclick="deleteYtCookies()" id="yt-delete-btn">Delete Cookies</button>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- Footer -->
+            <div class="av-modal-footer">
+                <span></span>
+                <button class="system-btn av-refresh-btn" onclick="ytSettingsRefresh()">Refresh</button>
             </div>
         </div>
     </div>

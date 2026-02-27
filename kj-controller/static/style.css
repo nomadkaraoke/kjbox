@@ -1038,3 +1038,48 @@ body {
 .av-health-item.av-health-ok    { color: #22c55e; }
 .av-health-item.av-health-warn  { color: #f59e0b; }
 .av-health-item.av-health-error { color: #ef4444; }
+
+/* ============================================================
+   YouTube Settings Modal
+   ============================================================ */
+
+.yt-modal-content {
+    max-width: 550px;
+}
+
+.yt-health-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-left: 6px;
+    vertical-align: middle;
+    background-color: #444;
+}
+.yt-health-dot.yt-dot-ok    { background-color: #22c55e; box-shadow: 0 0 5px rgba(34,197,94,0.5); }
+.yt-health-dot.yt-dot-warn  { background-color: #f59e0b; box-shadow: 0 0 5px rgba(245,158,11,0.5); }
+.yt-health-dot.yt-dot-error { background-color: #ef4444; box-shadow: 0 0 5px rgba(239,68,68,0.5); }
+
+.yt-cookie-actions {
+    margin-top: 8px;
+}
+.yt-cookie-actions textarea {
+    width: 100%;
+    font-family: monospace;
+    font-size: 0.75em;
+    background-color: #1a1a1a;
+    color: #ccc;
+    border: 1px solid #333;
+    border-radius: 6px;
+    padding: 8px;
+    resize: vertical;
+}
+.yt-cookie-actions textarea:focus {
+    border-color: #555;
+    outline: none;
+}
+.yt-cookie-buttons {
+    display: flex;
+    gap: 8px;
+    margin-top: 8px;
+}

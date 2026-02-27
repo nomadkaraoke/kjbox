@@ -756,6 +756,157 @@ async function avReset() {
     }
 }
 
+// --- YouTube Settings Modal ---
+
+async function openYtModal() {
+    document.getElementById('yt-modal').classList.remove('hidden');
+    await ytSettingsRefresh();
+}
+
+function closeYtModal() {
+    document.getElementById('yt-modal').classList.add('hidden');
+}
+
+async function ytSettingsRefresh() {
+    document.getElementById('yt-loading').classList.remove('hidden');
+    document.getElementById('yt-content').classList.add('hidden');
+    try {
+        const response = await fetch('/youtube/status');
+        if (!response.ok) throw new Error('YouTube status fetch failed');
+        const data = await response.json();
+        renderYtSettings(data);
+        updateYtHealthDot(data);
+    } catch (e) {
+        const errEl = document.getElementById('yt-loading');
+        errEl.textContent = '';
+        const span = document.createElement('span');
+        span.style.color = '#ef4444';
+        span.textContent = `Error loading YouTube status: ${e.message}`;
+        errEl.appendChild(span);
+    }
+}
+
+function renderYtSettings(data) {
+    // Health bar
+    const bar = document.getElementById('yt-health-bar');
+    const items = [
+        { label: 'yt-dlp', ok: !!data.ytdlp_version },
+        { label: 'EJS', ok: data.ejs_installed },
+        { label: 'Deno', ok: data.deno_available },
+        { label: 'Cookies', ok: data.cookies_present && data.cookies_valid },
+    ];
+    bar.innerHTML = items.map(({ label, ok }) => {
+        const cls = ok ? 'av-health-ok' : (label === 'Cookies' ? 'av-health-warn' : 'av-health-error');
+        const dotCls = ok ? 'av-dot-ok' : (label === 'Cookies' ? 'av-dot-warn' : 'av-dot-error');
+        return `<span class="av-health-item ${cls}">${avDot(dotCls)} ${label}</span>`;
+    }).join('');
+
+    // Engine info
+    const engineEl = document.getElementById('yt-engine-info');
+    engineEl.innerHTML = `
+        <div class="av-info-row">
+            <span class="av-info-label">yt-dlp</span>
+            ${avDot(data.ytdlp_version ? 'av-dot-ok' : 'av-dot-error')}
+            <span class="av-info-value">${escapeHtml(data.ytdlp_version || 'not installed')}</span>
+        </div>
+        <div class="av-info-row">
+            <span class="av-info-label">EJS solver</span>
+            ${avDot(data.ejs_installed ? 'av-dot-ok' : 'av-dot-warn')}
+            <span class="av-info-value">${data.ejs_installed ? escapeHtml(data.ejs_version || 'installed') : 'not installed'}</span>
+        </div>
+        <div class="av-info-row">
+            <span class="av-info-label">Deno runtime</span>
+            ${avDot(data.deno_available ? 'av-dot-ok' : 'av-dot-warn')}
+            <span class="av-info-value">${data.deno_available ? escapeHtml(data.deno_version) : 'not installed'}</span>
+        </div>`;
+
+    // Cookie status
+    const cookieEl = document.getElementById('yt-cookie-status');
+    if (data.cookies_present) {
+        const validDot = data.cookies_valid ? 'av-dot-ok' : 'av-dot-error';
+        const validLabel = data.cookies_valid ? 'valid' : 'invalid format';
+        let updated = '';
+        if (data.cookies_last_updated) {
+            const d = new Date(data.cookies_last_updated * 1000);
+            updated = ` (updated ${d.toLocaleDateString()} ${d.toLocaleTimeString()})`;
+        }
+        cookieEl.innerHTML = `
+            <div class="av-info-row">
+                <span class="av-info-label">Status</span>
+                ${avDot(validDot)}
+                <span class="av-info-value">${escapeHtml(validLabel)}${escapeHtml(updated)}</span>
+            </div>`;
+    } else {
+        cookieEl.innerHTML = `
+            <div class="av-info-row">
+                <span class="av-info-label">Status</span>
+                ${avDot('av-dot-warn')}
+                <span class="av-info-value">no cookies file</span>
+            </div>`;
+    }
+
+    document.getElementById('yt-loading').classList.add('hidden');
+    document.getElementById('yt-content').classList.remove('hidden');
+}
+
+function updateYtHealthDot(data) {
+    const dot = document.getElementById('yt-health-dot');
+    if (!dot) return;
+    // Green: yt-dlp works + cookies present
+    // Yellow: yt-dlp works but missing EJS or cookies
+    // Red: yt-dlp broken
+    dot.className = 'yt-health-dot';
+    if (!data.ytdlp_version) {
+        dot.classList.add('yt-dot-error');
+    } else if (!data.ejs_installed || !data.cookies_present || !data.cookies_valid) {
+        dot.classList.add('yt-dot-warn');
+    } else {
+        dot.classList.add('yt-dot-ok');
+    }
+}
+
+async function uploadYtCookies() {
+    const textarea = document.getElementById('yt-cookie-textarea');
+    const content = textarea.value.trim();
+    if (!content) {
+        log('Paste cookie content first.', 'error');
+        return;
+    }
+    const btn = document.getElementById('yt-upload-btn');
+    btn.disabled = true;
+    btn.textContent = 'Uploading…';
+    try {
+        const data = await apiCall('/youtube/cookies', { content });
+        if (data && data.success) {
+            log('YouTube cookies uploaded: ' + data.message, 'success');
+            textarea.value = '';
+            await ytSettingsRefresh();
+        }
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Upload Cookies';
+    }
+}
+
+async function deleteYtCookies() {
+    if (!confirm('Delete YouTube cookies? Downloads may start failing if rate-limited.')) return;
+    try {
+        const resp = await fetch('/youtube/cookies', { method: 'DELETE' });
+        const data = await resp.json();
+        if (data.success) {
+            log('YouTube cookies deleted.', 'success');
+            await ytSettingsRefresh();
+        } else {
+            log('Error: ' + (data.error || 'Unknown'), 'error');
+        }
+    } catch (e) {
+        log('Error deleting cookies: ' + e.message, 'error');
+    }
+}
+
+// Fetch YouTube health dot on page load
+fetch('/youtube/status').then(r => r.json()).then(updateYtHealthDot).catch(() => {});
+
 // --- Catalog Search ---
 
 let searchActive = false;

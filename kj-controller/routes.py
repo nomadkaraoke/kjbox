@@ -12,6 +12,7 @@ import time
 from flask import Blueprint, current_app, jsonify, render_template, request
 
 import karaoke_nerds
+import youtube_health
 import youtube_search
 from catalog import LATIN_SPECIAL_MAP
 from config import APP_DIR, load_config, save_config_value
@@ -668,6 +669,55 @@ def yt_search():
 
     results = youtube_search.search(query, current_app.kj_config)
     return jsonify(results)
+
+
+@routes_bp.route('/youtube/status', methods=['GET'])
+def youtube_status():
+    """Returns YouTube download engine health: yt-dlp, EJS, Deno, cookies."""
+    cfg = current_app.kj_config
+    status = youtube_health.get_youtube_status(cfg)
+    return jsonify(status)
+
+
+@routes_bp.route('/youtube/cookies', methods=['POST'])
+def youtube_upload_cookies():
+    """Validates and saves YouTube cookies in Netscape format."""
+    data = request.get_json(silent=True) or {}
+    content = data.get('content', '')
+    if not content:
+        return jsonify({'error': 'Cookie content is required'}), 400
+
+    valid, msg = youtube_health.validate_cookies_format(content)
+    if not valid:
+        return jsonify({'error': msg}), 400
+
+    cfg = current_app.kj_config
+    cookies_path = cfg.get('youtube_cookies_file', '')
+    if not cookies_path:
+        return jsonify({'error': 'youtube_cookies_file not configured'}), 500
+
+    ok, write_msg = youtube_health.write_cookies_file(content, cookies_path)
+    if not ok:
+        return jsonify({'error': write_msg}), 500
+
+    log_message(f"YouTube cookies uploaded ({msg})", cfg)
+    return jsonify({'success': True, 'message': msg})
+
+
+@routes_bp.route('/youtube/cookies', methods=['DELETE'])
+def youtube_delete_cookies():
+    """Deletes the YouTube cookies file."""
+    cfg = current_app.kj_config
+    cookies_path = cfg.get('youtube_cookies_file', '')
+    if not cookies_path:
+        return jsonify({'error': 'youtube_cookies_file not configured'}), 500
+
+    if os.path.exists(cookies_path):
+        os.remove(cookies_path)
+        log_message("YouTube cookies deleted.", cfg)
+        return jsonify({'success': True, 'message': 'Cookies deleted'})
+
+    return jsonify({'success': True, 'message': 'No cookies file to delete'})
 
 
 # --- Display Resolution ---

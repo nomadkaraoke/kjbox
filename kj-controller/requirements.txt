@@ -2,4 +2,4 @@ Flask
 beautifulsoup4
 requests
 websockify
-yt-dlp
+yt-dlp[default]

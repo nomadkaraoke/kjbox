@@ -3,7 +3,7 @@
 import json
 import os
 
-from media import MediaIndex
+from media import MediaIndex, _ytdlp_base_opts
 
 
 def test_validate_media_path_valid(mock_config, tmp_media_dir):
@@ -379,3 +379,39 @@ def test_download_video_file_not_found(mock_config, tmp_media_dir, mocker):
     file_path, title = mi.download_video("https://youtube.com/watch?v=abc12345678")
     assert file_path is None
     assert title is None
+
+
+# --- _ytdlp_base_opts ---
+
+def test_ytdlp_base_opts_defaults():
+    """Base opts include anti-detection settings."""
+    opts = _ytdlp_base_opts({})
+    assert opts['retries'] == 3
+    assert opts['fragment_retries'] == 3
+    assert opts['extractor_retries'] == 3
+    assert opts['sleep_interval'] == 1
+    assert opts['max_sleep_interval'] == 5
+    assert opts['sleep_interval_requests'] == 1
+    assert opts['quiet'] is True
+    assert opts['noplaylist'] is True
+    assert 'cookiefile' not in opts
+
+
+def test_ytdlp_base_opts_with_cookies(tmp_path):
+    """Base opts include cookiefile when cookie file exists."""
+    cookie_file = tmp_path / 'cookies.txt'
+    cookie_file.write_text('cookie data')
+    opts = _ytdlp_base_opts({'youtube_cookies_file': str(cookie_file)})
+    assert opts['cookiefile'] == str(cookie_file)
+
+
+def test_ytdlp_base_opts_missing_cookies():
+    """Base opts skip cookiefile when file doesn't exist."""
+    opts = _ytdlp_base_opts({'youtube_cookies_file': '/nonexistent/cookies.txt'})
+    assert 'cookiefile' not in opts
+
+
+def test_ytdlp_base_opts_empty_cookies_path():
+    """Base opts skip cookiefile when path is empty string."""
+    opts = _ytdlp_base_opts({'youtube_cookies_file': ''})
+    assert 'cookiefile' not in opts
