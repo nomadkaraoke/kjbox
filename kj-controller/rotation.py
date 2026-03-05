@@ -183,9 +183,9 @@ class RotationManager:
             if idx == row_index:
                 batch_updates.append({
                     "range": f"{col_letter}{idx}",
-                    "values": [["Singing Now"]],
+                    "values": [["Now Singing"]],
                 })
-            elif status in ("singing now", "singing"):
+            elif status in ("now singing", "singing now", "singing"):
                 batch_updates.append({
                     "range": f"{col_letter}{idx}",
                     "values": [[""]],

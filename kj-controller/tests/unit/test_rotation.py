@@ -15,8 +15,8 @@ def mock_sheet():
     sheet.get_all_values.return_value = [
         ["", "", "", "", "", ".", "URL!"],  # metadata row
         ["Timestamp", "Singer", "Song & Artist", "Status", "Round", "Notes", "Column 1"],
-        ["3/5/2026 20:00:00", "Alice", "Bohemian Rhapsody - Queen", "Singing Now", "1", "", ""],
-        ["3/5/2026 20:05:00", "Bob", "Don't Stop Believin - Journey", "Next", "1", "", ""],
+        ["3/5/2026 20:00:00", "Alice", "Bohemian Rhapsody - Queen", "Now Singing", "1", "", ""],
+        ["3/5/2026 20:05:00", "Bob", "Don't Stop Believin - Journey", "Up Next", "1", "", ""],
         ["3/5/2026 20:10:00", "Carol", "Sweet Caroline - Neil Diamond", "", "1", "first timer", ""],
         ["3/5/2026 19:30:00", "Dave", "Piano Man - Billy Joel", "Done", "1", "", ""],
         ["3/5/2026 20:15:00", "Eve", "Total Eclipse - Bonnie Tyler", "", "1", "", ""],
@@ -62,7 +62,7 @@ class TestGetRotation:
         entries = manager.get_rotation()
         assert len(entries) == 4  # Alice, Bob, Carol, Eve (not Dave who is Done)
         assert entries[0]["singer"] == "Alice"
-        assert entries[0]["status"] == "Singing Now"
+        assert entries[0]["status"] == "Now Singing"
         assert entries[0]["row_index"] == 3  # header is row 2, data starts row 3
 
     def test_includes_song_artist(self, manager):
@@ -129,10 +129,10 @@ class TestMarkSinging:
         manager.mark_singing(4)  # Bob is row 4
         mock_sheet.batch_update.assert_called_once()
         updates = mock_sheet.batch_update.call_args[0][0]
-        # Should clear Alice (row 3, currently "Singing Now") and set Bob (row 4)
+        # Should clear Alice (row 3, currently "Now Singing") and set Bob (row 4)
         ranges = {u["range"]: u["values"][0][0] for u in updates}
         assert ranges["D3"] == ""  # clear Alice's singing
-        assert ranges["D4"] == "Singing Now"  # set Bob as singing
+        assert ranges["D4"] == "Now Singing"  # set Bob as singing
 
     def test_invalidates_cache(self, manager, mock_sheet):
         manager.get_rotation()

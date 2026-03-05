@@ -1192,6 +1192,14 @@ body {
     background: rgba(245, 158, 11, 0.08);
     border-left: 3px solid #f59e0b;
 }
+.rotation-entry.rotation-onhold {
+    opacity: 0.5;
+    border-left: 3px solid #6b7280;
+}
+.rotation-entry.rotation-skipped {
+    opacity: 0.4;
+    border-left: 3px solid #3b82f6;
+}
 .rotation-info {
     display: flex;
     align-items: center;
@@ -1236,9 +1244,21 @@ body {
     background: rgba(245, 158, 11, 0.2);
     color: #f59e0b;
 }
+.badge-waiting {
+    background: rgba(251, 146, 60, 0.2);
+    color: #fb923c;
+}
 .badge-wip {
-    background: rgba(239, 68, 68, 0.2);
-    color: #ef4444;
+    background: rgba(234, 179, 8, 0.2);
+    color: #eab308;
+}
+.badge-onhold {
+    background: rgba(156, 163, 175, 0.2);
+    color: #9ca3af;
+}
+.badge-skipped {
+    background: rgba(59, 130, 246, 0.2);
+    color: #3b82f6;
 }
 .rotation-actions {
     display: flex;

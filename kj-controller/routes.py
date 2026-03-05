@@ -1350,7 +1350,7 @@ def update_rotation_status():
         return jsonify({"error": "row_index must be >= 1"}), 400
 
     try:
-        if status.lower() in ('singing now', 'singing'):
+        if status.lower() in ('now singing', 'singing now', 'singing'):
             rotation.mark_singing(row_index)
         else:
             rotation.update_status(row_index, status)

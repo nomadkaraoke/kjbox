@@ -135,12 +135,18 @@ def format_conky(entries):
         status_lower = entry["status"].lower()
 
         # Determine badge
-        if idx == 1 or "singing" in status_lower or "now" in status_lower:
+        if idx == 1 or "singing" in status_lower or status_lower == "now singing":
             entry_badge = badge("NOW", COLOR_NOW_PILL)
         elif "next" in status_lower:
             entry_badge = badge("NEXT", COLOR_NEXT_PILL)
-        elif "being made" in status_lower or "wip" in status_lower:
-            entry_badge = badge("WIP", COLOR_WIP_PILL)
+        elif "waiting" == status_lower:
+            entry_badge = badge("WAITING", COLOR_NEXT_PILL)
+        elif "being made" in status_lower:
+            entry_badge = badge("MAKING", COLOR_WIP_PILL)
+        elif "on hold" in status_lower or "brb" in status_lower:
+            entry_badge = badge("BRB", "888888")
+        elif "skipped" == status_lower:
+            entry_badge = badge("SKIP", "3b82f6")
         else:
             entry_badge = ""
 

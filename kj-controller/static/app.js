@@ -2071,10 +2071,14 @@ function renderRotation(entries) {
         const row = document.createElement('div');
         row.className = 'rotation-entry';
         const statusLower = (entry.status || '').toLowerCase();
-        if (statusLower.includes('singing') || statusLower.includes('now')) {
+        if (statusLower.includes('singing') || statusLower === 'now singing') {
             row.classList.add('rotation-singing');
         } else if (statusLower.includes('next')) {
             row.classList.add('rotation-next');
+        } else if (statusLower.includes('on hold') || statusLower.includes('brb')) {
+            row.classList.add('rotation-onhold');
+        } else if (statusLower === 'skipped') {
+            row.classList.add('rotation-skipped');
         }
 
         const info = document.createElement('div');
@@ -2098,26 +2102,35 @@ function renderRotation(entries) {
 
         const badge = document.createElement('span');
         badge.className = 'rotation-badge';
-        if (statusLower.includes('singing') || statusLower.includes('now')) {
+        if (statusLower.includes('singing') || statusLower === 'now singing') {
             badge.textContent = 'NOW';
             badge.classList.add('badge-now');
         } else if (statusLower.includes('next')) {
             badge.textContent = 'NEXT';
             badge.classList.add('badge-next');
-        } else if (statusLower.includes('wip') || statusLower.includes('being made')) {
-            badge.textContent = 'WIP';
+        } else if (statusLower === 'waiting') {
+            badge.textContent = 'WAITING';
+            badge.classList.add('badge-waiting');
+        } else if (statusLower.includes('being made')) {
+            badge.textContent = 'MAKING';
             badge.classList.add('badge-wip');
+        } else if (statusLower.includes('on hold') || statusLower.includes('brb')) {
+            badge.textContent = 'BRB';
+            badge.classList.add('badge-onhold');
+        } else if (statusLower === 'skipped') {
+            badge.textContent = 'SKIP';
+            badge.classList.add('badge-skipped');
         }
         if (badge.textContent) info.appendChild(badge);
 
         const actions = document.createElement('div');
         actions.className = 'rotation-actions';
 
-        if (!statusLower.includes('singing') && !statusLower.includes('now')) {
+        if (!statusLower.includes('singing') && statusLower !== 'now singing') {
             const singBtn = document.createElement('button');
             singBtn.className = 'rotation-btn rotation-btn-sing';
             singBtn.textContent = 'Singing';
-            singBtn.onclick = () => updateRotationStatus(entry.row_index, 'Singing Now');
+            singBtn.onclick = () => updateRotationStatus(entry.row_index, 'Now Singing');
             actions.appendChild(singBtn);
         }
 
@@ -2130,8 +2143,8 @@ function renderRotation(entries) {
         if (!statusLower.includes('next')) {
             const nextBtn = document.createElement('button');
             nextBtn.className = 'rotation-btn rotation-btn-next';
-            nextBtn.textContent = 'Next';
-            nextBtn.onclick = () => updateRotationStatus(entry.row_index, 'Next');
+            nextBtn.textContent = 'Up Next';
+            nextBtn.onclick = () => updateRotationStatus(entry.row_index, 'Up Next');
             actions.appendChild(nextBtn);
         }
 

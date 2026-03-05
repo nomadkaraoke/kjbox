@@ -9,8 +9,8 @@ from app import create_app
 
 
 SAMPLE_ENTRIES = [
-    {"row_index": 2, "singer": "Alice", "song_artist": "Bohemian Rhapsody", "status": "Singing Now", "notes": ""},
-    {"row_index": 3, "singer": "Bob", "song_artist": "Don't Stop Believin", "status": "Next", "notes": ""},
+    {"row_index": 2, "singer": "Alice", "song_artist": "Bohemian Rhapsody", "status": "Now Singing", "notes": ""},
+    {"row_index": 3, "singer": "Bob", "song_artist": "Don't Stop Believin", "status": "Up Next", "notes": ""},
     {"row_index": 4, "singer": "Carol", "song_artist": "Sweet Caroline", "status": "", "notes": ""},
 ]
 
@@ -71,7 +71,7 @@ class TestUpdateRotationStatus:
 
     def test_update_singing_uses_mark_singing(self, rotation_client, mock_rotation):
         resp = rotation_client.post('/rotation/status',
-            data=json.dumps({"row_index": 3, "status": "Singing Now"}),
+            data=json.dumps({"row_index": 3, "status": "Now Singing"}),
             content_type='application/json')
         assert resp.status_code == 200
         mock_rotation.mark_singing.assert_called_once_with(3)
