@@ -13,10 +13,20 @@ from catalog import ExternalCatalog
 from config import is_pi, load_config
 from media import MediaIndex
 from overlay import OverlayManager
+from rotation import RotationManager
 from routes import routes_bp
 from utils import log_message
 from vlc import VLCManager
 from zip_playback import ZipPlayback
+
+
+def _init_rotation(cfg):
+    """Create a RotationManager if sheet config is present, else None."""
+    sheet_id = cfg.get('rotation_sheet_id')
+    creds_file = cfg.get('rotation_credentials_file')
+    if sheet_id and creds_file:
+        return RotationManager(sheet_id, creds_file)
+    return None
 
 
 def create_app(config=None):
@@ -30,6 +40,7 @@ def create_app(config=None):
     flask_app.zip_playback = ZipPlayback(cfg)
     overlay_path = cfg.get('overlays_path') if config else None
     flask_app.overlay_manager = OverlayManager(config_path=overlay_path)
+    flask_app.rotation = _init_rotation(cfg)
     flask_app.download_queue = {'items': [], 'worker_running': False}
     flask_app._download_lock = threading.Lock()
     flask_app.register_blueprint(routes_bp)
@@ -110,6 +121,9 @@ def start_app():  # pragma: no cover
     flask_app.catalog = ExternalCatalog(cfg)
     flask_app.zip_playback = ZipPlayback(cfg)
     flask_app.overlay_manager = overlay_mgr
+    flask_app.rotation = _init_rotation(cfg)
+    if flask_app.rotation:
+        log_message("Rotation sheet integration enabled.", cfg)
     flask_app.download_queue = {'items': [], 'worker_running': False}
     flask_app._download_lock = threading.Lock()
     flask_app.register_blueprint(routes_bp)
