@@ -2154,10 +2154,24 @@ function renderRotation(entries) {
     });
 }
 
+function showRotationIndicator(state) {
+    const el = document.getElementById('rotation-indicator');
+    el.className = 'rotation-indicator';
+    if (state === 'spin') {
+        el.classList.add('spinning');
+    } else if (state === 'success') {
+        el.classList.add('success');
+        setTimeout(() => el.classList.add('hidden'), 1500);
+    } else if (state === 'error') {
+        el.classList.add('error');
+        setTimeout(() => el.classList.add('hidden'), 3000);
+    } else {
+        el.classList.add('hidden');
+    }
+}
+
 async function updateRotationStatus(rowIndex, status) {
-    const statusEl = document.getElementById('rotation-status');
-    statusEl.classList.remove('hidden');
-    statusEl.textContent = 'Updating...';
+    showRotationIndicator('spin');
     try {
         const response = await fetch('/rotation/status', {
             method: 'POST',
@@ -2166,19 +2180,16 @@ async function updateRotationStatus(rowIndex, status) {
         });
         const data = await response.json();
         if (!response.ok) {
-            statusEl.textContent = data.error || `Update failed (${response.status})`;
-            setTimeout(() => statusEl.classList.add('hidden'), 3000);
+            showRotationIndicator('error');
             return;
         }
         if (data.entries) {
             rotationData = data.entries;
             renderRotation(rotationData);
         }
-        statusEl.textContent = 'Updated!';
-        setTimeout(() => statusEl.classList.add('hidden'), 1500);
+        showRotationIndicator('success');
     } catch (e) {
-        statusEl.textContent = 'Update failed';
-        setTimeout(() => statusEl.classList.add('hidden'), 3000);
+        showRotationIndicator('error');
     }
 }
 
@@ -2197,9 +2208,7 @@ async function addRotationEntry() {
     const songArtist = songInput.value.trim();
     if (!singer) return;
 
-    const statusEl = document.getElementById('rotation-status');
-    statusEl.classList.remove('hidden');
-    statusEl.textContent = 'Adding...';
+    showRotationIndicator('spin');
     try {
         const response = await fetch('/rotation/add', {
             method: 'POST',
@@ -2208,8 +2217,7 @@ async function addRotationEntry() {
         });
         const data = await response.json();
         if (!response.ok) {
-            statusEl.textContent = data.error || `Add failed (${response.status})`;
-            setTimeout(() => statusEl.classList.add('hidden'), 3000);
+            showRotationIndicator('error');
             return;
         }
         if (data.entries) {
@@ -2218,10 +2226,8 @@ async function addRotationEntry() {
         }
         singerInput.value = '';
         songInput.value = '';
-        statusEl.textContent = 'Added!';
-        setTimeout(() => statusEl.classList.add('hidden'), 1500);
+        showRotationIndicator('success');
     } catch (e) {
-        statusEl.textContent = 'Add failed';
-        setTimeout(() => statusEl.classList.add('hidden'), 3000);
+        showRotationIndicator('error');
     }
 }

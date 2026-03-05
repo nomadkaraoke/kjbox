@@ -1157,13 +1157,38 @@ body {
 .rotation-add-form button:hover {
     background: rgba(139, 92, 246, 0.3);
 }
-.rotation-status {
-    font-size: 0.8em;
-    padding: 4px 8px;
-    margin-bottom: 6px;
-    color: #a78bfa;
+.rotation-indicator {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
 }
-.rotation-status.hidden { display: none; }
+.rotation-indicator.hidden { display: none; }
+.rotation-indicator.spinning::after {
+    content: '';
+    width: 14px;
+    height: 14px;
+    border: 2px solid rgba(139, 92, 246, 0.3);
+    border-top-color: #a78bfa;
+    border-radius: 50%;
+    animation: rot-spin 0.6s linear infinite;
+}
+@keyframes rot-spin {
+    to { transform: rotate(360deg); }
+}
+.rotation-indicator.success::after {
+    content: '\2713';
+    color: #22c55e;
+    font-size: 16px;
+    font-weight: 700;
+}
+.rotation-indicator.error::after {
+    content: '\2717';
+    color: #ef4444;
+    font-size: 16px;
+    font-weight: 700;
+}
 .rotation-list { }
 .rotation-empty {
     color: #666;
