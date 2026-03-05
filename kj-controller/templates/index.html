@@ -562,6 +562,8 @@
 
             rfb.addEventListener('disconnect', function(e) {
                 rfb = null;
+                // Don't update UI if preview is hidden
+                if (document.getElementById('vnc-preview-container').dataset.hidden) return;
                 if (e.detail.clean) {
                     setStatus('Disconnected', '');
                 } else {

@@ -1506,16 +1506,18 @@ async function toggleOverlayEnabled(id) {
 // --- VNC Size Control ---
 
 function hideVncPreview() {
-    // Disconnect without forgetting password, collapse the section
-    if (window.disconnectVnc) window.disconnectVnc();
+    // Mark hidden first so disconnect event handlers don't re-show elements
     const container = document.getElementById('vnc-preview-container');
+    container.dataset.hidden = 'true';
+    localStorage.setItem('kj-vnc-hidden', '1');
+    // Disconnect without forgetting password
+    if (window.disconnectVnc) window.disconnectVnc();
+    // Collapse everything
     container.querySelectorAll('#vnc-screen, #vnc-status, .vnc-password-form, #vnc-controls').forEach(
         el => el.classList.add('hidden')
     );
-    container.dataset.hidden = 'true';
     document.querySelectorAll('.vnc-size-btn').forEach(btn => btn.classList.remove('vnc-size-active'));
     document.querySelector('.vnc-hide-btn').classList.add('vnc-size-active');
-    localStorage.setItem('kj-vnc-hidden', '1');
 }
 
 function showVncPreview() {
