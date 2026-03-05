@@ -3,7 +3,8 @@
 Reads and writes to a Google Sheet that tracks the singer rotation.
 Uses gspread with a service account for authentication.
 
-Sheet columns: Timestamp | Singer | Song & Artist | Status | Notes
+Auto-detects the header row by looking for a row containing "Singer"
+and "Status" columns, then maps column positions dynamically.
 """
 
 import os
@@ -13,17 +14,40 @@ from datetime import datetime
 import gspread
 from google.oauth2.service_account import Credentials
 
-# Column indices (0-based)
-COL_TIMESTAMP = 0
-COL_SINGER = 1
-COL_SONG_ARTIST = 2
-COL_STATUS = 3
-COL_NOTES = 4
-
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 
 # Cache duration in seconds
 CACHE_TTL = 10
+
+# Column letter lookup (0-based index to A, B, C, ...)
+def _col_letter(idx):
+    return chr(ord('A') + idx)
+
+
+def _find_header(all_values):
+    """Find the header row and return (header_row_index, column_map).
+
+    Scans for a row containing "Singer" and "Status" (case-insensitive).
+    Returns 1-based row index and a dict mapping canonical names to 0-based
+    column indices.
+    """
+    for i, row in enumerate(all_values):
+        lower_cells = [c.strip().lower() for c in row]
+        if "singer" in lower_cells and "status" in lower_cells:
+            col_map = {}
+            for j, cell in enumerate(lower_cells):
+                if cell == "singer":
+                    col_map["singer"] = j
+                elif cell in ("song & artist", "song", "song and artist"):
+                    col_map["song_artist"] = j
+                elif cell == "status":
+                    col_map["status"] = j
+                elif cell == "notes":
+                    col_map["notes"] = j
+                elif cell == "timestamp":
+                    col_map["timestamp"] = j
+            return i + 1, col_map  # 1-based row index
+    return None, {}
 
 
 class RotationManager:
@@ -66,18 +90,23 @@ class RotationManager:
         sheet = self._get_sheet()
         all_values = sheet.get_all_values()
 
-        if len(all_values) <= 1:
-            # Only header row or empty
+        header_row, col_map = _find_header(all_values)
+        if header_row is None:
             self._cache = []
             self._cache_time = time.time()
             return self._cache
 
+        col_singer = col_map.get("singer", 1)
+        col_song = col_map.get("song_artist", 2)
+        col_status = col_map.get("status", 3)
+        col_notes = col_map.get("notes")
+
         entries = []
-        for idx, row in enumerate(all_values[1:], start=2):  # row 2 in sheet (1-indexed, skip header)
-            if len(row) <= COL_STATUS:
+        for idx, row in enumerate(all_values[header_row:], start=header_row + 1):
+            if len(row) <= col_status:
                 continue
-            singer = row[COL_SINGER].strip()
-            status = row[COL_STATUS].strip()
+            singer = row[col_singer].strip()
+            status = row[col_status].strip()
             if not singer:
                 continue
             if status.lower() == "done":
@@ -86,9 +115,9 @@ class RotationManager:
             entries.append({
                 "row_index": idx,
                 "singer": singer,
-                "song_artist": row[COL_SONG_ARTIST].strip() if len(row) > COL_SONG_ARTIST else "",
+                "song_artist": row[col_song].strip() if col_song < len(row) else "",
                 "status": status,
-                "notes": row[COL_NOTES].strip() if len(row) > COL_NOTES else "",
+                "notes": row[col_notes].strip() if col_notes is not None and col_notes < len(row) else "",
             })
 
         self._cache = entries
@@ -103,8 +132,10 @@ class RotationManager:
             new_status: New status string (e.g. "Singing Now", "Done", "Next")
         """
         sheet = self._get_sheet()
-        # Status is column D (index 4 in 1-based)
-        sheet.update_cell(row_index, COL_STATUS + 1, new_status)
+        all_values = sheet.get_all_values()
+        _, col_map = _find_header(all_values)
+        col_status = col_map.get("status", 3)
+        sheet.update_cell(row_index, col_status + 1, new_status)
         self._invalidate_cache()
 
     def add_entry(self, singer, song_artist, notes=""):
@@ -116,11 +147,20 @@ class RotationManager:
             notes: Optional notes
         """
         sheet = self._get_sheet()
-        timestamp = datetime.now().strftime("%-m/%-d/%Y %H:%M:%S")
-        sheet.append_row(
-            [timestamp, singer, song_artist, "", notes],
-            value_input_option="USER_ENTERED",
-        )
+        all_values = sheet.get_all_values()
+        _, col_map = _find_header(all_values)
+
+        # Build a row matching the sheet's column layout
+        max_col = max(col_map.values()) + 1 if col_map else 5
+        new_row = [""] * max_col
+        if "timestamp" in col_map:
+            new_row[col_map["timestamp"]] = datetime.now().strftime("%-m/%-d/%Y %H:%M:%S")
+        new_row[col_map.get("singer", 1)] = singer
+        new_row[col_map.get("song_artist", 2)] = song_artist
+        if notes and "notes" in col_map:
+            new_row[col_map["notes"]] = notes
+
+        sheet.append_row(new_row, value_input_option="USER_ENTERED")
         self._invalidate_cache()
 
     def mark_singing(self, row_index):
@@ -128,20 +168,25 @@ class RotationManager:
         sheet = self._get_sheet()
         all_values = sheet.get_all_values()
 
-        # Batch: clear other "Singing Now" entries and set this one
+        header_row, col_map = _find_header(all_values)
+        if header_row is None:
+            return
+        col_status = col_map.get("status", 3)
+        col_letter = _col_letter(col_status)
+
         batch_updates = []
-        for idx, row in enumerate(all_values[1:], start=2):
-            if len(row) <= COL_STATUS:
+        for idx, row in enumerate(all_values[header_row:], start=header_row + 1):
+            if len(row) <= col_status:
                 continue
-            status = row[COL_STATUS].strip().lower()
+            status = row[col_status].strip().lower()
             if idx == row_index:
                 batch_updates.append({
-                    "range": f"D{idx}",
+                    "range": f"{col_letter}{idx}",
                     "values": [["Singing Now"]],
                 })
             elif status in ("singing now", "singing"):
                 batch_updates.append({
-                    "range": f"D{idx}",
+                    "range": f"{col_letter}{idx}",
                     "values": [[""]],
                 })
 
