@@ -605,9 +605,9 @@
             }, RECONNECT_DELAY);
         }
 
-        // Auto-connect on load if password is saved
+        // Auto-connect on load if password is saved (and not hidden)
         const saved = localStorage.getItem(STORAGE_KEY);
-        if (saved) {
+        if (saved && localStorage.getItem('kj-vnc-hidden') !== '1') {
             window.connectVnc(saved);
         }
     </script>
