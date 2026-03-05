@@ -1019,24 +1019,48 @@ async function upgradeYtdlp(btn) {
     if (!confirm('Update yt-dlp to the latest version?\n\nThis will restart the service.')) return;
     btn.disabled = true;
     btn.textContent = 'Updating...';
+
+    // Show restart overlay in modal
+    const contentEl = document.getElementById('yt-content');
+    const loadingEl = document.getElementById('yt-loading');
+    function showOverlay(msg) {
+        contentEl.classList.add('hidden');
+        loadingEl.innerHTML = `<span class="download-spinner"></span> ${escapeHtml(msg)}`;
+        loadingEl.classList.remove('hidden');
+    }
+
     try {
+        showOverlay('Upgrading yt-dlp...');
         const response = await fetch('/youtube/upgrade-ytdlp', { method: 'POST' });
         const data = await response.json();
         if (!response.ok) {
             log('yt-dlp upgrade failed: ' + (data.error || 'Unknown error'), 'error');
-            btn.textContent = 'Update';
-            btn.disabled = false;
+            await ytSettingsRefresh();
             return;
         }
-        log(data.message + (data.restarting ? ' — restarting service...' : ''), 'success');
+        log(data.message, 'success');
         if (data.restarting) {
-            btn.textContent = 'Restarting...';
-            setTimeout(() => { location.reload(); }, 5000);
+            showOverlay('Restarting service, please wait...');
+            await waitForRestart();
+            log('Service restarted.', 'success');
         }
+        await ytSettingsRefresh();
     } catch (e) {
         log('yt-dlp upgrade failed: ' + e.message, 'error');
-        btn.textContent = 'Update';
-        btn.disabled = false;
+        await ytSettingsRefresh();
+    }
+}
+
+async function waitForRestart() {
+    // Wait a moment for the service to actually stop
+    await new Promise(r => setTimeout(r, 2000));
+    // Poll until backend responds again (up to 30s)
+    for (let i = 0; i < 30; i++) {
+        try {
+            const r = await fetch('/status', { signal: AbortSignal.timeout(2000) });
+            if (r.ok) return;
+        } catch (e) { /* still restarting */ }
+        await new Promise(r => setTimeout(r, 1000));
     }
 }
 
