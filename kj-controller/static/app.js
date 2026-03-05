@@ -1539,6 +1539,21 @@ function restartApp() {
         'The web UI will be briefly unavailable while the service restarts.');
 }
 
+async function updateApp() {
+    if (!confirm('Update KJ Controller\n\nThis will pull the latest code from GitHub and restart the service if needed.\n\nAre you sure?')) return;
+    log('Updating KJ Controller...');
+    const data = await apiCall('/system/update', {});
+    if (data && data.success) {
+        log(data.message, 'success');
+        if (data.restarting) {
+            log('Service is restarting — page will reload in 5 seconds...', 'info');
+            setTimeout(() => location.reload(), 5000);
+        } else {
+            log('Refresh the page to see frontend changes.', 'info');
+        }
+    }
+}
+
 // --- Karaoke Nerds Search ---
 
 function extractYouTubeId(url) {

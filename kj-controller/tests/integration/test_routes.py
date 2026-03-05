@@ -809,6 +809,48 @@ def test_system_restart_app(flask_test_client, mocker):
     mock_thread.return_value.start.assert_called_once()
 
 
+def test_system_update_pulls_and_restarts(flask_test_client, mocker):
+    """POST /system/update runs git pull and restarts if .py files changed."""
+    mock_run = mocker.patch('routes.subprocess.run')
+    mock_run.return_value.returncode = 0
+    mock_run.return_value.stdout = "Updating abc123..def456\n routes.py | 5 ++---"
+    mock_run.return_value.stderr = ""
+    mock_thread = mocker.patch('routes.threading.Thread')
+    response = flask_test_client.post('/system/update')
+    assert response.status_code == 200
+    data = json.loads(response.data)
+    assert data["success"] is True
+    assert data["restarting"] is True
+    mock_thread.assert_called_once()
+
+
+def test_system_update_no_restart_for_static_only(flask_test_client, mocker):
+    """POST /system/update skips restart if only static files changed."""
+    mock_run = mocker.patch('routes.subprocess.run')
+    mock_run.return_value.returncode = 0
+    mock_run.return_value.stdout = "Updating abc..def\n static/app.js | 2 +-"
+    mock_run.return_value.stderr = ""
+    mock_thread = mocker.patch('routes.threading.Thread')
+    response = flask_test_client.post('/system/update')
+    assert response.status_code == 200
+    data = json.loads(response.data)
+    assert data["success"] is True
+    assert data["restarting"] is False
+    mock_thread.assert_not_called()
+
+
+def test_system_update_git_pull_failure(flask_test_client, mocker):
+    """POST /system/update returns 500 if git pull fails."""
+    mock_run = mocker.patch('routes.subprocess.run')
+    mock_run.return_value.returncode = 1
+    mock_run.return_value.stdout = ""
+    mock_run.return_value.stderr = "fatal: not a git repository"
+    response = flask_test_client.post('/system/update')
+    assert response.status_code == 500
+    data = json.loads(response.data)
+    assert "error" in data
+
+
 def test_system_reboot(flask_test_client, mocker):
     """POST /system/reboot returns success and spawns reboot thread."""
     mock_run = mocker.patch('routes.subprocess.run')

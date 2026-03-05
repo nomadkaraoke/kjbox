@@ -103,6 +103,7 @@
                 <h2>System</h2>
                 <div class="button-group">
                     <button class="system-btn" onclick="rebuildCatalog()" title="Re-index the external USB drive karaoke library from the file list configured in external_file_list, mounted at external_media_mount">Rebuild Catalog</button>
+                    <button class="system-btn" onclick="updateApp()">Update</button>
                     <button class="system-btn" onclick="restartApp()">Restart App</button>
                     <button class="system-btn system-btn-warn" onclick="dangerousAction(this, 'reboot', 'Reboot', 'The entire system will reboot. This will take about a minute.')">Reboot</button>
                     <button class="system-btn system-btn-danger" onclick="dangerousAction(this, 'shutdown', 'Shut Down', 'The system will power off completely. You will need physical access to turn it back on.')">Shut Down</button>

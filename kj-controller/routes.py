@@ -1244,6 +1244,49 @@ def restart_app():
     return jsonify({"success": True, "message": "Restarting KJ Controller..."})
 
 
+@routes_bp.route('/system/update', methods=['POST'])
+def system_update():
+    """Pulls latest code from GitHub and restarts the service."""
+    cfg = current_app.kj_config
+    log_message("System: update requested from web UI.", cfg)
+
+    repo_dir = os.path.dirname(APP_DIR)  # kjbox/ (parent of kj-controller/)
+
+    # Run git pull synchronously so we can report the result
+    result = subprocess.run(
+        ['git', 'pull', 'origin', 'main'],
+        cwd=repo_dir, capture_output=True, text=True, timeout=30,
+    )
+
+    if result.returncode != 0:
+        log_message(f"System: git pull failed: {result.stderr}", cfg)
+        return jsonify({"error": f"git pull failed: {result.stderr.strip()}"}), 500
+
+    pull_output = result.stdout.strip()
+    log_message(f"System: git pull result: {pull_output}", cfg)
+
+    # Check if any Python files changed (needs restart)
+    needs_restart = '.py' in pull_output
+
+    if needs_restart:
+        def do_restart():
+            time.sleep(1)
+            subprocess.run(['sudo', 'systemctl', 'restart', 'kj-controller'])
+
+        threading.Thread(target=do_restart, daemon=True).start()
+        return jsonify({
+            "success": True,
+            "message": f"Updated and restarting service...\n{pull_output}",
+            "restarting": True,
+        })
+
+    return jsonify({
+        "success": True,
+        "message": f"Updated (refresh browser for changes).\n{pull_output}",
+        "restarting": False,
+    })
+
+
 @routes_bp.route('/system/reboot', methods=['POST'])
 def system_reboot():
     """Reboots the entire system."""
