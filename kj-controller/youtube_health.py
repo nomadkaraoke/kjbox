@@ -1,15 +1,24 @@
 """YouTube health checks and cookie management."""
 
+import json
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
+import time
+import urllib.request
+
+# Cache latest yt-dlp version (checked at most once per day)
+_ytdlp_latest_cache = {'version': None, 'checked_at': 0}
+_YTDLP_CHECK_INTERVAL = 86400  # 24 hours
 
 
 def get_youtube_status(config):
     """Return YouTube download engine status: yt-dlp, EJS, Deno, cookies."""
     status = {
         'ytdlp_version': _get_ytdlp_version(),
+        'ytdlp_latest': _get_ytdlp_latest(),
         'ejs_installed': False,
         'ejs_version': None,
         'deno_available': False,
@@ -135,6 +144,61 @@ def _get_ytdlp_version():
         return yt_dlp.version.__version__
     except Exception:
         return None
+
+
+def _get_ytdlp_latest():
+    """Get latest yt-dlp version from PyPI, cached for 24 hours."""
+    now = time.time()
+    if _ytdlp_latest_cache['version'] and now - _ytdlp_latest_cache['checked_at'] < _YTDLP_CHECK_INTERVAL:
+        return _ytdlp_latest_cache['version']
+    try:
+        req = urllib.request.Request(
+            'https://pypi.org/pypi/yt-dlp/json',
+            headers={'Accept': 'application/json'},
+        )
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            data = json.loads(resp.read())
+            version = data['info']['version']
+            _ytdlp_latest_cache['version'] = version
+            _ytdlp_latest_cache['checked_at'] = now
+            return version
+    except Exception:
+        return _ytdlp_latest_cache.get('version')
+
+
+def upgrade_ytdlp():
+    """Upgrade yt-dlp via pip. Returns (success, message)."""
+    pip_cmd = [sys.executable, '-m', 'pip']
+    try:
+        result = subprocess.run(
+            pip_cmd + ['install', '--upgrade', 'yt-dlp'],
+            capture_output=True, text=True, timeout=120,
+        )
+        if result.returncode != 0:
+            return False, f'pip upgrade failed: {result.stderr.strip()}'
+        # Clear the cached latest version so next status check re-fetches
+        _ytdlp_latest_cache['checked_at'] = 0
+        new_version = _get_ytdlp_version_from_pip()
+        return True, f'yt-dlp upgraded to {new_version}' if new_version else 'yt-dlp upgraded'
+    except subprocess.TimeoutExpired:
+        return False, 'pip upgrade timed out'
+    except Exception as e:
+        return False, f'Upgrade failed: {e}'
+
+
+def _get_ytdlp_version_from_pip():
+    """Get yt-dlp version from pip (not cached import)."""
+    try:
+        result = subprocess.run(
+            [sys.executable, '-m', 'pip', 'show', 'yt-dlp'],
+            capture_output=True, text=True, timeout=10,
+        )
+        for line in result.stdout.splitlines():
+            if line.startswith('Version:'):
+                return line.split(':', 1)[1].strip()
+    except Exception:
+        pass
+    return None
 
 
 def _get_ejs_version():

@@ -893,25 +893,31 @@ async function ytSettingsRefresh() {
 function renderYtSettings(data) {
     // Health bar
     const bar = document.getElementById('yt-health-bar');
+    const ytdlpOk = !!data.ytdlp_version && (!data.ytdlp_latest || data.ytdlp_version === data.ytdlp_latest);
     const items = [
-        { label: 'yt-dlp', ok: !!data.ytdlp_version },
+        { label: 'yt-dlp', ok: ytdlpOk, warn: !!data.ytdlp_version && !ytdlpOk },
         { label: 'EJS', ok: data.ejs_installed },
         { label: 'Deno', ok: data.deno_available },
         { label: 'Cookies', ok: data.cookies_present && data.cookies_valid },
     ];
-    bar.innerHTML = items.map(({ label, ok }) => {
-        const cls = ok ? 'av-health-ok' : (label === 'Cookies' ? 'av-health-warn' : 'av-health-error');
-        const dotCls = ok ? 'av-dot-ok' : (label === 'Cookies' ? 'av-dot-warn' : 'av-dot-error');
+    bar.innerHTML = items.map(({ label, ok, warn }) => {
+        const cls = ok ? 'av-health-ok' : (warn || label === 'Cookies' ? 'av-health-warn' : 'av-health-error');
+        const dotCls = ok ? 'av-dot-ok' : (warn || label === 'Cookies' ? 'av-dot-warn' : 'av-dot-error');
         return `<span class="av-health-item ${cls}">${avDot(dotCls)} ${label}</span>`;
     }).join('');
 
     // Engine info
     const engineEl = document.getElementById('yt-engine-info');
+    const ytdlpOutdated = data.ytdlp_version && data.ytdlp_latest && data.ytdlp_version !== data.ytdlp_latest;
+    const ytdlpDotCls = !data.ytdlp_version ? 'av-dot-error' : (ytdlpOutdated ? 'av-dot-warn' : 'av-dot-ok');
+    const ytdlpExtra = ytdlpOutdated
+        ? ` <span class="yt-outdated">(latest: ${escapeHtml(data.ytdlp_latest)})</span> <button class="system-btn yt-upgrade-btn" onclick="upgradeYtdlp(this)">Update</button>`
+        : '';
     engineEl.innerHTML = `
         <div class="av-info-row">
             <span class="av-info-label">yt-dlp</span>
-            ${avDot(data.ytdlp_version ? 'av-dot-ok' : 'av-dot-error')}
-            <span class="av-info-value">${escapeHtml(data.ytdlp_version || 'not installed')}</span>
+            ${avDot(ytdlpDotCls)}
+            <span class="av-info-value">${escapeHtml(data.ytdlp_version || 'not installed')}${ytdlpExtra}</span>
         </div>
         <div class="av-info-row">
             <span class="av-info-label">EJS solver</span>
@@ -962,7 +968,8 @@ function updateYtHealthDot(data) {
     dot.className = 'yt-health-dot';
     if (!data.ytdlp_version) {
         dot.classList.add('yt-dot-error');
-    } else if (!data.ejs_installed || !data.cookies_present || !data.cookies_valid) {
+    } else if (!data.ejs_installed || !data.cookies_present || !data.cookies_valid
+               || (data.ytdlp_latest && data.ytdlp_version !== data.ytdlp_latest)) {
         dot.classList.add('yt-dot-warn');
     } else {
         dot.classList.add('yt-dot-ok');
@@ -1005,6 +1012,31 @@ async function deleteYtCookies() {
         }
     } catch (e) {
         log('Error deleting cookies: ' + e.message, 'error');
+    }
+}
+
+async function upgradeYtdlp(btn) {
+    if (!confirm('Update yt-dlp to the latest version?\n\nThis will restart the service.')) return;
+    btn.disabled = true;
+    btn.textContent = 'Updating...';
+    try {
+        const response = await fetch('/youtube/upgrade-ytdlp', { method: 'POST' });
+        const data = await response.json();
+        if (!response.ok) {
+            log('yt-dlp upgrade failed: ' + (data.error || 'Unknown error'), 'error');
+            btn.textContent = 'Update';
+            btn.disabled = false;
+            return;
+        }
+        log(data.message + (data.restarting ? ' — restarting service...' : ''), 'success');
+        if (data.restarting) {
+            btn.textContent = 'Restarting...';
+            setTimeout(() => { location.reload(); }, 5000);
+        }
+    } catch (e) {
+        log('yt-dlp upgrade failed: ' + e.message, 'error');
+        btn.textContent = 'Update';
+        btn.disabled = false;
     }
 }
 

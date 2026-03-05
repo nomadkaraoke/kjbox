@@ -837,6 +837,27 @@ def youtube_delete_cookies():
     return jsonify({'success': True, 'message': 'No cookies file to delete'})
 
 
+@routes_bp.route('/youtube/upgrade-ytdlp', methods=['POST'])
+def youtube_upgrade_ytdlp():
+    """Upgrades yt-dlp to the latest version and restarts the service."""
+    cfg = current_app.kj_config
+    log_message("YouTube: yt-dlp upgrade requested from web UI.", cfg)
+
+    ok, msg = youtube_health.upgrade_ytdlp()
+    if not ok:
+        log_message(f"YouTube: yt-dlp upgrade failed: {msg}", cfg)
+        return jsonify({'error': msg}), 500
+
+    log_message(f"YouTube: {msg}, restarting service...", cfg)
+
+    def do_restart():
+        time.sleep(1)
+        subprocess.run(['sudo', 'systemctl', 'restart', 'kj-controller'])
+
+    threading.Thread(target=do_restart, daemon=True).start()
+    return jsonify({'success': True, 'message': msg, 'restarting': True})
+
+
 # --- Display Resolution ---
 
 def _query_xrandr():

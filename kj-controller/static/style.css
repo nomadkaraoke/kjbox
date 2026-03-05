@@ -1083,6 +1083,9 @@ body {
 .yt-health-dot.yt-dot-ok    { background-color: #22c55e; box-shadow: 0 0 5px rgba(34,197,94,0.5); }
 .yt-health-dot.yt-dot-warn  { background-color: #f59e0b; box-shadow: 0 0 5px rgba(245,158,11,0.5); }
 .yt-health-dot.yt-dot-error { background-color: #ef4444; box-shadow: 0 0 5px rgba(239,68,68,0.5); }
+.yt-outdated { color: #f59e0b; font-size: 0.85em; }
+.yt-upgrade-btn { font-size: 0.75em !important; padding: 2px 8px !important; margin-left: 6px; vertical-align: middle; color: #f59e0b !important; border-color: rgba(245, 158, 11, 0.4) !important; }
+.yt-upgrade-btn:hover { background-color: rgba(245, 158, 11, 0.15) !important; }
 
 .yt-cookie-actions {
     margin-top: 8px;
