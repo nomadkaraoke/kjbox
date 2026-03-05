@@ -117,6 +117,15 @@
                         <button class="system-btn av-output-btn" onclick="openAvModal()">AV Output</button>
                     </div>
                 </div>
+                <div class="controls-row">
+                    <label class="autodeploy-toggle">
+                        <span>Auto-Deploy</span>
+                        <label class="overlay-toggle">
+                            <input type="checkbox" id="autodeploy-switch" onchange="toggleAutoDeploy(this.checked)">
+                            <span class="slider"></span>
+                        </label>
+                    </label>
+                </div>
                 <div id="status-bar">
                     <strong>Status:</strong> <span id="player-state">Unknown</span> |
                     <strong>Filler:</strong> <span id="current-filler">wii.mp3</span>

@@ -1526,6 +1526,30 @@ async function systemAction(action, label, extraWarning) {
     }
 }
 
+async function fetchAutoDeployStatus() {
+    try {
+        const response = await fetch('/system/autodeploy');
+        const data = await response.json();
+        document.getElementById('autodeploy-switch').checked = data.active;
+    } catch (e) { /* ignore */ }
+}
+
+async function toggleAutoDeploy(active) {
+    try {
+        const response = await fetch('/system/autodeploy', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ active })
+        });
+        const data = await response.json();
+        document.getElementById('autodeploy-switch').checked = data.active;
+        log(`Auto-deploy ${data.active ? 'enabled' : 'disabled'}`, 'success');
+    } catch (e) {
+        log('Failed to toggle auto-deploy', 'error');
+        fetchAutoDeployStatus(); // revert switch to actual state
+    }
+}
+
 async function rebuildCatalog() {
     log('Rebuilding catalog...');
     const data = await apiCall('/catalog/build', {});
@@ -2025,6 +2049,7 @@ document.addEventListener('DOMContentLoaded', () => {
     loadOverlays();
     checkCatalogAvailability();
     fetchRotation();
+    fetchAutoDeployStatus();
     log('Nomad KJ Control initialized.');
 });
 
