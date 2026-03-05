@@ -1286,25 +1286,15 @@ def system_update():
     pull_output = result.stdout.strip()
     log_message(f"System: git pull result: {pull_output}", cfg)
 
-    # Check if any Python files changed (needs restart)
-    needs_restart = '.py' in pull_output
+    def do_restart():
+        time.sleep(1)
+        subprocess.run(['sudo', 'systemctl', 'restart', 'kj-controller'])
 
-    if needs_restart:
-        def do_restart():
-            time.sleep(1)
-            subprocess.run(['sudo', 'systemctl', 'restart', 'kj-controller'])
-
-        threading.Thread(target=do_restart, daemon=True).start()
-        return jsonify({
-            "success": True,
-            "message": f"Updated and restarting service...\n{pull_output}",
-            "restarting": True,
-        })
-
+    threading.Thread(target=do_restart, daemon=True).start()
     return jsonify({
         "success": True,
-        "message": f"Updated (refresh browser for changes).\n{pull_output}",
-        "restarting": False,
+        "message": pull_output,
+        "restarting": True,
     })
 
 

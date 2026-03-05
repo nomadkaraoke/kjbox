@@ -1683,18 +1683,14 @@ async function restartApp() {
 }
 
 async function updateApp() {
-    if (!confirm('Update KJ Controller?\n\nThis will pull the latest code from GitHub and restart the service if needed.')) return;
+    if (!confirm('Update KJ Controller?\n\nThis will pull the latest code from GitHub and restart the service.')) return;
     showSystemOverlay('Pulling latest code from GitHub...');
     const data = await apiCall('/system/update', {});
     if (data && data.success) {
         log(data.message, 'success');
-        if (data.restarting) {
-            showSystemOverlay('Code updated. Restarting service...');
-            await waitForRestart();
-            showSystemSuccess('Updated and restarted. Refresh for frontend changes.');
-        } else {
-            showSystemSuccess('Updated. Refresh the page for frontend changes.');
-        }
+        showSystemOverlay('Code updated. Restarting service...');
+        await waitForRestart();
+        showSystemSuccess('Updated and restarted. Refresh for frontend changes.');
     } else {
         hideSystemOverlay();
     }
