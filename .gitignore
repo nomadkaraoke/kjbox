@@ -59,6 +59,9 @@ kj-controller/config.json
 kj-controller/media_index.json
 kj-controller/external_media.db
 
+# Runtime data (device-specific, must not be overwritten by deploys)
+data/overlays.json
+
 # Testing / Coverage
 .pytest_cache/
 htmlcov/
