@@ -20,8 +20,8 @@ class VLCManager:
         self.processes = {"karaoke": None, "filler": None}
         self.current_playing_path = None
         self.current_filler_track = None
-        self.filler_volume = 100
-        self.karaoke_volume = 200
+        self.filler_volume = config.get('filler_volume', 100)
+        self.karaoke_volume = config.get('karaoke_volume', 200)
         self.karaoke_active = False
         self.last_seek_time = 0
         self.last_play_time = 0
