@@ -1690,7 +1690,7 @@ async function updateApp() {
         log(data.message, 'success');
         showSystemOverlay('Code updated. Restarting service...');
         await waitForRestart();
-        showSystemSuccess('Updated and restarted. Refresh for frontend changes.');
+        location.reload();
     } else {
         hideSystemOverlay();
     }
