@@ -47,7 +47,7 @@ KJ Controller is a web-based karaoke show management application. A Flask backen
 | `config.py` | ~70 | Constants, `is_pi()`, `load_config()`, `save_config_value()` |
 | `utils.py` | ~40 | `log_message()`, `sanitize_filename_part()`, `parse_youtube_filename()` |
 | `media.py` | ~260 | `MediaIndex` class: scan, validate, download, delete, list |
-| `vlc.py` | ~260 | `VLCManager` class: launch, command, fade, play, restart, monitor |
+| `vlc.py` | ~440 | `VLCManager` class: launch, command, fade, play, restart, monitor, reconnect |
 | `catalog.py` | ~230 | `ExternalCatalog` class: SQLite FTS5 search over external media |
 | `zip_playback.py` | ~50 | `ZipPlayback` class: CDG+MP3 ZIP extraction for VLC |
 | `overlay.py` | ~100 | `OverlayManager` class: CRUD, toggle, karaoke_playing state, JSON persistence |
@@ -156,6 +156,8 @@ A stateful class holding the index dict, with methods for scan, validate, downlo
 
 ### VLCManager Class
 A stateful class holding process handles, volume levels, and playback state. All VLC operations are no-ops when `enabled=False` (non-Pi environments), enabling safe dev mode.
+
+VLC processes are launched in their own session (`start_new_session=True`) and survive kj-controller restarts. On startup, `try_reconnect()` probes VLC HTTP ports (8080/8081) — if an existing instance responds, it skips launching a new one and recovers playback state from VLC's status API plus a persisted state file (`/tmp/kj-vlc-state.json`). The systemd unit uses `KillMode=process` so only the Python process is killed on restart, not VLC children.
 
 ### Platform Detection
 `is_pi()` checks for `/boot/dietpi.txt`. On non-Pi platforms, VLC is disabled and the app runs in dev mode (web UI + media scanning only).
