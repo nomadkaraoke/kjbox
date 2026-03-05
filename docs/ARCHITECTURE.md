@@ -135,6 +135,8 @@ utils.py → (stdlib only)
 | POST | `/system/autodeploy` | Enable/disable kj-autodeploy (persists across reboots) |
 | GET | `/rotation` | Get singer rotation queue (non-done entries from Google Sheet) |
 | POST | `/rotation/status` | Update a rotation entry's status (any status from sheet) |
+| POST | `/rotation/edit` | Edit a rotation entry's singer name and/or song |
+| POST | `/rotation/delete` | Delete a rotation entry (removes row from sheet) |
 | POST | `/rotation/add` | Add a new singer to the rotation |
 
 ## Key Design Decisions

@@ -5,6 +5,9 @@ Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](a
 ## 2026-03-05 - UI Polish & System Management
 
 **Rotation improvements:**
+- Edit and delete rotation entries: pencil button, Shift+click to edit inline, Ctrl/Cmd+click to delete
+- Ctrl/Cmd+hover shows red strikethrough delete preview
+- `POST /rotation/edit` and `POST /rotation/delete` endpoints
 - Replaced "Updating..."/"Updated!" text with spinner/tick indicator in section header
 - Compact row layout (smaller fonts, tighter padding) to show more singers at once
 - Advanced status dropdown ("...") button with all 7 Google Sheet statuses
