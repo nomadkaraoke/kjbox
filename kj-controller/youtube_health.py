@@ -14,11 +14,24 @@ _ytdlp_latest_cache = {'version': None, 'checked_at': 0}
 _YTDLP_CHECK_INTERVAL = 86400  # 24 hours
 
 
+def _normalize_version(v):
+    """Normalize version like '2026.03.03' to '2026.3.3' for comparison."""
+    if not v:
+        return v
+    return '.'.join(str(int(p)) for p in v.split('.'))
+
+
 def get_youtube_status(config):
     """Return YouTube download engine status: yt-dlp, EJS, Deno, cookies."""
+    installed = _get_ytdlp_version()
+    latest = _get_ytdlp_latest()
+    outdated = False
+    if installed and latest:
+        outdated = _normalize_version(installed) != _normalize_version(latest)
     status = {
-        'ytdlp_version': _get_ytdlp_version(),
-        'ytdlp_latest': _get_ytdlp_latest(),
+        'ytdlp_version': installed,
+        'ytdlp_latest': latest,
+        'ytdlp_outdated': outdated,
         'ejs_installed': False,
         'ejs_version': None,
         'deno_available': False,

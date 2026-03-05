@@ -893,7 +893,7 @@ async function ytSettingsRefresh() {
 function renderYtSettings(data) {
     // Health bar
     const bar = document.getElementById('yt-health-bar');
-    const ytdlpOk = !!data.ytdlp_version && (!data.ytdlp_latest || data.ytdlp_version === data.ytdlp_latest);
+    const ytdlpOk = !!data.ytdlp_version && !data.ytdlp_outdated;
     const items = [
         { label: 'yt-dlp', ok: ytdlpOk, warn: !!data.ytdlp_version && !ytdlpOk },
         { label: 'EJS', ok: data.ejs_installed },
@@ -908,7 +908,7 @@ function renderYtSettings(data) {
 
     // Engine info
     const engineEl = document.getElementById('yt-engine-info');
-    const ytdlpOutdated = data.ytdlp_version && data.ytdlp_latest && data.ytdlp_version !== data.ytdlp_latest;
+    const ytdlpOutdated = data.ytdlp_outdated;
     const ytdlpDotCls = !data.ytdlp_version ? 'av-dot-error' : (ytdlpOutdated ? 'av-dot-warn' : 'av-dot-ok');
     const ytdlpExtra = ytdlpOutdated
         ? ` <span class="yt-outdated">(latest: ${escapeHtml(data.ytdlp_latest)})</span> <button class="system-btn yt-upgrade-btn" onclick="upgradeYtdlp(this)">Update</button>`
@@ -969,7 +969,7 @@ function updateYtHealthDot(data) {
     if (!data.ytdlp_version) {
         dot.classList.add('yt-dot-error');
     } else if (!data.ejs_installed || !data.cookies_present || !data.cookies_valid
-               || (data.ytdlp_latest && data.ytdlp_version !== data.ytdlp_latest)) {
+               || data.ytdlp_outdated) {
         dot.classList.add('yt-dot-warn');
     } else {
         dot.classList.add('yt-dot-ok');
