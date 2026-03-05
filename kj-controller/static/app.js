@@ -2137,6 +2137,11 @@ async function updateRotationStatus(rowIndex, status) {
             body: JSON.stringify({ row_index: rowIndex, status: status })
         });
         const data = await response.json();
+        if (!response.ok) {
+            statusEl.textContent = data.error || `Update failed (${response.status})`;
+            setTimeout(() => statusEl.classList.add('hidden'), 3000);
+            return;
+        }
         if (data.entries) {
             rotationData = data.entries;
             renderRotation(rotationData);
@@ -2174,6 +2179,11 @@ async function addRotationEntry() {
             body: JSON.stringify({ singer, song_artist: songArtist })
         });
         const data = await response.json();
+        if (!response.ok) {
+            statusEl.textContent = data.error || `Add failed (${response.status})`;
+            setTimeout(() => statusEl.classList.add('hidden'), 3000);
+            return;
+        }
         if (data.entries) {
             rotationData = data.entries;
             renderRotation(rotationData);

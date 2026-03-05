@@ -76,6 +76,19 @@ class TestUpdateRotationStatus:
         assert resp.status_code == 200
         mock_rotation.mark_singing.assert_called_once_with(3)
 
+    def test_invalid_row_index_returns_400(self, rotation_client):
+        resp = rotation_client.post('/rotation/status',
+            data=json.dumps({"row_index": "abc", "status": "Done"}),
+            content_type='application/json')
+        assert resp.status_code == 400
+        assert "integer" in resp.get_json()["error"]
+
+    def test_negative_row_index_returns_400(self, rotation_client):
+        resp = rotation_client.post('/rotation/status',
+            data=json.dumps({"row_index": -1, "status": "Done"}),
+            content_type='application/json')
+        assert resp.status_code == 400
+
     def test_missing_row_index_returns_400(self, rotation_client):
         resp = rotation_client.post('/rotation/status',
             data=json.dumps({"status": "Done"}),

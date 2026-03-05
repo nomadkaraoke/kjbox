@@ -154,7 +154,8 @@ class RotationManager:
         max_col = max(col_map.values()) + 1 if col_map else 5
         new_row = [""] * max_col
         if "timestamp" in col_map:
-            new_row[col_map["timestamp"]] = datetime.now().strftime("%-m/%-d/%Y %H:%M:%S")
+            dt = datetime.now()
+            new_row[col_map["timestamp"]] = f"{dt.month}/{dt.day}/{dt.year} {dt:%H:%M:%S}"
         new_row[col_map.get("singer", 1)] = singer
         new_row[col_map.get("song_artist", 2)] = song_artist
         if notes and "notes" in col_map:

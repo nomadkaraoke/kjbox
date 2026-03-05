@@ -1295,10 +1295,16 @@ def update_rotation_status():
     if rotation is None:
         return jsonify({"error": "Rotation not configured"}), 503
     data = request.get_json(force=True)
-    row_index = data.get('row_index')
+    raw_index = data.get('row_index')
     status = data.get('status', '')
-    if not row_index:
+    if raw_index is None:
         return jsonify({"error": "row_index is required"}), 400
+    try:
+        row_index = int(raw_index)
+    except (TypeError, ValueError):
+        return jsonify({"error": "row_index must be an integer"}), 400
+    if row_index < 1:
+        return jsonify({"error": "row_index must be >= 1"}), 400
 
     try:
         if status.lower() in ('singing now', 'singing'):
