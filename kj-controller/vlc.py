@@ -12,8 +12,7 @@ import requests
 from config import APP_DIR, is_pi
 from utils import log_message
 
-STATE_DIR = '/var/run/kj-controller'
-STATE_FILE = os.path.join(STATE_DIR, 'state.json')
+STATE_FILE = '/tmp/kj-vlc-state.json'
 
 
 class VLCManager:
@@ -43,7 +42,6 @@ class VLCManager:
             'current_filler_track': self.current_filler_track,
         }
         try:
-            os.makedirs(STATE_DIR, exist_ok=True)
             with open(STATE_FILE, 'w') as f:
                 json.dump(state, f)
         except OSError:

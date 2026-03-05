@@ -8,7 +8,7 @@ Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](a
 
 - VLC launched in its own process group (`start_new_session=True`) so it's not killed when the Python process exits
 - On startup, kj-controller probes VLC HTTP ports and reconnects to existing instances
-- Playback state (current song, filler track) persisted to `/var/run/kj-controller/state.json` and recovered on restart
+- Playback state (current song, filler track) persisted to `/tmp/kj-vlc-state.json` and recovered on restart
 - `restart_instances` handles orphan VLC processes (kills by port when we don't own the PID)
 - Auto-deploy skips service restart for frontend-only changes (JS/CSS/HTML)
 - systemd unit updated: `KillMode=process` so only Python is killed, not VLC children

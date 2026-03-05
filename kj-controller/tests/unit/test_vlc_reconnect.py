@@ -16,7 +16,6 @@ class TestStatePersistence:
     def test_save_and_load_state(self, mock_config, tmp_path, monkeypatch):
         state_file = str(tmp_path / "state.json")
         monkeypatch.setattr('vlc.STATE_FILE', state_file)
-        monkeypatch.setattr('vlc.STATE_DIR', str(tmp_path))
 
         vm = VLCManager(mock_config, enabled=True)
         vm.current_playing_path = "/media/Song - Artist.mp4"
@@ -39,19 +38,18 @@ class TestStatePersistence:
         vm = VLCManager(mock_config, enabled=True)
         assert vm._load_state() == {}
 
-    def test_save_state_creates_directory(self, mock_config, tmp_path, monkeypatch):
-        state_dir = tmp_path / "subdir"
-        state_file = state_dir / "state.json"
-        monkeypatch.setattr('vlc.STATE_DIR', str(state_dir))
+    def test_save_state_overwrites(self, mock_config, tmp_path, monkeypatch):
+        state_file = tmp_path / "state.json"
         monkeypatch.setattr('vlc.STATE_FILE', str(state_file))
 
         vm = VLCManager(mock_config, enabled=True)
         vm.current_playing_path = "/media/test.mp4"
         vm._save_state()
+        vm.current_playing_path = "/media/test2.mp4"
+        vm._save_state()
 
-        assert state_file.exists()
         data = json.loads(state_file.read_text())
-        assert data['current_playing_path'] == "/media/test.mp4"
+        assert data['current_playing_path'] == "/media/test2.mp4"
 
 
 # --- Reconnection ---
