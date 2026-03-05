@@ -1300,14 +1300,22 @@ def autodeploy_status():
 
 @routes_bp.route('/system/autodeploy', methods=['POST'])
 def autodeploy_toggle():
-    """Starts or stops the kj-autodeploy service."""
+    """Starts/stops and enables/disables the kj-autodeploy service."""
     cfg = current_app.kj_config
     data = request.get_json() or {}
     enable = data.get('active', False)
-    action = 'start' if enable else 'stop'
-    log_message(f"System: autodeploy {action} requested from web UI.", cfg)
-    subprocess.run(['sudo', 'systemctl', action, 'kj-autodeploy'])
-    return jsonify({"active": enable})
+    log_message(f"System: autodeploy {'enable' if enable else 'disable'} requested from web UI.", cfg)
+    if enable:
+        subprocess.run(['sudo', 'systemctl', 'enable', '--now', 'kj-autodeploy'])
+    else:
+        subprocess.run(['sudo', 'systemctl', 'disable', '--now', 'kj-autodeploy'])
+    # Verify actual state
+    result = subprocess.run(
+        ['systemctl', 'is-active', 'kj-autodeploy'],
+        capture_output=True, text=True,
+    )
+    active = result.stdout.strip() == 'active'
+    return jsonify({"active": active})
 
 
 @routes_bp.route('/system/reboot', methods=['POST'])

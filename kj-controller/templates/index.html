@@ -118,13 +118,13 @@
                     </div>
                 </div>
                 <div class="controls-row">
-                    <label class="autodeploy-toggle">
+                    <div class="autodeploy-toggle">
                         <span>Auto-Deploy</span>
-                        <label class="overlay-toggle">
+                        <div class="overlay-toggle">
                             <input type="checkbox" id="autodeploy-switch" onchange="toggleAutoDeploy(this.checked)">
-                            <span class="slider"></span>
-                        </label>
-                    </label>
+                            <span class="slider" onclick="document.getElementById('autodeploy-switch').click()"></span>
+                        </div>
+                    </div>
                 </div>
                 <div id="status-bar">
                     <strong>Status:</strong> <span id="player-state">Unknown</span> |
