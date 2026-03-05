@@ -36,6 +36,8 @@ Key settings in `config.json`:
 - `websockify_enabled` - enable/disable websockify subprocess (default: true, Pi-only)
 - `tls_cert` - path to TLS certificate (default: `certs/cert.pem`); enables HTTPS when present
 - `tls_key` - path to TLS private key (default: `certs/key.pem`); enables HTTPS when present
+- `rotation_sheet_id` - Google Sheet ID for singer rotation (optional)
+- `rotation_credentials_file` - path to GCP service account JSON key for Sheets API (optional)
 
 ## Running the App
 
@@ -95,7 +97,8 @@ kj-controller/
   vlc.py                 # VLCManager class (launch, command, fade, play)
   catalog.py             # ExternalCatalog class (SQLite FTS5 search)
   zip_playback.py        # ZipPlayback class (CDG+MP3 ZIP extraction)
-  routes.py              # Flask Blueprint with all 18 route handlers
+  rotation.py            # RotationManager class (Google Sheets singer rotation)
+  routes.py              # Flask Blueprint with REST API route handlers
   config.example.json    # Example configuration
   requirements.txt       # Production dependencies
   requirements-dev.txt   # Test dependencies
@@ -117,7 +120,9 @@ kj-controller/
       test_vlc.py        # VLCManager tests (disabled mode)
       test_catalog.py    # ExternalCatalog + filename parser tests
       test_zip_playback.py # ZipPlayback extraction tests
+      test_rotation.py   # RotationManager unit tests
     integration/
       test_routes.py     # Flask route tests via test client
       test_search_routes.py # Search, catalog, ZIP playback route tests
+      test_rotation_routes.py # Rotation API route tests
 ```

@@ -2,6 +2,44 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-03-05 - Rotation Sheet Integration & System Update Button
+
+**Motivation:** The singer rotation was managed entirely via a Google Sheet, which meant the KJ had to alt-tab to the browser to update singer status. This led to forgetting to update the rotation until several songs late.
+
+**New module: `rotation.py`**
+- `RotationManager` class using `gspread` + GCP service account for Google Sheets API
+- Auto-detects header row and column positions (handles metadata rows, extra columns)
+- Read: fetches non-done entries with 10s cache to avoid API hammering
+- Write: update status, mark singing (auto-clears other "Singing Now"), add new entries
+- Portable timestamp formatting (no platform-specific strftime)
+
+**New UI: Rotation panel (below Playback Controls)**
+- Shows all non-done rotation entries with singer name, song, and status badges (NOW/NEXT/WIP)
+- Per-row action buttons: Singing, Done, Next
+- Inline "Add Singer" form
+- Auto-refreshes every 10s, manual Refresh button
+- Gracefully hidden when rotation is not configured (no service account set up)
+
+**New UI: System Update button**
+- `POST /system/update` runs `git pull origin main` on the device
+- If Python files changed: auto-restarts the service and reloads the page after 5s
+- If only static files changed: prompts to refresh the browser
+- Reports git pull output and errors in the UI
+
+**Config additions** (both optional):
+- `rotation_sheet_id` — Google Sheet ID for singer rotation
+- `rotation_credentials_file` — path to GCP service account JSON key
+
+**Setup on NomadPC:**
+- Created GCP service account `kjbox-138@nomadkaraoke.iam.gserviceaccount.com`
+- Shared rotation Google Sheet with service account (Editor access)
+- SA key deployed to `~/kjdata/rotation-sa-key.json`
+- Config updated, service restarted, verified working
+
+**Dependencies added:** `gspread`, `google-auth` (already installed in venv)
+
+**Version:** 0.8.3 → 0.9.0
+
 ## 2026-02-26 - YouTube Download Resilience & Async Downloads
 
 **Motivation:** YouTube downloads via yt-dlp would fail after several tracks in quick succession during a live karaoke show (YouTube rate limiting/bot detection). Also, refreshing the page during a download lost the completion notification since the download was synchronous (blocking 25+ seconds).
