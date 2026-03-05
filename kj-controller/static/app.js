@@ -2297,6 +2297,36 @@ function renderRotation(entries) {
             actions.appendChild(nextBtn);
         }
 
+        // "..." more status options
+        const moreBtn = document.createElement('button');
+        moreBtn.className = 'rotation-btn rotation-btn-more';
+        moreBtn.textContent = '\u2026';
+        moreBtn.title = 'More status options';
+        moreBtn.onclick = (e) => {
+            e.stopPropagation();
+            // Close any open dropdown
+            document.querySelectorAll('.rotation-dropdown').forEach(d => d.remove());
+            const dropdown = document.createElement('div');
+            dropdown.className = 'rotation-dropdown';
+            const allStatuses = ['Now Singing', 'Up Next', 'Waiting', 'Done', 'Being Made (!)', 'On Hold (BRB)', 'Skipped'];
+            allStatuses.forEach(s => {
+                const item = document.createElement('button');
+                item.className = 'rotation-dropdown-item';
+                item.textContent = s;
+                item.onclick = (ev) => {
+                    ev.stopPropagation();
+                    dropdown.remove();
+                    updateRotationStatus(entry.row_index, s);
+                };
+                dropdown.appendChild(item);
+            });
+            actions.appendChild(dropdown);
+            // Close on outside click
+            const close = () => { dropdown.remove(); document.removeEventListener('click', close); };
+            setTimeout(() => document.addEventListener('click', close), 0);
+        };
+        actions.appendChild(moreBtn);
+
         row.appendChild(info);
         row.appendChild(actions);
         list.appendChild(row);
