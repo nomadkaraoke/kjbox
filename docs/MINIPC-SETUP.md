@@ -370,6 +370,7 @@ EOF
 - `external_file_list` / `external_media_mount` — used by the SQLite FTS5 external catalog system for large collections like HyperMule (~415K files). See [Phase 6: USB External Drive](#phase-6-usb-external-drive) for details.
 - `tls_cert` / `tls_key` — when present, Flask serves HTTPS on port 443 instead of HTTP on port 80. See [Phase 5.6](#56-tls-certificates-configured).
 - `websockify_host` — tunnel hostname for VNC WebSocket. When accessing via tunnel (e.g., `kjbox.nomadkaraoke.com`), the noVNC client connects to this hostname. When accessing locally (`.local`, `localhost`, or IP), it connects directly to `hostname:6080`. Leave empty if not using a tunnel.
+- `rotation_sheet_id` / `rotation_credentials_file` — (optional) Google Sheet ID and GCP service account key for singer rotation integration. When configured, a Rotation panel appears in the KJ Controller UI. Requires sharing the sheet with the service account email (Editor access).
 
 **Audio note:** This mini PC has PipeWire installed, but VLC bypasses it and uses ALSA directly for HDMI audio. PipeWire's HDMI routing doesn't reliably produce sound on this hardware. The `hdmiout` ALSA device (defined in `/etc/asound.conf`) maps directly to `hw:0,7`. See [AUDIO.md](AUDIO.md) for the full NomadPC audio setup and troubleshooting.
 

@@ -28,7 +28,7 @@ A more powerful replacement/companion — Intel N97 mini PC running Linux Mint.
 |-----------|---------|
 | VLC | Video/audio playback |
 | KJ Controller | Web-based karaoke show management (Flask + yt-dlp + VLC) |
-| Rotation Display | Singer queue overlay from Google Sheets (Conky + Python) |
+| Rotation Display | Singer queue overlay from Google Sheets (Conky + Python + KJ Controller integration) |
 | Overlay Engine | Dynamic display overlays (ticker, countdown, QR, etc.) |
 
 ## Repository Structure
@@ -62,6 +62,7 @@ kjbox/
     utils.py                   # Logging and filename utilities
     media.py                   # MediaIndex class (scan, validate, download)
     vlc.py                     # VLCManager class (dual VLC instance control)
+    rotation.py                # RotationManager (Google Sheets singer rotation)
     routes.py                  # Flask Blueprint with REST API handlers
     pyproject.toml             # Project metadata and tool config
     requirements.txt           # Production dependencies
