@@ -2009,7 +2009,181 @@ document.addEventListener('DOMContentLoaded', () => {
     updateFillerMusicList();
     loadOverlays();
     checkCatalogAvailability();
+    fetchRotation();
     log('Nomad KJ Control initialized.');
 });
 
 setInterval(updateStatus, 2000);
+setInterval(fetchRotation, 10000);
+
+// --- Rotation (Google Sheet integration) ---
+
+let rotationData = [];
+
+async function fetchRotation(forceRefresh) {
+    try {
+        const url = forceRefresh ? '/rotation?refresh=1' : '/rotation';
+        const response = await fetch(url);
+        if (!response.ok) {
+            if (response.status === 503) {
+                // Rotation not configured — hide the panel
+                const panel = document.querySelector('.rotation-panel');
+                if (panel) panel.style.display = 'none';
+                return;
+            }
+            throw new Error('Failed to fetch rotation');
+        }
+        const data = await response.json();
+        rotationData = data.entries || [];
+        renderRotation(rotationData);
+    } catch (e) {
+        const list = document.getElementById('rotation-list');
+        if (list) list.innerHTML = '<div class="rotation-empty">Could not load rotation</div>';
+    }
+}
+
+function renderRotation(entries) {
+    const list = document.getElementById('rotation-list');
+    if (!list) return;
+
+    if (!entries.length) {
+        list.innerHTML = '<div class="rotation-empty">No singers in queue</div>';
+        return;
+    }
+
+    list.innerHTML = '';
+    entries.forEach((entry, idx) => {
+        const row = document.createElement('div');
+        row.className = 'rotation-entry';
+        const statusLower = (entry.status || '').toLowerCase();
+        if (statusLower.includes('singing') || statusLower.includes('now')) {
+            row.classList.add('rotation-singing');
+        } else if (statusLower.includes('next')) {
+            row.classList.add('rotation-next');
+        }
+
+        const info = document.createElement('div');
+        info.className = 'rotation-info';
+
+        const num = document.createElement('span');
+        num.className = 'rotation-num';
+        num.textContent = (idx + 1) + '.';
+
+        const name = document.createElement('span');
+        name.className = 'rotation-name';
+        name.textContent = entry.singer;
+
+        const song = document.createElement('span');
+        song.className = 'rotation-song';
+        song.textContent = entry.song_artist || '';
+
+        info.appendChild(num);
+        info.appendChild(name);
+        if (entry.song_artist) info.appendChild(song);
+
+        const badge = document.createElement('span');
+        badge.className = 'rotation-badge';
+        if (statusLower.includes('singing') || statusLower.includes('now')) {
+            badge.textContent = 'NOW';
+            badge.classList.add('badge-now');
+        } else if (statusLower.includes('next')) {
+            badge.textContent = 'NEXT';
+            badge.classList.add('badge-next');
+        } else if (statusLower.includes('wip') || statusLower.includes('being made')) {
+            badge.textContent = 'WIP';
+            badge.classList.add('badge-wip');
+        }
+        if (badge.textContent) info.appendChild(badge);
+
+        const actions = document.createElement('div');
+        actions.className = 'rotation-actions';
+
+        if (!statusLower.includes('singing') && !statusLower.includes('now')) {
+            const singBtn = document.createElement('button');
+            singBtn.className = 'rotation-btn rotation-btn-sing';
+            singBtn.textContent = 'Singing';
+            singBtn.onclick = () => updateRotationStatus(entry.row_index, 'Singing Now');
+            actions.appendChild(singBtn);
+        }
+
+        const doneBtn = document.createElement('button');
+        doneBtn.className = 'rotation-btn rotation-btn-done';
+        doneBtn.textContent = 'Done';
+        doneBtn.onclick = () => updateRotationStatus(entry.row_index, 'Done');
+        actions.appendChild(doneBtn);
+
+        if (!statusLower.includes('next')) {
+            const nextBtn = document.createElement('button');
+            nextBtn.className = 'rotation-btn rotation-btn-next';
+            nextBtn.textContent = 'Next';
+            nextBtn.onclick = () => updateRotationStatus(entry.row_index, 'Next');
+            actions.appendChild(nextBtn);
+        }
+
+        row.appendChild(info);
+        row.appendChild(actions);
+        list.appendChild(row);
+    });
+}
+
+async function updateRotationStatus(rowIndex, status) {
+    const statusEl = document.getElementById('rotation-status');
+    statusEl.classList.remove('hidden');
+    statusEl.textContent = 'Updating...';
+    try {
+        const response = await fetch('/rotation/status', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ row_index: rowIndex, status: status })
+        });
+        const data = await response.json();
+        if (data.entries) {
+            rotationData = data.entries;
+            renderRotation(rotationData);
+        }
+        statusEl.textContent = 'Updated!';
+        setTimeout(() => statusEl.classList.add('hidden'), 1500);
+    } catch (e) {
+        statusEl.textContent = 'Update failed';
+        setTimeout(() => statusEl.classList.add('hidden'), 3000);
+    }
+}
+
+function toggleRotationAddForm() {
+    const form = document.getElementById('rotation-add-form');
+    form.classList.toggle('hidden');
+    if (!form.classList.contains('hidden')) {
+        document.getElementById('rotation-singer').focus();
+    }
+}
+
+async function addRotationEntry() {
+    const singerInput = document.getElementById('rotation-singer');
+    const songInput = document.getElementById('rotation-song');
+    const singer = singerInput.value.trim();
+    const songArtist = songInput.value.trim();
+    if (!singer) return;
+
+    const statusEl = document.getElementById('rotation-status');
+    statusEl.classList.remove('hidden');
+    statusEl.textContent = 'Adding...';
+    try {
+        const response = await fetch('/rotation/add', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ singer, song_artist: songArtist })
+        });
+        const data = await response.json();
+        if (data.entries) {
+            rotationData = data.entries;
+            renderRotation(rotationData);
+        }
+        singerInput.value = '';
+        songInput.value = '';
+        statusEl.textContent = 'Added!';
+        setTimeout(() => statusEl.classList.add('hidden'), 1500);
+    } catch (e) {
+        statusEl.textContent = 'Add failed';
+        setTimeout(() => statusEl.classList.add('hidden'), 3000);
+    }
+}

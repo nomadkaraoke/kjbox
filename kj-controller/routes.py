@@ -1270,3 +1270,62 @@ def system_shutdown():
 
     threading.Thread(target=do_shutdown, daemon=True).start()
     return jsonify({"success": True, "message": "Shutting down system..."})
+
+
+# --- Rotation (Google Sheet) ---
+
+@routes_bp.route('/rotation', methods=['GET'])
+def get_rotation():
+    """Returns the current singer rotation queue (non-done entries)."""
+    rotation = current_app.rotation
+    if rotation is None:
+        return jsonify({"error": "Rotation not configured"}), 503
+    try:
+        force = request.args.get('refresh') == '1'
+        entries = rotation.get_rotation(force_refresh=force)
+        return jsonify({"entries": entries})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@routes_bp.route('/rotation/status', methods=['POST'])
+def update_rotation_status():
+    """Update a rotation entry's status."""
+    rotation = current_app.rotation
+    if rotation is None:
+        return jsonify({"error": "Rotation not configured"}), 503
+    data = request.get_json(force=True)
+    row_index = data.get('row_index')
+    status = data.get('status', '')
+    if not row_index:
+        return jsonify({"error": "row_index is required"}), 400
+
+    try:
+        if status.lower() in ('singing now', 'singing'):
+            rotation.mark_singing(row_index)
+        else:
+            rotation.update_status(row_index, status)
+        entries = rotation.get_rotation(force_refresh=True)
+        return jsonify({"success": True, "entries": entries})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@routes_bp.route('/rotation/add', methods=['POST'])
+def add_rotation_entry():
+    """Add a new singer to the rotation."""
+    rotation = current_app.rotation
+    if rotation is None:
+        return jsonify({"error": "Rotation not configured"}), 503
+    data = request.get_json(force=True)
+    singer = data.get('singer', '').strip()
+    song_artist = data.get('song_artist', '').strip()
+    if not singer:
+        return jsonify({"error": "singer is required"}), 400
+
+    try:
+        rotation.add_entry(singer, song_artist)
+        entries = rotation.get_rotation(force_refresh=True)
+        return jsonify({"success": True, "entries": entries})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
