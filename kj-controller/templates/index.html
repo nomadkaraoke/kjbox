@@ -155,10 +155,7 @@
                 </div>
                 <input type="url" id="youtube-url" placeholder="Enter YouTube URL" onkeyup="if(event.keyCode === 13) downloadSong()">
                 <button id="download-btn" onclick="downloadSong()" style="align-self: flex-start;">Download</button>
-                <div id="download-status" class="download-progress hidden">
-                    <span class="download-spinner"></span>
-                    <span id="download-stage">Fetching video info...</span>
-                </div>
+                <div id="download-queue" class="dl-queue"></div>
             </div>
             <div class="container available-songs">
                 <div class="header-row">
