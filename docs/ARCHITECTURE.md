@@ -53,7 +53,7 @@ KJ Controller is a web-based karaoke show management application. A Flask backen
 | `overlay.py` | ~100 | `OverlayManager` class: CRUD, toggle, karaoke_playing state, JSON persistence |
 | `karaoke_nerds.py` | ~140 | Karaoke Nerds web scraper: search, parse HTML results, extract YouTube URLs |
 | `youtube_search.py` | ~80 | YouTube search via yt-dlp: ytsearch with extract_flat for fast metadata |
-| `youtube_health.py` | ~120 | YouTube health checks: yt-dlp/EJS/Deno version detection, cookie validation and management |
+| `youtube_health.py` | ~170 | YouTube health checks: yt-dlp/EJS/Deno version detection, cookie validation, PyPI version check (24h cache), pip upgrade |
 | `rotation.py` | ~180 | `RotationManager` class: Google Sheets singer rotation read/write via gspread |
 | `routes.py` | ~720 | Flask Blueprint with all route handlers |
 
@@ -129,8 +129,12 @@ utils.py → (stdlib only)
 | GET | `/youtube/status` | YouTube health: yt-dlp/EJS/Deno versions, cookie status |
 | POST | `/youtube/cookies` | Upload Netscape-format cookies for authenticated downloads |
 | DELETE | `/youtube/cookies` | Remove YouTube cookies file |
+| POST | `/youtube/upgrade-ytdlp` | Upgrade yt-dlp via pip and restart service |
+| POST | `/overlays/import` | Bulk import overlays (replaces all, assigns new IDs) |
+| GET | `/system/autodeploy` | Check if kj-autodeploy service is active |
+| POST | `/system/autodeploy` | Enable/disable kj-autodeploy (persists across reboots) |
 | GET | `/rotation` | Get singer rotation queue (non-done entries from Google Sheet) |
-| POST | `/rotation/status` | Update a rotation entry's status (Singing Now, Done, Next) |
+| POST | `/rotation/status` | Update a rotation entry's status (any status from sheet) |
 | POST | `/rotation/add` | Add a new singer to the rotation |
 
 ## Key Design Decisions

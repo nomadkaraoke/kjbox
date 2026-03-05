@@ -2,6 +2,35 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-03-05 - UI Polish & System Management
+
+**Rotation improvements:**
+- Replaced "Updating..."/"Updated!" text with spinner/tick indicator in section header
+- Compact row layout (smaller fonts, tighter padding) to show more singers at once
+- Advanced status dropdown ("...") button with all 7 Google Sheet statuses
+- Click-to-copy on singer names and song text
+
+**System section:**
+- Auto-deploy toggle (start/stop + enable/disable for reboot persistence)
+- Graceful restart/reboot/update: spinner overlay, polls backend, shows success when back online
+- Update button always restarts service; auto-reloads browser when backend recovers
+
+**YouTube settings:**
+- yt-dlp version check against PyPI (cached 24h), yellow dot + "Update" button when outdated
+- One-click yt-dlp upgrade from UI with graceful restart polling
+- Normalized version comparison (2026.03.03 vs 2026.3.3)
+
+**Screen Preview:**
+- Hide button disconnects VNC and collapses section; clicking a size button reconnects
+- Hidden state persists via localStorage; VNC doesn't auto-connect when hidden
+
+**Overlay management:**
+- Backup/Restore buttons: download config as JSON, restore from file
+- `POST /overlays/import` endpoint for bulk import
+- Untracked `data/overlays.json` from git to prevent auto-deploy wiping device config
+
+---
+
 ## 2026-03-05 - Rotation Sheet Integration & System Update Button
 
 **Motivation:** The singer rotation was managed entirely via a Google Sheet, which meant the KJ had to alt-tab to the browser to update singer status. This led to forgetting to update the rotation until several songs late.
