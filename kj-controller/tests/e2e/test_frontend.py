@@ -98,9 +98,9 @@ class TestDownloadSection:
         expect(btn).to_be_visible()
         expect(btn).to_have_text("Download")
 
-    def test_download_status_hidden_initially(self, app_page):
-        status = app_page.locator("#download-status")
-        expect(status).to_be_hidden()
+    def test_download_queue_empty_initially(self, app_page):
+        queue = app_page.locator("#download-queue")
+        expect(queue).to_be_empty()
 
 
 # ---------------------------------------------------------------------------
@@ -426,10 +426,10 @@ class TestDownloadCompletionRefresh:
             ),
         )
 
-        # Directly call handleDownloadState with a completed download
+        # Directly call handleDownloadQueue with a completed download
         page.evaluate(
             """async () => {
-                await handleDownloadState({status: 'completed', title: 'Test Song - Artist'});
+                await handleDownloadQueue([{id: 'test1', status: 'completed', title: 'Test Song - Artist', url: 'http://test', error: null}]);
             }"""
         )
 
@@ -476,7 +476,7 @@ class TestDownloadCompletionRefresh:
         # Simulate download completion while search is active
         page.evaluate(
             """async () => {
-                await handleDownloadState({status: 'completed', title: 'Bohemian Rhapsody - Queen'});
+                await handleDownloadQueue([{id: 'test2', status: 'completed', title: 'Bohemian Rhapsody - Queen', url: 'http://test', error: null}]);
             }"""
         )
 

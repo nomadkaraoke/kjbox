@@ -60,94 +60,80 @@ async function apiCall(endpoint, body) {
     }
 }
 
-// --- Download (async with status polling) ---
+// --- Download Queue ---
 
-let downloadStageTimers = [];
+const _handledDownloads = new Set();
 
 async function downloadSong() {
     const urlInput = document.getElementById('youtube-url');
-    const downloadBtn = document.getElementById('download-btn');
-    const downloadStatus = document.getElementById('download-status');
-    const downloadStage = document.getElementById('download-stage');
     const url = urlInput.value;
     if (!url) {
         log('Please enter a YouTube URL.', 'error');
         return;
     }
-    log(`Downloading: ${url}`);
-    downloadBtn.disabled = true;
-    downloadStatus.classList.remove('hidden');
-
-    // Staged progress messages
-    downloadStageTimers.forEach(t => clearTimeout(t));
-    downloadStageTimers = [];
-    const stages = [
-        { time: 0, text: 'Fetching video info...' },
-        { time: 3000, text: 'Downloading video...' },
-        { time: 15000, text: 'Still downloading (large file)...' },
-        { time: 30000, text: 'Almost there...' },
-    ];
-    stages.forEach(s => {
-        downloadStageTimers.push(setTimeout(() => {
-            downloadStage.textContent = s.text;
-        }, s.time));
-    });
-
-    // Kick off background download — completion detected via status polling
+    log(`Queuing download: ${url}`);
     const data = await apiCall('/download', { url });
-    if (!data || !data.success) {
-        downloadStageTimers.forEach(t => clearTimeout(t));
-        downloadStageTimers = [];
-        downloadBtn.disabled = false;
-        downloadStatus.classList.add('hidden');
+    if (data && data.success) {
+        urlInput.value = '';
     }
-    // If started OK, UI stays in "downloading" state until updateStatus detects completion
 }
 
-async function handleDownloadState(dl) {
-    const downloadBtn = document.getElementById('download-btn');
-    const downloadStatus = document.getElementById('download-status');
-    const downloadStage = document.getElementById('download-stage');
-    const urlInput = document.getElementById('youtube-url');
-
-    if (!dl) return;
-
-    if (dl.status === 'downloading') {
-        // Show download progress if not already visible (e.g., after page refresh)
-        if (downloadStatus.classList.contains('hidden')) {
-            downloadBtn.disabled = true;
-            downloadStatus.classList.remove('hidden');
-            downloadStage.textContent = 'Downloading video...';
-        }
-    } else if (dl.status === 'completed') {
-        downloadStageTimers.forEach(t => clearTimeout(t));
-        downloadStageTimers = [];
-        downloadBtn.disabled = false;
-        downloadStatus.classList.add('hidden');
-        log(`Downloaded "${dl.title}" successfully!`, 'success');
-        urlInput.value = '';
-        flashElement(urlInput, 'success');
-
-        // Always refresh underlying media data so new track is available
-        await refreshMediaData();
-
-        // Clear any active search so user sees the folder view with new track
-        if (searchActive) clearSearch();
-        else renderFolderView(applyMediaFilter(localMediaItems));
-
-        // Ensure downloads folder is expanded so new track is visible
-        expandDownloadsFolder();
-
-        fetch('/download/ack', { method: 'POST' });
-    } else if (dl.status === 'error') {
-        downloadStageTimers.forEach(t => clearTimeout(t));
-        downloadStageTimers = [];
-        downloadBtn.disabled = false;
-        downloadStatus.classList.add('hidden');
-        log(`Download failed: ${dl.error || 'Unknown error'}`, 'error');
-        fetch('/download/ack', { method: 'POST' });
+function renderDownloadQueue(items) {
+    const container = document.getElementById('download-queue');
+    if (!items || items.length === 0) {
+        container.innerHTML = '';
+        return;
     }
-    // 'idle' — nothing to do
+    const icons = { downloading: '⏳', queued: '⏳', completed: '✅', error: '❌' };
+    container.innerHTML = items.map(item => {
+        const icon = icons[item.status] || '';
+        const label = item.title || item.url;
+        const spinner = item.status === 'downloading' ? '<span class="download-spinner"></span>' : '';
+        let action = '';
+        if (item.status === 'queued') {
+            action = `<button class="dl-queue-action" onclick="cancelQueueItem('${item.id}')">Cancel</button>`;
+        } else if (item.status === 'error') {
+            action = `<button class="dl-queue-action" onclick="ackQueueItem('${item.id}')">Dismiss</button>`;
+        }
+        return `<div class="dl-queue-item dl-queue-${item.status}">${spinner}<span class="dl-queue-icon">${icon}</span><span class="dl-queue-label" title="${item.url}">${label}</span>${action}</div>`;
+    }).join('');
+}
+
+async function handleDownloadQueue(items) {
+    if (!items) return;
+
+    renderDownloadQueue(items);
+
+    for (const item of items) {
+        if (item.status === 'completed' && !_handledDownloads.has(item.id)) {
+            _handledDownloads.add(item.id);
+            log(`Downloaded "${item.title}" successfully!`, 'success');
+
+            await refreshMediaData();
+            if (searchActive) clearSearch();
+            else renderFolderView(applyMediaFilter(localMediaItems));
+            expandDownloadsFolder();
+
+            // Auto-dismiss after 3s
+            setTimeout(() => ackQueueItem(item.id), 3000);
+        }
+        if (item.status === 'error' && !_handledDownloads.has(item.id)) {
+            _handledDownloads.add(item.id);
+            log(`Download failed: ${item.error || 'Unknown error'}`, 'error');
+        }
+    }
+}
+
+async function cancelQueueItem(id) {
+    await apiCall('/download/cancel', { id });
+}
+
+async function ackQueueItem(id) {
+    await fetch('/download/ack', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id }),
+    });
 }
 
 // --- Playback ---
@@ -606,8 +592,8 @@ async function updateStatus() {
                 }
             }
 
-            // Track background download progress
-            if (data.download) await handleDownloadState(data.download);
+            // Track download queue progress
+            await handleDownloadQueue(data.download_queue);
         }
     } catch (error) {
         // Don't log periodic status check errors to avoid clutter
@@ -1818,11 +1804,9 @@ async function loadKNCatalogMatches(songId) {
 }
 
 function downloadKNTrack(youtubeUrl) {
-    // Inject into existing Download Song section and trigger its download flow
-    const urlInput = document.getElementById('youtube-url');
-    urlInput.value = youtubeUrl;
     clearKNResults();
-    downloadSong();
+    log(`Queuing download: ${youtubeUrl}`);
+    apiCall('/download', { url: youtubeUrl });
 }
 
 function toggleKNPrefs() {
@@ -1943,10 +1927,9 @@ function renderYTResults(results) {
 }
 
 function downloadYTTrack(url) {
-    const urlInput = document.getElementById('youtube-url');
-    urlInput.value = url;
     clearYTResults();
-    downloadSong();
+    log(`Queuing download: ${url}`);
+    apiCall('/download', { url });
 }
 
 function saveYTKaraokeToggle() {

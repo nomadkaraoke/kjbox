@@ -53,47 +53,106 @@ def index():
 
 @routes_bp.route('/download', methods=['POST'])
 def handle_download():
-    """Starts a video download in the background. Poll /status for progress."""
+    """Add a URL to the download queue (max 5). Poll /status for progress."""
     url = request.json.get('url')
     if not url:
         return jsonify({"error": "URL is required"}), 400
 
-    state = current_app.download_state
-    if state.get('status') == 'downloading':
-        return jsonify({"error": "A download is already in progress"}), 409
-
-    media = current_app.media
-    cfg = current_app.kj_config
     app = current_app._get_current_object()
-    log_message(f"Received download request for URL: {url}", cfg)
+    cfg = current_app.kj_config
 
-    app.download_state = {'status': 'downloading', 'url': url}
+    from uuid import uuid4
+    with app._download_lock:
+        items = app.download_queue['items']
+        # Reject duplicate URL already queued or downloading
+        active = [i for i in items if i['status'] in ('queued', 'downloading')]
+        if any(i['url'] == url for i in active):
+            return jsonify({"error": "This URL is already in the queue"}), 409
+        if len(active) >= 5:
+            return jsonify({"error": "Queue is full (max 5)"}), 409
 
-    def _do_download():
-        file_path, title = media.download_video(url)
-        if file_path:
-            app.download_state = {
-                'status': 'completed',
-                'url': url,
-                'title': title,
-                'file_path': file_path,
-                'completed_at': time.time(),
-            }
-        else:
-            app.download_state = {
-                'status': 'error',
-                'url': url,
-                'error': 'Download failed',
-            }
+        item = {
+            'id': str(uuid4()),
+            'url': url,
+            'status': 'queued',
+            'title': None,
+            'error': None,
+            'file_path': None,
+            'added_at': time.time(),
+            'completed_at': None,
+        }
+        items.append(item)
+        log_message(f"Queued download: {url}", cfg)
 
-    threading.Thread(target=_do_download, daemon=True).start()
-    return jsonify({"success": True, "message": "Download started"})
+        if not app.download_queue['worker_running']:
+            app.download_queue['worker_running'] = True
+            threading.Thread(target=_download_worker, args=[app], daemon=True).start()
+
+    return jsonify({"success": True, "id": item['id']})
+
+
+def _download_worker(app):
+    """Process queued downloads sequentially until queue is drained."""
+    while True:
+        with app._download_lock:
+            next_item = next(
+                (i for i in app.download_queue['items'] if i['status'] == 'queued'),
+                None,
+            )
+            if not next_item:
+                app.download_queue['worker_running'] = False
+                return
+            next_item['status'] = 'downloading'
+
+        try:
+            file_path, title = app.media.download_video(next_item['url'])
+        except Exception:
+            file_path, title = None, None
+
+        with app._download_lock:
+            if file_path:
+                next_item.update(status='completed', title=title,
+                                 file_path=file_path, completed_at=time.time())
+            else:
+                next_item.update(status='error', error='Download failed',
+                                 completed_at=time.time())
+
+
+@routes_bp.route('/download/cancel', methods=['POST'])
+def cancel_download():
+    """Cancel a queued download by id. Cannot cancel an active download."""
+    item_id = request.json.get('id')
+    if not item_id:
+        return jsonify({"error": "id is required"}), 400
+
+    app = current_app._get_current_object()
+    with app._download_lock:
+        items = app.download_queue['items']
+        item = next((i for i in items if i['id'] == item_id), None)
+        if not item:
+            return jsonify({"error": "Item not found"}), 404
+        if item['status'] == 'downloading':
+            return jsonify({"error": "Cannot cancel an active download"}), 409
+        items.remove(item)
+    return jsonify({"success": True})
 
 
 @routes_bp.route('/download/ack', methods=['POST'])
 def ack_download():
-    """Acknowledges a completed/errored download, resetting state to idle."""
-    current_app.download_state = {'status': 'idle'}
+    """Dismiss completed/errored items. With id: specific item. Without: all finished."""
+    app = current_app._get_current_object()
+    item_id = request.json.get('id') if request.is_json else None
+
+    with app._download_lock:
+        items = app.download_queue['items']
+        if item_id:
+            item = next((i for i in items if i['id'] == item_id), None)
+            if item and item['status'] in ('completed', 'error'):
+                items.remove(item)
+        else:
+            app.download_queue['items'] = [
+                i for i in items if i['status'] not in ('completed', 'error')
+            ]
     return jsonify({"success": True})
 
 
@@ -361,7 +420,7 @@ def get_status():
     elif cpp:
         current_playing = os.path.basename(cpp)
 
-    dl_state = current_app.download_state
+    dl_queue = current_app.download_queue['items']
 
     if status:
         return jsonify({
@@ -374,7 +433,7 @@ def get_status():
             "audio_device": vlc.audio_device,
             "vlc_enabled": vlc.enabled,
             "audio_error": vlc.audio_error,
-            "download": dl_state,
+            "download_queue": dl_queue,
             "karaoke_volume": vlc.karaoke_volume,
             "filler_volume": vlc.filler_volume,
         })
@@ -389,7 +448,7 @@ def get_status():
         "length": 0,
         "audio_device": vlc.audio_device,
         "vlc_enabled": vlc.enabled,
-        "download": dl_state,
+        "download_queue": dl_queue,
         "karaoke_volume": vlc.karaoke_volume,
         "filler_volume": vlc.filler_volume,
     })

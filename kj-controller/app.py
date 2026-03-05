@@ -30,7 +30,8 @@ def create_app(config=None):
     flask_app.zip_playback = ZipPlayback(cfg)
     overlay_path = cfg.get('overlays_path') if config else None
     flask_app.overlay_manager = OverlayManager(config_path=overlay_path)
-    flask_app.download_state = {'status': 'idle'}
+    flask_app.download_queue = {'items': [], 'worker_running': False}
+    flask_app._download_lock = threading.Lock()
     flask_app.register_blueprint(routes_bp)
     return flask_app
 
@@ -109,7 +110,8 @@ def start_app():  # pragma: no cover
     flask_app.catalog = ExternalCatalog(cfg)
     flask_app.zip_playback = ZipPlayback(cfg)
     flask_app.overlay_manager = overlay_mgr
-    flask_app.download_state = {'status': 'idle'}
+    flask_app.download_queue = {'items': [], 'worker_running': False}
+    flask_app._download_lock = threading.Lock()
     flask_app.register_blueprint(routes_bp)
 
     # Log external catalog status

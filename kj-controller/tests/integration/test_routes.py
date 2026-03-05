@@ -2,6 +2,7 @@
 
 import json
 import threading
+import time
 from unittest.mock import patch
 
 from app import create_app
@@ -28,6 +29,8 @@ def test_create_app_factory(mock_config):
     assert hasattr(app, 'media')
     assert hasattr(app, 'vlc')
     assert app.vlc.enabled is False
+    assert 'items' in app.download_queue
+    assert hasattr(app, '_download_lock')
 
 
 def test_index_returns_html(flask_test_client):
@@ -437,9 +440,9 @@ def test_audio_device_switch(flask_test_client, flask_app, mocker):
 
 # --- Additional coverage tests ---
 
-def test_download_starts_async(flask_test_client, flask_app, mocker):
-    """POST /download starts a background download and returns immediately."""
-    mock_dl = mocker.patch.object(flask_app.media, 'download_video',
+def test_download_queues_item(flask_test_client, flask_app, mocker):
+    """POST /download adds an item to the queue and returns its id."""
+    mocker.patch.object(flask_app.media, 'download_video',
         return_value=("/path/to/video.mp4", "My Video"))
 
     response = flask_test_client.post('/download',
@@ -448,17 +451,19 @@ def test_download_starts_async(flask_test_client, flask_app, mocker):
     assert response.status_code == 200
     data = json.loads(response.data)
     assert data["success"] is True
-    assert "message" in data
+    assert "id" in data
 
-    # Wait for background thread to finish
+    # Wait for worker to finish
     import time
     for _ in range(50):
-        if flask_app.download_state.get('status') != 'downloading':
-            break
+        with flask_app._download_lock:
+            item = flask_app.download_queue['items'][0]
+            if item['status'] != 'downloading':
+                break
         time.sleep(0.05)
 
-    assert flask_app.download_state['status'] == 'completed'
-    assert flask_app.download_state['title'] == 'My Video'
+    assert item['status'] == 'completed'
+    assert item['title'] == 'My Video'
 
 
 def test_download_failure_tracked(flask_test_client, flask_app, mocker):
@@ -469,44 +474,206 @@ def test_download_failure_tracked(flask_test_client, flask_app, mocker):
     response = flask_test_client.post('/download',
         data=json.dumps({"url": "https://youtube.com/watch?v=bad"}),
         content_type='application/json')
-    assert response.status_code == 200  # Returns 200, tracks error in state
+    assert response.status_code == 200
 
-    # Wait for background thread
     import time
     for _ in range(50):
-        if flask_app.download_state.get('status') != 'downloading':
-            break
+        with flask_app._download_lock:
+            item = flask_app.download_queue['items'][0]
+            if item['status'] != 'downloading':
+                break
         time.sleep(0.05)
 
-    assert flask_app.download_state['status'] == 'error'
+    assert item['status'] == 'error'
 
 
-def test_download_rejects_concurrent(flask_test_client, flask_app):
-    """POST /download rejects a second download while one is in progress."""
-    flask_app.download_state = {'status': 'downloading', 'url': 'https://example.com'}
+def test_download_rejects_duplicate_url(flask_test_client, flask_app, mocker):
+    """POST /download rejects duplicate URL already in queue."""
+    mocker.patch.object(flask_app.media, 'download_video',
+        side_effect=lambda url: time.sleep(10))  # block forever
+
+    flask_test_client.post('/download',
+        data=json.dumps({"url": "https://youtube.com/watch?v=dup"}),
+        content_type='application/json')
+
+    import time
+    time.sleep(0.1)  # let worker start
+
     response = flask_test_client.post('/download',
-        data=json.dumps({"url": "https://youtube.com/watch?v=abc123"}),
+        data=json.dumps({"url": "https://youtube.com/watch?v=dup"}),
         content_type='application/json')
     assert response.status_code == 409
-    flask_app.download_state = {'status': 'idle'}
 
 
-def test_download_state_in_status(flask_test_client, flask_app):
-    """GET /status includes download state."""
-    flask_app.download_state = {'status': 'downloading', 'url': 'https://example.com'}
+def test_download_allows_different_urls(flask_test_client, flask_app, mocker):
+    """POST /download allows different URLs in the queue."""
+    mocker.patch.object(flask_app.media, 'download_video',
+        side_effect=lambda url: time.sleep(10))
+
+    r1 = flask_test_client.post('/download',
+        data=json.dumps({"url": "https://youtube.com/watch?v=a"}),
+        content_type='application/json')
+    assert r1.status_code == 200
+
+    r2 = flask_test_client.post('/download',
+        data=json.dumps({"url": "https://youtube.com/watch?v=b"}),
+        content_type='application/json')
+    assert r2.status_code == 200
+
+    with flask_app._download_lock:
+        assert len(flask_app.download_queue['items']) == 2
+
+
+def test_download_rejects_full_queue(flask_test_client, flask_app, mocker):
+    """POST /download rejects when 5 items are already queued/downloading."""
+    mocker.patch.object(flask_app.media, 'download_video',
+        side_effect=lambda url: time.sleep(10))
+
+    for i in range(5):
+        r = flask_test_client.post('/download',
+            data=json.dumps({"url": f"https://youtube.com/watch?v=q{i}"}),
+            content_type='application/json')
+        assert r.status_code == 200
+
+    response = flask_test_client.post('/download',
+        data=json.dumps({"url": "https://youtube.com/watch?v=q5"}),
+        content_type='application/json')
+    assert response.status_code == 409
+
+
+def test_download_queue_in_status(flask_test_client, flask_app):
+    """GET /status includes download_queue list."""
+    flask_app.download_queue['items'] = [
+        {'id': '1', 'url': 'https://example.com', 'status': 'downloading',
+         'title': None, 'error': None, 'file_path': None,
+         'added_at': 0, 'completed_at': None}
+    ]
     response = flask_test_client.get('/status')
     data = json.loads(response.data)
-    assert 'download' in data
-    assert data['download']['status'] == 'downloading'
-    flask_app.download_state = {'status': 'idle'}
+    assert 'download_queue' in data
+    assert len(data['download_queue']) == 1
+    assert data['download_queue'][0]['status'] == 'downloading'
+    flask_app.download_queue['items'] = []
 
 
-def test_download_ack(flask_test_client, flask_app):
-    """POST /download/ack resets download state to idle."""
-    flask_app.download_state = {'status': 'completed', 'title': 'Test'}
+def test_download_ack_specific_id(flask_test_client, flask_app):
+    """POST /download/ack with id removes that specific completed item."""
+    flask_app.download_queue['items'] = [
+        {'id': 'a', 'url': 'u1', 'status': 'completed', 'title': 'T1',
+         'error': None, 'file_path': '/f', 'added_at': 0, 'completed_at': 1},
+        {'id': 'b', 'url': 'u2', 'status': 'queued', 'title': None,
+         'error': None, 'file_path': None, 'added_at': 0, 'completed_at': None},
+    ]
+    response = flask_test_client.post('/download/ack',
+        data=json.dumps({"id": "a"}),
+        content_type='application/json')
+    assert response.status_code == 200
+    assert len(flask_app.download_queue['items']) == 1
+    assert flask_app.download_queue['items'][0]['id'] == 'b'
+
+
+def test_download_ack_legacy_no_id(flask_test_client, flask_app):
+    """POST /download/ack without id removes all completed/errored items."""
+    flask_app.download_queue['items'] = [
+        {'id': 'a', 'url': 'u1', 'status': 'completed', 'title': 'T1',
+         'error': None, 'file_path': '/f', 'added_at': 0, 'completed_at': 1},
+        {'id': 'b', 'url': 'u2', 'status': 'error', 'title': None,
+         'error': 'fail', 'file_path': None, 'added_at': 0, 'completed_at': 1},
+        {'id': 'c', 'url': 'u3', 'status': 'queued', 'title': None,
+         'error': None, 'file_path': None, 'added_at': 0, 'completed_at': None},
+    ]
     response = flask_test_client.post('/download/ack')
     assert response.status_code == 200
-    assert flask_app.download_state['status'] == 'idle'
+    assert len(flask_app.download_queue['items']) == 1
+    assert flask_app.download_queue['items'][0]['id'] == 'c'
+
+
+def test_download_cancel_queued_item(flask_test_client, flask_app):
+    """POST /download/cancel removes a queued item."""
+    flask_app.download_queue['items'] = [
+        {'id': 'x', 'url': 'u1', 'status': 'queued', 'title': None,
+         'error': None, 'file_path': None, 'added_at': 0, 'completed_at': None},
+    ]
+    response = flask_test_client.post('/download/cancel',
+        data=json.dumps({"id": "x"}),
+        content_type='application/json')
+    assert response.status_code == 200
+    assert len(flask_app.download_queue['items']) == 0
+
+
+def test_download_cancel_downloading_rejected(flask_test_client, flask_app):
+    """POST /download/cancel rejects cancelling an active download."""
+    flask_app.download_queue['items'] = [
+        {'id': 'y', 'url': 'u1', 'status': 'downloading', 'title': None,
+         'error': None, 'file_path': None, 'added_at': 0, 'completed_at': None},
+    ]
+    response = flask_test_client.post('/download/cancel',
+        data=json.dumps({"id": "y"}),
+        content_type='application/json')
+    assert response.status_code == 409
+
+
+def test_download_cancel_not_found(flask_test_client, flask_app):
+    """POST /download/cancel returns 404 for nonexistent id."""
+    response = flask_test_client.post('/download/cancel',
+        data=json.dumps({"id": "nonexistent"}),
+        content_type='application/json')
+    assert response.status_code == 404
+
+
+def test_download_worker_sequential(flask_test_client, flask_app, mocker):
+    """Worker processes items sequentially — second item starts after first."""
+    call_order = []
+
+    def fake_download(url):
+        call_order.append(url)
+        import time
+        time.sleep(0.05)
+        return (f"/path/{url}", f"Title {url}")
+
+    mocker.patch.object(flask_app.media, 'download_video', side_effect=fake_download)
+
+    flask_test_client.post('/download',
+        data=json.dumps({"url": "url1"}), content_type='application/json')
+    flask_test_client.post('/download',
+        data=json.dumps({"url": "url2"}), content_type='application/json')
+
+    import time
+    for _ in range(100):
+        with flask_app._download_lock:
+            statuses = [i['status'] for i in flask_app.download_queue['items']]
+            if all(s == 'completed' for s in statuses):
+                break
+        time.sleep(0.05)
+
+    assert call_order == ['url1', 'url2']
+    assert all(i['status'] == 'completed' for i in flask_app.download_queue['items'])
+
+
+def test_download_worker_continues_after_error(flask_test_client, flask_app, mocker):
+    """Worker continues to next item when one fails."""
+    def fake_download(url):
+        if 'fail' in url:
+            return (None, None)
+        return (f"/path/{url}", f"Title {url}")
+
+    mocker.patch.object(flask_app.media, 'download_video', side_effect=fake_download)
+
+    flask_test_client.post('/download',
+        data=json.dumps({"url": "fail-url"}), content_type='application/json')
+    flask_test_client.post('/download',
+        data=json.dumps({"url": "good-url"}), content_type='application/json')
+
+    import time
+    for _ in range(100):
+        with flask_app._download_lock:
+            items = flask_app.download_queue['items']
+            if len(items) == 2 and all(i['status'] in ('completed', 'error') for i in items):
+                break
+        time.sleep(0.05)
+
+    assert items[0]['status'] == 'error'
+    assert items[1]['status'] == 'completed'
 
 
 def test_volume_non_numeric_level(flask_test_client):
