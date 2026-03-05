@@ -1051,11 +1051,11 @@ async function upgradeYtdlp(btn) {
     }
 }
 
-async function waitForRestart() {
+async function waitForRestart(maxSeconds = 30) {
     // Wait a moment for the service to actually stop
     await new Promise(r => setTimeout(r, 2000));
-    // Poll until backend responds again (up to 30s)
-    for (let i = 0; i < 30; i++) {
+    // Poll until backend responds again
+    for (let i = 0; i < maxSeconds; i++) {
         try {
             const r = await fetch('/status', { signal: AbortSignal.timeout(2000) });
             if (r.ok) return;
@@ -1537,6 +1537,28 @@ function setVncSize(size) {
 
 // --- System Control (#4 dangerous action protection) ---
 
+function showSystemOverlay(msg) {
+    const el = document.getElementById('system-overlay');
+    const msgEl = document.getElementById('system-overlay-msg');
+    el.classList.remove('hidden', 'success');
+    el.querySelector('.download-spinner').style.display = '';
+    msgEl.textContent = msg;
+}
+
+function showSystemSuccess(msg) {
+    const el = document.getElementById('system-overlay');
+    const msgEl = document.getElementById('system-overlay-msg');
+    el.classList.remove('hidden');
+    el.classList.add('success');
+    el.querySelector('.download-spinner').style.display = 'none';
+    msgEl.textContent = msg;
+    setTimeout(() => el.classList.add('hidden'), 4000);
+}
+
+function hideSystemOverlay() {
+    document.getElementById('system-overlay').classList.add('hidden');
+}
+
 function dangerousAction(btn, action, label, extraWarning) {
     if (btn.dataset.armed) {
         // Second click — execute
@@ -1544,12 +1566,7 @@ function dangerousAction(btn, action, label, extraWarning) {
         delete btn.dataset.armed;
         btn.textContent = label;
         btn.classList.remove('system-btn-armed');
-        log(`System: ${label}...`);
-        apiCall(`/system/${action}`, {}).then(data => {
-            if (data && data.success) {
-                log(data.message, 'success');
-            }
-        });
+        executeDangerousAction(action, label);
         return;
     }
     // First click — arm the button
@@ -1570,15 +1587,20 @@ function dangerousAction(btn, action, label, extraWarning) {
     }, 1000);
 }
 
-async function systemAction(action, label, extraWarning) {
-    const message = extraWarning
-        ? `${label}\n\n${extraWarning}\n\nAre you sure?`
-        : `${label}\n\nAre you sure?`;
-    if (!confirm(message)) return;
-    log(`System: ${label}...`);
+async function executeDangerousAction(action, label) {
+    showSystemOverlay(`${label}ing...`);
     const data = await apiCall(`/system/${action}`, {});
     if (data && data.success) {
-        log(data.message, 'success');
+        if (action === 'shutdown') {
+            showSystemOverlay('System is shutting down...');
+            return;
+        }
+        // Reboot — wait for it to come back
+        showSystemOverlay('Waiting for system to come back online...');
+        await waitForRestart(60);
+        showSystemSuccess('System is back online.');
+    } else {
+        hideSystemOverlay();
     }
 }
 
@@ -1614,23 +1636,34 @@ async function rebuildCatalog() {
     }
 }
 
-function restartApp() {
-    systemAction('restart-app', 'Restart KJ Controller',
-        'The web UI will be briefly unavailable while the service restarts.');
+async function restartApp() {
+    if (!confirm('Restart KJ Controller?\n\nThe web UI will be briefly unavailable while the service restarts.')) return;
+    showSystemOverlay('Restarting service...');
+    const data = await apiCall('/system/restart-app', {});
+    if (data && data.success) {
+        showSystemOverlay('Waiting for service to restart...');
+        await waitForRestart();
+        showSystemSuccess('Service restarted successfully.');
+    } else {
+        hideSystemOverlay();
+    }
 }
 
 async function updateApp() {
-    if (!confirm('Update KJ Controller\n\nThis will pull the latest code from GitHub and restart the service if needed.\n\nAre you sure?')) return;
-    log('Updating KJ Controller...');
+    if (!confirm('Update KJ Controller?\n\nThis will pull the latest code from GitHub and restart the service if needed.')) return;
+    showSystemOverlay('Pulling latest code from GitHub...');
     const data = await apiCall('/system/update', {});
     if (data && data.success) {
         log(data.message, 'success');
         if (data.restarting) {
-            log('Service is restarting — page will reload in 5 seconds...', 'info');
-            setTimeout(() => location.reload(), 5000);
+            showSystemOverlay('Code updated. Restarting service...');
+            await waitForRestart();
+            showSystemSuccess('Updated and restarted. Refresh for frontend changes.');
         } else {
-            log('Refresh the page to see frontend changes.', 'info');
+            showSystemSuccess('Updated. Refresh the page for frontend changes.');
         }
+    } else {
+        hideSystemOverlay();
     }
 }
 
