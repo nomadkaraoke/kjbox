@@ -1407,6 +1407,8 @@ def update_rotation_status():
     try:
         if status.lower() in ('now singing', 'singing now', 'singing'):
             rotation.mark_singing(row_index)
+        elif status.lower() in ('up next', 'next'):
+            rotation.mark_up_next(row_index)
         else:
             rotation.update_status(row_index, status)
         entries = rotation.get_rotation(force_refresh=True)
@@ -1488,5 +1490,20 @@ def add_rotation_entry():
         rotation.add_entry(singer, song_artist)
         entries = rotation.get_rotation(force_refresh=True)
         return jsonify({"success": True, "entries": entries})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@routes_bp.route('/rotation/archive', methods=['POST'])
+def archive_rotation():
+    """Archive all rotation entries to 'Past events' sheet and clear rotation."""
+    rotation = current_app.rotation
+    if rotation is None:
+        return jsonify({"error": "Rotation not configured"}), 503
+
+    try:
+        count = rotation.archive_rotation()
+        entries = rotation.get_rotation(force_refresh=True)
+        return jsonify({"success": True, "archived": count, "entries": entries})
     except Exception as e:
         return jsonify({"error": str(e)}), 500

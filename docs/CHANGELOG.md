@@ -5,9 +5,13 @@ Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](a
 ## 2026-03-05 - UI Polish & System Management
 
 **Rotation improvements:**
+- "New Rotation" button: archives all entries to "Past events" sheet, clears rotation for a fresh night
 - Edit and delete rotation entries: pencil button, Shift+click to edit inline, Ctrl/Cmd+click to delete
-- Ctrl/Cmd+hover shows red strikethrough delete preview
-- `POST /rotation/edit` and `POST /rotation/delete` endpoints
+- Ctrl/Cmd+hover shows red strikethrough delete preview, Shift+hover shows purple edit preview
+- Exclusive statuses: only one "Now Singing" and one "Up Next" at a time (others reset to "Waiting")
+- New entries default to "Waiting" status
+- `POST /rotation/archive`, `/rotation/edit`, `/rotation/delete` endpoints
+- Local dev server (`dev_server.py`) with mock rotation data for UI iteration
 - Replaced "Updating..."/"Updated!" text with spinner/tick indicator in section header
 - Compact row layout (smaller fonts, tighter padding) to show more singers at once
 - Advanced status dropdown ("...") button with all 7 Google Sheet statuses

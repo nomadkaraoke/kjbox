@@ -76,6 +76,13 @@ class TestUpdateRotationStatus:
         assert resp.status_code == 200
         mock_rotation.mark_singing.assert_called_once_with(3)
 
+    def test_update_up_next_uses_mark_up_next(self, rotation_client, mock_rotation):
+        resp = rotation_client.post('/rotation/status',
+            data=json.dumps({"row_index": 4, "status": "Up Next"}),
+            content_type='application/json')
+        assert resp.status_code == 200
+        mock_rotation.mark_up_next.assert_called_once_with(4)
+
     def test_invalid_row_index_returns_400(self, rotation_client):
         resp = rotation_client.post('/rotation/status',
             data=json.dumps({"row_index": "abc", "status": "Done"}),
@@ -213,5 +220,29 @@ class TestAddRotationEntry:
     def test_not_configured_returns_503(self, flask_test_client):
         resp = flask_test_client.post('/rotation/add',
             data=json.dumps({"singer": "Frank"}),
+            content_type='application/json')
+        assert resp.status_code == 503
+
+
+class TestArchiveRotation:
+    def test_archive_returns_count(self, rotation_client, mock_rotation):
+        mock_rotation.archive_rotation.return_value = 5
+        mock_rotation.get_rotation.return_value = []
+        resp = rotation_client.post('/rotation/archive',
+            content_type='application/json')
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data['archived'] == 5
+        assert data['entries'] == []
+        mock_rotation.archive_rotation.assert_called_once()
+
+    def test_error_returns_500(self, rotation_client, mock_rotation):
+        mock_rotation.archive_rotation.side_effect = Exception("Sheet error")
+        resp = rotation_client.post('/rotation/archive',
+            content_type='application/json')
+        assert resp.status_code == 500
+
+    def test_not_configured_returns_503(self, flask_test_client):
+        resp = flask_test_client.post('/rotation/archive',
             content_type='application/json')
         assert resp.status_code == 503

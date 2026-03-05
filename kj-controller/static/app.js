@@ -2367,7 +2367,7 @@ function renderRotation(entries) {
         if (!statusLower.includes('next')) {
             const nextBtn = document.createElement('button');
             nextBtn.className = 'rotation-btn rotation-btn-next';
-            nextBtn.textContent = 'Up Next';
+            nextBtn.textContent = 'Next';
             nextBtn.onclick = () => updateRotationStatus(entry.row_index, 'Up Next');
             actions.appendChild(nextBtn);
         }
@@ -2623,6 +2623,30 @@ async function addRotationEntry() {
         }
         singerInput.value = '';
         songInput.value = '';
+        showRotationIndicator('success');
+    } catch (e) {
+        showRotationIndicator('error');
+    }
+}
+
+async function archiveRotation() {
+    if (!confirm('Archive all entries to "Past events" and start a new rotation?\n\nThis cannot be undone.')) return;
+    showRotationIndicator('spin');
+    try {
+        const response = await fetch('/rotation/archive', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+        });
+        const data = await response.json();
+        if (!response.ok) {
+            showRotationIndicator('error');
+            alert('Failed to archive: ' + (data.error || 'Unknown error'));
+            return;
+        }
+        if (data.entries) {
+            rotationData = data.entries;
+            renderRotation(rotationData);
+        }
         showRotationIndicator('success');
     } catch (e) {
         showRotationIndicator('error');

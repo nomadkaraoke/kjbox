@@ -61,15 +61,20 @@ class RotationManager:
         self._cache = None
         self._cache_time = 0
 
+    def _get_spreadsheet(self):
+        """Get or create the gspread spreadsheet connection."""
+        if self._client is None:
+            creds = Credentials.from_service_account_file(
+                self._credentials_file, scopes=SCOPES
+            )
+            self._client = gspread.authorize(creds)
+        return self._client.open_by_key(self._sheet_id)
+
     def _get_sheet(self):
         """Get or create the gspread worksheet connection."""
         if self._sheet is not None:
             return self._sheet
-        creds = Credentials.from_service_account_file(
-            self._credentials_file, scopes=SCOPES
-        )
-        self._client = gspread.authorize(creds)
-        spreadsheet = self._client.open_by_key(self._sheet_id)
+        spreadsheet = self._get_spreadsheet()
         self._sheet = spreadsheet.sheet1
         return self._sheet
 
@@ -161,6 +166,7 @@ class RotationManager:
         if notes and "notes" in col_map:
             new_row[col_map["notes"]] = notes
 
+        new_row[col_map.get("status", 3)] = "Waiting"
         sheet.append_row(new_row, value_input_option="USER_ENTERED")
         self._invalidate_cache()
 
@@ -188,8 +194,14 @@ class RotationManager:
         sheet.delete_rows(row_index)
         self._invalidate_cache()
 
-    def mark_singing(self, row_index):
-        """Mark a row as 'Singing Now' and clear any other 'Singing Now' statuses."""
+    def _set_exclusive_status(self, row_index, new_status, clear_statuses):
+        """Set a status on one row and clear it from all others.
+
+        Args:
+            row_index: 1-based sheet row to set
+            new_status: Status string to apply (e.g. "Now Singing", "Up Next")
+            clear_statuses: Set of lowercase status strings to clear back to "Waiting"
+        """
         sheet = self._get_sheet()
         all_values = sheet.get_all_values()
 
@@ -207,14 +219,76 @@ class RotationManager:
             if idx == row_index:
                 batch_updates.append({
                     "range": f"{col_letter}{idx}",
-                    "values": [["Now Singing"]],
+                    "values": [[new_status]],
                 })
-            elif status in ("now singing", "singing now", "singing"):
+            elif status in clear_statuses:
                 batch_updates.append({
                     "range": f"{col_letter}{idx}",
-                    "values": [[""]],
+                    "values": [["Waiting"]],
                 })
 
         if batch_updates:
             sheet.batch_update(batch_updates, value_input_option="USER_ENTERED")
         self._invalidate_cache()
+
+    def mark_singing(self, row_index):
+        """Mark a row as 'Now Singing' and reset any other singing rows to 'Waiting'."""
+        self._set_exclusive_status(
+            row_index, "Now Singing",
+            {"now singing", "singing now", "singing"},
+        )
+
+    def mark_up_next(self, row_index):
+        """Mark a row as 'Up Next' and reset any other 'Up Next' rows to 'Waiting'."""
+        self._set_exclusive_status(
+            row_index, "Up Next",
+            {"up next", "next"},
+        )
+
+    def archive_rotation(self):
+        """Move all data rows from the rotation sheet to the 'Past events' sheet.
+
+        Copies every row below the header (including Done entries) to the bottom
+        of the 'Past events' sheet with a date separator, then deletes them from
+        the rotation sheet, leaving the header intact.
+
+        Returns the number of rows archived.
+        """
+        sheet = self._get_sheet()
+        all_values = sheet.get_all_values()
+
+        header_row, _ = _find_header(all_values)
+        if header_row is None:
+            return 0
+
+        # All rows below the header (header_row is 1-based, data starts at index header_row)
+        data_rows = all_values[header_row:]
+        # Filter out completely empty rows
+        data_rows = [r for r in data_rows if any(cell.strip() for cell in r)]
+        if not data_rows:
+            return 0
+
+        # Get or create the "Past events" sheet
+        spreadsheet = self._get_spreadsheet()
+        try:
+            archive_sheet = spreadsheet.worksheet("Past events")
+        except gspread.exceptions.WorksheetNotFound:
+            archive_sheet = spreadsheet.add_worksheet(
+                title="Past events", rows=1000, cols=len(all_values[0]) if all_values else 7
+            )
+
+        # Add a date separator row then the data
+        dt = datetime.now()
+        separator = [f"--- {dt.strftime('%B %d, %Y')} ---"]
+        archive_sheet.append_row(separator, value_input_option="USER_ENTERED")
+        archive_sheet.append_rows(data_rows, value_input_option="USER_ENTERED")
+
+        # Delete data rows from rotation sheet (keep header and any rows above it)
+        # Rows are 1-based; data starts at header_row + 1
+        first_data_row = header_row + 1
+        last_data_row = len(all_values)
+        if last_data_row >= first_data_row:
+            sheet.delete_rows(first_data_row, last_data_row)
+
+        self._invalidate_cache()
+        return len(data_rows)

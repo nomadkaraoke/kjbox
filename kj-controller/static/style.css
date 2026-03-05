@@ -1131,7 +1131,7 @@ body {
     display: flex;
     gap: 6px;
 }
-.rotation-refresh-btn, .rotation-add-btn {
+.rotation-refresh-btn, .rotation-add-btn, .rotation-new-btn {
     font-size: 0.75em;
     padding: 4px 10px;
     border-radius: 6px;
@@ -1139,6 +1139,14 @@ body {
     background: #222;
     color: #ccc;
     cursor: pointer;
+}
+.rotation-new-btn {
+    border-color: rgba(239, 68, 68, 0.3);
+    color: #fca5a5;
+}
+.rotation-new-btn:hover {
+    background: rgba(239, 68, 68, 0.15);
+    color: #fca5a5;
 }
 .rotation-refresh-btn:hover, .rotation-add-btn:hover {
     background: #333;

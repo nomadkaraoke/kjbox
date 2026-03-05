@@ -137,7 +137,8 @@ utils.py → (stdlib only)
 | POST | `/rotation/status` | Update a rotation entry's status (any status from sheet) |
 | POST | `/rotation/edit` | Edit a rotation entry's singer name and/or song |
 | POST | `/rotation/delete` | Delete a rotation entry (removes row from sheet) |
-| POST | `/rotation/add` | Add a new singer to the rotation |
+| POST | `/rotation/add` | Add a new singer to the rotation (default status: Waiting) |
+| POST | `/rotation/archive` | Archive all entries to "Past events" sheet and clear rotation |
 
 ## Key Design Decisions
 
