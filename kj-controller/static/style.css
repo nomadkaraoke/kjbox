@@ -1102,3 +1102,182 @@ body {
     gap: 8px;
     margin-top: 8px;
 }
+
+/* --- Rotation Panel --- */
+
+.rotation-panel { }
+.rotation-header-btns {
+    display: flex;
+    gap: 6px;
+}
+.rotation-refresh-btn, .rotation-add-btn {
+    font-size: 0.75em;
+    padding: 4px 10px;
+    border-radius: 6px;
+    border: 1px solid #444;
+    background: #222;
+    color: #ccc;
+    cursor: pointer;
+}
+.rotation-refresh-btn:hover, .rotation-add-btn:hover {
+    background: #333;
+    color: #fff;
+}
+.rotation-add-form {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 8px;
+    padding: 8px;
+    background: #1a1a1a;
+    border-radius: 8px;
+}
+.rotation-add-form.hidden { display: none; }
+.rotation-add-form input {
+    flex: 1;
+    padding: 6px 10px;
+    border-radius: 6px;
+    border: 1px solid #333;
+    background: #111;
+    color: #e5e5e5;
+    font-size: 0.85em;
+}
+.rotation-add-form input:focus {
+    border-color: #555;
+    outline: none;
+}
+.rotation-add-form button {
+    padding: 6px 14px;
+    border-radius: 6px;
+    border: 1px solid rgba(139, 92, 246, 0.4);
+    background: rgba(139, 92, 246, 0.15);
+    color: #c4b5fd;
+    cursor: pointer;
+    font-size: 0.85em;
+}
+.rotation-add-form button:hover {
+    background: rgba(139, 92, 246, 0.3);
+}
+.rotation-status {
+    font-size: 0.8em;
+    padding: 4px 8px;
+    margin-bottom: 6px;
+    color: #a78bfa;
+}
+.rotation-status.hidden { display: none; }
+.rotation-list { }
+.rotation-empty {
+    color: #666;
+    font-size: 0.85em;
+    padding: 12px 0;
+    text-align: center;
+}
+.rotation-entry {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 10px;
+    border-radius: 8px;
+    margin-bottom: 4px;
+    background: #1a1a1a;
+    transition: background 0.15s;
+}
+.rotation-entry:hover {
+    background: #222;
+}
+.rotation-entry.rotation-singing {
+    background: rgba(34, 197, 94, 0.1);
+    border-left: 3px solid #22c55e;
+}
+.rotation-entry.rotation-next {
+    background: rgba(245, 158, 11, 0.08);
+    border-left: 3px solid #f59e0b;
+}
+.rotation-info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1;
+    min-width: 0;
+    flex-wrap: wrap;
+}
+.rotation-num {
+    color: #666;
+    font-size: 0.8em;
+    font-weight: 600;
+    width: 1.5em;
+    flex-shrink: 0;
+}
+.rotation-name {
+    font-weight: 600;
+    color: #ffdf6b;
+    white-space: nowrap;
+}
+.rotation-song {
+    color: #999;
+    font-size: 0.8em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.rotation-badge {
+    font-size: 0.65em;
+    font-weight: 700;
+    text-transform: uppercase;
+    padding: 2px 6px;
+    border-radius: 4px;
+    letter-spacing: 0.5px;
+    flex-shrink: 0;
+}
+.badge-now {
+    background: rgba(34, 197, 94, 0.2);
+    color: #22c55e;
+}
+.badge-next {
+    background: rgba(245, 158, 11, 0.2);
+    color: #f59e0b;
+}
+.badge-wip {
+    background: rgba(239, 68, 68, 0.2);
+    color: #ef4444;
+}
+.rotation-actions {
+    display: flex;
+    gap: 4px;
+    flex-shrink: 0;
+    margin-left: 8px;
+}
+.rotation-btn {
+    font-size: 0.7em;
+    padding: 3px 8px;
+    border-radius: 5px;
+    border: 1px solid #333;
+    background: #222;
+    color: #ccc;
+    cursor: pointer;
+    white-space: nowrap;
+}
+.rotation-btn:hover {
+    background: #333;
+    color: #fff;
+}
+.rotation-btn-sing {
+    border-color: rgba(34, 197, 94, 0.4);
+    color: #86efac;
+}
+.rotation-btn-sing:hover {
+    background: rgba(34, 197, 94, 0.15);
+}
+.rotation-btn-done {
+    border-color: rgba(139, 92, 246, 0.3);
+    color: #c4b5fd;
+}
+.rotation-btn-done:hover {
+    background: rgba(139, 92, 246, 0.15);
+}
+.rotation-btn-next {
+    border-color: rgba(245, 158, 11, 0.3);
+    color: #fcd34d;
+}
+.rotation-btn-next:hover {
+    background: rgba(245, 158, 11, 0.15);
+}

@@ -1244,6 +1244,49 @@ def restart_app():
     return jsonify({"success": True, "message": "Restarting KJ Controller..."})
 
 
+@routes_bp.route('/system/update', methods=['POST'])
+def system_update():
+    """Pulls latest code from GitHub and restarts the service."""
+    cfg = current_app.kj_config
+    log_message("System: update requested from web UI.", cfg)
+
+    repo_dir = os.path.dirname(APP_DIR)  # kjbox/ (parent of kj-controller/)
+
+    # Run git pull synchronously so we can report the result
+    result = subprocess.run(
+        ['git', 'pull', 'origin', 'main'],
+        cwd=repo_dir, capture_output=True, text=True, timeout=30,
+    )
+
+    if result.returncode != 0:
+        log_message(f"System: git pull failed: {result.stderr}", cfg)
+        return jsonify({"error": f"git pull failed: {result.stderr.strip()}"}), 500
+
+    pull_output = result.stdout.strip()
+    log_message(f"System: git pull result: {pull_output}", cfg)
+
+    # Check if any Python files changed (needs restart)
+    needs_restart = '.py' in pull_output
+
+    if needs_restart:
+        def do_restart():
+            time.sleep(1)
+            subprocess.run(['sudo', 'systemctl', 'restart', 'kj-controller'])
+
+        threading.Thread(target=do_restart, daemon=True).start()
+        return jsonify({
+            "success": True,
+            "message": f"Updated and restarting service...\n{pull_output}",
+            "restarting": True,
+        })
+
+    return jsonify({
+        "success": True,
+        "message": f"Updated (refresh browser for changes).\n{pull_output}",
+        "restarting": False,
+    })
+
+
 @routes_bp.route('/system/reboot', methods=['POST'])
 def system_reboot():
     """Reboots the entire system."""
@@ -1270,3 +1313,68 @@ def system_shutdown():
 
     threading.Thread(target=do_shutdown, daemon=True).start()
     return jsonify({"success": True, "message": "Shutting down system..."})
+
+
+# --- Rotation (Google Sheet) ---
+
+@routes_bp.route('/rotation', methods=['GET'])
+def get_rotation():
+    """Returns the current singer rotation queue (non-done entries)."""
+    rotation = current_app.rotation
+    if rotation is None:
+        return jsonify({"error": "Rotation not configured"}), 503
+    try:
+        force = request.args.get('refresh') == '1'
+        entries = rotation.get_rotation(force_refresh=force)
+        return jsonify({"entries": entries})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@routes_bp.route('/rotation/status', methods=['POST'])
+def update_rotation_status():
+    """Update a rotation entry's status."""
+    rotation = current_app.rotation
+    if rotation is None:
+        return jsonify({"error": "Rotation not configured"}), 503
+    data = request.get_json(force=True)
+    raw_index = data.get('row_index')
+    status = data.get('status', '')
+    if raw_index is None:
+        return jsonify({"error": "row_index is required"}), 400
+    try:
+        row_index = int(raw_index)
+    except (TypeError, ValueError):
+        return jsonify({"error": "row_index must be an integer"}), 400
+    if row_index < 1:
+        return jsonify({"error": "row_index must be >= 1"}), 400
+
+    try:
+        if status.lower() in ('singing now', 'singing'):
+            rotation.mark_singing(row_index)
+        else:
+            rotation.update_status(row_index, status)
+        entries = rotation.get_rotation(force_refresh=True)
+        return jsonify({"success": True, "entries": entries})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@routes_bp.route('/rotation/add', methods=['POST'])
+def add_rotation_entry():
+    """Add a new singer to the rotation."""
+    rotation = current_app.rotation
+    if rotation is None:
+        return jsonify({"error": "Rotation not configured"}), 503
+    data = request.get_json(force=True)
+    singer = data.get('singer', '').strip()
+    song_artist = data.get('song_artist', '').strip()
+    if not singer:
+        return jsonify({"error": "singer is required"}), 400
+
+    try:
+        rotation.add_entry(singer, song_artist)
+        entries = rotation.get_rotation(force_refresh=True)
+        return jsonify({"success": True, "entries": entries})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
