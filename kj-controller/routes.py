@@ -369,6 +369,7 @@ def set_filler_music():
     filler_pw = cfg.get('filler_vlc_password', 'filler')
 
     vlc.current_filler_track = track_name
+    vlc._save_state()
     log_message(f"Changing filler music to: {track_name}", cfg)
 
     # Enqueue the new track (always — updates playlist for when filler resumes)

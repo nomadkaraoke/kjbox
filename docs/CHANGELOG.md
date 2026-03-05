@@ -2,6 +2,17 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-03-05 - VLC Process Lifecycle Decoupling
+
+**Zero-downtime deploys:** VLC playback now survives kj-controller restarts.
+
+- VLC launched in its own process group (`start_new_session=True`) so it's not killed when the Python process exits
+- On startup, kj-controller probes VLC HTTP ports and reconnects to existing instances
+- Playback state (current song, filler track) persisted to `/var/run/kj-controller/state.json` and recovered on restart
+- `restart_instances` handles orphan VLC processes (kills by port when we don't own the PID)
+- Auto-deploy skips service restart for frontend-only changes (JS/CSS/HTML)
+- systemd unit updated: `KillMode=process` so only Python is killed, not VLC children
+
 ## 2026-03-05 - UI Polish & System Management
 
 **Rotation improvements:**

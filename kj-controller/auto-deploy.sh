@@ -25,6 +25,9 @@ while true; do
         REQ_CHANGED=$(git diff HEAD origin/main -- kj-controller/requirements.txt)
         CATALOG_CHANGED=$(git diff HEAD origin/main -- kj-controller/catalog.py)
 
+        # Check if only frontend files changed (no Python restart needed)
+        PYTHON_CHANGED=$(git diff HEAD origin/main -- '*.py' 'kj-controller/requirements.txt')
+
         git reset --hard origin/main --quiet
 
         # Install new dependencies if requirements changed
@@ -33,8 +36,12 @@ while true; do
             "$APP_DIR/venv/bin/pip" install -q -r "$APP_DIR/requirements.txt"
         fi
 
-        log "Restarting kj-controller..."
-        sudo systemctl restart kj-controller
+        if [ -n "$PYTHON_CHANGED" ]; then
+            log "Python files changed, restarting kj-controller..."
+            sudo systemctl restart kj-controller
+        else
+            log "Frontend-only changes, skipping kj-controller restart (takes effect on browser refresh)."
+        fi
         systemctl is-active --quiet rotation-display && sudo systemctl restart rotation-display
         systemctl is-active --quiet overlay-display && sudo systemctl restart overlay-display
         log "Deploy complete (${REMOTE:0:7})"

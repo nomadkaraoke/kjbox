@@ -1,6 +1,8 @@
 """VLCManager class: launch, control, and manage dual VLC instances."""
 
+import json
 import os
+import signal
 import subprocess
 import threading
 import time
@@ -9,6 +11,9 @@ import requests
 
 from config import APP_DIR, is_pi
 from utils import log_message
+
+STATE_DIR = '/var/run/kj-controller'
+STATE_FILE = os.path.join(STATE_DIR, 'state.json')
 
 
 class VLCManager:
@@ -30,6 +35,109 @@ class VLCManager:
         self._play_lock = threading.Lock()
         self._fade_cancel = threading.Event()
         self.on_karaoke_end = None  # Optional callback when karaoke ends
+
+    def _save_state(self):
+        """Persist playback state so it can be recovered after a restart."""
+        state = {
+            'current_playing_path': self.current_playing_path,
+            'current_filler_track': self.current_filler_track,
+        }
+        try:
+            os.makedirs(STATE_DIR, exist_ok=True)
+            with open(STATE_FILE, 'w') as f:
+                json.dump(state, f)
+        except OSError:
+            pass
+
+    def _load_state(self):
+        """Load persisted playback state if available."""
+        try:
+            with open(STATE_FILE) as f:
+                return json.load(f)
+        except (OSError, json.JSONDecodeError):
+            return {}
+
+    def _probe_vlc(self, port, password):
+        """Check if a VLC instance is responding on a port. Returns status dict or None."""
+        try:
+            s = requests.Session()
+            s.auth = ('', password)
+            resp = s.get(f"http://localhost:{port}/requests/status.json", timeout=2)
+            resp.raise_for_status()
+            return resp.json()
+        except Exception:
+            return None
+
+    def _kill_port(self, port):
+        """Kill whatever process is listening on a TCP port."""
+        try:
+            result = subprocess.run(
+                ['fuser', f'{port}/tcp'],
+                capture_output=True, text=True
+            )
+            pids = result.stdout.strip().split()
+            for pid in pids:
+                try:
+                    os.kill(int(pid), signal.SIGTERM)
+                except (ValueError, OSError):
+                    pass
+            if pids:
+                time.sleep(1)
+        except FileNotFoundError:
+            # fuser not available, try lsof
+            try:
+                result = subprocess.run(
+                    ['lsof', '-ti', f':{port}'],
+                    capture_output=True, text=True
+                )
+                pids = result.stdout.strip().split('\n')
+                for pid in pids:
+                    try:
+                        os.kill(int(pid), signal.SIGTERM)
+                    except (ValueError, OSError):
+                        pass
+                if pids and pids[0]:
+                    time.sleep(1)
+            except FileNotFoundError:
+                pass
+
+    def try_reconnect(self):
+        """Attempt to reconnect to existing VLC instances after a restart.
+
+        Returns a dict with 'karaoke' and 'filler' keys indicating which
+        instances were found running.
+        """
+        if not self.enabled:
+            return {'karaoke': False, 'filler': False}
+
+        karaoke_port = self.config.get('karaoke_vlc_port', 8080)
+        karaoke_pw = self.config.get('karaoke_vlc_password', 'karaoke')
+        filler_port = self.config.get('filler_vlc_port', 8081)
+        filler_pw = self.config.get('filler_vlc_password', 'filler')
+
+        found = {'karaoke': False, 'filler': False}
+        saved = self._load_state()
+
+        # Check karaoke VLC
+        karaoke_status = self._probe_vlc(karaoke_port, karaoke_pw)
+        if karaoke_status:
+            found['karaoke'] = True
+            state = karaoke_status.get('state', 'stopped')
+            log_message(f"Reconnected to existing karaoke VLC (state: {state}).", self.config)
+            if state in ('playing', 'paused'):
+                self.karaoke_active = True
+                self.current_playing_path = saved.get('current_playing_path')
+                self.last_play_time = time.time()
+                log_message(f"Recovered karaoke playback: {self.current_playing_path}", self.config)
+
+        # Check filler VLC
+        filler_status = self._probe_vlc(filler_port, filler_pw)
+        if filler_status:
+            found['filler'] = True
+            self.current_filler_track = saved.get('current_filler_track', self.current_filler_track)
+            log_message(f"Reconnected to existing filler VLC (state: {filler_status.get('state')}).", self.config)
+
+        return found
 
     def launch_instance(self, name, port, password, media_file=None, loop=False):
         """Launches a VLC instance with the HTTP interface enabled."""
@@ -76,7 +184,8 @@ class VLCManager:
             vlc_log = open(os.path.join(log_dir, f'vlc-{name}.log'), 'a')
             vlc_log.write(f"\n--- VLC '{name}' starting at {time.strftime('%Y-%m-%d %H:%M:%S')} ---\n")
             vlc_log.flush()
-            process = subprocess.Popen(full_command, stdout=vlc_log, stderr=vlc_log)
+            process = subprocess.Popen(full_command, stdout=vlc_log, stderr=vlc_log,
+                                       start_new_session=True)
             self.processes[name] = process
             log_message(f"VLC instance '{name}' launched with PID {process.pid}.", self.config)
             time.sleep(2)
@@ -242,6 +351,7 @@ class VLCManager:
             self.send_command(karaoke_port, karaoke_pw, "pl_play")
 
             self.karaoke_active = True
+            self._save_state()
             log_message(f"Playback started for {os.path.basename(file_path)}.", self.config)
 
         # Verify audio is actually working after a brief delay (outside lock)
@@ -267,8 +377,9 @@ class VLCManager:
 
         log_message(f"Restarting VLC instances with audio device '{self.audio_device}'...", self.config)
 
-        # Terminate existing VLC processes
-        for name, proc in self.processes.items():
+        # Terminate existing VLC processes (owned or orphan)
+        for name in list(self.processes.keys()):
+            proc = self.processes[name]
             if proc and proc.poll() is None:
                 proc.terminate()
                 try:
@@ -276,6 +387,11 @@ class VLCManager:
                 except subprocess.TimeoutExpired:
                     proc.kill()
                 log_message(f"Terminated VLC instance '{name}'.", self.config)
+            else:
+                # No owned process — kill by port (orphan from previous run)
+                port = self.config.get(f'{name}_vlc_port', 8080 if name == 'karaoke' else 8081)
+                self._kill_port(port)
+                log_message(f"Killed orphan VLC on port {port} for '{name}'.", self.config)
             self.processes[name] = None
 
         self.karaoke_active = False
@@ -289,6 +405,7 @@ class VLCManager:
         self.launch_instance("filler", filler_port, filler_pw, filler_path, True)
         time.sleep(3)
         self.fade_in_filler()
+        self._save_state()
         log_message("VLC instances restarted successfully.", self.config)
 
     def monitor_karaoke(self):
@@ -316,6 +433,7 @@ class VLCManager:
                 log_message("Karaoke video finished playing.", self.config)
                 self.karaoke_active = False
                 self.current_playing_path = None
+                self._save_state()
                 if self.on_karaoke_end:
                     try:
                         self.on_karaoke_end()

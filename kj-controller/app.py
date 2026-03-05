@@ -134,19 +134,29 @@ def start_app():  # pragma: no cover
     else:
         log_message("External catalog not yet built. Use POST /catalog/build to create.", cfg)
 
-    # Launch VLC instances (only on Pi)
+    # Launch VLC instances (only on Pi / karaoke device)
     if vlc.enabled:
         karaoke_port = cfg.get('karaoke_vlc_port', 8080)
         karaoke_pw = cfg.get('karaoke_vlc_password', 'karaoke')
         filler_port = cfg.get('filler_vlc_port', 8081)
         filler_pw = cfg.get('filler_vlc_password', 'filler')
 
-        vlc.launch_instance("karaoke", karaoke_port, karaoke_pw)
-        filler_path = os.path.join(filler_dir, vlc.current_filler_track) if filler_dir and vlc.current_filler_track else ''
-        vlc.launch_instance("filler", filler_port, filler_pw, filler_path, True)
+        # Try to reconnect to VLC instances that survived a restart
+        found = vlc.try_reconnect()
 
-        time.sleep(3)
-        vlc.fade_in_filler()
+        if not found['karaoke']:
+            vlc.launch_instance("karaoke", karaoke_port, karaoke_pw)
+        if not found['filler']:
+            filler_path = os.path.join(filler_dir, vlc.current_filler_track) if filler_dir and vlc.current_filler_track else ''
+            vlc.launch_instance("filler", filler_port, filler_pw, filler_path, True)
+
+        # Only fade in filler if karaoke isn't actively playing
+        if not vlc.karaoke_active:
+            if not found['filler']:
+                time.sleep(3)
+            vlc.fade_in_filler()
+        else:
+            log_message("Karaoke is active — skipping filler fade-in.", cfg)
 
         # Start the karaoke player monitor in a background thread
         monitor_thread = threading.Thread(target=vlc.monitor_karaoke, daemon=True)
