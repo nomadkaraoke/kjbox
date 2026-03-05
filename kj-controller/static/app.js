@@ -2279,12 +2279,13 @@ function renderRotation(entries) {
             row.classList.add('rotation-skipped');
         }
 
-        // Ctrl+hover: show delete indicator
+        // Modifier+hover: show edit/delete indicator
         row.addEventListener('mouseenter', (e) => {
             if (e.ctrlKey || e.metaKey) row.classList.add('rotation-delete-hover');
+            else if (e.shiftKey) row.classList.add('rotation-edit-hover');
         });
         row.addEventListener('mouseleave', () => {
-            row.classList.remove('rotation-delete-hover');
+            row.classList.remove('rotation-delete-hover', 'rotation-edit-hover');
         });
 
         // Row click: Shift=edit, Ctrl/Cmd=delete
@@ -2628,15 +2629,23 @@ async function addRotationEntry() {
     }
 }
 
-// Update Ctrl-hover delete indicator as modifier keys change
+// Update modifier-hover indicators as keys change
 document.addEventListener('keydown', (e) => {
+    const hovered = document.querySelector('.rotation-entry:hover');
+    if (!hovered) return;
     if (e.ctrlKey || e.metaKey) {
-        const hovered = document.querySelector('.rotation-entry:hover');
-        if (hovered) hovered.classList.add('rotation-delete-hover');
+        hovered.classList.remove('rotation-edit-hover');
+        hovered.classList.add('rotation-delete-hover');
+    } else if (e.shiftKey) {
+        hovered.classList.remove('rotation-delete-hover');
+        hovered.classList.add('rotation-edit-hover');
     }
 });
 document.addEventListener('keyup', (e) => {
     if (!e.ctrlKey && !e.metaKey) {
         document.querySelectorAll('.rotation-delete-hover').forEach(el => el.classList.remove('rotation-delete-hover'));
+    }
+    if (!e.shiftKey) {
+        document.querySelectorAll('.rotation-edit-hover').forEach(el => el.classList.remove('rotation-edit-hover'));
     }
 });
