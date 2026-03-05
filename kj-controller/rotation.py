@@ -164,6 +164,30 @@ class RotationManager:
         sheet.append_row(new_row, value_input_option="USER_ENTERED")
         self._invalidate_cache()
 
+    def update_entry(self, row_index, singer=None, song_artist=None):
+        """Update the singer name and/or song for a given row."""
+        sheet = self._get_sheet()
+        all_values = sheet.get_all_values()
+        _, col_map = _find_header(all_values)
+
+        updates = []
+        if singer is not None:
+            col = col_map.get("singer", 1)
+            updates.append({"range": f"{_col_letter(col)}{row_index}", "values": [[singer]]})
+        if song_artist is not None:
+            col = col_map.get("song_artist", 2)
+            updates.append({"range": f"{_col_letter(col)}{row_index}", "values": [[song_artist]]})
+
+        if updates:
+            sheet.batch_update(updates, value_input_option="USER_ENTERED")
+        self._invalidate_cache()
+
+    def delete_entry(self, row_index):
+        """Delete a row from the sheet entirely."""
+        sheet = self._get_sheet()
+        sheet.delete_rows(row_index)
+        self._invalidate_cache()
+
     def mark_singing(self, row_index):
         """Mark a row as 'Singing Now' and clear any other 'Singing Now' statuses."""
         sheet = self._get_sheet()

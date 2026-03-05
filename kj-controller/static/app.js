@@ -2240,7 +2240,6 @@ async function fetchRotation(forceRefresh) {
         const response = await fetch(url);
         if (!response.ok) {
             if (response.status === 503) {
-                // Rotation not configured — hide the panel
                 const panel = document.querySelector('.rotation-panel');
                 if (panel) panel.style.display = 'none';
                 return;
@@ -2280,6 +2279,27 @@ function renderRotation(entries) {
             row.classList.add('rotation-skipped');
         }
 
+        // Ctrl+hover: show delete indicator
+        row.addEventListener('mouseenter', (e) => {
+            if (e.ctrlKey || e.metaKey) row.classList.add('rotation-delete-hover');
+        });
+        row.addEventListener('mouseleave', () => {
+            row.classList.remove('rotation-delete-hover');
+        });
+
+        // Row click: Shift=edit, Ctrl/Cmd=delete
+        row.addEventListener('click', (e) => {
+            // Don't intercept clicks on buttons/inputs
+            if (e.target.closest('button, input')) return;
+            if (e.shiftKey) {
+                e.preventDefault();
+                enterRotationEditMode(row, entry);
+            } else if (e.ctrlKey || e.metaKey) {
+                e.preventDefault();
+                deleteRotationEntry(entry.row_index, entry.singer);
+            }
+        });
+
         const info = document.createElement('div');
         info.className = 'rotation-info';
 
@@ -2290,14 +2310,14 @@ function renderRotation(entries) {
         const name = document.createElement('span');
         name.className = 'rotation-name rotation-copyable';
         name.textContent = entry.singer;
-        name.title = 'Click to copy';
-        name.onclick = () => copyRotationText(name);
+        name.title = 'Click to copy \u2022 Shift+click to edit';
+        name.onclick = (e) => { if (!e.shiftKey && !e.ctrlKey && !e.metaKey) copyRotationText(name); };
 
         const song = document.createElement('span');
         song.className = 'rotation-song rotation-copyable';
         song.textContent = entry.song_artist || '';
-        song.title = 'Click to copy';
-        song.onclick = () => copyRotationText(song);
+        song.title = 'Click to copy \u2022 Shift+click to edit';
+        song.onclick = (e) => { if (!e.shiftKey && !e.ctrlKey && !e.metaKey) copyRotationText(song); };
 
         info.appendChild(num);
         info.appendChild(name);
@@ -2358,7 +2378,6 @@ function renderRotation(entries) {
         moreBtn.title = 'More status options';
         moreBtn.onclick = (e) => {
             e.stopPropagation();
-            // Close any open dropdown
             document.querySelectorAll('.rotation-dropdown').forEach(d => d.remove());
             const dropdown = document.createElement('div');
             dropdown.className = 'rotation-dropdown';
@@ -2375,16 +2394,153 @@ function renderRotation(entries) {
                 dropdown.appendChild(item);
             });
             actions.appendChild(dropdown);
-            // Close on outside click
             const close = () => { dropdown.remove(); document.removeEventListener('click', close); };
             setTimeout(() => document.addEventListener('click', close), 0);
         };
         actions.appendChild(moreBtn);
 
+        // Edit pencil button
+        const editBtn = document.createElement('button');
+        editBtn.className = 'rotation-btn rotation-btn-edit';
+        editBtn.innerHTML = '&#9998;';
+        editBtn.title = 'Edit singer/song';
+        editBtn.onclick = (e) => {
+            e.stopPropagation();
+            enterRotationEditMode(row, entry);
+        };
+        actions.appendChild(editBtn);
+
         row.appendChild(info);
         row.appendChild(actions);
         list.appendChild(row);
     });
+}
+
+function enterRotationEditMode(row, entry) {
+    // Don't double-enter edit mode
+    if (row.classList.contains('rotation-editing')) return;
+    row.classList.add('rotation-editing');
+
+    const info = row.querySelector('.rotation-info');
+    const actions = row.querySelector('.rotation-actions');
+
+    // Save original content for cancel
+    const origInfoHTML = info.innerHTML;
+    const origActionsHTML = actions.innerHTML;
+
+    // Replace info with editable inputs
+    info.innerHTML = '';
+    const singerInput = document.createElement('input');
+    singerInput.type = 'text';
+    singerInput.className = 'rotation-edit-input rotation-edit-singer';
+    singerInput.value = entry.singer;
+    singerInput.placeholder = 'Singer name';
+
+    const songInput = document.createElement('input');
+    songInput.type = 'text';
+    songInput.className = 'rotation-edit-input rotation-edit-song';
+    songInput.value = entry.song_artist || '';
+    songInput.placeholder = 'Song & Artist';
+
+    info.appendChild(singerInput);
+    info.appendChild(songInput);
+
+    // Replace actions with save/cancel/delete
+    actions.innerHTML = '';
+    const saveBtn = document.createElement('button');
+    saveBtn.className = 'rotation-btn rotation-btn-save';
+    saveBtn.textContent = 'Save';
+    saveBtn.onclick = (e) => {
+        e.stopPropagation();
+        const newSinger = singerInput.value.trim();
+        const newSong = songInput.value.trim();
+        if (!newSinger) { singerInput.focus(); return; }
+        saveRotationEdit(entry.row_index, newSinger, newSong);
+    };
+
+    const cancelBtn = document.createElement('button');
+    cancelBtn.className = 'rotation-btn rotation-btn-cancel';
+    cancelBtn.textContent = 'Cancel';
+    cancelBtn.onclick = (e) => {
+        e.stopPropagation();
+        info.innerHTML = origInfoHTML;
+        actions.innerHTML = origActionsHTML;
+        row.classList.remove('rotation-editing');
+        // Re-render to restore event listeners
+        renderRotation(rotationData);
+    };
+
+    const delBtn = document.createElement('button');
+    delBtn.className = 'rotation-btn rotation-btn-delete';
+    delBtn.textContent = 'Delete';
+    delBtn.onclick = (e) => {
+        e.stopPropagation();
+        deleteRotationEntry(entry.row_index, entry.singer);
+    };
+
+    actions.appendChild(saveBtn);
+    actions.appendChild(cancelBtn);
+    actions.appendChild(delBtn);
+
+    singerInput.focus();
+    singerInput.select();
+
+    // Enter on singer: move to song input. Enter on song: save. Escape: cancel.
+    singerInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); songInput.focus(); songInput.select(); }
+        else if (e.key === 'Escape') { cancelBtn.click(); }
+    });
+    songInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { saveBtn.click(); }
+        else if (e.key === 'Escape') { cancelBtn.click(); }
+    });
+}
+
+async function saveRotationEdit(rowIndex, singer, songArtist) {
+    showRotationIndicator('spin');
+    try {
+        const response = await fetch('/rotation/edit', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ row_index: rowIndex, singer, song_artist: songArtist })
+        });
+        const data = await response.json();
+        if (!response.ok) {
+            showRotationIndicator('error');
+            return;
+        }
+        if (data.entries) {
+            rotationData = data.entries;
+            renderRotation(rotationData);
+        }
+        showRotationIndicator('success');
+    } catch (e) {
+        showRotationIndicator('error');
+    }
+}
+
+async function deleteRotationEntry(rowIndex, singerName) {
+    if (!confirm(`Delete "${singerName}" from rotation?`)) return;
+    showRotationIndicator('spin');
+    try {
+        const response = await fetch('/rotation/delete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ row_index: rowIndex })
+        });
+        const data = await response.json();
+        if (!response.ok) {
+            showRotationIndicator('error');
+            return;
+        }
+        if (data.entries) {
+            rotationData = data.entries;
+            renderRotation(rotationData);
+        }
+        showRotationIndicator('success');
+    } catch (e) {
+        showRotationIndicator('error');
+    }
 }
 
 function copyRotationText(el) {
@@ -2471,3 +2627,16 @@ async function addRotationEntry() {
         showRotationIndicator('error');
     }
 }
+
+// Update Ctrl-hover delete indicator as modifier keys change
+document.addEventListener('keydown', (e) => {
+    if (e.ctrlKey || e.metaKey) {
+        const hovered = document.querySelector('.rotation-entry:hover');
+        if (hovered) hovered.classList.add('rotation-delete-hover');
+    }
+});
+document.addEventListener('keyup', (e) => {
+    if (!e.ctrlKey && !e.metaKey) {
+        document.querySelectorAll('.rotation-delete-hover').forEach(el => el.classList.remove('rotation-delete-hover'));
+    }
+});

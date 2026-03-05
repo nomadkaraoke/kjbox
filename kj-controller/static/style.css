@@ -1387,3 +1387,55 @@ body {
     background: #2a2a2a;
     color: #fff;
 }
+/* Edit button (pencil) */
+.rotation-btn-edit {
+    border-color: #555;
+    color: #999;
+    padding: 2px 5px;
+    font-size: 0.7em;
+    line-height: 1;
+}
+.rotation-btn-edit:hover { color: #fbbf24; border-color: rgba(251, 191, 36, 0.4); }
+/* Edit mode */
+.rotation-entry.rotation-editing {
+    background: #1e1e2e;
+    border: 1px solid rgba(139, 92, 246, 0.3);
+}
+.rotation-edit-input {
+    padding: 3px 8px;
+    border-radius: 5px;
+    border: 1px solid #444;
+    background: #111;
+    color: #e5e5e5;
+    font-size: 0.85em;
+    outline: none;
+}
+.rotation-edit-singer { flex: 1; min-width: 80px; max-width: 140px; }
+.rotation-edit-song { flex: 2; min-width: 100px; }
+.rotation-edit-input:focus { border-color: rgba(139, 92, 246, 0.5); }
+.rotation-btn-save {
+    border-color: rgba(34, 197, 94, 0.4);
+    color: #86efac;
+}
+.rotation-btn-save:hover { background: rgba(34, 197, 94, 0.15); }
+.rotation-btn-cancel {
+    border-color: #444;
+    color: #999;
+}
+.rotation-btn-cancel:hover { color: #ccc; }
+.rotation-btn-delete {
+    border-color: rgba(239, 68, 68, 0.4);
+    color: #fca5a5;
+}
+.rotation-btn-delete:hover { background: rgba(239, 68, 68, 0.15); }
+/* Ctrl+hover delete indicator */
+.rotation-entry.rotation-delete-hover {
+    background: rgba(239, 68, 68, 0.1) !important;
+    border-left: 3px solid #ef4444 !important;
+    cursor: pointer;
+}
+.rotation-entry.rotation-delete-hover .rotation-name,
+.rotation-entry.rotation-delete-hover .rotation-song {
+    text-decoration: line-through;
+    opacity: 0.6;
+}

@@ -140,6 +140,48 @@ class TestMarkSinging:
         assert manager._cache is None
 
 
+class TestUpdateEntry:
+    def test_updates_singer_and_song(self, manager, mock_sheet):
+        manager.update_entry(4, singer="Bobby", song_artist="New Song - Artist")
+        mock_sheet.batch_update.assert_called_once()
+        updates = mock_sheet.batch_update.call_args[0][0]
+        ranges = {u["range"]: u["values"][0][0] for u in updates}
+        assert ranges["B4"] == "Bobby"
+        assert ranges["C4"] == "New Song - Artist"
+
+    def test_updates_singer_only(self, manager, mock_sheet):
+        manager.update_entry(4, singer="Bobby")
+        updates = mock_sheet.batch_update.call_args[0][0]
+        assert len(updates) == 1
+        assert updates[0]["range"] == "B4"
+
+    def test_updates_song_only(self, manager, mock_sheet):
+        manager.update_entry(4, song_artist="New Song")
+        updates = mock_sheet.batch_update.call_args[0][0]
+        assert len(updates) == 1
+        assert updates[0]["range"] == "C4"
+
+    def test_no_updates_no_batch(self, manager, mock_sheet):
+        manager.update_entry(4)
+        mock_sheet.batch_update.assert_not_called()
+
+    def test_invalidates_cache(self, manager, mock_sheet):
+        manager.get_rotation()
+        manager.update_entry(4, singer="Bobby")
+        assert manager._cache is None
+
+
+class TestDeleteEntry:
+    def test_deletes_row(self, manager, mock_sheet):
+        manager.delete_entry(4)
+        mock_sheet.delete_rows.assert_called_once_with(4)
+
+    def test_invalidates_cache(self, manager, mock_sheet):
+        manager.get_rotation()
+        manager.delete_entry(4)
+        assert manager._cache is None
+
+
 class TestAddEntry:
     def test_appends_row(self, manager, mock_sheet):
         manager.add_entry("Frank", "My Way - Sinatra")

@@ -102,6 +102,100 @@ class TestUpdateRotationStatus:
         assert resp.status_code == 503
 
 
+class TestEditRotationEntry:
+    def test_edit_singer_and_song(self, rotation_client, mock_rotation):
+        resp = rotation_client.post('/rotation/edit',
+            data=json.dumps({"row_index": 3, "singer": "Bobby", "song_artist": "New Song"}),
+            content_type='application/json')
+        assert resp.status_code == 200
+        mock_rotation.update_entry.assert_called_once_with(3, singer="Bobby", song_artist="New Song")
+
+    def test_edit_singer_only(self, rotation_client, mock_rotation):
+        resp = rotation_client.post('/rotation/edit',
+            data=json.dumps({"row_index": 3, "singer": "Bobby"}),
+            content_type='application/json')
+        assert resp.status_code == 200
+        mock_rotation.update_entry.assert_called_once_with(3, singer="Bobby", song_artist=None)
+
+    def test_missing_row_index_returns_400(self, rotation_client):
+        resp = rotation_client.post('/rotation/edit',
+            data=json.dumps({"singer": "Bobby"}),
+            content_type='application/json')
+        assert resp.status_code == 400
+
+    def test_invalid_row_index_returns_400(self, rotation_client):
+        resp = rotation_client.post('/rotation/edit',
+            data=json.dumps({"row_index": "abc", "singer": "Bobby"}),
+            content_type='application/json')
+        assert resp.status_code == 400
+
+    def test_negative_row_index_returns_400(self, rotation_client):
+        resp = rotation_client.post('/rotation/edit',
+            data=json.dumps({"row_index": -1, "singer": "Bobby"}),
+            content_type='application/json')
+        assert resp.status_code == 400
+
+    def test_strips_whitespace(self, rotation_client, mock_rotation):
+        resp = rotation_client.post('/rotation/edit',
+            data=json.dumps({"row_index": 3, "singer": "  Bobby  ", "song_artist": "  Song  "}),
+            content_type='application/json')
+        assert resp.status_code == 200
+        mock_rotation.update_entry.assert_called_once_with(3, singer="Bobby", song_artist="Song")
+
+    def test_error_returns_500(self, rotation_client, mock_rotation):
+        mock_rotation.update_entry.side_effect = Exception("API error")
+        resp = rotation_client.post('/rotation/edit',
+            data=json.dumps({"row_index": 3, "singer": "Bobby"}),
+            content_type='application/json')
+        assert resp.status_code == 500
+
+    def test_not_configured_returns_503(self, flask_test_client):
+        resp = flask_test_client.post('/rotation/edit',
+            data=json.dumps({"row_index": 3, "singer": "Bobby"}),
+            content_type='application/json')
+        assert resp.status_code == 503
+
+
+class TestDeleteRotationEntry:
+    def test_delete_entry(self, rotation_client, mock_rotation):
+        resp = rotation_client.post('/rotation/delete',
+            data=json.dumps({"row_index": 3}),
+            content_type='application/json')
+        assert resp.status_code == 200
+        mock_rotation.delete_entry.assert_called_once_with(3)
+
+    def test_missing_row_index_returns_400(self, rotation_client):
+        resp = rotation_client.post('/rotation/delete',
+            data=json.dumps({}),
+            content_type='application/json')
+        assert resp.status_code == 400
+
+    def test_invalid_row_index_returns_400(self, rotation_client):
+        resp = rotation_client.post('/rotation/delete',
+            data=json.dumps({"row_index": "abc"}),
+            content_type='application/json')
+        assert resp.status_code == 400
+
+    def test_negative_row_index_returns_400(self, rotation_client):
+        resp = rotation_client.post('/rotation/delete',
+            data=json.dumps({"row_index": -1}),
+            content_type='application/json')
+        assert resp.status_code == 400
+
+    def test_error_returns_500(self, rotation_client, mock_rotation):
+        mock_rotation.delete_entry.side_effect = Exception("API error")
+        resp = rotation_client.post('/rotation/delete',
+            data=json.dumps({"row_index": 3}),
+            content_type='application/json')
+        assert resp.status_code == 500
+
+    def test_not_configured_returns_503(self, flask_test_client):
+        resp = flask_test_client.post('/rotation/delete',
+            data=json.dumps({"row_index": 3}),
+            content_type='application/json')
+        assert resp.status_code == 503
+
+
 class TestAddRotationEntry:
     def test_add_entry(self, rotation_client, mock_rotation):
         resp = rotation_client.post('/rotation/add',

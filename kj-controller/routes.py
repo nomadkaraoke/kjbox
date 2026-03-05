@@ -1415,6 +1415,63 @@ def update_rotation_status():
         return jsonify({"error": str(e)}), 500
 
 
+@routes_bp.route('/rotation/edit', methods=['POST'])
+def edit_rotation_entry():
+    """Edit a rotation entry's singer name and/or song."""
+    rotation = current_app.rotation
+    if rotation is None:
+        return jsonify({"error": "Rotation not configured"}), 503
+    data = request.get_json(force=True)
+    raw_index = data.get('row_index')
+    if raw_index is None:
+        return jsonify({"error": "row_index is required"}), 400
+    try:
+        row_index = int(raw_index)
+    except (TypeError, ValueError):
+        return jsonify({"error": "row_index must be an integer"}), 400
+    if row_index < 1:
+        return jsonify({"error": "row_index must be >= 1"}), 400
+
+    singer = data.get('singer')
+    song_artist = data.get('song_artist')
+    if singer is not None:
+        singer = singer.strip()
+    if song_artist is not None:
+        song_artist = song_artist.strip()
+
+    try:
+        rotation.update_entry(row_index, singer=singer, song_artist=song_artist)
+        entries = rotation.get_rotation(force_refresh=True)
+        return jsonify({"success": True, "entries": entries})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@routes_bp.route('/rotation/delete', methods=['POST'])
+def delete_rotation_entry():
+    """Delete a rotation entry entirely."""
+    rotation = current_app.rotation
+    if rotation is None:
+        return jsonify({"error": "Rotation not configured"}), 503
+    data = request.get_json(force=True)
+    raw_index = data.get('row_index')
+    if raw_index is None:
+        return jsonify({"error": "row_index is required"}), 400
+    try:
+        row_index = int(raw_index)
+    except (TypeError, ValueError):
+        return jsonify({"error": "row_index must be an integer"}), 400
+    if row_index < 1:
+        return jsonify({"error": "row_index must be >= 1"}), 400
+
+    try:
+        rotation.delete_entry(row_index)
+        entries = rotation.get_rotation(force_refresh=True)
+        return jsonify({"success": True, "entries": entries})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @routes_bp.route('/rotation/add', methods=['POST'])
 def add_rotation_entry():
     """Add a new singer to the rotation."""
