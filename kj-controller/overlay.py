@@ -120,6 +120,25 @@ class OverlayManager:
             })
         return None
 
+    def import_overlays(self, overlays):
+        """Replace all overlays with imported list. Assigns new IDs."""
+        imported = []
+        for o in overlays:
+            if o.get('type') not in OVERLAY_TYPES:
+                continue
+            overlay = {
+                'id': str(uuid.uuid4())[:8],
+                'type': o['type'],
+                'name': o.get('name', ''),
+                'enabled': o.get('enabled', False),
+                'show_over_video': o.get('show_over_video', False),
+                'config': o.get('config', {}),
+            }
+            imported.append(overlay)
+        self._data['overlays'] = imported
+        self._save()
+        return imported
+
     def set_karaoke_playing(self, playing):
         """Update the karaoke_playing state flag."""
         if self._data.get('karaoke_playing') != playing:

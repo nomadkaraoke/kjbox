@@ -432,6 +432,9 @@ body {
 /* --- Overlay Management --- */
 
 .overlay-panel { display: flex; flex-direction: column; }
+.overlay-header-btns { display: flex; gap: 4px; }
+.overlay-header-btn { font-size: 0.65em; padding: 3px 8px; background-color: #252525; border: 1px solid #2a2a2a; border-radius: 6px; color: #666; cursor: pointer; box-shadow: none; }
+.overlay-header-btn:hover { background-color: #333; color: #ccc; box-shadow: none; }
 .overlay-add-btn { font-size: 0.75em; padding: 4px 12px; background-color: #252525; border: 1px solid #2a2a2a; color: #888; box-shadow: none; }
 .overlay-add-btn:hover { background-color: #333; color: #e5e5e5; box-shadow: none; }
 .overlay-list { overflow-y: auto; flex: 1; min-height: 0; }

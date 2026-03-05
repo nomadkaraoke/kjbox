@@ -672,6 +672,19 @@ def list_overlays():
     return jsonify(current_app.overlay_manager.list_overlays())
 
 
+@routes_bp.route('/overlays/import', methods=['POST'])
+def import_overlays():
+    """Replaces all overlays with imported config."""
+    data = request.get_json(silent=True)
+    if not data or not isinstance(data, list):
+        return jsonify({"error": "Expected a JSON array of overlays"}), 400
+    try:
+        imported = current_app.overlay_manager.import_overlays(data)
+        return jsonify({"success": True, "count": len(imported), "overlays": imported})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @routes_bp.route('/overlays', methods=['POST'])
 def create_overlay():
     """Creates a new overlay."""

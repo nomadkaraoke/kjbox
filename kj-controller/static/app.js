@@ -1249,6 +1249,56 @@ const OVERLAY_TYPE_LABELS = {
     qr_code: 'QR',
 };
 
+async function backupOverlays() {
+    try {
+        const response = await fetch('/overlays');
+        const overlays = await response.json();
+        const blob = new Blob([JSON.stringify(overlays, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'overlays-backup.json';
+        a.click();
+        URL.revokeObjectURL(url);
+        log('Overlay config downloaded.', 'success');
+    } catch (e) {
+        log('Failed to backup overlays: ' + e.message, 'error');
+    }
+}
+
+function restoreOverlays() {
+    document.getElementById('overlay-restore-input').click();
+}
+
+async function handleOverlayRestore(input) {
+    const file = input.files[0];
+    input.value = '';
+    if (!file) return;
+    try {
+        const text = await file.text();
+        const data = JSON.parse(text);
+        if (!Array.isArray(data)) {
+            log('Invalid overlay backup file — expected a JSON array.', 'error');
+            return;
+        }
+        if (!confirm(`Restore ${data.length} overlay(s)? This will replace all current overlays.`)) return;
+        const response = await fetch('/overlays/import', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
+        });
+        const result = await response.json();
+        if (!response.ok) {
+            log('Restore failed: ' + (result.error || 'Unknown error'), 'error');
+            return;
+        }
+        log(`Restored ${result.count} overlay(s).`, 'success');
+        await loadOverlays();
+    } catch (e) {
+        log('Failed to restore overlays: ' + e.message, 'error');
+    }
+}
+
 async function loadOverlays() {
     try {
         const response = await fetch('/overlays');

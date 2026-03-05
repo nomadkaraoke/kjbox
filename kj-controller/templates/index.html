@@ -73,7 +73,12 @@
             <div class="container overlay-panel">
                 <div class="header-row">
                     <h2>Overlays</h2>
-                    <button class="overlay-add-btn" id="overlay-add-btn" onclick="showOverlayForm()">+ Add</button>
+                    <div class="overlay-header-btns">
+                        <button class="overlay-header-btn" onclick="backupOverlays()" title="Download overlay config">Backup</button>
+                        <button class="overlay-header-btn" onclick="restoreOverlays()" title="Restore overlay config from file">Restore</button>
+                        <input type="file" id="overlay-restore-input" accept=".json" class="hidden" onchange="handleOverlayRestore(this)">
+                        <button class="overlay-add-btn" id="overlay-add-btn" onclick="showOverlayForm()">+ Add</button>
+                    </div>
                 </div>
                 <div id="overlay-list" class="overlay-list"></div>
             </div>
