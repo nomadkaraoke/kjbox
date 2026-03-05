@@ -192,6 +192,52 @@ class TestOverlayManagerKaraokeState:
         assert mtime1 == mtime2
 
 
+class TestOverlayImport:
+    """Test bulk import of overlays."""
+
+    def test_import_replaces_all(self, manager):
+        manager.create_overlay({'type': 'ticker', 'name': 'Existing', 'config': {}})
+        imported = manager.import_overlays([
+            {'type': 'static_text', 'name': 'Imported 1', 'config': {'text': 'hi'}},
+            {'type': 'qr_code', 'name': 'Imported 2', 'config': {'url': 'https://example.com'}},
+        ])
+        assert len(imported) == 2
+        assert len(manager.list_overlays()) == 2
+        assert manager.list_overlays()[0]['name'] == 'Imported 1'
+
+    def test_import_assigns_new_ids(self, manager):
+        imported = manager.import_overlays([
+            {'type': 'ticker', 'name': 'A', 'id': 'old-id-1', 'config': {}},
+            {'type': 'ticker', 'name': 'B', 'id': 'old-id-2', 'config': {}},
+        ])
+        assert imported[0]['id'] != 'old-id-1'
+        assert imported[1]['id'] != 'old-id-2'
+        assert imported[0]['id'] != imported[1]['id']
+
+    def test_import_skips_invalid_types(self, manager):
+        imported = manager.import_overlays([
+            {'type': 'ticker', 'name': 'Valid', 'config': {}},
+            {'type': 'nonexistent', 'name': 'Invalid', 'config': {}},
+        ])
+        assert len(imported) == 1
+        assert imported[0]['name'] == 'Valid'
+
+    def test_import_empty_list(self, manager):
+        manager.create_overlay({'type': 'ticker', 'name': 'Existing', 'config': {}})
+        imported = manager.import_overlays([])
+        assert len(imported) == 0
+        assert len(manager.list_overlays()) == 0
+
+    def test_import_persists(self, overlays_path):
+        mgr1 = OverlayManager(config_path=overlays_path)
+        mgr1.import_overlays([
+            {'type': 'ticker', 'name': 'Persisted', 'config': {'text': 'test'}},
+        ])
+        mgr2 = OverlayManager(config_path=overlays_path)
+        assert len(mgr2.list_overlays()) == 1
+        assert mgr2.list_overlays()[0]['name'] == 'Persisted'
+
+
 class TestOverlayDefaults:
     """Test that overlays get proper defaults."""
 

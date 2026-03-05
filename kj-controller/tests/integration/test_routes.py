@@ -824,8 +824,8 @@ def test_system_update_pulls_and_restarts(flask_test_client, mocker):
     mock_thread.assert_called_once()
 
 
-def test_system_update_no_restart_for_static_only(flask_test_client, mocker):
-    """POST /system/update skips restart if only static files changed."""
+def test_system_update_always_restarts_even_static_only(flask_test_client, mocker):
+    """POST /system/update always restarts, even if only static files changed."""
     mock_run = mocker.patch('routes.subprocess.run')
     mock_run.return_value.returncode = 0
     mock_run.return_value.stdout = "Updating abc..def\n static/app.js | 2 +-"
@@ -835,8 +835,8 @@ def test_system_update_no_restart_for_static_only(flask_test_client, mocker):
     assert response.status_code == 200
     data = json.loads(response.data)
     assert data["success"] is True
-    assert data["restarting"] is False
-    mock_thread.assert_not_called()
+    assert data["restarting"] is True
+    mock_thread.assert_called_once()
 
 
 def test_system_update_git_pull_failure(flask_test_client, mocker):
@@ -871,6 +871,49 @@ def test_system_shutdown(flask_test_client, mocker):
     data = json.loads(response.data)
     assert data["success"] is True
     mock_thread.assert_called_once()
+
+
+# --- Auto-Deploy Tests ---
+
+def test_autodeploy_status(flask_test_client, mocker):
+    """GET /system/autodeploy returns active boolean."""
+    mock_run = mocker.patch('routes.subprocess.run')
+    mock_run.return_value.stdout = 'active\n'
+    response = flask_test_client.get('/system/autodeploy')
+    assert response.status_code == 200
+    data = json.loads(response.data)
+    assert data['active'] is True
+
+
+def test_autodeploy_status_inactive(flask_test_client, mocker):
+    """GET /system/autodeploy returns false when inactive."""
+    mock_run = mocker.patch('routes.subprocess.run')
+    mock_run.return_value.stdout = 'inactive\n'
+    response = flask_test_client.get('/system/autodeploy')
+    assert response.status_code == 200
+    data = json.loads(response.data)
+    assert data['active'] is False
+
+
+def test_autodeploy_enable(flask_test_client, mocker):
+    """POST /system/autodeploy enables the service."""
+    mock_run = mocker.patch('routes.subprocess.run')
+    # First call is enable, second is verify
+    mock_run.return_value.stdout = 'active\n'
+    response = flask_test_client.post('/system/autodeploy', json={'active': True})
+    assert response.status_code == 200
+    data = json.loads(response.data)
+    assert data['active'] is True
+
+
+def test_autodeploy_disable(flask_test_client, mocker):
+    """POST /system/autodeploy disables the service."""
+    mock_run = mocker.patch('routes.subprocess.run')
+    mock_run.return_value.stdout = 'inactive\n'
+    response = flask_test_client.post('/system/autodeploy', json={'active': False})
+    assert response.status_code == 200
+    data = json.loads(response.data)
+    assert data['active'] is False
 
 
 # --- Karaoke Nerds Search Tests ---

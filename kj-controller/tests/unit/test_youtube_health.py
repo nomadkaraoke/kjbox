@@ -8,8 +8,11 @@ from unittest.mock import MagicMock, patch
 from youtube_health import (
     _get_deno_version,
     _get_ejs_version,
+    _get_ytdlp_latest,
     _get_ytdlp_version,
+    _normalize_version,
     get_youtube_status,
+    upgrade_ytdlp,
     validate_cookies_format,
     write_cookies_file,
 )
@@ -257,3 +260,99 @@ class TestGetDenoVersion:
         mock_run.return_value = MagicMock(returncode=1, stdout='')
         version = _get_deno_version()
         assert version is None
+
+
+# --- _normalize_version ---
+
+class TestNormalizeVersion:
+    def test_strips_leading_zeros(self):
+        assert _normalize_version('2026.03.03') == '2026.3.3'
+
+    def test_already_normalized(self):
+        assert _normalize_version('2026.3.3') == '2026.3.3'
+
+    def test_mixed_zeros(self):
+        assert _normalize_version('2026.01.15') == '2026.1.15'
+
+    def test_none_passthrough(self):
+        assert _normalize_version(None) is None
+
+    def test_single_segment(self):
+        assert _normalize_version('2026') == '2026'
+
+
+# --- _get_ytdlp_latest ---
+
+class TestGetYtdlpLatest:
+    @patch('youtube_health.urllib.request.urlopen')
+    def test_returns_version_from_pypi(self, mock_urlopen):
+        import youtube_health
+        youtube_health._ytdlp_latest_cache['checked_at'] = 0  # force fetch
+        mock_resp = MagicMock()
+        mock_resp.read.return_value = b'{"info": {"version": "2026.3.3"}}'
+        mock_resp.__enter__ = lambda s: s
+        mock_resp.__exit__ = MagicMock(return_value=False)
+        mock_urlopen.return_value = mock_resp
+        version = _get_ytdlp_latest()
+        assert version == '2026.3.3'
+
+    @patch('youtube_health.urllib.request.urlopen', side_effect=Exception('network error'))
+    def test_returns_cached_on_failure(self, mock_urlopen):
+        import youtube_health
+        youtube_health._ytdlp_latest_cache['version'] = '2026.2.1'
+        youtube_health._ytdlp_latest_cache['checked_at'] = 0
+        version = _get_ytdlp_latest()
+        assert version == '2026.2.1'
+
+
+# --- get_youtube_status ytdlp_outdated ---
+
+class TestYtdlpOutdated:
+    @patch('youtube_health._get_ytdlp_latest', return_value='2026.3.3')
+    @patch('youtube_health._get_ytdlp_version', return_value='2026.03.03')
+    def test_not_outdated_when_versions_match_after_normalize(self, mock_ver, mock_latest):
+        status = get_youtube_status({})
+        assert status['ytdlp_outdated'] is False
+
+    @patch('youtube_health._get_ytdlp_latest', return_value='2026.4.1')
+    @patch('youtube_health._get_ytdlp_version', return_value='2026.03.03')
+    def test_outdated_when_behind(self, mock_ver, mock_latest):
+        status = get_youtube_status({})
+        assert status['ytdlp_outdated'] is True
+
+    @patch('youtube_health._get_ytdlp_latest', return_value=None)
+    @patch('youtube_health._get_ytdlp_version', return_value='2026.03.03')
+    def test_not_outdated_when_latest_unknown(self, mock_ver, mock_latest):
+        status = get_youtube_status({})
+        assert status['ytdlp_outdated'] is False
+
+    @patch('youtube_health._get_ytdlp_latest', return_value='2026.3.3')
+    @patch('youtube_health._get_ytdlp_version', return_value=None)
+    def test_not_outdated_when_not_installed(self, mock_ver, mock_latest):
+        status = get_youtube_status({})
+        assert status['ytdlp_outdated'] is False
+
+
+# --- upgrade_ytdlp ---
+
+class TestUpgradeYtdlp:
+    @patch('youtube_health._get_ytdlp_version_from_pip', return_value='2026.3.3')
+    @patch('subprocess.run')
+    def test_success(self, mock_run, mock_ver):
+        mock_run.return_value = MagicMock(returncode=0, stdout='', stderr='')
+        ok, msg = upgrade_ytdlp()
+        assert ok is True
+        assert '2026.3.3' in msg
+
+    @patch('subprocess.run')
+    def test_pip_failure(self, mock_run):
+        mock_run.return_value = MagicMock(returncode=1, stdout='', stderr='Permission denied')
+        ok, msg = upgrade_ytdlp()
+        assert ok is False
+        assert 'failed' in msg.lower()
+
+    @patch('subprocess.run', side_effect=subprocess.TimeoutExpired(cmd='pip', timeout=120))
+    def test_timeout(self, mock_run):
+        ok, msg = upgrade_ytdlp()
+        assert ok is False
+        assert 'timed out' in msg.lower()

@@ -86,6 +86,37 @@ def test_youtube_delete_cookies_after_upload(flask_test_client, flask_app):
     assert not os.path.exists(cookies_path)
 
 
+def test_youtube_status_includes_outdated_field(flask_test_client):
+    """GET /youtube/status includes ytdlp_outdated boolean."""
+    resp = flask_test_client.get('/youtube/status')
+    assert resp.status_code == 200
+    data = json.loads(resp.data)
+    assert 'ytdlp_outdated' in data
+    assert isinstance(data['ytdlp_outdated'], bool)
+    assert 'ytdlp_latest' in data
+
+
+def test_youtube_upgrade_ytdlp(flask_test_client, mocker):
+    """POST /youtube/upgrade-ytdlp upgrades yt-dlp and triggers restart."""
+    mocker.patch('youtube_health.upgrade_ytdlp', return_value=(True, 'yt-dlp upgraded to 2026.3.3'))
+    mock_thread = mocker.patch('routes.threading.Thread')
+    resp = flask_test_client.post('/youtube/upgrade-ytdlp')
+    assert resp.status_code == 200
+    data = json.loads(resp.data)
+    assert data['success'] is True
+    assert data['restarting'] is True
+    mock_thread.assert_called_once()
+
+
+def test_youtube_upgrade_ytdlp_failure(flask_test_client, mocker):
+    """POST /youtube/upgrade-ytdlp returns 500 on failure."""
+    mocker.patch('youtube_health.upgrade_ytdlp', return_value=(False, 'pip upgrade failed'))
+    resp = flask_test_client.post('/youtube/upgrade-ytdlp')
+    assert resp.status_code == 500
+    data = json.loads(resp.data)
+    assert 'error' in data
+
+
 def test_youtube_status_reflects_cookies(flask_test_client, flask_app):
     """GET /youtube/status shows cookies after upload."""
     # Before upload

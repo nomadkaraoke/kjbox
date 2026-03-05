@@ -1,6 +1,7 @@
 """Integration tests for overlay API routes."""
 
 import json
+import pytest
 
 
 class TestOverlayRoutes:
@@ -179,3 +180,52 @@ class TestOverlayRoutes:
         # Confirm empty
         resp = flask_test_client.get('/overlays')
         assert resp.json == []
+
+
+class TestOverlayImportRoute:
+    """Test POST /overlays/import endpoint."""
+
+    def test_import_overlays(self, flask_test_client):
+        resp = flask_test_client.post('/overlays/import', json=[
+            {'type': 'ticker', 'name': 'Imported A', 'config': {'text': 'hello'}},
+            {'type': 'static_text', 'name': 'Imported B', 'config': {'text': 'world'}},
+        ])
+        assert resp.status_code == 200
+        data = resp.json
+        assert data['success'] is True
+        assert data['count'] == 2
+
+        # Verify they're listed
+        resp = flask_test_client.get('/overlays')
+        assert len(resp.json) == 2
+
+    def test_import_replaces_existing(self, flask_test_client):
+        # Create one first
+        flask_test_client.post('/overlays', json={
+            'type': 'ticker', 'name': 'Original', 'config': {},
+        })
+        # Import replaces
+        resp = flask_test_client.post('/overlays/import', json=[
+            {'type': 'qr_code', 'name': 'Replacement', 'config': {'url': 'https://example.com'}},
+        ])
+        assert resp.status_code == 200
+        assert resp.json['count'] == 1
+
+        resp = flask_test_client.get('/overlays')
+        assert len(resp.json) == 1
+        assert resp.json[0]['name'] == 'Replacement'
+
+    def test_import_empty_list(self, flask_test_client):
+        resp = flask_test_client.post('/overlays/import', json=[])
+        assert resp.status_code == 200
+        assert resp.json['count'] == 0
+
+    def test_import_invalid_body_not_array(self, flask_test_client):
+        resp = flask_test_client.post('/overlays/import', json={'not': 'an array'})
+        assert resp.status_code == 400
+        assert 'error' in resp.json
+
+    def test_import_no_body(self, flask_test_client):
+        resp = flask_test_client.post('/overlays/import',
+                                       content_type='application/json')
+        assert resp.status_code == 400

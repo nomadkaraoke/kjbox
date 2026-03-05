@@ -676,7 +676,7 @@ def list_overlays():
 def import_overlays():
     """Replaces all overlays with imported config."""
     data = request.get_json(silent=True)
-    if not data or not isinstance(data, list):
+    if data is None or not isinstance(data, list):
         return jsonify({"error": "Expected a JSON array of overlays"}), 400
     try:
         imported = current_app.overlay_manager.import_overlays(data)
