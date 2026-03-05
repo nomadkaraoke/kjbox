@@ -2238,12 +2238,16 @@ function renderRotation(entries) {
         num.textContent = (idx + 1) + '.';
 
         const name = document.createElement('span');
-        name.className = 'rotation-name';
+        name.className = 'rotation-name rotation-copyable';
         name.textContent = entry.singer;
+        name.title = 'Click to copy';
+        name.onclick = () => copyRotationText(name);
 
         const song = document.createElement('span');
-        song.className = 'rotation-song';
+        song.className = 'rotation-song rotation-copyable';
         song.textContent = entry.song_artist || '';
+        song.title = 'Click to copy';
+        song.onclick = () => copyRotationText(song);
 
         info.appendChild(num);
         info.appendChild(name);
@@ -2330,6 +2334,13 @@ function renderRotation(entries) {
         row.appendChild(info);
         row.appendChild(actions);
         list.appendChild(row);
+    });
+}
+
+function copyRotationText(el) {
+    navigator.clipboard.writeText(el.textContent).then(() => {
+        el.classList.add('rotation-copied');
+        setTimeout(() => el.classList.remove('rotation-copied'), 600);
     });
 }
 
