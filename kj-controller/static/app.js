@@ -1505,7 +1505,40 @@ async function toggleOverlayEnabled(id) {
 
 // --- VNC Size Control ---
 
+function hideVncPreview() {
+    // Disconnect without forgetting password, collapse the section
+    if (window.disconnectVnc) window.disconnectVnc();
+    const container = document.getElementById('vnc-preview-container');
+    container.querySelectorAll('#vnc-screen, #vnc-status, .vnc-password-form, #vnc-controls').forEach(
+        el => el.classList.add('hidden')
+    );
+    container.dataset.hidden = 'true';
+    document.querySelectorAll('.vnc-size-btn').forEach(btn => btn.classList.remove('vnc-size-active'));
+    document.querySelector('.vnc-hide-btn').classList.add('vnc-size-active');
+    localStorage.setItem('kj-vnc-hidden', '1');
+}
+
+function showVncPreview() {
+    const container = document.getElementById('vnc-preview-container');
+    container.querySelectorAll('#vnc-screen, #vnc-status').forEach(
+        el => el.classList.remove('hidden')
+    );
+    // Show password form or controls depending on whether we have a saved password
+    const hasPw = !!localStorage.getItem('kj-vnc-password');
+    document.getElementById('vnc-password-form').classList.toggle('hidden', hasPw);
+    document.getElementById('vnc-controls').classList.toggle('hidden', !hasPw);
+    delete container.dataset.hidden;
+    document.querySelector('.vnc-hide-btn').classList.remove('vnc-size-active');
+    localStorage.removeItem('kj-vnc-hidden');
+    // Reconnect if we have a saved password
+    if (hasPw && window.connectVnc) window.connectVnc(localStorage.getItem('kj-vnc-password'));
+}
+
 function setVncSize(size) {
+    // Un-hide if hidden
+    const container = document.getElementById('vnc-preview-container');
+    if (container.dataset.hidden) showVncPreview();
+
     const el = document.getElementById('vnc-screen');
     el.classList.remove('vnc-fixed', 'vnc-fixed-400', 'vnc-fit', 'vnc-max');
 
@@ -2125,9 +2158,13 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('karaoke-volume-label').textContent = volumePercent(document.getElementById('karaoke-volume').value);
     document.getElementById('filler-volume-label').textContent = volumePercent(document.getElementById('filler-volume').value);
 
-    // Restore VNC size preference
-    const savedVncSize = localStorage.getItem('kj-vnc-size');
-    if (savedVncSize) setVncSize(savedVncSize);
+    // Restore VNC size preference and hidden state
+    if (localStorage.getItem('kj-vnc-hidden') === '1') {
+        hideVncPreview();
+    } else {
+        const savedVncSize = localStorage.getItem('kj-vnc-size');
+        if (savedVncSize) setVncSize(savedVncSize);
+    }
 
     document.getElementById('mp4-only-btn').classList.toggle('active', mp4OnlyFilter);
 
