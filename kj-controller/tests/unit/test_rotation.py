@@ -223,15 +223,21 @@ class TestArchiveRotation:
         count = manager.archive_rotation()
         # 5 data rows (Alice, Bob, Carol, Dave, Eve)
         assert count == 5
-        # Should append separator + data rows
+        # Should append separator + data rows to archive
         archive_sheet.append_row.assert_called_once()
         sep = archive_sheet.append_row.call_args[0][0][0]
         assert sep.startswith("---") and "2026" in sep
         archive_sheet.append_rows.assert_called_once()
         rows = archive_sheet.append_rows.call_args[0][0]
         assert len(rows) == 5
-        # Should delete data rows from rotation sheet (rows 3-7)
-        mock_sheet.delete_rows.assert_called_once_with(3, 7)
+        # Should write starter row into first data row (row 3)
+        mock_sheet.update.assert_called_once()
+        starter = mock_sheet.update.call_args[0][1][0]
+        assert starter[1] == "Andrew"
+        assert starter[2] == "First Song of the Night"
+        assert starter[3] == "Waiting"
+        # Should delete remaining rows (4-7)
+        mock_sheet.delete_rows.assert_called_once_with(4, 7)
 
     def test_creates_past_events_sheet_if_missing(self, manager, mock_sheet):
         spreadsheet = MagicMock()

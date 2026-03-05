@@ -283,12 +283,28 @@ class RotationManager:
         archive_sheet.append_row(separator, value_input_option="USER_ENTERED")
         archive_sheet.append_rows(data_rows, value_input_option="USER_ENTERED")
 
-        # Delete data rows from rotation sheet (keep header and any rows above it)
-        # Rows are 1-based; data starts at header_row + 1
+        # Replace data rows with a single starter entry (Sheets won't allow
+        # deleting all non-frozen rows, so we overwrite row 1 then delete the rest)
+        col_map = _find_header(all_values)[1]
+        dt = datetime.now()
+        starter = [""] * len(all_values[0])
+        if "timestamp" in col_map:
+            starter[col_map["timestamp"]] = f"{dt.month}/{dt.day}/{dt.year} {dt:%H:%M:%S}"
+        starter[col_map.get("singer", 1)] = "Andrew"
+        starter[col_map.get("song_artist", 2)] = "First Song of the Night"
+        starter[col_map.get("status", 3)] = "Waiting"
+
         first_data_row = header_row + 1
         last_data_row = len(all_values)
-        if last_data_row >= first_data_row:
-            sheet.delete_rows(first_data_row, last_data_row)
+
+        # Write starter into the first data row
+        col_letter = _col_letter(len(starter) - 1)
+        sheet.update(f"A{first_data_row}:{col_letter}{first_data_row}", [starter],
+                     value_input_option="USER_ENTERED")
+
+        # Delete remaining rows (if any)
+        if last_data_row > first_data_row:
+            sheet.delete_rows(first_data_row + 1, last_data_row)
 
         self._invalidate_cache()
         return len(data_rows)
