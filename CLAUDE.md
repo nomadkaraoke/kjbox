@@ -27,15 +27,35 @@ KJ Controller (`kj-controller/`) is a Flask + vanilla JS web app for managing li
 
 **Detailed architecture**: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) (module diagram, full API reference, design decisions)
 
-## Deployment
+## Deployment — PRODUCTION SAFETY
 
-Push to `main` → auto-deployed to devices within ~60s (no build step).
+**NomadPC is a live production device.** It may be running a karaoke show with singers actively performing. Treat every deployment action as a production deploy.
+
+### NEVER do these without explicit user permission:
+- `git push` to `main` (triggers auto-deploy to devices within ~60s)
+- `ssh nomadpc 'sudo systemctl restart kj-controller'` (kills active VLC playback mid-song)
+- Any SSH command that modifies state on the device
+
+### Safe actions (no permission needed):
+- `ssh nomadpc 'journalctl -u kj-controller -f'` (read-only log tailing)
+- `ssh nomadpc 'cat ...'` or other read-only SSH commands
+- Running tests locally
+- Committing locally (without push)
+
+### Frontend-only changes (JS/CSS/HTML):
+- Auto-deploy pulls the code but does NOT restart the service
+- Changes take effect on next browser refresh — **no service interruption**
+- Still requires permission to push since auto-deploy runs `git pull`
+
+### Backend changes (Python):
+- Requires service restart to take effect — **will interrupt active playback**
+- Always ask user before pushing AND before restarting
 
 ```bash
 ssh nomadpc                          # Mini PC (primary device)
 ssh nomadpi                          # Raspberry Pi
-ssh nomadpc 'sudo systemctl restart kj-controller'   # restart after Python changes
-ssh nomadpc 'journalctl -u kj-controller -f'         # tail logs
+ssh nomadpc 'journalctl -u kj-controller -f'         # tail logs (safe)
+# REQUIRES PERMISSION: ssh nomadpc 'sudo systemctl restart kj-controller'
 ```
 
 Web UI: `http://nomadpc.local` (LAN) or `https://kjbox.nomadkaraoke.com` (tunnel)

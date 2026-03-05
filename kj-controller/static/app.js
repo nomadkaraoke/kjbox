@@ -220,14 +220,21 @@ function volumePercent(val) {
     return Math.round(val / 256 * 100) + '%';
 }
 
+const _volumeTimers = {};
+
+function debouncedSetVolume(target, level) {
+    if (_volumeTimers[target]) clearTimeout(_volumeTimers[target]);
+    _volumeTimers[target] = setTimeout(() => setVolume(target, level), 150);
+}
+
 function updateKaraokeVolume(value) {
     document.getElementById('karaoke-volume-label').textContent = volumePercent(value);
-    setVolume('karaoke', value);
+    debouncedSetVolume('karaoke', value);
 }
 
 function updateFillerVolume(value) {
     document.getElementById('filler-volume-label').textContent = volumePercent(value);
-    setVolume('filler', value);
+    debouncedSetVolume('filler', value);
 }
 
 async function setVolume(target, level) {
@@ -582,6 +589,22 @@ async function updateStatus() {
             // Update now-playing bar (#1) and button states (#3)
             updateNowPlaying(data);
             updatePlaybackButtons(state);
+
+            // Sync volume sliders from server (don't fight active drag)
+            if (data.karaoke_volume !== undefined) {
+                const kSlider = document.getElementById('karaoke-volume');
+                if (document.activeElement !== kSlider) {
+                    kSlider.value = data.karaoke_volume;
+                    document.getElementById('karaoke-volume-label').textContent = volumePercent(data.karaoke_volume);
+                }
+            }
+            if (data.filler_volume !== undefined) {
+                const fSlider = document.getElementById('filler-volume');
+                if (document.activeElement !== fSlider) {
+                    fSlider.value = data.filler_volume;
+                    document.getElementById('filler-volume-label').textContent = volumePercent(data.filler_volume);
+                }
+            }
 
             // Track background download progress
             if (data.download) await handleDownloadState(data.download);

@@ -57,6 +57,24 @@ def test_initial_state(mock_config):
     assert vm.audio_device == "hdmiout"
 
 
+def test_volumes_loaded_from_config(mock_config):
+    """VLCManager reads persisted volume settings from config dict."""
+    mock_config['karaoke_volume'] = 180
+    mock_config['filler_volume'] = 75
+    vm = VLCManager(mock_config, enabled=False)
+    assert vm.karaoke_volume == 180
+    assert vm.filler_volume == 75
+
+
+def test_volumes_default_when_not_in_config(mock_config):
+    """VLCManager uses defaults when volume keys are absent from config."""
+    mock_config.pop('karaoke_volume', None)
+    mock_config.pop('filler_volume', None)
+    vm = VLCManager(mock_config, enabled=False)
+    assert vm.karaoke_volume == 200
+    assert vm.filler_volume == 100
+
+
 def test_fade_in_filler_noop_when_disabled(mock_config):
     """fade_in_filler is a no-op when disabled."""
     vm = VLCManager(mock_config, enabled=False)

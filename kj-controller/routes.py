@@ -20,6 +20,27 @@ from utils import log_message
 
 routes_bp = Blueprint('routes', __name__)
 
+# --- Debounced volume persistence ---
+_volume_save_timer = None
+_volume_save_lock = threading.Lock()
+
+
+def _do_save_volumes(vlc):
+    """Write both volume values to config.json (runs on timer thread)."""
+    save_config_value('karaoke_volume', vlc.karaoke_volume)
+    save_config_value('filler_volume', vlc.filler_volume)
+
+
+def _debounced_save_volumes(vlc):
+    """Schedule a config write 2s from now, cancelling any pending write."""
+    global _volume_save_timer
+    with _volume_save_lock:
+        if _volume_save_timer is not None:
+            _volume_save_timer.cancel()
+        _volume_save_timer = threading.Timer(2.0, _do_save_volumes, args=[vlc])
+        _volume_save_timer.daemon = True
+        _volume_save_timer.start()
+
 
 @routes_bp.route('/')
 def index():
@@ -203,6 +224,7 @@ def handle_volume():
         return jsonify({"error": "Invalid target"}), 400
 
     vlc.send_command(port, password, f"volume&val={level}")
+    _debounced_save_volumes(vlc)
     log_message(f"Set volume for '{target}' to {level}", cfg)
     return jsonify({"success": True})
 
@@ -353,6 +375,8 @@ def get_status():
             "vlc_enabled": vlc.enabled,
             "audio_error": vlc.audio_error,
             "download": dl_state,
+            "karaoke_volume": vlc.karaoke_volume,
+            "filler_volume": vlc.filler_volume,
         })
 
     # VLC not running - return status without VLC data
@@ -366,6 +390,8 @@ def get_status():
         "audio_device": vlc.audio_device,
         "vlc_enabled": vlc.enabled,
         "download": dl_state,
+        "karaoke_volume": vlc.karaoke_volume,
+        "filler_volume": vlc.filler_volume,
     })
 
 

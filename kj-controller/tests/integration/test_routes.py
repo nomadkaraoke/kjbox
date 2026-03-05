@@ -1,9 +1,24 @@
 """Integration tests for Flask routes via test client."""
 
 import json
+import threading
 from unittest.mock import patch
 
 from app import create_app
+import routes as routes_mod
+
+
+import pytest
+
+
+@pytest.fixture(autouse=True)
+def _cancel_volume_timers():
+    """Cancel any pending debounced volume save timers between tests."""
+    yield
+    with routes_mod._volume_save_lock:
+        if routes_mod._volume_save_timer is not None:
+            routes_mod._volume_save_timer.cancel()
+            routes_mod._volume_save_timer = None
 
 
 def test_create_app_factory(mock_config):
@@ -895,3 +910,74 @@ def test_play_passes_display_path_and_overlay(flask_test_client, flask_app, tmp_
     kwargs = play_mock.call_args[1]
     assert 'display_path' in kwargs
     assert 'overlay_manager' in kwargs
+
+
+# --- Volume persistence ---
+
+def test_status_includes_volume(flask_test_client, flask_app):
+    """GET /status includes karaoke_volume and filler_volume."""
+    flask_app.vlc.karaoke_volume = 180
+    flask_app.vlc.filler_volume = 75
+
+    response = flask_test_client.get('/status')
+    assert response.status_code == 200
+    data = json.loads(response.data)
+    assert data['karaoke_volume'] == 180
+    assert data['filler_volume'] == 75
+
+
+def test_volume_schedules_debounced_save(flask_test_client, flask_app, mocker):
+    """POST /volume schedules a debounced save (does not write immediately)."""
+    save_mock = mocker.patch('routes.save_config_value')
+
+    response = flask_test_client.post('/volume',
+        data=json.dumps({"target": "karaoke", "level": 180}),
+        content_type='application/json')
+    assert response.status_code == 200
+
+    # save_config_value should NOT have been called yet (2s debounce)
+    save_mock.assert_not_called()
+
+    # But a timer should be pending
+    with routes_mod._volume_save_lock:
+        assert routes_mod._volume_save_timer is not None
+
+
+def test_do_save_volumes_writes_both_keys(flask_app, mocker):
+    """_do_save_volumes calls save_config_value for both volume keys."""
+    save_mock = mocker.patch('routes.save_config_value')
+    flask_app.vlc.karaoke_volume = 190
+    flask_app.vlc.filler_volume = 60
+
+    routes_mod._do_save_volumes(flask_app.vlc)
+
+    assert save_mock.call_count == 2
+    save_mock.assert_any_call('karaoke_volume', 190)
+    save_mock.assert_any_call('filler_volume', 60)
+
+
+def test_volume_updates_vlc_state(flask_test_client, flask_app):
+    """POST /volume updates the VLCManager volume attribute."""
+    flask_test_client.post('/volume',
+        data=json.dumps({"target": "karaoke", "level": 175}),
+        content_type='application/json')
+    assert flask_app.vlc.karaoke_volume == 175
+
+    flask_test_client.post('/volume',
+        data=json.dumps({"target": "filler", "level": 55}),
+        content_type='application/json')
+    assert flask_app.vlc.filler_volume == 55
+
+
+def test_status_includes_volume_with_vlc_enabled(flask_test_client, flask_app, mocker):
+    """GET /status with VLC enabled also includes volume fields."""
+    flask_app.vlc.enabled = True
+    flask_app.vlc.karaoke_volume = 210
+    flask_app.vlc.filler_volume = 90
+    mocker.patch.object(flask_app.vlc, 'send_command',
+        return_value={"state": "playing", "time": 10, "length": 100})
+
+    response = flask_test_client.get('/status')
+    data = json.loads(response.data)
+    assert data['karaoke_volume'] == 210
+    assert data['filler_volume'] == 90
