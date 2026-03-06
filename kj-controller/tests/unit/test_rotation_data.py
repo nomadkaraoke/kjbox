@@ -138,22 +138,38 @@ class TestFormatConky:
         output = capsys.readouterr().out
         assert "No singers in queue" in output
 
-    def test_now_singing_badge(self, capsys):
+    def test_now_singing_shows_exact_status(self, capsys):
         rotation_data.format_conky([
             {"singer": "Alice", "song_artist": "Test Song", "status": "Now Singing"},
         ])
         output = capsys.readouterr().out
         assert "Alice" in output
-        assert "NOW" in output
+        assert "Now Singing" in output
         assert "Test Song" in output
 
-    def test_up_next_badge(self, capsys):
+    def test_up_next_shows_exact_status(self, capsys):
         rotation_data.format_conky([
             {"singer": "First", "song_artist": "", "status": "Now Singing"},
             {"singer": "Bob", "song_artist": "", "status": "Up Next"},
         ])
         output = capsys.readouterr().out
-        assert "NEXT" in output
+        assert "Up Next" in output
+
+    def test_waiting_has_no_badge(self, capsys):
+        rotation_data.format_conky([
+            {"singer": "Carol", "song_artist": "", "status": "Waiting"},
+        ])
+        output = capsys.readouterr().out
+        assert "Carol" in output
+        # "Waiting" should not appear as a badge
+        assert "Waiting" not in output
+
+    def test_custom_status_shown_verbatim(self, capsys):
+        rotation_data.format_conky([
+            {"singer": "Del", "song_artist": "", "status": "Being Made (!)"},
+        ])
+        output = capsys.readouterr().out
+        assert "Being Made (!)" in output
 
     def test_no_song_line_when_empty(self, capsys):
         rotation_data.format_conky([

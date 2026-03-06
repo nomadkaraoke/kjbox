@@ -152,8 +152,25 @@ def fetch_all_rows():
 # ---------------------------------------------------------------------------
 
 def badge(text, bg_color):
-    """Render a colored badge."""
+    """Render a colored badge with the exact status text."""
     return f"  ${{color {bg_color}}}${{font {FONT_BADGE}}} {text} ${{font}}${{color}}"
+
+
+def _status_color(status_lower):
+    """Return badge color for a status string."""
+    if "singing" in status_lower or status_lower == "now singing":
+        return COLOR_NOW_PILL
+    if "next" in status_lower:
+        return COLOR_NEXT_PILL
+    if status_lower == "waiting":
+        return COLOR_NEXT_PILL
+    if "being made" in status_lower:
+        return COLOR_WIP_PILL
+    if "on hold" in status_lower or "brb" in status_lower:
+        return "888888"
+    if status_lower == "skipped":
+        return "3b82f6"
+    return COLOR_DEFAULT
 
 
 def format_conky(entries):
@@ -163,21 +180,12 @@ def format_conky(entries):
         return
 
     for idx, entry in enumerate(entries, start=1):
-        status_lower = entry["status"].lower()
+        status = entry["status"]
+        status_lower = status.lower()
 
-        # Determine badge
-        if idx == 1 or "singing" in status_lower or status_lower == "now singing":
-            entry_badge = badge("NOW", COLOR_NOW_PILL)
-        elif "next" in status_lower:
-            entry_badge = badge("NEXT", COLOR_NEXT_PILL)
-        elif "waiting" == status_lower:
-            entry_badge = badge("WAITING", COLOR_NEXT_PILL)
-        elif "being made" in status_lower:
-            entry_badge = badge("MAKING", COLOR_WIP_PILL)
-        elif "on hold" in status_lower or "brb" in status_lower:
-            entry_badge = badge("BRB", "888888")
-        elif "skipped" == status_lower:
-            entry_badge = badge("SKIP", "3b82f6")
+        # Show exact status text with color coding
+        if status and status_lower != "waiting":
+            entry_badge = badge(status, _status_color(status_lower))
         else:
             entry_badge = ""
 
