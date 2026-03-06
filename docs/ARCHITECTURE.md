@@ -54,7 +54,7 @@ KJ Controller is a web-based karaoke show management application. A Flask backen
 | `karaoke_nerds.py` | ~140 | Karaoke Nerds web scraper: search, parse HTML results, extract YouTube URLs |
 | `youtube_search.py` | ~80 | YouTube search via yt-dlp: ytsearch with extract_flat for fast metadata |
 | `youtube_health.py` | ~170 | YouTube health checks: yt-dlp/EJS/Deno version detection, cookie validation, PyPI version check (24h cache), pip upgrade |
-| `rotation.py` | ~180 | `RotationManager` class: Google Sheets singer rotation read/write via gspread |
+| `rotation.py` | ~390 | `RotationManager` class: Google Sheets singer rotation read/write via gspread, writes local cache for display |
 | `routes.py` | ~720 | Flask Blueprint with all route handlers |
 
 ### Dependency Flow

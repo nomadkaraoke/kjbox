@@ -28,7 +28,7 @@ A more powerful replacement/companion — Intel N97 mini PC running Linux Mint.
 |-----------|---------|
 | VLC | Video/audio playback |
 | KJ Controller | Web-based karaoke show management (Flask + yt-dlp + VLC) |
-| Rotation Display | Singer queue overlay from Google Sheets (Conky + Python + KJ Controller integration) |
+| Rotation Display | Singer queue overlay via local cache from KJ Controller (Conky + Python, ~3s refresh) |
 | Overlay Engine | Dynamic display overlays (ticker, countdown, QR, etc.) |
 
 ## Repository Structure
