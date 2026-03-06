@@ -216,9 +216,8 @@ class TestStatusBar:
     def test_av_output_button_in_system(self, app_page):
         """AV Output button is in the System section."""
         system = app_page.locator(".system-controls")
-        btn = system.locator(".av-output-btn")
+        btn = system.locator("button", has_text="AV Output")
         expect(btn).to_be_visible()
-        expect(btn).to_have_text("AV Output")
 
     def test_audio_warning_hidden(self, app_page):
         """Audio warning should be hidden when no audio error."""
@@ -375,12 +374,12 @@ class TestBrandIdentity:
         assert color == "rgb(255, 122, 204)"
 
     def test_button_background_color(self, app_page):
-        """Primary buttons use brand pink background."""
+        """Primary action buttons use dark outlined style with pink border."""
         bg = app_page.evaluate(
             "getComputedStyle(document.getElementById('download-btn')).backgroundColor"
         )
-        # #ff5bb8 = rgb(255, 91, 184)
-        assert bg == "rgb(255, 91, 184)"
+        # #222 = rgb(34, 34, 34) — outlined style base
+        assert bg == "rgb(34, 34, 34)"
 
     def test_dark_theme_background(self, app_page):
         """Cards use the dark card background."""

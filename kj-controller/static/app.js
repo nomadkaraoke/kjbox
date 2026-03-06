@@ -274,26 +274,44 @@ async function updateFillerMusicList() {
 // --- Media List ---
 
 let localMediaItems = [];
-let mp4OnlyFilter = localStorage.getItem('kj-mp4-only') === 'true';
+// Media format filter: 'all' | 'mp4' | 'cdg'
+const MEDIA_FILTERS = ['all', 'mp4', 'cdg'];
+const MEDIA_FILTER_LABELS = { all: 'All Formats', mp4: 'MP4 Only', cdg: 'CDG/ZIP Only' };
+let mediaFilter = localStorage.getItem('kj-media-filter') || 'all';
+// Migrate old boolean setting
+if (mediaFilter === 'true' || localStorage.getItem('kj-mp4-only') === 'true') {
+    mediaFilter = 'mp4';
+    localStorage.setItem('kj-media-filter', mediaFilter);
+    localStorage.removeItem('kj-mp4-only');
+}
 
 function applyMediaFilter(items) {
-    if (!mp4OnlyFilter) return items;
+    if (mediaFilter === 'all') return items;
     return items.filter(item => {
         const ext = item.filename.split('.').pop().toLowerCase();
-        return ext !== 'zip' && ext !== 'cdg';
+        const isCdgZip = ext === 'zip' || ext === 'cdg';
+        return mediaFilter === 'mp4' ? !isCdgZip : isCdgZip;
     });
 }
 
-function toggleMp4Only() {
-    mp4OnlyFilter = !mp4OnlyFilter;
-    localStorage.setItem('kj-mp4-only', mp4OnlyFilter);
-    document.getElementById('mp4-only-btn').classList.toggle('active', mp4OnlyFilter);
+function cycleMediaFilter() {
+    const idx = MEDIA_FILTERS.indexOf(mediaFilter);
+    mediaFilter = MEDIA_FILTERS[(idx + 1) % MEDIA_FILTERS.length];
+    localStorage.setItem('kj-media-filter', mediaFilter);
+    updateMediaFilterBtn();
     if (searchActive) {
         const query = document.getElementById('catalog-search').value.trim();
         if (query) catalogSearch(query);
     } else {
         renderFolderView(applyMediaFilter(localMediaItems));
     }
+}
+
+function updateMediaFilterBtn() {
+    const btn = document.getElementById('media-filter-btn');
+    if (!btn) return;
+    btn.textContent = MEDIA_FILTER_LABELS[mediaFilter];
+    btn.classList.toggle('active', mediaFilter !== 'all');
 }
 
 function loadFolderStates() {
@@ -2214,7 +2232,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (savedVncSize) setVncSize(savedVncSize);
     }
 
-    document.getElementById('mp4-only-btn').classList.toggle('active', mp4OnlyFilter);
+    updateMediaFilterBtn();
 
     loadYTKaraokeToggle();
     updateStatus();
@@ -2229,6 +2247,75 @@ document.addEventListener('DOMContentLoaded', () => {
 
 setInterval(updateStatus, 2000);
 setInterval(fetchRotation, 10000);
+
+// --- System Stats ---
+
+const SPARK_MAX = 30;
+const cpuHistory = [];
+const memHistory = [];
+
+async function fetchSystemStats() {
+    try {
+        const resp = await fetch('/system/stats');
+        if (!resp.ok) return;
+        const d = await resp.json();
+
+        // Update bars
+        const cpuBar = document.getElementById('stat-cpu-bar');
+        const memBar = document.getElementById('stat-mem-bar');
+        const diskBar = document.getElementById('stat-disk-bar');
+        if (cpuBar) cpuBar.style.width = d.cpu_percent + '%';
+        if (memBar) memBar.style.width = d.mem_percent + '%';
+        if (diskBar) diskBar.style.width = d.disk_percent + '%';
+
+        // Warn/crit colors
+        [cpuBar, memBar, diskBar].forEach((bar, i) => {
+            if (!bar) return;
+            const val = [d.cpu_percent, d.mem_percent, d.disk_percent][i];
+            bar.classList.toggle('stat-warn', val >= 75 && val < 90);
+            bar.classList.toggle('stat-crit', val >= 90);
+        });
+
+        // Update values
+        const cpuVal = document.getElementById('stat-cpu-val');
+        const memVal = document.getElementById('stat-mem-val');
+        const diskVal = document.getElementById('stat-disk-val');
+        if (cpuVal) cpuVal.textContent = Math.round(d.cpu_percent) + '%';
+        if (memVal) memVal.textContent = d.mem_used_gb + '/' + d.mem_total_gb + ' GB';
+        if (diskVal) diskVal.textContent = d.disk_used_gb + '/' + d.disk_total_gb + ' GB';
+
+        // Sparklines (CPU + MEM only)
+        cpuHistory.push(d.cpu_percent);
+        memHistory.push(d.mem_percent);
+        if (cpuHistory.length > SPARK_MAX) cpuHistory.shift();
+        if (memHistory.length > SPARK_MAX) memHistory.shift();
+        renderSparkline('stat-cpu-spark', cpuHistory, '');
+        renderSparkline('stat-mem-spark', memHistory, 'spark-mem');
+    } catch (_) {}
+}
+
+function renderSparkline(id, data, cls) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    // Reuse existing bars or create new ones
+    while (el.children.length > data.length) el.removeChild(el.lastChild);
+    while (el.children.length < data.length) {
+        const bar = document.createElement('div');
+        bar.className = 'sys-stat-spark-bar' + (cls ? ' ' + cls : '');
+        el.appendChild(bar);
+    }
+    const unit = cls === 'spark-mem' ? ' GB' : '%';
+    data.forEach((val, i) => {
+        const bar = el.children[i];
+        bar.style.height = Math.max(1, val / 100 * 20) + 'px';
+        const ago = (data.length - 1 - i) * 5;
+        const timeLabel = ago === 0 ? 'now' : ago + 's ago';
+        bar.title = Math.round(val) + unit + ' (' + timeLabel + ')';
+    });
+}
+
+fetchSystemStats();
+setInterval(fetchSystemStats, 5000);
 
 // --- Rotation (Google Sheet integration) ---
 

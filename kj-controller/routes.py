@@ -1371,6 +1371,31 @@ def system_shutdown():
     return jsonify({"success": True, "message": "Shutting down system..."})
 
 
+# --- System Stats ---
+
+@routes_bp.route('/system/stats', methods=['GET'])
+def system_stats():
+    """Returns CPU, memory, and disk usage for the system stats widget."""
+    try:
+        import psutil
+        cpu = psutil.cpu_percent(interval=0)
+        mem = psutil.virtual_memory()
+        disk = psutil.disk_usage('/')
+        return jsonify({
+            "cpu_percent": cpu,
+            "mem_percent": mem.percent,
+            "mem_used_gb": round(mem.used / (1024**3), 1),
+            "mem_total_gb": round(mem.total / (1024**3), 1),
+            "disk_percent": disk.percent,
+            "disk_used_gb": round(disk.used / (1024**3), 1),
+            "disk_total_gb": round(disk.total / (1024**3), 1),
+        })
+    except ImportError:
+        return jsonify({"error": "psutil not installed"}), 501
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 # --- Rotation (Google Sheet) ---
 
 @routes_bp.route('/rotation', methods=['GET'])

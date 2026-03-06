@@ -25,7 +25,7 @@
             <span id="np-time">0:00</span> / <span id="np-length">0:00</span>
         </div>
         <div class="now-playing-controls">
-            <button class="np-btn" id="np-pause" onclick="controlPlayback('pause_resume')">Pause</button>
+            <button class="np-btn btn-primary" id="np-pause" onclick="controlPlayback('pause_resume')">Pause</button>
             <button class="np-btn np-btn-stop" id="np-stop" onclick="controlPlayback('stop')">Stop</button>
         </div>
     </div>
@@ -35,9 +35,9 @@
             <div class="container playback-controls">
                 <h2>Playback Controls</h2>
                 <div class="button-group">
-                    <button id="btn-pause" onclick="controlPlayback('pause_resume')">Pause / Resume</button>
+                    <button id="btn-pause" class="btn-primary" onclick="controlPlayback('pause_resume')">Pause / Resume</button>
                     <button id="btn-restart" onclick="controlPlayback('restart')" disabled>Restart</button>
-                    <button id="btn-stop" onclick="controlPlayback('stop')" disabled>Stop</button>
+                    <button id="btn-stop" class="system-btn-danger" onclick="controlPlayback('stop')" disabled>Stop</button>
                 </div>
                 <div>
                     <label for="seek-slider">Seek: <span id="seek-value">0:00</span></label>
@@ -108,31 +108,72 @@
             </div>
             <div class="container system-controls">
                 <h2>System</h2>
-                <div class="button-group">
-                    <button class="system-btn" onclick="rebuildCatalog()" title="Re-index the external USB drive karaoke library from the file list configured in external_file_list, mounted at external_media_mount">Rebuild Catalog</button>
-                    <button class="system-btn" onclick="updateApp()">Update</button>
-                    <button class="system-btn" onclick="restartApp()">Restart App</button>
-                    <button class="system-btn system-btn-warn" onclick="dangerousAction(this, 'reboot', 'Reboot', 'The entire system will reboot. This will take about a minute.')">Reboot</button>
-                    <button class="system-btn system-btn-danger" onclick="dangerousAction(this, 'shutdown', 'Shut Down', 'The system will power off completely. You will need physical access to turn it back on.')">Shut Down</button>
-                </div>
-                <div class="controls-row">
-                    <div class="control-half">
-                        <label for="filler-selector">Filler Music:</label>
-                        <select id="filler-selector" onchange="setFillerMusic(this.value)"></select>
-                    </div>
-                    <div class="control-half" style="display:flex;align-items:flex-end;">
-                        <button class="system-btn av-output-btn" onclick="openAvModal()">AV Output</button>
+
+                <div class="system-subsection">
+                    <div class="system-subsection-label">Media & Output</div>
+                    <div class="controls-row">
+                        <div class="control-half">
+                            <label for="filler-selector">Filler Music:</label>
+                            <select id="filler-selector" onchange="setFillerMusic(this.value)"></select>
+                        </div>
+                        <div class="control-half" style="display:flex;align-items:flex-end;">
+                            <button class="system-btn" onclick="openAvModal()">AV Output</button>
+                        </div>
                     </div>
                 </div>
-                <div class="controls-row">
-                    <div class="autodeploy-toggle">
-                        <span>Auto-Deploy</span>
-                        <label class="overlay-toggle">
-                            <input type="checkbox" id="autodeploy-switch" onchange="toggleAutoDeploy(this.checked)">
-                            <span class="slider"></span>
-                        </label>
+
+                <div class="system-subsection">
+                    <div class="system-subsection-label">Maintenance</div>
+                    <div class="system-subsection-row">
+                        <button class="system-btn" onclick="updateApp()">Update</button>
+                        <div class="autodeploy-toggle">
+                            <span>Auto-Deploy</span>
+                            <label class="overlay-toggle">
+                                <input type="checkbox" id="autodeploy-switch" onchange="toggleAutoDeploy(this.checked)">
+                                <span class="slider"></span>
+                            </label>
+                        </div>
                     </div>
                 </div>
+
+                <div class="system-subsection">
+                    <div class="system-subsection-label">Power</div>
+                    <div class="system-subsection-row">
+                        <button class="system-btn" onclick="restartApp()">Restart App</button>
+                        <button class="system-btn system-btn-warn" onclick="dangerousAction(this, 'reboot', 'Reboot', 'The entire system will reboot. This will take about a minute.')">Reboot</button>
+                        <button class="system-btn system-btn-danger" onclick="dangerousAction(this, 'shutdown', 'Shut Down', 'The system will power off completely. You will need physical access to turn it back on.')">Shut Down</button>
+                    </div>
+                </div>
+
+                <div class="system-subsection">
+                    <div class="system-subsection-label">Stats</div>
+                    <div class="sys-stats" id="sys-stats">
+                        <div class="sys-stat">
+                            <div class="sys-stat-header">
+                                <span class="sys-stat-label">CPU</span>
+                                <span class="sys-stat-value" id="stat-cpu-val">—</span>
+                            </div>
+                            <div class="sys-stat-bar"><div class="sys-stat-fill sys-stat-cpu" id="stat-cpu-bar"></div></div>
+                            <div class="sys-stat-spark" id="stat-cpu-spark"></div>
+                        </div>
+                        <div class="sys-stat">
+                            <div class="sys-stat-header">
+                                <span class="sys-stat-label">MEM</span>
+                                <span class="sys-stat-value" id="stat-mem-val">—</span>
+                            </div>
+                            <div class="sys-stat-bar"><div class="sys-stat-fill sys-stat-mem" id="stat-mem-bar"></div></div>
+                            <div class="sys-stat-spark" id="stat-mem-spark"></div>
+                        </div>
+                        <div class="sys-stat">
+                            <div class="sys-stat-header">
+                                <span class="sys-stat-label">DISK</span>
+                                <span class="sys-stat-value" id="stat-disk-val">—</span>
+                            </div>
+                            <div class="sys-stat-bar"><div class="sys-stat-fill sys-stat-disk" id="stat-disk-bar"></div></div>
+                        </div>
+                    </div>
+                </div>
+
                 <div id="system-overlay" class="system-overlay hidden">
                     <span class="download-spinner"></span>
                     <span id="system-overlay-msg"></span>
@@ -161,7 +202,7 @@
                 </div>
                 <div class="kn-search-row">
                     <input type="text" id="kn-query" placeholder="Search for karaoke tracks..." onkeyup="if(event.keyCode === 13) searchKaraokeNerds()">
-                    <button id="kn-search-btn" onclick="searchKaraokeNerds()">Search</button>
+                    <button id="kn-search-btn" class="btn-primary" onclick="searchKaraokeNerds()">Search</button>
                     <button id="kn-clear-btn" onclick="clearKNResults()">Clear</button>
                 </div>
                 <div id="kn-status" class="download-progress hidden">
@@ -174,7 +215,7 @@
                 <h2>Search YouTube</h2>
                 <div class="yt-search-row">
                     <input type="text" id="yt-query" placeholder="Search YouTube for videos..." onkeyup="if(event.keyCode === 13) searchYouTube()">
-                    <button id="yt-search-btn" onclick="searchYouTube()">Search</button>
+                    <button id="yt-search-btn" class="btn-primary" onclick="searchYouTube()">Search</button>
                     <button id="yt-clear-btn" onclick="clearYTResults()">Clear</button>
                 </div>
                 <label class="yt-karaoke-toggle">
@@ -192,15 +233,18 @@
                     <h2>Download Song <span id="yt-health-dot" class="yt-health-dot"></span></h2>
                     <button class="rescan-btn" onclick="openYtModal()" title="YouTube download engine settings, cookies, and health">Settings</button>
                 </div>
-                <input type="url" id="youtube-url" placeholder="Enter YouTube URL" onkeyup="if(event.keyCode === 13) downloadSong()">
-                <button id="download-btn" onclick="downloadSong()" style="align-self: flex-start;">Download</button>
+                <div class="download-row">
+                    <input type="url" id="youtube-url" placeholder="Enter YouTube URL" onkeyup="if(event.keyCode === 13) downloadSong()">
+                    <button id="download-btn" class="btn-primary" onclick="downloadSong()">Download</button>
+                </div>
                 <div id="download-queue" class="dl-queue"></div>
             </div>
             <div class="container available-songs">
                 <div class="header-row">
                     <h2>Available Songs<span id="media-count" class="media-count"></span></h2>
-                    <button class="rescan-btn" id="mp4-only-btn" onclick="toggleMp4Only()" title="Show only MP4/video files, hide CDG/ZIP packages">MP4 Only</button>
+                    <button class="rescan-btn" id="media-filter-btn" onclick="cycleMediaFilter()" title="Cycle format filter: All → MP4 Only → CDG/ZIP Only">All Formats</button>
                     <button class="rescan-btn" id="rescan-btn" onclick="rescanMedia()" title="Scan the local directories listed in media_folders for downloaded and imported files">Rescan Media</button>
+                    <button class="rescan-btn" onclick="rebuildCatalog()" title="Re-index the external USB drive karaoke library from the file list configured in external_file_list, mounted at external_media_mount">Rebuild Catalog</button>
                 </div>
                 <div class="search-box">
                     <input type="text" id="catalog-search" placeholder="Search your library and catalog..." autocomplete="off">
@@ -353,7 +397,7 @@
                 </div>
 
                 <div class="overlay-form-actions">
-                    <button onclick="saveOverlay()">Save</button>
+                    <button class="btn-primary" onclick="saveOverlay()">Save</button>
                     <button class="overlay-cancel-btn" onclick="hideOverlayForm()">Cancel</button>
                 </div>
             </div>
