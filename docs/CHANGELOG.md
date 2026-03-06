@@ -2,6 +2,10 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-03-05 - Faster Filler Music Fade
+
+Reduced filler music fade time from 3s to 1.5s, and post-fade buffer from 0.5s to 0.3s. Karaoke playback now starts ~1.8s after pressing Play (was ~3.5s).
+
 ## 2026-03-05 - Consistent Button Styling, System Stats & Format Filter
 
 **UI overhaul:** Unified all ~33 button types to consistent outlined style (was: 3 conflicting paradigms).

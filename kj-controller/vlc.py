@@ -227,7 +227,7 @@ class VLCManager:
             log_message(f"An unexpected error occurred when calling VLC: {e}", self.config)
             return None
 
-    def fade_music(self, port, password, start_vol, end_vol, duration_s=3, cancel_event=None):
+    def fade_music(self, port, password, start_vol, end_vol, duration_s=1.5, cancel_event=None):
         """Gradually fades volume over a set duration. Stops early if cancel_event is set."""
         steps = 20
         delay = duration_s / steps
@@ -336,7 +336,7 @@ class VLCManager:
             filler_status = self.send_command(filler_port, filler_pw, "")
             if not filler_status or filler_status.get('state') != 'stopped':
                 self.fade_out_filler()
-                time.sleep(0.5)
+                time.sleep(0.3)
                 self.ensure_filler_stopped()
 
             # Load and play the video
