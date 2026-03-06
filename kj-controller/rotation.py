@@ -7,6 +7,7 @@ Auto-detects the header row by looking for a row containing "Singer"
 and "Status" columns, then maps column positions dynamically.
 """
 
+import json
 import os
 import time
 from datetime import datetime
@@ -18,6 +19,9 @@ SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 
 # Cache duration in seconds
 CACHE_TTL = 10
+
+# Local file cache for conky rotation display (avoids sheet polling delay)
+ROTATION_CACHE_FILE = "/tmp/rotation_cache.json"
 
 # Column letter lookup (0-based index to A, B, C, ...)
 def _col_letter(idx):
@@ -81,6 +85,81 @@ class RotationManager:
     def _invalidate_cache(self):
         self._cache = None
         self._cache_time = 0
+        self._write_display_cache()
+
+    def _write_display_cache(self):
+        """Write current rotation to a local JSON file for the conky display.
+
+        Re-fetches from the sheet (cache was just invalidated) and writes
+        the queue + stats so rotation_data.py can read locally instead of
+        polling the sheet.
+        """
+        try:
+            entries = self.get_rotation(force_refresh=True)
+            queue = [
+                {
+                    "singer": e["singer"],
+                    "song_artist": e["song_artist"],
+                    "status": e["status"],
+                }
+                for e in entries
+            ]
+            # Build stats from the sheet data
+            sheet = self._get_sheet()
+            all_values = sheet.get_all_values()
+            header_row, col_map = _find_header(all_values)
+            if header_row is None:
+                return
+            col_singer = col_map.get("singer", 1)
+            col_status = col_map.get("status", 3)
+
+            all_singers = set()
+            done_count = 0
+            queued_count = 0
+            earliest_ts = None
+            col_ts = col_map.get("timestamp")
+
+            for row in all_values[header_row:]:
+                if len(row) <= col_status:
+                    continue
+                singer = row[col_singer].strip()
+                if not singer:
+                    continue
+                all_singers.add(singer)
+                status = row[col_status].strip().lower()
+                if status == "done":
+                    done_count += 1
+                else:
+                    queued_count += 1
+                if col_ts is not None and earliest_ts is None:
+                    ts_raw = row[col_ts].strip() if col_ts < len(row) else ""
+                    if ts_raw:
+                        earliest_ts = ts_raw
+
+            started = ""
+            if earliest_ts:
+                try:
+                    dt = datetime.strptime(earliest_ts, "%m/%d/%Y %H:%M:%S")
+                    started = dt.strftime("%-m/%-d %-H:%M")
+                except ValueError:
+                    started = earliest_ts
+
+            data = {
+                "queue": queue,
+                "stats": {
+                    "singers": len(all_singers),
+                    "sung": done_count,
+                    "queued": queued_count,
+                    "started": started,
+                },
+                "updated": time.time(),
+            }
+            tmp = ROTATION_CACHE_FILE + ".tmp"
+            with open(tmp, "w") as f:
+                json.dump(data, f)
+            os.replace(tmp, ROTATION_CACHE_FILE)
+        except Exception:
+            pass  # Best-effort; display will fall back to sheet polling
 
     def get_rotation(self, force_refresh=False):
         """Fetch the current rotation queue from the sheet.

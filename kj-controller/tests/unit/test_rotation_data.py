@@ -1,0 +1,164 @@
+"""Unit tests for rotation_data.py (conky display script)."""
+
+import json
+import os
+import sys
+import time
+
+import pytest
+
+# rotation_data.py lives in desktop/, add it to path
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "..", "desktop"))
+
+import rotation_data
+
+
+@pytest.fixture
+def cache_file(tmp_path):
+    """Create a temporary cache file path."""
+    return str(tmp_path / "rotation_cache.json")
+
+
+@pytest.fixture
+def sample_cache_data():
+    """Sample cache data matching what rotation.py writes."""
+    return {
+        "queue": [
+            {"singer": "Alice", "song_artist": "Bohemian Rhapsody - Queen", "status": "Now Singing"},
+            {"singer": "Bob", "song_artist": "Don't Stop Believin - Journey", "status": "Up Next"},
+            {"singer": "Carol", "song_artist": "Sweet Caroline - Neil Diamond", "status": "Waiting"},
+        ],
+        "stats": {
+            "singers": 4,
+            "sung": 1,
+            "queued": 3,
+            "started": "3/5 20:00",
+        },
+        "updated": time.time(),
+    }
+
+
+class TestReadLocalCache:
+    def test_reads_valid_cache(self, cache_file, sample_cache_data, monkeypatch):
+        monkeypatch.setattr(rotation_data, "CACHE_FILE", cache_file)
+        with open(cache_file, "w") as f:
+            json.dump(sample_cache_data, f)
+
+        result = rotation_data.read_local_cache()
+        assert result is not None
+        queue, stats = result
+        assert len(queue) == 3
+        assert queue[0]["singer"] == "Alice"
+        assert stats["singers"] == 4
+
+    def test_returns_none_if_missing(self, cache_file, monkeypatch):
+        monkeypatch.setattr(rotation_data, "CACHE_FILE", cache_file)
+        assert rotation_data.read_local_cache() is None
+
+    def test_returns_none_if_stale(self, cache_file, sample_cache_data, monkeypatch):
+        monkeypatch.setattr(rotation_data, "CACHE_FILE", cache_file)
+        with open(cache_file, "w") as f:
+            json.dump(sample_cache_data, f)
+        # Backdate the file modification time
+        old_time = time.time() - rotation_data.CACHE_MAX_AGE - 10
+        os.utime(cache_file, (old_time, old_time))
+
+        assert rotation_data.read_local_cache() is None
+
+    def test_returns_none_if_invalid_json(self, cache_file, monkeypatch):
+        monkeypatch.setattr(rotation_data, "CACHE_FILE", cache_file)
+        with open(cache_file, "w") as f:
+            f.write("not json")
+
+        assert rotation_data.read_local_cache() is None
+
+    def test_returns_none_if_missing_keys(self, cache_file, monkeypatch):
+        monkeypatch.setattr(rotation_data, "CACHE_FILE", cache_file)
+        with open(cache_file, "w") as f:
+            json.dump({"bad": "data"}, f)
+
+        assert rotation_data.read_local_cache() is None
+
+    def test_respects_max_entries(self, cache_file, monkeypatch):
+        monkeypatch.setattr(rotation_data, "CACHE_FILE", cache_file)
+        big_queue = [
+            {"singer": f"Singer{i}", "song_artist": f"Song{i}", "status": "Waiting"}
+            for i in range(20)
+        ]
+        data = {
+            "queue": big_queue,
+            "stats": {"singers": 20, "sung": 0, "queued": 20, "started": ""},
+            "updated": time.time(),
+        }
+        with open(cache_file, "w") as f:
+            json.dump(data, f)
+
+        queue, _ = rotation_data.read_local_cache()
+        assert len(queue) == rotation_data.MAX_ENTRIES
+
+
+class TestFetchAllRows:
+    def test_prefers_cache_over_sheet(self, cache_file, sample_cache_data, monkeypatch):
+        """When cache exists and is fresh, sheet is not hit."""
+        monkeypatch.setattr(rotation_data, "CACHE_FILE", cache_file)
+        with open(cache_file, "w") as f:
+            json.dump(sample_cache_data, f)
+
+        sheet_called = False
+        original_fetch = rotation_data.fetch_from_sheet
+
+        def mock_fetch():
+            nonlocal sheet_called
+            sheet_called = True
+            return original_fetch()
+
+        monkeypatch.setattr(rotation_data, "fetch_from_sheet", mock_fetch)
+
+        queue, stats = rotation_data.fetch_all_rows()
+        assert not sheet_called
+        assert len(queue) == 3
+
+    def test_falls_back_to_sheet_when_no_cache(self, cache_file, monkeypatch):
+        """When cache is missing, falls back to sheet fetch."""
+        monkeypatch.setattr(rotation_data, "CACHE_FILE", cache_file)
+
+        sheet_data = (
+            [{"singer": "Test", "song_artist": "Song", "status": "Waiting"}],
+            {"singers": 1, "sung": 0, "queued": 1, "started": ""},
+        )
+        monkeypatch.setattr(rotation_data, "fetch_from_sheet", lambda: sheet_data)
+
+        queue, stats = rotation_data.fetch_all_rows()
+        assert queue[0]["singer"] == "Test"
+
+
+class TestFormatConky:
+    def test_empty_queue(self, capsys):
+        rotation_data.format_conky([])
+        output = capsys.readouterr().out
+        assert "No singers in queue" in output
+
+    def test_now_singing_badge(self, capsys):
+        rotation_data.format_conky([
+            {"singer": "Alice", "song_artist": "Test Song", "status": "Now Singing"},
+        ])
+        output = capsys.readouterr().out
+        assert "Alice" in output
+        assert "NOW" in output
+        assert "Test Song" in output
+
+    def test_up_next_badge(self, capsys):
+        rotation_data.format_conky([
+            {"singer": "First", "song_artist": "", "status": "Now Singing"},
+            {"singer": "Bob", "song_artist": "", "status": "Up Next"},
+        ])
+        output = capsys.readouterr().out
+        assert "NEXT" in output
+
+    def test_no_song_line_when_empty(self, capsys):
+        rotation_data.format_conky([
+            {"singer": "Alice", "song_artist": "", "status": "Now Singing"},
+        ])
+        output = capsys.readouterr().out
+        lines = [l for l in output.strip().split("\n") if l.strip()]
+        assert len(lines) == 1  # only singer line, no song line

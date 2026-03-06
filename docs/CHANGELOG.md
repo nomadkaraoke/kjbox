@@ -2,6 +2,14 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-03-05 - Instant Rotation Display Updates
+
+Rotation display (conky) now updates within ~3 seconds of changes made in KJ Controller, down from up to 60 seconds.
+
+- KJ Controller writes `/tmp/rotation_cache.json` after every rotation mutation (add, update, delete, mark singing, etc.)
+- `rotation_data.py` reads from local cache first, falls back to Google Sheet CSV if cache is missing or >120s old
+- Conky polling interval reduced from 30s to 3s (reading a local file is effectively free)
+
 ## 2026-03-05 - Faster Filler Music Fade
 
 Reduced filler music fade time from 3s to 1.5s, and post-fade buffer from 0.5s to 0.3s. Karaoke playback now starts ~1.8s after pressing Play (was ~3.5s).

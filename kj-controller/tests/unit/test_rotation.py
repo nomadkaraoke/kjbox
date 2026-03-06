@@ -1,11 +1,13 @@
 """Unit tests for RotationManager."""
 
+import json
+import os
 import time
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from rotation import RotationManager, _find_header
+from rotation import ROTATION_CACHE_FILE, RotationManager, _find_header
 
 
 @pytest.fixture
@@ -29,6 +31,7 @@ def manager(mock_sheet):
     """Create a RotationManager with a mocked sheet."""
     mgr = RotationManager("fake-sheet-id", "/tmp/fake-creds.json")
     mgr._sheet = mock_sheet
+    mgr._write_display_cache = lambda: None  # don't write files in tests
     return mgr
 
 
@@ -267,3 +270,77 @@ class TestArchiveRotation:
         manager.get_rotation()
         manager.archive_rotation()
         assert manager._cache is None
+
+
+class TestWriteDisplayCache:
+    """Tests for the local JSON cache written for conky display."""
+
+    def test_writes_cache_file(self, mock_sheet, tmp_path):
+        """_write_display_cache writes valid JSON with queue and stats."""
+        cache_file = str(tmp_path / "rotation_cache.json")
+        mgr = RotationManager("fake-sheet-id", "/tmp/fake-creds.json")
+        mgr._sheet = mock_sheet
+        with patch("rotation.ROTATION_CACHE_FILE", cache_file):
+            mgr._write_display_cache()
+
+        assert os.path.exists(cache_file)
+        with open(cache_file) as f:
+            data = json.load(f)
+
+        assert "queue" in data
+        assert "stats" in data
+        assert "updated" in data
+        # Should have 4 non-done entries (Alice, Bob, Carol, Eve)
+        assert len(data["queue"]) == 4
+        assert data["queue"][0]["singer"] == "Alice"
+        assert data["queue"][0]["status"] == "Now Singing"
+        # Stats
+        assert data["stats"]["singers"] == 5  # including Dave (done)
+        assert data["stats"]["sung"] == 1  # Dave
+        assert data["stats"]["queued"] == 4
+        assert data["stats"]["started"] == "3/5 20:00"
+
+    def test_cache_queue_fields(self, mock_sheet, tmp_path):
+        """Cache entries only include display-relevant fields."""
+        cache_file = str(tmp_path / "rotation_cache.json")
+        mgr = RotationManager("fake-sheet-id", "/tmp/fake-creds.json")
+        mgr._sheet = mock_sheet
+        with patch("rotation.ROTATION_CACHE_FILE", cache_file):
+            mgr._write_display_cache()
+
+        with open(cache_file) as f:
+            data = json.load(f)
+
+        entry = data["queue"][0]
+        assert set(entry.keys()) == {"singer", "song_artist", "status"}
+
+    def test_invalidate_triggers_cache_write(self, mock_sheet, tmp_path):
+        """_invalidate_cache calls _write_display_cache (integration check)."""
+        cache_file = str(tmp_path / "rotation_cache.json")
+        mgr = RotationManager("fake-sheet-id", "/tmp/fake-creds.json")
+        mgr._sheet = mock_sheet
+        with patch("rotation.ROTATION_CACHE_FILE", cache_file):
+            mgr._invalidate_cache()
+
+        assert os.path.exists(cache_file)
+
+    def test_survives_errors(self, mock_sheet, tmp_path):
+        """_write_display_cache silently handles errors."""
+        mgr = RotationManager("fake-sheet-id", "/tmp/fake-creds.json")
+        mgr._sheet = mock_sheet
+        # Make get_all_values raise to trigger the except branch
+        mock_sheet.get_all_values.side_effect = Exception("network error")
+        # Should not raise
+        mgr._write_display_cache()
+
+    def test_atomic_write(self, mock_sheet, tmp_path):
+        """Cache is written atomically via tmp file + rename."""
+        cache_file = str(tmp_path / "rotation_cache.json")
+        mgr = RotationManager("fake-sheet-id", "/tmp/fake-creds.json")
+        mgr._sheet = mock_sheet
+        with patch("rotation.ROTATION_CACHE_FILE", cache_file):
+            mgr._write_display_cache()
+
+        # tmp file should not remain
+        assert not os.path.exists(cache_file + ".tmp")
+        assert os.path.exists(cache_file)

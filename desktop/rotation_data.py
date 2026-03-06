@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Fetch karaoke rotation data and output conky-formatted text.
 
-Called by conky via ${execpi}. Fetches the singer rotation from a public
-Google Sheet CSV endpoint, filters out completed entries, and prints
-conky markup to stdout.
+Called by conky via ${execpi}. Reads rotation data from a local JSON cache
+written by kj-controller (instant updates), falling back to the Google Sheet
+CSV endpoint if the cache is missing or stale.
 
 Usage:
     python3 rotation_data.py              # Full conky-formatted rotation
@@ -12,7 +12,10 @@ Usage:
 
 import csv
 import io
+import json
+import os
 import sys
+import time
 from urllib.error import URLError
 from urllib.request import urlopen
 
@@ -33,6 +36,10 @@ COL_STATUS = 3
 
 MAX_ENTRIES = 10
 FETCH_TIMEOUT = 10
+
+# Local cache written by kj-controller after every rotation change
+CACHE_FILE = "/tmp/rotation_cache.json"
+CACHE_MAX_AGE = 120  # seconds before falling back to sheet
 
 # Colors (hex without #)
 COLOR_NAME = "ffdf6b"      # gold for all singer names
@@ -56,8 +63,24 @@ FONT_BADGE = "DejaVu Sans:bold:size=18"
 # Data fetching
 # ---------------------------------------------------------------------------
 
-def fetch_all_rows():
-    """Fetch all rows from the Google Sheet CSV. Returns (all_rows, queue, stats)."""
+def read_local_cache():
+    """Read rotation data from the local JSON cache file.
+
+    Returns (queue, stats) or None if cache is missing/stale.
+    """
+    try:
+        mtime = os.path.getmtime(CACHE_FILE)
+        if time.time() - mtime > CACHE_MAX_AGE:
+            return None
+        with open(CACHE_FILE) as f:
+            data = json.load(f)
+        return data["queue"][:MAX_ENTRIES], data["stats"]
+    except (OSError, KeyError, json.JSONDecodeError):
+        return None
+
+
+def fetch_from_sheet():
+    """Fetch all rows from the Google Sheet CSV. Returns (queue, stats)."""
     with urlopen(SHEET_CSV_URL, timeout=FETCH_TIMEOUT) as response:
         text = response.read().decode("utf-8")
     reader = csv.reader(io.StringIO(text))
@@ -65,7 +88,7 @@ def fetch_all_rows():
     try:
         next(reader)  # skip header
     except StopIteration:
-        return [], {}, {}
+        return [], {}
 
     all_singers = set()
     done_count = 0
@@ -114,6 +137,14 @@ def fetch_all_rows():
         "started": started,
     }
     return queue, stats
+
+
+def fetch_all_rows():
+    """Get rotation data, preferring local cache over sheet fetch."""
+    cached = read_local_cache()
+    if cached is not None:
+        return cached
+    return fetch_from_sheet()
 
 
 # ---------------------------------------------------------------------------
@@ -174,7 +205,7 @@ def main():
 
     if stats_only:
         parts = []
-        if stats["started"]:
+        if stats.get("started"):
             parts.append(f"Started: {stats['started']}")
         parts.append(f"{stats['singers']} singers | {stats['sung']} sung | {stats['queued']} queued")
         print("    ".join(parts))

@@ -20,7 +20,7 @@ conky.config = {
     maximum_width = 1920,
     minimum_height = 1080,
 
-    update_interval = 30,
+    update_interval = 3,
     use_xft = true,
     xftalpha = 1.0,
 
@@ -33,6 +33,6 @@ conky.config = {
 
 conky.text = [[
 ${image /opt/nomad/kjbox/desktop/rotation-bg.png -p 0,0 -s 1920x1080}\
-${voffset 70}${goto 90}${font DejaVu Sans:bold:size=40}${color ffffff}ROTATION${color}${font}${goto 460}${font DejaVu Sans:size=21}${color 8892a4}${execpi 30 /usr/bin/python3 /opt/nomad/kjbox/desktop/rotation_data.py --stats}${color}${font}
-${execpi 30 /usr/bin/python3 /opt/nomad/kjbox/desktop/rotation_data.py}
+${voffset 70}${goto 90}${font DejaVu Sans:bold:size=40}${color ffffff}ROTATION${color}${font}${goto 460}${font DejaVu Sans:size=21}${color 8892a4}${execpi 3 /usr/bin/python3 /opt/nomad/kjbox/desktop/rotation_data.py --stats}${color}${font}
+${execpi 3 /usr/bin/python3 /opt/nomad/kjbox/desktop/rotation_data.py}
 ]]
