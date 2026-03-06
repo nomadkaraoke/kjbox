@@ -224,6 +224,46 @@ class TestAddRotationEntry:
         assert resp.status_code == 503
 
 
+class TestMoveRotationEntry:
+    def test_move_entry(self, rotation_client, mock_rotation):
+        resp = rotation_client.post('/rotation/move',
+            data=json.dumps({"from_row": 2, "to_row": 4}),
+            content_type='application/json')
+        assert resp.status_code == 200
+        mock_rotation.move_entry.assert_called_once_with(2, 4)
+
+    def test_missing_params_returns_400(self, rotation_client):
+        resp = rotation_client.post('/rotation/move',
+            data=json.dumps({"from_row": 2}),
+            content_type='application/json')
+        assert resp.status_code == 400
+
+    def test_invalid_params_returns_400(self, rotation_client):
+        resp = rotation_client.post('/rotation/move',
+            data=json.dumps({"from_row": "abc", "to_row": 3}),
+            content_type='application/json')
+        assert resp.status_code == 400
+
+    def test_negative_row_returns_400(self, rotation_client):
+        resp = rotation_client.post('/rotation/move',
+            data=json.dumps({"from_row": -1, "to_row": 3}),
+            content_type='application/json')
+        assert resp.status_code == 400
+
+    def test_error_returns_500(self, rotation_client, mock_rotation):
+        mock_rotation.move_entry.side_effect = Exception("API error")
+        resp = rotation_client.post('/rotation/move',
+            data=json.dumps({"from_row": 2, "to_row": 4}),
+            content_type='application/json')
+        assert resp.status_code == 500
+
+    def test_not_configured_returns_503(self, flask_test_client):
+        resp = flask_test_client.post('/rotation/move',
+            data=json.dumps({"from_row": 2, "to_row": 4}),
+            content_type='application/json')
+        assert resp.status_code == 503
+
+
 class TestArchiveRotation:
     def test_archive_returns_count(self, rotation_client, mock_rotation):
         mock_rotation.archive_rotation.return_value = 5

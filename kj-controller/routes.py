@@ -1520,6 +1520,29 @@ def add_rotation_entry():
         return jsonify({"error": str(e)}), 500
 
 
+@routes_bp.route('/rotation/move', methods=['POST'])
+def move_rotation_entry():
+    """Move a rotation entry from one position to another."""
+    rotation = current_app.rotation
+    if rotation is None:
+        return jsonify({"error": "Rotation not configured"}), 503
+    data = request.get_json(force=True)
+    try:
+        from_row = int(data.get('from_row'))
+        to_row = int(data.get('to_row'))
+    except (TypeError, ValueError):
+        return jsonify({"error": "from_row and to_row must be integers"}), 400
+    if from_row < 1 or to_row < 1:
+        return jsonify({"error": "row indices must be >= 1"}), 400
+
+    try:
+        rotation.move_entry(from_row, to_row)
+        entries = rotation.get_rotation(force_refresh=True)
+        return jsonify({"success": True, "entries": entries})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @routes_bp.route('/rotation/archive', methods=['POST'])
 def archive_rotation():
     """Archive all rotation entries to 'Past events' sheet and clear rotation."""

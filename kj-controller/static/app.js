@@ -2388,6 +2388,41 @@ function renderRotation(entries) {
             }
         });
 
+        // Drag handle
+        const handle = document.createElement('span');
+        handle.className = 'rotation-drag-handle';
+        handle.textContent = '\u2261';  // ≡ hamburger icon
+        handle.draggable = true;
+        handle.addEventListener('dragstart', (e) => {
+            row.classList.add('dragging');
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/plain', String(idx));
+            e.dataTransfer.setDragImage(row, 0, 0);
+        });
+        handle.addEventListener('dragend', () => {
+            row.classList.remove('dragging');
+            list.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
+        });
+
+        row.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            list.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
+            row.classList.add('drag-over');
+        });
+        row.addEventListener('dragleave', () => {
+            row.classList.remove('drag-over');
+        });
+        row.addEventListener('drop', (e) => {
+            e.preventDefault();
+            row.classList.remove('drag-over');
+            const fromIdx = parseInt(e.dataTransfer.getData('text/plain'), 10);
+            const toIdx = idx;
+            if (fromIdx !== toIdx) {
+                moveRotationEntry(entries[fromIdx].row_index, entries[toIdx].row_index);
+            }
+        });
+
         const info = document.createElement('div');
         info.className = 'rotation-info';
 
@@ -2407,6 +2442,7 @@ function renderRotation(entries) {
         song.title = 'Click to copy \u2022 Shift+click to edit';
         song.onclick = (e) => { if (!e.shiftKey && !e.ctrlKey && !e.metaKey) copyRotationText(song); };
 
+        row.appendChild(handle);
         info.appendChild(num);
         info.appendChild(name);
         if (entry.song_artist) info.appendChild(song);
@@ -2661,6 +2697,29 @@ async function updateRotationStatus(rowIndex, status) {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ row_index: rowIndex, status: status })
+        });
+        const data = await response.json();
+        if (!response.ok) {
+            showRotationIndicator('error');
+            return;
+        }
+        if (data.entries) {
+            rotationData = data.entries;
+            renderRotation(rotationData);
+        }
+        showRotationIndicator('success');
+    } catch (e) {
+        showRotationIndicator('error');
+    }
+}
+
+async function moveRotationEntry(fromRow, toRow) {
+    showRotationIndicator('spin');
+    try {
+        const response = await fetch('/rotation/move', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ from_row: fromRow, to_row: toRow })
         });
         const data = await response.json();
         if (!response.ok) {

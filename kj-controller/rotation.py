@@ -273,6 +273,34 @@ class RotationManager:
         sheet.delete_rows(row_index)
         self._invalidate_cache()
 
+    def move_entry(self, from_row, to_row):
+        """Move a row from one position to another in the sheet.
+
+        Args:
+            from_row: 1-based sheet row to move
+            to_row: 1-based target sheet row position
+        """
+        if from_row == to_row:
+            return
+        sheet = self._get_sheet()
+        all_values = sheet.get_all_values()
+        if from_row < 1 or from_row > len(all_values):
+            raise ValueError(f"from_row {from_row} out of range")
+        if to_row < 1 or to_row > len(all_values):
+            raise ValueError(f"to_row {to_row} out of range")
+
+        row_data = all_values[from_row - 1]  # 0-based index
+
+        # Delete the source row first
+        sheet.delete_rows(from_row)
+
+        # After deletion, target index shifts if it was below the source
+        insert_at = to_row if to_row < from_row else to_row - 1
+
+        # insert_row is 1-based, inserts BEFORE the given row
+        sheet.insert_row(row_data, insert_at, value_input_option="USER_ENTERED")
+        self._invalidate_cache()
+
     def _set_exclusive_status(self, row_index, new_status, clear_statuses):
         """Set a status on one row and clear it from all others.
 

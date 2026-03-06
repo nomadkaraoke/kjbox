@@ -200,6 +200,44 @@ class TestDeleteEntry:
         assert manager._cache is None
 
 
+class TestMoveEntry:
+    def test_move_down(self, manager, mock_sheet):
+        """Moving row 3 to row 5: delete row 3, insert at row 4 (shifted)."""
+        manager.move_entry(3, 5)
+        mock_sheet.delete_rows.assert_called_once_with(3)
+        mock_sheet.insert_row.assert_called_once()
+        # After deleting row 3, target 5 shifts to 4
+        assert mock_sheet.insert_row.call_args[0][1] == 4
+
+    def test_move_up(self, manager, mock_sheet):
+        """Moving row 5 to row 3: delete row 5, insert at row 3."""
+        manager.move_entry(5, 3)
+        mock_sheet.delete_rows.assert_called_once_with(5)
+        mock_sheet.insert_row.assert_called_once()
+        assert mock_sheet.insert_row.call_args[0][1] == 3
+
+    def test_noop_same_row(self, manager, mock_sheet):
+        manager.move_entry(3, 3)
+        mock_sheet.delete_rows.assert_not_called()
+
+    def test_preserves_row_data(self, manager, mock_sheet):
+        manager.move_entry(3, 5)
+        row_data = mock_sheet.insert_row.call_args[0][0]
+        # Row 3 (0-based index 2) is Alice's row
+        assert row_data[1] == "Alice"
+
+    def test_invalid_row_raises(self, manager, mock_sheet):
+        with pytest.raises(ValueError):
+            manager.move_entry(0, 3)
+        with pytest.raises(ValueError):
+            manager.move_entry(3, 99)
+
+    def test_invalidates_cache(self, manager, mock_sheet):
+        manager.get_rotation()
+        manager.move_entry(3, 5)
+        assert manager._cache is None
+
+
 class TestAddEntry:
     def test_appends_row(self, manager, mock_sheet):
         manager.add_entry("Frank", "My Way - Sinatra")
