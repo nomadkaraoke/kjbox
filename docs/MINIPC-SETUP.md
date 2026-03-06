@@ -334,6 +334,8 @@ cd /opt/nomad/kjbox/kj-controller
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
+# Verify psutil installed (needed for system stats dashboard):
+python -c "import psutil; print(psutil.__version__)"
 ```
 
 ### 3.4 Create config.json

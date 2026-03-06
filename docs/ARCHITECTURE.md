@@ -61,7 +61,7 @@ KJ Controller is a web-based karaoke show management application. A Flask backen
 
 ```
 app.py → config.py, media.py, vlc.py, catalog.py, zip_playback.py, overlay.py, routes.py, utils.py
-routes.py → config.py, utils.py, karaoke_nerds, youtube_search, youtube_health (accesses media/vlc/catalog/zip_playback/overlay_manager via current_app)
+routes.py → config.py, utils.py, karaoke_nerds, youtube_search, youtube_health, psutil (accesses media/vlc/catalog/zip_playback/overlay_manager via current_app)
 karaoke_nerds.py → config.py, utils.py (requests, beautifulsoup4)
 youtube_search.py → media._ytdlp_base_opts, config.py, utils.py (yt_dlp)
 youtube_health.py → (yt_dlp, importlib.metadata, shutil, subprocess)
@@ -133,6 +133,7 @@ utils.py → (stdlib only)
 | POST | `/overlays/import` | Bulk import overlays (replaces all, assigns new IDs) |
 | GET | `/system/autodeploy` | Check if kj-autodeploy service is active |
 | POST | `/system/autodeploy` | Enable/disable kj-autodeploy (persists across reboots) |
+| GET | `/system/stats` | System metrics: CPU %, memory, disk usage (requires psutil) |
 | GET | `/rotation` | Get singer rotation queue (non-done entries from Google Sheet) |
 | POST | `/rotation/status` | Update a rotation entry's status (any status from sheet) |
 | POST | `/rotation/edit` | Edit a rotation entry's singer name and/or song |

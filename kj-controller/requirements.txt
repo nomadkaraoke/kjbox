@@ -2,6 +2,7 @@ Flask
 beautifulsoup4
 gspread
 google-auth
+psutil
 requests
 websockify
 yt-dlp[default]

@@ -2,6 +2,31 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-03-05 - Consistent Button Styling, System Stats & Format Filter
+
+**UI overhaul:** Unified all ~33 button types to consistent outlined style (was: 3 conflicting paradigms).
+
+- Base buttons: dark outlined (`#222` bg, `#444` border, `#ccc` text) with hover glow
+- New `.btn-primary` class: pink-hinted outline for primary actions (Play, Download, Search, Save)
+- All secondary buttons (filler, overlay, rotation, system) updated to match
+- Delete buttons: outlined red instead of solid red fill
+
+**System section reorganized** into logical subsections:
+- Media & Output (AV Output, Filler Music, Audio Device)
+- Maintenance (Auto-Deploy, Update, Restart, Reboot)
+- Stats (CPU, Memory, Disk — live sparkline graphs with hover tooltips)
+
+**System stats** (`GET /system/stats`):
+- CPU %, memory (used/total GB), disk (used/total GB) via `psutil`
+- Frontend: bar charts + 30-point sparkline history, polled every 5s
+- Hover tooltips show value and time offset (e.g., "45% (30s ago)")
+
+**3-state format filter** replaces MP4 Only toggle:
+- Cycles: All → MP4 Only → CDG+ZIP Only
+- Persisted in localStorage with migration from old boolean setting
+
+**Dependency:** Added `psutil` to `requirements.txt`
+
 ## 2026-03-05 - VLC Process Lifecycle Decoupling
 
 **Zero-downtime deploys:** VLC playback now survives kj-controller restarts.
