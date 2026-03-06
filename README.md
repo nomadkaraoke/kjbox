@@ -52,8 +52,8 @@ kjbox/
       NOMADPI-DETAILS.md       # Device reference: hardware, network, display, services
       NETWORK-CONFIG-BACKUP.md # Tailscale & Cloudflare tunnel backup
   desktop/
-    rotation.conkyrc           # Conky config for singer queue overlay (full-screen layout)
-    rotation_data.py           # Data fetcher: Google Sheet → conky markup (stdlib only)
+    rotation.conkyrc           # Conky config for singer queue overlay (full-screen, 3s refresh)
+    rotation_data.py           # Data fetcher: local cache → conky markup (falls back to Sheet CSV)
     rotation-bg.png            # 1920x1080 wallpaper background (faux transparency)
     nomad-kjbox-desktop-background-4k.jpg  # 4K source wallpaper
   kj-controller/               # KJ Remote Controller web app
@@ -62,7 +62,7 @@ kjbox/
     utils.py                   # Logging and filename utilities
     media.py                   # MediaIndex class (scan, validate, download)
     vlc.py                     # VLCManager class (dual VLC instance control)
-    rotation.py                # RotationManager (Google Sheets singer rotation)
+    rotation.py                # RotationManager (Google Sheets rotation + local display cache)
     routes.py                  # Flask Blueprint with REST API handlers
     pyproject.toml             # Project metadata and tool config
     requirements.txt           # Production dependencies

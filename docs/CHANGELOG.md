@@ -2,6 +2,18 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-03-06 - Drag-and-Drop Rotation Reordering
+
+Added drag handles (≡) to rotation entries in the KJ Controller UI for reordering singers.
+
+- Drag handle on the left of each entry, HTML5 drag-and-drop with visual feedback
+- Backend `POST /rotation/move` endpoint: deletes source row and re-inserts at target position
+- `RotationManager.move_entry()` handles row index shifting after deletion
+
+## 2026-03-05 - Exact Status Text on Rotation Display
+
+Conky rotation display now shows the exact status text from the Google Sheet (e.g. "Now Singing", "Being Made (!)") instead of abbreviated badge labels ("NOW", "MAKING"). Color coding preserved, "Waiting" status hidden (no badge).
+
 ## 2026-03-05 - Instant Rotation Display Updates
 
 Rotation display (conky) now updates within ~3 seconds of changes made in KJ Controller, down from up to 60 seconds.

@@ -18,7 +18,7 @@ KJ Controller (`kj-controller/`) is a Flask + vanilla JS web app for managing li
 - `kj-controller/vlc.py` — VLCManager (dual VLC process control)
 - `kj-controller/media.py` — MediaIndex (scan, validate, download, delete)
 - `kj-controller/overlay.py` — OverlayManager (CRUD, JSON persistence)
-- `kj-controller/rotation.py` — RotationManager (Google Sheets singer rotation read/write)
+- `kj-controller/rotation.py` — RotationManager (Google Sheets rotation CRUD, reorder, local cache for conky display)
 - `kj-controller/catalog.py` — ExternalCatalog (SQLite FTS5 search)
 - `kj-controller/karaoke_nerds.py` — Karaoke Nerds web scraper (search, parse, YouTube URLs)
 - `kj-controller/youtube_search.py` — YouTube search via yt-dlp (fast metadata-only)

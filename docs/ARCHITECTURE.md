@@ -37,6 +37,12 @@ KJ Controller is a web-based karaoke show management application. A Flask backen
                   │  desktop/            │  pygame-ce, 30fps render loop
                   │  overlay_engine.py   │  One X11 window per overlay
                   └─────────────────────┘
+
+                  ┌─────────────────────┐
+                  │  Rotation Display    │  Separate process (systemd)
+                  │  desktop/            │  Conky, reads local cache
+                  │  rotation_data.py    │  /tmp/rotation_cache.json
+                  └─────────────────────┘
 ```
 
 ## Module Structure
@@ -88,6 +94,7 @@ utils.py → (stdlib only)
 | Overlay configs | `OverlayManager` (overlays.json) | `current_app.overlay_manager` |
 | Karaoke playing flag | `OverlayManager.karaoke_playing` | `current_app.overlay_manager` |
 | Download state | `app.download_state` dict | `current_app.download_state` |
+| Rotation queue | `RotationManager` (Google Sheet + local cache) | `current_app.rotation` |
 
 ## REST API
 
@@ -139,6 +146,7 @@ utils.py → (stdlib only)
 | POST | `/rotation/edit` | Edit a rotation entry's singer name and/or song |
 | POST | `/rotation/delete` | Delete a rotation entry (removes row from sheet) |
 | POST | `/rotation/add` | Add a new singer to the rotation (default status: Waiting) |
+| POST | `/rotation/move` | Reorder a rotation entry (drag-and-drop: from_row → to_row) |
 | POST | `/rotation/archive` | Archive all entries to "Past events" sheet and clear rotation |
 
 ## Key Design Decisions
@@ -174,6 +182,42 @@ VLC processes are launched in their own session (`start_new_session=True`) and s
 
 ### Dynamic Overlay System
 The overlay system uses a three-component architecture: (1) the KJ Controller web UI for configuration, (2) the Flask backend (`overlay.py`) for CRUD and state management, and (3) a standalone overlay engine (`desktop/overlay_engine.py`) for rendering. The engine runs as a separate systemd service (`overlay-display.service`) with a 30fps pygame-ce render loop, creating one borderless always-on-top X11 window per enabled overlay. Communication between the Flask backend and the engine is via a shared JSON file (`data/overlays.json`) polled by mtime every ~1 second. This avoids coupling the render loop to Flask's request-response model and matches the existing pattern of the rotation-display service. Five overlay types are supported: `ticker` (scrolling text bar), `static_text`, `image`, `countdown`, and `qr_code`. Each overlay has an independent `show_over_video` flag — when false, it auto-hides during karaoke playback and auto-shows when playback stops. The `karaoke_playing` state is set by the play/control routes and a `VLCManager.on_karaoke_end` callback.
+
+### Singer Rotation System
+
+The rotation system manages the singer queue during live karaoke shows, with three integrated components:
+
+```
+┌─────────────────┐     gspread API     ┌──────────────────┐
+│  KJ Controller  │◄──────────────────►│  Google Sheet     │
+│  rotation.py    │                     │  (source of truth)│
+│                 │                     └──────────────────┘
+│  After mutation:│
+│  writes cache   │
+│        │        │
+│        ▼        │
+│  /tmp/rotation  │     reads every 3s  ┌──────────────────┐
+│  _cache.json    │◄───────────────────│  Conky Display    │
+│                 │                     │  rotation_data.py │
+└─────────────────┘                     │  rotation.conkyrc │
+                                        └──────────────────┘
+                                                │
+                                        ┌───────▼──────────┐
+                                        │  HDMI Output      │
+                                        │  (singer queue    │
+                                        │   on screen)      │
+                                        └──────────────────┘
+```
+
+**Data flow:** The Google Sheet is the source of truth. `RotationManager` reads/writes it via gspread (service account auth). After every mutation (add, edit, delete, reorder, status change), the manager writes a local JSON cache to `/tmp/rotation_cache.json`. The conky display script (`rotation_data.py`) reads this cache every 3 seconds for near-instant updates, falling back to the Sheet CSV endpoint if the cache is missing or stale (>120s).
+
+**UI features:** The KJ Controller web UI shows the rotation queue with status badges, action buttons (Singing, Done, Next, plus more status options), drag-and-drop reordering via drag handles, inline editing (Shift+click), and one-click deletion (Ctrl/Cmd+click). An "Add Singer" form appends new entries.
+
+**Conky display:** A full-screen 1920x1080 conky window (`rotation.conkyrc`) renders the queue with gold singer names, colored status badges matching the exact sheet status text, and song info. Uses faux transparency via a wallpaper background image (`rotation-bg.png`). Runs as the `rotation-display` systemd service.
+
+**Reordering:** Drag-and-drop in the UI calls `POST /rotation/move` which deletes the source row and re-inserts it at the target position in the Google Sheet. Row indices shift after deletion, which the backend handles.
+
+**Configuration:** Requires `rotation_sheet_id` and `rotation_credentials_file` in `config.json`. The credentials file is a GCP service account JSON key with Editor access to the sheet. See [archive/2026-03-05-rotation-sheet-integration-plan.md](archive/2026-03-05-rotation-sheet-integration-plan.md) for setup details.
 
 ## VNC Screen Preview
 

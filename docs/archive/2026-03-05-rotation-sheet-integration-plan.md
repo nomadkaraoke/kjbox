@@ -74,8 +74,8 @@ Add to `requirements.txt`:
 
 Replace the Google Sheet entirely with built-in rotation management:
 - SQLite or JSON-based rotation storage
-- Full CRUD for rotation entries (add, edit, reorder, delete)
-- Drag-and-drop reorder
+- ~~Full CRUD for rotation entries (add, edit, reorder, delete)~~ ✅ Done (2026-03-05, still uses Sheet)
+- ~~Drag-and-drop reorder~~ ✅ Done (2026-03-06)
 - Singer history / stats (songs sung, last time sung)
 - Auto-suggest returning singers
 - "On Deck" display overlay (replaces Conky widget)
