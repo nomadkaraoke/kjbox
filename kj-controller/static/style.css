@@ -1576,3 +1576,49 @@ body {
     border-left: 3px solid #a78bfa !important;
     cursor: text;
 }
+
+/* --- Browser Mode Widget --- */
+.browser-mode-panel .header-row {
+    gap: 8px;
+}
+.browser-mode-badge {
+    background: #22c55e;
+    color: #000;
+    font-size: 0.65em;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 4px;
+    letter-spacing: 0.05em;
+}
+.browser-mode-url-row {
+    display: flex;
+    gap: 6px;
+}
+.browser-mode-url-row input {
+    flex: 1;
+    padding: 6px 10px;
+    border-radius: 6px;
+    border: 1px solid #333;
+    background: #111;
+    color: #e5e5e5;
+    font-size: 0.85em;
+}
+.browser-mode-url-row input:disabled {
+    opacity: 0.5;
+}
+.browser-mode-controls {
+    display: flex;
+    gap: 6px;
+}
+.browser-mode-controls button {
+    flex: 1;
+}
+.browser-mode-status {
+    font-size: 0.8em;
+    color: #999;
+    padding-top: 2px;
+}
+.browser-mode-url-display {
+    color: #7dd3fc;
+    word-break: break-all;
+}

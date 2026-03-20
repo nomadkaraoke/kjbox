@@ -16,6 +16,7 @@ from overlay import OverlayManager
 from rotation import RotationManager
 from routes import routes_bp
 from utils import log_message
+from chromium import ChromiumManager
 from vlc import VLCManager
 from zip_playback import ZipPlayback
 
@@ -38,6 +39,7 @@ def create_app(config=None):
     flask_app.vlc = VLCManager(cfg, enabled=False if config else None)
     flask_app.catalog = ExternalCatalog(cfg)
     flask_app.zip_playback = ZipPlayback(cfg)
+    flask_app.chromium = ChromiumManager(cfg)
     overlay_path = cfg.get('overlays_path') if config else None
     flask_app.overlay_manager = OverlayManager(config_path=overlay_path)
     flask_app.rotation = _init_rotation(cfg)
@@ -120,6 +122,7 @@ def start_app():  # pragma: no cover
     flask_app.vlc = vlc
     flask_app.catalog = ExternalCatalog(cfg)
     flask_app.zip_playback = ZipPlayback(cfg)
+    flask_app.chromium = ChromiumManager(cfg)
     flask_app.overlay_manager = overlay_mgr
     flask_app.rotation = _init_rotation(cfg)
     if flask_app.rotation:
