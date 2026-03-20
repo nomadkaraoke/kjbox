@@ -54,6 +54,7 @@ KJ Controller is a web-based karaoke show management application. A Flask backen
 | `utils.py` | ~40 | `log_message()`, `sanitize_filename_part()`, `parse_youtube_filename()` |
 | `media.py` | ~260 | `MediaIndex` class: scan, validate, download, delete, list |
 | `vlc.py` | ~440 | `VLCManager` class: launch, command, fade, play, restart, monitor, reconnect |
+| `chromium.py` | ~160 | `ChromiumManager` class: launch/kill fullscreen Chromium for Browser Mode, PipeWire audio routing |
 | `catalog.py` | ~230 | `ExternalCatalog` class: SQLite FTS5 search over external media |
 | `zip_playback.py` | ~50 | `ZipPlayback` class: CDG+MP3 ZIP extraction for VLC |
 | `overlay.py` | ~100 | `OverlayManager` class: CRUD, toggle, karaoke_playing state, JSON persistence |
@@ -66,7 +67,7 @@ KJ Controller is a web-based karaoke show management application. A Flask backen
 ### Dependency Flow
 
 ```
-app.py → config.py, media.py, vlc.py, catalog.py, zip_playback.py, overlay.py, routes.py, utils.py
+app.py → config.py, media.py, vlc.py, chromium.py, catalog.py, zip_playback.py, overlay.py, routes.py, utils.py
 routes.py → config.py, utils.py, karaoke_nerds, youtube_search, youtube_health, psutil (accesses media/vlc/catalog/zip_playback/overlay_manager via current_app)
 karaoke_nerds.py → config.py, utils.py (requests, beautifulsoup4)
 youtube_search.py → media._ytdlp_base_opts, config.py, utils.py (yt_dlp)
@@ -74,6 +75,7 @@ youtube_health.py → (yt_dlp, importlib.metadata, shutil, subprocess)
 overlay.py → (stdlib only: json, os, uuid, tempfile)
 media.py → config.py, utils.py
 vlc.py → config.py, utils.py
+chromium.py → config.py, utils.py
 catalog.py → (stdlib only: sqlite3, os, re)
 zip_playback.py → (stdlib only: zipfile, tempfile, shutil)
 config.py → (stdlib only)
@@ -95,6 +97,8 @@ utils.py → (stdlib only)
 | Karaoke playing flag | `OverlayManager.karaoke_playing` | `current_app.overlay_manager` |
 | Download state | `app.download_state` dict | `current_app.download_state` |
 | Rotation queue | `RotationManager` (Google Sheet + local cache) | `current_app.rotation` |
+| Chromium process | `ChromiumManager` (subprocess + PipeWire) | `current_app.chromium` |
+| Browser mode flag | `_browser_mode` bool in routes.py | Module-level (resets on restart) |
 
 ## REST API
 
@@ -148,6 +152,8 @@ utils.py → (stdlib only)
 | POST | `/rotation/add` | Add a new singer to the rotation (default status: Waiting) |
 | POST | `/rotation/move` | Reorder a rotation entry (drag-and-drop: from_row → to_row) |
 | POST | `/rotation/archive` | Archive all entries to "Past events" sheet and clear rotation |
+| POST | `/browser-mode/enable` | Enable Browser Mode: stop VLC, launch fullscreen Chromium at URL |
+| POST | `/browser-mode/disable` | Disable Browser Mode: kill Chromium, restart VLC |
 
 ## Key Design Decisions
 
