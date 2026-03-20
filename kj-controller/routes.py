@@ -413,6 +413,7 @@ def set_filler_music():
 @routes_bp.route('/status')
 def get_status():
     """Gets the status of the karaoke player."""
+    global _browser_mode
     vlc = current_app.vlc
     media = current_app.media
     cfg = current_app.kj_config
@@ -432,8 +433,11 @@ def get_status():
     dl_queue = current_app.download_queue['items']
 
     # Browser mode status (Chromium)
+    # Auto-clear browser_mode if Chromium crashed/exited on its own
     chromium = getattr(current_app, 'chromium', None)
     browser_status = chromium.get_status() if chromium else {'running': False, 'pid': None, 'url': None}
+    if _browser_mode and not browser_status['running']:
+        _browser_mode = False
     browser_status['enabled'] = _browser_mode
 
     if status:

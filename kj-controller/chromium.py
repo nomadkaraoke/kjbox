@@ -4,6 +4,7 @@ import os
 import shutil
 import subprocess
 import time
+from urllib.parse import urlparse
 
 from config import is_pi
 from utils import log_message
@@ -102,6 +103,12 @@ class ChromiumManager:
         if not url:
             url = 'https://youtube.com'
 
+        # Only allow http/https URLs — block file://, data:, etc.
+        parsed = urlparse(url)
+        if parsed.scheme not in ('http', 'https'):
+            log_message(f"ERROR: Rejected unsafe URL scheme '{parsed.scheme}'.", self.config)
+            return False
+
         binary = self._find_binary()
         if not binary:
             log_message("ERROR: No Chromium binary found on this system.", self.config)
@@ -188,7 +195,9 @@ class ChromiumManager:
             )
             if result.returncode == 0:
                 time.sleep(0.5)
-        except (FileNotFoundError, subprocess.TimeoutExpired):
+        except subprocess.TimeoutExpired:
+            log_message("WARNING: pkill timed out killing orphan Chromium instances.", self.config)
+        except FileNotFoundError:
             pass
 
     def get_status(self):

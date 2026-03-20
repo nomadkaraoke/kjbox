@@ -136,6 +136,29 @@ def test_enable_uses_config_default_when_vlc_disabled(flask_test_client, flask_a
     mock_launch.assert_called_once_with('https://youtube.com', audio_device='hdmiout')
 
 
+def test_status_auto_clears_browser_mode_on_chromium_crash(flask_test_client, flask_app, mocker):
+    """Status auto-clears browser_mode when Chromium dies on its own."""
+    mocker.patch.object(flask_app.chromium, 'launch', return_value=True)
+    mocker.patch('routes.save_config_value')
+
+    # Enable browser mode
+    flask_test_client.post(
+        '/browser-mode/enable',
+        data=json.dumps({'url': 'https://youtube.com'}),
+        content_type='application/json',
+    )
+
+    # Simulate Chromium crashing (is_running returns False)
+    mocker.patch.object(flask_app.chromium, 'get_status', return_value={
+        'running': False, 'pid': None, 'url': None,
+    })
+
+    # Status should auto-clear browser_mode
+    response = flask_test_client.get('/status')
+    data = json.loads(response.data)
+    assert data['browser_mode']['enabled'] is False
+
+
 def test_status_reflects_enabled_after_toggle(flask_test_client, flask_app, mocker):
     """Status shows browser_mode.enabled=True after enabling."""
     mocker.patch.object(flask_app.chromium, 'launch', return_value=True)

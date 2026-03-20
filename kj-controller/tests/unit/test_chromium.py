@@ -310,3 +310,50 @@ def test_kill_orphans_handles_pkill_not_found(mgr, mocker):
     """_kill_orphans doesn't raise when pkill is missing."""
     mocker.patch('chromium.subprocess.run', side_effect=FileNotFoundError)
     mgr._kill_orphans()  # Should not raise
+
+
+# --- URL scheme validation ---
+
+def test_launch_rejects_file_url(mgr, mocker):
+    """launch() rejects file:// URLs for security."""
+    result = mgr.launch('file:///etc/passwd')
+    assert result is False
+    assert mgr.process is None
+
+
+def test_launch_rejects_data_url(mgr, mocker):
+    """launch() rejects data: URLs for security."""
+    result = mgr.launch('data:text/html,<h1>hi</h1>')
+    assert result is False
+
+
+def test_launch_accepts_https_url(mgr, mocker):
+    """launch() accepts https:// URLs."""
+    mocker.patch('chromium.shutil.which', return_value='/usr/bin/chromium')
+    mocker.patch('chromium.is_pi', return_value=False)
+    mock_popen = mocker.patch('chromium.subprocess.Popen')
+    mock_proc = MagicMock()
+    mock_proc.pid = 1
+    mock_proc.poll.return_value = None
+    mock_popen.return_value = mock_proc
+    mocker.patch.object(mgr, '_pactl', return_value=(True, ''))
+    mocker.patch('chromium.subprocess.run')
+
+    result = mgr.launch('https://youtube.com')
+    assert result is True
+
+
+def test_launch_accepts_http_url(mgr, mocker):
+    """launch() accepts http:// URLs."""
+    mocker.patch('chromium.shutil.which', return_value='/usr/bin/chromium')
+    mocker.patch('chromium.is_pi', return_value=False)
+    mock_popen = mocker.patch('chromium.subprocess.Popen')
+    mock_proc = MagicMock()
+    mock_proc.pid = 1
+    mock_proc.poll.return_value = None
+    mock_popen.return_value = mock_proc
+    mocker.patch.object(mgr, '_pactl', return_value=(True, ''))
+    mocker.patch('chromium.subprocess.run')
+
+    result = mgr.launch('http://localhost:8080')
+    assert result is True

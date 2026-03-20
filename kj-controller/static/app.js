@@ -2824,10 +2824,10 @@ async function enableBrowserMode() {
     btn.textContent = 'Switching...';
 
     const data = await apiCall('/browser-mode/enable', { url });
+    btn.disabled = false;
     if (data && data.success) {
         log(`Browser mode enabled — ${url}`, 'success');
     } else {
-        btn.disabled = false;
         btn.textContent = 'Enable Browser Mode';
     }
 }
@@ -2839,10 +2839,10 @@ async function disableBrowserMode() {
     btn.textContent = 'Switching...';
 
     const data = await apiCall('/browser-mode/disable', {});
+    btn.disabled = false;
     if (data && data.success) {
         log('Browser mode disabled — back to VLC', 'success');
     } else {
-        btn.disabled = false;
         btn.textContent = 'Disable Browser Mode';
     }
 }
