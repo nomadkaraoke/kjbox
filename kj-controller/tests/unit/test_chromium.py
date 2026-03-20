@@ -249,3 +249,64 @@ def test_launch_sets_pipewire_for_audio_device(mgr, mocker):
     mgr.launch('https://youtube.com', audio_device='hdmiout')
 
     mock_set.assert_called_once_with('hdmiout')
+
+
+# --- _pactl subprocess integration ---
+
+def test_pactl_runs_as_nomad_user(mgr, mocker):
+    """_pactl runs pactl via sudo -u nomad with XDG_RUNTIME_DIR."""
+    mock_run = mocker.patch('chromium.subprocess.run')
+    mock_run.return_value = MagicMock(returncode=0, stdout='ok')
+
+    ok, output = mgr._pactl('set-card-profile', 'card', 'profile')
+
+    assert ok is True
+    cmd = mock_run.call_args[0][0]
+    assert cmd[:4] == ['sudo', '-u', 'nomad', 'env']
+    assert 'XDG_RUNTIME_DIR=/run/user/1000' in cmd
+    assert 'pactl' in cmd
+
+
+def test_pactl_returns_false_on_failure(mgr, mocker):
+    """_pactl returns (False, '') when pactl fails."""
+    mock_run = mocker.patch('chromium.subprocess.run')
+    mock_run.return_value = MagicMock(returncode=1, stdout='')
+
+    ok, output = mgr._pactl('set-card-profile', 'card', 'profile')
+
+    assert ok is False
+
+
+def test_pactl_handles_missing_binary(mgr, mocker):
+    """_pactl returns (False, '') when pactl is not installed."""
+    mocker.patch('chromium.subprocess.run', side_effect=FileNotFoundError)
+
+    ok, output = mgr._pactl('list')
+
+    assert ok is False
+    assert output == ''
+
+
+# --- Launch failure resets PipeWire ---
+
+def test_launch_resets_pipewire_on_popen_failure(mgr, mocker):
+    """If Popen raises, PipeWire is reset to analog."""
+    mocker.patch('chromium.shutil.which', return_value='/usr/bin/chromium')
+    mocker.patch('chromium.is_pi', return_value=False)
+    mocker.patch('chromium.subprocess.Popen', side_effect=OSError('no display'))
+    mocker.patch('chromium.subprocess.run')  # pkill
+    mock_reset = mocker.patch.object(mgr, '_reset_pipewire')
+    mock_set = mocker.patch.object(mgr, '_set_pipewire_profile')
+
+    result = mgr.launch('https://youtube.com', audio_device='hdmiout')
+
+    assert result is False
+    mock_reset.assert_called_once()
+
+
+# --- Orphan cleanup ---
+
+def test_kill_orphans_handles_pkill_not_found(mgr, mocker):
+    """_kill_orphans doesn't raise when pkill is missing."""
+    mocker.patch('chromium.subprocess.run', side_effect=FileNotFoundError)
+    mgr._kill_orphans()  # Should not raise

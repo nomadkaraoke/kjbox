@@ -100,6 +100,42 @@ def test_disable_browser_mode(flask_test_client, flask_app, mocker):
     flask_app.vlc.restart_instances.assert_called_once()
 
 
+def test_enable_passes_audio_device_to_chromium(flask_test_client, flask_app, mocker):
+    """Contract: enable route passes VLC's audio_device to chromium.launch()."""
+    flask_app.vlc.enabled = True
+    flask_app.vlc.audio_device = 'usbmixer'
+    mocker.patch.object(flask_app.vlc, 'fade_out_filler')
+    mocker.patch.object(flask_app.vlc, 'ensure_filler_stopped')
+    mocker.patch.object(flask_app.vlc, 'ensure_karaoke_released')
+    mock_launch = mocker.patch.object(flask_app.chromium, 'launch', return_value=True)
+    mocker.patch('routes.save_config_value')
+
+    flask_test_client.post(
+        '/browser-mode/enable',
+        data=json.dumps({'url': 'https://youtube.com'}),
+        content_type='application/json',
+    )
+
+    # Verify audio_device was passed through
+    mock_launch.assert_called_once_with('https://youtube.com', audio_device='usbmixer')
+
+
+def test_enable_uses_config_default_when_vlc_disabled(flask_test_client, flask_app, mocker):
+    """Contract: when VLC is disabled, audio_device comes from config default."""
+    flask_app.vlc.enabled = False
+    flask_app.kj_config['default_audio_device'] = 'hdmiout'
+    mock_launch = mocker.patch.object(flask_app.chromium, 'launch', return_value=True)
+    mocker.patch('routes.save_config_value')
+
+    flask_test_client.post(
+        '/browser-mode/enable',
+        data=json.dumps({'url': 'https://youtube.com'}),
+        content_type='application/json',
+    )
+
+    mock_launch.assert_called_once_with('https://youtube.com', audio_device='hdmiout')
+
+
 def test_status_reflects_enabled_after_toggle(flask_test_client, flask_app, mocker):
     """Status shows browser_mode.enabled=True after enabling."""
     mocker.patch.object(flask_app.chromium, 'launch', return_value=True)
