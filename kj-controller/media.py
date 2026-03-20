@@ -3,6 +3,7 @@
 import json
 import os
 import tempfile
+import unicodedata
 
 from config import MEDIA_EXTENSIONS
 from utils import log_message, sanitize_filename_part, parse_youtube_filename
@@ -136,13 +137,19 @@ class MediaIndex:
             self.scan()
 
     def validate_path(self, filepath):
-        """Verify path resolves to within a configured media_folders entry. Returns real path or None."""
-        real = os.path.realpath(filepath)
-        for folder in self.config.get('media_folders', []):
-            real_folder = os.path.realpath(folder)
-            if real.startswith(real_folder + os.sep) or real == real_folder:
-                if os.path.exists(real):
-                    return real
+        """Verify path resolves to within a configured media_folders entry. Returns real path or None.
+
+        Tries both NFC and NFD Unicode normalization forms to handle filenames
+        with diacritics (e.g. ç, à) that may change form during JSON round-trips
+        through the browser.
+        """
+        for form in ('NFC', 'NFD'):
+            candidate = os.path.realpath(unicodedata.normalize(form, filepath))
+            for folder in self.config.get('media_folders', []):
+                real_folder = os.path.realpath(folder)
+                if candidate.startswith(real_folder + os.sep) or candidate == real_folder:
+                    if os.path.exists(candidate):
+                        return candidate
         return None
 
     def is_in_download_folder(self, filepath):

@@ -8,6 +8,7 @@ import struct
 import subprocess
 import threading
 import time
+import unicodedata
 
 from flask import Blueprint, current_app, jsonify, render_template, request
 
@@ -174,10 +175,12 @@ def handle_play():
     if not validated:
         mount = cfg.get('external_media_mount', '')
         if mount:
-            real = os.path.realpath(file_path)
             real_mount = os.path.realpath(mount)
-            if real.startswith(real_mount + os.sep) and os.path.exists(real):
-                validated = real
+            for form in ('NFC', 'NFD'):
+                real = os.path.realpath(unicodedata.normalize(form, file_path))
+                if real.startswith(real_mount + os.sep) and os.path.exists(real):
+                    validated = real
+                    break
 
     if not validated:
         return jsonify({"error": "Invalid or inaccessible file path"}), 400
