@@ -259,6 +259,21 @@
                     <li>Loading media...</li>
                 </ul>
             </div>
+            <div class="container browser-mode-panel">
+                <div class="header-row">
+                    <h2>Browser Mode</h2>
+                    <span id="browser-mode-badge" class="browser-mode-badge hidden">ACTIVE</span>
+                </div>
+                <div class="browser-mode-url-row">
+                    <input type="url" id="browser-mode-url" placeholder="https://youtube.com" value="{{ config.get('browser_mode_url', 'https://youtube.com') }}">
+                </div>
+                <div class="browser-mode-controls">
+                    <button id="browser-mode-toggle" class="btn-primary" onclick="toggleBrowserMode()">Enable Browser Mode</button>
+                </div>
+                <div id="browser-mode-status" class="browser-mode-status">
+                    Mode: <strong>VLC</strong> (default)
+                </div>
+            </div>
         </div>
     </div>
 

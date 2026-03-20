@@ -19,6 +19,11 @@ from catalog import LATIN_SPECIAL_MAP
 from config import APP_DIR, load_config, save_config_value
 from utils import log_message
 
+# --- Browser mode state ---
+# Tracks whether the system is in Browser mode (Chromium) vs VLC mode (default).
+# This is module-level so it survives across requests but resets on service restart.
+_browser_mode = False
+
 routes_bp = Blueprint('routes', __name__)
 
 # --- Debounced volume persistence ---
@@ -408,6 +413,7 @@ def set_filler_music():
 @routes_bp.route('/status')
 def get_status():
     """Gets the status of the karaoke player."""
+    global _browser_mode
     vlc = current_app.vlc
     media = current_app.media
     cfg = current_app.kj_config
@@ -426,6 +432,14 @@ def get_status():
 
     dl_queue = current_app.download_queue['items']
 
+    # Browser mode status (Chromium)
+    # Auto-clear browser_mode if Chromium crashed/exited on its own
+    chromium = getattr(current_app, 'chromium', None)
+    browser_status = chromium.get_status() if chromium else {'running': False, 'pid': None, 'url': None}
+    if _browser_mode and not browser_status['running']:
+        _browser_mode = False
+    browser_status['enabled'] = _browser_mode
+
     if status:
         return jsonify({
             "state": status.get('state'),
@@ -440,6 +454,7 @@ def get_status():
             "download_queue": dl_queue,
             "karaoke_volume": vlc.karaoke_volume,
             "filler_volume": vlc.filler_volume,
+            "browser_mode": browser_status,
         })
 
     # VLC not running - return status without VLC data
@@ -455,6 +470,7 @@ def get_status():
         "download_queue": dl_queue,
         "karaoke_volume": vlc.karaoke_volume,
         "filler_volume": vlc.filler_volume,
+        "browser_mode": browser_status,
     })
 
 
@@ -1559,3 +1575,66 @@ def archive_rotation():
         return jsonify({"success": True, "archived": count, "entries": entries})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+# --- Browser Mode routes ---
+
+@routes_bp.route('/browser-mode/enable', methods=['POST'])
+def browser_mode_enable():
+    """Enable browser mode: stop VLC, switch PipeWire to HDMI, launch Chromium."""
+    global _browser_mode
+    cfg = current_app.kj_config
+    vlc = current_app.vlc
+    chromium = getattr(current_app, 'chromium', None)
+
+    if chromium is None:
+        return jsonify({"error": "Chromium manager not available"}), 503
+
+    url = (request.json or {}).get('url', '').strip() or 'https://youtube.com'
+
+    # Stop VLC playback (both karaoke and filler)
+    if vlc.enabled:
+        log_message("Browser mode: stopping VLC instances...", cfg)
+        vlc.fade_out_filler()
+        vlc.ensure_filler_stopped()
+        vlc.ensure_karaoke_released()
+        vlc.karaoke_active = False
+        vlc.current_playing_path = None
+
+    # Launch Chromium with audio routed to the same device VLC uses
+    audio_device = vlc.audio_device if vlc.enabled else cfg.get('default_audio_device', 'hdmiout')
+    success = chromium.launch(url, audio_device=audio_device)
+    if not success:
+        return jsonify({"error": "Failed to launch Chromium"}), 500
+
+    _browser_mode = True
+
+    # Persist last-used URL
+    save_config_value('browser_mode_url', url)
+
+    log_message(f"Browser mode enabled — Chromium at {url}", cfg)
+    return jsonify({"success": True, "url": url})
+
+
+@routes_bp.route('/browser-mode/disable', methods=['POST'])
+def browser_mode_disable():
+    """Disable browser mode: kill Chromium, reset PipeWire, restart VLC."""
+    global _browser_mode
+    cfg = current_app.kj_config
+    vlc = current_app.vlc
+    chromium = getattr(current_app, 'chromium', None)
+
+    if chromium is None:
+        return jsonify({"error": "Chromium manager not available"}), 503
+
+    # Kill Chromium (handles PipeWire reset internally)
+    chromium.kill()
+    _browser_mode = False
+
+    # Restart VLC instances
+    if vlc.enabled:
+        log_message("Browser mode disabled — restarting VLC instances...", cfg)
+        vlc.restart_instances()
+
+    log_message("Browser mode disabled — back to VLC.", cfg)
+    return jsonify({"success": True})

@@ -612,6 +612,9 @@ async function updateStatus() {
 
             // Track download queue progress
             await handleDownloadQueue(data.download_queue);
+
+            // Browser mode status
+            updateBrowserModeUI(data.browser_mode);
         }
     } catch (error) {
         // Don't log periodic status check errors to avoid clutter
@@ -2796,6 +2799,78 @@ async function archiveRotation() {
         showRotationIndicator('success');
     } catch (e) {
         showRotationIndicator('error');
+    }
+}
+
+// --- Browser Mode ---
+
+let browserModeActive = false;
+
+async function toggleBrowserMode() {
+    if (browserModeActive) {
+        await disableBrowserMode();
+    } else {
+        await enableBrowserMode();
+    }
+}
+
+async function enableBrowserMode() {
+    const urlInput = document.getElementById('browser-mode-url');
+    const url = urlInput.value.trim() || 'https://youtube.com';
+
+    log('Enabling browser mode...');
+    const btn = document.getElementById('browser-mode-toggle');
+    btn.disabled = true;
+    btn.textContent = 'Switching...';
+
+    const data = await apiCall('/browser-mode/enable', { url });
+    btn.disabled = false;
+    if (data && data.success) {
+        log(`Browser mode enabled — ${url}`, 'success');
+    } else {
+        btn.textContent = 'Enable Browser Mode';
+    }
+}
+
+async function disableBrowserMode() {
+    log('Disabling browser mode...');
+    const btn = document.getElementById('browser-mode-toggle');
+    btn.disabled = true;
+    btn.textContent = 'Switching...';
+
+    const data = await apiCall('/browser-mode/disable', {});
+    btn.disabled = false;
+    if (data && data.success) {
+        log('Browser mode disabled — back to VLC', 'success');
+    } else {
+        btn.textContent = 'Disable Browser Mode';
+    }
+}
+
+function updateBrowserModeUI(browserMode) {
+    if (!browserMode) return;
+    browserModeActive = browserMode.enabled;
+
+    const btn = document.getElementById('browser-mode-toggle');
+    const badge = document.getElementById('browser-mode-badge');
+    const statusEl = document.getElementById('browser-mode-status');
+    const urlInput = document.getElementById('browser-mode-url');
+
+    if (browserModeActive) {
+        btn.textContent = 'Disable Browser Mode';
+        btn.className = 'system-btn system-btn-danger';
+        btn.disabled = false;
+        badge.classList.remove('hidden');
+        urlInput.disabled = true;
+        const pid = browserMode.pid ? ` (PID ${browserMode.pid})` : '';
+        statusEl.innerHTML = `Mode: <strong>Browser</strong>${pid} — <span class="browser-mode-url-display">${escapeHtml(browserMode.url || '')}</span>`;
+    } else {
+        btn.textContent = 'Enable Browser Mode';
+        btn.className = 'btn-primary';
+        btn.disabled = false;
+        badge.classList.add('hidden');
+        urlInput.disabled = false;
+        statusEl.innerHTML = 'Mode: <strong>VLC</strong> (default)';
     }
 }
 
