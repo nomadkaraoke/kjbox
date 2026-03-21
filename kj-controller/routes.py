@@ -1313,6 +1313,7 @@ def _get_av_audio_status(vlc_device):
 @routes_bp.route('/av/status', methods=['GET'])
 def av_status():
     """Returns comprehensive AV output status: video connectors, audio devices, health."""
+    cfg = current_app.kj_config
     vlc = current_app.vlc
     video = _get_av_video_status()
     audio = _get_av_audio_status(vlc.audio_device)
@@ -1330,7 +1331,45 @@ def av_status():
         'iec958_ok': any_iec958_on,
     }
 
+    # Browser audio config
+    browser_audio = cfg.get('browser_audio_device', 'same')
+    from chromium import PW_PROFILES, ALSA_TO_PW_PROFILE, PW_PROFILE_ANALOG
+    if browser_audio == 'same':
+        # Resolve what "same as VLC" actually means in PipeWire terms
+        resolved = ALSA_TO_PW_PROFILE.get(vlc.audio_device, PW_PROFILE_ANALOG)
+    else:
+        resolved = browser_audio
+
+    audio['browser_audio'] = {
+        'setting': browser_audio,
+        'resolved_profile': resolved,
+        'available_profiles': PW_PROFILES,
+    }
+
     return jsonify({'video': video, 'audio': audio, 'health': health})
+
+
+@routes_bp.route('/av/browser-audio', methods=['POST'])
+def av_set_browser_audio():
+    """Set the browser audio output device (PipeWire profile or 'same' to follow VLC)."""
+    cfg = current_app.kj_config
+    device = (request.json or {}).get('device', '').strip()
+    if not device:
+        return jsonify({"error": "Device is required"}), 400
+
+    from chromium import PW_PROFILES
+    valid = {'same'} | set(PW_PROFILES.keys()) | set(PW_PROFILES.values())
+    if device not in valid:
+        return jsonify({"error": f"Unknown browser audio device '{device}'"}), 400
+
+    # Normalize: if a profile key like 'hdmi' was given, store the full profile string
+    if device in PW_PROFILES:
+        device = PW_PROFILES[device]
+
+    save_config_value('browser_audio_device', device)
+    cfg['browser_audio_device'] = device
+    log_message(f"Browser audio device set to '{device}'.", cfg)
+    return jsonify({"success": True, "device": device})
 
 
 @routes_bp.route('/av/reset', methods=['POST'])
@@ -1744,8 +1783,12 @@ def browser_mode_enable():
         vlc.karaoke_active = False
         vlc.current_playing_path = None
 
-    # Launch Chromium with audio routed to the same device VLC uses
-    audio_device = vlc.audio_device if vlc.enabled else cfg.get('default_audio_device', 'hdmiout')
+    # Determine browser audio device: use independent setting, or fall back to VLC's
+    browser_audio = cfg.get('browser_audio_device', 'same')
+    if browser_audio == 'same':
+        audio_device = vlc.audio_device if vlc.enabled else cfg.get('default_audio_device', 'hdmiout')
+    else:
+        audio_device = browser_audio  # Direct PipeWire profile string
     success = chromium.launch(url, audio_device=audio_device)
     if not success:
         return jsonify({"error": "Failed to launch Chromium"}), 500

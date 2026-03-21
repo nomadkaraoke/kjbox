@@ -27,6 +27,13 @@ ALSA_TO_PW_PROFILE = {
     'default': 'output:analog-stereo+input:analog-stereo',
 }
 
+# Available PipeWire profiles for the browser audio dropdown.
+# Keys are user-facing labels, values are pactl profile strings.
+PW_PROFILES = {
+    'hdmi': 'output:hdmi-stereo+input:analog-stereo',
+    'analog': 'output:analog-stereo+input:analog-stereo',
+}
+
 # Safe fallback — analog profile doesn't lock HDMI for VLC
 PW_PROFILE_ANALOG = 'output:analog-stereo+input:analog-stereo'
 
@@ -60,15 +67,21 @@ class ChromiumManager:
             return False, ''
 
     def _set_pipewire_profile(self, audio_device):
-        """Set PipeWire card profile to match the configured audio output device.
+        """Set PipeWire card profile for browser audio output.
 
         Args:
-            audio_device: The ALSA device name from KJ config (e.g. 'hdmiout').
+            audio_device: Either an ALSA device name (e.g. 'hdmiout') which is
+                         mapped to a PipeWire profile, or a direct PipeWire
+                         profile string (e.g. 'output:hdmi-stereo+input:analog-stereo').
         """
         if is_pi():
             return  # Pi doesn't use PipeWire
 
-        profile = ALSA_TO_PW_PROFILE.get(audio_device, PW_PROFILE_ANALOG)
+        # If it looks like a PipeWire profile string, use it directly
+        if audio_device and audio_device.startswith('output:'):
+            profile = audio_device
+        else:
+            profile = ALSA_TO_PW_PROFILE.get(audio_device, PW_PROFILE_ANALOG)
         ok, _ = self._pactl('set-card-profile', PW_CARD, profile)
         if ok:
             log_message(f"PipeWire profile set to '{profile}' for browser audio.", self.config)

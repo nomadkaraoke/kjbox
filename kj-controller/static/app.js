@@ -654,9 +654,11 @@ function renderAvModal(data) {
     renderAvHealthBar(data.health);
     renderAvVideoSection(data.video);
     renderAvAudioSection(data.audio);
+    renderAvBrowserAudioSection(data.audio);
     populateAvResolutionSelect(data.video);
     populateAvHdmiPcmSelect(data.audio);
     populateAvVlcDeviceSelect(data.audio);
+    populateAvBrowserAudioSelect(data.audio);
     document.getElementById('av-loading').classList.add('hidden');
     document.getElementById('av-content').classList.remove('hidden');
 }
@@ -835,6 +837,65 @@ function populateAvVlcDeviceSelect(audio) {
         if (value === audio.vlc_device) opt.selected = true;
         sel.appendChild(opt);
     });
+}
+
+function renderAvBrowserAudioSection(audio) {
+    const infoEl = document.getElementById('av-browser-audio-info');
+    const ba = audio.browser_audio || {};
+    const isSame = ba.setting === 'same';
+    const dotCls = 'av-dot-ok';
+
+    let label;
+    if (isSame) {
+        label = `Same as VLC → ${ba.resolved_profile || '(unknown)'}`;
+    } else {
+        label = ba.setting || '(unknown)';
+    }
+
+    infoEl.innerHTML = `
+        <div class="av-info-row">
+            <span class="av-info-label">Browser device</span>
+            ${avDot(dotCls)}
+            <span class="av-info-value" style="font-size:0.8em;">${escapeHtml(label)}</span>
+        </div>`;
+}
+
+function populateAvBrowserAudioSelect(audio) {
+    const sel = document.getElementById('av-browser-audio-select');
+    sel.innerHTML = '';
+    const ba = audio.browser_audio || {};
+    const currentSetting = ba.setting || 'same';
+
+    // "Same as VLC" option
+    const sameOpt = document.createElement('option');
+    sameOpt.value = 'same';
+    sameOpt.textContent = `Same as VLC (${ba.resolved_profile || 'auto'})`;
+    if (currentSetting === 'same') sameOpt.selected = true;
+    sel.appendChild(sameOpt);
+
+    // Individual PipeWire profiles
+    const profiles = ba.available_profiles || {};
+    const profileLabels = {
+        'hdmi': 'HDMI — audio via HDMI display/splitter',
+        'analog': 'Analog — 3.5mm headphone jack',
+    };
+    for (const [key, profileStr] of Object.entries(profiles)) {
+        const opt = document.createElement('option');
+        opt.value = profileStr;
+        opt.textContent = profileLabels[key] || `${key} — ${profileStr}`;
+        if (currentSetting === profileStr) opt.selected = true;
+        sel.appendChild(opt);
+    }
+}
+
+async function avSetBrowserAudio(device) {
+    if (!device) return;
+    log(`Setting browser audio to ${device === 'same' ? 'Same as VLC' : device}...`);
+    const data = await apiCall('/av/browser-audio', { device });
+    if (data && data.success) {
+        log(`Browser audio set to ${data.device}`, 'success');
+        setTimeout(avRefresh, 500);
+    }
 }
 
 async function avSetResolution(resolution) {
