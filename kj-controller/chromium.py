@@ -55,7 +55,7 @@ class ChromiumManager:
         """Check if any Chromium process is running with our data dir (not managed by us)."""
         try:
             result = subprocess.run(
-                ['pgrep', '-f', f'--user-data-dir={CHROMIUM_DATA_DIR}'],
+                ['pgrep', '-f', '--', f'--user-data-dir={CHROMIUM_DATA_DIR}'],
                 capture_output=True, text=True, timeout=5,
             )
             return result.returncode == 0
@@ -221,7 +221,7 @@ class ChromiumManager:
         """Kill any Chromium processes using our user-data-dir."""
         try:
             result = subprocess.run(
-                ['pkill', '-f', f'--user-data-dir={CHROMIUM_DATA_DIR}'],
+                ['pkill', '-f', '--', f'--user-data-dir={CHROMIUM_DATA_DIR}'],
                 capture_output=True,
                 timeout=5,
             )
