@@ -304,7 +304,55 @@ def test_launch_resets_pipewire_on_popen_failure(mgr, mocker):
     mock_reset.assert_called_once()
 
 
-# --- Orphan cleanup ---
+# --- Orphan detection and cleanup ---
+
+def test_has_orphan_true_when_pgrep_finds_match(mgr, mocker):
+    """has_orphan() returns True when pgrep finds Chromium with our data dir."""
+    mocker.patch('chromium.subprocess.run', return_value=MagicMock(returncode=0))
+    assert mgr.has_orphan() is True
+
+
+def test_has_orphan_false_when_no_match(mgr, mocker):
+    """has_orphan() returns False when pgrep finds no matching processes."""
+    mocker.patch('chromium.subprocess.run', return_value=MagicMock(returncode=1))
+    assert mgr.has_orphan() is False
+
+
+def test_has_orphan_false_on_pgrep_missing(mgr, mocker):
+    """has_orphan() returns False when pgrep is not installed."""
+    mocker.patch('chromium.subprocess.run', side_effect=FileNotFoundError)
+    assert mgr.has_orphan() is False
+
+
+def test_is_running_detects_orphan_without_managed_process(mgr, mocker):
+    """is_running() returns True when no managed process but orphan exists."""
+    assert mgr.process is None
+    mocker.patch.object(mgr, 'has_orphan', return_value=True)
+    assert mgr.is_running() is True
+
+
+def test_is_running_prefers_managed_process(mgr, mocker):
+    """is_running() returns True from managed process without checking orphans."""
+    mock_proc = MagicMock()
+    mock_proc.poll.return_value = None  # Running
+    mgr.process = mock_proc
+    # has_orphan should not be called when managed process is running
+    mock_orphan = mocker.patch.object(mgr, 'has_orphan')
+    assert mgr.is_running() is True
+    mock_orphan.assert_not_called()
+
+
+def test_kill_resets_pipewire_for_orphans(mgr, mocker):
+    """kill() resets PipeWire when orphan Chromium exists (no managed process)."""
+    assert mgr.process is None
+    mocker.patch.object(mgr, 'has_orphan', return_value=True)
+    mocker.patch('chromium.subprocess.run')  # pkill
+    mock_reset = mocker.patch.object(mgr, '_reset_pipewire')
+
+    mgr.kill()
+
+    mock_reset.assert_called_once()
+
 
 def test_kill_orphans_handles_pkill_not_found(mgr, mocker):
     """_kill_orphans doesn't raise when pkill is missing."""
