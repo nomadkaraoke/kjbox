@@ -2426,10 +2426,12 @@ function renderDBResults(songs) {
                 brandSpan.textContent = track.brand || 'Unknown';
                 info.appendChild(brandSpan);
 
-                // Format badge
+                // Format + quality badge (e.g. "MP4 720p", "MP4 HD", "ZIP CDG")
                 const fmtBadge = document.createElement('span');
                 fmtBadge.className = 'format-badge db-format-badge';
-                fmtBadge.textContent = (track.format || 'unknown').toUpperCase();
+                const fmt = (track.format || 'unknown').toUpperCase();
+                const quality = track.quality || '';
+                fmtBadge.textContent = quality ? `${fmt} ${quality}` : fmt;
                 info.appendChild(fmtBadge);
 
                 // File size
@@ -2440,10 +2442,17 @@ function renderDBResults(songs) {
                     info.appendChild(sizeSpan);
                 }
 
-                // Divebar community badge
+                // Source badge (GCS = fast mirror, or Divebar = Google Drive)
                 const badge = document.createElement('span');
                 badge.className = 'kn-community-badge db-badge';
-                badge.textContent = 'Divebar';
+                if (track.in_gcs) {
+                    badge.textContent = 'GCS';
+                    badge.title = 'Download from GCS mirror (fast)';
+                    badge.classList.add('db-gcs-badge');
+                } else {
+                    badge.textContent = 'Drive';
+                    badge.title = 'Download from Google Drive';
+                }
                 info.appendChild(badge);
 
                 const actions = document.createElement('span');

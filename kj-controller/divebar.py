@@ -152,6 +152,9 @@ def _group_results(results):
             "format": r.get("format", "unknown"),
             "file_size": r.get("file_size"),
             "drive_path": r.get("drive_path"),
+            "subfolder": r.get("subfolder", ""),
+            "quality": r.get("quality", ""),
+            "in_gcs": r.get("in_gcs", False),
         })
 
     return list(songs.values())
