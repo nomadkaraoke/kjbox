@@ -202,6 +202,16 @@ def handle_play():
             return jsonify({"error": "ZIP file does not contain a playable .mp3 file"}), 400
         actual_play_path = mp3_path
 
+    # Auto-disable browser mode before playing — kill Chromium and reset PipeWire
+    # so VLC has exclusive access to the audio device and display
+    global _browser_mode
+    if _browser_mode:
+        chromium = getattr(current_app, 'chromium', None)
+        if chromium:
+            chromium.kill()
+        _browser_mode = False
+        log_message("Browser mode auto-disabled for VLC playback.", cfg)
+
     log_message(f"Received play request for {os.path.basename(validated)}.", cfg)
     threading.Thread(target=vlc.play_video, args=(actual_play_path,),
                      kwargs={'display_path': validated,
