@@ -63,6 +63,16 @@ class TestGetStatus:
         assert 'state' not in status
 
 
+    def test_status_with_corrupt_state_file(self, sleep_mgr, tmp_path):
+        flag = tmp_path / 'kj-sleep-mode'
+        flag.touch()
+        state = tmp_path / 'kj-sleep-state.json'
+        state.write_text('not valid json{{{')
+        status = sleep_mgr.get_status()
+        assert status['active'] is True
+        assert 'state' not in status  # corrupt file is silently ignored
+
+
 class TestEnterSleep:
     def test_already_sleeping_returns_early(self, sleep_mgr, tmp_path, cfg):
         (tmp_path / 'kj-sleep-mode').touch()
@@ -116,6 +126,43 @@ class TestEnterSleep:
         assert len(result['errors']) > 0
         assert 'script failed' in result['errors'][0]
 
+    @patch('sleep_mode.subprocess.run')
+    def test_enter_sleep_vlc_process_termination(self, mock_run, sleep_mgr, tmp_path, cfg):
+        """Test that VLC processes are terminated during sleep entry."""
+        def side_effect(*args, **kwargs):
+            if args[0][0].endswith('sleep-enter.sh'):
+                (tmp_path / 'kj-sleep-mode').touch()
+            return MagicMock(returncode=0, stdout='ok', stderr='')
+        mock_run.side_effect = side_effect
+
+        vlc = MagicMock()
+        vlc.enabled = True
+        # Simulate running VLC processes
+        mock_proc = MagicMock()
+        mock_proc.poll.return_value = None  # process is running
+        vlc.processes = {'karaoke': mock_proc, 'filler': mock_proc}
+        sleep_mgr.enter_sleep(cfg, vlc=vlc)
+
+        mock_proc.terminate.assert_called()
+
+    @patch('sleep_mode.subprocess.run')
+    def test_enter_sleep_vlc_error_captured(self, mock_run, sleep_mgr, tmp_path, cfg):
+        """VLC errors don't prevent sleep, but are reported."""
+        def side_effect(*args, **kwargs):
+            if args[0][0].endswith('sleep-enter.sh'):
+                (tmp_path / 'kj-sleep-mode').touch()
+            return MagicMock(returncode=0, stdout='ok', stderr='')
+        mock_run.side_effect = side_effect
+
+        vlc = MagicMock()
+        vlc.enabled = True
+        vlc.processes = {}
+        vlc.fade_out_filler.side_effect = RuntimeError("VLC not responding")
+        result = sleep_mgr.enter_sleep(cfg, vlc=vlc)
+
+        assert result['active'] is True  # sleep still entered
+        assert any('VLC stop' in e for e in result['errors'])
+
 
 class TestExitSleep:
     def test_not_sleeping_returns_early(self, sleep_mgr, cfg):
@@ -156,3 +203,29 @@ class TestExitSleep:
         sleep_mgr.exit_sleep(cfg, vlc=vlc)
 
         vlc.restart_instances.assert_called_once()
+
+    @patch('sleep_mode.subprocess.run')
+    def test_exit_sleep_script_failure_reports_error(self, mock_run, sleep_mgr, tmp_path, cfg):
+        (tmp_path / 'kj-sleep-mode').touch()
+        mock_run.return_value = MagicMock(returncode=1, stdout='', stderr='exit failed')
+
+        result = sleep_mgr.exit_sleep(cfg)
+        assert any('exit failed' in e for e in result['errors'])
+
+    @patch('sleep_mode.subprocess.run')
+    def test_exit_sleep_vlc_restart_error_captured(self, mock_run, sleep_mgr, tmp_path, cfg):
+        (tmp_path / 'kj-sleep-mode').touch()
+
+        def side_effect(*args, **kwargs):
+            if args[0][0].endswith('sleep-exit.sh'):
+                (tmp_path / 'kj-sleep-mode').unlink(missing_ok=True)
+            return MagicMock(returncode=0, stdout='ok', stderr='')
+        mock_run.side_effect = side_effect
+
+        vlc = MagicMock()
+        vlc.enabled = True
+        vlc.restart_instances.side_effect = RuntimeError("VLC failed")
+        result = sleep_mgr.exit_sleep(cfg, vlc=vlc)
+
+        assert result['active'] is False  # wake still completed
+        assert any('VLC restart' in e for e in result['errors'])
