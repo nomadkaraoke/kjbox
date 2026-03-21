@@ -1,0 +1,524 @@
+"""Unit tests for RotationStore — SQLite-backed rotation storage."""
+
+import sqlite3
+
+import pytest
+
+from rotation_store import RotationStore
+
+
+# ---------------------------------------------------------------------------
+# Fixtures
+# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def store():
+    """In-memory RotationStore for each test."""
+    s = RotationStore(":memory:")
+    yield s
+    s.close()
+
+
+# ---------------------------------------------------------------------------
+# Task 1: Schema and Connection
+# ---------------------------------------------------------------------------
+
+class TestSchemaInit:
+    def test_tables_created(self, store):
+        conn = store._get_conn()
+        tables = {row[0] for row in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'"
+        ).fetchall()}
+        assert "rotation_entries" in tables
+        assert "rotation_meta" in tables
+        assert "rotation_archive" in tables
+
+    def test_rotation_entries_columns(self, store):
+        conn = store._get_conn()
+        cols = {row[1] for row in conn.execute(
+            "PRAGMA table_info(rotation_entries)"
+        ).fetchall()}
+        expected = {
+            "id", "singer", "song_artist", "status", "notes",
+            "position", "file_path", "duration", "created_at", "updated_at",
+        }
+        assert expected <= cols
+
+    def test_rotation_meta_columns(self, store):
+        conn = store._get_conn()
+        cols = {row[1] for row in conn.execute(
+            "PRAGMA table_info(rotation_meta)"
+        ).fetchall()}
+        assert {"key", "value"} <= cols
+
+    def test_rotation_archive_columns(self, store):
+        conn = store._get_conn()
+        cols = {row[1] for row in conn.execute(
+            "PRAGMA table_info(rotation_archive)"
+        ).fetchall()}
+        expected = {
+            "id", "night_date", "singer", "song_artist", "status", "notes",
+            "position", "file_path", "duration", "created_at",
+        }
+        assert expected <= cols
+
+    def test_indexes_created(self, store):
+        conn = store._get_conn()
+        indexes = {row[1] for row in conn.execute(
+            "SELECT type, name FROM sqlite_master WHERE type='index'"
+        ).fetchall()}
+        assert "idx_rotation_position" in indexes
+        assert "idx_rotation_status" in indexes
+        assert "idx_rotation_archive_night" in indexes
+
+    def test_wal_mode(self, tmp_path):
+        """WAL mode is set for on-disk databases (in-memory always returns 'memory')."""
+        db_path = str(tmp_path / "rotation.db")
+        s = RotationStore(db_path)
+        mode = s._get_conn().execute("PRAGMA journal_mode").fetchone()[0]
+        s.close()
+        assert mode == "wal"
+
+    def test_schema_idempotent(self, store):
+        """Calling init_schema again should not raise."""
+        store.init_schema()
+        store.init_schema()
+
+    def test_second_instance_same_db(self, tmp_path):
+        """Two RotationStore instances on the same file both see schema."""
+        db_path = str(tmp_path / "rotation.db")
+        s1 = RotationStore(db_path)
+        s2 = RotationStore(db_path)
+        conn = s2._get_conn()
+        tables = {row[0] for row in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'"
+        ).fetchall()}
+        assert "rotation_entries" in tables
+        s1.close()
+        s2.close()
+
+
+# ---------------------------------------------------------------------------
+# Task 2: Add and Get Entries
+# ---------------------------------------------------------------------------
+
+class TestAddAndGetEntries:
+    def test_add_returns_dict(self, store):
+        entry = store.add_entry("Alice")
+        assert isinstance(entry, dict)
+
+    def test_add_has_id(self, store):
+        entry = store.add_entry("Alice")
+        assert "id" in entry
+        assert entry["id"] is not None
+
+    def test_add_sets_singer(self, store):
+        entry = store.add_entry("Bob")
+        assert entry["singer"] == "Bob"
+
+    def test_add_sets_song_artist(self, store):
+        entry = store.add_entry("Bob", song_artist="The Beatles")
+        assert entry["song_artist"] == "The Beatles"
+
+    def test_add_sets_notes(self, store):
+        entry = store.add_entry("Carol", notes="birthday!")
+        assert entry["notes"] == "birthday!"
+
+    def test_position_starts_at_1(self, store):
+        entry = store.add_entry("Alice")
+        assert entry["position"] == 1
+
+    def test_position_increments(self, store):
+        e1 = store.add_entry("Alice")
+        e2 = store.add_entry("Bob")
+        e3 = store.add_entry("Carol")
+        assert e1["position"] == 1
+        assert e2["position"] == 2
+        assert e3["position"] == 3
+
+    def test_get_entries_ordered_by_position(self, store):
+        store.add_entry("Alice")
+        store.add_entry("Bob")
+        store.add_entry("Carol")
+        entries = store.get_entries()
+        assert [e["singer"] for e in entries] == ["Alice", "Bob", "Carol"]
+
+    def test_get_entries_excludes_done_by_default(self, store):
+        store.add_entry("Alice")
+        done = store.add_entry("Bob")
+        store.update_status(done["id"], "Done")
+        entries = store.get_entries()
+        singers = [e["singer"] for e in entries]
+        assert "Alice" in singers
+        assert "Bob" not in singers
+
+    def test_get_entries_include_done(self, store):
+        store.add_entry("Alice")
+        done = store.add_entry("Bob")
+        store.update_status(done["id"], "Done")
+        entries = store.get_entries(include_done=True)
+        singers = [e["singer"] for e in entries]
+        assert "Alice" in singers
+        assert "Bob" in singers
+
+    def test_get_entry_by_id(self, store):
+        added = store.add_entry("Dave")
+        fetched = store.get_entry(added["id"])
+        assert fetched is not None
+        assert fetched["singer"] == "Dave"
+        assert fetched["id"] == added["id"]
+
+    def test_get_entry_missing_returns_none(self, store):
+        assert store.get_entry(9999) is None
+
+    def test_empty_rotation(self, store):
+        assert store.get_entries() == []
+
+    def test_default_status_is_waiting(self, store):
+        entry = store.add_entry("Eve")
+        assert entry["status"].lower() in ("waiting", "")
+
+    def test_done_case_insensitive(self, store):
+        e = store.add_entry("Frank")
+        store.update_status(e["id"], "DONE")
+        entries = store.get_entries()
+        assert all(en["singer"] != "Frank" for en in entries)
+
+
+# ---------------------------------------------------------------------------
+# Task 3: Update, Delete, Exclusive Statuses
+# ---------------------------------------------------------------------------
+
+class TestUpdateEntry:
+    def test_update_singer(self, store):
+        e = store.add_entry("Alice")
+        store.update_entry(e["id"], singer="Alicia")
+        fetched = store.get_entry(e["id"])
+        assert fetched["singer"] == "Alicia"
+
+    def test_update_song_artist(self, store):
+        e = store.add_entry("Alice", song_artist="Adele")
+        store.update_entry(e["id"], song_artist="Beyoncé")
+        fetched = store.get_entry(e["id"])
+        assert fetched["song_artist"] == "Beyoncé"
+
+    def test_update_partial(self, store):
+        """Updating one field does not clobber the other."""
+        e = store.add_entry("Alice", song_artist="Adele")
+        store.update_entry(e["id"], singer="Alicia")
+        fetched = store.get_entry(e["id"])
+        assert fetched["song_artist"] == "Adele"
+
+    def test_update_not_found_raises(self, store):
+        with pytest.raises(ValueError):
+            store.update_entry(9999, singer="Ghost")
+
+    def test_update_returns_updated_dict(self, store):
+        e = store.add_entry("Alice")
+        result = store.update_entry(e["id"], singer="Alicia")
+        assert isinstance(result, dict)
+        assert result["singer"] == "Alicia"
+
+
+class TestDeleteEntry:
+    def test_delete_removes_entry(self, store):
+        e = store.add_entry("Alice")
+        store.delete_entry(e["id"])
+        assert store.get_entry(e["id"]) is None
+
+    def test_delete_recompacts_positions(self, store):
+        e1 = store.add_entry("Alice")
+        e2 = store.add_entry("Bob")
+        e3 = store.add_entry("Carol")
+        store.delete_entry(e2["id"])
+        entries = store.get_entries()
+        positions = [en["position"] for en in entries]
+        assert positions == [1, 2]
+
+    def test_delete_not_found_raises(self, store):
+        with pytest.raises(ValueError):
+            store.delete_entry(9999)
+
+    def test_delete_first_recompacts(self, store):
+        e1 = store.add_entry("Alice")
+        store.add_entry("Bob")
+        store.add_entry("Carol")
+        store.delete_entry(e1["id"])
+        entries = store.get_entries()
+        positions = [en["position"] for en in entries]
+        assert positions == [1, 2]
+
+    def test_delete_last_no_shift_needed(self, store):
+        store.add_entry("Alice")
+        store.add_entry("Bob")
+        e3 = store.add_entry("Carol")
+        store.delete_entry(e3["id"])
+        entries = store.get_entries()
+        assert len(entries) == 2
+        assert [e["position"] for e in entries] == [1, 2]
+
+
+class TestUpdateStatus:
+    def test_set_waiting(self, store):
+        e = store.add_entry("Alice")
+        store.update_status(e["id"], "Waiting")
+        assert store.get_entry(e["id"])["status"] == "Waiting"
+
+    def test_set_done(self, store):
+        e = store.add_entry("Alice")
+        store.update_status(e["id"], "Done")
+        assert store.get_entry(e["id"])["status"] == "Done"
+
+    def test_now_singing_clears_others(self, store):
+        e1 = store.add_entry("Alice")
+        e2 = store.add_entry("Bob")
+        e3 = store.add_entry("Carol")
+        store.update_status(e1["id"], "Now Singing")
+        store.update_status(e2["id"], "Now Singing")
+        # e1 should now be back to Waiting
+        assert store.get_entry(e1["id"])["status"] == "Waiting"
+        assert store.get_entry(e2["id"])["status"] == "Now Singing"
+
+    def test_now_singing_clears_singing_variants(self, store):
+        e1 = store.add_entry("Alice")
+        e2 = store.add_entry("Bob")
+        store.update_status(e1["id"], "singing now")
+        store.update_status(e2["id"], "Now Singing")
+        assert store.get_entry(e1["id"])["status"] == "Waiting"
+
+    def test_up_next_clears_others(self, store):
+        e1 = store.add_entry("Alice")
+        e2 = store.add_entry("Bob")
+        store.update_status(e1["id"], "Up Next")
+        store.update_status(e2["id"], "Up Next")
+        assert store.get_entry(e1["id"])["status"] == "Waiting"
+        assert store.get_entry(e2["id"])["status"] == "Up Next"
+
+    def test_up_next_clears_next_variant(self, store):
+        e1 = store.add_entry("Alice")
+        e2 = store.add_entry("Bob")
+        store.update_status(e1["id"], "next")
+        store.update_status(e2["id"], "Up Next")
+        assert store.get_entry(e1["id"])["status"] == "Waiting"
+
+    def test_status_not_found_raises(self, store):
+        with pytest.raises(ValueError):
+            store.update_status(9999, "Waiting")
+
+    def test_now_singing_does_not_clear_up_next(self, store):
+        e1 = store.add_entry("Alice")
+        e2 = store.add_entry("Bob")
+        store.update_status(e1["id"], "Up Next")
+        store.update_status(e2["id"], "Now Singing")
+        # Up Next on e1 should still be intact
+        assert store.get_entry(e1["id"])["status"] == "Up Next"
+
+
+# ---------------------------------------------------------------------------
+# Task 4: Move, Stats, File Linking
+# ---------------------------------------------------------------------------
+
+class TestMoveEntry:
+    def test_move_down(self, store):
+        e1 = store.add_entry("Alice")   # pos 1
+        e2 = store.add_entry("Bob")     # pos 2
+        e3 = store.add_entry("Carol")   # pos 3
+        store.move_entry(e1["id"], 3)
+        entries = store.get_entries(include_done=True)
+        order = [e["singer"] for e in entries]
+        assert order == ["Bob", "Carol", "Alice"]
+
+    def test_move_up(self, store):
+        e1 = store.add_entry("Alice")   # pos 1
+        e2 = store.add_entry("Bob")     # pos 2
+        e3 = store.add_entry("Carol")   # pos 3
+        store.move_entry(e3["id"], 1)
+        entries = store.get_entries(include_done=True)
+        order = [e["singer"] for e in entries]
+        assert order == ["Carol", "Alice", "Bob"]
+
+    def test_move_same_position_noop(self, store):
+        e1 = store.add_entry("Alice")
+        store.add_entry("Bob")
+        store.move_entry(e1["id"], 1)
+        entries = store.get_entries()
+        assert entries[0]["singer"] == "Alice"
+
+    def test_move_nonexistent_raises(self, store):
+        with pytest.raises(ValueError):
+            store.move_entry(9999, 1)
+
+    def test_move_preserves_all_positions_contiguous(self, store):
+        for name in ["Alice", "Bob", "Carol", "Dave"]:
+            store.add_entry(name)
+        entries = store.get_entries()
+        e2 = next(e for e in entries if e["singer"] == "Bob")
+        store.move_entry(e2["id"], 4)
+        entries = store.get_entries()
+        positions = sorted(e["position"] for e in entries)
+        assert positions == [1, 2, 3, 4]
+
+
+class TestGetStats:
+    def test_empty_stats(self, store):
+        stats = store.get_stats()
+        assert stats["singers"] == 0
+        assert stats["sung"] == 0
+        assert stats["queued"] == 0
+
+    def test_stats_with_entries(self, store):
+        store.add_entry("Alice")
+        store.add_entry("Alice")   # same singer, still 1 distinct
+        e3 = store.add_entry("Bob")
+        store.update_status(e3["id"], "Done")
+        stats = store.get_stats()
+        assert stats["singers"] == 2
+        assert stats["sung"] == 1
+        assert stats["queued"] == 2   # Alice×2 (not done)
+
+    def test_stats_started_none_by_default(self, store):
+        stats = store.get_stats()
+        assert stats["started"] is None
+
+    def test_stats_started_after_archive(self, store):
+        store.archive()
+        stats = store.get_stats()
+        assert stats["started"] is not None
+
+
+class TestFileLink:
+    def test_link_file(self, store):
+        e = store.add_entry("Alice")
+        store.link_file(e["id"], "/path/to/file.cdg")
+        fetched = store.get_entry(e["id"])
+        assert fetched["file_path"] == "/path/to/file.cdg"
+
+    def test_link_file_with_duration(self, store):
+        e = store.add_entry("Alice")
+        store.link_file(e["id"], "/path/to/file.cdg", duration=210)
+        fetched = store.get_entry(e["id"])
+        assert fetched["duration"] == 210
+
+    def test_link_file_without_duration(self, store):
+        e = store.add_entry("Alice")
+        store.link_file(e["id"], "/path/to/file.cdg")
+        fetched = store.get_entry(e["id"])
+        assert fetched["duration"] is None
+
+    def test_link_file_nonexistent_raises(self, store):
+        with pytest.raises(ValueError):
+            store.link_file(9999, "/path/to/file.cdg")
+
+    def test_unlink_file(self, store):
+        e = store.add_entry("Alice")
+        store.link_file(e["id"], "/path/to/file.cdg", duration=210)
+        store.unlink_file(e["id"])
+        fetched = store.get_entry(e["id"])
+        assert fetched["file_path"] is None
+        assert fetched["duration"] is None
+
+    def test_unlink_file_nonexistent_raises(self, store):
+        with pytest.raises(ValueError):
+            store.unlink_file(9999)
+
+
+# ---------------------------------------------------------------------------
+# Task 5: Archive and get_all_entries
+# ---------------------------------------------------------------------------
+
+class TestArchive:
+    def test_archive_moves_to_archive_table(self, store):
+        store.add_entry("Alice")
+        store.add_entry("Bob")
+        count = store.archive()
+        assert count == 2
+        conn = store._get_conn()
+        archived = conn.execute("SELECT COUNT(*) FROM rotation_archive").fetchone()[0]
+        assert archived == 2
+
+    def test_archive_clears_rotation_entries(self, store):
+        store.add_entry("Alice")
+        store.add_entry("Bob")
+        store.archive()
+        entries = store.get_all_entries()
+        # Only starter entry remains
+        assert len(entries) == 1
+
+    def test_archive_creates_starter_entry(self, store):
+        store.add_entry("Alice")
+        store.archive(starter_singer="KJ", starter_song="Welcome Song")
+        entries = store.get_all_entries()
+        assert len(entries) == 1
+        assert entries[0]["singer"] == "KJ"
+        assert entries[0]["song_artist"] == "Welcome Song"
+
+    def test_archive_default_starter(self, store):
+        store.add_entry("Alice")
+        store.archive()
+        entries = store.get_all_entries()
+        assert entries[0]["singer"] == "Andrew"
+        assert entries[0]["song_artist"] == "First Song of the Night"
+
+    def test_archive_empty_rotation(self, store):
+        count = store.archive()
+        assert count == 0
+        entries = store.get_all_entries()
+        # Starter entry still created
+        assert len(entries) == 1
+
+    def test_archive_sets_night_started_at(self, store):
+        store.add_entry("Alice")
+        store.archive()
+        stats = store.get_stats()
+        assert stats["started"] is not None
+
+    def test_archive_includes_done_entries(self, store):
+        e1 = store.add_entry("Alice")
+        store.update_status(e1["id"], "Done")
+        store.add_entry("Bob")
+        count = store.archive()
+        assert count == 2
+
+    def test_archive_night_date_set(self, store):
+        store.add_entry("Alice")
+        store.archive()
+        conn = store._get_conn()
+        row = conn.execute(
+            "SELECT night_date FROM rotation_archive LIMIT 1"
+        ).fetchone()
+        assert row is not None
+        assert row[0] is not None
+
+    def test_archive_multiple_nights(self, store):
+        store.add_entry("Alice")
+        store.archive()
+        # After first archive: rotation has [Andrew starter]
+        store.add_entry("Bob")
+        # Rotation now has [Andrew starter, Bob]
+        count = store.archive()
+        assert count == 2   # Andrew starter + Bob both archived
+        conn = store._get_conn()
+        total = conn.execute("SELECT COUNT(*) FROM rotation_archive").fetchone()[0]
+        # Alice from night 1, Andrew starter from night 1, Andrew starter + Bob from night 2
+        assert total >= 3
+
+
+class TestGetAllEntries:
+    def test_get_all_includes_done(self, store):
+        store.add_entry("Alice")
+        e2 = store.add_entry("Bob")
+        store.update_status(e2["id"], "Done")
+        all_entries = store.get_all_entries()
+        singers = [e["singer"] for e in all_entries]
+        assert "Alice" in singers
+        assert "Bob" in singers
+
+    def test_get_all_ordered_by_position(self, store):
+        store.add_entry("Alice")
+        store.add_entry("Bob")
+        store.add_entry("Carol")
+        entries = store.get_all_entries()
+        assert [e["singer"] for e in entries] == ["Alice", "Bob", "Carol"]
+
+    def test_get_all_empty(self, store):
+        assert store.get_all_entries() == []
