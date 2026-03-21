@@ -1576,3 +1576,63 @@ body {
     border-left: 3px solid #a78bfa !important;
     cursor: text;
 }
+
+/* Rotation sync indicator */
+.rotation-sync-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-right: 8px;
+    background: #555;
+}
+.rotation-sync-dot.sync-online { background: #2d8a4e; }
+.rotation-sync-dot.sync-offline { background: #d4720a; }
+.rotation-sync-dot.sync-disabled { background: #555; }
+
+/* Duration badge */
+.rotation-duration {
+    font-size: 0.75em;
+    color: #8892a4;
+    margin-left: 8px;
+    font-variant-numeric: tabular-nums;
+}
+
+/* Time estimate */
+.rotation-estimate {
+    font-size: 0.75em;
+    color: #8892a4;
+    margin-left: auto;
+    padding-left: 8px;
+    white-space: nowrap;
+}
+
+/* Link/Play buttons */
+.rotation-btn-play {
+    background: #2d8a4e;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 2px 6px;
+    cursor: pointer;
+}
+.rotation-btn-link {
+    background: transparent;
+    color: #8892a4;
+    border: 1px solid #555;
+    border-radius: 4px;
+    padding: 2px 6px;
+    cursor: pointer;
+}
+.rotation-btn-link:hover { border-color: #8892a4; }
+
+/* Restore button */
+.rotation-restore-btn {
+    font-size: 0.75em;
+    background: transparent;
+    color: #8892a4;
+    border: 1px solid #555;
+    border-radius: 4px;
+    padding: 2px 8px;
+    cursor: pointer;
+}

@@ -2446,6 +2446,23 @@ function renderRotation(entries) {
         info.appendChild(name);
         if (entry.song_artist) info.appendChild(song);
 
+        if (entry.duration) {
+            const dur = document.createElement('span');
+            dur.className = 'rotation-duration';
+            const mins = Math.floor(entry.duration / 60);
+            const secs = entry.duration % 60;
+            dur.textContent = mins + ':' + String(secs).padStart(2, '0');
+            info.appendChild(dur);
+        }
+
+        if (entry.estimated_time) {
+            const est = document.createElement('span');
+            est.className = 'rotation-estimate';
+            est.textContent = '~' + entry.estimated_time;
+            est.title = 'Estimated sing time';
+            info.appendChild(est);
+        }
+
         const badge = document.createElement('span');
         badge.className = 'rotation-badge';
         if (statusLower.includes('singing') || statusLower === 'now singing') {
@@ -2471,6 +2488,22 @@ function renderRotation(entries) {
 
         const actions = document.createElement('div');
         actions.className = 'rotation-actions';
+
+        if (entry.file_path) {
+            const playBtn = document.createElement('button');
+            playBtn.className = 'rotation-btn rotation-btn-play';
+            playBtn.textContent = '\u25B6';  // ▶
+            playBtn.title = 'Play this song';
+            playBtn.onclick = () => playMedia(entry.file_path);
+            actions.appendChild(playBtn);
+        } else {
+            const linkBtn = document.createElement('button');
+            linkBtn.className = 'rotation-btn rotation-btn-link';
+            linkBtn.textContent = '\uD83D\uDD17';  // 🔗
+            linkBtn.title = 'Link a song file';
+            linkBtn.onclick = () => openLinkSearch(entry.id);
+            actions.appendChild(linkBtn);
+        }
 
         if (!statusLower.includes('singing') && statusLower !== 'now singing') {
             const singBtn = document.createElement('button');
@@ -2733,6 +2766,67 @@ async function moveRotationEntry(entryId, newPosition) {
     } catch (e) {
         showRotationIndicator('error');
     }
+}
+
+async function fetchSyncStatus() {
+    try {
+        const resp = await fetch('/rotation/sync-status');
+        if (!resp.ok) return;
+        const data = await resp.json();
+        const dot = document.getElementById('rotation-sync-dot');
+        if (!dot) return;
+        dot.className = 'rotation-sync-dot';
+        if (data.is_online) {
+            dot.classList.add('sync-online');
+            dot.title = 'Synced: ' + (data.last_sync || 'unknown');
+        } else if (data.next_sync_in) {
+            dot.classList.add('sync-offline');
+            dot.title = 'Offline — sync will resume when connected';
+        } else {
+            dot.classList.add('sync-disabled');
+            dot.title = 'Sheet sync not configured';
+        }
+    } catch (e) { /* ignore */ }
+}
+setInterval(fetchSyncStatus, 30000);
+
+async function restoreFromSheet() {
+    if (!confirm('Restore rotation from Google Sheet backup?\n\nThis will replace the current rotation with the last synced state.')) return;
+    showRotationIndicator('spin');
+    try {
+        const resp = await fetch('/rotation/restore', { method: 'POST', headers: {'Content-Type': 'application/json'} });
+        const data = await resp.json();
+        if (!resp.ok) { showRotationIndicator('error'); alert('Restore failed: ' + (data.error || 'Unknown')); return; }
+        if (data.entries) { rotationData = data.entries; renderRotation(rotationData); }
+        showRotationIndicator('success');
+    } catch (e) { showRotationIndicator('error'); }
+}
+
+async function openLinkSearch(entryId) {
+    const query = prompt('Search for song to link:');
+    if (!query) return;
+    try {
+        const resp = await fetch('/search?q=' + encodeURIComponent(query));
+        if (!resp.ok) return;
+        const data = await resp.json();
+        if (!data.results || !data.results.length) { alert('No results found'); return; }
+        const choices = data.results.slice(0, 5);
+        const msg = choices.map((r, i) => `${i+1}. ${r.artist} - ${r.title} (${r.format})`).join('\n');
+        const choice = prompt('Select a result (1-' + choices.length + '):\n\n' + msg);
+        if (!choice) return;
+        const idx = parseInt(choice, 10) - 1;
+        if (idx < 0 || idx >= choices.length) return;
+        const selected = choices[idx];
+        showRotationIndicator('spin');
+        const linkResp = await fetch('/rotation/link', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ id: entryId, file_path: selected.path }),
+        });
+        const linkData = await linkResp.json();
+        if (linkData.entries) { rotationData = linkData.entries; renderRotation(rotationData); }
+        showRotationIndicator(linkResp.ok ? 'success' : 'error');
+    } catch (e) { showRotationIndicator('error'); }
 }
 
 function toggleRotationAddForm() {
