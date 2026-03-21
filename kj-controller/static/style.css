@@ -810,6 +810,30 @@ body {
 }
 .yt-download-btn:hover { background: #333; color: #fff; box-shadow: none; }
 
+/* --- Divebar Search --- */
+
+.db-search-section { }
+.db-search-row { display: flex; gap: 6px; margin-bottom: 8px; }
+.db-search-row input { flex: 1; }
+.db-song-header { border-left: 3px solid #a855f7; }  /* Purple accent for Divebar */
+.db-track { }
+.db-format-badge {
+    font-size: 0.65em; padding: 1px 5px; border-radius: 3px;
+    background-color: rgba(168, 85, 247, 0.2); color: #a855f7;
+    font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; flex-shrink: 0;
+}
+.db-badge {
+    background-color: rgba(168, 85, 247, 0.2) !important; color: #a855f7 !important;
+}
+.db-file-size {
+    font-size: 0.7em; color: #666; flex-shrink: 0;
+}
+.db-download-btn {
+    background: rgba(168, 85, 247, 0.15); border-color: rgba(168, 85, 247, 0.4);
+    color: #c084fc;
+}
+.db-download-btn:hover { background: rgba(168, 85, 247, 0.3); color: #e9d5ff; }
+
 /* --- Responsive --- */
 
 @media (max-width: 1024px) {
@@ -831,11 +855,12 @@ body {
     .playback-controls { order: 1; }
     .available-songs   { order: 2; }
     .kn-search-section { order: 3; }
-    .yt-search-section { order: 4; }
-    .download-section  { order: 5; }
-    .overlay-panel     { order: 6; }
-    #vnc-preview-container { order: 7; }
-    .system-controls   { order: 8; }
+    .db-search-section { order: 4; }
+    .yt-search-section { order: 5; }
+    .download-section  { order: 6; }
+    .overlay-panel     { order: 7; }
+    #vnc-preview-container { order: 8; }
+    .system-controls   { order: 9; }
 
     #media-list { max-height: 50vh; }
     .button-group { flex-direction: row; }
