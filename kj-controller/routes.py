@@ -1413,7 +1413,7 @@ def _add_time_estimates(entries):
             entry["estimated_time"] = "Now"
             continue
         est = now + timedelta(seconds=cumulative)
-        entry["estimated_time"] = est.strftime("%-I:%M %p").lower()
+        entry["estimated_time"] = est.strftime("%I:%M %p").lstrip("0").lower()
         cumulative += entry.get("duration") or default_duration
 
 

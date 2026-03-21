@@ -103,14 +103,10 @@ class RotationStore:
     def add_entry(self, singer, song_artist='', notes=''):
         """Insert a new entry at max(position)+1 and return the new entry dict."""
         conn = self._get_conn()
-        row = conn.execute(
-            "SELECT COALESCE(MAX(position), 0) FROM rotation_entries"
-        ).fetchone()
-        next_pos = row[0] + 1
         cur = conn.execute(
             "INSERT INTO rotation_entries (singer, song_artist, notes, position) "
-            "VALUES (?, ?, ?, ?)",
-            (singer, song_artist, notes, next_pos),
+            "VALUES (?, ?, ?, (SELECT COALESCE(MAX(position), 0) + 1 FROM rotation_entries))",
+            (singer, song_artist, notes),
         )
         conn.commit()
         return self._row_to_dict(
