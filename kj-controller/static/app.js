@@ -2317,14 +2317,13 @@ function renderSparkline(id, data, cls) {
 fetchSystemStats();
 setInterval(fetchSystemStats, 5000);
 
-// --- Rotation (Google Sheet integration) ---
+// --- Rotation (SQLite primary) ---
 
 let rotationData = [];
 
-async function fetchRotation(forceRefresh) {
+async function fetchRotation() {
     try {
-        const url = forceRefresh ? '/rotation?refresh=1' : '/rotation';
-        const response = await fetch(url);
+        const response = await fetch('/rotation');
         if (!response.ok) {
             if (response.status === 503) {
                 const panel = document.querySelector('.rotation-panel');
@@ -2384,7 +2383,7 @@ function renderRotation(entries) {
                 enterRotationEditMode(row, entry);
             } else if (e.ctrlKey || e.metaKey) {
                 e.preventDefault();
-                deleteRotationEntry(entry.row_index, entry.singer);
+                deleteRotationEntry(entry.id, entry.singer);
             }
         });
 
@@ -2419,7 +2418,7 @@ function renderRotation(entries) {
             const fromIdx = parseInt(e.dataTransfer.getData('text/plain'), 10);
             const toIdx = idx;
             if (fromIdx !== toIdx) {
-                moveRotationEntry(entries[fromIdx].row_index, entries[toIdx].row_index);
+                moveRotationEntry(entries[fromIdx].id, entries[toIdx].position);
             }
         });
 
@@ -2477,21 +2476,21 @@ function renderRotation(entries) {
             const singBtn = document.createElement('button');
             singBtn.className = 'rotation-btn rotation-btn-sing';
             singBtn.textContent = 'Singing';
-            singBtn.onclick = () => updateRotationStatus(entry.row_index, 'Now Singing');
+            singBtn.onclick = () => updateRotationStatus(entry.id, 'Now Singing');
             actions.appendChild(singBtn);
         }
 
         const doneBtn = document.createElement('button');
         doneBtn.className = 'rotation-btn rotation-btn-done';
         doneBtn.textContent = 'Done';
-        doneBtn.onclick = () => updateRotationStatus(entry.row_index, 'Done');
+        doneBtn.onclick = () => updateRotationStatus(entry.id, 'Done');
         actions.appendChild(doneBtn);
 
         if (!statusLower.includes('next')) {
             const nextBtn = document.createElement('button');
             nextBtn.className = 'rotation-btn rotation-btn-next';
             nextBtn.textContent = 'Next';
-            nextBtn.onclick = () => updateRotationStatus(entry.row_index, 'Up Next');
+            nextBtn.onclick = () => updateRotationStatus(entry.id, 'Up Next');
             actions.appendChild(nextBtn);
         }
 
@@ -2513,7 +2512,7 @@ function renderRotation(entries) {
                 item.onclick = (ev) => {
                     ev.stopPropagation();
                     dropdown.remove();
-                    updateRotationStatus(entry.row_index, s);
+                    updateRotationStatus(entry.id, s);
                 };
                 dropdown.appendChild(item);
             });
@@ -2579,7 +2578,7 @@ function enterRotationEditMode(row, entry) {
         const newSinger = singerInput.value.trim();
         const newSong = songInput.value.trim();
         if (!newSinger) { singerInput.focus(); return; }
-        saveRotationEdit(entry.row_index, newSinger, newSong);
+        saveRotationEdit(entry.id, newSinger, newSong);
     };
 
     const cancelBtn = document.createElement('button');
@@ -2599,7 +2598,7 @@ function enterRotationEditMode(row, entry) {
     delBtn.textContent = 'Delete';
     delBtn.onclick = (e) => {
         e.stopPropagation();
-        deleteRotationEntry(entry.row_index, entry.singer);
+        deleteRotationEntry(entry.id, entry.singer);
     };
 
     actions.appendChild(saveBtn);
@@ -2620,13 +2619,13 @@ function enterRotationEditMode(row, entry) {
     });
 }
 
-async function saveRotationEdit(rowIndex, singer, songArtist) {
+async function saveRotationEdit(entryId, singer, songArtist) {
     showRotationIndicator('spin');
     try {
         const response = await fetch('/rotation/edit', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ row_index: rowIndex, singer, song_artist: songArtist })
+            body: JSON.stringify({ id: entryId, singer, song_artist: songArtist })
         });
         const data = await response.json();
         if (!response.ok) {
@@ -2643,14 +2642,14 @@ async function saveRotationEdit(rowIndex, singer, songArtist) {
     }
 }
 
-async function deleteRotationEntry(rowIndex, singerName) {
+async function deleteRotationEntry(entryId, singerName) {
     if (!confirm(`Delete "${singerName}" from rotation?`)) return;
     showRotationIndicator('spin');
     try {
         const response = await fetch('/rotation/delete', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ row_index: rowIndex })
+            body: JSON.stringify({ id: entryId })
         });
         const data = await response.json();
         if (!response.ok) {
@@ -2690,13 +2689,13 @@ function showRotationIndicator(state) {
     }
 }
 
-async function updateRotationStatus(rowIndex, status) {
+async function updateRotationStatus(entryId, status) {
     showRotationIndicator('spin');
     try {
         const response = await fetch('/rotation/status', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ row_index: rowIndex, status: status })
+            body: JSON.stringify({ id: entryId, status: status })
         });
         const data = await response.json();
         if (!response.ok) {
@@ -2713,13 +2712,13 @@ async function updateRotationStatus(rowIndex, status) {
     }
 }
 
-async function moveRotationEntry(fromRow, toRow) {
+async function moveRotationEntry(entryId, newPosition) {
     showRotationIndicator('spin');
     try {
         const response = await fetch('/rotation/move', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ from_row: fromRow, to_row: toRow })
+            body: JSON.stringify({ id: entryId, new_position: newPosition })
         });
         const data = await response.json();
         if (!response.ok) {
