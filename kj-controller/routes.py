@@ -1679,8 +1679,11 @@ def browser_mode_disable():
     chromium.kill()
     _browser_mode = False
 
-    # Restart VLC instances
-    if vlc.enabled:
+    # Restart VLC instances (skip if sleep mode is active)
+    sleep_mgr = getattr(current_app, 'sleep_manager', None)
+    if sleep_mgr and sleep_mgr.is_sleeping():
+        log_message("Browser mode disabled — skipping VLC restart (sleep mode active).", cfg)
+    elif vlc.enabled:
         log_message("Browser mode disabled — restarting VLC instances...", cfg)
         vlc.restart_instances()
 
