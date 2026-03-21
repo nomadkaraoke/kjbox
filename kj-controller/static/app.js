@@ -2492,10 +2492,125 @@ function formatFileSize(bytes) {
 
 // Divebar cross-reference for KN results
 async function loadDivebarBadges() {
-    // Collect KN song data that has tracks — we need KN IDs from the community data
-    // For now, this is a placeholder. KN results don't include KN IDs directly,
-    // so cross-referencing requires the KN search to return IDs (future enhancement).
-    // The Divebar lookup API cross-references via artist+title matching instead.
+    // Placeholder for KN cross-reference badges (future enhancement)
+}
+
+// --- Divebar Status ---
+
+let dbStatusCache = null;
+
+async function fetchDbStatus() {
+    try {
+        const resp = await fetch('/divebar/status');
+        if (!resp.ok) return null;
+        return await resp.json();
+    } catch (_) { return null; }
+}
+
+async function updateDbHealthDot() {
+    const dot = document.getElementById('db-health-dot');
+    if (!dot) return;
+    const data = await fetchDbStatus();
+    dbStatusCache = data;
+    if (!data || !data.configured) {
+        dot.className = 'yt-health-dot red';
+        dot.title = 'Divebar not configured';
+    } else if (data.gcs_mirror && data.gcs_mirror.percent >= 95) {
+        dot.className = 'yt-health-dot green';
+        dot.title = `GCS mirror ${data.gcs_mirror.percent}% synced`;
+    } else if (data.gcs_mirror && data.gcs_mirror.percent > 0) {
+        dot.className = 'yt-health-dot yellow';
+        dot.title = `GCS mirror ${data.gcs_mirror.percent}% synced (${data.gcs_mirror.synced}/${data.catalog.total_files})`;
+    } else {
+        dot.className = 'yt-health-dot yellow';
+        dot.title = 'GCS mirror sync starting...';
+    }
+}
+
+function openDbStatusModal() {
+    document.getElementById('db-modal').classList.remove('hidden');
+    document.getElementById('db-modal-loading').classList.remove('hidden');
+    document.getElementById('db-modal-body').classList.add('hidden');
+    loadDbStatusModal();
+}
+
+function closeDbStatusModal() {
+    document.getElementById('db-modal').classList.add('hidden');
+}
+
+async function loadDbStatusModal() {
+    const data = dbStatusCache || await fetchDbStatus();
+    dbStatusCache = data;
+
+    const loading = document.getElementById('db-modal-loading');
+    const body = document.getElementById('db-modal-body');
+    loading.classList.add('hidden');
+    body.classList.remove('hidden');
+
+    if (!data || data.error) {
+        body.innerHTML = `<div class="av-section"><p style="color:#f87171">${data?.error || 'Could not connect to Divebar API'}</p></div>`;
+        return;
+    }
+
+    const c = data.catalog || {};
+    const g = data.gcs_mirror || {};
+    const f = data.formats || {};
+    const x = data.cross_reference || {};
+    const kn = data.karaoke_nerds || {};
+
+    const lastSync = c.last_index_sync ? new Date(c.last_index_sync).toLocaleString() : 'Never';
+    const lastXref = x.last_rebuild ? new Date(x.last_rebuild).toLocaleString() : 'Never';
+
+    const mirrorColor = g.percent >= 95 ? '#22c55e' : g.percent > 0 ? '#eab308' : '#f87171';
+    const mirrorLabel = g.percent >= 100 ? 'Fully synced' : `${g.percent}% synced`;
+
+    // Format breakdown
+    let fmtRows = '';
+    for (const [fmt, info] of Object.entries(f)) {
+        const pct = info.count > 0 ? Math.round(info.in_gcs / info.count * 100) : 0;
+        fmtRows += `<tr><td>${fmt.toUpperCase()}</td><td>${info.count.toLocaleString()}</td><td>${info.gb} GB</td><td>${info.in_gcs.toLocaleString()} (${pct}%)</td></tr>`;
+    }
+
+    body.innerHTML = `
+        <div class="av-section">
+            <div class="av-section-title">Catalog Index</div>
+            <div class="av-grid">
+                <span class="av-label">Total files</span><span class="av-value">${c.total_files?.toLocaleString() || 0}</span>
+                <span class="av-label">Brands</span><span class="av-value">${c.total_brands || 0}</span>
+                <span class="av-label">With metadata</span><span class="av-value">${c.with_metadata?.toLocaleString() || 0}</span>
+                <span class="av-label">Total size</span><span class="av-value">${c.total_gb || 0} GB</span>
+                <span class="av-label">Last index sync</span><span class="av-value">${lastSync}</span>
+            </div>
+        </div>
+        <div class="av-section">
+            <div class="av-section-title">GCS Mirror</div>
+            <div class="db-progress-bar">
+                <div class="db-progress-fill" style="width:${Math.min(g.percent || 0, 100)}%; background:${mirrorColor}"></div>
+            </div>
+            <div class="av-grid">
+                <span class="av-label">Status</span><span class="av-value" style="color:${mirrorColor}">${mirrorLabel}</span>
+                <span class="av-label">Files synced</span><span class="av-value">${g.synced?.toLocaleString() || 0} / ${c.total_files?.toLocaleString() || 0}</span>
+                <span class="av-label">Data synced</span><span class="av-value">${g.synced_gb || 0} / ${c.total_gb || 0} GB</span>
+                <span class="av-label">Pending</span><span class="av-value">${g.pending?.toLocaleString() || 0} files (${g.pending_gb || 0} GB)</span>
+            </div>
+        </div>
+        <div class="av-section">
+            <div class="av-section-title">Formats</div>
+            <table class="db-format-table">
+                <thead><tr><th>Format</th><th>Files</th><th>Size</th><th>In GCS</th></tr></thead>
+                <tbody>${fmtRows}</tbody>
+            </table>
+        </div>
+        <div class="av-section">
+            <div class="av-section-title">KaraokeNerds Data</div>
+            <div class="av-grid">
+                <span class="av-label">Song catalog</span><span class="av-value">${kn.songs?.toLocaleString() || 0} songs</span>
+                <span class="av-label">Community tracks</span><span class="av-value">${kn.community_tracks?.toLocaleString() || 0} tracks</span>
+                <span class="av-label">KN cross-references</span><span class="av-value">${x.total_matches?.toLocaleString() || 0} matches</span>
+                <span class="av-label">Last xref rebuild</span><span class="av-value">${lastXref}</span>
+            </div>
+        </div>
+    `;
 }
 
 // --- Initialization ---
@@ -2564,6 +2679,7 @@ document.addEventListener('DOMContentLoaded', () => {
     updateMediaFilterBtn();
 
     loadYTKaraokeToggle();
+    updateDbHealthDot();
     updateStatus();
     updateMediaList();
     updateFillerMusicList();

@@ -243,7 +243,10 @@
                 <div id="yt-results"></div>
             </div>
             <div class="container db-search-section">
-                <h2>Search Divebar Karaoke</h2>
+                <div class="header-row">
+                    <h2>Search Divebar Karaoke <span id="db-health-dot" class="yt-health-dot"></span></h2>
+                    <button class="rescan-btn" onclick="openDbStatusModal()" title="Divebar catalog status, GCS mirror sync progress, and data pipeline health">Status</button>
+                </div>
                 <div class="db-search-row">
                     <input type="text" id="db-query" placeholder="Search community karaoke tracks..." onkeyup="if(event.keyCode === 13) searchDivebar()">
                     <button id="db-search-btn" class="btn-primary" onclick="searchDivebar()">Search</button>
@@ -716,5 +719,19 @@
             window.connectVnc(saved);
         }
     </script>
+
+    <!-- Divebar Status Modal -->
+    <div id="db-modal" class="modal-backdrop hidden" onclick="if(event.target===this) closeDbStatusModal()">
+        <div class="modal-content db-modal-content">
+            <div class="modal-header">
+                <h3>Divebar Catalog Status</h3>
+                <button class="modal-close" onclick="closeDbStatusModal()">&times;</button>
+            </div>
+            <div id="db-modal-loading" class="av-loading">
+                <span class="download-spinner"></span> Loading status&hellip;
+            </div>
+            <div id="db-modal-body" class="hidden"></div>
+        </div>
+    </div>
 </body>
 </html>

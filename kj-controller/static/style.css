@@ -849,6 +849,21 @@ body {
 .db-gcs-badge {
     background-color: rgba(59, 130, 246, 0.2) !important; color: #60a5fa !important;
 }
+.db-modal-content { max-width: 520px; }
+.db-progress-bar {
+    height: 8px; background: #222; border-radius: 4px; margin: 8px 0; overflow: hidden;
+}
+.db-progress-fill {
+    height: 100%; border-radius: 4px; transition: width 0.5s ease;
+}
+.db-format-table {
+    width: 100%; font-size: 0.8em; border-collapse: collapse; margin-top: 4px;
+}
+.db-format-table th {
+    text-align: left; color: #888; font-weight: 500; padding: 3px 8px;
+    border-bottom: 1px solid #333;
+}
+.db-format-table td { padding: 3px 8px; color: #ccc; }
 
 /* --- Responsive --- */
 

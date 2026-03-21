@@ -100,6 +100,36 @@ def lookup_kn_ids(kn_ids, config=None):
         return {}
 
 
+def get_stats(config=None):
+    """
+    Get Divebar catalog statistics from the Cloud Function.
+
+    Returns dict with catalog, gcs_mirror, formats, cross_reference, karaoke_nerds.
+    """
+    config = config or {}
+    api_url = _get_api_url(config)
+    if not api_url:
+        return None
+
+    try:
+        resp = requests.post(
+            api_url,
+            json={"action": "stats"},
+            timeout=_TIMEOUT,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+
+        if data.get("status") != "ok":
+            return None
+
+        return data
+
+    except requests.RequestException as e:
+        logger.error("Divebar stats failed: %s", e)
+        return None
+
+
 def get_download_url(file_id, config=None):
     """
     Get a download URL for a Divebar file.
