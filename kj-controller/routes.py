@@ -12,6 +12,7 @@ import unicodedata
 
 from flask import Blueprint, current_app, jsonify, render_template, request
 
+import divebar
 import karaoke_nerds
 import youtube_health
 import youtube_search
@@ -111,7 +112,11 @@ def _download_worker(app):
             next_item['status'] = 'downloading'
 
         try:
-            file_path, title = app.media.download_video(next_item['url'])
+            if next_item.get('source') == 'divebar':
+                file_path, title = app.media.download_from_url(
+                    next_item['url'], filename=next_item.get('title'))
+            else:
+                file_path, title = app.media.download_video(next_item['url'])
         except Exception:
             file_path, title = None, None
 
@@ -889,6 +894,86 @@ def youtube_upgrade_ytdlp():
 
     threading.Thread(target=do_restart, daemon=True).start()
     return jsonify({'success': True, 'message': msg, 'restarting': True})
+
+
+# --- Divebar Search ---
+
+@routes_bp.route('/divebar/search', methods=['POST'])
+def divebar_search():
+    """Search the Divebar karaoke catalog for community tracks."""
+    data = request.get_json(silent=True) or {}
+    query = data.get('query', '').strip()
+    if not query or len(query) < 2:
+        return jsonify({"error": "Query must be at least 2 characters"}), 400
+
+    cfg = current_app.kj_config
+    if not cfg.get('divebar_api_url'):
+        return jsonify({"error": "Divebar not configured"}), 503
+
+    log_message(f"Divebar search: {query}", cfg)
+    results = divebar.search(query, config=cfg)
+    return jsonify(results)
+
+
+@routes_bp.route('/divebar/kn-lookup', methods=['POST'])
+def divebar_kn_lookup():
+    """Look up which KN song IDs have Divebar versions."""
+    data = request.get_json(silent=True) or {}
+    kn_ids = data.get('kn_ids', [])
+    if not kn_ids or not isinstance(kn_ids, list):
+        return jsonify({"error": "kn_ids list required"}), 400
+
+    cfg = current_app.kj_config
+    if not cfg.get('divebar_api_url'):
+        return jsonify({})
+
+    matches = divebar.lookup_kn_ids(kn_ids, config=cfg)
+    return jsonify(matches)
+
+
+@routes_bp.route('/divebar/download', methods=['POST'])
+def divebar_download():
+    """Download a Divebar track by file_id. Queues it like a YouTube download."""
+    data = request.get_json(silent=True) or {}
+    file_id = data.get('file_id', '').strip()
+    filename = data.get('filename', '').strip()
+    if not file_id:
+        return jsonify({"error": "file_id is required"}), 400
+
+    cfg = current_app.kj_config
+    url = divebar.get_download_url(file_id, config=cfg)
+    if not url:
+        return jsonify({"error": "Could not get download URL"}), 500
+
+    # Reuse the existing download queue with the Drive URL
+    app = current_app._get_current_object()
+    from uuid import uuid4
+    with app._download_lock:
+        items = app.download_queue['items']
+        active = [i for i in items if i['status'] in ('queued', 'downloading')]
+        if len(active) >= 5:
+            return jsonify({"error": "Queue is full (max 5)"}), 409
+
+        item = {
+            'id': str(uuid4()),
+            'url': url,
+            'status': 'queued',
+            'title': filename or f"Divebar track {file_id[:8]}",
+            'error': None,
+            'file_path': None,
+            'added_at': time.time(),
+            'completed_at': None,
+            'source': 'divebar',
+            'divebar_file_id': file_id,
+        }
+        items.append(item)
+        log_message(f"Queued Divebar download: {filename or file_id}", cfg)
+
+        if not app.download_queue['worker_running']:
+            app.download_queue['worker_running'] = True
+            threading.Thread(target=_download_worker, args=[app], daemon=True).start()
+
+    return jsonify({"success": True, "id": item['id']})
 
 
 # --- Display Resolution ---

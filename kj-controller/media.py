@@ -5,6 +5,8 @@ import os
 import tempfile
 import unicodedata
 
+import requests
+
 from config import MEDIA_EXTENSIONS
 from utils import log_message, sanitize_filename_part, parse_youtube_filename
 
@@ -292,4 +294,58 @@ class MediaIndex:
             return real_path, title
         except Exception as e:
             log_message(f"Error downloading video: {e}", self.config)
+            return None, None
+
+    def download_from_url(self, url, filename=None):
+        """Downloads a file from a direct HTTP URL (e.g. Google Drive), updates media index."""
+        download_folder = self.config.get('download_folder', os.path.expanduser("~/kjdata/videos"))
+        os.makedirs(download_folder, exist_ok=True)
+
+        try:
+            resp = requests.get(url, stream=True, timeout=120, allow_redirects=True)
+            resp.raise_for_status()
+
+            # Determine filename from response or parameter
+            if not filename:
+                # Try Content-Disposition header
+                cd = resp.headers.get('Content-Disposition', '')
+                if 'filename=' in cd:
+                    filename = cd.split('filename=')[-1].strip('"\'')
+                else:
+                    filename = url.split('/')[-1].split('?')[0] or 'download'
+
+            safe_name = sanitize_filename_part(os.path.splitext(filename)[0])
+            ext = os.path.splitext(filename)[1] or '.mp4'
+            final_name = f"divebar__{safe_name}{ext}"
+            file_path = os.path.join(download_folder, final_name)
+
+            # Download with streaming
+            with open(file_path, 'wb') as f:
+                for chunk in resp.iter_content(chunk_size=8192):
+                    f.write(chunk)
+
+            real_path = os.path.realpath(file_path)
+            stat = os.stat(real_path)
+            display_name = os.path.splitext(filename)[0]
+
+            entry = {
+                "path": real_path,
+                "filename": os.path.basename(real_path),
+                "folder": os.path.realpath(download_folder),
+                "size": stat.st_size,
+                "mtime": stat.st_mtime,
+                "is_download": True,
+                "display_name": display_name,
+                "original_url": url,
+                "source": "divebar",
+            }
+
+            self.index[real_path] = entry
+            self.save()
+
+            log_message(f"Successfully downloaded '{display_name}' from Divebar", self.config)
+            return real_path, display_name
+
+        except Exception as e:
+            log_message(f"Error downloading from URL: {e}", self.config)
             return None, None

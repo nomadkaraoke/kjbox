@@ -2172,6 +2172,168 @@ function loadYTKaraokeToggle() {
     document.getElementById('yt-karaoke-prefix').checked = saved === '1';
 }
 
+// --- Divebar Search ---
+
+async function searchDivebar() {
+    const input = document.getElementById('db-query');
+    const btn = document.getElementById('db-search-btn');
+    const status = document.getElementById('db-status');
+    const query = input.value.trim();
+    if (!query || query.length < 2) {
+        log('Enter at least 2 characters to search.', 'error');
+        return;
+    }
+    log(`Searching Divebar: ${query}`);
+    btn.disabled = true;
+    status.classList.remove('hidden');
+    document.getElementById('db-stage').textContent = 'Searching Divebar catalog...';
+
+    const data = await apiCall('/divebar/search', { query });
+
+    btn.disabled = false;
+    status.classList.add('hidden');
+    if (data) {
+        if (Array.isArray(data) && data.length === 0) {
+            log('No results found in Divebar.', 'error');
+            document.getElementById('db-results').innerHTML =
+                '<div class="kn-no-results">No results found in Divebar catalog.</div>';
+        } else if (data.error) {
+            log(`Divebar search error: ${data.error}`, 'error');
+        } else {
+            const totalTracks = data.reduce((sum, s) => sum + (s.tracks ? s.tracks.length : 0), 0);
+            log(`Found ${data.length} song${data.length !== 1 ? 's' : ''} (${totalTracks} tracks) in Divebar.`, 'success');
+            renderDBResults(data);
+        }
+    }
+}
+
+function clearDBResults() {
+    document.getElementById('db-results').innerHTML = '';
+    document.getElementById('db-query').value = '';
+}
+
+function renderDBResults(songs) {
+    const container = document.getElementById('db-results');
+    container.innerHTML = '';
+
+    songs.forEach((song, idx) => {
+        const songId = `db-song-${idx}`;
+        const trackCount = song.tracks ? song.tracks.length : 0;
+
+        // Song header
+        const header = document.createElement('div');
+        header.className = 'kn-song-header db-song-header';
+        header.onclick = () => {
+            const el = document.getElementById(songId);
+            if (el) {
+                const collapsed = el.classList.toggle('collapsed');
+                const chev = document.getElementById('db-chevron-' + idx);
+                if (chev) chev.classList.toggle('expanded', !collapsed);
+            }
+        };
+
+        const chevron = document.createElement('span');
+        chevron.className = 'folder-chevron';
+        chevron.id = 'db-chevron-' + idx;
+        chevron.textContent = '\u25B6';
+
+        const titleText = document.createElement('span');
+        titleText.className = 'kn-song-title';
+        titleText.textContent = `${song.title || 'Unknown'} \u2014 ${song.artist || 'Unknown'}`;
+
+        const count = document.createElement('span');
+        count.className = 'kn-track-count';
+        count.textContent = `${trackCount} track${trackCount !== 1 ? 's' : ''}`;
+
+        header.appendChild(chevron);
+        header.appendChild(titleText);
+        if (song.artist && song.title) {
+            header.appendChild(createCopyBtn(`${song.artist} - ${song.title}`));
+        }
+        header.appendChild(count);
+        container.appendChild(header);
+
+        // Track list (collapsed by default)
+        const trackList = document.createElement('div');
+        trackList.className = 'kn-track-list collapsed';
+        trackList.id = songId;
+
+        if (song.tracks) {
+            song.tracks.forEach(track => {
+                const trackEl = document.createElement('div');
+                trackEl.className = 'kn-track db-track';
+
+                const info = document.createElement('span');
+                info.className = 'kn-track-info';
+
+                const brandSpan = document.createElement('span');
+                brandSpan.className = 'kn-brand-name';
+                brandSpan.textContent = track.brand || 'Unknown';
+                info.appendChild(brandSpan);
+
+                // Format badge
+                const fmtBadge = document.createElement('span');
+                fmtBadge.className = 'format-badge db-format-badge';
+                fmtBadge.textContent = (track.format || 'unknown').toUpperCase();
+                info.appendChild(fmtBadge);
+
+                // File size
+                if (track.file_size) {
+                    const sizeSpan = document.createElement('span');
+                    sizeSpan.className = 'db-file-size';
+                    sizeSpan.textContent = formatFileSize(track.file_size);
+                    info.appendChild(sizeSpan);
+                }
+
+                // Divebar community badge
+                const badge = document.createElement('span');
+                badge.className = 'kn-community-badge db-badge';
+                badge.textContent = 'Divebar';
+                info.appendChild(badge);
+
+                const actions = document.createElement('span');
+                actions.className = 'kn-track-actions';
+
+                const dlBtn = document.createElement('button');
+                dlBtn.className = 'kn-download-btn db-download-btn';
+                dlBtn.textContent = 'Download';
+                dlBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    downloadDivebarTrack(track.file_id, track.drive_path || track.brand);
+                    dlBtn.disabled = true;
+                    dlBtn.textContent = 'Queued';
+                };
+                actions.appendChild(dlBtn);
+
+                trackEl.appendChild(info);
+                trackEl.appendChild(actions);
+                trackList.appendChild(trackEl);
+            });
+        }
+
+        container.appendChild(trackList);
+    });
+}
+
+function downloadDivebarTrack(fileId, filename) {
+    log(`Queuing Divebar download: ${filename}`);
+    apiCall('/divebar/download', { file_id: fileId, filename: filename });
+}
+
+function formatFileSize(bytes) {
+    if (!bytes) return '';
+    if (bytes < 1024 * 1024) return Math.round(bytes / 1024) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+}
+
+// Divebar cross-reference for KN results
+async function loadDivebarBadges() {
+    // Collect KN song data that has tracks — we need KN IDs from the community data
+    // For now, this is a placeholder. KN results don't include KN IDs directly,
+    // so cross-referencing requires the KN search to return IDs (future enhancement).
+    // The Divebar lookup API cross-references via artist+title matching instead.
+}
+
 // --- Initialization ---
 
 document.addEventListener('DOMContentLoaded', () => {

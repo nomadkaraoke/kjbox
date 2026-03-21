@@ -228,6 +228,19 @@
                 </div>
                 <div id="yt-results"></div>
             </div>
+            <div class="container db-search-section">
+                <h2>Search Divebar Karaoke</h2>
+                <div class="db-search-row">
+                    <input type="text" id="db-query" placeholder="Search community karaoke tracks..." onkeyup="if(event.keyCode === 13) searchDivebar()">
+                    <button id="db-search-btn" class="btn-primary" onclick="searchDivebar()">Search</button>
+                    <button id="db-clear-btn" onclick="clearDBResults()">Clear</button>
+                </div>
+                <div id="db-status" class="download-progress hidden">
+                    <span class="download-spinner"></span>
+                    <span id="db-stage">Searching Divebar catalog...</span>
+                </div>
+                <div id="db-results"></div>
+            </div>
             <div class="container download-section">
                 <div class="header-row">
                     <h2>Download Song <span id="yt-health-dot" class="yt-health-dot"></span></h2>
