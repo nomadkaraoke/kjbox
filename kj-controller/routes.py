@@ -225,10 +225,11 @@ def handle_play():
         actual_play_path = mp3_path
 
     # Auto-disable browser mode before playing — kill Chromium and reset PipeWire
-    # so VLC has exclusive access to the audio device and display
+    # so VLC has exclusive access to the audio device and display.
+    # Check both the flag AND actual process state to catch orphans after restart.
     global _browser_mode
-    if _browser_mode:
-        chromium = getattr(current_app, 'chromium', None)
+    chromium = getattr(current_app, 'chromium', None)
+    if _browser_mode or (chromium and chromium.is_running()):
         if chromium:
             chromium.kill()
         _browser_mode = False
@@ -468,11 +469,15 @@ def get_status():
     dl_queue = current_app.download_queue['items']
 
     # Browser mode status (Chromium)
-    # Auto-clear browser_mode if Chromium crashed/exited on its own
+    # Sync _browser_mode flag with actual Chromium process state
     chromium = getattr(current_app, 'chromium', None)
     browser_status = chromium.get_status() if chromium else {'running': False, 'pid': None, 'url': None}
     if _browser_mode and not browser_status['running']:
+        # Chromium crashed/exited — clear flag
         _browser_mode = False
+    elif not _browser_mode and browser_status['running']:
+        # Orphan Chromium detected (e.g. after server restart) — adopt it
+        _browser_mode = True
     browser_status['enabled'] = _browser_mode
 
     if status:

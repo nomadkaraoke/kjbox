@@ -45,6 +45,22 @@ class ChromiumManager:
         self.config = config
         self.process = None
         self.current_url = None
+        # Kill any orphan Chromium left from a previous server instance
+        # and reset PipeWire so VLC can use HDMI via ALSA
+        if self.has_orphan():
+            self._kill_orphans()
+            self._reset_pipewire()
+
+    def has_orphan(self):
+        """Check if any Chromium process is running with our data dir (not managed by us)."""
+        try:
+            result = subprocess.run(
+                ['pgrep', '-f', f'--user-data-dir={CHROMIUM_DATA_DIR}'],
+                capture_output=True, text=True, timeout=5,
+            )
+            return result.returncode == 0
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            return False
 
     def _find_binary(self):
         """Find the first available Chromium binary on the system."""
@@ -99,8 +115,10 @@ class ChromiumManager:
             log_message("WARNING: Could not reset PipeWire to analog profile.", self.config)
 
     def is_running(self):
-        """Check if the managed Chromium process is still alive."""
-        return self.process is not None and self.process.poll() is None
+        """Check if any Chromium process with our data dir is alive (managed or orphan)."""
+        if self.process is not None and self.process.poll() is None:
+            return True
+        return self.has_orphan()
 
     def launch(self, url, audio_device=None):
         """Launch Chromium in kiosk mode at the given URL.
@@ -191,11 +209,12 @@ class ChromiumManager:
             self.process = None
 
         # Kill any orphan Chromium instances launched with our data dir
+        had_orphans = self.has_orphan()
         self._kill_orphans()
         self.current_url = None
 
         # Reset PipeWire to analog so VLC can use HDMI via ALSA
-        if was_running:
+        if was_running or had_orphans:
             self._reset_pipewire()
 
     def _kill_orphans(self):

@@ -199,6 +199,53 @@ def test_play_auto_disables_browser_mode(flask_test_client, flask_app, mocker, t
     assert status_data['browser_mode']['enabled'] is False
 
 
+def test_status_adopts_orphan_chromium(flask_test_client, flask_app, mocker):
+    """Status auto-adopts orphan Chromium: sets browser_mode.enabled=True when
+    Chromium is running but _browser_mode flag is False (e.g. after server restart)."""
+    import routes
+    routes._browser_mode = False  # Simulate post-restart state
+
+    # Simulate orphan Chromium detected by is_running()
+    mocker.patch.object(flask_app.chromium, 'get_status', return_value={
+        'running': True, 'pid': 99999, 'url': 'https://youtube.com',
+    })
+
+    response = flask_test_client.get('/status')
+    data = json.loads(response.data)
+    assert data['browser_mode']['enabled'] is True
+    assert data['browser_mode']['running'] is True
+
+    # Clean up
+    routes._browser_mode = False
+
+
+def test_play_kills_orphan_chromium_even_when_flag_false(flask_test_client, flask_app, mocker, tmp_media_dir):
+    """Playing a track kills orphan Chromium even when _browser_mode is False."""
+    import routes
+    routes._browser_mode = False  # Simulate post-restart state
+
+    # Simulate orphan Chromium running
+    mocker.patch.object(flask_app.chromium, 'is_running', return_value=True)
+    mock_kill = mocker.patch.object(flask_app.chromium, 'kill')
+
+    # Create a test media file
+    test_file = tmp_media_dir / "downloads" / "orphan_test.mp4"
+    test_file.write_text("fake video")
+    flask_app.media.load()
+
+    mocker.patch.object(flask_app.vlc, 'play_video')
+    flask_app.vlc.enabled = True
+
+    response = flask_test_client.post(
+        '/play',
+        data=json.dumps({'file_path': str(test_file)}),
+        content_type='application/json',
+    )
+
+    assert response.status_code == 200
+    mock_kill.assert_called_once()
+
+
 def test_status_reflects_enabled_after_toggle(flask_test_client, flask_app, mocker):
     """Status shows browser_mode.enabled=True after enabling."""
     mocker.patch.object(flask_app.chromium, 'launch', return_value=True)

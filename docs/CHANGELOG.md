@@ -2,6 +2,15 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-03-21 - Browser Mode Orphan Detection
+
+Fixed browser mode state getting out of sync after auto-deploy restarts. Chromium processes now survive service restarts as orphans but the server lost track of them — mode showed "VLC" while browser was visible, toggle didn't work, and playing a video left the browser on screen.
+
+- `ChromiumManager` now detects orphan Chromium via `pgrep` (not just managed `self.process`)
+- Orphans killed on startup; adopted by status endpoint if still running
+- `/play` checks actual process state, not just `_browser_mode` flag
+- PipeWire reset triggered for orphan cleanup (not just managed process)
+
 ## 2026-03-21 - Sleep Mode
 
 Added Sleep Mode toggle to the System section of the KJ Controller UI for low-power state between weekly karaoke nights.
