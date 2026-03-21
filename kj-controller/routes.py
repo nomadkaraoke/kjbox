@@ -966,6 +966,20 @@ def divebar_kn_lookup():
     return jsonify(matches)
 
 
+@routes_bp.route('/divebar/status', methods=['GET'])
+def divebar_status():
+    """Get Divebar catalog status: sync progress, file counts, pipeline health."""
+    cfg = current_app.kj_config
+    if not cfg.get('divebar_api_url'):
+        return jsonify({"error": "Divebar not configured", "configured": False}), 503
+
+    stats = divebar.get_stats(config=cfg)
+    if stats:
+        stats["configured"] = True
+        return jsonify(stats)
+    return jsonify({"error": "Could not fetch Divebar status", "configured": True}), 502
+
+
 @routes_bp.route('/divebar/download', methods=['POST'])
 def divebar_download():
     """Download a Divebar track by file_id. Queues it like a YouTube download."""
