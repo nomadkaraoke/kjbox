@@ -304,3 +304,62 @@ def test_switch_hdmi_no_longer_saves_config(flask_test_client, flask_app, mocker
         content_type='application/json')
 
     mock_save.assert_not_called()
+
+
+# --- /av/browser-audio ---
+
+def test_av_status_includes_browser_audio(flask_test_client, mocker):
+    """GET /av/status audio section includes browser_audio config."""
+    mocker.patch('routes.subprocess.run', return_value=MagicMock(stdout='', stderr='', returncode=0))
+    mocker.patch('routes.glob.glob', return_value=[])
+    mocker.patch('builtins.open', side_effect=FileNotFoundError)
+
+    response = flask_test_client.get('/av/status')
+    data = json.loads(response.data)
+    ba = data['audio']['browser_audio']
+    assert ba['setting'] == 'same'
+    assert 'resolved_profile' in ba
+    assert 'available_profiles' in ba
+    assert 'hdmi' in ba['available_profiles']
+    assert 'analog' in ba['available_profiles']
+
+
+def test_set_browser_audio_same(flask_test_client, mocker):
+    """POST /av/browser-audio with 'same' sets browser audio to follow VLC."""
+    mocker.patch('routes.save_config_value')
+
+    response = flask_test_client.post(
+        '/av/browser-audio',
+        data=json.dumps({'device': 'same'}),
+        content_type='application/json',
+    )
+    assert response.status_code == 200
+    data = json.loads(response.data)
+    assert data['success'] is True
+    assert data['device'] == 'same'
+
+
+def test_set_browser_audio_hdmi_profile(flask_test_client, mocker):
+    """POST /av/browser-audio with profile key sets the PipeWire profile."""
+    mock_save = mocker.patch('routes.save_config_value')
+
+    response = flask_test_client.post(
+        '/av/browser-audio',
+        data=json.dumps({'device': 'hdmi'}),
+        content_type='application/json',
+    )
+    assert response.status_code == 200
+    data = json.loads(response.data)
+    # 'hdmi' key should be expanded to full profile string
+    assert 'hdmi-stereo' in data['device']
+    mock_save.assert_called_once()
+
+
+def test_set_browser_audio_invalid_device(flask_test_client, mocker):
+    """POST /av/browser-audio with unknown device returns 400."""
+    response = flask_test_client.post(
+        '/av/browser-audio',
+        data=json.dumps({'device': 'nonexistent'}),
+        content_type='application/json',
+    )
+    assert response.status_code == 400

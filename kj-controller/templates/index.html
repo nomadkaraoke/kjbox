@@ -503,6 +503,17 @@
                     </div>
                 </div>
 
+                <!-- Browser Audio section -->
+                <div class="av-section">
+                    <div class="av-section-title">Browser Audio Output</div>
+                    <div id="av-browser-audio-info"></div>
+                    <div class="av-control-row">
+                        <label for="av-browser-audio-select">Browser Mode Audio Device</label>
+                        <p class="av-help">Controls which PipeWire output Chromium uses in Browser Mode. <strong>Same as VLC</strong> automatically matches VLC's audio device. Persisted across restarts.</p>
+                        <select id="av-browser-audio-select" onchange="avSetBrowserAudio(this.value)"></select>
+                    </div>
+                </div>
+
             </div>
 
             <!-- Footer -->
