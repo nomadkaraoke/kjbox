@@ -159,6 +159,46 @@ def test_status_auto_clears_browser_mode_on_chromium_crash(flask_test_client, fl
     assert data['browser_mode']['enabled'] is False
 
 
+def test_play_auto_disables_browser_mode(flask_test_client, flask_app, mocker, tmp_media_dir):
+    """Playing a karaoke track auto-disables browser mode (kills Chromium first)."""
+    # Enable browser mode
+    mocker.patch.object(flask_app.chromium, 'launch', return_value=True)
+    mocker.patch('routes.save_config_value')
+    flask_test_client.post(
+        '/browser-mode/enable',
+        data=json.dumps({'url': 'https://youtube.com'}),
+        content_type='application/json',
+    )
+
+    # Create a test media file
+    test_file = tmp_media_dir / "downloads" / "test.mp4"
+    test_file.write_text("fake video")
+    flask_app.media.load()
+
+    # Mock VLC play and chromium kill
+    mocker.patch.object(flask_app.vlc, 'play_video')
+    flask_app.vlc.enabled = True
+    mock_kill = mocker.patch.object(flask_app.chromium, 'kill')
+
+    # Play a track
+    response = flask_test_client.post(
+        '/play',
+        data=json.dumps({'file_path': str(test_file)}),
+        content_type='application/json',
+    )
+
+    assert response.status_code == 200
+    mock_kill.assert_called_once()
+
+    # Verify browser mode is now disabled in status
+    mocker.patch.object(flask_app.chromium, 'get_status', return_value={
+        'running': False, 'pid': None, 'url': None,
+    })
+    status_resp = flask_test_client.get('/status')
+    status_data = json.loads(status_resp.data)
+    assert status_data['browser_mode']['enabled'] is False
+
+
 def test_status_reflects_enabled_after_toggle(flask_test_client, flask_app, mocker):
     """Status shows browser_mode.enabled=True after enabling."""
     mocker.patch.object(flask_app.chromium, 'launch', return_value=True)
