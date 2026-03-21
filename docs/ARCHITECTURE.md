@@ -52,7 +52,7 @@ KJ Controller is a web-based karaoke show management application. A Flask backen
 | `app.py` | ~70 | `create_app()` factory, `start_app()` entry point |
 | `config.py` | ~70 | Constants, `is_pi()`, `load_config()`, `save_config_value()` |
 | `utils.py` | ~40 | `log_message()`, `sanitize_filename_part()`, `parse_youtube_filename()` |
-| `media.py` | ~260 | `MediaIndex` class: scan, validate, download, delete, list |
+| `media.py` | ~310 | `MediaIndex` class: scan, validate, download, delete, list |
 | `vlc.py` | ~440 | `VLCManager` class: launch, command, fade, play, restart, monitor, reconnect |
 | `chromium.py` | ~160 | `ChromiumManager` class: launch/kill fullscreen Chromium for Browser Mode, PipeWire audio routing |
 | `catalog.py` | ~230 | `ExternalCatalog` class: SQLite FTS5 search over external media |
@@ -61,15 +61,17 @@ KJ Controller is a web-based karaoke show management application. A Flask backen
 | `karaoke_nerds.py` | ~140 | Karaoke Nerds web scraper: search, parse HTML results, extract YouTube URLs |
 | `youtube_search.py` | ~80 | YouTube search via yt-dlp: ytsearch with extract_flat for fast metadata |
 | `youtube_health.py` | ~170 | YouTube health checks: yt-dlp/EJS/Deno version detection, cookie validation, PyPI version check (24h cache), pip upgrade |
+| `divebar.py` | ~150 | Divebar catalog client: search, KN cross-reference lookup, download URL generation via Cloud Function API |
 | `rotation.py` | ~390 | `RotationManager` class: Google Sheets singer rotation read/write via gspread, writes local cache for display |
 | `sleep_mode.py` | ~100 | `SleepManager` class: enter/exit low-power sleep mode, stop services, unmount SSD |
-| `routes.py` | ~720 | Flask Blueprint with all route handlers |
+| `routes.py` | ~800 | Flask Blueprint with all route handlers |
 
 ### Dependency Flow
 
 ```
 app.py → config.py, media.py, vlc.py, chromium.py, catalog.py, zip_playback.py, overlay.py, sleep_mode.py, routes.py, utils.py
-routes.py → config.py, utils.py, sleep_mode, karaoke_nerds, youtube_search, youtube_health, psutil (accesses media/vlc/catalog/zip_playback/overlay_manager/sleep_manager via current_app)
+routes.py → config.py, utils.py, divebar, karaoke_nerds, youtube_search, youtube_health, psutil (accesses media/vlc/catalog/zip_playback/overlay_manager via current_app)
+divebar.py → config.py (requests)
 sleep_mode.py → config.py, utils.py (subprocess for shell scripts)
 karaoke_nerds.py → config.py, utils.py (requests, beautifulsoup4)
 youtube_search.py → media._ytdlp_base_opts, config.py, utils.py (yt_dlp)
@@ -136,6 +138,9 @@ utils.py → (stdlib only)
 | DELETE | `/overlays/<id>` | Delete an overlay |
 | POST | `/overlays/<id>/toggle` | Toggle overlay enabled state |
 | POST | `/overlays/<id>/toggle-video` | Toggle overlay show-over-video state |
+| POST | `/divebar/search` | Search Divebar community karaoke catalog (48K+ tracks from 62 brands) |
+| POST | `/divebar/kn-lookup` | Cross-reference KN song IDs with Divebar catalog |
+| POST | `/divebar/download` | Queue download of a Divebar track from Google Drive |
 | POST | `/karaoke-nerds/search` | Search karaokenerds.com for web-only tracks |
 | GET | `/karaoke-nerds/config` | Get preferred brand codes for KN result sorting |
 | POST | `/karaoke-nerds/config` | Set preferred brand codes for KN result sorting |
