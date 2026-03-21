@@ -864,6 +864,12 @@ body {
     border-bottom: 1px solid #333;
 }
 .db-format-table td { padding: 3px 8px; color: #ccc; }
+.av-grid {
+    display: grid; grid-template-columns: auto 1fr; gap: 4px 12px;
+    font-size: 0.85em; margin-top: 4px;
+}
+.av-label { color: #888; }
+.av-value { color: #e5e5e5; }
 
 /* --- Responsive --- */
 
