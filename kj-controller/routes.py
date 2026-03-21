@@ -18,6 +18,7 @@ import youtube_health
 import youtube_search
 from catalog import LATIN_SPECIAL_MAP
 from config import APP_DIR, load_config, save_config_value
+from sleep_mode import SleepManager
 from utils import log_message
 
 # --- Browser mode state ---
@@ -26,6 +27,16 @@ from utils import log_message
 _browser_mode = False
 
 routes_bp = Blueprint('routes', __name__)
+
+
+def _check_sleep_mode():
+    """Return a 409 JSON response if sleep mode is active, else None."""
+    sleep_mgr = getattr(current_app, 'sleep_manager', None)
+    if sleep_mgr and sleep_mgr.is_sleeping():
+        return jsonify({
+            "error": "Sleep mode is active. Disable sleep mode first."
+        }), 409
+    return None
 
 # --- Debounced volume persistence ---
 _volume_save_timer = None
@@ -61,6 +72,9 @@ def index():
 @routes_bp.route('/download', methods=['POST'])
 def handle_download():
     """Add a URL to the download queue (max 5). Poll /status for progress."""
+    blocked = _check_sleep_mode()
+    if blocked:
+        return blocked
     url = request.json.get('url')
     if not url:
         return jsonify({"error": "URL is required"}), 400
@@ -170,6 +184,9 @@ def ack_download():
 @routes_bp.route('/play', methods=['POST'])
 def handle_play():
     """Plays a media file by path (supports local media, external media, and ZIP files)."""
+    blocked = _check_sleep_mode()
+    if blocked:
+        return blocked
     file_path = request.json.get('file_path')
     if not file_path:
         return jsonify({"error": "file_path is required"}), 400
@@ -367,6 +384,9 @@ def list_filler_music():
 @routes_bp.route('/filler_music', methods=['POST'])
 def set_filler_music():
     """Sets the filler music track and starts playing it at a random time."""
+    blocked = _check_sleep_mode()
+    if blocked:
+        return blocked
     track_name = request.json.get('track_name')
     if not track_name:
         return jsonify({"error": "Track name is required"}), 400
@@ -1447,6 +1467,31 @@ def autodeploy_toggle():
     return jsonify({"active": active})
 
 
+# --- Sleep Mode ---
+
+@routes_bp.route('/system/sleep-mode', methods=['GET'])
+def sleep_mode_status():
+    """Returns current sleep mode status."""
+    sleep_mgr = current_app.sleep_manager
+    return jsonify(sleep_mgr.get_status())
+
+
+@routes_bp.route('/system/sleep-mode', methods=['POST'])
+def sleep_mode_toggle():
+    """Enter or exit sleep mode."""
+    cfg = current_app.kj_config
+    sleep_mgr = current_app.sleep_manager
+    data = request.get_json() or {}
+    active = data.get('active', False)
+
+    if active:
+        result = sleep_mgr.enter_sleep(cfg, vlc=current_app.vlc)
+    else:
+        result = sleep_mgr.exit_sleep(cfg, vlc=current_app.vlc)
+
+    return jsonify(result)
+
+
 @routes_bp.route('/system/reboot', methods=['POST'])
 def system_reboot():
     """Reboots the entire system."""
@@ -1667,6 +1712,9 @@ def archive_rotation():
 @routes_bp.route('/browser-mode/enable', methods=['POST'])
 def browser_mode_enable():
     """Enable browser mode: stop VLC, switch PipeWire to HDMI, launch Chromium."""
+    blocked = _check_sleep_mode()
+    if blocked:
+        return blocked
     global _browser_mode
     cfg = current_app.kj_config
     vlc = current_app.vlc
@@ -1716,8 +1764,11 @@ def browser_mode_disable():
     chromium.kill()
     _browser_mode = False
 
-    # Restart VLC instances
-    if vlc.enabled:
+    # Restart VLC instances (skip if sleep mode is active)
+    sleep_mgr = getattr(current_app, 'sleep_manager', None)
+    if sleep_mgr and sleep_mgr.is_sleeping():
+        log_message("Browser mode disabled — skipping VLC restart (sleep mode active).", cfg)
+    elif vlc.enabled:
         log_message("Browser mode disabled — restarting VLC instances...", cfg)
         vlc.restart_instances()
 

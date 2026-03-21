@@ -62,13 +62,15 @@ KJ Controller is a web-based karaoke show management application. A Flask backen
 | `youtube_search.py` | ~80 | YouTube search via yt-dlp: ytsearch with extract_flat for fast metadata |
 | `youtube_health.py` | ~170 | YouTube health checks: yt-dlp/EJS/Deno version detection, cookie validation, PyPI version check (24h cache), pip upgrade |
 | `rotation.py` | ~390 | `RotationManager` class: Google Sheets singer rotation read/write via gspread, writes local cache for display |
+| `sleep_mode.py` | ~100 | `SleepManager` class: enter/exit low-power sleep mode, stop services, unmount SSD |
 | `routes.py` | ~720 | Flask Blueprint with all route handlers |
 
 ### Dependency Flow
 
 ```
-app.py → config.py, media.py, vlc.py, chromium.py, catalog.py, zip_playback.py, overlay.py, routes.py, utils.py
-routes.py → config.py, utils.py, karaoke_nerds, youtube_search, youtube_health, psutil (accesses media/vlc/catalog/zip_playback/overlay_manager via current_app)
+app.py → config.py, media.py, vlc.py, chromium.py, catalog.py, zip_playback.py, overlay.py, sleep_mode.py, routes.py, utils.py
+routes.py → config.py, utils.py, sleep_mode, karaoke_nerds, youtube_search, youtube_health, psutil (accesses media/vlc/catalog/zip_playback/overlay_manager/sleep_manager via current_app)
+sleep_mode.py → config.py, utils.py (subprocess for shell scripts)
 karaoke_nerds.py → config.py, utils.py (requests, beautifulsoup4)
 youtube_search.py → media._ytdlp_base_opts, config.py, utils.py (yt_dlp)
 youtube_health.py → (yt_dlp, importlib.metadata, shutil, subprocess)
@@ -99,6 +101,7 @@ utils.py → (stdlib only)
 | Rotation queue | `RotationManager` (Google Sheet + local cache) | `current_app.rotation` |
 | Chromium process | `ChromiumManager` (subprocess + PipeWire) | `current_app.chromium` |
 | Browser mode flag | `_browser_mode` bool in routes.py | Module-level (resets on restart) |
+| Sleep mode | `SleepManager` (`/tmp/kj-sleep-mode` flag) | `current_app.sleep_manager` |
 
 ## REST API
 
@@ -144,6 +147,8 @@ utils.py → (stdlib only)
 | POST | `/overlays/import` | Bulk import overlays (replaces all, assigns new IDs) |
 | GET | `/system/autodeploy` | Check if kj-autodeploy service is active |
 | POST | `/system/autodeploy` | Enable/disable kj-autodeploy (persists across reboots) |
+| GET | `/system/sleep-mode` | Sleep mode status (active, entering, exiting, state details) |
+| POST | `/system/sleep-mode` | Enter or exit sleep mode (stops services, unmounts SSD, power-saver) |
 | GET | `/system/stats` | System metrics: CPU %, memory, disk usage (requires psutil) |
 | GET | `/rotation` | Get singer rotation queue (non-done entries from Google Sheet) |
 | POST | `/rotation/status` | Update a rotation entry's status (any status from sheet) |

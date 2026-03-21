@@ -15,6 +15,7 @@ from media import MediaIndex
 from overlay import OverlayManager
 from rotation import RotationManager
 from routes import routes_bp
+from sleep_mode import SleepManager
 from utils import log_message
 from chromium import ChromiumManager
 from vlc import VLCManager
@@ -43,6 +44,7 @@ def create_app(config=None):
     overlay_path = cfg.get('overlays_path') if config else None
     flask_app.overlay_manager = OverlayManager(config_path=overlay_path)
     flask_app.rotation = _init_rotation(cfg)
+    flask_app.sleep_manager = SleepManager()
     flask_app.download_queue = {'items': [], 'worker_running': False}
     flask_app._download_lock = threading.Lock()
     flask_app.register_blueprint(routes_bp)
@@ -127,6 +129,9 @@ def start_app():  # pragma: no cover
     flask_app.rotation = _init_rotation(cfg)
     if flask_app.rotation:
         log_message("Rotation sheet integration enabled.", cfg)
+    flask_app.sleep_manager = SleepManager()
+    if flask_app.sleep_manager.is_sleeping():
+        log_message("Sleep mode is active (from previous session).", cfg)
     flask_app.download_queue = {'items': [], 'worker_running': False}
     flask_app._download_lock = threading.Lock()
     flask_app.register_blueprint(routes_bp)

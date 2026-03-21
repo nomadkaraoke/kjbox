@@ -1734,6 +1734,100 @@ async function toggleAutoDeploy(active) {
     }
 }
 
+// --- Sleep Mode ---
+
+let _sleepModeActive = false;
+
+async function fetchSleepModeStatus() {
+    try {
+        const response = await fetch('/system/sleep-mode');
+        const data = await response.json();
+        _sleepModeActive = data.active;
+        const sw = document.getElementById('sleep-mode-switch');
+        if (sw) sw.checked = data.active;
+        updateSleepModeUI(data);
+    } catch (e) { /* ignore */ }
+}
+
+function updateSleepModeUI(data) {
+    const statusEl = document.getElementById('sleep-mode-status');
+    const section = document.getElementById('sleep-mode-section');
+    if (!statusEl || !section) return;
+
+    if (data.active) {
+        section.classList.add('sleep-mode-active');
+        const entered = data.state && data.state.entered_at
+            ? new Date(data.state.entered_at).toLocaleString()
+            : 'unknown';
+        statusEl.textContent = `Sleeping since ${entered}. Services stopped, SSD unmounted, power-saver mode.`;
+        statusEl.classList.remove('hidden');
+    } else if (data.entering) {
+        section.classList.add('sleep-mode-active');
+        statusEl.textContent = 'Entering sleep mode...';
+        statusEl.classList.remove('hidden');
+    } else if (data.exiting) {
+        section.classList.remove('sleep-mode-active');
+        statusEl.textContent = 'Waking up...';
+        statusEl.classList.remove('hidden');
+    } else {
+        section.classList.remove('sleep-mode-active');
+        statusEl.classList.add('hidden');
+    }
+}
+
+async function toggleSleepMode(active) {
+    const sw = document.getElementById('sleep-mode-switch');
+
+    if (active) {
+        // Entering sleep — confirm first
+        const ok = confirm(
+            'Enter Sleep Mode?\n\n' +
+            'This will:\n' +
+            '- Stop VLC, overlays, rotation display, VNC\n' +
+            '- Unmount and power down the USB SSD\n' +
+            '- Switch to power-saver mode\n' +
+            '- Stop Dropbox and other services\n\n' +
+            'The web UI will remain accessible to wake the system.'
+        );
+        if (!ok) {
+            if (sw) sw.checked = false;
+            return;
+        }
+    }
+
+    const statusEl = document.getElementById('sleep-mode-status');
+    if (statusEl) {
+        statusEl.textContent = active ? 'Entering sleep mode...' : 'Waking up...';
+        statusEl.classList.remove('hidden');
+    }
+
+    try {
+        const response = await fetch('/system/sleep-mode', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ active })
+        });
+        const data = await response.json();
+        _sleepModeActive = data.active;
+        if (sw) sw.checked = data.active;
+
+        if (data.active) {
+            log('Sleep mode activated', 'success');
+            updateSleepModeUI(data);
+        } else {
+            log('System awake', 'success');
+            updateSleepModeUI({ active: false });
+        }
+
+        if (data.errors && data.errors.length > 0) {
+            log(`Sleep mode warnings: ${data.errors.join('; ')}`, 'warn');
+        }
+    } catch (e) {
+        log('Failed to toggle sleep mode', 'error');
+        fetchSleepModeStatus(); // revert switch to actual state
+    }
+}
+
 async function rebuildCatalog() {
     log('Rebuilding catalog...');
     const data = await apiCall('/catalog/build', {});
@@ -2407,6 +2501,7 @@ document.addEventListener('DOMContentLoaded', () => {
     checkCatalogAvailability();
     fetchRotation();
     fetchAutoDeployStatus();
+    fetchSleepModeStatus();
     log('Nomad KJ Control initialized.');
 });
 

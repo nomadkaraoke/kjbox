@@ -207,6 +207,19 @@ button:disabled:hover {
     display: flex; align-items: center; gap: 8px;
     font-size: 0.8em; color: #888; cursor: default;
 }
+.sleep-mode-toggle {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 0.8em; color: #888; cursor: default;
+}
+.sleep-mode-status {
+    font-size: 0.75em; color: #a78bfa; padding: 6px 0 0;
+    line-height: 1.4;
+}
+.sleep-mode-status.hidden { display: none; }
+.sleep-mode-active {
+    background: rgba(167, 139, 250, 0.05);
+    border-color: rgba(167, 139, 250, 0.3);
+}
 
 .system-overlay {
     display: flex; align-items: center; gap: 8px;

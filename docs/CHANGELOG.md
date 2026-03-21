@@ -2,6 +2,19 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-03-21 - Sleep Mode
+
+Added Sleep Mode toggle to the System section of the KJ Controller UI for low-power state between weekly karaoke nights.
+
+- Toggle in System panel stops VLC, overlays, rotation display, VNC, Dropbox, and unnecessary services
+- Unmounts and spins down USB SSD, enables USB auto-suspend
+- Blanks display via DPMS, switches to power-saver power profile
+- Pre-sleep state captured to restore only previously-running services on wake
+- Playback routes return 409 while sleeping; web UI and SSH remain accessible
+- Reboot during sleep auto-clears flag — system boots normally
+- Shell scripts (`sleep-enter.sh`, `sleep-exit.sh`) can also be run manually via SSH
+- Installed `uhubctl` on NomadPC (USB hubs don't support per-port power, but available for future hardware)
+
 ## 2026-03-06 - Drag-and-Drop Rotation Reordering
 
 Added drag handles (≡) to rotation entries in the KJ Controller UI for reordering singers.
