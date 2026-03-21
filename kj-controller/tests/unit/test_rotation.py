@@ -1,8 +1,7 @@
-"""Unit tests for RotationManager."""
+"""Unit tests for RotationManager (rotation.py) — coordinator layer."""
 
 import json
 import os
-import time
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -10,375 +9,313 @@ import pytest
 from rotation import ROTATION_CACHE_FILE, RotationManager, _find_header
 
 
+# ---------------------------------------------------------------------------
+# Fixtures
+# ---------------------------------------------------------------------------
+
 @pytest.fixture
-def mock_sheet():
-    """Create a mock gspread worksheet with header in row 2 (like the real sheet)."""
-    sheet = MagicMock()
-    sheet.get_all_values.return_value = [
-        ["", "", "", "", "", ".", "URL!"],  # metadata row
-        ["Timestamp", "Singer", "Song & Artist", "Status", "Round", "Notes", "Column 1"],
-        ["3/5/2026 20:00:00", "Alice", "Bohemian Rhapsody - Queen", "Now Singing", "1", "", ""],
-        ["3/5/2026 20:05:00", "Bob", "Don't Stop Believin - Journey", "Up Next", "1", "", ""],
-        ["3/5/2026 20:10:00", "Carol", "Sweet Caroline - Neil Diamond", "", "1", "first timer", ""],
-        ["3/5/2026 19:30:00", "Dave", "Piano Man - Billy Joel", "Done", "1", "", ""],
-        ["3/5/2026 20:15:00", "Eve", "Total Eclipse - Bonnie Tyler", "", "1", "", ""],
-    ]
-    return sheet
+def mgr(tmp_path):
+    """Return a RotationManager backed by a temp SQLite DB, no Sheet configured."""
+    return RotationManager(str(tmp_path / "rotation.db"))
 
 
 @pytest.fixture
-def manager(mock_sheet):
-    """Create a RotationManager with a mocked sheet."""
-    mgr = RotationManager("fake-sheet-id", "/tmp/fake-creds.json")
-    mgr._sheet = mock_sheet
-    mgr._write_display_cache = lambda: None  # don't write files in tests
+def mgr_with_entries(mgr):
+    """RotationManager pre-populated with three singers."""
+    mgr.add_entry("Alice", "Bohemian Rhapsody - Queen")
+    mgr.add_entry("Bob", "Don't Stop Believin - Journey")
+    mgr.add_entry("Carol", "Sweet Caroline - Neil Diamond", notes="first timer")
     return mgr
 
 
-class TestFindHeader:
-    def test_finds_header_in_row_2(self):
-        rows = [
-            ["", "", "", "", "", ".", "URL!"],
-            ["Timestamp", "Singer", "Song & Artist", "Status", "Round", "Notes", "Column 1"],
-        ]
-        row_idx, col_map = _find_header(rows)
-        assert row_idx == 2
-        assert col_map["singer"] == 1
-        assert col_map["song_artist"] == 2
-        assert col_map["status"] == 3
-        assert col_map["notes"] == 5
+# ---------------------------------------------------------------------------
+# Re-export check
+# ---------------------------------------------------------------------------
 
-    def test_finds_header_in_row_1(self):
+class TestFindHeaderReExport:
+    """Ensure _find_header is still importable from rotation for existing callers."""
+
+    def test_finds_header(self):
         rows = [["Timestamp", "Singer", "Song & Artist", "Status", "Notes"]]
-        row_idx, col_map = _find_header(rows)
-        assert row_idx == 1
-        assert col_map["notes"] == 4
+        idx, col_map = _find_header(rows)
+        assert idx == 1
+        assert col_map["singer"] == 1
+        assert col_map["status"] == 3
 
-    def test_no_header_found(self):
-        rows = [["Foo", "Bar", "Baz"]]
-        row_idx, col_map = _find_header(rows)
-        assert row_idx is None
+    def test_no_header(self):
+        idx, col_map = _find_header([["Foo", "Bar"]])
+        assert idx is None
 
 
-class TestGetRotation:
-    def test_returns_non_done_entries(self, manager, mock_sheet):
-        entries = manager.get_rotation()
-        assert len(entries) == 4  # Alice, Bob, Carol, Eve (not Dave who is Done)
+# ---------------------------------------------------------------------------
+# TestCoordinatorCRUD
+# ---------------------------------------------------------------------------
+
+class TestCoordinatorCRUD:
+    def test_get_rotation_empty(self, mgr):
+        assert mgr.get_rotation() == []
+
+    def test_get_rotation_returns_entries(self, mgr_with_entries):
+        entries = mgr_with_entries.get_rotation()
+        assert len(entries) == 3
         assert entries[0]["singer"] == "Alice"
-        assert entries[0]["status"] == "Now Singing"
-        assert entries[0]["row_index"] == 3  # header is row 2, data starts row 3
 
-    def test_includes_song_artist(self, manager):
-        entries = manager.get_rotation()
-        assert entries[1]["song_artist"] == "Don't Stop Believin - Journey"
+    def test_get_rotation_force_refresh_accepted(self, mgr_with_entries):
+        """force_refresh=True is accepted without error (ignored internally)."""
+        entries = mgr_with_entries.get_rotation(force_refresh=True)
+        assert len(entries) == 3
 
-    def test_includes_notes(self, manager):
-        entries = manager.get_rotation()
-        assert entries[2]["notes"] == "first timer"
+    def test_add_entry_returns_dict(self, mgr):
+        entry = mgr.add_entry("Dave", "Piano Man - Billy Joel")
+        assert entry["singer"] == "Dave"
+        assert entry["song_artist"] == "Piano Man - Billy Joel"
+        assert entry["status"] == "Waiting"
+        assert "id" in entry
 
-    def test_caches_results(self, manager, mock_sheet):
-        manager.get_rotation()
-        manager.get_rotation()
-        assert mock_sheet.get_all_values.call_count == 1
+    def test_add_entry_with_notes(self, mgr):
+        entry = mgr.add_entry("Eve", "Total Eclipse", notes="VIP")
+        assert entry["notes"] == "VIP"
 
-    def test_force_refresh_bypasses_cache(self, manager, mock_sheet):
-        manager.get_rotation()
-        manager.get_rotation(force_refresh=True)
-        assert mock_sheet.get_all_values.call_count == 2
+    def test_update_status_basic(self, mgr_with_entries):
+        entries = mgr_with_entries.get_rotation()
+        alice_id = entries[0]["id"]
+        mgr_with_entries.update_status(alice_id, "Done")
+        updated = mgr_with_entries.store.get_entry(alice_id)
+        assert updated["status"] == "Done"
 
-    def test_cache_expires(self, manager, mock_sheet):
-        manager.get_rotation()
-        manager._cache_time = time.time() - 20  # expired
-        manager.get_rotation()
-        assert mock_sheet.get_all_values.call_count == 2
+    def test_update_status_not_in_queue_after_done(self, mgr_with_entries):
+        entries = mgr_with_entries.get_rotation()
+        alice_id = entries[0]["id"]
+        mgr_with_entries.update_status(alice_id, "Done")
+        queue = mgr_with_entries.get_rotation()
+        singers = [e["singer"] for e in queue]
+        assert "Alice" not in singers
 
-    def test_empty_sheet_no_header(self, manager, mock_sheet):
-        mock_sheet.get_all_values.return_value = [["Foo", "Bar"]]
-        entries = manager.get_rotation()
-        assert entries == []
+    def test_mark_singing(self, mgr_with_entries):
+        entries = mgr_with_entries.get_rotation()
+        bob_id = entries[1]["id"]
+        mgr_with_entries.mark_singing(bob_id)
+        updated = mgr_with_entries.store.get_entry(bob_id)
+        assert updated["status"] == "Now Singing"
 
-    def test_header_only(self, manager, mock_sheet):
-        mock_sheet.get_all_values.return_value = [
-            ["Timestamp", "Singer", "Song & Artist", "Status", "Notes"],
-        ]
-        entries = manager.get_rotation()
-        assert entries == []
+    def test_mark_singing_clears_others(self, mgr_with_entries):
+        entries = mgr_with_entries.get_rotation()
+        alice_id = entries[0]["id"]
+        bob_id = entries[1]["id"]
+        mgr_with_entries.mark_singing(alice_id)
+        mgr_with_entries.mark_singing(bob_id)
+        # Alice should be back to Waiting
+        assert mgr_with_entries.store.get_entry(alice_id)["status"] == "Waiting"
+        assert mgr_with_entries.store.get_entry(bob_id)["status"] == "Now Singing"
 
-    def test_skips_empty_singer(self, manager, mock_sheet):
-        mock_sheet.get_all_values.return_value = [
-            ["Timestamp", "Singer", "Song & Artist", "Status", "Notes"],
-            ["3/5/2026 20:00:00", "", "Some Song", "", ""],
-            ["3/5/2026 20:05:00", "Bob", "A Song", "", ""],
-        ]
-        entries = manager.get_rotation()
+    def test_mark_up_next(self, mgr_with_entries):
+        entries = mgr_with_entries.get_rotation()
+        carol_id = entries[2]["id"]
+        mgr_with_entries.mark_up_next(carol_id)
+        assert mgr_with_entries.store.get_entry(carol_id)["status"] == "Up Next"
+
+    def test_mark_up_next_clears_others(self, mgr_with_entries):
+        entries = mgr_with_entries.get_rotation()
+        alice_id = entries[0]["id"]
+        bob_id = entries[1]["id"]
+        mgr_with_entries.mark_up_next(alice_id)
+        mgr_with_entries.mark_up_next(bob_id)
+        assert mgr_with_entries.store.get_entry(alice_id)["status"] == "Waiting"
+        assert mgr_with_entries.store.get_entry(bob_id)["status"] == "Up Next"
+
+    def test_update_entry_singer(self, mgr_with_entries):
+        entries = mgr_with_entries.get_rotation()
+        alice_id = entries[0]["id"]
+        result = mgr_with_entries.update_entry(alice_id, singer="Alicia")
+        assert result["singer"] == "Alicia"
+
+    def test_update_entry_song(self, mgr_with_entries):
+        entries = mgr_with_entries.get_rotation()
+        bob_id = entries[1]["id"]
+        result = mgr_with_entries.update_entry(bob_id, song_artist="New Song - Artist")
+        assert result["song_artist"] == "New Song - Artist"
+
+    def test_update_entry_both(self, mgr_with_entries):
+        entries = mgr_with_entries.get_rotation()
+        carol_id = entries[2]["id"]
+        result = mgr_with_entries.update_entry(carol_id, singer="Caroline", song_artist="Different Song")
+        assert result["singer"] == "Caroline"
+        assert result["song_artist"] == "Different Song"
+
+    def test_delete_entry(self, mgr_with_entries):
+        entries = mgr_with_entries.get_rotation()
+        alice_id = entries[0]["id"]
+        mgr_with_entries.delete_entry(alice_id)
+        remaining = mgr_with_entries.get_rotation()
+        assert len(remaining) == 2
+        assert all(e["singer"] != "Alice" for e in remaining)
+
+    def test_move_entry(self, mgr_with_entries):
+        entries = mgr_with_entries.get_rotation()
+        alice_id = entries[0]["id"]
+        # Move Alice from position 1 to position 3
+        mgr_with_entries.move_entry(alice_id, 3)
+        reordered = mgr_with_entries.get_rotation()
+        assert reordered[2]["singer"] == "Alice"
+
+    def test_archive_rotation(self, mgr_with_entries):
+        count = mgr_with_entries.archive_rotation()
+        assert count == 3
+        # After archive, rotation has only the starter entry
+        entries = mgr_with_entries.get_rotation()
         assert len(entries) == 1
-        assert entries[0]["singer"] == "Bob"
+        assert entries[0]["singer"] == "Andrew"
+
+    def test_get_stats(self, mgr_with_entries):
+        stats = mgr_with_entries.get_stats()
+        assert stats["singers"] == 3
+        assert stats["queued"] == 3
+        assert stats["sung"] == 0
 
 
-class TestUpdateStatus:
-    def test_updates_cell(self, manager, mock_sheet):
-        manager.update_status(4, "Done")
-        # Status column is D (index 3, so 1-based = 4)
-        mock_sheet.update_cell.assert_called_once_with(4, 4, "Done")
+# ---------------------------------------------------------------------------
+# TestCoordinatorLinking
+# ---------------------------------------------------------------------------
 
-    def test_invalidates_cache(self, manager, mock_sheet):
-        manager.get_rotation()  # populate cache
-        manager.update_status(4, "Done")
-        assert manager._cache is None
+class TestCoordinatorLinking:
+    def test_link_file_without_media(self, mgr):
+        entry = mgr.add_entry("Frank", "My Way - Sinatra")
+        mgr.link_file(entry["id"], "/path/to/my-way.cdg")
+        updated = mgr.store.get_entry(entry["id"])
+        assert updated["file_path"] == "/path/to/my-way.cdg"
+        assert updated["duration"] is None  # no media index
 
+    def test_link_file_with_media_index(self, mgr):
+        """When self.media is set, duration is looked up from media.index."""
+        entry = mgr.add_entry("Frank", "My Way - Sinatra")
+        file_path = "/path/to/my-way.cdg"
 
-class TestMarkSinging:
-    def test_sets_singing_and_clears_others(self, manager, mock_sheet):
-        manager.mark_singing(4)  # Bob is row 4
-        mock_sheet.batch_update.assert_called_once()
-        updates = mock_sheet.batch_update.call_args[0][0]
-        # Should clear Alice (row 3, currently "Now Singing") and set Bob (row 4)
-        ranges = {u["range"]: u["values"][0][0] for u in updates}
-        assert ranges["D3"] == "Waiting"  # clear Alice's singing
-        assert ranges["D4"] == "Now Singing"  # set Bob as singing
+        media_mock = MagicMock()
+        media_mock.index = {file_path: {"duration": 245}}
+        mgr.media = media_mock
 
-    def test_invalidates_cache(self, manager, mock_sheet):
-        manager.get_rotation()
-        manager.mark_singing(4)
-        assert manager._cache is None
+        mgr.link_file(entry["id"], file_path)
+        updated = mgr.store.get_entry(entry["id"])
+        assert updated["file_path"] == file_path
+        assert updated["duration"] == 245
 
+    def test_link_file_media_missing_from_index(self, mgr):
+        """If file not in media index, duration stays None."""
+        entry = mgr.add_entry("Frank", "My Way - Sinatra")
+        media_mock = MagicMock()
+        media_mock.index = {}  # file not indexed
+        mgr.media = media_mock
 
-class TestMarkUpNext:
-    def test_sets_up_next_and_clears_others(self, manager, mock_sheet):
-        manager.mark_up_next(5)  # Carol is row 5
-        mock_sheet.batch_update.assert_called_once()
-        updates = mock_sheet.batch_update.call_args[0][0]
-        ranges = {u["range"]: u["values"][0][0] for u in updates}
-        assert ranges["D4"] == "Waiting"  # clear Bob's "Up Next"
-        assert ranges["D5"] == "Up Next"  # set Carol
+        mgr.link_file(entry["id"], "/path/to/my-way.cdg")
+        updated = mgr.store.get_entry(entry["id"])
+        assert updated["duration"] is None
 
-    def test_invalidates_cache(self, manager, mock_sheet):
-        manager.get_rotation()
-        manager.mark_up_next(5)
-        assert manager._cache is None
-
-
-class TestUpdateEntry:
-    def test_updates_singer_and_song(self, manager, mock_sheet):
-        manager.update_entry(4, singer="Bobby", song_artist="New Song - Artist")
-        mock_sheet.batch_update.assert_called_once()
-        updates = mock_sheet.batch_update.call_args[0][0]
-        ranges = {u["range"]: u["values"][0][0] for u in updates}
-        assert ranges["B4"] == "Bobby"
-        assert ranges["C4"] == "New Song - Artist"
-
-    def test_updates_singer_only(self, manager, mock_sheet):
-        manager.update_entry(4, singer="Bobby")
-        updates = mock_sheet.batch_update.call_args[0][0]
-        assert len(updates) == 1
-        assert updates[0]["range"] == "B4"
-
-    def test_updates_song_only(self, manager, mock_sheet):
-        manager.update_entry(4, song_artist="New Song")
-        updates = mock_sheet.batch_update.call_args[0][0]
-        assert len(updates) == 1
-        assert updates[0]["range"] == "C4"
-
-    def test_no_updates_no_batch(self, manager, mock_sheet):
-        manager.update_entry(4)
-        mock_sheet.batch_update.assert_not_called()
-
-    def test_invalidates_cache(self, manager, mock_sheet):
-        manager.get_rotation()
-        manager.update_entry(4, singer="Bobby")
-        assert manager._cache is None
+    def test_unlink_file(self, mgr):
+        entry = mgr.add_entry("Grace", "Dancing Queen")
+        mgr.link_file(entry["id"], "/path/to/dancing-queen.zip")
+        mgr.unlink_file(entry["id"])
+        updated = mgr.store.get_entry(entry["id"])
+        assert updated["file_path"] is None
+        assert updated["duration"] is None
 
 
-class TestDeleteEntry:
-    def test_deletes_row(self, manager, mock_sheet):
-        manager.delete_entry(4)
-        mock_sheet.delete_rows.assert_called_once_with(4)
+# ---------------------------------------------------------------------------
+# TestSyncStatus
+# ---------------------------------------------------------------------------
 
-    def test_invalidates_cache(self, manager, mock_sheet):
-        manager.get_rotation()
-        manager.delete_entry(4)
-        assert manager._cache is None
+class TestSyncStatus:
+    def test_get_sync_status_no_sync(self, mgr):
+        status = mgr.get_sync_status()
+        assert status["is_online"] is False
+        assert status["last_sync"] is None
+        assert status["next_sync_in"] is None
 
+    def test_get_sync_status_delegates_to_sync(self, tmp_path):
+        mgr = RotationManager(str(tmp_path / "rotation.db"))
+        mock_sync = MagicMock()
+        mock_sync.get_status.return_value = {
+            "last_sync": "2026-03-21 17:00:00",
+            "is_online": True,
+            "next_sync_in": 15.0,
+        }
+        mgr.sync = mock_sync
+        status = mgr.get_sync_status()
+        assert status["is_online"] is True
+        mock_sync.get_status.assert_called_once()
 
-class TestMoveEntry:
-    def test_move_down(self, manager, mock_sheet):
-        """Moving row 3 to row 5: delete row 3, insert at row 4 (shifted)."""
-        manager.move_entry(3, 5)
-        mock_sheet.delete_rows.assert_called_once_with(3)
-        mock_sheet.insert_row.assert_called_once()
-        # After deleting row 3, target 5 shifts to 4
-        assert mock_sheet.insert_row.call_args[0][1] == 4
+    def test_restore_from_sheet_no_sync_raises(self, mgr):
+        with pytest.raises(RuntimeError, match="not configured"):
+            mgr.restore_from_sheet()
 
-    def test_move_up(self, manager, mock_sheet):
-        """Moving row 5 to row 3: delete row 5, insert at row 3."""
-        manager.move_entry(5, 3)
-        mock_sheet.delete_rows.assert_called_once_with(5)
-        mock_sheet.insert_row.assert_called_once()
-        assert mock_sheet.insert_row.call_args[0][1] == 3
-
-    def test_noop_same_row(self, manager, mock_sheet):
-        manager.move_entry(3, 3)
-        mock_sheet.delete_rows.assert_not_called()
-
-    def test_preserves_row_data(self, manager, mock_sheet):
-        manager.move_entry(3, 5)
-        row_data = mock_sheet.insert_row.call_args[0][0]
-        # Row 3 (0-based index 2) is Alice's row
-        assert row_data[1] == "Alice"
-
-    def test_invalid_row_raises(self, manager, mock_sheet):
-        with pytest.raises(ValueError):
-            manager.move_entry(0, 3)
-        with pytest.raises(ValueError):
-            manager.move_entry(3, 99)
-
-    def test_invalidates_cache(self, manager, mock_sheet):
-        manager.get_rotation()
-        manager.move_entry(3, 5)
-        assert manager._cache is None
-
-
-class TestAddEntry:
-    def test_appends_row(self, manager, mock_sheet):
-        manager.add_entry("Frank", "My Way - Sinatra")
-        mock_sheet.append_row.assert_called_once()
-        row = mock_sheet.append_row.call_args[0][0]
-        assert row[1] == "Frank"
-        assert row[2] == "My Way - Sinatra"
-        assert row[3] == "Waiting"  # default status
-        assert row[0]  # has timestamp
-
-    def test_invalidates_cache(self, manager, mock_sheet):
-        manager.get_rotation()
-        manager.add_entry("Frank", "My Way")
-        assert manager._cache is None
-
-
-class TestArchiveRotation:
-    def test_archives_data_rows_to_past_events(self, manager, mock_sheet):
-        archive_sheet = MagicMock()
-        spreadsheet = MagicMock()
-        spreadsheet.worksheet.return_value = archive_sheet
-        manager._get_spreadsheet = lambda: spreadsheet
-
-        count = manager.archive_rotation()
-        # 5 data rows (Alice, Bob, Carol, Dave, Eve)
+    def test_restore_from_sheet_delegates_to_sync(self, tmp_path):
+        mgr = RotationManager(str(tmp_path / "rotation.db"))
+        mock_sync = MagicMock()
+        mock_sync.restore_from_sheet.return_value = 5
+        mgr.sync = mock_sync
+        count = mgr.restore_from_sheet()
         assert count == 5
-        # Should append separator + data rows to archive
-        archive_sheet.append_row.assert_called_once()
-        sep = archive_sheet.append_row.call_args[0][0][0]
-        assert sep.startswith("---") and "2026" in sep
-        archive_sheet.append_rows.assert_called_once()
-        rows = archive_sheet.append_rows.call_args[0][0]
-        assert len(rows) == 5
-        # Should write starter row into first data row (row 3)
-        mock_sheet.update.assert_called_once()
-        starter = mock_sheet.update.call_args[0][1][0]
-        assert starter[1] == "Andrew"
-        assert starter[2] == "First Song of the Night"
-        assert starter[3] == "Waiting"
-        # Should delete remaining rows (4-7)
-        mock_sheet.delete_rows.assert_called_once_with(4, 7)
-
-    def test_creates_past_events_sheet_if_missing(self, manager, mock_sheet):
-        spreadsheet = MagicMock()
-        spreadsheet.worksheet.side_effect = __import__('gspread').exceptions.WorksheetNotFound
-        new_sheet = MagicMock()
-        spreadsheet.add_worksheet.return_value = new_sheet
-        manager._get_spreadsheet = lambda: spreadsheet
-
-        count = manager.archive_rotation()
-        assert count == 5
-        spreadsheet.add_worksheet.assert_called_once()
-        new_sheet.append_rows.assert_called_once()
-
-    def test_returns_zero_when_no_data(self, manager, mock_sheet):
-        mock_sheet.get_all_values.return_value = [
-            ["Timestamp", "Singer", "Song & Artist", "Status", "Notes"],
-        ]
-        count = manager.archive_rotation()
-        assert count == 0
-
-    def test_invalidates_cache(self, manager, mock_sheet):
-        archive_sheet = MagicMock()
-        spreadsheet = MagicMock()
-        spreadsheet.worksheet.return_value = archive_sheet
-        manager._get_spreadsheet = lambda: spreadsheet
-
-        manager.get_rotation()
-        manager.archive_rotation()
-        assert manager._cache is None
+        mock_sync.restore_from_sheet.assert_called_once()
 
 
-class TestWriteDisplayCache:
-    """Tests for the local JSON cache written for conky display."""
+# ---------------------------------------------------------------------------
+# TestDisplayCache
+# ---------------------------------------------------------------------------
 
-    def test_writes_cache_file(self, mock_sheet, tmp_path):
-        """_write_display_cache writes valid JSON with queue and stats."""
+class TestDisplayCache:
+    def test_cache_written_after_add(self, tmp_path):
         cache_file = str(tmp_path / "rotation_cache.json")
-        mgr = RotationManager("fake-sheet-id", "/tmp/fake-creds.json")
-        mgr._sheet = mock_sheet
+        mgr = RotationManager(str(tmp_path / "rotation.db"))
         with patch("rotation.ROTATION_CACHE_FILE", cache_file):
-            mgr._write_display_cache()
-
+            mgr.add_entry("Alice", "Bohemian Rhapsody")
         assert os.path.exists(cache_file)
+
+    def test_cache_contains_queue(self, tmp_path):
+        cache_file = str(tmp_path / "rotation_cache.json")
+        mgr = RotationManager(str(tmp_path / "rotation.db"))
+        with patch("rotation.ROTATION_CACHE_FILE", cache_file):
+            mgr.add_entry("Alice", "Bohemian Rhapsody")
+            mgr.add_entry("Bob", "My Way")
         with open(cache_file) as f:
             data = json.load(f)
-
         assert "queue" in data
         assert "stats" in data
         assert "updated" in data
-        # Should have 4 non-done entries (Alice, Bob, Carol, Eve)
-        assert len(data["queue"]) == 4
+        assert len(data["queue"]) == 2
         assert data["queue"][0]["singer"] == "Alice"
-        assert data["queue"][0]["status"] == "Now Singing"
-        # Stats
-        assert data["stats"]["singers"] == 5  # including Dave (done)
-        assert data["stats"]["sung"] == 1  # Dave
-        assert data["stats"]["queued"] == 4
-        assert data["stats"]["started"] == "3/5 20:00"
 
-    def test_cache_queue_fields(self, mock_sheet, tmp_path):
-        """Cache entries only include display-relevant fields."""
+    def test_cache_queue_fields(self, tmp_path):
         cache_file = str(tmp_path / "rotation_cache.json")
-        mgr = RotationManager("fake-sheet-id", "/tmp/fake-creds.json")
-        mgr._sheet = mock_sheet
+        mgr = RotationManager(str(tmp_path / "rotation.db"))
         with patch("rotation.ROTATION_CACHE_FILE", cache_file):
-            mgr._write_display_cache()
-
+            mgr.add_entry("Alice", "Bohemian Rhapsody")
         with open(cache_file) as f:
             data = json.load(f)
-
         entry = data["queue"][0]
         assert set(entry.keys()) == {"singer", "song_artist", "status"}
 
-    def test_invalidate_triggers_cache_write(self, mock_sheet, tmp_path):
-        """_invalidate_cache calls _write_display_cache (integration check)."""
+    def test_cache_updated_after_status_change(self, tmp_path):
         cache_file = str(tmp_path / "rotation_cache.json")
-        mgr = RotationManager("fake-sheet-id", "/tmp/fake-creds.json")
-        mgr._sheet = mock_sheet
+        mgr = RotationManager(str(tmp_path / "rotation.db"))
         with patch("rotation.ROTATION_CACHE_FILE", cache_file):
-            mgr._invalidate_cache()
+            entry = mgr.add_entry("Alice", "Bohemian Rhapsody")
+            mgr.mark_singing(entry["id"])
+        with open(cache_file) as f:
+            data = json.load(f)
+        assert data["queue"][0]["status"] == "Now Singing"
 
-        assert os.path.exists(cache_file)
-
-    def test_survives_errors(self, mock_sheet, tmp_path):
-        """_write_display_cache silently handles errors."""
-        mgr = RotationManager("fake-sheet-id", "/tmp/fake-creds.json")
-        mgr._sheet = mock_sheet
-        # Make get_all_values raise to trigger the except branch
-        mock_sheet.get_all_values.side_effect = Exception("network error")
-        # Should not raise
-        mgr._write_display_cache()
-
-    def test_atomic_write(self, mock_sheet, tmp_path):
-        """Cache is written atomically via tmp file + rename."""
+    def test_cache_atomic_write(self, tmp_path):
+        """No .tmp file should linger after the write."""
         cache_file = str(tmp_path / "rotation_cache.json")
-        mgr = RotationManager("fake-sheet-id", "/tmp/fake-creds.json")
-        mgr._sheet = mock_sheet
+        mgr = RotationManager(str(tmp_path / "rotation.db"))
         with patch("rotation.ROTATION_CACHE_FILE", cache_file):
-            mgr._write_display_cache()
-
-        # tmp file should not remain
+            mgr.add_entry("Alice", "Bohemian Rhapsody")
         assert not os.path.exists(cache_file + ".tmp")
         assert os.path.exists(cache_file)
+
+    def test_cache_survives_errors(self, tmp_path):
+        """_write_display_cache silently swallows errors (best-effort)."""
+        mgr = RotationManager(str(tmp_path / "rotation.db"))
+        # Patch ROTATION_CACHE_FILE to an unwritable path to simulate failure
+        with patch("rotation.ROTATION_CACHE_FILE", "/no/such/directory/cache.json"):
+            # Should not raise
+            mgr._write_display_cache()
