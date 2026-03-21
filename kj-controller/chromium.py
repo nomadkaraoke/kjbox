@@ -46,7 +46,10 @@ class ChromiumManager:
         self.process = None
         self.current_url = None
         # Kill any orphan Chromium left from a previous server instance
-        self._kill_orphans()
+        # and reset PipeWire so VLC can use HDMI via ALSA
+        if self.has_orphan():
+            self._kill_orphans()
+            self._reset_pipewire()
 
     def has_orphan(self):
         """Check if any Chromium process is running with our data dir (not managed by us)."""
