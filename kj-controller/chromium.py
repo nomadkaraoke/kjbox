@@ -1,16 +1,21 @@
 """ChromiumManager: launch and manage a fullscreen Chromium browser instance."""
 
+import http.client
+import json
 import os
 import shutil
 import subprocess
 import time
-from urllib.parse import urlparse
+from urllib.parse import quote, urlparse
 
 from config import is_pi
 from utils import log_message
 
 # Chromium user data dir — separate from any existing sessions
 CHROMIUM_DATA_DIR = '/tmp/kj-chromium'
+
+# CDP remote debugging port for navigating without relaunch
+CDP_PORT = 9222
 
 # Candidate binary names in priority order
 CHROMIUM_BINARIES = ['chromium-browser', 'chromium', 'google-chrome']
@@ -159,6 +164,7 @@ class ChromiumManager:
             '--disable-translate',
             '--disable-infobars',
             '--autoplay-policy=no-user-gesture-required',
+            f'--remote-debugging-port={CDP_PORT}',
             f'--user-data-dir={CHROMIUM_DATA_DIR}',
             url,
         ]
@@ -187,6 +193,56 @@ class ChromiumManager:
             self.process = None
             # Revert PipeWire on failure
             self._reset_pipewire()
+            return False
+
+    def navigate(self, url):
+        """Navigate the existing Chromium instance to a new URL via CDP.
+
+        Uses the Chrome DevTools Protocol HTTP API to open a new tab at the
+        target URL, then closes the old tab. This avoids the flicker and delay
+        of killing and relaunching the entire browser.
+
+        Returns True on success, False if navigation failed (caller should
+        fall back to launch()).
+        """
+        if not url:
+            return False
+
+        parsed = urlparse(url)
+        if parsed.scheme not in ('http', 'https'):
+            log_message(f"ERROR: Rejected unsafe URL scheme '{parsed.scheme}'.", self.config)
+            return False
+
+        if not self.is_running():
+            return False
+
+        try:
+            conn = http.client.HTTPConnection('localhost', CDP_PORT, timeout=3)
+
+            # Get current tab ID
+            conn.request('GET', '/json')
+            resp = conn.getresponse()
+            pages = json.loads(resp.read())
+            if not pages:
+                return False
+            old_id = pages[0]['id']
+
+            # Open new tab at target URL
+            conn.request('PUT', f'/json/new?{quote(url, safe="")}')
+            resp = conn.getresponse()
+            resp.read()
+
+            # Close old tab
+            conn.request('GET', f'/json/close/{old_id}')
+            resp = conn.getresponse()
+            resp.read()
+            conn.close()
+
+            self.current_url = url
+            log_message(f"Chromium navigated to {url}", self.config)
+            return True
+        except Exception as e:
+            log_message(f"WARNING: CDP navigate failed ({e}), will relaunch.", self.config)
             return False
 
     def kill(self):

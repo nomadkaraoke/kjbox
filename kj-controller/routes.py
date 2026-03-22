@@ -1934,6 +1934,42 @@ def browser_mode_enable():
     return jsonify({"success": True, "url": url})
 
 
+@routes_bp.route('/browser-mode/navigate', methods=['POST'])
+def browser_mode_navigate():
+    """Navigate existing Chromium to a new URL without restarting."""
+    blocked = _check_sleep_mode()
+    if blocked:
+        return blocked
+    cfg = current_app.kj_config
+    chromium = getattr(current_app, 'chromium', None)
+
+    if chromium is None:
+        return jsonify({"error": "Chromium manager not available"}), 503
+
+    if not _browser_mode or not chromium.is_running():
+        return jsonify({"error": "Browser mode not active"}), 409
+
+    url = (request.json or {}).get('url', '').strip()
+    if not url:
+        return jsonify({"error": "url is required"}), 400
+
+    success = chromium.navigate(url)
+    if not success:
+        # Fall back to full relaunch
+        browser_audio = cfg.get('browser_audio_device', 'same')
+        vlc = current_app.vlc
+        if browser_audio == 'same':
+            audio_device = vlc.audio_device if vlc.enabled else cfg.get('default_audio_device', 'hdmiout')
+        else:
+            audio_device = browser_audio
+        success = chromium.launch(url, audio_device=audio_device)
+        if not success:
+            return jsonify({"error": "Failed to navigate"}), 500
+
+    save_config_value('browser_mode_url', url)
+    return jsonify({"success": True, "url": url})
+
+
 @routes_bp.route('/browser-mode/disable', methods=['POST'])
 def browser_mode_disable():
     """Disable browser mode: kill Chromium, reset PipeWire, restart VLC."""
