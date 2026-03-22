@@ -2041,6 +2041,8 @@ def download_and_link_rotation():
 
         if source == "divebar":
             download_url = divebar.get_download_url(file_id, cfg)
+            if not download_url:
+                return jsonify({"error": "Failed to get download URL from Divebar"}), 502
             queue_item = {
                 'id': download_id,
                 'url': download_url,
@@ -2080,6 +2082,82 @@ def download_and_link_rotation():
         _add_time_estimates(entries)
         return jsonify({"success": True, "entry": entry, "entries": entries})
 
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@routes_bp.route('/rotation/make', methods=['POST'])
+def make_rotation_entry():
+    """Create a gen job and link it to a rotation entry."""
+    rotation = current_app.rotation
+    if not hasattr(current_app, 'rotation') or rotation is None:
+        return jsonify({"error": "Rotation not configured"}), 503
+
+    gen_client = getattr(current_app, 'gen_client', None)
+    if gen_client is None:
+        return jsonify({"error": "Gen API not configured"}), 503
+
+    data = request.get_json(force=True)
+    artist = data.get('artist', '').strip()
+    title = data.get('title', '').strip()
+    if not artist or not title:
+        return jsonify({"error": "artist and title are required"}), 400
+
+    # Get or create rotation entry
+    entry_id = data.get('id')
+    if entry_id is None:
+        singer = data.get('singer', '').strip()
+        song_artist = data.get('song_artist', '').strip() or f"{title} - {artist}"
+        if not singer:
+            return jsonify({"error": "id or singer is required"}), 400
+        entry = rotation.add_entry(singer, song_artist)
+        entry_id = entry["id"]
+
+    try:
+        entry_id = int(entry_id)
+    except (TypeError, ValueError):
+        return jsonify({"error": "id must be an integer"}), 400
+
+    try:
+        from gen_client import map_gen_status
+        result = gen_client.create_job(artist, title)
+        job_id = result.get("job_id")
+        if not job_id:
+            return jsonify({"error": "Gen API did not return a job_id"}), 502
+
+        api_status = result.get("status", "pending")
+        gen_status = map_gen_status(api_status)
+        rotation.set_gen_status(entry_id, job_id, gen_status)
+
+        entry = rotation.store.get_entry(entry_id)
+        entries = rotation.get_rotation()
+        _add_time_estimates(entries)
+        return jsonify({"success": True, "entry": entry, "entries": entries, "job_id": job_id})
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@routes_bp.route('/rotation/gen-status', methods=['GET'])
+def rotation_gen_status():
+    """Return status of all active gen jobs for the current rotation."""
+    rotation = current_app.rotation
+    if not hasattr(current_app, 'rotation') or rotation is None:
+        return jsonify({"error": "Rotation not configured"}), 503
+
+    try:
+        active = rotation.store.get_active_gen_entries()
+        gen_entries = [
+            {
+                "entry_id": e["id"],
+                "gen_job_id": e["gen_job_id"],
+                "gen_status": e["gen_status"],
+                "singer": e["singer"],
+                "song_artist": e["song_artist"],
+            }
+            for e in active
+        ]
+        return jsonify({"gen_entries": gen_entries})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

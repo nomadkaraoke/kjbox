@@ -48,6 +48,23 @@ def create_app(config=None):
     flask_app.sleep_manager = SleepManager()
     flask_app.download_queue = {'items': [], 'worker_running': False}
     flask_app._download_lock = threading.Lock()
+
+    # Initialize gen API client and poller (optional — only if configured)
+    gen_api_url = cfg.get('gen_api_url', '')
+    gen_api_token = cfg.get('gen_api_token', '')
+    if gen_api_url and gen_api_token:
+        from gen_client import GenClient
+        from gen_poller import GenPoller
+        flask_app.gen_client = GenClient(gen_api_url, gen_api_token)
+        flask_app.gen_poller = GenPoller(
+            flask_app.gen_client, flask_app.rotation,
+            flask_app.media, cfg.get('download_folder', ''),
+            poll_interval=cfg.get('gen_poll_interval', 60),
+        )
+    else:
+        flask_app.gen_client = None
+        flask_app.gen_poller = None
+
     flask_app.register_blueprint(routes_bp)
     return flask_app
 
@@ -137,6 +154,25 @@ def start_app():  # pragma: no cover
         log_message("Sleep mode is active (from previous session).", cfg)
     flask_app.download_queue = {'items': [], 'worker_running': False}
     flask_app._download_lock = threading.Lock()
+
+    # Initialize gen API client and poller (optional)
+    gen_api_url = cfg.get('gen_api_url', '')
+    gen_api_token = cfg.get('gen_api_token', '')
+    if gen_api_url and gen_api_token:
+        from gen_client import GenClient
+        from gen_poller import GenPoller
+        flask_app.gen_client = GenClient(gen_api_url, gen_api_token)
+        flask_app.gen_poller = GenPoller(
+            flask_app.gen_client, flask_app.rotation,
+            flask_app.media, cfg.get('download_folder', ''),
+            poll_interval=cfg.get('gen_poll_interval', 60),
+        )
+        flask_app.gen_poller.start()
+        log_message("Gen API integration enabled.", cfg)
+    else:
+        flask_app.gen_client = None
+        flask_app.gen_poller = None
+
     flask_app.register_blueprint(routes_bp)
 
     # Log external catalog status

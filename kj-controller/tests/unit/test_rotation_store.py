@@ -565,3 +565,56 @@ class TestDownloadColumns:
 
     def test_get_entry_by_download_id_missing(self, store):
         assert store.get_entry_by_download_id("nonexistent") is None
+
+
+# ---------------------------------------------------------------------------
+# Gen Job Tracking Columns
+# ---------------------------------------------------------------------------
+
+class TestGenColumns:
+    def test_add_entry_has_gen_fields(self, store):
+        entry = store.add_entry("Alice", "Song A")
+        assert entry["gen_job_id"] is None
+        assert entry["gen_status"] is None
+
+    def test_set_gen_status(self, store):
+        entry = store.add_entry("Alice", "Song A")
+        updated = store.set_gen_status(entry["id"], job_id="job-123", status="processing")
+        assert updated["gen_job_id"] == "job-123"
+        assert updated["gen_status"] == "processing"
+
+    def test_update_gen_status(self, store):
+        entry = store.add_entry("Alice", "Song A")
+        store.set_gen_status(entry["id"], job_id="job-123", status="processing")
+        updated = store.set_gen_status(entry["id"], job_id="job-123", status="awaiting_review")
+        assert updated["gen_status"] == "awaiting_review"
+
+    def test_set_gen_status_not_found_raises(self, store):
+        with pytest.raises(ValueError):
+            store.set_gen_status(9999, job_id="job-123", status="processing")
+
+    def test_get_active_gen_entries(self, store):
+        e1 = store.add_entry("Alice", "Song A")
+        e2 = store.add_entry("Bob", "Song B")
+        e3 = store.add_entry("Carol", "Song C")
+        store.set_gen_status(e1["id"], "job-1", "processing")
+        store.set_gen_status(e2["id"], "job-2", "complete")  # terminal
+        store.set_gen_status(e3["id"], "job-3", "awaiting_review")
+        active = store.get_active_gen_entries()
+        assert len(active) == 2
+        job_ids = {e["gen_job_id"] for e in active}
+        assert job_ids == {"job-1", "job-3"}
+
+    def test_get_active_gen_entries_empty(self, store):
+        store.add_entry("Alice", "Song A")
+        assert store.get_active_gen_entries() == []
+
+    def test_get_entry_by_gen_job_id(self, store):
+        e = store.add_entry("Alice", "Song A")
+        store.set_gen_status(e["id"], "job-123", "processing")
+        found = store.get_entry_by_gen_job_id("job-123")
+        assert found is not None
+        assert found["singer"] == "Alice"
+
+    def test_get_entry_by_gen_job_id_missing(self, store):
+        assert store.get_entry_by_gen_job_id("nonexistent") is None

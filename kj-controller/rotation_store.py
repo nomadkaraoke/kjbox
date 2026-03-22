@@ -57,6 +57,8 @@ class RotationStore:
                 download_status TEXT DEFAULT NULL,
                 download_id TEXT DEFAULT NULL,
                 url_fallback TEXT DEFAULT NULL,
+                gen_job_id  TEXT DEFAULT NULL,
+                gen_status  TEXT DEFAULT NULL,
                 created_at  TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
                 updated_at  TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
             );
@@ -374,6 +376,43 @@ class RotationStore:
         conn = self._get_conn()
         row = conn.execute(
             "SELECT * FROM rotation_entries WHERE download_id = ?", (download_id,)
+        ).fetchone()
+        return self._row_to_dict(row)
+
+    # ------------------------------------------------------------------
+    # Gen Job Tracking
+    # ------------------------------------------------------------------
+
+    def set_gen_status(self, entry_id, job_id, status):
+        """Set gen job tracking fields on a rotation entry."""
+        if self.get_entry(entry_id) is None:
+            raise ValueError(f"Entry {entry_id} not found")
+        conn = self._get_conn()
+        conn.execute(
+            """UPDATE rotation_entries
+               SET gen_job_id = ?, gen_status = ?,
+                   updated_at = datetime('now', 'localtime')
+               WHERE id = ?""",
+            (job_id, status, entry_id),
+        )
+        conn.commit()
+        return self.get_entry(entry_id)
+
+    def get_active_gen_entries(self):
+        """Return entries with active (non-terminal) gen jobs."""
+        conn = self._get_conn()
+        rows = conn.execute(
+            "SELECT * FROM rotation_entries "
+            "WHERE gen_job_id IS NOT NULL AND gen_status NOT IN ('complete', 'failed') "
+            "ORDER BY position"
+        ).fetchall()
+        return [self._row_to_dict(r) for r in rows]
+
+    def get_entry_by_gen_job_id(self, job_id):
+        """Find a rotation entry by its gen job ID."""
+        conn = self._get_conn()
+        row = conn.execute(
+            "SELECT * FROM rotation_entries WHERE gen_job_id = ?", (job_id,)
         ).fetchone()
         return self._row_to_dict(row)
 
