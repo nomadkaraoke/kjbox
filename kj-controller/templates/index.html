@@ -817,7 +817,10 @@
             goBtn.disabled = true;
             goBtn.textContent = '...';
             try {
-                const resp = await fetch('/browser-mode/enable', {
+                // Use navigate endpoint if browser mode is already active (fast, no relaunch)
+                // Fall back to enable endpoint to start browser mode from scratch
+                const endpoint = browserModeActive ? '/browser-mode/navigate' : '/browser-mode/enable';
+                const resp = await fetch(endpoint, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ url }),
