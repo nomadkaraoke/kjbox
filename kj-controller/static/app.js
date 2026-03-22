@@ -3552,7 +3552,7 @@ async function selectRotSearchResult(result) {
     // In link mode, we don't need a singer name (already exists)
     if (!linkTargetId) {
         const singer = singerInput ? singerInput.value.trim() : '';
-        if (!singer) { singerInput.focus(); return; }
+        if (!singer) { if (singerInput) singerInput.focus(); return; }
     }
 
     hideRotSearchDropdown();

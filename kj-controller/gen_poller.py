@@ -61,7 +61,8 @@ class GenPoller:
             else:
                 title = song_artist
                 artist = ""
-            filename = f"GEN-{job_id[:8]} - {artist} - {title}.mp4".strip(" -")
+            name_parts = [p for p in [f"GEN-{job_id[:8]}", artist, title] if p]
+            filename = " - ".join(name_parts) + ".mp4"
 
             file_path, _ = self.media.download_from_url(download_url, filename=filename)
             if file_path:

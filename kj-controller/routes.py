@@ -2041,6 +2041,8 @@ def download_and_link_rotation():
 
         if source == "divebar":
             download_url = divebar.get_download_url(file_id, cfg)
+            if not download_url:
+                return jsonify({"error": "Failed to get download URL from Divebar"}), 502
             queue_item = {
                 'id': download_id,
                 'url': download_url,
