@@ -40,7 +40,9 @@ class TestSchemaInit:
         ).fetchall()}
         expected = {
             "id", "singer", "song_artist", "status", "notes",
-            "position", "file_path", "duration", "created_at", "updated_at",
+            "position", "file_path", "duration",
+            "download_source", "download_status", "download_id", "url_fallback",
+            "created_at", "updated_at",
         }
         assert expected <= cols
 
@@ -522,3 +524,44 @@ class TestGetAllEntries:
 
     def test_get_all_empty(self, store):
         assert store.get_all_entries() == []
+
+
+# ---------------------------------------------------------------------------
+# Download/Prep Tracking Columns
+# ---------------------------------------------------------------------------
+
+class TestDownloadColumns:
+    def test_add_entry_has_download_fields(self, store):
+        entry = store.add_entry("Alice", "Song A")
+        assert entry["download_source"] is None
+        assert entry["download_status"] is None
+        assert entry["download_id"] is None
+        assert entry["url_fallback"] is None
+
+    def test_add_entry_with_file_path(self, store):
+        """add_entry accepts optional file_path and duration for single-action add+link."""
+        entry = store.add_entry("Alice", "Song A", file_path="/media/song.mp4", duration=213)
+        assert entry["file_path"] == "/media/song.mp4"
+        assert entry["duration"] == 213
+
+    def test_set_download_status(self, store):
+        entry = store.add_entry("Alice", "Song A")
+        updated = store.set_download_status(entry["id"], source="divebar", status="queued", download_id="uuid-123")
+        assert updated["download_source"] == "divebar"
+        assert updated["download_status"] == "queued"
+        assert updated["download_id"] == "uuid-123"
+
+    def test_set_url_fallback(self, store):
+        entry = store.add_entry("Alice", "Song A")
+        updated = store.set_url_fallback(entry["id"], "https://youtube.com/watch?v=abc")
+        assert updated["url_fallback"] == "https://youtube.com/watch?v=abc"
+
+    def test_get_entry_by_download_id(self, store):
+        e1 = store.add_entry("Alice", "Song A")
+        store.set_download_status(e1["id"], source="divebar", status="queued", download_id="uuid-123")
+        found = store.get_entry_by_download_id("uuid-123")
+        assert found is not None
+        assert found["singer"] == "Alice"
+
+    def test_get_entry_by_download_id_missing(self, store):
+        assert store.get_entry_by_download_id("nonexistent") is None

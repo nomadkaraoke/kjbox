@@ -53,6 +53,10 @@ class RotationStore:
                 position    INTEGER NOT NULL DEFAULT 0,
                 file_path   TEXT,
                 duration    INTEGER,
+                download_source TEXT DEFAULT NULL,
+                download_status TEXT DEFAULT NULL,
+                download_id TEXT DEFAULT NULL,
+                url_fallback TEXT DEFAULT NULL,
                 created_at  TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
                 updated_at  TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
             );
@@ -100,13 +104,13 @@ class RotationStore:
     # Task 2: Add and Get Entries
     # ------------------------------------------------------------------
 
-    def add_entry(self, singer, song_artist='', notes=''):
+    def add_entry(self, singer, song_artist='', notes='', file_path=None, duration=None):
         """Insert a new entry at max(position)+1 and return the new entry dict."""
         conn = self._get_conn()
         cur = conn.execute(
-            "INSERT INTO rotation_entries (singer, song_artist, notes, position) "
-            "VALUES (?, ?, ?, (SELECT COALESCE(MAX(position), 0) + 1 FROM rotation_entries))",
-            (singer, song_artist, notes),
+            "INSERT INTO rotation_entries (singer, song_artist, notes, position, file_path, duration) "
+            "VALUES (?, ?, ?, (SELECT COALESCE(MAX(position), 0) + 1 FROM rotation_entries), ?, ?)",
+            (singer, song_artist, notes, file_path, duration),
         )
         conn.commit()
         return self._row_to_dict(
@@ -332,6 +336,46 @@ class RotationStore:
             (entry_id,),
         )
         conn.commit()
+
+    # ------------------------------------------------------------------
+    # Download/Prep Tracking
+    # ------------------------------------------------------------------
+
+    def set_download_status(self, entry_id, source, status, download_id=None):
+        """Set download tracking fields on a rotation entry."""
+        if self.get_entry(entry_id) is None:
+            raise ValueError(f"Entry {entry_id} not found")
+        conn = self._get_conn()
+        conn.execute(
+            """UPDATE rotation_entries
+               SET download_source = ?, download_status = ?, download_id = ?,
+                   updated_at = datetime('now', 'localtime')
+               WHERE id = ?""",
+            (source, status, download_id, entry_id),
+        )
+        conn.commit()
+        return self.get_entry(entry_id)
+
+    def set_url_fallback(self, entry_id, url):
+        """Set a URL fallback for browser mode playback."""
+        if self.get_entry(entry_id) is None:
+            raise ValueError(f"Entry {entry_id} not found")
+        conn = self._get_conn()
+        conn.execute(
+            """UPDATE rotation_entries SET url_fallback = ?, updated_at = datetime('now', 'localtime')
+               WHERE id = ?""",
+            (url, entry_id),
+        )
+        conn.commit()
+        return self.get_entry(entry_id)
+
+    def get_entry_by_download_id(self, download_id):
+        """Find a rotation entry by its download queue correlation ID."""
+        conn = self._get_conn()
+        row = conn.execute(
+            "SELECT * FROM rotation_entries WHERE download_id = ?", (download_id,)
+        ).fetchone()
+        return self._row_to_dict(row)
 
     # ------------------------------------------------------------------
     # Task 5: Archive and get_all_entries
