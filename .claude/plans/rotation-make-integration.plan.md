@@ -1,6 +1,6 @@
 # Rotation MAKE Integration (Gen API) — Phase 2
 
-> **For agentic workers:** Use superpowers:subagent-driven-development or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** Use superpowers:subagent-driven-development or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Add a "MAKE" button to the rotation search dropdown that creates karaoke videos via the gen API, with background status polling, auto-download on completion, and NEEDS REVIEW badges linking to the gen review UI.
 
@@ -69,7 +69,7 @@
 - Create: `kj-controller/gen_client.py`
 - Create: `kj-controller/tests/unit/test_gen_client.py`
 
-- [ ] **Step 1: Write GenClient tests**
+- [x] **Step 1: Write GenClient tests**
 
 ```python
 # kj-controller/tests/unit/test_gen_client.py
@@ -160,11 +160,11 @@ class TestGenClient:
         assert url is None
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `cd kj-controller && python -m pytest tests/unit/test_gen_client.py -v`
 
-- [ ] **Step 3: Implement GenClient**
+- [x] **Step 3: Implement GenClient**
 
 ```python
 # kj-controller/gen_client.py
@@ -274,11 +274,11 @@ class GenClient:
             return None
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `cd kj-controller && python -m pytest tests/unit/test_gen_client.py -v`
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add kj-controller/gen_client.py kj-controller/tests/unit/test_gen_client.py
@@ -293,7 +293,7 @@ git commit -m "feat(rotation): add GenClient for gen API communication"
 - Modify: `kj-controller/rotation_store.py`
 - Modify: `kj-controller/tests/unit/test_rotation_store.py`
 
-- [ ] **Step 1: Write gen column tests**
+- [x] **Step 1: Write gen column tests**
 
 ```python
 # Append to test_rotation_store.py
@@ -329,9 +329,9 @@ class TestGenColumns:
         assert job_ids == {"job-1", "job-3"}
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
-- [ ] **Step 3: Add columns and methods**
+- [x] **Step 3: Add columns and methods**
 
 Add to schema (after url_fallback):
 ```sql
@@ -350,9 +350,9 @@ def get_active_gen_entries(self):
     ...
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ---
 
@@ -362,7 +362,7 @@ def get_active_gen_entries(self):
 - Modify: `kj-controller/rotation.py`
 - Modify: `kj-controller/tests/unit/test_rotation.py`
 
-- [ ] **Step 1: Write coordinator gen tests**
+- [x] **Step 1: Write coordinator gen tests**
 
 ```python
 class TestCoordinatorGen:
@@ -380,13 +380,13 @@ class TestCoordinatorGen:
         assert updated["gen_status"] == "complete"
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
-- [ ] **Step 3: Implement coordinator methods**
+- [x] **Step 3: Implement coordinator methods**
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ---
 
@@ -396,13 +396,13 @@ class TestCoordinatorGen:
 - Create: `kj-controller/gen_poller.py`
 - Create: `kj-controller/tests/unit/test_gen_poller.py`
 
-- [ ] **Step 1: Write GenPoller tests**
+- [x] **Step 1: Write GenPoller tests**
 
 Test: poll_once updates gen_status from API, auto-downloads on complete, handles failures, skips terminal entries.
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
-- [ ] **Step 3: Implement GenPoller**
+- [x] **Step 3: Implement GenPoller**
 
 GenPoller has:
 - `__init__(gen_client, rotation_store, media, download_folder)` — stores references
@@ -412,9 +412,9 @@ GenPoller has:
 
 On complete: calls `gen_client.get_download_url()`, downloads via `media.download_from_url()`, links to rotation entry.
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ---
 
@@ -426,7 +426,7 @@ On complete: calls `gen_client.get_download_url()`, downloads via `media.downloa
 - Modify: `kj-controller/config.py`
 - Create or modify: tests
 
-- [ ] **Step 1: Add config defaults**
+- [x] **Step 1: Add config defaults**
 
 In `config.py` defaults dict:
 ```python
@@ -435,7 +435,7 @@ In `config.py` defaults dict:
 "gen_poll_interval": 60,
 ```
 
-- [ ] **Step 2: Initialize GenClient + GenPoller in app.py**
+- [x] **Step 2: Initialize GenClient + GenPoller in app.py**
 
 In `create_app()` and `start_app()`:
 ```python
@@ -454,11 +454,11 @@ else:
     flask_app.gen_poller = None
 ```
 
-- [ ] **Step 3: Write route tests**
+- [x] **Step 3: Write route tests**
 
 Test POST /rotation/make with mock gen_client. Test GET /rotation/gen-status. Test 503 when gen not configured.
 
-- [ ] **Step 4: Implement routes**
+- [x] **Step 4: Implement routes**
 
 POST /rotation/make:
 - Validate artist, title required
@@ -471,11 +471,11 @@ GET /rotation/gen-status:
 - Get active gen entries from store
 - Return list with gen_job_id, gen_status, entry_id
 
-- [ ] **Step 5: Run tests**
+- [x] **Step 5: Run tests**
 
-- [ ] **Step 6: Run full test suite**
+- [x] **Step 6: Run full test suite**
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ---
 
@@ -485,14 +485,14 @@ GET /rotation/gen-status:
 - Modify: `kj-controller/static/app.js`
 - Modify: `kj-controller/static/style.css`
 
-- [ ] **Step 1: Add MAKE option to search dropdown**
+- [x] **Step 1: Add MAKE option to search dropdown**
 
 In the expanded search results, add a "MAKE" button at the bottom that triggers a gen job creation:
 - Appears in expanded mode only (after "More results")
 - Shows "MAKE this song" with purple badge
 - On click: calls POST /rotation/make with artist/title parsed from the search query
 
-- [ ] **Step 2: Update prep badges for gen statuses**
+- [x] **Step 2: Update prep badges for gen statuses**
 
 The Phase 1 code already has placeholder badge logic for `entry.gen_status`. Update:
 - `gen_status === "processing"` → MAKING (purple)
@@ -500,18 +500,18 @@ The Phase 1 code already has placeholder badge logic for `entry.gen_status`. Upd
 - `gen_status === "rendering"` → RENDERING (purple)
 - gen_status complete → handled by file_path being set (READY)
 
-- [ ] **Step 3: Add review link on NEEDS REVIEW badge**
+- [x] **Step 3: Add review link on NEEDS REVIEW badge**
 
 When NEEDS REVIEW badge is tapped, open gen review URL:
 ```javascript
 window.open(`https://gen.nomadkaraoke.com/app/jobs#/${entry.gen_job_id}/review`, '_blank');
 ```
 
-- [ ] **Step 4: Add gen status polling**
+- [x] **Step 4: Add gen status polling**
 
 In the status update handler, poll /rotation/gen-status periodically (every 30s) and refresh rotation when gen statuses change.
 
-- [ ] **Step 5: CSS for MAKE button in dropdown**
+- [x] **Step 5: CSS for MAKE button in dropdown**
 
 ```css
 .search-badge-make { background: #7c3aed; }
@@ -519,15 +519,15 @@ In the status update handler, poll /rotation/gen-status periodically (every 30s)
 
 Already added in Phase 1 prep badge styles.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ---
 
 ## Task 7: Integration Testing and Cleanup
 
-- [ ] **Step 1: Run full test suite**
-- [ ] **Step 2: Run with coverage (target 70%+)**
-- [ ] **Step 3: Manual end-to-end test plan**
+- [x] **Step 1: Run full test suite**
+- [x] **Step 2: Run with coverage (target 70%+)**
+- [x] **Step 3: Manual end-to-end test plan**
 
 1. Configure gen_api_url and gen_api_token in test config
 2. Add singer, type song, expand search
@@ -537,4 +537,4 @@ Already added in Phase 1 prep badge styles.
 6. After review → RENDERING badge appears
 7. After completion → auto-download → READY badge with play button
 
-- [ ] **Step 4: Commit any final fixes**
+- [x] **Step 4: Commit any final fixes**
