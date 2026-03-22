@@ -54,9 +54,7 @@ _YOUTUBE_RE = re.compile(
     re.IGNORECASE,
 )
 
-# JS injected into YouTube pages to maximize video and set volume to max.
-# Retries every 500ms until the video element is ready (max 20s).
-_YOUTUBE_SETUP_JS = """
+_YOUTUBE_VOLUME_JS = """
 (function() {
     var attempts = 0, maxAttempts = 40;
     function setup() {
@@ -65,12 +63,6 @@ _YOUTUBE_SETUP_JS = """
         if (!video || video.readyState < 2) { setTimeout(setup, 500); return; }
         video.volume = 1;
         video.muted = false;
-        var fsBtn = document.querySelector('.ytp-fullscreen-button');
-        if (fsBtn && !document.fullscreenElement) {
-            fsBtn.click();
-        } else if (!fsBtn) {
-            setTimeout(setup, 500);
-        }
     }
     setup();
 })()
@@ -286,108 +278,135 @@ class ChromiumManager:
         """Check if a URL is a YouTube video/shorts/embed URL."""
         return bool(_YOUTUBE_RE.search(url or ''))
 
-    def _cdp_evaluate(self, expression):
-        """Evaluate a JavaScript expression in the active tab via CDP WebSocket.
+    def _cdp_connect(self):
+        """Open a CDP WebSocket connection to the active page tab.
 
-        Uses a minimal raw WebSocket implementation (no external deps) to send
-        a single Runtime.evaluate command and read the response.
+        Returns (sock, msg_id_counter) or raises on failure.
+        Caller must close the socket when done.
         """
-        # Get the WebSocket debugger URL for the first tab
         conn = http.client.HTTPConnection('localhost', CDP_PORT, timeout=3)
         conn.request('GET', '/json')
         resp = conn.getresponse()
         pages = json.loads(resp.read())
         conn.close()
-        if not pages:
-            return None
-        ws_url = pages[0].get('webSocketDebuggerUrl', '')
-        if not ws_url:
-            return None
 
-        # Parse ws://host:port/path
+        # Find the page tab (skip service workers, etc.)
+        page = next((p for p in pages if p.get('type') == 'page'), None)
+        if not page:
+            raise RuntimeError("No page tab found")
+        ws_url = page.get('webSocketDebuggerUrl', '')
+        if not ws_url:
+            raise RuntimeError("No webSocketDebuggerUrl")
+
         parsed = urlparse(ws_url)
         host = parsed.hostname
         port = parsed.port or 80
         path = parsed.path
 
         sock = socket.create_connection((host, port), timeout=10)
-        try:
-            # WebSocket handshake
-            key = base64.b64encode(os.urandom(16)).decode()
-            handshake = (
-                f"GET {path} HTTP/1.1\r\n"
-                f"Host: {host}:{port}\r\n"
-                f"Upgrade: websocket\r\n"
-                f"Connection: Upgrade\r\n"
-                f"Sec-WebSocket-Key: {key}\r\n"
-                f"Sec-WebSocket-Version: 13\r\n"
-                f"\r\n"
-            )
-            sock.sendall(handshake.encode())
+        key = base64.b64encode(os.urandom(16)).decode()
+        handshake = (
+            f"GET {path} HTTP/1.1\r\n"
+            f"Host: {host}:{port}\r\n"
+            f"Upgrade: websocket\r\n"
+            f"Connection: Upgrade\r\n"
+            f"Sec-WebSocket-Key: {key}\r\n"
+            f"Sec-WebSocket-Version: 13\r\n"
+            f"\r\n"
+        )
+        sock.sendall(handshake.encode())
+        buf = b''
+        while b'\r\n\r\n' not in buf:
+            buf += sock.recv(4096)
+        return sock
 
-            # Read upgrade response
-            buf = b''
-            while b'\r\n\r\n' not in buf:
-                buf += sock.recv(4096)
+    @staticmethod
+    def _cdp_send(sock, msg_id, method, params=None):
+        """Send a CDP command and read the response over an open WebSocket."""
+        msg = json.dumps({"id": msg_id, "method": method, "params": params or {}})
+        payload = msg.encode()
+        mask_key = os.urandom(4)
+        frame = bytearray([0x81])
+        length = len(payload)
+        if length < 126:
+            frame.append(0x80 | length)
+        elif length < 65536:
+            frame.append(0x80 | 126)
+            frame.extend(struct.pack('!H', length))
+        else:
+            frame.append(0x80 | 127)
+            frame.extend(struct.pack('!Q', length))
+        frame.extend(mask_key)
+        frame.extend(bytes(b ^ mask_key[i % 4] for i, b in enumerate(payload)))
+        sock.sendall(bytes(frame))
 
-            # Send Runtime.evaluate as masked text frame
-            msg = json.dumps({
-                "id": 1,
-                "method": "Runtime.evaluate",
-                "params": {"expression": expression},
-            })
-            payload = msg.encode()
-            mask_key = os.urandom(4)
-            frame = bytearray([0x81])  # FIN + TEXT opcode
-            length = len(payload)
-            if length < 126:
-                frame.append(0x80 | length)
-            elif length < 65536:
-                frame.append(0x80 | 126)
-                frame.extend(struct.pack('!H', length))
-            else:
-                frame.append(0x80 | 127)
-                frame.extend(struct.pack('!Q', length))
-            frame.extend(mask_key)
-            frame.extend(b ^ mask_key[i % 4] for i, b in enumerate(payload))
-            sock.sendall(frame)
-
-            # Read response frame
-            header = sock.recv(2)
-            resp_len = header[1] & 0x7F
-            if resp_len == 126:
-                resp_len = struct.unpack('!H', sock.recv(2))[0]
-            elif resp_len == 127:
-                resp_len = struct.unpack('!Q', sock.recv(8))[0]
-            data = b''
-            while len(data) < resp_len:
-                data += sock.recv(resp_len - len(data))
-            return json.loads(data.decode())
-        finally:
-            sock.close()
+        header = sock.recv(2)
+        resp_len = header[1] & 0x7F
+        if resp_len == 126:
+            resp_len = struct.unpack('!H', sock.recv(2))[0]
+        elif resp_len == 127:
+            resp_len = struct.unpack('!Q', sock.recv(8))[0]
+        data = b''
+        while len(data) < resp_len:
+            data += sock.recv(resp_len - len(data))
+        return json.loads(data.decode())
 
     def _youtube_auto_setup(self, url):
-        """If URL is a YouTube video, inject JS to maximize and set volume to max.
+        """If URL is a YouTube video, set volume to max and fullscreen.
 
-        Runs in a background thread so it doesn't block the navigate/launch call.
-        Waits for CDP to be ready, then injects the setup script.
+        Runs in a background thread. Uses CDP to:
+        1. Inject JS to set video.volume = 1 and unmute
+        2. Send 'f' keypress via Input.dispatchKeyEvent (YouTube fullscreen shortcut)
+
+        The keypress approach is needed because programmatic .click() on the
+        fullscreen button doesn't count as a user gesture in Chromium.
         """
         if not self._is_youtube_video(url):
             return
 
         def _run():
-            # Wait for CDP and page to be ready
             for attempt in range(10):
                 time.sleep(2)
                 if not self.is_running():
                     return
                 try:
-                    result = self._cdp_evaluate(_YOUTUBE_SETUP_JS)
-                    if result:
-                        log_message("YouTube auto-setup: volume max + fullscreen injected.", self.config)
+                    sock = self._cdp_connect()
+                    try:
+                        # Set volume to max
+                        self._cdp_send(sock, 1, 'Runtime.evaluate',
+                                       {'expression': _YOUTUBE_VOLUME_JS})
+                        # Wait for video to be ready before sending 'f'
+                        self._cdp_send(sock, 2, 'Runtime.evaluate', {
+                            'expression': '''
+                                new Promise(resolve => {
+                                    function check() {
+                                        var v = document.querySelector('video');
+                                        if (v && v.readyState >= 2) resolve(true);
+                                        else setTimeout(check, 300);
+                                    }
+                                    check();
+                                    setTimeout(() => resolve(false), 10000);
+                                })
+                            ''',
+                            'awaitPromise': True,
+                        })
+                        # Send 'f' key for fullscreen (trusted user gesture via CDP)
+                        self._cdp_send(sock, 3, 'Input.dispatchKeyEvent', {
+                            'type': 'keyDown', 'key': 'f', 'code': 'KeyF',
+                            'text': 'f', 'windowsVirtualKeyCode': 70,
+                            'nativeVirtualKeyCode': 70,
+                        })
+                        self._cdp_send(sock, 4, 'Input.dispatchKeyEvent', {
+                            'type': 'keyUp', 'key': 'f', 'code': 'KeyF',
+                            'windowsVirtualKeyCode': 70,
+                            'nativeVirtualKeyCode': 70,
+                        })
+                        log_message("YouTube auto-setup: volume max + fullscreen.", self.config)
                         return
-                except Exception:
-                    pass
+                    finally:
+                        sock.close()
+                except Exception as e:
+                    log_message(f"YouTube auto-setup attempt {attempt + 1}: {e}", self.config)
             log_message("WARNING: YouTube auto-setup failed after retries.", self.config)
 
         thread = threading.Thread(target=_run, daemon=True)
