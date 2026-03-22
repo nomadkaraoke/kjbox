@@ -1997,7 +1997,28 @@ def download_and_link_rotation():
     if not source:
         return jsonify({"error": "source is required"}), 400
 
-    # Get or create rotation entry
+    # Validate source-specific fields BEFORE creating any rotation entry
+    if source == "divebar":
+        file_id = data.get('file_id', '').strip()
+        filename = data.get('filename', '').strip()
+        if not file_id:
+            return jsonify({"error": "file_id is required for divebar"}), 400
+    elif source == "youtube":
+        youtube_url = data.get('youtube_url', '').strip()
+        filename = data.get('filename', '').strip()
+        if not youtube_url:
+            return jsonify({"error": "youtube_url is required for youtube"}), 400
+    else:
+        return jsonify({"error": f"Unknown source: {source}"}), 400
+
+    # Check queue capacity
+    app = current_app._get_current_object()
+    with app._download_lock:
+        active = [i for i in app.download_queue['items'] if i['status'] in ('queued', 'downloading')]
+        if len(active) >= 5:
+            return jsonify({"error": "Download queue is full (max 5)"}), 409
+
+    # Get or create rotation entry (only after all validations pass)
     entry_id = data.get('id')
     if entry_id is None:
         singer = data.get('singer', '').strip()
@@ -2016,14 +2037,9 @@ def download_and_link_rotation():
     download_id = str(uuid4())
 
     try:
-        app = current_app._get_current_object()
         cfg = current_app.kj_config
 
         if source == "divebar":
-            file_id = data.get('file_id', '').strip()
-            filename = data.get('filename', '').strip()
-            if not file_id:
-                return jsonify({"error": "file_id is required for divebar"}), 400
             download_url = divebar.get_download_url(file_id, cfg)
             queue_item = {
                 'id': download_id,
@@ -2034,11 +2050,7 @@ def download_and_link_rotation():
                 'error': None,
                 'rotation_entry_id': entry_id,
             }
-        elif source == "youtube":
-            youtube_url = data.get('youtube_url', '').strip()
-            filename = data.get('filename', '').strip()
-            if not youtube_url:
-                return jsonify({"error": "youtube_url is required for youtube"}), 400
+        else:  # youtube (already validated above)
             queue_item = {
                 'id': download_id,
                 'url': youtube_url,
@@ -2048,8 +2060,6 @@ def download_and_link_rotation():
                 'error': None,
                 'rotation_entry_id': entry_id,
             }
-        else:
-            return jsonify({"error": f"Unknown source: {source}"}), 400
 
         # Add to download queue
         with app._download_lock:

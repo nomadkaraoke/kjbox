@@ -3285,9 +3285,11 @@ async function restoreFromSheet() {
 }
 
 function openLinkSearch(entryId, songText) {
-    // Open add form with song pre-filled to trigger search dropdown
+    // Open add form with song pre-filled to trigger search dropdown in link mode
     const form = document.getElementById('rotation-add-form');
     if (form.classList.contains('hidden')) toggleRotationAddForm();
+    // Store the target entry ID so selectRotSearchResult can link instead of add
+    form.dataset.linkTargetId = entryId;
     const songInput = document.getElementById('rotation-song');
     songInput.value = songText || '';
     songInput.focus();
@@ -3299,6 +3301,8 @@ function openLinkSearch(entryId, songText) {
 function toggleRotationAddForm() {
     const form = document.getElementById('rotation-add-form');
     form.classList.toggle('hidden');
+    // Clear link mode when toggling form
+    delete form.dataset.linkTargetId;
     if (!form.classList.contains('hidden')) {
         document.getElementById('rotation-singer').focus();
     }
@@ -3412,11 +3416,13 @@ function renderRotSearchDropdown(data) {
 
     // Tier 1: Local library (READY)
     for (const r of (data.local || [])) {
+        const displayTitle = ((r.artist || '') + ' - ' + (r.title || r.filename || '')).replace(/^- /, '');
         rotSearchResults.push({
             type: 'local', badge: 'READY', badgeClass: 'search-badge-ready',
-            title: ((r.artist || '') + ' - ' + (r.title || r.filename || '')).replace(/^- /, ''),
+            title: displayTitle,
             meta: [r.disc_id, r.format, r.duration ? fmtDur(r.duration) : ''].filter(Boolean).join(' \u00B7 '),
             path: r.path, duration: r.duration,
+            song_artist: (r.title || '') + ' - ' + (r.artist || ''),
         });
     }
 
@@ -3486,49 +3492,91 @@ function highlightRotSearchResult() {
 async function selectRotSearchResult(result) {
     const singerInput = document.getElementById('rotation-singer');
     const songInput = document.getElementById('rotation-song');
-    const singer = singerInput ? singerInput.value.trim() : '';
-    if (!singer) { singerInput.focus(); return; }
+    const form = document.getElementById('rotation-add-form');
+    const linkTargetId = form ? form.dataset.linkTargetId : null;
+
+    // In link mode, we don't need a singer name (already exists)
+    if (!linkTargetId) {
+        const singer = singerInput ? singerInput.value.trim() : '';
+        if (!singer) { singerInput.focus(); return; }
+    }
 
     hideRotSearchDropdown();
     showRotationIndicator('spin');
 
     try {
-        if (result.type === 'local') {
-            const resp = await fetch('/rotation/add', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({
-                    singer,
-                    song_artist: songInput.value.trim(),
-                    file_path: result.path,
-                }),
-            });
-            const data = await resp.json();
-            if (data.entries) { rotationData = data.entries; renderRotation(rotationData); }
-        } else if (result.type === 'divebar' || result.type === 'youtube') {
-            const body = {
-                singer,
-                song_artist: result.song_artist || songInput.value.trim(),
-                source: result.type,
-            };
-            if (result.type === 'divebar') {
-                body.file_id = result.file_id;
-                body.filename = result.filename;
-            } else {
-                body.youtube_url = result.youtube_url;
-                body.filename = result.filename;
+        if (linkTargetId) {
+            // Link mode: link result to existing rotation entry
+            if (result.type === 'local') {
+                const resp = await fetch('/rotation/link', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ id: parseInt(linkTargetId), file_path: result.path }),
+                });
+                const data = await resp.json();
+                if (data.entries) { rotationData = data.entries; renderRotation(rotationData); }
+            } else if (result.type === 'divebar' || result.type === 'youtube') {
+                const body = {
+                    id: parseInt(linkTargetId),
+                    source: result.type,
+                };
+                if (result.type === 'divebar') {
+                    body.file_id = result.file_id;
+                    body.filename = result.filename;
+                } else {
+                    body.youtube_url = result.youtube_url;
+                    body.filename = result.filename;
+                }
+                const resp = await fetch('/rotation/download-and-link', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(body),
+                });
+                const data = await resp.json();
+                if (data.entries) { rotationData = data.entries; renderRotation(rotationData); }
             }
-            const resp = await fetch('/rotation/download-and-link', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify(body),
-            });
-            const data = await resp.json();
-            if (data.entries) { rotationData = data.entries; renderRotation(rotationData); }
+        } else {
+            // Add mode: create new rotation entry with linked result
+            const singer = singerInput.value.trim();
+            if (result.type === 'local') {
+                const resp = await fetch('/rotation/add', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        singer,
+                        song_artist: result.song_artist || songInput.value.trim(),
+                        file_path: result.path,
+                    }),
+                });
+                const data = await resp.json();
+                if (data.entries) { rotationData = data.entries; renderRotation(rotationData); }
+            } else if (result.type === 'divebar' || result.type === 'youtube') {
+                const body = {
+                    singer,
+                    song_artist: result.song_artist || songInput.value.trim(),
+                    source: result.type,
+                };
+                if (result.type === 'divebar') {
+                    body.file_id = result.file_id;
+                    body.filename = result.filename;
+                } else {
+                    body.youtube_url = result.youtube_url;
+                    body.filename = result.filename;
+                }
+                const resp = await fetch('/rotation/download-and-link', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(body),
+                });
+                const data = await resp.json();
+                if (data.entries) { rotationData = data.entries; renderRotation(rotationData); }
+            }
         }
 
-        singerInput.value = '';
+        // Clear form and link mode
+        if (singerInput) singerInput.value = '';
         songInput.value = '';
+        if (form) delete form.dataset.linkTargetId;
         showRotationIndicator('success');
     } catch (e) {
         showRotationIndicator('error');
@@ -3594,9 +3642,9 @@ async function toggleBrowserMode() {
     }
 }
 
-async function enableBrowserMode() {
+async function enableBrowserMode(overrideUrl) {
     const urlInput = document.getElementById('browser-mode-url');
-    const url = urlInput.value.trim() || 'https://youtube.com';
+    const url = overrideUrl || urlInput.value.trim() || 'https://youtube.com';
 
     log('Enabling browser mode...');
     const btn = document.getElementById('browser-mode-toggle');
