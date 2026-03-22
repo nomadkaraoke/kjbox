@@ -1888,6 +1888,72 @@ def restore_rotation_from_sheet():
         return jsonify({"error": str(e)}), 500
 
 
+@routes_bp.route('/rotation/search', methods=['GET'])
+def rotation_search():
+    """Unified search: local catalog + Karaoke Nerds + Divebar cross-reference."""
+    query = request.args.get('q', '').strip()
+    if len(query) < 3:
+        return jsonify({"error": "Query must be at least 3 characters"}), 400
+
+    # Local catalog search (fast, <10ms)
+    local_results = []
+    if current_app.catalog.is_available():
+        local_results = current_app.catalog.search(query, limit=10)
+
+    # Add duration from media index where available
+    for result in local_results:
+        media_entry = current_app.media.index.get(result.get("path"))
+        if media_entry:
+            result["duration"] = media_entry.get("duration")
+
+    # Karaoke Nerds search (slower, 1-3s)
+    kn_results = []
+    kn_timeout = False
+    try:
+        kn_results = karaoke_nerds.search(query, current_app.kj_config)
+    except Exception:
+        kn_timeout = True
+
+    # Divebar cross-reference for KN results
+    if kn_results and not kn_timeout:
+        try:
+            # Extract KN IDs from tracks
+            all_kn_ids = []
+            for song in kn_results:
+                for track in song.get("tracks", []):
+                    kn_id = track.get("brand_code")
+                    if kn_id:
+                        all_kn_ids.append(kn_id)
+            if all_kn_ids:
+                divebar_matches = divebar.lookup_kn_ids(all_kn_ids, current_app.kj_config)
+                # Merge Divebar availability into KN tracks
+                for song in kn_results:
+                    for track in song.get("tracks", []):
+                        kn_id = track.get("brand_code")
+                        if kn_id and kn_id in divebar_matches:
+                            db_match = divebar_matches[kn_id]
+                            if isinstance(db_match, list) and db_match:
+                                track["divebar"] = db_match[0]
+                            elif isinstance(db_match, dict):
+                                track["divebar"] = db_match
+        except Exception:
+            pass  # Divebar cross-ref is best-effort
+
+        # Check local library for KN tracks
+        for song in kn_results:
+            for track in song.get("tracks", []):
+                track["in_library"] = any(
+                    r.get("artist", "").lower() == song.get("artist", "").lower()
+                    and r.get("title", "").lower() == song.get("title", "").lower()
+                    for r in local_results
+                )
+
+    response = {"local": local_results, "karaoke_nerds": kn_results}
+    if kn_timeout:
+        response["karaoke_nerds_timeout"] = True
+    return jsonify(response)
+
+
 # --- Browser Mode routes ---
 
 @routes_bp.route('/browser-mode/enable', methods=['POST'])
