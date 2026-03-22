@@ -142,6 +142,16 @@ def _download_worker(app):
                 next_item.update(status='error', error='Download failed',
                                  completed_at=time.time())
 
+        # Auto-link rotation entry if this was a rotation-linked download
+        rotation_entry_id = next_item.get('rotation_entry_id')
+        if rotation_entry_id and file_path and hasattr(app, 'rotation') and app.rotation:
+            try:
+                download_id = next_item.get('id')
+                if download_id:
+                    app.rotation.complete_download(download_id, file_path)
+            except Exception:
+                pass  # Best-effort; entry can be linked manually
+
 
 @routes_bp.route('/download/cancel', methods=['POST'])
 def cancel_download():
@@ -480,6 +490,19 @@ def get_status():
         _browser_mode = True
     browser_status['enabled'] = _browser_mode
 
+    # Build rotation download status map
+    rotation_downloads = {}
+    if hasattr(current_app, 'rotation') and current_app.rotation:
+        with current_app._get_current_object()._download_lock:
+            for item in current_app.download_queue['items']:
+                rot_id = item.get('rotation_entry_id')
+                if rot_id:
+                    rotation_downloads[str(rot_id)] = {
+                        "status": item.get('status', 'unknown'),
+                        "progress": item.get('progress', 0),
+                        "file_path": item.get('file_path'),
+                    }
+
     if status:
         return jsonify({
             "state": status.get('state'),
@@ -495,6 +518,7 @@ def get_status():
             "karaoke_volume": vlc.karaoke_volume,
             "filler_volume": vlc.filler_volume,
             "browser_mode": browser_status,
+            "rotation_downloads": rotation_downloads,
         })
 
     # VLC not running - return status without VLC data
@@ -511,6 +535,7 @@ def get_status():
         "karaoke_volume": vlc.karaoke_volume,
         "filler_volume": vlc.filler_volume,
         "browser_mode": browser_status,
+        "rotation_downloads": rotation_downloads,
     })
 
 
@@ -1749,8 +1774,14 @@ def add_rotation_entry():
     if not singer:
         return jsonify({"error": "singer is required"}), 400
 
+    file_path = data.get('file_path', '').strip() or None
+    url_fallback = data.get('url_fallback', '').strip() or None
+
     try:
-        entry = rotation.add_entry(singer, song_artist, notes)
+        entry = rotation.add_entry(singer, song_artist, notes, file_path=file_path)
+        if url_fallback:
+            rotation.set_url_fallback(entry["id"], url_fallback)
+            entry = rotation.store.get_entry(entry["id"])
         entries = rotation.get_rotation()
         _add_time_estimates(entries)
         return jsonify({"success": True, "entry": entry, "entries": entries})
@@ -1884,6 +1915,171 @@ def restore_rotation_from_sheet():
         entries = rotation.get_rotation()
         _add_time_estimates(entries)
         return jsonify({"success": True, "restored": count, "entries": entries})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@routes_bp.route('/rotation/search', methods=['GET'])
+def rotation_search():
+    """Unified search: local catalog + Karaoke Nerds + Divebar cross-reference."""
+    query = request.args.get('q', '').strip()
+    if len(query) < 3:
+        return jsonify({"error": "Query must be at least 3 characters"}), 400
+
+    # Local catalog search (fast, <10ms)
+    local_results = []
+    if current_app.catalog.is_available():
+        local_results = current_app.catalog.search(query, limit=10)
+
+    # Add duration from media index where available
+    for result in local_results:
+        media_entry = current_app.media.index.get(result.get("path"))
+        if media_entry:
+            result["duration"] = media_entry.get("duration")
+
+    # Karaoke Nerds search (slower, 1-3s)
+    kn_results = []
+    kn_timeout = False
+    try:
+        kn_results = karaoke_nerds.search(query, current_app.kj_config)
+    except Exception:
+        kn_timeout = True
+
+    # Divebar cross-reference for KN results
+    if kn_results and not kn_timeout:
+        try:
+            # Extract KN IDs from tracks
+            all_kn_ids = []
+            for song in kn_results:
+                for track in song.get("tracks", []):
+                    kn_id = track.get("brand_code")
+                    if kn_id:
+                        all_kn_ids.append(kn_id)
+            if all_kn_ids:
+                divebar_matches = divebar.lookup_kn_ids(all_kn_ids, current_app.kj_config)
+                # Merge Divebar availability into KN tracks
+                for song in kn_results:
+                    for track in song.get("tracks", []):
+                        kn_id = track.get("brand_code")
+                        if kn_id and kn_id in divebar_matches:
+                            db_match = divebar_matches[kn_id]
+                            if isinstance(db_match, list) and db_match:
+                                track["divebar"] = db_match[0]
+                            elif isinstance(db_match, dict):
+                                track["divebar"] = db_match
+        except Exception:
+            pass  # Divebar cross-ref is best-effort
+
+        # Check local library for KN tracks
+        for song in kn_results:
+            for track in song.get("tracks", []):
+                track["in_library"] = any(
+                    r.get("artist", "").lower() == song.get("artist", "").lower()
+                    and r.get("title", "").lower() == song.get("title", "").lower()
+                    for r in local_results
+                )
+
+    response = {"local": local_results, "karaoke_nerds": kn_results}
+    if kn_timeout:
+        response["karaoke_nerds_timeout"] = True
+    return jsonify(response)
+
+
+@routes_bp.route('/rotation/download-and-link', methods=['POST'])
+def download_and_link_rotation():
+    """Queue a download and link it to a rotation entry."""
+    rotation = current_app.rotation
+    if not hasattr(current_app, 'rotation') or rotation is None:
+        return jsonify({"error": "Rotation not configured"}), 503
+
+    data = request.get_json(force=True)
+    source = data.get('source', '').strip()
+    if not source:
+        return jsonify({"error": "source is required"}), 400
+
+    # Validate source-specific fields BEFORE creating any rotation entry
+    if source == "divebar":
+        file_id = data.get('file_id', '').strip()
+        filename = data.get('filename', '').strip()
+        if not file_id:
+            return jsonify({"error": "file_id is required for divebar"}), 400
+    elif source == "youtube":
+        youtube_url = data.get('youtube_url', '').strip()
+        filename = data.get('filename', '').strip()
+        if not youtube_url:
+            return jsonify({"error": "youtube_url is required for youtube"}), 400
+    else:
+        return jsonify({"error": f"Unknown source: {source}"}), 400
+
+    # Check queue capacity
+    app = current_app._get_current_object()
+    with app._download_lock:
+        active = [i for i in app.download_queue['items'] if i['status'] in ('queued', 'downloading')]
+        if len(active) >= 5:
+            return jsonify({"error": "Download queue is full (max 5)"}), 409
+
+    # Get or create rotation entry (only after all validations pass)
+    entry_id = data.get('id')
+    if entry_id is None:
+        singer = data.get('singer', '').strip()
+        song_artist = data.get('song_artist', '').strip()
+        if not singer:
+            return jsonify({"error": "id or singer is required"}), 400
+        entry = rotation.add_entry(singer, song_artist)
+        entry_id = entry["id"]
+
+    try:
+        entry_id = int(entry_id)
+    except (TypeError, ValueError):
+        return jsonify({"error": "id must be an integer"}), 400
+
+    from uuid import uuid4
+    download_id = str(uuid4())
+
+    try:
+        cfg = current_app.kj_config
+
+        if source == "divebar":
+            download_url = divebar.get_download_url(file_id, cfg)
+            queue_item = {
+                'id': download_id,
+                'url': download_url,
+                'title': filename or f"divebar-{file_id}.mp4",
+                'source': 'divebar',
+                'status': 'queued',
+                'error': None,
+                'rotation_entry_id': entry_id,
+            }
+        else:  # youtube (already validated above)
+            queue_item = {
+                'id': download_id,
+                'url': youtube_url,
+                'title': filename,
+                'source': 'youtube',
+                'status': 'queued',
+                'error': None,
+                'rotation_entry_id': entry_id,
+            }
+
+        # Add to download queue
+        with app._download_lock:
+            app.download_queue['items'].append(queue_item)
+
+        # Start download worker if not running
+        with app._download_lock:
+            if not app.download_queue.get('worker_running'):
+                app.download_queue['worker_running'] = True
+                t = threading.Thread(target=_download_worker, args=(app,), daemon=True)
+                t.start()
+
+        # Update rotation entry with download tracking
+        rotation.set_download_status(entry_id, source, "queued", download_id)
+
+        entry = rotation.store.get_entry(entry_id)
+        entries = rotation.get_rotation()
+        _add_time_estimates(entries)
+        return jsonify({"success": True, "entry": entry, "entries": entries})
+
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

@@ -62,8 +62,8 @@ KJ Controller is a web-based karaoke show management application. A Flask backen
 | `youtube_search.py` | ~80 | YouTube search via yt-dlp: ytsearch with extract_flat for fast metadata |
 | `youtube_health.py` | ~170 | YouTube health checks: yt-dlp/EJS/Deno version detection, cookie validation, PyPI version check (24h cache), pip upgrade |
 | `divebar.py` | ~150 | Divebar catalog client: search, KN cross-reference lookup, download URL generation via Cloud Function API |
-| `rotation.py` | ~90 | `RotationManager` coordinator: delegates to `RotationStore` (SQLite) + `SheetSync` (optional), writes display cache |
-| `rotation_store.py` | ~220 | `RotationStore` class: SQLite CRUD for rotation entries, position management, file linking, archive |
+| `rotation.py` | ~150 | `RotationManager` coordinator: delegates to `RotationStore` (SQLite) + `SheetSync` (optional), writes display cache, download tracking |
+| `rotation_store.py` | ~270 | `RotationStore` class: SQLite CRUD for rotation entries, position management, file linking, download tracking, archive |
 | `rotation_sync.py` | ~230 | `SheetSync` class: background thread pushing SQLite state to Google Sheets (optional backup) |
 | `sleep_mode.py` | ~100 | `SleepManager` class: enter/exit low-power sleep mode, stop services, unmount SSD |
 | `routes.py` | ~800 | Flask Blueprint with all route handlers |
@@ -161,11 +161,13 @@ utils.py → (stdlib only)
 | POST | `/rotation/status` | Update a rotation entry's status (`{id, status}`) |
 | POST | `/rotation/edit` | Edit a rotation entry's singer name and/or song (`{id, singer?, song_artist?}`) |
 | POST | `/rotation/delete` | Delete a rotation entry (`{id}`) |
-| POST | `/rotation/add` | Add a new singer (`{singer, song_artist?, notes?}`, default status: Waiting) |
+| POST | `/rotation/add` | Add a new singer (`{singer, song_artist?, notes?, file_path?, url_fallback?}`, default status: Waiting) |
 | POST | `/rotation/move` | Reorder a rotation entry (`{id, new_position}`) |
 | POST | `/rotation/archive` | Archive all entries to local archive + Sheet, start new rotation |
 | POST | `/rotation/link` | Link a media file to a rotation entry (`{id, file_path}`) |
 | POST | `/rotation/unlink` | Remove file link from a rotation entry (`{id}`) |
+| GET | `/rotation/search` | Unified search: local catalog + Karaoke Nerds + Divebar cross-ref (`?q=query`, min 3 chars) |
+| POST | `/rotation/download-and-link` | Queue download and link to rotation entry (`{id?, singer?, source, file_id/youtube_url}`) |
 | GET | `/rotation/sync-status` | Get Sheet sync status (`{last_sync, is_online, next_sync_in}`) |
 | POST | `/rotation/restore` | Emergency restore rotation from Google Sheet backup |
 | POST | `/browser-mode/enable` | Enable Browser Mode: stop VLC, launch fullscreen Chromium at URL |
@@ -235,13 +237,13 @@ The rotation system manages the singer queue during live karaoke shows, with an 
 
 **Data flow:** SQLite is the source of truth (`~/kjdata/rotation.db`). `RotationManager` delegates all CRUD to `RotationStore` (SQLite) and optionally syncs to Google Sheets via `SheetSync` (background thread, every 30s). After every mutation, the manager writes a local JSON cache to `/tmp/rotation_cache.json`. The conky display reads this cache every 3 seconds. The system works fully offline — Sheet sync is optional and gracefully handles network failures.
 
-**UI features:** The KJ Controller web UI shows the rotation queue with status badges, action buttons (Singing, Done, Next, plus more status options), drag-and-drop reordering via drag handles, inline editing (Shift+click), and one-click deletion (Ctrl/Cmd+click). An "Add Singer" form appends new entries.
+**UI features:** The KJ Controller web UI shows the rotation queue with status badges, preparation badges (READY/DOWNLOADING/URL/UNLINKED), action buttons (Singing, Done, Next, plus more status options), drag-and-drop reordering via drag handles, inline editing (Shift+click), and one-click deletion (Ctrl/Cmd+click). The "Add Singer" form includes a search-as-you-type dropdown that queries local catalog, Karaoke Nerds, and Divebar in parallel — selecting a result adds the singer with the file linked or download queued in one action.
 
 **Conky display:** A full-screen 1920x1080 conky window (`rotation.conkyrc`) renders the queue with gold singer names, colored status badges matching the exact sheet status text, and song info. Uses faux transparency via a wallpaper background image (`rotation-bg.png`). Runs as the `rotation-display` systemd service.
 
 **Reordering:** Drag-and-drop in the UI calls `POST /rotation/move` with `{id, new_position}`. The store atomically shifts positions — no delete+insert, so entries can't be lost mid-operation.
 
-**File linking:** Rotation entries can be linked to media files from the catalog (`POST /rotation/link`). Duration is looked up from MediaIndex and stored in the entry. This enables estimated sing times (shown in the UI) and one-click playback from the rotation view.
+**File linking:** Rotation entries can be linked to media files from the catalog (`POST /rotation/link`). Duration is looked up from MediaIndex and stored in the entry. This enables estimated sing times (shown in the UI) and one-click playback from the rotation view. The unified search dropdown can also link files at add time, and `POST /rotation/download-and-link` queues a download (Divebar or YouTube) that auto-links to the rotation entry on completion. Each entry tracks `download_source`, `download_status`, `download_id`, and `url_fallback` for preparation status.
 
 **Configuration:** `rotation_db_path` (default: `~/kjdata/rotation.db`) is always used. `rotation_sheet_id` + `rotation_credentials_file` in `config.json` are optional — if present, Sheet sync is enabled. `rotation_sync_interval` (default: 30s) controls push frequency.
 

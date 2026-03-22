@@ -74,9 +74,11 @@ class RotationManager:
     # Mutation methods — each calls _after_mutation()
     # ------------------------------------------------------------------
 
-    def add_entry(self, singer, song_artist='', notes=''):
+    def add_entry(self, singer, song_artist='', notes='', file_path=None, duration=None):
         """Add a new singer entry and return the entry dict."""
-        result = self.store.add_entry(singer, song_artist, notes)
+        if file_path and duration is None:
+            duration = self._lookup_duration(file_path)
+        result = self.store.add_entry(singer, song_artist, notes, file_path=file_path, duration=duration)
         self._after_mutation()
         return result
 
@@ -125,6 +127,36 @@ class RotationManager:
         """Remove any linked file from entry_id."""
         self.store.unlink_file(entry_id)
         self._after_mutation()
+
+    def set_download_status(self, entry_id, source, status, download_id=None):
+        """Set download tracking fields on a rotation entry."""
+        entry = self.store.set_download_status(entry_id, source, status, download_id)
+        self._after_mutation()
+        return entry
+
+    def set_url_fallback(self, entry_id, url):
+        """Set a URL fallback for browser mode playback."""
+        entry = self.store.set_url_fallback(entry_id, url)
+        self._after_mutation()
+        return entry
+
+    def complete_download(self, download_id, file_path):
+        """Called by download worker when a rotation-linked download completes."""
+        entry = self.store.get_entry_by_download_id(download_id)
+        if entry is None:
+            return None
+        self.store.link_file(entry["id"], file_path, self._lookup_duration(file_path))
+        self.store.set_download_status(entry["id"], entry["download_source"], "complete")
+        self._after_mutation()
+        return self.store.get_entry(entry["id"])
+
+    def _lookup_duration(self, file_path):
+        """Look up duration from media index, if available."""
+        if self.media is not None and hasattr(self.media, 'index'):
+            media_entry = self.media.index.get(file_path)
+            if media_entry is not None:
+                return media_entry.get("duration")
+        return None
 
     def archive_rotation(self):
         """Archive all current entries and reset the rotation.

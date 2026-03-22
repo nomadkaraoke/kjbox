@@ -1808,3 +1808,94 @@ body {
     color: #7dd3fc;
     word-break: break-all;
 }
+
+/* Rotation search dropdown */
+.rotation-search-dropdown {
+    background: #1a1f2e;
+    border: 1px solid #333;
+    border-radius: 0 0 6px 6px;
+    margin-top: -1px;
+    max-height: 300px;
+    overflow-y: auto;
+    z-index: 100;
+}
+.rotation-search-dropdown.hidden { display: none; }
+.rotation-search-dropdown .search-header {
+    padding: 6px 10px;
+    font-size: 10px;
+    color: #8892a4;
+    border-bottom: 1px solid #333;
+    display: flex;
+    justify-content: space-between;
+}
+.rotation-search-result {
+    padding: 7px 10px;
+    border-bottom: 1px solid #222;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: background 0.1s;
+}
+.rotation-search-result:hover,
+.rotation-search-result.selected { background: #252b3b; }
+.rotation-search-result .search-badge {
+    font-size: 9px;
+    padding: 2px 6px;
+    border-radius: 3px;
+    white-space: nowrap;
+    min-width: 52px;
+    text-align: center;
+    color: white;
+}
+.search-badge-ready { background: #2d8a4e; }
+.search-badge-divebar { background: #2d8a4e; }
+.search-badge-youtube { background: #d4720a; }
+.search-badge-url { background: #555; }
+.search-badge-make { background: #7c3aed; }
+.rotation-search-result .search-info { flex: 1; min-width: 0; }
+.rotation-search-result .search-title { color: #e0e6f0; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rotation-search-result .search-meta { color: #8892a4; font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rotation-search-more {
+    padding: 8px;
+    text-align: center;
+    cursor: pointer;
+    color: #5b9bd5;
+    font-size: 11px;
+}
+.rotation-search-more:hover { text-decoration: underline; }
+.rotation-search-hint {
+    padding: 6px 10px;
+    font-size: 10px;
+    color: #666;
+    border-top: 1px solid #222;
+}
+.rotation-search-section {
+    padding: 6px 10px;
+    font-size: 10px;
+    color: #8892a4;
+    border-bottom: 1px solid #333;
+    position: sticky;
+    top: 0;
+    background: #1a1f2e;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* Prep badges on rotation entries */
+.rotation-prep-badge {
+    font-size: 9px;
+    padding: 2px 6px;
+    border-radius: 3px;
+    white-space: nowrap;
+    margin-left: 4px;
+}
+.prep-ready { background: #2d8a4e33; color: #2d8a4e; }
+.prep-downloading-green { background: #2d8a4e33; color: #2d8a4e; }
+.prep-downloading-orange { background: #d4720a33; color: #d4720a; }
+.prep-url { background: #55555533; color: #888; }
+.prep-unlinked { background: #55555533; color: #888; }
+.prep-failed { background: #ef444433; color: #ef4444; }
+.prep-making { background: #7c3aed33; color: #7c3aed; }
+.prep-review { background: #f59e0b33; color: #f59e0b; }
+.prep-rendering { background: #7c3aed33; color: #7c3aed; }

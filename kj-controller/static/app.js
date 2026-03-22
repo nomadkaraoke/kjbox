@@ -613,6 +613,15 @@ async function updateStatus() {
             // Track download queue progress
             await handleDownloadQueue(data.download_queue);
 
+            // Check rotation downloads for completion
+            if (data.rotation_downloads) {
+                let needsRotRefresh = false;
+                for (const [entryId, dl] of Object.entries(data.rotation_downloads)) {
+                    if (dl.status === 'completed') needsRotRefresh = true;
+                }
+                if (needsRotRefresh) fetchRotation();
+            }
+
             // Browser mode status
             updateBrowserModeUI(data.browser_mode);
         }
@@ -2931,6 +2940,27 @@ function renderRotation(entries) {
         }
         if (badge.textContent) info.appendChild(badge);
 
+        // Preparation status badge
+        const prepBadge = document.createElement('span');
+        prepBadge.className = 'rotation-prep-badge';
+        if (entry.file_path) {
+            prepBadge.textContent = 'READY';
+            prepBadge.classList.add('prep-ready');
+        } else if (entry.download_status === 'queued' || entry.download_status === 'downloading') {
+            prepBadge.textContent = 'DOWNLOADING';
+            prepBadge.classList.add(entry.download_source === 'youtube' ? 'prep-downloading-orange' : 'prep-downloading-green');
+        } else if (entry.download_status === 'failed') {
+            prepBadge.textContent = 'FAILED';
+            prepBadge.classList.add('prep-failed');
+        } else if (entry.url_fallback) {
+            prepBadge.textContent = 'URL';
+            prepBadge.classList.add('prep-url');
+        } else {
+            prepBadge.textContent = 'UNLINKED';
+            prepBadge.classList.add('prep-unlinked');
+        }
+        info.appendChild(prepBadge);
+
         const actions = document.createElement('div');
         actions.className = 'rotation-actions';
 
@@ -2941,12 +2971,19 @@ function renderRotation(entries) {
             playBtn.title = 'Play this song';
             playBtn.onclick = () => playMedia(entry.file_path);
             actions.appendChild(playBtn);
-        } else {
+        } else if (entry.url_fallback) {
+            const playBtn = document.createElement('button');
+            playBtn.className = 'rotation-btn rotation-btn-play';
+            playBtn.textContent = '\u25B6';  // ▶
+            playBtn.title = 'Play via browser mode';
+            playBtn.onclick = () => enableBrowserMode(entry.url_fallback);
+            actions.appendChild(playBtn);
+        } else if (!entry.download_status || entry.download_status === 'failed') {
             const linkBtn = document.createElement('button');
             linkBtn.className = 'rotation-btn rotation-btn-link';
             linkBtn.textContent = '\uD83D\uDD17';  // 🔗
-            linkBtn.title = 'Link a song file';
-            linkBtn.onclick = () => openLinkSearch(entry.id);
+            linkBtn.title = 'Search and link a song';
+            linkBtn.onclick = () => openLinkSearch(entry.id, entry.song_artist);
             actions.appendChild(linkBtn);
         }
 
@@ -3247,36 +3284,25 @@ async function restoreFromSheet() {
     } catch (e) { showRotationIndicator('error'); }
 }
 
-async function openLinkSearch(entryId) {
-    const query = prompt('Search for song to link:');
-    if (!query) return;
-    try {
-        const resp = await fetch('/search?q=' + encodeURIComponent(query));
-        if (!resp.ok) return;
-        const data = await resp.json();
-        if (!data.results || !data.results.length) { alert('No results found'); return; }
-        const choices = data.results.slice(0, 5);
-        const msg = choices.map((r, i) => `${i+1}. ${r.artist} - ${r.title} (${r.format})`).join('\n');
-        const choice = prompt('Select a result (1-' + choices.length + '):\n\n' + msg);
-        if (!choice) return;
-        const idx = parseInt(choice, 10) - 1;
-        if (idx < 0 || idx >= choices.length) return;
-        const selected = choices[idx];
-        showRotationIndicator('spin');
-        const linkResp = await fetch('/rotation/link', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ id: entryId, file_path: selected.path }),
-        });
-        const linkData = await linkResp.json();
-        if (linkData.entries) { rotationData = linkData.entries; renderRotation(rotationData); }
-        showRotationIndicator(linkResp.ok ? 'success' : 'error');
-    } catch (e) { showRotationIndicator('error'); }
+function openLinkSearch(entryId, songText) {
+    // Open add form with song pre-filled to trigger search dropdown in link mode
+    const form = document.getElementById('rotation-add-form');
+    if (form.classList.contains('hidden')) toggleRotationAddForm();
+    // Store the target entry ID so selectRotSearchResult can link instead of add
+    form.dataset.linkTargetId = entryId;
+    const songInput = document.getElementById('rotation-song');
+    songInput.value = songText || '';
+    songInput.focus();
+    if (songText && songText.length >= 3) {
+        songInput.dispatchEvent(new Event('input'));
+    }
 }
 
 function toggleRotationAddForm() {
     const form = document.getElementById('rotation-add-form');
     form.classList.toggle('hidden');
+    // Clear link mode when toggling form
+    delete form.dataset.linkTargetId;
     if (!form.classList.contains('hidden')) {
         document.getElementById('rotation-singer').focus();
     }
@@ -3312,6 +3338,273 @@ async function addRotationEntry() {
         showRotationIndicator('error');
     }
 }
+
+// --- Rotation Search-As-You-Type ---
+
+let rotSearchTimer = null;
+let rotSearchSelectedIdx = -1;
+let rotSearchResults = [];
+let rotSearchExpanded = false;
+
+function initRotationSearch() {
+    const songInput = document.getElementById('rotation-song');
+    if (!songInput) return;
+
+    songInput.addEventListener('input', () => {
+        clearTimeout(rotSearchTimer);
+        const query = songInput.value.trim();
+        if (query.length < 3) {
+            hideRotSearchDropdown();
+            return;
+        }
+        rotSearchTimer = setTimeout(() => doRotationSearch(query), 300);
+    });
+
+    songInput.addEventListener('keydown', (e) => {
+        const dropdown = document.getElementById('rotation-search-dropdown');
+        if (!dropdown || dropdown.classList.contains('hidden')) {
+            if (e.key === 'Enter') addRotationEntry();
+            return;
+        }
+
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            rotSearchSelectedIdx = Math.min(rotSearchSelectedIdx + 1, rotSearchResults.length - 1);
+            highlightRotSearchResult();
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            rotSearchSelectedIdx = Math.max(rotSearchSelectedIdx - 1, -1);
+            highlightRotSearchResult();
+        } else if (e.key === 'Enter' && rotSearchSelectedIdx >= 0) {
+            e.preventDefault();
+            selectRotSearchResult(rotSearchResults[rotSearchSelectedIdx]);
+        } else if (e.key === 'Enter') {
+            // Enter with no selection = add without linking
+            hideRotSearchDropdown();
+            addRotationEntry();
+        } else if (e.key === 'Escape') {
+            hideRotSearchDropdown();
+        } else if (e.key === 'Tab') {
+            hideRotSearchDropdown();
+        }
+    });
+
+    // Close dropdown when clicking outside
+    document.addEventListener('click', (e) => {
+        if (!e.target.closest('.rotation-add-form, .rotation-search-dropdown')) {
+            hideRotSearchDropdown();
+        }
+    });
+}
+
+async function doRotationSearch(query) {
+    try {
+        const resp = await fetch('/rotation/search?q=' + encodeURIComponent(query));
+        if (!resp.ok) return;
+        const data = await resp.json();
+        renderRotSearchDropdown(data);
+    } catch (e) {
+        hideRotSearchDropdown();
+    }
+}
+
+function renderRotSearchDropdown(data) {
+    const dropdown = document.getElementById('rotation-search-dropdown');
+    if (!dropdown) return;
+    rotSearchResults = [];
+    rotSearchSelectedIdx = -1;
+
+    // Tier 1: Local library (READY)
+    for (const r of (data.local || [])) {
+        const displayTitle = ((r.artist || '') + ' - ' + (r.title || r.filename || '')).replace(/^- /, '');
+        rotSearchResults.push({
+            type: 'local', badge: 'READY', badgeClass: 'search-badge-ready',
+            title: displayTitle,
+            meta: [r.disc_id, r.format, r.duration ? fmtDur(r.duration) : ''].filter(Boolean).join(' \u00B7 '),
+            path: r.path, duration: r.duration,
+            song_artist: (r.title || '') + ' - ' + (r.artist || ''),
+        });
+    }
+
+    // Tier 2/3: KN tracks (Divebar / YouTube)
+    for (const song of (data.karaoke_nerds || [])) {
+        for (const track of (song.tracks || [])) {
+            if (track.in_library) continue;
+            if (track.divebar) {
+                rotSearchResults.push({
+                    type: 'divebar', badge: 'DIVEBAR', badgeClass: 'search-badge-divebar',
+                    title: song.artist + ' - ' + song.title,
+                    meta: [track.brand_name || track.brand_code, track.divebar.format || 'mp4', 'Divebar mirror'].filter(Boolean).join(' \u00B7 '),
+                    file_id: track.divebar.file_id,
+                    filename: (track.brand_code || 'DB') + ' - ' + song.artist + ' - ' + song.title + '.mp4',
+                    song_artist: song.title + ' - ' + song.artist,
+                });
+            } else if (track.youtube_url) {
+                rotSearchResults.push({
+                    type: 'youtube', badge: 'YOUTUBE', badgeClass: 'search-badge-youtube',
+                    title: song.artist + ' - ' + song.title,
+                    meta: [track.brand_name || track.brand_code, track.is_community ? 'community' : '', 'YouTube'].filter(Boolean).join(' \u00B7 '),
+                    youtube_url: track.youtube_url,
+                    filename: (track.brand_code || 'YT') + ' - ' + song.artist + ' - ' + song.title + '.mp4',
+                    song_artist: song.title + ' - ' + song.artist,
+                });
+            }
+        }
+    }
+
+    const maxInline = rotSearchExpanded ? 999 : 4;
+    let html = '';
+
+    if (rotSearchResults.length === 0) {
+        html = '<div class="search-header">No results found</div>';
+    } else {
+        html = '<div class="search-header"><span>\uD83D\uDD0D ' + rotSearchResults.length + ' result' + (rotSearchResults.length > 1 ? 's' : '') + '</span></div>';
+    }
+
+    rotSearchResults.slice(0, maxInline).forEach((r, i) => {
+        html += '<div class="rotation-search-result' + (i === rotSearchSelectedIdx ? ' selected' : '') + '" data-idx="' + i + '" onclick="selectRotSearchResult(rotSearchResults[' + i + '])">' +
+            '<span class="search-badge ' + r.badgeClass + '">' + r.badge + '</span>' +
+            '<div class="search-info">' +
+                '<div class="search-title">' + escHtml(r.title) + '</div>' +
+                '<div class="search-meta">' + escHtml(r.meta) + '</div>' +
+            '</div>' +
+        '</div>';
+    });
+
+    if (!rotSearchExpanded && rotSearchResults.length > maxInline) {
+        html += '<div class="rotation-search-more" onclick="rotSearchExpanded=true;doRotationSearch(document.getElementById(\'rotation-song\').value.trim())">More results + options \u25BE</div>';
+    } else if (rotSearchExpanded) {
+        html += '<div class="rotation-search-more" onclick="rotSearchExpanded=false;doRotationSearch(document.getElementById(\'rotation-song\').value.trim())">\u25B4 Show less</div>';
+    }
+
+    html += '<div class="rotation-search-hint">\u2191\u2193 navigate \u00B7 Enter select \u00B7 Tab skip \u00B7 Esc close</div>';
+
+    dropdown.innerHTML = html;
+    dropdown.classList.remove('hidden');
+}
+
+function highlightRotSearchResult() {
+    document.querySelectorAll('.rotation-search-result').forEach((el, i) => {
+        el.classList.toggle('selected', i === rotSearchSelectedIdx);
+    });
+}
+
+async function selectRotSearchResult(result) {
+    const singerInput = document.getElementById('rotation-singer');
+    const songInput = document.getElementById('rotation-song');
+    const form = document.getElementById('rotation-add-form');
+    const linkTargetId = form ? form.dataset.linkTargetId : null;
+
+    // In link mode, we don't need a singer name (already exists)
+    if (!linkTargetId) {
+        const singer = singerInput ? singerInput.value.trim() : '';
+        if (!singer) { singerInput.focus(); return; }
+    }
+
+    hideRotSearchDropdown();
+    showRotationIndicator('spin');
+
+    try {
+        if (linkTargetId) {
+            // Link mode: link result to existing rotation entry
+            if (result.type === 'local') {
+                const resp = await fetch('/rotation/link', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ id: parseInt(linkTargetId), file_path: result.path }),
+                });
+                const data = await resp.json();
+                if (data.entries) { rotationData = data.entries; renderRotation(rotationData); }
+            } else if (result.type === 'divebar' || result.type === 'youtube') {
+                const body = {
+                    id: parseInt(linkTargetId),
+                    source: result.type,
+                };
+                if (result.type === 'divebar') {
+                    body.file_id = result.file_id;
+                    body.filename = result.filename;
+                } else {
+                    body.youtube_url = result.youtube_url;
+                    body.filename = result.filename;
+                }
+                const resp = await fetch('/rotation/download-and-link', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(body),
+                });
+                const data = await resp.json();
+                if (data.entries) { rotationData = data.entries; renderRotation(rotationData); }
+            }
+        } else {
+            // Add mode: create new rotation entry with linked result
+            const singer = singerInput.value.trim();
+            if (result.type === 'local') {
+                const resp = await fetch('/rotation/add', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        singer,
+                        song_artist: result.song_artist || songInput.value.trim(),
+                        file_path: result.path,
+                    }),
+                });
+                const data = await resp.json();
+                if (data.entries) { rotationData = data.entries; renderRotation(rotationData); }
+            } else if (result.type === 'divebar' || result.type === 'youtube') {
+                const body = {
+                    singer,
+                    song_artist: result.song_artist || songInput.value.trim(),
+                    source: result.type,
+                };
+                if (result.type === 'divebar') {
+                    body.file_id = result.file_id;
+                    body.filename = result.filename;
+                } else {
+                    body.youtube_url = result.youtube_url;
+                    body.filename = result.filename;
+                }
+                const resp = await fetch('/rotation/download-and-link', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(body),
+                });
+                const data = await resp.json();
+                if (data.entries) { rotationData = data.entries; renderRotation(rotationData); }
+            }
+        }
+
+        // Clear form and link mode
+        if (singerInput) singerInput.value = '';
+        songInput.value = '';
+        if (form) delete form.dataset.linkTargetId;
+        showRotationIndicator('success');
+    } catch (e) {
+        showRotationIndicator('error');
+    }
+}
+
+function hideRotSearchDropdown() {
+    const dropdown = document.getElementById('rotation-search-dropdown');
+    if (dropdown) dropdown.classList.add('hidden');
+    rotSearchSelectedIdx = -1;
+    rotSearchExpanded = false;
+}
+
+function fmtDur(seconds) {
+    if (!seconds) return '';
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return m + ':' + String(s).padStart(2, '0');
+}
+
+function escHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text || '';
+    return div.innerHTML;
+}
+
+// Initialize on load
+document.addEventListener('DOMContentLoaded', initRotationSearch);
 
 async function archiveRotation() {
     if (!confirm('Archive all entries to "Past events" and start a new rotation?\n\nThis cannot be undone.')) return;
@@ -3349,9 +3642,9 @@ async function toggleBrowserMode() {
     }
 }
 
-async function enableBrowserMode() {
+async function enableBrowserMode(overrideUrl) {
     const urlInput = document.getElementById('browser-mode-url');
-    const url = urlInput.value.trim() || 'https://youtube.com';
+    const url = overrideUrl || urlInput.value.trim() || 'https://youtube.com';
 
     log('Enabling browser mode...');
     const btn = document.getElementById('browser-mode-toggle');

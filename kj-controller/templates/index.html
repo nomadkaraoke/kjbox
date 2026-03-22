@@ -66,9 +66,10 @@
                 </div>
                 <div id="rotation-add-form" class="rotation-add-form hidden">
                     <input type="text" id="rotation-singer" placeholder="Singer name" onkeyup="if(event.keyCode === 13) document.getElementById('rotation-song').focus()">
-                    <input type="text" id="rotation-song" placeholder="Song & Artist" onkeyup="if(event.keyCode === 13) addRotationEntry()">
+                    <input type="text" id="rotation-song" placeholder="Song & Artist" autocomplete="off">
                     <button onclick="addRotationEntry()">Add</button>
                 </div>
+                <div id="rotation-search-dropdown" class="rotation-search-dropdown hidden"></div>
                 <div id="rotation-list" class="rotation-list">
                     <div class="rotation-empty">Loading rotation...</div>
                 </div>
