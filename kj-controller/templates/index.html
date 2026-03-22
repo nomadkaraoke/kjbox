@@ -129,6 +129,11 @@
                             <button onclick="sendVncKey('ArrowLeft')">&#9664;</button>
                             <button onclick="sendVncKey('ArrowRight')">&#9654;</button>
                         </div>
+                        <div class="vnc-navigate-row">
+                            <input type="url" id="vnc-navigate-url" placeholder="Navigate to URL..."
+                                   onkeydown="if(event.key === 'Enter') { event.preventDefault(); vncNavigate(); }">
+                            <button onclick="vncNavigate()">Go</button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -801,6 +806,30 @@
             if (keysym) {
                 rfb.sendKey(keysym, null, true);
                 rfb.sendKey(keysym, null, false);
+            }
+        };
+
+        window.vncNavigate = async function() {
+            const input = document.getElementById('vnc-navigate-url');
+            const url = input.value.trim();
+            if (!url) return;
+            const goBtn = input.nextElementSibling;
+            goBtn.disabled = true;
+            goBtn.textContent = '...';
+            try {
+                const resp = await fetch('/browser-mode/enable', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url }),
+                });
+                const data = await resp.json();
+                if (data && data.success) {
+                    input.value = '';
+                    input.placeholder = url;
+                }
+            } finally {
+                goBtn.disabled = false;
+                goBtn.textContent = 'Go';
             }
         };
 
