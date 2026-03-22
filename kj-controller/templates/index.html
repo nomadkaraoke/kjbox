@@ -83,6 +83,12 @@
                 </div>
                 <div id="overlay-list" class="overlay-list"></div>
             </div>
+            <div id="vnc-max-toolbar" class="vnc-max-toolbar">
+                <button class="vnc-size-btn" onclick="setVncSize('200px')">200px</button>
+                <button class="vnc-size-btn" onclick="setVncSize('400px')">400px</button>
+                <button class="vnc-size-btn" onclick="setVncSize('fit')">Fit</button>
+                <button class="vnc-size-btn vnc-size-active" onclick="setVncSize('max')">Max</button>
+            </div>
             <div class="container" id="vnc-preview-container">
                 <div class="header-row">
                     <h2>Screen Preview</h2>
@@ -104,6 +110,24 @@
                 <div id="vnc-controls" class="vnc-controls hidden">
                     <button class="vnc-btn" onclick="disconnectVnc()">Disconnect</button>
                     <a class="vnc-forget-link" onclick="forgetVncPassword()">Forget password</a>
+                </div>
+                <div id="vnc-interactive-controls" class="vnc-interactive-controls hidden">
+                    <button class="vnc-btn vnc-interactive-toggle" onclick="toggleInteractive()">Interactive: OFF</button>
+                    <div id="vnc-keyboard-input" class="vnc-keyboard-input hidden">
+                        <input type="text" id="vnc-type-input" placeholder="Type text to send..."
+                               onkeydown="if(event.key === 'Enter') { event.preventDefault(); sendVncText(); }">
+                        <button onclick="sendVncText()">Send</button>
+                        <div class="vnc-special-keys">
+                            <button onclick="sendVncKey('Enter')">Enter</button>
+                            <button onclick="sendVncKey('Escape')">Esc</button>
+                            <button onclick="sendVncKey('Tab')">Tab</button>
+                            <button onclick="sendVncKey('Backspace')">Bksp</button>
+                            <button onclick="sendVncKey('ArrowUp')">&#9650;</button>
+                            <button onclick="sendVncKey('ArrowDown')">&#9660;</button>
+                            <button onclick="sendVncKey('ArrowLeft')">&#9664;</button>
+                            <button onclick="sendVncKey('ArrowRight')">&#9654;</button>
+                        </div>
+                    </div>
                 </div>
             </div>
             <div class="container system-controls">
@@ -592,6 +616,7 @@
         const RECONNECT_DELAY = 5000;
         let rfb = null;
         let reconnectTimer = null;
+        let interactiveMode = false;
 
         const statusEl = document.getElementById('vnc-status');
         const passwordForm = document.getElementById('vnc-password-form');
@@ -644,7 +669,7 @@
                 return;
             }
 
-            rfb.viewOnly = true;
+            rfb.viewOnly = !interactiveMode;
             rfb.scaleViewport = true;
             rfb.qualityLevel = 3;
             rfb.compressionLevel = 9;
@@ -660,11 +685,13 @@
             rfb.addEventListener('connect', function() {
                 setStatus('Connected', 'connected');
                 showControls();
+                document.getElementById('vnc-interactive-controls').classList.remove('hidden');
                 passwordInput.value = '';
             });
 
             rfb.addEventListener('disconnect', function(e) {
                 rfb = null;
+                resetInteractive();
                 // Don't update UI if preview is hidden
                 if (document.getElementById('vnc-preview-container').dataset.hidden) return;
                 if (e.detail.clean) {
@@ -709,6 +736,68 @@
                 window.connectVnc(saved);
             }, RECONNECT_DELAY);
         }
+
+        function resetInteractive() {
+            interactiveMode = false;
+            const btn = document.querySelector('.vnc-interactive-toggle');
+            if (btn) {
+                btn.textContent = 'Interactive: OFF';
+                btn.classList.remove('vnc-interactive-active');
+            }
+            document.getElementById('vnc-screen').classList.remove('vnc-interactive');
+            document.getElementById('vnc-keyboard-input').classList.add('hidden');
+            document.getElementById('vnc-interactive-controls').classList.add('hidden');
+        }
+
+        window.toggleInteractive = function() {
+            interactiveMode = !interactiveMode;
+            if (rfb) rfb.viewOnly = !interactiveMode;
+
+            const btn = document.querySelector('.vnc-interactive-toggle');
+            btn.textContent = 'Interactive: ' + (interactiveMode ? 'ON' : 'OFF');
+            btn.classList.toggle('vnc-interactive-active', interactiveMode);
+
+            const screen = document.getElementById('vnc-screen');
+            screen.classList.toggle('vnc-interactive', interactiveMode);
+
+            document.getElementById('vnc-keyboard-input').classList.toggle('hidden', !interactiveMode);
+
+            // Auto-enlarge if too small for clicking
+            if (interactiveMode && screen.classList.contains('vnc-fixed')) {
+                setVncSize('fit');
+            }
+        };
+
+        window.sendVncText = function() {
+            const input = document.getElementById('vnc-type-input');
+            if (!rfb || !input.value) return;
+            for (const char of input.value) {
+                const keysym = char.charCodeAt(0);
+                rfb.sendKey(keysym, null, true);
+                rfb.sendKey(keysym, null, false);
+            }
+            input.value = '';
+            input.focus();
+        };
+
+        window.sendVncKey = function(key) {
+            if (!rfb) return;
+            const keyMap = {
+                'Enter':      0xFF0D,
+                'Escape':     0xFF1B,
+                'Tab':        0xFF09,
+                'Backspace':  0xFF08,
+                'ArrowUp':    0xFF52,
+                'ArrowDown':  0xFF54,
+                'ArrowLeft':  0xFF51,
+                'ArrowRight': 0xFF53,
+            };
+            const keysym = keyMap[key];
+            if (keysym) {
+                rfb.sendKey(keysym, null, true);
+                rfb.sendKey(keysym, null, false);
+            }
+        };
 
         // Auto-connect on load if password is saved (and not hidden)
         const saved = localStorage.getItem(STORAGE_KEY);
