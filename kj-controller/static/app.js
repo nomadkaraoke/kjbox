@@ -613,6 +613,15 @@ async function updateStatus() {
             // Track download queue progress
             await handleDownloadQueue(data.download_queue);
 
+            // Check rotation downloads for completion
+            if (data.rotation_downloads) {
+                let needsRotRefresh = false;
+                for (const [entryId, dl] of Object.entries(data.rotation_downloads)) {
+                    if (dl.status === 'completed') needsRotRefresh = true;
+                }
+                if (needsRotRefresh) fetchRotation();
+            }
+
             // Browser mode status
             updateBrowserModeUI(data.browser_mode);
         }
@@ -2931,6 +2940,27 @@ function renderRotation(entries) {
         }
         if (badge.textContent) info.appendChild(badge);
 
+        // Preparation status badge
+        const prepBadge = document.createElement('span');
+        prepBadge.className = 'rotation-prep-badge';
+        if (entry.file_path) {
+            prepBadge.textContent = 'READY';
+            prepBadge.classList.add('prep-ready');
+        } else if (entry.download_status === 'queued' || entry.download_status === 'downloading') {
+            prepBadge.textContent = 'DOWNLOADING';
+            prepBadge.classList.add(entry.download_source === 'youtube' ? 'prep-downloading-orange' : 'prep-downloading-green');
+        } else if (entry.download_status === 'failed') {
+            prepBadge.textContent = 'FAILED';
+            prepBadge.classList.add('prep-failed');
+        } else if (entry.url_fallback) {
+            prepBadge.textContent = 'URL';
+            prepBadge.classList.add('prep-url');
+        } else {
+            prepBadge.textContent = 'UNLINKED';
+            prepBadge.classList.add('prep-unlinked');
+        }
+        info.appendChild(prepBadge);
+
         const actions = document.createElement('div');
         actions.className = 'rotation-actions';
 
@@ -2941,11 +2971,18 @@ function renderRotation(entries) {
             playBtn.title = 'Play this song';
             playBtn.onclick = () => playMedia(entry.file_path);
             actions.appendChild(playBtn);
-        } else {
+        } else if (entry.url_fallback) {
+            const playBtn = document.createElement('button');
+            playBtn.className = 'rotation-btn rotation-btn-play';
+            playBtn.textContent = '\u25B6';  // ▶
+            playBtn.title = 'Play via browser mode';
+            playBtn.onclick = () => enableBrowserMode(entry.url_fallback);
+            actions.appendChild(playBtn);
+        } else if (!entry.download_status || entry.download_status === 'failed') {
             const linkBtn = document.createElement('button');
             linkBtn.className = 'rotation-btn rotation-btn-link';
             linkBtn.textContent = '\uD83D\uDD17';  // 🔗
-            linkBtn.title = 'Link a song file';
+            linkBtn.title = 'Search and link a song';
             linkBtn.onclick = () => openLinkSearch(entry.id, entry.song_artist);
             actions.appendChild(linkBtn);
         }
