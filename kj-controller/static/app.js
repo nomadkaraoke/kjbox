@@ -622,11 +622,33 @@ async function updateStatus() {
                 if (needsRotRefresh) fetchRotation();
             }
 
+            // Poll gen job statuses periodically (every 30s via counter)
+            if (!window._genPollCounter) window._genPollCounter = 0;
+            window._genPollCounter++;
+            if (window._genPollCounter >= 15) {  // 15 * 2s = 30s
+                window._genPollCounter = 0;
+                pollGenStatuses();
+            }
+
             // Browser mode status
             updateBrowserModeUI(data.browser_mode);
         }
     } catch (error) {
         // Don't log periodic status check errors to avoid clutter
+    }
+}
+
+async function pollGenStatuses() {
+    try {
+        const resp = await fetch('/rotation/gen-status');
+        if (!resp.ok) return;
+        const data = await resp.json();
+        if (data.gen_entries && data.gen_entries.length > 0) {
+            // Refresh rotation to pick up badge changes
+            fetchRotation();
+        }
+    } catch (e) {
+        // Best-effort
     }
 }
 
@@ -2955,6 +2977,21 @@ function renderRotation(entries) {
         } else if (entry.url_fallback) {
             prepBadge.textContent = 'URL';
             prepBadge.classList.add('prep-url');
+        } else if (entry.gen_status === 'processing') {
+            prepBadge.textContent = 'MAKING';
+            prepBadge.classList.add('prep-making');
+        } else if (entry.gen_status === 'awaiting_review') {
+            prepBadge.textContent = 'NEEDS REVIEW';
+            prepBadge.classList.add('prep-review');
+            prepBadge.style.cursor = 'pointer';
+            prepBadge.title = 'Click to review lyrics';
+            prepBadge.onclick = (e) => {
+                e.stopPropagation();
+                window.open('https://gen.nomadkaraoke.com/app/jobs#/' + entry.gen_job_id + '/review', '_blank');
+            };
+        } else if (entry.gen_status === 'rendering') {
+            prepBadge.textContent = 'RENDERING';
+            prepBadge.classList.add('prep-rendering');
         } else {
             prepBadge.textContent = 'UNLINKED';
             prepBadge.classList.add('prep-unlinked');
@@ -3474,6 +3511,23 @@ function renderRotSearchDropdown(data) {
     if (!rotSearchExpanded && rotSearchResults.length > maxInline) {
         html += '<div class="rotation-search-more" onclick="rotSearchExpanded=true;doRotationSearch(document.getElementById(\'rotation-song\').value.trim())">More results + options \u25BE</div>';
     } else if (rotSearchExpanded) {
+        // MAKE button in expanded mode — parse artist/title from query
+        const songInput = document.getElementById('rotation-song');
+        const rawQuery = songInput ? songInput.value.trim() : '';
+        const makeIdx = rotSearchResults.length;
+        rotSearchResults.push({
+            type: 'make', badge: 'MAKE', badgeClass: 'search-badge-make',
+            title: 'Create karaoke video for: ' + rawQuery,
+            meta: 'Generate via Nomad Gen \u00B7 Takes ~5 min',
+            rawQuery: rawQuery,
+        });
+        html += '<div class="rotation-search-result' + (makeIdx === rotSearchSelectedIdx ? ' selected' : '') + '" data-idx="' + makeIdx + '" onclick="selectRotSearchResult(rotSearchResults[' + makeIdx + '])">' +
+            '<span class="search-badge search-badge-make">MAKE</span>' +
+            '<div class="search-info">' +
+                '<div class="search-title">' + escHtml('Create karaoke video for: ' + rawQuery) + '</div>' +
+                '<div class="search-meta">Generate via Nomad Gen \u00B7 Takes ~5 min</div>' +
+            '</div>' +
+        '</div>';
         html += '<div class="rotation-search-more" onclick="rotSearchExpanded=false;doRotationSearch(document.getElementById(\'rotation-song\').value.trim())">\u25B4 Show less</div>';
     }
 
@@ -3567,6 +3621,24 @@ async function selectRotSearchResult(result) {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify(body),
+                });
+                const data = await resp.json();
+                if (data.entries) { rotationData = data.entries; renderRotation(rotationData); }
+            } else if (result.type === 'make') {
+                // Parse artist/title from query (try "Title - Artist" or "Artist - Title")
+                const query = result.rawQuery || songInput.value.trim();
+                const parts = query.split(/\s*-\s*/);
+                let makeArtist = parts.length >= 2 ? parts[parts.length - 1] : '';
+                let makeTitle = parts.length >= 2 ? parts.slice(0, -1).join(' - ') : query;
+                const resp = await fetch('/rotation/make', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        singer,
+                        song_artist: query,
+                        artist: makeArtist,
+                        title: makeTitle,
+                    }),
                 });
                 const data = await resp.json();
                 if (data.entries) { rotationData = data.entries; renderRotation(rotationData); }
