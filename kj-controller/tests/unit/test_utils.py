@@ -57,10 +57,10 @@ def test_parse_youtube_filename_multiple_separators():
 
 
 def test_log_message_prints(capsys):
-    """log_message prints to stdout."""
+    """log_message prints to stderr for systemd journal visibility."""
     log_message("test output")
     captured = capsys.readouterr()
-    assert "test output" in captured.out
+    assert "test output" in captured.err
 
 
 def test_log_message_writes_to_file(tmp_path):

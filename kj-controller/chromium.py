@@ -246,13 +246,14 @@ class ChromiumManager:
         try:
             conn = http.client.HTTPConnection('localhost', CDP_PORT, timeout=3)
 
-            # Get current tab ID
+            # Get current page tab ID (skip service workers etc.)
             conn.request('GET', '/json')
             resp = conn.getresponse()
             pages = json.loads(resp.read())
-            if not pages:
+            page = next((p for p in pages if p.get('type') == 'page'), None)
+            if not page:
                 return False
-            old_id = pages[0]['id']
+            old_id = page['id']
 
             # Open new tab at target URL
             conn.request('PUT', f'/json/new?{quote(url, safe="")}')
