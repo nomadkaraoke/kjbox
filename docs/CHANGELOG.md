@@ -19,6 +19,28 @@ Major architecture change: rotation system now uses local SQLite as source of tr
 - **Conky simplified:** Display script reads local cache only (Sheet CSV fallback removed)
 - **Modules:** `rotation_store.py` (SQLite CRUD), `rotation_sync.py` (Sheet backup), `rotation.py` (coordinator)
 
+## 2026-03-21 - Browser Mode Orphan Detection
+
+Fixed browser mode state getting out of sync after auto-deploy restarts. Chromium processes now survive service restarts as orphans but the server lost track of them — mode showed "VLC" while browser was visible, toggle didn't work, and playing a video left the browser on screen.
+
+- `ChromiumManager` now detects orphan Chromium via `pgrep` (not just managed `self.process`)
+- Orphans killed on startup; adopted by status endpoint if still running
+- `/play` checks actual process state, not just `_browser_mode` flag
+- PipeWire reset triggered for orphan cleanup (not just managed process)
+
+## 2026-03-21 - Sleep Mode
+
+Added Sleep Mode toggle to the System section of the KJ Controller UI for low-power state between weekly karaoke nights.
+
+- Toggle in System panel stops VLC, overlays, rotation display, VNC, Dropbox, and unnecessary services
+- Unmounts and spins down USB SSD, enables USB auto-suspend
+- Blanks display via DPMS, switches to power-saver power profile
+- Pre-sleep state captured to restore only previously-running services on wake
+- Playback routes return 409 while sleeping; web UI and SSH remain accessible
+- Reboot during sleep auto-clears flag — system boots normally
+- Shell scripts (`sleep-enter.sh`, `sleep-exit.sh`) can also be run manually via SSH
+- Installed `uhubctl` on NomadPC (USB hubs don't support per-port power, but available for future hardware)
+
 ## 2026-03-06 - Drag-and-Drop Rotation Reordering
 
 Added drag handles (≡) to rotation entries in the KJ Controller UI for reordering singers.

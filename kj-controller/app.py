@@ -15,7 +15,9 @@ from media import MediaIndex
 from overlay import OverlayManager
 from rotation import RotationManager
 from routes import routes_bp
+from sleep_mode import SleepManager
 from utils import log_message
+from chromium import ChromiumManager
 from vlc import VLCManager
 from zip_playback import ZipPlayback
 
@@ -38,10 +40,12 @@ def create_app(config=None):
     flask_app.vlc = VLCManager(cfg, enabled=False if config else None)
     flask_app.catalog = ExternalCatalog(cfg)
     flask_app.zip_playback = ZipPlayback(cfg)
+    flask_app.chromium = ChromiumManager(cfg)
     overlay_path = cfg.get('overlays_path') if config else None
     flask_app.overlay_manager = OverlayManager(config_path=overlay_path)
     flask_app.rotation = _init_rotation(cfg)
     flask_app.rotation.media = flask_app.media
+    flask_app.sleep_manager = SleepManager()
     flask_app.download_queue = {'items': [], 'worker_running': False}
     flask_app._download_lock = threading.Lock()
     flask_app.register_blueprint(routes_bp)
@@ -121,12 +125,16 @@ def start_app():  # pragma: no cover
     flask_app.vlc = vlc
     flask_app.catalog = ExternalCatalog(cfg)
     flask_app.zip_playback = ZipPlayback(cfg)
+    flask_app.chromium = ChromiumManager(cfg)
     flask_app.overlay_manager = overlay_mgr
     flask_app.rotation = _init_rotation(cfg)
     flask_app.rotation.media = flask_app.media
     log_message("Rotation enabled (SQLite primary).", cfg)
     if flask_app.rotation.sync:
         log_message("Sheet sync enabled.", cfg)
+    flask_app.sleep_manager = SleepManager()
+    if flask_app.sleep_manager.is_sleeping():
+        log_message("Sleep mode is active (from previous session).", cfg)
     flask_app.download_queue = {'items': [], 'worker_running': False}
     flask_app._download_lock = threading.Lock()
     flask_app.register_blueprint(routes_bp)

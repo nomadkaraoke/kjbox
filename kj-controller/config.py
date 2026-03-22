@@ -46,6 +46,7 @@ def load_config(config_file=None):
         "tls_cert": os.path.join(APP_DIR, 'certs', 'cert.pem'),
         "tls_key": os.path.join(APP_DIR, 'certs', 'key.pem'),
         "kn_preferred_brands": ["KV", "KFN"],
+        "divebar_api_url": "",
     }
     if os.path.exists(config_file):
         try:

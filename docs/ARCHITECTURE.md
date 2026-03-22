@@ -52,30 +52,36 @@ KJ Controller is a web-based karaoke show management application. A Flask backen
 | `app.py` | ~70 | `create_app()` factory, `start_app()` entry point |
 | `config.py` | ~70 | Constants, `is_pi()`, `load_config()`, `save_config_value()` |
 | `utils.py` | ~40 | `log_message()`, `sanitize_filename_part()`, `parse_youtube_filename()` |
-| `media.py` | ~260 | `MediaIndex` class: scan, validate, download, delete, list |
+| `media.py` | ~310 | `MediaIndex` class: scan, validate, download, delete, list |
 | `vlc.py` | ~440 | `VLCManager` class: launch, command, fade, play, restart, monitor, reconnect |
+| `chromium.py` | ~160 | `ChromiumManager` class: launch/kill fullscreen Chromium for Browser Mode, PipeWire audio routing |
 | `catalog.py` | ~230 | `ExternalCatalog` class: SQLite FTS5 search over external media |
 | `zip_playback.py` | ~50 | `ZipPlayback` class: CDG+MP3 ZIP extraction for VLC |
 | `overlay.py` | ~100 | `OverlayManager` class: CRUD, toggle, karaoke_playing state, JSON persistence |
 | `karaoke_nerds.py` | ~140 | Karaoke Nerds web scraper: search, parse HTML results, extract YouTube URLs |
 | `youtube_search.py` | ~80 | YouTube search via yt-dlp: ytsearch with extract_flat for fast metadata |
 | `youtube_health.py` | ~170 | YouTube health checks: yt-dlp/EJS/Deno version detection, cookie validation, PyPI version check (24h cache), pip upgrade |
+| `divebar.py` | ~150 | Divebar catalog client: search, KN cross-reference lookup, download URL generation via Cloud Function API |
 | `rotation.py` | ~90 | `RotationManager` coordinator: delegates to `RotationStore` (SQLite) + `SheetSync` (optional), writes display cache |
 | `rotation_store.py` | ~220 | `RotationStore` class: SQLite CRUD for rotation entries, position management, file linking, archive |
 | `rotation_sync.py` | ~230 | `SheetSync` class: background thread pushing SQLite state to Google Sheets (optional backup) |
-| `routes.py` | ~720 | Flask Blueprint with all route handlers |
+| `sleep_mode.py` | ~100 | `SleepManager` class: enter/exit low-power sleep mode, stop services, unmount SSD |
+| `routes.py` | ~800 | Flask Blueprint with all route handlers |
 
 ### Dependency Flow
 
 ```
-app.py → config.py, media.py, vlc.py, catalog.py, zip_playback.py, overlay.py, routes.py, utils.py
-routes.py → config.py, utils.py, karaoke_nerds, youtube_search, youtube_health, psutil (accesses media/vlc/catalog/zip_playback/overlay_manager via current_app)
+app.py → config.py, media.py, vlc.py, chromium.py, catalog.py, zip_playback.py, overlay.py, sleep_mode.py, routes.py, utils.py
+routes.py → config.py, utils.py, divebar, karaoke_nerds, youtube_search, youtube_health, psutil (accesses media/vlc/catalog/zip_playback/overlay_manager via current_app)
+divebar.py → config.py (requests)
+sleep_mode.py → config.py, utils.py (subprocess for shell scripts)
 karaoke_nerds.py → config.py, utils.py (requests, beautifulsoup4)
 youtube_search.py → media._ytdlp_base_opts, config.py, utils.py (yt_dlp)
 youtube_health.py → (yt_dlp, importlib.metadata, shutil, subprocess)
 overlay.py → (stdlib only: json, os, uuid, tempfile)
 media.py → config.py, utils.py
 vlc.py → config.py, utils.py
+chromium.py → config.py, utils.py
 catalog.py → (stdlib only: sqlite3, os, re)
 zip_playback.py → (stdlib only: zipfile, tempfile, shutil)
 config.py → (stdlib only)
@@ -97,6 +103,9 @@ utils.py → (stdlib only)
 | Karaoke playing flag | `OverlayManager.karaoke_playing` | `current_app.overlay_manager` |
 | Download state | `app.download_state` dict | `current_app.download_state` |
 | Rotation queue | `RotationManager` (SQLite primary + optional Sheet backup) | `current_app.rotation` |
+| Chromium process | `ChromiumManager` (subprocess + PipeWire) | `current_app.chromium` |
+| Browser mode flag | `_browser_mode` bool in routes.py | Module-level (resets on restart) |
+| Sleep mode | `SleepManager` (`/tmp/kj-sleep-mode` flag) | `current_app.sleep_manager` |
 
 ## REST API
 
@@ -131,6 +140,9 @@ utils.py → (stdlib only)
 | DELETE | `/overlays/<id>` | Delete an overlay |
 | POST | `/overlays/<id>/toggle` | Toggle overlay enabled state |
 | POST | `/overlays/<id>/toggle-video` | Toggle overlay show-over-video state |
+| POST | `/divebar/search` | Search Divebar community karaoke catalog (48K+ tracks from 62 brands) |
+| POST | `/divebar/kn-lookup` | Cross-reference KN song IDs with Divebar catalog |
+| POST | `/divebar/download` | Queue download of a Divebar track from Google Drive |
 | POST | `/karaoke-nerds/search` | Search karaokenerds.com for web-only tracks |
 | GET | `/karaoke-nerds/config` | Get preferred brand codes for KN result sorting |
 | POST | `/karaoke-nerds/config` | Set preferred brand codes for KN result sorting |
@@ -142,6 +154,8 @@ utils.py → (stdlib only)
 | POST | `/overlays/import` | Bulk import overlays (replaces all, assigns new IDs) |
 | GET | `/system/autodeploy` | Check if kj-autodeploy service is active |
 | POST | `/system/autodeploy` | Enable/disable kj-autodeploy (persists across reboots) |
+| GET | `/system/sleep-mode` | Sleep mode status (active, entering, exiting, state details) |
+| POST | `/system/sleep-mode` | Enter or exit sleep mode (stops services, unmounts SSD, power-saver) |
 | GET | `/system/stats` | System metrics: CPU %, memory, disk usage (requires psutil) |
 | GET | `/rotation` | Get singer rotation queue (non-done entries, with estimated times) |
 | POST | `/rotation/status` | Update a rotation entry's status (`{id, status}`) |
@@ -154,6 +168,8 @@ utils.py → (stdlib only)
 | POST | `/rotation/unlink` | Remove file link from a rotation entry (`{id}`) |
 | GET | `/rotation/sync-status` | Get Sheet sync status (`{last_sync, is_online, next_sync_in}`) |
 | POST | `/rotation/restore` | Emergency restore rotation from Google Sheet backup |
+| POST | `/browser-mode/enable` | Enable Browser Mode: stop VLC, launch fullscreen Chromium at URL |
+| POST | `/browser-mode/disable` | Disable Browser Mode: kill Chromium, restart VLC |
 
 ## Key Design Decisions
 

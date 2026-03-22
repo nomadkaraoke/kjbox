@@ -612,6 +612,9 @@ async function updateStatus() {
 
             // Track download queue progress
             await handleDownloadQueue(data.download_queue);
+
+            // Browser mode status
+            updateBrowserModeUI(data.browser_mode);
         }
     } catch (error) {
         // Don't log periodic status check errors to avoid clutter
@@ -651,9 +654,11 @@ function renderAvModal(data) {
     renderAvHealthBar(data.health);
     renderAvVideoSection(data.video);
     renderAvAudioSection(data.audio);
+    renderAvBrowserAudioSection(data.audio);
     populateAvResolutionSelect(data.video);
     populateAvHdmiPcmSelect(data.audio);
     populateAvVlcDeviceSelect(data.audio);
+    populateAvBrowserAudioSelect(data.audio);
     document.getElementById('av-loading').classList.add('hidden');
     document.getElementById('av-content').classList.remove('hidden');
 }
@@ -832,6 +837,65 @@ function populateAvVlcDeviceSelect(audio) {
         if (value === audio.vlc_device) opt.selected = true;
         sel.appendChild(opt);
     });
+}
+
+function renderAvBrowserAudioSection(audio) {
+    const infoEl = document.getElementById('av-browser-audio-info');
+    const ba = audio.browser_audio || {};
+    const isSame = ba.setting === 'same';
+    const dotCls = 'av-dot-ok';
+
+    let label;
+    if (isSame) {
+        label = `Same as VLC → ${ba.resolved_profile || '(unknown)'}`;
+    } else {
+        label = ba.setting || '(unknown)';
+    }
+
+    infoEl.innerHTML = `
+        <div class="av-info-row">
+            <span class="av-info-label">Browser device</span>
+            ${avDot(dotCls)}
+            <span class="av-info-value" style="font-size:0.8em;">${escapeHtml(label)}</span>
+        </div>`;
+}
+
+function populateAvBrowserAudioSelect(audio) {
+    const sel = document.getElementById('av-browser-audio-select');
+    sel.innerHTML = '';
+    const ba = audio.browser_audio || {};
+    const currentSetting = ba.setting || 'same';
+
+    // "Same as VLC" option
+    const sameOpt = document.createElement('option');
+    sameOpt.value = 'same';
+    sameOpt.textContent = `Same as VLC (${ba.resolved_profile || 'auto'})`;
+    if (currentSetting === 'same') sameOpt.selected = true;
+    sel.appendChild(sameOpt);
+
+    // Individual PipeWire profiles
+    const profiles = ba.available_profiles || {};
+    const profileLabels = {
+        'hdmi': 'HDMI — audio via HDMI display/splitter',
+        'analog': 'Analog — 3.5mm headphone jack',
+    };
+    for (const [key, profileStr] of Object.entries(profiles)) {
+        const opt = document.createElement('option');
+        opt.value = profileStr;
+        opt.textContent = profileLabels[key] || `${key} — ${profileStr}`;
+        if (currentSetting === profileStr) opt.selected = true;
+        sel.appendChild(opt);
+    }
+}
+
+async function avSetBrowserAudio(device) {
+    if (!device) return;
+    log(`Setting browser audio to ${device === 'same' ? 'Same as VLC' : device}...`);
+    const data = await apiCall('/av/browser-audio', { device });
+    if (data && data.success) {
+        log(`Browser audio set to ${data.device}`, 'success');
+        setTimeout(avRefresh, 500);
+    }
 }
 
 async function avSetResolution(resolution) {
@@ -1731,6 +1795,100 @@ async function toggleAutoDeploy(active) {
     }
 }
 
+// --- Sleep Mode ---
+
+let _sleepModeActive = false;
+
+async function fetchSleepModeStatus() {
+    try {
+        const response = await fetch('/system/sleep-mode');
+        const data = await response.json();
+        _sleepModeActive = data.active;
+        const sw = document.getElementById('sleep-mode-switch');
+        if (sw) sw.checked = data.active;
+        updateSleepModeUI(data);
+    } catch (e) { /* ignore */ }
+}
+
+function updateSleepModeUI(data) {
+    const statusEl = document.getElementById('sleep-mode-status');
+    const section = document.getElementById('sleep-mode-section');
+    if (!statusEl || !section) return;
+
+    if (data.active) {
+        section.classList.add('sleep-mode-active');
+        const entered = data.state && data.state.entered_at
+            ? new Date(data.state.entered_at).toLocaleString()
+            : 'unknown';
+        statusEl.textContent = `Sleeping since ${entered}. Services stopped, SSD unmounted, power-saver mode.`;
+        statusEl.classList.remove('hidden');
+    } else if (data.entering) {
+        section.classList.add('sleep-mode-active');
+        statusEl.textContent = 'Entering sleep mode...';
+        statusEl.classList.remove('hidden');
+    } else if (data.exiting) {
+        section.classList.remove('sleep-mode-active');
+        statusEl.textContent = 'Waking up...';
+        statusEl.classList.remove('hidden');
+    } else {
+        section.classList.remove('sleep-mode-active');
+        statusEl.classList.add('hidden');
+    }
+}
+
+async function toggleSleepMode(active) {
+    const sw = document.getElementById('sleep-mode-switch');
+
+    if (active) {
+        // Entering sleep — confirm first
+        const ok = confirm(
+            'Enter Sleep Mode?\n\n' +
+            'This will:\n' +
+            '- Stop VLC, overlays, rotation display, VNC\n' +
+            '- Unmount and power down the USB SSD\n' +
+            '- Switch to power-saver mode\n' +
+            '- Stop Dropbox and other services\n\n' +
+            'The web UI will remain accessible to wake the system.'
+        );
+        if (!ok) {
+            if (sw) sw.checked = false;
+            return;
+        }
+    }
+
+    const statusEl = document.getElementById('sleep-mode-status');
+    if (statusEl) {
+        statusEl.textContent = active ? 'Entering sleep mode...' : 'Waking up...';
+        statusEl.classList.remove('hidden');
+    }
+
+    try {
+        const response = await fetch('/system/sleep-mode', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ active })
+        });
+        const data = await response.json();
+        _sleepModeActive = data.active;
+        if (sw) sw.checked = data.active;
+
+        if (data.active) {
+            log('Sleep mode activated', 'success');
+            updateSleepModeUI(data);
+        } else {
+            log('System awake', 'success');
+            updateSleepModeUI({ active: false });
+        }
+
+        if (data.errors && data.errors.length > 0) {
+            log(`Sleep mode warnings: ${data.errors.join('; ')}`, 'warn');
+        }
+    } catch (e) {
+        log('Failed to toggle sleep mode', 'error');
+        fetchSleepModeStatus(); // revert switch to actual state
+    }
+}
+
 async function rebuildCatalog() {
     log('Rebuilding catalog...');
     const data = await apiCall('/catalog/build', {});
@@ -2169,6 +2327,292 @@ function loadYTKaraokeToggle() {
     document.getElementById('yt-karaoke-prefix').checked = saved === '1';
 }
 
+// --- Divebar Search ---
+
+async function searchDivebar() {
+    const input = document.getElementById('db-query');
+    const btn = document.getElementById('db-search-btn');
+    const status = document.getElementById('db-status');
+    const query = input.value.trim();
+    if (!query || query.length < 2) {
+        log('Enter at least 2 characters to search.', 'error');
+        return;
+    }
+    log(`Searching Divebar: ${query}`);
+    btn.disabled = true;
+    status.classList.remove('hidden');
+    document.getElementById('db-stage').textContent = 'Searching Divebar catalog...';
+
+    const data = await apiCall('/divebar/search', { query });
+
+    btn.disabled = false;
+    status.classList.add('hidden');
+    if (data) {
+        if (Array.isArray(data) && data.length === 0) {
+            log('No results found in Divebar.', 'error');
+            document.getElementById('db-results').innerHTML =
+                '<div class="kn-no-results">No results found in Divebar catalog.</div>';
+        } else if (data.error) {
+            log(`Divebar search error: ${data.error}`, 'error');
+        } else {
+            const totalTracks = data.reduce((sum, s) => sum + (s.tracks ? s.tracks.length : 0), 0);
+            log(`Found ${data.length} song${data.length !== 1 ? 's' : ''} (${totalTracks} tracks) in Divebar.`, 'success');
+            renderDBResults(data);
+        }
+    }
+}
+
+function clearDBResults() {
+    document.getElementById('db-results').innerHTML = '';
+    document.getElementById('db-query').value = '';
+}
+
+function renderDBResults(songs) {
+    const container = document.getElementById('db-results');
+    container.innerHTML = '';
+
+    songs.forEach((song, idx) => {
+        const songId = `db-song-${idx}`;
+        const trackCount = song.tracks ? song.tracks.length : 0;
+
+        // Song header
+        const header = document.createElement('div');
+        header.className = 'kn-song-header db-song-header';
+        header.onclick = () => {
+            const el = document.getElementById(songId);
+            if (el) {
+                const collapsed = el.classList.toggle('collapsed');
+                const chev = document.getElementById('db-chevron-' + idx);
+                if (chev) chev.classList.toggle('expanded', !collapsed);
+            }
+        };
+
+        const chevron = document.createElement('span');
+        chevron.className = 'folder-chevron';
+        chevron.id = 'db-chevron-' + idx;
+        chevron.textContent = '\u25B6';
+
+        const titleText = document.createElement('span');
+        titleText.className = 'kn-song-title';
+        titleText.textContent = `${song.title || 'Unknown'} \u2014 ${song.artist || 'Unknown'}`;
+
+        const count = document.createElement('span');
+        count.className = 'kn-track-count';
+        count.textContent = `${trackCount} track${trackCount !== 1 ? 's' : ''}`;
+
+        header.appendChild(chevron);
+        header.appendChild(titleText);
+        if (song.artist && song.title) {
+            header.appendChild(createCopyBtn(`${song.artist} - ${song.title}`));
+        }
+        header.appendChild(count);
+        container.appendChild(header);
+
+        // Track list (collapsed by default)
+        const trackList = document.createElement('div');
+        trackList.className = 'kn-track-list collapsed';
+        trackList.id = songId;
+
+        if (song.tracks) {
+            song.tracks.forEach(track => {
+                const trackEl = document.createElement('div');
+                trackEl.className = 'kn-track db-track';
+
+                const info = document.createElement('span');
+                info.className = 'kn-track-info';
+
+                const brandSpan = document.createElement('span');
+                brandSpan.className = 'kn-brand-name';
+                brandSpan.textContent = track.brand || 'Unknown';
+                info.appendChild(brandSpan);
+
+                // Format + quality badge (e.g. "MP4 720p", "MP4 HD", "ZIP CDG")
+                const fmtBadge = document.createElement('span');
+                fmtBadge.className = 'format-badge db-format-badge';
+                const fmt = (track.format || 'unknown').toUpperCase();
+                const quality = track.quality || '';
+                fmtBadge.textContent = quality ? `${fmt} ${quality}` : fmt;
+                info.appendChild(fmtBadge);
+
+                // File size
+                if (track.file_size) {
+                    const sizeSpan = document.createElement('span');
+                    sizeSpan.className = 'db-file-size';
+                    sizeSpan.textContent = formatFileSize(track.file_size);
+                    info.appendChild(sizeSpan);
+                }
+
+                // Source badge (GCS = fast mirror, or Divebar = Google Drive)
+                const badge = document.createElement('span');
+                badge.className = 'kn-community-badge db-badge';
+                if (track.in_gcs) {
+                    badge.textContent = 'GCS';
+                    badge.title = 'Download from GCS mirror (fast)';
+                    badge.classList.add('db-gcs-badge');
+                } else {
+                    badge.textContent = 'Drive';
+                    badge.title = 'Download from Google Drive';
+                }
+                info.appendChild(badge);
+
+                const actions = document.createElement('span');
+                actions.className = 'kn-track-actions';
+
+                const dlBtn = document.createElement('button');
+                dlBtn.className = 'kn-download-btn db-download-btn';
+                dlBtn.textContent = 'Download';
+                dlBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    downloadDivebarTrack(track.file_id, track.drive_path || track.brand);
+                    dlBtn.disabled = true;
+                    dlBtn.textContent = 'Queued';
+                };
+                actions.appendChild(dlBtn);
+
+                trackEl.appendChild(info);
+                trackEl.appendChild(actions);
+                trackList.appendChild(trackEl);
+            });
+        }
+
+        container.appendChild(trackList);
+    });
+}
+
+function downloadDivebarTrack(fileId, filename) {
+    log(`Queuing Divebar download: ${filename}`);
+    apiCall('/divebar/download', { file_id: fileId, filename: filename });
+}
+
+function formatFileSize(bytes) {
+    if (!bytes) return '';
+    if (bytes < 1024 * 1024) return Math.round(bytes / 1024) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+}
+
+// Divebar cross-reference for KN results
+async function loadDivebarBadges() {
+    // Placeholder for KN cross-reference badges (future enhancement)
+}
+
+// --- Divebar Status ---
+
+let dbStatusCache = null;
+
+async function fetchDbStatus() {
+    try {
+        const resp = await fetch('/divebar/status');
+        if (!resp.ok) return null;
+        return await resp.json();
+    } catch (_) { return null; }
+}
+
+async function updateDbHealthDot() {
+    const dot = document.getElementById('db-health-dot');
+    if (!dot) return;
+    const data = await fetchDbStatus();
+    dbStatusCache = data;
+    if (!data || !data.configured) {
+        dot.className = 'yt-health-dot red';
+        dot.title = 'Divebar not configured';
+    } else if (data.gcs_mirror && data.gcs_mirror.percent >= 95) {
+        dot.className = 'yt-health-dot green';
+        dot.title = `GCS mirror ${data.gcs_mirror.percent}% synced`;
+    } else if (data.gcs_mirror && data.gcs_mirror.percent > 0) {
+        dot.className = 'yt-health-dot yellow';
+        dot.title = `GCS mirror ${data.gcs_mirror.percent}% synced (${data.gcs_mirror.synced}/${data.catalog.total_files})`;
+    } else {
+        dot.className = 'yt-health-dot yellow';
+        dot.title = 'GCS mirror sync starting...';
+    }
+}
+
+function openDbStatusModal() {
+    document.getElementById('db-modal').classList.remove('hidden');
+    document.getElementById('db-modal-loading').classList.remove('hidden');
+    document.getElementById('db-modal-body').classList.add('hidden');
+    loadDbStatusModal();
+}
+
+function closeDbStatusModal() {
+    document.getElementById('db-modal').classList.add('hidden');
+}
+
+async function loadDbStatusModal() {
+    const data = dbStatusCache || await fetchDbStatus();
+    dbStatusCache = data;
+
+    const loading = document.getElementById('db-modal-loading');
+    const body = document.getElementById('db-modal-body');
+    loading.classList.add('hidden');
+    body.classList.remove('hidden');
+
+    if (!data || data.error) {
+        body.innerHTML = `<div class="av-section"><p style="color:#f87171">${data?.error || 'Could not connect to Divebar API'}</p></div>`;
+        return;
+    }
+
+    const c = data.catalog || {};
+    const g = data.gcs_mirror || {};
+    const f = data.formats || {};
+    const x = data.cross_reference || {};
+    const kn = data.karaoke_nerds || {};
+
+    const lastSync = c.last_index_sync ? new Date(c.last_index_sync).toLocaleString() : 'Never';
+    const lastXref = x.last_rebuild ? new Date(x.last_rebuild).toLocaleString() : 'Never';
+
+    const mirrorColor = g.percent >= 95 ? '#22c55e' : g.percent > 0 ? '#eab308' : '#f87171';
+    const mirrorLabel = g.percent >= 100 ? 'Fully synced' : `${g.percent}% synced`;
+
+    // Format breakdown
+    let fmtRows = '';
+    for (const [fmt, info] of Object.entries(f)) {
+        const pct = info.count > 0 ? Math.round(info.in_gcs / info.count * 100) : 0;
+        fmtRows += `<tr><td>${fmt.toUpperCase()}</td><td>${info.count.toLocaleString()}</td><td>${info.gb} GB</td><td>${info.in_gcs.toLocaleString()} (${pct}%)</td></tr>`;
+    }
+
+    body.innerHTML = `
+        <div class="av-section">
+            <div class="av-section-title">Catalog Index</div>
+            <div class="av-grid">
+                <span class="av-label">Total files</span><span class="av-value">${c.total_files?.toLocaleString() || 0}</span>
+                <span class="av-label">Brands</span><span class="av-value">${c.total_brands || 0}</span>
+                <span class="av-label">With metadata</span><span class="av-value">${c.with_metadata?.toLocaleString() || 0}</span>
+                <span class="av-label">Total size</span><span class="av-value">${c.total_gb || 0} GB</span>
+                <span class="av-label">Last index sync</span><span class="av-value">${lastSync}</span>
+            </div>
+        </div>
+        <div class="av-section">
+            <div class="av-section-title">GCS Mirror</div>
+            <div class="db-progress-bar">
+                <div class="db-progress-fill" style="width:${Math.min(g.percent || 0, 100)}%; background:${mirrorColor}"></div>
+            </div>
+            <div class="av-grid">
+                <span class="av-label">Status</span><span class="av-value" style="color:${mirrorColor}">${mirrorLabel}</span>
+                <span class="av-label">Files synced</span><span class="av-value">${g.synced?.toLocaleString() || 0} / ${c.total_files?.toLocaleString() || 0}</span>
+                <span class="av-label">Data synced</span><span class="av-value">${g.synced_gb || 0} / ${c.total_gb || 0} GB</span>
+                <span class="av-label">Pending</span><span class="av-value">${g.pending?.toLocaleString() || 0} files (${g.pending_gb || 0} GB)</span>
+            </div>
+        </div>
+        <div class="av-section">
+            <div class="av-section-title">Formats</div>
+            <table class="db-format-table">
+                <thead><tr><th>Format</th><th>Files</th><th>Size</th><th>In GCS</th></tr></thead>
+                <tbody>${fmtRows}</tbody>
+            </table>
+        </div>
+        <div class="av-section">
+            <div class="av-section-title">KaraokeNerds Data</div>
+            <div class="av-grid">
+                <span class="av-label">Song catalog</span><span class="av-value">${kn.songs?.toLocaleString() || 0} songs</span>
+                <span class="av-label">Community tracks</span><span class="av-value">${kn.community_tracks?.toLocaleString() || 0} tracks</span>
+                <span class="av-label">KN cross-references</span><span class="av-value">${x.total_matches?.toLocaleString() || 0} matches</span>
+                <span class="av-label">Last xref rebuild</span><span class="av-value">${lastXref}</span>
+            </div>
+        </div>
+    `;
+}
+
 // --- Initialization ---
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -2235,6 +2679,7 @@ document.addEventListener('DOMContentLoaded', () => {
     updateMediaFilterBtn();
 
     loadYTKaraokeToggle();
+    updateDbHealthDot();
     updateStatus();
     updateMediaList();
     updateFillerMusicList();
@@ -2242,6 +2687,7 @@ document.addEventListener('DOMContentLoaded', () => {
     checkCatalogAvailability();
     fetchRotation();
     fetchAutoDeployStatus();
+    fetchSleepModeStatus();
     log('Nomad KJ Control initialized.');
 });
 
@@ -2889,6 +3335,78 @@ async function archiveRotation() {
         showRotationIndicator('success');
     } catch (e) {
         showRotationIndicator('error');
+    }
+}
+
+// --- Browser Mode ---
+
+let browserModeActive = false;
+
+async function toggleBrowserMode() {
+    if (browserModeActive) {
+        await disableBrowserMode();
+    } else {
+        await enableBrowserMode();
+    }
+}
+
+async function enableBrowserMode() {
+    const urlInput = document.getElementById('browser-mode-url');
+    const url = urlInput.value.trim() || 'https://youtube.com';
+
+    log('Enabling browser mode...');
+    const btn = document.getElementById('browser-mode-toggle');
+    btn.disabled = true;
+    btn.textContent = 'Switching...';
+
+    const data = await apiCall('/browser-mode/enable', { url });
+    btn.disabled = false;
+    if (data && data.success) {
+        log(`Browser mode enabled — ${url}`, 'success');
+    } else {
+        btn.textContent = 'Enable Browser Mode';
+    }
+}
+
+async function disableBrowserMode() {
+    log('Disabling browser mode...');
+    const btn = document.getElementById('browser-mode-toggle');
+    btn.disabled = true;
+    btn.textContent = 'Switching...';
+
+    const data = await apiCall('/browser-mode/disable', {});
+    btn.disabled = false;
+    if (data && data.success) {
+        log('Browser mode disabled — back to VLC', 'success');
+    } else {
+        btn.textContent = 'Disable Browser Mode';
+    }
+}
+
+function updateBrowserModeUI(browserMode) {
+    if (!browserMode) return;
+    browserModeActive = browserMode.enabled;
+
+    const btn = document.getElementById('browser-mode-toggle');
+    const badge = document.getElementById('browser-mode-badge');
+    const statusEl = document.getElementById('browser-mode-status');
+    const urlInput = document.getElementById('browser-mode-url');
+
+    if (browserModeActive) {
+        btn.textContent = 'Disable Browser Mode';
+        btn.className = 'system-btn system-btn-danger';
+        btn.disabled = false;
+        badge.classList.remove('hidden');
+        urlInput.disabled = true;
+        const pid = browserMode.pid ? ` (PID ${browserMode.pid})` : '';
+        statusEl.innerHTML = `Mode: <strong>Browser</strong>${pid} — <span class="browser-mode-url-display">${escapeHtml(browserMode.url || '')}</span>`;
+    } else {
+        btn.textContent = 'Enable Browser Mode';
+        btn.className = 'btn-primary';
+        btn.disabled = false;
+        badge.classList.add('hidden');
+        urlInput.disabled = false;
+        statusEl.innerHTML = 'Mode: <strong>VLC</strong> (default)';
     }
 }
 

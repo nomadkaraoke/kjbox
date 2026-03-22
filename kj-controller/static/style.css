@@ -207,6 +207,19 @@ button:disabled:hover {
     display: flex; align-items: center; gap: 8px;
     font-size: 0.8em; color: #888; cursor: default;
 }
+.sleep-mode-toggle {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 0.8em; color: #888; cursor: default;
+}
+.sleep-mode-status {
+    font-size: 0.75em; color: #a78bfa; padding: 6px 0 0;
+    line-height: 1.4;
+}
+.sleep-mode-status.hidden { display: none; }
+.sleep-mode-active {
+    background: rgba(167, 139, 250, 0.05);
+    border-color: rgba(167, 139, 250, 0.3);
+}
 
 .system-overlay {
     display: flex; align-items: center; gap: 8px;
@@ -810,6 +823,54 @@ body {
 }
 .yt-download-btn:hover { background: #333; color: #fff; box-shadow: none; }
 
+/* --- Divebar Search --- */
+
+.db-search-section { }
+.db-search-row { display: flex; gap: 6px; margin-bottom: 8px; }
+.db-search-row input { flex: 1; }
+.db-song-header { border-left: 3px solid #a855f7; }  /* Purple accent for Divebar */
+.db-track { }
+.db-format-badge {
+    font-size: 0.65em; padding: 1px 5px; border-radius: 3px;
+    background-color: rgba(168, 85, 247, 0.2); color: #a855f7;
+    font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; flex-shrink: 0;
+}
+.db-badge {
+    background-color: rgba(168, 85, 247, 0.2) !important; color: #a855f7 !important;
+}
+.db-file-size {
+    font-size: 0.7em; color: #666; flex-shrink: 0;
+}
+.db-download-btn {
+    background: rgba(168, 85, 247, 0.15); border-color: rgba(168, 85, 247, 0.4);
+    color: #c084fc;
+}
+.db-download-btn:hover { background: rgba(168, 85, 247, 0.3); color: #e9d5ff; }
+.db-gcs-badge {
+    background-color: rgba(59, 130, 246, 0.2) !important; color: #60a5fa !important;
+}
+.db-modal-content { max-width: 520px; }
+.db-progress-bar {
+    height: 8px; background: #222; border-radius: 4px; margin: 8px 0; overflow: hidden;
+}
+.db-progress-fill {
+    height: 100%; border-radius: 4px; transition: width 0.5s ease;
+}
+.db-format-table {
+    width: 100%; font-size: 0.8em; border-collapse: collapse; margin-top: 4px;
+}
+.db-format-table th {
+    text-align: left; color: #888; font-weight: 500; padding: 3px 8px;
+    border-bottom: 1px solid #333;
+}
+.db-format-table td { padding: 3px 8px; color: #ccc; }
+.av-grid {
+    display: grid; grid-template-columns: auto 1fr; gap: 4px 12px;
+    font-size: 0.85em; margin-top: 4px;
+}
+.av-label { color: #888; }
+.av-value { color: #e5e5e5; }
+
 /* --- Responsive --- */
 
 @media (max-width: 1024px) {
@@ -831,11 +892,12 @@ body {
     .playback-controls { order: 1; }
     .available-songs   { order: 2; }
     .kn-search-section { order: 3; }
-    .yt-search-section { order: 4; }
-    .download-section  { order: 5; }
-    .overlay-panel     { order: 6; }
-    #vnc-preview-container { order: 7; }
-    .system-controls   { order: 8; }
+    .db-search-section { order: 4; }
+    .yt-search-section { order: 5; }
+    .download-section  { order: 6; }
+    .overlay-panel     { order: 7; }
+    #vnc-preview-container { order: 8; }
+    .system-controls   { order: 9; }
 
     #media-list { max-height: 50vh; }
     .button-group { flex-direction: row; }
@@ -1635,4 +1697,50 @@ body {
     border-radius: 4px;
     padding: 2px 8px;
     cursor: pointer;
+}
+
+/* --- Browser Mode Widget --- */
+.browser-mode-panel .header-row {
+    gap: 8px;
+}
+.browser-mode-badge {
+    background: #22c55e;
+    color: #000;
+    font-size: 0.65em;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 4px;
+    letter-spacing: 0.05em;
+}
+.browser-mode-url-row {
+    display: flex;
+    gap: 6px;
+}
+.browser-mode-url-row input {
+    flex: 1;
+    padding: 6px 10px;
+    border-radius: 6px;
+    border: 1px solid #333;
+    background: #111;
+    color: #e5e5e5;
+    font-size: 0.85em;
+}
+.browser-mode-url-row input:disabled {
+    opacity: 0.5;
+}
+.browser-mode-controls {
+    display: flex;
+    gap: 6px;
+}
+.browser-mode-controls button {
+    flex: 1;
+}
+.browser-mode-status {
+    font-size: 0.8em;
+    color: #999;
+    padding-top: 2px;
+}
+.browser-mode-url-display {
+    color: #7dd3fc;
+    word-break: break-all;
 }

@@ -138,6 +138,20 @@
                     </div>
                 </div>
 
+                <div class="system-subsection" id="sleep-mode-section">
+                    <div class="system-subsection-label">Sleep Mode</div>
+                    <div class="system-subsection-row">
+                        <div class="sleep-mode-toggle">
+                            <span>Sleep Mode</span>
+                            <label class="overlay-toggle">
+                                <input type="checkbox" id="sleep-mode-switch" onchange="toggleSleepMode(this.checked)">
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+                    </div>
+                    <div id="sleep-mode-status" class="sleep-mode-status hidden"></div>
+                </div>
+
                 <div class="system-subsection">
                     <div class="system-subsection-label">Power</div>
                     <div class="system-subsection-row">
@@ -230,6 +244,22 @@
                 </div>
                 <div id="yt-results"></div>
             </div>
+            <div class="container db-search-section">
+                <div class="header-row">
+                    <h2>Search Divebar Karaoke <span id="db-health-dot" class="yt-health-dot"></span></h2>
+                    <button class="rescan-btn" onclick="openDbStatusModal()" title="Divebar catalog status, GCS mirror sync progress, and data pipeline health">Status</button>
+                </div>
+                <div class="db-search-row">
+                    <input type="text" id="db-query" placeholder="Search community karaoke tracks..." onkeyup="if(event.keyCode === 13) searchDivebar()">
+                    <button id="db-search-btn" class="btn-primary" onclick="searchDivebar()">Search</button>
+                    <button id="db-clear-btn" onclick="clearDBResults()">Clear</button>
+                </div>
+                <div id="db-status" class="download-progress hidden">
+                    <span class="download-spinner"></span>
+                    <span id="db-stage">Searching Divebar catalog...</span>
+                </div>
+                <div id="db-results"></div>
+            </div>
             <div class="container download-section">
                 <div class="header-row">
                     <h2>Download Song <span id="yt-health-dot" class="yt-health-dot"></span></h2>
@@ -260,6 +290,21 @@
                 <ul id="media-list">
                     <li>Loading media...</li>
                 </ul>
+            </div>
+            <div class="container browser-mode-panel">
+                <div class="header-row">
+                    <h2>Browser Mode</h2>
+                    <span id="browser-mode-badge" class="browser-mode-badge hidden">ACTIVE</span>
+                </div>
+                <div class="browser-mode-url-row">
+                    <input type="url" id="browser-mode-url" placeholder="https://youtube.com" value="{{ config.get('browser_mode_url', 'https://youtube.com') }}">
+                </div>
+                <div class="browser-mode-controls">
+                    <button id="browser-mode-toggle" class="btn-primary" onclick="toggleBrowserMode()">Enable Browser Mode</button>
+                </div>
+                <div id="browser-mode-status" class="browser-mode-status">
+                    Mode: <strong>VLC</strong> (default)
+                </div>
             </div>
         </div>
     </div>
@@ -460,6 +505,17 @@
                         <label for="av-vlc-device-select">VLC Audio Output Device</label>
                         <p class="av-help">Overrides which ALSA device VLC uses directly. <strong>hdmiout</strong> (ALSA alias) is correct for normal operation. Temporary &mdash; reset on restart.</p>
                         <select id="av-vlc-device-select" onchange="avSetVlcDevice(this.value)"></select>
+                    </div>
+                </div>
+
+                <!-- Browser Audio section -->
+                <div class="av-section">
+                    <div class="av-section-title">Browser Audio Output</div>
+                    <div id="av-browser-audio-info"></div>
+                    <div class="av-control-row">
+                        <label for="av-browser-audio-select">Browser Mode Audio Device</label>
+                        <p class="av-help">Controls which PipeWire output Chromium uses in Browser Mode. <strong>Same as VLC</strong> automatically matches VLC's audio device. Persisted across restarts.</p>
+                        <select id="av-browser-audio-select" onchange="avSetBrowserAudio(this.value)"></select>
                     </div>
                 </div>
 
@@ -665,5 +721,19 @@
             window.connectVnc(saved);
         }
     </script>
+
+    <!-- Divebar Status Modal -->
+    <div id="db-modal" class="modal-backdrop hidden" onclick="if(event.target===this) closeDbStatusModal()">
+        <div class="modal-content db-modal-content">
+            <div class="modal-header">
+                <h3>Divebar Catalog Status</h3>
+                <button class="modal-close" onclick="closeDbStatusModal()">&times;</button>
+            </div>
+            <div id="db-modal-loading" class="av-loading">
+                <span class="download-spinner"></span> Loading status&hellip;
+            </div>
+            <div id="db-modal-body" class="hidden"></div>
+        </div>
+    </div>
 </body>
 </html>

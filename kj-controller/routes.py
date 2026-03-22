@@ -12,14 +12,31 @@ import unicodedata
 
 from flask import Blueprint, current_app, jsonify, render_template, request
 
+import divebar
 import karaoke_nerds
 import youtube_health
 import youtube_search
 from catalog import LATIN_SPECIAL_MAP
 from config import APP_DIR, load_config, save_config_value
+from sleep_mode import SleepManager
 from utils import log_message
 
+# --- Browser mode state ---
+# Tracks whether the system is in Browser mode (Chromium) vs VLC mode (default).
+# This is module-level so it survives across requests but resets on service restart.
+_browser_mode = False
+
 routes_bp = Blueprint('routes', __name__)
+
+
+def _check_sleep_mode():
+    """Return a 409 JSON response if sleep mode is active, else None."""
+    sleep_mgr = getattr(current_app, 'sleep_manager', None)
+    if sleep_mgr and sleep_mgr.is_sleeping():
+        return jsonify({
+            "error": "Sleep mode is active. Disable sleep mode first."
+        }), 409
+    return None
 
 # --- Debounced volume persistence ---
 _volume_save_timer = None
@@ -55,6 +72,9 @@ def index():
 @routes_bp.route('/download', methods=['POST'])
 def handle_download():
     """Add a URL to the download queue (max 5). Poll /status for progress."""
+    blocked = _check_sleep_mode()
+    if blocked:
+        return blocked
     url = request.json.get('url')
     if not url:
         return jsonify({"error": "URL is required"}), 400
@@ -106,7 +126,11 @@ def _download_worker(app):
             next_item['status'] = 'downloading'
 
         try:
-            file_path, title = app.media.download_video(next_item['url'])
+            if next_item.get('source') == 'divebar':
+                file_path, title = app.media.download_from_url(
+                    next_item['url'], filename=next_item.get('title'))
+            else:
+                file_path, title = app.media.download_video(next_item['url'])
         except Exception:
             file_path, title = None, None
 
@@ -160,6 +184,9 @@ def ack_download():
 @routes_bp.route('/play', methods=['POST'])
 def handle_play():
     """Plays a media file by path (supports local media, external media, and ZIP files)."""
+    blocked = _check_sleep_mode()
+    if blocked:
+        return blocked
     file_path = request.json.get('file_path')
     if not file_path:
         return jsonify({"error": "file_path is required"}), 400
@@ -196,6 +223,17 @@ def handle_play():
         if not mp3_path:
             return jsonify({"error": "ZIP file does not contain a playable .mp3 file"}), 400
         actual_play_path = mp3_path
+
+    # Auto-disable browser mode before playing — kill Chromium and reset PipeWire
+    # so VLC has exclusive access to the audio device and display.
+    # Check both the flag AND actual process state to catch orphans after restart.
+    global _browser_mode
+    chromium = getattr(current_app, 'chromium', None)
+    if _browser_mode or (chromium and chromium.is_running()):
+        if chromium:
+            chromium.kill()
+        _browser_mode = False
+        log_message("Browser mode auto-disabled for VLC playback.", cfg)
 
     log_message(f"Received play request for {os.path.basename(validated)}.", cfg)
     threading.Thread(target=vlc.play_video, args=(actual_play_path,),
@@ -357,6 +395,9 @@ def list_filler_music():
 @routes_bp.route('/filler_music', methods=['POST'])
 def set_filler_music():
     """Sets the filler music track and starts playing it at a random time."""
+    blocked = _check_sleep_mode()
+    if blocked:
+        return blocked
     track_name = request.json.get('track_name')
     if not track_name:
         return jsonify({"error": "Track name is required"}), 400
@@ -408,6 +449,7 @@ def set_filler_music():
 @routes_bp.route('/status')
 def get_status():
     """Gets the status of the karaoke player."""
+    global _browser_mode
     vlc = current_app.vlc
     media = current_app.media
     cfg = current_app.kj_config
@@ -426,6 +468,18 @@ def get_status():
 
     dl_queue = current_app.download_queue['items']
 
+    # Browser mode status (Chromium)
+    # Sync _browser_mode flag with actual Chromium process state
+    chromium = getattr(current_app, 'chromium', None)
+    browser_status = chromium.get_status() if chromium else {'running': False, 'pid': None, 'url': None}
+    if _browser_mode and not browser_status['running']:
+        # Chromium crashed/exited — clear flag
+        _browser_mode = False
+    elif not _browser_mode and browser_status['running']:
+        # Orphan Chromium detected (e.g. after server restart) — adopt it
+        _browser_mode = True
+    browser_status['enabled'] = _browser_mode
+
     if status:
         return jsonify({
             "state": status.get('state'),
@@ -440,6 +494,7 @@ def get_status():
             "download_queue": dl_queue,
             "karaoke_volume": vlc.karaoke_volume,
             "filler_volume": vlc.filler_volume,
+            "browser_mode": browser_status,
         })
 
     # VLC not running - return status without VLC data
@@ -455,6 +510,7 @@ def get_status():
         "download_queue": dl_queue,
         "karaoke_volume": vlc.karaoke_volume,
         "filler_volume": vlc.filler_volume,
+        "browser_mode": browser_status,
     })
 
 
@@ -875,6 +931,100 @@ def youtube_upgrade_ytdlp():
     return jsonify({'success': True, 'message': msg, 'restarting': True})
 
 
+# --- Divebar Search ---
+
+@routes_bp.route('/divebar/search', methods=['POST'])
+def divebar_search():
+    """Search the Divebar karaoke catalog for community tracks."""
+    data = request.get_json(silent=True) or {}
+    query = data.get('query', '').strip()
+    if not query or len(query) < 2:
+        return jsonify({"error": "Query must be at least 2 characters"}), 400
+
+    cfg = current_app.kj_config
+    if not cfg.get('divebar_api_url'):
+        return jsonify({"error": "Divebar not configured"}), 503
+
+    log_message(f"Divebar search: {query}", cfg)
+    results = divebar.search(query, config=cfg)
+    return jsonify(results)
+
+
+@routes_bp.route('/divebar/kn-lookup', methods=['POST'])
+def divebar_kn_lookup():
+    """Look up which KN song IDs have Divebar versions."""
+    data = request.get_json(silent=True) or {}
+    kn_ids = data.get('kn_ids', [])
+    if not kn_ids or not isinstance(kn_ids, list):
+        return jsonify({"error": "kn_ids list required"}), 400
+
+    cfg = current_app.kj_config
+    if not cfg.get('divebar_api_url'):
+        return jsonify({})
+
+    matches = divebar.lookup_kn_ids(kn_ids, config=cfg)
+    return jsonify(matches)
+
+
+@routes_bp.route('/divebar/status', methods=['GET'])
+def divebar_status():
+    """Get Divebar catalog status: sync progress, file counts, pipeline health."""
+    cfg = current_app.kj_config
+    if not cfg.get('divebar_api_url'):
+        return jsonify({"error": "Divebar not configured", "configured": False}), 503
+
+    stats = divebar.get_stats(config=cfg)
+    if stats:
+        stats["configured"] = True
+        return jsonify(stats)
+    return jsonify({"error": "Could not fetch Divebar status", "configured": True}), 502
+
+
+@routes_bp.route('/divebar/download', methods=['POST'])
+def divebar_download():
+    """Download a Divebar track by file_id. Queues it like a YouTube download."""
+    data = request.get_json(silent=True) or {}
+    file_id = data.get('file_id', '').strip()
+    filename = data.get('filename', '').strip()
+    if not file_id:
+        return jsonify({"error": "file_id is required"}), 400
+
+    cfg = current_app.kj_config
+    url = divebar.get_download_url(file_id, config=cfg)
+    if not url:
+        return jsonify({"error": "Could not get download URL"}), 500
+
+    # Reuse the existing download queue with the Drive URL
+    app = current_app._get_current_object()
+    from uuid import uuid4
+    with app._download_lock:
+        items = app.download_queue['items']
+        active = [i for i in items if i['status'] in ('queued', 'downloading')]
+        if len(active) >= 5:
+            return jsonify({"error": "Queue is full (max 5)"}), 409
+
+        item = {
+            'id': str(uuid4()),
+            'url': url,
+            'status': 'queued',
+            'title': filename or f"Divebar track {file_id[:8]}",
+            'error': None,
+            'file_path': None,
+            'added_at': time.time(),
+            'completed_at': None,
+            'source': 'divebar',
+            'divebar_file_id': file_id,
+        }
+        items.append(item)
+        log_message(f"Queued Divebar download: {filename or file_id}", cfg)
+
+        if not app.download_queue['worker_running']:
+            app.download_queue['worker_running'] = True
+            threading.Thread(target=_download_worker, args=[app], daemon=True).start()
+
+    return jsonify({"success": True, "id": item['id']})
+
+
 # --- Display Resolution ---
 
 def _query_xrandr():
@@ -1182,6 +1332,7 @@ def _get_av_audio_status(vlc_device):
 @routes_bp.route('/av/status', methods=['GET'])
 def av_status():
     """Returns comprehensive AV output status: video connectors, audio devices, health."""
+    cfg = current_app.kj_config
     vlc = current_app.vlc
     video = _get_av_video_status()
     audio = _get_av_audio_status(vlc.audio_device)
@@ -1199,7 +1350,45 @@ def av_status():
         'iec958_ok': any_iec958_on,
     }
 
+    # Browser audio config
+    browser_audio = cfg.get('browser_audio_device', 'same')
+    from chromium import PW_PROFILES, ALSA_TO_PW_PROFILE, PW_PROFILE_ANALOG
+    if browser_audio == 'same':
+        # Resolve what "same as VLC" actually means in PipeWire terms
+        resolved = ALSA_TO_PW_PROFILE.get(vlc.audio_device, PW_PROFILE_ANALOG)
+    else:
+        resolved = browser_audio
+
+    audio['browser_audio'] = {
+        'setting': browser_audio,
+        'resolved_profile': resolved,
+        'available_profiles': PW_PROFILES,
+    }
+
     return jsonify({'video': video, 'audio': audio, 'health': health})
+
+
+@routes_bp.route('/av/browser-audio', methods=['POST'])
+def av_set_browser_audio():
+    """Set the browser audio output device (PipeWire profile or 'same' to follow VLC)."""
+    cfg = current_app.kj_config
+    device = (request.json or {}).get('device', '').strip()
+    if not device:
+        return jsonify({"error": "Device is required"}), 400
+
+    from chromium import PW_PROFILES
+    valid = {'same'} | set(PW_PROFILES.keys()) | set(PW_PROFILES.values())
+    if device not in valid:
+        return jsonify({"error": f"Unknown browser audio device '{device}'"}), 400
+
+    # Normalize: if a profile key like 'hdmi' was given, store the full profile string
+    if device in PW_PROFILES:
+        device = PW_PROFILES[device]
+
+    save_config_value('browser_audio_device', device)
+    cfg['browser_audio_device'] = device
+    log_message(f"Browser audio device set to '{device}'.", cfg)
+    return jsonify({"success": True, "device": device})
 
 
 @routes_bp.route('/av/reset', methods=['POST'])
@@ -1344,6 +1533,31 @@ def autodeploy_toggle():
     )
     active = result.stdout.strip() == 'active'
     return jsonify({"active": active})
+
+
+# --- Sleep Mode ---
+
+@routes_bp.route('/system/sleep-mode', methods=['GET'])
+def sleep_mode_status():
+    """Returns current sleep mode status."""
+    sleep_mgr = current_app.sleep_manager
+    return jsonify(sleep_mgr.get_status())
+
+
+@routes_bp.route('/system/sleep-mode', methods=['POST'])
+def sleep_mode_toggle():
+    """Enter or exit sleep mode."""
+    cfg = current_app.kj_config
+    sleep_mgr = current_app.sleep_manager
+    data = request.get_json() or {}
+    active = data.get('active', False)
+
+    if active:
+        result = sleep_mgr.enter_sleep(cfg, vlc=current_app.vlc)
+    else:
+        result = sleep_mgr.exit_sleep(cfg, vlc=current_app.vlc)
+
+    return jsonify(result)
 
 
 @routes_bp.route('/system/reboot', methods=['POST'])
@@ -1672,3 +1886,76 @@ def restore_rotation_from_sheet():
         return jsonify({"success": True, "restored": count, "entries": entries})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+# --- Browser Mode routes ---
+
+@routes_bp.route('/browser-mode/enable', methods=['POST'])
+def browser_mode_enable():
+    """Enable browser mode: stop VLC, switch PipeWire to HDMI, launch Chromium."""
+    blocked = _check_sleep_mode()
+    if blocked:
+        return blocked
+    global _browser_mode
+    cfg = current_app.kj_config
+    vlc = current_app.vlc
+    chromium = getattr(current_app, 'chromium', None)
+
+    if chromium is None:
+        return jsonify({"error": "Chromium manager not available"}), 503
+
+    url = (request.json or {}).get('url', '').strip() or 'https://youtube.com'
+
+    # Stop VLC playback (both karaoke and filler)
+    if vlc.enabled:
+        log_message("Browser mode: stopping VLC instances...", cfg)
+        vlc.fade_out_filler()
+        vlc.ensure_filler_stopped()
+        vlc.ensure_karaoke_released()
+        vlc.karaoke_active = False
+        vlc.current_playing_path = None
+
+    # Determine browser audio device: use independent setting, or fall back to VLC's
+    browser_audio = cfg.get('browser_audio_device', 'same')
+    if browser_audio == 'same':
+        audio_device = vlc.audio_device if vlc.enabled else cfg.get('default_audio_device', 'hdmiout')
+    else:
+        audio_device = browser_audio  # Direct PipeWire profile string
+    success = chromium.launch(url, audio_device=audio_device)
+    if not success:
+        return jsonify({"error": "Failed to launch Chromium"}), 500
+
+    _browser_mode = True
+
+    # Persist last-used URL
+    save_config_value('browser_mode_url', url)
+
+    log_message(f"Browser mode enabled — Chromium at {url}", cfg)
+    return jsonify({"success": True, "url": url})
+
+
+@routes_bp.route('/browser-mode/disable', methods=['POST'])
+def browser_mode_disable():
+    """Disable browser mode: kill Chromium, reset PipeWire, restart VLC."""
+    global _browser_mode
+    cfg = current_app.kj_config
+    vlc = current_app.vlc
+    chromium = getattr(current_app, 'chromium', None)
+
+    if chromium is None:
+        return jsonify({"error": "Chromium manager not available"}), 503
+
+    # Kill Chromium (handles PipeWire reset internally)
+    chromium.kill()
+    _browser_mode = False
+
+    # Restart VLC instances (skip if sleep mode is active)
+    sleep_mgr = getattr(current_app, 'sleep_manager', None)
+    if sleep_mgr and sleep_mgr.is_sleeping():
+        log_message("Browser mode disabled — skipping VLC restart (sleep mode active).", cfg)
+    elif vlc.enabled:
+        log_message("Browser mode disabled — restarting VLC instances...", cfg)
+        vlc.restart_instances()
+
+    log_message("Browser mode disabled — back to VLC.", cfg)
+    return jsonify({"success": True})
