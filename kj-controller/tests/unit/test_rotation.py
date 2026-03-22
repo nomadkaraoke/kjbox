@@ -319,3 +319,43 @@ class TestDisplayCache:
         with patch("rotation.ROTATION_CACHE_FILE", "/no/such/directory/cache.json"):
             # Should not raise
             mgr._write_display_cache()
+
+
+# ---------------------------------------------------------------------------
+# TestCoordinatorDownload
+# ---------------------------------------------------------------------------
+
+class TestCoordinatorDownload:
+    def test_add_entry_with_file_path(self, mgr):
+        entry = mgr.add_entry("Alice", "Song A", file_path="/media/song.mp4")
+        assert entry["file_path"] == "/media/song.mp4"
+
+    def test_add_entry_with_file_path_auto_duration(self, mgr):
+        """When media index is available, duration is looked up automatically."""
+        media_mock = MagicMock()
+        media_mock.index = {"/media/song.mp4": {"duration": 213}}
+        mgr.media = media_mock
+        entry = mgr.add_entry("Alice", "Song A", file_path="/media/song.mp4")
+        assert entry["file_path"] == "/media/song.mp4"
+        assert entry["duration"] == 213
+
+    def test_set_download_status(self, mgr):
+        entry = mgr.add_entry("Alice", "Song A")
+        updated = mgr.set_download_status(entry["id"], "divebar", "queued", "uuid-123")
+        assert updated["download_source"] == "divebar"
+
+    def test_set_url_fallback(self, mgr):
+        entry = mgr.add_entry("Alice", "Song A")
+        updated = mgr.set_url_fallback(entry["id"], "https://youtube.com/watch?v=abc")
+        assert updated["url_fallback"] == "https://youtube.com/watch?v=abc"
+
+    def test_complete_download(self, mgr):
+        """complete_download links file and clears download status."""
+        entry = mgr.add_entry("Alice", "Song A")
+        mgr.set_download_status(entry["id"], "divebar", "downloading", "uuid-123")
+        updated = mgr.complete_download("uuid-123", "/media/song.mp4")
+        assert updated["file_path"] == "/media/song.mp4"
+        assert updated["download_status"] == "complete"
+
+    def test_complete_download_missing_returns_none(self, mgr):
+        assert mgr.complete_download("nonexistent", "/media/song.mp4") is None
