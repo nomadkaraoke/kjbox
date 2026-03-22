@@ -237,7 +237,7 @@ class TestAddRotationEntry:
             data=json.dumps({"singer": "Frank", "song_artist": "My Way"}),
             content_type='application/json')
         assert resp.status_code == 200
-        mock_rotation.add_entry.assert_called_once_with("Frank", "My Way", "")
+        mock_rotation.add_entry.assert_called_once_with("Frank", "My Way", "", file_path=None)
 
     def test_add_entry_with_notes(self, rotation_client, mock_rotation):
         mock_rotation.add_entry.return_value = {"id": 4, "singer": "Frank", "song_artist": "My Way", "notes": "has mic"}
@@ -245,7 +245,7 @@ class TestAddRotationEntry:
             data=json.dumps({"singer": "Frank", "song_artist": "My Way", "notes": "has mic"}),
             content_type='application/json')
         assert resp.status_code == 200
-        mock_rotation.add_entry.assert_called_once_with("Frank", "My Way", "has mic")
+        mock_rotation.add_entry.assert_called_once_with("Frank", "My Way", "has mic", file_path=None)
 
     def test_missing_singer_returns_400(self, rotation_client):
         resp = rotation_client.post('/rotation/add',
@@ -268,6 +268,32 @@ class TestAddRotationEntry:
             data=json.dumps({"singer": "Frank"}),
             content_type='application/json')
         assert resp.status_code == 503
+
+    def test_add_with_file_path(self, rotation_client, mock_rotation):
+        mock_rotation.add_entry.return_value = {
+            "id": 4, "singer": "Alice", "song_artist": "Song A",
+            "file_path": "/media/song.mp4", "duration": None,
+        }
+        resp = rotation_client.post('/rotation/add',
+            data=json.dumps({"singer": "Alice", "song_artist": "Song A", "file_path": "/media/song.mp4"}),
+            content_type='application/json')
+        assert resp.status_code == 200
+        mock_rotation.add_entry.assert_called_once_with(
+            "Alice", "Song A", "", file_path="/media/song.mp4")
+
+    def test_add_with_url_fallback(self, rotation_client, mock_rotation):
+        new_entry = {"id": 4, "singer": "Bob", "song_artist": "Song B",
+                     "url_fallback": "https://youtube.com/watch?v=abc"}
+        mock_rotation.add_entry.return_value = {"id": 4, "singer": "Bob",
+            "song_artist": "Song B", "url_fallback": None}
+        mock_rotation.store.get_entry.return_value = new_entry
+        mock_rotation.get_rotation.return_value = [new_entry]
+        resp = rotation_client.post('/rotation/add',
+            data=json.dumps({"singer": "Bob", "song_artist": "Song B",
+                            "url_fallback": "https://youtube.com/watch?v=abc"}),
+            content_type='application/json')
+        assert resp.status_code == 200
+        mock_rotation.set_url_fallback.assert_called_once_with(4, "https://youtube.com/watch?v=abc")
 
 
 class TestMoveRotationEntry:

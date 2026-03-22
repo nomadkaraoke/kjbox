@@ -1774,8 +1774,14 @@ def add_rotation_entry():
     if not singer:
         return jsonify({"error": "singer is required"}), 400
 
+    file_path = data.get('file_path', '').strip() or None
+    url_fallback = data.get('url_fallback', '').strip() or None
+
     try:
-        entry = rotation.add_entry(singer, song_artist, notes)
+        entry = rotation.add_entry(singer, song_artist, notes, file_path=file_path)
+        if url_fallback:
+            rotation.set_url_fallback(entry["id"], url_fallback)
+            entry = rotation.store.get_entry(entry["id"])
         entries = rotation.get_rotation()
         _add_time_estimates(entries)
         return jsonify({"success": True, "entry": entry, "entries": entries})
