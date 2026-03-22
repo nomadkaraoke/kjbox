@@ -1646,6 +1646,7 @@ body {
     height: 8px;
     border-radius: 50%;
     margin-right: 8px;
+    align-self: center;
     background: #555;
 }
 .rotation-sync-dot.sync-online { background: #2d8a4e; }
