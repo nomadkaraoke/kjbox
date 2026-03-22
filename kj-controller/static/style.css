@@ -584,8 +584,8 @@ body {
     border-radius: 6px;
     overflow: hidden;
 }
-.vnc-thumbnail.vnc-fixed { width: 200px; }
-.vnc-thumbnail.vnc-fixed-400 { width: 400px; }
+.vnc-thumbnail.vnc-fixed { width: 200px; max-width: 100%; }
+.vnc-thumbnail.vnc-fixed-400 { width: 400px; max-width: 100%; }
 .vnc-thumbnail.vnc-fit { width: 100%; }
 .vnc-thumbnail.vnc-max {
     position: fixed; top: 36px; left: 0; right: 0; bottom: 0; z-index: 9999;
@@ -946,15 +946,19 @@ body {
         gap: 0.5rem;
     }
     #col1, #col2 { display: contents; }
-    .playback-controls { order: 1; }
-    .available-songs   { order: 2; }
-    .kn-search-section { order: 3; }
-    .db-search-section { order: 4; }
-    .yt-search-section { order: 5; }
-    .download-section  { order: 6; }
-    .overlay-panel     { order: 7; }
-    #vnc-preview-container { order: 8; }
-    .system-controls   { order: 9; }
+    /* Ensure all sections fill full width when columns are unwrapped */
+    .container { width: 100%; }
+    .playback-controls  { order: 1; }
+    .rotation-panel     { order: 2; }
+    .available-songs    { order: 3; }
+    .kn-search-section  { order: 4; }
+    .db-search-section  { order: 5; }
+    .yt-search-section  { order: 6; }
+    .download-section   { order: 7; }
+    .overlay-panel      { order: 8; }
+    .browser-mode-panel { order: 9; }
+    #vnc-preview-container { order: 10; }
+    .system-controls    { order: 11; }
 
     #media-list { max-height: 50vh; }
     .button-group { flex-direction: row; }
@@ -962,20 +966,114 @@ body {
     .controls-row { flex-direction: column; gap: 0.5rem; }
     h2 { font-size: 1em; }
     #status-bar { font-size: 0.7em; }
+
+    /* Now playing bar */
     .now-playing-bar { border-radius: 0; margin-bottom: 0.5rem; padding: 0.4rem 0.75rem; gap: 0.5rem; }
     .now-playing-title { font-size: 0.8em; }
-    .np-btn { font-size: 0.65em; padding: 3px 8px; }
+    .np-btn { font-size: 0.7em; padding: 6px 12px; }
+
+    /* Search rows: stack on mobile */
+    .kn-search-row, .yt-search-row, .db-search-row, .download-row {
+        flex-wrap: wrap;
+    }
+    .kn-search-row input, .yt-search-row input, .db-search-row input, .download-row input {
+        flex-basis: 100%;
+    }
+    .kn-search-row button, .yt-search-row button, .db-search-row button, .download-row button {
+        flex: 1;
+    }
+
+    /* VNC: cap fixed sizes to container width */
+    .vnc-thumbnail.vnc-fixed, .vnc-thumbnail.vnc-fixed-400 {
+        width: 100%;
+        max-width: 400px;
+    }
+
+    /* Rotation header buttons: wrap */
+    .rotation-header-btns { flex-wrap: wrap; }
+
+    /* Rotation add form: stack on mobile */
+    .rotation-add-form { flex-wrap: wrap; }
+    .rotation-add-form input { flex-basis: calc(50% - 3px); min-width: 0; }
+
+    /* Header rows with multiple buttons */
+    .header-row { flex-wrap: wrap; gap: 6px; }
+    .rescan-btn { margin-left: 0; }
+
+    /* Available Songs header: wrap buttons */
+    .available-songs .header-row { gap: 4px; }
+
+    /* Rotation entry actions: slightly larger touch targets */
+    .rotation-btn { font-size: 0.7em; padding: 4px 8px; }
+
+    /* System buttons: wrap properly */
+    .system-subsection-row { gap: 6px; }
+    .system-btn { padding: 8px 12px; }
 }
 
 @media (max-width: 480px) {
-    body { padding: 0.35rem; }
-    .container { padding: 0.6rem; border-radius: 8px; }
+    body { padding: 0.25rem; }
+    .container { padding: 0.5rem; border-radius: 8px; }
     button { padding: 10px 12px; font-size: 0.8em; border-color: #444; }
-    .header-row { flex-wrap: wrap; gap: 0.5rem; }
-    .header-row h2 { font-size: 0.95em; }
-    .rescan-btn { margin-left: 0; }
-    .now-playing-bar { flex-wrap: wrap; }
+    .header-row h2 { font-size: 0.95em; width: 100%; }
+
+    /* Now playing bar: stack */
+    .now-playing-bar { flex-wrap: wrap; gap: 0.4rem; padding: 0.4rem 0.6rem; }
     .now-playing-info { flex-basis: 100%; }
+    .now-playing-controls { margin-left: auto; }
+    .np-btn { padding: 6px 14px; }
+
+    /* Search rows: input full-width, buttons row below */
+    .kn-search-row, .yt-search-row, .db-search-row, .download-row {
+        flex-wrap: wrap;
+    }
+    .kn-search-row input, .yt-search-row input, .db-search-row input, .download-row input {
+        flex-basis: 100%;
+    }
+    .kn-search-row button, .yt-search-row button, .db-search-row button, .download-row button {
+        flex: 1;
+        padding: 10px;
+    }
+
+    /* Rotation add form: full stack */
+    .rotation-add-form { flex-direction: column; }
+    .rotation-add-form input { flex-basis: auto; }
+    .rotation-add-form button { width: 100%; }
+
+    /* Rotation entries: tighter layout */
+    .rotation-entry { padding: 6px 6px; }
+    .rotation-info { gap: 3px; }
+    .rotation-name { font-size: 0.8em; }
+    .rotation-song { font-size: 0.7em; }
+    .rotation-actions { gap: 2px; margin-left: 4px; }
+    .rotation-btn { font-size: 0.7em; padding: 5px 8px; }
+
+    /* Overlay header buttons */
+    .overlay-header-btns { flex-wrap: wrap; }
+
+    /* System power buttons: stack */
+    .system-subsection-row { flex-direction: column; }
+    .system-subsection-row > button { width: 100%; }
+    .system-subsection-row > .autodeploy-toggle,
+    .system-subsection-row > .sleep-mode-toggle { width: 100%; justify-content: space-between; }
+
+    /* VNC size buttons: wrap */
+    .vnc-size-buttons { flex-wrap: wrap; }
+
+    /* Modals: full-width on small screens */
+    .modal-content { width: 95%; padding: 0.75rem; }
+
+    /* KN tracks: improve touch targets */
+    .kn-track { padding: 8px 10px 8px 16px; }
+    .kn-download-btn { padding: 6px 12px; }
+
+    /* Media list items: larger touch targets */
+    #media-list li { padding: 12px; font-size: 0.85em; }
+    .folder-items li { padding: 12px; }
+
+    /* Sys stats: stack at very narrow widths */
+    .sys-stats { flex-wrap: wrap; gap: 8px; }
+    .sys-stat { min-width: calc(33% - 6px); }
 }
 
 /* ============================================================
