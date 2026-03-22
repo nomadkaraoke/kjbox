@@ -461,6 +461,6 @@ class ChromiumManager:
         running = self.is_running()
         return {
             'running': running,
-            'pid': self.process.pid if running else None,
+            'pid': self.process.pid if self.process and running else None,
             'url': self.current_url if running else None,
         }
