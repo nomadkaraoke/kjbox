@@ -91,6 +91,25 @@ class RotationStore:
                 ON rotation_archive (night_date);
         """)
 
+        # Migrate existing databases: add columns that may be missing
+        existing_cols = {row[1] for row in conn.execute(
+            "PRAGMA table_info(rotation_entries)"
+        ).fetchall()}
+        migrations = [
+            ("download_source", "TEXT DEFAULT NULL"),
+            ("download_status", "TEXT DEFAULT NULL"),
+            ("download_id", "TEXT DEFAULT NULL"),
+            ("url_fallback", "TEXT DEFAULT NULL"),
+            ("gen_job_id", "TEXT DEFAULT NULL"),
+            ("gen_status", "TEXT DEFAULT NULL"),
+        ]
+        for col_name, col_type in migrations:
+            if col_name not in existing_cols:
+                conn.execute(
+                    f"ALTER TABLE rotation_entries ADD COLUMN {col_name} {col_type}"
+                )
+        conn.commit()
+
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
