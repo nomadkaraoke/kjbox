@@ -326,7 +326,9 @@
                     <span id="browser-mode-badge" class="browser-mode-badge hidden">ACTIVE</span>
                 </div>
                 <div class="browser-mode-url-row">
-                    <input type="url" id="browser-mode-url" placeholder="https://youtube.com" value="{{ config.get('browser_mode_url', 'https://youtube.com') }}">
+                    <input type="url" id="browser-mode-url" placeholder="https://youtube.com" value="{{ config.get('browser_mode_url', 'https://youtube.com') }}"
+                           onkeydown="if(event.key === 'Enter' && browserModeActive) { event.preventDefault(); browserModeNavigate(); }">
+                    <button id="browser-mode-go" class="browser-mode-go-btn hidden" onclick="browserModeNavigate()">Go</button>
                 </div>
                 <div class="browser-mode-controls">
                     <button id="browser-mode-toggle" class="btn-primary" onclick="toggleBrowserMode()">Enable Browser Mode</button>

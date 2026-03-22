@@ -3382,6 +3382,21 @@ async function disableBrowserMode() {
     }
 }
 
+async function browserModeNavigate() {
+    const urlInput = document.getElementById('browser-mode-url');
+    const url = urlInput.value.trim();
+    if (!url) return;
+    const goBtn = document.getElementById('browser-mode-go');
+    goBtn.disabled = true;
+    goBtn.textContent = '...';
+    const data = await apiCall('/browser-mode/navigate', { url });
+    goBtn.disabled = false;
+    goBtn.textContent = 'Go';
+    if (data && data.success) {
+        log(`Navigated to ${url}`, 'success');
+    }
+}
+
 function updateBrowserModeUI(browserMode) {
     if (!browserMode) return;
     browserModeActive = browserMode.enabled;
@@ -3390,13 +3405,14 @@ function updateBrowserModeUI(browserMode) {
     const badge = document.getElementById('browser-mode-badge');
     const statusEl = document.getElementById('browser-mode-status');
     const urlInput = document.getElementById('browser-mode-url');
+    const goBtn = document.getElementById('browser-mode-go');
 
     if (browserModeActive) {
         btn.textContent = 'Disable Browser Mode';
         btn.className = 'system-btn system-btn-danger';
         btn.disabled = false;
         badge.classList.remove('hidden');
-        urlInput.disabled = true;
+        goBtn.classList.remove('hidden');
         const pid = browserMode.pid ? ` (PID ${browserMode.pid})` : '';
         statusEl.innerHTML = `Mode: <strong>Browser</strong>${pid} — <span class="browser-mode-url-display">${escapeHtml(browserMode.url || '')}</span>`;
     } else {
@@ -3404,7 +3420,7 @@ function updateBrowserModeUI(browserMode) {
         btn.className = 'btn-primary';
         btn.disabled = false;
         badge.classList.add('hidden');
-        urlInput.disabled = false;
+        goBtn.classList.add('hidden');
         statusEl.innerHTML = 'Mode: <strong>VLC</strong> (default)';
     }
 }
