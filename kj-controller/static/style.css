@@ -588,10 +588,20 @@ body {
 .vnc-thumbnail.vnc-fixed-400 { width: 400px; }
 .vnc-thumbnail.vnc-fit { width: 100%; }
 .vnc-thumbnail.vnc-max {
-    position: fixed; inset: 0; z-index: 9999;
-    width: 100vw; height: 100vh;
+    position: fixed; top: 36px; left: 0; right: 0; bottom: 0; z-index: 9999;
+    width: 100vw; height: calc(100vh - 36px);
     aspect-ratio: auto; border-radius: 0; border: none;
 }
+.vnc-max-toolbar {
+    display: none;
+    position: fixed; top: 0; left: 0; right: 0; z-index: 10000;
+    height: 36px;
+    background: rgba(17, 17, 17, 0.95);
+    border-bottom: 1px solid #333;
+    align-items: center; justify-content: center;
+    gap: 4px; padding: 0 12px;
+}
+.vnc-max-toolbar.visible { display: flex; }
 .vnc-thumbnail canvas {
     width: 100% !important;
     height: 100% !important;
@@ -652,6 +662,39 @@ body {
     font-size: 0.7em; color: #666; cursor: pointer; text-decoration: none;
 }
 .vnc-forget-link:hover { color: #ff7acc; text-decoration: underline; }
+
+/* Interactive mode */
+.vnc-interactive-controls { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; align-items: center; }
+.vnc-interactive-toggle.vnc-interactive-active {
+    background: rgba(34, 197, 94, 0.15);
+    color: #22c55e;
+    border-color: rgba(34, 197, 94, 0.4);
+}
+.vnc-thumbnail.vnc-interactive {
+    border-color: #22c55e;
+    box-shadow: 0 0 8px rgba(34, 197, 94, 0.3);
+    cursor: crosshair;
+}
+.vnc-keyboard-input { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.vnc-keyboard-input input[type="text"] {
+    flex: 1; min-width: 120px; padding: 5px 8px;
+    background: #0f0f0f; border: 1px solid #2a2a2a; color: #e5e5e5;
+    border-radius: 6px; font-size: 0.8em;
+}
+.vnc-keyboard-input input[type="text"]:focus {
+    border-color: #22c55e; box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.15); outline: none;
+}
+.vnc-keyboard-input button {
+    font-size: 0.65em; padding: 3px 8px;
+    background: #222; border: 1px solid #444; color: #ccc; box-shadow: none; border-radius: 5px;
+}
+.vnc-keyboard-input button:hover { background: #333; color: #fff; }
+.vnc-special-keys { display: flex; gap: 3px; width: 100%; }
+.vnc-special-keys button {
+    font-size: 0.6em; padding: 2px 6px;
+    background: #1a1a1a; border: 1px solid #333; color: #999; border-radius: 4px;
+}
+.vnc-special-keys button:hover { color: #fff; border-color: #555; }
 
 /* --- HDMI Scan --- */
 

@@ -1645,9 +1645,10 @@ function hideVncPreview() {
     // Disconnect without forgetting password
     if (window.disconnectVnc) window.disconnectVnc();
     // Collapse everything
-    container.querySelectorAll('#vnc-screen, #vnc-status, .vnc-password-form, #vnc-controls').forEach(
+    container.querySelectorAll('#vnc-screen, #vnc-status, .vnc-password-form, #vnc-controls, #vnc-interactive-controls').forEach(
         el => el.classList.add('hidden')
     );
+    document.getElementById('vnc-max-toolbar').classList.remove('visible');
     document.querySelectorAll('.vnc-size-btn').forEach(btn => btn.classList.remove('vnc-size-active'));
     document.querySelector('.vnc-hide-btn').classList.add('vnc-size-active');
 }
@@ -1676,25 +1677,23 @@ function setVncSize(size) {
     const el = document.getElementById('vnc-screen');
     el.classList.remove('vnc-fixed', 'vnc-fixed-400', 'vnc-fit', 'vnc-max');
 
+    const maxToolbar = document.getElementById('vnc-max-toolbar');
+
     if (size === 'max') {
         el.classList.add('vnc-max');
-        // Press Escape to exit max
-        const handler = (e) => {
-            if (e.key === 'Escape') {
-                setVncSize('fit');
-                document.removeEventListener('keydown', handler);
-            }
-        };
-        document.addEventListener('keydown', handler);
-    } else if (size === '200px') {
-        el.classList.add('vnc-fixed');
-    } else if (size === '400px') {
-        el.classList.add('vnc-fixed-400');
+        maxToolbar.classList.add('visible');
     } else {
-        el.classList.add('vnc-fit');
+        maxToolbar.classList.remove('visible');
+        if (size === '200px') {
+            el.classList.add('vnc-fixed');
+        } else if (size === '400px') {
+            el.classList.add('vnc-fixed-400');
+        } else {
+            el.classList.add('vnc-fit');
+        }
     }
 
-    // Update active button
+    // Update active button (both inline and max toolbar buttons)
     document.querySelectorAll('.vnc-size-btn').forEach(btn => {
         btn.classList.toggle('vnc-size-active', btn.textContent.trim() === (size === 'fit' ? 'Fit' : size === 'max' ? 'Max' : size));
     });
