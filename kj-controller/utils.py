@@ -2,11 +2,12 @@
 
 import os
 import re
+import sys
 import time
 
 
 def log_message(message, config=None):
-    """Appends a message to the log file and prints to stdout."""
+    """Appends a message to the log file and prints to stderr."""
     log_file = config.get('log_file') if config else None
     if log_file:
         try:
@@ -14,7 +15,7 @@ def log_message(message, config=None):
                 f.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} - {message}\n")
         except Exception:
             pass
-    print(message)
+    print(message, file=sys.stderr, flush=True)
 
 
 def sanitize_filename_part(text):
