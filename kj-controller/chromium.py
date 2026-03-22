@@ -391,19 +391,36 @@ class ChromiumManager:
                             ''',
                             'awaitPromise': True,
                         })
+                        # Click the video player to dismiss overlays and establish focus
+                        self._cdp_send(sock, 3, 'Runtime.evaluate', {
+                            'expression': 'var p = document.querySelector(".html5-video-player");'
+                                          'if (p) p.focus();'
+                                          'var v = document.querySelector("video");'
+                                          'if (v) v.focus();',
+                        })
+                        time.sleep(0.5)
                         # Send 'f' key for fullscreen (trusted user gesture via CDP)
-                        self._cdp_send(sock, 3, 'Input.dispatchKeyEvent', {
+                        self._cdp_send(sock, 4, 'Input.dispatchKeyEvent', {
                             'type': 'keyDown', 'key': 'f', 'code': 'KeyF',
                             'text': 'f', 'windowsVirtualKeyCode': 70,
                             'nativeVirtualKeyCode': 70,
                         })
-                        self._cdp_send(sock, 4, 'Input.dispatchKeyEvent', {
+                        self._cdp_send(sock, 5, 'Input.dispatchKeyEvent', {
                             'type': 'keyUp', 'key': 'f', 'code': 'KeyF',
                             'windowsVirtualKeyCode': 70,
                             'nativeVirtualKeyCode': 70,
                         })
-                        log_message("YouTube auto-setup: volume max + fullscreen.", self.config)
-                        return
+                        time.sleep(0.5)
+                        # Verify fullscreen actually stuck
+                        r = self._cdp_send(sock, 6, 'Runtime.evaluate', {
+                            'expression': '!!document.fullscreenElement',
+                        })
+                        is_fs = r.get('result', {}).get('result', {}).get('value', False)
+                        if is_fs:
+                            log_message("YouTube auto-setup: volume max + fullscreen.", self.config)
+                            return
+                        else:
+                            log_message(f"YouTube auto-setup attempt {attempt + 1}: fullscreen didn't stick, retrying.", self.config)
                     finally:
                         sock.close()
                 except Exception as e:
