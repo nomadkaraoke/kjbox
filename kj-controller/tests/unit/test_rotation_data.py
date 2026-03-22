@@ -97,41 +97,6 @@ class TestReadLocalCache:
         assert len(queue) == rotation_data.MAX_ENTRIES
 
 
-class TestFetchAllRows:
-    def test_prefers_cache_over_sheet(self, cache_file, sample_cache_data, monkeypatch):
-        """When cache exists and is fresh, sheet is not hit."""
-        monkeypatch.setattr(rotation_data, "CACHE_FILE", cache_file)
-        with open(cache_file, "w") as f:
-            json.dump(sample_cache_data, f)
-
-        sheet_called = False
-        original_fetch = rotation_data.fetch_from_sheet
-
-        def mock_fetch():
-            nonlocal sheet_called
-            sheet_called = True
-            return original_fetch()
-
-        monkeypatch.setattr(rotation_data, "fetch_from_sheet", mock_fetch)
-
-        queue, stats = rotation_data.fetch_all_rows()
-        assert not sheet_called
-        assert len(queue) == 3
-
-    def test_falls_back_to_sheet_when_no_cache(self, cache_file, monkeypatch):
-        """When cache is missing, falls back to sheet fetch."""
-        monkeypatch.setattr(rotation_data, "CACHE_FILE", cache_file)
-
-        sheet_data = (
-            [{"singer": "Test", "song_artist": "Song", "status": "Waiting"}],
-            {"singers": 1, "sung": 0, "queued": 1, "started": ""},
-        )
-        monkeypatch.setattr(rotation_data, "fetch_from_sheet", lambda: sheet_data)
-
-        queue, stats = rotation_data.fetch_all_rows()
-        assert queue[0]["singer"] == "Test"
-
-
 class TestFormatConky:
     def test_empty_queue(self, capsys):
         rotation_data.format_conky([])

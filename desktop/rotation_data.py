@@ -1,45 +1,32 @@
 #!/usr/bin/env python3
 """Fetch karaoke rotation data and output conky-formatted text.
 
-Called by conky via ${execpi}. Reads rotation data from a local JSON cache
-written by kj-controller (instant updates), falling back to the Google Sheet
-CSV endpoint if the cache is missing or stale.
+Called by conky via ${execpi}. Reads rotation data from the local JSON cache
+written by kj-controller after every rotation change.
 
 Usage:
     python3 rotation_data.py              # Full conky-formatted rotation
     python3 rotation_data.py --count-only # Just the singer count (integer)
 """
 
-import csv
-import io
 import json
 import os
 import sys
 import time
-from urllib.error import URLError
-from urllib.request import urlopen
 
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
-
-SHEET_ID = "1OzNxqJB-pYHhI0VJkkPjJc1Ba242TL6Kadov52GHWl8"
-SHEET_GID = "0"
-SHEET_CSV_URL = (
-    f"https://docs.google.com/spreadsheets/d/{SHEET_ID}"
-    f"/gviz/tq?tqx=out:csv&gid={SHEET_GID}"
-)
 
 COL_SINGER = 1
 COL_SONG_ARTIST = 2
 COL_STATUS = 3
 
 MAX_ENTRIES = 10
-FETCH_TIMEOUT = 10
 
 # Local cache written by kj-controller after every rotation change
 CACHE_FILE = "/tmp/rotation_cache.json"
-CACHE_MAX_AGE = 120  # seconds before falling back to sheet
+CACHE_MAX_AGE = 120  # seconds; treat as offline if cache is older than this
 
 # Colors (hex without #)
 COLOR_NAME = "ffdf6b"      # gold for all singer names
@@ -77,74 +64,6 @@ def read_local_cache():
         return data["queue"][:MAX_ENTRIES], data["stats"]
     except (OSError, KeyError, json.JSONDecodeError):
         return None
-
-
-def fetch_from_sheet():
-    """Fetch all rows from the Google Sheet CSV. Returns (queue, stats)."""
-    with urlopen(SHEET_CSV_URL, timeout=FETCH_TIMEOUT) as response:
-        text = response.read().decode("utf-8")
-    reader = csv.reader(io.StringIO(text))
-
-    try:
-        next(reader)  # skip header
-    except StopIteration:
-        return [], {}
-
-    all_singers = set()
-    done_count = 0
-    queue = []
-    earliest_ts = None
-
-    for row in reader:
-        if len(row) <= COL_STATUS:
-            continue
-        status = row[COL_STATUS].strip()
-        singer = row[COL_SINGER].strip()
-        if not singer:
-            continue
-
-        # Track earliest timestamp (column 0, format "M/D/YYYY HH:MM:SS")
-        ts_raw = row[0].strip() if row[0].strip() else None
-        if ts_raw and earliest_ts is None:
-            earliest_ts = ts_raw
-
-        all_singers.add(singer)
-
-        if status.lower() == "done":
-            done_count += 1
-        else:
-            if len(queue) < MAX_ENTRIES:
-                queue.append({
-                    "singer": singer,
-                    "song_artist": row[COL_SONG_ARTIST].strip() if COL_SONG_ARTIST < len(row) else "",
-                    "status": status,
-                })
-
-    # Format earliest timestamp as M/D HH:MM
-    started = ""
-    if earliest_ts:
-        try:
-            from datetime import datetime
-            dt = datetime.strptime(earliest_ts, "%m/%d/%Y %H:%M:%S")
-            started = dt.strftime("%-m/%-d %-H:%M")
-        except ValueError:
-            started = earliest_ts
-
-    stats = {
-        "singers": len(all_singers),
-        "sung": done_count,
-        "queued": len(queue),
-        "started": started,
-    }
-    return queue, stats
-
-
-def fetch_all_rows():
-    """Get rotation data, preferring local cache over sheet fetch."""
-    cached = read_local_cache()
-    if cached is not None:
-        return cached
-    return fetch_from_sheet()
 
 
 # ---------------------------------------------------------------------------
@@ -205,11 +124,12 @@ def format_conky(entries):
 def main():
     stats_only = "--stats" in sys.argv
 
-    try:
-        queue, stats = fetch_all_rows()
-    except (URLError, OSError, ValueError, csv.Error):
+    cached = read_local_cache()
+    if cached is None:
         print("--" if stats_only else f"{MARGIN}${{color {COLOR_DEFAULT}}}${{font DejaVu Sans:size=28}}Offline${{font}}${{color}}")
         return
+
+    queue, stats = cached
 
     if stats_only:
         parts = []

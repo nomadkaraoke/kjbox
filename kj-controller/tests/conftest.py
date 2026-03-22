@@ -54,6 +54,7 @@ def mock_config(tmp_media_dir):
         "tls_cert": "",
         "tls_key": "",
         "youtube_cookies_file": str(tmp_media_dir / "youtube_cookies.txt"),
+        "rotation_db_path": ":memory:",
     }
 
 

@@ -2,6 +2,23 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-03-21 - SQLite-Primary Offline-First Rotation
+
+Major architecture change: rotation system now uses local SQLite as source of truth instead of Google Sheets.
+
+- **SQLite primary:** All rotation data stored in `~/kjdata/rotation.db` (WAL mode, busy_timeout)
+- **Offline-first:** System works without internet; Google Sheets is an optional background backup
+- **Stable IDs:** Entries use auto-increment SQLite IDs instead of fragile sheet row indices
+- **Atomic moves:** Position updates use SQL UPDATE (not delete+insert), preventing data loss
+- **File linking:** Rotation entries can link to catalog files (`POST /rotation/link`) with duration lookup
+- **Time estimates:** Each entry shows estimated sing time based on cumulative durations
+- **Sync indicator:** UI shows green/yellow/gray dot for Sheet sync status
+- **Restore button:** Emergency restore from Sheet backup if local DB is corrupted
+- **New endpoints:** `/rotation/link`, `/rotation/unlink`, `/rotation/sync-status`, `/rotation/restore`
+- **API change:** All rotation endpoints now use `id` instead of `row_index`, move uses `{id, new_position}`
+- **Conky simplified:** Display script reads local cache only (Sheet CSV fallback removed)
+- **Modules:** `rotation_store.py` (SQLite CRUD), `rotation_sync.py` (Sheet backup), `rotation.py` (coordinator)
+
 ## 2026-03-21 - Browser Mode Orphan Detection
 
 Fixed browser mode state getting out of sync after auto-deploy restarts. Chromium processes now survive service restarts as orphans but the server lost track of them — mode showed "VLC" while browser was visible, toggle didn't work, and playing a video left the browser on screen.

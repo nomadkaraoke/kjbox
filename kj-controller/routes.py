@@ -1613,17 +1613,33 @@ def system_stats():
         return jsonify({"error": str(e)}), 500
 
 
-# --- Rotation (Google Sheet) ---
+# --- Rotation ---
+
+
+def _add_time_estimates(entries):
+    """Add estimated_time field to each entry based on cumulative durations."""
+    from datetime import datetime, timedelta
+    default_duration = 240  # 4 minutes
+    now = datetime.now()
+    cumulative = 0
+    for entry in entries:
+        if entry.get("status", "").lower() in ("now singing", "singing now"):
+            entry["estimated_time"] = "Now"
+            continue
+        est = now + timedelta(seconds=cumulative)
+        entry["estimated_time"] = est.strftime("%I:%M %p").lstrip("0").lower()
+        cumulative += entry.get("duration") or default_duration
+
 
 @routes_bp.route('/rotation', methods=['GET'])
 def get_rotation():
     """Returns the current singer rotation queue (non-done entries)."""
     rotation = current_app.rotation
-    if rotation is None:
+    if not hasattr(current_app, 'rotation') or current_app.rotation is None:
         return jsonify({"error": "Rotation not configured"}), 503
     try:
-        force = request.args.get('refresh') == '1'
-        entries = rotation.get_rotation(force_refresh=force)
+        entries = rotation.get_rotation()
+        _add_time_estimates(entries)
         return jsonify({"entries": entries})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -1633,28 +1649,29 @@ def get_rotation():
 def update_rotation_status():
     """Update a rotation entry's status."""
     rotation = current_app.rotation
-    if rotation is None:
+    if not hasattr(current_app, 'rotation') or current_app.rotation is None:
         return jsonify({"error": "Rotation not configured"}), 503
     data = request.get_json(force=True)
-    raw_index = data.get('row_index')
+    raw_id = data.get('id')
     status = data.get('status', '')
-    if raw_index is None:
-        return jsonify({"error": "row_index is required"}), 400
+    if raw_id is None:
+        return jsonify({"error": "id is required"}), 400
     try:
-        row_index = int(raw_index)
+        entry_id = int(raw_id)
     except (TypeError, ValueError):
-        return jsonify({"error": "row_index must be an integer"}), 400
-    if row_index < 1:
-        return jsonify({"error": "row_index must be >= 1"}), 400
+        return jsonify({"error": "id must be an integer"}), 400
+    if entry_id < 1:
+        return jsonify({"error": "id must be >= 1"}), 400
 
     try:
         if status.lower() in ('now singing', 'singing now', 'singing'):
-            rotation.mark_singing(row_index)
+            rotation.mark_singing(entry_id)
         elif status.lower() in ('up next', 'next'):
-            rotation.mark_up_next(row_index)
+            rotation.mark_up_next(entry_id)
         else:
-            rotation.update_status(row_index, status)
-        entries = rotation.get_rotation(force_refresh=True)
+            rotation.update_status(entry_id, status)
+        entries = rotation.get_rotation()
+        _add_time_estimates(entries)
         return jsonify({"success": True, "entries": entries})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -1664,18 +1681,18 @@ def update_rotation_status():
 def edit_rotation_entry():
     """Edit a rotation entry's singer name and/or song."""
     rotation = current_app.rotation
-    if rotation is None:
+    if not hasattr(current_app, 'rotation') or current_app.rotation is None:
         return jsonify({"error": "Rotation not configured"}), 503
     data = request.get_json(force=True)
-    raw_index = data.get('row_index')
-    if raw_index is None:
-        return jsonify({"error": "row_index is required"}), 400
+    raw_id = data.get('id')
+    if raw_id is None:
+        return jsonify({"error": "id is required"}), 400
     try:
-        row_index = int(raw_index)
+        entry_id = int(raw_id)
     except (TypeError, ValueError):
-        return jsonify({"error": "row_index must be an integer"}), 400
-    if row_index < 1:
-        return jsonify({"error": "row_index must be >= 1"}), 400
+        return jsonify({"error": "id must be an integer"}), 400
+    if entry_id < 1:
+        return jsonify({"error": "id must be >= 1"}), 400
 
     singer = data.get('singer')
     song_artist = data.get('song_artist')
@@ -1685,8 +1702,9 @@ def edit_rotation_entry():
         song_artist = song_artist.strip()
 
     try:
-        rotation.update_entry(row_index, singer=singer, song_artist=song_artist)
-        entries = rotation.get_rotation(force_refresh=True)
+        rotation.update_entry(entry_id, singer=singer, song_artist=song_artist)
+        entries = rotation.get_rotation()
+        _add_time_estimates(entries)
         return jsonify({"success": True, "entries": entries})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -1696,22 +1714,23 @@ def edit_rotation_entry():
 def delete_rotation_entry():
     """Delete a rotation entry entirely."""
     rotation = current_app.rotation
-    if rotation is None:
+    if not hasattr(current_app, 'rotation') or current_app.rotation is None:
         return jsonify({"error": "Rotation not configured"}), 503
     data = request.get_json(force=True)
-    raw_index = data.get('row_index')
-    if raw_index is None:
-        return jsonify({"error": "row_index is required"}), 400
+    raw_id = data.get('id')
+    if raw_id is None:
+        return jsonify({"error": "id is required"}), 400
     try:
-        row_index = int(raw_index)
+        entry_id = int(raw_id)
     except (TypeError, ValueError):
-        return jsonify({"error": "row_index must be an integer"}), 400
-    if row_index < 1:
-        return jsonify({"error": "row_index must be >= 1"}), 400
+        return jsonify({"error": "id must be an integer"}), 400
+    if entry_id < 1:
+        return jsonify({"error": "id must be >= 1"}), 400
 
     try:
-        rotation.delete_entry(row_index)
-        entries = rotation.get_rotation(force_refresh=True)
+        rotation.delete_entry(entry_id)
+        entries = rotation.get_rotation()
+        _add_time_estimates(entries)
         return jsonify({"success": True, "entries": entries})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -1721,40 +1740,47 @@ def delete_rotation_entry():
 def add_rotation_entry():
     """Add a new singer to the rotation."""
     rotation = current_app.rotation
-    if rotation is None:
+    if not hasattr(current_app, 'rotation') or current_app.rotation is None:
         return jsonify({"error": "Rotation not configured"}), 503
     data = request.get_json(force=True)
     singer = data.get('singer', '').strip()
     song_artist = data.get('song_artist', '').strip()
+    notes = data.get('notes', '').strip()
     if not singer:
         return jsonify({"error": "singer is required"}), 400
 
     try:
-        rotation.add_entry(singer, song_artist)
-        entries = rotation.get_rotation(force_refresh=True)
-        return jsonify({"success": True, "entries": entries})
+        entry = rotation.add_entry(singer, song_artist, notes)
+        entries = rotation.get_rotation()
+        _add_time_estimates(entries)
+        return jsonify({"success": True, "entry": entry, "entries": entries})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
 
 @routes_bp.route('/rotation/move', methods=['POST'])
 def move_rotation_entry():
-    """Move a rotation entry from one position to another."""
+    """Move a rotation entry to a new position."""
     rotation = current_app.rotation
-    if rotation is None:
+    if not hasattr(current_app, 'rotation') or current_app.rotation is None:
         return jsonify({"error": "Rotation not configured"}), 503
     data = request.get_json(force=True)
+    raw_id = data.get('id')
+    raw_pos = data.get('new_position')
+    if raw_id is None or raw_pos is None:
+        return jsonify({"error": "id and new_position are required"}), 400
     try:
-        from_row = int(data.get('from_row'))
-        to_row = int(data.get('to_row'))
+        entry_id = int(raw_id)
+        new_position = int(raw_pos)
     except (TypeError, ValueError):
-        return jsonify({"error": "from_row and to_row must be integers"}), 400
-    if from_row < 1 or to_row < 1:
-        return jsonify({"error": "row indices must be >= 1"}), 400
+        return jsonify({"error": "id and new_position must be integers"}), 400
+    if entry_id < 1 or new_position < 1:
+        return jsonify({"error": "id and new_position must be >= 1"}), 400
 
     try:
-        rotation.move_entry(from_row, to_row)
-        entries = rotation.get_rotation(force_refresh=True)
+        rotation.move_entry(entry_id, new_position)
+        entries = rotation.get_rotation()
+        _add_time_estimates(entries)
         return jsonify({"success": True, "entries": entries})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -1762,15 +1788,102 @@ def move_rotation_entry():
 
 @routes_bp.route('/rotation/archive', methods=['POST'])
 def archive_rotation():
-    """Archive all rotation entries to 'Past events' sheet and clear rotation."""
+    """Archive all rotation entries and clear the rotation."""
     rotation = current_app.rotation
-    if rotation is None:
+    if not hasattr(current_app, 'rotation') or current_app.rotation is None:
         return jsonify({"error": "Rotation not configured"}), 503
 
     try:
         count = rotation.archive_rotation()
-        entries = rotation.get_rotation(force_refresh=True)
+        entries = rotation.get_rotation()
         return jsonify({"success": True, "archived": count, "entries": entries})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@routes_bp.route('/rotation/link', methods=['POST'])
+def link_rotation_file():
+    """Link a media file to a rotation entry."""
+    rotation = current_app.rotation
+    if not hasattr(current_app, 'rotation') or current_app.rotation is None:
+        return jsonify({"error": "Rotation not configured"}), 503
+    data = request.get_json(force=True)
+    raw_id = data.get('id')
+    file_path = data.get('file_path')
+    if raw_id is None:
+        return jsonify({"error": "id is required"}), 400
+    if not file_path:
+        return jsonify({"error": "file_path is required"}), 400
+    try:
+        entry_id = int(raw_id)
+    except (TypeError, ValueError):
+        return jsonify({"error": "id must be an integer"}), 400
+    if entry_id < 1:
+        return jsonify({"error": "id must be >= 1"}), 400
+
+    try:
+        rotation.link_file(entry_id, file_path)
+        entries = rotation.get_rotation()
+        _add_time_estimates(entries)
+        entry = next((e for e in entries if e.get('id') == entry_id), None)
+        return jsonify({"success": True, "entry": entry, "entries": entries})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@routes_bp.route('/rotation/unlink', methods=['POST'])
+def unlink_rotation_file():
+    """Remove a file link from a rotation entry."""
+    rotation = current_app.rotation
+    if not hasattr(current_app, 'rotation') or current_app.rotation is None:
+        return jsonify({"error": "Rotation not configured"}), 503
+    data = request.get_json(force=True)
+    raw_id = data.get('id')
+    if raw_id is None:
+        return jsonify({"error": "id is required"}), 400
+    try:
+        entry_id = int(raw_id)
+    except (TypeError, ValueError):
+        return jsonify({"error": "id must be an integer"}), 400
+    if entry_id < 1:
+        return jsonify({"error": "id must be >= 1"}), 400
+
+    try:
+        rotation.unlink_file(entry_id)
+        entries = rotation.get_rotation()
+        _add_time_estimates(entries)
+        entry = next((e for e in entries if e.get('id') == entry_id), None)
+        return jsonify({"success": True, "entry": entry, "entries": entries})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@routes_bp.route('/rotation/sync-status', methods=['GET'])
+def rotation_sync_status():
+    """Return the current sheet sync status."""
+    rotation = current_app.rotation
+    if not hasattr(current_app, 'rotation') or current_app.rotation is None:
+        return jsonify({"error": "Rotation not configured"}), 503
+
+    try:
+        status = rotation.get_sync_status()
+        return jsonify(status)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@routes_bp.route('/rotation/restore', methods=['POST'])
+def restore_rotation_from_sheet():
+    """Emergency restore rotation from Google Sheet."""
+    rotation = current_app.rotation
+    if not hasattr(current_app, 'rotation') or current_app.rotation is None:
+        return jsonify({"error": "Rotation not configured"}), 503
+
+    try:
+        count = rotation.restore_from_sheet()
+        entries = rotation.get_rotation()
+        _add_time_estimates(entries)
+        return jsonify({"success": True, "restored": count, "entries": entries})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

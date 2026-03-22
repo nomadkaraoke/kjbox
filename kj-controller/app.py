@@ -23,12 +23,12 @@ from zip_playback import ZipPlayback
 
 
 def _init_rotation(cfg):
-    """Create a RotationManager if sheet config is present, else None."""
+    """Create a RotationManager with SQLite DB and optional Sheet sync."""
+    db_path = cfg.get('rotation_db_path', os.path.expanduser('~/kjdata/rotation.db'))
     sheet_id = cfg.get('rotation_sheet_id')
     creds_file = cfg.get('rotation_credentials_file')
-    if sheet_id and creds_file:
-        return RotationManager(sheet_id, creds_file)
-    return None
+    sync_interval = cfg.get('rotation_sync_interval', 30)
+    return RotationManager(db_path, sheet_id, creds_file, sync_interval)
 
 
 def create_app(config=None):
@@ -44,6 +44,7 @@ def create_app(config=None):
     overlay_path = cfg.get('overlays_path') if config else None
     flask_app.overlay_manager = OverlayManager(config_path=overlay_path)
     flask_app.rotation = _init_rotation(cfg)
+    flask_app.rotation.media = flask_app.media
     flask_app.sleep_manager = SleepManager()
     flask_app.download_queue = {'items': [], 'worker_running': False}
     flask_app._download_lock = threading.Lock()
@@ -127,8 +128,10 @@ def start_app():  # pragma: no cover
     flask_app.chromium = ChromiumManager(cfg)
     flask_app.overlay_manager = overlay_mgr
     flask_app.rotation = _init_rotation(cfg)
-    if flask_app.rotation:
-        log_message("Rotation sheet integration enabled.", cfg)
+    flask_app.rotation.media = flask_app.media
+    log_message("Rotation enabled (SQLite primary).", cfg)
+    if flask_app.rotation.sync:
+        log_message("Sheet sync enabled.", cfg)
     flask_app.sleep_manager = SleepManager()
     if flask_app.sleep_manager.is_sleeping():
         log_message("Sleep mode is active (from previous session).", cfg)

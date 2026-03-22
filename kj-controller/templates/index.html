@@ -56,8 +56,10 @@
                 <div class="header-row">
                     <h2>Rotation</h2>
                     <div class="rotation-header-btns">
+                        <span id="rotation-sync-dot" class="rotation-sync-dot" title="Sync status"></span>
                         <span id="rotation-indicator" class="rotation-indicator hidden"></span>
-                        <button class="rotation-refresh-btn" onclick="fetchRotation(true)" title="Refresh rotation">Refresh</button>
+                        <button class="rotation-restore-btn" onclick="restoreFromSheet()" title="Restore from Google Sheet backup">Restore</button>
+                        <button class="rotation-refresh-btn" onclick="fetchRotation()" title="Refresh rotation">Refresh</button>
                         <button class="rotation-add-btn" onclick="toggleRotationAddForm()">+ Add</button>
                         <button class="rotation-new-btn" onclick="archiveRotation()" title="Archive current rotation and start fresh">New Rotation</button>
                     </div>
