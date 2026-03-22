@@ -158,6 +158,22 @@ class RotationManager:
                 return media_entry.get("duration")
         return None
 
+    def set_gen_status(self, entry_id, job_id, status):
+        """Set gen job tracking fields on a rotation entry."""
+        entry = self.store.set_gen_status(entry_id, job_id, status)
+        self._after_mutation()
+        return entry
+
+    def complete_gen_job(self, job_id, file_path):
+        """Called by gen poller when a gen job completes and file is downloaded."""
+        entry = self.store.get_entry_by_gen_job_id(job_id)
+        if entry is None:
+            return None
+        self.store.link_file(entry["id"], file_path, self._lookup_duration(file_path))
+        self.store.set_gen_status(entry["id"], job_id, "complete")
+        self._after_mutation()
+        return self.store.get_entry(entry["id"])
+
     def archive_rotation(self):
         """Archive all current entries and reset the rotation.
 

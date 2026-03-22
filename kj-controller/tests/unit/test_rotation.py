@@ -359,3 +359,26 @@ class TestCoordinatorDownload:
 
     def test_complete_download_missing_returns_none(self, mgr):
         assert mgr.complete_download("nonexistent", "/media/song.mp4") is None
+
+
+# ---------------------------------------------------------------------------
+# TestCoordinatorGen
+# ---------------------------------------------------------------------------
+
+class TestCoordinatorGen:
+    def test_set_gen_status(self, mgr):
+        entry = mgr.add_entry("Alice", "Song A")
+        updated = mgr.set_gen_status(entry["id"], "job-123", "processing")
+        assert updated["gen_job_id"] == "job-123"
+        assert updated["gen_status"] == "processing"
+
+    def test_complete_gen_job(self, mgr):
+        """complete_gen_job links file and sets gen_status to complete."""
+        entry = mgr.add_entry("Alice", "Song A")
+        mgr.set_gen_status(entry["id"], "job-123", "rendering")
+        updated = mgr.complete_gen_job("job-123", "/media/song.mp4")
+        assert updated["file_path"] == "/media/song.mp4"
+        assert updated["gen_status"] == "complete"
+
+    def test_complete_gen_job_missing_returns_none(self, mgr):
+        assert mgr.complete_gen_job("nonexistent", "/media/song.mp4") is None
