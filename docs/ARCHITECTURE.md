@@ -62,9 +62,11 @@ KJ Controller is a web-based karaoke show management application. A Flask backen
 | `youtube_search.py` | ~80 | YouTube search via yt-dlp: ytsearch with extract_flat for fast metadata |
 | `youtube_health.py` | ~170 | YouTube health checks: yt-dlp/EJS/Deno version detection, cookie validation, PyPI version check (24h cache), pip upgrade |
 | `divebar.py` | ~150 | Divebar catalog client: search, KN cross-reference lookup, download URL generation via Cloud Function API |
-| `rotation.py` | ~150 | `RotationManager` coordinator: delegates to `RotationStore` (SQLite) + `SheetSync` (optional), writes display cache, download tracking |
-| `rotation_store.py` | ~270 | `RotationStore` class: SQLite CRUD for rotation entries, position management, file linking, download tracking, archive |
+| `rotation.py` | ~180 | `RotationManager` coordinator: delegates to `RotationStore` (SQLite) + `SheetSync` (optional), writes display cache, download/gen tracking |
+| `rotation_store.py` | ~310 | `RotationStore` class: SQLite CRUD for rotation entries, position management, file linking, download/gen tracking, archive |
 | `rotation_sync.py` | ~230 | `SheetSync` class: background thread pushing SQLite state to Google Sheets (optional backup) |
+| `gen_client.py` | ~100 | `GenClient` HTTP client for gen API: job creation, status polling, download URL retrieval |
+| `gen_poller.py` | ~90 | `GenPoller` background thread: polls gen API for active jobs, auto-downloads completed videos |
 | `sleep_mode.py` | ~100 | `SleepManager` class: enter/exit low-power sleep mode, stop services, unmount SSD |
 | `routes.py` | ~800 | Flask Blueprint with all route handlers |
 
@@ -168,6 +170,8 @@ utils.py → (stdlib only)
 | POST | `/rotation/unlink` | Remove file link from a rotation entry (`{id}`) |
 | GET | `/rotation/search` | Unified search: local catalog + Karaoke Nerds + Divebar cross-ref (`?q=query`, min 3 chars) |
 | POST | `/rotation/download-and-link` | Queue download and link to rotation entry (`{id?, singer?, source, file_id/youtube_url}`) |
+| POST | `/rotation/make` | Create gen job and link to rotation entry (`{id?, singer?, artist, title}`) |
+| GET | `/rotation/gen-status` | Get active gen job statuses for rotation entries |
 | GET | `/rotation/sync-status` | Get Sheet sync status (`{last_sync, is_online, next_sync_in}`) |
 | POST | `/rotation/restore` | Emergency restore rotation from Google Sheet backup |
 | POST | `/browser-mode/enable` | Enable Browser Mode: stop VLC, launch fullscreen Chromium at URL |
