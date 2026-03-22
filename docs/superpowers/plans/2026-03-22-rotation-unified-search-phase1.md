@@ -1,6 +1,6 @@
 # Rotation Unified Search — Phase 1 Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Replace the fragmented add-singer + search + link workflow with an integrated search-as-you-type experience and preparation status badges on every rotation entry.
 
@@ -35,7 +35,7 @@
 - Modify: `kj-controller/rotation_store.py`
 - Modify: `kj-controller/tests/unit/test_rotation_store.py`
 
-- [ ] **Step 1: Write schema migration tests**
+- [x] **Step 1: Write schema migration tests**
 
 ```python
 # Append to test_rotation_store.py
@@ -77,12 +77,12 @@ class TestDownloadColumns:
         assert store.get_entry_by_download_id("nonexistent") is None
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `cd kj-controller && python -m pytest tests/unit/test_rotation_store.py::TestDownloadColumns -v`
 Expected: FAIL
 
-- [ ] **Step 3: Add columns to schema and implement methods**
+- [x] **Step 3: Add columns to schema and implement methods**
 
 In `rotation_store.py`, add to the `_SCHEMA` string after the existing `rotation_entries` columns (before the closing `);`):
 
@@ -151,12 +151,12 @@ def get_entry_by_download_id(self, download_id):
     return self._row_to_dict(row)
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `cd kj-controller && python -m pytest tests/unit/test_rotation_store.py -v`
 Expected: All pass
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add kj-controller/rotation_store.py kj-controller/tests/unit/test_rotation_store.py
@@ -171,7 +171,7 @@ git commit -m "feat(rotation): add download/prep tracking columns to RotationSto
 - Modify: `kj-controller/rotation.py`
 - Modify: `kj-controller/tests/unit/test_rotation.py`
 
-- [ ] **Step 1: Write coordinator tests**
+- [x] **Step 1: Write coordinator tests**
 
 ```python
 # Append to test_rotation.py
@@ -200,11 +200,11 @@ class TestCoordinatorDownload:
         assert updated["download_status"] == "complete"
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `cd kj-controller && python -m pytest tests/unit/test_rotation.py::TestCoordinatorDownload -v`
 
-- [ ] **Step 3: Extend RotationManager**
+- [x] **Step 3: Extend RotationManager**
 
 In `rotation.py`, extend `add_entry` to pass through `file_path` and `duration`:
 
@@ -250,11 +250,11 @@ def _lookup_duration(self, file_path):
     return None
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `cd kj-controller && python -m pytest tests/unit/test_rotation.py -v`
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add kj-controller/rotation.py kj-controller/tests/unit/test_rotation.py
@@ -269,7 +269,7 @@ git commit -m "feat(rotation): add download tracking to RotationManager coordina
 - Modify: `kj-controller/routes.py`
 - Create: `kj-controller/tests/unit/test_rotation_search.py`
 
-- [ ] **Step 1: Write search endpoint tests**
+- [x] **Step 1: Write search endpoint tests**
 
 ```python
 # kj-controller/tests/unit/test_rotation_search.py
@@ -342,11 +342,11 @@ class TestUnifiedSearch:
             assert data.get("karaoke_nerds_timeout") is True
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `cd kj-controller && python -m pytest tests/unit/test_rotation_search.py -v`
 
-- [ ] **Step 3: Implement the unified search endpoint**
+- [x] **Step 3: Implement the unified search endpoint**
 
 Add to the rotation section of `routes.py`:
 
@@ -420,11 +420,11 @@ def rotation_search():
     return jsonify(response)
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `cd kj-controller && python -m pytest tests/unit/test_rotation_search.py -v`
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add kj-controller/routes.py kj-controller/tests/unit/test_rotation_search.py
@@ -439,7 +439,7 @@ git commit -m "feat(rotation): add unified search endpoint /rotation/search"
 - Modify: `kj-controller/routes.py`
 - Create: `kj-controller/tests/integration/test_download_link_routes.py`
 
-- [ ] **Step 1: Write download-and-link tests**
+- [x] **Step 1: Write download-and-link tests**
 
 ```python
 # kj-controller/tests/integration/test_download_link_routes.py
@@ -538,11 +538,11 @@ class TestDownloadAndLink:
             assert resp.get_json()["entry"]["singer"] == "Alice"
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `cd kj-controller && python -m pytest tests/integration/test_download_link_routes.py -v`
 
-- [ ] **Step 3: Implement download-and-link endpoint**
+- [x] **Step 3: Implement download-and-link endpoint**
 
 Add to `routes.py`:
 
@@ -625,7 +625,7 @@ def download_and_link_rotation():
         return jsonify({"error": str(e)}), 500
 ```
 
-- [ ] **Step 4: Extend the download worker to auto-link on completion**
+- [x] **Step 4: Extend the download worker to auto-link on completion**
 
 In `routes.py`, find the `_download_worker` function (~line 115). After a download completes successfully (where `file_path` is set), add a check for `rotation_entry_id`:
 
@@ -641,7 +641,7 @@ if rotation_entry_id and hasattr(app, 'rotation') and app.rotation:
         pass  # Best-effort; entry can be linked manually
 ```
 
-- [ ] **Step 5: Extend /status to include rotation_downloads**
+- [x] **Step 5: Extend /status to include rotation_downloads**
 
 In the `get_status()` route (~line 449), add a `rotation_downloads` field to the response:
 
@@ -662,15 +662,15 @@ if hasattr(current_app, 'rotation') and current_app.rotation:
 
 Add `"rotation_downloads": rotation_downloads` to the status response dict.
 
-- [ ] **Step 6: Run tests**
+- [x] **Step 6: Run tests**
 
 Run: `cd kj-controller && python -m pytest tests/integration/test_download_link_routes.py tests/unit/test_rotation_search.py -v`
 
-- [ ] **Step 7: Run full test suite**
+- [x] **Step 7: Run full test suite**
 
 Run: `cd kj-controller && python -m pytest tests/ -q`
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add kj-controller/routes.py kj-controller/tests/integration/test_download_link_routes.py
@@ -685,7 +685,7 @@ git commit -m "feat(rotation): add download-and-link endpoint with auto-link on 
 - Modify: `kj-controller/routes.py`
 - Modify: `kj-controller/tests/integration/test_rotation_routes.py`
 
-- [ ] **Step 1: Write tests for extended add**
+- [x] **Step 1: Write tests for extended add**
 
 ```python
 # Append to test_rotation_routes.py, in TestAddRotationEntry class
@@ -707,7 +707,7 @@ git commit -m "feat(rotation): add download-and-link endpoint with auto-link on 
         assert entry["url_fallback"] == "https://youtube.com/watch?v=abc"
 ```
 
-- [ ] **Step 2: Update the /rotation/add route**
+- [x] **Step 2: Update the /rotation/add route**
 
 In `routes.py`, update `add_rotation_entry()` (~line 1740) to accept optional `file_path` and `url_fallback`:
 
@@ -724,11 +724,11 @@ if url_fallback:
         rotation.set_url_fallback(new_entry["id"], url_fallback)
 ```
 
-- [ ] **Step 3: Run tests**
+- [x] **Step 3: Run tests**
 
 Run: `cd kj-controller && python -m pytest tests/integration/test_rotation_routes.py -v`
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add kj-controller/routes.py kj-controller/tests/integration/test_rotation_routes.py
@@ -744,7 +744,7 @@ git commit -m "feat(rotation): extend /rotation/add to accept file_path and url_
 - Modify: `kj-controller/templates/index.html`
 - Modify: `kj-controller/static/style.css`
 
-- [ ] **Step 1: Add dropdown container to HTML**
+- [x] **Step 1: Add dropdown container to HTML**
 
 In `templates/index.html`, after the `rotation-add-form` div (~line 67), add:
 
@@ -752,7 +752,7 @@ In `templates/index.html`, after the `rotation-add-form` div (~line 67), add:
 <div id="rotation-search-dropdown" class="rotation-search-dropdown hidden"></div>
 ```
 
-- [ ] **Step 2: Add CSS for search dropdown**
+- [x] **Step 2: Add CSS for search dropdown**
 
 Append to `static/style.css`:
 
@@ -850,7 +850,7 @@ Append to `static/style.css`:
 .prep-rendering { background: #7c3aed33; color: #7c3aed; }
 ```
 
-- [ ] **Step 3: Implement search-as-you-type JS**
+- [x] **Step 3: Implement search-as-you-type JS**
 
 In `static/app.js`, add the search dropdown logic in the rotation section:
 
@@ -1082,7 +1082,7 @@ function escapeHtml(text) {
 
 Call `initRotationSearch()` at the bottom of the file or in the DOMContentLoaded handler.
 
-- [ ] **Step 4: Test manually in browser**
+- [x] **Step 4: Test manually in browser**
 
 Start the dev server and test:
 - Type 3+ chars in song field → dropdown appears
@@ -1091,7 +1091,7 @@ Start the dev server and test:
 - Tab to skip and add without linking
 - Esc to close
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add kj-controller/static/app.js kj-controller/templates/index.html kj-controller/static/style.css
@@ -1105,7 +1105,7 @@ git commit -m "feat(rotation): search-as-you-type dropdown in add-singer form"
 **Files:**
 - Modify: `kj-controller/static/app.js`
 
-- [ ] **Step 1: Update renderRotation to show prep badges**
+- [x] **Step 1: Update renderRotation to show prep badges**
 
 In `app.js`, update the `renderRotation` function. After the existing status badge rendering, add prep badge logic:
 
@@ -1147,7 +1147,7 @@ if (entry.file_path) {
 info.appendChild(prepBadge);
 ```
 
-- [ ] **Step 2: Update play button behavior**
+- [x] **Step 2: Update play button behavior**
 
 The existing play button (▶) should check prep status:
 
@@ -1192,7 +1192,7 @@ function openRotationLinkSearch(entryId, songText) {
 }
 ```
 
-- [ ] **Step 3: Update status polling to check rotation downloads**
+- [x] **Step 3: Update status polling to check rotation downloads**
 
 In the `updateStatus` function, after receiving `/status` response, check `rotation_downloads`:
 
@@ -1207,7 +1207,7 @@ if (data.rotation_downloads) {
 }
 ```
 
-- [ ] **Step 4: Test manually**
+- [x] **Step 4: Test manually**
 
 Verify:
 - Each rotation entry shows appropriate prep badge
@@ -1216,7 +1216,7 @@ Verify:
 - Link button pre-fills search
 - Downloads trigger badge updates
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add kj-controller/static/app.js
@@ -1230,17 +1230,17 @@ git commit -m "feat(rotation): preparation status badges and one-click play"
 **Files:**
 - All modified files
 
-- [ ] **Step 1: Run full test suite**
+- [x] **Step 1: Run full test suite**
 
 Run: `cd kj-controller && python -m pytest tests/ -q`
 Expected: All pass
 
-- [ ] **Step 2: Run with coverage**
+- [x] **Step 2: Run with coverage**
 
 Run: `cd kj-controller && python -m pytest tests/ --cov --cov-report=term`
 Expected: rotation modules above 70%
 
-- [ ] **Step 3: Manual end-to-end test**
+- [x] **Step 3: Manual end-to-end test**
 
 Start the app and test the complete flow:
 1. Open the add-singer form
@@ -1252,7 +1252,7 @@ Start the app and test the complete flow:
 7. Click 🔗 on unlinked entry → search pre-fills with song text
 8. Verify time estimates update when entries are linked
 
-- [ ] **Step 4: Commit any final fixes**
+- [x] **Step 4: Commit any final fixes**
 
 ```bash
 git add -A
