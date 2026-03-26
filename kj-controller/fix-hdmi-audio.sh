@@ -68,7 +68,7 @@ echo "fix-hdmi-audio: Enabled IEC958 Playback Switch for all HDMI devices"
 PW_CARD="alsa_card.pci-0000_00_1f.3"
 PW_PROFILE="output:analog-stereo+input:analog-stereo"
 if id -u nomad >/dev/null 2>&1; then
-    if sudo -u nomad env XDG_RUNTIME_DIR=/run/user/1000 pactl set-card-profile "$PW_CARD" "$PW_PROFILE" 2>/dev/null; then
+    if timeout 5 sudo -u nomad env XDG_RUNTIME_DIR=/run/user/1000 pactl set-card-profile "$PW_CARD" "$PW_PROFILE" 2>/dev/null; then
         echo "fix-hdmi-audio: PipeWire reset to analog profile"
     else
         echo "fix-hdmi-audio: WARNING — could not reset PipeWire profile (may not be running)"
@@ -80,9 +80,9 @@ fi
 # Reset display resolution to 1920x1080 on the connected output.
 # Requires X11 to be running (DISPLAY=:0). Fails silently if X is not up.
 XRANDR_OUT=""
-XRANDR_OUT=$(DISPLAY=:0 xrandr 2>/dev/null | grep ' connected' | grep -v ' disconnected' | awk '{print $1}' | head -1) || true
+XRANDR_OUT=$(timeout 5 xrandr --display :0 2>/dev/null | grep ' connected' | grep -v ' disconnected' | awk '{print $1}' | head -1) || true
 if [ -n "$XRANDR_OUT" ]; then
-    if DISPLAY=:0 xrandr --output "$XRANDR_OUT" --mode 1920x1080 2>/dev/null; then
+    if timeout 5 xrandr --display :0 --output "$XRANDR_OUT" --mode 1920x1080 2>/dev/null; then
         echo "fix-hdmi-audio: Display reset to 1920x1080 on $XRANDR_OUT"
     else
         echo "fix-hdmi-audio: WARNING — xrandr --mode 1920x1080 failed on $XRANDR_OUT (mode may not be available)"
