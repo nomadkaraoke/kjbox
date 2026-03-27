@@ -3037,14 +3037,14 @@ function renderRotation(entries) {
             playBtn.className = 'rotation-btn rotation-btn-play';
             playBtn.textContent = '\u25B6';  // ▶
             playBtn.title = 'Play this song';
-            playBtn.onclick = () => playMedia(entry.file_path);
+            playBtn.onclick = () => playAndAdvanceRotation(entry, idx, entries);
             actions.appendChild(playBtn);
         } else if (entry.url_fallback) {
             const playBtn = document.createElement('button');
             playBtn.className = 'rotation-btn rotation-btn-play';
             playBtn.textContent = '\u25B6';  // ▶
             playBtn.title = 'Play via browser mode';
-            playBtn.onclick = () => enableBrowserMode(entry.url_fallback);
+            playBtn.onclick = () => { enableBrowserMode(entry.url_fallback); advanceRotationStatus(entry, idx, entries); };
             actions.appendChild(playBtn);
         } else if (!entry.download_status || entry.download_status === 'failed') {
             const linkBtn = document.createElement('button');
@@ -3295,6 +3295,21 @@ function showRotationIndicator(state) {
         setTimeout(() => el.classList.add('hidden'), 3000);
     } else {
         el.classList.add('hidden');
+    }
+}
+
+async function playAndAdvanceRotation(entry, idx, entries) {
+    playMedia(entry.file_path);
+    advanceRotationStatus(entry, idx, entries);
+}
+
+async function advanceRotationStatus(entry, idx, entries) {
+    // Mark this entry as singing
+    await updateRotationStatus(entry.id, 'Now Singing');
+    // Mark the next entry as up next (if there is one)
+    const nextEntry = entries[idx + 1];
+    if (nextEntry) {
+        await updateRotationStatus(nextEntry.id, 'Up Next');
     }
 }
 
