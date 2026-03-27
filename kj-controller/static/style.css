@@ -1978,48 +1978,61 @@ body {
     display: flex;
     justify-content: space-between;
 }
+/* Rotation search results — KN-matching track rows */
+.rs-track {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 6px 12px 6px 16px; border-bottom: 1px solid #222;
+    font-size: 0.85em; cursor: pointer;
+    transition: background-color 0.15s;
+    border-left: 3px solid transparent;
+}
+.rs-track:hover { background-color: #1a1a1a; }
+.rs-track.selected { background-color: #252b3b; }
+.rs-track.rs-community {
+    border-left-color: #22c55e;
+    background-color: rgba(34, 197, 94, 0.06);
+}
+.rs-track.rs-community:hover, .rs-track.rs-community.selected { background-color: rgba(34, 197, 94, 0.12); }
+.rs-track.rs-karafun {
+    border-left-color: #ffdf6b;
+    background-color: rgba(255, 223, 107, 0.04);
+}
+.rs-track.rs-karafun:hover, .rs-track.rs-karafun.selected { background-color: rgba(255, 223, 107, 0.08); }
+.rs-track-info { display: flex; align-items: center; gap: 6px; flex: 1; min-width: 0; overflow: hidden; }
+.rs-brand-name { color: #e5e5e5; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rs-brand-code { color: #666; font-size: 0.8em; font-weight: 600; flex-shrink: 0; }
+.rs-disc-id { color: #666; font-size: 0.85em; font-weight: 600; flex-shrink: 0; white-space: nowrap; }
+.rs-title { color: #e5e5e5; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rs-format-badge {
+    font-size: 0.7em; padding: 2px 8px; border-radius: 4px; flex-shrink: 0;
+    background-color: rgba(34, 197, 94, 0.15); color: #22c55e;
+    font-weight: 600; letter-spacing: 0.3px;
+}
+.rs-karafun-badge { color: #ffdf6b; font-size: 0.85em; flex-shrink: 0; }
+.rs-track-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; margin-left: 6px; }
+.rs-action-btn {
+    font-size: 0.75em; padding: 4px 10px; border-radius: 4px; flex-shrink: 0;
+}
+.rs-action-ready {
+    background: rgba(34, 197, 94, 0.15); border: 1px solid rgba(34, 197, 94, 0.3); color: #22c55e;
+}
+.rs-action-download {
+    background: #222; border: 1px solid #444; color: #ccc;
+}
+/* MAKE row keeps the old badge style */
 .rotation-search-result {
-    padding: 7px 10px;
-    border-bottom: 1px solid #222;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    transition: background 0.1s;
+    padding: 7px 10px; border-bottom: 1px solid #222; cursor: pointer;
+    display: flex; align-items: center; gap: 8px; transition: background 0.1s;
 }
-.rotation-search-result:hover,
-.rotation-search-result.selected { background: #252b3b; }
+.rotation-search-result:hover, .rotation-search-result.selected { background: #252b3b; }
 .rotation-search-result .search-badge {
-    font-size: 9px;
-    padding: 2px 6px;
-    border-radius: 3px;
-    white-space: nowrap;
-    min-width: 52px;
-    text-align: center;
-    color: white;
+    font-size: 9px; padding: 2px 6px; border-radius: 3px;
+    white-space: nowrap; min-width: 52px; text-align: center; color: white;
 }
-.search-badge-ready { background: #2d8a4e; }
-.search-badge-community { background: #15803d; border: 1px solid #22c55e; }
-.search-badge-karafun { background: #a16207; border: 1px solid #eab308; }
-.search-badge-divebar { background: #2d8a4e; }
-.search-badge-youtube { background: #d4720a; }
-.search-badge-url { background: #555; }
 .search-badge-make { background: #7c3aed; }
 .rotation-search-result .search-info { flex: 1; min-width: 0; }
 .rotation-search-result .search-title { color: #e0e6f0; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .rotation-search-result .search-meta { color: #8892a4; font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.search-source {
-    display: inline-block;
-    font-size: 9px;
-    font-weight: 600;
-    padding: 1px 5px;
-    border-radius: 3px;
-    margin-left: 6px;
-    vertical-align: middle;
-}
-.search-source-local { background: rgba(45, 138, 78, 0.25); color: #4ade80; }
-.search-source-divebar { background: rgba(45, 138, 78, 0.25); color: #4ade80; }
-.search-source-youtube { background: rgba(212, 114, 10, 0.25); color: #fb923c; }
 .rotation-search-more {
     padding: 8px;
     text-align: center;

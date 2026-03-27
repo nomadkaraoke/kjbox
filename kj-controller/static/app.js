@@ -3630,16 +3630,46 @@ function renderRotSearchDropdown(data) {
     }
 
     rotSearchResults.forEach((r, i) => {
-        // Source tag shows where the file comes from (local/divebar/youtube)
-        const srcLabels = { local: 'IN LIBRARY', divebar: 'DIVEBAR DL', youtube: 'YOUTUBE DL' };
-        const srcTag = srcLabels[r.type] ? '<span class="search-source search-source-' + r.type + '">' + srcLabels[r.type] + '</span>' : '';
-        html += '<div class="rotation-search-result' + (i === rotSearchSelectedIdx ? ' selected' : '') + '" data-idx="' + i + '" onclick="selectRotSearchResult(rotSearchResults[' + i + '])">' +
-            '<span class="search-badge ' + r.badgeClass + '">' + r.badge + '</span>' +
-            '<div class="search-info">' +
-                '<div class="search-title">' + escHtml(r.title) + ' ' + srcTag + '</div>' +
-                '<div class="search-meta">' + escHtml(r.meta) + '</div>' +
-            '</div>' +
-        '</div>';
+        const isCommunity = r.priority === 0;
+        const isKarafun = r.priority === 1;
+        const rowClass = isCommunity ? ' rs-community' : isKarafun ? ' rs-karafun' : '';
+        const selClass = i === rotSearchSelectedIdx ? ' selected' : '';
+
+        let rowHtml = '<div class="rs-track' + rowClass + selClass + '" data-idx="' + i + '" onclick="selectRotSearchResult(rotSearchResults[' + i + '])">';
+        rowHtml += '<div class="rs-track-info">';
+
+        if (r.type === 'local') {
+            // Local library: show disc_id + artist - title + format badge
+            const discId = r.meta.split(' \u00B7 ')[0] || '';
+            const format = r.meta.split(' \u00B7 ')[1] || '';
+            rowHtml += '<span class="rs-disc-id">' + escHtml(discId) + '</span>';
+            rowHtml += '<span class="rs-title">' + escHtml(r.title) + '</span>';
+            if (format) rowHtml += '<span class="rs-format-badge">' + escHtml(format) + '</span>';
+        } else {
+            // KN track: brand name + brand code + community badge
+            const brandName = r.meta.split(' \u00B7 ')[0] || '';
+            const brandCode = r.brandCode || '';
+            rowHtml += '<span class="rs-brand-name">' + escHtml(brandName) + '</span>';
+            if (brandCode) rowHtml += '<span class="rs-brand-code">' + escHtml(brandCode) + '</span>';
+            if (isCommunity) rowHtml += '<span class="kn-community-badge">COMMUNITY</span>';
+            if (isKarafun) rowHtml += '<span class="rs-karafun-badge">\u2605</span>';
+        }
+
+        rowHtml += '</div>';  // rs-track-info
+
+        // Action area: source label
+        rowHtml += '<div class="rs-track-actions">';
+        if (r.type === 'local') {
+            rowHtml += '<span class="rs-action-btn rs-action-ready">Play</span>';
+        } else if (r.type === 'divebar') {
+            rowHtml += '<span class="rs-action-btn rs-action-download">Download</span>';
+        } else {
+            rowHtml += '<span class="rs-action-btn rs-action-download">Download</span>';
+        }
+        rowHtml += '</div>';
+
+        rowHtml += '</div>';
+        html += rowHtml;
     });
 
     // MAKE option always at the bottom
