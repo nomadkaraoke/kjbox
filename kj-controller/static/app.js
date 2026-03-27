@@ -3356,8 +3356,8 @@ function openLinkSearch(entryId, songText) {
     // Find the entry from rotationData for the banner
     const entry = rotationData.find(e => e.id === entryId);
     const singerName = entry ? entry.singer : '#' + entryId;
-    const songText = entry ? entry.song_artist : '';
-    const bannerText = songText ? singerName + ' — ' + songText : singerName;
+    const entrySong = entry ? entry.song_artist : '';
+    const bannerText = entrySong ? singerName + ' — ' + entrySong : singerName;
     document.getElementById('rotation-link-singer-name').textContent = bannerText;
     document.getElementById('rotation-link-banner').classList.remove('hidden');
     const songInput = document.getElementById('rotation-song');
