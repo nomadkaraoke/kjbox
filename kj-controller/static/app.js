@@ -3353,10 +3353,12 @@ function openLinkSearch(entryId, songText) {
     // Store the target entry ID so selectRotSearchResult can link instead of add
     form.dataset.linkTargetId = entryId;
     form.classList.add('link-mode');
-    // Find the singer name from rotationData for the banner
+    // Find the entry from rotationData for the banner
     const entry = rotationData.find(e => e.id === entryId);
     const singerName = entry ? entry.singer : '#' + entryId;
-    document.getElementById('rotation-link-singer-name').textContent = singerName;
+    const songText = entry ? entry.song_artist : '';
+    const bannerText = songText ? singerName + ' — ' + songText : singerName;
+    document.getElementById('rotation-link-singer-name').textContent = bannerText;
     document.getElementById('rotation-link-banner').classList.remove('hidden');
     const songInput = document.getElementById('rotation-song');
     songInput.placeholder = 'Search for song to link...';
