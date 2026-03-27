@@ -2852,6 +2852,9 @@ function renderRotation(entries) {
     const list = document.getElementById('rotation-list');
     if (!list) return;
 
+    // Don't re-render while a row is being edited — would destroy the edit inputs
+    if (document.querySelector('.rotation-editing')) return;
+
     if (!entries.length) {
         list.innerHTML = '<div class="rotation-empty">No singers in queue</div>';
         return;
