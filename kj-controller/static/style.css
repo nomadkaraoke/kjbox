@@ -1543,8 +1543,10 @@ body {
     font-size: 0.85em;
 }
 .rotation-link-cancel:hover { background: rgba(251, 191, 36, 0.25); }
-.rotation-add-form.link-mode #rotation-singer { display: none; }
-.rotation-add-form.link-mode #rotation-add-btn-submit { display: none; }
+.rotation-add-form.link-mode { flex-wrap: wrap; }
+.rotation-add-form.link-mode #rotation-singer { display: none !important; }
+.rotation-add-form.link-mode #rotation-song { flex-basis: 100%; }
+.rotation-add-form.link-mode #rotation-add-btn-submit { display: none !important; }
 .rotation-indicator {
     display: inline-flex;
     align-items: center;
