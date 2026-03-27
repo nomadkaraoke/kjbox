@@ -3429,7 +3429,6 @@ async function addRotationEntry() {
 let rotSearchTimer = null;
 let rotSearchSelectedIdx = -1;
 let rotSearchResults = [];
-let rotSearchExpanded = false;
 
 function initRotationSearch() {
     const songInput = document.getElementById('rotation-song');
@@ -3540,7 +3539,10 @@ function renderRotSearchDropdown(data) {
         }
     }
 
-    const maxInline = rotSearchExpanded ? 999 : 4;
+    // Sort: local (downloaded) first, then divebar, then youtube
+    const typeOrder = { local: 0, divebar: 1, youtube: 2 };
+    rotSearchResults.sort((a, b) => (typeOrder[a.type] ?? 9) - (typeOrder[b.type] ?? 9));
+
     let html = '';
 
     if (rotSearchResults.length === 0) {
@@ -3549,7 +3551,7 @@ function renderRotSearchDropdown(data) {
         html = '<div class="search-header"><span>\uD83D\uDD0D ' + rotSearchResults.length + ' result' + (rotSearchResults.length > 1 ? 's' : '') + '</span></div>';
     }
 
-    rotSearchResults.slice(0, maxInline).forEach((r, i) => {
+    rotSearchResults.forEach((r, i) => {
         html += '<div class="rotation-search-result' + (i === rotSearchSelectedIdx ? ' selected' : '') + '" data-idx="' + i + '" onclick="selectRotSearchResult(rotSearchResults[' + i + '])">' +
             '<span class="search-badge ' + r.badgeClass + '">' + r.badge + '</span>' +
             '<div class="search-info">' +
@@ -3559,28 +3561,23 @@ function renderRotSearchDropdown(data) {
         '</div>';
     });
 
-    if (!rotSearchExpanded && rotSearchResults.length > maxInline) {
-        html += '<div class="rotation-search-more" onclick="rotSearchExpanded=true;doRotationSearch(document.getElementById(\'rotation-song\').value.trim())">More results + options \u25BE</div>';
-    } else if (rotSearchExpanded) {
-        // MAKE button in expanded mode — parse artist/title from query
-        const songInput = document.getElementById('rotation-song');
-        const rawQuery = songInput ? songInput.value.trim() : '';
-        const makeIdx = rotSearchResults.length;
-        rotSearchResults.push({
-            type: 'make', badge: 'MAKE', badgeClass: 'search-badge-make',
-            title: 'Create karaoke video for: ' + rawQuery,
-            meta: 'Generate via Nomad Gen \u00B7 Takes ~5 min',
-            rawQuery: rawQuery,
-        });
-        html += '<div class="rotation-search-result' + (makeIdx === rotSearchSelectedIdx ? ' selected' : '') + '" data-idx="' + makeIdx + '" onclick="selectRotSearchResult(rotSearchResults[' + makeIdx + '])">' +
-            '<span class="search-badge search-badge-make">MAKE</span>' +
-            '<div class="search-info">' +
-                '<div class="search-title">' + escHtml('Create karaoke video for: ' + rawQuery) + '</div>' +
-                '<div class="search-meta">Generate via Nomad Gen \u00B7 Takes ~5 min</div>' +
-            '</div>' +
-        '</div>';
-        html += '<div class="rotation-search-more" onclick="rotSearchExpanded=false;doRotationSearch(document.getElementById(\'rotation-song\').value.trim())">\u25B4 Show less</div>';
-    }
+    // MAKE option always at the bottom
+    const songInput = document.getElementById('rotation-song');
+    const rawQuery = songInput ? songInput.value.trim() : '';
+    const makeIdx = rotSearchResults.length;
+    rotSearchResults.push({
+        type: 'make', badge: 'MAKE', badgeClass: 'search-badge-make',
+        title: 'Create karaoke video for: ' + rawQuery,
+        meta: 'Generate via Nomad Gen \u00B7 Takes ~5 min',
+        rawQuery: rawQuery,
+    });
+    html += '<div class="rotation-search-result' + (makeIdx === rotSearchSelectedIdx ? ' selected' : '') + '" data-idx="' + makeIdx + '" onclick="selectRotSearchResult(rotSearchResults[' + makeIdx + '])">' +
+        '<span class="search-badge search-badge-make">MAKE</span>' +
+        '<div class="search-info">' +
+            '<div class="search-title">' + escHtml('Create karaoke video for: ' + rawQuery) + '</div>' +
+            '<div class="search-meta">Generate via Nomad Gen \u00B7 Takes ~5 min</div>' +
+        '</div>' +
+    '</div>';
 
     html += '<div class="rotation-search-hint">\u2191\u2193 navigate \u00B7 Enter select \u00B7 Tab skip \u00B7 Esc close</div>';
 
@@ -3725,7 +3722,6 @@ function hideRotSearchDropdown() {
     const dropdown = document.getElementById('rotation-search-dropdown');
     if (dropdown) dropdown.classList.add('hidden');
     rotSearchSelectedIdx = -1;
-    rotSearchExpanded = false;
 }
 
 function fmtDur(seconds) {
