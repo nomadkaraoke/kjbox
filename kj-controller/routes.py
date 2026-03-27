@@ -1559,15 +1559,6 @@ def system_update():
     pull_output = result.stdout.strip()
     log_message(f"System: git pull result: {pull_output}", cfg)
 
-    mode = request.get_json(force=True).get('mode', 'full') if request.is_json else 'full'
-
-    if mode == 'frontend-only':
-        return jsonify({
-            "success": True,
-            "message": pull_output,
-            "restarting": False,
-        })
-
     def do_restart():
         time.sleep(1)
         subprocess.run(['sudo', 'systemctl', 'restart', 'kj-controller'])

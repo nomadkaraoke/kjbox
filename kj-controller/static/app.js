@@ -1985,16 +1985,6 @@ async function updateApp() {
     }
 }
 
-async function updateFrontendOnly() {
-    showSystemOverlay('Pulling latest code (frontend only)...');
-    const data = await apiCall('/system/update', { mode: 'frontend-only' });
-    hideSystemOverlay();
-    if (data && data.success) {
-        log(data.message, 'success');
-        location.reload();
-    }
-}
-
 // --- Karaoke Nerds Search ---
 
 function extractYouTubeId(url) {
