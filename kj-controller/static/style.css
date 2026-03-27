@@ -1997,6 +1997,8 @@ body {
     color: white;
 }
 .search-badge-ready { background: #2d8a4e; }
+.search-badge-community { background: #15803d; border: 1px solid #22c55e; }
+.search-badge-karafun { background: #a16207; border: 1px solid #eab308; }
 .search-badge-divebar { background: #2d8a4e; }
 .search-badge-youtube { background: #d4720a; }
 .search-badge-url { background: #555; }
@@ -2004,6 +2006,18 @@ body {
 .rotation-search-result .search-info { flex: 1; min-width: 0; }
 .rotation-search-result .search-title { color: #e0e6f0; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .rotation-search-result .search-meta { color: #8892a4; font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.search-source {
+    display: inline-block;
+    font-size: 9px;
+    font-weight: 600;
+    padding: 1px 5px;
+    border-radius: 3px;
+    margin-left: 6px;
+    vertical-align: middle;
+}
+.search-source-local { background: rgba(45, 138, 78, 0.25); color: #4ade80; }
+.search-source-divebar { background: rgba(45, 138, 78, 0.25); color: #4ade80; }
+.search-source-youtube { background: rgba(212, 114, 10, 0.25); color: #fb923c; }
 .rotation-search-more {
     padding: 8px;
     text-align: center;

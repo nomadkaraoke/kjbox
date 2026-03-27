@@ -3534,15 +3534,34 @@ function renderRotSearchDropdown(data) {
     rotSearchResults = [];
     rotSearchSelectedIdx = -1;
 
+    const KARAFUN_CODES = new Set(['KF', 'KFN', 'KV', 'KFS']);
+    function _classifyResult(brandCode, isCommunity) {
+        // Returns priority: 0=community, 1=karafun, 2=other
+        if (isCommunity) return 0;
+        if (brandCode && KARAFUN_CODES.has(brandCode.toUpperCase())) return 1;
+        return 2;
+    }
+    function _badgeForTrack(isCommunity, brandCode, source) {
+        if (isCommunity) return { badge: 'COMMUNITY', badgeClass: 'search-badge-community' };
+        if (brandCode && KARAFUN_CODES.has(brandCode.toUpperCase())) return { badge: 'KARAFUN', badgeClass: 'search-badge-karafun' };
+        if (source === 'local') return { badge: 'READY', badgeClass: 'search-badge-ready' };
+        if (source === 'divebar') return { badge: 'DIVEBAR', badgeClass: 'search-badge-divebar' };
+        return { badge: 'YOUTUBE', badgeClass: 'search-badge-youtube' };
+    }
+
     // Tier 1: Local library (READY)
     for (const r of (data.local || [])) {
         const displayTitle = ((r.artist || '') + ' - ' + (r.title || r.filename || '')).replace(/^- /, '');
+        const code = r.disc_id ? r.disc_id.replace(/[-_]?\d+$/, '') : '';
+        const bInfo = _badgeForTrack(false, code, 'local');
         rotSearchResults.push({
-            type: 'local', badge: 'READY', badgeClass: 'search-badge-ready',
+            ...bInfo,
+            type: 'local', priority: _classifyResult(code, false),
             title: displayTitle,
             meta: [r.disc_id, r.format, r.duration ? fmtDur(r.duration) : ''].filter(Boolean).join(' \u00B7 '),
             path: r.path, duration: r.duration,
             song_artist: (r.title || '') + ' - ' + (r.artist || ''),
+            brandCode: code,
         });
     }
 
@@ -3550,38 +3569,41 @@ function renderRotSearchDropdown(data) {
     for (const song of (data.karaoke_nerds || [])) {
         for (const track of (song.tracks || [])) {
             if (track.in_library) continue;
+            const code = track.brand_code || '';
+            const isCommunity = !!track.is_community;
+            const bInfo = _badgeForTrack(isCommunity, code, track.divebar ? 'divebar' : 'youtube');
+            const sourceLabel = track.divebar ? 'Divebar' : 'YouTube';
             if (track.divebar) {
                 rotSearchResults.push({
-                    type: 'divebar', badge: 'DIVEBAR', badgeClass: 'search-badge-divebar',
+                    ...bInfo,
+                    type: 'divebar', priority: _classifyResult(code, isCommunity),
                     title: song.artist + ' - ' + song.title,
-                    meta: [track.brand_name || track.brand_code, track.divebar.format || 'mp4', 'Divebar mirror'].filter(Boolean).join(' \u00B7 '),
+                    meta: [track.brand_name || code, isCommunity ? 'community' : '', sourceLabel].filter(Boolean).join(' \u00B7 '),
                     file_id: track.divebar.file_id,
-                    filename: (track.brand_code || 'DB') + ' - ' + song.artist + ' - ' + song.title + '.mp4',
+                    filename: (code || 'DB') + ' - ' + song.artist + ' - ' + song.title + '.mp4',
                     song_artist: song.title + ' - ' + song.artist,
+                    brandCode: code,
                 });
             } else if (track.youtube_url) {
                 rotSearchResults.push({
-                    type: 'youtube', badge: 'YOUTUBE', badgeClass: 'search-badge-youtube',
+                    ...bInfo,
+                    type: 'youtube', priority: _classifyResult(code, isCommunity),
                     title: song.artist + ' - ' + song.title,
-                    meta: [track.brand_name || track.brand_code, track.is_community ? 'community' : '', 'YouTube'].filter(Boolean).join(' \u00B7 '),
+                    meta: [track.brand_name || code, isCommunity ? 'community' : '', sourceLabel].filter(Boolean).join(' \u00B7 '),
                     youtube_url: track.youtube_url,
-                    filename: (track.brand_code || 'YT') + ' - ' + song.artist + ' - ' + song.title + '.mp4',
+                    filename: (code || 'YT') + ' - ' + song.artist + ' - ' + song.title + '.mp4',
                     song_artist: song.title + ' - ' + song.artist,
+                    brandCode: code,
                 });
             }
         }
     }
 
-    // Sort: local first, then divebar, then community youtube, then commercial youtube
-    const typeOrder = { local: 0, divebar: 1, youtube: 2 };
+    // Sort by: priority (community > karafun > other), then source (local > divebar > youtube)
+    const sourceOrder = { local: 0, divebar: 1, youtube: 2 };
     rotSearchResults.sort((a, b) => {
-        const aOrder = typeOrder[a.type] ?? 9;
-        const bOrder = typeOrder[b.type] ?? 9;
-        if (aOrder !== bOrder) return aOrder - bOrder;
-        // Within youtube, community versions first
-        const aCommunity = (a.meta || '').includes('community') ? 0 : 1;
-        const bCommunity = (b.meta || '').includes('community') ? 0 : 1;
-        return aCommunity - bCommunity;
+        if (a.priority !== b.priority) return a.priority - b.priority;
+        return (sourceOrder[a.type] ?? 9) - (sourceOrder[b.type] ?? 9);
     });
 
     let html = '';
@@ -3593,10 +3615,13 @@ function renderRotSearchDropdown(data) {
     }
 
     rotSearchResults.forEach((r, i) => {
+        // Source tag shows where the file comes from (local/divebar/youtube)
+        const srcLabels = { local: 'IN LIBRARY', divebar: 'DIVEBAR DL', youtube: 'YOUTUBE DL' };
+        const srcTag = srcLabels[r.type] ? '<span class="search-source search-source-' + r.type + '">' + srcLabels[r.type] + '</span>' : '';
         html += '<div class="rotation-search-result' + (i === rotSearchSelectedIdx ? ' selected' : '') + '" data-idx="' + i + '" onclick="selectRotSearchResult(rotSearchResults[' + i + '])">' +
             '<span class="search-badge ' + r.badgeClass + '">' + r.badge + '</span>' +
             '<div class="search-info">' +
-                '<div class="search-title">' + escHtml(r.title) + '</div>' +
+                '<div class="search-title">' + escHtml(r.title) + ' ' + srcTag + '</div>' +
                 '<div class="search-meta">' + escHtml(r.meta) + '</div>' +
             '</div>' +
         '</div>';
