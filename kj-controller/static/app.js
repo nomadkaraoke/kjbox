@@ -2883,8 +2883,8 @@ function renderRotation(entries) {
 
         // Row click: Shift=edit, Ctrl/Cmd=delete
         row.addEventListener('click', (e) => {
-            // Don't intercept clicks on buttons/inputs
-            if (e.target.closest('button, input')) return;
+            // Don't intercept clicks on buttons/inputs or during editing
+            if (e.target.closest('button, input') || row.classList.contains('rotation-editing')) return;
             if (e.shiftKey) {
                 e.preventDefault();
                 enterRotationEditMode(row, entry);
@@ -3216,6 +3216,13 @@ function enterRotationEditMode(row, entry) {
 
     singerInput.focus();
     singerInput.select();
+
+    // Stop all events from bubbling out of edit inputs
+    [singerInput, songInput].forEach(input => {
+        input.addEventListener('click', (e) => e.stopPropagation());
+        input.addEventListener('keydown', (e) => e.stopPropagation());
+        input.addEventListener('keyup', (e) => e.stopPropagation());
+    });
 
     // Enter on singer: move to song input. Enter on song: save. Escape: cancel.
     singerInput.addEventListener('keydown', (e) => {
@@ -3937,6 +3944,8 @@ function updateBrowserModeUI(browserMode) {
 
 // Update modifier-hover indicators as keys change
 document.addEventListener('keydown', (e) => {
+    // Skip modifier-key highlighting when any rotation row is being edited
+    if (document.querySelector('.rotation-editing')) return;
     const hovered = document.querySelector('.rotation-entry:hover');
     if (!hovered) return;
     if (e.ctrlKey || e.metaKey) {
@@ -3948,6 +3957,7 @@ document.addEventListener('keydown', (e) => {
     }
 });
 document.addEventListener('keyup', (e) => {
+    if (document.querySelector('.rotation-editing')) return;
     if (!e.ctrlKey && !e.metaKey) {
         document.querySelectorAll('.rotation-delete-hover').forEach(el => el.classList.remove('rotation-delete-hover'));
     }
