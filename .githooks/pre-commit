@@ -1,0 +1,23 @@
+#!/bin/sh
+# Pre-commit hook: syntax-check staged JS files with node --check
+# Catches redeclarations, syntax errors, etc. before they ship.
+
+staged_js=$(git diff --cached --name-only --diff-filter=ACM -- '*.js')
+if [ -z "$staged_js" ]; then
+    exit 0
+fi
+
+failed=0
+for file in $staged_js; do
+    # Check the staged version, not the working copy
+    if ! git show ":$file" | node --check 2>&1; then
+        echo "  -> $file"
+        failed=1
+    fi
+done
+
+if [ "$failed" -ne 0 ]; then
+    echo ""
+    echo "JS syntax check failed. Fix errors above before committing."
+    exit 1
+fi
