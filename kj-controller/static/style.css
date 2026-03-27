@@ -360,13 +360,13 @@ button:disabled:hover {
 /* --- Layout --- */
 
 body {
-    max-width: 1400px;
-    margin: 1rem auto;
-    padding: 1rem;
+    max-width: 100%;
+    margin: 0 auto;
+    padding: 0.5rem;
 }
 .main-layout {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 2fr 1fr;
     gap: 0.75rem;
     align-items: start;
 }
