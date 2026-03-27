@@ -296,13 +296,21 @@
             </div>
             <div class="container download-section">
                 <div class="header-row">
-                    <h2>Download Song <span id="yt-health-dot" class="yt-health-dot"></span></h2>
+                    <h2>Upload / Download <span id="yt-health-dot" class="yt-health-dot"></span></h2>
                     <button class="rescan-btn" onclick="openYtModal()" title="YouTube download engine settings, cookies, and health">Settings</button>
                 </div>
                 <div class="download-row">
                     <input type="url" id="youtube-url" placeholder="Enter YouTube URL" onkeyup="if(event.keyCode === 13) downloadSong()">
                     <button id="download-btn" class="btn-primary" onclick="downloadSong()">Download</button>
                 </div>
+                <div class="download-row">
+                    <label class="upload-label" id="upload-label">
+                        <input type="file" id="upload-file" accept=".mp4,.mkv,.avi,.webm,.mov,.mp3,.wav,.flac,.ogg,.zip,.cdg" onchange="uploadFile(this)" hidden>
+                        <span id="upload-label-text">Choose file to upload...</span>
+                    </label>
+                    <button id="upload-btn" class="btn-primary" onclick="document.getElementById('upload-file').click()" style="display:none">Upload</button>
+                </div>
+                <div id="upload-progress" class="dl-queue"></div>
                 <div id="download-queue" class="dl-queue"></div>
             </div>
             <div class="container available-songs">

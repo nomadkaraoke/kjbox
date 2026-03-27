@@ -112,6 +112,48 @@ def handle_download():
     return jsonify({"success": True, "id": item['id']})
 
 
+@routes_bp.route('/upload', methods=['POST'])
+def handle_upload():
+    """Upload a media file to the download folder."""
+    blocked = _check_sleep_mode()
+    if blocked:
+        return blocked
+    if 'file' not in request.files:
+        return jsonify({"error": "No file provided"}), 400
+    file = request.files['file']
+    if not file.filename:
+        return jsonify({"error": "No filename"}), 400
+
+    from config import MEDIA_EXTENSIONS
+    ext = os.path.splitext(file.filename)[1].lower()
+    if ext not in MEDIA_EXTENSIONS:
+        return jsonify({"error": f"Unsupported format: {ext}"}), 400
+
+    cfg = current_app.kj_config
+    download_folder = cfg.get('download_folder', os.path.expanduser('~/kjdata/videos'))
+    os.makedirs(download_folder, exist_ok=True)
+
+    # Sanitize filename
+    safe_name = re.sub(r'[^\w\s\-\.\(\)]', '', file.filename).strip()
+    if not safe_name:
+        safe_name = 'uploaded_file' + ext
+    dest = os.path.join(download_folder, safe_name)
+
+    # Avoid overwriting
+    if os.path.exists(dest):
+        base, extension = os.path.splitext(safe_name)
+        dest = os.path.join(download_folder, f"{base}_{int(time.time())}{extension}")
+        safe_name = os.path.basename(dest)
+
+    file.save(dest)
+    log_message(f"Uploaded file: {safe_name} ({os.path.getsize(dest)} bytes)", cfg)
+
+    # Add to media index
+    current_app.media.scan()
+
+    return jsonify({"success": True, "filename": safe_name, "path": dest})
+
+
 def _download_worker(app):
     """Process queued downloads sequentially until queue is drained."""
     while True:

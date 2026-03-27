@@ -78,6 +78,37 @@ async function downloadSong() {
     }
 }
 
+async function uploadFile(input) {
+    const file = input.files[0];
+    if (!file) return;
+    const label = document.getElementById('upload-label');
+    const labelText = document.getElementById('upload-label-text');
+    const progress = document.getElementById('upload-progress');
+    label.classList.add('uploading');
+    labelText.textContent = 'Uploading: ' + file.name;
+    progress.innerHTML = '<div class="dl-queue-item dl-queue-downloading"><span class="download-spinner"></span><span class="dl-queue-label">' + file.name + '</span></div>';
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+        const resp = await fetch('/upload', { method: 'POST', body: formData });
+        const data = await resp.json();
+        if (resp.ok && data.success) {
+            progress.innerHTML = '<div class="dl-queue-item dl-queue-completed"><span class="dl-queue-icon">✅</span><span class="dl-queue-label">' + (data.filename || file.name) + '</span></div>';
+            log('Uploaded: ' + (data.filename || file.name));
+        } else {
+            progress.innerHTML = '<div class="dl-queue-item dl-queue-error"><span class="dl-queue-icon">❌</span><span class="dl-queue-label">' + (data.error || 'Upload failed') + '</span></div>';
+        }
+    } catch (e) {
+        progress.innerHTML = '<div class="dl-queue-item dl-queue-error"><span class="dl-queue-icon">❌</span><span class="dl-queue-label">Upload failed</span></div>';
+    }
+    label.classList.remove('uploading');
+    labelText.textContent = 'Choose file to upload...';
+    input.value = '';
+    setTimeout(() => { progress.innerHTML = ''; }, 5000);
+}
+
 function renderDownloadQueue(items) {
     const container = document.getElementById('download-queue');
     if (!items || items.length === 0) {

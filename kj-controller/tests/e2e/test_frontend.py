@@ -83,10 +83,10 @@ class TestLayoutStructure:
 # ---------------------------------------------------------------------------
 
 class TestDownloadSection:
-    """Download Song card."""
+    """Upload / Download card."""
 
     def test_download_heading(self, app_page):
-        expect(app_page.locator("h2", has_text="Download Song")).to_be_visible()
+        expect(app_page.locator("h2", has_text="Upload / Download")).to_be_visible()
 
     def test_url_input(self, app_page):
         url_input = app_page.locator("#youtube-url")

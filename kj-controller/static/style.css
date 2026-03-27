@@ -336,6 +336,23 @@ button:disabled:hover {
 .download-row { display: flex; gap: 8px; }
 .download-row input { flex: 1; }
 .download-row button { flex-shrink: 0; }
+.upload-label {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    padding: 6px 10px;
+    border-radius: 6px;
+    border: 1px dashed #555;
+    background: #111;
+    color: #8892a4;
+    cursor: pointer;
+    font-size: 0.85em;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+.upload-label:hover { border-color: #888; color: #ccc; }
+.upload-label.uploading { border-color: #c084fc; color: #c084fc; }
 .dl-queue { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; }
 .dl-queue:empty { margin: 0; }
 .dl-queue-item {
