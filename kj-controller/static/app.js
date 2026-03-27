@@ -3598,7 +3598,7 @@ function renderRotSearchDropdown(data) {
     knSongs.forEach(song => {
         const sorted = sortKNTracks(song.tracks || []);
         sorted.forEach(track => {
-            if (track.in_library) return;
+            // Don't skip in_library tracks — show all versions like KN panel does
             const isCommunity = !!track.is_community;
             const isPreferred = prefUpper.includes((track.brand_code || '').toUpperCase());
             const videoId = extractYouTubeId(track.youtube_url || '');
