@@ -1937,6 +1937,27 @@ def rotation_search():
         if media_entry:
             result["duration"] = media_entry.get("duration")
 
+    # Also search downloaded media files (not in external catalog)
+    local_paths = {r.get("path") for r in local_results}
+    query_lower = query.lower()
+    query_terms = query_lower.split()
+    for path, entry in current_app.media.index.items():
+        if path in local_paths:
+            continue
+        searchable = (entry.get("display_name") or entry.get("filename", "")).lower()
+        if all(term in searchable for term in query_terms):
+            from catalog import parse_karaoke_filename
+            disc_id, artist, title = parse_karaoke_filename(entry.get("filename", ""))
+            local_results.append({
+                "path": path,
+                "filename": entry.get("filename"),
+                "artist": artist,
+                "title": title or entry.get("display_name", ""),
+                "disc_id": disc_id,
+                "format": os.path.splitext(entry.get("filename", ""))[1].lstrip('.'),
+                "duration": entry.get("duration"),
+            })
+
     # Karaoke Nerds search (slower, 1-3s)
     kn_results = []
     kn_timeout = False
