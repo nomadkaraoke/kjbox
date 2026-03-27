@@ -2,6 +2,28 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-03-26 - Streamlined Rotation Link UX & Auto-Advance
+
+Major improvements to the rotation song-linking workflow, search results, playback auto-advance, and edit mode isolation.
+
+- **Link mode UI:** Visual "Linking song for: Singer — Song" banner with Cancel button replaces old prompt()-based flow
+- **Singer name hidden in link mode:** Not needed when linking to an existing entry
+- **Song_artist auto-updated:** When linking a search result, the rotation entry's song_artist is updated to match the selected result
+- **Unlink Song option:** Added to rotation entry overflow menu for removing file links
+- **Downloaded videos in search:** Local downloaded videos now included in rotation search results alongside catalog/KN/Divebar
+- **Search result sorting:** Community tracks first, then karafun/preferred brands, then others
+- **KN-style dropdown rendering:** Rotation search dropdown now renders identically to the Karaoke Nerds panel with community/preferred badges
+- **Auto-advance on Play:** Play button sets the current entry to "Now Singing" and the next entry to "Up Next" automatically
+- **File upload:** `POST /upload` route for uploading media files directly to the download folder (validates extension, sanitizes filename, triggers rescan)
+- **Conky fix:** Removed `own_window_hints below` so rotation display stays visible after VLC exits fullscreen
+- **Cache write on startup:** Prevents conky showing "Offline" status immediately after kj-controller restart
+- **Pre-commit hook:** `.githooks/pre-commit` validates JS syntax via `node --check` before commits
+- **"Update (Safe)" button:** Renamed with tooltip explaining VLC keeps playing during restart
+- **Edit mode isolation:** Global keyboard shortcuts (Space, arrow keys) and click handlers disabled during inline editing
+- **Polling protection:** 10-second rotation poll skips re-render when edit mode is active
+- **Layout improvements:** 2:1 left/right column ratio, reduced page padding for better space utilization
+- **Upload/Download widget:** Renamed with file upload picker for direct media uploads
+
 ## 2026-03-21 - SQLite-Primary Offline-First Rotation
 
 Major architecture change: rotation system now uses local SQLite as source of truth instead of Google Sheets.

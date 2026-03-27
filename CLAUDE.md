@@ -28,6 +28,9 @@ KJ Controller (`kj-controller/`) is a Flask + vanilla JS web app for managing li
 - `kj-controller/app.py` — app factory + entry point
 - `kj-controller/config.py` — constants, platform detection, config loading
 
+**Hooks**:
+- `.githooks/pre-commit` — JS syntax validation hook (activate with `git config core.hooksPath .githooks`)
+
 **Detailed architecture**: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) (module diagram, full API reference, design decisions)
 
 ## Deployment — PRODUCTION SAFETY

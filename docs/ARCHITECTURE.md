@@ -174,6 +174,7 @@ utils.py → (stdlib only)
 | GET | `/rotation/gen-status` | Get active gen job statuses for rotation entries |
 | GET | `/rotation/sync-status` | Get Sheet sync status (`{last_sync, is_online, next_sync_in}`) |
 | POST | `/rotation/restore` | Emergency restore rotation from Google Sheet backup |
+| POST | `/upload` | Upload a media file to the download folder (validates extension, sanitizes filename, triggers rescan) |
 | POST | `/browser-mode/enable` | Enable Browser Mode: stop VLC, launch fullscreen Chromium at URL |
 | POST | `/browser-mode/disable` | Disable Browser Mode: kill Chromium, restart VLC |
 
@@ -241,7 +242,7 @@ The rotation system manages the singer queue during live karaoke shows, with an 
 
 **Data flow:** SQLite is the source of truth (`~/kjdata/rotation.db`). `RotationManager` delegates all CRUD to `RotationStore` (SQLite) and optionally syncs to Google Sheets via `SheetSync` (background thread, every 30s). After every mutation, the manager writes a local JSON cache to `/tmp/rotation_cache.json`. The conky display reads this cache every 3 seconds. The system works fully offline — Sheet sync is optional and gracefully handles network failures.
 
-**UI features:** The KJ Controller web UI shows the rotation queue with status badges, preparation badges (READY/DOWNLOADING/URL/UNLINKED), action buttons (Singing, Done, Next, plus more status options), drag-and-drop reordering via drag handles, inline editing (Shift+click), and one-click deletion (Ctrl/Cmd+click). The "Add Singer" form includes a search-as-you-type dropdown that queries local catalog, Karaoke Nerds, and Divebar in parallel — selecting a result adds the singer with the file linked or download queued in one action.
+**UI features:** The KJ Controller web UI shows the rotation queue with status badges, preparation badges (READY/DOWNLOADING/URL/UNLINKED), action buttons (Singing, Done, Next, plus more status options), drag-and-drop reordering via drag handles, inline editing (Shift+click), and one-click deletion (Ctrl/Cmd+click). The "Add Singer" form includes a search-as-you-type dropdown that queries local catalog, Karaoke Nerds, and Divebar in parallel — selecting a result adds the singer with the file linked or download queued in one action. The search dropdown renders identically to the KN panel with community/preferred badges. The Play button auto-advances rotation status: sets the current entry to "Now Singing" and the next entry to "Up Next". Edit mode (inline editing) is isolated from global keyboard/click handlers and polling — the 10-second rotation poll skips re-render while an entry is being edited.
 
 **Conky display:** A full-screen 1920x1080 conky window (`rotation.conkyrc`) renders the queue with gold singer names, colored status badges matching the exact sheet status text, and song info. Uses faux transparency via a wallpaper background image (`rotation-bg.png`). Runs as the `rotation-display` systemd service.
 
