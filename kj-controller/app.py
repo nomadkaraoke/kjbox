@@ -147,6 +147,7 @@ def start_app():  # pragma: no cover
     flask_app.rotation = _init_rotation(cfg)
     flask_app.rotation.media = flask_app.media
     log_message("Rotation enabled (SQLite primary).", cfg)
+    flask_app.rotation._write_display_cache()  # Refresh cache so conky doesn't show "Offline"
     if flask_app.rotation.sync:
         log_message("Sheet sync enabled.", cfg)
     flask_app.sleep_manager = SleepManager()
