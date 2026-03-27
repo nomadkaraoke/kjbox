@@ -3068,6 +3068,32 @@ function renderRotation(entries) {
                 };
                 dropdown.appendChild(item);
             });
+            // Add Unlink option if entry has a linked file
+            if (entry.file_path || entry.url_fallback) {
+                const sep = document.createElement('div');
+                sep.className = 'rotation-dropdown-sep';
+                dropdown.appendChild(sep);
+                const unlinkItem = document.createElement('button');
+                unlinkItem.className = 'rotation-dropdown-item rotation-dropdown-item-danger';
+                unlinkItem.textContent = 'Unlink Song';
+                unlinkItem.onclick = async (ev) => {
+                    ev.stopPropagation();
+                    dropdown.remove();
+                    try {
+                        const resp = await fetch('/rotation/unlink', {
+                            method: 'POST',
+                            headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify({ id: entry.id }),
+                        });
+                        const data = await resp.json();
+                        if (data.entries) { rotationData = data.entries; renderRotation(rotationData); }
+                        showRotationIndicator('success');
+                    } catch (err) {
+                        showRotationIndicator('error');
+                    }
+                };
+                dropdown.appendChild(unlinkItem);
+            }
             actions.appendChild(dropdown);
             const close = () => { dropdown.remove(); document.removeEventListener('click', close); };
             setTimeout(() => document.addEventListener('click', close), 0);

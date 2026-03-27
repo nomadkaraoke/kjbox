@@ -1761,6 +1761,13 @@ body {
     background: #2a2a2a;
     color: #fff;
 }
+.rotation-dropdown-sep {
+    height: 1px;
+    background: rgba(255,255,255,0.1);
+    margin: 4px 0;
+}
+.rotation-dropdown-item-danger { color: #f87171; }
+.rotation-dropdown-item-danger:hover { background: rgba(248, 113, 113, 0.15); color: #fca5a5; }
 /* Edit button (pencil) */
 .rotation-btn-edit {
     border-color: #555;
