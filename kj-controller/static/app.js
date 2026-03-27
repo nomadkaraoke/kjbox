@@ -3475,6 +3475,7 @@ async function addRotationEntry() {
         singerInput.focus();
         showRotationIndicator('success');
     } catch (e) {
+        hideRotSearchDropdown();
         showRotationIndicator('error');
     }
 }
@@ -3793,7 +3794,8 @@ async function selectRotSearchResult(result) {
             }
         }
 
-        // Clear form and link mode
+        // Clear form, link mode, and dropdown
+        hideRotSearchDropdown();
         if (linkTargetId) {
             exitLinkMode();
         } else {
