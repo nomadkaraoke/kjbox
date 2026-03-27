@@ -3549,127 +3549,98 @@ function renderRotSearchDropdown(data) {
     rotSearchResults = [];
     rotSearchSelectedIdx = -1;
 
-    const KARAFUN_CODES = new Set(['KF', 'KFN', 'KV', 'KFS']);
-    function _classifyResult(brandCode, isCommunity) {
-        // Returns priority: 0=community, 1=karafun, 2=other
-        if (isCommunity) return 0;
-        if (brandCode && KARAFUN_CODES.has(brandCode.toUpperCase())) return 1;
-        return 2;
-    }
-    function _badgeForTrack(isCommunity, brandCode, source) {
-        if (isCommunity) return { badge: 'COMMUNITY', badgeClass: 'search-badge-community' };
-        if (brandCode && KARAFUN_CODES.has(brandCode.toUpperCase())) return { badge: 'KARAFUN', badgeClass: 'search-badge-karafun' };
-        if (source === 'local') return { badge: 'READY', badgeClass: 'search-badge-ready' };
-        if (source === 'divebar') return { badge: 'DIVEBAR', badgeClass: 'search-badge-divebar' };
-        return { badge: 'YOUTUBE', badgeClass: 'search-badge-youtube' };
-    }
-
-    // Tier 1: Local library (READY)
-    for (const r of (data.local || [])) {
-        const displayTitle = ((r.artist || '') + ' - ' + (r.title || r.filename || '')).replace(/^- /, '');
-        const code = r.disc_id ? r.disc_id.replace(/[-_]?\d+$/, '') : '';
-        const bInfo = _badgeForTrack(false, code, 'local');
-        rotSearchResults.push({
-            ...bInfo,
-            type: 'local', priority: _classifyResult(code, false),
-            title: displayTitle,
-            meta: [r.disc_id, r.format, r.duration ? fmtDur(r.duration) : ''].filter(Boolean).join(' \u00B7 '),
-            path: r.path, duration: r.duration,
-            song_artist: (r.title || '') + ' - ' + (r.artist || ''),
-            brandCode: code,
-        });
-    }
-
-    // Tier 2/3: KN tracks (Divebar / YouTube)
-    for (const song of (data.karaoke_nerds || [])) {
-        for (const track of (song.tracks || [])) {
-            if (track.in_library) continue;
-            const code = track.brand_code || '';
-            const isCommunity = !!track.is_community;
-            const bInfo = _badgeForTrack(isCommunity, code, track.divebar ? 'divebar' : 'youtube');
-            const sourceLabel = track.divebar ? 'Divebar' : 'YouTube';
-            if (track.divebar) {
-                rotSearchResults.push({
-                    ...bInfo,
-                    type: 'divebar', priority: _classifyResult(code, isCommunity),
-                    title: song.artist + ' - ' + song.title,
-                    meta: [track.brand_name || code, isCommunity ? 'community' : '', sourceLabel].filter(Boolean).join(' \u00B7 '),
-                    file_id: track.divebar.file_id,
-                    filename: (code || 'DB') + ' - ' + song.artist + ' - ' + song.title + '.mp4',
-                    song_artist: song.title + ' - ' + song.artist,
-                    brandCode: code,
-                });
-            } else if (track.youtube_url) {
-                rotSearchResults.push({
-                    ...bInfo,
-                    type: 'youtube', priority: _classifyResult(code, isCommunity),
-                    title: song.artist + ' - ' + song.title,
-                    meta: [track.brand_name || code, isCommunity ? 'community' : '', sourceLabel].filter(Boolean).join(' \u00B7 '),
-                    youtube_url: track.youtube_url,
-                    filename: (code || 'YT') + ' - ' + song.artist + ' - ' + song.title + '.mp4',
-                    song_artist: song.title + ' - ' + song.artist,
-                    brandCode: code,
-                });
-            }
-        }
-    }
-
-    // Sort by: priority (community > karafun > other), then source (local > divebar > youtube)
-    const sourceOrder = { local: 0, divebar: 1, youtube: 2 };
-    rotSearchResults.sort((a, b) => {
-        if (a.priority !== b.priority) return a.priority - b.priority;
-        return (sourceOrder[a.type] ?? 9) - (sourceOrder[b.type] ?? 9);
-    });
+    const localResults = data.local || [];
+    const knSongs = data.karaoke_nerds || [];
+    const prefUpper = knPreferredBrands.map(b => b.toUpperCase());
+    const downloadedIdToPath = new Map(
+        localMediaItems.filter(i => i.youtube_id).map(i => [i.youtube_id, i.file_path])
+    );
 
     let html = '';
 
-    if (rotSearchResults.length === 0) {
+    if (localResults.length === 0 && knSongs.length === 0) {
         html = '<div class="search-header">No results found</div>';
-    } else {
-        html = '<div class="search-header"><span>\uD83D\uDD0D ' + rotSearchResults.length + ' result' + (rotSearchResults.length > 1 ? 's' : '') + '</span></div>';
+        html += '<div class="rotation-search-hint">\u2191\u2193 navigate \u00B7 Enter select \u00B7 Tab skip \u00B7 Esc close</div>';
+        dropdown.innerHTML = html;
+        dropdown.classList.remove('hidden');
+        return;
     }
 
-    rotSearchResults.forEach((r, i) => {
-        const isCommunity = r.priority === 0;
-        const isKarafun = r.priority === 1;
-        const rowClass = isCommunity ? ' rs-community' : isKarafun ? ' rs-karafun' : '';
-        const selClass = i === rotSearchSelectedIdx ? ' selected' : '';
+    // --- "IN YOUR COLLECTION" section (local matches) ---
+    if (localResults.length > 0) {
+        html += '<div class="kn-local-section">';
+        html += '<div class="kn-local-header">In your collection (' + localResults.length + ')</div>';
+        localResults.forEach(match => {
+            const idx = rotSearchResults.length;
+            rotSearchResults.push({
+                type: 'local', path: match.path, duration: match.duration,
+                song_artist: (match.title || '') + ' - ' + (match.artist || ''),
+            });
+            const fname = match.filename ? match.filename.replace(/\.\w+$/, '') : (match.disc_id || '') + ' - ' + (match.artist || '') + ' - ' + (match.title || '');
+            const formatClass = match.format ? getFormatBadgeClass(match.format) : 'other';
+            html += '<div class="kn-local-match rs-clickable' + (idx === rotSearchSelectedIdx ? ' selected' : '') + '" data-idx="' + idx + '" onclick="selectRotSearchResult(rotSearchResults[' + idx + '])">';
+            html += '<div class="catalog-detail">';
+            html += '<span>' + escHtml(fname) + ' ';
+            if (match.format) html += '<span class="format-badge ' + formatClass + '">' + escHtml(match.format) + '</span>';
+            html += '</span>';
+            if (match.path) {
+                const folder = match.path.replace(/\/[^/]+$/, '').replace(/^\/media\/nomad\//, '').replace(/^\/opt\/nomad\//, '');
+                html += '<div class="catalog-folder" title="' + escHtml(match.path) + '">' + escHtml(folder) + '</div>';
+            }
+            html += '</div>';
+            html += '<span class="kn-play-btn">Link</span>';
+            html += '</div>';
+        });
+        html += '</div>';
+    }
 
-        let rowHtml = '<div class="rs-track' + rowClass + selClass + '" data-idx="' + i + '" onclick="selectRotSearchResult(rotSearchResults[' + i + '])">';
-        rowHtml += '<div class="rs-track-info">';
+    // --- KN tracks (same rendering as KN search) ---
+    knSongs.forEach(song => {
+        const sorted = sortKNTracks(song.tracks || []);
+        sorted.forEach(track => {
+            if (track.in_library) return;
+            const isCommunity = !!track.is_community;
+            const isPreferred = prefUpper.includes((track.brand_code || '').toUpperCase());
+            const videoId = extractYouTubeId(track.youtube_url || '');
+            const downloadedPath = videoId ? downloadedIdToPath.get(videoId) : null;
+            const idx = rotSearchResults.length;
 
-        if (r.type === 'local') {
-            // Local library: show disc_id + artist - title + format badge
-            const discId = r.meta.split(' \u00B7 ')[0] || '';
-            const format = r.meta.split(' \u00B7 ')[1] || '';
-            rowHtml += '<span class="rs-disc-id">' + escHtml(discId) + '</span>';
-            rowHtml += '<span class="rs-title">' + escHtml(r.title) + '</span>';
-            if (format) rowHtml += '<span class="rs-format-badge">' + escHtml(format) + '</span>';
-        } else {
-            // KN track: brand name + brand code + community badge
-            const brandName = r.meta.split(' \u00B7 ')[0] || '';
-            const brandCode = r.brandCode || '';
-            rowHtml += '<span class="rs-brand-name">' + escHtml(brandName) + '</span>';
-            if (brandCode) rowHtml += '<span class="rs-brand-code">' + escHtml(brandCode) + '</span>';
-            if (isCommunity) rowHtml += '<span class="kn-community-badge">COMMUNITY</span>';
-            if (isKarafun) rowHtml += '<span class="rs-karafun-badge">\u2605</span>';
-        }
+            // Build result object for selectRotSearchResult
+            const result = { song_artist: song.title + ' - ' + song.artist };
+            if (downloadedPath) {
+                result.type = 'local';
+                result.path = downloadedPath;
+            } else if (track.divebar) {
+                result.type = 'divebar';
+                result.file_id = track.divebar.file_id;
+                result.filename = (track.brand_code || 'DB') + ' - ' + song.artist + ' - ' + song.title + '.mp4';
+            } else if (track.youtube_url) {
+                result.type = 'youtube';
+                result.youtube_url = track.youtube_url;
+                result.filename = (track.brand_code || 'YT') + ' - ' + song.artist + ' - ' + song.title + '.mp4';
+            } else {
+                return;
+            }
+            rotSearchResults.push(result);
 
-        rowHtml += '</div>';  // rs-track-info
-
-        // Action area: source label
-        rowHtml += '<div class="rs-track-actions">';
-        if (r.type === 'local') {
-            rowHtml += '<span class="rs-action-btn rs-action-ready">Play</span>';
-        } else if (r.type === 'divebar') {
-            rowHtml += '<span class="rs-action-btn rs-action-download">Download</span>';
-        } else {
-            rowHtml += '<span class="rs-action-btn rs-action-download">Download</span>';
-        }
-        rowHtml += '</div>';
-
-        rowHtml += '</div>';
-        html += rowHtml;
+            const rowClass = isCommunity ? ' community' : isPreferred ? ' preferred' : '';
+            html += '<div class="kn-track' + rowClass + (idx === rotSearchSelectedIdx ? ' selected' : '') + ' rs-clickable" data-idx="' + idx + '" onclick="selectRotSearchResult(rotSearchResults[' + idx + '])">';
+            html += '<span class="kn-track-info">';
+            html += '<span class="kn-brand-name">' + escHtml(track.brand_name || '') + '</span>';
+            html += '<span class="kn-brand-code">' + escHtml(track.brand_code || '') + '</span>';
+            if (isCommunity) html += '<span class="kn-community-badge">Community</span>';
+            else if (isPreferred) html += '<span class="kn-preferred-badge">\u2605</span>';
+            html += '</span>';
+            html += '<span class="kn-track-actions">';
+            if (downloadedPath) {
+                html += '<span class="kn-downloaded-badge">\u2713 Downloaded</span>';
+                html += '<span class="kn-play-btn">Link</span>';
+            } else {
+                html += '<span class="kn-download-btn">DL & Link</span>';
+            }
+            html += '</span>';
+            html += '</div>';
+        });
     });
 
     // MAKE option always at the bottom
@@ -3697,8 +3668,9 @@ function renderRotSearchDropdown(data) {
 }
 
 function highlightRotSearchResult() {
-    document.querySelectorAll('.rotation-search-result').forEach((el, i) => {
-        el.classList.toggle('selected', i === rotSearchSelectedIdx);
+    document.querySelectorAll('[data-idx]').forEach(el => {
+        const idx = parseInt(el.dataset.idx, 10);
+        el.classList.toggle('selected', idx === rotSearchSelectedIdx);
     });
 }
 
