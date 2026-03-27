@@ -7,7 +7,7 @@ conky.config = {
     own_window = true,
     own_window_type = 'dock',
     own_window_transparent = true,
-    own_window_hints = 'undecorated,below,skip_taskbar,skip_pager',
+    own_window_hints = 'undecorated,skip_taskbar,skip_pager',
     double_buffer = true,
 
     font = 'DejaVu Sans:size=20',
