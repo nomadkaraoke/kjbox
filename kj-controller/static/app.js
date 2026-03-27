@@ -1972,7 +1972,7 @@ async function restartApp() {
 }
 
 async function updateApp() {
-    if (!confirm('Update KJ Controller?\n\nThis will pull the latest code from GitHub and restart the service.')) return;
+    if (!confirm('Update & Restart KJ Controller?\n\nPulls latest code and restarts Flask.\nVLC keeps playing — safe mid-song.\nWeb UI will be unavailable for ~2 seconds.')) return;
     showSystemOverlay('Pulling latest code from GitHub...');
     const data = await apiCall('/system/update', {});
     if (data && data.success) {
