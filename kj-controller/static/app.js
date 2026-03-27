@@ -3541,9 +3541,17 @@ function renderRotSearchDropdown(data) {
         }
     }
 
-    // Sort: local (downloaded) first, then divebar, then youtube
+    // Sort: local first, then divebar, then community youtube, then commercial youtube
     const typeOrder = { local: 0, divebar: 1, youtube: 2 };
-    rotSearchResults.sort((a, b) => (typeOrder[a.type] ?? 9) - (typeOrder[b.type] ?? 9));
+    rotSearchResults.sort((a, b) => {
+        const aOrder = typeOrder[a.type] ?? 9;
+        const bOrder = typeOrder[b.type] ?? 9;
+        if (aOrder !== bOrder) return aOrder - bOrder;
+        // Within youtube, community versions first
+        const aCommunity = (a.meta || '').includes('community') ? 0 : 1;
+        const bCommunity = (b.meta || '').includes('community') ? 0 : 1;
+        return aCommunity - bCommunity;
+    });
 
     let html = '';
 
