@@ -3644,6 +3644,7 @@ function renderRotSearchDropdown(data) {
             html += '<span class="kn-brand-code">' + escHtml(track.brand_code || '') + '</span>';
             if (isCommunity) html += '<span class="kn-community-badge">Community</span>';
             else if (isPreferred) html += '<span class="kn-preferred-badge">\u2605</span>';
+            html += '<span class="kn-song-title">' + escHtml(song.title + ' - ' + song.artist) + '</span>';
             html += '</span>';
             html += '<span class="kn-track-actions">';
             if (downloadedPath) {
