@@ -1977,7 +1977,7 @@ async function updateApp() {
     const data = await apiCall('/system/update', {});
     if (data && data.success) {
         log(data.message, 'success');
-        showSystemOverlay('Code updated. Restarting service...');
+        showSystemOverlay('Code updated. Restarting service...\nVLC keeps playing — no interruption.');
         await waitForRestart();
         location.reload();
     } else {
