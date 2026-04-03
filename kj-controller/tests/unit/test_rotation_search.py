@@ -75,7 +75,7 @@ class TestUnifiedSearch:
             assert data.get("karaoke_nerds_timeout") is True
 
     def test_divebar_cross_reference(self, search_client, search_app):
-        """KN results are enriched with Divebar availability."""
+        """KN results are enriched with Divebar availability via search."""
         with patch.object(search_app.catalog, 'search', return_value=[]), \
              patch('routes.karaoke_nerds.search', return_value=[
                  {"title": "Bohemian Rhapsody", "artist": "Queen", "tracks": [
@@ -83,9 +83,11 @@ class TestUnifiedSearch:
                       "youtube_url": "https://youtube.com/watch?v=abc", "is_community": True}
                  ]}
              ]), \
-             patch('routes.divebar.lookup_kn_ids', return_value={
-                 "KFN-1234": [{"file_id": "abc123", "format": "mp4"}]
-             }):
+             patch('routes.divebar.search', return_value=[
+                 {"artist": "Queen", "title": "Bohemian Rhapsody", "tracks": [
+                     {"file_id": "abc123", "brand_code": "KFN-1234", "format": "mp4"}
+                 ]}
+             ]):
             resp = search_client.get('/rotation/search?q=bohemian')
             data = resp.get_json()
             track = data["karaoke_nerds"][0]["tracks"][0]
@@ -177,7 +179,7 @@ class TestUnifiedSearch:
             assert paths.count("/downloads/Queen - Bohemian Rhapsody.mp4") == 1
 
     def test_rotation_search_divebar_exception_graceful(self, search_client, search_app):
-        """If divebar.lookup_kn_ids raises, search still returns results."""
+        """If divebar.search raises, rotation search still returns results."""
         with patch.object(search_app.catalog, 'is_available', return_value=True), \
              patch.object(search_app.catalog, 'search', return_value=[
                  {"path": "/media/song.zip", "artist": "Queen", "title": "Bohemian Rhapsody",
@@ -189,7 +191,7 @@ class TestUnifiedSearch:
                       "youtube_url": "https://youtube.com/watch?v=abc", "is_community": True}
                  ]}
              ]), \
-             patch('routes.divebar.lookup_kn_ids', side_effect=Exception("connection refused")):
+             patch('routes.divebar.search', side_effect=Exception("connection refused")):
             resp = search_client.get('/rotation/search?q=bohemian')
             assert resp.status_code == 200
             data = resp.get_json()

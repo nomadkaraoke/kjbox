@@ -2008,28 +2008,29 @@ def rotation_search():
     except Exception:
         kn_timeout = True
 
-    # Divebar cross-reference for KN results
+    # Divebar cross-reference for KN results via catalog search
     if kn_results and not kn_timeout:
         try:
-            # Extract KN IDs from tracks
-            all_kn_ids = []
+            db_results = divebar.search(query, current_app.kj_config, limit=100)
+            # Build lookup: (artist_lower, title_lower, brand_code_upper) -> track
+            db_index = {}
+            for db_song in db_results:
+                for db_track in db_song.get("tracks", []):
+                    key = (
+                        (db_song.get("artist") or "").lower().strip(),
+                        (db_song.get("title") or "").lower().strip(),
+                        (db_track.get("brand_code") or "").upper().strip(),
+                    )
+                    db_index[key] = db_track
+            # Match KN tracks to Divebar tracks by artist+title+brand_code
             for song in kn_results:
+                artist_lower = (song.get("artist") or "").lower().strip()
+                title_lower = (song.get("title") or "").lower().strip()
                 for track in song.get("tracks", []):
-                    kn_id = track.get("brand_code")
-                    if kn_id:
-                        all_kn_ids.append(kn_id)
-            if all_kn_ids:
-                divebar_matches = divebar.lookup_kn_ids(all_kn_ids, current_app.kj_config)
-                # Merge Divebar availability into KN tracks
-                for song in kn_results:
-                    for track in song.get("tracks", []):
-                        kn_id = track.get("brand_code")
-                        if kn_id and kn_id in divebar_matches:
-                            db_match = divebar_matches[kn_id]
-                            if isinstance(db_match, list) and db_match:
-                                track["divebar"] = db_match[0]
-                            elif isinstance(db_match, dict):
-                                track["divebar"] = db_match
+                    brand = (track.get("brand_code") or "").upper().strip()
+                    db_match = db_index.get((artist_lower, title_lower, brand))
+                    if db_match and db_match.get("file_id"):
+                        track["divebar"] = db_match
         except Exception:
             pass  # Divebar cross-ref is best-effort
 
