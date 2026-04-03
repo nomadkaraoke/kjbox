@@ -253,11 +253,14 @@ class ExternalCatalog:
         conn.commit()
 
     def search(self, query, limit=50, offset=0):
-        """Full-text search using FTS5 MATCH.
+        """Full-text search using FTS5 MATCH with LIKE fallback.
 
         Returns list of dicts with path, filename, folder, disc_id, artist, title, format.
+        FTS5 handles most queries fast; LIKE fallback catches punctuation
+        mismatches (e.g. "Sheeps" vs "Sheep's").
         """
-        fts_query = _fts5_safe_query(_normalize_for_search(query))
+        normalized = _normalize_for_search(query)
+        fts_query = _fts5_safe_query(normalized)
         if not fts_query:
             return []
 
@@ -271,6 +274,39 @@ class ExternalCatalog:
                 "ORDER BY rank "
                 "LIMIT ? OFFSET ?",
                 (fts_query, limit, offset)
+            ).fetchall()
+            if rows:
+                return [dict(row) for row in rows]
+        except sqlite3.OperationalError:
+            pass
+
+        # LIKE fallback: strip punctuation from query terms and match against
+        # artist/title with punctuation stripped. Handles cases like
+        # "Sheeps" matching "Sheep's" where FTS5 tokenization diverges.
+        return self._like_fallback(normalized, limit, offset)
+
+    def _like_fallback(self, query, limit, offset):
+        """Fallback search using LIKE with punctuation stripped."""
+        terms = re.sub(r'[^\w\s]', ' ', query, flags=re.UNICODE).split()
+        if not terms:
+            return []
+        # Build WHERE clause: each term must appear in artist||title with
+        # punctuation removed (using SQLite REPLACE for common punctuation)
+        strip_expr = "LOWER(REPLACE(REPLACE(REPLACE(COALESCE(artist,'') || ' ' || COALESCE(title,''), '''', ''), '-', ' '), '.', ''))"
+        conditions = []
+        params = []
+        for term in terms:
+            conditions.append(f"{strip_expr} LIKE ?")
+            params.append(f"%{term.lower()}%")
+        params.extend([limit, offset])
+        conn = self._get_conn()
+        try:
+            rows = conn.execute(
+                "SELECT path, filename, folder, disc_id, artist, title, format "
+                "FROM media "
+                f"WHERE {' AND '.join(conditions)} "
+                "LIMIT ? OFFSET ?",
+                params,
             ).fetchall()
             return [dict(row) for row in rows]
         except sqlite3.OperationalError:

@@ -517,8 +517,32 @@ class TestExternalCatalog:
             "VALUES ('/test', 'test.mp4', '/dir', '', 'Test', 'Song', 'mp4')"
         )
         conn.commit()
-        # Drop FTS table to force OperationalError on search
+        # Drop FTS table to force OperationalError on FTS5 — LIKE fallback kicks in
         conn.execute("DROP TABLE media_fts")
         results = catalog.search("Test")
-        assert results == []
+        assert len(results) == 1
+        assert results[0]["artist"] == "Test"
+        catalog.close()
+
+    def test_search_punctuation_tolerance(self, mock_config, sample_file_list):
+        """Search without apostrophe matches entries with apostrophe (e.g. Sheeps vs Sheep's)."""
+        catalog = ExternalCatalog(mock_config)
+        catalog.build_from_file_list(sample_file_list)
+        # Insert a song with apostrophe
+        conn = catalog._get_conn()
+        conn.execute(
+            "INSERT INTO media (path, filename, folder, disc_id, artist, title, format) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            ("/test/sheeps.mp4", "SC1234 - Set It Off - Wolf In Sheep's Clothing.mp4",
+             "/test", "SC1234", "Set It Off", "Wolf In Sheep's Clothing", "mp4")
+        )
+        conn.execute(
+            "INSERT INTO media_fts(rowid, artist, title, disc_id) "
+            "VALUES (last_insert_rowid(), 'Set It Off', 'Wolf In Sheep''s Clothing', 'SC1234')"
+        )
+        conn.commit()
+        # Search without apostrophe — FTS5 won't match, but LIKE fallback should
+        results = catalog.search("Set It Off Wolf in Sheeps Clothing")
+        assert len(results) >= 1
+        assert any("Sheep" in r["title"] for r in results)
         catalog.close()

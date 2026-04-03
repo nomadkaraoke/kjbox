@@ -1983,11 +1983,17 @@ def rotation_search():
     local_paths = {r.get("path") for r in local_results}
     query_lower = query.lower()
     query_terms = query_lower.split()
+    # Strip punctuation for fuzzy matching (e.g. "Sheeps" matches "Sheep's")
+    import re as _re
+    _strip_punct = lambda s: _re.sub(r'[^\w\s]', '', s)
+    query_terms_clean = [_strip_punct(t) for t in query_terms]
     for path, entry in current_app.media.index.items():
         if path in local_paths:
             continue
         searchable = (entry.get("display_name") or entry.get("filename", "")).lower()
-        if all(term in searchable for term in query_terms):
+        searchable_clean = _strip_punct(searchable)
+        if all(term in searchable or term in searchable_clean
+               for term in query_terms_clean):
             from catalog import parse_karaoke_filename
             disc_id, artist, title = parse_karaoke_filename(entry.get("filename", ""))
             local_results.append({
