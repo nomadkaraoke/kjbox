@@ -155,6 +155,23 @@ class TestUnifiedSearch:
             assert len(data["local"]) == 1
             assert "Bohemian" in data["local"][0]["filename"]
 
+    def test_rotation_search_media_index_punctuation(self, search_client, search_app):
+        """Punctuation in query or filename doesn't prevent media index matches."""
+        search_app.media.index = {
+            "/downloads/Set It Off - Wolf In Sheep's Clothing.mp4": {
+                "filename": "Set It Off - Wolf In Sheep's Clothing.mp4",
+                "display_name": "Set It Off - Wolf In Sheep's Clothing",
+            },
+        }
+        with patch.object(search_app.catalog, 'is_available', return_value=True), \
+             patch.object(search_app.catalog, 'search', return_value=[]), \
+             patch('routes.karaoke_nerds.search', return_value=[]):
+            # Query without apostrophe matches filename with apostrophe
+            resp = search_client.get('/rotation/search?q=wolf sheeps clothing')
+            data = resp.get_json()
+            assert len(data["local"]) == 1
+            assert "Sheep" in data["local"][0]["filename"]
+
     def test_rotation_search_no_duplicates(self, search_client, search_app):
         """A file in both catalog and media.index only appears once."""
         catalog_result = {

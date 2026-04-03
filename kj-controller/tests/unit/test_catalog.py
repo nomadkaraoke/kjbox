@@ -545,4 +545,7 @@ class TestExternalCatalog:
         results = catalog.search("Set It Off Wolf in Sheeps Clothing")
         assert len(results) >= 1
         assert any("Sheep" in r["title"] for r in results)
+        # Verify offset works through the LIKE fallback path
+        results_offset = catalog.search("Set It Off Wolf in Sheeps Clothing", limit=10, offset=1)
+        assert len(results_offset) == 0  # only 1 match, offset=1 skips it
         catalog.close()
