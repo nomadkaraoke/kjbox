@@ -1595,6 +1595,7 @@ body {
     margin-bottom: 2px;
     background: #1a1a1a;
     transition: background 0.15s;
+    position: relative;
 }
 .rotation-entry:hover {
     background: #222;
@@ -1608,12 +1609,16 @@ body {
     border-left: 3px solid #f59e0b;
 }
 .rotation-entry.rotation-onhold {
-    opacity: 0.5;
     border-left: 3px solid #6b7280;
 }
+.rotation-entry.rotation-onhold > :not(.rotation-dropdown) {
+    opacity: 0.5;
+}
 .rotation-entry.rotation-skipped {
-    opacity: 0.4;
     border-left: 3px solid #3b82f6;
+}
+.rotation-entry.rotation-skipped > :not(.rotation-dropdown) {
+    opacity: 0.4;
 }
 .rotation-drag-handle {
     cursor: grab;

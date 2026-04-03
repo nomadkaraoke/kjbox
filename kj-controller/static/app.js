@@ -3128,7 +3128,7 @@ function renderRotation(entries) {
                 };
                 dropdown.appendChild(unlinkItem);
             }
-            actions.appendChild(dropdown);
+            row.appendChild(dropdown);
             const close = () => { dropdown.remove(); document.removeEventListener('click', close); };
             setTimeout(() => document.addEventListener('click', close), 0);
         };
