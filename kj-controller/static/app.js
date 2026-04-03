@@ -3253,6 +3253,9 @@ async function saveRotationEdit(entryId, singer, songArtist) {
         }
         if (data.entries) {
             rotationData = data.entries;
+            // Clear editing state so renderRotation doesn't skip the re-render
+            const editingRow = document.querySelector('.rotation-editing');
+            if (editingRow) editingRow.classList.remove('rotation-editing');
             renderRotation(rotationData);
         }
         showRotationIndicator('success');
