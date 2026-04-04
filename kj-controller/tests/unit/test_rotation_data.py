@@ -143,3 +143,64 @@ class TestFormatConky:
         output = capsys.readouterr().out
         lines = [l for l in output.strip().split("\n") if l.strip()]
         assert len(lines) == 1  # only singer line, no song line
+
+
+class TestPaidIndicator:
+    def test_paid_entry_shows_heart(self, capsys):
+        rotation_data.format_conky([
+            {"singer": "Alice", "song_artist": "Test Song", "status": "Waiting", "paid": True},
+        ])
+        output = capsys.readouterr().out
+        assert "♥" in output
+        assert "Alice" in output
+
+    def test_unpaid_entry_no_heart(self, capsys):
+        rotation_data.format_conky([
+            {"singer": "Bob", "song_artist": "Test Song", "status": "Waiting", "paid": False},
+        ])
+        output = capsys.readouterr().out
+        assert "♥" not in output
+
+    def test_paid_missing_field_no_heart(self, capsys):
+        """Backward compat: old cache data without paid field."""
+        rotation_data.format_conky([
+            {"singer": "Carol", "song_artist": "Test Song", "status": "Waiting"},
+        ])
+        output = capsys.readouterr().out
+        assert "♥" not in output
+
+
+class TestRulesMode:
+    def test_rules_output_contains_header(self, capsys, tmp_path, monkeypatch):
+        rules_file = str(tmp_path / "rules.txt")
+        with open(rules_file, "w") as f:
+            f.write("First come, first sing\nNew singers get priority\n")
+        monkeypatch.setattr(rotation_data, "RULES_FILE", rules_file)
+        rotation_data.format_rules()
+        output = capsys.readouterr().out
+        assert "HOW IT WORKS" in output
+
+    def test_rules_output_contains_bullets(self, capsys, tmp_path, monkeypatch):
+        rules_file = str(tmp_path / "rules.txt")
+        with open(rules_file, "w") as f:
+            f.write("First come, first sing\nNew singers get priority\n")
+        monkeypatch.setattr(rotation_data, "RULES_FILE", rules_file)
+        rotation_data.format_rules()
+        output = capsys.readouterr().out
+        assert "First come, first sing" in output
+        assert "New singers get priority" in output
+
+    def test_rules_missing_file_shows_nothing(self, capsys, tmp_path, monkeypatch):
+        monkeypatch.setattr(rotation_data, "RULES_FILE", str(tmp_path / "nonexistent.txt"))
+        rotation_data.format_rules()
+        output = capsys.readouterr().out
+        assert output.strip() == ""
+
+    def test_rules_positioned_on_right(self, capsys, tmp_path, monkeypatch):
+        rules_file = str(tmp_path / "rules.txt")
+        with open(rules_file, "w") as f:
+            f.write("Test rule\n")
+        monkeypatch.setattr(rotation_data, "RULES_FILE", rules_file)
+        rotation_data.format_rules()
+        output = capsys.readouterr().out
+        assert "${goto 1020}" in output

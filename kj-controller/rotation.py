@@ -164,6 +164,12 @@ class RotationManager:
         self._after_mutation()
         return entry
 
+    def set_paid(self, entry_id, paid):
+        """Set paid priority flag on a rotation entry."""
+        entry = self.store.set_paid(entry_id, paid)
+        self._after_mutation()
+        return entry
+
     def complete_gen_job(self, job_id, file_path):
         """Called by gen poller when a gen job completes and file is downloaded."""
         entry = self.store.get_entry_by_gen_job_id(job_id)
@@ -227,6 +233,7 @@ class RotationManager:
                     "singer": e["singer"],
                     "song_artist": e["song_artist"],
                     "status": e["status"],
+                    "paid": bool(e["paid"]),
                 }
                 for e in entries
             ]

@@ -54,6 +54,8 @@ kjbox/
   desktop/
     rotation.conkyrc           # Conky config for singer queue overlay (full-screen, 3s refresh)
     rotation_data.py           # Data fetcher: local cache → conky markup (falls back to Sheet CSV)
+    rotation_rules.txt         # Rotation policy bullets (read by rotation_data.py --rules)
+    rotation_rules_printable.html  # Printable rotation rules (laminate for KJ desk)
     rotation-bg.png            # 1920x1080 wallpaper background (faux transparency)
     nomad-kjbox-desktop-background-4k.jpg  # 4K source wallpaper
   kj-controller/               # KJ Remote Controller web app

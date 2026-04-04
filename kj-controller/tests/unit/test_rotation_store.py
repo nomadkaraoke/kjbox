@@ -42,6 +42,7 @@ class TestSchemaInit:
             "id", "singer", "song_artist", "status", "notes",
             "position", "file_path", "duration",
             "download_source", "download_status", "download_id", "url_fallback",
+            "gen_job_id", "gen_status", "paid",
             "created_at", "updated_at",
         }
         assert expected <= cols
@@ -735,3 +736,30 @@ class TestRestoreEntries:
         assert entry["url_fallback"] == "https://example.com/d"
         assert entry["gen_job_id"] == "gen-456"
         assert entry["gen_status"] == "complete"
+
+
+# ---------------------------------------------------------------------------
+# Paid flag
+# ---------------------------------------------------------------------------
+
+class TestSetPaid:
+    def test_set_paid_true(self, store):
+        entry = store.add_entry("Alice", "Song A")
+        store.set_paid(entry["id"], True)
+        updated = store.get_entry(entry["id"])
+        assert updated["paid"] == 1
+
+    def test_set_paid_false(self, store):
+        entry = store.add_entry("Alice", "Song A")
+        store.set_paid(entry["id"], True)
+        store.set_paid(entry["id"], False)
+        updated = store.get_entry(entry["id"])
+        assert updated["paid"] == 0
+
+    def test_set_paid_default_is_zero(self, store):
+        entry = store.add_entry("Alice", "Song A")
+        assert entry["paid"] == 0
+
+    def test_set_paid_nonexistent_entry(self, store):
+        with pytest.raises(ValueError, match="not found"):
+            store.set_paid(9999, True)

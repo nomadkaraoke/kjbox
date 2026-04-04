@@ -168,6 +168,7 @@ utils.py → (stdlib only)
 | POST | `/rotation/archive` | Archive all entries to local archive + Sheet, start new rotation |
 | POST | `/rotation/link` | Link a media file to a rotation entry (`{id, file_path}`) |
 | POST | `/rotation/unlink` | Remove file link from a rotation entry (`{id}`) |
+| POST | `/rotation/set-paid` | Toggle paid priority flag on a rotation entry (`{id, paid}`) |
 | GET | `/rotation/search` | Unified search: local catalog + Karaoke Nerds + Divebar cross-ref (`?q=query`, min 3 chars) |
 | POST | `/rotation/download-and-link` | Queue download and link to rotation entry (`{id?, singer?, source, file_id/youtube_url}`) |
 | POST | `/rotation/make` | Create gen job and link to rotation entry (`{id?, singer?, artist, title}`) |
