@@ -1958,6 +1958,8 @@ def restore_rotation_from_sheet():
         return jsonify({"error": "Rotation not configured"}), 503
 
     data = request.get_json(force=True, silent=True)
+    if data is not None and not isinstance(data, dict):
+        return jsonify({"error": "request body must be a JSON object"}), 400
     if data is not None:
         # JSON body present — snapshot restore path (undo/redo support)
         if 'entries' not in data:

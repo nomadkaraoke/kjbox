@@ -506,26 +506,30 @@ class RotationStore:
         download_id, url_fallback, gen_job_id, gen_status.
         """
         conn = self._get_conn()
-        conn.execute("DELETE FROM rotation_entries")
-        conn.execute(
-            "DELETE FROM sqlite_sequence WHERE name = 'rotation_entries'"
-        )
-        for e in entries:
+        try:
+            conn.execute("DELETE FROM rotation_entries")
             conn.execute(
-                "INSERT INTO rotation_entries "
-                "(id, singer, song_artist, status, notes, position, "
-                " file_path, duration, download_source, download_status, "
-                " download_id, url_fallback, gen_job_id, gen_status, "
-                " updated_at) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "
-                "        datetime('now', 'localtime'))",
-                (
-                    e["id"], e["singer"], e["song_artist"], e["status"],
-                    e.get("notes", ""), e["position"],
-                    e.get("file_path"), e.get("duration"),
-                    e.get("download_source"), e.get("download_status"),
-                    e.get("download_id"), e.get("url_fallback"),
-                    e.get("gen_job_id"), e.get("gen_status"),
-                ),
+                "DELETE FROM sqlite_sequence WHERE name = 'rotation_entries'"
             )
-        conn.commit()
+            for e in entries:
+                conn.execute(
+                    "INSERT INTO rotation_entries "
+                    "(id, singer, song_artist, status, notes, position, "
+                    " file_path, duration, download_source, download_status, "
+                    " download_id, url_fallback, gen_job_id, gen_status, "
+                    " updated_at) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "
+                    "        datetime('now', 'localtime'))",
+                    (
+                        e["id"], e["singer"], e["song_artist"], e["status"],
+                        e.get("notes", ""), e["position"],
+                        e.get("file_path"), e.get("duration"),
+                        e.get("download_source"), e.get("download_status"),
+                        e.get("download_id"), e.get("url_fallback"),
+                        e.get("gen_job_id"), e.get("gen_status"),
+                    ),
+                )
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
