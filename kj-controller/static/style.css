@@ -1913,6 +1913,26 @@ body {
     cursor: pointer;
 }
 
+.rotation-undo-btn, .rotation-redo-btn {
+    font-size: 0.85em;
+    background: transparent;
+    color: #8892a4;
+    border: 1px solid #555;
+    border-radius: 4px;
+    padding: 2px 8px;
+    cursor: pointer;
+    line-height: 1;
+}
+.rotation-undo-btn:hover:not(:disabled), .rotation-redo-btn:hover:not(:disabled) {
+    background: #333;
+    color: #fff;
+    border-color: #666;
+}
+.rotation-undo-btn:disabled, .rotation-redo-btn:disabled {
+    opacity: 0.3;
+    cursor: default;
+}
+
 /* --- Browser Mode Widget --- */
 .browser-mode-panel .header-row {
     gap: 8px;

@@ -174,7 +174,7 @@ utils.py → (stdlib only)
 | POST | `/rotation/make` | Create gen job and link to rotation entry (`{id?, singer?, artist, title}`) |
 | GET | `/rotation/gen-status` | Get active gen job statuses for rotation entries |
 | GET | `/rotation/sync-status` | Get Sheet sync status (`{last_sync, is_online, next_sync_in}`) |
-| POST | `/rotation/restore` | Emergency restore rotation from Google Sheet backup |
+| POST | `/rotation/restore` | Restore rotation from snapshot (`{entries}` for undo/redo) or from Google Sheet backup (no body) |
 | POST | `/upload` | Upload a media file to the download folder (validates extension, sanitizes filename, triggers rescan) |
 | POST | `/browser-mode/enable` | Enable Browser Mode: stop VLC, launch fullscreen Chromium at URL |
 | POST | `/browser-mode/disable` | Disable Browser Mode: kill Chromium, restart VLC |

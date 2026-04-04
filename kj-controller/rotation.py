@@ -201,6 +201,11 @@ class RotationManager:
         self._after_mutation()
         return count
 
+    def restore_entries(self, entries):
+        """Atomically replace rotation with a snapshot (undo/redo support)."""
+        self.store.restore_entries(entries)
+        self._after_mutation()
+
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------

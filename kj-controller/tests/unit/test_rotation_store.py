@@ -621,6 +621,123 @@ class TestGenColumns:
         assert store.get_entry_by_gen_job_id("nonexistent") is None
 
 
+class TestRestoreEntries:
+    """Tests for restore_entries() — atomic snapshot restore."""
+
+    def test_restore_replaces_all_entries(self, store):
+        """Restoring a snapshot replaces all current entries."""
+        store.add_entry("Alice", "Song A")
+        store.add_entry("Bob", "Song B")
+
+        snapshot = [
+            {"id": 10, "singer": "Xavier", "song_artist": "Song X", "status": "Waiting",
+             "notes": "", "position": 1, "file_path": None, "duration": None,
+             "download_source": None, "download_status": None, "download_id": None,
+             "url_fallback": None, "gen_job_id": None, "gen_status": None},
+            {"id": 11, "singer": "Yolanda", "song_artist": "Song Y", "status": "Now Singing",
+             "notes": "", "position": 2, "file_path": "/path/y.mp4", "duration": 180,
+             "download_source": None, "download_status": None, "download_id": None,
+             "url_fallback": None, "gen_job_id": None, "gen_status": None},
+        ]
+        store.restore_entries(snapshot)
+
+        entries = store.get_entries(include_done=True)
+        assert len(entries) == 2
+        assert entries[0]["id"] == 10
+        assert entries[0]["singer"] == "Xavier"
+        assert entries[1]["id"] == 11
+        assert entries[1]["singer"] == "Yolanda"
+        assert entries[1]["status"] == "Now Singing"
+        assert entries[1]["file_path"] == "/path/y.mp4"
+        assert entries[1]["duration"] == 180
+
+    def test_restore_preserves_original_ids(self, store):
+        """Restored entries keep their original IDs, not new autoincrement values."""
+        snapshot = [
+            {"id": 42, "singer": "Zara", "song_artist": "Song Z", "status": "Waiting",
+             "notes": "test", "position": 1, "file_path": None, "duration": None,
+             "download_source": None, "download_status": None, "download_id": None,
+             "url_fallback": None, "gen_job_id": None, "gen_status": None},
+        ]
+        store.restore_entries(snapshot)
+
+        entry = store.get_entry(42)
+        assert entry is not None
+        assert entry["singer"] == "Zara"
+        assert entry["notes"] == "test"
+
+    def test_restore_to_empty(self, store):
+        """Restoring an empty snapshot clears the rotation."""
+        store.add_entry("Alice", "Song A")
+        store.add_entry("Bob", "Song B")
+
+        store.restore_entries([])
+
+        entries = store.get_entries(include_done=True)
+        assert len(entries) == 0
+
+    def test_restore_fewer_entries(self, store):
+        """Restoring fewer entries than current removes the extras."""
+        store.add_entry("Alice", "Song A")
+        store.add_entry("Bob", "Song B")
+        store.add_entry("Carol", "Song C")
+
+        snapshot = [
+            {"id": 1, "singer": "Alice", "song_artist": "Song A", "status": "Done",
+             "notes": "", "position": 1, "file_path": None, "duration": None,
+             "download_source": None, "download_status": None, "download_id": None,
+             "url_fallback": None, "gen_job_id": None, "gen_status": None},
+        ]
+        store.restore_entries(snapshot)
+
+        entries = store.get_entries(include_done=True)
+        assert len(entries) == 1
+        assert entries[0]["singer"] == "Alice"
+        assert entries[0]["status"] == "Done"
+
+    def test_restore_more_entries(self, store):
+        """Restoring more entries than current adds the new ones."""
+        store.add_entry("Alice", "Song A")
+
+        snapshot = [
+            {"id": 1, "singer": "Alice", "song_artist": "Song A", "status": "Waiting",
+             "notes": "", "position": 1, "file_path": None, "duration": None,
+             "download_source": None, "download_status": None, "download_id": None,
+             "url_fallback": None, "gen_job_id": None, "gen_status": None},
+            {"id": 2, "singer": "Bob", "song_artist": "Song B", "status": "Up Next",
+             "notes": "", "position": 2, "file_path": None, "duration": None,
+             "download_source": None, "download_status": None, "download_id": None,
+             "url_fallback": None, "gen_job_id": None, "gen_status": None},
+            {"id": 3, "singer": "Carol", "song_artist": "Song C", "status": "Waiting",
+             "notes": "", "position": 3, "file_path": None, "duration": None,
+             "download_source": None, "download_status": None, "download_id": None,
+             "url_fallback": None, "gen_job_id": None, "gen_status": None},
+        ]
+        store.restore_entries(snapshot)
+
+        entries = store.get_entries(include_done=True)
+        assert len(entries) == 3
+
+    def test_restore_preserves_download_and_gen_fields(self, store):
+        """All download/gen tracking fields survive a restore."""
+        snapshot = [
+            {"id": 5, "singer": "Dan", "song_artist": "Song D", "status": "Waiting",
+             "notes": "", "position": 1, "file_path": "/path/d.mp4", "duration": 200,
+             "download_source": "youtube", "download_status": "complete",
+             "download_id": "dl-123", "url_fallback": "https://example.com/d",
+             "gen_job_id": "gen-456", "gen_status": "complete"},
+        ]
+        store.restore_entries(snapshot)
+
+        entry = store.get_entry(5)
+        assert entry["download_source"] == "youtube"
+        assert entry["download_status"] == "complete"
+        assert entry["download_id"] == "dl-123"
+        assert entry["url_fallback"] == "https://example.com/d"
+        assert entry["gen_job_id"] == "gen-456"
+        assert entry["gen_status"] == "complete"
+
+
 # ---------------------------------------------------------------------------
 # Paid flag
 # ---------------------------------------------------------------------------
