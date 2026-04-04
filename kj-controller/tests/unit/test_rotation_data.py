@@ -143,3 +143,28 @@ class TestFormatConky:
         output = capsys.readouterr().out
         lines = [l for l in output.strip().split("\n") if l.strip()]
         assert len(lines) == 1  # only singer line, no song line
+
+
+class TestPaidIndicator:
+    def test_paid_entry_shows_heart(self, capsys):
+        rotation_data.format_conky([
+            {"singer": "Alice", "song_artist": "Test Song", "status": "Waiting", "paid": True},
+        ])
+        output = capsys.readouterr().out
+        assert "♥" in output
+        assert "Alice" in output
+
+    def test_unpaid_entry_no_heart(self, capsys):
+        rotation_data.format_conky([
+            {"singer": "Bob", "song_artist": "Test Song", "status": "Waiting", "paid": False},
+        ])
+        output = capsys.readouterr().out
+        assert "♥" not in output
+
+    def test_paid_missing_field_no_heart(self, capsys):
+        """Backward compat: old cache data without paid field."""
+        rotation_data.format_conky([
+            {"singer": "Carol", "song_artist": "Test Song", "status": "Waiting"},
+        ])
+        output = capsys.readouterr().out
+        assert "♥" not in output

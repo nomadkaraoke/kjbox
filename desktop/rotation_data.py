@@ -35,6 +35,7 @@ COLOR_NEXT_PILL = "d4720a" # darker orange for "Next" badge
 COLOR_WIP_PILL = "cc3333"  # red for "WIP" badge
 COLOR_DEFAULT = "8892a4"   # muted gray — queued number
 COLOR_TEXT = "e0e6f0"      # light gray body text
+COLOR_PAID_HEART = "e74c3c"  # red for paid heart
 
 # Layout
 MARGIN = "${goto 90}"       # left margin for all lines
@@ -108,9 +109,12 @@ def format_conky(entries):
         else:
             entry_badge = ""
 
+        # Paid heart indicator
+        paid_mark = f" ${{color {COLOR_PAID_HEART}}}♥${{color}}" if entry.get("paid") else ""
+
         # Singer line: single font block so number and name share baseline
         print(f"{MARGIN}${{font {FONT_NAME}}}${{color ffffff}}{idx}. ${{color}}"
-              f"${{color {COLOR_NAME}}}{entry['singer']}${{color}}${{font}}{entry_badge}")
+              f"${{color {COLOR_NAME}}}{entry['singer']}${{color}}{paid_mark}${{font}}{entry_badge}")
 
         # Song line
         if entry["song_artist"]:
