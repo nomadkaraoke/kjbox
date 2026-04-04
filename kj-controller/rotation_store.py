@@ -102,6 +102,7 @@ class RotationStore:
             ("url_fallback", "TEXT DEFAULT NULL"),
             ("gen_job_id", "TEXT DEFAULT NULL"),
             ("gen_status", "TEXT DEFAULT NULL"),
+            ("paid", "INTEGER NOT NULL DEFAULT 0"),
         ]
         for col_name, col_type in migrations:
             if col_name not in existing_cols:
@@ -434,6 +435,26 @@ class RotationStore:
             "SELECT * FROM rotation_entries WHERE gen_job_id = ?", (job_id,)
         ).fetchone()
         return self._row_to_dict(row)
+
+    # ------------------------------------------------------------------
+    # Paid flag
+    # ------------------------------------------------------------------
+
+    def set_paid(self, entry_id, paid):
+        """Set paid priority flag on a rotation entry.
+
+        Raises ValueError if entry_id not found.
+        """
+        if self.get_entry(entry_id) is None:
+            raise ValueError(f"Entry {entry_id} not found")
+        conn = self._get_conn()
+        conn.execute(
+            "UPDATE rotation_entries SET paid = ?, updated_at = datetime('now', 'localtime') "
+            "WHERE id = ?",
+            (int(bool(paid)), entry_id),
+        )
+        conn.commit()
+        return self.get_entry(entry_id)
 
     # ------------------------------------------------------------------
     # Task 5: Archive and get_all_entries
