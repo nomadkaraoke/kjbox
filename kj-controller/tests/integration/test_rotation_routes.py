@@ -547,6 +547,13 @@ class TestSetPaidRoute:
             content_type='application/json')
         assert resp.status_code == 400
 
+    def test_set_paid_string_value_returns_400(self, rotation_client):
+        resp = rotation_client.post('/rotation/set-paid',
+            data=json.dumps({"id": 1, "paid": "true"}),
+            content_type='application/json')
+        assert resp.status_code == 400
+        assert "boolean" in resp.get_json()["error"]
+
     def test_set_paid_not_configured(self, no_rotation_client):
         resp = no_rotation_client.post('/rotation/set-paid',
             data=json.dumps({"id": 1, "paid": True}),

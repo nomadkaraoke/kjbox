@@ -1948,7 +1948,10 @@ def set_rotation_paid():
     if entry_id < 1:
         return jsonify({"error": "id must be >= 1"}), 400
 
-    paid = bool(data.get('paid', False))
+    raw_paid = data.get('paid')
+    if raw_paid is not None and not isinstance(raw_paid, bool):
+        return jsonify({"error": "paid must be a boolean"}), 400
+    paid = bool(raw_paid) if raw_paid is not None else False
 
     try:
         rotation.set_paid(entry_id, paid)

@@ -3151,6 +3151,7 @@ function renderRotation(entries) {
                         headers: {'Content-Type': 'application/json'},
                         body: JSON.stringify({ id: entry.id, paid: !entry.paid }),
                     });
+                    if (!resp.ok) throw new Error('Failed to update paid status');
                     const data = await resp.json();
                     if (data.entries) { rotationData = data.entries; renderRotation(rotationData); }
                     showRotationIndicator('success');
