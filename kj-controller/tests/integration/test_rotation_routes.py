@@ -516,3 +516,39 @@ class TestRestoreRotationFromSheet:
         resp = no_rotation_client.post('/rotation/restore',
             content_type='application/json')
         assert resp.status_code == 503
+
+
+class TestSetPaidRoute:
+    def test_set_paid_success(self, rotation_client, mock_rotation):
+        mock_rotation.set_paid.return_value = {
+            "id": 1, "singer": "Alice", "paid": 1,
+        }
+        mock_rotation.get_rotation.return_value = [
+            {"id": 1, "singer": "Alice", "song_artist": "Song A", "status": "Waiting", "paid": 1},
+        ]
+        resp = rotation_client.post('/rotation/set-paid',
+            data=json.dumps({"id": 1, "paid": True}),
+            content_type='application/json')
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["success"] is True
+        assert "entries" in data
+        mock_rotation.set_paid.assert_called_once_with(1, True)
+
+    def test_set_paid_missing_id(self, rotation_client):
+        resp = rotation_client.post('/rotation/set-paid',
+            data=json.dumps({"paid": True}),
+            content_type='application/json')
+        assert resp.status_code == 400
+
+    def test_set_paid_invalid_id(self, rotation_client):
+        resp = rotation_client.post('/rotation/set-paid',
+            data=json.dumps({"id": "abc", "paid": True}),
+            content_type='application/json')
+        assert resp.status_code == 400
+
+    def test_set_paid_not_configured(self, no_rotation_client):
+        resp = no_rotation_client.post('/rotation/set-paid',
+            data=json.dumps({"id": 1, "paid": True}),
+            content_type='application/json')
+        assert resp.status_code == 503

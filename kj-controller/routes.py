@@ -1931,6 +1931,34 @@ def unlink_rotation_file():
         return jsonify({"error": str(e)}), 500
 
 
+@routes_bp.route('/rotation/set-paid', methods=['POST'])
+def set_rotation_paid():
+    """Toggle paid priority flag on a rotation entry."""
+    rotation = current_app.rotation
+    if not hasattr(current_app, 'rotation') or current_app.rotation is None:
+        return jsonify({"error": "Rotation not configured"}), 503
+    data = request.get_json(force=True)
+    raw_id = data.get('id')
+    if raw_id is None:
+        return jsonify({"error": "id is required"}), 400
+    try:
+        entry_id = int(raw_id)
+    except (TypeError, ValueError):
+        return jsonify({"error": "id must be an integer"}), 400
+    if entry_id < 1:
+        return jsonify({"error": "id must be >= 1"}), 400
+
+    paid = bool(data.get('paid', False))
+
+    try:
+        rotation.set_paid(entry_id, paid)
+        entries = rotation.get_rotation()
+        _add_time_estimates(entries)
+        return jsonify({"success": True, "entries": entries})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @routes_bp.route('/rotation/sync-status', methods=['GET'])
 def rotation_sync_status():
     """Return the current sheet sync status."""
