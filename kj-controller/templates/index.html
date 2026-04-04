@@ -58,6 +58,8 @@
                     <div class="rotation-header-btns">
                         <span id="rotation-sync-dot" class="rotation-sync-dot" title="Sync status"></span>
                         <span id="rotation-indicator" class="rotation-indicator hidden"></span>
+                        <button id="rotation-undo-btn" class="rotation-undo-btn" onclick="rotationHistory.undo()" title="Nothing to undo" disabled>&#x21A9;</button>
+                        <button id="rotation-redo-btn" class="rotation-redo-btn" onclick="rotationHistory.redo()" title="Nothing to redo" disabled>&#x21AA;</button>
                         <button class="rotation-restore-btn" onclick="restoreFromSheet()" title="Restore from Google Sheet backup">Restore</button>
                         <button class="rotation-refresh-btn" onclick="fetchRotation()" title="Refresh rotation">Refresh</button>
                         <button class="rotation-add-btn" onclick="toggleRotationAddForm()">+ Add</button>
