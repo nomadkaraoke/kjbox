@@ -291,7 +291,7 @@ class TestDisplayCache:
         with open(cache_file) as f:
             data = json.load(f)
         entry = data["queue"][0]
-        assert set(entry.keys()) == {"singer", "song_artist", "status"}
+        assert set(entry.keys()) == {"singer", "song_artist", "status", "paid"}
 
     def test_cache_updated_after_status_change(self, tmp_path):
         cache_file = str(tmp_path / "rotation_cache.json")
@@ -382,3 +382,40 @@ class TestCoordinatorGen:
 
     def test_complete_gen_job_missing_returns_none(self, mgr):
         assert mgr.complete_gen_job("nonexistent", "/media/song.mp4") is None
+
+
+# ---------------------------------------------------------------------------
+# TestSetPaid
+# ---------------------------------------------------------------------------
+
+class TestSetPaid:
+    def test_set_paid_delegates_to_store(self, mgr):
+        entry = mgr.add_entry("Alice", "Song A")
+        result = mgr.set_paid(entry["id"], True)
+        assert result["paid"] == 1
+
+    def test_set_paid_triggers_cache_write(self, mgr, tmp_path, monkeypatch):
+        cache_path = str(tmp_path / "cache.json")
+        monkeypatch.setattr("rotation.ROTATION_CACHE_FILE", cache_path)
+        entry = mgr.add_entry("Alice", "Song A")
+        mgr.set_paid(entry["id"], True)
+        import json
+        with open(cache_path) as f:
+            data = json.load(f)
+        assert data["queue"][0]["paid"] is True
+
+
+# ---------------------------------------------------------------------------
+# TestDisplayCacheIncludesPaid
+# ---------------------------------------------------------------------------
+
+class TestDisplayCacheIncludesPaid:
+    def test_cache_has_paid_field(self, mgr, tmp_path, monkeypatch):
+        cache_path = str(tmp_path / "cache.json")
+        monkeypatch.setattr("rotation.ROTATION_CACHE_FILE", cache_path)
+        mgr.add_entry("Alice", "Song A")
+        import json
+        with open(cache_path) as f:
+            data = json.load(f)
+        assert "paid" in data["queue"][0]
+        assert data["queue"][0]["paid"] is False
