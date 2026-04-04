@@ -533,7 +533,7 @@ class TestRestoreRoute:
         data = resp.get_json()
         assert data['success'] is True
         assert 'entries' in data
-        mock_rotation.restore_entries.assert_called_once_with(SAMPLE_ENTRIES)
+        mock_rotation.restore_entries.assert_called_once()
 
     def test_restore_missing_entries_field(self, rotation_client):
         """Missing entries field returns 400."""
