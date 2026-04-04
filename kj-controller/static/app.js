@@ -2954,6 +2954,13 @@ function renderRotation(entries) {
         row.appendChild(handle);
         info.appendChild(num);
         info.appendChild(name);
+        if (entry.paid) {
+            const heart = document.createElement('span');
+            heart.className = 'rotation-paid-heart';
+            heart.textContent = ' ♥';
+            heart.title = 'Paid priority';
+            info.appendChild(heart);
+        }
         if (entry.song_artist) info.appendChild(song);
 
         if (entry.duration) {
@@ -3128,6 +3135,30 @@ function renderRotation(entries) {
                 };
                 dropdown.appendChild(unlinkItem);
             }
+            // Add paid toggle
+            const paidSep = document.createElement('div');
+            paidSep.className = 'rotation-dropdown-sep';
+            dropdown.appendChild(paidSep);
+            const paidItem = document.createElement('button');
+            paidItem.className = 'rotation-dropdown-item';
+            paidItem.textContent = entry.paid ? 'Remove Paid ♥' : 'Mark as Paid ♥';
+            paidItem.onclick = async (ev) => {
+                ev.stopPropagation();
+                dropdown.remove();
+                try {
+                    const resp = await fetch('/rotation/set-paid', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({ id: entry.id, paid: !entry.paid }),
+                    });
+                    const data = await resp.json();
+                    if (data.entries) { rotationData = data.entries; renderRotation(rotationData); }
+                    showRotationIndicator('success');
+                } catch (err) {
+                    showRotationIndicator('error');
+                }
+            };
+            dropdown.appendChild(paidItem);
             row.appendChild(dropdown);
             const close = () => { dropdown.remove(); document.removeEventListener('click', close); };
             setTimeout(() => document.addEventListener('click', close), 0);

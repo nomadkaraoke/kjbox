@@ -2048,3 +2048,8 @@ body {
 .prep-making { background: #7c3aed33; color: #7c3aed; }
 .prep-review { background: #f59e0b33; color: #f59e0b; }
 .prep-rendering { background: #7c3aed33; color: #7c3aed; }
+
+.rotation-paid-heart {
+    color: #e74c3c;
+    font-size: 0.9em;
+}
