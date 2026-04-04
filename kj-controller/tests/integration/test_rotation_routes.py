@@ -516,3 +516,37 @@ class TestRestoreRotationFromSheet:
         resp = no_rotation_client.post('/rotation/restore',
             content_type='application/json')
         assert resp.status_code == 503
+
+
+class TestRestoreRoute:
+    """Tests for POST /rotation/restore."""
+
+    def test_restore_success(self, rotation_client, mock_rotation):
+        """Restore endpoint calls restore_entries and returns updated entries."""
+        mock_rotation.restore_entries.return_value = None
+        mock_rotation.get_rotation.return_value = SAMPLE_ENTRIES
+
+        resp = rotation_client.post('/rotation/restore', json={
+            'entries': SAMPLE_ENTRIES,
+        })
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data['success'] is True
+        assert 'entries' in data
+        mock_rotation.restore_entries.assert_called_once()
+
+    def test_restore_missing_entries_field(self, rotation_client):
+        """Missing entries field returns 400."""
+        resp = rotation_client.post('/rotation/restore', json={})
+        assert resp.status_code == 400
+        assert 'entries' in resp.get_json()['error'].lower()
+
+    def test_restore_entries_not_list(self, rotation_client):
+        """Non-list entries field returns 400."""
+        resp = rotation_client.post('/rotation/restore', json={'entries': 'not a list'})
+        assert resp.status_code == 400
+
+    def test_restore_no_rotation(self, no_rotation_client):
+        """Returns 503 when rotation is not configured."""
+        resp = no_rotation_client.post('/rotation/restore', json={'entries': []})
+        assert resp.status_code == 503

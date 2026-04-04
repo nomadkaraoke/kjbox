@@ -1947,18 +1947,42 @@ def rotation_sync_status():
 
 @routes_bp.route('/rotation/restore', methods=['POST'])
 def restore_rotation_from_sheet():
-    """Emergency restore rotation from Google Sheet."""
+    """Restore rotation — from a snapshot (undo/redo) or from Google Sheet.
+
+    If the request body contains an ``entries`` list, atomically replaces the
+    rotation with that snapshot (undo/redo support).  Otherwise falls back to
+    the legacy behaviour of restoring from Google Sheets (emergency recovery).
+    """
     rotation = current_app.rotation
     if not hasattr(current_app, 'rotation') or current_app.rotation is None:
         return jsonify({"error": "Rotation not configured"}), 503
 
-    try:
-        count = rotation.restore_from_sheet()
-        entries = rotation.get_rotation()
-        _add_time_estimates(entries)
-        return jsonify({"success": True, "restored": count, "entries": entries})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    data = request.get_json(force=True, silent=True)
+    if data is not None and not isinstance(data, dict):
+        return jsonify({"error": "request body must be a JSON object"}), 400
+    if data is not None:
+        # JSON body present — snapshot restore path (undo/redo support)
+        if 'entries' not in data:
+            return jsonify({"error": "entries is required"}), 400
+        entries = data['entries']
+        if not isinstance(entries, list):
+            return jsonify({"error": "entries must be a list"}), 400
+        try:
+            rotation.restore_entries(entries)
+            updated = rotation.get_rotation()
+            _add_time_estimates(updated)
+            return jsonify({"success": True, "entries": updated})
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+    else:
+        # No JSON body — legacy sheet restore path
+        try:
+            count = rotation.restore_from_sheet()
+            sheet_entries = rotation.get_rotation()
+            _add_time_estimates(sheet_entries)
+            return jsonify({"success": True, "restored": count, "entries": sheet_entries})
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
 
 
 @routes_bp.route('/rotation/search', methods=['GET'])

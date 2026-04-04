@@ -4,6 +4,76 @@
 
 const logArea = document.getElementById('log-area');
 
+// --- Undo/Redo History ---
+
+const rotationHistory = {
+    undoStack: [],
+    redoStack: [],
+    maxSize: 10,
+
+    pushUndo(snapshot) {
+        this.undoStack.push(JSON.parse(JSON.stringify(snapshot)));
+        if (this.undoStack.length > this.maxSize) this.undoStack.shift();
+        this.redoStack = [];
+        this.updateButtons();
+    },
+
+    async undo() {
+        if (this.undoStack.length === 0) return;
+        this.redoStack.push(JSON.parse(JSON.stringify(rotationData)));
+        const snapshot = this.undoStack.pop();
+        await this._restore(snapshot);
+    },
+
+    async redo() {
+        if (this.redoStack.length === 0) return;
+        this.undoStack.push(JSON.parse(JSON.stringify(rotationData)));
+        const snapshot = this.redoStack.pop();
+        await this._restore(snapshot);
+    },
+
+    async _restore(snapshot) {
+        showRotationIndicator('spin');
+        try {
+            const response = await fetch('/rotation/restore', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ entries: snapshot }),
+            });
+            const data = await response.json();
+            if (!response.ok) {
+                showRotationIndicator('error');
+                return;
+            }
+            if (data.entries) {
+                rotationData = data.entries;
+                renderRotation(rotationData);
+            }
+            showRotationIndicator('success');
+        } catch (e) {
+            showRotationIndicator('error');
+        }
+        this.updateButtons();
+    },
+
+    updateButtons() {
+        const undoBtn = document.getElementById('rotation-undo-btn');
+        const redoBtn = document.getElementById('rotation-redo-btn');
+        if (undoBtn) {
+            undoBtn.disabled = this.undoStack.length === 0;
+            undoBtn.title = this.undoStack.length > 0
+                ? `Undo (${this.undoStack.length} remaining)`
+                : 'Nothing to undo';
+        }
+        if (redoBtn) {
+            redoBtn.disabled = this.redoStack.length === 0;
+            redoBtn.title = this.redoStack.length > 0
+                ? `Redo (${this.redoStack.length} remaining)`
+                : 'Nothing to redo';
+        }
+    },
+};
+
 function log(message, type = 'info') {
     const entry = document.createElement('div');
     entry.className = `log-entry ${type}`;
@@ -3113,6 +3183,7 @@ function renderRotation(entries) {
                 unlinkItem.onclick = async (ev) => {
                     ev.stopPropagation();
                     dropdown.remove();
+                    rotationHistory.pushUndo(rotationData);
                     try {
                         const resp = await fetch('/rotation/unlink', {
                             method: 'POST',
@@ -3239,6 +3310,7 @@ function enterRotationEditMode(row, entry) {
 }
 
 async function saveRotationEdit(entryId, singer, songArtist) {
+    rotationHistory.pushUndo(rotationData);
     showRotationIndicator('spin');
     try {
         const response = await fetch('/rotation/edit', {
@@ -3266,6 +3338,7 @@ async function saveRotationEdit(entryId, singer, songArtist) {
 
 async function deleteRotationEntry(entryId, singerName) {
     if (!confirm(`Delete "${singerName}" from rotation?`)) return;
+    rotationHistory.pushUndo(rotationData);
     showRotationIndicator('spin');
     try {
         const response = await fetch('/rotation/delete', {
@@ -3320,16 +3393,18 @@ async function playAndAdvanceRotation(entry, idx, entries) {
 }
 
 async function advanceRotationStatus(entry, idx, entries) {
+    rotationHistory.pushUndo(rotationData);
     // Mark this entry as singing
-    await updateRotationStatus(entry.id, 'Now Singing');
+    await updateRotationStatus(entry.id, 'Now Singing', { skipUndo: true });
     // Mark the next entry as up next (if there is one)
     const nextEntry = entries[idx + 1];
     if (nextEntry) {
-        await updateRotationStatus(nextEntry.id, 'Up Next');
+        await updateRotationStatus(nextEntry.id, 'Up Next', { skipUndo: true });
     }
 }
 
-async function updateRotationStatus(entryId, status) {
+async function updateRotationStatus(entryId, status, { skipUndo = false } = {}) {
+    if (!skipUndo) rotationHistory.pushUndo(rotationData);
     showRotationIndicator('spin');
     try {
         const response = await fetch('/rotation/status', {
@@ -3353,6 +3428,7 @@ async function updateRotationStatus(entryId, status) {
 }
 
 async function moveRotationEntry(entryId, newPosition) {
+    rotationHistory.pushUndo(rotationData);
     showRotationIndicator('spin');
     try {
         const response = await fetch('/rotation/move', {
@@ -3463,6 +3539,7 @@ async function addRotationEntry() {
     const songArtist = songInput.value.trim();
     if (!singer) return;
 
+    rotationHistory.pushUndo(rotationData);
     showRotationIndicator('spin');
     try {
         const response = await fetch('/rotation/add', {
@@ -3705,6 +3782,7 @@ async function selectRotSearchResult(result) {
     }
 
     hideRotSearchDropdown();
+    rotationHistory.pushUndo(rotationData);
     showRotationIndicator('spin');
 
     try {
