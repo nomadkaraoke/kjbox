@@ -168,3 +168,39 @@ class TestPaidIndicator:
         ])
         output = capsys.readouterr().out
         assert "♥" not in output
+
+
+class TestRulesMode:
+    def test_rules_output_contains_header(self, capsys, tmp_path, monkeypatch):
+        rules_file = str(tmp_path / "rules.txt")
+        with open(rules_file, "w") as f:
+            f.write("First come, first sing\nNew singers get priority\n")
+        monkeypatch.setattr(rotation_data, "RULES_FILE", rules_file)
+        rotation_data.format_rules()
+        output = capsys.readouterr().out
+        assert "HOW IT WORKS" in output
+
+    def test_rules_output_contains_bullets(self, capsys, tmp_path, monkeypatch):
+        rules_file = str(tmp_path / "rules.txt")
+        with open(rules_file, "w") as f:
+            f.write("First come, first sing\nNew singers get priority\n")
+        monkeypatch.setattr(rotation_data, "RULES_FILE", rules_file)
+        rotation_data.format_rules()
+        output = capsys.readouterr().out
+        assert "First come, first sing" in output
+        assert "New singers get priority" in output
+
+    def test_rules_missing_file_shows_nothing(self, capsys, tmp_path, monkeypatch):
+        monkeypatch.setattr(rotation_data, "RULES_FILE", str(tmp_path / "nonexistent.txt"))
+        rotation_data.format_rules()
+        output = capsys.readouterr().out
+        assert output.strip() == ""
+
+    def test_rules_positioned_on_right(self, capsys, tmp_path, monkeypatch):
+        rules_file = str(tmp_path / "rules.txt")
+        with open(rules_file, "w") as f:
+            f.write("Test rule\n")
+        monkeypatch.setattr(rotation_data, "RULES_FILE", rules_file)
+        rotation_data.format_rules()
+        output = capsys.readouterr().out
+        assert "${goto 1020}" in output

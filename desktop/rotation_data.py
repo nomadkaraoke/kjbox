@@ -46,6 +46,14 @@ FONT_NAME = "DejaVu Sans:bold:size=36"
 FONT_SONG = "DejaVu Sans:size=20"
 FONT_BADGE = "DejaVu Sans:bold:size=18"
 
+# Rules panel
+RULES_FILE = "/opt/nomad/kjbox/desktop/rotation_rules.txt"
+RULES_MARGIN = "${goto 1020}"  # right column start
+FONT_RULES_HEADER = "DejaVu Sans:bold:size=28"
+FONT_RULES_BODY = "DejaVu Sans:size=18"
+COLOR_RULES_HEADER = "ffffff"
+COLOR_RULES_BODY = "8892a4"
+
 
 # ---------------------------------------------------------------------------
 # Data fetching
@@ -121,12 +129,34 @@ def format_conky(entries):
             print(f"{SONG_INDENT}${{color {COLOR_TEXT}}}${{font {FONT_SONG}}}{entry['song_artist']}${{font}}${{color}}")
 
 
+def format_rules():
+    """Output conky markup for the rules panel on the right side of the screen."""
+    try:
+        with open(RULES_FILE) as f:
+            lines = [line.strip() for line in f if line.strip()]
+    except OSError:
+        return
+
+    # Header
+    print(f"{RULES_MARGIN}${{voffset -30}}${{font {FONT_RULES_HEADER}}}${{color {COLOR_RULES_HEADER}}}HOW IT WORKS${{color}}${{font}}")
+    print()
+
+    # Bullet points
+    for line in lines:
+        print(f"{RULES_MARGIN}${{font {FONT_RULES_BODY}}}${{color {COLOR_RULES_BODY}}}• {line}${{color}}${{font}}")
+
+
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
 def main():
     stats_only = "--stats" in sys.argv
+    rules_only = "--rules" in sys.argv
+
+    if rules_only:
+        format_rules()
+        return
 
     cached = read_local_cache()
     if cached is None:
