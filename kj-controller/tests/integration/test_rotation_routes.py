@@ -21,6 +21,7 @@ def mock_rotation():
     rotation = MagicMock()
     rotation.get_rotation.return_value = list(SAMPLE_ENTRIES)
     rotation.get_sync_status.return_value = {"last_sync": None, "is_online": False, "next_sync_in": None}
+    rotation.store.get_songs_sung_counts.return_value = {}
     rotation.sync = None
     rotation.media = None
     return rotation
@@ -81,6 +82,23 @@ class TestGetRotation:
     def test_not_configured_returns_503(self, no_rotation_client):
         resp = no_rotation_client.get('/rotation')
         assert resp.status_code == 503
+
+    def test_entries_have_songs_sung(self, rotation_client):
+        resp = rotation_client.get('/rotation')
+        entries = resp.get_json()['entries']
+        assert all('songs_sung' in e for e in entries)
+        assert all(e['songs_sung'] == 0 for e in entries)
+
+    def test_songs_sung_reflects_done_count(self, rotation_client, mock_rotation):
+        mock_rotation.store.get_songs_sung_counts.return_value = {"alice": 2, "bob": 1}
+        resp = rotation_client.get('/rotation')
+        entries = resp.get_json()['entries']
+        alice = next(e for e in entries if e['singer'] == 'Alice')
+        bob = next(e for e in entries if e['singer'] == 'Bob')
+        carol = next(e for e in entries if e['singer'] == 'Carol')
+        assert alice['songs_sung'] == 2
+        assert bob['songs_sung'] == 1
+        assert carol['songs_sung'] == 0
 
     def test_error_returns_500(self, rotation_client, mock_rotation):
         mock_rotation.get_rotation.side_effect = Exception("DB error")

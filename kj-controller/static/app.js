@@ -3105,6 +3105,13 @@ function renderRotation(entries) {
         row.appendChild(handle);
         info.appendChild(num);
         info.appendChild(name);
+        if (entry.songs_sung > 0) {
+            const count = document.createElement('span');
+            count.className = 'rotation-songs-sung';
+            count.textContent = '\u00d7' + entry.songs_sung;
+            count.title = entry.songs_sung + ' song' + (entry.songs_sung === 1 ? '' : 's') + ' sung tonight';
+            info.appendChild(count);
+        }
         if (entry.paid) {
             const heart = document.createElement('span');
             heart.className = 'rotation-paid-heart';

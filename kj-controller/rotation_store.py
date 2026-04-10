@@ -299,6 +299,20 @@ class RotationStore:
         )
         conn.commit()
 
+    def get_songs_sung_counts(self):
+        """Return a dict mapping singer name → count of 'done' entries tonight.
+
+        Case-insensitive matching on singer name (lowered keys).
+        Only counts entries in the current rotation_entries table (not archive).
+        """
+        conn = self._get_conn()
+        rows = conn.execute(
+            "SELECT LOWER(singer) AS singer_lower, COUNT(*) AS cnt "
+            "FROM rotation_entries WHERE LOWER(status) = 'done' "
+            "GROUP BY singer_lower"
+        ).fetchall()
+        return {row["singer_lower"]: row["cnt"] for row in rows}
+
     def get_stats(self):
         """Return rotation statistics dict.
 

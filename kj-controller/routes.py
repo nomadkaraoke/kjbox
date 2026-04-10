@@ -1789,6 +1789,13 @@ def system_stats():
 # --- Rotation ---
 
 
+def _add_songs_sung(entries, rotation):
+    """Add songs_sung field to each entry (count of done entries for that singer tonight)."""
+    counts = rotation.store.get_songs_sung_counts()
+    for entry in entries:
+        entry["songs_sung"] = counts.get(entry["singer"].lower(), 0)
+
+
 def _add_time_estimates(entries):
     """Add estimated_time field to each entry based on cumulative durations."""
     from datetime import datetime, timedelta
@@ -1813,6 +1820,7 @@ def get_rotation():
     try:
         entries = rotation.get_rotation()
         _add_time_estimates(entries)
+        _add_songs_sung(entries, rotation)
         return jsonify({"entries": entries})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -1845,6 +1853,7 @@ def update_rotation_status():
             rotation.update_status(entry_id, status)
         entries = rotation.get_rotation()
         _add_time_estimates(entries)
+        _add_songs_sung(entries, rotation)
         return jsonify({"success": True, "entries": entries})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -1878,6 +1887,7 @@ def edit_rotation_entry():
         rotation.update_entry(entry_id, singer=singer, song_artist=song_artist)
         entries = rotation.get_rotation()
         _add_time_estimates(entries)
+        _add_songs_sung(entries, rotation)
         return jsonify({"success": True, "entries": entries})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -1904,6 +1914,7 @@ def delete_rotation_entry():
         rotation.delete_entry(entry_id)
         entries = rotation.get_rotation()
         _add_time_estimates(entries)
+        _add_songs_sung(entries, rotation)
         return jsonify({"success": True, "entries": entries})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -1932,6 +1943,7 @@ def add_rotation_entry():
             entry = rotation.store.get_entry(entry["id"])
         entries = rotation.get_rotation()
         _add_time_estimates(entries)
+        _add_songs_sung(entries, rotation)
         return jsonify({"success": True, "entry": entry, "entries": entries})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -1960,6 +1972,7 @@ def move_rotation_entry():
         rotation.move_entry(entry_id, new_position)
         entries = rotation.get_rotation()
         _add_time_estimates(entries)
+        _add_songs_sung(entries, rotation)
         return jsonify({"success": True, "entries": entries})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -2004,6 +2017,7 @@ def link_rotation_file():
         rotation.link_file(entry_id, file_path)
         entries = rotation.get_rotation()
         _add_time_estimates(entries)
+        _add_songs_sung(entries, rotation)
         entry = next((e for e in entries if e.get('id') == entry_id), None)
         return jsonify({"success": True, "entry": entry, "entries": entries})
     except Exception as e:
@@ -2031,6 +2045,7 @@ def unlink_rotation_file():
         rotation.unlink_file(entry_id)
         entries = rotation.get_rotation()
         _add_time_estimates(entries)
+        _add_songs_sung(entries, rotation)
         entry = next((e for e in entries if e.get('id') == entry_id), None)
         return jsonify({"success": True, "entry": entry, "entries": entries})
     except Exception as e:
@@ -2063,6 +2078,7 @@ def set_rotation_paid():
         rotation.set_paid(entry_id, paid)
         entries = rotation.get_rotation()
         _add_time_estimates(entries)
+        _add_songs_sung(entries, rotation)
         return jsonify({"success": True, "entries": entries})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -2108,6 +2124,7 @@ def restore_rotation_from_sheet():
             rotation.restore_entries(entries)
             updated = rotation.get_rotation()
             _add_time_estimates(updated)
+            _add_songs_sung(updated, rotation)
             return jsonify({"success": True, "entries": updated})
         except Exception as e:
             return jsonify({"error": str(e)}), 500
@@ -2117,6 +2134,7 @@ def restore_rotation_from_sheet():
             count = rotation.restore_from_sheet()
             sheet_entries = rotation.get_rotation()
             _add_time_estimates(sheet_entries)
+            _add_songs_sung(sheet_entries, rotation)
             return jsonify({"success": True, "restored": count, "entries": sheet_entries})
         except Exception as e:
             return jsonify({"error": str(e)}), 500
@@ -2311,6 +2329,7 @@ def download_and_link_rotation():
         entry = rotation.store.get_entry(entry_id)
         entries = rotation.get_rotation()
         _add_time_estimates(entries)
+        _add_songs_sung(entries, rotation)
         return jsonify({"success": True, "entry": entry, "entries": entries})
 
     except Exception as e:
@@ -2363,6 +2382,7 @@ def make_rotation_entry():
         entry = rotation.store.get_entry(entry_id)
         entries = rotation.get_rotation()
         _add_time_estimates(entries)
+        _add_songs_sung(entries, rotation)
         return jsonify({"success": True, "entry": entry, "entries": entries, "job_id": job_id})
 
     except Exception as e:
