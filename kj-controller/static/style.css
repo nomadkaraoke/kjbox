@@ -2071,12 +2071,19 @@ body {
 .prep-review { background: #f59e0b33; color: #f59e0b; }
 .prep-rendering { background: #7c3aed33; color: #7c3aed; }
 
-.rotation-songs-sung {
-    color: #999;
-    font-size: 0.75em;
-    margin-left: 4px;
-    font-weight: normal;
+.rotation-songs-pill {
+    font-size: 9px;
+    padding: 2px 6px;
+    border-radius: 8px;
+    font-weight: 600;
+    margin-left: 5px;
+    letter-spacing: 0.3px;
+    white-space: nowrap;
 }
+.pill-new  { background: #e74c3c33; color: #e74c3c; }
+.pill-once { background: #f59e0b33; color: #f59e0b; }
+.pill-few  { background: #2d8a4e33; color: #2d8a4e; }
+.pill-many { background: #7c3aed33; color: #7c3aed; }
 
 .rotation-paid-heart {
     color: #e74c3c;

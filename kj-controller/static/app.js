@@ -3105,13 +3105,27 @@ function renderRotation(entries) {
         row.appendChild(handle);
         info.appendChild(num);
         info.appendChild(name);
-        if (entry.songs_sung > 0) {
-            const count = document.createElement('span');
-            count.className = 'rotation-songs-sung';
-            count.textContent = '\u00d7' + entry.songs_sung;
-            count.title = entry.songs_sung + ' song' + (entry.songs_sung === 1 ? '' : 's') + ' sung tonight';
-            info.appendChild(count);
+        const pill = document.createElement('span');
+        pill.className = 'rotation-songs-pill';
+        const sung = entry.songs_sung || 0;
+        if (sung === 0) {
+            pill.classList.add('pill-new');
+            pill.textContent = 'NEW';
+            pill.title = 'Hasn\u2019t sung yet tonight';
+        } else if (sung === 1) {
+            pill.classList.add('pill-once');
+            pill.textContent = '\u00d71';
+            pill.title = '1 song sung tonight';
+        } else if (sung <= 3) {
+            pill.classList.add('pill-few');
+            pill.textContent = '\u00d7' + sung;
+            pill.title = sung + ' songs sung tonight';
+        } else {
+            pill.classList.add('pill-many');
+            pill.textContent = '\u00d7' + sung;
+            pill.title = sung + ' songs sung tonight';
         }
+        info.appendChild(pill);
         if (entry.paid) {
             const heart = document.createElement('span');
             heart.className = 'rotation-paid-heart';
