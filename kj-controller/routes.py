@@ -872,6 +872,94 @@ def toggle_overlay_video(overlay_id):
     return jsonify(overlay)
 
 
+# --- Wallpaper ---
+
+@routes_bp.route('/wallpaper', methods=['GET'])
+def get_wallpaper():
+    """Serve the current desktop wallpaper image as a thumbnail."""
+    desktop_dir = os.path.join(APP_DIR, '..', 'desktop')
+    wallpaper = os.path.join(desktop_dir, 'wallpaper.jpg')
+    # Fall back to rotation-bg.png if no wallpaper.jpg yet
+    if not os.path.exists(wallpaper):
+        wallpaper = os.path.join(desktop_dir, 'rotation-bg.png')
+    if not os.path.exists(wallpaper):
+        return jsonify({"error": "No wallpaper found"}), 404
+    from flask import send_file
+    return send_file(os.path.abspath(wallpaper), mimetype='image/jpeg')
+
+
+@routes_bp.route('/wallpaper', methods=['POST'])
+def upload_wallpaper():
+    """Upload a new desktop wallpaper image.
+
+    Saves the original, generates a 1080p rotation-bg.png for conky,
+    and sets the XFCE desktop wallpaper on all monitors.
+    """
+    if 'file' not in request.files:
+        return jsonify({"error": "No file provided"}), 400
+    file = request.files['file']
+    if not file.filename:
+        return jsonify({"error": "No filename"}), 400
+
+    ext = os.path.splitext(file.filename)[1].lower()
+    if ext not in {'.jpg', '.jpeg', '.png', '.webp'}:
+        return jsonify({"error": f"Unsupported image format: {ext}"}), 400
+
+    desktop_dir = os.path.abspath(os.path.join(APP_DIR, '..', 'desktop'))
+    wallpaper_path = os.path.join(desktop_dir, 'wallpaper.jpg')
+    rotation_bg_path = os.path.join(desktop_dir, 'rotation-bg.png')
+
+    try:
+        from PIL import Image
+        # Save original upload as wallpaper.jpg
+        img = Image.open(file.stream)
+        img = img.convert('RGB')
+        img.save(wallpaper_path, 'JPEG', quality=95)
+        cfg = current_app.kj_config
+        log_message(f"Wallpaper uploaded: {file.filename} ({img.size[0]}x{img.size[1]})", cfg)
+
+        # Generate 1080p rotation background for conky
+        bg = img.resize((1920, 1080), Image.LANCZOS)
+        bg.save(rotation_bg_path, 'PNG')
+        log_message("Generated rotation-bg.png (1920x1080)", cfg)
+
+        # Set XFCE desktop wallpaper on all monitors
+        _set_xfce_wallpaper(wallpaper_path)
+
+    except Exception as e:
+        return jsonify({"error": f"Failed to process image: {e}"}), 500
+
+    return jsonify({"success": True, "size": list(img.size)})
+
+
+def _set_xfce_wallpaper(image_path):
+    """Set the XFCE desktop wallpaper on all monitors via xfconf-query."""
+    try:
+        uid_result = subprocess.run(
+            ['id', '-u', 'nomad'], capture_output=True, text=True, timeout=5,
+        )
+        uid = uid_result.stdout.strip()
+        env = os.environ.copy()
+        env['DISPLAY'] = ':0'
+        env['DBUS_SESSION_BUS_ADDRESS'] = f'unix:path=/run/user/{uid}/bus'
+
+        # List all wallpaper properties
+        result = subprocess.run(
+            ['sudo', '-u', 'nomad', 'xfconf-query', '-c', 'xfce4-desktop', '-l'],
+            capture_output=True, text=True, timeout=10, env=env,
+        )
+        props = [line.strip() for line in result.stdout.splitlines() if 'last-image' in line]
+
+        for prop in props:
+            subprocess.run(
+                ['sudo', '-u', 'nomad', 'xfconf-query', '-c', 'xfce4-desktop',
+                 '-p', prop, '-s', image_path],
+                capture_output=True, text=True, timeout=5, env=env,
+            )
+    except Exception:
+        pass  # Best-effort; wallpaper via conky still works
+
+
 # --- Karaoke Nerds Search ---
 
 @routes_bp.route('/karaoke-nerds/search', methods=['POST'])

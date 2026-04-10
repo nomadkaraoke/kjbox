@@ -84,6 +84,7 @@
                 <div class="header-row">
                     <h2>Overlays</h2>
                     <div class="overlay-header-btns">
+                        <button class="overlay-header-btn" onclick="showWallpaperModal()" title="Change desktop wallpaper">Wallpaper</button>
                         <button class="overlay-header-btn" onclick="backupOverlays()" title="Download overlay config">Backup</button>
                         <button class="overlay-header-btn" onclick="restoreOverlays()" title="Restore overlay config from file">Restore</button>
                         <input type="file" id="overlay-restore-input" accept=".json" class="hidden" onchange="handleOverlayRestore(this)">
@@ -389,9 +390,22 @@
                 <div class="overlay-form-row overlay-field" data-types="static_text">
                     <label for="overlay-font-family">Font</label>
                     <select id="overlay-font-family">
-                        <option value="sans">Sans-serif (DejaVu Sans)</option>
-                        <option value="serif">Serif (DejaVu Serif)</option>
-                        <option value="mono">Monospace (DejaVu Mono)</option>
+                        <optgroup label="DejaVu">
+                            <option value="sans">DejaVu Sans</option>
+                            <option value="serif">DejaVu Serif</option>
+                            <option value="mono">DejaVu Mono</option>
+                        </optgroup>
+                        <optgroup label="Noto">
+                            <option value="noto-sans">Noto Sans</option>
+                            <option value="noto-sans-display">Noto Sans Display</option>
+                            <option value="noto-serif">Noto Serif</option>
+                            <option value="noto-mono">Noto Sans Mono</option>
+                        </optgroup>
+                        <optgroup label="Liberation (Arial/Times/Courier)">
+                            <option value="liberation-sans">Liberation Sans</option>
+                            <option value="liberation-serif">Liberation Serif</option>
+                            <option value="liberation-mono">Liberation Mono</option>
+                        </optgroup>
                     </select>
                 </div>
 
@@ -529,6 +543,28 @@
                     <button class="btn-primary" onclick="saveOverlay()">Save</button>
                     <button class="overlay-cancel-btn" onclick="hideOverlayForm()">Cancel</button>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Wallpaper Modal -->
+    <div id="wallpaper-modal" class="modal-backdrop hidden" onclick="if(event.target===this) hideWallpaperModal()">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Desktop Wallpaper</h3>
+                <button class="modal-close" onclick="hideWallpaperModal()">&times;</button>
+            </div>
+            <div class="wallpaper-form">
+                <div class="wallpaper-preview-container">
+                    <img id="wallpaper-preview" src="/wallpaper" alt="Current wallpaper"
+                         style="width:100%; border-radius:8px; border:1px solid #2a2a2a; display:block;">
+                </div>
+                <div class="overlay-form-row" style="margin-top:10px;">
+                    <label for="wallpaper-file">Upload New Wallpaper</label>
+                    <input type="file" id="wallpaper-file" accept=".jpg,.jpeg,.png,.webp"
+                           onchange="uploadWallpaper(this)" style="margin-top:4px;">
+                </div>
+                <div id="wallpaper-status"></div>
             </div>
         </div>
     </div>

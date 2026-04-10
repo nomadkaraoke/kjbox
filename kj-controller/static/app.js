@@ -1788,6 +1788,47 @@ async function toggleOverlayEnabled(id) {
     await loadOverlays();
 }
 
+// --- Wallpaper ---
+
+function showWallpaperModal() {
+    document.getElementById('wallpaper-modal').classList.remove('hidden');
+    // Refresh preview with cache-bust
+    const img = document.getElementById('wallpaper-preview');
+    img.src = '/wallpaper?t=' + Date.now();
+    document.getElementById('wallpaper-status').innerHTML = '';
+    document.getElementById('wallpaper-file').value = '';
+}
+
+function hideWallpaperModal() {
+    document.getElementById('wallpaper-modal').classList.add('hidden');
+}
+
+async function uploadWallpaper(input) {
+    const file = input.files[0];
+    if (!file) return;
+    const status = document.getElementById('wallpaper-status');
+    status.innerHTML = '<span style="color:#aaa">Uploading...</span>';
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+        const resp = await fetch('/wallpaper', { method: 'POST', body: formData });
+        const data = await resp.json();
+        if (resp.ok) {
+            log('Wallpaper updated: ' + file.name, 'success');
+            status.innerHTML = '<span style="color:#4caf50">Wallpaper updated!</span>';
+            // Refresh preview
+            document.getElementById('wallpaper-preview').src = '/wallpaper?t=' + Date.now();
+        } else {
+            status.innerHTML = '<span style="color:#f44336">' + (data.error || 'Upload failed') + '</span>';
+        }
+    } catch (e) {
+        status.innerHTML = '<span style="color:#f44336">Upload failed</span>';
+    }
+    input.value = '';
+}
+
 // --- VNC Size Control ---
 
 function hideVncPreview() {

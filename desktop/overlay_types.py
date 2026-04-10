@@ -38,26 +38,71 @@ FONT_PATHS = [
     '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',
 ]
 
-# Font family paths for Pillow rendering (DejaVu variants on Linux)
-FONT_DIR = '/usr/share/fonts/truetype/dejavu'
+# Font family paths for Pillow rendering
+# Each family maps (bold, italic) to a font file path
+_DEJAVU = '/usr/share/fonts/truetype/dejavu'
+_NOTO = '/usr/share/fonts/truetype/noto'
+_LIBERATION = '/usr/share/fonts/truetype/liberation'
 FONT_FAMILIES = {
     'sans': {
-        (False, False): 'DejaVuSans.ttf',
-        (True, False): 'DejaVuSans-Bold.ttf',
-        (False, True): 'DejaVuSans-Oblique.ttf',
-        (True, True): 'DejaVuSans-BoldOblique.ttf',
+        (False, False): f'{_DEJAVU}/DejaVuSans.ttf',
+        (True, False): f'{_DEJAVU}/DejaVuSans-Bold.ttf',
+        (False, True): f'{_DEJAVU}/DejaVuSans-Oblique.ttf',
+        (True, True): f'{_DEJAVU}/DejaVuSans-BoldOblique.ttf',
     },
     'serif': {
-        (False, False): 'DejaVuSerif.ttf',
-        (True, False): 'DejaVuSerif-Bold.ttf',
-        (False, True): 'DejaVuSerif-Italic.ttf',
-        (True, True): 'DejaVuSerif-BoldItalic.ttf',
+        (False, False): f'{_DEJAVU}/DejaVuSerif.ttf',
+        (True, False): f'{_DEJAVU}/DejaVuSerif-Bold.ttf',
+        (False, True): f'{_DEJAVU}/DejaVuSerif-Italic.ttf',
+        (True, True): f'{_DEJAVU}/DejaVuSerif-BoldItalic.ttf',
     },
     'mono': {
-        (False, False): 'DejaVuSansMono.ttf',
-        (True, False): 'DejaVuSansMono-Bold.ttf',
-        (False, True): 'DejaVuSansMono-Oblique.ttf',
-        (True, True): 'DejaVuSansMono-BoldOblique.ttf',
+        (False, False): f'{_DEJAVU}/DejaVuSansMono.ttf',
+        (True, False): f'{_DEJAVU}/DejaVuSansMono-Bold.ttf',
+        (False, True): f'{_DEJAVU}/DejaVuSansMono-Oblique.ttf',
+        (True, True): f'{_DEJAVU}/DejaVuSansMono-BoldOblique.ttf',
+    },
+    'noto-sans': {
+        (False, False): f'{_NOTO}/NotoSans-Regular.ttf',
+        (True, False): f'{_NOTO}/NotoSans-Bold.ttf',
+        (False, True): f'{_NOTO}/NotoSans-Italic.ttf',
+        (True, True): f'{_NOTO}/NotoSans-BoldItalic.ttf',
+    },
+    'noto-sans-display': {
+        (False, False): f'{_NOTO}/NotoSansDisplay-Regular.ttf',
+        (True, False): f'{_NOTO}/NotoSansDisplay-Bold.ttf',
+        (False, True): f'{_NOTO}/NotoSansDisplay-Italic.ttf',
+        (True, True): f'{_NOTO}/NotoSansDisplay-BoldItalic.ttf',
+    },
+    'noto-serif': {
+        (False, False): f'{_NOTO}/NotoSerif-Regular.ttf',
+        (True, False): f'{_NOTO}/NotoSerif-Bold.ttf',
+        (False, True): f'{_NOTO}/NotoSerif-Italic.ttf',
+        (True, True): f'{_NOTO}/NotoSerif-BoldItalic.ttf',
+    },
+    'noto-mono': {
+        (False, False): f'{_NOTO}/NotoSansMono-Regular.ttf',
+        (True, False): f'{_NOTO}/NotoSansMono-Bold.ttf',
+        (False, True): f'{_NOTO}/NotoSansMono-Regular.ttf',  # no italic variant
+        (True, True): f'{_NOTO}/NotoSansMono-Bold.ttf',
+    },
+    'liberation-sans': {
+        (False, False): f'{_LIBERATION}/LiberationSans-Regular.ttf',
+        (True, False): f'{_LIBERATION}/LiberationSans-Bold.ttf',
+        (False, True): f'{_LIBERATION}/LiberationSans-Italic.ttf',
+        (True, True): f'{_LIBERATION}/LiberationSans-BoldItalic.ttf',
+    },
+    'liberation-serif': {
+        (False, False): f'{_LIBERATION}/LiberationSerif-Regular.ttf',
+        (True, False): f'{_LIBERATION}/LiberationSerif-Bold.ttf',
+        (False, True): f'{_LIBERATION}/LiberationSerif-Italic.ttf',
+        (True, True): f'{_LIBERATION}/LiberationSerif-BoldItalic.ttf',
+    },
+    'liberation-mono': {
+        (False, False): f'{_LIBERATION}/LiberationMono-Regular.ttf',
+        (True, False): f'{_LIBERATION}/LiberationMono-Bold.ttf',
+        (False, True): f'{_LIBERATION}/LiberationMono-Italic.ttf',
+        (True, True): f'{_LIBERATION}/LiberationMono-BoldItalic.ttf',
     },
 }
 
@@ -80,16 +125,14 @@ def _get_font(size, bold=False):
 def _get_pil_font(family, size, bold, italic):
     """Get a PIL ImageFont for the given family and style."""
     variants = FONT_FAMILIES.get(family, FONT_FAMILIES['sans'])
-    filename = variants.get((bold, italic), variants.get((False, False)))
-    path = os.path.join(FONT_DIR, filename)
+    path = variants.get((bold, italic), variants.get((False, False)))
     if os.path.exists(path):
         return ImageFont.truetype(path, size)
     # Try any variant of the family
-    for fname in variants.values():
-        p = os.path.join(FONT_DIR, fname)
+    for p in variants.values():
         if os.path.exists(p):
             return ImageFont.truetype(p, size)
-    # Try original FONT_PATHS
+    # Try original FONT_PATHS (pygame fallback)
     for fp in FONT_PATHS:
         if os.path.exists(fp):
             return ImageFont.truetype(fp, size)
