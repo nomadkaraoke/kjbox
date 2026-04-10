@@ -3051,7 +3051,7 @@ function renderRotation(entries) {
         // Drag handle
         const handle = document.createElement('span');
         handle.className = 'rotation-drag-handle';
-        handle.textContent = '\u2261';  // ≡ hamburger icon
+        handle.textContent = '\u2807';  // ⠇ braille 6-dot grip
         handle.draggable = true;
         handle.addEventListener('dragstart', (e) => {
             row.classList.add('dragging');
