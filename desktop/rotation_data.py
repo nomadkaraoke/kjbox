@@ -22,7 +22,8 @@ COL_SINGER = 1
 COL_SONG_ARTIST = 2
 COL_STATUS = 3
 
-MAX_ENTRIES = 10
+PAGE_SIZE = 10
+PAGE_DURATION = 10  # seconds per page when cycling
 
 # Local cache written by kj-controller after every rotation change
 CACHE_FILE = "/tmp/rotation_cache.json"
@@ -70,7 +71,7 @@ def read_local_cache():
             return None
         with open(CACHE_FILE) as f:
             data = json.load(f)
-        return data["queue"][:MAX_ENTRIES], data["stats"]
+        return data["queue"], data["stats"]
     except (OSError, KeyError, json.JSONDecodeError):
         return None
 
@@ -101,13 +102,30 @@ def _status_color(status_lower):
     return COLOR_DEFAULT
 
 
-def format_conky(entries):
-    """Format entries as conky markup text."""
+def paginate(queue):
+    """Return (page_entries, start_index, page_num, total_pages) for the current time slice."""
+    total = len(queue)
+    if total <= PAGE_SIZE:
+        return queue, 0, 0, 1
+    num_pages = (total + PAGE_SIZE - 1) // PAGE_SIZE
+    page = int(time.time() / PAGE_DURATION) % num_pages
+    start = page * PAGE_SIZE
+    return queue[start:start + PAGE_SIZE], start, page, num_pages
+
+
+def format_conky(entries, start_index=0, page_info=None):
+    """Format entries as conky markup text.
+
+    Args:
+        entries: List of rotation entries to display.
+        start_index: Queue position offset (0-based) for numbering.
+        page_info: Tuple of (page_num, total_pages) if paginated, else None.
+    """
     if not entries:
         print(f"{MARGIN}${{color {COLOR_DEFAULT}}}${{font DejaVu Sans:size=28}}No singers in queue${{font}}${{color}}")
         return
 
-    for idx, entry in enumerate(entries, start=1):
+    for idx, entry in enumerate(entries, start=start_index + 1):
         status = entry["status"]
         status_lower = status.lower()
 
@@ -127,6 +145,15 @@ def format_conky(entries):
         # Song line
         if entry["song_artist"]:
             print(f"{SONG_INDENT}${{color {COLOR_TEXT}}}${{font {FONT_SONG}}}{entry['song_artist']}${{font}}${{color}}")
+
+    # Page indicator when cycling
+    if page_info and page_info[1] > 1:
+        page_num, total_pages = page_info
+        dots = "  ".join(
+            f"${{color ffffff}}●${{color}}" if i == page_num else f"${{color {COLOR_DEFAULT}}}●${{color}}"
+            for i in range(total_pages)
+        )
+        print(f"\n{MARGIN}${{font DejaVu Sans:size=16}}{dots}${{font}}")
 
 
 def format_rules():
@@ -172,7 +199,9 @@ def main():
         parts.append(f"{stats['singers']} singers | {stats['sung']} sung | {stats['queued']} queued")
         print("    ".join(parts))
     else:
-        format_conky(queue)
+        page_entries, start_idx, page_num, total_pages = paginate(queue)
+        page_info = (page_num, total_pages) if total_pages > 1 else None
+        format_conky(page_entries, start_index=start_idx, page_info=page_info)
 
 
 if __name__ == "__main__":
