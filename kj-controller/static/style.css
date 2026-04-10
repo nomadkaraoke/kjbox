@@ -1625,18 +1625,25 @@ body {
 }
 .rotation-drag-handle {
     cursor: grab;
-    color: #444;
-    font-size: 0.85em;
-    padding: 2px 4px 2px 0;
+    color: #555;
+    font-size: 1em;
+    padding: 4px 6px;
     flex-shrink: 0;
     user-select: none;
     touch-action: none;
+    border-radius: 4px;
+    background: #2a2a2a;
+    transition: background 0.15s, color 0.15s;
+    line-height: 1;
 }
 .rotation-drag-handle:hover {
-    color: #888;
+    color: #ccc;
+    background: #3a3a3a;
 }
 .rotation-drag-handle:active {
     cursor: grabbing;
+    color: #ffdf6b;
+    background: #444;
 }
 .rotation-entry.dragging {
     opacity: 0.4;
