@@ -389,6 +389,42 @@ class TestGetStats:
         assert stats["started"] is not None
 
 
+class TestGetSongsSungCounts:
+    def test_empty(self, store):
+        assert store.get_songs_sung_counts() == {}
+
+    def test_no_done_entries(self, store):
+        store.add_entry("Alice")
+        store.add_entry("Bob")
+        assert store.get_songs_sung_counts() == {}
+
+    def test_counts_done_entries(self, store):
+        e1 = store.add_entry("Alice")
+        e2 = store.add_entry("Bob")
+        e3 = store.add_entry("Alice")
+        store.update_status(e1["id"], "Done")
+        store.update_status(e3["id"], "Done")
+        store.update_status(e2["id"], "Done")
+        counts = store.get_songs_sung_counts()
+        assert counts["alice"] == 2
+        assert counts["bob"] == 1
+
+    def test_case_insensitive(self, store):
+        e1 = store.add_entry("Alice")
+        e2 = store.add_entry("alice")
+        store.update_status(e1["id"], "Done")
+        store.update_status(e2["id"], "Done")
+        counts = store.get_songs_sung_counts()
+        assert counts["alice"] == 2
+
+    def test_excludes_non_done(self, store):
+        e1 = store.add_entry("Alice")
+        store.add_entry("Alice")  # still waiting
+        store.update_status(e1["id"], "Done")
+        counts = store.get_songs_sung_counts()
+        assert counts["alice"] == 1
+
+
 class TestFileLink:
     def test_link_file(self, store):
         e = store.add_entry("Alice")

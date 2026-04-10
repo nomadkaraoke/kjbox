@@ -2071,6 +2071,13 @@ body {
 .prep-review { background: #f59e0b33; color: #f59e0b; }
 .prep-rendering { background: #7c3aed33; color: #7c3aed; }
 
+.rotation-songs-sung {
+    color: #999;
+    font-size: 0.75em;
+    margin-left: 4px;
+    font-weight: normal;
+}
+
 .rotation-paid-heart {
     color: #e74c3c;
     font-size: 0.9em;
