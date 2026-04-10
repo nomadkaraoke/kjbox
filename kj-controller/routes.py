@@ -345,6 +345,24 @@ def handle_control():
         vlc.audio_error = False
         overlay_mgr.set_karaoke_playing(False)
         vlc.fade_in_filler()
+    elif action == 'fadeout':
+        saved_volume = vlc.karaoke_volume
+
+        def _do_fadeout():
+            vlc.fade_music(karaoke_port, karaoke_pw, saved_volume, 0, duration_s=3.0)
+            vlc.ensure_karaoke_released()
+            vlc.karaoke_active = False
+            vlc.current_playing_path = None
+            vlc.audio_error = False
+            overlay_mgr.set_karaoke_playing(False)
+            # Restore karaoke volume to what it was before fadeout
+            vlc.send_command(karaoke_port, karaoke_pw, f"volume&val={saved_volume}")
+            vlc.karaoke_volume = saved_volume
+            vlc._save_state()
+            vlc.fade_in_filler()
+            log_message(f"Fadeout complete, volume restored to {saved_volume}.", cfg)
+
+        threading.Thread(target=_do_fadeout, daemon=True).start()
 
     return jsonify({"success": True, "message": f"Action '{action}' executed."})
 
