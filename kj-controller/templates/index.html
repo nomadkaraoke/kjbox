@@ -385,6 +385,16 @@
                     <textarea id="overlay-text" rows="2" placeholder="Enter overlay text..."></textarea>
                 </div>
 
+                <!-- Static Text: font family -->
+                <div class="overlay-form-row overlay-field" data-types="static_text">
+                    <label for="overlay-font-family">Font</label>
+                    <select id="overlay-font-family">
+                        <option value="sans">Sans-serif (DejaVu Sans)</option>
+                        <option value="serif">Serif (DejaVu Serif)</option>
+                        <option value="mono">Monospace (DejaVu Mono)</option>
+                    </select>
+                </div>
+
                 <!-- Ticker: speed -->
                 <div class="overlay-form-row overlay-field" data-types="ticker">
                     <label for="overlay-speed">Speed</label>
@@ -454,10 +464,31 @@
                     </div>
                 </div>
 
+                <!-- Static Text: max width + text align -->
+                <div class="overlay-form-row overlay-field" data-types="static_text">
+                    <label for="overlay-max-width">Max Width (px, 0 = auto)</label>
+                    <input type="number" id="overlay-max-width" value="0" min="0" max="1920" onchange="onOverlayMaxWidthChange()">
+                </div>
+                <div class="overlay-form-row overlay-field hidden" data-types="static_text" id="overlay-text-align-row">
+                    <label for="overlay-text-align">Text Align</label>
+                    <select id="overlay-text-align">
+                        <option value="left">Left</option>
+                        <option value="center">Center</option>
+                        <option value="right">Right</option>
+                    </select>
+                </div>
+
                 <!-- Common: colors (text overlays) -->
                 <div class="overlay-form-row overlay-field" data-types="ticker,static_text,countdown">
                     <label>Font Size</label>
                     <input type="number" id="overlay-font-size" value="28" min="12" max="120">
+                </div>
+                <!-- Static Text: bold + italic -->
+                <div class="overlay-form-row overlay-field" data-types="static_text">
+                    <div class="controls-row">
+                        <label class="overlay-toggle-label"><input type="checkbox" id="overlay-bold" checked> Bold</label>
+                        <label class="overlay-toggle-label"><input type="checkbox" id="overlay-italic"> Italic</label>
+                    </div>
                 </div>
                 <div class="overlay-form-row overlay-field" data-types="ticker,static_text,countdown">
                     <div class="controls-row">
@@ -475,6 +506,11 @@
                     <label for="overlay-bg-opacity">BG Opacity</label>
                     <input type="range" id="overlay-bg-opacity" class="volume-slider" min="0" max="1" step="0.05" value="0.85">
                     <span id="overlay-opacity-label" class="range-label">85%</span>
+                </div>
+                <!-- Static Text: padding -->
+                <div class="overlay-form-row overlay-field" data-types="static_text">
+                    <label for="overlay-padding">Padding (px)</label>
+                    <input type="number" id="overlay-padding" value="12" min="0" max="60">
                 </div>
 
                 <!-- Common: toggles -->

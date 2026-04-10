@@ -19,6 +19,12 @@ try:
 except ImportError:
     qrcode = None
 
+try:
+    from PIL import Image, ImageDraw, ImageFont
+    _pil_available = True
+except ImportError:
+    _pil_available = False
+
 from overlay_config import (
     SCREEN_HEIGHT,
     SCREEN_WIDTH,
@@ -32,6 +38,34 @@ FONT_PATHS = [
     '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',
 ]
 
+# Font family paths for Pillow rendering (DejaVu variants on Linux)
+FONT_DIR = '/usr/share/fonts/truetype/dejavu'
+FONT_FAMILIES = {
+    'sans': {
+        (False, False): 'DejaVuSans.ttf',
+        (True, False): 'DejaVuSans-Bold.ttf',
+        (False, True): 'DejaVuSans-Oblique.ttf',
+        (True, True): 'DejaVuSans-BoldOblique.ttf',
+    },
+    'serif': {
+        (False, False): 'DejaVuSerif.ttf',
+        (True, False): 'DejaVuSerif-Bold.ttf',
+        (False, True): 'DejaVuSerif-Italic.ttf',
+        (True, True): 'DejaVuSerif-BoldItalic.ttf',
+    },
+    'mono': {
+        (False, False): 'DejaVuSansMono.ttf',
+        (True, False): 'DejaVuSansMono-Bold.ttf',
+        (False, True): 'DejaVuSansMono-Oblique.ttf',
+        (True, True): 'DejaVuSansMono-BoldOblique.ttf',
+    },
+}
+
+EMOJI_FONT_PATHS = [
+    '/usr/share/fonts/truetype/noto/NotoColorEmoji.ttf',
+    '/usr/share/fonts/truetype/noto/NotoEmoji-Regular.ttf',
+]
+
 
 def _get_font(size, bold=False):
     """Get a pygame font, preferring DejaVu Sans."""
@@ -41,6 +75,165 @@ def _get_font(size, bold=False):
     if os.path.exists(FONT_PATHS[0]):
         return pygame.font.Font(FONT_PATHS[0], size)
     return pygame.font.SysFont('DejaVu Sans', size, bold=bold)
+
+
+def _get_pil_font(family, size, bold, italic):
+    """Get a PIL ImageFont for the given family and style."""
+    variants = FONT_FAMILIES.get(family, FONT_FAMILIES['sans'])
+    filename = variants.get((bold, italic), variants.get((False, False)))
+    path = os.path.join(FONT_DIR, filename)
+    if os.path.exists(path):
+        return ImageFont.truetype(path, size)
+    # Try any variant of the family
+    for fname in variants.values():
+        p = os.path.join(FONT_DIR, fname)
+        if os.path.exists(p):
+            return ImageFont.truetype(p, size)
+    # Try original FONT_PATHS
+    for fp in FONT_PATHS:
+        if os.path.exists(fp):
+            return ImageFont.truetype(fp, size)
+    try:
+        return ImageFont.load_default(size=size)
+    except TypeError:
+        return ImageFont.load_default()
+
+
+def _get_emoji_font(size):
+    """Try to load an emoji font for fallback rendering."""
+    for path in EMOJI_FONT_PATHS:
+        if os.path.exists(path):
+            try:
+                return ImageFont.truetype(path, size)
+            except Exception:
+                continue
+    return None
+
+
+def _is_emoji(char):
+    """Check if a character is likely an emoji needing the emoji font."""
+    cp = ord(char)
+    return (
+        0x1F600 <= cp <= 0x1F64F or  # Emoticons
+        0x1F300 <= cp <= 0x1F5FF or  # Misc Symbols and Pictographs
+        0x1F680 <= cp <= 0x1F6FF or  # Transport and Map
+        0x1F1E0 <= cp <= 0x1F1FF or  # Flags
+        0x2600 <= cp <= 0x26FF or    # Misc symbols
+        0x2700 <= cp <= 0x27BF or    # Dingbats
+        0x1F900 <= cp <= 0x1F9FF or  # Supplemental Symbols
+        0x1FA00 <= cp <= 0x1FAFF or  # Symbols Extended-A
+        cp == 0x200D or              # Zero Width Joiner
+        cp == 0xFE0F or              # Variation Selector-16
+        cp == 0x2764 or              # Heavy black heart
+        cp == 0x2B50 or              # White medium star
+        cp == 0x2B55                 # Heavy large circle
+    )
+
+
+def _wrap_text_pil(text, font, max_width):
+    """Word-wrap text to fit within max_width pixels. Returns list of lines."""
+    if max_width <= 0:
+        return text.split('\n')
+
+    result = []
+    for paragraph in text.split('\n'):
+        if not paragraph.strip():
+            result.append('')
+            continue
+        words = paragraph.split(' ')
+        current = ''
+        for word in words:
+            test = (current + ' ' + word).strip()
+            if font.getlength(test) > max_width and current:
+                result.append(current)
+                current = word
+            else:
+                current = test
+        if current:
+            result.append(current)
+    return result if result else ['']
+
+
+def _draw_line_with_emoji(draw, x, y, line, font, emoji_font, color):
+    """Draw a line of text, using emoji font for emoji characters."""
+    runs = []
+    current = ''
+    is_emoji_run = False
+
+    for char in line:
+        char_is_emoji = _is_emoji(char)
+        if char_is_emoji != is_emoji_run and current:
+            runs.append((current, is_emoji_run))
+            current = ''
+        current += char
+        is_emoji_run = char_is_emoji
+    if current:
+        runs.append((current, is_emoji_run))
+
+    for text_run, is_emoji in runs:
+        f = emoji_font if is_emoji else font
+        try:
+            draw.text((x, y), text_run, fill=color, font=f)
+            x += f.getlength(text_run)
+        except Exception:
+            draw.text((x, y), text_run, fill=color, font=font)
+            x += font.getlength(text_run)
+
+
+def _render_text_pil(text, family, size, bold, italic, text_color_rgb,
+                     max_width=0, text_align='left'):
+    """Render multiline text to a pygame surface using Pillow.
+
+    Returns (surface, width, height).
+    """
+    font = _get_pil_font(family, size, bold, italic)
+    emoji_font = _get_emoji_font(size)
+
+    lines = _wrap_text_pil(text, font, max_width)
+
+    ascent, descent = font.getmetrics()
+    line_height = ascent + descent + 4
+
+    line_widths = []
+    for line in lines:
+        if line:
+            bbox = font.getbbox(line)
+            line_widths.append(bbox[2] - bbox[0])
+        else:
+            line_widths.append(0)
+
+    text_width = max(line_widths) if line_widths else 1
+    text_height = line_height * len(lines)
+    canvas_width = max(text_width, max_width) if max_width > 0 else text_width
+    canvas_width = max(int(canvas_width), 1)
+    text_height = max(int(text_height), 1)
+
+    img = Image.new('RGBA', (canvas_width, text_height), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(img)
+
+    y = 0
+    for i, line in enumerate(lines):
+        if not line:
+            y += line_height
+            continue
+
+        if text_align == 'center':
+            x = (canvas_width - line_widths[i]) / 2
+        elif text_align == 'right':
+            x = canvas_width - line_widths[i]
+        else:
+            x = 0
+
+        if emoji_font and any(_is_emoji(c) for c in line):
+            _draw_line_with_emoji(draw, x, y, line, font, emoji_font, text_color_rgb)
+        else:
+            draw.text((x, y), line, fill=text_color_rgb, font=font)
+
+        y += line_height
+
+    raw = img.tobytes()
+    surface = pygame.image.frombytes(raw, img.size, 'RGBA')
+    return surface, canvas_width, text_height
 
 
 def _make_bg_color(hex_color, opacity):
@@ -207,14 +400,26 @@ class StaticTextOverlay(BaseOverlay):
     def _setup(self):
         font_size = self.config.get('font_size', 36)
         padding = self.config.get('padding', 12)
-
-        font = _get_font(font_size, bold=True)
+        bold = self.config.get('bold', True)
+        italic = self.config.get('italic', False)
+        family = self.config.get('font_family', 'sans')
+        max_width = self.config.get('max_width', 0)
+        text_align = self.config.get('text_align', 'left')
         text = self.config.get('text', '')
         text_color = hex_to_rgb(self.config.get('text_color', '#FFFFFF'))
-        self._text_surface = font.render(text, True, text_color)
 
-        self._width = self._text_surface.get_width() + padding * 2
-        self._height = self._text_surface.get_height() + padding * 2
+        if _pil_available:
+            self._text_surface, text_w, text_h = _render_text_pil(
+                text, family, font_size, bold, italic, text_color,
+                max_width=max_width, text_align=text_align,
+            )
+            self._width = text_w + padding * 2
+            self._height = text_h + padding * 2
+        else:
+            font = _get_font(font_size, bold=bold)
+            self._text_surface = font.render(text, True, text_color)
+            self._width = self._text_surface.get_width() + padding * 2
+            self._height = self._text_surface.get_height() + padding * 2
 
         position = self.config.get('position', 'top-right')
         custom_x = self.config.get('custom_x')

@@ -1617,6 +1617,12 @@ function onOverlayPositionChange() {
     document.getElementById('overlay-custom-pos').classList.toggle('hidden', pos !== 'custom');
 }
 
+function onOverlayMaxWidthChange() {
+    const maxWidth = parseInt(document.getElementById('overlay-max-width').value) || 0;
+    const alignRow = document.getElementById('overlay-text-align-row');
+    if (alignRow) alignRow.classList.toggle('hidden', maxWidth <= 0);
+}
+
 function showOverlayForm(overlay) {
     const modal = document.getElementById('overlay-modal');
     const title = document.getElementById('overlay-modal-title');
@@ -1639,10 +1645,16 @@ function showOverlayForm(overlay) {
     document.getElementById('overlay-custom-x').value = cfg.custom_x || '';
     document.getElementById('overlay-custom-y').value = cfg.custom_y || '';
     document.getElementById('overlay-font-size').value = cfg.font_size || 28;
+    document.getElementById('overlay-font-family').value = cfg.font_family || 'sans';
+    document.getElementById('overlay-bold').checked = cfg.bold != null ? cfg.bold : true;
+    document.getElementById('overlay-italic').checked = cfg.italic || false;
+    document.getElementById('overlay-max-width').value = cfg.max_width || 0;
+    document.getElementById('overlay-text-align').value = cfg.text_align || 'left';
     document.getElementById('overlay-text-color').value = cfg.text_color || '#FFFFFF';
     document.getElementById('overlay-bg-color').value = cfg.bg_color || '#000000';
     document.getElementById('overlay-bg-opacity').value = cfg.bg_opacity != null ? cfg.bg_opacity : 0.85;
     document.getElementById('overlay-opacity-label').textContent = Math.round((cfg.bg_opacity != null ? cfg.bg_opacity : 0.85) * 100) + '%';
+    document.getElementById('overlay-padding').value = cfg.padding != null ? cfg.padding : 12;
     document.getElementById('overlay-image-path').value = cfg.image_path || '';
     document.getElementById('overlay-image-width').value = cfg.width || 150;
     document.getElementById('overlay-target-time').value = cfg.target_time || '';
@@ -1654,6 +1666,7 @@ function showOverlayForm(overlay) {
 
     onOverlayTypeChange();
     onOverlayPositionChange();
+    onOverlayMaxWidthChange();
 }
 
 function hideOverlayForm() {
@@ -1687,6 +1700,14 @@ function buildOverlayConfig() {
         config.bg_color = document.getElementById('overlay-bg-color').value;
         config.bg_opacity = parseFloat(document.getElementById('overlay-bg-opacity').value);
         config.padding = 12;
+    }
+    if (type === 'static_text') {
+        config.font_family = document.getElementById('overlay-font-family').value;
+        config.bold = document.getElementById('overlay-bold').checked;
+        config.italic = document.getElementById('overlay-italic').checked;
+        config.max_width = parseInt(document.getElementById('overlay-max-width').value) || 0;
+        config.text_align = document.getElementById('overlay-text-align').value;
+        config.padding = parseInt(document.getElementById('overlay-padding').value) || 12;
     }
     if (type === 'image') {
         config.image_path = document.getElementById('overlay-image-path').value;
