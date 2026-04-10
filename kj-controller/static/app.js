@@ -301,6 +301,21 @@ async function controlPlayback(action) {
     await apiCall('/control', { action });
 }
 
+let _fadingOut = false;
+async function fadeOut() {
+    if (_fadingOut) return;
+    _fadingOut = true;
+    const btns = [document.getElementById('btn-fadeout'), document.getElementById('np-fadeout')];
+    btns.forEach(b => { if (b) { b.textContent = 'Fading...'; b.disabled = true; } });
+    log('Fading out karaoke...');
+    await apiCall('/control', { action: 'fadeout' });
+    // Wait for the 3s fade to finish before resetting UI
+    setTimeout(() => {
+        _fadingOut = false;
+        btns.forEach(b => { if (b) b.textContent = 'Fade Out'; });
+    }, 3500);
+}
+
 // --- Volume & Seek (#2 volume labels) ---
 
 function volumePercent(val) {
@@ -638,22 +653,26 @@ function updatePlaybackButtons(state) {
     const btnPause = document.getElementById('btn-pause');
     const btnRestart = document.getElementById('btn-restart');
     const btnStop = document.getElementById('btn-stop');
+    const btnFadeout = document.getElementById('btn-fadeout');
 
     if (state === 'playing') {
         btnPause.textContent = 'Pause';
         btnPause.disabled = false;
         btnRestart.disabled = false;
         btnStop.disabled = false;
+        if (!_fadingOut) btnFadeout.disabled = false;
     } else if (state === 'paused') {
         btnPause.textContent = 'Resume';
         btnPause.disabled = false;
         btnRestart.disabled = false;
         btnStop.disabled = false;
+        if (!_fadingOut) btnFadeout.disabled = false;
     } else {
         btnPause.textContent = 'Pause / Resume';
         btnPause.disabled = false; // Keep enabled so user can always try
         btnRestart.disabled = true;
         btnStop.disabled = true;
+        btnFadeout.disabled = true;
     }
 }
 

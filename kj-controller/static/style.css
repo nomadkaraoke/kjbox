@@ -58,6 +58,8 @@ body::after {
     box-shadow: none; border-radius: 6px;
 }
 .np-btn:hover { background: #333; color: #fff; box-shadow: none; }
+.np-btn-fadeout { color: #fcd34d; border-color: rgba(245, 158, 11, 0.3); }
+.np-btn-fadeout:hover { background: rgba(245, 158, 11, 0.15); color: #fbbf24; }
 .np-btn-stop { color: #fca5a5; border-color: rgba(239, 68, 68, 0.3); }
 .np-btn-stop:hover { background: rgba(239, 68, 68, 0.15); color: #f87171; }
 
