@@ -22,6 +22,7 @@ def mock_rotation():
     rotation.get_rotation.return_value = list(SAMPLE_ENTRIES)
     rotation.get_sync_status.return_value = {"last_sync": None, "is_online": False, "next_sync_in": None}
     rotation.store.get_songs_sung_counts.return_value = {}
+    rotation.get_singer_stats.return_value = []
     rotation.sync = None
     rotation.media = None
     return rotation
@@ -675,3 +676,81 @@ class TestSetPaidRoute:
             data=json.dumps({"id": 1, "paid": True}),
             content_type='application/json')
         assert resp.status_code == 503
+
+
+class TestSingerStats:
+    def test_rotation_includes_singer_stats(self, rotation_client, mock_rotation):
+        mock_rotation.get_singer_stats.return_value = [
+            {"name": "Alice", "entries_total": 2, "entries_sung": 1,
+             "entries_waiting": 1, "entries_left": 0, "first_added": "2026-04-14 20:00:00",
+             "has_tipped": False, "status": "active"},
+        ]
+        resp = rotation_client.get('/rotation')
+        data = resp.get_json()
+        assert 'singer_stats' in data
+        assert len(data['singer_stats']) == 1
+        assert data['singer_stats'][0]['name'] == 'Alice'
+
+
+class TestSingerRenameRoute:
+    def test_rename_singer(self, rotation_client, mock_rotation):
+        mock_rotation.get_singer_stats.return_value = []
+        resp = rotation_client.post('/rotation/singer/rename',
+            data=json.dumps({"old_name": "Phill", "new_name": "Phil"}),
+            content_type='application/json')
+        assert resp.status_code == 200
+        mock_rotation.rename_singer.assert_called_once_with("Phill", "Phil")
+
+    def test_rename_missing_params(self, rotation_client, mock_rotation):
+        resp = rotation_client.post('/rotation/singer/rename',
+            data=json.dumps({"old_name": "Phil"}),
+            content_type='application/json')
+        assert resp.status_code == 400
+
+
+class TestSingerMergeRoute:
+    def test_merge_singers(self, rotation_client, mock_rotation):
+        mock_rotation.get_singer_stats.return_value = []
+        resp = rotation_client.post('/rotation/singer/merge',
+            data=json.dumps({"source_name": "Phill", "target_name": "Phil"}),
+            content_type='application/json')
+        assert resp.status_code == 200
+        mock_rotation.merge_singers.assert_called_once_with("Phill", "Phil")
+
+
+class TestSingerBrbRoute:
+    def test_brb_toggle(self, rotation_client, mock_rotation):
+        mock_rotation.get_singer_stats.return_value = []
+        resp = rotation_client.post('/rotation/singer/brb',
+            data=json.dumps({"name": "Alice", "brb": True}),
+            content_type='application/json')
+        assert resp.status_code == 200
+        mock_rotation.set_singer_status.assert_called_once_with("Alice", "On Hold (BRB)")
+
+    def test_brb_restore(self, rotation_client, mock_rotation):
+        mock_rotation.get_singer_stats.return_value = []
+        resp = rotation_client.post('/rotation/singer/brb',
+            data=json.dumps({"name": "Alice", "brb": False}),
+            content_type='application/json')
+        assert resp.status_code == 200
+        mock_rotation.set_singer_status.assert_called_once_with("Alice", "Waiting")
+
+
+class TestSingerRemoveRoute:
+    def test_remove_singer(self, rotation_client, mock_rotation):
+        mock_rotation.get_singer_stats.return_value = []
+        resp = rotation_client.post('/rotation/singer/remove',
+            data=json.dumps({"name": "Alice"}),
+            content_type='application/json')
+        assert resp.status_code == 200
+        mock_rotation.set_singer_status.assert_called_once_with("Alice", "Left")
+
+
+class TestSingerRestoreRoute:
+    def test_restore_singer(self, rotation_client, mock_rotation):
+        mock_rotation.get_singer_stats.return_value = []
+        resp = rotation_client.post('/rotation/singer/restore',
+            data=json.dumps({"name": "Alice"}),
+            content_type='application/json')
+        assert resp.status_code == 200
+        mock_rotation.set_singer_status.assert_called_once_with("Alice", "Waiting")
