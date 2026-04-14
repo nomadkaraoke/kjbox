@@ -1790,9 +1790,25 @@ def system_stats():
 
 
 def _add_songs_sung(entries, rotation):
-    """Add songs_sung field to each entry (count of done entries for that singer tonight)."""
+    """Add songs_sung field to each entry.
+
+    For multi-singer entries (singers_json not null), uses the minimum count
+    across all singers in the group.
+    For legacy entries, matches on the singer display string.
+    """
+    import json as _json
     counts = rotation.store.get_songs_sung_counts()
     for entry in entries:
+        singers_json = entry.get("singers_json")
+        if singers_json:
+            try:
+                names = _json.loads(singers_json)
+            except (ValueError, TypeError):
+                names = None
+            if isinstance(names, list) and names:
+                individual_counts = [counts.get(n.strip().lower(), 0) for n in names]
+                entry["songs_sung"] = min(individual_counts)
+                continue
         entry["songs_sung"] = counts.get(entry["singer"].lower(), 0)
 
 
@@ -1878,13 +1894,17 @@ def edit_rotation_entry():
 
     singer = data.get('singer')
     song_artist = data.get('song_artist')
+    singers = data.get('singers')
     if singer is not None:
         singer = singer.strip()
     if song_artist is not None:
         song_artist = song_artist.strip()
+    if singers is not None:
+        if not isinstance(singers, list) or not all(isinstance(s, str) for s in singers):
+            return jsonify({"error": "singers must be a list of strings"}), 400
 
     try:
-        rotation.update_entry(entry_id, singer=singer, song_artist=song_artist)
+        rotation.update_entry(entry_id, singer=singer, song_artist=song_artist, singers=singers)
         entries = rotation.get_rotation()
         _add_time_estimates(entries)
         _add_songs_sung(entries, rotation)
@@ -1927,17 +1947,23 @@ def add_rotation_entry():
     if not hasattr(current_app, 'rotation') or current_app.rotation is None:
         return jsonify({"error": "Rotation not configured"}), 503
     data = request.get_json(force=True)
+    singers = data.get('singers')
     singer = data.get('singer', '').strip()
     song_artist = data.get('song_artist', '').strip()
     notes = data.get('notes', '').strip()
-    if not singer:
-        return jsonify({"error": "singer is required"}), 400
+    if singers:
+        if not isinstance(singers, list) or not all(isinstance(s, str) for s in singers):
+            return jsonify({"error": "singers must be a list of strings"}), 400
+        if not singer:
+            singer = " & ".join(s.strip() for s in singers)
+    if not singer and not singers:
+        return jsonify({"error": "singer or singers is required"}), 400
 
     file_path = data.get('file_path', '').strip() or None
     url_fallback = data.get('url_fallback', '').strip() or None
 
     try:
-        entry = rotation.add_entry(singer, song_artist, notes, file_path=file_path)
+        entry = rotation.add_entry(singer, song_artist, notes, file_path=file_path, singers=singers if singers else None)
         if url_fallback:
             rotation.set_url_fallback(entry["id"], url_fallback)
             entry = rotation.store.get_entry(entry["id"])

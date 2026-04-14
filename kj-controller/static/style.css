@@ -1547,7 +1547,7 @@ body {
 }
 .rotation-link-cancel:hover { background: rgba(251, 191, 36, 0.25); }
 .rotation-add-form.link-mode { flex-wrap: wrap; }
-.rotation-add-form.link-mode #rotation-singer { display: none !important; }
+.rotation-add-form.link-mode #singer-input-container { display: none !important; }
 .rotation-add-form.link-mode #rotation-song { flex-basis: 100%; }
 .rotation-add-form.link-mode #rotation-add-btn-submit { display: none !important; }
 .rotation-indicator {
@@ -2087,10 +2087,68 @@ body {
     letter-spacing: 0.3px;
     white-space: nowrap;
 }
-.pill-new  { background: #e74c3c33; color: #e74c3c; }
+.pill-new  { background: #2d8a4e33; color: #2d8a4e; }
 .pill-once { background: #f59e0b33; color: #f59e0b; }
-.pill-few  { background: #2d8a4e33; color: #2d8a4e; }
-.pill-many { background: #7c3aed33; color: #7c3aed; }
+.pill-few  { background: #d4720a33; color: #d4720a; }
+.pill-many { background: #e74c3c33; color: #e74c3c; }
+
+/* Singer pill input (add form) */
+.singer-input-container {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px;
+    background: #2a2a2a;
+    border: 1px solid #444;
+    border-radius: 6px;
+    padding: 4px 8px;
+    min-height: 34px;
+    cursor: text;
+    flex: 1;
+}
+.singer-input-container:focus-within {
+    border-color: #ffdf6b;
+}
+.singer-input-container input {
+    background: none;
+    border: none;
+    outline: none;
+    color: #ffdf6b;
+    font-size: 14px;
+    flex: 1;
+    min-width: 60px;
+    padding: 2px 0;
+}
+.singer-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: #3a3a3a;
+    color: #ffdf6b;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 13px;
+    white-space: nowrap;
+}
+.singer-pill-x {
+    cursor: pointer;
+    color: #666;
+    font-size: 11px;
+    line-height: 1;
+}
+.singer-pill-x:hover {
+    color: #e74c3c;
+}
+
+/* Multi-singer pills in rotation rows */
+.rotation-singer-pill {
+    background: #2a2a2a;
+    color: #ffdf6b;
+    padding: 1px 7px;
+    border-radius: 10px;
+    font-size: 13px;
+    white-space: nowrap;
+}
 
 .rotation-paid-heart {
     color: #e74c3c;
