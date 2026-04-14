@@ -321,14 +321,22 @@ class RotationStore:
 
         Case-insensitive matching on singer name (lowered keys).
         Only counts entries in the current rotation_entries table (not archive).
+        When singers_json is set, credits each individual singer separately.
         """
         conn = self._get_conn()
         rows = conn.execute(
-            "SELECT LOWER(singer) AS singer_lower, COUNT(*) AS cnt "
-            "FROM rotation_entries WHERE LOWER(status) = 'done' "
-            "GROUP BY singer_lower"
+            "SELECT singer, singers_json FROM rotation_entries WHERE LOWER(status) = 'done'"
         ).fetchall()
-        return {row["singer_lower"]: row["cnt"] for row in rows}
+        counts = {}
+        for row in rows:
+            if row["singers_json"] is not None:
+                names = json.loads(row["singers_json"])
+            else:
+                names = [row["singer"]]
+            for name in names:
+                key = name.lower()
+                counts[key] = counts.get(key, 0) + 1
+        return counts
 
     def get_stats(self):
         """Return rotation statistics dict.
