@@ -15,7 +15,8 @@ KJ Controller (`kj-controller/`) is a Flask + vanilla JS web app for managing li
 
 **Backend** (Flask):
 - `kj-controller/routes.py` — REST API endpoints
-- `kj-controller/vlc.py` — VLCManager (dual VLC process control)
+- `kj-controller/mpv_manager.py` — MpvManager (mpv karaoke with rubberband pitch + VLC filler)
+- `kj-controller/vlc.py` — VLCManager (legacy, kept for rollback)
 - `kj-controller/media.py` — MediaIndex (scan, validate, download, delete)
 - `kj-controller/overlay.py` — OverlayManager (CRUD, JSON persistence)
 - `kj-controller/rotation.py` — RotationManager (coordinator: delegates to rotation_store + rotation_sync)
