@@ -1,5 +1,6 @@
 """RotationStore: SQLite-backed storage for karaoke singer rotation entries."""
 
+import json
 import sqlite3
 
 
@@ -103,6 +104,7 @@ class RotationStore:
             ("gen_job_id", "TEXT DEFAULT NULL"),
             ("gen_status", "TEXT DEFAULT NULL"),
             ("paid", "INTEGER NOT NULL DEFAULT 0"),
+            ("singers_json", "TEXT DEFAULT NULL"),
         ]
         for col_name, col_type in migrations:
             if col_name not in existing_cols:
@@ -126,13 +128,19 @@ class RotationStore:
     # Task 2: Add and Get Entries
     # ------------------------------------------------------------------
 
-    def add_entry(self, singer, song_artist='', notes='', file_path=None, duration=None):
+    def add_entry(self, singer, song_artist='', notes='', file_path=None, duration=None, singers=None):
         """Insert a new entry at max(position)+1 and return the new entry dict."""
+        singers_json = None
+        if singers is not None:
+            singers = [s.strip() for s in singers]
+            singer = " & ".join(singers)
+            singers_json = json.dumps(singers)
+
         conn = self._get_conn()
         cur = conn.execute(
-            "INSERT INTO rotation_entries (singer, song_artist, notes, position, file_path, duration) "
-            "VALUES (?, ?, ?, (SELECT COALESCE(MAX(position), 0) + 1 FROM rotation_entries), ?, ?)",
-            (singer, song_artist, notes, file_path, duration),
+            "INSERT INTO rotation_entries (singer, song_artist, notes, position, file_path, duration, singers_json) "
+            "VALUES (?, ?, ?, (SELECT COALESCE(MAX(position), 0) + 1 FROM rotation_entries), ?, ?, ?)",
+            (singer, song_artist, notes, file_path, duration, singers_json),
         )
         conn.commit()
         return self._row_to_dict(
@@ -171,8 +179,11 @@ class RotationStore:
     # Task 3: Update, Delete, Exclusive Statuses
     # ------------------------------------------------------------------
 
-    def update_entry(self, entry_id, singer=None, song_artist=None):
+    def update_entry(self, entry_id, singer=None, song_artist=None, singers=None):
         """Edit singer and/or song_artist fields.
+
+        When singers is provided, overrides both singer and singers_json.
+        When singers is None, preserves existing singers_json.
 
         Raises ValueError if entry_id not found.
         Returns updated entry dict.
@@ -181,15 +192,21 @@ class RotationStore:
         if existing is None:
             raise ValueError(f"Entry {entry_id} not found")
 
+        new_singers_json = existing.get("singers_json")
+        if singers is not None:
+            singers = [s.strip() for s in singers]
+            singer = " & ".join(singers)
+            new_singers_json = json.dumps(singers)
+
         new_singer = singer if singer is not None else existing["singer"]
         new_song_artist = song_artist if song_artist is not None else existing["song_artist"]
 
         conn = self._get_conn()
         conn.execute(
             "UPDATE rotation_entries "
-            "SET singer = ?, song_artist = ?, updated_at = datetime('now', 'localtime') "
+            "SET singer = ?, song_artist = ?, singers_json = ?, updated_at = datetime('now', 'localtime') "
             "WHERE id = ?",
-            (new_singer, new_song_artist, entry_id),
+            (new_singer, new_song_artist, new_singers_json, entry_id),
         )
         conn.commit()
         return self.get_entry(entry_id)
@@ -298,6 +315,28 @@ class RotationStore:
             (new_position, entry_id),
         )
         conn.commit()
+
+    def get_songs_sung_counts(self):
+        """Return a dict mapping singer name → count of 'done' entries tonight.
+
+        Case-insensitive matching on singer name (lowered keys).
+        Only counts entries in the current rotation_entries table (not archive).
+        When singers_json is set, credits each individual singer separately.
+        """
+        conn = self._get_conn()
+        rows = conn.execute(
+            "SELECT singer, singers_json FROM rotation_entries WHERE LOWER(status) = 'done'"
+        ).fetchall()
+        counts = {}
+        for row in rows:
+            if row["singers_json"] is not None:
+                names = json.loads(row["singers_json"])
+            else:
+                names = [row["singer"]]
+            for name in names:
+                key = name.lower()
+                counts[key] = counts.get(key, 0) + 1
+        return counts
 
     def get_stats(self):
         """Return rotation statistics dict.
@@ -538,8 +577,8 @@ class RotationStore:
                     "(id, singer, song_artist, status, notes, position, "
                     " file_path, duration, download_source, download_status, "
                     " download_id, url_fallback, gen_job_id, gen_status, "
-                    " updated_at) "
-                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "
+                    " singers_json, updated_at) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "
                     "        datetime('now', 'localtime'))",
                     (
                         e["id"], e["singer"], e["song_artist"], e["status"],
@@ -548,6 +587,7 @@ class RotationStore:
                         e.get("download_source"), e.get("download_status"),
                         e.get("download_id"), e.get("url_fallback"),
                         e.get("gen_job_id"), e.get("gen_status"),
+                        e.get("singers_json"),
                     ),
                 )
             conn.commit()

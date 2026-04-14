@@ -79,7 +79,7 @@ class TestReadLocalCache:
 
         assert rotation_data.read_local_cache() is None
 
-    def test_respects_max_entries(self, cache_file, monkeypatch):
+    def test_returns_full_queue(self, cache_file, monkeypatch):
         monkeypatch.setattr(rotation_data, "CACHE_FILE", cache_file)
         big_queue = [
             {"singer": f"Singer{i}", "song_artist": f"Song{i}", "status": "Waiting"}
@@ -94,7 +94,57 @@ class TestReadLocalCache:
             json.dump(data, f)
 
         queue, _ = rotation_data.read_local_cache()
-        assert len(queue) == rotation_data.MAX_ENTRIES
+        assert len(queue) == 20
+
+
+class TestPaginate:
+    def test_small_queue_no_pagination(self):
+        queue = [{"singer": f"S{i}"} for i in range(5)]
+        entries, start, page, total = rotation_data.paginate(queue)
+        assert entries == queue
+        assert start == 0
+        assert page == 0
+        assert total == 1
+
+    def test_exact_page_size_no_pagination(self):
+        queue = [{"singer": f"S{i}"} for i in range(10)]
+        entries, start, page, total = rotation_data.paginate(queue)
+        assert len(entries) == 10
+        assert total == 1
+
+    def test_over_page_size_cycles(self, monkeypatch):
+        queue = [{"singer": f"S{i}"} for i in range(25)]
+        # Force page 0 (time=0)
+        monkeypatch.setattr(time, "time", lambda: 0.0)
+        entries, start, page, total = rotation_data.paginate(queue)
+        assert total == 3
+        assert page == 0
+        assert start == 0
+        assert len(entries) == 10
+
+    def test_page_cycling_time_based(self, monkeypatch):
+        queue = [{"singer": f"S{i}"} for i in range(25)]
+        # Page 1 (time=10s into cycle)
+        monkeypatch.setattr(time, "time", lambda: 10.0)
+        entries, start, page, total = rotation_data.paginate(queue)
+        assert page == 1
+        assert start == 10
+        assert len(entries) == 10
+
+        # Page 2 (time=20s into cycle)
+        monkeypatch.setattr(time, "time", lambda: 20.0)
+        entries, start, page, total = rotation_data.paginate(queue)
+        assert page == 2
+        assert start == 20
+        assert len(entries) == 5  # last page has remainder
+
+    def test_page_wraps_around(self, monkeypatch):
+        queue = [{"singer": f"S{i}"} for i in range(25)]
+        # After 3 pages (30s), wraps back to page 0
+        monkeypatch.setattr(time, "time", lambda: 30.0)
+        entries, start, page, total = rotation_data.paginate(queue)
+        assert page == 0
+        assert start == 0
 
 
 class TestFormatConky:
@@ -143,6 +193,34 @@ class TestFormatConky:
         output = capsys.readouterr().out
         lines = [l for l in output.strip().split("\n") if l.strip()]
         assert len(lines) == 1  # only singer line, no song line
+
+
+    def test_numbering_with_start_index(self, capsys):
+        entries = [
+            {"singer": "Alice", "song_artist": "Song A", "status": "Waiting"},
+            {"singer": "Bob", "song_artist": "Song B", "status": "Waiting"},
+        ]
+        rotation_data.format_conky(entries, start_index=10)
+        output = capsys.readouterr().out
+        assert "11." in output
+        assert "12." in output
+
+    def test_page_indicator_dots(self, capsys):
+        entries = [
+            {"singer": "Alice", "song_artist": "Song A", "status": "Waiting"},
+        ]
+        rotation_data.format_conky(entries, page_info=(1, 3))
+        output = capsys.readouterr().out
+        # Should have 3 dots (● characters)
+        assert output.count("●") == 3
+
+    def test_no_page_indicator_single_page(self, capsys):
+        entries = [
+            {"singer": "Alice", "song_artist": "Song A", "status": "Waiting"},
+        ]
+        rotation_data.format_conky(entries)
+        output = capsys.readouterr().out
+        assert "●" not in output
 
 
 class TestPaidIndicator:

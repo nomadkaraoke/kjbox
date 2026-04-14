@@ -74,17 +74,17 @@ class RotationManager:
     # Mutation methods — each calls _after_mutation()
     # ------------------------------------------------------------------
 
-    def add_entry(self, singer, song_artist='', notes='', file_path=None, duration=None):
+    def add_entry(self, singer, song_artist='', notes='', file_path=None, duration=None, singers=None):
         """Add a new singer entry and return the entry dict."""
         if file_path and duration is None:
             duration = self._lookup_duration(file_path)
-        result = self.store.add_entry(singer, song_artist, notes, file_path=file_path, duration=duration)
+        result = self.store.add_entry(singer, song_artist, notes, file_path=file_path, duration=duration, singers=singers)
         self._after_mutation()
         return result
 
-    def update_entry(self, entry_id, singer=None, song_artist=None):
+    def update_entry(self, entry_id, singer=None, song_artist=None, singers=None):
         """Update singer name and/or song for entry_id. Returns updated entry."""
-        result = self.store.update_entry(entry_id, singer=singer, song_artist=song_artist)
+        result = self.store.update_entry(entry_id, singer=singer, song_artist=song_artist, singers=singers)
         self._after_mutation()
         return result
 

@@ -74,6 +74,55 @@ const rotationHistory = {
     },
 };
 
+// --- Singer pill input state ---
+const singerPillInput = {
+    pills: [],
+
+    render() {
+        const container = document.getElementById('singer-input-container');
+        if (!container) return;
+        container.querySelectorAll('.singer-pill').forEach(el => el.remove());
+        const input = document.getElementById('rotation-singer');
+        this.pills.forEach((name, idx) => {
+            const pill = document.createElement('span');
+            pill.className = 'singer-pill';
+            pill.textContent = name;
+            const x = document.createElement('span');
+            x.className = 'singer-pill-x';
+            x.textContent = '\u00d7';
+            x.onclick = (e) => { e.stopPropagation(); this.removePill(idx); };
+            pill.appendChild(x);
+            container.insertBefore(pill, input);
+        });
+    },
+
+    addPill(name) {
+        const trimmed = name.trim();
+        if (!trimmed) return;
+        this.pills.push(trimmed);
+        this.render();
+    },
+
+    removePill(idx) {
+        this.pills.splice(idx, 1);
+        this.render();
+        document.getElementById('rotation-singer').focus();
+    },
+
+    clear() {
+        this.pills = [];
+        this.render();
+    },
+
+    getSingers() {
+        const input = document.getElementById('rotation-singer');
+        const remaining = input ? input.value.trim() : '';
+        const all = [...this.pills];
+        if (remaining) all.push(remaining);
+        return all;
+    },
+};
+
 function log(message, type = 'info') {
     const entry = document.createElement('div');
     entry.className = `log-entry ${type}`;
@@ -326,6 +375,21 @@ function updatePitchDisplay(semitones) {
     const upBtn = document.getElementById('np-pitch-up');
     if (downBtn) downBtn.disabled = semitones <= -6;
     if (upBtn) upBtn.disabled = semitones >= 6;
+}
+
+let _fadingOut = false;
+async function fadeOut() {
+    if (_fadingOut) return;
+    _fadingOut = true;
+    const btns = [document.getElementById('btn-fadeout'), document.getElementById('np-fadeout')];
+    btns.forEach(b => { if (b) { b.textContent = 'Fading...'; b.disabled = true; } });
+    log('Fading out karaoke...');
+    await apiCall('/control', { action: 'fadeout' });
+    // Wait for the 3s fade to finish before resetting UI
+    setTimeout(() => {
+        _fadingOut = false;
+        btns.forEach(b => { if (b) b.textContent = 'Fade Out'; });
+    }, 3500);
 }
 
 // --- Volume & Seek (#2 volume labels) ---
@@ -669,22 +733,26 @@ function updatePlaybackButtons(state) {
     const btnPause = document.getElementById('btn-pause');
     const btnRestart = document.getElementById('btn-restart');
     const btnStop = document.getElementById('btn-stop');
+    const btnFadeout = document.getElementById('btn-fadeout');
 
     if (state === 'playing') {
         btnPause.textContent = 'Pause';
         btnPause.disabled = false;
         btnRestart.disabled = false;
         btnStop.disabled = false;
+        if (!_fadingOut) btnFadeout.disabled = false;
     } else if (state === 'paused') {
         btnPause.textContent = 'Resume';
         btnPause.disabled = false;
         btnRestart.disabled = false;
         btnStop.disabled = false;
+        if (!_fadingOut) btnFadeout.disabled = false;
     } else {
         btnPause.textContent = 'Pause / Resume';
         btnPause.disabled = false; // Keep enabled so user can always try
         btnRestart.disabled = true;
         btnStop.disabled = true;
+        btnFadeout.disabled = true;
     }
 }
 
@@ -2913,6 +2981,34 @@ document.addEventListener('DOMContentLoaded', () => {
     fetchAutoDeployStatus();
     fetchSleepModeStatus();
     log('Nomad KJ Control initialized.');
+
+    // Singer pill input keydown handlers
+    const singerInput = document.getElementById('rotation-singer');
+    if (singerInput) {
+        singerInput.addEventListener('keydown', (e) => {
+            const val = singerInput.value;
+
+            // Tab, comma, or & with text -> create pill
+            if ((e.key === 'Tab' || e.key === ',' || e.key === '&') && val.trim()) {
+                e.preventDefault();
+                singerPillInput.addPill(val);
+                singerInput.value = '';
+                return;
+            }
+
+            // Backspace on empty input -> remove last pill
+            if (e.key === 'Backspace' && !val && singerPillInput.pills.length > 0) {
+                singerPillInput.removePill(singerPillInput.pills.length - 1);
+                return;
+            }
+
+            // Enter -> move focus to song field
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                document.getElementById('rotation-song').focus();
+            }
+        });
+    }
 });
 
 setInterval(updateStatus, 2000);
@@ -3063,7 +3159,7 @@ function renderRotation(entries) {
         // Drag handle
         const handle = document.createElement('span');
         handle.className = 'rotation-drag-handle';
-        handle.textContent = '\u2261';  // ≡ hamburger icon
+        handle.textContent = '\u2807';  // ⠇ braille 6-dot grip
         handle.draggable = true;
         handle.addEventListener('dragstart', (e) => {
             row.classList.add('dragging');
@@ -3102,11 +3198,11 @@ function renderRotation(entries) {
         num.className = 'rotation-num';
         num.textContent = (idx + 1) + '.';
 
-        const name = document.createElement('span');
-        name.className = 'rotation-name rotation-copyable';
-        name.textContent = entry.singer;
-        name.title = 'Click to copy \u2022 Shift+click to edit';
-        name.onclick = (e) => { if (!e.shiftKey && !e.ctrlKey && !e.metaKey) copyRotationText(name); };
+        // Singer name(s)
+        let singers_parsed = null;
+        if (entry.singers_json) {
+            try { singers_parsed = JSON.parse(entry.singers_json); } catch (e) { /* ignore */ }
+        }
 
         const song = document.createElement('span');
         song.className = 'rotation-song rotation-copyable';
@@ -3116,7 +3212,47 @@ function renderRotation(entries) {
 
         row.appendChild(handle);
         info.appendChild(num);
-        info.appendChild(name);
+
+        if (singers_parsed && singers_parsed.length > 1) {
+            // Multi-singer: render individual pills
+            singers_parsed.forEach((s) => {
+                const sp = document.createElement('span');
+                sp.className = 'rotation-singer-pill rotation-copyable';
+                sp.textContent = s;
+                sp.title = 'Click to copy \u2022 Shift+click to edit';
+                sp.onclick = (ev) => { if (!ev.shiftKey && !ev.ctrlKey && !ev.metaKey) copyRotationText(sp); };
+                info.appendChild(sp);
+            });
+        } else {
+            // Single singer or legacy: plain text (unchanged)
+            const name = document.createElement('span');
+            name.className = 'rotation-name rotation-copyable';
+            name.textContent = entry.singer;
+            name.title = 'Click to copy \u2022 Shift+click to edit';
+            name.onclick = (ev) => { if (!ev.shiftKey && !ev.ctrlKey && !ev.metaKey) copyRotationText(name); };
+            info.appendChild(name);
+        }
+        const pill = document.createElement('span');
+        pill.className = 'rotation-songs-pill';
+        const sung = entry.songs_sung || 0;
+        if (sung === 0) {
+            pill.classList.add('pill-new');
+            pill.textContent = 'NEW';
+            pill.title = 'Hasn\u2019t sung yet tonight';
+        } else if (sung === 1) {
+            pill.classList.add('pill-once');
+            pill.textContent = '\u00d71';
+            pill.title = '1 song sung tonight';
+        } else if (sung <= 4) {
+            pill.classList.add('pill-few');
+            pill.textContent = '\u00d7' + sung;
+            pill.title = sung + ' songs sung tonight';
+        } else {
+            pill.classList.add('pill-many');
+            pill.textContent = '\u00d7' + sung;
+            pill.title = sung + ' songs sung tonight';
+        }
+        info.appendChild(pill);
         if (entry.paid) {
             const heart = document.createElement('span');
             heart.className = 'rotation-paid-heart';
@@ -3359,13 +3495,56 @@ function enterRotationEditMode(row, entry) {
     const origInfoHTML = info.innerHTML;
     const origActionsHTML = actions.innerHTML;
 
-    // Replace info with editable inputs
+    // --- Edit pill state (local to this edit session) ---
+    let editPills = [];
+    if (entry.singers_json) {
+        try { editPills = JSON.parse(entry.singers_json); } catch (e) { editPills = [entry.singer]; }
+    } else {
+        editPills = [entry.singer];
+    }
+
+    function renderEditPills() {
+        container.querySelectorAll('.singer-pill').forEach(el => el.remove());
+        editPills.forEach((name, idx) => {
+            const pill = document.createElement('span');
+            pill.className = 'singer-pill';
+            pill.textContent = name;
+            const x = document.createElement('span');
+            x.className = 'singer-pill-x';
+            x.textContent = '\u00d7';
+            x.onclick = (ev) => {
+                ev.stopPropagation();
+                editPills.splice(idx, 1);
+                renderEditPills();
+                singerInput.focus();
+            };
+            pill.appendChild(x);
+            container.insertBefore(pill, singerInput);
+        });
+    }
+
+    function getEditSingers() {
+        const remaining = singerInput.value.trim();
+        const all = [...editPills];
+        if (remaining) all.push(remaining);
+        return all;
+    }
+
+    // Replace info with pill input + song input
     info.innerHTML = '';
+    const container = document.createElement('div');
+    container.className = 'singer-input-container';
+    container.onclick = () => singerInput.focus();
+
     const singerInput = document.createElement('input');
     singerInput.type = 'text';
-    singerInput.className = 'rotation-edit-input rotation-edit-singer';
-    singerInput.value = entry.singer;
+    singerInput.className = 'rotation-edit-singer';
     singerInput.placeholder = 'Singer name';
+    singerInput.autocomplete = 'off';
+    container.appendChild(singerInput);
+
+    // Clear pre-populated pills, render them inside container
+    renderEditPills();
 
     const songInput = document.createElement('input');
     songInput.type = 'text';
@@ -3373,7 +3552,7 @@ function enterRotationEditMode(row, entry) {
     songInput.value = entry.song_artist || '';
     songInput.placeholder = 'Song & Artist';
 
-    info.appendChild(singerInput);
+    info.appendChild(container);
     info.appendChild(songInput);
 
     // Replace actions with save/cancel/delete
@@ -3383,10 +3562,10 @@ function enterRotationEditMode(row, entry) {
     saveBtn.textContent = 'Save';
     saveBtn.onclick = (e) => {
         e.stopPropagation();
-        const newSinger = singerInput.value.trim();
+        const singers = getEditSingers();
+        if (singers.length === 0) { singerInput.focus(); return; }
         const newSong = songInput.value.trim();
-        if (!newSinger) { singerInput.focus(); return; }
-        saveRotationEdit(entry.id, newSinger, newSong);
+        saveRotationEdit(entry.id, singers, newSong);
     };
 
     const cancelBtn = document.createElement('button');
@@ -3414,34 +3593,47 @@ function enterRotationEditMode(row, entry) {
     actions.appendChild(delBtn);
 
     singerInput.focus();
-    singerInput.select();
 
     // Stop all events from bubbling out of edit inputs
     [singerInput, songInput].forEach(input => {
         input.addEventListener('click', (e) => e.stopPropagation());
-        input.addEventListener('keydown', (e) => e.stopPropagation());
         input.addEventListener('keyup', (e) => e.stopPropagation());
     });
 
-    // Enter on singer: move to song input. Enter on song: save. Escape: cancel.
+    // Singer input: Tab/comma/& create pills, Backspace removes, Enter moves to song
     singerInput.addEventListener('keydown', (e) => {
+        e.stopPropagation();
+        const val = singerInput.value;
+        if ((e.key === 'Tab' || e.key === ',' || e.key === '&') && val.trim()) {
+            e.preventDefault();
+            editPills.push(val.trim());
+            singerInput.value = '';
+            renderEditPills();
+            return;
+        }
+        if (e.key === 'Backspace' && !val && editPills.length > 0) {
+            editPills.pop();
+            renderEditPills();
+            return;
+        }
         if (e.key === 'Enter') { e.preventDefault(); songInput.focus(); songInput.select(); }
         else if (e.key === 'Escape') { cancelBtn.click(); }
     });
     songInput.addEventListener('keydown', (e) => {
+        e.stopPropagation();
         if (e.key === 'Enter') { saveBtn.click(); }
         else if (e.key === 'Escape') { cancelBtn.click(); }
     });
 }
 
-async function saveRotationEdit(entryId, singer, songArtist) {
+async function saveRotationEdit(entryId, singers, songArtist) {
     rotationHistory.pushUndo(rotationData);
     showRotationIndicator('spin');
     try {
         const response = await fetch('/rotation/edit', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id: entryId, singer, song_artist: songArtist })
+            body: JSON.stringify({ id: entryId, singers, song_artist: songArtist })
         });
         const data = await response.json();
         if (!response.ok) {
@@ -3660,9 +3852,9 @@ function toggleRotationAddForm() {
 async function addRotationEntry() {
     const singerInput = document.getElementById('rotation-singer');
     const songInput = document.getElementById('rotation-song');
-    const singer = singerInput.value.trim();
+    const singers = singerPillInput.getSingers();
     const songArtist = songInput.value.trim();
-    if (!singer) return;
+    if (singers.length === 0) return;
 
     rotationHistory.pushUndo(rotationData);
     showRotationIndicator('spin');
@@ -3670,7 +3862,7 @@ async function addRotationEntry() {
         const response = await fetch('/rotation/add', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ singer, song_artist: songArtist })
+            body: JSON.stringify({ singers: singers, song_artist: songArtist })
         });
         const data = await response.json();
         if (!response.ok) {
@@ -3681,6 +3873,7 @@ async function addRotationEntry() {
             rotationData = data.entries;
             renderRotation(rotationData);
         }
+        singerPillInput.clear();
         singerInput.value = '';
         songInput.value = '';
         singerInput.focus();

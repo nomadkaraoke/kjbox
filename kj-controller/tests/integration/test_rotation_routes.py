@@ -21,6 +21,7 @@ def mock_rotation():
     rotation = MagicMock()
     rotation.get_rotation.return_value = list(SAMPLE_ENTRIES)
     rotation.get_sync_status.return_value = {"last_sync": None, "is_online": False, "next_sync_in": None}
+    rotation.store.get_songs_sung_counts.return_value = {}
     rotation.sync = None
     rotation.media = None
     return rotation
@@ -82,6 +83,23 @@ class TestGetRotation:
         resp = no_rotation_client.get('/rotation')
         assert resp.status_code == 503
 
+    def test_entries_have_songs_sung(self, rotation_client):
+        resp = rotation_client.get('/rotation')
+        entries = resp.get_json()['entries']
+        assert all('songs_sung' in e for e in entries)
+        assert all(e['songs_sung'] == 0 for e in entries)
+
+    def test_songs_sung_reflects_done_count(self, rotation_client, mock_rotation):
+        mock_rotation.store.get_songs_sung_counts.return_value = {"alice": 2, "bob": 1}
+        resp = rotation_client.get('/rotation')
+        entries = resp.get_json()['entries']
+        alice = next(e for e in entries if e['singer'] == 'Alice')
+        bob = next(e for e in entries if e['singer'] == 'Bob')
+        carol = next(e for e in entries if e['singer'] == 'Carol')
+        assert alice['songs_sung'] == 2
+        assert bob['songs_sung'] == 1
+        assert carol['songs_sung'] == 0
+
     def test_error_returns_500(self, rotation_client, mock_rotation):
         mock_rotation.get_rotation.side_effect = Exception("DB error")
         resp = rotation_client.get('/rotation')
@@ -142,14 +160,14 @@ class TestEditRotationEntry:
             data=json.dumps({"id": 3, "singer": "Bobby", "song_artist": "New Song"}),
             content_type='application/json')
         assert resp.status_code == 200
-        mock_rotation.update_entry.assert_called_once_with(3, singer="Bobby", song_artist="New Song")
+        mock_rotation.update_entry.assert_called_once_with(3, singer="Bobby", song_artist="New Song", singers=None)
 
     def test_edit_singer_only(self, rotation_client, mock_rotation):
         resp = rotation_client.post('/rotation/edit',
             data=json.dumps({"id": 3, "singer": "Bobby"}),
             content_type='application/json')
         assert resp.status_code == 200
-        mock_rotation.update_entry.assert_called_once_with(3, singer="Bobby", song_artist=None)
+        mock_rotation.update_entry.assert_called_once_with(3, singer="Bobby", song_artist=None, singers=None)
 
     def test_missing_id_returns_400(self, rotation_client):
         resp = rotation_client.post('/rotation/edit',
@@ -174,7 +192,7 @@ class TestEditRotationEntry:
             data=json.dumps({"id": 3, "singer": "  Bobby  ", "song_artist": "  Song  "}),
             content_type='application/json')
         assert resp.status_code == 200
-        mock_rotation.update_entry.assert_called_once_with(3, singer="Bobby", song_artist="Song")
+        mock_rotation.update_entry.assert_called_once_with(3, singer="Bobby", song_artist="Song", singers=None)
 
     def test_error_returns_500(self, rotation_client, mock_rotation):
         mock_rotation.update_entry.side_effect = Exception("DB error")
@@ -237,7 +255,7 @@ class TestAddRotationEntry:
             data=json.dumps({"singer": "Frank", "song_artist": "My Way"}),
             content_type='application/json')
         assert resp.status_code == 200
-        mock_rotation.add_entry.assert_called_once_with("Frank", "My Way", "", file_path=None)
+        mock_rotation.add_entry.assert_called_once_with("Frank", "My Way", "", file_path=None, singers=None)
 
     def test_add_entry_with_notes(self, rotation_client, mock_rotation):
         mock_rotation.add_entry.return_value = {"id": 4, "singer": "Frank", "song_artist": "My Way", "notes": "has mic"}
@@ -245,7 +263,7 @@ class TestAddRotationEntry:
             data=json.dumps({"singer": "Frank", "song_artist": "My Way", "notes": "has mic"}),
             content_type='application/json')
         assert resp.status_code == 200
-        mock_rotation.add_entry.assert_called_once_with("Frank", "My Way", "has mic", file_path=None)
+        mock_rotation.add_entry.assert_called_once_with("Frank", "My Way", "has mic", file_path=None, singers=None)
 
     def test_missing_singer_returns_400(self, rotation_client):
         resp = rotation_client.post('/rotation/add',
@@ -279,7 +297,7 @@ class TestAddRotationEntry:
             content_type='application/json')
         assert resp.status_code == 200
         mock_rotation.add_entry.assert_called_once_with(
-            "Alice", "Song A", "", file_path="/media/song.mp4")
+            "Alice", "Song A", "", file_path="/media/song.mp4", singers=None)
 
     def test_add_with_url_fallback(self, rotation_client, mock_rotation):
         new_entry = {"id": 4, "singer": "Bob", "song_artist": "Song B",
@@ -550,6 +568,70 @@ class TestRestoreRoute:
         """Returns 503 when rotation is not configured."""
         resp = no_rotation_client.post('/rotation/restore', json={'entries': []})
         assert resp.status_code == 503
+
+
+class TestMultiSingerAdd:
+    def test_add_with_singers_array(self, rotation_client, mock_rotation):
+        mock_rotation.add_entry.return_value = {
+            "id": 10, "singer": "Phil & Anya", "singers_json": '["Phil", "Anya"]',
+            "position": 4, "status": "Waiting",
+        }
+        resp = rotation_client.post('/rotation/add',
+            data=json.dumps({"singers": ["Phil", "Anya"], "song_artist": "Duet Song"}),
+            content_type='application/json')
+        assert resp.status_code == 200
+        mock_rotation.add_entry.assert_called_once()
+        call_kwargs = mock_rotation.add_entry.call_args
+        assert call_kwargs[1].get("singers") == ["Phil", "Anya"]
+
+    def test_add_without_singers_backward_compat(self, rotation_client, mock_rotation):
+        mock_rotation.add_entry.return_value = {
+            "id": 10, "singer": "Sarah", "singers_json": None,
+            "position": 4, "status": "Waiting",
+        }
+        resp = rotation_client.post('/rotation/add',
+            data=json.dumps({"singer": "Sarah", "song_artist": "My Song"}),
+            content_type='application/json')
+        assert resp.status_code == 200
+        call_kwargs = mock_rotation.add_entry.call_args
+        assert call_kwargs[1].get("singers") is None
+
+
+class TestMultiSingerEdit:
+    def test_edit_with_singers_array(self, rotation_client, mock_rotation):
+        mock_rotation.update_entry.return_value = {
+            "id": 1, "singer": "Phil & Anya", "singers_json": '["Phil", "Anya"]',
+        }
+        resp = rotation_client.post('/rotation/edit',
+            data=json.dumps({"id": 1, "singers": ["Phil", "Anya"]}),
+            content_type='application/json')
+        assert resp.status_code == 200
+        call_kwargs = mock_rotation.update_entry.call_args
+        assert call_kwargs[1].get("singers") == ["Phil", "Anya"]
+
+
+class TestMultiSingerSongsSung:
+    def test_songs_sung_min_for_multi_singer(self, rotation_client, mock_rotation):
+        mock_rotation.store.get_songs_sung_counts.return_value = {"phil": 3, "anya": 1}
+        mock_rotation.get_rotation.return_value = [
+            {"id": 1, "position": 1, "singer": "Phil & Anya",
+             "singers_json": '["Phil", "Anya"]', "status": "Waiting",
+             "song_artist": "Duet", "notes": "", "file_path": None, "duration": None},
+        ]
+        resp = rotation_client.get('/rotation')
+        entries = resp.get_json()['entries']
+        assert entries[0]['songs_sung'] == 1  # min(phil=3, anya=1)
+
+    def test_songs_sung_legacy_entry_unchanged(self, rotation_client, mock_rotation):
+        mock_rotation.store.get_songs_sung_counts.return_value = {"sarah": 2}
+        mock_rotation.get_rotation.return_value = [
+            {"id": 1, "position": 1, "singer": "Sarah",
+             "singers_json": None, "status": "Waiting",
+             "song_artist": "Song", "notes": "", "file_path": None, "duration": None},
+        ]
+        resp = rotation_client.get('/rotation')
+        entries = resp.get_json()['entries']
+        assert entries[0]['songs_sung'] == 2
 
 
 class TestSetPaidRoute:

@@ -336,6 +336,28 @@ def handle_control():
         vlc.ensure_karaoke_released()
         overlay_mgr.set_karaoke_playing(False)
         vlc.fade_in_filler()
+    elif action == 'fadeout':
+        saved_volume = vlc.karaoke_volume
+
+        def _do_fadeout():
+            # Fade karaoke volume to 0 over 3 seconds via mpv
+            mpv_start = vlc._vlc_to_mpv_volume(saved_volume)
+            steps = 20
+            delay = 3.0 / steps
+            for i in range(steps + 1):
+                vol = mpv_start * (1 - i / steps)
+                vlc._set_property("volume", vol)
+                time.sleep(delay)
+            vlc.stop_karaoke()
+            vlc.ensure_karaoke_released()
+            overlay_mgr.set_karaoke_playing(False)
+            # Restore karaoke volume setting for next song
+            vlc.karaoke_volume = saved_volume
+            vlc._save_state()
+            vlc.fade_in_filler()
+            log_message(f"Fadeout complete, volume restored to {saved_volume}.", cfg)
+
+        threading.Thread(target=_do_fadeout, daemon=True).start()
 
     return jsonify({"success": True, "message": f"Action '{action}' executed."})
 
@@ -1754,6 +1776,29 @@ def system_stats():
 # --- Rotation ---
 
 
+def _add_songs_sung(entries, rotation):
+    """Add songs_sung field to each entry.
+
+    For multi-singer entries (singers_json not null), uses the minimum count
+    across all singers in the group.
+    For legacy entries, matches on the singer display string.
+    """
+    import json as _json
+    counts = rotation.store.get_songs_sung_counts()
+    for entry in entries:
+        singers_json = entry.get("singers_json")
+        if singers_json:
+            try:
+                names = _json.loads(singers_json)
+            except (ValueError, TypeError):
+                names = None
+            if isinstance(names, list) and names:
+                individual_counts = [counts.get(n.strip().lower(), 0) for n in names]
+                entry["songs_sung"] = min(individual_counts)
+                continue
+        entry["songs_sung"] = counts.get(entry["singer"].lower(), 0)
+
+
 def _add_time_estimates(entries):
     """Add estimated_time field to each entry based on cumulative durations."""
     from datetime import datetime, timedelta
@@ -1778,6 +1823,7 @@ def get_rotation():
     try:
         entries = rotation.get_rotation()
         _add_time_estimates(entries)
+        _add_songs_sung(entries, rotation)
         return jsonify({"entries": entries})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -1810,6 +1856,7 @@ def update_rotation_status():
             rotation.update_status(entry_id, status)
         entries = rotation.get_rotation()
         _add_time_estimates(entries)
+        _add_songs_sung(entries, rotation)
         return jsonify({"success": True, "entries": entries})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -1834,15 +1881,20 @@ def edit_rotation_entry():
 
     singer = data.get('singer')
     song_artist = data.get('song_artist')
+    singers = data.get('singers')
     if singer is not None:
         singer = singer.strip()
     if song_artist is not None:
         song_artist = song_artist.strip()
+    if singers is not None:
+        if not isinstance(singers, list) or not all(isinstance(s, str) for s in singers):
+            return jsonify({"error": "singers must be a list of strings"}), 400
 
     try:
-        rotation.update_entry(entry_id, singer=singer, song_artist=song_artist)
+        rotation.update_entry(entry_id, singer=singer, song_artist=song_artist, singers=singers)
         entries = rotation.get_rotation()
         _add_time_estimates(entries)
+        _add_songs_sung(entries, rotation)
         return jsonify({"success": True, "entries": entries})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -1869,6 +1921,7 @@ def delete_rotation_entry():
         rotation.delete_entry(entry_id)
         entries = rotation.get_rotation()
         _add_time_estimates(entries)
+        _add_songs_sung(entries, rotation)
         return jsonify({"success": True, "entries": entries})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -1881,22 +1934,29 @@ def add_rotation_entry():
     if not hasattr(current_app, 'rotation') or current_app.rotation is None:
         return jsonify({"error": "Rotation not configured"}), 503
     data = request.get_json(force=True)
+    singers = data.get('singers')
     singer = data.get('singer', '').strip()
     song_artist = data.get('song_artist', '').strip()
     notes = data.get('notes', '').strip()
-    if not singer:
-        return jsonify({"error": "singer is required"}), 400
+    if singers:
+        if not isinstance(singers, list) or not all(isinstance(s, str) for s in singers):
+            return jsonify({"error": "singers must be a list of strings"}), 400
+        if not singer:
+            singer = " & ".join(s.strip() for s in singers)
+    if not singer and not singers:
+        return jsonify({"error": "singer or singers is required"}), 400
 
     file_path = data.get('file_path', '').strip() or None
     url_fallback = data.get('url_fallback', '').strip() or None
 
     try:
-        entry = rotation.add_entry(singer, song_artist, notes, file_path=file_path)
+        entry = rotation.add_entry(singer, song_artist, notes, file_path=file_path, singers=singers if singers else None)
         if url_fallback:
             rotation.set_url_fallback(entry["id"], url_fallback)
             entry = rotation.store.get_entry(entry["id"])
         entries = rotation.get_rotation()
         _add_time_estimates(entries)
+        _add_songs_sung(entries, rotation)
         return jsonify({"success": True, "entry": entry, "entries": entries})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -1925,6 +1985,7 @@ def move_rotation_entry():
         rotation.move_entry(entry_id, new_position)
         entries = rotation.get_rotation()
         _add_time_estimates(entries)
+        _add_songs_sung(entries, rotation)
         return jsonify({"success": True, "entries": entries})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -1969,6 +2030,7 @@ def link_rotation_file():
         rotation.link_file(entry_id, file_path)
         entries = rotation.get_rotation()
         _add_time_estimates(entries)
+        _add_songs_sung(entries, rotation)
         entry = next((e for e in entries if e.get('id') == entry_id), None)
         return jsonify({"success": True, "entry": entry, "entries": entries})
     except Exception as e:
@@ -1996,6 +2058,7 @@ def unlink_rotation_file():
         rotation.unlink_file(entry_id)
         entries = rotation.get_rotation()
         _add_time_estimates(entries)
+        _add_songs_sung(entries, rotation)
         entry = next((e for e in entries if e.get('id') == entry_id), None)
         return jsonify({"success": True, "entry": entry, "entries": entries})
     except Exception as e:
@@ -2028,6 +2091,7 @@ def set_rotation_paid():
         rotation.set_paid(entry_id, paid)
         entries = rotation.get_rotation()
         _add_time_estimates(entries)
+        _add_songs_sung(entries, rotation)
         return jsonify({"success": True, "entries": entries})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -2073,6 +2137,7 @@ def restore_rotation_from_sheet():
             rotation.restore_entries(entries)
             updated = rotation.get_rotation()
             _add_time_estimates(updated)
+            _add_songs_sung(updated, rotation)
             return jsonify({"success": True, "entries": updated})
         except Exception as e:
             return jsonify({"error": str(e)}), 500
@@ -2082,6 +2147,7 @@ def restore_rotation_from_sheet():
             count = rotation.restore_from_sheet()
             sheet_entries = rotation.get_rotation()
             _add_time_estimates(sheet_entries)
+            _add_songs_sung(sheet_entries, rotation)
             return jsonify({"success": True, "restored": count, "entries": sheet_entries})
         except Exception as e:
             return jsonify({"error": str(e)}), 500
@@ -2276,6 +2342,7 @@ def download_and_link_rotation():
         entry = rotation.store.get_entry(entry_id)
         entries = rotation.get_rotation()
         _add_time_estimates(entries)
+        _add_songs_sung(entries, rotation)
         return jsonify({"success": True, "entry": entry, "entries": entries})
 
     except Exception as e:
@@ -2328,6 +2395,7 @@ def make_rotation_entry():
         entry = rotation.store.get_entry(entry_id)
         entries = rotation.get_rotation()
         _add_time_estimates(entries)
+        _add_songs_sung(entries, rotation)
         return jsonify({"success": True, "entry": entry, "entries": entries, "job_id": job_id})
 
     except Exception as e:

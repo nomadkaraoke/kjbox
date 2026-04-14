@@ -389,6 +389,42 @@ class TestGetStats:
         assert stats["started"] is not None
 
 
+class TestGetSongsSungCounts:
+    def test_empty(self, store):
+        assert store.get_songs_sung_counts() == {}
+
+    def test_no_done_entries(self, store):
+        store.add_entry("Alice")
+        store.add_entry("Bob")
+        assert store.get_songs_sung_counts() == {}
+
+    def test_counts_done_entries(self, store):
+        e1 = store.add_entry("Alice")
+        e2 = store.add_entry("Bob")
+        e3 = store.add_entry("Alice")
+        store.update_status(e1["id"], "Done")
+        store.update_status(e3["id"], "Done")
+        store.update_status(e2["id"], "Done")
+        counts = store.get_songs_sung_counts()
+        assert counts["alice"] == 2
+        assert counts["bob"] == 1
+
+    def test_case_insensitive(self, store):
+        e1 = store.add_entry("Alice")
+        e2 = store.add_entry("alice")
+        store.update_status(e1["id"], "Done")
+        store.update_status(e2["id"], "Done")
+        counts = store.get_songs_sung_counts()
+        assert counts["alice"] == 2
+
+    def test_excludes_non_done(self, store):
+        e1 = store.add_entry("Alice")
+        store.add_entry("Alice")  # still waiting
+        store.update_status(e1["id"], "Done")
+        counts = store.get_songs_sung_counts()
+        assert counts["alice"] == 1
+
+
 class TestFileLink:
     def test_link_file(self, store):
         e = store.add_entry("Alice")
@@ -763,3 +799,79 @@ class TestSetPaid:
     def test_set_paid_nonexistent_entry(self, store):
         with pytest.raises(ValueError, match="not found"):
             store.set_paid(9999, True)
+
+
+class TestSingersJson:
+    def test_schema_has_singers_json_column(self, store):
+        conn = store._get_conn()
+        cols = {row[1] for row in conn.execute(
+            "PRAGMA table_info(rotation_entries)"
+        ).fetchall()}
+        assert "singers_json" in cols
+
+    def test_add_entry_with_singers_list(self, store):
+        entry = store.add_entry("ignored", singers=["Phil", "Anya"])
+        assert entry["singer"] == "Phil & Anya"
+        assert entry["singers_json"] == '["Phil", "Anya"]'
+
+    def test_add_entry_with_single_singer_list(self, store):
+        entry = store.add_entry("ignored", singers=["Sarah"])
+        assert entry["singer"] == "Sarah"
+        assert entry["singers_json"] == '["Sarah"]'
+
+    def test_add_entry_without_singers_has_null_singers_json(self, store):
+        entry = store.add_entry("Sarah")
+        assert entry["singer"] == "Sarah"
+        assert entry["singers_json"] is None
+
+    def test_add_entry_singers_trims_whitespace(self, store):
+        entry = store.add_entry("ignored", singers=["  Phil  ", " Anya "])
+        assert entry["singer"] == "Phil & Anya"
+        import json
+        assert json.loads(entry["singers_json"]) == ["Phil", "Anya"]
+
+    def test_update_entry_with_singers(self, store):
+        entry = store.add_entry("Phil", singers=["Phil"])
+        updated = store.update_entry(entry["id"], singers=["Phil", "Anya"])
+        assert updated["singer"] == "Phil & Anya"
+        assert updated["singers_json"] == '["Phil", "Anya"]'
+
+    def test_update_entry_without_singers_preserves_singers_json(self, store):
+        entry = store.add_entry("ignored", singers=["Phil", "Anya"])
+        updated = store.update_entry(entry["id"], song_artist="New Song")
+        assert updated["singers_json"] == '["Phil", "Anya"]'
+        assert updated["singer"] == "Phil & Anya"
+
+    def test_get_songs_sung_counts_unpacks_json(self, store):
+        e = store.add_entry("ignored", song_artist="Duet Song", singers=["Phil", "Anya"])
+        store.update_status(e["id"], "Done")
+        counts = store.get_songs_sung_counts()
+        assert counts["phil"] == 1
+        assert counts["anya"] == 1
+
+    def test_get_songs_sung_counts_mixed_legacy_and_json(self, store):
+        e1 = store.add_entry("Phil")
+        store.update_status(e1["id"], "Done")
+        e2 = store.add_entry("ignored", singers=["Phil", "Anya"])
+        store.update_status(e2["id"], "Done")
+        counts = store.get_songs_sung_counts()
+        assert counts["phil"] == 2
+        assert counts["anya"] == 1
+
+    def test_get_songs_sung_counts_ignores_non_done(self, store):
+        store.add_entry("ignored", singers=["Phil", "Anya"])
+        e2 = store.add_entry("ignored", singers=["Phil"])
+        store.update_status(e2["id"], "Done")
+        counts = store.get_songs_sung_counts()
+        assert counts["phil"] == 1
+        assert "anya" not in counts
+
+    def test_restore_entries_preserves_singers_json(self, store):
+        e = store.add_entry("ignored", singers=["Phil", "Anya"])
+        snapshot = store.get_all_entries()
+        store.add_entry("Extra")
+        store.restore_entries(snapshot)
+        entries = store.get_all_entries()
+        assert len(entries) == 1
+        assert entries[0]["singers_json"] == '["Phil", "Anya"]'
+        assert entries[0]["singer"] == "Phil & Anya"
