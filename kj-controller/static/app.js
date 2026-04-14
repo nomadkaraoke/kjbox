@@ -301,6 +301,33 @@ async function controlPlayback(action) {
     await apiCall('/control', { action });
 }
 
+// --- Pitch Control ---
+
+let _currentPitch = 0;
+
+async function changePitch(delta) {
+    // delta: +1 or -1 for relative, 0 for reset
+    const newPitch = delta === 0 ? 0 : Math.max(-6, Math.min(6, _currentPitch + delta));
+    if (newPitch === _currentPitch && delta !== 0) return;
+    const resp = await apiCall('/pitch', { semitones: newPitch });
+    if (resp && resp.pitch_semitones !== undefined) {
+        _currentPitch = resp.pitch_semitones;
+        updatePitchDisplay(_currentPitch);
+    }
+}
+
+function updatePitchDisplay(semitones) {
+    _currentPitch = semitones;
+    const el = document.getElementById('np-pitch');
+    if (!el) return;
+    el.textContent = semitones > 0 ? '+' + semitones : String(semitones);
+    el.className = 'np-pitch-display' + (semitones !== 0 ? ' np-pitch-active' : '');
+    const downBtn = document.getElementById('np-pitch-down');
+    const upBtn = document.getElementById('np-pitch-up');
+    if (downBtn) downBtn.disabled = semitones <= -6;
+    if (upBtn) upBtn.disabled = semitones >= 6;
+}
+
 // --- Volume & Seek (#2 volume labels) ---
 
 function volumePercent(val) {
@@ -629,6 +656,10 @@ function updateNowPlaying(data) {
         npState.textContent = state === 'playing' ? 'Playing' : 'Paused';
         npState.className = 'now-playing-state ' + (state === 'playing' ? 'state-playing' : 'state-paused');
         npPause.textContent = state === 'playing' ? 'Pause' : 'Resume';
+
+        if (data.pitch_semitones !== undefined) {
+            updatePitchDisplay(data.pitch_semitones);
+        }
     } else {
         bar.classList.add('hidden');
     }

@@ -60,6 +60,18 @@ body::after {
 .np-btn:hover { background: #333; color: #fff; box-shadow: none; }
 .np-btn-stop { color: #fca5a5; border-color: rgba(239, 68, 68, 0.3); }
 .np-btn-stop:hover { background: rgba(239, 68, 68, 0.15); color: #f87171; }
+.now-playing-pitch { display: flex; align-items: center; gap: 2px; flex-shrink: 0; }
+.np-btn-pitch {
+    width: 28px; height: 28px; padding: 0; font-size: 1em; font-weight: bold;
+    display: flex; align-items: center; justify-content: center;
+}
+.np-btn-pitch:disabled { opacity: 0.3; cursor: default; }
+.np-pitch-display {
+    min-width: 28px; text-align: center; font-size: 0.8em; font-weight: bold;
+    color: #888; cursor: pointer; padding: 2px 4px; font-variant-numeric: tabular-nums;
+}
+.np-pitch-display:hover { color: #fff; }
+.np-pitch-active { color: #60a5fa; }
 
 /* --- Cards & Typography --- */
 

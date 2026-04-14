@@ -303,11 +303,8 @@ def handle_seek():
 
     vlc = current_app.vlc
     cfg = current_app.kj_config
-    karaoke_port = cfg.get('karaoke_vlc_port', 8080)
-    karaoke_pw = cfg.get('karaoke_vlc_password', 'karaoke')
     log_message(f"Received seek request to time: {int(seek_time)}s", cfg)
-    vlc.last_seek_time = time.time()
-    vlc.send_command(karaoke_port, karaoke_pw, f"seek&val={int(seek_time)}")
+    vlc.seek_karaoke(int(seek_time))
     return jsonify({"success": True})
 
 
@@ -320,16 +317,12 @@ def handle_control():
 
     vlc = current_app.vlc
     cfg = current_app.kj_config
-    karaoke_port = cfg.get('karaoke_vlc_port', 8080)
-    karaoke_pw = cfg.get('karaoke_vlc_password', 'karaoke')
 
     log_message(f"Received control action: {action}", cfg)
     overlay_mgr = current_app.overlay_manager
     if action == 'pause_resume':
-        vlc.send_command(karaoke_port, karaoke_pw, "pl_pause")
-        time.sleep(0.5)
-        status = vlc.send_command(karaoke_port, karaoke_pw, "")
-        if status and status.get('state') == 'paused':
+        is_now_paused = vlc.pause_resume_karaoke()
+        if is_now_paused:
             vlc.karaoke_active = False
             overlay_mgr.set_karaoke_playing(False)
             # Don't start filler — paused karaoke still holds the ALSA device
@@ -337,12 +330,9 @@ def handle_control():
             vlc.karaoke_active = True
             overlay_mgr.set_karaoke_playing(True)
     elif action == 'restart':
-        vlc.send_command(karaoke_port, karaoke_pw, "seek&val=0")
+        vlc.seek_karaoke(0)
     elif action == 'stop':
-        vlc.ensure_karaoke_released()
-        vlc.karaoke_active = False
-        vlc.current_playing_path = None
-        vlc.audio_error = False
+        vlc.stop_karaoke()
         overlay_mgr.set_karaoke_playing(False)
         vlc.fade_in_filler()
 
@@ -365,20 +355,34 @@ def handle_volume():
     cfg = current_app.kj_config
 
     if target == 'karaoke':
-        port = cfg.get('karaoke_vlc_port', 8080)
-        password = cfg.get('karaoke_vlc_password', 'karaoke')
-        vlc.karaoke_volume = level
+        vlc.set_karaoke_volume_live(level)
     elif target == 'filler':
         port = cfg.get('filler_vlc_port', 8081)
         password = cfg.get('filler_vlc_password', 'filler')
         vlc.filler_volume = level
+        vlc.send_command(port, password, f"volume&val={level}")
     else:
         return jsonify({"error": "Invalid target"}), 400
-
-    vlc.send_command(port, password, f"volume&val={level}")
     _debounced_save_volumes(vlc)
     log_message(f"Set volume for '{target}' to {level}", cfg)
     return jsonify({"success": True})
+
+
+@routes_bp.route('/pitch', methods=['POST'])
+def handle_pitch():
+    """Set karaoke pitch offset in semitones (-6 to +6)."""
+    semitones = request.json.get('semitones')
+    if semitones is None:
+        return jsonify({"error": "semitones is required"}), 400
+    try:
+        semitones = int(semitones)
+    except (ValueError, TypeError):
+        return jsonify({"error": "semitones must be an integer"}), 400
+
+    vlc = current_app.vlc
+    vlc.set_pitch(semitones)
+    log_message(f"Pitch set to {vlc.pitch_semitones} semitones", current_app.kj_config)
+    return jsonify({"success": True, "pitch_semitones": vlc.pitch_semitones})
 
 
 @routes_bp.route('/media')
@@ -504,11 +508,8 @@ def get_status():
     global _browser_mode
     vlc = current_app.vlc
     media = current_app.media
-    cfg = current_app.kj_config
-    karaoke_port = cfg.get('karaoke_vlc_port', 8080)
-    karaoke_pw = cfg.get('karaoke_vlc_password', 'karaoke')
 
-    status = vlc.send_command(karaoke_port, karaoke_pw, "")
+    status = vlc.get_karaoke_status()
 
     # Get display name for currently playing file
     current_playing = None
@@ -525,10 +526,8 @@ def get_status():
     chromium = getattr(current_app, 'chromium', None)
     browser_status = chromium.get_status() if chromium else {'running': False, 'pid': None, 'url': None}
     if _browser_mode and not browser_status['running']:
-        # Chromium crashed/exited — clear flag
         _browser_mode = False
     elif not _browser_mode and browser_status['running']:
-        # Orphan Chromium detected (e.g. after server restart) — adopt it
         _browser_mode = True
     browser_status['enabled'] = _browser_mode
 
@@ -545,39 +544,22 @@ def get_status():
                         "file_path": item.get('file_path'),
                     }
 
-    if status:
-        return jsonify({
-            "state": status.get('state'),
-            "current_playing": current_playing,
-            "current_playing_path": cpp,
-            "current_filler_track": vlc.current_filler_track,
-            "time": status.get('time'),
-            "length": status.get('length'),
-            "audio_device": vlc.audio_device,
-            "vlc_enabled": vlc.enabled,
-            "audio_error": vlc.audio_error,
-            "download_queue": dl_queue,
-            "karaoke_volume": vlc.karaoke_volume,
-            "filler_volume": vlc.filler_volume,
-            "browser_mode": browser_status,
-            "rotation_downloads": rotation_downloads,
-        })
-
-    # VLC not running - return status without VLC data
     return jsonify({
-        "state": "stopped",
+        "state": status.get('state', 'stopped'),
         "current_playing": current_playing,
         "current_playing_path": cpp,
         "current_filler_track": vlc.current_filler_track,
-        "time": 0,
-        "length": 0,
+        "time": status.get('time', 0),
+        "length": status.get('length', 0),
         "audio_device": vlc.audio_device,
         "vlc_enabled": vlc.enabled,
+        "audio_error": vlc.audio_error,
         "download_queue": dl_queue,
         "karaoke_volume": vlc.karaoke_volume,
         "filler_volume": vlc.filler_volume,
         "browser_mode": browser_status,
         "rotation_downloads": rotation_downloads,
+        "pitch_semitones": vlc.pitch_semitones,
     })
 
 
@@ -586,10 +568,10 @@ def fix_audio():
     """Emergency recovery: restarts both VLC instances to fix audio device conflicts."""
     vlc = current_app.vlc
     cfg = current_app.kj_config
-    log_message("Fix audio requested - restarting VLC instances...", cfg)
+    log_message("Fix audio requested - restarting playback instances...", cfg)
     vlc.audio_error = False
     vlc.restart_instances()
-    return jsonify({"success": True, "message": "VLC instances restarted."})
+    return jsonify({"success": True, "message": "Playback instances restarted."})
 
 
 @routes_bp.route('/audio_device', methods=['GET'])

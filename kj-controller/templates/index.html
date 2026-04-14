@@ -24,6 +24,11 @@
         <div class="now-playing-time">
             <span id="np-time">0:00</span> / <span id="np-length">0:00</span>
         </div>
+        <div class="now-playing-pitch">
+            <button class="np-btn np-btn-pitch" id="np-pitch-down" onclick="changePitch(-1)" title="Pitch down 1 semitone">-</button>
+            <span class="np-pitch-display" id="np-pitch" onclick="changePitch(0)" title="Reset pitch">0</span>
+            <button class="np-btn np-btn-pitch" id="np-pitch-up" onclick="changePitch(1)" title="Pitch up 1 semitone">+</button>
+        </div>
         <div class="now-playing-controls">
             <button class="np-btn btn-primary" id="np-pause" onclick="controlPlayback('pause_resume')">Pause</button>
             <button class="np-btn np-btn-stop" id="np-stop" onclick="controlPlayback('stop')">Stop</button>
