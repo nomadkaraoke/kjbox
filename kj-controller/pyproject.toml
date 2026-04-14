@@ -1,7 +1,7 @@
 [project]
 name = "kj-controller"
 version = "0.18.0"
-description = "Web-based karaoke show management with dual VLC playback"
+description = "Web-based karaoke show management with mpv + VLC playback"
 requires-python = ">=3.11"
 
 [tool.pytest.ini_options]
