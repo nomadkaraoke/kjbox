@@ -103,6 +103,7 @@ class RotationStore:
             ("gen_job_id", "TEXT DEFAULT NULL"),
             ("gen_status", "TEXT DEFAULT NULL"),
             ("paid", "INTEGER NOT NULL DEFAULT 0"),
+            ("singers_json", "TEXT DEFAULT NULL"),
         ]
         for col_name, col_type in migrations:
             if col_name not in existing_cols:

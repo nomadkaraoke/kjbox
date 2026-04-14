@@ -799,3 +799,12 @@ class TestSetPaid:
     def test_set_paid_nonexistent_entry(self, store):
         with pytest.raises(ValueError, match="not found"):
             store.set_paid(9999, True)
+
+
+class TestSingersJson:
+    def test_schema_has_singers_json_column(self, store):
+        conn = store._get_conn()
+        cols = {row[1] for row in conn.execute(
+            "PRAGMA table_info(rotation_entries)"
+        ).fetchall()}
+        assert "singers_json" in cols
