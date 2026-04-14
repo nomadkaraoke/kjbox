@@ -2087,10 +2087,10 @@ body {
     letter-spacing: 0.3px;
     white-space: nowrap;
 }
-.pill-new  { background: #e74c3c33; color: #e74c3c; }
+.pill-new  { background: #2d8a4e33; color: #2d8a4e; }
 .pill-once { background: #f59e0b33; color: #f59e0b; }
-.pill-few  { background: #2d8a4e33; color: #2d8a4e; }
-.pill-many { background: #7c3aed33; color: #7c3aed; }
+.pill-few  { background: #d4720a33; color: #d4720a; }
+.pill-many { background: #e74c3c33; color: #e74c3c; }
 
 .rotation-paid-heart {
     color: #e74c3c;

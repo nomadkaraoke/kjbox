@@ -3116,7 +3116,7 @@ function renderRotation(entries) {
             pill.classList.add('pill-once');
             pill.textContent = '\u00d71';
             pill.title = '1 song sung tonight';
-        } else if (sung <= 3) {
+        } else if (sung <= 4) {
             pill.classList.add('pill-few');
             pill.textContent = '\u00d7' + sung;
             pill.title = sung + ' songs sung tonight';
