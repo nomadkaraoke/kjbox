@@ -960,6 +960,134 @@ body {
 .av-label { color: #888; }
 .av-value { color: #e5e5e5; }
 
+/* Singer stats panel */
+.singer-stats-panel {
+    margin-top: 8px;
+    border-top: 1px solid #333;
+    padding-top: 8px;
+}
+.singer-stats-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 6px;
+}
+.singer-stats-header h3 {
+    margin: 0;
+    font-size: 0.95em;
+    color: #ffdf6b;
+}
+.singer-stats-toggle {
+    background: #2a2a2a;
+    border: 1px solid #444;
+    color: #999;
+    padding: 2px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.8em;
+}
+.singer-stats-toggle:hover {
+    color: #ccc;
+    background: #3a3a3a;
+}
+.singer-stats-list {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+.singer-stats-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 5px 8px;
+    border-radius: 6px;
+    background: #1a1a1a;
+    transition: background 0.15s;
+    gap: 8px;
+}
+.singer-stats-row:hover {
+    background: #222;
+}
+.singer-stats-info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+}
+.singer-stats-name {
+    color: #ffdf6b;
+    font-weight: 600;
+    font-size: 0.85em;
+    white-space: nowrap;
+}
+.singer-stats-detail {
+    color: #888;
+    font-size: 0.75em;
+    white-space: nowrap;
+}
+.singer-stats-tip {
+    color: #e74c3c;
+    font-size: 0.8em;
+}
+.singer-stats-actions {
+    display: flex;
+    gap: 3px;
+    flex-shrink: 0;
+}
+.singer-stats-btn {
+    background: #2a2a2a;
+    border: 1px solid #444;
+    color: #999;
+    padding: 3px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.7em;
+}
+.singer-stats-btn:hover {
+    color: #ccc;
+    background: #3a3a3a;
+}
+.singer-stats-row.singer-brb {
+    opacity: 0.6;
+    border-left: 3px solid #f59e0b;
+}
+.singer-stats-row.singer-left {
+    opacity: 0.4;
+    border-left: 3px solid #666;
+}
+.singer-stats-row.singer-done {
+    opacity: 0.3;
+}
+.singer-merge-dropdown {
+    position: fixed;
+    background: #2a2a2a;
+    border: 1px solid #555;
+    border-radius: 6px;
+    padding: 4px;
+    z-index: 100;
+    max-height: 200px;
+    overflow-y: auto;
+    min-width: 120px;
+}
+.singer-merge-option {
+    display: block;
+    width: 100%;
+    text-align: left;
+    background: none;
+    border: none;
+    color: #ccc;
+    padding: 6px 10px;
+    cursor: pointer;
+    font-size: 0.85em;
+    border-radius: 4px;
+}
+.singer-merge-option:hover {
+    background: #3a3a3a;
+    color: #ffdf6b;
+}
+
 /* --- Responsive --- */
 
 @media (max-width: 1024px) {

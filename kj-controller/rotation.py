@@ -206,6 +206,25 @@ class RotationManager:
         self.store.restore_entries(entries)
         self._after_mutation()
 
+    def get_singer_stats(self):
+        """Return per-singer aggregate stats."""
+        return self.store.get_singer_stats()
+
+    def rename_singer(self, old_name, new_name):
+        """Rename a singer across all entries."""
+        self.store.rename_singer(old_name, new_name)
+        self._after_mutation()
+
+    def merge_singers(self, source_name, target_name):
+        """Merge source singer into target across all entries."""
+        self.store.merge_singers(source_name, target_name)
+        self._after_mutation()
+
+    def set_singer_status(self, name, new_status):
+        """Set status on all non-done entries for a singer."""
+        self.store.set_singer_status(name, new_status)
+        self._after_mutation()
+
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------

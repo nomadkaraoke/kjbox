@@ -48,6 +48,7 @@ const rotationHistory = {
             if (data.entries) {
                 rotationData = data.entries;
                 renderRotation(rotationData);
+                if (data.singer_stats) { renderSingerStats(data.singer_stats); }
             }
             showRotationIndicator('success');
         } catch (e) {
@@ -2982,6 +2983,13 @@ document.addEventListener('DOMContentLoaded', () => {
     fetchSleepModeStatus();
     log('Nomad KJ Control initialized.');
 
+    if (localStorage.getItem('kj-singer-stats-hidden') === '1') {
+        const statsList = document.getElementById('singer-stats-list');
+        const statsBtn = document.querySelector('.singer-stats-toggle');
+        if (statsList) statsList.classList.add('hidden');
+        if (statsBtn) statsBtn.textContent = 'Show';
+    }
+
     // Singer pill input keydown handlers
     const singerInput = document.getElementById('rotation-singer');
     if (singerInput) {
@@ -3086,6 +3094,7 @@ setInterval(fetchSystemStats, 5000);
 // --- Rotation (SQLite primary) ---
 
 let rotationData = [];
+let singerStatsData = [];
 
 async function fetchRotation() {
     try {
@@ -3101,6 +3110,7 @@ async function fetchRotation() {
         const data = await response.json();
         rotationData = data.entries || [];
         renderRotation(rotationData);
+        if (data.singer_stats) { renderSingerStats(data.singer_stats); }
     } catch (e) {
         const list = document.getElementById('rotation-list');
         if (list) list.innerHTML = '<div class="rotation-empty">Could not load rotation</div>';
@@ -3481,6 +3491,249 @@ function renderRotation(entries) {
         row.appendChild(actions);
         list.appendChild(row);
     });
+}
+
+// --- Singer Stats Panel ---
+
+function toggleSingerStats() {
+    const list = document.getElementById('singer-stats-list');
+    const btn = document.querySelector('.singer-stats-toggle');
+    if (!list || !btn) return;
+    if (list.classList.contains('hidden')) {
+        list.classList.remove('hidden');
+        btn.textContent = 'Hide';
+        localStorage.removeItem('kj-singer-stats-hidden');
+    } else {
+        list.classList.add('hidden');
+        btn.textContent = 'Show';
+        localStorage.setItem('kj-singer-stats-hidden', '1');
+    }
+}
+
+function renderSingerStats(stats) {
+    const list = document.getElementById('singer-stats-list');
+    if (!list) return;
+    singerStatsData = stats || [];
+
+    if (!stats || stats.length === 0) {
+        list.innerHTML = '<div style="color:#666;font-size:0.8em;padding:4px;">No singers yet</div>';
+        return;
+    }
+
+    const order = { active: 0, brb: 1, left: 2, done: 3 };
+    const sorted = [...stats].sort((a, b) => {
+        const oa = order[a.status] ?? 0;
+        const ob = order[b.status] ?? 0;
+        if (oa !== ob) return oa - ob;
+        return 0;
+    });
+
+    list.innerHTML = '';
+    sorted.forEach((singer) => {
+        if (singer.status === 'done' && singer.entries_waiting === 0 && singer.entries_left === 0) return;
+
+        const row = document.createElement('div');
+        row.className = 'singer-stats-row';
+        if (singer.status === 'brb') row.classList.add('singer-brb');
+        if (singer.status === 'left') row.classList.add('singer-left');
+        if (singer.status === 'done') row.classList.add('singer-done');
+
+        const info = document.createElement('div');
+        info.className = 'singer-stats-info';
+
+        const name = document.createElement('span');
+        name.className = 'singer-stats-name';
+        name.textContent = singer.name;
+        info.appendChild(name);
+
+        if (singer.has_tipped) {
+            const tip = document.createElement('span');
+            tip.className = 'singer-stats-tip';
+            tip.textContent = ' \u2665';
+            tip.title = 'Tipped tonight';
+            info.appendChild(tip);
+        }
+
+        if (singer.first_added) {
+            const elapsed = document.createElement('span');
+            elapsed.className = 'singer-stats-detail';
+            const added = new Date(singer.first_added.replace(' ', 'T'));
+            const mins = Math.round((Date.now() - added.getTime()) / 60000);
+            if (mins < 60) {
+                elapsed.textContent = mins + 'm ago';
+            } else {
+                elapsed.textContent = Math.floor(mins / 60) + 'h ' + (mins % 60) + 'm ago';
+            }
+            elapsed.title = 'First added to rotation';
+            info.appendChild(elapsed);
+        }
+
+        const songs = document.createElement('span');
+        songs.className = 'singer-stats-detail';
+        songs.textContent = singer.entries_sung + '/' + singer.entries_total + ' sung';
+        songs.title = singer.entries_sung + ' sung, ' + singer.entries_waiting + ' waiting';
+        info.appendChild(songs);
+
+        if (singer.entries_waiting > 0) {
+            const singerLower = singer.name.toLowerCase();
+            const nextEntry = rotationData.find(e => {
+                if (e.singers_json) {
+                    try {
+                        const names = JSON.parse(e.singers_json);
+                        return names.some(n => n.trim().toLowerCase() === singerLower);
+                    } catch (err) { return false; }
+                }
+                return e.singer.toLowerCase() === singerLower;
+            });
+            if (nextEntry && nextEntry.estimated_time) {
+                const est = document.createElement('span');
+                est.className = 'singer-stats-detail';
+                est.textContent = '~' + nextEntry.estimated_time;
+                est.title = 'Estimated next sing time';
+                info.appendChild(est);
+            }
+        }
+
+        row.appendChild(info);
+
+        const actions = document.createElement('div');
+        actions.className = 'singer-stats-actions';
+
+        if (singer.status === 'left') {
+            const restoreBtn = document.createElement('button');
+            restoreBtn.className = 'singer-stats-btn';
+            restoreBtn.textContent = 'Restore';
+            restoreBtn.onclick = () => singerAction('restore', { name: singer.name });
+            actions.appendChild(restoreBtn);
+        } else if (singer.status !== 'done') {
+            const editBtn = document.createElement('button');
+            editBtn.className = 'singer-stats-btn';
+            editBtn.textContent = 'Edit';
+            editBtn.onclick = () => enterSingerEditMode(row, singer);
+            actions.appendChild(editBtn);
+
+            const mergeBtn = document.createElement('button');
+            mergeBtn.className = 'singer-stats-btn';
+            mergeBtn.textContent = 'Merge';
+            mergeBtn.onclick = (ev) => showMergeDropdown(ev, singer);
+            actions.appendChild(mergeBtn);
+
+            const brbBtn = document.createElement('button');
+            brbBtn.className = 'singer-stats-btn';
+            brbBtn.textContent = singer.status === 'brb' ? 'Back' : 'BRB';
+            brbBtn.onclick = () => singerAction('brb', { name: singer.name, brb: singer.status !== 'brb' });
+            actions.appendChild(brbBtn);
+
+            const removeBtn = document.createElement('button');
+            removeBtn.className = 'singer-stats-btn';
+            removeBtn.textContent = 'Remove';
+            removeBtn.onclick = () => singerAction('remove', { name: singer.name });
+            actions.appendChild(removeBtn);
+        }
+
+        row.appendChild(actions);
+        list.appendChild(row);
+    });
+}
+
+async function singerAction(action, data) {
+    rotationHistory.pushUndo(rotationData);
+    showRotationIndicator('spin');
+    try {
+        const resp = await fetch('/rotation/singer/' + action, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
+        });
+        const result = await resp.json();
+        if (!resp.ok) { showRotationIndicator('error'); return; }
+        if (result.entries) { rotationData = result.entries; renderRotation(rotationData); }
+        if (result.singer_stats) { renderSingerStats(result.singer_stats); }
+        showRotationIndicator('success');
+    } catch (e) {
+        showRotationIndicator('error');
+    }
+}
+
+function enterSingerEditMode(row, singer) {
+    const info = row.querySelector('.singer-stats-info');
+    const actions = row.querySelector('.singer-stats-actions');
+    const origInfoHTML = info.innerHTML;
+    const origActionsHTML = actions.innerHTML;
+
+    info.innerHTML = '';
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.value = singer.name;
+    input.className = 'rotation-edit-input';
+    input.style.flex = '1';
+    info.appendChild(input);
+
+    actions.innerHTML = '';
+    const saveBtn = document.createElement('button');
+    saveBtn.className = 'singer-stats-btn';
+    saveBtn.textContent = 'Save';
+    saveBtn.onclick = async () => {
+        const newName = input.value.trim();
+        if (!newName || newName === singer.name) {
+            info.innerHTML = origInfoHTML;
+            actions.innerHTML = origActionsHTML;
+            return;
+        }
+        await singerAction('rename', { old_name: singer.name, new_name: newName });
+    };
+    const cancelBtn = document.createElement('button');
+    cancelBtn.className = 'singer-stats-btn';
+    cancelBtn.textContent = 'Cancel';
+    cancelBtn.onclick = () => {
+        info.innerHTML = origInfoHTML;
+        actions.innerHTML = origActionsHTML;
+    };
+    actions.appendChild(saveBtn);
+    actions.appendChild(cancelBtn);
+    input.focus();
+    input.select();
+    input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') saveBtn.click();
+        if (e.key === 'Escape') cancelBtn.click();
+    });
+}
+
+function showMergeDropdown(ev, singer) {
+    document.querySelectorAll('.singer-merge-dropdown').forEach(d => d.remove());
+
+    const others = singerStatsData
+        .filter(s => s.name.toLowerCase() !== singer.name.toLowerCase() && s.status !== 'done')
+        .map(s => s.name);
+
+    if (others.length === 0) return;
+
+    const dropdown = document.createElement('div');
+    dropdown.className = 'singer-merge-dropdown';
+    others.forEach(targetName => {
+        const opt = document.createElement('button');
+        opt.className = 'singer-merge-option';
+        opt.textContent = targetName;
+        opt.onclick = () => {
+            dropdown.remove();
+            singerAction('merge', { source_name: singer.name, target_name: targetName });
+        };
+        dropdown.appendChild(opt);
+    });
+
+    const btn = ev.currentTarget;
+    const rect = btn.getBoundingClientRect();
+    dropdown.style.top = (rect.bottom + 2) + 'px';
+    dropdown.style.left = rect.left + 'px';
+    document.body.appendChild(dropdown);
+
+    const close = (e) => {
+        if (!dropdown.contains(e.target)) {
+            dropdown.remove();
+            document.removeEventListener('click', close);
+        }
+    };
+    setTimeout(() => document.addEventListener('click', close), 0);
 }
 
 function enterRotationEditMode(row, entry) {

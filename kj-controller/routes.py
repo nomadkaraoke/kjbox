@@ -1799,6 +1799,15 @@ def _add_songs_sung(entries, rotation):
         entry["songs_sung"] = counts.get(entry["singer"].lower(), 0)
 
 
+def _singer_action_response(rotation):
+    """Build standard response for singer action routes."""
+    entries = rotation.get_rotation()
+    _add_time_estimates(entries)
+    _add_songs_sung(entries, rotation)
+    singer_stats = rotation.get_singer_stats()
+    return jsonify({"success": True, "entries": entries, "singer_stats": singer_stats})
+
+
 def _add_time_estimates(entries):
     """Add estimated_time field to each entry based on cumulative durations."""
     from datetime import datetime, timedelta
@@ -1824,7 +1833,8 @@ def get_rotation():
         entries = rotation.get_rotation()
         _add_time_estimates(entries)
         _add_songs_sung(entries, rotation)
-        return jsonify({"entries": entries})
+        singer_stats = rotation.get_singer_stats()
+        return jsonify({"entries": entries, "singer_stats": singer_stats})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -2151,6 +2161,90 @@ def restore_rotation_from_sheet():
             return jsonify({"success": True, "restored": count, "entries": sheet_entries})
         except Exception as e:
             return jsonify({"error": str(e)}), 500
+
+
+@routes_bp.route('/rotation/singer/rename', methods=['POST'])
+def rename_singer_route():
+    rotation = current_app.rotation
+    if not hasattr(current_app, 'rotation') or current_app.rotation is None:
+        return jsonify({"error": "Rotation not configured"}), 503
+    data = request.get_json(force=True)
+    old_name = data.get('old_name', '').strip()
+    new_name = data.get('new_name', '').strip()
+    if not old_name or not new_name:
+        return jsonify({"error": "old_name and new_name are required"}), 400
+    try:
+        rotation.rename_singer(old_name, new_name)
+        return _singer_action_response(rotation)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@routes_bp.route('/rotation/singer/merge', methods=['POST'])
+def merge_singers_route():
+    rotation = current_app.rotation
+    if not hasattr(current_app, 'rotation') or current_app.rotation is None:
+        return jsonify({"error": "Rotation not configured"}), 503
+    data = request.get_json(force=True)
+    source = data.get('source_name', '').strip()
+    target = data.get('target_name', '').strip()
+    if not source or not target:
+        return jsonify({"error": "source_name and target_name are required"}), 400
+    try:
+        rotation.merge_singers(source, target)
+        return _singer_action_response(rotation)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@routes_bp.route('/rotation/singer/brb', methods=['POST'])
+def singer_brb_route():
+    rotation = current_app.rotation
+    if not hasattr(current_app, 'rotation') or current_app.rotation is None:
+        return jsonify({"error": "Rotation not configured"}), 503
+    data = request.get_json(force=True)
+    name = data.get('name', '').strip()
+    brb = data.get('brb', True)
+    if not name:
+        return jsonify({"error": "name is required"}), 400
+    try:
+        new_status = "On Hold (BRB)" if brb else "Waiting"
+        rotation.set_singer_status(name, new_status)
+        return _singer_action_response(rotation)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@routes_bp.route('/rotation/singer/remove', methods=['POST'])
+def remove_singer_route():
+    rotation = current_app.rotation
+    if not hasattr(current_app, 'rotation') or current_app.rotation is None:
+        return jsonify({"error": "Rotation not configured"}), 503
+    data = request.get_json(force=True)
+    name = data.get('name', '').strip()
+    if not name:
+        return jsonify({"error": "name is required"}), 400
+    try:
+        rotation.set_singer_status(name, "Left")
+        return _singer_action_response(rotation)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@routes_bp.route('/rotation/singer/restore', methods=['POST'])
+def restore_singer_route():
+    rotation = current_app.rotation
+    if not hasattr(current_app, 'rotation') or current_app.rotation is None:
+        return jsonify({"error": "Rotation not configured"}), 503
+    data = request.get_json(force=True)
+    name = data.get('name', '').strip()
+    if not name:
+        return jsonify({"error": "name is required"}), 400
+    try:
+        rotation.set_singer_status(name, "Waiting")
+        return _singer_action_response(rotation)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 @routes_bp.route('/rotation/search', methods=['GET'])
