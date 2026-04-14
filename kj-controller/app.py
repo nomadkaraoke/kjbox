@@ -18,6 +18,7 @@ from routes import routes_bp
 from sleep_mode import SleepManager
 from utils import log_message
 from chromium import ChromiumManager
+from mpv_manager import MpvManager
 from vlc import VLCManager
 from zip_playback import ZipPlayback
 
@@ -37,7 +38,7 @@ def create_app(config=None):
     cfg = config or load_config()
     flask_app.kj_config = cfg
     flask_app.media = MediaIndex(cfg)
-    flask_app.vlc = VLCManager(cfg, enabled=False if config else None)
+    flask_app.vlc = MpvManager(cfg, enabled=False if config else None)
     flask_app.catalog = ExternalCatalog(cfg)
     flask_app.zip_playback = ZipPlayback(cfg)
     flask_app.chromium = ChromiumManager(cfg)
@@ -77,8 +78,8 @@ def start_app():  # pragma: no cover
     cfg = load_config()
     os.makedirs(cfg['download_folder'], exist_ok=True)
 
-    # Create VLCManager (auto-detects Pi)
-    vlc = VLCManager(cfg)
+    # Create MpvManager (mpv for karaoke, VLC for filler)
+    vlc = MpvManager(cfg)
 
     # Set default filler track from config, or auto-detect from filler music dir
     configured_filler = cfg.get('default_filler_track', '')
@@ -182,18 +183,16 @@ def start_app():  # pragma: no cover
     else:
         log_message("External catalog not yet built. Use POST /catalog/build to create.", cfg)
 
-    # Launch VLC instances (only on Pi / karaoke device)
+    # Launch playback instances (mpv karaoke + VLC filler, only on Pi / karaoke device)
     if vlc.enabled:
-        karaoke_port = cfg.get('karaoke_vlc_port', 8080)
-        karaoke_pw = cfg.get('karaoke_vlc_password', 'karaoke')
         filler_port = cfg.get('filler_vlc_port', 8081)
         filler_pw = cfg.get('filler_vlc_password', 'filler')
 
-        # Try to reconnect to VLC instances that survived a restart
+        # Try to reconnect to instances that survived a restart
         found = vlc.try_reconnect()
 
         if not found['karaoke']:
-            vlc.launch_instance("karaoke", karaoke_port, karaoke_pw)
+            vlc.launch_instance("karaoke")
         if not found['filler']:
             filler_path = os.path.join(filler_dir, vlc.current_filler_track) if filler_dir and vlc.current_filler_track else ''
             vlc.launch_instance("filler", filler_port, filler_pw, filler_path, True)

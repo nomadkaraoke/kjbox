@@ -723,9 +723,8 @@ def test_play_with_vlc_enabled(flask_test_client, flask_app, tmp_media_dir, mock
 def test_control_pause_resume_paused_state(flask_test_client, flask_app, mocker):
     """POST /control pause_resume when paused does NOT start filler (ALSA held)."""
     flask_app.vlc.enabled = True
-    # send_command returns paused state on the status check
-    mocker.patch.object(flask_app.vlc, 'send_command',
-        return_value={"state": "paused"})
+    # pause_resume_karaoke returns True (now paused)
+    mocker.patch.object(flask_app.vlc, 'pause_resume_karaoke', return_value=True)
     fade_in_mock = mocker.patch.object(flask_app.vlc, 'fade_in_filler')
 
     response = flask_test_client.post('/control',
@@ -740,8 +739,8 @@ def test_control_pause_resume_paused_state(flask_test_client, flask_app, mocker)
 def test_control_pause_resume_playing_state(flask_test_client, flask_app, mocker):
     """POST /control resume does NOT fade out filler (karaoke reclaims ALSA)."""
     flask_app.vlc.enabled = True
-    mocker.patch.object(flask_app.vlc, 'send_command',
-        return_value={"state": "playing"})
+    # pause_resume_karaoke returns False (now playing/resumed)
+    mocker.patch.object(flask_app.vlc, 'pause_resume_karaoke', return_value=False)
     fade_out_mock = mocker.patch.object(flask_app.vlc, 'fade_out_filler')
 
     response = flask_test_client.post('/control',
@@ -781,9 +780,9 @@ def test_filler_music_set_with_seek(flask_test_client, flask_app, tmp_media_dir,
 
 
 def test_status_with_vlc_enabled(flask_test_client, flask_app, mocker):
-    """GET /status with VLC enabled returns full status data."""
+    """GET /status with playback enabled returns full status data."""
     flask_app.vlc.enabled = True
-    mocker.patch.object(flask_app.vlc, 'send_command',
+    mocker.patch.object(flask_app.vlc, 'get_karaoke_status',
         return_value={"state": "playing", "time": 42, "length": 200})
 
     response = flask_test_client.get('/status')
@@ -1078,21 +1077,19 @@ def test_yt_search_no_body(flask_test_client):
 
 # --- Bug fix: stop uses ensure_karaoke_released ---
 
-def test_control_stop_calls_ensure_karaoke_released(flask_test_client, flask_app, mocker):
-    """POST /control stop uses ensure_karaoke_released (not manual pl_stop/pl_empty)."""
+def test_control_stop_calls_stop_karaoke(flask_test_client, flask_app, mocker):
+    """POST /control stop calls stop_karaoke() and fades in filler."""
     flask_app.vlc.enabled = True
     flask_app.vlc.karaoke_active = True
     flask_app.vlc.current_playing_path = "/some/path.mp4"
-    ensure_mock = mocker.patch.object(flask_app.vlc, 'ensure_karaoke_released')
+    stop_mock = mocker.patch.object(flask_app.vlc, 'stop_karaoke')
     mocker.patch.object(flask_app.vlc, 'fade_in_filler')
 
     response = flask_test_client.post('/control',
         data=json.dumps({"action": "stop"}),
         content_type='application/json')
     assert response.status_code == 200
-    ensure_mock.assert_called_once()
-    assert flask_app.vlc.karaoke_active is False
-    assert flask_app.vlc.current_playing_path is None
+    stop_mock.assert_called_once()
 
 
 def test_control_fadeout(flask_test_client):
@@ -1104,17 +1101,18 @@ def test_control_fadeout(flask_test_client):
 
 
 def test_control_fadeout_spawns_thread(flask_test_client, flask_app, mocker):
-    """POST /control fadeout captures volume, spawns fade thread, and restores volume."""
+    """POST /control fadeout fades mpv volume, stops, and restores volume."""
     flask_app.vlc.enabled = True
     flask_app.vlc.karaoke_active = True
     flask_app.vlc.karaoke_volume = 200
     flask_app.vlc.current_playing_path = "/some/path.mp4"
 
-    fade_mock = mocker.patch.object(flask_app.vlc, 'fade_music')
+    set_prop_mock = mocker.patch.object(flask_app.vlc, '_set_property')
+    stop_mock = mocker.patch.object(flask_app.vlc, 'stop_karaoke')
     ensure_mock = mocker.patch.object(flask_app.vlc, 'ensure_karaoke_released')
     filler_mock = mocker.patch.object(flask_app.vlc, 'fade_in_filler')
-    mocker.patch.object(flask_app.vlc, 'send_command')
     mocker.patch.object(flask_app.vlc, '_save_state')
+    mocker.patch('routes.time.sleep')
 
     # Patch threading.Thread to run synchronously for testing
     original_thread = mocker.patch('routes.threading.Thread')
@@ -1134,20 +1132,18 @@ def test_control_fadeout_spawns_thread(flask_test_client, flask_app, mocker):
         content_type='application/json')
     assert response.status_code == 200
 
-    # Verify fade was called from 200 -> 0 over 3 seconds
-    fade_mock.assert_called_once()
-    args = fade_mock.call_args
-    assert args[0][2] == 200  # start_vol
-    assert args[0][3] == 0    # end_vol
-    assert args[1]['duration_s'] == 3.0
+    # Verify mpv volume was set multiple times (fade steps)
+    assert set_prop_mock.call_count >= 20
+    # Last volume set should be ~0
+    last_vol = set_prop_mock.call_args_list[-1][0][1]
+    assert last_vol < 1.0
 
+    stop_mock.assert_called_once()
     ensure_mock.assert_called_once()
     filler_mock.assert_called_once()
 
-    # Volume should be restored
+    # Volume setting should be restored for next song
     assert flask_app.vlc.karaoke_volume == 200
-    assert flask_app.vlc.karaoke_active is False
-    assert flask_app.vlc.current_playing_path is None
 
 
 # --- Bug fix: filler music skips playback during karaoke ---
