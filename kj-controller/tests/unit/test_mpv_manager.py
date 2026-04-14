@@ -5,6 +5,8 @@ import os
 import socket
 import threading
 
+import pytest
+
 from mpv_manager import MpvManager, PITCH_MIN, PITCH_MAX
 
 
@@ -355,3 +357,394 @@ def test_get_property_error(mock_config, tmp_path):
 
     result = m._get_property("nonexistent")
     assert result is None
+
+
+# --- play_video ---
+
+def test_play_video_file_not_found(mock_config, mocker):
+    m = MpvManager(mock_config, enabled=True)
+    mock_ipc = mocker.patch.object(m, '_send_ipc')
+    m.play_video("/nonexistent/file.mp4")
+    mock_ipc.assert_not_called()
+    assert m.karaoke_active is False
+
+
+def test_play_video_disabled(mock_config, tmp_media_dir, mocker):
+    m = MpvManager(mock_config, enabled=False)
+    test_file = tmp_media_dir / "media" / "song.mp4"
+    test_file.write_text("fake")
+    mock_ipc = mocker.patch.object(m, '_send_ipc')
+    m.play_video(str(test_file))
+    mock_ipc.assert_not_called()
+    assert m.karaoke_active is False
+
+
+def test_play_video_success(mock_config, tmp_media_dir, mocker):
+    m = MpvManager(mock_config, enabled=True)
+    test_file = tmp_media_dir / "media" / "song.mp4"
+    test_file.write_text("fake video")
+
+    # Mock all external calls
+    mocker.patch.object(m, 'send_command', return_value={"state": "stopped"})
+    mocker.patch.object(m, 'fade_out_filler')
+    mocker.patch.object(m, 'ensure_filler_stopped')
+    mocker.patch.object(m, '_send_ipc', return_value={"data": {"playlist_entry_id": 1}, "error": "success"})
+    mocker.patch.object(m, '_set_property')
+    mocker.patch.object(m, '_save_state')
+
+    m.play_video(str(test_file), display_path="/display/song.mp4")
+
+    assert m.karaoke_active is True
+    assert m.current_playing_path == "/display/song.mp4"
+    assert m.pitch_semitones == 0  # Reset on new song
+    assert m.audio_error is False
+
+
+def test_play_video_resets_pitch(mock_config, tmp_media_dir, mocker):
+    m = MpvManager(mock_config, enabled=True)
+    m.pitch_semitones = 4
+    test_file = tmp_media_dir / "media" / "song.mp4"
+    test_file.write_text("fake video")
+
+    mocker.patch.object(m, 'send_command', return_value={"state": "stopped"})
+    mocker.patch.object(m, 'fade_out_filler')
+    mocker.patch.object(m, 'ensure_filler_stopped')
+    mocker.patch.object(m, '_send_ipc', return_value={"error": "success", "data": {"playlist_entry_id": 1}})
+    mocker.patch.object(m, '_set_property')
+    mocker.patch.object(m, '_save_state')
+
+    m.play_video(str(test_file))
+    assert m.pitch_semitones == 0
+
+
+def test_play_video_sets_overlay(mock_config, tmp_media_dir, mocker):
+    m = MpvManager(mock_config, enabled=True)
+    test_file = tmp_media_dir / "media" / "song.mp4"
+    test_file.write_text("fake video")
+
+    mocker.patch.object(m, 'send_command', return_value={"state": "stopped"})
+    mocker.patch.object(m, 'fade_out_filler')
+    mocker.patch.object(m, 'ensure_filler_stopped')
+    mocker.patch.object(m, '_send_ipc', return_value={"error": "success", "data": {"playlist_entry_id": 1}})
+    mocker.patch.object(m, '_set_property')
+    mocker.patch.object(m, '_save_state')
+
+    overlay = mocker.Mock()
+    m.play_video(str(test_file), overlay_manager=overlay)
+    overlay.set_karaoke_playing.assert_called_once_with(True)
+
+
+def test_play_video_skips_filler_fade_when_already_stopped(mock_config, tmp_media_dir, mocker):
+    m = MpvManager(mock_config, enabled=True)
+    test_file = tmp_media_dir / "media" / "song.mp4"
+    test_file.write_text("fake video")
+
+    mocker.patch.object(m, 'send_command', return_value={"state": "stopped"})
+    fade_mock = mocker.patch.object(m, 'fade_out_filler')
+    mocker.patch.object(m, '_send_ipc', return_value={"error": "success", "data": {"playlist_entry_id": 1}})
+    mocker.patch.object(m, '_set_property')
+    mocker.patch.object(m, '_save_state')
+
+    m.play_video(str(test_file))
+    fade_mock.assert_not_called()
+
+
+def test_play_video_loadfile_failure(mock_config, tmp_media_dir, mocker):
+    m = MpvManager(mock_config, enabled=True)
+    test_file = tmp_media_dir / "media" / "song.mp4"
+    test_file.write_text("fake video")
+
+    mocker.patch.object(m, 'send_command', return_value={"state": "stopped"})
+    mocker.patch.object(m, '_send_ipc', return_value=None)
+    mocker.patch.object(m, '_set_property')
+    mocker.patch.object(m, '_save_state')
+
+    m.play_video(str(test_file))
+    assert m.audio_error is True
+
+
+# --- ensure_karaoke_released ---
+
+def test_ensure_karaoke_released_success(mock_config, mocker):
+    m = MpvManager(mock_config, enabled=False)
+    mocker.patch.object(m, '_send_ipc')
+    mocker.patch.object(m, '_get_property', return_value=True)
+    assert m.ensure_karaoke_released() is True
+
+
+def test_ensure_karaoke_released_retries(mock_config, mocker):
+    m = MpvManager(mock_config, enabled=False)
+    mocker.patch.object(m, '_send_ipc')
+    mocker.patch.object(m, '_get_property', side_effect=[False, False, True])
+    mocker.patch('mpv_manager.time.sleep')
+    assert m.ensure_karaoke_released() is True
+
+
+# --- mpv_is_running ---
+
+def test_mpv_is_running_true(mock_config, mocker):
+    m = MpvManager(mock_config, enabled=False)
+    mocker.patch.object(m, '_get_property', return_value=True)
+    assert m._mpv_is_running() is True
+
+
+def test_mpv_is_running_false(mock_config, mocker):
+    m = MpvManager(mock_config, enabled=False)
+    mocker.patch.object(m, '_get_property', return_value=None)
+    assert m._mpv_is_running() is False
+
+
+# --- try_reconnect ---
+
+def test_try_reconnect_disabled(mock_config):
+    m = MpvManager(mock_config, enabled=False)
+    result = m.try_reconnect()
+    assert result == {'karaoke': False, 'filler': False}
+
+
+def test_try_reconnect_finds_idle_mpv(mock_config, mocker):
+    m = MpvManager(mock_config, enabled=True)
+    mocker.patch('os.path.exists', return_value=True)
+    mocker.patch.object(m, '_get_property', return_value=True)  # idle=True
+    mocker.patch.object(m, '_probe_vlc', return_value=None)
+    mocker.patch.object(m, '_load_state', return_value={})
+
+    result = m.try_reconnect()
+    assert result['karaoke'] is True
+    assert m.karaoke_active is False
+
+
+def test_try_reconnect_finds_playing_mpv(mock_config, mocker):
+    m = MpvManager(mock_config, enabled=True)
+    mocker.patch('os.path.exists', return_value=True)
+    mocker.patch.object(m, '_get_property', return_value=False)  # idle=False (playing)
+    mocker.patch.object(m, '_probe_vlc', return_value=None)
+    mocker.patch.object(m, '_load_state', return_value={'current_playing_path': '/test.mp4'})
+
+    result = m.try_reconnect()
+    assert result['karaoke'] is True
+    assert m.karaoke_active is True
+    assert m.current_playing_path == '/test.mp4'
+
+
+def test_try_reconnect_finds_filler(mock_config, mocker):
+    m = MpvManager(mock_config, enabled=True)
+    mocker.patch('os.path.exists', return_value=False)  # no mpv socket
+    mocker.patch.object(m, '_probe_vlc', return_value={"state": "playing"})
+    mocker.patch.object(m, '_load_state', return_value={'current_filler_track': 'song.mp3'})
+
+    result = m.try_reconnect()
+    assert result['karaoke'] is False
+    assert result['filler'] is True
+    assert m.current_filler_track == 'song.mp3'
+
+
+# --- Filler VLC methods ---
+
+def test_fade_in_filler_disabled(mock_config):
+    m = MpvManager(mock_config, enabled=False)
+    m.fade_in_filler()  # Should not raise
+
+
+def test_fade_out_filler_disabled(mock_config):
+    m = MpvManager(mock_config, enabled=False)
+    m.fade_out_filler()  # Should not raise
+
+
+def test_ensure_filler_stopped_success(mock_config, mocker):
+    m = MpvManager(mock_config, enabled=True)
+    mocker.patch.object(m, 'send_command', return_value={"state": "stopped"})
+    assert m.ensure_filler_stopped() is True
+
+
+def test_ensure_filler_stopped_retries(mock_config, mocker):
+    m = MpvManager(mock_config, enabled=True)
+    mocker.patch.object(m, 'send_command', side_effect=[
+        {"state": "playing"}, None,
+        {"state": "playing"}, None,
+        {"state": "stopped"},
+    ])
+    mocker.patch('mpv_manager.time.sleep')
+    assert m.ensure_filler_stopped() is True
+
+
+# --- send_command (filler VLC) ---
+
+def test_send_command_disabled(mock_config):
+    m = MpvManager(mock_config, enabled=False)
+    assert m.send_command(8081, "filler", "pl_play") is None
+
+
+def test_send_command_success(mock_config, mocker):
+    m = MpvManager(mock_config, enabled=True)
+    mock_resp = mocker.Mock()
+    mock_resp.json.return_value = {"state": "playing"}
+    mock_resp.raise_for_status = mocker.Mock()
+    mock_session = mocker.Mock()
+    mock_session.get.return_value = mock_resp
+    mocker.patch('mpv_manager.requests.Session', return_value=mock_session)
+    result = m.send_command(8081, "filler", "pl_play")
+    assert result == {"state": "playing"}
+
+
+# --- restart_instances ---
+
+def test_restart_instances_disabled(mock_config):
+    m = MpvManager(mock_config, enabled=False)
+    m.restart_instances()  # Should not raise
+
+
+def test_restart_instances_kills_and_relaunches(mock_config, mocker):
+    m = MpvManager(mock_config, enabled=True)
+    mock_karaoke_proc = mocker.Mock()
+    mock_karaoke_proc.poll.return_value = None  # running
+    mock_filler_proc = mocker.Mock()
+    mock_filler_proc.poll.return_value = None  # running
+    m.processes = {"karaoke": mock_karaoke_proc, "filler": mock_filler_proc}
+    m.karaoke_active = True
+    m.pitch_semitones = 3
+
+    mocker.patch.object(m, '_launch_mpv_karaoke')
+    mocker.patch.object(m, '_launch_vlc_filler')
+    mocker.patch.object(m, 'fade_in_filler')
+    mocker.patch.object(m, '_save_state')
+    mocker.patch('mpv_manager.time.sleep')
+    mocker.patch('os.unlink')
+
+    m.restart_instances()
+
+    mock_karaoke_proc.terminate.assert_called_once()
+    mock_filler_proc.terminate.assert_called_once()
+    assert m.karaoke_active is False
+    assert m.pitch_semitones == 0
+    m._launch_mpv_karaoke.assert_called_once()
+    m._launch_vlc_filler.assert_called_once()
+    m.fade_in_filler.assert_called_once()
+
+
+# --- launch_instance dispatch ---
+
+def test_launch_instance_disabled(mock_config, mocker):
+    m = MpvManager(mock_config, enabled=False)
+    mocker.patch.object(m, '_launch_mpv_karaoke')
+    m.launch_instance("karaoke")
+    m._launch_mpv_karaoke.assert_not_called()
+
+
+def test_launch_instance_karaoke(mock_config, mocker):
+    m = MpvManager(mock_config, enabled=True)
+    mock_launch = mocker.patch.object(m, '_launch_mpv_karaoke')
+    m.launch_instance("karaoke")
+    mock_launch.assert_called_once()
+
+
+def test_launch_instance_filler(mock_config, mocker):
+    m = MpvManager(mock_config, enabled=True)
+    mock_launch = mocker.patch.object(m, '_launch_vlc_filler')
+    m.launch_instance("filler", 8081, "filler", "/music/song.mp3", True)
+    mock_launch.assert_called_once_with(8081, "filler", "/music/song.mp3", True)
+
+
+# --- _launch_mpv_karaoke ---
+
+def test_launch_mpv_karaoke_already_running(mock_config, mocker):
+    m = MpvManager(mock_config, enabled=True)
+    mock_proc = mocker.Mock()
+    mock_proc.poll.return_value = None  # still running
+    m.processes["karaoke"] = mock_proc
+    mocker.patch('subprocess.Popen')
+    m._launch_mpv_karaoke()
+    # Should not launch a second instance
+    import subprocess
+    subprocess.Popen.assert_not_called()
+
+
+def test_launch_mpv_karaoke_mpv_not_found(mock_config, mocker):
+    m = MpvManager(mock_config, enabled=True)
+    m.processes["karaoke"] = None
+    mocker.patch('os.unlink', side_effect=FileNotFoundError)
+    mocker.patch('builtins.open', mocker.mock_open())
+    mocker.patch('subprocess.Popen', side_effect=FileNotFoundError)
+    m._launch_mpv_karaoke()
+    assert m.processes["karaoke"] is None
+
+
+# --- _launch_vlc_filler ---
+
+def test_launch_vlc_filler_already_running(mock_config, mocker):
+    m = MpvManager(mock_config, enabled=True)
+    mock_proc = mocker.Mock()
+    mock_proc.poll.return_value = None
+    m.processes["filler"] = mock_proc
+    mocker.patch('subprocess.Popen')
+    m._launch_vlc_filler(8081, "filler")
+    import subprocess
+    subprocess.Popen.assert_not_called()
+
+
+# --- _monitor_via_polling ---
+
+def test_monitor_polling_detects_end(mock_config, mocker):
+    """Polling fallback detects idle state and triggers karaoke ended."""
+    m = MpvManager(mock_config, enabled=False)
+    m.karaoke_active = True
+    m.last_seek_time = 0
+    m.last_play_time = 0
+
+    mocker.patch.object(m, '_get_property', return_value=True)  # idle-active=True
+    handle_mock = mocker.patch.object(m, '_handle_karaoke_ended')
+    sleep_mock = mocker.patch('mpv_manager.time.sleep')
+    # Make the loop run once then stop
+    call_count = [0]
+    original_sleep = sleep_mock.side_effect
+
+    def limited_sleep(t):
+        call_count[0] += 1
+        if call_count[0] > 2:
+            raise StopIteration  # Break the loop
+
+    sleep_mock.side_effect = limited_sleep
+
+    try:
+        m._monitor_via_polling()
+    except StopIteration:
+        pass
+
+    handle_mock.assert_called()
+
+
+def test_monitor_polling_skips_during_seek(mock_config, mocker):
+    """Polling fallback skips check briefly after seek."""
+    import time as real_time
+    m = MpvManager(mock_config, enabled=False)
+    m.karaoke_active = True
+    m.last_seek_time = real_time.time()  # Just seeked
+    m.last_play_time = 0
+
+    get_mock = mocker.patch.object(m, '_get_property')
+    sleep_mock = mocker.patch('mpv_manager.time.sleep')
+    call_count = [0]
+
+    def limited_sleep(t):
+        call_count[0] += 1
+        if call_count[0] > 1:
+            raise StopIteration
+
+    sleep_mock.side_effect = limited_sleep
+
+    try:
+        m._monitor_via_polling()
+    except StopIteration:
+        pass
+
+    get_mock.assert_not_called()  # Should skip due to recent seek
+
+
+# --- Volume conversion edge cases ---
+
+def test_vlc_to_mpv_volume_low():
+    assert MpvManager._vlc_to_mpv_volume(31) == pytest.approx(12.109, abs=0.1)
+
+
+def test_vlc_to_mpv_volume_filler_default():
+    assert MpvManager._vlc_to_mpv_volume(110) == pytest.approx(42.97, abs=0.1)
