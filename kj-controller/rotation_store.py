@@ -179,8 +179,11 @@ class RotationStore:
     # Task 3: Update, Delete, Exclusive Statuses
     # ------------------------------------------------------------------
 
-    def update_entry(self, entry_id, singer=None, song_artist=None):
+    def update_entry(self, entry_id, singer=None, song_artist=None, singers=None):
         """Edit singer and/or song_artist fields.
+
+        When singers is provided, overrides both singer and singers_json.
+        When singers is None, preserves existing singers_json.
 
         Raises ValueError if entry_id not found.
         Returns updated entry dict.
@@ -189,15 +192,21 @@ class RotationStore:
         if existing is None:
             raise ValueError(f"Entry {entry_id} not found")
 
+        new_singers_json = existing.get("singers_json")
+        if singers is not None:
+            singers = [s.strip() for s in singers]
+            singer = " & ".join(singers)
+            new_singers_json = json.dumps(singers)
+
         new_singer = singer if singer is not None else existing["singer"]
         new_song_artist = song_artist if song_artist is not None else existing["song_artist"]
 
         conn = self._get_conn()
         conn.execute(
             "UPDATE rotation_entries "
-            "SET singer = ?, song_artist = ?, updated_at = datetime('now', 'localtime') "
+            "SET singer = ?, song_artist = ?, singers_json = ?, updated_at = datetime('now', 'localtime') "
             "WHERE id = ?",
-            (new_singer, new_song_artist, entry_id),
+            (new_singer, new_song_artist, new_singers_json, entry_id),
         )
         conn.commit()
         return self.get_entry(entry_id)
