@@ -3464,13 +3464,56 @@ function enterRotationEditMode(row, entry) {
     const origInfoHTML = info.innerHTML;
     const origActionsHTML = actions.innerHTML;
 
-    // Replace info with editable inputs
+    // --- Edit pill state (local to this edit session) ---
+    let editPills = [];
+    if (entry.singers_json) {
+        try { editPills = JSON.parse(entry.singers_json); } catch (e) { editPills = [entry.singer]; }
+    } else {
+        editPills = [entry.singer];
+    }
+
+    function renderEditPills() {
+        container.querySelectorAll('.singer-pill').forEach(el => el.remove());
+        editPills.forEach((name, idx) => {
+            const pill = document.createElement('span');
+            pill.className = 'singer-pill';
+            pill.textContent = name;
+            const x = document.createElement('span');
+            x.className = 'singer-pill-x';
+            x.textContent = '\u00d7';
+            x.onclick = (ev) => {
+                ev.stopPropagation();
+                editPills.splice(idx, 1);
+                renderEditPills();
+                singerInput.focus();
+            };
+            pill.appendChild(x);
+            container.insertBefore(pill, singerInput);
+        });
+    }
+
+    function getEditSingers() {
+        const remaining = singerInput.value.trim();
+        const all = [...editPills];
+        if (remaining) all.push(remaining);
+        return all;
+    }
+
+    // Replace info with pill input + song input
     info.innerHTML = '';
+    const container = document.createElement('div');
+    container.className = 'singer-input-container';
+    container.onclick = () => singerInput.focus();
+
     const singerInput = document.createElement('input');
     singerInput.type = 'text';
-    singerInput.className = 'rotation-edit-input rotation-edit-singer';
-    singerInput.value = entry.singer;
+    singerInput.className = 'rotation-edit-singer';
     singerInput.placeholder = 'Singer name';
+    singerInput.autocomplete = 'off';
+    container.appendChild(singerInput);
+
+    // Clear pre-populated pills, render them inside container
+    renderEditPills();
 
     const songInput = document.createElement('input');
     songInput.type = 'text';
@@ -3478,7 +3521,7 @@ function enterRotationEditMode(row, entry) {
     songInput.value = entry.song_artist || '';
     songInput.placeholder = 'Song & Artist';
 
-    info.appendChild(singerInput);
+    info.appendChild(container);
     info.appendChild(songInput);
 
     // Replace actions with save/cancel/delete
@@ -3488,10 +3531,10 @@ function enterRotationEditMode(row, entry) {
     saveBtn.textContent = 'Save';
     saveBtn.onclick = (e) => {
         e.stopPropagation();
-        const newSinger = singerInput.value.trim();
+        const singers = getEditSingers();
+        if (singers.length === 0) { singerInput.focus(); return; }
         const newSong = songInput.value.trim();
-        if (!newSinger) { singerInput.focus(); return; }
-        saveRotationEdit(entry.id, newSinger, newSong);
+        saveRotationEdit(entry.id, singers, newSong);
     };
 
     const cancelBtn = document.createElement('button');
@@ -3519,34 +3562,47 @@ function enterRotationEditMode(row, entry) {
     actions.appendChild(delBtn);
 
     singerInput.focus();
-    singerInput.select();
 
     // Stop all events from bubbling out of edit inputs
     [singerInput, songInput].forEach(input => {
         input.addEventListener('click', (e) => e.stopPropagation());
-        input.addEventListener('keydown', (e) => e.stopPropagation());
         input.addEventListener('keyup', (e) => e.stopPropagation());
     });
 
-    // Enter on singer: move to song input. Enter on song: save. Escape: cancel.
+    // Singer input: Tab/comma/& create pills, Backspace removes, Enter moves to song
     singerInput.addEventListener('keydown', (e) => {
+        e.stopPropagation();
+        const val = singerInput.value;
+        if ((e.key === 'Tab' || e.key === ',' || e.key === '&') && val.trim()) {
+            e.preventDefault();
+            editPills.push(val.trim());
+            singerInput.value = '';
+            renderEditPills();
+            return;
+        }
+        if (e.key === 'Backspace' && !val && editPills.length > 0) {
+            editPills.pop();
+            renderEditPills();
+            return;
+        }
         if (e.key === 'Enter') { e.preventDefault(); songInput.focus(); songInput.select(); }
         else if (e.key === 'Escape') { cancelBtn.click(); }
     });
     songInput.addEventListener('keydown', (e) => {
+        e.stopPropagation();
         if (e.key === 'Enter') { saveBtn.click(); }
         else if (e.key === 'Escape') { cancelBtn.click(); }
     });
 }
 
-async function saveRotationEdit(entryId, singer, songArtist) {
+async function saveRotationEdit(entryId, singers, songArtist) {
     rotationHistory.pushUndo(rotationData);
     showRotationIndicator('spin');
     try {
         const response = await fetch('/rotation/edit', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id: entryId, singer, song_artist: songArtist })
+            body: JSON.stringify({ id: entryId, singers, song_artist: songArtist })
         });
         const data = await response.json();
         if (!response.ok) {
