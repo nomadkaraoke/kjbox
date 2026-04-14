@@ -796,6 +796,171 @@ class TestSetPaid:
         entry = store.add_entry("Alice", "Song A")
         assert entry["paid"] == 0
 
+
+# ---------------------------------------------------------------------------
+# Task 1 (new): Left status exclusion + get_singer_stats
+# ---------------------------------------------------------------------------
+
+class TestLeftStatus:
+    def test_get_entries_excludes_left(self, store):
+        store.add_entry("Alice")
+        e2 = store.add_entry("Bob")
+        store.update_status(e2["id"], "Left")
+        entries = store.get_entries()
+        assert len(entries) == 1
+        assert entries[0]["singer"] == "Alice"
+
+    def test_get_entries_include_done_includes_left(self, store):
+        e1 = store.add_entry("Alice")
+        e2 = store.add_entry("Bob")
+        store.update_status(e1["id"], "Done")
+        store.update_status(e2["id"], "Left")
+        entries = store.get_entries(include_done=True)
+        assert len(entries) == 2
+
+
+class TestGetSingerStats:
+    def test_basic_stats(self, store):
+        store.add_entry("Alice", song_artist="Song 1")
+        store.add_entry("Alice", song_artist="Song 2")
+        store.add_entry("Bob", song_artist="Song 3")
+        stats = store.get_singer_stats()
+        assert len(stats) == 2
+        alice = next(s for s in stats if s["name"].lower() == "alice")
+        assert alice["entries_total"] == 2
+        assert alice["entries_waiting"] == 2
+        assert alice["entries_sung"] == 0
+        assert alice["status"] == "active"
+
+    def test_multi_singer_entry_credits_both(self, store):
+        store.add_entry("ignored", singers=["Phil", "Anya"])
+        stats = store.get_singer_stats()
+        names = [s["name"].lower() for s in stats]
+        assert "phil" in names
+        assert "anya" in names
+
+    def test_done_entries_counted(self, store):
+        e1 = store.add_entry("Alice", song_artist="Song 1")
+        store.add_entry("Alice", song_artist="Song 2")
+        store.update_status(e1["id"], "Done")
+        stats = store.get_singer_stats()
+        alice = next(s for s in stats if s["name"].lower() == "alice")
+        assert alice["entries_sung"] == 1
+        assert alice["entries_waiting"] == 1
+        assert alice["entries_total"] == 2
+
+    def test_left_singer_status(self, store):
+        e1 = store.add_entry("Alice")
+        store.update_status(e1["id"], "Left")
+        stats = store.get_singer_stats()
+        alice = next(s for s in stats if s["name"].lower() == "alice")
+        assert alice["status"] == "left"
+        assert alice["entries_left"] == 1
+
+    def test_brb_singer_status(self, store):
+        e1 = store.add_entry("Alice")
+        store.update_status(e1["id"], "On Hold (BRB)")
+        stats = store.get_singer_stats()
+        alice = next(s for s in stats if s["name"].lower() == "alice")
+        assert alice["status"] == "brb"
+
+    def test_sorted_by_first_added(self, store):
+        store.add_entry("Bob")
+        store.add_entry("Alice")
+        stats = store.get_singer_stats()
+        assert stats[0]["name"].lower() == "bob"
+
+    def test_has_tipped(self, store):
+        e1 = store.add_entry("Alice")
+        store.set_paid(e1["id"], True)
+        store.add_entry("Alice")
+        stats = store.get_singer_stats()
+        alice = next(s for s in stats if s["name"].lower() == "alice")
+        assert alice["has_tipped"] is True
+
+    def test_all_done_status(self, store):
+        e1 = store.add_entry("Alice")
+        store.update_status(e1["id"], "Done")
+        stats = store.get_singer_stats()
+        alice = next(s for s in stats if s["name"].lower() == "alice")
+        assert alice["status"] == "done"
+
+
+# ---------------------------------------------------------------------------
+# Task 2 (new): Singer action methods
+# ---------------------------------------------------------------------------
+
+class TestSingerActions:
+    def test_rename_singer(self, store):
+        store.add_entry("Phill", song_artist="Song 1")
+        store.add_entry("Phill", song_artist="Song 2")
+        store.add_entry("Bob", song_artist="Song 3")
+        store.rename_singer("Phill", "Phil")
+        entries = store.get_entries(include_done=True)
+        phill_entries = [e for e in entries if "Phill" in e["singer"]]
+        phil_entries = [e for e in entries if "Phil" in e["singer"] and "Phill" not in e["singer"]]
+        assert len(phill_entries) == 0
+        assert len(phil_entries) == 2
+
+    def test_rename_singer_in_multi_singer_entry(self, store):
+        store.add_entry("ignored", singers=["Phill", "Anya"])
+        store.rename_singer("Phill", "Phil")
+        entry = store.get_entries(include_done=True)[0]
+        import json
+        names = json.loads(entry["singers_json"])
+        assert "Phil" in names
+        assert "Phill" not in names
+        assert entry["singer"] == "Phil & Anya"
+
+    def test_merge_singers(self, store):
+        store.add_entry("Phill")
+        store.add_entry("Phil")
+        store.merge_singers("Phill", "Phil")
+        entries = store.get_entries(include_done=True)
+        assert all(e["singer"] == "Phil" for e in entries)
+
+    def test_merge_deduplicates_in_multi_singer(self, store):
+        store.add_entry("ignored", singers=["Phill", "Phil"])
+        store.merge_singers("Phill", "Phil")
+        entry = store.get_entries(include_done=True)[0]
+        import json
+        names = json.loads(entry["singers_json"])
+        assert names == ["Phil"]
+        assert entry["singer"] == "Phil"
+
+    def test_set_singer_status_brb(self, store):
+        e1 = store.add_entry("Alice")
+        e2 = store.add_entry("Alice")
+        e3 = store.add_entry("Bob")
+        store.set_singer_status("Alice", "On Hold (BRB)")
+        alice_entries = [e for e in store.get_entries(include_done=True) if e["singer"] == "Alice"]
+        assert all(e["status"] == "On Hold (BRB)" for e in alice_entries)
+        bob = store.get_entry(e3["id"])
+        assert bob["status"] == "Waiting"
+
+    def test_set_singer_status_left(self, store):
+        e1 = store.add_entry("Alice")
+        store.set_singer_status("Alice", "Left")
+        entry = store.get_entry(e1["id"])
+        assert entry["status"] == "Left"
+
+    def test_set_singer_status_skips_done(self, store):
+        e1 = store.add_entry("Alice")
+        e2 = store.add_entry("Alice")
+        store.update_status(e1["id"], "Done")
+        store.set_singer_status("Alice", "Left")
+        done_entry = store.get_entry(e1["id"])
+        left_entry = store.get_entry(e2["id"])
+        assert done_entry["status"] == "Done"
+        assert left_entry["status"] == "Left"
+
+    def test_set_singer_status_restores_left_to_waiting(self, store):
+        e1 = store.add_entry("Alice")
+        store.update_status(e1["id"], "Left")
+        store.set_singer_status("Alice", "Waiting")
+        entry = store.get_entry(e1["id"])
+        assert entry["status"] == "Waiting"
+
     def test_set_paid_nonexistent_entry(self, store):
         with pytest.raises(ValueError, match="not found"):
             store.set_paid(9999, True)

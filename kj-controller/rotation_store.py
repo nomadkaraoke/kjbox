@@ -162,7 +162,7 @@ class RotationStore:
         else:
             rows = conn.execute(
                 "SELECT * FROM rotation_entries "
-                "WHERE LOWER(status) != 'done' "
+                "WHERE LOWER(status) NOT IN ('done', 'left') "
                 "ORDER BY position"
             ).fetchall()
         return [self._row_to_dict(r) for r in rows]
@@ -338,6 +338,67 @@ class RotationStore:
                 counts[key] = counts.get(key, 0) + 1
         return counts
 
+    def get_singer_stats(self):
+        """Return per-singer aggregate stats from all entries (including done/left).
+
+        Returns a list of dicts sorted by first_added (earliest first).
+        """
+        import json as _json
+        conn = self._get_conn()
+        rows = conn.execute(
+            "SELECT * FROM rotation_entries ORDER BY created_at"
+        ).fetchall()
+
+        singers = {}
+        for row in rows:
+            entry = self._row_to_dict(row)
+            if entry.get("singers_json"):
+                try:
+                    names = _json.loads(entry["singers_json"])
+                except (ValueError, TypeError):
+                    names = [entry["singer"]]
+            else:
+                names = [entry["singer"]]
+
+            for name in names:
+                key = name.strip().lower()
+                if key not in singers:
+                    singers[key] = {"display_name": name.strip(), "entries": []}
+                singers[key]["entries"].append(entry)
+
+        result = []
+        for key, data in singers.items():
+            entries = data["entries"]
+            statuses = [e["status"].lower() for e in entries]
+            non_done = [s for s in statuses if s != "done"]
+
+            entries_sung = sum(1 for s in statuses if s == "done")
+            entries_left = sum(1 for s in statuses if s == "left")
+            entries_waiting = len(entries) - entries_sung - entries_left
+
+            if not non_done:
+                status = "done"
+            elif all(s == "left" for s in non_done):
+                status = "left"
+            elif all(s in ("on hold (brb)", "on hold") for s in non_done):
+                status = "brb"
+            else:
+                status = "active"
+
+            result.append({
+                "name": data["display_name"],
+                "entries_total": len(entries),
+                "entries_sung": entries_sung,
+                "entries_waiting": entries_waiting,
+                "entries_left": entries_left,
+                "first_added": entries[0]["created_at"],
+                "has_tipped": any(e.get("paid") for e in entries),
+                "status": status,
+            })
+
+        result.sort(key=lambda s: s["first_added"])
+        return result
+
     def get_stats(self):
         """Return rotation statistics dict.
 
@@ -494,6 +555,115 @@ class RotationStore:
         )
         conn.commit()
         return self.get_entry(entry_id)
+
+    # ------------------------------------------------------------------
+    # Singer action methods
+    # ------------------------------------------------------------------
+
+    def rename_singer(self, old_name, new_name):
+        """Rename all entries belonging to old_name to new_name.
+
+        For multi-singer entries (singers_json), replaces old_name within the
+        JSON array and regenerates the display singer string.
+        For legacy single-singer entries, updates singer directly if it matches.
+        """
+        conn = self._get_conn()
+        rows = conn.execute("SELECT * FROM rotation_entries").fetchall()
+        for row in rows:
+            entry = self._row_to_dict(row)
+            if entry.get("singers_json"):
+                try:
+                    names = json.loads(entry["singers_json"])
+                except (ValueError, TypeError):
+                    names = [entry["singer"]]
+                if old_name in names:
+                    names = [new_name if n == old_name else n for n in names]
+                    new_display = " & ".join(names)
+                    conn.execute(
+                        "UPDATE rotation_entries "
+                        "SET singer = ?, singers_json = ?, updated_at = datetime('now', 'localtime') "
+                        "WHERE id = ?",
+                        (new_display, json.dumps(names), entry["id"]),
+                    )
+            else:
+                if entry["singer"] == old_name:
+                    conn.execute(
+                        "UPDATE rotation_entries "
+                        "SET singer = ?, updated_at = datetime('now', 'localtime') "
+                        "WHERE id = ?",
+                        (new_name, entry["id"]),
+                    )
+        conn.commit()
+
+    def merge_singers(self, source_name, target_name):
+        """Merge source_name into target_name across all entries.
+
+        Same as rename_singer but also deduplicates: if replacing source with
+        target would create a duplicate in singers_json, removes the duplicate.
+        """
+        conn = self._get_conn()
+        rows = conn.execute("SELECT * FROM rotation_entries").fetchall()
+        for row in rows:
+            entry = self._row_to_dict(row)
+            if entry.get("singers_json"):
+                try:
+                    names = json.loads(entry["singers_json"])
+                except (ValueError, TypeError):
+                    names = [entry["singer"]]
+                if source_name in names:
+                    # Replace source with target and deduplicate
+                    new_names = []
+                    seen = set()
+                    for n in names:
+                        effective = target_name if n == source_name else n
+                        if effective not in seen:
+                            new_names.append(effective)
+                            seen.add(effective)
+                    new_display = " & ".join(new_names)
+                    conn.execute(
+                        "UPDATE rotation_entries "
+                        "SET singer = ?, singers_json = ?, updated_at = datetime('now', 'localtime') "
+                        "WHERE id = ?",
+                        (new_display, json.dumps(new_names), entry["id"]),
+                    )
+            else:
+                if entry["singer"] == source_name:
+                    conn.execute(
+                        "UPDATE rotation_entries "
+                        "SET singer = ?, updated_at = datetime('now', 'localtime') "
+                        "WHERE id = ?",
+                        (target_name, entry["id"]),
+                    )
+        conn.commit()
+
+    def set_singer_status(self, singer_name, new_status):
+        """Set status for all non-done entries where the singer appears.
+
+        Checks both the singer field and individual names in singers_json.
+        Skips entries whose current status is 'Done'.
+        """
+        conn = self._get_conn()
+        rows = conn.execute("SELECT * FROM rotation_entries").fetchall()
+        for row in rows:
+            entry = self._row_to_dict(row)
+            if entry["status"].lower() == "done":
+                continue
+            # Determine if this singer appears in the entry
+            if entry.get("singers_json"):
+                try:
+                    names = json.loads(entry["singers_json"])
+                except (ValueError, TypeError):
+                    names = [entry["singer"]]
+            else:
+                names = [entry["singer"]]
+            if singer_name in names:
+                conn.execute(
+                    "UPDATE rotation_entries "
+                    "SET status = ?, updated_at = datetime('now', 'localtime') "
+                    "WHERE id = ?",
+                    (new_status, entry["id"]),
+                )
+        conn.commit()
 
     # ------------------------------------------------------------------
     # Task 5: Archive and get_all_entries
