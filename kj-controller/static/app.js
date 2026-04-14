@@ -3167,11 +3167,11 @@ function renderRotation(entries) {
         num.className = 'rotation-num';
         num.textContent = (idx + 1) + '.';
 
-        const name = document.createElement('span');
-        name.className = 'rotation-name rotation-copyable';
-        name.textContent = entry.singer;
-        name.title = 'Click to copy \u2022 Shift+click to edit';
-        name.onclick = (e) => { if (!e.shiftKey && !e.ctrlKey && !e.metaKey) copyRotationText(name); };
+        // Singer name(s)
+        let singers_parsed = null;
+        if (entry.singers_json) {
+            try { singers_parsed = JSON.parse(entry.singers_json); } catch (e) { /* ignore */ }
+        }
 
         const song = document.createElement('span');
         song.className = 'rotation-song rotation-copyable';
@@ -3181,7 +3181,26 @@ function renderRotation(entries) {
 
         row.appendChild(handle);
         info.appendChild(num);
-        info.appendChild(name);
+
+        if (singers_parsed && singers_parsed.length > 1) {
+            // Multi-singer: render individual pills
+            singers_parsed.forEach((s) => {
+                const sp = document.createElement('span');
+                sp.className = 'rotation-singer-pill rotation-copyable';
+                sp.textContent = s;
+                sp.title = 'Click to copy \u2022 Shift+click to edit';
+                sp.onclick = (ev) => { if (!ev.shiftKey && !ev.ctrlKey && !ev.metaKey) copyRotationText(sp); };
+                info.appendChild(sp);
+            });
+        } else {
+            // Single singer or legacy: plain text (unchanged)
+            const name = document.createElement('span');
+            name.className = 'rotation-name rotation-copyable';
+            name.textContent = entry.singer;
+            name.title = 'Click to copy \u2022 Shift+click to edit';
+            name.onclick = (ev) => { if (!ev.shiftKey && !ev.ctrlKey && !ev.metaKey) copyRotationText(name); };
+            info.appendChild(name);
+        }
         const pill = document.createElement('span');
         pill.className = 'rotation-songs-pill';
         const sung = entry.songs_sung || 0;
