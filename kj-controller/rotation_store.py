@@ -1,5 +1,6 @@
 """RotationStore: SQLite-backed storage for karaoke singer rotation entries."""
 
+import json
 import sqlite3
 
 
@@ -127,13 +128,19 @@ class RotationStore:
     # Task 2: Add and Get Entries
     # ------------------------------------------------------------------
 
-    def add_entry(self, singer, song_artist='', notes='', file_path=None, duration=None):
+    def add_entry(self, singer, song_artist='', notes='', file_path=None, duration=None, singers=None):
         """Insert a new entry at max(position)+1 and return the new entry dict."""
+        singers_json = None
+        if singers is not None:
+            singers = [s.strip() for s in singers]
+            singer = " & ".join(singers)
+            singers_json = json.dumps(singers)
+
         conn = self._get_conn()
         cur = conn.execute(
-            "INSERT INTO rotation_entries (singer, song_artist, notes, position, file_path, duration) "
-            "VALUES (?, ?, ?, (SELECT COALESCE(MAX(position), 0) + 1 FROM rotation_entries), ?, ?)",
-            (singer, song_artist, notes, file_path, duration),
+            "INSERT INTO rotation_entries (singer, song_artist, notes, position, file_path, duration, singers_json) "
+            "VALUES (?, ?, ?, (SELECT COALESCE(MAX(position), 0) + 1 FROM rotation_entries), ?, ?, ?)",
+            (singer, song_artist, notes, file_path, duration, singers_json),
         )
         conn.commit()
         return self._row_to_dict(
