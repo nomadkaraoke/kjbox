@@ -74,6 +74,55 @@ const rotationHistory = {
     },
 };
 
+// --- Singer pill input state ---
+const singerPillInput = {
+    pills: [],
+
+    render() {
+        const container = document.getElementById('singer-input-container');
+        if (!container) return;
+        container.querySelectorAll('.singer-pill').forEach(el => el.remove());
+        const input = document.getElementById('rotation-singer');
+        this.pills.forEach((name, idx) => {
+            const pill = document.createElement('span');
+            pill.className = 'singer-pill';
+            pill.textContent = name;
+            const x = document.createElement('span');
+            x.className = 'singer-pill-x';
+            x.textContent = '\u00d7';
+            x.onclick = (e) => { e.stopPropagation(); this.removePill(idx); };
+            pill.appendChild(x);
+            container.insertBefore(pill, input);
+        });
+    },
+
+    addPill(name) {
+        const trimmed = name.trim();
+        if (!trimmed) return;
+        this.pills.push(trimmed);
+        this.render();
+    },
+
+    removePill(idx) {
+        this.pills.splice(idx, 1);
+        this.render();
+        document.getElementById('rotation-singer').focus();
+    },
+
+    clear() {
+        this.pills = [];
+        this.render();
+    },
+
+    getSingers() {
+        const input = document.getElementById('rotation-singer');
+        const remaining = input ? input.value.trim() : '';
+        const all = [...this.pills];
+        if (remaining) all.push(remaining);
+        return all;
+    },
+};
+
 function log(message, type = 'info') {
     const entry = document.createElement('div');
     entry.className = `log-entry ${type}`;
@@ -2901,6 +2950,34 @@ document.addEventListener('DOMContentLoaded', () => {
     fetchAutoDeployStatus();
     fetchSleepModeStatus();
     log('Nomad KJ Control initialized.');
+
+    // Singer pill input keydown handlers
+    const singerInput = document.getElementById('rotation-singer');
+    if (singerInput) {
+        singerInput.addEventListener('keydown', (e) => {
+            const val = singerInput.value;
+
+            // Tab, comma, or & with text -> create pill
+            if ((e.key === 'Tab' || e.key === ',' || e.key === '&') && val.trim()) {
+                e.preventDefault();
+                singerPillInput.addPill(val);
+                singerInput.value = '';
+                return;
+            }
+
+            // Backspace on empty input -> remove last pill
+            if (e.key === 'Backspace' && !val && singerPillInput.pills.length > 0) {
+                singerPillInput.removePill(singerPillInput.pills.length - 1);
+                return;
+            }
+
+            // Enter -> move focus to song field
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                document.getElementById('rotation-song').focus();
+            }
+        });
+    }
 });
 
 setInterval(updateStatus, 2000);
@@ -3669,9 +3746,9 @@ function toggleRotationAddForm() {
 async function addRotationEntry() {
     const singerInput = document.getElementById('rotation-singer');
     const songInput = document.getElementById('rotation-song');
-    const singer = singerInput.value.trim();
+    const singers = singerPillInput.getSingers();
     const songArtist = songInput.value.trim();
-    if (!singer) return;
+    if (singers.length === 0) return;
 
     rotationHistory.pushUndo(rotationData);
     showRotationIndicator('spin');
@@ -3679,7 +3756,7 @@ async function addRotationEntry() {
         const response = await fetch('/rotation/add', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ singer, song_artist: songArtist })
+            body: JSON.stringify({ singers: singers, song_artist: songArtist })
         });
         const data = await response.json();
         if (!response.ok) {
@@ -3690,6 +3767,7 @@ async function addRotationEntry() {
             rotationData = data.entries;
             renderRotation(rotationData);
         }
+        singerPillInput.clear();
         singerInput.value = '';
         songInput.value = '';
         singerInput.focus();
