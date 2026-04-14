@@ -1801,11 +1801,15 @@ def _add_songs_sung(entries, rotation):
     for entry in entries:
         singers_json = entry.get("singers_json")
         if singers_json:
-            names = _json.loads(singers_json)
-            individual_counts = [counts.get(n.strip().lower(), 0) for n in names]
-            entry["songs_sung"] = min(individual_counts) if individual_counts else 0
-        else:
-            entry["songs_sung"] = counts.get(entry["singer"].lower(), 0)
+            try:
+                names = _json.loads(singers_json)
+            except (ValueError, TypeError):
+                names = None
+            if isinstance(names, list) and names:
+                individual_counts = [counts.get(n.strip().lower(), 0) for n in names]
+                entry["songs_sung"] = min(individual_counts)
+                continue
+        entry["songs_sung"] = counts.get(entry["singer"].lower(), 0)
 
 
 def _add_time_estimates(entries):
