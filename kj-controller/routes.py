@@ -333,6 +333,7 @@ def handle_control():
         vlc.seek_karaoke(0)
     elif action == 'stop':
         vlc.stop_karaoke()
+        vlc.ensure_karaoke_released()
         overlay_mgr.set_karaoke_playing(False)
         vlc.fade_in_filler()
 

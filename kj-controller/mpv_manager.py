@@ -571,6 +571,11 @@ class MpvManager:
             if resp is None or resp.get("error") != "success":
                 log_message(f"ERROR: mpv failed to load {file_path}", self.config)
                 self.audio_error = True
+                # Rollback: restore overlay and filler state
+                if overlay_manager is not None:
+                    overlay_manager.set_karaoke_playing(False)
+                self.current_playing_path = None
+                self.fade_in_filler()
                 return
 
             # Wait for playback to actually start before setting volume/pitch
