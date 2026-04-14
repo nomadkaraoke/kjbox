@@ -577,8 +577,8 @@ class RotationStore:
                     "(id, singer, song_artist, status, notes, position, "
                     " file_path, duration, download_source, download_status, "
                     " download_id, url_fallback, gen_job_id, gen_status, "
-                    " updated_at) "
-                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "
+                    " singers_json, updated_at) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "
                     "        datetime('now', 'localtime'))",
                     (
                         e["id"], e["singer"], e["song_artist"], e["status"],
@@ -587,6 +587,7 @@ class RotationStore:
                         e.get("download_source"), e.get("download_status"),
                         e.get("download_id"), e.get("url_fallback"),
                         e.get("gen_job_id"), e.get("gen_status"),
+                        e.get("singers_json"),
                     ),
                 )
             conn.commit()
