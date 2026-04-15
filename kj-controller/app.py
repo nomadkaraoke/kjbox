@@ -17,6 +17,7 @@ from rotation import RotationManager
 from routes import routes_bp
 from sleep_mode import SleepManager
 from utils import log_message
+from audio_monitor import AudioMonitor
 from chromium import ChromiumManager
 from mpv_manager import MpvManager
 from vlc import VLCManager
@@ -67,6 +68,7 @@ def create_app(config=None):
     flask_app.kj_config = cfg
     flask_app.media = MediaIndex(cfg)
     flask_app.vlc = MpvManager(cfg, enabled=False if config else None)
+    flask_app.audio_monitor = AudioMonitor(flask_app.vlc, cfg)
     flask_app.catalog = ExternalCatalog(cfg)
     flask_app.zip_playback = ZipPlayback(cfg)
     flask_app.chromium = ChromiumManager(cfg)
@@ -172,6 +174,7 @@ def start_app():  # pragma: no cover
     media.load()
     flask_app.media = media
     flask_app.vlc = vlc
+    flask_app.audio_monitor = AudioMonitor(vlc, cfg)
     flask_app.catalog = ExternalCatalog(cfg)
     flask_app.zip_playback = ZipPlayback(cfg)
     flask_app.chromium = ChromiumManager(cfg)

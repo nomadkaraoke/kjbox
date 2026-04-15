@@ -396,3 +396,52 @@ def test_drain_loop_drains_when_no_client(monitor, mocker):
     monitor._drain_loop()
 
     assert mock_stdout.read.call_count == 2
+
+
+# --- Route tests ---
+
+@pytest.fixture
+def app_with_monitor(mock_config):
+    from app import create_app
+    app = create_app(config=mock_config)
+    app.config['TESTING'] = True
+    yield app
+    app.catalog.close()
+
+
+@pytest.fixture
+def client(app_with_monitor):
+    with app_with_monitor.test_client() as c:
+        yield c
+
+
+def test_status_route_inactive(client):
+    resp = client.get('/audio-monitor/status')
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data['active'] is False
+
+
+def test_start_route(client, mocker):
+    mocker.patch('audio_monitor.subprocess.run')
+    mocker.patch('audio_monitor.subprocess.Popen')
+    resp = client.post('/audio-monitor/start', json={})
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data['success'] is True
+    assert 'stream_url' in data
+
+
+def test_stop_route(client, mocker):
+    mocker.patch('audio_monitor.subprocess.run')
+    mocker.patch('audio_monitor.subprocess.Popen')
+    client.post('/audio-monitor/start', json={})
+    resp = client.post('/audio-monitor/stop', json={})
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data['success'] is True
+
+
+def test_stream_route_when_inactive(client):
+    resp = client.get('/audio-monitor/stream')
+    assert resp.status_code == 404

@@ -10,7 +10,7 @@ import threading
 import time
 import unicodedata
 
-from flask import Blueprint, current_app, jsonify, render_template, request
+from flask import Blueprint, Response, current_app, jsonify, render_template, request
 
 import divebar
 import karaoke_nerds
@@ -1533,7 +1533,11 @@ def av_status():
         'available_profiles': PW_PROFILES,
     }
 
-    return jsonify({'video': video, 'audio': audio, 'health': health})
+    audio_monitor = {}
+    if hasattr(current_app, 'audio_monitor'):
+        audio_monitor = current_app.audio_monitor.status()
+
+    return jsonify({'video': video, 'audio': audio, 'health': health, 'audio_monitor': audio_monitor})
 
 
 @routes_bp.route('/av/browser-audio', methods=['POST'])
@@ -1569,6 +1573,11 @@ def av_reset():
     """
     cfg = current_app.kj_config
     vlc = current_app.vlc
+
+    # Stop audio monitor if active (must happen before ALSA reset)
+    if hasattr(current_app, 'audio_monitor') and current_app.audio_monitor.active:
+        log_message("AV reset: stopping audio monitor first...", cfg)
+        current_app.audio_monitor.stop()
 
     script_path = os.path.join(APP_DIR, 'fix-hdmi-audio.sh')
     log_message("AV reset requested — running fix-hdmi-audio.sh...", cfg)
@@ -1621,6 +1630,45 @@ def av_set_vlc_device():
     vlc.audio_device = device
     threading.Thread(target=vlc.restart_instances).start()
     return jsonify({'success': True, 'message': f'Switching VLC to {device}. Restarting...'})
+
+
+# --- Audio Monitor Routes ---
+
+@routes_bp.route('/audio-monitor/status', methods=['GET'])
+def audio_monitor_status():
+    """Returns audio monitor state."""
+    return jsonify(current_app.audio_monitor.status())
+
+
+@routes_bp.route('/audio-monitor/start', methods=['POST'])
+def audio_monitor_start():
+    """Enable audio monitor: switch to PipeWire, start capture stream."""
+    monitor = current_app.audio_monitor
+    if monitor.active:
+        return jsonify({'success': True, 'stream_url': '/audio-monitor/stream', 'message': 'Already running.'})
+    threading.Thread(target=monitor.start).start()
+    return jsonify({'success': True, 'stream_url': '/audio-monitor/stream'})
+
+
+@routes_bp.route('/audio-monitor/stop', methods=['POST'])
+def audio_monitor_stop():
+    """Disable audio monitor: stop capture, restore ALSA."""
+    monitor = current_app.audio_monitor
+    if not monitor.active:
+        return jsonify({'success': True, 'message': 'Already stopped.'})
+    threading.Thread(target=monitor.stop).start()
+    return jsonify({'success': True})
+
+
+@routes_bp.route('/audio-monitor/stream', methods=['GET'])
+def audio_monitor_stream():
+    """Chunked HTTP audio stream (audio/mpeg). Single client only."""
+    monitor = current_app.audio_monitor
+    if not monitor.active or not monitor._ffmpeg_proc:
+        return jsonify({'error': 'Audio monitor not active'}), 404
+    if monitor._client_connected:
+        return jsonify({'error': 'Another client is already connected'}), 409
+    return Response(monitor.stream_generator(), mimetype='audio/mpeg')
 
 
 # --- System Control ---
