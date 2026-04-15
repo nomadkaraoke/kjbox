@@ -3513,6 +3513,8 @@ function toggleSingerStats() {
 function renderSingerStats(stats) {
     const list = document.getElementById('singer-stats-list');
     if (!list) return;
+    // Don't re-render while a singer row is being edited
+    if (list.querySelector('.singer-editing')) return;
     singerStatsData = stats || [];
 
     if (!stats || stats.length === 0) {
@@ -3660,6 +3662,7 @@ function enterSingerEditMode(row, singer) {
     const origInfoHTML = info.innerHTML;
     const origActionsHTML = actions.innerHTML;
 
+    row.classList.add('singer-editing');
     info.innerHTML = '';
     const input = document.createElement('input');
     input.type = 'text';
@@ -3675,6 +3678,7 @@ function enterSingerEditMode(row, singer) {
     saveBtn.onclick = async () => {
         const newName = input.value.trim();
         if (!newName || newName === singer.name) {
+            row.classList.remove('singer-editing');
             info.innerHTML = origInfoHTML;
             actions.innerHTML = origActionsHTML;
             return;
@@ -3685,6 +3689,7 @@ function enterSingerEditMode(row, singer) {
     cancelBtn.className = 'singer-stats-btn';
     cancelBtn.textContent = 'Cancel';
     cancelBtn.onclick = () => {
+        row.classList.remove('singer-editing');
         info.innerHTML = origInfoHTML;
         actions.innerHTML = origActionsHTML;
     };
