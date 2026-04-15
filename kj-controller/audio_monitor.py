@@ -11,7 +11,7 @@ from utils import log_message
 PW_CARD = 'alsa_card.pci-0000_00_1f.3'
 PW_HDMI_PROFILE = 'output:hdmi-stereo+input:analog-stereo'
 PW_ANALOG_PROFILE = 'output:analog-stereo+input:analog-stereo'
-PW_MONITOR_SOURCE = 'alsa_output.pci-0000_00_1f.3.hdmi-stereo.monitor'
+PW_MONITOR_SOURCE_PREFIX = 'alsa_output.pci-0000_00_1f.3.hdmi-stereo'
 PACTL_ENV_PREFIX = ['sudo', '-u', 'nomad', 'env', 'XDG_RUNTIME_DIR=/run/user/1000']
 
 STREAM_CHUNK_SIZE = 4096
@@ -31,6 +31,26 @@ class AudioMonitor:
 
     # ── Public API ────────────────────────────────────────────────────
 
+    def _find_monitor_source(self):
+        """Discover the HDMI monitor source name from PipeWire.
+
+        PipeWire appends a numeric suffix that changes each time the profile
+        is toggled, so we can't hardcode the full name.
+        """
+        try:
+            result = subprocess.run(
+                PACTL_ENV_PREFIX + ['pactl', 'list', 'sources', 'short'],
+                capture_output=True, text=True, timeout=5,
+            )
+            for line in result.stdout.splitlines():
+                parts = line.split()
+                if len(parts) >= 2 and parts[1].startswith(PW_MONITOR_SOURCE_PREFIX):
+                    log_message(f"Found monitor source: {parts[1]}", self.config)
+                    return parts[1]
+        except (subprocess.TimeoutExpired, FileNotFoundError):
+            pass
+        return None
+
     def start(self):
         """Switch to HDMI profile, restart players with PipeWire, start ffmpeg capture."""
         with self._lock:
@@ -38,23 +58,41 @@ class AudioMonitor:
                 log_message("Audio monitor already active, ignoring start().", self.config)
                 return
 
-            # Switch PipeWire card to HDMI profile
+            log_message("AudioMonitor: starting...", self.config)
+
+            # Step 1: Switch players to PipeWire and restart.
+            # restart_instances() sends IPC quit to kill old mpv (releasing ALSA device),
+            # then relaunches with PipeWire output.
+            self.mpv.audio_backend = 'pipewire'
+            self.mpv.restart_instances()
+
+            # Step 2: Now that old mpv has released the ALSA device, switch PipeWire
+            # to HDMI profile so it can claim the device and create the HDMI sink.
             log_message("Switching PipeWire card to HDMI profile...", self.config)
             subprocess.run(
                 PACTL_ENV_PREFIX + ['pactl', 'set-card-profile', PW_CARD, PW_HDMI_PROFILE],
                 check=False,
             )
+            time.sleep(1)  # Give PipeWire time to create the HDMI sink
 
-            # Switch mpv/VLC to PipeWire audio backend and restart
-            self.mpv.audio_backend = 'pipewire'
-            self.mpv.restart_instances()
+            # Step 3: Discover the monitor source (name has a dynamic numeric suffix)
+            monitor_source = self._find_monitor_source()
+            if not monitor_source:
+                log_message("ERROR: Could not find PipeWire HDMI monitor source.", self.config)
+                # Rollback
+                self.mpv.audio_backend = 'alsa'
+                self.mpv.restart_instances()
+                subprocess.run(
+                    PACTL_ENV_PREFIX + ['pactl', 'set-card-profile', PW_CARD, PW_ANALOG_PROFILE],
+                    check=False,
+                )
+                return
 
-            # Start ffmpeg capturing from PipeWire monitor source
-            # Full PACTL_ENV_PREFIX needed — ffmpeg requires XDG_RUNTIME_DIR to find PipeWire
+            # Step 4: Start ffmpeg capture from the discovered monitor source
             ffmpeg_cmd = PACTL_ENV_PREFIX + [
                 'ffmpeg',
                 '-f', 'pulse',
-                '-i', PW_MONITOR_SOURCE,
+                '-i', monitor_source,
                 '-c:a', 'libmp3lame',
                 '-b:a', '128k',
                 '-f', 'mp3',
