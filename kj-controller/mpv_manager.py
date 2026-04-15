@@ -516,7 +516,10 @@ class MpvManager:
 
         log_message(f"Restarting instances with audio device '{self.audio_device}'...", self.config)
 
-        # Kill mpv karaoke
+        # Kill mpv karaoke — use IPC quit first (handles reconnected instances
+        # where we have IPC access but no Popen handle), then fall back to process kill
+        self._send_ipc(["quit"])
+        time.sleep(0.5)
         proc = self.processes.get("karaoke")
         if proc and proc.poll() is None:
             proc.terminate()
