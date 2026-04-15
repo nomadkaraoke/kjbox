@@ -28,16 +28,12 @@ def mock_mpv(mock_config, mocker):
 MOCK_MONITOR_SOURCE = PW_MONITOR_SOURCE_PREFIX + '.3.monitor'
 
 
-def _mock_popen_pair(mocker):
-    """Mock subprocess.Popen to handle the pw-cat | ffmpeg pipeline (2 calls)."""
-    mock_pw = mocker.Mock()
-    mock_pw.stdout = mocker.Mock()
-
-    mock_ffmpeg = mocker.Mock()
-    mock_ffmpeg.stdout = mocker.Mock()
-
-    mock_popen = mocker.patch('audio_monitor.subprocess.Popen', side_effect=[mock_pw, mock_ffmpeg])
-    return mock_popen, mock_pw, mock_ffmpeg
+def _mock_popen(mocker):
+    """Mock subprocess.Popen for the shell pipeline (single call)."""
+    mock_proc = mocker.Mock()
+    mock_proc.stdout = mocker.Mock()
+    mock_popen = mocker.patch('audio_monitor.subprocess.Popen', return_value=mock_proc)
+    return mock_popen, mock_proc
 
 
 @pytest.fixture
@@ -53,7 +49,6 @@ def monitor(mock_mpv, mocker):
 def test_initial_state(monitor):
     assert monitor.active is False
     assert monitor._ffmpeg_proc is None
-    assert monitor._pw_proc is None
     assert monitor._drain_thread is None
     assert monitor._client_connected is False
 
@@ -74,7 +69,7 @@ def test_constructor_custom_config(mock_mpv, mocker):
 # --- start() ---
 
 def test_start_switches_pipewire_to_hdmi(monitor, mocker):
-    _mock_popen_pair(mocker)
+    _mock_popen(mocker)
     monitor.start()
 
     import audio_monitor
@@ -85,42 +80,41 @@ def test_start_switches_pipewire_to_hdmi(monitor, mocker):
 
 
 def test_start_sets_audio_backend_to_pipewire(monitor, mocker):
-    _mock_popen_pair(mocker)
+    _mock_popen(mocker)
     monitor.start()
     assert monitor.mpv.audio_backend == 'pipewire'
 
 
 def test_start_calls_restart_instances(monitor, mocker):
-    _mock_popen_pair(mocker)
+    _mock_popen(mocker)
     monitor.start()
     monitor.mpv.restart_instances.assert_called_once()
 
 
-def test_start_launches_pw_cat_and_ffmpeg(monitor, mocker):
-    mock_popen, mock_pw, mock_ffmpeg = _mock_popen_pair(mocker)
+def test_start_launches_shell_pipeline(monitor, mocker):
+    mock_popen, mock_proc = _mock_popen(mocker)
     monitor.start()
 
-    assert mock_popen.call_count == 2
-    # First call: pw-cat
-    pw_args = mock_popen.call_args_list[0][0][0]
-    assert 'pw-cat' in pw_args
-    assert '--record' in pw_args
-    assert MOCK_MONITOR_SOURCE in pw_args
-    # Second call: ffmpeg
-    ffmpeg_args = mock_popen.call_args_list[1][0][0]
-    assert 'ffmpeg' in ffmpeg_args
-    assert 'libmp3lame' in ffmpeg_args
-    assert 'pipe:1' in ffmpeg_args
+    mock_popen.assert_called_once()
+    call_kwargs = mock_popen.call_args[1]
+    assert call_kwargs['shell'] is True
+    assert call_kwargs['stdout'] == subprocess.PIPE
+    shell_cmd = mock_popen.call_args[0][0]
+    assert 'pw-cat' in shell_cmd
+    assert '--record' in shell_cmd
+    assert MOCK_MONITOR_SOURCE in shell_cmd
+    assert 'ffmpeg' in shell_cmd
+    assert 'libmp3lame' in shell_cmd
 
 
 def test_start_sets_active_flag(monitor, mocker):
-    _mock_popen_pair(mocker)
+    _mock_popen(mocker)
     monitor.start()
     assert monitor.active is True
 
 
 def test_start_starts_drain_thread(monitor, mocker):
-    _mock_popen_pair(mocker)
+    _mock_popen(mocker)
     monitor.start()
     assert monitor._drain_thread is not None
     assert monitor._drain_thread.daemon is True
@@ -128,7 +122,7 @@ def test_start_starts_drain_thread(monitor, mocker):
 
 def test_start_idempotent(monitor, mocker):
     """Calling start() when already active should be a no-op."""
-    mock_popen, _, _ = _mock_popen_pair(mocker)
+    mock_popen, _ = _mock_popen(mocker)
     monitor.start()
     monitor.mpv.restart_instances.reset_mock()
     mock_popen.reset_mock()
@@ -141,17 +135,16 @@ def test_start_idempotent(monitor, mocker):
 
 # --- stop() ---
 
-def test_stop_kills_both_processes(monitor, mocker):
-    _, mock_pw, mock_ffmpeg = _mock_popen_pair(mocker)
+def test_stop_kills_process(monitor, mocker):
+    _, mock_proc = _mock_popen(mocker)
     monitor.start()
     monitor.stop()
 
-    mock_ffmpeg.terminate.assert_called_once()
-    mock_pw.terminate.assert_called_once()
+    mock_proc.terminate.assert_called_once()
 
 
 def test_stop_sets_active_false(monitor, mocker):
-    _mock_popen_pair(mocker)
+    _mock_popen(mocker)
     monitor.start()
     assert monitor.active is True
     monitor.stop()
@@ -159,7 +152,7 @@ def test_stop_sets_active_false(monitor, mocker):
 
 
 def test_stop_restores_alsa_backend(monitor, mocker):
-    _mock_popen_pair(mocker)
+    _mock_popen(mocker)
     monitor.start()
     assert monitor.mpv.audio_backend == 'pipewire'
     monitor.stop()
@@ -167,7 +160,7 @@ def test_stop_restores_alsa_backend(monitor, mocker):
 
 
 def test_stop_calls_restart_instances(monitor, mocker):
-    _mock_popen_pair(mocker)
+    _mock_popen(mocker)
     monitor.start()
     monitor.mpv.restart_instances.reset_mock()
     monitor.stop()
@@ -175,7 +168,7 @@ def test_stop_calls_restart_instances(monitor, mocker):
 
 
 def test_stop_switches_pipewire_to_analog(monitor, mocker):
-    _mock_popen_pair(mocker)
+    _mock_popen(mocker)
     monitor.start()
     import audio_monitor
     audio_monitor.subprocess.run.reset_mock()
@@ -194,14 +187,12 @@ def test_stop_when_not_active_is_noop(monitor, mocker):
     assert monitor.active is False
 
 
-def test_stop_clears_procs(monitor, mocker):
-    _mock_popen_pair(mocker)
+def test_stop_clears_proc(monitor, mocker):
+    _mock_popen(mocker)
     monitor.start()
     assert monitor._ffmpeg_proc is not None
-    assert monitor._pw_proc is not None
     monitor.stop()
     assert monitor._ffmpeg_proc is None
-    assert monitor._pw_proc is None
 
 
 # --- status() ---
@@ -211,7 +202,7 @@ def test_status_when_inactive(monitor):
 
 
 def test_status_when_active(monitor, mocker):
-    _mock_popen_pair(mocker)
+    _mock_popen(mocker)
     monitor.start()
     status = monitor.status()
     assert status == {'active': True, 'stream_url': '/audio-monitor/stream'}
@@ -256,7 +247,7 @@ def test_stream_generator_no_proc_returns_empty(monitor):
 
 
 def test_stream_generator_no_stdout_returns_empty(monitor, mocker):
-    _mock_popen_pair(mocker)
+    _mock_popen(mocker)
     # Override ffmpeg stdout to None after start
     monitor.start()
     monitor._ffmpeg_proc.stdout = None
