@@ -94,7 +94,7 @@ class AudioMonitor:
             # Uses shell pipe because Python Popen pipe chaining breaks with sudo.
             shell_cmd = (
                 f"sudo -u nomad env XDG_RUNTIME_DIR=/run/user/1000"
-                f" pw-cat --record --target {monitor_source}"
+                f" pw-cat --record --target {monitor_source} -"
                 f" --format s16 --rate 48000 --channels 2"
                 f" | ffmpeg -f s16le -ar 48000 -ac 2 -i pipe:0"
                 f" -c:a libmp3lame -b:a 128k -f mp3"
