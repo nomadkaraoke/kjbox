@@ -53,9 +53,12 @@ class RotationManager:
         """Return the current rotation queue (non-done entries, ordered by position).
 
         force_refresh is accepted for API compatibility but ignored; SQLite
-        always returns fresh data.
+        always returns fresh data. Also refreshes the display cache so the
+        conky overlay stays current even when no mutations occur.
         """
-        return self.store.get_entries()
+        entries = self.store.get_entries()
+        self._write_display_cache()
+        return entries
 
     def get_stats(self):
         """Return rotation statistics dict (singers, sung, queued, started)."""
