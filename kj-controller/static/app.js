@@ -3648,6 +3648,9 @@ async function singerAction(action, data) {
         });
         const result = await resp.json();
         if (!resp.ok) { showRotationIndicator('error'); return; }
+        // Clear editing state so renderSingerStats doesn't skip the re-render
+        const editingRow = document.querySelector('.singer-editing');
+        if (editingRow) editingRow.classList.remove('singer-editing');
         if (result.entries) { rotationData = result.entries; renderRotation(rotationData); }
         if (result.singer_stats) { renderSingerStats(result.singer_stats); }
         showRotationIndicator('success');
@@ -3683,6 +3686,7 @@ function enterSingerEditMode(row, singer) {
             actions.innerHTML = origActionsHTML;
             return;
         }
+        row.classList.remove('singer-editing');
         await singerAction('rename', { old_name: singer.name, new_name: newName });
     };
     const cancelBtn = document.createElement('button');
