@@ -445,3 +445,32 @@ def test_stop_route(client, mocker):
 def test_stream_route_when_inactive(client):
     resp = client.get('/audio-monitor/stream')
     assert resp.status_code == 404
+
+
+def test_av_status_includes_audio_monitor(client):
+    """The /av/status response should include audio_monitor data."""
+    resp = client.get('/av/status')
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert 'audio_monitor' in data
+    assert data['audio_monitor']['active'] is False
+
+
+def test_av_reset_stops_active_monitor(client, mocker):
+    """AV reset should stop the audio monitor if it's active."""
+    mocker.patch('audio_monitor.subprocess.run')
+    mocker.patch('audio_monitor.subprocess.Popen')
+    # Mock fix-hdmi-audio.sh to avoid file-not-found
+    mock_subprocess_run = mocker.patch('routes.subprocess.run')
+    mock_subprocess_run.return_value = mocker.Mock(returncode=0, stdout='OK', stderr='')
+
+    # Start the monitor
+    client.post('/audio-monitor/start', json={})
+    import time
+    time.sleep(0.2)  # let background thread run
+
+    # Reset should stop it
+    resp = client.post('/av/reset', json={})
+    assert resp.status_code == 200
+    time.sleep(0.2)
+    assert client.application.audio_monitor.active is False
