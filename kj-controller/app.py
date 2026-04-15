@@ -32,6 +32,18 @@ def _init_rotation(cfg):
     return RotationManager(db_path, sheet_id, creds_file, sync_interval)
 
 
+def _restore_wallpaper():
+    """Restore custom wallpaper from ~/kjdata/ backup if git overwrote the desktop copy."""
+    kjdata_bg = os.path.expanduser('~/kjdata/rotation-bg.png')
+    desktop_bg = os.path.join(os.path.dirname(__file__), '..', 'desktop', 'rotation-bg.png')
+    desktop_bg = os.path.abspath(desktop_bg)
+    if os.path.exists(kjdata_bg):
+        try:
+            shutil.copy2(kjdata_bg, desktop_bg)
+        except OSError:
+            pass
+
+
 def create_app(config=None):
     """Create and configure the Flask application."""
     flask_app = Flask(__name__)
@@ -49,6 +61,9 @@ def create_app(config=None):
     flask_app.sleep_manager = SleepManager()
     flask_app.download_queue = {'items': [], 'worker_running': False}
     flask_app._download_lock = threading.Lock()
+
+    # Restore custom wallpaper if git pull/reset overwrote it
+    _restore_wallpaper()
 
     # Initialize gen API client and poller (optional — only if configured)
     gen_api_url = cfg.get('gen_api_url', '')

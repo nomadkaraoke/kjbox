@@ -882,15 +882,18 @@ def toggle_overlay_video(overlay_id):
 @routes_bp.route('/wallpaper', methods=['GET'])
 def get_wallpaper():
     """Serve the current desktop wallpaper image as a thumbnail."""
+    kjdata_dir = os.path.expanduser('~/kjdata')
     desktop_dir = os.path.join(APP_DIR, '..', 'desktop')
-    wallpaper = os.path.join(desktop_dir, 'wallpaper.jpg')
-    # Fall back to rotation-bg.png if no wallpaper.jpg yet
-    if not os.path.exists(wallpaper):
-        wallpaper = os.path.join(desktop_dir, 'rotation-bg.png')
-    if not os.path.exists(wallpaper):
-        return jsonify({"error": "No wallpaper found"}), 404
-    from flask import send_file
-    return send_file(os.path.abspath(wallpaper), mimetype='image/jpeg')
+    # Prefer custom wallpaper in ~/kjdata/, fall back to git-tracked default
+    for path in [
+        os.path.join(kjdata_dir, 'wallpaper.jpg'),
+        os.path.join(kjdata_dir, 'rotation-bg.png'),
+        os.path.join(desktop_dir, 'rotation-bg.png'),
+    ]:
+        if os.path.exists(path):
+            from flask import send_file
+            return send_file(os.path.abspath(path), mimetype='image/jpeg')
+    return jsonify({"error": "No wallpaper found"}), 404
 
 
 @routes_bp.route('/wallpaper', methods=['POST'])
@@ -910,8 +913,12 @@ def upload_wallpaper():
     if ext not in {'.jpg', '.jpeg', '.png', '.webp'}:
         return jsonify({"error": f"Unsupported image format: {ext}"}), 400
 
+    # Store wallpapers in ~/kjdata/ (survives git pull/reset) and also write
+    # rotation-bg.png to the desktop dir for conky (gitignored)
+    kjdata_dir = os.path.expanduser('~/kjdata')
+    os.makedirs(kjdata_dir, exist_ok=True)
     desktop_dir = os.path.abspath(os.path.join(APP_DIR, '..', 'desktop'))
-    wallpaper_path = os.path.join(desktop_dir, 'wallpaper.jpg')
+    wallpaper_path = os.path.join(kjdata_dir, 'wallpaper.jpg')
     rotation_bg_path = os.path.join(desktop_dir, 'rotation-bg.png')
 
     try:
@@ -923,9 +930,10 @@ def upload_wallpaper():
         cfg = current_app.kj_config
         log_message(f"Wallpaper uploaded: {file.filename} ({img.size[0]}x{img.size[1]})", cfg)
 
-        # Generate 1080p rotation background for conky
+        # Generate 1080p rotation background for conky + backup in ~/kjdata/
         bg = img.resize((1920, 1080), Image.LANCZOS)
         bg.save(rotation_bg_path, 'PNG')
+        bg.save(os.path.join(kjdata_dir, 'rotation-bg.png'), 'PNG')
         log_message("Generated rotation-bg.png (1920x1080)", cfg)
 
         # Set XFCE desktop wallpaper on all monitors

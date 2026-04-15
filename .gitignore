@@ -61,6 +61,8 @@ kj-controller/external_media.db
 
 # Runtime data (device-specific, must not be overwritten by deploys)
 data/overlays.json
+desktop/rotation-bg.png
+desktop/wallpaper.jpg
 
 # Testing / Coverage
 .pytest_cache/

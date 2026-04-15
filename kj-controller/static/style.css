@@ -1058,7 +1058,6 @@ body {
     border-left: 3px solid #666;
 }
 .singer-stats-row.singer-done {
-    opacity: 0.3;
 }
 .singer-merge-dropdown {
     position: fixed;

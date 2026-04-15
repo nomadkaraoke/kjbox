@@ -3536,7 +3536,6 @@ function renderSingerStats(stats) {
         row.className = 'singer-stats-row';
         if (singer.status === 'brb') row.classList.add('singer-brb');
         if (singer.status === 'left') row.classList.add('singer-left');
-        if (singer.status === 'done') row.classList.add('singer-done');
 
         const info = document.createElement('div');
         info.className = 'singer-stats-info';
