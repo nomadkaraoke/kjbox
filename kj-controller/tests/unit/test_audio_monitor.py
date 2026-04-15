@@ -10,7 +10,7 @@ from audio_monitor import (
     PW_ANALOG_PROFILE,
     PW_CARD,
     PW_HDMI_PROFILE,
-    PW_MONITOR_SOURCE,
+    PW_MONITOR_SOURCE_PREFIX,
     PACTL_ENV_PREFIX,
     STREAM_CHUNK_SIZE,
 )
@@ -25,10 +25,14 @@ def mock_mpv(mock_config, mocker):
     return m
 
 
+MOCK_MONITOR_SOURCE = PW_MONITOR_SOURCE_PREFIX + '.3.monitor'
+
+
 @pytest.fixture
 def monitor(mock_mpv, mocker):
-    """AudioMonitor with subprocess.run mocked (pactl calls)."""
+    """AudioMonitor with subprocess.run mocked (pactl calls) and source discovery mocked."""
     mocker.patch('audio_monitor.subprocess.run')
+    mocker.patch.object(AudioMonitor, '_find_monitor_source', return_value=MOCK_MONITOR_SOURCE)
     return AudioMonitor(mock_mpv)
 
 
@@ -106,7 +110,7 @@ def test_start_launches_ffmpeg(monitor, mocker):
     assert '-f' in cmd
     assert 'pulse' in cmd
     assert '-i' in cmd
-    assert PW_MONITOR_SOURCE in cmd
+    assert MOCK_MONITOR_SOURCE in cmd
     assert 'libmp3lame' in cmd
     assert 'pipe:1' in cmd
     # Verify stdout=PIPE, stderr=DEVNULL
