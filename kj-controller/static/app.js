@@ -3686,6 +3686,7 @@ function enterSingerEditMode(row, singer) {
             actions.innerHTML = origActionsHTML;
             return;
         }
+        row.classList.remove('singer-editing');
         await singerAction('rename', { old_name: singer.name, new_name: newName });
     };
     const cancelBtn = document.createElement('button');

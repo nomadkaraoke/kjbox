@@ -44,9 +44,23 @@ def _restore_wallpaper():
             pass
 
 
+def _get_version():
+    """Read version from pyproject.toml for cache-busting static assets."""
+    try:
+        pyproject = os.path.join(os.path.dirname(__file__), 'pyproject.toml')
+        with open(pyproject) as f:
+            for line in f:
+                if line.startswith('version'):
+                    return line.split('"')[1]
+    except Exception:
+        pass
+    return str(int(time.time()))
+
+
 def create_app(config=None):
     """Create and configure the Flask application."""
     flask_app = Flask(__name__)
+    flask_app.config['APP_VERSION'] = _get_version()
     cfg = config or load_config()
     flask_app.kj_config = cfg
     flask_app.media = MediaIndex(cfg)
