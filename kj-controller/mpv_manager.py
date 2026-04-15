@@ -35,6 +35,7 @@ class MpvManager:
         self.last_play_time = 0
         self.audio_error = False
         self.audio_device = config.get('default_audio_device', 'hdmiout')
+        self.audio_backend = 'alsa'
         self._play_lock = threading.Lock()
         self._fade_cancel = threading.Event()
         self.on_karaoke_end = None
@@ -356,19 +357,33 @@ class MpvManager:
         except FileNotFoundError:
             pass
 
-        log_message(f"Launching mpv karaoke with audio device 'alsa/{self.audio_device}'...", self.config)
-        command = [
-            'mpv', '--idle',
-            '--fs',
-            '--ao=alsa',
-            f'--audio-device=alsa/{self.audio_device}',
-            '--af=@rb:rubberband',
-            f'--input-ipc-server={self.ipc_socket_path}',
-            '--really-quiet',
-            '--keep-open=no',
-            '--no-input-default-bindings',
-            '--no-osc',
-        ]
+        if self.audio_backend == 'pipewire':
+            log_message("Launching mpv karaoke with PipeWire audio...", self.config)
+            command = [
+                'mpv', '--idle',
+                '--fs',
+                '--ao=pipewire',
+                '--af=@rb:rubberband',
+                f'--input-ipc-server={self.ipc_socket_path}',
+                '--really-quiet',
+                '--keep-open=no',
+                '--no-input-default-bindings',
+                '--no-osc',
+            ]
+        else:
+            log_message(f"Launching mpv karaoke with audio device 'alsa/{self.audio_device}'...", self.config)
+            command = [
+                'mpv', '--idle',
+                '--fs',
+                '--ao=alsa',
+                f'--audio-device=alsa/{self.audio_device}',
+                '--af=@rb:rubberband',
+                f'--input-ipc-server={self.ipc_socket_path}',
+                '--really-quiet',
+                '--keep-open=no',
+                '--no-input-default-bindings',
+                '--no-osc',
+            ]
 
         mpv_log = None
         try:
@@ -403,17 +418,29 @@ class MpvManager:
         port = port or self.config.get('filler_vlc_port', 8081)
         password = password or self.config.get('filler_vlc_password', 'filler')
 
-        log_message(f"Launching VLC filler on port {port} with audio device '{self.audio_device}'...", self.config)
-        command = [
-            'cvlc',
-            '--extraintf', 'http',
-            '--http-host', '0.0.0.0',
-            '--http-port', str(port),
-            '--http-password', password,
-            '--no-video-title-show',
-            '--aout', 'alsa',
-            '--alsa-audio-device', self.audio_device,
-        ]
+        if self.audio_backend == 'pipewire':
+            log_message(f"Launching VLC filler on port {port} with PipeWire audio...", self.config)
+            command = [
+                'cvlc',
+                '--extraintf', 'http',
+                '--http-host', '0.0.0.0',
+                '--http-port', str(port),
+                '--http-password', password,
+                '--no-video-title-show',
+                '--aout', 'pulse',
+            ]
+        else:
+            log_message(f"Launching VLC filler on port {port} with audio device '{self.audio_device}'...", self.config)
+            command = [
+                'cvlc',
+                '--extraintf', 'http',
+                '--http-host', '0.0.0.0',
+                '--http-port', str(port),
+                '--http-password', password,
+                '--no-video-title-show',
+                '--aout', 'alsa',
+                '--alsa-audio-device', self.audio_device,
+            ]
         if media_file:
             command.append(media_file)
         if loop:
