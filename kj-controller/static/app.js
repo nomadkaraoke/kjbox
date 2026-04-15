@@ -3555,26 +3555,37 @@ function renderSingerStats(stats) {
             info.appendChild(tip);
         }
 
+        // Joined time
         if (singer.first_added) {
-            const elapsed = document.createElement('span');
-            elapsed.className = 'singer-stats-detail';
+            const joined = document.createElement('span');
+            joined.className = 'singer-stats-label';
             const added = new Date(singer.first_added.replace(' ', 'T'));
             const mins = Math.round((Date.now() - added.getTime()) / 60000);
-            if (mins < 60) {
-                elapsed.textContent = mins + 'm ago';
-            } else {
-                elapsed.textContent = Math.floor(mins / 60) + 'h ' + (mins % 60) + 'm ago';
-            }
-            elapsed.title = 'First added to rotation';
-            info.appendChild(elapsed);
+            const ago = mins < 60 ? mins + ' mins ago' : Math.floor(mins / 60) + 'h ' + (mins % 60) + 'm ago';
+            joined.innerHTML = '<span class="singer-label-key">Joined:</span> ' + ago;
+            info.appendChild(joined);
         }
 
-        const songs = document.createElement('span');
-        songs.className = 'singer-stats-detail';
-        songs.textContent = singer.entries_sung + '/' + singer.entries_total + ' sung';
-        songs.title = singer.entries_sung + ' sung, ' + singer.entries_waiting + ' waiting';
-        info.appendChild(songs);
+        // Sung count (color-coded like rotation pills)
+        const sung = document.createElement('span');
+        sung.className = 'singer-stats-label';
+        const sungCount = singer.entries_sung;
+        let pillClass = 'pill-new';
+        if (sungCount === 1) pillClass = 'pill-once';
+        else if (sungCount >= 2 && sungCount <= 4) pillClass = 'pill-few';
+        else if (sungCount >= 5) pillClass = 'pill-many';
+        sung.innerHTML = '<span class="singer-label-key">Sung:</span> <span class="singer-sung-pill ' + pillClass + '">' + sungCount + '</span>';
+        info.appendChild(sung);
 
+        // Queued count
+        if (singer.entries_waiting > 0) {
+            const queued = document.createElement('span');
+            queued.className = 'singer-stats-label';
+            queued.innerHTML = '<span class="singer-label-key">Queued:</span> ' + singer.entries_waiting;
+            info.appendChild(queued);
+        }
+
+        // Next song time
         if (singer.entries_waiting > 0) {
             const singerLower = singer.name.toLowerCase();
             const nextEntry = rotationData.find(e => {
@@ -3588,9 +3599,8 @@ function renderSingerStats(stats) {
             });
             if (nextEntry && nextEntry.estimated_time) {
                 const est = document.createElement('span');
-                est.className = 'singer-stats-detail';
-                est.textContent = '~' + nextEntry.estimated_time;
-                est.title = 'Estimated next sing time';
+                est.className = 'singer-stats-label';
+                est.innerHTML = '<span class="singer-label-key">Next:</span> ~' + nextEntry.estimated_time;
                 info.appendChild(est);
             }
         }

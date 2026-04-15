@@ -1049,6 +1049,21 @@ body {
     color: #ccc;
     background: #3a3a3a;
 }
+.singer-stats-label {
+    font-size: 0.75em;
+    color: #ccc;
+    white-space: nowrap;
+}
+.singer-label-key {
+    color: #666;
+}
+.singer-sung-pill {
+    display: inline-block;
+    padding: 0 5px;
+    border-radius: 6px;
+    font-weight: 600;
+    font-size: 1em;
+}
 .singer-stats-row.singer-brb {
     opacity: 0.6;
     border-left: 3px solid #f59e0b;
