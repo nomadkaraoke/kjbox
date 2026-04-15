@@ -4347,8 +4347,8 @@ async function selectRotSearchResult(result) {
 
     // In link mode, we don't need a singer name (already exists)
     if (!linkTargetId) {
-        const singer = singerInput ? singerInput.value.trim() : '';
-        if (!singer) { if (singerInput) singerInput.focus(); return; }
+        const singers = singerPillInput.getSingers();
+        if (singers.length === 0) { if (singerInput) singerInput.focus(); return; }
     }
 
     hideRotSearchDropdown();
@@ -4398,13 +4398,13 @@ async function selectRotSearchResult(result) {
             }
         } else {
             // Add mode: create new rotation entry with linked result
-            const singer = singerInput.value.trim();
+            const singers = singerPillInput.getSingers();
             if (result.type === 'local') {
                 const resp = await fetch('/rotation/add', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({
-                        singer,
+                        singers,
                         song_artist: result.song_artist || songInput.value.trim(),
                         file_path: result.path,
                     }),
@@ -4413,7 +4413,7 @@ async function selectRotSearchResult(result) {
                 if (data.entries) { rotationData = data.entries; renderRotation(rotationData); }
             } else if (result.type === 'divebar' || result.type === 'youtube') {
                 const body = {
-                    singer,
+                    singers,
                     song_artist: result.song_artist || songInput.value.trim(),
                     source: result.type,
                 };
@@ -4441,7 +4441,7 @@ async function selectRotSearchResult(result) {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({
-                        singer,
+                        singers,
                         song_artist: query,
                         artist: makeArtist,
                         title: makeTitle,
@@ -4457,6 +4457,7 @@ async function selectRotSearchResult(result) {
         if (linkTargetId) {
             exitLinkMode();
         } else {
+            singerPillInput.clear();
             if (singerInput) singerInput.value = '';
             songInput.value = '';
             // Re-focus singer name for rapid-fire adds
