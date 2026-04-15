@@ -24,6 +24,7 @@ class AudioMonitor:
         self.mpv = mpv_manager
         self.config = config or {}
         self.active = False
+        self._pw_proc = None
         self._ffmpeg_proc = None
         self._drain_thread = None
         self._client_connected = False
@@ -88,11 +89,20 @@ class AudioMonitor:
                 )
                 return
 
-            # Step 4: Start ffmpeg capture from the discovered monitor source
-            ffmpeg_cmd = PACTL_ENV_PREFIX + [
+            # Step 4: Start pw-cat capture piped into ffmpeg for MP3 encoding.
+            # pw-cat (native PipeWire) captures all sink audio reliably, while
+            # ffmpeg's -f pulse input misses mpv's PipeWire output.
+            pw_cmd = PACTL_ENV_PREFIX + [
+                'pw-cat', '--record',
+                '--target', monitor_source,
+                '--format', 's16',
+                '--rate', '48000',
+                '--channels', '2',
+            ]
+            ffmpeg_cmd = [
                 'ffmpeg',
-                '-f', 'pulse',
-                '-i', monitor_source,
+                '-f', 's16le', '-ar', '48000', '-ac', '2',
+                '-i', 'pipe:0',
                 '-c:a', 'libmp3lame',
                 '-b:a', '128k',
                 '-f', 'mp3',
@@ -100,7 +110,7 @@ class AudioMonitor:
                 '-flags', '+low_delay',
                 'pipe:1',
             ]
-            log_message(f"Starting ffmpeg capture: {' '.join(ffmpeg_cmd)}", self.config)
+            log_message(f"Starting capture: {' '.join(pw_cmd)} | {' '.join(ffmpeg_cmd)}", self.config)
             ffmpeg_log = None
             try:
                 log_dir = os.path.dirname(self.config.get('log_file', ''))
@@ -108,11 +118,19 @@ class AudioMonitor:
                     ffmpeg_log = open(os.path.join(log_dir, 'ffmpeg-monitor.log'), 'a')
             except OSError:
                 pass
+            self._pw_proc = subprocess.Popen(
+                pw_cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+            )
             self._ffmpeg_proc = subprocess.Popen(
                 ffmpeg_cmd,
+                stdin=self._pw_proc.stdout,
                 stdout=subprocess.PIPE,
                 stderr=ffmpeg_log or subprocess.DEVNULL,
             )
+            # Allow pw-cat to receive SIGPIPE if ffmpeg dies
+            self._pw_proc.stdout.close()
 
             # Start drain thread to prevent pipe backpressure when no client
             self._client_connected = False
@@ -128,16 +146,17 @@ class AudioMonitor:
             if not self.active:
                 return
 
-            # Kill ffmpeg process
-            if self._ffmpeg_proc is not None:
-                log_message("Stopping ffmpeg capture...", self.config)
-                self._ffmpeg_proc.terminate()
-                try:
-                    self._ffmpeg_proc.wait(timeout=5)
-                except subprocess.TimeoutExpired:
-                    self._ffmpeg_proc.kill()
-                    self._ffmpeg_proc.wait(timeout=5)
-                self._ffmpeg_proc = None
+            # Kill capture pipeline (pw-cat → ffmpeg)
+            for proc_name in ('_ffmpeg_proc', '_pw_proc'):
+                proc = getattr(self, proc_name, None)
+                if proc is not None:
+                    proc.terminate()
+                    try:
+                        proc.wait(timeout=5)
+                    except subprocess.TimeoutExpired:
+                        proc.kill()
+                    setattr(self, proc_name, None)
+            log_message("Stopped capture pipeline.", self.config)
 
             self.active = False
 
