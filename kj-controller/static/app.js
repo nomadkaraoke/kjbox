@@ -891,6 +891,7 @@ function renderAvModal(data) {
     populateAvHdmiPcmSelect(data.audio);
     populateAvVlcDeviceSelect(data.audio);
     populateAvBrowserAudioSelect(data.audio);
+    renderAvMonitorSection(data.audio_monitor);
     document.getElementById('av-loading').classList.add('hidden');
     document.getElementById('av-content').classList.remove('hidden');
 }
@@ -1171,6 +1172,59 @@ async function avReset() {
     if (data && data.success) {
         log('AV reset complete.', 'success');
         setTimeout(avRefresh, 4500);
+    }
+}
+
+// --- Audio Monitor ---
+
+function renderAvMonitorSection(monitorData) {
+    const info = document.getElementById('av-monitor-info');
+    const btn = document.getElementById('av-monitor-btn');
+    const listenDiv = document.getElementById('av-monitor-listen');
+    const urlEl = document.getElementById('av-monitor-url');
+
+    if (!monitorData || !monitorData.active) {
+        info.innerHTML = `
+            <div class="av-info-row">
+                <span class="av-info-label">Status</span>
+                <span class="av-dot av-dot-off"></span>
+                <span class="av-info-value">Off</span>
+            </div>`;
+        btn.textContent = 'Start Monitor';
+        btn.onclick = () => toggleAudioMonitor(true);
+        btn.disabled = false;
+        listenDiv.classList.add('hidden');
+    } else {
+        info.innerHTML = `
+            <div class="av-info-row">
+                <span class="av-info-label">Status</span>
+                <span class="av-dot av-dot-ok"></span>
+                <span class="av-info-value">Streaming (PipeWire HDMI)</span>
+            </div>`;
+        btn.textContent = 'Stop Monitor';
+        btn.onclick = () => toggleAudioMonitor(false);
+        btn.disabled = false;
+        const host = location.hostname || 'nomadpc.local';
+        const port = location.port || (location.protocol === 'https:' ? '443' : '80');
+        const proto = location.protocol;
+        urlEl.textContent = `ffplay ${proto}//${host}:${port}/audio-monitor/stream`;
+        listenDiv.classList.remove('hidden');
+    }
+}
+
+async function toggleAudioMonitor(start) {
+    const btn = document.getElementById('av-monitor-btn');
+    btn.disabled = true;
+    btn.textContent = start ? 'Starting…' : 'Stopping…';
+    const endpoint = start ? '/audio-monitor/start' : '/audio-monitor/stop';
+    log(start ? 'Starting audio monitor (switching to PipeWire)…' : 'Stopping audio monitor (restoring ALSA)…');
+    const data = await apiCall(endpoint, {});
+    if (data && data.success) {
+        log(start ? 'Audio monitor started.' : 'Audio monitor stopped.', 'success');
+        setTimeout(avRefresh, start ? 5000 : 4000);
+    } else {
+        btn.disabled = false;
+        btn.textContent = start ? 'Start Monitor' : 'Stop Monitor';
     }
 }
 

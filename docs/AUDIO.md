@@ -100,6 +100,27 @@ If HDMI audio stops working after reboot:
    ```
    If this fails with "Device or resource busy", PipeWire has the device — see step 1.
 
+### Remote Audio Monitor
+
+The KJ Controller includes a remote audio monitor for dev/testing. When enabled via the AV Output modal, it:
+
+1. Switches PipeWire to the HDMI profile (`output:hdmi-stereo+input:analog-stereo`)
+2. Restarts mpv with `--ao=pipewire` and VLC filler with `--aout pulse`
+3. Runs ffmpeg to capture from PipeWire's HDMI monitor source and encode to MP3
+4. Serves the stream at `GET /audio-monitor/stream`
+
+**Listen from another machine:**
+```bash
+ffplay http://nomadpc.local/audio-monitor/stream
+```
+
+**Important notes:**
+- Enabling/disabling restarts mpv and VLC (~3 second interruption)
+- Single client at a time
+- State is NOT persisted — after service restart, monitor is off and audio returns to ALSA
+- "Reset All" in the AV Output modal stops the monitor and restores ALSA mode
+- PipeWire HDMI output was tested and confirmed working on NomadPC (2026-04-15)
+
 ---
 
 ## NomadPi (Raspberry Pi 4)

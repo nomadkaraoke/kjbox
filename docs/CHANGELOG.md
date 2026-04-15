@@ -2,6 +2,10 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-04-15 - Remote Audio Monitor
+
+- **Audio Monitor:** Added remote audio monitoring via AV Output modal. Streams live audio over HTTP for dev/testing. Uses PipeWire HDMI capture + ffmpeg MP3 encoding. See [AUDIO.md](AUDIO.md#remote-audio-monitor).
+
 ## 2026-03-26 - Streamlined Rotation Link UX & Auto-Advance
 
 Major improvements to the rotation song-linking workflow, search results, playback auto-advance, and edit mode isolation.

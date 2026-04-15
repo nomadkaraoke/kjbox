@@ -748,3 +748,89 @@ def test_vlc_to_mpv_volume_low():
 
 def test_vlc_to_mpv_volume_filler_default():
     assert MpvManager._vlc_to_mpv_volume(110) == pytest.approx(42.97, abs=0.1)
+
+
+# --- audio_backend property ---
+
+def test_audio_backend_defaults_to_alsa(mock_config):
+    m = MpvManager(mock_config, enabled=False)
+    assert m.audio_backend == 'alsa'
+
+
+def test_audio_backend_stored(mock_config):
+    m = MpvManager(mock_config, enabled=False)
+    m.audio_backend = 'pipewire'
+    assert m.audio_backend == 'pipewire'
+
+
+def test_mpv_launch_alsa_command(mock_config, mocker):
+    m = MpvManager(mock_config, enabled=True)
+    m.audio_backend = 'alsa'
+    m.audio_device = 'hdmiout'
+    m.processes["karaoke"] = None
+    mocker.patch('os.unlink', side_effect=FileNotFoundError)
+    mocker.patch('builtins.open', mocker.mock_open())
+    mock_popen = mocker.patch('subprocess.Popen')
+    mock_popen.return_value.pid = 12345
+    mocker.patch('os.path.exists', return_value=False)
+    mocker.patch('mpv_manager.time.sleep')
+    m._launch_mpv_karaoke()
+    args = mock_popen.call_args[0][0]
+    assert '--ao=alsa' in args
+    assert '--audio-device=alsa/hdmiout' in args
+    assert '--ao=pipewire' not in args
+
+
+def test_mpv_launch_pipewire_command(mock_config, mocker):
+    m = MpvManager(mock_config, enabled=True)
+    m.audio_backend = 'pipewire'
+    m.processes["karaoke"] = None
+    mocker.patch('os.unlink', side_effect=FileNotFoundError)
+    mocker.patch('builtins.open', mocker.mock_open())
+    mock_popen = mocker.patch('subprocess.Popen')
+    mock_popen.return_value.pid = 12345
+    mocker.patch('os.path.exists', return_value=False)
+    mocker.patch('mpv_manager.time.sleep')
+    m._launch_mpv_karaoke()
+    args = mock_popen.call_args[0][0]
+    assert '--ao=pipewire' in args
+    assert '--ao=alsa' not in args
+    assert not any(a.startswith('--audio-device=') for a in args)
+
+
+def test_vlc_filler_launch_alsa_command(mock_config, mocker):
+    m = MpvManager(mock_config, enabled=True)
+    m.audio_backend = 'alsa'
+    m.audio_device = 'hdmiout'
+    m.processes["filler"] = None
+    mocker.patch('builtins.open', mocker.mock_open())
+    mock_popen = mocker.patch('subprocess.Popen')
+    mock_popen.return_value.pid = 12346
+    mocker.patch('mpv_manager.is_pi', return_value=False)
+    mocker.patch('mpv_manager.time.sleep')
+    m._launch_vlc_filler(8081, 'filler')
+    args = mock_popen.call_args[0][0]
+    assert '--aout' in args
+    alsa_idx = args.index('--aout')
+    assert args[alsa_idx + 1] == 'alsa'
+    assert '--alsa-audio-device' in args
+    assert '--aout' in args
+    pulse_present = '--aout' in args and args[args.index('--aout') + 1] == 'pulse'
+    assert not pulse_present
+
+
+def test_vlc_filler_launch_pipewire_command(mock_config, mocker):
+    m = MpvManager(mock_config, enabled=True)
+    m.audio_backend = 'pipewire'
+    m.processes["filler"] = None
+    mocker.patch('builtins.open', mocker.mock_open())
+    mock_popen = mocker.patch('subprocess.Popen')
+    mock_popen.return_value.pid = 12346
+    mocker.patch('mpv_manager.is_pi', return_value=False)
+    mocker.patch('mpv_manager.time.sleep')
+    m._launch_vlc_filler(8081, 'filler')
+    args = mock_popen.call_args[0][0]
+    assert '--aout' in args
+    pulse_idx = args.index('--aout')
+    assert args[pulse_idx + 1] == 'pulse'
+    assert '--alsa-audio-device' not in args

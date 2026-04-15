@@ -653,6 +653,19 @@
                     </div>
                 </div>
 
+                <!-- Audio Monitor section -->
+                <div class="av-section">
+                    <div class="av-section-title">Audio Monitor (Dev)</div>
+                    <div id="av-monitor-info"></div>
+                    <div class="av-control-row">
+                        <p class="av-help">Streams audio over HTTP for remote listening. Switches players to PipeWire (~3s restart).</p>
+                        <div id="av-monitor-listen" class="hidden" style="margin:6px 0;">
+                            <code id="av-monitor-url" style="font-size:0.8em;color:#aaa;user-select:all;"></code>
+                        </div>
+                        <button class="system-btn" id="av-monitor-btn" onclick="toggleAudioMonitor(true)">Start Monitor</button>
+                    </div>
+                </div>
+
             </div>
 
             <!-- Footer -->
