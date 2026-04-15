@@ -47,11 +47,13 @@ def _restore_wallpaper():
 def _get_version():
     """Read version from pyproject.toml for cache-busting static assets."""
     try:
-        pyproject = os.path.join(os.path.dirname(__file__), 'pyproject.toml')
+        pyproject = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'pyproject.toml')
         with open(pyproject) as f:
             for line in f:
-                if line.startswith('version'):
-                    return line.split('"')[1]
+                if line.strip().startswith('version'):
+                    parts = line.split('"')
+                    if len(parts) >= 2:
+                        return parts[1]
     except Exception:
         pass
     return str(int(time.time()))
