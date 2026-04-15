@@ -3170,6 +3170,7 @@ function renderRotation(entries) {
         const handle = document.createElement('span');
         handle.className = 'rotation-drag-handle';
         handle.textContent = '\u2807';  // ⠇ braille 6-dot grip
+        handle.title = 'Drag to reorder this entry in the queue';
         handle.draggable = true;
         handle.addEventListener('dragstart', (e) => {
             row.classList.add('dragging');
@@ -3248,7 +3249,7 @@ function renderRotation(entries) {
         if (sung === 0) {
             pill.classList.add('pill-new');
             pill.textContent = 'NEW';
-            pill.title = 'Hasn\u2019t sung yet tonight';
+            pill.title = 'Hasn\u2019t sung yet tonight \u2014 prioritise this singer';
         } else if (sung === 1) {
             pill.classList.add('pill-once');
             pill.textContent = '\u00d71';
@@ -3267,7 +3268,7 @@ function renderRotation(entries) {
             const heart = document.createElement('span');
             heart.className = 'rotation-paid-heart';
             heart.textContent = ' ♥';
-            heart.title = 'Paid priority';
+            heart.title = 'This singer tipped tonight \u2014 paid priority';
             info.appendChild(heart);
         }
         if (entry.song_artist) info.appendChild(song);
@@ -3285,7 +3286,7 @@ function renderRotation(entries) {
             const est = document.createElement('span');
             est.className = 'rotation-estimate';
             est.textContent = '~' + entry.estimated_time;
-            est.title = 'Estimated sing time';
+            est.title = 'Estimated time this singer will perform (based on songs ahead in queue)';
             info.appendChild(est);
         }
 
@@ -3294,21 +3295,27 @@ function renderRotation(entries) {
         if (statusLower.includes('singing') || statusLower === 'now singing') {
             badge.textContent = 'NOW';
             badge.classList.add('badge-now');
+            badge.title = 'Currently singing';
         } else if (statusLower.includes('next')) {
             badge.textContent = 'NEXT';
             badge.classList.add('badge-next');
+            badge.title = 'Up next \u2014 get ready!';
         } else if (statusLower === 'waiting') {
             badge.textContent = 'WAITING';
             badge.classList.add('badge-waiting');
+            badge.title = 'Waiting in queue';
         } else if (statusLower.includes('being made')) {
             badge.textContent = 'MAKING';
             badge.classList.add('badge-wip');
+            badge.title = 'Karaoke video being generated';
         } else if (statusLower.includes('on hold') || statusLower.includes('brb')) {
             badge.textContent = 'BRB';
             badge.classList.add('badge-onhold');
+            badge.title = 'Singer stepped away \u2014 will be skipped until they return';
         } else if (statusLower === 'skipped') {
             badge.textContent = 'SKIP';
             badge.classList.add('badge-skipped');
+            badge.title = 'Skipped this round';
         }
         if (badge.textContent) info.appendChild(badge);
 
@@ -3318,18 +3325,23 @@ function renderRotation(entries) {
         if (entry.file_path) {
             prepBadge.textContent = 'READY';
             prepBadge.classList.add('prep-ready');
+            prepBadge.title = 'Song file linked and ready to play';
         } else if (entry.download_status === 'queued' || entry.download_status === 'downloading') {
             prepBadge.textContent = 'DOWNLOADING';
             prepBadge.classList.add(entry.download_source === 'youtube' ? 'prep-downloading-orange' : 'prep-downloading-green');
+            prepBadge.title = 'Song is downloading from ' + (entry.download_source || 'source') + ' \u2014 will be ready soon';
         } else if (entry.download_status === 'failed') {
             prepBadge.textContent = 'FAILED';
             prepBadge.classList.add('prep-failed');
+            prepBadge.title = 'Download failed \u2014 click the link button to try again';
         } else if (entry.url_fallback) {
             prepBadge.textContent = 'URL';
             prepBadge.classList.add('prep-url');
+            prepBadge.title = 'Will play via browser mode (no local file)';
         } else if (entry.gen_status === 'processing') {
             prepBadge.textContent = 'MAKING';
             prepBadge.classList.add('prep-making');
+            prepBadge.title = 'Custom karaoke video being generated \u2014 check back soon';
         } else if (entry.gen_status === 'awaiting_review') {
             prepBadge.textContent = 'NEEDS REVIEW';
             prepBadge.classList.add('prep-review');
@@ -3342,9 +3354,11 @@ function renderRotation(entries) {
         } else if (entry.gen_status === 'rendering') {
             prepBadge.textContent = 'RENDERING';
             prepBadge.classList.add('prep-rendering');
+            prepBadge.title = 'Karaoke video rendering \u2014 almost ready';
         } else {
             prepBadge.textContent = 'UNLINKED';
             prepBadge.classList.add('prep-unlinked');
+            prepBadge.title = 'No song file linked \u2014 use the link button to search and attach a song';
         }
         info.appendChild(prepBadge);
 
@@ -3369,7 +3383,7 @@ function renderRotation(entries) {
             const linkBtn = document.createElement('button');
             linkBtn.className = 'rotation-btn rotation-btn-link';
             linkBtn.textContent = '\uD83D\uDD17';  // 🔗
-            linkBtn.title = 'Search and link a song';
+            linkBtn.title = 'Search for a matching song file and link it to this entry';
             linkBtn.onclick = () => openLinkSearch(entry.id, entry.song_artist);
             actions.appendChild(linkBtn);
         }
@@ -3378,6 +3392,7 @@ function renderRotation(entries) {
             const singBtn = document.createElement('button');
             singBtn.className = 'rotation-btn rotation-btn-sing';
             singBtn.textContent = 'Singing';
+            singBtn.title = 'Mark this singer as currently performing';
             singBtn.onclick = () => updateRotationStatus(entry.id, 'Now Singing');
             actions.appendChild(singBtn);
         }
@@ -3385,6 +3400,7 @@ function renderRotation(entries) {
         const doneBtn = document.createElement('button');
         doneBtn.className = 'rotation-btn rotation-btn-done';
         doneBtn.textContent = 'Done';
+        doneBtn.title = 'Song finished \u2014 mark as done and credit the singer';
         doneBtn.onclick = () => updateRotationStatus(entry.id, 'Done');
         actions.appendChild(doneBtn);
 
@@ -3392,6 +3408,7 @@ function renderRotation(entries) {
             const nextBtn = document.createElement('button');
             nextBtn.className = 'rotation-btn rotation-btn-next';
             nextBtn.textContent = 'Next';
+            nextBtn.title = 'Mark as up next \u2014 give them a heads up to get ready';
             nextBtn.onclick = () => updateRotationStatus(entry.id, 'Up Next');
             actions.appendChild(nextBtn);
         }
@@ -3480,7 +3497,7 @@ function renderRotation(entries) {
         const editBtn = document.createElement('button');
         editBtn.className = 'rotation-btn rotation-btn-edit';
         editBtn.innerHTML = '&#9998;';
-        editBtn.title = 'Edit singer/song';
+        editBtn.title = 'Edit singer name or song (Shift+click row for quick edit)';
         editBtn.onclick = (e) => {
             e.stopPropagation();
             enterRotationEditMode(row, entry);
@@ -3614,30 +3631,37 @@ function renderSingerStats(stats) {
             const restoreBtn = document.createElement('button');
             restoreBtn.className = 'singer-stats-btn';
             restoreBtn.textContent = 'Restore';
+            restoreBtn.title = 'Bring this singer back \u2014 restore their songs to the queue';
             restoreBtn.onclick = () => singerAction('restore', { name: singer.name });
             actions.appendChild(restoreBtn);
         } else if (singer.status !== 'done') {
             const editBtn = document.createElement('button');
             editBtn.className = 'singer-stats-btn';
             editBtn.textContent = 'Edit';
+            editBtn.title = 'Rename this singer (fixes typos across all their entries)';
             editBtn.onclick = () => enterSingerEditMode(row, singer);
             actions.appendChild(editBtn);
 
             const mergeBtn = document.createElement('button');
             mergeBtn.className = 'singer-stats-btn';
             mergeBtn.textContent = 'Merge';
+            mergeBtn.title = 'Merge this singer into another \u2014 use when the same person was added under two different names';
             mergeBtn.onclick = (ev) => showMergeDropdown(ev, singer);
             actions.appendChild(mergeBtn);
 
             const brbBtn = document.createElement('button');
             brbBtn.className = 'singer-stats-btn';
             brbBtn.textContent = singer.status === 'brb' ? 'Back' : 'BRB';
+            brbBtn.title = singer.status === 'brb'
+                ? 'Singer is back \u2014 restore their songs to the active queue'
+                : 'Singer stepped away \u2014 hold all their songs until they return';
             brbBtn.onclick = () => singerAction('brb', { name: singer.name, brb: singer.status !== 'brb' });
             actions.appendChild(brbBtn);
 
             const removeBtn = document.createElement('button');
             removeBtn.className = 'singer-stats-btn';
             removeBtn.textContent = 'Remove';
+            removeBtn.title = 'Singer is leaving \u2014 remove their songs from the queue (can be restored later)';
             removeBtn.onclick = () => singerAction('remove', { name: singer.name });
             actions.appendChild(removeBtn);
         }

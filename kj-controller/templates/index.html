@@ -67,10 +67,10 @@
                         <span id="rotation-indicator" class="rotation-indicator hidden"></span>
                         <button id="rotation-undo-btn" class="rotation-undo-btn" onclick="rotationHistory.undo()" title="Nothing to undo" disabled>&#x21A9;</button>
                         <button id="rotation-redo-btn" class="rotation-redo-btn" onclick="rotationHistory.redo()" title="Nothing to redo" disabled>&#x21AA;</button>
-                        <button class="rotation-restore-btn" onclick="restoreFromSheet()" title="Restore from Google Sheet backup">Restore</button>
-                        <button class="rotation-refresh-btn" onclick="fetchRotation()" title="Refresh rotation">Refresh</button>
-                        <button class="rotation-add-btn" onclick="toggleRotationAddForm()">+ Add</button>
-                        <button class="rotation-new-btn" onclick="archiveRotation()" title="Archive current rotation and start fresh">New Rotation</button>
+                        <button class="rotation-restore-btn" onclick="restoreFromSheet()" title="Restore rotation from Google Sheet backup (emergency recovery)">Restore</button>
+                        <button class="rotation-refresh-btn" onclick="fetchRotation()" title="Refresh the rotation list from the server">Refresh</button>
+                        <button class="rotation-add-btn" onclick="toggleRotationAddForm()" title="Add a new singer and song to the rotation queue">+ Add</button>
+                        <button class="rotation-new-btn" onclick="archiveRotation()" title="Archive tonight's rotation and start fresh for a new event">New Rotation</button>
                     </div>
                 </div>
                 <div id="rotation-add-form" class="rotation-add-form hidden">
@@ -82,7 +82,7 @@
                         <input type="text" id="rotation-singer" placeholder="Singer name" autocomplete="off">
                     </div>
                     <input type="text" id="rotation-song" placeholder="Song & Artist" autocomplete="off">
-                    <button id="rotation-add-btn-submit" onclick="addRotationEntry()">Add</button>
+                    <button id="rotation-add-btn-submit" onclick="addRotationEntry()" title="Add this singer and song to the rotation queue">Add</button>
                 </div>
                 <div id="rotation-search-dropdown" class="rotation-search-dropdown hidden"></div>
                 <div id="rotation-list" class="rotation-list">
@@ -91,7 +91,7 @@
                 <div id="singer-stats-panel" class="singer-stats-panel">
                     <div class="singer-stats-header">
                         <h3>Singers</h3>
-                        <button class="singer-stats-toggle" onclick="toggleSingerStats()">Hide</button>
+                        <button class="singer-stats-toggle" onclick="toggleSingerStats()" title="Show or hide the singer summary panel">Hide</button>
                     </div>
                     <div id="singer-stats-list" class="singer-stats-list"></div>
                 </div>
