@@ -3530,7 +3530,7 @@ function renderSingerStats(stats) {
 
     list.innerHTML = '';
     sorted.forEach((singer) => {
-        if (singer.status === 'done' && singer.entries_waiting === 0 && singer.entries_left === 0) return;
+        // Done singers still shown (dimmed) so KJ can see who's been through tonight
 
         const row = document.createElement('div');
         row.className = 'singer-stats-row';
