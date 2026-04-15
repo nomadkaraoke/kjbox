@@ -1,5 +1,6 @@
 """AudioMonitor: PipeWire profile switching, ffmpeg capture, and MP3 stream serving."""
 
+import os
 import subprocess
 import threading
 import time
@@ -49,7 +50,8 @@ class AudioMonitor:
             self.mpv.restart_instances()
 
             # Start ffmpeg capturing from PipeWire monitor source
-            ffmpeg_cmd = PACTL_ENV_PREFIX[:4] + [
+            # Full PACTL_ENV_PREFIX needed — ffmpeg requires XDG_RUNTIME_DIR to find PipeWire
+            ffmpeg_cmd = PACTL_ENV_PREFIX + [
                 'ffmpeg',
                 '-f', 'pulse',
                 '-i', PW_MONITOR_SOURCE,
@@ -61,10 +63,17 @@ class AudioMonitor:
                 'pipe:1',
             ]
             log_message(f"Starting ffmpeg capture: {' '.join(ffmpeg_cmd)}", self.config)
+            ffmpeg_log = None
+            try:
+                log_dir = os.path.dirname(self.config.get('log_file', ''))
+                if log_dir:
+                    ffmpeg_log = open(os.path.join(log_dir, 'ffmpeg-monitor.log'), 'a')
+            except OSError:
+                pass
             self._ffmpeg_proc = subprocess.Popen(
                 ffmpeg_cmd,
                 stdout=subprocess.PIPE,
-                stderr=subprocess.DEVNULL,
+                stderr=ffmpeg_log or subprocess.DEVNULL,
             )
 
             # Start drain thread to prevent pipe backpressure when no client
