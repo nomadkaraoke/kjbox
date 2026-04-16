@@ -104,22 +104,33 @@ If HDMI audio stops working after reboot:
 
 The KJ Controller includes a remote audio monitor for dev/testing. When enabled via the AV Output modal, it:
 
-1. Switches PipeWire to the HDMI profile (`output:hdmi-stereo+input:analog-stereo`)
-2. Restarts mpv with `--ao=pipewire` and VLC filler with `--aout pulse`
-3. Runs ffmpeg to capture from PipeWire's HDMI monitor source and encode to MP3
-4. Serves the stream at `GET /audio-monitor/stream`
+1. Restarts mpv with `--ao=pulse` and VLC filler with `--aout pulse` (PulseAudio compat, replacing ALSA direct)
+2. Switches PipeWire to the HDMI profile (`output:hdmi-stereo+input:analog-stereo`)
+3. Discovers the HDMI monitor source name dynamically (PipeWire appends a changing numeric suffix)
+4. Runs `parec | ffmpeg` to capture from the monitor source and encode to MP3
+5. Serves the stream at `GET /audio-monitor/stream`
 
-**Listen from another machine:**
+**Listen from another machine (requires SSH — Cloudflare Access blocks direct ffplay):**
 ```bash
-ffplay http://nomadpc.local/audio-monitor/stream
+ssh nomadpctunnel 'curl -sk https://localhost/audio-monitor/stream' | ffplay -nodisp -f mp3 -i -
 ```
 
 **Important notes:**
-- Enabling/disabling restarts mpv and VLC (~3 second interruption)
+- Enabling/disabling restarts mpv and VLC (~5 second interruption)
 - Single client at a time
 - State is NOT persisted — after service restart, monitor is off and audio returns to ALSA
 - "Reset All" in the AV Output modal stops the monitor and restores ALSA mode
-- PipeWire HDMI output was tested and confirmed working on NomadPC (2026-04-15)
+
+**Technical details (2026-04-15):**
+- PipeWire HDMI output works on NomadPC for both mpv and VLC
+- Ordering matters: players must restart BEFORE PipeWire profile switches to HDMI,
+  otherwise PipeWire can't claim the ALSA device (old mpv still holds it) and falls back to `auto_null`
+- `parec` (PulseAudio compat) is the only reliable capture method — `ffmpeg -f pulse` silently
+  fails to capture mpv audio, and `pw-cat`/`pw-record` go silent after repeated profile toggles
+- mpv must use `--ao=pulse` (not `--ao=pipewire`) so audio flows through PulseAudio compat
+  layer where `parec` can capture it. Native PipeWire output bypasses the PulseAudio monitor.
+- The PipeWire monitor source name has a dynamic numeric suffix (e.g. `.3`, `.4`) that changes
+  on each profile toggle — discovered at runtime via `pactl list sources short`
 
 ---
 
