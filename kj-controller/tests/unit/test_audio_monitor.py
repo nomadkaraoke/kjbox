@@ -100,9 +100,8 @@ def test_start_launches_shell_pipeline(monitor, mocker):
     assert call_kwargs['shell'] is True
     assert call_kwargs['stdout'] == subprocess.PIPE
     shell_cmd = mock_popen.call_args[0][0]
-    assert 'pw-cat' in shell_cmd
-    assert '--record' in shell_cmd
-    assert MOCK_MONITOR_SOURCE in shell_cmd
+    assert 'parec' in shell_cmd
+    assert f'--device={MOCK_MONITOR_SOURCE}' in shell_cmd
     assert 'ffmpeg' in shell_cmd
     assert 'libmp3lame' in shell_cmd
 
