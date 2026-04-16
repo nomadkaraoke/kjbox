@@ -22,14 +22,14 @@ Tested on NomadPC (2026-04-15):
 The audio monitor is a toggle: enabling it switches the audio pipeline from ALSA-direct to PipeWire, and disabling restores the original ALSA mode. State is not persisted — after service restart, monitor is off and audio returns to ALSA default.
 
 **Enable flow:**
-1. Switch PipeWire card profile to `output:hdmi-stereo+input:analog-stereo`
-2. Restart mpv with `--ao=pipewire` (replaces `--ao=alsa --audio-device=alsa/hdmiout`)
-3. Restart VLC filler with `--aout pulse` (replaces `--aout alsa --alsa-audio-device hdmiout`)
-4. Start ffmpeg subprocess: capture PipeWire monitor source → encode MP3 → stdout pipe
+1. Restart mpv with `--ao=pulse` and VLC filler with `--aout pulse` (PulseAudio compat)
+2. Switch PipeWire card profile to `output:hdmi-stereo+input:analog-stereo` (AFTER players restart, so old mpv has released the ALSA device)
+3. Discover the HDMI monitor source name dynamically (suffix changes on each toggle)
+4. Start `parec | ffmpeg` shell pipeline: capture from PulseAudio monitor source → encode MP3
 5. Flask route serves ffmpeg stdout as chunked HTTP response
 
 **Disable flow (also triggered by Reset All):**
-1. Kill ffmpeg capture process
+1. Kill capture pipeline (shell process running `parec | ffmpeg`)
 2. Restart mpv with `--ao=alsa` (original mode)
 3. Restart VLC filler with `--aout alsa` (original mode)
 4. Switch PipeWire card profile back to `output:analog-stereo+input:analog-stereo`
@@ -37,18 +37,27 @@ The audio monitor is a toggle: enabling it switches the audio pipeline from ALSA
 ### Stream Details
 
 - Format: MP3 128kbps (compatible with ffplay, VLC, browsers)
-- Transport: Chunked HTTP on the existing Flask port (5000)
+- Transport: Chunked HTTP on the existing Flask port (443 on NomadPC)
 - Endpoint: `GET /audio-monitor/stream`
+- Access: Cloudflare Access blocks direct ffplay — use SSH pipe: `ssh nomadpctunnel 'curl -sk https://localhost/audio-monitor/stream' | ffplay -nodisp -f mp3 -i -`
 - Single client only (dev tool). Second connection gets 409.
-- A drain thread discards ffmpeg output when no client is connected to prevent pipe backpressure.
+- A drain thread discards data when no client is connected to prevent pipe backpressure.
 
 ### PipeWire Details
 
 - Card: `alsa_card.pci-0000_00_1f.3`
 - HDMI profile: `output:hdmi-stereo+input:analog-stereo`
 - Analog profile (default): `output:analog-stereo+input:analog-stereo`
-- Monitor source name: `alsa_output.pci-0000_00_1f.3.hdmi-stereo.monitor`
+- Monitor source name: `alsa_output.pci-0000_00_1f.3.hdmi-stereo.<N>.monitor` (N is dynamic, discovered at runtime)
 - Commands run as user `nomad` with `XDG_RUNTIME_DIR=/run/user/1000`
+
+### Lessons Learned (E2E Testing 2026-04-15)
+
+1. **Ordering matters:** PipeWire profile must switch AFTER old mpv releases ALSA device, not before. Otherwise PipeWire falls back to `auto_null` sink.
+2. **PulseAudio compat only:** Both mpv and VLC must use PulseAudio output (`--ao=pulse`, `--aout pulse`), not native PipeWire. The `parec` monitor only sees PulseAudio clients.
+3. **`parec` is the only reliable capture:** `ffmpeg -f pulse` silently fails for mpv audio. `pw-cat`/`pw-record` go silent after repeated PipeWire profile toggles (apparent PipeWire bug).
+4. **Dynamic source names:** PipeWire appends a numeric suffix to sink/source names that increments on each profile toggle. Must discover at runtime.
+5. **Shell pipe required:** Python `subprocess.Popen` pipe chaining breaks when the first process runs under `sudo`. Use `shell=True` with a pipe command instead.
 
 ## Files
 
