@@ -1,0 +1,98 @@
+<h2>Section 2: Pill Input UI</h2>
+<p class="subtitle">How the singer name field works for single and multi-singer entries</p>
+
+<div class="section">
+  <h3>Single Singer (90% of entries) — unchanged feel</h3>
+  <div class="mockup">
+    <div class="mockup-header">Add to Rotation</div>
+    <div class="mockup-body" style="background:#1a1a1a;padding:16px;display:flex;gap:8px;align-items:center;">
+      <div style="flex:1;background:#2a2a2a;border-radius:6px;padding:8px 12px;display:flex;align-items:center;gap:6px;border:1px solid #444;">
+        <span style="color:#ffdf6b;font-size:14px;">Sarah</span>
+        <span style="color:#666;font-size:12px;margin-left:auto;">|</span>
+      </div>
+      <div style="flex:1.5;background:#2a2a2a;border-radius:6px;padding:8px 12px;color:#666;font-size:14px;border:1px solid #333;">Song &amp; Artist</div>
+      <div style="background:#ffdf6b;color:#000;padding:8px 16px;border-radius:6px;font-weight:600;font-size:14px;">Add</div>
+    </div>
+  </div>
+  <p style="color:#999;font-size:13px;margin-top:8px;">Type name, press Enter or click Add. Works exactly like today.</p>
+</div>
+
+<div class="section">
+  <h3>Multi-Singer — Tab/comma/&amp; creates a pill</h3>
+  <div class="mockup">
+    <div class="mockup-header">Add to Rotation — Duet</div>
+    <div class="mockup-body" style="background:#1a1a1a;padding:16px;display:flex;gap:8px;align-items:center;">
+      <div style="flex:1;background:#2a2a2a;border-radius:6px;padding:6px 8px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;border:1px solid #444;min-height:34px;">
+        <span style="background:#3a3a3a;color:#ffdf6b;padding:3px 8px;border-radius:12px;font-size:13px;display:inline-flex;align-items:center;gap:4px;">Phil <span style="color:#666;cursor:pointer;font-size:11px;">&times;</span></span>
+        <span style="color:#ffdf6b;font-size:14px;">Anya</span>
+        <span style="color:#666;font-size:12px;">|</span>
+      </div>
+      <div style="flex:1.5;background:#2a2a2a;border-radius:6px;padding:8px 12px;color:#666;font-size:14px;border:1px solid #333;">Song &amp; Artist</div>
+      <div style="background:#ffdf6b;color:#000;padding:8px 16px;border-radius:6px;font-weight:600;font-size:14px;">Add</div>
+    </div>
+  </div>
+  <p style="color:#999;font-size:13px;margin-top:8px;">Phil typed, then Tab pressed &rarr; "Phil" becomes a pill. Now typing "Anya". The &times; on each pill removes that singer.</p>
+</div>
+
+<div class="section">
+  <h3>Group of 3 — pills wrap naturally</h3>
+  <div class="mockup">
+    <div class="mockup-header">Add to Rotation — Trio</div>
+    <div class="mockup-body" style="background:#1a1a1a;padding:16px;display:flex;gap:8px;align-items:center;">
+      <div style="flex:1;background:#2a2a2a;border-radius:6px;padding:6px 8px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;border:1px solid #444;min-height:34px;">
+        <span style="background:#3a3a3a;color:#ffdf6b;padding:3px 8px;border-radius:12px;font-size:13px;display:inline-flex;align-items:center;gap:4px;">Tara <span style="color:#666;cursor:pointer;font-size:11px;">&times;</span></span>
+        <span style="background:#3a3a3a;color:#ffdf6b;padding:3px 8px;border-radius:12px;font-size:13px;display:inline-flex;align-items:center;gap:4px;">Jessie <span style="color:#666;cursor:pointer;font-size:11px;">&times;</span></span>
+        <span style="background:#3a3a3a;color:#ffdf6b;padding:3px 8px;border-radius:12px;font-size:13px;display:inline-flex;align-items:center;gap:4px;">Celeste <span style="color:#666;cursor:pointer;font-size:11px;">&times;</span></span>
+        <span style="color:#666;font-size:12px;">|</span>
+      </div>
+      <div style="flex:1.5;background:#2a2a2a;border-radius:6px;padding:8px 12px;color:#666;font-size:14px;border:1px solid #333;">Song &amp; Artist</div>
+      <div style="background:#ffdf6b;color:#000;padding:8px 16px;border-radius:6px;font-weight:600;font-size:14px;">Add</div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>How it renders in the rotation queue</h3>
+  <div class="mockup">
+    <div class="mockup-header">Rotation Queue</div>
+    <div class="mockup-body" style="background:#111;padding:8px;">
+      <!-- Single singer row -->
+      <div style="display:flex;align-items:center;padding:6px 8px;background:#1a1a1a;border-radius:6px;margin-bottom:3px;">
+        <span style="color:#555;padding:4px 6px;background:#2a2a2a;border-radius:4px;font-size:14px;margin-right:8px;">&#x2807;</span>
+        <span style="color:#888;font-size:13px;margin-right:6px;">1.</span>
+        <span style="color:#ffdf6b;font-size:14px;">Sarah</span>
+        <span style="background:#e74c3c33;color:#e74c3c;font-size:9px;padding:2px 6px;border-radius:8px;font-weight:600;margin-left:5px;">NEW</span>
+        <span style="color:#888;font-size:12px;margin-left:8px;">Sweet Caroline</span>
+      </div>
+      <!-- Multi-singer row with pills -->
+      <div style="display:flex;align-items:center;padding:6px 8px;background:#1a1a1a;border-radius:6px;margin-bottom:3px;">
+        <span style="color:#555;padding:4px 6px;background:#2a2a2a;border-radius:4px;font-size:14px;margin-right:8px;">&#x2807;</span>
+        <span style="color:#888;font-size:13px;margin-right:6px;">2.</span>
+        <span style="background:#2a2a2a;color:#ffdf6b;padding:2px 7px;border-radius:10px;font-size:13px;margin-right:3px;">Phil</span>
+        <span style="background:#2a2a2a;color:#ffdf6b;padding:2px 7px;border-radius:10px;font-size:13px;">Anya</span>
+        <span style="background:#f59e0b33;color:#f59e0b;font-size:9px;padding:2px 6px;border-radius:8px;font-weight:600;margin-left:5px;">&times;1</span>
+        <span style="color:#888;font-size:12px;margin-left:8px;">Don't Go Breaking My Heart</span>
+      </div>
+      <!-- Another single singer -->
+      <div style="display:flex;align-items:center;padding:6px 8px;background:#1a1a1a;border-radius:6px;margin-bottom:3px;">
+        <span style="color:#555;padding:4px 6px;background:#2a2a2a;border-radius:4px;font-size:14px;margin-right:8px;">&#x2807;</span>
+        <span style="color:#888;font-size:13px;margin-right:6px;">3.</span>
+        <span style="color:#ffdf6b;font-size:14px;">Marcus</span>
+        <span style="background:#2d8a4e33;color:#2d8a4e;font-size:9px;padding:2px 6px;border-radius:8px;font-weight:600;margin-left:5px;">&times;2</span>
+        <span style="color:#888;font-size:12px;margin-left:8px;">Bohemian Rhapsody</span>
+      </div>
+    </div>
+  </div>
+  <p style="color:#999;font-size:13px;margin-top:8px;">Multi-singer entries show individual name pills. Single-singer entries render as plain text (unchanged). The songs-sung pill shows the <strong>minimum</strong> count across all singers in the group.</p>
+</div>
+
+<div class="section">
+  <h3>Interaction Details</h3>
+  <div style="color:#ccc;font-size:14px;line-height:1.7;">
+    <p><strong>Creating pills:</strong> Tab, comma, or &amp; after typing a name converts it to a pill. Backspace on empty input deletes the last pill.</p>
+    <p><strong>Removing pills:</strong> Click the &times; on any pill, or Backspace to remove the last one.</p>
+    <p><strong>Submit:</strong> Enter (when song field focused) or click Add. Any text still in the input becomes the final singer (no need to pill it first).</p>
+    <p><strong>Storage:</strong> <code>singers_json = '["Phil","Anya"]'</code>, <code>singer = "Phil &amp; Anya"</code></p>
+    <p><strong>Single singer shortcut:</strong> Just type "Sarah", press Enter &mdash; stored as <code>singers_json = '["Sarah"]'</code>, <code>singer = "Sarah"</code>. No pill step needed.</p>
+  </div>
+</div>
