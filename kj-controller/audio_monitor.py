@@ -88,14 +88,14 @@ class AudioMonitor:
                 )
                 return
 
-            # Step 4: Start pw-cat | ffmpeg pipeline via shell.
-            # pw-cat (native PipeWire) captures all sink audio reliably, while
-            # ffmpeg's -f pulse input misses mpv's PipeWire output.
-            # Uses shell pipe because Python Popen pipe chaining breaks with sudo.
+            # Step 4: Start parec | ffmpeg pipeline via shell.
+            # parec (PulseAudio compat) reliably captures from monitor sources.
+            # pw-cat/pw-record go silent after repeated PipeWire profile toggles.
+            # ffmpeg's built-in -f pulse input misses mpv's PipeWire output.
             shell_cmd = (
                 f"sudo -u nomad env XDG_RUNTIME_DIR=/run/user/1000"
-                f" pw-cat --record --target {monitor_source} -"
-                f" --format s16 --rate 48000 --channels 2"
+                f" parec --device={monitor_source}"
+                f" --format=s16le --rate=48000 --channels=2"
                 f" | ffmpeg -f s16le -ar 48000 -ac 2 -i pipe:0"
                 f" -c:a libmp3lame -b:a 128k -f mp3"
                 f" -fflags +nobuffer -flags +low_delay pipe:1"
