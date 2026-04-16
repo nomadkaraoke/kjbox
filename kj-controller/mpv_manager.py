@@ -358,11 +358,11 @@ class MpvManager:
             pass
 
         if self.audio_backend == 'pipewire':
-            log_message("Launching mpv karaoke with PipeWire audio...", self.config)
+            log_message("Launching mpv karaoke with PulseAudio/PipeWire audio...", self.config)
             command = [
                 'mpv', '--idle',
                 '--fs',
-                '--ao=pipewire',
+                '--ao=pulse',
                 '--af=@rb:rubberband',
                 f'--input-ipc-server={self.ipc_socket_path}',
                 '--really-quiet',

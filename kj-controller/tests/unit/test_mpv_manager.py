@@ -778,7 +778,7 @@ def test_mpv_launch_alsa_command(mock_config, mocker):
     args = mock_popen.call_args[0][0]
     assert '--ao=alsa' in args
     assert '--audio-device=alsa/hdmiout' in args
-    assert '--ao=pipewire' not in args
+    assert '--ao=pulse' not in args
 
 
 def test_mpv_launch_pipewire_command(mock_config, mocker):
@@ -793,7 +793,7 @@ def test_mpv_launch_pipewire_command(mock_config, mocker):
     mocker.patch('mpv_manager.time.sleep')
     m._launch_mpv_karaoke()
     args = mock_popen.call_args[0][0]
-    assert '--ao=pipewire' in args
+    assert '--ao=pulse' in args
     assert '--ao=alsa' not in args
     assert not any(a.startswith('--audio-device=') for a in args)
 
