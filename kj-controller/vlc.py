@@ -439,3 +439,61 @@ class VLCManager:
                         pass
                 self.ensure_karaoke_released()
                 self.fade_in_filler()
+
+    # ── API-compatibility shims (MpvManager-style named methods) ────────
+    # Routes.py calls these named methods; delegate to HTTP send_command.
+
+    pitch_semitones = 0  # VLC has no pitch control; attribute kept for API compat
+
+    def seek_karaoke(self, seconds):
+        """Seek karaoke to an absolute position in seconds."""
+        karaoke_port = self.config.get('karaoke_vlc_port', 8080)
+        karaoke_pw = self.config.get('karaoke_vlc_password', 'karaoke')
+        self.last_seek_time = time.time()
+        self.send_command(karaoke_port, karaoke_pw, f"seek&val={int(seconds)}")
+
+    def pause_resume_karaoke(self):
+        """Toggle pause. Returns True if now paused, False if now playing, None on error."""
+        karaoke_port = self.config.get('karaoke_vlc_port', 8080)
+        karaoke_pw = self.config.get('karaoke_vlc_password', 'karaoke')
+        self.send_command(karaoke_port, karaoke_pw, "pl_pause")
+        time.sleep(0.5)
+        status = self.send_command(karaoke_port, karaoke_pw, "")
+        if not status:
+            return None
+        return status.get('state') == 'paused'
+
+    def stop_karaoke(self):
+        """Stop karaoke playback and clear state."""
+        self.ensure_karaoke_released()
+        self.karaoke_active = False
+        self.current_playing_path = None
+        self.audio_error = False
+        self._save_state()
+
+    def set_karaoke_volume_live(self, vlc_level):
+        """Set karaoke volume live (VLC-scale 0-512)."""
+        karaoke_port = self.config.get('karaoke_vlc_port', 8080)
+        karaoke_pw = self.config.get('karaoke_vlc_password', 'karaoke')
+        self.karaoke_volume = vlc_level
+        self.send_command(karaoke_port, karaoke_pw, f"volume&val={int(vlc_level)}")
+
+    def get_karaoke_status(self):
+        """Return {state, time, length} for the karaoke VLC instance."""
+        karaoke_port = self.config.get('karaoke_vlc_port', 8080)
+        karaoke_pw = self.config.get('karaoke_vlc_password', 'karaoke')
+        status = self.send_command(karaoke_port, karaoke_pw, "")
+        if not status:
+            return {"state": "stopped", "time": 0, "length": 0}
+        return {
+            "state": status.get('state', 'stopped'),
+            "time": int(status.get('time', 0) or 0),
+            "length": int(status.get('length', 0) or 0),
+        }
+
+    def set_pitch(self, semitones):
+        """No-op: VLC playback path has no real-time pitch shifting."""
+        log_message(
+            f"set_pitch({semitones}) ignored — VLC karaoke path has no rubberband filter.",
+            self.config,
+        )

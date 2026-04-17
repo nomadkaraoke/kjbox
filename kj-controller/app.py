@@ -104,7 +104,7 @@ def create_app(config=None):
     cfg = config or load_config()
     flask_app.kj_config = cfg
     flask_app.media = MediaIndex(cfg)
-    flask_app.vlc = MpvManager(cfg, enabled=False if config else None)
+    flask_app.vlc = VLCManager(cfg, enabled=False if config else None)
     flask_app.audio_monitor = AudioMonitor(flask_app.vlc, cfg)
     flask_app.catalog = ExternalCatalog(cfg)
     flask_app.zip_playback = ZipPlayback(cfg)
@@ -148,8 +148,8 @@ def start_app():  # pragma: no cover
     cfg = load_config()
     os.makedirs(cfg['download_folder'], exist_ok=True)
 
-    # Create MpvManager (mpv for karaoke, VLC for filler)
-    vlc = MpvManager(cfg)
+    # Rolled back to dual-VLC for CDG rendering (mpv doesn't render CDG overlays)
+    vlc = VLCManager(cfg)
 
     # Set default filler track from config, or auto-detect from filler music dir
     configured_filler = cfg.get('default_filler_track', '')
