@@ -262,6 +262,7 @@ def test_handle_karaoke_ended(mock_config, mocker):
     m.on_karaoke_end = callback
     mocker.patch.object(m, '_save_state')
     mocker.patch.object(m, 'fade_in_filler')
+    wait_mock = mocker.patch.object(m, '_wait_for_mpv_idle')
 
     m._handle_karaoke_ended()
 
@@ -270,6 +271,20 @@ def test_handle_karaoke_ended(mock_config, mocker):
     assert m.pitch_semitones == 0
     callback.assert_called_once()
     m.fade_in_filler.assert_called_once()
+    # Must wait for mpv to release ALSA before filler reclaims it
+    wait_mock.assert_called_once()
+
+
+def test_handle_karaoke_ended_waits_before_filler(mock_config, mocker):
+    """_wait_for_mpv_idle must run BEFORE fade_in_filler to avoid the race."""
+    m = MpvManager(mock_config, enabled=False)
+    m.karaoke_active = True
+    mocker.patch.object(m, '_save_state')
+    call_order = []
+    mocker.patch.object(m, '_wait_for_mpv_idle', side_effect=lambda: call_order.append('wait'))
+    mocker.patch.object(m, 'fade_in_filler', side_effect=lambda: call_order.append('fade'))
+    m._handle_karaoke_ended()
+    assert call_order == ['wait', 'fade']
 
 
 def test_handle_karaoke_ended_noop_when_inactive(mock_config, mocker):
@@ -277,8 +292,45 @@ def test_handle_karaoke_ended_noop_when_inactive(mock_config, mocker):
     m.karaoke_active = False
     callback = mocker.Mock()
     m.on_karaoke_end = callback
+    wait_mock = mocker.patch.object(m, '_wait_for_mpv_idle')
     m._handle_karaoke_ended()
     callback.assert_not_called()
+    wait_mock.assert_not_called()
+
+
+# --- _wait_for_mpv_idle ---
+
+def test_wait_for_mpv_idle_sends_stop_and_polls(mock_config, mocker):
+    """Sends mpv stop, polls idle-active until true, then waits buffer."""
+    m = MpvManager(mock_config, enabled=True)
+    send_ipc = mocker.patch.object(m, '_send_ipc', return_value={'error': 'success'})
+    # idle-active flips true on third poll
+    get_prop = mocker.patch.object(m, '_get_property', side_effect=[False, False, True])
+    sleep = mocker.patch('mpv_manager.time.sleep')
+
+    m._wait_for_mpv_idle()
+
+    send_ipc.assert_called_with(["stop"])
+    assert get_prop.call_count == 3
+    # Both polling sleeps (0.02) and final buffer sleep (0.15) happened
+    sleep_args = [c.args[0] for c in sleep.call_args_list]
+    assert 0.15 in sleep_args
+
+
+def test_wait_for_mpv_idle_respects_timeout(mock_config, mocker):
+    """If idle-active never becomes true, bail out after timeout_s."""
+    m = MpvManager(mock_config, enabled=True)
+    mocker.patch.object(m, '_send_ipc')
+    mocker.patch.object(m, '_get_property', return_value=False)
+    # Simulate time elapsing to trip the deadline
+    fake_time = [100.0]
+    def advance(_):
+        fake_time[0] += 0.02
+    mocker.patch('mpv_manager.time.sleep', side_effect=advance)
+    mocker.patch('mpv_manager.time.time', side_effect=lambda: fake_time[0])
+
+    m._wait_for_mpv_idle(timeout_s=0.1)  # should return even with idle=False forever
+    # Implicit: no infinite loop
 
 
 # --- IPC communication ---
@@ -566,6 +618,134 @@ def test_ensure_filler_stopped_retries(mock_config, mocker):
     ])
     mocker.patch('mpv_manager.time.sleep')
     assert m.ensure_filler_stopped() is True
+
+
+# --- Auto-heal: _verify_filler_playing / _relaunch_filler ---
+
+def test_verify_filler_playing_healthy_does_nothing(mock_config, mocker):
+    """playedabuffers > 0 → VLC is outputting audio, no action."""
+    m = MpvManager(mock_config, enabled=True)
+    mocker.patch('mpv_manager.time.sleep')
+    mocker.patch.object(m, '_probe_vlc', return_value={
+        "state": "playing",
+        "stats": {"playedabuffers": 500, "decodedaudio": 1000},
+    })
+    relaunch = mocker.patch.object(m, '_relaunch_filler')
+    m._verify_filler_playing()
+    relaunch.assert_not_called()
+
+
+def test_verify_filler_playing_dead_aout_relaunches(mock_config, mocker):
+    """played=0 but decoded>100 → aout is dead, trigger relaunch."""
+    m = MpvManager(mock_config, enabled=True)
+    mocker.patch('mpv_manager.time.sleep')
+    mocker.patch.object(m, '_probe_vlc', return_value={
+        "state": "playing",
+        "stats": {"playedabuffers": 0, "decodedaudio": 5000},
+    })
+    relaunch = mocker.patch.object(m, '_relaunch_filler')
+    m._verify_filler_playing()
+    relaunch.assert_called_once()
+
+
+def test_verify_filler_playing_skips_when_karaoke_active(mock_config, mocker):
+    """User started karaoke during the verify window → don't touch filler."""
+    m = MpvManager(mock_config, enabled=True)
+    m.karaoke_active = True
+    mocker.patch('mpv_manager.time.sleep')
+    probe = mocker.patch.object(m, '_probe_vlc')
+    relaunch = mocker.patch.object(m, '_relaunch_filler')
+    m._verify_filler_playing()
+    probe.assert_not_called()
+    relaunch.assert_not_called()
+
+
+def test_verify_filler_playing_skips_when_not_playing(mock_config, mocker):
+    """state != 'playing' (e.g., user stopped it) → don't restart."""
+    m = MpvManager(mock_config, enabled=True)
+    mocker.patch('mpv_manager.time.sleep')
+    mocker.patch.object(m, '_probe_vlc', return_value={
+        "state": "stopped",
+        "stats": {"playedabuffers": 0, "decodedaudio": 0},
+    })
+    relaunch = mocker.patch.object(m, '_relaunch_filler')
+    m._verify_filler_playing()
+    relaunch.assert_not_called()
+
+
+def test_verify_filler_playing_skips_when_probe_fails(mock_config, mocker):
+    """VLC unreachable → don't assume it's broken, skip."""
+    m = MpvManager(mock_config, enabled=True)
+    mocker.patch('mpv_manager.time.sleep')
+    mocker.patch.object(m, '_probe_vlc', return_value=None)
+    relaunch = mocker.patch.object(m, '_relaunch_filler')
+    m._verify_filler_playing()
+    relaunch.assert_not_called()
+
+
+def test_verify_filler_playing_skips_when_decoder_cold(mock_config, mocker):
+    """decoded<100 → too early to judge, don't restart."""
+    m = MpvManager(mock_config, enabled=True)
+    mocker.patch('mpv_manager.time.sleep')
+    mocker.patch.object(m, '_probe_vlc', return_value={
+        "state": "playing",
+        "stats": {"playedabuffers": 0, "decodedaudio": 10},
+    })
+    relaunch = mocker.patch.object(m, '_relaunch_filler')
+    m._verify_filler_playing()
+    relaunch.assert_not_called()
+
+
+def test_relaunch_filler_kills_and_launches(mock_config, mocker):
+    """Relaunch tears down filler process and starts a fresh one — does not touch mpv."""
+    m = MpvManager(mock_config, enabled=True)
+    mock_filler = mocker.Mock()
+    mock_filler.poll.return_value = None  # running
+    mock_karaoke = mocker.Mock()
+    mock_karaoke.poll.return_value = None
+    m.processes = {"karaoke": mock_karaoke, "filler": mock_filler}
+    m.current_filler_track = "wii.mp3"
+
+    mocker.patch('mpv_manager.time.sleep')
+    mocker.patch.object(m, '_kill_port')
+    launch = mocker.patch.object(m, '_launch_vlc_filler')
+    send = mocker.patch.object(m, 'send_command')
+
+    m._relaunch_filler()
+
+    mock_filler.terminate.assert_called_once()
+    mock_karaoke.terminate.assert_not_called()  # mpv untouched
+    assert m.processes["filler"] is None
+    launch.assert_called_once()
+    # Verify it starts playing at target volume directly (no fade recursion)
+    commands = [c.args[2] for c in send.call_args_list]
+    assert "pl_play" in commands
+    assert any(c.startswith("volume&val=") for c in commands)
+
+
+def test_relaunch_filler_does_not_call_fade_in_filler(mock_config, mocker):
+    """Guard against infinite recovery loop: relaunch must not call fade_in_filler."""
+    m = MpvManager(mock_config, enabled=True)
+    m.processes = {"karaoke": None, "filler": None}
+    m.current_filler_track = "wii.mp3"
+    mocker.patch('mpv_manager.time.sleep')
+    mocker.patch.object(m, '_kill_port')
+    mocker.patch.object(m, '_launch_vlc_filler')
+    mocker.patch.object(m, 'send_command')
+    fade_in = mocker.patch.object(m, 'fade_in_filler')
+    m._relaunch_filler()
+    fade_in.assert_not_called()
+
+
+def test_fade_in_filler_spawns_verify_thread(mock_config, mocker):
+    """fade_in_filler must kick off the auto-heal verify thread."""
+    m = MpvManager(mock_config, enabled=True)
+    mocker.patch.object(m, 'send_command')
+    mock_thread = mocker.patch('mpv_manager.threading.Thread')
+    m.fade_in_filler()
+    # Find the thread started targeting _verify_filler_playing
+    targets = [call.kwargs.get('target') for call in mock_thread.call_args_list]
+    assert m._verify_filler_playing in targets
 
 
 # --- send_command (filler VLC) ---

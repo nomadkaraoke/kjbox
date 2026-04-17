@@ -2,6 +2,15 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-04-16 - Fix: Filler music silent after every karaoke track (NomadPC)
+
+Root-caused and fixed a race where VLC's filler music would go silent after every karaoke track played via the new mpv karaoke pipeline. See [AUDIO.md § Filler Audio Handoff](AUDIO.md#filler-audio-handoff-mpv--vlc) for the full story.
+
+- **Race condition:** mpv emits its `end-file` IPC event ~350ms before it actually releases the ALSA device. The old handler called `fade_in_filler` → `pl_play` within 0.6ms — VLC's `snd_pcm_open` hit "Device or resource busy" and its `aout` module entered a permanent broken state (`state=playing` but `playedabuffers=0`, audio decoded into the void).
+- **Fix:** Added `_wait_for_mpv_idle()` that sends mpv `stop` and polls `idle-active` before yielding to VLC. Eliminates the race.
+- **Safety net:** Added `_verify_filler_playing()` auto-heal thread that samples VLC stats 4s after every fade-in; if `played=0` while `decoded>100`, calls `_relaunch_filler()` to restart only the VLC process (mpv untouched).
+- **Version:** `kj-controller` bumped 0.19.0 → 0.19.1
+
 ## 2026-04-15 - Remote Audio Monitor
 
 - **Audio Monitor:** Added remote audio monitoring via AV Output modal. Streams live audio over HTTP for dev/testing. Uses PipeWire HDMI capture + ffmpeg MP3 encoding. See [AUDIO.md](AUDIO.md#remote-audio-monitor).

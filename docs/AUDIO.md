@@ -100,6 +100,87 @@ If HDMI audio stops working after reboot:
    ```
    If this fails with "Device or resource busy", PipeWire has the device — see step 1.
 
+### Filler Audio Handoff (mpv ↔ VLC)
+
+The KJ Controller runs **two audio clients** that take turns on the same exclusive HDMI ALSA device (`hdmiout` → `hw:0,N`):
+
+- **mpv** — plays the karaoke video (with rubberband pitch shifting, `--ao=alsa`)
+- **VLC** — plays filler music between songs (`--aout alsa --alsa-audio-device hdmiout`)
+
+Only one can hold `hw:0,N` at a time. The handoff dance on every track is:
+
+```
+filler playing (VLC) → user hits Play →
+  fade_out_filler: fade VLC volume to 0 → pl_stop → VLC releases ALSA
+  → mpv loadfile → mpv opens ALSA, plays karaoke
+  → karaoke ends → mpv end-file event
+  → _wait_for_mpv_idle: mpv stop + poll idle-active → mpv releases ALSA
+  → fade_in_filler: VLC pl_play → VLC re-opens ALSA, fades up
+```
+
+#### The mpv → VLC race (fixed 2026-04-16)
+
+**Symptom:** After any karaoke track finishes, filler music appears to be playing (VLC HTTP reports `state=playing`, decoder runs, `time` advances) but is **silent**.
+
+**Diagnostic signature:**
+```bash
+curl -s "http://:filler@localhost:8081/requests/status.json" | jq '.state, .stats'
+# state: "playing"
+# playedabuffers: 0          ← smoking gun
+# decodedaudio:   12000+     ← decoder producing
+# lostabuffers:   6000+      ← output module dead
+```
+```bash
+cat /opt/nomad/kjbox/kj-controller/vlc-filler.log | tail
+# alsa audio output error: cannot open ALSA device "hdmiout": Device or resource busy
+# main audio output error: module not functional
+# main decoder error: failed to create audio output
+```
+`playedabuffers=0` while `decodedaudio` grows means VLC's ALSA output module is permanently dead — audio is decoded into `/dev/null`. VLC never retries `aout` init on its own once it's marked non-functional; the only way to recover is to force a re-init (`pl_stop` then `pl_play`) or restart the VLC process.
+
+**Root cause:** mpv emits its `end-file` IPC event **~350ms before** it actually closes the ALSA device. Measured on NomadPC:
+```
+t+   0ms  end-file event emitted
+t+ 252ms  pcm still RUNNING (mpv draining)
+t+ 303ms  pcm XRUN (transitioning)
+t+ 353ms  pcm closed
+```
+The old end-of-track handler received `end-file` and called `fade_in_filler` → `pl_play` within 0.6ms, while mpv was still draining the ALSA device. VLC's `snd_pcm_open` hit "Device or resource busy" and its `aout` module entered the permanent broken state above.
+
+**The fix** (`kj-controller/mpv_manager.py`):
+
+1. **Primary — eliminate the race.** `_wait_for_mpv_idle()` is called **before** `fade_in_filler()` in `_handle_karaoke_ended`. It sends mpv `stop` over IPC and polls `idle-active` until true, then waits an extra 150ms for ALSA to drain:
+   ```python
+   self._send_ipc(["stop"])
+   while time.time() < deadline:
+       if self._get_property("idle-active") is True:
+           break
+       time.sleep(0.02)
+   time.sleep(0.15)  # ALSA drains slightly after idle-active flips
+   ```
+
+2. **Safety net — auto-heal.** `_verify_filler_playing()` runs as a daemon thread spawned from every `fade_in_filler()` call. 4s after fade-in, it samples VLC stats: if `state=playing` and `playedabuffers=0` while `decodedaudio>100`, it calls `_relaunch_filler()` — which terminates only the VLC process (mpv untouched) and relaunches with the current filler track. Catches other failure modes (e.g., deploy-time startup races where mpv and VLC launch within ms of each other).
+
+**Debugging tools:**
+```bash
+# Is mpv holding the device right now?
+ssh nomadpc 'cat /proc/asound/card0/pcm*p/sub*/status | head'
+
+# Which FDs does each process hold?
+ssh nomadpc 'ls -la /proc/$(pgrep -x mpv)/fd /proc/$(pgrep -x vlc)/fd | grep snd'
+
+# VLC aout health (played > 0 and growing = healthy)
+ssh nomadpc 'curl -s "http://:filler@localhost:8081/requests/status.json" | \
+  python3 -c "import sys,json;d=json.load(sys.stdin);s=d[\"stats\"];\
+  print(f\"state={d[\"state\"]} played={s[\"playedabuffers\"]} decoded={s[\"decodedaudio\"]}\")"'
+```
+
+If you ever see `played=0` with `decoded>100`, VLC's aout is dead. Hit `/fix_audio` (or wait 4s for the auto-heal) — but prefer the fix: without `_wait_for_mpv_idle` the issue reproduces on every track.
+
+**Why not use dmix?** ALSA `dmix` would let both processes share `hw:0,N` simultaneously and eliminate the handoff entirely. Rejected because (a) adds ~20ms latency, (b) locks the sample rate/format which complicates audio-monitor routing, and (c) doesn't play cleanly with the `iec958` plugin used on NomadPi. The coordination approach above is simpler and deterministic.
+
+**Why not route both through PulseAudio?** PipeWire is pinned to the analog profile so it doesn't lock the HDMI ALSA device (see "PipeWire Coexistence" above). Routing mpv/VLC through the PulseAudio compat layer only works when the audio monitor is active (`audio_backend='pipewire'`) — and even then, PipeWire has to be explicitly flipped to an HDMI profile.
+
 ### Remote Audio Monitor
 
 The KJ Controller includes a remote audio monitor for dev/testing. When enabled via the AV Output modal, it:

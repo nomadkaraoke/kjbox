@@ -234,6 +234,71 @@ class MpvManager:
         self.send_command(filler_port, filler_pw, "pl_play")
         threading.Thread(target=self.fade_music, args=(filler_port, filler_pw, 0, self.filler_volume),
                          kwargs={'cancel_event': cancel}).start()
+        threading.Thread(target=self._verify_filler_playing, daemon=True).start()
+
+    def _verify_filler_playing(self):
+        """Auto-heal: detect dead VLC audio output after fade_in_filler and relaunch.
+
+        VLC's ALSA aout module can fail permanently if the device is busy at
+        startup (deploy race). Symptom: status reports state='playing' with
+        decodedaudio growing but playedabuffers=0 — audio decoded into the void.
+        Recovery requires a fresh VLC process.
+        """
+        time.sleep(4)
+        if self.karaoke_active:
+            return
+
+        filler_port = self.config.get('filler_vlc_port', 8081)
+        filler_pw = self.config.get('filler_vlc_password', 'filler')
+        status = self._probe_vlc(filler_port, filler_pw)
+        if not status or status.get('state') != 'playing':
+            return
+
+        stats = status.get('stats') or {}
+        played = stats.get('playedabuffers', 0) or 0
+        decoded = stats.get('decodedaudio', 0) or 0
+        if played > 0:
+            return
+        if decoded < 100:
+            return
+
+        log_message(
+            f"Filler VLC aout not outputting (decoded={decoded}, played=0) — "
+            "relaunching filler process to recover.",
+            self.config,
+        )
+        self._relaunch_filler()
+
+    def _relaunch_filler(self):
+        """Kill and relaunch only the filler VLC process; leave mpv karaoke alone.
+
+        Called by _verify_filler_playing when VLC's aout module is dead.
+        Plays at target volume directly to avoid recursing into fade_in_filler.
+        """
+        filler_port = self.config.get('filler_vlc_port', 8081)
+        filler_pw = self.config.get('filler_vlc_password', 'filler')
+
+        proc = self.processes.get("filler")
+        if proc and proc.poll() is None:
+            proc.terminate()
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+        self.processes["filler"] = None
+        self._kill_port(filler_port)
+        time.sleep(0.5)
+
+        filler_dir = self.config.get('filler_music_dir', '')
+        filler_path = (
+            os.path.join(filler_dir, self.current_filler_track)
+            if filler_dir and self.current_filler_track else ''
+        )
+        self._launch_vlc_filler(filler_port, filler_pw, filler_path, True)
+        time.sleep(2)
+        self.send_command(filler_port, filler_pw, f"volume&val={self.filler_volume}")
+        self.send_command(filler_port, filler_pw, "pl_play")
+        log_message("Filler VLC relaunched.", self.config)
 
     def fade_out_filler(self):
         """Fades out the filler music and stops it (releases audio device for karaoke)."""
@@ -704,6 +769,23 @@ class MpvManager:
             if idle is True:
                 self._handle_karaoke_ended()
 
+    def _wait_for_mpv_idle(self, timeout_s=1.0):
+        """Force mpv to finalize idle state so the ALSA device is released.
+
+        mpv emits the end-file event ~350ms before its ALSA output actually closes.
+        Sending 'stop' and polling idle-active ensures the device is free before
+        a downstream consumer (VLC filler) tries to acquire it — otherwise VLC's
+        ALSA open races into "Device or resource busy" and its aout silently dies.
+        """
+        self._send_ipc(["stop"])
+        deadline = time.time() + timeout_s
+        while time.time() < deadline:
+            if self._get_property("idle-active") is True:
+                break
+            time.sleep(0.02)
+        # idle-active flips true slightly before ALSA draining completes
+        time.sleep(0.15)
+
     def _handle_karaoke_ended(self):
         """Handle the end of a karaoke song."""
         if not self.karaoke_active:
@@ -713,6 +795,7 @@ class MpvManager:
         self.current_playing_path = None
         self.pitch_semitones = 0
         self._save_state()
+        self._wait_for_mpv_idle()
         if self.on_karaoke_end:
             try:
                 self.on_karaoke_end()
