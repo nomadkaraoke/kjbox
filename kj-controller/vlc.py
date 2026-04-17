@@ -137,10 +137,15 @@ class VLCManager:
 
         return found
 
-    def launch_instance(self, name, port, password, media_file=None, loop=False):
+    def launch_instance(self, name, port=None, password=None, media_file=None, loop=False):
         """Launches a VLC instance with the HTTP interface enabled."""
         if not self.enabled:
             return
+
+        if port is None:
+            port = self.config.get(f'{name}_vlc_port', 8080 if name == 'karaoke' else 8081)
+        if password is None:
+            password = self.config.get(f'{name}_vlc_password', name)
 
         if self.processes[name] and self.processes[name].poll() is None:
             log_message(f"VLC instance '{name}' is already running.", self.config)
