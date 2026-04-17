@@ -1,0 +1,48 @@
+# Caddy reverse proxy for kj-controller.
+#
+# Why: Werkzeug (Flask dev server) forces `Connection: close` on every response,
+# so the browser re-handshakes TLS (~600ms cold) per asset and per /status poll.
+# Caddy gives us HTTP/2 + keep-alive so all assets and polls share one TLS
+# session. Caddy also serves /static/* directly from disk, bypassing Flask.
+#
+# Install target: /etc/caddy/Caddyfile  (symlinked from this file — see
+# deploy/install-caddy.sh). Caddy is installed via `apt install caddy`.
+
+{
+	# We use mkcert-issued certs for nomadpc.local; skip Caddy's ACME.
+	auto_https off
+	admin off
+}
+
+# HTTPS on 443 — terminates TLS, proxies to Flask on 127.0.0.1:5001.
+:443 {
+	tls /opt/nomad/kjbox/kj-controller/certs/cert.pem /opt/nomad/kjbox/kj-controller/certs/key.pem
+
+	encode zstd gzip
+
+	# Serve static assets directly from disk. Flask-style cache-busting query
+	# strings (?v=...) are fine — file_server ignores them.
+	handle_path /static/* {
+		root * /opt/nomad/kjbox/kj-controller/static
+		file_server {
+			precompressed br gzip
+		}
+	}
+
+	# Everything else → Flask app.
+	reverse_proxy 127.0.0.1:5001 {
+		header_up X-Forwarded-Proto https
+		header_up X-Forwarded-Host {host}
+		# websockify/WebSocket connections (e.g. /vnc) need upgrades.
+		# reverse_proxy handles Upgrade/Connection headers by default.
+	}
+
+	header {
+		-Server
+	}
+}
+
+# HTTP → HTTPS redirect.
+:80 {
+	redir https://{host}{uri} permanent
+}
