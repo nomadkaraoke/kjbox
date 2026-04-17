@@ -45,6 +45,43 @@ def _restore_wallpaper():
             pass
 
 
+def _start_http_redirect_thread():
+    """Tiny HTTP listener on :80 that 301-redirects to HTTPS.
+
+    Why: device only listens on 443, but mDNS-resolved clients sometimes try
+    HTTP first (bookmarks, prefetch, Happy Eyeballs on IPv6 link-local). With
+    no :80 listener those attempts stall for ~75s before failing — users feel
+    this as the page "loading slowly".
+    """
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+    import socket
+
+    class _Redirect(BaseHTTPRequestHandler):
+        def do_GET(self):
+            host = (self.headers.get('Host') or 'nomadpc.local').split(':')[0]
+            self.send_response(301)
+            self.send_header('Location', f'https://{host}{self.path}')
+            self.send_header('Connection', 'close')
+            self.end_headers()
+        do_HEAD = do_POST = do_PUT = do_DELETE = do_PATCH = do_GET
+        def log_message(self, *a, **kw):
+            pass
+
+    class _DualStack(ThreadingHTTPServer):
+        address_family = socket.AF_INET6
+        def server_bind(self):
+            self.socket.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 0)
+            super().server_bind()
+
+    def _run():
+        try:
+            _DualStack(('::', 80), _Redirect).serve_forever()
+        except Exception as e:
+            log_message(f"HTTP→HTTPS redirect listener not started: {e}")
+
+    threading.Thread(target=_run, daemon=True).start()
+
+
 def _get_version():
     """Read version from pyproject.toml for cache-busting static assets."""
     try:
@@ -243,7 +280,17 @@ def start_app():  # pragma: no cover
         monitor_thread = threading.Thread(target=vlc.monitor_karaoke, daemon=True)
         monitor_thread.start()
 
-    # Start Flask app
+    # Start Flask app.
+    # behind_proxy=True: a reverse proxy (e.g. Caddy) terminates TLS on :443
+    # and forwards to Flask on localhost. Yields HTTP/2 + keep-alive so
+    # browsers don't re-handshake TLS per asset/status-poll.
+    if cfg.get('behind_proxy', False):
+        host = cfg.get('app_bind_host', '127.0.0.1')
+        port = cfg.get('app_bind_port', 5001)
+        log_message(f"Starting Flask on {host}:{port} (behind reverse proxy)...", cfg)
+        flask_app.run(host=host, port=port, threaded=True)
+        return
+
     flask_port = cfg.get('flask_port', 80)
     tls_cert = cfg.get('tls_cert', '')
     tls_key = cfg.get('tls_key', '')
@@ -253,9 +300,11 @@ def start_app():  # pragma: no cover
         if flask_port == 80:
             flask_port = 443
         log_message(f"Starting Flask server on port {flask_port} (HTTPS)...", cfg)
+        _start_http_redirect_thread()
     else:
         log_message(f"Starting Flask server on port {flask_port}...", cfg)
-    flask_app.run(host='0.0.0.0', port=flask_port, ssl_context=ssl_ctx, threaded=True)
+    # Bind dual-stack (IPv6 + IPv4) so mDNS AAAA hits don't stall Happy Eyeballs.
+    flask_app.run(host='::', port=flask_port, ssl_context=ssl_ctx, threaded=True)
 
 
 if __name__ == '__main__':
