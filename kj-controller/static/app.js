@@ -3847,7 +3847,13 @@ function buildSingerRow(singer) {
 }
 
 function buildSingerActions(actions, singer, row) {
-    // Placeholder — filled in by Task 10.
+    const songsBtn = document.createElement('button');
+    songsBtn.className = 'singer-stats-btn';
+    songsBtn.textContent = 'Songs';
+    songsBtn.title = 'Show all songs this singer has queued or sung tonight';
+    songsBtn.onclick = () => toggleSingerSongs(row, singer);
+    actions.appendChild(songsBtn);
+
     if (singer.status === 'left') {
         const restoreBtn = document.createElement('button');
         restoreBtn.className = 'singer-stats-btn';
@@ -3855,21 +3861,33 @@ function buildSingerActions(actions, singer, row) {
         restoreBtn.title = 'Bring this singer back \u2014 restore their songs to the queue';
         restoreBtn.onclick = () => singerAction('restore', { name: singer.name });
         actions.appendChild(restoreBtn);
-    } else if (singer.status !== 'done') {
-        const editBtn = document.createElement('button');
-        editBtn.className = 'singer-stats-btn';
-        editBtn.textContent = 'Edit';
-        editBtn.title = 'Rename this singer (fixes typos across all their entries)';
-        editBtn.onclick = () => enterSingerEditMode(row, singer);
-        actions.appendChild(editBtn);
+        return;
+    }
 
-        const mergeBtn = document.createElement('button');
-        mergeBtn.className = 'singer-stats-btn';
-        mergeBtn.textContent = 'Merge';
-        mergeBtn.title = 'Merge this singer into another \u2014 use when the same person was added under two different names';
-        mergeBtn.onclick = (ev) => showMergeDropdown(ev, singer);
-        actions.appendChild(mergeBtn);
+    // Edit + Merge + Split available on both active and done
+    const editBtn = document.createElement('button');
+    editBtn.className = 'singer-stats-btn';
+    editBtn.textContent = 'Edit';
+    editBtn.title = 'Rename this singer (fixes typos across all their entries)';
+    editBtn.onclick = () => enterSingerEditMode(row, singer);
+    actions.appendChild(editBtn);
 
+    const mergeBtn = document.createElement('button');
+    mergeBtn.className = 'singer-stats-btn';
+    mergeBtn.textContent = 'Merge';
+    mergeBtn.title = 'Merge this singer into another \u2014 use when the same person was added under two different names';
+    mergeBtn.onclick = (ev) => showMergeDropdown(ev, singer);
+    actions.appendChild(mergeBtn);
+
+    const splitBtn = document.createElement('button');
+    splitBtn.className = 'singer-stats-btn';
+    splitBtn.textContent = 'Split';
+    splitBtn.title = 'Split this singer \u2014 reassign some of their songs to a different name';
+    splitBtn.onclick = () => openSplitModal(singer);
+    actions.appendChild(splitBtn);
+
+    // BRB only meaningful when there's an active queue
+    if (singer.status !== 'done') {
         const brbBtn = document.createElement('button');
         brbBtn.className = 'singer-stats-btn';
         brbBtn.textContent = singer.status === 'brb' ? 'Back' : 'BRB';
@@ -3878,15 +3896,18 @@ function buildSingerActions(actions, singer, row) {
             : 'Singer stepped away \u2014 hold all their songs until they return';
         brbBtn.onclick = () => singerAction('brb', { name: singer.name, brb: singer.status !== 'brb' });
         actions.appendChild(brbBtn);
-
-        const removeBtn = document.createElement('button');
-        removeBtn.className = 'singer-stats-btn';
-        removeBtn.textContent = 'Remove';
-        removeBtn.title = 'Singer is leaving \u2014 remove their songs from the queue (can be restored later)';
-        removeBtn.onclick = () => singerAction('remove', { name: singer.name });
-        actions.appendChild(removeBtn);
     }
+
+    const leftBtn = document.createElement('button');
+    leftBtn.className = 'singer-stats-btn';
+    leftBtn.textContent = 'Left';
+    leftBtn.title = 'Mark this singer as having left \u2014 hides them from the active list (can be restored).';
+    leftBtn.onclick = () => singerAction('remove', { name: singer.name });
+    actions.appendChild(leftBtn);
 }
+
+function toggleSingerSongs(_row, _singer) { /* Task 11 */ }
+function openSplitModal(_singer) { /* Task 12 */ }
 
 async function singerAction(action, data) {
     rotationHistory.pushUndo(rotationData);
