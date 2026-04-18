@@ -1040,3 +1040,52 @@ class TestSingersJson:
         assert len(entries) == 1
         assert entries[0]["singers_json"] == '["Phil", "Anya"]'
         assert entries[0]["singer"] == "Phil & Anya"
+
+
+class TestLeftSingersMeta:
+    def test_empty_by_default(self, store):
+        assert store.get_left_singer_names() == set()
+
+    def test_mark_adds_lowercased(self, store):
+        store.mark_singer_left("Kai")
+        assert store.get_left_singer_names() == {"kai"}
+
+    def test_mark_strips_whitespace(self, store):
+        store.mark_singer_left("  Kai  ")
+        assert store.get_left_singer_names() == {"kai"}
+
+    def test_mark_is_idempotent(self, store):
+        store.mark_singer_left("Kai")
+        store.mark_singer_left("kai")
+        store.mark_singer_left("KAI")
+        assert store.get_left_singer_names() == {"kai"}
+
+    def test_mark_multiple_names(self, store):
+        store.mark_singer_left("Kai")
+        store.mark_singer_left("Anya")
+        assert store.get_left_singer_names() == {"kai", "anya"}
+
+    def test_unmark_removes(self, store):
+        store.mark_singer_left("Kai")
+        store.mark_singer_left("Anya")
+        store.unmark_singer_left("Kai")
+        assert store.get_left_singer_names() == {"anya"}
+
+    def test_unmark_is_idempotent(self, store):
+        store.unmark_singer_left("Kai")  # no-op
+        assert store.get_left_singer_names() == set()
+        store.mark_singer_left("Kai")
+        store.unmark_singer_left("Kai")
+        store.unmark_singer_left("Kai")  # second unmark no-op
+        assert store.get_left_singer_names() == set()
+
+    def test_unmark_case_insensitive(self, store):
+        store.mark_singer_left("Kai")
+        store.unmark_singer_left("KAI")
+        assert store.get_left_singer_names() == set()
+
+    def test_persisted_across_get(self, store):
+        store.mark_singer_left("Kai")
+        # Second call reads from DB, not cached state
+        assert store.get_left_singer_names() == {"kai"}
+        assert store.get_left_singer_names() == {"kai"}

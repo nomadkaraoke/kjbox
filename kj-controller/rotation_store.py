@@ -666,6 +666,58 @@ class RotationStore:
         conn.commit()
 
     # ------------------------------------------------------------------
+    # Left-singers meta (session-scoped list of names who have left)
+    # ------------------------------------------------------------------
+
+    _LEFT_META_KEY = "left_singers_json"
+
+    def get_left_singer_names(self):
+        """Return the set of lowercased singer names marked as 'left'.
+
+        Backed by rotation_meta.left_singers_json. Returns an empty set if
+        the key is unset or unparseable (malformed JSON is treated as empty).
+        """
+        conn = self._get_conn()
+        row = conn.execute(
+            "SELECT value FROM rotation_meta WHERE key = ?",
+            (self._LEFT_META_KEY,),
+        ).fetchone()
+        if row is None or row[0] is None:
+            return set()
+        try:
+            names = json.loads(row[0])
+        except (ValueError, TypeError):
+            return set()
+        return set(names) if isinstance(names, list) else set()
+
+    def _set_left_singer_names(self, names):
+        """Internal: overwrite the left-singers meta list."""
+        conn = self._get_conn()
+        conn.execute(
+            "INSERT OR REPLACE INTO rotation_meta (key, value) VALUES (?, ?)",
+            (self._LEFT_META_KEY, json.dumps(sorted(names))),
+        )
+        conn.commit()
+
+    def mark_singer_left(self, name):
+        """Add a singer name to the left set (case-insensitive, idempotent)."""
+        key = name.strip().lower()
+        if not key:
+            return
+        names = self.get_left_singer_names()
+        names.add(key)
+        self._set_left_singer_names(names)
+
+    def unmark_singer_left(self, name):
+        """Remove a singer name from the left set (case-insensitive, idempotent)."""
+        key = name.strip().lower()
+        if not key:
+            return
+        names = self.get_left_singer_names()
+        names.discard(key)
+        self._set_left_singer_names(names)
+
+    # ------------------------------------------------------------------
     # Task 5: Archive and get_all_entries
     # ------------------------------------------------------------------
 
