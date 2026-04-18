@@ -916,6 +916,41 @@ class TestGetSingerStats:
         kai = next(s for s in stats if s["name"].lower() == "kai")
         assert kai["status"] == "left"
 
+    def test_entries_projection_included(self, store):
+        e1 = store.add_entry("Alice", song_artist="Song A")
+        e2 = store.add_entry("Alice", song_artist="Song B")
+        store.update_status(e1["id"], "Done")
+        stats = store.get_singer_stats()
+        alice = next(s for s in stats if s["name"].lower() == "alice")
+        assert "entries" in alice
+        assert len(alice["entries"]) == 2
+        fields = set(alice["entries"][0].keys())
+        assert fields == {"id", "song_artist", "status", "position", "created_at"}
+        # Ordered by created_at (earliest first, same as stat ordering)
+        assert alice["entries"][0]["song_artist"] == "Song A"
+        assert alice["entries"][0]["status"] == "Done"
+        assert alice["entries"][1]["song_artist"] == "Song B"
+        assert alice["entries"][1]["status"] == "Waiting"
+
+    def test_entries_projection_excludes_heavy_fields(self, store):
+        e1 = store.add_entry("Alice", song_artist="Song A", file_path="/some/path.mp3")
+        stats = store.get_singer_stats()
+        alice = next(s for s in stats if s["name"].lower() == "alice")
+        entry = alice["entries"][0]
+        assert "file_path" not in entry
+        assert "download_source" not in entry
+        assert "singers_json" not in entry
+
+    def test_multi_singer_entry_appears_under_each_singer(self, store):
+        e1 = store.add_entry("ignored", singers=["Phil", "Anya"], song_artist="Duet")
+        stats = store.get_singer_stats()
+        phil = next(s for s in stats if s["name"].lower() == "phil")
+        anya = next(s for s in stats if s["name"].lower() == "anya")
+        assert phil["entries"][0]["song_artist"] == "Duet"
+        assert anya["entries"][0]["song_artist"] == "Duet"
+        # Same underlying entry id
+        assert phil["entries"][0]["id"] == anya["entries"][0]["id"]
+
 
 # ---------------------------------------------------------------------------
 # Task 2 (new): Singer action methods

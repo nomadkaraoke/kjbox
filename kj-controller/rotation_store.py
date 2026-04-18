@@ -390,6 +390,17 @@ class RotationStore:
             if key in left_set:
                 status = "left"
 
+            trimmed_entries = [
+                {
+                    "id": e["id"],
+                    "song_artist": e["song_artist"],
+                    "status": e["status"],
+                    "position": e["position"],
+                    "created_at": e["created_at"],
+                }
+                for e in entries
+            ]
+
             result.append({
                 "name": data["display_name"],
                 "entries_total": len(entries),
@@ -399,6 +410,7 @@ class RotationStore:
                 "first_added": entries[0]["created_at"],
                 "has_tipped": any(e.get("paid") for e in entries),
                 "status": status,
+                "entries": trimmed_entries,
             })
 
         result.sort(key=lambda s: s["first_added"])
