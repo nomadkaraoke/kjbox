@@ -2359,3 +2359,45 @@ body {
     color: #e74c3c;
     font-size: 0.9em;
 }
+
+.singer-section {
+    margin-bottom: 0.5rem;
+}
+
+.singer-section-header {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.3rem 0.4rem;
+    cursor: pointer;
+    user-select: none;
+    color: var(--text-dim, #aaa);
+    font-size: 0.9rem;
+    border-top: 1px dashed rgba(255, 255, 255, 0.08);
+}
+
+.singer-section-header:hover {
+    color: var(--text, #ddd);
+}
+
+.singer-section-caret {
+    display: inline-block;
+    transition: transform 0.15s ease;
+}
+
+.singer-section:not(.collapsed) > .singer-section-header > .singer-section-caret {
+    transform: rotate(90deg);
+}
+
+.singer-section.collapsed .singer-section-body {
+    display: none;
+}
+
+.singer-section-count {
+    opacity: 0.6;
+}
+
+/* The Active section shouldn't have a border-top (it's the first/expected state) */
+.singer-section-active > .singer-section-header {
+    border-top: none;
+}

@@ -3717,145 +3717,175 @@ function toggleSingerStats() {
 function renderSingerStats(stats) {
     const list = document.getElementById('singer-stats-list');
     if (!list) return;
-    // Don't re-render while a singer row is being edited
     if (list.querySelector('.singer-editing')) return;
-    singerStatsData = stats || [];
 
-    if (!stats || stats.length === 0) {
-        list.innerHTML = '<div style="color:#666;font-size:0.8em;padding:4px;">No singers yet</div>';
-        return;
+    singerStatsData = stats || [];
+    list.innerHTML = '';
+
+    const sections = {
+        active: [],
+        done: [],
+        gone: [],
+    };
+    for (const singer of singerStatsData) {
+        if (singer.status === 'left') sections.gone.push(singer);
+        else if (singer.status === 'done') sections.done.push(singer);
+        else sections.active.push(singer);
     }
 
-    const order = { active: 0, brb: 1, left: 2, done: 3 };
-    const sorted = [...stats].sort((a, b) => {
-        const oa = order[a.status] ?? 0;
-        const ob = order[b.status] ?? 0;
-        if (oa !== ob) return oa - ob;
-        return 0;
-    });
+    renderSingerSection(list, 'active', 'Active', sections.active, false);
+    renderSingerSection(list, 'done', 'Done', sections.done, true);
+    renderSingerSection(list, 'gone', 'Gone', sections.gone, true);
+}
 
-    list.innerHTML = '';
-    sorted.forEach((singer) => {
-        // Done singers still shown (dimmed) so KJ can see who's been through tonight
+function renderSingerSection(container, key, label, singers, collapsedByDefault) {
+    if (singers.length === 0) return;
 
-        const row = document.createElement('div');
-        row.className = 'singer-stats-row';
-        if (singer.status === 'brb') row.classList.add('singer-brb');
-        if (singer.status === 'left') row.classList.add('singer-left');
+    const storageKey = 'kj-singers-' + key + '-collapsed';
+    const stored = localStorage.getItem(storageKey);
+    const collapsed = stored === null ? collapsedByDefault : (stored === '1');
 
-        const info = document.createElement('div');
-        info.className = 'singer-stats-info';
+    const section = document.createElement('div');
+    section.className = 'singer-section singer-section-' + key;
+    if (collapsed) section.classList.add('collapsed');
 
-        const name = document.createElement('span');
-        name.className = 'singer-stats-name';
-        name.textContent = singer.name;
-        info.appendChild(name);
+    const header = document.createElement('div');
+    header.className = 'singer-section-header';
+    header.innerHTML = '<span class="singer-section-caret">\u25B8</span> '
+        + '<span class="singer-section-label">' + label + '</span> '
+        + '<span class="singer-section-count">(' + singers.length + ')</span>';
+    header.onclick = () => {
+        const isCollapsed = section.classList.toggle('collapsed');
+        localStorage.setItem(storageKey, isCollapsed ? '1' : '0');
+    };
+    section.appendChild(header);
 
-        if (singer.has_tipped) {
-            const tip = document.createElement('span');
-            tip.className = 'singer-stats-tip';
-            tip.textContent = ' \u2665';
-            tip.title = 'Tipped tonight';
-            info.appendChild(tip);
-        }
+    const body = document.createElement('div');
+    body.className = 'singer-section-body';
+    for (const singer of singers) {
+        body.appendChild(buildSingerRow(singer));
+    }
+    section.appendChild(body);
+    container.appendChild(section);
+}
 
-        // Joined time
-        if (singer.first_added) {
-            const joined = document.createElement('span');
-            joined.className = 'singer-stats-label';
-            const added = new Date(singer.first_added.replace(' ', 'T'));
-            const mins = Math.round((Date.now() - added.getTime()) / 60000);
-            const ago = mins < 60 ? mins + ' mins ago' : Math.floor(mins / 60) + 'h ' + (mins % 60) + 'm ago';
-            joined.innerHTML = '<span class="singer-label-key">Joined:</span> ' + ago;
-            info.appendChild(joined);
-        }
+function buildSingerRow(singer) {
+    const row = document.createElement('div');
+    row.className = 'singer-stats-row';
+    if (singer.status === 'brb') row.classList.add('singer-brb');
+    if (singer.status === 'left') row.classList.add('singer-left');
 
-        // Sung count (color-coded like rotation pills)
-        const sung = document.createElement('span');
-        sung.className = 'singer-stats-label';
-        const sungCount = singer.entries_sung;
-        let pillClass = 'pill-new';
-        if (sungCount === 1) pillClass = 'pill-once';
-        else if (sungCount >= 2 && sungCount <= 4) pillClass = 'pill-few';
-        else if (sungCount >= 5) pillClass = 'pill-many';
-        sung.innerHTML = '<span class="singer-label-key">Sung:</span> <span class="singer-sung-pill ' + pillClass + '">' + sungCount + '</span>';
-        info.appendChild(sung);
+    const info = document.createElement('div');
+    info.className = 'singer-stats-info';
 
-        // Queued count
-        if (singer.entries_waiting > 0) {
-            const queued = document.createElement('span');
-            queued.className = 'singer-stats-label';
-            queued.innerHTML = '<span class="singer-label-key">Queued:</span> ' + singer.entries_waiting;
-            info.appendChild(queued);
-        }
+    const name = document.createElement('span');
+    name.className = 'singer-stats-name';
+    name.textContent = singer.name;
+    info.appendChild(name);
 
-        // Next song time
-        if (singer.entries_waiting > 0) {
-            const singerLower = singer.name.toLowerCase();
-            const nextEntry = rotationData.find(e => {
-                if (e.singers_json) {
-                    try {
-                        const names = JSON.parse(e.singers_json);
-                        return names.some(n => n.trim().toLowerCase() === singerLower);
-                    } catch (err) { return false; }
-                }
-                return e.singer.toLowerCase() === singerLower;
-            });
-            if (nextEntry && nextEntry.estimated_time) {
-                const est = document.createElement('span');
-                est.className = 'singer-stats-label';
-                est.innerHTML = '<span class="singer-label-key">Next:</span> ~' + nextEntry.estimated_time;
-                info.appendChild(est);
+    if (singer.has_tipped) {
+        const tip = document.createElement('span');
+        tip.className = 'singer-stats-tip';
+        tip.textContent = '\u2764\uFE0F';
+        info.appendChild(tip);
+    }
+
+    if (singer.first_added) {
+        const joined = document.createElement('span');
+        joined.className = 'singer-stats-label';
+        const added = new Date(singer.first_added.replace(' ', 'T'));
+        const mins = Math.round((Date.now() - added.getTime()) / 60000);
+        const ago = mins < 60 ? mins + ' mins ago' : Math.floor(mins / 60) + 'h ' + (mins % 60) + 'm ago';
+        joined.innerHTML = '<span class="singer-label-key">Joined:</span> ' + ago;
+        info.appendChild(joined);
+    }
+
+    const sung = document.createElement('span');
+    sung.className = 'singer-stats-label';
+    const sungCount = singer.entries_sung;
+    let pillClass = 'pill-new';
+    if (sungCount === 1) pillClass = 'pill-once';
+    else if (sungCount >= 2 && sungCount <= 4) pillClass = 'pill-few';
+    else if (sungCount >= 5) pillClass = 'pill-many';
+    sung.innerHTML = '<span class="singer-label-key">Sung:</span> <span class="singer-sung-pill ' + pillClass + '">' + sungCount + '</span>';
+    info.appendChild(sung);
+
+    if (singer.entries_waiting > 0) {
+        const queued = document.createElement('span');
+        queued.className = 'singer-stats-label';
+        queued.innerHTML = '<span class="singer-label-key">Queued:</span> ' + singer.entries_waiting;
+        info.appendChild(queued);
+    }
+
+    if (singer.entries_waiting > 0) {
+        const singerLower = singer.name.toLowerCase();
+        const nextEntry = rotationData.find(e => {
+            if (e.singers_json) {
+                try {
+                    const names = JSON.parse(e.singers_json);
+                    return names.some(n => n.trim().toLowerCase() === singerLower);
+                } catch (err) { return false; }
             }
+            return e.singer.toLowerCase() === singerLower;
+        });
+        if (nextEntry && nextEntry.estimated_time) {
+            const est = document.createElement('span');
+            est.className = 'singer-stats-label';
+            est.innerHTML = '<span class="singer-label-key">Next:</span> ~' + nextEntry.estimated_time;
+            info.appendChild(est);
         }
+    }
 
-        row.appendChild(info);
+    row.appendChild(info);
 
-        const actions = document.createElement('div');
-        actions.className = 'singer-stats-actions';
+    const actions = document.createElement('div');
+    actions.className = 'singer-stats-actions';
+    buildSingerActions(actions, singer, row);
+    row.appendChild(actions);
 
-        if (singer.status === 'left') {
-            const restoreBtn = document.createElement('button');
-            restoreBtn.className = 'singer-stats-btn';
-            restoreBtn.textContent = 'Restore';
-            restoreBtn.title = 'Bring this singer back \u2014 restore their songs to the queue';
-            restoreBtn.onclick = () => singerAction('restore', { name: singer.name });
-            actions.appendChild(restoreBtn);
-        } else if (singer.status !== 'done') {
-            const editBtn = document.createElement('button');
-            editBtn.className = 'singer-stats-btn';
-            editBtn.textContent = 'Edit';
-            editBtn.title = 'Rename this singer (fixes typos across all their entries)';
-            editBtn.onclick = () => enterSingerEditMode(row, singer);
-            actions.appendChild(editBtn);
+    return row;
+}
 
-            const mergeBtn = document.createElement('button');
-            mergeBtn.className = 'singer-stats-btn';
-            mergeBtn.textContent = 'Merge';
-            mergeBtn.title = 'Merge this singer into another \u2014 use when the same person was added under two different names';
-            mergeBtn.onclick = (ev) => showMergeDropdown(ev, singer);
-            actions.appendChild(mergeBtn);
+function buildSingerActions(actions, singer, row) {
+    // Placeholder — filled in by Task 10.
+    if (singer.status === 'left') {
+        const restoreBtn = document.createElement('button');
+        restoreBtn.className = 'singer-stats-btn';
+        restoreBtn.textContent = 'Restore';
+        restoreBtn.title = 'Bring this singer back \u2014 restore their songs to the queue';
+        restoreBtn.onclick = () => singerAction('restore', { name: singer.name });
+        actions.appendChild(restoreBtn);
+    } else if (singer.status !== 'done') {
+        const editBtn = document.createElement('button');
+        editBtn.className = 'singer-stats-btn';
+        editBtn.textContent = 'Edit';
+        editBtn.title = 'Rename this singer (fixes typos across all their entries)';
+        editBtn.onclick = () => enterSingerEditMode(row, singer);
+        actions.appendChild(editBtn);
 
-            const brbBtn = document.createElement('button');
-            brbBtn.className = 'singer-stats-btn';
-            brbBtn.textContent = singer.status === 'brb' ? 'Back' : 'BRB';
-            brbBtn.title = singer.status === 'brb'
-                ? 'Singer is back \u2014 restore their songs to the active queue'
-                : 'Singer stepped away \u2014 hold all their songs until they return';
-            brbBtn.onclick = () => singerAction('brb', { name: singer.name, brb: singer.status !== 'brb' });
-            actions.appendChild(brbBtn);
+        const mergeBtn = document.createElement('button');
+        mergeBtn.className = 'singer-stats-btn';
+        mergeBtn.textContent = 'Merge';
+        mergeBtn.title = 'Merge this singer into another \u2014 use when the same person was added under two different names';
+        mergeBtn.onclick = (ev) => showMergeDropdown(ev, singer);
+        actions.appendChild(mergeBtn);
 
-            const removeBtn = document.createElement('button');
-            removeBtn.className = 'singer-stats-btn';
-            removeBtn.textContent = 'Remove';
-            removeBtn.title = 'Singer is leaving \u2014 remove their songs from the queue (can be restored later)';
-            removeBtn.onclick = () => singerAction('remove', { name: singer.name });
-            actions.appendChild(removeBtn);
-        }
+        const brbBtn = document.createElement('button');
+        brbBtn.className = 'singer-stats-btn';
+        brbBtn.textContent = singer.status === 'brb' ? 'Back' : 'BRB';
+        brbBtn.title = singer.status === 'brb'
+            ? 'Singer is back \u2014 restore their songs to the active queue'
+            : 'Singer stepped away \u2014 hold all their songs until they return';
+        brbBtn.onclick = () => singerAction('brb', { name: singer.name, brb: singer.status !== 'brb' });
+        actions.appendChild(brbBtn);
 
-        row.appendChild(actions);
-        list.appendChild(row);
-    });
+        const removeBtn = document.createElement('button');
+        removeBtn.className = 'singer-stats-btn';
+        removeBtn.textContent = 'Remove';
+        removeBtn.title = 'Singer is leaving \u2014 remove their songs from the queue (can be restored later)';
+        removeBtn.onclick = () => singerAction('remove', { name: singer.name });
+        actions.appendChild(removeBtn);
+    }
 }
 
 async function singerAction(action, data) {
