@@ -24,11 +24,12 @@
         <div class="now-playing-time">
             <span id="np-time">0:00</span> / <span id="np-length">0:00</span>
         </div>
-        <div class="now-playing-pitch">
+        <div class="now-playing-pitch" id="np-pitch-group">
             <button class="np-btn np-btn-pitch" id="np-pitch-down" onclick="changePitch(-1)" title="Pitch down 1 semitone">-</button>
             <span class="np-pitch-display" id="np-pitch" onclick="changePitch(0)" title="Reset pitch">0</span>
             <button class="np-btn np-btn-pitch" id="np-pitch-up" onclick="changePitch(1)" title="Pitch up 1 semitone">+</button>
         </div>
+        <span class="np-renderer-badge" id="np-renderer-badge" title="Active karaoke renderer &mdash; change in AV Output modal"></span>
         <div class="now-playing-controls">
             <button class="np-btn btn-primary" id="np-pause" onclick="controlPlayback('pause_resume')">Pause</button>
             <button class="np-btn np-btn-fadeout" id="np-fadeout" onclick="fadeOut()">Fade Out</button>
@@ -603,6 +604,25 @@
 
                 <!-- Health summary -->
                 <div id="av-health-bar" class="av-health-bar"></div>
+
+                <!-- Karaoke Renderer section -->
+                <div class="av-section">
+                    <div class="av-section-title">Karaoke Renderer</div>
+                    <div class="av-control-row">
+                        <label>Playback Engine</label>
+                        <p class="av-help">Which engine plays karaoke videos. <strong>mpv</strong> supports real-time pitch shift; <strong>VLC</strong> is the fallback if a file doesn't render on mpv. Switch only while stopped (filler-only) &mdash; rejected during playback. Persists across restarts.</p>
+                        <div id="av-renderer-toggle" class="av-renderer-toggle">
+                            <label class="av-renderer-option">
+                                <input type="radio" name="av-renderer" value="mpv" onchange="avSetRenderer(this.value)">
+                                <span>mpv <small>(pitch shift)</small></span>
+                            </label>
+                            <label class="av-renderer-option">
+                                <input type="radio" name="av-renderer" value="vlc" onchange="avSetRenderer(this.value)">
+                                <span>VLC</span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
 
                 <!-- Video section -->
                 <div class="av-section">

@@ -726,6 +726,22 @@ function updateNowPlaying(data) {
     const state = data.state || 'stopped';
     const isActive = state === 'playing' || state === 'paused';
 
+    // Renderer-aware UI: hide pitch controls on engines that don't support it,
+    // show a small badge so the KJ knows which engine is active without
+    // opening the modal.
+    const renderer = data.renderer || null;
+    if (renderer) {
+        const pitchGroup = document.getElementById('np-pitch-group');
+        if (pitchGroup) {
+            pitchGroup.style.display = renderer.supports_pitch ? '' : 'none';
+        }
+        const badge = document.getElementById('np-renderer-badge');
+        if (badge) {
+            badge.textContent = renderer.mode === 'mpv' ? 'mpv' : 'VLC';
+            badge.className = 'np-renderer-badge np-renderer-' + renderer.mode;
+        }
+    }
+
     if (isActive && data.current_playing) {
         bar.classList.remove('hidden');
         npTitle.textContent = data.current_playing;
@@ -886,10 +902,15 @@ async function avRefresh() {
     document.getElementById('av-loading').classList.remove('hidden');
     document.getElementById('av-content').classList.add('hidden');
     try {
-        const response = await fetch('/av/status');
-        if (!response.ok) throw new Error('AV status fetch failed');
-        const data = await response.json();
-        renderAvModal(data);
+        // Fetch AV status and renderer state in parallel
+        const [avResp, rendererResp] = await Promise.all([
+            fetch('/av/status'),
+            fetch('/renderer'),
+        ]);
+        if (!avResp.ok) throw new Error('AV status fetch failed');
+        const data = await avResp.json();
+        const rendererData = rendererResp.ok ? await rendererResp.json() : null;
+        renderAvModal(data, rendererData);
     } catch (e) {
         const errEl = document.getElementById('av-loading');
         errEl.textContent = '';
@@ -900,8 +921,9 @@ async function avRefresh() {
     }
 }
 
-function renderAvModal(data) {
+function renderAvModal(data, rendererData) {
     renderAvHealthBar(data.health);
+    renderAvRendererSection(rendererData);
     renderAvVideoSection(data.video);
     renderAvAudioSection(data.audio);
     renderAvBrowserAudioSection(data.audio);
@@ -912,6 +934,43 @@ function renderAvModal(data) {
     renderAvMonitorSection(data.audio_monitor);
     document.getElementById('av-loading').classList.add('hidden');
     document.getElementById('av-content').classList.remove('hidden');
+}
+
+function renderAvRendererSection(rendererData) {
+    if (!rendererData) return;
+    // Mark the active radio; other branches handled by the name="av-renderer" group
+    const radios = document.querySelectorAll('input[name="av-renderer"]');
+    radios.forEach(r => {
+        r.checked = (r.value === rendererData.mode);
+    });
+}
+
+async function avSetRenderer(mode) {
+    try {
+        const resp = await fetch('/renderer', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ mode }),
+        });
+        if (resp.status === 409) {
+            const err = await resp.json();
+            alert(err.message || 'Stop playback before switching renderer.');
+            // Revert the radio selection to the actual active mode
+            avRefresh();
+            return;
+        }
+        if (!resp.ok) {
+            const err = await resp.json().catch(() => ({}));
+            alert(err.message || 'Renderer switch failed.');
+            avRefresh();
+            return;
+        }
+        const data = await resp.json();
+        // Brief visual confirmation; subsequent /status polls will refresh the badge
+        console.log(`Renderer switched to ${data.mode}.`);
+    } catch (e) {
+        alert(`Renderer switch error: ${e.message}`);
+    }
 }
 
 function avDot(cls) {
