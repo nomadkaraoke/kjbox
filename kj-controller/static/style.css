@@ -2474,3 +2474,102 @@ body {
     color: var(--text-dim, #888);
     font-style: italic;
 }
+
+.singer-split-modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+
+.singer-split-modal {
+    background: var(--bg-elevated, #1e1e22);
+    color: var(--text, #ddd);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 6px;
+    padding: 1.2rem;
+    min-width: 480px;
+    max-width: 90vw;
+    max-height: 90vh;
+    overflow: auto;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
+}
+
+.singer-split-modal h3 {
+    margin: 0 0 0.4rem;
+    font-size: 1.1rem;
+}
+
+.singer-split-help {
+    margin: 0 0 0.8rem;
+    color: var(--text-dim, #999);
+    font-size: 0.85rem;
+}
+
+.singer-split-entries {
+    max-height: 300px;
+    overflow-y: auto;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 4px;
+    padding: 0.3rem 0.4rem;
+    margin-bottom: 0.8rem;
+}
+
+.singer-split-entry {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.2rem 0;
+    cursor: pointer;
+}
+
+.singer-split-entry:hover {
+    background: rgba(255, 255, 255, 0.04);
+}
+
+.singer-split-entry-song {
+    flex: 1;
+}
+
+.singer-split-entry-status {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    color: var(--text-dim, #888);
+}
+
+.singer-split-form-row {
+    margin-bottom: 0.5rem;
+    font-size: 0.9rem;
+}
+
+.singer-split-mode {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    margin-bottom: 1rem;
+}
+
+.singer-split-new-input,
+.singer-split-existing-select {
+    background: var(--bg, #111);
+    color: var(--text, #ddd);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 3px;
+    padding: 0.2rem 0.4rem;
+    margin-left: 0.3rem;
+}
+
+.singer-split-buttons {
+    display: flex;
+    gap: 0.5rem;
+    justify-content: flex-end;
+}
+
+.singer-split-confirm {
+    background: rgba(100, 200, 120, 0.2);
+    color: #8ecc94;
+    border-color: rgba(100, 200, 120, 0.4);
+}

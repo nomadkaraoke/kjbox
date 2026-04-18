@@ -3966,7 +3966,152 @@ function toggleSingerSongs(row, singer) {
 
     row.parentNode.insertBefore(panel, row.nextSibling);
 }
-function openSplitModal(_singer) { /* Task 12 */ }
+function openSplitModal(singer) {
+    document.querySelectorAll('.singer-split-modal-backdrop').forEach(d => d.remove());
+
+    const entries = singer.entries || [];
+    if (entries.length === 0) {
+        alert('This singer has no entries to split.');
+        return;
+    }
+
+    const backdrop = document.createElement('div');
+    backdrop.className = 'singer-split-modal-backdrop';
+    backdrop.onclick = (ev) => { if (ev.target === backdrop) backdrop.remove(); };
+
+    const modal = document.createElement('div');
+    modal.className = 'singer-split-modal';
+
+    const heading = document.createElement('h3');
+    heading.textContent = 'Split "' + singer.name + '"';
+    modal.appendChild(heading);
+
+    const help = document.createElement('p');
+    help.className = 'singer-split-help';
+    help.textContent = 'Pick the entries that actually belong to a different person, then give that person a name.';
+    modal.appendChild(help);
+
+    // Entry checkboxes
+    const listWrap = document.createElement('div');
+    listWrap.className = 'singer-split-entries';
+    for (const entry of entries) {
+        const label = document.createElement('label');
+        label.className = 'singer-split-entry';
+
+        const cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.value = String(entry.id);
+        label.appendChild(cb);
+
+        const song = document.createElement('span');
+        song.className = 'singer-split-entry-song';
+        song.textContent = entry.song_artist || '(no song)';
+        label.appendChild(song);
+
+        const status = document.createElement('span');
+        status.className = 'singer-split-entry-status';
+        status.textContent = entry.status || 'Waiting';
+        label.appendChild(status);
+
+        listWrap.appendChild(label);
+    }
+    modal.appendChild(listWrap);
+
+    // Reassign-to pick
+    const formRow = document.createElement('div');
+    formRow.className = 'singer-split-form-row';
+    formRow.innerHTML = '<span class="singer-split-form-label">Reassign selected to:</span>';
+    modal.appendChild(formRow);
+
+    const modeWrap = document.createElement('div');
+    modeWrap.className = 'singer-split-mode';
+
+    const newLabel = document.createElement('label');
+    const newRadio = document.createElement('input');
+    newRadio.type = 'radio';
+    newRadio.name = 'split-mode';
+    newRadio.value = 'new';
+    newRadio.checked = true;
+    newLabel.appendChild(newRadio);
+    newLabel.appendChild(document.createTextNode(' New name: '));
+    const newInput = document.createElement('input');
+    newInput.type = 'text';
+    newInput.className = 'singer-split-new-input';
+    newInput.placeholder = singer.name + ' P';
+    newLabel.appendChild(newInput);
+    modeWrap.appendChild(newLabel);
+
+    const existingLabel = document.createElement('label');
+    const existingRadio = document.createElement('input');
+    existingRadio.type = 'radio';
+    existingRadio.name = 'split-mode';
+    existingRadio.value = 'existing';
+    existingLabel.appendChild(existingRadio);
+    existingLabel.appendChild(document.createTextNode(' Existing singer: '));
+    const existingSelect = document.createElement('select');
+    existingSelect.className = 'singer-split-existing-select';
+    const others = (singerStatsData || [])
+        .filter(s => s.name.toLowerCase() !== singer.name.toLowerCase())
+        .map(s => s.name);
+    if (others.length === 0) {
+        existingRadio.disabled = true;
+    }
+    for (const other of others) {
+        const opt = document.createElement('option');
+        opt.value = other;
+        opt.textContent = other;
+        existingSelect.appendChild(opt);
+    }
+    existingLabel.appendChild(existingSelect);
+    modeWrap.appendChild(existingLabel);
+
+    modal.appendChild(modeWrap);
+
+    // Buttons
+    const buttons = document.createElement('div');
+    buttons.className = 'singer-split-buttons';
+
+    const cancelBtn = document.createElement('button');
+    cancelBtn.className = 'singer-stats-btn';
+    cancelBtn.textContent = 'Cancel';
+    cancelBtn.onclick = () => backdrop.remove();
+    buttons.appendChild(cancelBtn);
+
+    const splitBtn = document.createElement('button');
+    splitBtn.className = 'singer-stats-btn singer-split-confirm';
+    splitBtn.textContent = 'Split';
+    splitBtn.onclick = async () => {
+        const checkedIds = Array.from(listWrap.querySelectorAll('input[type=checkbox]:checked'))
+            .map(cb => parseInt(cb.value, 10));
+        if (checkedIds.length === 0) {
+            alert('Select at least one entry to reassign.');
+            return;
+        }
+        const mode = modeWrap.querySelector('input[name=split-mode]:checked').value;
+        const newName = mode === 'new' ? newInput.value.trim() : existingSelect.value;
+        if (!newName) {
+            alert('Enter a new name.');
+            return;
+        }
+        if (newName.toLowerCase() === singer.name.toLowerCase()) {
+            alert('New name must differ from the original.');
+            return;
+        }
+        backdrop.remove();
+        await singerAction('split', {
+            source_name: singer.name,
+            new_name: newName,
+            entry_ids: checkedIds,
+        });
+    };
+    buttons.appendChild(splitBtn);
+
+    modal.appendChild(buttons);
+
+    backdrop.appendChild(modal);
+    document.body.appendChild(backdrop);
+    newInput.focus();
+}
 
 async function singerAction(action, data) {
     rotationHistory.pushUndo(rotationData);
