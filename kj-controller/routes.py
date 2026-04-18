@@ -1850,7 +1850,16 @@ def sleep_mode_toggle():
     data = request.get_json() or {}
     active = data.get('active', False)
 
+    sing_store = getattr(current_app, 'sing_store', None)
     if active:
+        # Close public requests *before* the device goes quiet so no one
+        # submits into a dead queue. We do NOT re-enable on exit — the KJ
+        # must flip it back manually to prevent a surprise re-opening.
+        if sing_store is not None:
+            try:
+                sing_store.set_enabled(False)
+            except Exception:
+                pass
         result = sleep_mgr.enter_sleep(cfg, vlc=current_app.vlc)
     else:
         result = sleep_mgr.exit_sleep(cfg, vlc=current_app.vlc)
@@ -2193,7 +2202,12 @@ def move_rotation_entry():
 
 @routes_bp.route('/rotation/archive', methods=['POST'])
 def archive_rotation():
-    """Archive all rotation entries and clear the rotation."""
+    """Archive all rotation entries and clear the rotation.
+
+    Also regenerates the event token for the public request form so a
+    new night gets a new QR — and re-enables requests in case they were
+    paused during the previous event.
+    """
     rotation = current_app.rotation
     if not hasattr(current_app, 'rotation') or current_app.rotation is None:
         return jsonify({"error": "Rotation not configured"}), 503
@@ -2201,6 +2215,18 @@ def archive_rotation():
     try:
         count = rotation.archive_rotation()
         entries = rotation.get_rotation()
+        # Regen the sing token for the new event so yesterday's QR stops working.
+        sing_store = getattr(current_app, 'sing_store', None)
+        if sing_store is not None:
+            new_token = sing_store.regenerate_token()
+            sing_store.set_enabled(True)
+            # Push new URL to any qr_code overlays linked to the event URL.
+            try:
+                from sing import get_event_url, sync_event_url_overlays
+                url = get_event_url(current_app.kj_config, new_token, scope="public")
+                sync_event_url_overlays(current_app.overlay_manager, url)
+            except Exception:
+                pass  # Best-effort — the main archive must still succeed.
         return jsonify({"success": True, "archived": count, "entries": entries})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -2827,3 +2853,250 @@ def browser_mode_disable():
 
     log_message("Browser mode disabled — back to VLC.", cfg)
     return jsonify({"success": True})
+
+
+# ---------------------------------------------------------------------------
+# Public singer request form — admin side
+# ---------------------------------------------------------------------------
+
+def _format_song_text(artist, title):
+    artist = (artist or "").strip()
+    title = (title or "").strip()
+    if artist and title:
+        return f"{title} - {artist}"
+    return title or artist
+
+
+def approve_sing_request(app, req):
+    """Dispatch approval of a sing request; create/link a rotation entry.
+
+    Called from the admin /rotation/requests/<id>/approve route and from the
+    auto-approve path in sing_bp.submit. Returns the rotation entry_id.
+    """
+    rotation = getattr(app, 'rotation', None)
+    if rotation is None:
+        raise RuntimeError("Rotation not configured")
+
+    singer = req["singer_name"]
+    song_text = _format_song_text(req.get("song_artist"), req.get("song_title"))
+    source_type = req["source_type"]
+    source_ref = req.get("source_ref")
+
+    if source_type == "local":
+        entry = rotation.add_entry(
+            singer, song_text, file_path=source_ref or None
+        )
+        return entry["id"]
+
+    if source_type in ("divebar", "youtube", "kn"):
+        entry = rotation.add_entry(singer, song_text)
+        from uuid import uuid4
+        download_id = str(uuid4())
+        if source_type == "divebar":
+            # source_ref is a divebar file_id
+            try:
+                download_url = divebar.get_download_url(source_ref, app.kj_config)
+            except Exception as exc:
+                raise RuntimeError(f"Divebar URL failed: {exc}") from exc
+            if not download_url:
+                raise RuntimeError("Failed to get download URL from Divebar")
+            title = f"divebar-{source_ref}.mp4"
+            queue_src = "divebar"
+            queue_url = download_url
+        else:
+            # youtube / kn — source_ref is a YouTube URL
+            queue_src = "youtube"
+            queue_url = source_ref
+            title = song_text or (req.get("song_title") or "")
+
+        queue_item = {
+            "id": download_id,
+            "url": queue_url,
+            "title": title,
+            "source": queue_src,
+            "status": "queued",
+            "error": None,
+            "rotation_entry_id": entry["id"],
+        }
+        rotation.set_download_status(
+            entry["id"], queue_src, "queued", download_id
+        )
+        with app._download_lock:
+            app.download_queue["items"].append(queue_item)
+            if not app.download_queue.get("worker_running"):
+                app.download_queue["worker_running"] = True
+                threading.Thread(
+                    target=_download_worker, args=(app,), daemon=True
+                ).start()
+        return entry["id"]
+
+    if source_type == "make":
+        gen_client = getattr(app, "gen_client", None)
+        if gen_client is None:
+            raise RuntimeError("Gen API not configured")
+        entry = rotation.add_entry(singer, song_text)
+        result = gen_client.create_job(
+            req.get("song_artist", ""), req.get("song_title", "")
+        )
+        job_id = result.get("job_id")
+        if not job_id:
+            raise RuntimeError("Gen API did not return a job_id")
+        from gen_client import map_gen_status
+        rotation.set_gen_status(
+            entry["id"], job_id, map_gen_status(result.get("status", "pending"))
+        )
+        return entry["id"]
+
+    raise ValueError(f"Unknown source_type: {source_type}")
+
+
+def _require_sing_store():
+    store = getattr(current_app, "sing_store", None)
+    if store is None:
+        return None, (jsonify({"error": "Sing store not configured"}), 503)
+    return store, None
+
+
+@routes_bp.route('/rotation/requests', methods=['GET'])
+def list_sing_requests():
+    """List pending/approved/rejected sing requests."""
+    store, err = _require_sing_store()
+    if err:
+        return err
+    status = request.args.get('status') or None
+    limit = request.args.get('limit', type=int)
+    requests = store.list_requests(status=status, limit=limit)
+    return jsonify({
+        "requests": requests,
+        "counts": store.count_by_status(),
+    })
+
+
+@routes_bp.route('/rotation/requests/config', methods=['GET'])
+def get_sing_config():
+    """Return current token, enabled / auto-approve flags, and URLs."""
+    store, err = _require_sing_store()
+    if err:
+        return err
+    cfg = current_app.kj_config
+    token = store.ensure_token()
+    from sing import get_event_url
+    return jsonify({
+        "token": token,
+        "enabled": store.is_enabled(),
+        "auto_approve": store.is_auto_approve(),
+        "public_url": get_event_url(cfg, token, scope="public"),
+        "local_url": get_event_url(cfg, token, scope="local"),
+        "pending_count": store.count_pending(),
+    })
+
+
+@routes_bp.route('/rotation/requests/config', methods=['POST'])
+def update_sing_config():
+    """Regenerate the token, toggle enabled / auto-approve."""
+    store, err = _require_sing_store()
+    if err:
+        return err
+    data = request.get_json(force=True, silent=True) or {}
+    changed = {}
+
+    if data.get("regenerate"):
+        new_token = store.regenerate_token()
+        changed["token"] = new_token
+        # Also refresh any linked overlays.
+        try:
+            from sing import get_event_url, sync_event_url_overlays
+            url = get_event_url(current_app.kj_config, new_token, scope="public")
+            sync_event_url_overlays(current_app.overlay_manager, url)
+        except Exception:
+            pass
+
+    if "enabled" in data:
+        store.set_enabled(bool(data["enabled"]))
+        changed["enabled"] = bool(data["enabled"])
+
+    if "auto_approve" in data:
+        store.set_auto_approve(bool(data["auto_approve"]))
+        changed["auto_approve"] = bool(data["auto_approve"])
+
+    return jsonify({"success": True, "changed": changed})
+
+
+@routes_bp.route('/rotation/requests/qr.svg', methods=['GET'])
+def sing_qr_svg():
+    """Return an SVG QR code pointing at the event URL."""
+    store, err = _require_sing_store()
+    if err:
+        return err
+    scope = request.args.get('scope', 'public')
+    if scope not in ('public', 'local'):
+        return jsonify({"error": "scope must be 'public' or 'local'"}), 400
+    token = store.ensure_token()
+    from sing import get_event_url
+    url = get_event_url(current_app.kj_config, token, scope=scope)
+    try:
+        import qrcode
+        from qrcode.image.svg import SvgPathImage
+        img = qrcode.make(url, image_factory=SvgPathImage, box_size=10, border=2)
+        from io import BytesIO
+        buf = BytesIO()
+        img.save(buf)
+        return Response(buf.getvalue(), mimetype='image/svg+xml')
+    except Exception as exc:
+        return jsonify({"error": f"QR generation failed: {exc}"}), 500
+
+
+@routes_bp.route('/rotation/requests/<int:req_id>/approve', methods=['POST'])
+def approve_sing_request_route(req_id):
+    store, err = _require_sing_store()
+    if err:
+        return err
+    req = store.get_request(req_id)
+    if req is None:
+        return jsonify({"error": "Request not found"}), 404
+    if req["status"] != "pending":
+        return jsonify({"error": f"Request is already {req['status']}"}), 409
+    try:
+        entry_id = approve_sing_request(current_app._get_current_object(), req)
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+    store.mark_approved(req_id, linked_entry_id=entry_id)
+    return jsonify({
+        "success": True,
+        "request": store.get_request(req_id),
+        "entry_id": entry_id,
+    })
+
+
+@routes_bp.route('/rotation/requests/<int:req_id>/edit', methods=['POST'])
+def edit_sing_request_route(req_id):
+    store, err = _require_sing_store()
+    if err:
+        return err
+    req = store.get_request(req_id)
+    if req is None:
+        return jsonify({"error": "Request not found"}), 404
+    data = request.get_json(force=True, silent=True) or {}
+    allowed = {k: data[k] for k in (
+        "singer_name", "song_artist", "song_title",
+        "source_type", "source_ref", "source_meta", "notes",
+    ) if k in data}
+    try:
+        updated = store.update_request(req_id, **allowed)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    return jsonify({"success": True, "request": updated})
+
+
+@routes_bp.route('/rotation/requests/<int:req_id>/reject', methods=['POST'])
+def reject_sing_request_route(req_id):
+    store, err = _require_sing_store()
+    if err:
+        return err
+    req = store.get_request(req_id)
+    if req is None:
+        return jsonify({"error": "Request not found"}), 404
+    data = request.get_json(force=True, silent=True) or {}
+    reason = (data.get("reason") or "").strip() or None
+    store.mark_rejected(req_id, reason=reason)
+    return jsonify({"success": True, "request": store.get_request(req_id)})

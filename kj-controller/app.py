@@ -16,6 +16,8 @@ from overlay import OverlayManager
 from playback import PlaybackCoordinator
 from rotation import RotationManager
 from routes import routes_bp
+from sing import install_host_guard, sing_bp
+from sing_store import SingStore
 from sleep_mode import SleepManager
 from utils import log_message
 from audio_monitor import AudioMonitor
@@ -96,12 +98,37 @@ def _get_version():
     return str(int(time.time()))
 
 
+def _get_secret_key(cfg):
+    """Load (or create + persist) a per-device secret key for Flask sessions.
+
+    Stored under ~/kjdata/flask_secret so the sing-form session cookie survives
+    service restarts on the device. Falls back to an in-memory value for tests.
+    """
+    path = cfg.get('flask_secret_key_path') or os.path.expanduser('~/kjdata/flask_secret')
+    try:
+        if os.path.exists(path):
+            with open(path, 'rb') as f:
+                data = f.read().strip()
+                if data:
+                    return data
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        data = os.urandom(32)
+        with open(path, 'wb') as f:
+            f.write(data)
+        os.chmod(path, 0o600)
+        return data
+    except Exception:
+        # For tests / unwritable dirs, fall back to a per-process random key.
+        return os.urandom(32)
+
+
 def create_app(config=None):
     """Create and configure the Flask application."""
     flask_app = Flask(__name__)
     flask_app.config['APP_VERSION'] = _get_version()
     cfg = config or load_config()
     flask_app.kj_config = cfg
+    flask_app.secret_key = _get_secret_key(cfg)
     flask_app.media = MediaIndex(cfg)
     overlay_path = cfg.get('overlays_path') if config else None
     flask_app.overlay_manager = OverlayManager(config_path=overlay_path)
@@ -116,6 +143,10 @@ def create_app(config=None):
     flask_app.chromium = ChromiumManager(cfg)
     flask_app.rotation = _init_rotation(cfg)
     flask_app.rotation.media = flask_app.media
+    flask_app.sing_store = SingStore(
+        cfg.get('rotation_db_path', os.path.expanduser('~/kjdata/rotation.db'))
+    )
+    flask_app.sing_store.ensure_token()
     flask_app.sleep_manager = SleepManager()
     flask_app.download_queue = {'items': [], 'worker_running': False}
     flask_app._download_lock = threading.Lock()
@@ -140,6 +171,8 @@ def create_app(config=None):
         flask_app.gen_poller = None
 
     flask_app.register_blueprint(routes_bp)
+    flask_app.register_blueprint(sing_bp)
+    install_host_guard(flask_app)
     return flask_app
 
 
@@ -211,6 +244,7 @@ def start_app():  # pragma: no cover
     # Create Flask app with services
     flask_app = Flask(__name__)
     flask_app.kj_config = cfg
+    flask_app.secret_key = _get_secret_key(cfg)
     media = MediaIndex(cfg)
     media.load()
     flask_app.media = media
@@ -226,6 +260,11 @@ def start_app():  # pragma: no cover
     flask_app.rotation._write_display_cache()  # Refresh cache so conky doesn't show "Offline"
     if flask_app.rotation.sync:
         log_message("Sheet sync enabled.", cfg)
+    flask_app.sing_store = SingStore(
+        cfg.get('rotation_db_path', os.path.expanduser('~/kjdata/rotation.db'))
+    )
+    flask_app.sing_store.ensure_token()
+    log_message("Sing store ready (public request form).", cfg)
     flask_app.sleep_manager = SleepManager()
     if flask_app.sleep_manager.is_sleeping():
         log_message("Sleep mode is active (from previous session).", cfg)
@@ -251,6 +290,8 @@ def start_app():  # pragma: no cover
         flask_app.gen_poller = None
 
     flask_app.register_blueprint(routes_bp)
+    flask_app.register_blueprint(sing_bp)
+    install_host_guard(flask_app)
 
     # Log external catalog status
     if flask_app.catalog.is_available():

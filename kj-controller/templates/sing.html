@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Nomad Karaoke — Request a song</title>
+<link rel="icon" href="{{ url_for('sing.static', filename='favicon.ico') }}">
+<link rel="stylesheet" href="{{ url_for('sing.static', filename='sing.css') }}">
+</head>
+<body class="sing">
+{% if closed %}
+<main class="sing-card sing-closed">
+  <h1>Requests aren't open right now</h1>
+  <p>The KJ hasn't started a new event, or has paused requests. Please ask them.</p>
+</main>
+{% else %}
+<div id="sing-root"
+     data-token="{{ token }}"
+     data-request-id="{{ request_id }}">
+</div>
+<script type="module" src="{{ url_for('sing.static', filename='sing.js') }}"></script>
+{% endif %}
+</body>
+</html>

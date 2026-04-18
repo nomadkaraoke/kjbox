@@ -3,6 +3,7 @@ beautifulsoup4
 gspread
 google-auth
 psutil
+qrcode
 requests
 websockify
 yt-dlp[default]
