@@ -3717,145 +3717,400 @@ function toggleSingerStats() {
 function renderSingerStats(stats) {
     const list = document.getElementById('singer-stats-list');
     if (!list) return;
-    // Don't re-render while a singer row is being edited
     if (list.querySelector('.singer-editing')) return;
-    singerStatsData = stats || [];
 
-    if (!stats || stats.length === 0) {
-        list.innerHTML = '<div style="color:#666;font-size:0.8em;padding:4px;">No singers yet</div>';
+    singerStatsData = stats || [];
+    list.innerHTML = '';
+
+    const sections = {
+        active: [],
+        done: [],
+        gone: [],
+    };
+    for (const singer of singerStatsData) {
+        if (singer.status === 'left') sections.gone.push(singer);
+        else if (singer.status === 'done') sections.done.push(singer);
+        else sections.active.push(singer);
+    }
+
+    renderSingerSection(list, 'active', 'Active', sections.active, false);
+    renderSingerSection(list, 'done', 'Done', sections.done, true);
+    renderSingerSection(list, 'gone', 'Gone', sections.gone, true);
+}
+
+function renderSingerSection(container, key, label, singers, collapsedByDefault) {
+    if (singers.length === 0) return;
+
+    const storageKey = 'kj-singers-' + key + '-collapsed';
+    const stored = localStorage.getItem(storageKey);
+    const collapsed = stored === null ? collapsedByDefault : (stored === '1');
+
+    const section = document.createElement('div');
+    section.className = 'singer-section singer-section-' + key;
+    if (collapsed) section.classList.add('collapsed');
+
+    const header = document.createElement('div');
+    header.className = 'singer-section-header';
+    header.innerHTML = '<span class="singer-section-caret">\u25B8</span> '
+        + '<span class="singer-section-label">' + label + '</span> '
+        + '<span class="singer-section-count">(' + singers.length + ')</span>';
+    header.onclick = () => {
+        const isCollapsed = section.classList.toggle('collapsed');
+        localStorage.setItem(storageKey, isCollapsed ? '1' : '0');
+    };
+    section.appendChild(header);
+
+    const body = document.createElement('div');
+    body.className = 'singer-section-body';
+    for (const singer of singers) {
+        body.appendChild(buildSingerRow(singer));
+    }
+    section.appendChild(body);
+    container.appendChild(section);
+}
+
+function buildSingerRow(singer) {
+    const row = document.createElement('div');
+    row.className = 'singer-stats-row';
+    if (singer.status === 'brb') row.classList.add('singer-brb');
+    if (singer.status === 'left') row.classList.add('singer-left');
+
+    const info = document.createElement('div');
+    info.className = 'singer-stats-info';
+
+    const name = document.createElement('span');
+    name.className = 'singer-stats-name';
+    name.textContent = singer.name;
+    info.appendChild(name);
+
+    if (singer.has_tipped) {
+        const tip = document.createElement('span');
+        tip.className = 'singer-stats-tip';
+        tip.textContent = '\u2764\uFE0F';
+        info.appendChild(tip);
+    }
+
+    if (singer.first_added) {
+        const joined = document.createElement('span');
+        joined.className = 'singer-stats-label';
+        const added = new Date(singer.first_added.replace(' ', 'T'));
+        const mins = Math.round((Date.now() - added.getTime()) / 60000);
+        const ago = mins < 60 ? mins + ' mins ago' : Math.floor(mins / 60) + 'h ' + (mins % 60) + 'm ago';
+        joined.innerHTML = '<span class="singer-label-key">Joined:</span> ' + ago;
+        info.appendChild(joined);
+    }
+
+    const sung = document.createElement('span');
+    sung.className = 'singer-stats-label';
+    const sungCount = singer.entries_sung;
+    let pillClass = 'pill-new';
+    if (sungCount === 1) pillClass = 'pill-once';
+    else if (sungCount >= 2 && sungCount <= 4) pillClass = 'pill-few';
+    else if (sungCount >= 5) pillClass = 'pill-many';
+    sung.innerHTML = '<span class="singer-label-key">Sung:</span> <span class="singer-sung-pill ' + pillClass + '">' + sungCount + '</span>';
+    info.appendChild(sung);
+
+    if (singer.entries_waiting > 0) {
+        const queued = document.createElement('span');
+        queued.className = 'singer-stats-label';
+        queued.innerHTML = '<span class="singer-label-key">Queued:</span> ' + singer.entries_waiting;
+        info.appendChild(queued);
+    }
+
+    if (singer.entries_waiting > 0) {
+        const singerLower = singer.name.toLowerCase();
+        const nextEntry = rotationData.find(e => {
+            if (e.singers_json) {
+                try {
+                    const names = JSON.parse(e.singers_json);
+                    return names.some(n => n.trim().toLowerCase() === singerLower);
+                } catch (err) { return false; }
+            }
+            return e.singer.toLowerCase() === singerLower;
+        });
+        if (nextEntry && nextEntry.estimated_time) {
+            const est = document.createElement('span');
+            est.className = 'singer-stats-label';
+            est.innerHTML = '<span class="singer-label-key">Next:</span> ~' + nextEntry.estimated_time;
+            info.appendChild(est);
+        }
+    }
+
+    row.appendChild(info);
+
+    const actions = document.createElement('div');
+    actions.className = 'singer-stats-actions';
+    buildSingerActions(actions, singer, row);
+    row.appendChild(actions);
+
+    return row;
+}
+
+function buildSingerActions(actions, singer, row) {
+    const songsBtn = document.createElement('button');
+    songsBtn.className = 'singer-stats-btn';
+    songsBtn.textContent = 'Songs';
+    songsBtn.title = 'Show all songs this singer has queued or sung tonight';
+    songsBtn.onclick = () => toggleSingerSongs(row, singer);
+    actions.appendChild(songsBtn);
+
+    if (singer.status === 'left') {
+        const restoreBtn = document.createElement('button');
+        restoreBtn.className = 'singer-stats-btn';
+        restoreBtn.textContent = 'Restore';
+        restoreBtn.title = 'Bring this singer back \u2014 restore their songs to the queue';
+        restoreBtn.onclick = () => singerAction('restore', { name: singer.name });
+        actions.appendChild(restoreBtn);
         return;
     }
 
-    const order = { active: 0, brb: 1, left: 2, done: 3 };
-    const sorted = [...stats].sort((a, b) => {
-        const oa = order[a.status] ?? 0;
-        const ob = order[b.status] ?? 0;
-        if (oa !== ob) return oa - ob;
-        return 0;
-    });
+    // Edit + Merge + Split available on both active and done
+    const editBtn = document.createElement('button');
+    editBtn.className = 'singer-stats-btn';
+    editBtn.textContent = 'Edit';
+    editBtn.title = 'Rename this singer (fixes typos across all their entries)';
+    editBtn.onclick = () => enterSingerEditMode(row, singer);
+    actions.appendChild(editBtn);
 
-    list.innerHTML = '';
-    sorted.forEach((singer) => {
-        // Done singers still shown (dimmed) so KJ can see who's been through tonight
+    const mergeBtn = document.createElement('button');
+    mergeBtn.className = 'singer-stats-btn';
+    mergeBtn.textContent = 'Merge';
+    mergeBtn.title = 'Merge this singer into another \u2014 use when the same person was added under two different names';
+    mergeBtn.onclick = (ev) => showMergeDropdown(ev, singer);
+    actions.appendChild(mergeBtn);
 
-        const row = document.createElement('div');
-        row.className = 'singer-stats-row';
-        if (singer.status === 'brb') row.classList.add('singer-brb');
-        if (singer.status === 'left') row.classList.add('singer-left');
+    const splitBtn = document.createElement('button');
+    splitBtn.className = 'singer-stats-btn';
+    splitBtn.textContent = 'Split';
+    splitBtn.title = 'Split this singer \u2014 reassign some of their songs to a different name';
+    splitBtn.onclick = () => openSplitModal(singer);
+    actions.appendChild(splitBtn);
 
-        const info = document.createElement('div');
-        info.className = 'singer-stats-info';
+    // BRB only meaningful when there's an active queue
+    if (singer.status !== 'done') {
+        const brbBtn = document.createElement('button');
+        brbBtn.className = 'singer-stats-btn';
+        brbBtn.textContent = singer.status === 'brb' ? 'Back' : 'BRB';
+        brbBtn.title = singer.status === 'brb'
+            ? 'Singer is back \u2014 restore their songs to the active queue'
+            : 'Singer stepped away \u2014 hold all their songs until they return';
+        brbBtn.onclick = () => singerAction('brb', { name: singer.name, brb: singer.status !== 'brb' });
+        actions.appendChild(brbBtn);
+    }
 
-        const name = document.createElement('span');
-        name.className = 'singer-stats-name';
-        name.textContent = singer.name;
-        info.appendChild(name);
+    const leftBtn = document.createElement('button');
+    leftBtn.className = 'singer-stats-btn';
+    leftBtn.textContent = 'Left';
+    leftBtn.title = 'Mark this singer as having left \u2014 hides them from the active list (can be restored).';
+    leftBtn.onclick = () => singerAction('remove', { name: singer.name });
+    actions.appendChild(leftBtn);
+}
 
-        if (singer.has_tipped) {
-            const tip = document.createElement('span');
-            tip.className = 'singer-stats-tip';
-            tip.textContent = ' \u2665';
-            tip.title = 'Tipped tonight';
-            info.appendChild(tip);
-        }
+function toggleSingerSongs(row, singer) {
+    // Toggle: if already open, close it
+    const existing = row.nextElementSibling;
+    if (existing && existing.classList.contains('singer-songs-panel')
+        && existing.dataset.singer === singer.name) {
+        existing.remove();
+        return;
+    }
+    // Close any other open panel
+    document.querySelectorAll('.singer-songs-panel').forEach(p => p.remove());
 
-        // Joined time
-        if (singer.first_added) {
-            const joined = document.createElement('span');
-            joined.className = 'singer-stats-label';
-            const added = new Date(singer.first_added.replace(' ', 'T'));
-            const mins = Math.round((Date.now() - added.getTime()) / 60000);
-            const ago = mins < 60 ? mins + ' mins ago' : Math.floor(mins / 60) + 'h ' + (mins % 60) + 'm ago';
-            joined.innerHTML = '<span class="singer-label-key">Joined:</span> ' + ago;
-            info.appendChild(joined);
-        }
+    const panel = document.createElement('div');
+    panel.className = 'singer-songs-panel';
+    panel.dataset.singer = singer.name;
 
-        // Sung count (color-coded like rotation pills)
-        const sung = document.createElement('span');
-        sung.className = 'singer-stats-label';
-        const sungCount = singer.entries_sung;
-        let pillClass = 'pill-new';
-        if (sungCount === 1) pillClass = 'pill-once';
-        else if (sungCount >= 2 && sungCount <= 4) pillClass = 'pill-few';
-        else if (sungCount >= 5) pillClass = 'pill-many';
-        sung.innerHTML = '<span class="singer-label-key">Sung:</span> <span class="singer-sung-pill ' + pillClass + '">' + sungCount + '</span>';
-        info.appendChild(sung);
+    const entries = singer.entries || [];
+    if (entries.length === 0) {
+        panel.innerHTML = '<div class="singer-songs-empty">No songs recorded for this singer.</div>';
+    } else {
+        const table = document.createElement('table');
+        table.className = 'singer-songs-table';
+        const tbody = document.createElement('tbody');
+        for (const entry of entries) {
+            const tr = document.createElement('tr');
 
-        // Queued count
-        if (singer.entries_waiting > 0) {
-            const queued = document.createElement('span');
-            queued.className = 'singer-stats-label';
-            queued.innerHTML = '<span class="singer-label-key">Queued:</span> ' + singer.entries_waiting;
-            info.appendChild(queued);
-        }
+            const songCell = document.createElement('td');
+            songCell.className = 'singer-songs-song';
+            songCell.textContent = entry.song_artist || '(no song)';
+            tr.appendChild(songCell);
 
-        // Next song time
-        if (singer.entries_waiting > 0) {
-            const singerLower = singer.name.toLowerCase();
-            const nextEntry = rotationData.find(e => {
-                if (e.singers_json) {
-                    try {
-                        const names = JSON.parse(e.singers_json);
-                        return names.some(n => n.trim().toLowerCase() === singerLower);
-                    } catch (err) { return false; }
-                }
-                return e.singer.toLowerCase() === singerLower;
-            });
-            if (nextEntry && nextEntry.estimated_time) {
-                const est = document.createElement('span');
-                est.className = 'singer-stats-label';
-                est.innerHTML = '<span class="singer-label-key">Next:</span> ~' + nextEntry.estimated_time;
-                info.appendChild(est);
+            const statusCell = document.createElement('td');
+            statusCell.className = 'singer-songs-status';
+            const statusLower = (entry.status || '').toLowerCase();
+            const pillClass = statusLower.includes('done') ? 'status-done'
+                : statusLower.includes('left') ? 'status-left'
+                : statusLower.includes('hold') ? 'status-brb'
+                : statusLower.includes('now') ? 'status-singing'
+                : statusLower.includes('next') ? 'status-next'
+                : 'status-waiting';
+            statusCell.innerHTML = '<span class="singer-songs-status-pill ' + pillClass + '">'
+                + (entry.status || 'Waiting') + '</span>';
+            tr.appendChild(statusCell);
+
+            const timeCell = document.createElement('td');
+            timeCell.className = 'singer-songs-time';
+            if (entry.created_at) {
+                const added = new Date(entry.created_at.replace(' ', 'T'));
+                const mins = Math.round((Date.now() - added.getTime()) / 60000);
+                timeCell.textContent = mins < 60 ? mins + 'm ago' : Math.floor(mins / 60) + 'h ' + (mins % 60) + 'm ago';
             }
+            tr.appendChild(timeCell);
+
+            tbody.appendChild(tr);
         }
+        table.appendChild(tbody);
+        panel.appendChild(table);
+    }
 
-        row.appendChild(info);
+    row.parentNode.insertBefore(panel, row.nextSibling);
+}
+function openSplitModal(singer) {
+    document.querySelectorAll('.singer-split-modal-backdrop').forEach(d => d.remove());
 
-        const actions = document.createElement('div');
-        actions.className = 'singer-stats-actions';
+    const entries = singer.entries || [];
+    if (entries.length === 0) {
+        alert('This singer has no entries to split.');
+        return;
+    }
 
-        if (singer.status === 'left') {
-            const restoreBtn = document.createElement('button');
-            restoreBtn.className = 'singer-stats-btn';
-            restoreBtn.textContent = 'Restore';
-            restoreBtn.title = 'Bring this singer back \u2014 restore their songs to the queue';
-            restoreBtn.onclick = () => singerAction('restore', { name: singer.name });
-            actions.appendChild(restoreBtn);
-        } else if (singer.status !== 'done') {
-            const editBtn = document.createElement('button');
-            editBtn.className = 'singer-stats-btn';
-            editBtn.textContent = 'Edit';
-            editBtn.title = 'Rename this singer (fixes typos across all their entries)';
-            editBtn.onclick = () => enterSingerEditMode(row, singer);
-            actions.appendChild(editBtn);
+    const backdrop = document.createElement('div');
+    backdrop.className = 'singer-split-modal-backdrop';
+    backdrop.onclick = (ev) => { if (ev.target === backdrop) backdrop.remove(); };
 
-            const mergeBtn = document.createElement('button');
-            mergeBtn.className = 'singer-stats-btn';
-            mergeBtn.textContent = 'Merge';
-            mergeBtn.title = 'Merge this singer into another \u2014 use when the same person was added under two different names';
-            mergeBtn.onclick = (ev) => showMergeDropdown(ev, singer);
-            actions.appendChild(mergeBtn);
+    const modal = document.createElement('div');
+    modal.className = 'singer-split-modal';
 
-            const brbBtn = document.createElement('button');
-            brbBtn.className = 'singer-stats-btn';
-            brbBtn.textContent = singer.status === 'brb' ? 'Back' : 'BRB';
-            brbBtn.title = singer.status === 'brb'
-                ? 'Singer is back \u2014 restore their songs to the active queue'
-                : 'Singer stepped away \u2014 hold all their songs until they return';
-            brbBtn.onclick = () => singerAction('brb', { name: singer.name, brb: singer.status !== 'brb' });
-            actions.appendChild(brbBtn);
+    const heading = document.createElement('h3');
+    heading.textContent = 'Split "' + singer.name + '"';
+    modal.appendChild(heading);
 
-            const removeBtn = document.createElement('button');
-            removeBtn.className = 'singer-stats-btn';
-            removeBtn.textContent = 'Remove';
-            removeBtn.title = 'Singer is leaving \u2014 remove their songs from the queue (can be restored later)';
-            removeBtn.onclick = () => singerAction('remove', { name: singer.name });
-            actions.appendChild(removeBtn);
+    const help = document.createElement('p');
+    help.className = 'singer-split-help';
+    help.textContent = 'Pick the entries that actually belong to a different person, then give that person a name.';
+    modal.appendChild(help);
+
+    // Entry checkboxes
+    const listWrap = document.createElement('div');
+    listWrap.className = 'singer-split-entries';
+    for (const entry of entries) {
+        const label = document.createElement('label');
+        label.className = 'singer-split-entry';
+
+        const cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.value = String(entry.id);
+        label.appendChild(cb);
+
+        const song = document.createElement('span');
+        song.className = 'singer-split-entry-song';
+        song.textContent = entry.song_artist || '(no song)';
+        label.appendChild(song);
+
+        const status = document.createElement('span');
+        status.className = 'singer-split-entry-status';
+        status.textContent = entry.status || 'Waiting';
+        label.appendChild(status);
+
+        listWrap.appendChild(label);
+    }
+    modal.appendChild(listWrap);
+
+    // Reassign-to pick
+    const formRow = document.createElement('div');
+    formRow.className = 'singer-split-form-row';
+    formRow.innerHTML = '<span class="singer-split-form-label">Reassign selected to:</span>';
+    modal.appendChild(formRow);
+
+    const modeWrap = document.createElement('div');
+    modeWrap.className = 'singer-split-mode';
+
+    const newLabel = document.createElement('label');
+    const newRadio = document.createElement('input');
+    newRadio.type = 'radio';
+    newRadio.name = 'split-mode';
+    newRadio.value = 'new';
+    newRadio.checked = true;
+    newLabel.appendChild(newRadio);
+    newLabel.appendChild(document.createTextNode(' New name: '));
+    const newInput = document.createElement('input');
+    newInput.type = 'text';
+    newInput.className = 'singer-split-new-input';
+    newInput.placeholder = singer.name + ' P';
+    newLabel.appendChild(newInput);
+    modeWrap.appendChild(newLabel);
+
+    const existingLabel = document.createElement('label');
+    const existingRadio = document.createElement('input');
+    existingRadio.type = 'radio';
+    existingRadio.name = 'split-mode';
+    existingRadio.value = 'existing';
+    existingLabel.appendChild(existingRadio);
+    existingLabel.appendChild(document.createTextNode(' Existing singer: '));
+    const existingSelect = document.createElement('select');
+    existingSelect.className = 'singer-split-existing-select';
+    const others = (singerStatsData || [])
+        .filter(s => s.name.toLowerCase() !== singer.name.toLowerCase())
+        .map(s => s.name);
+    if (others.length === 0) {
+        existingRadio.disabled = true;
+    }
+    for (const other of others) {
+        const opt = document.createElement('option');
+        opt.value = other;
+        opt.textContent = other;
+        existingSelect.appendChild(opt);
+    }
+    existingLabel.appendChild(existingSelect);
+    modeWrap.appendChild(existingLabel);
+
+    modal.appendChild(modeWrap);
+
+    // Buttons
+    const buttons = document.createElement('div');
+    buttons.className = 'singer-split-buttons';
+
+    const cancelBtn = document.createElement('button');
+    cancelBtn.className = 'singer-stats-btn';
+    cancelBtn.textContent = 'Cancel';
+    cancelBtn.onclick = () => backdrop.remove();
+    buttons.appendChild(cancelBtn);
+
+    const splitBtn = document.createElement('button');
+    splitBtn.className = 'singer-stats-btn singer-split-confirm';
+    splitBtn.textContent = 'Split';
+    splitBtn.onclick = async () => {
+        const checkedIds = Array.from(listWrap.querySelectorAll('input[type=checkbox]:checked'))
+            .map(cb => parseInt(cb.value, 10));
+        if (checkedIds.length === 0) {
+            alert('Select at least one entry to reassign.');
+            return;
         }
+        const mode = modeWrap.querySelector('input[name=split-mode]:checked').value;
+        const newName = mode === 'new' ? newInput.value.trim() : existingSelect.value;
+        if (!newName) {
+            alert('Enter a new name.');
+            return;
+        }
+        if (newName.toLowerCase() === singer.name.toLowerCase()) {
+            alert('New name must differ from the original.');
+            return;
+        }
+        backdrop.remove();
+        await singerAction('split', {
+            source_name: singer.name,
+            new_name: newName,
+            entry_ids: checkedIds,
+        });
+    };
+    buttons.appendChild(splitBtn);
 
-        row.appendChild(actions);
-        list.appendChild(row);
-    });
+    modal.appendChild(buttons);
+
+    backdrop.appendChild(modal);
+    document.body.appendChild(backdrop);
+    newInput.focus();
 }
 
 async function singerAction(action, data) {

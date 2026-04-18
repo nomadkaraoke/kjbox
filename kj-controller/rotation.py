@@ -228,6 +228,21 @@ class RotationManager:
         self.store.set_singer_status(name, new_status)
         self._after_mutation()
 
+    def mark_singer_left(self, name):
+        """Mark a singer as having left (session-scoped meta flag)."""
+        self.store.mark_singer_left(name)
+        self._after_mutation()
+
+    def unmark_singer_left(self, name):
+        """Remove a singer from the left set."""
+        self.store.unmark_singer_left(name)
+        self._after_mutation()
+
+    def split_singer(self, source_name, new_name, entry_ids):
+        """Reassign specific entries from source_name to new_name."""
+        self.store.split_singer(source_name, new_name, entry_ids)
+        self._after_mutation()
+
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------

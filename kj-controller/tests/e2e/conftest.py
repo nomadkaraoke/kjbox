@@ -43,6 +43,7 @@ def live_server(tmp_path_factory, flask_port):
         "websockify_port": 6080,
         "vnc_target": "localhost:5900",
         "websockify_enabled": False,
+        "rotation_db_path": str(tmp / "rotation.db"),
     }
 
     app = create_app(config=config)

@@ -366,6 +366,8 @@ class RotationStore:
                     singers[key] = {"display_name": name.strip(), "entries": []}
                 singers[key]["entries"].append(entry)
 
+        left_set = self.get_left_singer_names()
+
         result = []
         for key, data in singers.items():
             entries = data["entries"]
@@ -385,6 +387,20 @@ class RotationStore:
             else:
                 status = "active"
 
+            if key in left_set:
+                status = "left"
+
+            trimmed_entries = [
+                {
+                    "id": e["id"],
+                    "song_artist": e["song_artist"],
+                    "status": e["status"],
+                    "position": e["position"],
+                    "created_at": e["created_at"],
+                }
+                for e in entries
+            ]
+
             result.append({
                 "name": data["display_name"],
                 "entries_total": len(entries),
@@ -394,6 +410,7 @@ class RotationStore:
                 "first_added": entries[0]["created_at"],
                 "has_tipped": any(e.get("paid") for e in entries),
                 "status": status,
+                "entries": trimmed_entries,
             })
 
         result.sort(key=lambda s: s["first_added"])
@@ -595,6 +612,14 @@ class RotationStore:
                     )
         conn.commit()
 
+        # Migrate left-singer meta if applicable
+        left = self.get_left_singer_names()
+        old_key = old_name.strip().lower()
+        if old_key in left:
+            left.discard(old_key)
+            left.add(new_name.strip().lower())
+            self._set_left_singer_names(left)
+
     def merge_singers(self, source_name, target_name):
         """Merge source_name into target_name across all entries.
 
@@ -636,6 +661,73 @@ class RotationStore:
                     )
         conn.commit()
 
+        # Drop source from left-singer meta; target's state is untouched
+        self.unmark_singer_left(source_name)
+
+    def split_singer(self, source_name, new_name, entry_ids):
+        """Reassign specific entries from source_name to new_name.
+
+        For multi-singer entries (singers_json set), replace source_name with
+        new_name in the array (case-insensitive match on source_name), preserving
+        other names. If the resulting array has a single name, collapse to the
+        legacy single-singer shape (singers_json = NULL).
+
+        For legacy single-singer entries whose `singer` matches source_name
+        case-insensitively, overwrite singer = new_name.
+
+        Entries whose content doesn't include source_name are silently skipped.
+
+        Raises ValueError if any entry_id is not found.
+        """
+        if not entry_ids:
+            return
+        source_key = source_name.strip().lower()
+        new_name = new_name.strip()
+        conn = self._get_conn()
+
+        for entry_id in entry_ids:
+            existing = self.get_entry(entry_id)
+            if existing is None:
+                raise ValueError(f"Entry {entry_id} not found")
+
+            singers_json_raw = existing.get("singers_json")
+            if singers_json_raw:
+                try:
+                    names = json.loads(singers_json_raw)
+                except (ValueError, TypeError):
+                    names = [existing["singer"]]
+                # Case-insensitive replacement of source with new_name
+                if not any(n.strip().lower() == source_key for n in names):
+                    continue  # source not present; skip
+                new_names = [new_name if n.strip().lower() == source_key else n for n in names]
+                if len(new_names) == 1:
+                    conn.execute(
+                        "UPDATE rotation_entries "
+                        "SET singer = ?, singers_json = NULL, "
+                        "    updated_at = datetime('now', 'localtime') "
+                        "WHERE id = ?",
+                        (new_names[0], entry_id),
+                    )
+                else:
+                    conn.execute(
+                        "UPDATE rotation_entries "
+                        "SET singer = ?, singers_json = ?, "
+                        "    updated_at = datetime('now', 'localtime') "
+                        "WHERE id = ?",
+                        (" & ".join(new_names), json.dumps(new_names), entry_id),
+                    )
+            else:
+                if existing["singer"].strip().lower() != source_key:
+                    continue  # legacy single-singer but name doesn't match
+                conn.execute(
+                    "UPDATE rotation_entries "
+                    "SET singer = ?, updated_at = datetime('now', 'localtime') "
+                    "WHERE id = ?",
+                    (new_name, entry_id),
+                )
+
+        conn.commit()
+
     def set_singer_status(self, singer_name, new_status):
         """Set status for all non-done entries where the singer appears.
 
@@ -664,6 +756,58 @@ class RotationStore:
                     (new_status, entry["id"]),
                 )
         conn.commit()
+
+    # ------------------------------------------------------------------
+    # Left-singers meta (session-scoped list of names who have left)
+    # ------------------------------------------------------------------
+
+    _LEFT_META_KEY = "left_singers_json"
+
+    def get_left_singer_names(self):
+        """Return the set of lowercased singer names marked as 'left'.
+
+        Backed by rotation_meta.left_singers_json. Returns an empty set if
+        the key is unset or unparseable (malformed JSON is treated as empty).
+        """
+        conn = self._get_conn()
+        row = conn.execute(
+            "SELECT value FROM rotation_meta WHERE key = ?",
+            (self._LEFT_META_KEY,),
+        ).fetchone()
+        if row is None or row[0] is None:
+            return set()
+        try:
+            names = json.loads(row[0])
+        except (ValueError, TypeError):
+            return set()
+        return set(names) if isinstance(names, list) else set()
+
+    def _set_left_singer_names(self, names):
+        """Internal: overwrite the left-singers meta list."""
+        conn = self._get_conn()
+        conn.execute(
+            "INSERT OR REPLACE INTO rotation_meta (key, value) VALUES (?, ?)",
+            (self._LEFT_META_KEY, json.dumps(sorted(names))),
+        )
+        conn.commit()
+
+    def mark_singer_left(self, name):
+        """Add a singer name to the left set (case-insensitive, idempotent)."""
+        key = name.strip().lower()
+        if not key:
+            return
+        names = self.get_left_singer_names()
+        names.add(key)
+        self._set_left_singer_names(names)
+
+    def unmark_singer_left(self, name):
+        """Remove a singer name from the left set (case-insensitive, idempotent)."""
+        key = name.strip().lower()
+        if not key:
+            return
+        names = self.get_left_singer_names()
+        names.discard(key)
+        self._set_left_singer_names(names)
 
     # ------------------------------------------------------------------
     # Task 5: Archive and get_all_entries
@@ -701,6 +845,12 @@ class RotationStore:
 
         # Clear rotation
         conn.execute("DELETE FROM rotation_entries")
+
+        # Clear left-singers meta — it's session-scoped
+        conn.execute(
+            "DELETE FROM rotation_meta WHERE key = ?",
+            (self._LEFT_META_KEY,),
+        )
 
         # Reset the AUTOINCREMENT counter so IDs restart cleanly (optional but tidy)
         conn.execute(

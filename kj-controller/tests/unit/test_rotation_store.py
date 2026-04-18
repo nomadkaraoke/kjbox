@@ -885,6 +885,72 @@ class TestGetSingerStats:
         alice = next(s for s in stats if s["name"].lower() == "alice")
         assert alice["status"] == "done"
 
+    def test_done_singer_forced_left_by_meta(self, store):
+        e1 = store.add_entry("Alice")
+        store.update_status(e1["id"], "Done")
+        store.mark_singer_left("Alice")
+        stats = store.get_singer_stats()
+        alice = next(s for s in stats if s["name"].lower() == "alice")
+        assert alice["status"] == "left"
+
+    def test_active_singer_forced_left_by_meta(self, store):
+        store.add_entry("Alice")
+        store.mark_singer_left("Alice")
+        stats = store.get_singer_stats()
+        alice = next(s for s in stats if s["name"].lower() == "alice")
+        assert alice["status"] == "left"
+
+    def test_unmarked_done_singer_stays_done(self, store):
+        e1 = store.add_entry("Alice")
+        store.update_status(e1["id"], "Done")
+        store.mark_singer_left("Alice")
+        store.unmark_singer_left("Alice")
+        stats = store.get_singer_stats()
+        alice = next(s for s in stats if s["name"].lower() == "alice")
+        assert alice["status"] == "done"
+
+    def test_left_meta_case_insensitive_match(self, store):
+        store.add_entry("Kai")
+        store.mark_singer_left("kai")  # lowercase mark
+        stats = store.get_singer_stats()
+        kai = next(s for s in stats if s["name"].lower() == "kai")
+        assert kai["status"] == "left"
+
+    def test_entries_projection_included(self, store):
+        e1 = store.add_entry("Alice", song_artist="Song A")
+        e2 = store.add_entry("Alice", song_artist="Song B")
+        store.update_status(e1["id"], "Done")
+        stats = store.get_singer_stats()
+        alice = next(s for s in stats if s["name"].lower() == "alice")
+        assert "entries" in alice
+        assert len(alice["entries"]) == 2
+        fields = set(alice["entries"][0].keys())
+        assert fields == {"id", "song_artist", "status", "position", "created_at"}
+        # Ordered by created_at (earliest first, same as stat ordering)
+        assert alice["entries"][0]["song_artist"] == "Song A"
+        assert alice["entries"][0]["status"] == "Done"
+        assert alice["entries"][1]["song_artist"] == "Song B"
+        assert alice["entries"][1]["status"] == "Waiting"
+
+    def test_entries_projection_excludes_heavy_fields(self, store):
+        e1 = store.add_entry("Alice", song_artist="Song A", file_path="/some/path.mp3")
+        stats = store.get_singer_stats()
+        alice = next(s for s in stats if s["name"].lower() == "alice")
+        entry = alice["entries"][0]
+        assert "file_path" not in entry
+        assert "download_source" not in entry
+        assert "singers_json" not in entry
+
+    def test_multi_singer_entry_appears_under_each_singer(self, store):
+        e1 = store.add_entry("ignored", singers=["Phil", "Anya"], song_artist="Duet")
+        stats = store.get_singer_stats()
+        phil = next(s for s in stats if s["name"].lower() == "phil")
+        anya = next(s for s in stats if s["name"].lower() == "anya")
+        assert phil["entries"][0]["song_artist"] == "Duet"
+        assert anya["entries"][0]["song_artist"] == "Duet"
+        # Same underlying entry id
+        assert phil["entries"][0]["id"] == anya["entries"][0]["id"]
+
 
 # ---------------------------------------------------------------------------
 # Task 2 (new): Singer action methods
@@ -1040,3 +1106,156 @@ class TestSingersJson:
         assert len(entries) == 1
         assert entries[0]["singers_json"] == '["Phil", "Anya"]'
         assert entries[0]["singer"] == "Phil & Anya"
+
+
+class TestLeftSingersMeta:
+    def test_empty_by_default(self, store):
+        assert store.get_left_singer_names() == set()
+
+    def test_mark_adds_lowercased(self, store):
+        store.mark_singer_left("Kai")
+        assert store.get_left_singer_names() == {"kai"}
+
+    def test_mark_strips_whitespace(self, store):
+        store.mark_singer_left("  Kai  ")
+        assert store.get_left_singer_names() == {"kai"}
+
+    def test_mark_is_idempotent(self, store):
+        store.mark_singer_left("Kai")
+        store.mark_singer_left("kai")
+        store.mark_singer_left("KAI")
+        assert store.get_left_singer_names() == {"kai"}
+
+    def test_mark_multiple_names(self, store):
+        store.mark_singer_left("Kai")
+        store.mark_singer_left("Anya")
+        assert store.get_left_singer_names() == {"kai", "anya"}
+
+    def test_unmark_removes(self, store):
+        store.mark_singer_left("Kai")
+        store.mark_singer_left("Anya")
+        store.unmark_singer_left("Kai")
+        assert store.get_left_singer_names() == {"anya"}
+
+    def test_unmark_is_idempotent(self, store):
+        store.unmark_singer_left("Kai")  # no-op
+        assert store.get_left_singer_names() == set()
+        store.mark_singer_left("Kai")
+        store.unmark_singer_left("Kai")
+        store.unmark_singer_left("Kai")  # second unmark no-op
+        assert store.get_left_singer_names() == set()
+
+    def test_unmark_case_insensitive(self, store):
+        store.mark_singer_left("Kai")
+        store.unmark_singer_left("KAI")
+        assert store.get_left_singer_names() == set()
+
+    def test_persisted_across_get(self, store):
+        store.mark_singer_left("Kai")
+        # Second call reads from DB, not cached state
+        assert store.get_left_singer_names() == {"kai"}
+        assert store.get_left_singer_names() == {"kai"}
+
+    def test_rename_migrates_left_set(self, store):
+        store.add_entry("Kai")
+        store.mark_singer_left("Kai")
+        store.rename_singer("Kai", "Kai P")
+        assert store.get_left_singer_names() == {"kai p"}
+
+    def test_rename_unlisted_singer_no_effect(self, store):
+        store.add_entry("Kai")
+        store.add_entry("Anya")
+        store.mark_singer_left("Anya")
+        store.rename_singer("Kai", "Kai P")
+        assert store.get_left_singer_names() == {"anya"}
+
+    def test_merge_drops_source_from_left_set(self, store):
+        store.add_entry("Kai")
+        store.add_entry("Kai P")
+        store.mark_singer_left("Kai")
+        store.merge_singers("Kai", "Kai P")
+        assert store.get_left_singer_names() == set()
+
+    def test_merge_preserves_target_in_left_set(self, store):
+        store.add_entry("Kai")
+        store.add_entry("Kai P")
+        store.mark_singer_left("Kai P")
+        store.merge_singers("Kai", "Kai P")
+        assert store.get_left_singer_names() == {"kai p"}
+
+    def test_archive_clears_left_set(self, store):
+        store.add_entry("Kai")
+        store.mark_singer_left("Kai")
+        store.archive()
+        assert store.get_left_singer_names() == set()
+
+
+class TestSplitSinger:
+    def test_split_single_singer_entry(self, store):
+        e1 = store.add_entry("Kai", song_artist="Song A")
+        e2 = store.add_entry("Kai", song_artist="Song B")
+        store.split_singer("Kai", "Kai P", [e1["id"]])
+        updated = store.get_entry(e1["id"])
+        assert updated["singer"] == "Kai P"
+        assert updated["singers_json"] is None
+        unchanged = store.get_entry(e2["id"])
+        assert unchanged["singer"] == "Kai"
+
+    def test_split_multi_singer_replaces_within_array(self, store):
+        e1 = store.add_entry("ignored", singers=["Kai", "Anya"])
+        store.split_singer("Kai", "Kai P", [e1["id"]])
+        updated = store.get_entry(e1["id"])
+        import json as _j
+        names = _j.loads(updated["singers_json"])
+        assert names == ["Kai P", "Anya"]
+        assert updated["singer"] == "Kai P & Anya"
+
+    def test_split_multi_to_single_clears_singers_json(self, store):
+        # Entry with just one name in singers_json should collapse to legacy shape
+        e1 = store.add_entry("Kai", singers=["Kai"])
+        store.split_singer("Kai", "Kai P", [e1["id"]])
+        updated = store.get_entry(e1["id"])
+        assert updated["singer"] == "Kai P"
+        assert updated["singers_json"] is None
+
+    def test_split_case_insensitive_source_match(self, store):
+        e1 = store.add_entry("Kai", song_artist="Song A")
+        store.split_singer("kai", "Kai P", [e1["id"]])
+        updated = store.get_entry(e1["id"])
+        assert updated["singer"] == "Kai P"
+
+    def test_split_skips_entries_without_source(self, store):
+        e1 = store.add_entry("Kai", song_artist="Song A")
+        e2 = store.add_entry("Anya", song_artist="Song B")
+        store.split_singer("Kai", "Kai P", [e1["id"], e2["id"]])
+        assert store.get_entry(e1["id"])["singer"] == "Kai P"
+        # e2 untouched because source name wasn't present
+        assert store.get_entry(e2["id"])["singer"] == "Anya"
+
+    def test_split_nonexistent_entry_raises(self, store):
+        with pytest.raises(ValueError, match="not found"):
+            store.split_singer("Kai", "Kai P", [9999])
+
+    def test_split_empty_entry_ids_noop(self, store):
+        e1 = store.add_entry("Kai")
+        store.split_singer("Kai", "Kai P", [])
+        assert store.get_entry(e1["id"])["singer"] == "Kai"
+
+    def test_split_updates_updated_at(self, store):
+        e1 = store.add_entry("Kai")
+        original_updated = store.get_entry(e1["id"])["updated_at"]
+        # Bump time deterministically by forcing a second write
+        import time as _t
+        _t.sleep(1.01)
+        store.split_singer("Kai", "Kai P", [e1["id"]])
+        new_updated = store.get_entry(e1["id"])["updated_at"]
+        assert new_updated != original_updated
+
+    def test_split_preserves_other_entry_fields(self, store):
+        e1 = store.add_entry("Kai", song_artist="Song A", notes="vip")
+        store.update_status(e1["id"], "Done")
+        store.split_singer("Kai", "Kai P", [e1["id"]])
+        updated = store.get_entry(e1["id"])
+        assert updated["song_artist"] == "Song A"
+        assert updated["notes"] == "vip"
+        assert updated["status"] == "Done"

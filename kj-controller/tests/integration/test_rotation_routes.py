@@ -744,6 +744,7 @@ class TestSingerRemoveRoute:
             content_type='application/json')
         assert resp.status_code == 200
         mock_rotation.set_singer_status.assert_called_once_with("Alice", "Left")
+        mock_rotation.mark_singer_left.assert_called_once_with("Alice")
 
 
 class TestSingerRestoreRoute:
@@ -754,3 +755,52 @@ class TestSingerRestoreRoute:
             content_type='application/json')
         assert resp.status_code == 200
         mock_rotation.set_singer_status.assert_called_once_with("Alice", "Waiting")
+        mock_rotation.unmark_singer_left.assert_called_once_with("Alice")
+
+
+class TestSingerSplitRoute:
+    def test_split_success(self, rotation_client, mock_rotation):
+        mock_rotation.get_singer_stats.return_value = []
+        resp = rotation_client.post('/rotation/singer/split',
+            data=json.dumps({
+                "source_name": "Kai",
+                "new_name": "Kai P",
+                "entry_ids": [1, 2],
+            }),
+            content_type='application/json')
+        assert resp.status_code == 200
+        mock_rotation.split_singer.assert_called_once_with("Kai", "Kai P", [1, 2])
+
+    def test_split_missing_source_returns_400(self, rotation_client):
+        resp = rotation_client.post('/rotation/singer/split',
+            data=json.dumps({"new_name": "X", "entry_ids": [1]}),
+            content_type='application/json')
+        assert resp.status_code == 400
+
+    def test_split_missing_new_name_returns_400(self, rotation_client):
+        resp = rotation_client.post('/rotation/singer/split',
+            data=json.dumps({"source_name": "X", "entry_ids": [1]}),
+            content_type='application/json')
+        assert resp.status_code == 400
+
+    def test_split_missing_entry_ids_returns_400(self, rotation_client):
+        resp = rotation_client.post('/rotation/singer/split',
+            data=json.dumps({"source_name": "X", "new_name": "Y"}),
+            content_type='application/json')
+        assert resp.status_code == 400
+
+    def test_split_empty_entry_ids_returns_400(self, rotation_client):
+        resp = rotation_client.post('/rotation/singer/split',
+            data=json.dumps({
+                "source_name": "X", "new_name": "Y", "entry_ids": [],
+            }),
+            content_type='application/json')
+        assert resp.status_code == 400
+
+    def test_split_same_name_returns_400(self, rotation_client):
+        resp = rotation_client.post('/rotation/singer/split',
+            data=json.dumps({
+                "source_name": "Kai", "new_name": "  kai  ", "entry_ids": [1],
+            }),
+            content_type='application/json')
+        assert resp.status_code == 400
