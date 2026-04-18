@@ -600,6 +600,14 @@ class RotationStore:
                     )
         conn.commit()
 
+        # Migrate left-singer meta if applicable
+        left = self.get_left_singer_names()
+        old_key = old_name.strip().lower()
+        if old_key in left:
+            left.discard(old_key)
+            left.add(new_name.strip().lower())
+            self._set_left_singer_names(left)
+
     def merge_singers(self, source_name, target_name):
         """Merge source_name into target_name across all entries.
 
@@ -640,6 +648,9 @@ class RotationStore:
                         (target_name, entry["id"]),
                     )
         conn.commit()
+
+        # Drop source from left-singer meta; target's state is untouched
+        self.unmark_singer_left(source_name)
 
     def set_singer_status(self, singer_name, new_status):
         """Set status for all non-done entries where the singer appears.
@@ -758,6 +769,12 @@ class RotationStore:
 
         # Clear rotation
         conn.execute("DELETE FROM rotation_entries")
+
+        # Clear left-singers meta — it's session-scoped
+        conn.execute(
+            "DELETE FROM rotation_meta WHERE key = ?",
+            (self._LEFT_META_KEY,),
+        )
 
         # Reset the AUTOINCREMENT counter so IDs restart cleanly (optional but tidy)
         conn.execute(

@@ -1120,3 +1120,36 @@ class TestLeftSingersMeta:
         # Second call reads from DB, not cached state
         assert store.get_left_singer_names() == {"kai"}
         assert store.get_left_singer_names() == {"kai"}
+
+    def test_rename_migrates_left_set(self, store):
+        store.add_entry("Kai")
+        store.mark_singer_left("Kai")
+        store.rename_singer("Kai", "Kai P")
+        assert store.get_left_singer_names() == {"kai p"}
+
+    def test_rename_unlisted_singer_no_effect(self, store):
+        store.add_entry("Kai")
+        store.add_entry("Anya")
+        store.mark_singer_left("Anya")
+        store.rename_singer("Kai", "Kai P")
+        assert store.get_left_singer_names() == {"anya"}
+
+    def test_merge_drops_source_from_left_set(self, store):
+        store.add_entry("Kai")
+        store.add_entry("Kai P")
+        store.mark_singer_left("Kai")
+        store.merge_singers("Kai", "Kai P")
+        assert store.get_left_singer_names() == set()
+
+    def test_merge_preserves_target_in_left_set(self, store):
+        store.add_entry("Kai")
+        store.add_entry("Kai P")
+        store.mark_singer_left("Kai P")
+        store.merge_singers("Kai", "Kai P")
+        assert store.get_left_singer_names() == {"kai p"}
+
+    def test_archive_clears_left_set(self, store):
+        store.add_entry("Kai")
+        store.mark_singer_left("Kai")
+        store.archive()
+        assert store.get_left_singer_names() == set()
