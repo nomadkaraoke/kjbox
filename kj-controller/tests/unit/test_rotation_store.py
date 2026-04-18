@@ -885,6 +885,37 @@ class TestGetSingerStats:
         alice = next(s for s in stats if s["name"].lower() == "alice")
         assert alice["status"] == "done"
 
+    def test_done_singer_forced_left_by_meta(self, store):
+        e1 = store.add_entry("Alice")
+        store.update_status(e1["id"], "Done")
+        store.mark_singer_left("Alice")
+        stats = store.get_singer_stats()
+        alice = next(s for s in stats if s["name"].lower() == "alice")
+        assert alice["status"] == "left"
+
+    def test_active_singer_forced_left_by_meta(self, store):
+        store.add_entry("Alice")
+        store.mark_singer_left("Alice")
+        stats = store.get_singer_stats()
+        alice = next(s for s in stats if s["name"].lower() == "alice")
+        assert alice["status"] == "left"
+
+    def test_unmarked_done_singer_stays_done(self, store):
+        e1 = store.add_entry("Alice")
+        store.update_status(e1["id"], "Done")
+        store.mark_singer_left("Alice")
+        store.unmark_singer_left("Alice")
+        stats = store.get_singer_stats()
+        alice = next(s for s in stats if s["name"].lower() == "alice")
+        assert alice["status"] == "done"
+
+    def test_left_meta_case_insensitive_match(self, store):
+        store.add_entry("Kai")
+        store.mark_singer_left("kai")  # lowercase mark
+        stats = store.get_singer_stats()
+        kai = next(s for s in stats if s["name"].lower() == "kai")
+        assert kai["status"] == "left"
+
 
 # ---------------------------------------------------------------------------
 # Task 2 (new): Singer action methods

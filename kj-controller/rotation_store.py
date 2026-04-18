@@ -366,6 +366,8 @@ class RotationStore:
                     singers[key] = {"display_name": name.strip(), "entries": []}
                 singers[key]["entries"].append(entry)
 
+        left_set = self.get_left_singer_names()
+
         result = []
         for key, data in singers.items():
             entries = data["entries"]
@@ -384,6 +386,9 @@ class RotationStore:
                 status = "brb"
             else:
                 status = "active"
+
+            if key in left_set:
+                status = "left"
 
             result.append({
                 "name": data["display_name"],
