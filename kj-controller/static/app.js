@@ -5087,3 +5087,218 @@ document.addEventListener('keyup', (e) => {
         document.querySelectorAll('.rotation-edit-hover').forEach(el => el.classList.remove('rotation-edit-hover'));
     }
 });
+
+// ============================================================================
+// Public Singer Request Form — pending queue + settings modal
+// ============================================================================
+
+const SingRequests = (() => {
+    let pollTimer = null;
+    let pending = [];
+    let config = { token: '', enabled: true, auto_approve: false, public_url: '', local_url: '', pending_count: 0 };
+
+    async function fetchPending() {
+        try {
+            const resp = await fetch('/rotation/requests?status=pending');
+            if (!resp.ok) return;
+            const data = await resp.json();
+            pending = data.requests || [];
+            renderPanel();
+            updateBadge(pending.length);
+        } catch (e) { /* offline is fine */ }
+    }
+
+    async function fetchConfig() {
+        try {
+            const resp = await fetch('/rotation/requests/config');
+            if (!resp.ok) return;
+            config = await resp.json();
+            applyConfigToModal();
+            updateBadge(config.pending_count || 0);
+        } catch (e) { /* offline is fine */ }
+    }
+
+    function updateBadge(count) {
+        const badge = document.getElementById('pending-count-badge');
+        if (!badge) return;
+        if (count > 0) {
+            badge.textContent = String(count);
+            badge.classList.remove('hidden');
+        } else {
+            badge.classList.add('hidden');
+        }
+    }
+
+    function renderPanel() {
+        const panel = document.getElementById('pending-requests-panel');
+        const list = document.getElementById('pending-requests-list');
+        const count = document.getElementById('pending-requests-count');
+        if (!panel || !list) return;
+        if (!pending.length) { panel.classList.add('hidden'); return; }
+        panel.classList.remove('hidden');
+        if (count) count.textContent = String(pending.length);
+        list.innerHTML = '';
+        for (const req of pending) {
+            list.appendChild(renderRow(req));
+        }
+    }
+
+    function renderRow(req) {
+        const row = document.createElement('div');
+        row.className = 'pending-req-row';
+        const song = [req.song_title, req.song_artist].filter(Boolean).join(' — ');
+        row.innerHTML = `
+          <div class="pr-main">
+            <strong>${escapeHtml(req.singer_name)}</strong>
+            <span class="pr-phone">${escapeHtml(req.phone || '')}</span>
+            <span class="pr-song">${escapeHtml(song)}</span>
+            <span class="pr-badge pr-${escapeHtml(req.source_type)}">${escapeHtml(req.source_type)}</span>
+          </div>
+          <div class="pr-actions">
+            <button class="btn-approve" data-id="${req.id}">Approve</button>
+            <button class="btn-edit" data-id="${req.id}">Edit</button>
+            <button class="btn-reject" data-id="${req.id}">Reject</button>
+          </div>
+        `;
+        row.querySelector('.btn-approve').addEventListener('click', () => approve(req.id));
+        row.querySelector('.btn-edit').addEventListener('click', () => editInline(row, req));
+        row.querySelector('.btn-reject').addEventListener('click', () => reject(req.id));
+        return row;
+    }
+
+    async function approve(id) {
+        try {
+            const resp = await fetch(`/rotation/requests/${id}/approve`, { method: 'POST' });
+            if (!resp.ok) {
+                const data = await resp.json().catch(() => ({}));
+                alert('Approval failed: ' + (data.error || resp.statusText));
+                return;
+            }
+        } catch (e) { alert('Approval failed: ' + e.message); return; }
+        await fetchPending();
+        if (typeof fetchRotation === 'function') fetchRotation();
+    }
+
+    async function reject(id) {
+        if (!confirm('Reject this request? The singer will be asked to see the KJ.')) return;
+        await fetch(`/rotation/requests/${id}/reject`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({}),
+        });
+        await fetchPending();
+    }
+
+    function editInline(row, req) {
+        const main = row.querySelector('.pr-main');
+        main.innerHTML = `
+          <input type="text" class="pr-edit-name" value="${escapeHtml(req.singer_name)}">
+          <input type="text" class="pr-edit-artist" value="${escapeHtml(req.song_artist || '')}" placeholder="Artist">
+          <input type="text" class="pr-edit-title" value="${escapeHtml(req.song_title || '')}" placeholder="Title">
+        `;
+        const actions = row.querySelector('.pr-actions');
+        actions.innerHTML = `
+          <button class="btn-save">Save & Approve</button>
+          <button class="btn-cancel">Cancel</button>
+        `;
+        actions.querySelector('.btn-save').addEventListener('click', async () => {
+            const payload = {
+                singer_name: main.querySelector('.pr-edit-name').value.trim(),
+                song_artist: main.querySelector('.pr-edit-artist').value.trim(),
+                song_title: main.querySelector('.pr-edit-title').value.trim(),
+            };
+            const r1 = await fetch(`/rotation/requests/${req.id}/edit`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
+            if (!r1.ok) { alert('Edit failed'); return; }
+            await approve(req.id);
+        });
+        actions.querySelector('.btn-cancel').addEventListener('click', () => renderPanel());
+    }
+
+    function applyConfigToModal() {
+        const eEl = document.getElementById('sing-enabled-toggle');
+        const aEl = document.getElementById('sing-auto-approve-toggle');
+        const pub = document.getElementById('sing-public-url');
+        const loc = document.getElementById('sing-local-url');
+        const qp = document.getElementById('sing-qr-public');
+        const ql = document.getElementById('sing-qr-local');
+        if (eEl) eEl.checked = !!config.enabled;
+        if (aEl) aEl.checked = !!config.auto_approve;
+        if (pub) pub.textContent = config.public_url || '—';
+        if (loc) loc.textContent = config.local_url || '—';
+        const bust = Date.now();
+        if (qp) qp.src = `/rotation/requests/qr.svg?scope=public&cb=${bust}`;
+        if (ql) ql.src = `/rotation/requests/qr.svg?scope=local&cb=${bust}`;
+    }
+
+    async function postConfig(body) {
+        const resp = await fetch('/rotation/requests/config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+        });
+        if (!resp.ok) { alert('Config update failed'); return false; }
+        return true;
+    }
+
+    async function toggleEnabled(checked) {
+        if (await postConfig({ enabled: checked })) await fetchConfig();
+    }
+
+    async function toggleAutoApprove(checked) {
+        if (await postConfig({ auto_approve: checked })) await fetchConfig();
+    }
+
+    async function regenerate() {
+        if (!confirm('Regenerate the event token? The current QR code stops working.')) return;
+        if (await postConfig({ regenerate: true })) await fetchConfig();
+    }
+
+    function copyUrl(scope) {
+        const el = document.getElementById(scope === 'local' ? 'sing-local-url' : 'sing-public-url');
+        if (!el) return;
+        const url = el.textContent.trim();
+        if (!url || url === '—') return;
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(url).catch(() => {});
+        }
+    }
+
+    function openModal() {
+        const m = document.getElementById('sing-requests-modal');
+        if (!m) return;
+        m.classList.remove('hidden');
+        fetchConfig();
+    }
+
+    function closeModal() {
+        const m = document.getElementById('sing-requests-modal');
+        if (m) m.classList.add('hidden');
+    }
+
+    function escapeHtml(s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+        }[c]));
+    }
+
+    function start() {
+        fetchPending();
+        fetchConfig();
+        pollTimer = setInterval(fetchPending, 5000);
+    }
+
+    return { start, openModal, closeModal, toggleEnabled, toggleAutoApprove, regenerate, copyUrl };
+})();
+
+function openSingRequestsModal()   { SingRequests.openModal(); }
+function closeSingRequestsModal()  { SingRequests.closeModal(); }
+function toggleSingEnabled(c)      { SingRequests.toggleEnabled(c); }
+function toggleSingAutoApprove(c)  { SingRequests.toggleAutoApprove(c); }
+function regenerateSingToken()     { SingRequests.regenerate(); }
+function copySingUrl(scope)        { SingRequests.copyUrl(scope); }
+
+window.addEventListener('DOMContentLoaded', () => SingRequests.start());

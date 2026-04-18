@@ -71,8 +71,16 @@
                         <button class="rotation-restore-btn" onclick="restoreFromSheet()" title="Restore rotation from Google Sheet backup (emergency recovery)">Restore</button>
                         <button class="rotation-refresh-btn" onclick="fetchRotation()" title="Refresh the rotation list from the server">Refresh</button>
                         <button class="rotation-add-btn" onclick="toggleRotationAddForm()" title="Add a new singer and song to the rotation queue">+ Add</button>
+                        <button class="rotation-requests-btn" onclick="openSingRequestsModal()" title="Manage public request form (QR, token, kill switch)">Requests <span id="pending-count-badge" class="pending-count-badge hidden">0</span></button>
                         <button class="rotation-new-btn" onclick="archiveRotation()" title="Archive tonight's rotation and start fresh for a new event">New Rotation</button>
                     </div>
+                </div>
+                <div id="pending-requests-panel" class="pending-requests-panel hidden">
+                    <div class="pending-requests-header">
+                        <strong id="pending-requests-title">Pending Requests</strong>
+                        <span id="pending-requests-count" class="pending-requests-count">0</span>
+                    </div>
+                    <div id="pending-requests-list"></div>
                 </div>
                 <div id="rotation-add-form" class="rotation-add-form hidden">
                     <div id="rotation-link-banner" class="rotation-link-banner hidden">
@@ -992,6 +1000,54 @@
                 <span class="download-spinner"></span> Loading status&hellip;
             </div>
             <div id="db-modal-body" class="hidden"></div>
+        </div>
+    </div>
+
+    <!-- Public Singer Requests Modal -->
+    <div id="sing-requests-modal" class="modal-backdrop hidden" onclick="if(event.target===this) closeSingRequestsModal()">
+        <div class="modal-content sing-requests-modal-content">
+            <div class="modal-header">
+                <h3>Public Request Form</h3>
+                <button class="modal-close" onclick="closeSingRequestsModal()">&times;</button>
+            </div>
+            <div class="sing-requests-body">
+                <div class="sing-requests-row">
+                    <label><input type="checkbox" id="sing-enabled-toggle" onchange="toggleSingEnabled(this.checked)"> <strong>Requests enabled</strong></label>
+                    <p class="sing-hint">Uncheck to kill the public form instantly (stays off when sleep mode exits).</p>
+                </div>
+                <div class="sing-requests-row">
+                    <label><input type="checkbox" id="sing-auto-approve-toggle" onchange="toggleSingAutoApprove(this.checked)"> <strong>Auto-approve requests</strong></label>
+                    <p class="sing-hint">Skip the review queue — new requests go straight to the bottom of rotation.</p>
+                </div>
+                <div class="sing-requests-row">
+                    <div class="sing-url-block">
+                        <div><strong>Tunnel URL</strong> (internet):</div>
+                        <div class="sing-url-line">
+                            <code id="sing-public-url" class="sing-url">—</code>
+                            <button class="sing-copy-btn" onclick="copySingUrl('public')">Copy</button>
+                        </div>
+                        <div><strong>Local URL</strong> (venue wifi):</div>
+                        <div class="sing-url-line">
+                            <code id="sing-local-url" class="sing-url">—</code>
+                            <button class="sing-copy-btn" onclick="copySingUrl('local')">Copy</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="sing-requests-row">
+                    <button class="sing-regen-btn" onclick="regenerateSingToken()">Regenerate token</button>
+                    <p class="sing-hint">Invalidates the current QR. Singers already on the confirmation page keep updating.</p>
+                </div>
+                <div class="sing-requests-row sing-qr-row">
+                    <div class="sing-qr-card">
+                        <div>Tunnel QR</div>
+                        <img id="sing-qr-public" class="sing-qr" alt="Public QR">
+                    </div>
+                    <div class="sing-qr-card">
+                        <div>Local QR</div>
+                        <img id="sing-qr-local" class="sing-qr" alt="Local QR">
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 </body>
