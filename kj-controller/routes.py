@@ -2416,6 +2416,7 @@ def remove_singer_route():
         return jsonify({"error": "name is required"}), 400
     try:
         rotation.set_singer_status(name, "Left")
+        rotation.mark_singer_left(name)
         return _singer_action_response(rotation)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -2432,6 +2433,7 @@ def restore_singer_route():
         return jsonify({"error": "name is required"}), 400
     try:
         rotation.set_singer_status(name, "Waiting")
+        rotation.unmark_singer_left(name)
         return _singer_action_response(rotation)
     except Exception as e:
         return jsonify({"error": str(e)}), 500

@@ -744,6 +744,7 @@ class TestSingerRemoveRoute:
             content_type='application/json')
         assert resp.status_code == 200
         mock_rotation.set_singer_status.assert_called_once_with("Alice", "Left")
+        mock_rotation.mark_singer_left.assert_called_once_with("Alice")
 
 
 class TestSingerRestoreRoute:
@@ -754,3 +755,4 @@ class TestSingerRestoreRoute:
             content_type='application/json')
         assert resp.status_code == 200
         mock_rotation.set_singer_status.assert_called_once_with("Alice", "Waiting")
+        mock_rotation.unmark_singer_left.assert_called_once_with("Alice")
