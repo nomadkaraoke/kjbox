@@ -2439,6 +2439,32 @@ def restore_singer_route():
         return jsonify({"error": str(e)}), 500
 
 
+@routes_bp.route('/rotation/singer/split', methods=['POST'])
+def split_singer_route():
+    rotation = current_app.rotation
+    if not hasattr(current_app, 'rotation') or current_app.rotation is None:
+        return jsonify({"error": "Rotation not configured"}), 503
+    data = request.get_json(force=True)
+    source = data.get('source_name', '').strip()
+    new_name = data.get('new_name', '').strip()
+    entry_ids = data.get('entry_ids')
+    if not source:
+        return jsonify({"error": "source_name is required"}), 400
+    if not new_name:
+        return jsonify({"error": "new_name is required"}), 400
+    if not isinstance(entry_ids, list) or not entry_ids:
+        return jsonify({"error": "entry_ids must be a non-empty list"}), 400
+    if source.lower() == new_name.lower():
+        return jsonify({"error": "new_name must differ from source_name"}), 400
+    try:
+        rotation.split_singer(source, new_name, entry_ids)
+        return _singer_action_response(rotation)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @routes_bp.route('/rotation/search', methods=['GET'])
 def rotation_search():
     """Unified search: local catalog + Karaoke Nerds + Divebar cross-reference."""
