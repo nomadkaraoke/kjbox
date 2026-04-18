@@ -1,6 +1,7 @@
 """Tests for the download-and-link rotation endpoint."""
 
 import json
+import time
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -97,6 +98,42 @@ class TestDownloadAndLink:
             assert resp.status_code == 200
             assert resp.get_json()["entry"]["singer"] == "Alice"
 
+    def test_creates_entry_from_singers_array(self, dl_client, dl_app):
+        """Regression: if id is omitted and singers (plural) array is sent
+        instead of singer (singular), the entry is still created. The UI sends
+        `singers` from the pill input, so this must work or the user's entry
+        is silently lost."""
+        with patch('routes.divebar.get_download_url', return_value="https://storage.googleapis.com/test"):
+            resp = dl_client.post('/rotation/download-and-link',
+                data=json.dumps({
+                    "source": "divebar",
+                    "file_id": "abc123",
+                    "filename": "KFN-1234 - Queen - Bohemian Rhapsody.mp4",
+                    "singers": ["Alice"],
+                    "song_artist": "Bohemian Rhapsody - Queen"
+                }),
+                content_type='application/json')
+            assert resp.status_code == 200
+            assert resp.get_json()["entry"]["singer"] == "Alice"
+
+    def test_creates_multi_singer_entry_from_singers_array(self, dl_client, dl_app):
+        """Multi-singer add mode: singers list joined with ' & ' for display."""
+        with patch('routes.divebar.get_download_url', return_value="https://storage.googleapis.com/test"):
+            resp = dl_client.post('/rotation/download-and-link',
+                data=json.dumps({
+                    "source": "youtube",
+                    "youtube_url": "https://youtube.com/watch?v=abc",
+                    "filename": "KV-1 - Queen - Duet.mp4",
+                    "singers": ["Phil", "Anya"],
+                    "song_artist": "Duet Song"
+                }),
+                content_type='application/json')
+            assert resp.status_code == 200
+            entry = resp.get_json()["entry"]
+            assert entry["singer"] == "Phil & Anya"
+            # singers_json persisted so per-singer sung counts work
+            assert entry.get("singers_json") == '["Phil", "Anya"]'
+
     def test_unknown_source_returns_400(self, dl_client, dl_app):
         resp = dl_client.post('/rotation/add',
             data=json.dumps({"singer": "Alice"}),
@@ -107,3 +144,153 @@ class TestDownloadAndLink:
             data=json.dumps({"id": entry_id, "source": "invalid"}),
             content_type='application/json')
         assert resp.status_code == 400
+
+
+class TestRotationDownloadStateSync:
+    """Rotation entry's download_status must mirror the queue item across all
+    transitions (success, failure, cancel, dismiss) so UI actions never get stuck.
+
+    These tests drive the sync helpers directly instead of racing the background
+    download worker thread — the helpers are the contract that the worker and
+    the cancel/ack routes both depend on, and testing them synchronously makes
+    the assertions deterministic.
+    """
+
+    def _setup_rotation_download(self, dl_app, singer="Alice"):
+        """Create a rotation entry + matching download-queue item.
+
+        Mirrors what /rotation/download-and-link does, minus the worker
+        dispatch. Returns (entry_id, queue_item).
+        """
+        entry = dl_app.rotation.add_entry(singer, "Some Song")
+        download_id = f"dl-{singer}"
+        dl_app.rotation.set_download_status(
+            entry["id"], "youtube", "queued", download_id)
+        queue_item = {
+            'id': download_id,
+            'url': 'https://example.com',
+            'title': 'x.mp4',
+            'source': 'youtube',
+            'status': 'queued',
+            'error': None,
+            'rotation_entry_id': entry["id"],
+        }
+        dl_app.download_queue['items'].append(queue_item)
+        return entry["id"], queue_item
+
+    def test_sync_mirrors_downloading(self, dl_app):
+        from routes import _sync_rotation_download
+        entry_id, item = self._setup_rotation_download(dl_app)
+
+        item['status'] = 'downloading'
+        _sync_rotation_download(dl_app, item)
+
+        assert dl_app.rotation.store.get_entry(entry_id)["download_status"] == "downloading"
+
+    def test_sync_mirrors_error_as_failed(self, dl_app):
+        """THE BUG: worker was setting queue item to 'error' but leaving the
+        rotation entry at 'queued' — the UI then hid all action buttons
+        because download_status != 'failed'."""
+        from routes import _sync_rotation_download
+        entry_id, item = self._setup_rotation_download(dl_app)
+
+        item['status'] = 'error'
+        _sync_rotation_download(dl_app, item)
+
+        assert dl_app.rotation.store.get_entry(entry_id)["download_status"] == "failed"
+
+    def test_sync_noop_when_download_id_mismatch(self, dl_app):
+        """A stale item from a previous download must not clobber the entry's
+        current download_id (e.g. when a retry has been queued)."""
+        from routes import _sync_rotation_download
+        entry_id, item = self._setup_rotation_download(dl_app)
+
+        # Simulate a retry: entry now tracks a different download_id.
+        dl_app.rotation.set_download_status(
+            entry_id, "youtube", "queued", "dl-retry")
+
+        # Stale first item's error callback fires late.
+        item['status'] = 'error'
+        _sync_rotation_download(dl_app, item)
+
+        entry = dl_app.rotation.store.get_entry(entry_id)
+        assert entry["download_status"] == "queued"  # unchanged by stale sync
+        assert entry["download_id"] == "dl-retry"
+
+    def test_clear_removes_rotation_download_fields(self, dl_app):
+        from routes import _clear_rotation_download_for_item
+        entry_id, item = self._setup_rotation_download(dl_app)
+
+        _clear_rotation_download_for_item(dl_app, item)
+
+        entry = dl_app.rotation.store.get_entry(entry_id)
+        assert entry["download_status"] is None
+        assert entry["download_id"] is None
+        assert entry["download_source"] is None
+
+    def test_clear_noop_when_download_id_mismatch(self, dl_app):
+        """Dismissing a stale errored item mustn't wipe a fresh retry's state."""
+        from routes import _clear_rotation_download_for_item
+        entry_id, item = self._setup_rotation_download(dl_app)
+        dl_app.rotation.set_download_status(
+            entry_id, "youtube", "queued", "dl-retry")
+
+        _clear_rotation_download_for_item(dl_app, item)
+
+        entry = dl_app.rotation.store.get_entry(entry_id)
+        assert entry["download_status"] == "queued"
+        assert entry["download_id"] == "dl-retry"
+
+    def test_cancel_route_clears_rotation_entry(self, dl_client, dl_app):
+        """POST /download/cancel of a rotation-linked queued item clears
+        the entry's download fields."""
+        entry_id, item = self._setup_rotation_download(dl_app, "Bob")
+
+        resp = dl_client.post('/download/cancel',
+            data=json.dumps({"id": item['id']}),
+            content_type='application/json')
+        assert resp.status_code == 200
+
+        entry = dl_app.rotation.store.get_entry(entry_id)
+        assert entry["download_status"] is None
+        assert entry["download_id"] is None
+
+    def test_ack_route_clears_errored_rotation_entry(self, dl_client, dl_app):
+        """POST /download/ack of a rotation-linked errored item clears the
+        stuck rotation entry (this is the user-initiated escape hatch)."""
+        entry_id, item = self._setup_rotation_download(dl_app, "Carol")
+        # Simulate worker having run: queue item errored, entry marked failed.
+        item['status'] = 'error'
+        dl_app.rotation.set_download_status(
+            entry_id, "youtube", "failed", item['id'])
+
+        resp = dl_client.post('/download/ack',
+            data=json.dumps({"id": item['id']}),
+            content_type='application/json')
+        assert resp.status_code == 200
+
+        entry = dl_app.rotation.store.get_entry(entry_id)
+        assert entry["download_status"] is None
+        assert entry["download_id"] is None
+
+    def test_download_and_link_response_shows_queued_state(self, dl_client, dl_app, mocker):
+        """The route response must reflect the 'queued' state the caller just
+        requested, even though the worker thread may race to transition it."""
+        # Stub out the worker so the response is the only thing under test.
+        mocker.patch('routes._download_worker', lambda app: None)
+        resp = dl_client.post('/rotation/add',
+            data=json.dumps({"singer": "Dave", "song_artist": "Song"}),
+            content_type='application/json')
+        entry_id = resp.get_json()["entry"]["id"]
+
+        resp = dl_client.post('/rotation/download-and-link',
+            data=json.dumps({
+                "id": entry_id, "source": "youtube",
+                "youtube_url": "https://youtube.com/watch?v=x",
+                "filename": "x.mp4",
+            }),
+            content_type='application/json')
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["entry"]["download_status"] == "queued"
+        assert data["entry"]["download_id"] is not None

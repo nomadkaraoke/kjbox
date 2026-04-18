@@ -154,6 +154,60 @@ def handle_upload():
     return jsonify({"success": True, "filename": safe_name, "path": dest})
 
 
+_QUEUE_TO_ROTATION_STATUS = {
+    'queued': 'queued',
+    'downloading': 'downloading',
+    'error': 'failed',
+}
+
+
+def _sync_rotation_download(app, item):
+    """Mirror a download queue item's status onto its linked rotation entry.
+
+    Only touches the entry if its download_id still points at this queue item,
+    so a retry (new download_id) is never overwritten by a late state change
+    from a stale worker iteration.
+    """
+    rotation_entry_id = item.get('rotation_entry_id')
+    if not rotation_entry_id:
+        return
+    rotation = getattr(app, 'rotation', None)
+    if rotation is None:
+        return
+    new_status = _QUEUE_TO_ROTATION_STATUS.get(item.get('status'))
+    if new_status is None:
+        return  # 'completed' is handled by rotation.complete_download
+    try:
+        entry = rotation.store.get_entry(rotation_entry_id)
+        if entry is None or entry.get('download_id') != item.get('id'):
+            return
+        rotation.set_download_status(
+            rotation_entry_id, item.get('source'), new_status, item.get('id'))
+    except Exception:
+        pass  # Best-effort
+
+
+def _clear_rotation_download_for_item(app, item):
+    """Clear rotation entry's download fields when a queue item is removed.
+
+    No-op unless the entry's download_id still matches this queue item's id,
+    so dismissing a stale errored item never clobbers a fresh retry.
+    """
+    rotation_entry_id = item.get('rotation_entry_id')
+    if not rotation_entry_id:
+        return
+    rotation = getattr(app, 'rotation', None)
+    if rotation is None:
+        return
+    try:
+        entry = rotation.store.get_entry(rotation_entry_id)
+        if entry is None or entry.get('download_id') != item.get('id'):
+            return
+        rotation.set_download_status(rotation_entry_id, None, None, None)
+    except Exception:
+        pass  # Best-effort
+
+
 def _download_worker(app):
     """Process queued downloads sequentially until queue is drained."""
     while True:
@@ -166,6 +220,7 @@ def _download_worker(app):
                 app.download_queue['worker_running'] = False
                 return
             next_item['status'] = 'downloading'
+        _sync_rotation_download(app, next_item)
 
         try:
             if next_item.get('source') == 'divebar':
@@ -184,15 +239,19 @@ def _download_worker(app):
                 next_item.update(status='error', error='Download failed',
                                  completed_at=time.time())
 
-        # Auto-link rotation entry if this was a rotation-linked download
-        rotation_entry_id = next_item.get('rotation_entry_id')
-        if rotation_entry_id and file_path and hasattr(app, 'rotation') and app.rotation:
-            try:
-                download_id = next_item.get('id')
-                if download_id:
-                    app.rotation.complete_download(download_id, file_path)
-            except Exception:
-                pass  # Best-effort; entry can be linked manually
+        if file_path:
+            # Auto-link rotation entry if this was a rotation-linked download.
+            # complete_download sets download_status='complete' and links the file.
+            rotation_entry_id = next_item.get('rotation_entry_id')
+            if rotation_entry_id and hasattr(app, 'rotation') and app.rotation:
+                try:
+                    download_id = next_item.get('id')
+                    if download_id:
+                        app.rotation.complete_download(download_id, file_path)
+                except Exception:
+                    pass  # Best-effort; entry can be linked manually
+        else:
+            _sync_rotation_download(app, next_item)  # status='error' → entry 'failed'
 
 
 @routes_bp.route('/download/cancel', methods=['POST'])
@@ -211,6 +270,7 @@ def cancel_download():
         if item['status'] == 'downloading':
             return jsonify({"error": "Cannot cancel an active download"}), 409
         items.remove(item)
+    _clear_rotation_download_for_item(app, item)
     return jsonify({"success": True})
 
 
@@ -220,16 +280,28 @@ def ack_download():
     app = current_app._get_current_object()
     item_id = request.json.get('id') if request.is_json else None
 
+    removed = []
     with app._download_lock:
         items = app.download_queue['items']
         if item_id:
             item = next((i for i in items if i['id'] == item_id), None)
             if item and item['status'] in ('completed', 'error'):
                 items.remove(item)
+                removed.append(item)
         else:
-            app.download_queue['items'] = [
-                i for i in items if i['status'] not in ('completed', 'error')
-            ]
+            kept = []
+            for i in items:
+                if i['status'] in ('completed', 'error'):
+                    removed.append(i)
+                else:
+                    kept.append(i)
+            app.download_queue['items'] = kept
+
+    # Clear stuck rotation state for any errored items we just dismissed.
+    # Completed items already had their rotation state finalised by the worker.
+    for item in removed:
+        if item['status'] == 'error':
+            _clear_rotation_download_for_item(app, item)
     return jsonify({"success": True})
 
 
@@ -1864,6 +1936,66 @@ def _singer_action_response(rotation):
     return jsonify({"success": True, "entries": entries, "singer_stats": singer_stats})
 
 
+def _parse_singer_fields(data):
+    """Parse singer/singers/song_artist fields from a request body.
+
+    Accepts either ``singer`` (legacy single string) or ``singers`` (list of
+    strings). When ``singers`` is provided, a display ``singer`` string is
+    derived as ``" & ".join(...)`` unless one was already supplied.
+
+    Returns ``(singer, singers, song_artist, err)`` where ``err`` is ``None``
+    on success or a ``(flask Response, status_code)`` tuple on validation
+    failure. On success, ``singer`` is non-empty and ``singers`` is either
+    ``None`` or a list of trimmed non-empty strings.
+    """
+    singers = data.get('singers')
+    singer_raw = data.get('singer', '')
+    singer = singer_raw.strip() if isinstance(singer_raw, str) else ''
+    song_artist = data.get('song_artist', '').strip()
+
+    if singers is not None:
+        if not isinstance(singers, list) or not all(isinstance(s, str) for s in singers):
+            return None, None, None, (jsonify({"error": "singers must be a list of strings"}), 400)
+        singers = [s.strip() for s in singers if s.strip()] or None
+        if singers and not singer:
+            singer = " & ".join(singers)
+
+    if not singer:
+        return None, None, None, (jsonify({"error": "singer or singers is required"}), 400)
+
+    return singer, singers, song_artist, None
+
+
+def _resolve_or_create_rotation_entry_id(data, rotation, song_artist_fallback=None):
+    """Return ``(entry_id, err)`` for routes that act on an existing entry or
+    create a new one.
+
+    If ``data['id']`` is provided, validates it as an int and returns it.
+    Otherwise creates a new rotation entry using singer/singers/song_artist
+    fields, with ``song_artist_fallback`` used when no ``song_artist`` was
+    supplied. On validation failure, ``err`` is a ``(Response, status)`` tuple
+    suitable for returning directly from a Flask route.
+    """
+    if data.get('id') is not None:
+        try:
+            return int(data['id']), None
+        except (TypeError, ValueError):
+            return None, (jsonify({"error": "id must be an integer"}), 400)
+
+    if not data.get('singers') and not (isinstance(data.get('singer'), str) and data['singer'].strip()):
+        return None, (jsonify({"error": "id or singer is required"}), 400)
+
+    singer, singers, song_artist, err = _parse_singer_fields(data)
+    if err:
+        return None, err
+
+    if not song_artist and song_artist_fallback:
+        song_artist = song_artist_fallback
+
+    entry = rotation.add_entry(singer, song_artist, singers=singers)
+    return entry["id"], None
+
+
 def _add_time_estimates(entries):
     """Add estimated_time field to each entry based on cumulative durations."""
     from datetime import datetime, timedelta
@@ -2000,23 +2132,15 @@ def add_rotation_entry():
     if not hasattr(current_app, 'rotation') or current_app.rotation is None:
         return jsonify({"error": "Rotation not configured"}), 503
     data = request.get_json(force=True)
-    singers = data.get('singers')
-    singer = data.get('singer', '').strip()
-    song_artist = data.get('song_artist', '').strip()
+    singer, singers, song_artist, err = _parse_singer_fields(data)
+    if err:
+        return err
     notes = data.get('notes', '').strip()
-    if singers:
-        if not isinstance(singers, list) or not all(isinstance(s, str) for s in singers):
-            return jsonify({"error": "singers must be a list of strings"}), 400
-        if not singer:
-            singer = " & ".join(s.strip() for s in singers)
-    if not singer and not singers:
-        return jsonify({"error": "singer or singers is required"}), 400
-
     file_path = data.get('file_path', '').strip() or None
     url_fallback = data.get('url_fallback', '').strip() or None
 
     try:
-        entry = rotation.add_entry(singer, song_artist, notes, file_path=file_path, singers=singers if singers else None)
+        entry = rotation.add_entry(singer, song_artist, notes, file_path=file_path, singers=singers)
         if url_fallback:
             rotation.set_url_fallback(entry["id"], url_fallback)
             entry = rotation.store.get_entry(entry["id"])
@@ -2431,19 +2555,9 @@ def download_and_link_rotation():
             return jsonify({"error": "Download queue is full (max 5)"}), 409
 
     # Get or create rotation entry (only after all validations pass)
-    entry_id = data.get('id')
-    if entry_id is None:
-        singer = data.get('singer', '').strip()
-        song_artist = data.get('song_artist', '').strip()
-        if not singer:
-            return jsonify({"error": "id or singer is required"}), 400
-        entry = rotation.add_entry(singer, song_artist)
-        entry_id = entry["id"]
-
-    try:
-        entry_id = int(entry_id)
-    except (TypeError, ValueError):
-        return jsonify({"error": "id must be an integer"}), 400
+    entry_id, err = _resolve_or_create_rotation_entry_id(data, rotation)
+    if err:
+        return err
 
     from uuid import uuid4
     download_id = str(uuid4())
@@ -2475,22 +2589,22 @@ def download_and_link_rotation():
                 'rotation_entry_id': entry_id,
             }
 
-        # Add to download queue
+        # Update rotation entry with download tracking FIRST so the worker's
+        # sync helpers see the correct download_id when they run. Capture the
+        # snapshot here so the response doesn't race with the worker's own
+        # transitions once we dispatch it.
+        rotation.set_download_status(entry_id, source, "queued", download_id)
+        entry = rotation.store.get_entry(entry_id)
+        entries = rotation.get_rotation()
+
+        # Add to queue and start worker (one lock acquisition).
         with app._download_lock:
             app.download_queue['items'].append(queue_item)
-
-        # Start download worker if not running
-        with app._download_lock:
             if not app.download_queue.get('worker_running'):
                 app.download_queue['worker_running'] = True
                 t = threading.Thread(target=_download_worker, args=(app,), daemon=True)
                 t.start()
 
-        # Update rotation entry with download tracking
-        rotation.set_download_status(entry_id, source, "queued", download_id)
-
-        entry = rotation.store.get_entry(entry_id)
-        entries = rotation.get_rotation()
         _add_time_estimates(entries)
         _add_songs_sung(entries, rotation)
         return jsonify({"success": True, "entry": entry, "entries": entries})
@@ -2517,19 +2631,11 @@ def make_rotation_entry():
         return jsonify({"error": "artist and title are required"}), 400
 
     # Get or create rotation entry
-    entry_id = data.get('id')
-    if entry_id is None:
-        singer = data.get('singer', '').strip()
-        song_artist = data.get('song_artist', '').strip() or f"{title} - {artist}"
-        if not singer:
-            return jsonify({"error": "id or singer is required"}), 400
-        entry = rotation.add_entry(singer, song_artist)
-        entry_id = entry["id"]
-
-    try:
-        entry_id = int(entry_id)
-    except (TypeError, ValueError):
-        return jsonify({"error": "id must be an integer"}), 400
+    entry_id, err = _resolve_or_create_rotation_entry_id(
+        data, rotation, song_artist_fallback=f"{title} - {artist}"
+    )
+    if err:
+        return err
 
     try:
         from gen_client import map_gen_status

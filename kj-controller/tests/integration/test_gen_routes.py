@@ -73,6 +73,25 @@ class TestMakeRotationEntry:
             assert resp.status_code == 200
             assert resp.get_json()["entry"]["singer"] == "Alice"
 
+    def test_make_creates_entry_from_singers_array(self, gen_client, gen_app):
+        """Regression: the UI sends `singers` (plural array) from the pill
+        input when creating a MAKE entry. Must work or the entry is lost."""
+        with patch.object(gen_app.gen_client, 'create_job', return_value={
+            "job_id": "gen-abc123", "status": "pending"
+        }):
+            resp = gen_client.post('/rotation/make',
+                data=json.dumps({
+                    "artist": "Queen", "title": "Bohemian Rhapsody",
+                    "singers": ["Phil", "Anya"]
+                }),
+                content_type='application/json')
+            assert resp.status_code == 200
+            entry = resp.get_json()["entry"]
+            assert entry["singer"] == "Phil & Anya"
+            assert entry.get("singers_json") == '["Phil", "Anya"]'
+            # song_artist fallback: "{title} - {artist}" when not supplied
+            assert entry["song_artist"] == "Bohemian Rhapsody - Queen"
+
     def test_make_missing_artist_returns_400(self, gen_client):
         resp = gen_client.post('/rotation/make',
             data=json.dumps({"title": "Song"}),

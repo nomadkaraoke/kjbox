@@ -180,6 +180,20 @@ async function apiCall(endpoint, body) {
     }
 }
 
+// Wraps apiCall() for rotation mutations: on success, updates rotationData
+// from data.entries and re-renders. Returns true on success, false on any
+// error (HTTP, network, or JSON parse). apiCall() already logs the error.
+async function rotationMutate(endpoint, body) {
+    const data = await apiCall(endpoint, body);
+    if (data === null) return false;
+    if (data.entries) {
+        rotationData = data.entries;
+        renderRotation(rotationData);
+    }
+    return true;
+}
+
+
 // --- Download Queue ---
 
 const _handledDownloads = new Set();
@@ -814,13 +828,17 @@ async function updateStatus() {
             // Track download queue progress
             await handleDownloadQueue(data.download_queue);
 
-            // Check rotation downloads for completion
-            if (data.rotation_downloads) {
-                let needsRotRefresh = false;
-                for (const [entryId, dl] of Object.entries(data.rotation_downloads)) {
-                    if (dl.status === 'completed') needsRotRefresh = true;
-                }
-                if (needsRotRefresh) fetchRotation();
+            // Reconcile rotation downloads. Any change in the rotation-linked
+            // queue slice (new entry, status change, or removal) triggers a
+            // rotation refetch so the stored download_status catches up. The
+            // immediate re-render uses effectiveDownloadStatus() to unlock
+            // action buttons before the refetch completes.
+            const nextRotDls = data.rotation_downloads || {};
+            const rotDlsChanged = rotationDownloadsDiffer(lastRotationDownloads, nextRotDls);
+            lastRotationDownloads = nextRotDls;
+            if (rotDlsChanged) {
+                fetchRotation();
+                renderRotation(rotationData);
             }
 
             // Poll gen job statuses periodically (every 30s via counter)
@@ -3149,6 +3167,44 @@ setInterval(fetchSystemStats, 5000);
 
 let rotationData = [];
 let singerStatsData = [];
+// Map of rotation entry id (as string) → {status, progress, file_path}, mirroring
+// download_queue items that are linked to rotation entries. Refreshed by the
+// status poll. Used to reconcile stale entry.download_status when the worker or
+// user action has already removed/errored the underlying queue item.
+let lastRotationDownloads = {};
+
+// Compute the *effective* download_status for a rotation entry, reconciling
+// the rotation row's stored status against the live download queue. This
+// protects the UI from stale 'queued'/'downloading' rows whose backing queue
+// item has vanished or errored — without it the row's action buttons stay
+// hidden forever, blocking cancel/retry.
+function effectiveDownloadStatus(entry) {
+    const stored = entry.download_status;
+    if (!stored || stored === 'complete' || stored === 'failed') return stored;
+    // stored is 'queued' or 'downloading' — live queue is the source of truth.
+    const dl = lastRotationDownloads[String(entry.id)];
+    if (!dl) return 'failed';  // Queue item gone (cancelled/dismissed)
+    switch (dl.status) {
+        case 'queued':      return 'queued';
+        case 'downloading': return 'downloading';
+        case 'error':       return 'failed';
+        case 'completed':   return 'complete';
+        default:            return stored;
+    }
+}
+
+// Shallow compare two rotation_downloads snapshots by entry id + status, to
+// detect transitions that warrant a rotation refetch (progress %, ignored).
+function rotationDownloadsDiffer(a, b) {
+    const aKeys = Object.keys(a || {});
+    const bKeys = Object.keys(b || {});
+    if (aKeys.length !== bKeys.length) return true;
+    for (const k of aKeys) {
+        if (!(k in b)) return true;
+        if ((a[k] && a[k].status) !== (b[k] && b[k].status)) return true;
+    }
+    return false;
+}
 
 async function fetchRotation() {
     try {
@@ -3376,15 +3432,16 @@ function renderRotation(entries) {
         // Preparation status badge
         const prepBadge = document.createElement('span');
         prepBadge.className = 'rotation-prep-badge';
+        const effDlStatus = effectiveDownloadStatus(entry);
         if (entry.file_path) {
             prepBadge.textContent = 'READY';
             prepBadge.classList.add('prep-ready');
             prepBadge.title = 'Song file linked and ready to play';
-        } else if (entry.download_status === 'queued' || entry.download_status === 'downloading') {
+        } else if (effDlStatus === 'queued' || effDlStatus === 'downloading') {
             prepBadge.textContent = 'DOWNLOADING';
             prepBadge.classList.add(entry.download_source === 'youtube' ? 'prep-downloading-orange' : 'prep-downloading-green');
             prepBadge.title = 'Song is downloading from ' + (entry.download_source || 'source') + ' \u2014 will be ready soon';
-        } else if (entry.download_status === 'failed') {
+        } else if (effDlStatus === 'failed') {
             prepBadge.textContent = 'FAILED';
             prepBadge.classList.add('prep-failed');
             prepBadge.title = 'Download failed \u2014 click the link button to try again';
@@ -3433,13 +3490,30 @@ function renderRotation(entries) {
             playBtn.title = 'Play via browser mode';
             playBtn.onclick = () => { enableBrowserMode(entry.url_fallback); advanceRotationStatus(entry, idx, entries); };
             actions.appendChild(playBtn);
-        } else if (!entry.download_status || entry.download_status === 'failed') {
+        } else if (!effDlStatus || effDlStatus === 'failed') {
             const linkBtn = document.createElement('button');
             linkBtn.className = 'rotation-btn rotation-btn-link';
             linkBtn.textContent = '\uD83D\uDD17';  // 🔗
-            linkBtn.title = 'Search for a matching song file and link it to this entry';
+            linkBtn.title = effDlStatus === 'failed'
+                ? 'Download failed \u2014 search again and link a different file'
+                : 'Search for a matching song file and link it to this entry';
             linkBtn.onclick = () => openLinkSearch(entry.id, entry.song_artist);
             actions.appendChild(linkBtn);
+        } else if (effDlStatus === 'queued' && entry.download_id) {
+            // Cancel button for queued-but-not-yet-active downloads. Can't
+            // cancel 'downloading' — worker has the file open. The backend
+            // will clear the rotation entry's download fields after cancel.
+            const cancelBtn = document.createElement('button');
+            cancelBtn.className = 'rotation-btn rotation-btn-cancel';
+            cancelBtn.textContent = '\u2715';  // ✕
+            cancelBtn.title = 'Cancel this queued download';
+            cancelBtn.onclick = async () => {
+                try {
+                    await apiCall('/download/cancel', { id: entry.download_id });
+                    await fetchRotation();
+                } catch (e) { showRotationIndicator('error'); }
+            };
+            actions.appendChild(cancelBtn);
         }
 
         if (!statusLower.includes('singing') && statusLower !== 'now singing') {
@@ -4462,6 +4536,36 @@ async function selectRotSearchResult(result) {
     rotationHistory.pushUndo(rotationData);
     showRotationIndicator('spin');
 
+    // Build (endpoint, body) for a search result given the identity fields
+    // (either {id} for link mode, or {singers, song_artist} for add mode).
+    const buildCall = (base) => {
+        if (result.type === 'local') {
+            return { endpoint: '/rotation/link', body: { ...base, file_path: result.path } };
+        }
+        if (result.type === 'divebar') {
+            return { endpoint: '/rotation/download-and-link', body: {
+                ...base, source: 'divebar', file_id: result.file_id, filename: result.filename,
+            }};
+        }
+        if (result.type === 'youtube') {
+            return { endpoint: '/rotation/download-and-link', body: {
+                ...base, source: 'youtube', youtube_url: result.youtube_url, filename: result.filename,
+            }};
+        }
+        if (result.type === 'make') {
+            // Parse artist/title from query (try "Title - Artist" or "Artist - Title")
+            const query = result.rawQuery || songInput.value.trim();
+            const parts = query.split(/\s*-\s*/);
+            const makeArtist = parts.length >= 2 ? parts[parts.length - 1] : '';
+            const makeTitle = parts.length >= 2 ? parts.slice(0, -1).join(' - ') : query;
+            return { endpoint: '/rotation/make', body: {
+                ...base, song_artist: query, artist: makeArtist, title: makeTitle,
+            }};
+        }
+        return null;
+    };
+
+    let ok = false;
     try {
         if (linkTargetId) {
             // Link mode: link result to existing rotation entry
@@ -4469,111 +4573,44 @@ async function selectRotSearchResult(result) {
             // Also update the song_artist text to match the linked result
             const newSongArtist = result.song_artist || songInput.value.trim();
             if (newSongArtist) {
-                await fetch('/rotation/edit', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ id: entryId, song_artist: newSongArtist }),
-                });
+                await rotationMutate('/rotation/edit', { id: entryId, song_artist: newSongArtist });
             }
-            if (result.type === 'local') {
-                const resp = await fetch('/rotation/link', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ id: entryId, file_path: result.path }),
-                });
-                const data = await resp.json();
-                if (data.entries) { rotationData = data.entries; renderRotation(rotationData); }
-            } else if (result.type === 'divebar' || result.type === 'youtube') {
-                const body = {
-                    id: entryId,
-                    source: result.type,
-                };
-                if (result.type === 'divebar') {
-                    body.file_id = result.file_id;
-                    body.filename = result.filename;
-                } else {
-                    body.youtube_url = result.youtube_url;
-                    body.filename = result.filename;
-                }
-                const resp = await fetch('/rotation/download-and-link', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify(body),
-                });
-                const data = await resp.json();
-                if (data.entries) { rotationData = data.entries; renderRotation(rotationData); }
-            }
+            const call = buildCall({ id: entryId });
+            if (call) ok = await rotationMutate(call.endpoint, call.body);
         } else {
             // Add mode: create new rotation entry with linked result
             const singers = singerPillInput.getSingers();
-            if (result.type === 'local') {
-                const resp = await fetch('/rotation/add', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({
-                        singers,
-                        song_artist: result.song_artist || songInput.value.trim(),
-                        file_path: result.path,
-                    }),
-                });
-                const data = await resp.json();
-                if (data.entries) { rotationData = data.entries; renderRotation(rotationData); }
-            } else if (result.type === 'divebar' || result.type === 'youtube') {
-                const body = {
-                    singers,
-                    song_artist: result.song_artist || songInput.value.trim(),
-                    source: result.type,
-                };
-                if (result.type === 'divebar') {
-                    body.file_id = result.file_id;
-                    body.filename = result.filename;
-                } else {
-                    body.youtube_url = result.youtube_url;
-                    body.filename = result.filename;
-                }
-                const resp = await fetch('/rotation/download-and-link', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify(body),
-                });
-                const data = await resp.json();
-                if (data.entries) { rotationData = data.entries; renderRotation(rotationData); }
-            } else if (result.type === 'make') {
-                // Parse artist/title from query (try "Title - Artist" or "Artist - Title")
-                const query = result.rawQuery || songInput.value.trim();
-                const parts = query.split(/\s*-\s*/);
-                let makeArtist = parts.length >= 2 ? parts[parts.length - 1] : '';
-                let makeTitle = parts.length >= 2 ? parts.slice(0, -1).join(' - ') : query;
-                const resp = await fetch('/rotation/make', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({
-                        singers,
-                        song_artist: query,
-                        artist: makeArtist,
-                        title: makeTitle,
-                    }),
-                });
-                const data = await resp.json();
-                if (data.entries) { rotationData = data.entries; renderRotation(rotationData); }
-            }
+            const base = {
+                singers,
+                song_artist: result.song_artist || songInput.value.trim(),
+            };
+            const call = buildCall(base);
+            if (call) ok = await rotationMutate(call.endpoint, call.body);
         }
-
-        // Clear form, link mode, and dropdown
-        hideRotSearchDropdown();
-        if (linkTargetId) {
-            exitLinkMode();
-        } else {
-            singerPillInput.clear();
-            if (singerInput) singerInput.value = '';
-            songInput.value = '';
-            // Re-focus singer name for rapid-fire adds
-            if (singerInput) singerInput.focus();
-        }
-        showRotationIndicator('success');
     } catch (e) {
-        showRotationIndicator('error');
+        ok = false;
     }
+
+    if (!ok) {
+        // Server/network error: leave the form populated so the user can
+        // retry without re-typing. apiCall() has already logged the server's
+        // error message.
+        showRotationIndicator('error');
+        return;
+    }
+
+    // Success: clear form and/or exit link mode.
+    hideRotSearchDropdown();
+    if (linkTargetId) {
+        exitLinkMode();
+    } else {
+        singerPillInput.clear();
+        if (singerInput) singerInput.value = '';
+        songInput.value = '';
+        // Re-focus singer name for rapid-fire adds
+        if (singerInput) singerInput.focus();
+    }
+    showRotationIndicator('success');
 }
 
 function hideRotSearchDropdown() {
