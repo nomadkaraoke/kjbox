@@ -2401,3 +2401,76 @@ body {
 .singer-section-active > .singer-section-header {
     border-top: none;
 }
+
+.singer-songs-panel {
+    margin: 0.2rem 0 0.4rem 1rem;
+    padding: 0.4rem 0.6rem;
+    background: rgba(255, 255, 255, 0.03);
+    border-left: 2px solid rgba(255, 255, 255, 0.1);
+    border-radius: 0 4px 4px 0;
+}
+
+.singer-songs-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+}
+
+.singer-songs-table td {
+    padding: 0.15rem 0.4rem;
+    vertical-align: middle;
+}
+
+.singer-songs-song {
+    color: var(--text, #ddd);
+}
+
+.singer-songs-status {
+    width: 90px;
+}
+
+.singer-songs-status-pill {
+    display: inline-block;
+    padding: 1px 6px;
+    border-radius: 8px;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+}
+
+.singer-songs-status-pill.status-done {
+    background: rgba(100, 200, 120, 0.2);
+    color: #8ecc94;
+}
+.singer-songs-status-pill.status-waiting {
+    background: rgba(255, 180, 80, 0.15);
+    color: #e8a85a;
+}
+.singer-songs-status-pill.status-left {
+    background: rgba(200, 100, 100, 0.2);
+    color: #cc8a8a;
+}
+.singer-songs-status-pill.status-brb {
+    background: rgba(150, 150, 200, 0.2);
+    color: #9ea6d0;
+}
+.singer-songs-status-pill.status-singing {
+    background: rgba(100, 200, 180, 0.25);
+    color: #8fd9c8;
+}
+.singer-songs-status-pill.status-next {
+    background: rgba(200, 180, 100, 0.2);
+    color: #c8b664;
+}
+
+.singer-songs-time {
+    width: 80px;
+    text-align: right;
+    color: var(--text-dim, #888);
+    font-size: 0.75rem;
+}
+
+.singer-songs-empty {
+    padding: 0.3rem;
+    color: var(--text-dim, #888);
+    font-style: italic;
+}

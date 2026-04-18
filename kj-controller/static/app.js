@@ -3906,7 +3906,66 @@ function buildSingerActions(actions, singer, row) {
     actions.appendChild(leftBtn);
 }
 
-function toggleSingerSongs(_row, _singer) { /* Task 11 */ }
+function toggleSingerSongs(row, singer) {
+    // Toggle: if already open, close it
+    const existing = row.nextElementSibling;
+    if (existing && existing.classList.contains('singer-songs-panel')
+        && existing.dataset.singer === singer.name) {
+        existing.remove();
+        return;
+    }
+    // Close any other open panel
+    document.querySelectorAll('.singer-songs-panel').forEach(p => p.remove());
+
+    const panel = document.createElement('div');
+    panel.className = 'singer-songs-panel';
+    panel.dataset.singer = singer.name;
+
+    const entries = singer.entries || [];
+    if (entries.length === 0) {
+        panel.innerHTML = '<div class="singer-songs-empty">No songs recorded for this singer.</div>';
+    } else {
+        const table = document.createElement('table');
+        table.className = 'singer-songs-table';
+        const tbody = document.createElement('tbody');
+        for (const entry of entries) {
+            const tr = document.createElement('tr');
+
+            const songCell = document.createElement('td');
+            songCell.className = 'singer-songs-song';
+            songCell.textContent = entry.song_artist || '(no song)';
+            tr.appendChild(songCell);
+
+            const statusCell = document.createElement('td');
+            statusCell.className = 'singer-songs-status';
+            const statusLower = (entry.status || '').toLowerCase();
+            const pillClass = statusLower.includes('done') ? 'status-done'
+                : statusLower.includes('left') ? 'status-left'
+                : statusLower.includes('hold') ? 'status-brb'
+                : statusLower.includes('now') ? 'status-singing'
+                : statusLower.includes('next') ? 'status-next'
+                : 'status-waiting';
+            statusCell.innerHTML = '<span class="singer-songs-status-pill ' + pillClass + '">'
+                + (entry.status || 'Waiting') + '</span>';
+            tr.appendChild(statusCell);
+
+            const timeCell = document.createElement('td');
+            timeCell.className = 'singer-songs-time';
+            if (entry.created_at) {
+                const added = new Date(entry.created_at.replace(' ', 'T'));
+                const mins = Math.round((Date.now() - added.getTime()) / 60000);
+                timeCell.textContent = mins < 60 ? mins + 'm ago' : Math.floor(mins / 60) + 'h ' + (mins % 60) + 'm ago';
+            }
+            tr.appendChild(timeCell);
+
+            tbody.appendChild(tr);
+        }
+        table.appendChild(tbody);
+        panel.appendChild(table);
+    }
+
+    row.parentNode.insertBefore(panel, row.nextSibling);
+}
 function openSplitModal(_singer) { /* Task 12 */ }
 
 async function singerAction(action, data) {
