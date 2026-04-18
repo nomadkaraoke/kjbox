@@ -4205,6 +4205,9 @@ async function addRotationEntry() {
     const songArtist = songInput.value.trim();
     if (singers.length === 0) return;
 
+    // Cancel any pending rotation search so a late response can't pop a stale
+    // dropdown whose Link/DL&Link buttons would no-op (singers already cleared).
+    hideRotSearchDropdown();
     rotationHistory.pushUndo(rotationData);
     showRotationIndicator('spin');
     try {
@@ -4238,6 +4241,10 @@ async function addRotationEntry() {
 let rotSearchTimer = null;
 let rotSearchSelectedIdx = -1;
 let rotSearchResults = [];
+// Bumped whenever a pending search should be discarded (submit, hide, cancel).
+// In-flight fetches capture this at start and must re-check before rendering,
+// so stale responses can't resurrect the dropdown after a save/reset.
+let rotSearchGen = 0;
 
 function initRotationSearch() {
     const songInput = document.getElementById('rotation-song');
@@ -4294,10 +4301,13 @@ function initRotationSearch() {
 }
 
 async function doRotationSearch(query) {
+    const myGen = rotSearchGen;
     try {
         const resp = await fetch('/rotation/search?q=' + encodeURIComponent(query));
+        if (myGen !== rotSearchGen) return;  // superseded (e.g. user pressed Enter to save)
         if (!resp.ok) return;
         const data = await resp.json();
+        if (myGen !== rotSearchGen) return;
         renderRotSearchDropdown(data);
     } catch (e) {
         hideRotSearchDropdown();
@@ -4570,6 +4580,9 @@ function hideRotSearchDropdown() {
     const dropdown = document.getElementById('rotation-search-dropdown');
     if (dropdown) dropdown.classList.add('hidden');
     rotSearchSelectedIdx = -1;
+    // Cancel any pending/in-flight search so a late response can't re-show stale results
+    rotSearchGen++;
+    clearTimeout(rotSearchTimer);
 }
 
 function fmtDur(seconds) {

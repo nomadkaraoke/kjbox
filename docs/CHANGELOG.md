@@ -2,6 +2,14 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-04-17 - Fix: Rotation search race when saving before results render
+
+Fixed a UX bug where pressing Enter (or clicking Add) in the rotation add form before the search-as-you-type dropdown appeared would: save the entry successfully, then pop up a stale dropdown whose Link / DL & Link buttons silently did nothing. Cause: the pending `/rotation/search` fetch resolved after the form was reset, rendering a dropdown with no valid singer context; `selectRotSearchResult()` then returned early because `singerPillInput` was empty.
+
+Fix: added a `rotSearchGen` generation counter bumped by `hideRotSearchDropdown()` (and called from `addRotationEntry()` after validation passes). In-flight fetches capture the generation on dispatch and discard their response if it changed.
+
+- **Version:** `kj-controller` bumped 0.19.2 → 0.19.3
+
 ## 2026-04-16 - Fix: Filler music silent after every karaoke track (NomadPC)
 
 Root-caused and fixed a race where VLC's filler music would go silent after every karaoke track played via the new mpv karaoke pipeline. See [AUDIO.md § Filler Audio Handoff](AUDIO.md#filler-audio-handoff-mpv--vlc) for the full story.
