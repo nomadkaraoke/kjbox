@@ -72,9 +72,109 @@ class TestSingerRemoveRestore:
     def test_remove_and_restore(self, stats_page):
         page = stats_page
         row = page.locator('.singer-stats-row', has_text='StatsTestSinger').first
-        row.locator('.singer-stats-btn', has_text='Remove').click()
-        page.locator('.singer-stats-row.singer-left').first.wait_for(state='visible')
+        row.locator('.singer-stats-btn', has_text='Left').click()
+        # Gone section is collapsed by default — expand it to see the row
+        gone_section = page.locator('.singer-section-gone')
+        gone_section.wait_for(state='visible', timeout=10000)
+        gone_section.locator('.singer-section-header').click()
+        page.locator('.singer-stats-row.singer-left').first.wait_for(state='visible', timeout=10000)
         left_row = page.locator('.singer-stats-row', has_text='StatsTestSinger').first
         left_row.locator('.singer-stats-btn', has_text='Restore').click()
         page.wait_for_timeout(500)
         assert page.locator('.singer-stats-row.singer-left').count() == 0
+
+
+class TestDoneSingerLeftRoundTrip:
+    def test_done_singer_can_be_marked_left_and_restored(self, app_page):
+        page = app_page
+
+        # Add a singer with a song via the UI
+        page.locator('.rotation-add-btn').click()
+        page.locator('#singer-input-container').wait_for(state='visible')
+        page.locator('#rotation-singer').fill('AliceRoundTrip')
+        page.locator('#rotation-singer').press('Enter')
+        page.locator('#rotation-song').fill('Alice Round Trip Song')
+        page.locator('#rotation-add-btn-submit').click()
+        page.locator('.rotation-entry', has_text='AliceRoundTrip').first.wait_for(state='visible')
+
+        # Click Done on the rotation entry
+        entry = page.locator('.rotation-entry', has_text='AliceRoundTrip').first
+        entry.locator('.rotation-btn-done').click()
+
+        # Expand the Done section in singer stats (collapsed by default)
+        done_section = page.locator('.singer-section-done')
+        done_section.wait_for(state='visible', timeout=15000)
+        # Click the header to expand if collapsed
+        done_section.locator('.singer-section-header').click()
+        page.locator('.singer-section-done .singer-stats-row', has_text='AliceRoundTrip').first.wait_for(
+            state='visible', timeout=10000
+        )
+
+        # Click Left to mark the singer as having left
+        done_row = page.locator('.singer-section-done .singer-stats-row', has_text='AliceRoundTrip').first
+        done_row.locator('.singer-stats-btn', has_text='Left').click()
+
+        # Gone section is collapsed by default — expand it to see the row
+        gone_section = page.locator('.singer-section-gone')
+        gone_section.wait_for(state='visible', timeout=10000)
+        gone_section.locator('.singer-section-header').click()
+        page.locator('.singer-stats-row.singer-left', has_text='AliceRoundTrip').first.wait_for(
+            state='visible', timeout=10000
+        )
+
+        # Click Restore to bring Alice back
+        left_row = page.locator('.singer-stats-row.singer-left', has_text='AliceRoundTrip').first
+        left_row.locator('.singer-stats-btn', has_text='Restore').click()
+
+        # Singer should no longer have the singer-left class
+        page.wait_for_timeout(1000)
+        assert page.locator('.singer-stats-row.singer-left', has_text='AliceRoundTrip').count() == 0
+        # Alice should be back in the Done section
+        assert page.locator('.singer-stats-row', has_text='AliceRoundTrip').count() > 0
+
+
+class TestSplitSingerE2E:
+    def test_split_kai_into_kai_p(self, app_page):
+        page = app_page
+
+        # Open the add form once — it stays open after each submit
+        page.locator('.rotation-add-btn').click()
+        page.locator('#singer-input-container').wait_for(state='visible')
+
+        # Add two entries for "KaiSplit"
+        for song in ('KaiSplit Song A', 'KaiSplit Song B'):
+            page.locator('#rotation-singer').fill('KaiSplit')
+            page.locator('#rotation-singer').press('Enter')
+            page.locator('#rotation-song').fill(song)
+            page.locator('#rotation-add-btn-submit').click()
+            page.locator('.rotation-entry', has_text='KaiSplit').last.wait_for(state='visible')
+
+        # Wait for singer stats to show KaiSplit (may be collapsed in Active)
+        kai_stats_row = page.locator('.singer-stats-row', has_text='KaiSplit').first
+        kai_stats_row.wait_for(state='visible', timeout=15000)
+
+        # Click Split on KaiSplit's row in singer stats
+        kai_stats_row.locator('.singer-stats-btn', has_text='Split').click()
+
+        # Split modal should appear
+        page.locator('.singer-split-modal-backdrop').wait_for(state='visible', timeout=5000)
+
+        # Check the checkbox for Song B
+        song_b_label = page.locator('.singer-split-entry', has_text='KaiSplit Song B')
+        song_b_label.locator('input[type=checkbox]').check()
+
+        # Type the new name "KaiSplit P"
+        page.locator('.singer-split-new-input').fill('KaiSplit P')
+
+        # Click the Split confirm button
+        page.locator('.singer-split-confirm').click()
+
+        # Modal should close
+        page.locator('.singer-split-modal-backdrop').wait_for(state='hidden', timeout=5000)
+
+        # Both "KaiSplit" and "KaiSplit P" should appear in singer stats
+        page.locator('.singer-stats-row', has_text='KaiSplit P').first.wait_for(
+            state='visible', timeout=10000
+        )
+        assert page.locator('.singer-stats-name', has_text='KaiSplit').count() > 0
+        assert page.locator('.singer-stats-name', has_text='KaiSplit P').count() > 0
