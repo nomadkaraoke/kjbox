@@ -2,7 +2,7 @@
 
 ## System Overview
 
-KJ Controller is a web-based karaoke show management application. A Flask backend orchestrates mpv (karaoke) and VLC (filler) media player instances and serves a browser-based remote control UI.
+KJ Controller is a web-based karaoke show management application. A Flask backend orchestrates a runtime-swappable karaoke player (mpv **or** VLC) plus a shared VLC filler-music process, and serves a browser-based remote control UI.
 
 ```
 ┌─────────────────┐     HTTP/REST      ┌──────────────────────────────────┐
@@ -10,14 +10,19 @@ KJ Controller is a web-based karaoke show management application. A Flask backen
 │  templates/      │                    │                                  │
 │  index.html      │                    │  app.py (factory + entry point)  │
 └─────────────────┘                    │  routes.py (Blueprint)           │
-                                       │  media.py (MediaIndex)           │
-                                       │  mpv_manager.py (MpvManager)     │
+                                       │  playback.py (Coordinator)       │
+                                       │   ├── filler.py (FillerVLC)      │
+                                       │   └── one of:                    │
+                                       │       ├ mpv_manager.py (Mpv…)    │
+                                       │       └ vlc.py (Vlc…)            │
                                        │  overlay.py (OverlayManager)     │
                                        │  config.py / utils.py            │
                                        │                                  │
                                        │  ┌────────────┐ ┌────────────┐  │
-                                       │  │Karaoke mpv │ │ Filler VLC │  │
-                                       │  │ IPC socket │ │  :8081     │  │
+                                       │  │  Karaoke   │ │ Filler VLC │  │
+                                       │  │ mpv (IPC)  │ │   :8081    │  │
+                                       │  │  or VLC    │ │  (shared)  │  │
+                                       │  │   :8080    │ │            │  │
                                        │  └─────┬──────┘ └─────┬──────┘  │
                                        └────────┼──────────────┼──────────┘
                                                 │              │
@@ -50,11 +55,14 @@ KJ Controller is a web-based karaoke show management application. A Flask backen
 | Module | Lines | Responsibility |
 |--------|-------|----------------|
 | `app.py` | ~70 | `create_app()` factory, `start_app()` entry point |
-| `config.py` | ~70 | Constants, `is_pi()`, `load_config()`, `save_config_value()` |
+| `config.py` | ~70 | Constants, `is_pi()`, `load_config()`, `save_config_value()`, render mode constants |
 | `utils.py` | ~40 | `log_message()`, `sanitize_filename_part()`, `parse_youtube_filename()` |
 | `media.py` | ~310 | `MediaIndex` class: scan, validate, download, delete, list |
-| `mpv_manager.py` | ~480 | `MpvManager` class: mpv karaoke (IPC + rubberband pitch) + VLC filler, play, fade, restart, monitor |
-| `vlc.py` | ~440 | `VLCManager` class (legacy, kept for rollback): launch, command, fade, play, restart, monitor, reconnect |
+| `playback.py` | ~290 | `PlaybackCoordinator`: owns filler + one karaoke player, runtime `switch_renderer()`, facade for routes.py |
+| `karaoke_player.py` | ~90 | `KaraokePlayer` Protocol: contract both renderer backends implement |
+| `filler.py` | ~290 | `FillerVLC`: shared filler-music VLC instance, fade, auto-heal on broken aout |
+| `mpv_manager.py` | ~420 | `MpvKaraokePlayer`: mpv karaoke backend (IPC + rubberband pitch + ALSA-release race fix) |
+| `vlc.py` | ~340 | `VlcKaraokePlayer`: dual-VLC karaoke backend (CDG-compatible) |
 | `chromium.py` | ~160 | `ChromiumManager` class: launch/kill fullscreen Chromium for Browser Mode, PipeWire audio routing |
 | `catalog.py` | ~230 | `ExternalCatalog` class: SQLite FTS5 search over external media |
 | `zip_playback.py` | ~50 | `ZipPlayback` class: CDG+MP3 ZIP extraction for VLC |
@@ -74,7 +82,11 @@ KJ Controller is a web-based karaoke show management application. A Flask backen
 ### Dependency Flow
 
 ```
-app.py → config.py, media.py, mpv_manager.py, chromium.py, catalog.py, zip_playback.py, overlay.py, sleep_mode.py, routes.py, utils.py
+app.py → config.py, media.py, playback.py, chromium.py, catalog.py, zip_playback.py, overlay.py, sleep_mode.py, routes.py, utils.py
+playback.py → config.py, filler.py, karaoke_player.py, mpv_manager.py, vlc.py, utils.py
+filler.py → config.py, utils.py (requests)
+karaoke_player.py → (stdlib typing)
+mpv_manager.py → config.py, filler.py, utils.py (socket for IPC)
 routes.py → config.py, utils.py, divebar, karaoke_nerds, youtube_search, youtube_health, psutil (accesses media/vlc/catalog/zip_playback/overlay_manager via current_app)
 divebar.py → config.py (requests)
 sleep_mode.py → config.py, utils.py (subprocess for shell scripts)
@@ -97,10 +109,12 @@ utils.py → (stdlib only)
 |-------|-------|-----------------|
 | Config dict | `app.kj_config` | `current_app.kj_config` |
 | Media index | `MediaIndex.index` | `current_app.media` |
-| Player processes | `MpvManager.processes` | `current_app.vlc` |
-| Playback state | `MpvManager` attributes | `current_app.vlc` |
-| Audio device | `MpvManager.audio_device` | `current_app.vlc` |
-| Pitch offset | `MpvManager.pitch_semitones` | `current_app.vlc` |
+| Player processes | `PlaybackCoordinator.processes` (proxies filler + active player) | `current_app.vlc` |
+| Active renderer | `PlaybackCoordinator.render_mode` (persisted to config.json) | `current_app.vlc` |
+| Playback state | `KaraokePlayer` attributes on the active player | `current_app.vlc` |
+| Audio device | Set on both `FillerVLC` and active player | `current_app.vlc.audio_device` |
+| Pitch offset | `MpvKaraokePlayer.pitch_semitones` (0 on VLC) | `current_app.vlc.pitch_semitones` |
+| Filler track | `FillerVLC.current_track` | `current_app.vlc.current_filler_track` |
 | External catalog | `ExternalCatalog` (SQLite DB) | `current_app.catalog` |
 | ZIP extraction | `ZipPlayback._temp_dir` | `current_app.zip_playback` |
 | Overlay configs | `OverlayManager` (overlays.json) | `current_app.overlay_manager` |
@@ -119,9 +133,11 @@ utils.py → (stdlib only)
 | POST | `/download` | Start async YouTube download via yt-dlp (returns immediately) |
 | POST | `/download/ack` | Acknowledge download completion (resets state to idle) |
 | POST | `/play` | Play a media file (path validated) |
-| POST | `/pitch` | Set karaoke pitch offset in semitones (-6 to +6) |
+| POST | `/pitch` | Set karaoke pitch offset in semitones (-6 to +6, mpv only) |
+| GET | `/renderer` | Get active karaoke renderer and capabilities |
+| POST | `/renderer` | Switch karaoke renderer (`{mode: "mpv" \| "vlc"}`); 409 while karaoke is active |
 | POST | `/seek` | Seek to position in karaoke video |
-| POST | `/control` | Playback control (pause_resume, restart, stop) |
+| POST | `/control` | Playback control (pause_resume, restart, stop, fadeout) |
 | POST | `/volume` | Set volume for karaoke or filler |
 | GET | `/media` | List all indexed media files |
 | POST | `/delete` | Delete a downloaded media file |
@@ -187,8 +203,14 @@ utils.py → (stdlib only)
 ### App Factory Pattern
 `create_app(config=None)` creates a fresh Flask app with injected services. Tests use `create_app(config=test_config)` for isolation without `importlib.reload` hacks. This matches the pattern used by karaoke-decide.
 
-### mpv Karaoke + VLC Filler
-Karaoke playback uses mpv with the rubberband audio filter for real-time pitch shifting (key change). Filler music uses VLC with its HTTP interface. Both are managed by `MpvManager`. The filler instance is stopped entirely during karaoke playback to release exclusive HDMI audio access (ALSA limitation).
+### Swappable Karaoke Renderer + Shared Filler
+Karaoke playback happens on one of two backends, swappable at runtime from the AV Output modal:
+- **`MpvKaraokePlayer`** (default) — mpv + rubberband audio filter for real-time pitch shifting (±6 semitones).
+- **`VlcKaraokePlayer`** — dedicated VLC on port 8080, native CDG rendering, no pitch shift.
+
+Filler music is always a single VLC process on port 8081, owned by `FillerVLC` and shared across renderer swaps so filler keeps playing when the KJ toggles engines. The exclusive-HDMI handoff is the same either way: filler `pl_stop` → karaoke plays → karaoke player `ensure_released()` → filler fade-in.
+
+`PlaybackCoordinator` is the facade `routes.py` talks to; it holds the filler + one karaoke player and rejects `switch_renderer()` with HTTP 409 while karaoke is active. Render mode persists to `config.json` (`render_mode: mpv | vlc`).
 
 ### mpv IPC Control
 mpv is controlled via a JSON IPC socket (`/tmp/mpv-karaoke.sock`). Commands are sent as newline-terminated JSON objects. mpv runs in `--idle` mode (stays alive between songs) and pushes `end-file` events when a song finishes. The rubberband filter is pre-loaded as a labeled filter (`--af=@rb:rubberband`) so pitch can be changed mid-song via `af-command rb set-pitch <scale>` without reinserting the filter chain.
@@ -202,12 +224,18 @@ The filler VLC instance is controlled via its built-in HTTP interface (`--extrai
 ### MediaIndex Class
 A stateful class holding the index dict, with methods for scan, validate, download, and delete. The persistent JSON index (`media_index.json`) avoids rescanning the filesystem on every request. YouTube metadata (duration, upload_date) is preserved across rescans.
 
-### MpvManager Class
-A stateful class holding process handles, volume levels, pitch state, and playback state. All operations are no-ops when `enabled=False` (non-Pi environments), enabling safe dev mode.
+### PlaybackCoordinator + KaraokePlayer Protocol
+Three classes collaborate:
 
-mpv and VLC processes are launched in their own session (`start_new_session=True`) and survive kj-controller restarts. On startup, `try_reconnect()` probes the mpv IPC socket and VLC HTTP port — if existing instances respond, it skips launching new ones and recovers playback state. The systemd unit uses `KillMode=process` so only the Python process is killed on restart, not player children.
+- **`PlaybackCoordinator`** is what `current_app.vlc` points at. It owns a `FillerVLC` and exactly one `KaraokePlayer`. Most of the old `VLCManager` surface (play_video, seek_karaoke, set_pitch, restart_instances, …) is preserved as passthrough so `routes.py` was barely touched.
+- **`KaraokePlayer` protocol** (`karaoke_player.py`) formalises what every renderer backend must provide: `play`, `stop`, `seek`, `pause_resume`, `set_volume`, `set_pitch`, `fadeout`, `ensure_released`, `get_status`, `monitor`, `try_reconnect`, `shutdown`, plus `name`, `supports_pitch`, `supports_cdg`, `active`, and related state.
+- **`FillerVLC`** (`filler.py`) owns the shared filler-music process. Its `fade_in()` spawns an auto-heal thread that detects the "aout dead" failure mode (decoder running, no audio reaching the device — see `docs/AUDIO.md § Filler Audio Handoff`) and relaunches the VLC process to recover.
 
-**Volume scale:** The UI and config use VLC's 0-512 scale (256 = 100%). MpvManager converts to mpv's 0-100+ scale at the boundary. This avoids changing the UI, config values, or filler VLC behavior.
+Both player processes are launched with `start_new_session=True` and survive kj-controller restarts. `try_reconnect()` on each probes the mpv IPC socket / VLC HTTP port — if an existing instance responds, launch is skipped and playback state recovered. The systemd unit uses `KillMode=process` so only the Python process is killed on restart, not the player children.
+
+**Volume scale:** UI and config use VLC's 0-512 scale (256 = 100%). `MpvKaraokePlayer` converts to mpv's 0-100+ scale at the boundary so neither the UI nor filler VLC has to care.
+
+**ALSA release race fix:** `MpvKaraokePlayer.ensure_released()` sends `stop` over IPC and polls `idle-active` before returning — this closes a race where mpv's `end-file` event fires ~350ms before the ALSA device is actually released, which would starve the filler VLC on re-open. Documented in `docs/AUDIO.md`.
 
 ### Platform Detection
 `is_pi()` checks for `/boot/dietpi.txt`. On non-Pi platforms, VLC is disabled and the app runs in dev mode (web UI + media scanning only).

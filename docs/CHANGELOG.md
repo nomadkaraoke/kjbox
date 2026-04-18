@@ -2,6 +2,25 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-04-17 - Feature: Runtime-swappable karaoke renderer (mpv / VLC)
+
+The KJ can now switch karaoke engines at runtime from the AV Output modal. mpv is the default (pitch-shift supported); VLC is the fallback if a specific file or quirk doesn't render on the current engine. Switching is rejected during active karaoke playback (HTTP 409). Filler music stays uninterrupted across the swap. See [AUDIO.md § Karaoke Renderer Toggle](AUDIO.md#karaoke-renderer-toggle).
+
+**Architecture refactor** ([plan](archive/2026-04-17-renderer-toggle-plan.md)):
+- Extracted ~110 lines of duplicated filler-VLC logic into a single `FillerVLC` class shared across renderer swaps — single owner of port-8081 VLC, its audio backend, and the auto-heal on broken aout.
+- Added `KaraokePlayer` Protocol formalising the contract both backends satisfy.
+- Added `PlaybackCoordinator` facade that owns the filler + one karaoke player at a time. `switch_renderer()` tears down the old player and builds the new; filler untouched.
+- `audio_monitor.py` now talks to the coordinator instead of poking mpv internals directly.
+- Fixed a latent crash in `routes.py`'s fadeout action that called mpv-only methods on what would be a `VLCManager` after the previous rollback.
+
+**New endpoints:** `GET /renderer`, `POST /renderer {mode}`. `GET /status` now includes a `renderer` block with capability flags.
+
+**UI:** renderer radios in the AV Output modal; small engine badge ("MPV"/"VLC") in the Now Playing bar; pitch controls auto-hide when the active engine doesn't support pitch.
+
+**Version:** `kj-controller` bumped 0.19.3 → 0.20.0 (minor — new feature + facing API surface).
+
+**Test coverage:** 1185 tests pass (874 unit + 311 integration). New modules: `test_filler.py` (36), `test_mpv_karaoke_player.py` (25), `test_vlc_karaoke_player.py` (20), `test_playback_coordinator.py` (30), `test_karaoke_player_protocol.py` (10 parametric), `test_renderer_routes.py` (6). Obsolete `test_vlc.py` / `test_mpv_manager.py` / `test_vlc_reconnect.py` removed; their value migrated to the new files.
+
 ## 2026-04-17 - Fix: Rotation search race when saving before results render
 
 Fixed a UX bug where pressing Enter (or clicking Add) in the rotation add form before the search-as-you-type dropdown appeared would: save the entry successfully, then pop up a stale dropdown whose Link / DL & Link buttons silently did nothing. Cause: the pending `/rotation/search` fetch resolved after the form was reset, rendering a dropdown with no valid singer context; `selectRotSearchResult()` then returned early because `singerPillInput` was empty.

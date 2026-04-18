@@ -100,23 +100,42 @@ If HDMI audio stops working after reboot:
    ```
    If this fails with "Device or resource busy", PipeWire has the device — see step 1.
 
-### Filler Audio Handoff (mpv ↔ VLC)
+### Karaoke Renderer Toggle
 
-The KJ Controller runs **two audio clients** that take turns on the same exclusive HDMI ALSA device (`hdmiout` → `hw:0,N`):
+Karaoke playback uses one of two engines at runtime, swappable from the AV Output modal:
 
-- **mpv** — plays the karaoke video (with rubberband pitch shifting, `--ao=alsa`)
-- **VLC** — plays filler music between songs (`--aout alsa --alsa-audio-device hdmiout`)
+| Engine | Path | Pitch shift | Notes |
+|---|---|---|---|
+| **mpv** (default) | `MpvKaraokePlayer` | ±6 semitones (rubberband) | IPC socket `/tmp/mpv-karaoke.sock` |
+| **VLC** | `VlcKaraokePlayer` | none | Dedicated VLC on :8080, fullscreen |
 
-Only one can hold `hw:0,N` at a time. The handoff dance on every track is:
+Filler music is always a single shared VLC on :8081 — it keeps playing while the KJ flips the toggle. `POST /renderer {mode: "mpv" | "vlc"}` switches engines; **rejected with HTTP 409 during active karaoke playback** (stop first).
+
+Render mode persists to `config.json` (`render_mode: mpv`) and survives service restarts. See `docs/ARCHITECTURE.md § PlaybackCoordinator + KaraokePlayer Protocol` for the code-side architecture.
+
+Use the toggle as an escape hatch if a specific file (or environmental quirk) misbehaves on one engine. Both engines support CDG+MP3 rendering in principle — in practice, there may be per-file differences worth testing.
+
+### Filler Audio Handoff (karaoke engine ↔ VLC filler)
+
+The KJ Controller always has **two audio clients** taking turns on the same exclusive HDMI ALSA device (`hdmiout` → `hw:0,N`):
+
+- **Karaoke engine** — either mpv (`--ao=alsa`, rubberband pitch shift) or VLC on :8080 (`--aout alsa`, fullscreen)
+- **Filler VLC** — always present, plays filler music between songs (`--aout alsa --alsa-audio-device hdmiout`)
+
+Only one can hold `hw:0,N` at a time. The handoff on every track:
 
 ```
-filler playing (VLC) → user hits Play →
-  fade_out_filler: fade VLC volume to 0 → pl_stop → VLC releases ALSA
-  → mpv loadfile → mpv opens ALSA, plays karaoke
-  → karaoke ends → mpv end-file event
-  → _wait_for_mpv_idle: mpv stop + poll idle-active → mpv releases ALSA
-  → fade_in_filler: VLC pl_play → VLC re-opens ALSA, fades up
+filler playing → user hits Play →
+  filler.fade_out: fade volume to 0 → pl_stop → filler releases ALSA
+  → player.play → karaoke engine opens ALSA, plays karaoke
+  → karaoke ends → engine fires EOF
+  → player.ensure_released → engine fully idle, ALSA released
+  → filler.fade_in → filler re-opens ALSA, fades up
 ```
+
+The specifics of `ensure_released` depend on the active engine:
+- **mpv:** sends `stop` over IPC and polls `idle-active` because mpv emits the `end-file` event ~350ms before it actually closes ALSA. Without this the filler races into "Device or resource busy" and dies silently. (See the next section.)
+- **VLC:** sends `pl_stop` + `pl_empty`, polls state=stopped.
 
 #### The mpv → VLC race (fixed 2026-04-16)
 
