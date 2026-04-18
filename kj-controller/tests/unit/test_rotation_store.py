@@ -1153,3 +1153,74 @@ class TestLeftSingersMeta:
         store.mark_singer_left("Kai")
         store.archive()
         assert store.get_left_singer_names() == set()
+
+
+class TestSplitSinger:
+    def test_split_single_singer_entry(self, store):
+        e1 = store.add_entry("Kai", song_artist="Song A")
+        e2 = store.add_entry("Kai", song_artist="Song B")
+        store.split_singer("Kai", "Kai P", [e1["id"]])
+        updated = store.get_entry(e1["id"])
+        assert updated["singer"] == "Kai P"
+        assert updated["singers_json"] is None
+        unchanged = store.get_entry(e2["id"])
+        assert unchanged["singer"] == "Kai"
+
+    def test_split_multi_singer_replaces_within_array(self, store):
+        e1 = store.add_entry("ignored", singers=["Kai", "Anya"])
+        store.split_singer("Kai", "Kai P", [e1["id"]])
+        updated = store.get_entry(e1["id"])
+        import json as _j
+        names = _j.loads(updated["singers_json"])
+        assert names == ["Kai P", "Anya"]
+        assert updated["singer"] == "Kai P & Anya"
+
+    def test_split_multi_to_single_clears_singers_json(self, store):
+        # Entry with just one name in singers_json should collapse to legacy shape
+        e1 = store.add_entry("Kai", singers=["Kai"])
+        store.split_singer("Kai", "Kai P", [e1["id"]])
+        updated = store.get_entry(e1["id"])
+        assert updated["singer"] == "Kai P"
+        assert updated["singers_json"] is None
+
+    def test_split_case_insensitive_source_match(self, store):
+        e1 = store.add_entry("Kai", song_artist="Song A")
+        store.split_singer("kai", "Kai P", [e1["id"]])
+        updated = store.get_entry(e1["id"])
+        assert updated["singer"] == "Kai P"
+
+    def test_split_skips_entries_without_source(self, store):
+        e1 = store.add_entry("Kai", song_artist="Song A")
+        e2 = store.add_entry("Anya", song_artist="Song B")
+        store.split_singer("Kai", "Kai P", [e1["id"], e2["id"]])
+        assert store.get_entry(e1["id"])["singer"] == "Kai P"
+        # e2 untouched because source name wasn't present
+        assert store.get_entry(e2["id"])["singer"] == "Anya"
+
+    def test_split_nonexistent_entry_raises(self, store):
+        with pytest.raises(ValueError, match="not found"):
+            store.split_singer("Kai", "Kai P", [9999])
+
+    def test_split_empty_entry_ids_noop(self, store):
+        e1 = store.add_entry("Kai")
+        store.split_singer("Kai", "Kai P", [])
+        assert store.get_entry(e1["id"])["singer"] == "Kai"
+
+    def test_split_updates_updated_at(self, store):
+        e1 = store.add_entry("Kai")
+        original_updated = store.get_entry(e1["id"])["updated_at"]
+        # Bump time deterministically by forcing a second write
+        import time as _t
+        _t.sleep(1.01)
+        store.split_singer("Kai", "Kai P", [e1["id"]])
+        new_updated = store.get_entry(e1["id"])["updated_at"]
+        assert new_updated != original_updated
+
+    def test_split_preserves_other_entry_fields(self, store):
+        e1 = store.add_entry("Kai", song_artist="Song A", notes="vip")
+        store.update_status(e1["id"], "Done")
+        store.split_singer("Kai", "Kai P", [e1["id"]])
+        updated = store.get_entry(e1["id"])
+        assert updated["song_artist"] == "Song A"
+        assert updated["notes"] == "vip"
+        assert updated["status"] == "Done"

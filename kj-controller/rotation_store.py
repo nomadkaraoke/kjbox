@@ -652,6 +652,70 @@ class RotationStore:
         # Drop source from left-singer meta; target's state is untouched
         self.unmark_singer_left(source_name)
 
+    def split_singer(self, source_name, new_name, entry_ids):
+        """Reassign specific entries from source_name to new_name.
+
+        For multi-singer entries (singers_json set), replace source_name with
+        new_name in the array (case-insensitive match on source_name), preserving
+        other names. If the resulting array has a single name, collapse to the
+        legacy single-singer shape (singers_json = NULL).
+
+        For legacy single-singer entries whose `singer` matches source_name
+        case-insensitively, overwrite singer = new_name.
+
+        Entries whose content doesn't include source_name are silently skipped.
+
+        Raises ValueError if any entry_id is not found.
+        """
+        if not entry_ids:
+            return
+        source_key = source_name.strip().lower()
+        new_name = new_name.strip()
+        conn = self._get_conn()
+
+        for entry_id in entry_ids:
+            existing = self.get_entry(entry_id)
+            if existing is None:
+                raise ValueError(f"Entry {entry_id} not found")
+
+            singers_json_raw = existing.get("singers_json")
+            if singers_json_raw:
+                try:
+                    names = json.loads(singers_json_raw)
+                except (ValueError, TypeError):
+                    names = [existing["singer"]]
+                # Case-insensitive replacement of source with new_name
+                if not any(n.strip().lower() == source_key for n in names):
+                    continue  # source not present; skip
+                new_names = [new_name if n.strip().lower() == source_key else n for n in names]
+                if len(new_names) == 1:
+                    conn.execute(
+                        "UPDATE rotation_entries "
+                        "SET singer = ?, singers_json = NULL, "
+                        "    updated_at = datetime('now', 'localtime') "
+                        "WHERE id = ?",
+                        (new_names[0], entry_id),
+                    )
+                else:
+                    conn.execute(
+                        "UPDATE rotation_entries "
+                        "SET singer = ?, singers_json = ?, "
+                        "    updated_at = datetime('now', 'localtime') "
+                        "WHERE id = ?",
+                        (" & ".join(new_names), json.dumps(new_names), entry_id),
+                    )
+            else:
+                if existing["singer"].strip().lower() != source_key:
+                    continue  # legacy single-singer but name doesn't match
+                conn.execute(
+                    "UPDATE rotation_entries "
+                    "SET singer = ?, updated_at = datetime('now', 'localtime') "
+                    "WHERE id = ?",
+                    (new_name, entry_id),
+                )
+
+        conn.commit()
+
     def set_singer_status(self, singer_name, new_status):
         """Set status for all non-done entries where the singer appears.
 
