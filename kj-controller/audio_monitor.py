@@ -20,8 +20,11 @@ STREAM_CHUNK_SIZE = 4096
 class AudioMonitor:
     """Captures HDMI audio via PipeWire/ffmpeg and serves it as an MP3 stream."""
 
-    def __init__(self, mpv_manager, config=None):
-        self.mpv = mpv_manager
+    def __init__(self, coordinator, config=None):
+        # Param name kept as `coordinator` to signal the API contract; also
+        # aliased as `self.mpv` for legacy readability.
+        self.coordinator = coordinator
+        self.mpv = coordinator  # Legacy alias — some tests still use self.mpv
         self.config = config or {}
         self.active = False
         self._ffmpeg_proc = None
@@ -62,9 +65,10 @@ class AudioMonitor:
 
             # Step 1: Switch players to PipeWire and restart.
             # restart_instances() sends IPC quit to kill old mpv (releasing ALSA device),
-            # then relaunches with PipeWire output.
-            self.mpv.audio_backend = 'pipewire'
-            self.mpv.restart_instances()
+            # then relaunches with PipeWire output. set_audio_backend fans out
+            # to both the filler and the active karaoke player.
+            self.coordinator.set_audio_backend('pipewire')
+            self.coordinator.restart_instances()
 
             # Step 2: Now that old mpv has released the ALSA device, switch PipeWire
             # to HDMI profile so it can claim the device and create the HDMI sink.
@@ -80,8 +84,8 @@ class AudioMonitor:
             if not monitor_source:
                 log_message("ERROR: Could not find PipeWire HDMI monitor source.", self.config)
                 # Rollback
-                self.mpv.audio_backend = 'alsa'
-                self.mpv.restart_instances()
+                self.coordinator.set_audio_backend('alsa')
+                self.coordinator.restart_instances()
                 subprocess.run(
                     PACTL_ENV_PREFIX + ['pactl', 'set-card-profile', PW_CARD, PW_ANALOG_PROFILE],
                     check=False,
@@ -142,8 +146,8 @@ class AudioMonitor:
             self.active = False
 
             # Restore ALSA audio backend and restart players
-            self.mpv.audio_backend = 'alsa'
-            self.mpv.restart_instances()
+            self.coordinator.set_audio_backend('alsa')
+            self.coordinator.restart_instances()
 
             # Switch PipeWire card back to analog profile
             log_message("Switching PipeWire card to analog profile...", self.config)

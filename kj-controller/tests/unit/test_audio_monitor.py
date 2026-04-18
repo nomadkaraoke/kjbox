@@ -14,15 +14,16 @@ from audio_monitor import (
     PACTL_ENV_PREFIX,
     STREAM_CHUNK_SIZE,
 )
-from mpv_manager import MpvManager
+from playback import PlaybackCoordinator
 
 
 @pytest.fixture
 def mock_mpv(mock_config, mocker):
-    """MpvManager with restart_instances mocked out."""
-    m = MpvManager(mock_config, enabled=False)
-    m.restart_instances = mocker.Mock()
-    return m
+    """Coordinator with restart_instances mocked. Named mock_mpv for historical
+    reasons — the audio monitor now talks to a PlaybackCoordinator."""
+    c = PlaybackCoordinator(mock_config, enabled=False)
+    c.restart_instances = mocker.Mock()
+    return c
 
 
 MOCK_MONITOR_SOURCE = PW_MONITOR_SOURCE_PREFIX + '.3.monitor'

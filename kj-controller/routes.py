@@ -17,7 +17,8 @@ import karaoke_nerds
 import youtube_health
 import youtube_search
 from catalog import LATIN_SPECIAL_MAP
-from config import APP_DIR, load_config, save_config_value
+from config import APP_DIR, RENDER_MODES, load_config, save_config_value
+from playback import RendererSwitchRejected
 from sleep_mode import SleepManager
 from utils import log_message
 
@@ -409,27 +410,9 @@ def handle_control():
         overlay_mgr.set_karaoke_playing(False)
         vlc.fade_in_filler()
     elif action == 'fadeout':
-        saved_volume = vlc.karaoke_volume
-
-        def _do_fadeout():
-            # Fade karaoke volume to 0 over 3 seconds via mpv
-            mpv_start = vlc._vlc_to_mpv_volume(saved_volume)
-            steps = 20
-            delay = 3.0 / steps
-            for i in range(steps + 1):
-                vol = mpv_start * (1 - i / steps)
-                vlc._set_property("volume", vol)
-                time.sleep(delay)
-            vlc.stop_karaoke()
-            vlc.ensure_karaoke_released()
-            overlay_mgr.set_karaoke_playing(False)
-            # Restore karaoke volume setting for next song
-            vlc.karaoke_volume = saved_volume
-            vlc._save_state()
-            vlc.fade_in_filler()
-            log_message(f"Fadeout complete, volume restored to {saved_volume}.", cfg)
-
-        threading.Thread(target=_do_fadeout, daemon=True).start()
+        # Coordinator drives the fade on the active player, restores volume,
+        # clears overlay, and fades filler back in. Works for both renderers.
+        vlc.fadeout(duration_s=3.0)
 
     return jsonify({"success": True, "message": f"Action '{action}' executed."})
 
@@ -478,6 +461,32 @@ def handle_pitch():
     vlc.set_pitch(semitones)
     log_message(f"Pitch set to {vlc.pitch_semitones} semitones", current_app.kj_config)
     return jsonify({"success": True, "pitch_semitones": vlc.pitch_semitones})
+
+
+@routes_bp.route('/renderer', methods=['GET'])
+def get_renderer():
+    """Return active karaoke renderer mode and its capabilities."""
+    return jsonify(current_app.vlc.describe_renderer())
+
+
+@routes_bp.route('/renderer', methods=['POST'])
+def set_renderer():
+    """Switch karaoke renderer. Rejected with 409 while karaoke is active."""
+    mode = (request.json or {}).get('mode')
+    if mode not in RENDER_MODES:
+        return jsonify({
+            "error": "invalid_mode",
+            "message": f"mode must be one of {list(RENDER_MODES)}",
+        }), 400
+
+    vlc = current_app.vlc
+    try:
+        state = vlc.switch_renderer(mode)
+    except RendererSwitchRejected as e:
+        return jsonify({"error": "karaoke_active", "message": str(e)}), e.status_code
+
+    log_message(f"Renderer switched to '{mode}' via API.", current_app.kj_config)
+    return jsonify({"success": True, **state})
 
 
 @routes_bp.route('/media')
@@ -655,6 +664,7 @@ def get_status():
         "browser_mode": browser_status,
         "rotation_downloads": rotation_downloads,
         "pitch_semitones": vlc.pitch_semitones,
+        "renderer": vlc.describe_renderer(),
     })
 
 

@@ -9,6 +9,12 @@ MEDIA_EXTENSIONS = {'.mp4', '.mkv', '.avi', '.webm', '.mov', '.mp3', '.wav', '.f
 CONFIG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'config.json')
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 
+# Karaoke renderer modes — keys accepted by PlaybackCoordinator.switch_renderer
+RENDER_MODE_MPV = 'mpv'
+RENDER_MODE_VLC = 'vlc'
+RENDER_MODES = (RENDER_MODE_MPV, RENDER_MODE_VLC)
+DEFAULT_RENDER_MODE = RENDER_MODE_MPV
+
 
 def is_pi():
     """Detect if running on NomadPi (DietPi on Linux ARM)."""
@@ -50,6 +56,7 @@ def load_config(config_file=None):
         "gen_api_url": "",
         "gen_api_token": "",
         "gen_poll_interval": 60,
+        "render_mode": DEFAULT_RENDER_MODE,
     }
     if os.path.exists(config_file):
         try:

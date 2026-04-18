@@ -13,14 +13,13 @@ from catalog import ExternalCatalog
 from config import is_pi, load_config
 from media import MediaIndex
 from overlay import OverlayManager
+from playback import PlaybackCoordinator
 from rotation import RotationManager
 from routes import routes_bp
 from sleep_mode import SleepManager
 from utils import log_message
 from audio_monitor import AudioMonitor
 from chromium import ChromiumManager
-from mpv_manager import MpvManager
-from vlc import VLCManager
 from zip_playback import ZipPlayback
 
 
@@ -104,13 +103,17 @@ def create_app(config=None):
     cfg = config or load_config()
     flask_app.kj_config = cfg
     flask_app.media = MediaIndex(cfg)
-    flask_app.vlc = VLCManager(cfg, enabled=False if config else None)
+    overlay_path = cfg.get('overlays_path') if config else None
+    flask_app.overlay_manager = OverlayManager(config_path=overlay_path)
+    flask_app.vlc = PlaybackCoordinator(
+        cfg,
+        enabled=False if config else None,
+        overlay_manager=flask_app.overlay_manager,
+    )
     flask_app.audio_monitor = AudioMonitor(flask_app.vlc, cfg)
     flask_app.catalog = ExternalCatalog(cfg)
     flask_app.zip_playback = ZipPlayback(cfg)
     flask_app.chromium = ChromiumManager(cfg)
-    overlay_path = cfg.get('overlays_path') if config else None
-    flask_app.overlay_manager = OverlayManager(config_path=overlay_path)
     flask_app.rotation = _init_rotation(cfg)
     flask_app.rotation.media = flask_app.media
     flask_app.sleep_manager = SleepManager()
@@ -148,8 +151,11 @@ def start_app():  # pragma: no cover
     cfg = load_config()
     os.makedirs(cfg['download_folder'], exist_ok=True)
 
-    # Rolled back to dual-VLC for CDG rendering (mpv doesn't render CDG overlays)
-    vlc = VLCManager(cfg)
+    # Create shared overlay manager
+    overlay_mgr = OverlayManager()
+
+    # PlaybackCoordinator owns filler + one karaoke player; swappable at runtime.
+    vlc = PlaybackCoordinator(cfg, overlay_manager=overlay_mgr)
 
     # Set default filler track from config, or auto-detect from filler music dir
     configured_filler = cfg.get('default_filler_track', '')
@@ -166,8 +172,6 @@ def start_app():  # pragma: no cover
     else:
         log_message("WARNING: No filler music track configured or found.", cfg)
 
-    # Create shared overlay manager
-    overlay_mgr = OverlayManager()
     vlc.on_karaoke_end = lambda: overlay_mgr.set_karaoke_playing(False)
 
     # Platform-specific setup
@@ -254,31 +258,8 @@ def start_app():  # pragma: no cover
     else:
         log_message("External catalog not yet built. Use POST /catalog/build to create.", cfg)
 
-    # Launch playback instances (mpv karaoke + VLC filler, only on Pi / karaoke device)
-    if vlc.enabled:
-        filler_port = cfg.get('filler_vlc_port', 8081)
-        filler_pw = cfg.get('filler_vlc_password', 'filler')
-
-        # Try to reconnect to instances that survived a restart
-        found = vlc.try_reconnect()
-
-        if not found['karaoke']:
-            vlc.launch_instance("karaoke")
-        if not found['filler']:
-            filler_path = os.path.join(filler_dir, vlc.current_filler_track) if filler_dir and vlc.current_filler_track else ''
-            vlc.launch_instance("filler", filler_port, filler_pw, filler_path, True)
-
-        # Only fade in filler if karaoke isn't actively playing
-        if not vlc.karaoke_active:
-            if not found['filler']:
-                time.sleep(3)
-            vlc.fade_in_filler()
-        else:
-            log_message("Karaoke is active — skipping filler fade-in.", cfg)
-
-        # Start the karaoke player monitor in a background thread
-        monitor_thread = threading.Thread(target=vlc.monitor_karaoke, daemon=True)
-        monitor_thread.start()
+    # Launch playback instances (reconnect + launch + monitor thread + fade-in)
+    vlc.init_playback()
 
     # Start Flask app.
     # behind_proxy=True: a reverse proxy (e.g. Caddy) terminates TLS on :443

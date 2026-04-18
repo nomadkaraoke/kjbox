@@ -1100,50 +1100,19 @@ def test_control_fadeout(flask_test_client):
     assert response.status_code == 200
 
 
-def test_control_fadeout_spawns_thread(flask_test_client, flask_app, mocker):
-    """POST /control fadeout fades mpv volume, stops, and restores volume."""
+def test_control_fadeout_delegates_to_coordinator(flask_test_client, flask_app, mocker):
+    """POST /control fadeout delegates to coordinator.fadeout (polymorphic
+    across renderers; implementation tested in player-specific suites)."""
     flask_app.vlc.enabled = True
     flask_app.vlc.karaoke_active = True
-    flask_app.vlc.karaoke_volume = 200
-    flask_app.vlc.current_playing_path = "/some/path.mp4"
 
-    set_prop_mock = mocker.patch.object(flask_app.vlc, '_set_property')
-    stop_mock = mocker.patch.object(flask_app.vlc, 'stop_karaoke')
-    ensure_mock = mocker.patch.object(flask_app.vlc, 'ensure_karaoke_released')
-    filler_mock = mocker.patch.object(flask_app.vlc, 'fade_in_filler')
-    mocker.patch.object(flask_app.vlc, '_save_state')
-    mocker.patch('routes.time.sleep')
-
-    # Patch threading.Thread to run synchronously for testing
-    original_thread = mocker.patch('routes.threading.Thread')
-    captured_target = None
-
-    def run_sync(**kwargs):
-        nonlocal captured_target
-        captured_target = kwargs.get('target')
-        mock_thread = mocker.MagicMock()
-        mock_thread.start = lambda: captured_target()
-        return mock_thread
-
-    original_thread.side_effect = run_sync
+    fadeout_mock = mocker.patch.object(flask_app.vlc, 'fadeout')
 
     response = flask_test_client.post('/control',
         data=json.dumps({"action": "fadeout"}),
         content_type='application/json')
     assert response.status_code == 200
-
-    # Verify mpv volume was set multiple times (fade steps)
-    assert set_prop_mock.call_count >= 20
-    # Last volume set should be ~0
-    last_vol = set_prop_mock.call_args_list[-1][0][1]
-    assert last_vol < 1.0
-
-    stop_mock.assert_called_once()
-    ensure_mock.assert_called_once()
-    filler_mock.assert_called_once()
-
-    # Volume setting should be restored for next song
-    assert flask_app.vlc.karaoke_volume == 200
+    fadeout_mock.assert_called_once_with(duration_s=3.0)
 
 
 # --- Bug fix: filler music skips playback during karaoke ---
