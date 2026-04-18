@@ -26,6 +26,8 @@ KJ Controller (`kj-controller/`) is a Flask + vanilla JS web app for managing li
 - `kj-controller/karaoke_nerds.py` — Karaoke Nerds web scraper (search, parse, YouTube URLs)
 - `kj-controller/youtube_search.py` — YouTube search via yt-dlp (fast metadata-only)
 - `kj-controller/youtube_health.py` — YouTube health checks, cookie validation, EJS/Deno detection
+- `kj-controller/sing.py` — Public `/sing/*` blueprint, token gate, host-based route guard
+- `kj-controller/sing_store.py` — SingStore (SQLite CRUD for sing_requests + event-token helpers)
 - `kj-controller/app.py` — app factory + entry point
 - `kj-controller/config.py` — constants, platform detection, config loading
 

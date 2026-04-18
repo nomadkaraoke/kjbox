@@ -233,9 +233,10 @@ A Cloudflare tunnel exposes the KJ Controller web UI, VNC websocket, and SSH rem
 **Hostnames:**
 | Hostname | Service | Purpose |
 |----------|---------|---------|
-| `kjbox.nomadkaraoke.com` | `https://localhost:443` | KJ Controller web UI |
-| `kjvnc.nomadkaraoke.com` | `http://localhost:6080` | Websockify (VNC preview WebSocket) |
-| `kjssh.nomadkaraoke.com` | `ssh://localhost:22` | SSH remote access |
+| `kjbox.nomadkaraoke.com` | `https://localhost:443` | KJ Controller web UI (Access-gated) |
+| `kjvnc.nomadkaraoke.com` | `http://localhost:6080` | Websockify (VNC preview WebSocket, Access-gated) |
+| `kjssh.nomadkaraoke.com` | `ssh://localhost:22` | SSH remote access (Access-gated) |
+| `sing.nomadkaraoke.com` | `https://localhost:443` | **Public** singer request form (no Access) |
 
 **Current config (`/etc/cloudflared/config.yml`):**
 ```yaml
@@ -251,12 +252,17 @@ ingress:
     service: https://localhost:443
     originRequest:
       noTLSVerify: true
+  - hostname: sing.nomadkaraoke.com
+    service: https://localhost:443
+    originRequest:
+      noTLSVerify: true
   - service: http_status:404
 ```
 
 **Notes:**
 - `noTLSVerify: true` is needed because the origin uses a mkcert certificate (not publicly trusted)
 - The websockify hostname (`kjvnc`) is on a separate ingress because Cloudflare tunnels don't support path-based routing on the same hostname
+- `sing.nomadkaraoke.com` is served by the same Flask app as `kjbox.*`, but a Flask `before_request` guard blocks every route except `/sing/*` when the Host header matches the public hostname — so admin endpoints can never leak via the public tunnel
 - DNS CNAMEs created with: `sudo cloudflared tunnel route dns <tunnel-id> <hostname>`
 
 ### 2.7 Cloudflare Access (Zero Trust Auth)
@@ -264,12 +270,13 @@ ingress:
 Cloudflare Access protects the tunnel endpoints so only authorized users can access the controller remotely. This is configured in the Cloudflare Zero Trust dashboard (not on the device).
 
 **Setup:** https://one.dash.cloudflare.com/ → Access → Applications
-- **Application:** Self-hosted, covers both `kjbox.nomadkaraoke.com` and `kjvnc.nomadkaraoke.com`
-- **Auth method:** Email OTP — user enters email, receives one-time code
-- **Policy:** Allow list of authorized email addresses
+- **Application 1 (KJ):** Self-hosted, covers `kjbox.nomadkaraoke.com`, `kjvnc.nomadkaraoke.com`, `kjssh.nomadkaraoke.com`
+- **Application 2 (Public):** `sing.nomadkaraoke.com` — **NO Access policy**; this is the singer request form and must be reachable by anyone with a QR
+- **Auth method (KJ apps):** Email OTP — user enters email, receives one-time code
+- **Policy (KJ apps):** Allow list of authorized email addresses
 - **Session duration:** 24 hours
 
-When someone visits `https://kjbox.nomadkaraoke.com`, Cloudflare shows a login page before any traffic reaches the device.
+When someone visits `https://kjbox.nomadkaraoke.com`, Cloudflare shows a login page before any traffic reaches the device. Visiting `https://sing.nomadkaraoke.com` connects straight through — the KJ Controller's host guard + event token gate the actual request form.
 
 ### 2.8 Update SSH Config on Mac
 

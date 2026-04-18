@@ -2,6 +2,37 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-04-18 - Feature: Public singer request form (MVP, sub-project 1/4)
+
+Singers can now submit song requests from their phones by scanning a QR code, instead of handing the KJ a paper slip. The form is reachable over the internet via a new Cloudflare tunnel hostname (`sing.nomadkaraoke.com`, no Access rule) and over the venue wifi via the NomadPC's LAN IP when no internet is available. Requests land in a pending review queue on the KJ UI by default; an auto-approve toggle lets the KJ bypass review when they trust the crowd.
+
+See the design + plan docs:
+- [2026-04-18-public-request-form-design.md](archive/2026-04-18-public-request-form-design.md)
+- [2026-04-18-public-request-form-plan.md](archive/2026-04-18-public-request-form-plan.md)
+
+**New modules:**
+- `kj-controller/sing.py` — public `/sing/*` blueprint, token gate, rate limiter (5/5min/IP), host-based route guard, QR-overlay auto-sync helper
+- `kj-controller/sing_store.py` — SQLite CRUD for `sing_requests` (lives alongside `rotation_entries`) + event-token helpers on `rotation_meta`
+- `kj-controller/templates/sing.html` + `static-sing/` — singer-facing mobile SPA
+
+**New endpoints:**
+- Public: `GET /sing/`, `GET /sing/search`, `POST /sing/submit`, `GET /sing/status/<id>`
+- Admin: `GET /rotation/requests`, `GET|POST /rotation/requests/config`, `GET /rotation/requests/qr.svg`, `POST /rotation/requests/<id>/approve|edit|reject`
+
+**Integration hooks:**
+- `POST /rotation/archive` regenerates the event token + re-enables requests + syncs any `qr_code` overlay with `config.follow_event_url=True`
+- `POST /system/sleep-mode` on entry disables requests; exit does **not** auto-re-enable (KJ flips back manually)
+
+**Manual ops steps required (post-deploy):**
+1. Add DNS CNAME `sing.nomadkaraoke.com` → `<tunnel-id>.cfargotunnel.com`
+2. Add new `ingress` entry in `/etc/cloudflared/config.yml` on NomadPC (see MINIPC-SETUP § 2.6)
+3. Confirm no Cloudflare Access policy attached to the new hostname
+4. `sudo systemctl restart cloudflared` + `sudo systemctl restart kj-controller`
+
+**New dependency:** `qrcode` (pure-Python SVG QR generation; no Pillow).
+
+**Test coverage:** 1364 unit+integration tests pass (1307 prior + 57 new). Coverage includes sing_store CRUD + token helpers, public blueprint (landing, search, submit, rate limit, status), admin endpoints (all approval paths, edit, reject, config, QR), host-based route guard (blocks admin + static on public host; private hosts unaffected), and archive / sleep integration hooks.
+
 ## 2026-04-17 - Feature: Runtime-swappable karaoke renderer (mpv / VLC)
 
 The KJ can now switch karaoke engines at runtime from the AV Output modal. mpv is the default (pitch-shift supported); VLC is the fallback if a specific file or quirk doesn't render on the current engine. Switching is rejected during active karaoke playback (HTTP 409). Filler music stays uninterrupted across the swap. See [AUDIO.md § Karaoke Renderer Toggle](AUDIO.md#karaoke-renderer-toggle).
