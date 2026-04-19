@@ -5181,11 +5181,18 @@ const SingRequests = (() => {
 
     async function reject(id) {
         if (!confirm('Reject this request? The singer will be asked to see the KJ.')) return;
-        await fetch(`/rotation/requests/${id}/reject`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({}),
-        });
+        try {
+            const resp = await fetch(`/rotation/requests/${id}/reject`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({}),
+            });
+            if (!resp.ok) {
+                const data = await resp.json().catch(() => ({}));
+                alert('Reject failed: ' + (data.error || resp.statusText));
+                return;
+            }
+        } catch (e) { alert('Reject failed: ' + e.message); return; }
         await fetchPending();
     }
 

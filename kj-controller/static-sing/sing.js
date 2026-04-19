@@ -2,6 +2,12 @@
 // Vanilla JS, no framework, no build step. Mobile-first.
 
 const root = document.getElementById("sing-root");
+if (!root) {
+  // Template rendered the "closed" variant which has no #sing-root — this
+  // script shouldn't load in that case, but guard in case of future template
+  // changes so we don't throw on .dataset access.
+  throw new Error("sing-root element missing — requests are closed");
+}
 const TOKEN = root.dataset.token;
 const INITIAL_REQUEST_ID = root.dataset.requestId;
 

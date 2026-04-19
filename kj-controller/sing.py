@@ -41,6 +41,18 @@ _rate_limit_state = defaultdict(deque)
 _rate_limit_lock = threading.Lock()
 
 
+def _safe_int(value, default):
+    """Best-effort int conversion, falling back to ``default`` on any error.
+
+    Guards against malformed values in config.json (e.g. a string that won't
+    parse) crashing the submission path.
+    """
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
 # Peers we're willing to trust when they send CF-Connecting-IP / X-Forwarded-For.
 # In production, both cloudflared and the Caddy reverse proxy terminate on
 # loopback — other remote addresses must NOT be able to spoof these headers to
@@ -277,8 +289,8 @@ def submit():
     cfg = current_app.kj_config
     store = current_app.sing_store
 
-    limit = int(cfg.get("sing_rate_limit_per_ip", 5))
-    window = int(cfg.get("sing_rate_limit_window_s", 300))
+    limit = _safe_int(cfg.get("sing_rate_limit_per_ip"), 5)
+    window = _safe_int(cfg.get("sing_rate_limit_window_s"), 300)
     ip = _client_ip(request)
     if _rate_limit_exceeded(ip, limit, window):
         return jsonify({"error": "rate_limited"}), 429
