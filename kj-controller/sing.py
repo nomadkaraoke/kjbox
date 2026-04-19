@@ -41,12 +41,29 @@ _rate_limit_state = defaultdict(deque)
 _rate_limit_lock = threading.Lock()
 
 
+# Peers we're willing to trust when they send CF-Connecting-IP / X-Forwarded-For.
+# In production, both cloudflared and the Caddy reverse proxy terminate on
+# loopback — other remote addresses must NOT be able to spoof these headers to
+# bypass rate limiting.
+_TRUSTED_PROXIES = frozenset({"127.0.0.1", "::1"})
+
+
 def _client_ip(req):
-    """Best-effort client IP: honour the first Cloudflare-forwarded hop."""
-    forwarded = req.headers.get("CF-Connecting-IP") or req.headers.get("X-Forwarded-For", "")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
-    return req.remote_addr or "unknown"
+    """Best-effort client IP.
+
+    Only honours forwarded headers when the immediate peer is a trusted
+    reverse proxy (cloudflared, Caddy) — otherwise an internet-origin request
+    could spoof CF-Connecting-IP to escape the per-IP rate limit.
+    """
+    peer = req.remote_addr or ""
+    if peer in _TRUSTED_PROXIES:
+        forwarded = (
+            req.headers.get("CF-Connecting-IP")
+            or req.headers.get("X-Forwarded-For", "")
+        )
+        if forwarded:
+            return forwarded.split(",")[0].strip()
+    return peer or "unknown"
 
 
 def _rate_limit_exceeded(ip, limit, window_s):
@@ -232,33 +249,25 @@ def landing():
 @sing_bp.route("/search", methods=["GET"])
 @require_token
 def search():
-    """Thin wrapper over /rotation/search (local + KN + Divebar)."""
+    """Thin wrapper over the shared unified search helper.
+
+    Uses the same code path as /rotation/search so singer-facing results
+    include Divebar cross-reference (`track.divebar`) and `in_library` flags
+    — without which every KN track would show "Download needed" even when we
+    already have a community file ready to pull.
+    """
     query = (request.args.get("q") or "").strip()
     if len(query) < 3:
         return jsonify({"error": "Query must be at least 3 characters"}), 400
 
-    local_results = []
-    catalog = getattr(current_app, "catalog", None)
-    if catalog is not None and catalog.is_available():
-        local_results = catalog.search(query, limit=10)
+    # Lazy import avoids a circular dependency at module import time.
+    from routes import unified_search
 
-    media = getattr(current_app, "media", None)
-    if media is not None:
-        for result in local_results:
-            entry = media.index.get(result.get("path")) if hasattr(media, "index") else None
-            if entry:
-                result["duration"] = entry.get("duration")
-
-    # KN + Divebar cross-ref — import lazily so tests without network deps still work
-    kn_results = []
-    try:
-        import karaoke_nerds as kn
-
-        kn_results = kn.search(query, current_app.kj_config) or []
-    except Exception:
-        kn_results = []
-
-    return jsonify({"local": local_results, "karaoke_nerds": kn_results})
+    data = unified_search(query, current_app._get_current_object())
+    response = {"local": data["local"], "karaoke_nerds": data["karaoke_nerds"]}
+    if data.get("karaoke_nerds_timeout"):
+        response["karaoke_nerds_timeout"] = True
+    return jsonify(response)
 
 
 @sing_bp.route("/submit", methods=["POST"])
@@ -330,13 +339,28 @@ def submit():
 
 @sing_bp.route("/status/<int:request_id>", methods=["GET"])
 def status(request_id):
-    """Return the singer's own request status. No token required (id is the secret)."""
+    """Return the singer's own request status.
+
+    Requires a valid enabled event token AND the request row must belong to
+    the current event (i.e. its stored token must match the active one).
+    This prevents ID-guessing attacks and cross-event leakage after the KJ
+    archives a rotation.
+    """
     store = getattr(current_app, "sing_store", None)
     if store is None:
         return jsonify({"error": "not_configured"}), 503
 
+    token = _extract_token()
+    if not token or not _is_token_valid(store, token):
+        return jsonify({"error": "not_open"}), 403
+
     req = store.get_request(request_id)
     if req is None:
+        return jsonify({"error": "not_found"}), 404
+
+    # Scope the lookup to the current event — an old request from last week's
+    # event must not be readable via today's token, even if the id is known.
+    if req.get("token") != token:
         return jsonify({"error": "not_found"}), 404
 
     response = {"request": _public_request_view(req)}

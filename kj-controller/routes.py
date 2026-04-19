@@ -2491,21 +2491,21 @@ def split_singer_route():
         return jsonify({"error": str(e)}), 500
 
 
-@routes_bp.route('/rotation/search', methods=['GET'])
-def rotation_search():
-    """Unified search: local catalog + Karaoke Nerds + Divebar cross-reference."""
-    query = request.args.get('q', '').strip()
-    if len(query) < 3:
-        return jsonify({"error": "Query must be at least 3 characters"}), 400
+def unified_search(query, app):
+    """Unified search helper: local catalog + Karaoke Nerds + Divebar cross-reference.
 
-    # Local catalog search (fast, <10ms)
+    Shared by /rotation/search (KJ-side) and /sing/search (singer-side) so
+    the same result shape (including Divebar file_id cross-ref and in_library
+    flags) reaches both consumers.
+    """
+    cfg = app.kj_config
     local_results = []
-    if current_app.catalog.is_available():
-        local_results = current_app.catalog.search(query, limit=10)
+    if app.catalog.is_available():
+        local_results = app.catalog.search(query, limit=10)
 
     # Add duration from media index where available
     for result in local_results:
-        media_entry = current_app.media.index.get(result.get("path"))
+        media_entry = app.media.index.get(result.get("path"))
         if media_entry:
             result["duration"] = media_entry.get("duration")
 
@@ -2513,11 +2513,10 @@ def rotation_search():
     local_paths = {r.get("path") for r in local_results}
     query_lower = query.lower()
     query_terms = query_lower.split()
-    # Strip punctuation for fuzzy matching (e.g. "Sheeps" matches "Sheep's")
     import re as _re
     _strip_punct = lambda s: _re.sub(r'[^\w\s]', '', s)
     query_terms_clean = [_strip_punct(t) for t in query_terms]
-    for path, entry in current_app.media.index.items():
+    for path, entry in app.media.index.items():
         if path in local_paths:
             continue
         searchable = (entry.get("display_name") or entry.get("filename", "")).lower()
@@ -2536,19 +2535,16 @@ def rotation_search():
                 "duration": entry.get("duration"),
             })
 
-    # Karaoke Nerds search (slower, 1-3s)
     kn_results = []
     kn_timeout = False
     try:
-        kn_results = karaoke_nerds.search(query, current_app.kj_config)
+        kn_results = karaoke_nerds.search(query, cfg)
     except Exception:
         kn_timeout = True
 
-    # Divebar cross-reference for KN results via catalog search
     if kn_results and not kn_timeout:
         try:
-            db_results = divebar.search(query, current_app.kj_config, limit=100)
-            # Build lookup: (artist_lower, title_lower, brand_code_upper) -> track
+            db_results = divebar.search(query, cfg, limit=100)
             db_index = {}
             for db_song in db_results:
                 for db_track in db_song.get("tracks", []):
@@ -2558,7 +2554,6 @@ def rotation_search():
                         (db_track.get("brand_code") or "").upper().strip(),
                     )
                     db_index[key] = db_track
-            # Match KN tracks to Divebar tracks by artist+title+brand_code
             for song in kn_results:
                 artist_lower = (song.get("artist") or "").lower().strip()
                 title_lower = (song.get("title") or "").lower().strip()
@@ -2570,7 +2565,6 @@ def rotation_search():
         except Exception:
             pass  # Divebar cross-ref is best-effort
 
-        # Check local library for KN tracks
         for song in kn_results:
             for track in song.get("tracks", []):
                 track["in_library"] = any(
@@ -2579,8 +2573,26 @@ def rotation_search():
                     for r in local_results
                 )
 
-    response = {"local": local_results, "karaoke_nerds": kn_results}
-    if kn_timeout:
+    return {
+        "local": local_results,
+        "karaoke_nerds": kn_results,
+        "karaoke_nerds_timeout": kn_timeout,
+    }
+
+
+@routes_bp.route('/rotation/search', methods=['GET'])
+def rotation_search():
+    """Unified search: local catalog + Karaoke Nerds + Divebar cross-reference."""
+    query = request.args.get('q', '').strip()
+    if len(query) < 3:
+        return jsonify({"error": "Query must be at least 3 characters"}), 400
+
+    result = unified_search(query, current_app._get_current_object())
+
+    # Back-compat shape: legacy response omitted the timeout flag when False,
+    # and placed it at the top level when True. Preserve that.
+    response = {"local": result["local"], "karaoke_nerds": result["karaoke_nerds"]}
+    if result["karaoke_nerds_timeout"]:
         response["karaoke_nerds_timeout"] = True
     return jsonify(response)
 
@@ -2889,11 +2901,11 @@ def approve_sing_request(app, req):
         return entry["id"]
 
     if source_type in ("divebar", "youtube", "kn"):
-        entry = rotation.add_entry(singer, song_text)
+        # Resolve the download URL FIRST so we don't leave an orphan
+        # rotation entry behind when upstream validation fails.
         from uuid import uuid4
         download_id = str(uuid4())
         if source_type == "divebar":
-            # source_ref is a divebar file_id
             try:
                 download_url = divebar.get_download_url(source_ref, app.kj_config)
             except Exception as exc:
@@ -2905,10 +2917,13 @@ def approve_sing_request(app, req):
             queue_url = download_url
         else:
             # youtube / kn — source_ref is a YouTube URL
+            if not source_ref:
+                raise RuntimeError("source_ref (YouTube URL) required")
             queue_src = "youtube"
             queue_url = source_ref
             title = song_text or (req.get("song_title") or "")
 
+        entry = rotation.add_entry(singer, song_text)
         queue_item = {
             "id": download_id,
             "url": queue_url,

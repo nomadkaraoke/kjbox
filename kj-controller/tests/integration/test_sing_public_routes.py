@@ -139,6 +139,54 @@ class TestSubmit:
         r = client.post(f"/sing/submit?t={token}", json=self._body())
         assert r.status_code == 429
 
+    def test_untrusted_peer_cannot_spoof_forwarded_ip(self, sing_app, token):
+        """A non-loopback peer must NOT be able to bypass rate limits via CF-Connecting-IP."""
+        sing_app.kj_config["sing_rate_limit_per_ip"] = 2
+        sing_app.kj_config["sing_rate_limit_window_s"] = 60
+        # Simulate an internet origin (not loopback) sending different spoofed
+        # CF-Connecting-IP values on each request. The rate limiter must fall
+        # back to the real REMOTE_ADDR and still block after the limit.
+        client = sing_app.test_client()
+        client.environ_base["REMOTE_ADDR"] = "1.2.3.4"
+        for _ in range(2):
+            r = client.post(
+                f"/sing/submit?t={token}",
+                json=self._body(),
+                headers={"CF-Connecting-IP": "5.6.7.8"},
+            )
+            assert r.status_code == 200
+        r = client.post(
+            f"/sing/submit?t={token}",
+            json=self._body(),
+            headers={"CF-Connecting-IP": "9.9.9.9"},  # try to escape with new spoof
+        )
+        assert r.status_code == 429
+
+    def test_trusted_loopback_peer_honours_forwarded_ip(self, sing_app, token):
+        """cloudflared on localhost gets to pass the real singer IP through."""
+        sing_app.kj_config["sing_rate_limit_per_ip"] = 2
+        sing_app.kj_config["sing_rate_limit_window_s"] = 60
+        client = sing_app.test_client()  # default REMOTE_ADDR=127.0.0.1
+        # Two different forwarded IPs from a trusted loopback peer → each
+        # gets its own rate-limit bucket.
+        for forwarded in ("11.11.11.11", "22.22.22.22"):
+            for _ in range(2):
+                r = client.post(
+                    f"/sing/submit?t={token}",
+                    json=self._body(),
+                    headers={"CF-Connecting-IP": forwarded},
+                )
+                assert r.status_code == 200
+        # Third request from IP 11.11.11.11 is blocked; IP 22.22.22.22 still ok
+        # is ambiguous here because they share the loopback peer — what matters
+        # is that the forwarded IP, not the peer, keys the bucket.
+        r = client.post(
+            f"/sing/submit?t={token}",
+            json=self._body(),
+            headers={"CF-Connecting-IP": "11.11.11.11"},
+        )
+        assert r.status_code == 429
+
     def test_auto_approve_creates_rotation_entry(self, client, sing_app, token):
         sing_app.sing_store.set_auto_approve(True)
         body = self._body(source_type="local", source_ref="/tmp/song.mp4")
@@ -153,8 +201,12 @@ class TestSubmit:
 
 
 class TestStatus:
-    def test_status_not_found(self, client):
+    def test_status_without_token_rejected(self, client):
         resp = client.get("/sing/status/99999")
+        assert resp.status_code == 403
+
+    def test_status_not_found(self, client, token):
+        resp = client.get(f"/sing/status/99999?t={token}")
         assert resp.status_code == 404
 
     def test_status_pending(self, client, sing_app, token):
@@ -163,7 +215,7 @@ class TestStatus:
             "source_type": "local", "source_ref": "/x.mp4",
         })
         req_id = resp.get_json()["request"]["id"]
-        resp = client.get(f"/sing/status/{req_id}")
+        resp = client.get(f"/sing/status/{req_id}?t={token}")
         assert resp.status_code == 200
         data = resp.get_json()
         assert data["request"]["status"] == "pending"
@@ -179,11 +231,24 @@ class TestStatus:
         resp = client.post(f"/rotation/requests/{req_id}/approve")
         assert resp.status_code == 200
         # Singer checks status
-        resp = client.get(f"/sing/status/{req_id}")
+        resp = client.get(f"/sing/status/{req_id}?t={token}")
         data = resp.get_json()
         assert data["request"]["status"] == "approved"
         assert data["position"] is not None
         assert "queue" in data
+
+    def test_status_from_previous_event_rejected(self, client, sing_app, token):
+        """Requests submitted under an old token must not be readable with a new one."""
+        resp = client.post(f"/sing/submit?t={token}", json={
+            "singer_name": "Andrew", "phone": "+1 555 0000",
+            "source_type": "local", "source_ref": "/x.mp4",
+        })
+        req_id = resp.get_json()["request"]["id"]
+        # KJ starts a new event → new token
+        new_token = sing_app.sing_store.regenerate_token()
+        # Singer's old tab still has the old token — we verify with the new one
+        resp = client.get(f"/sing/status/{req_id}?t={new_token}")
+        assert resp.status_code == 404
 
 
 class TestOverlaySync:

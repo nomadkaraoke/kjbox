@@ -121,21 +121,29 @@ function renderLanding() {
 }
 
 function renderIdentity() {
-  let nameVal = state.name;
-  let phoneVal = state.phone;
-  let err = "";
+  // Store typed-but-not-yet-submitted values on `state` so a validation-fail
+  // rerender preserves them. Fall back to persisted state.name / state.phone
+  // on first entry.
+  if (state._identityDraft == null) {
+    state._identityDraft = { name: state.name, phone: state.phone, err: "" };
+  }
+  const draft = state._identityDraft;
 
   const onSubmit = (e) => {
     e.preventDefault();
-    if (!nameVal.trim()) { err = "Please enter your name."; rerender(); return; }
-    if (!PHONE_RE.test(phoneVal.trim())) {
-      err = "Please enter a valid phone number (digits, spaces, or + allowed).";
+    if (!draft.name.trim()) {
+      draft.err = "Please enter your name.";
       rerender(); return;
     }
-    state.name = nameVal.trim();
-    state.phone = phoneVal.trim();
+    if (!PHONE_RE.test(draft.phone.trim())) {
+      draft.err = "Please enter a valid phone number (digits, spaces, or + allowed).";
+      rerender(); return;
+    }
+    state.name = draft.name.trim();
+    state.phone = draft.phone.trim();
     LS.set("sing_name", state.name);
     LS.set("sing_phone", state.phone);
+    state._identityDraft = null;
     state.step = "search";
     render();
   };
@@ -153,20 +161,20 @@ function renderIdentity() {
       el("label", {}, "Your name",
         el("input", {
           type: "text", autocomplete: "given-name",
-          value: nameVal, placeholder: "e.g. Andrew",
-          oninput: (e) => { nameVal = e.target.value; },
+          value: draft.name, placeholder: "e.g. Andrew",
+          oninput: (e) => { draft.name = e.target.value; },
         }),
       ),
       el("label", {}, "Phone number",
         el("input", {
           type: "tel", autocomplete: "tel",
-          value: phoneVal, placeholder: "+61 400 123 456",
-          oninput: (e) => { phoneVal = e.target.value; },
+          value: draft.phone, placeholder: "+61 400 123 456",
+          oninput: (e) => { draft.phone = e.target.value; },
         }),
       ),
-      err ? el("p", { class: "error" }, err) : null,
+      draft.err ? el("p", { class: "error" }, draft.err) : null,
       el("div", { class: "row" },
-        el("button", { type: "button", class: "btn ghost", onclick: back("landing") }, "Back"),
+        el("button", { type: "button", class: "btn ghost", onclick: () => { state._identityDraft = null; state.step = "landing"; render(); } }, "Back"),
         el("button", { type: "submit", class: "btn primary" }, "Next"),
       ),
     ),
