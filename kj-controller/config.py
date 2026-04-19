@@ -57,6 +57,11 @@ def load_config(config_file=None):
         "gen_api_token": "",
         "gen_poll_interval": 60,
         "render_mode": DEFAULT_RENDER_MODE,
+        "sing_public_url_base": "https://sing.nomadkaraoke.com",
+        "sing_public_host": "sing.nomadkaraoke.com",
+        "sing_local_url_base": "",
+        "sing_rate_limit_per_ip": 5,
+        "sing_rate_limit_window_s": 300,
     }
     if os.path.exists(config_file):
         try:

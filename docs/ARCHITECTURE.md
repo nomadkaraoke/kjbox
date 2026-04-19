@@ -77,7 +77,9 @@ KJ Controller is a web-based karaoke show management application. A Flask backen
 | `gen_client.py` | ~100 | `GenClient` HTTP client for gen API: job creation, status polling, download URL retrieval |
 | `gen_poller.py` | ~90 | `GenPoller` background thread: polls gen API for active jobs, auto-downloads completed videos |
 | `sleep_mode.py` | ~100 | `SleepManager` class: enter/exit low-power sleep mode, stop services, unmount SSD |
-| `routes.py` | ~800 | Flask Blueprint with all route handlers |
+| `sing.py` | ~280 | Public `/sing/*` blueprint (landing, search, submit, status) + token-gate decorator + per-IP rate limiter + host-based route guard + QR-overlay auto-sync helper |
+| `sing_store.py` | ~260 | `SingStore` class: SQLite CRUD for `sing_requests` + event-token helpers (regenerate / enable / auto-approve) on `rotation_meta` |
+| `routes.py` | ~1000 | Flask Blueprint with all route handlers (includes `/rotation/requests/*` admin endpoints for the public request form) |
 
 ### Dependency Flow
 
@@ -194,6 +196,17 @@ utils.py → (stdlib only)
 | GET | `/rotation/gen-status` | Get active gen job statuses for rotation entries |
 | GET | `/rotation/sync-status` | Get Sheet sync status (`{last_sync, is_online, next_sync_in}`) |
 | POST | `/rotation/restore` | Restore rotation from snapshot (`{entries}` for undo/redo) or from Google Sheet backup (no body) |
+| GET  | `/rotation/requests` | List public sing requests (filter by `?status=pending\|approved\|rejected`) + counts |
+| GET  | `/rotation/requests/config` | Current event token, enabled flag, auto-approve flag, public/local URLs, pending count |
+| POST | `/rotation/requests/config` | Regenerate token / toggle enabled / toggle auto-approve |
+| GET  | `/rotation/requests/qr.svg` | SVG QR code for event URL (`?scope=public\|local`) |
+| POST | `/rotation/requests/<id>/approve` | Approve request → create rotation entry via source-specific dispatch |
+| POST | `/rotation/requests/<id>/edit` | Edit singer name / artist / title on a pending request |
+| POST | `/rotation/requests/<id>/reject` | Mark request rejected (silent to singer) |
+| GET  | `/sing/` | **PUBLIC** — singer-facing landing page (requires `?t=<token>`) |
+| GET  | `/sing/search` | **PUBLIC** — search local + Karaoke Nerds catalog (requires token) |
+| POST | `/sing/submit` | **PUBLIC** — create a pending request (rate-limited per IP) |
+| GET  | `/sing/status/<id>` | **PUBLIC** — singer's own request status + rotation position |
 | POST | `/upload` | Upload a media file to the download folder (validates extension, sanitizes filename, triggers rescan) |
 | POST | `/browser-mode/enable` | Enable Browser Mode: stop VLC, launch fullscreen Chromium at URL |
 | POST | `/browser-mode/disable` | Disable Browser Mode: kill Chromium, restart VLC |
@@ -291,6 +304,46 @@ The rotation system manages the singer queue during live karaoke shows, with an 
 **File linking:** Rotation entries can be linked to media files from the catalog (`POST /rotation/link`). Duration is looked up from MediaIndex and stored in the entry. This enables estimated sing times (shown in the UI) and one-click playback from the rotation view. The unified search dropdown can also link files at add time, and `POST /rotation/download-and-link` queues a download (Divebar or YouTube) that auto-links to the rotation entry on completion. Each entry tracks `download_source`, `download_status`, `download_id`, and `url_fallback` for preparation status.
 
 **Configuration:** `rotation_db_path` (default: `~/kjdata/rotation.db`) is always used. `rotation_sheet_id` + `rotation_credentials_file` in `config.json` are optional — if present, Sheet sync is enabled. `rotation_sync_interval` (default: 30s) controls push frequency.
+
+### Public Singer Request Form
+
+Singers submit song requests from their own phones via a QR code instead of handing the KJ a paper slip. See [archive/2026-04-18-public-request-form-design.md](archive/2026-04-18-public-request-form-design.md) for the full design spec.
+
+```
+   Singer's phone          Cloudflare tunnel           kj-controller (Flask)
+ ┌──────────────────┐   ┌──────────────────────┐    ┌─────────────────────┐
+ │ Scan QR → /sing/ │──▶│ sing.nomadkaraoke... │───▶│  sing_bp  /sing/*   │
+ │   (token in URL) │   │   no Access policy   │    │  (token gate, rate  │
+ └──────────────────┘   └──────────────────────┘    │   limit per IP)     │
+                                                    │                     │
+       OR venue wifi                                │  routes_bp          │
+ ┌──────────────────┐       travel router           │  /rotation/requests │
+ │ http://<ip>/sing │──▶ DHCP-reserved LAN IP ─────▶│  (KJ admin, gated   │
+ └──────────────────┘                               │   behind Access)    │
+                                                    └──────┬──────────────┘
+                                                           │
+                              ┌────────────────────────────┼───────────────────┐
+                              │  host guard: sing.* host → sing_bp only        │
+                              └────────────────────────────┬───────────────────┘
+                                                           ▼
+                                                 ~/kjdata/rotation.db
+                                                  (sing_requests table +
+                                                   rotation_meta token rows)
+```
+
+**Public routes** (`sing_bp`): `GET /sing/`, `GET /sing/search`, `POST /sing/submit`, `GET /sing/status/<id>`. All require a valid, enabled event token — provided as `?t=<token>` in the QR URL and kept in a session cookie. No auth beyond the token and the per-IP sliding-window rate limit (5 submits / 5 min by default).
+
+**Admin routes** (on `routes_bp`): `/rotation/requests/*` — list, approve, edit, reject, config (token + flags), and `qr.svg` QR generator. Never mounted under `/sing/*`, so they cannot leak via the public tunnel.
+
+**Host-based route guard:** a Flask `before_request` hook on the app reads `sing_public_host` (+ aliases) from `config.json`. If the incoming `Host` header matches, only endpoints registered on `sing_bp` are allowed; everything else returns 404 — defence-in-depth in case an endpoint is accidentally added elsewhere.
+
+**Event token lifecycle:** stored in `rotation_meta` as `request_token` + `request_token_enabled` + `request_auto_approve`. Regenerated automatically when the KJ archives a rotation, and manually from the Requests settings modal. Sleep-mode entry disables requests; exit does **not** auto-re-enable (prevents surprise re-opening).
+
+**Approval dispatch:** `approve_sing_request(app, req)` in `routes.py` creates a rotation entry based on `source_type` — `local` uses `rotation.add_entry(..., file_path=...)`, `divebar|youtube|kn` adds an entry + queues a download on the existing worker, `make` creates a gen-API job via the existing `GenClient`. Auto-approve on submission calls the same helper inline.
+
+**QR-overlay auto-sync:** `qr_code` overlays with `config.follow_event_url=True` are automatically updated to point at the current event URL whenever the token regenerates. KJs opt in by ticking the checkbox on the overlay editor.
+
+**Singer UI** lives under `static-sing/` (separate tree from the KJ UI's `static/`) and is served from `sing_bp`'s `/sing/static/*` URL path. Minimal vanilla-JS SPA with four steps: landing → identity (name + phone, persisted to `localStorage`) → search → confirm → confirmation that polls `/sing/status/<id>` every 15s.
 
 ## VNC Screen Preview
 
