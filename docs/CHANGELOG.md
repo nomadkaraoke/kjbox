@@ -31,7 +31,7 @@ See the design + plan docs:
 
 **New dependency:** `qrcode` (pure-Python SVG QR generation; no Pillow).
 
-**Test coverage:** 1364 unit+integration tests pass (1307 prior + 57 new). Coverage includes sing_store CRUD + token helpers, public blueprint (landing, search, submit, rate limit, status), admin endpoints (all approval paths, edit, reject, config, QR), host-based route guard (blocks admin + static on public host; private hosts unaffected), and archive / sleep integration hooks.
+**Test coverage:** 1327 unit+integration tests pass (1232 prior + 95 new). Overall coverage 81%; `sing_store.py` 99%, `sing.py` 87%, `routes.py` 85%. Coverage includes sing_store CRUD + token helpers, public blueprint (landing, search, submit, rate limit, status), admin endpoints (all approval paths, edit, reject, config, QR), host-based route guard (blocks admin + static on public host; private hosts unaffected), and archive / sleep integration hooks.
 
 ## 2026-04-17 - Feature: Runtime-swappable karaoke renderer (mpv / VLC)
 
