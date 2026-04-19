@@ -64,13 +64,12 @@ class TestPublicHostAllows:
         assert resp.status_code == 200
 
     def test_sing_static_allowed(self, guarded_client):
+        # sing.css is a real asset in static-sing/; the guard must not block it.
         resp = guarded_client.get(
             "/sing/static/sing.css", headers={"Host": PUBLIC_HOST}
         )
-        # 200 (served) or 404 (file not present in test) — but NOT blocked by guard
-        assert resp.status_code in (200, 404)
-        # If 404 comes from the guard it has no body; Flask static serves a real 404.
-        # Either way the guard is not the cause.
+        assert resp.status_code == 200
+        assert b"sing-card" in resp.data  # real CSS body, not a guard 404
 
     def test_sing_submit_allowed(self, guarded_client, token):
         resp = guarded_client.post(

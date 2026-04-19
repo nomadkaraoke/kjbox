@@ -59,7 +59,11 @@ async function submit(payload) {
 }
 
 async function fetchStatus(id) {
-  const resp = await fetch(`/sing/status/${id}`, { credentials: "same-origin" });
+  // Status now requires the same token gate as other sing routes — the
+  // backend cross-references the request's stored token to prevent cross-
+  // event reads, so we must pass ours on every poll.
+  const t = encodeURIComponent(TOKEN);
+  const resp = await fetch(`/sing/status/${id}?t=${t}`, { credentials: "same-origin" });
   if (!resp.ok) throw new Error("status fetch failed");
   return resp.json();
 }
@@ -416,6 +420,13 @@ async function pollStatus(card) {
   const reqId = state.request?.id;
   if (!reqId || !live) return;
 
+  // Clear any previous poll timer so re-rendering the "done" step doesn't
+  // leak overlapping intervals.
+  if (state._statusPollTimer) {
+    clearInterval(state._statusPollTimer);
+    state._statusPollTimer = null;
+  }
+
   const tick = async () => {
     try {
       const data = await fetchStatus(reqId);
@@ -450,7 +461,7 @@ async function pollStatus(card) {
   };
 
   tick();
-  setInterval(tick, 15000);
+  state._statusPollTimer = setInterval(tick, 15000);
 }
 
 // --- Bootstrap -------------------------------------------------------------

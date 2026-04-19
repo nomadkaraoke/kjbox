@@ -5245,11 +5245,23 @@ const SingRequests = (() => {
     }
 
     async function toggleEnabled(checked) {
-        if (await postConfig({ enabled: checked })) await fetchConfig();
+        // If the server update fails, fetchConfig() reverts the checkbox to the
+        // actual server state so the UI can't lie.
+        const ok = await postConfig({ enabled: checked });
+        if (!ok) {
+            const el = document.getElementById('sing-enabled-toggle');
+            if (el) el.checked = !checked;
+        }
+        await fetchConfig();
     }
 
     async function toggleAutoApprove(checked) {
-        if (await postConfig({ auto_approve: checked })) await fetchConfig();
+        const ok = await postConfig({ auto_approve: checked });
+        if (!ok) {
+            const el = document.getElementById('sing-auto-approve-toggle');
+            if (el) el.checked = !checked;
+        }
+        await fetchConfig();
     }
 
     async function regenerate() {
