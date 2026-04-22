@@ -437,13 +437,17 @@ async function pollStatus(card) {
     try {
       const data = await fetchStatus(reqId);
       state.status = data;
-      if (data.position != null) {
-        const waitMin = Math.round((data.estimated_wait_s || 0) / 60);
-        const low = Math.max(1, Math.round(waitMin * 0.8));
-        const high = Math.max(low + 1, Math.round(waitMin * 1.2));
-        live.textContent = data.position === 1
-          ? "🎤 You're up next!"
-          : `You're #${data.position} — about ${low}–${high} min.`;
+      const est = data.estimate;
+      if (est && est.now_singing) {
+        live.textContent = "🎤 You're up — break a leg!";
+      } else if (est && est.position === 1) {
+        live.textContent = "🎤 You're next — head to the mic";
+      } else if (est && est.position === 2) {
+        live.textContent = "About 1 song to go";
+      } else if (est && est.position >= 3) {
+        const low = Math.round(est.range_low_s / 60);
+        const high = Math.round(est.range_high_s / 60);
+        live.textContent = `You're #${est.position} — about ${low}–${high} min`;
       } else if (data.request?.status === "pending") {
         live.textContent = "Waiting for KJ to approve…";
       } else if (data.request?.status === "rejected") {
