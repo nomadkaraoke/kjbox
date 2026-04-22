@@ -92,6 +92,10 @@ function el(tag, attrs = {}, ...children) {
 }
 
 function render() {
+  if (nowPlayingTimer && state.step !== "landing" && state.step !== "done") {
+    clearInterval(nowPlayingTimer);
+    nowPlayingTimer = null;
+  }
   root.innerHTML = "";
   const view = {
     landing: renderLanding,
@@ -109,10 +113,68 @@ function back(to) {
 
 // --- Views -----------------------------------------------------------------
 
-// Stub — implemented in Task 5. Returns a hidden placeholder element so the
-// landing + confirm render paths have a stable call site.
+// --- "What's playing now" widget -------------------------------------------
+
+let nowPlayingTimer = null;
+
 function renderNowPlaying() {
-  return el("div", { class: "now-playing", hidden: "" });
+  const node = el("div", { class: "now-playing", "data-loading": "true" },
+    el("div", { class: "np-loading" }, "Checking rotation…"),
+  );
+  fetchNowPlaying(node);
+  return node;
+}
+
+async function fetchNowPlaying(node) {
+  if (nowPlayingTimer) { clearInterval(nowPlayingTimer); nowPlayingTimer = null; }
+  const tick = async () => {
+    try {
+      const resp = await fetch(`/sing/now?t=${encodeURIComponent(TOKEN)}`, {
+        credentials: "same-origin",
+      });
+      if (!resp.ok) return renderNowError(node);
+      updateNowPlaying(node, await resp.json());
+    } catch {
+      renderNowError(node);
+    }
+  };
+  await tick();
+  nowPlayingTimer = setInterval(tick, 15000);
+}
+
+function updateNowPlaying(node, data) {
+  node.innerHTML = "";
+  node.removeAttribute("data-loading");
+  const { now_singing, up_next, queued_count } = data || {};
+  if (!now_singing && !up_next && !queued_count) {
+    node.appendChild(el("div", { class: "np-empty" },
+      "Rotation hasn't started yet — you could be the first!"));
+    return;
+  }
+  if (now_singing) {
+    node.appendChild(el("div", { class: "np-line np-now" },
+      el("span", { class: "np-label" }, "🎤 Now:"),
+      el("span", { class: "np-singer" }, now_singing.first_name || "—"),
+      now_singing.song_artist
+        ? el("span", { class: "np-song" }, `— ${now_singing.song_artist}`)
+        : null,
+    ));
+  }
+  if (up_next) {
+    node.appendChild(el("div", { class: "np-line np-next" },
+      el("span", { class: "np-label" }, "Up next:"),
+      el("span", { class: "np-singer" }, up_next.first_name || "—"),
+    ));
+  } else if (!now_singing && queued_count) {
+    node.appendChild(el("div", { class: "np-line" },
+      "Between singers — next up soon"));
+  }
+}
+
+function renderNowError(node) {
+  node.innerHTML = "";
+  node.removeAttribute("data-loading");
+  // Silent failure — don't clutter the card while the status poll still has a chance.
 }
 
 function renderLanding() {
@@ -418,6 +480,7 @@ function renderConfirm() {
 
 function renderDone() {
   const card = el("main", { class: "sing-card" },
+    renderNowPlaying(),
     el("h2", {}, state.request?.status === "approved" ? "You're in!" : "Sent!"),
     el("p", {}, state.request?.status === "approved"
       ? "The KJ has added you to the queue."
@@ -491,6 +554,10 @@ async function pollStatus(card) {
             el("span", { class: "q-status" }, entry.status || ""),
           ));
         }
+      }
+      if (data.now_playing) {
+        const npNode = card.querySelector(".now-playing");
+        if (npNode) updateNowPlaying(npNode, data.now_playing);
       }
     } catch {
       live.textContent = "Couldn't update — checking again in a moment.";

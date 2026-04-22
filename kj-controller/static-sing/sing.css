@@ -191,6 +191,22 @@ input:focus {
 .sing-footer-links { text-align: center; font-size: 0.85rem; margin-top: 1.5rem; }
 .sing-footer-links a { color: var(--nk-text-dim); }
 
+/* --- Now playing widget ---------------------------------------------------- */
+.now-playing {
+  padding: 0.75rem;
+  margin-bottom: 1rem;
+  border-radius: 10px;
+  background: linear-gradient(135deg, rgba(255,77,207,0.08), rgba(111,0,255,0.08));
+  border: 1px solid var(--nk-border);
+  font-size: 0.95rem;
+}
+.now-playing[data-loading="true"] { color: var(--nk-text-dim); font-style: italic; }
+.np-loading, .np-empty { padding: 0.25rem 0; color: var(--nk-text-dim); }
+.np-line { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: baseline; padding: 0.2rem 0; }
+.np-label { font-weight: 600; color: var(--nk-accent); }
+.np-singer { font-weight: 500; color: var(--nk-text); }
+.np-song { color: var(--nk-text-dim); }
+
 /* --- Inline rules short-form (confirm / done step) ------------------------ */
 .rules-inline { margin-top: 1rem; padding: 0.75rem; border-radius: 8px;
                 background: var(--nk-card-2); border: 1px solid var(--nk-border); }
