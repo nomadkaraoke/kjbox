@@ -399,7 +399,13 @@ def status(request_id):
             response["estimate"] = estimate
             # Legacy fields kept during transition — client will stop reading them in Task 3
             response["position"] = estimate["position"]
-            response["estimated_wait_s"] = estimate["expected_s"]
+            ahead = 0
+            for entry in entries:
+                if entry.get("id") == req["linked_entry_id"]:
+                    break
+                if (entry.get("status") or "").lower() not in ("done", "left"):
+                    ahead += int(entry.get("duration") or current_app.kj_config["sing_estimate_default_song_s"])
+            response["estimated_wait_s"] = ahead
             response["queue"] = _public_queue_view(entries)
 
     return jsonify(response)
