@@ -55,6 +55,11 @@ def mock_config(tmp_media_dir):
         "tls_key": "",
         "youtube_cookies_file": str(tmp_media_dir / "youtube_cookies.txt"),
         "rotation_db_path": ":memory:",
+        "sing_rate_limit_per_ip": 5,
+        "sing_rate_limit_window_s": 300,
+        "sing_estimate_transition_s": 30,
+        "sing_estimate_default_song_s": 240,
+        "sing_estimate_min_spread_s": 120,
     }
 
 

@@ -349,6 +349,31 @@ def submit():
     )
 
 
+@sing_bp.route("/now", methods=["GET"])
+@require_token
+def now_playing():
+    """Lightweight 'what's playing now' payload for the landing page widget."""
+    rotation = getattr(current_app, "rotation", None)
+    if rotation is None:
+        return jsonify({"now_singing": None, "up_next": None, "queued_count": 0})
+    entries = rotation.get_rotation()
+    active = [e for e in entries if (e.get("status") or "").lower() not in ("done", "left")]
+
+    now_singing_entry = next(
+        (e for e in active if (e.get("status") or "").lower() == "now singing"),
+        None,
+    )
+    up_next_entry = next(
+        (e for e in active if e is not now_singing_entry),
+        None,
+    )
+    return jsonify({
+        "now_singing": _now_view(now_singing_entry),
+        "up_next": _now_view(up_next_entry),
+        "queued_count": len(active),
+    })
+
+
 @sing_bp.route("/status/<int:request_id>", methods=["GET"])
 def status(request_id):
     """Return the singer's own request status.
@@ -378,23 +403,53 @@ def status(request_id):
     response = {"request": _public_request_view(req)}
 
     rotation = getattr(current_app, "rotation", None)
-    if rotation is not None and req.get("linked_entry_id"):
+    if rotation is not None:
         entries = rotation.get_rotation()
-        position = None
-        estimated_wait_s = 0
-        for i, entry in enumerate(entries):
-            if entry.get("id") == req["linked_entry_id"]:
-                position = i + 1  # 1-based from top
-                break
-            if entry.get("status", "").lower() not in {"done", "left"}:
-                estimated_wait_s += int(entry.get("duration") or 240)
-        response["position"] = position
-        response["estimated_wait_s"] = estimated_wait_s
-        response["queue"] = _public_queue_view(entries)
+        active = [e for e in entries if (e.get("status") or "").lower() not in ("done", "left")]
+        now_singing_entry = next(
+            (e for e in active if (e.get("status") or "").lower() == "now singing"),
+            None,
+        )
+        up_next_entry = next(
+            (e for e in active if e is not now_singing_entry),
+            None,
+        )
+        response["now_playing"] = {
+            "now_singing": _now_view(now_singing_entry),
+            "up_next": _now_view(up_next_entry),
+            "queued_count": len(active),
+        }
+
+        if req.get("linked_entry_id"):
+            from wait_estimate import compute_estimate
+            estimate = compute_estimate(entries, req["linked_entry_id"], current_app.kj_config)
+            response["estimate"] = estimate
+            # Legacy fields kept during transition — client will stop reading them in Task 3
+            response["position"] = estimate["position"]
+            ahead = 0
+            for entry in entries:
+                if entry.get("id") == req["linked_entry_id"]:
+                    break
+                if (entry.get("status") or "").lower() not in ("done", "left"):
+                    ahead += int(entry.get("duration") or current_app.kj_config["sing_estimate_default_song_s"])
+            response["estimated_wait_s"] = ahead
+            response["queue"] = _public_queue_view(entries)
+
     return jsonify(response)
 
 
 # --- Response shaping ----------------------------------------------------
+
+def _now_view(entry):
+    """Minimal singer/song view for now_playing payloads."""
+    if not entry:
+        return None
+    singer = entry.get("singer") or ""
+    return {
+        "first_name": singer.split()[0] if singer else "",
+        "song_artist": entry.get("song_artist") or "",
+    }
+
 
 def _public_request_view(req):
     """Hide internal/PII fields from singer-facing responses."""

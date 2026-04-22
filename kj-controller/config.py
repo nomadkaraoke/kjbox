@@ -62,6 +62,9 @@ def load_config(config_file=None):
         "sing_local_url_base": "",
         "sing_rate_limit_per_ip": 5,
         "sing_rate_limit_window_s": 300,
+        "sing_estimate_transition_s": 30,
+        "sing_estimate_default_song_s": 240,
+        "sing_estimate_min_spread_s": 120,
     }
     if os.path.exists(config_file):
         try:
