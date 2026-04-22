@@ -2,36 +2,6 @@
 
 import pytest
 
-import sing
-from app import create_app
-
-
-@pytest.fixture(autouse=True)
-def _reset_rate_limiter():
-    """Each test starts with an empty rate-limit window."""
-    sing._rate_limit_state.clear()
-    yield
-    sing._rate_limit_state.clear()
-
-
-@pytest.fixture
-def sing_app(mock_config):
-    app = create_app(config=mock_config)
-    app.config["TESTING"] = True
-    yield app
-    app.catalog.close()
-
-
-@pytest.fixture
-def client(sing_app):
-    with sing_app.test_client() as c:
-        yield c
-
-
-@pytest.fixture
-def token(sing_app):
-    return sing_app.sing_store.ensure_token()
-
 
 def _enable_requests(sing_app):
     """Helper: enable public requests against the ensure_token()-generated token."""

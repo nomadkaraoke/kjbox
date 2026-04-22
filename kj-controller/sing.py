@@ -23,6 +23,7 @@ from flask import (
     session,
     url_for,
 )
+from wait_estimate import compute_estimate
 
 
 sing_bp = Blueprint(
@@ -356,22 +357,8 @@ def now_playing():
     rotation = getattr(current_app, "rotation", None)
     if rotation is None:
         return jsonify({"now_singing": None, "up_next": None, "queued_count": 0})
-    entries = rotation.get_rotation()
-    active = [e for e in entries if (e.get("status") or "").lower() not in ("done", "left")]
-
-    now_singing_entry = next(
-        (e for e in active if (e.get("status") or "").lower() == "now singing"),
-        None,
-    )
-    up_next_entry = next(
-        (e for e in active if e is not now_singing_entry),
-        None,
-    )
-    return jsonify({
-        "now_singing": _now_view(now_singing_entry),
-        "up_next": _now_view(up_next_entry),
-        "queued_count": len(active),
-    })
+    _entries, _active, now_playing_dict = _build_now_playing(rotation)
+    return jsonify(now_playing_dict)
 
 
 @sing_bp.route("/status/<int:request_id>", methods=["GET"])
@@ -404,41 +391,48 @@ def status(request_id):
 
     rotation = getattr(current_app, "rotation", None)
     if rotation is not None:
-        entries = rotation.get_rotation()
-        active = [e for e in entries if (e.get("status") or "").lower() not in ("done", "left")]
-        now_singing_entry = next(
-            (e for e in active if (e.get("status") or "").lower() == "now singing"),
-            None,
-        )
-        up_next_entry = next(
-            (e for e in active if e is not now_singing_entry),
-            None,
-        )
-        response["now_playing"] = {
-            "now_singing": _now_view(now_singing_entry),
-            "up_next": _now_view(up_next_entry),
-            "queued_count": len(active),
-        }
+        entries, _active, now_playing_dict = _build_now_playing(rotation)
+        response["now_playing"] = now_playing_dict
 
         if req.get("linked_entry_id"):
-            from wait_estimate import compute_estimate
             estimate = compute_estimate(entries, req["linked_entry_id"], current_app.kj_config)
             response["estimate"] = estimate
             # Legacy fields kept during transition — client will stop reading them in Task 3
             response["position"] = estimate["position"]
-            ahead = 0
-            for entry in entries:
-                if entry.get("id") == req["linked_entry_id"]:
-                    break
-                if (entry.get("status") or "").lower() not in ("done", "left"):
-                    ahead += int(entry.get("duration") or current_app.kj_config["sing_estimate_default_song_s"])
-            response["estimated_wait_s"] = ahead
+            response["estimated_wait_s"] = estimate["expected_s"]
             response["queue"] = _public_queue_view(entries)
 
     return jsonify(response)
 
 
 # --- Response shaping ----------------------------------------------------
+
+def _build_now_playing(rotation):
+    """Return (entries, active, now_playing_dict) for the /sing/now response body.
+
+    `entries` is the full rotation list (useful to the caller for estimate
+    computation). `active` is entries filtered to non-done/non-left (useful
+    for `queued_count` and any further filtering). `now_playing_dict` has
+    the three keys `now_singing`, `up_next`, `queued_count` matching the
+    /sing/now response shape and ready to embed as a sub-object of any
+    response.
+    """
+    entries = rotation.get_rotation()
+    active = [
+        e for e in entries
+        if (e.get("status") or "").lower() not in ("done", "left")
+    ]
+    now = next(
+        (e for e in active if (e.get("status") or "").lower() == "now singing"),
+        None,
+    )
+    nxt = next((e for e in active if e is not now), None)
+    return entries, active, {
+        "now_singing": _now_view(now),
+        "up_next": _now_view(nxt),
+        "queued_count": len(active),
+    }
+
 
 def _now_view(entry):
     """Minimal singer/song view for now_playing payloads."""
