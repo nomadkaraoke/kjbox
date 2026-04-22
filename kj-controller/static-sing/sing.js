@@ -30,6 +30,31 @@ const state = {
   status: null,     // /sing/status response
 };
 
+// --- Offline detection -----------------------------------------------------
+
+let consecutivePollFailures = 0;
+const OFFLINE_FAIL_THRESHOLD = 2;
+
+function setOfflineBanner(visible) {
+  const banner = document.getElementById("sing-offline");
+  if (!banner) return;
+  if (visible) banner.removeAttribute("hidden");
+  else banner.setAttribute("hidden", "");
+}
+
+function onPollSuccess() {
+  consecutivePollFailures = 0;
+  setOfflineBanner(false);
+}
+
+function onPollFailure() {
+  consecutivePollFailures++;
+  if (consecutivePollFailures >= OFFLINE_FAIL_THRESHOLD) setOfflineBanner(true);
+}
+
+window.addEventListener("online", () => setOfflineBanner(false));
+window.addEventListener("offline", () => setOfflineBanner(true));
+
 // --- Network ---------------------------------------------------------------
 
 async function fetchJson(url, opts = {}) {
@@ -132,9 +157,11 @@ async function fetchNowPlaying(node) {
       const resp = await fetch(`/sing/now?t=${encodeURIComponent(TOKEN)}`, {
         credentials: "same-origin",
       });
-      if (!resp.ok) return renderNowError(node);
+      if (!resp.ok) { onPollFailure(); return renderNowError(node); }
+      onPollSuccess();
       updateNowPlaying(node, await resp.json());
     } catch {
+      onPollFailure();
       renderNowError(node);
     }
   };
@@ -526,6 +553,7 @@ async function pollStatus(card) {
   const tick = async () => {
     try {
       const data = await fetchStatus(reqId);
+      onPollSuccess();
       state.status = data;
       const est = data.estimate;
       if (est && est.now_singing) {
@@ -560,6 +588,7 @@ async function pollStatus(card) {
         if (npNode) updateNowPlaying(npNode, data.now_playing);
       }
     } catch {
+      onPollFailure();
       live.textContent = "Couldn't update — checking again in a moment.";
     }
   };

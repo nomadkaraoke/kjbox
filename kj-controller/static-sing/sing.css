@@ -214,3 +214,16 @@ input:focus {
 .rules-inline .rules-short { list-style: none; padding-left: 0; margin-top: 0.75rem; }
 .rules-inline .rules-short li { padding: 0.25rem 0; border-bottom: 1px solid var(--nk-border); }
 .rules-inline a { color: var(--nk-accent); }
+
+/* --- Offline banner --------------------------------------------------------- */
+.offline-banner {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: #8a3a00;
+  color: #fff;
+  padding: 0.6rem 1rem;
+  text-align: center;
+  font-size: 0.9rem;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+}

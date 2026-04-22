@@ -8,6 +8,9 @@
 <link rel="stylesheet" href="{{ url_for('sing.static', filename='sing.css') }}">
 </head>
 <body class="sing">
+<div id="sing-offline" class="offline-banner" hidden>
+  No internet — keep this page open and we'll update when we're back.
+</div>
 {% if closed %}
 <main class="sing-card sing-closed">
   <h1>Requests aren't open right now</h1>
