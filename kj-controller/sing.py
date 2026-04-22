@@ -259,6 +259,12 @@ def landing():
     )
 
 
+@sing_bp.route("/rules", methods=["GET"])
+def rules():
+    """Public rules page — no token gate (bookmarkable, shareable)."""
+    return render_template("sing_rules.html")
+
+
 @sing_bp.route("/search", methods=["GET"])
 @require_token
 def search():

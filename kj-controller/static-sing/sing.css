@@ -175,3 +175,26 @@ input:focus {
 .q-name { font-weight: 600; }
 .q-song { color: var(--nk-text-dim); }
 .q-status { color: var(--nk-accent); font-size: 0.8rem; }
+
+/* --- Rules page ----------------------------------------------------------- */
+.sing-rules { max-width: 640px; }
+.sing-rules h1 { margin-bottom: 4px; }
+.sing-rules .subtitle { color: var(--nk-text-dim); margin-bottom: 24px; }
+.sing-rules .rules-list { list-style: decimal; padding-left: 1.5rem; }
+.sing-rules .rules-list li { margin-bottom: 1.25rem; }
+.sing-rules .rules-list h2 { font-size: 1.1rem; margin-bottom: 4px; }
+.sing-rules .rules-list p { color: var(--nk-text-dim); }
+.sing-rules .heart { color: var(--nk-error); }
+.sing-rules .rules-back { margin-top: 2rem; text-align: center; }
+
+/* --- Footer link (landing + done) ----------------------------------------- */
+.sing-footer-links { text-align: center; font-size: 0.85rem; margin-top: 1.5rem; }
+.sing-footer-links a { color: var(--nk-text-dim); }
+
+/* --- Inline rules short-form (confirm / done step) ------------------------ */
+.rules-inline { margin-top: 1rem; padding: 0.75rem; border-radius: 8px;
+                background: var(--nk-card-2); border: 1px solid var(--nk-border); }
+.rules-inline summary { cursor: pointer; font-weight: 600; }
+.rules-inline .rules-short { list-style: none; padding-left: 0; margin-top: 0.75rem; }
+.rules-inline .rules-short li { padding: 0.25rem 0; border-bottom: 1px solid var(--nk-border); }
+.rules-inline a { color: var(--nk-accent); }

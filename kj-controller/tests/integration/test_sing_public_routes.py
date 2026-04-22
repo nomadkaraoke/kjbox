@@ -245,3 +245,16 @@ class TestOverlaySync:
         assert overlay_manager.get_overlay(linked["id"])["config"]["url"] == "new-url"
         assert overlay_manager.get_overlay(unlinked["id"])["config"]["url"] == "leaveme"
         assert overlay_manager.get_overlay(ticker["id"])["config"]["text"] == "don't touch"
+
+
+class TestRulesPage:
+    def test_rules_page_unauthenticated(self, client):
+        """Rules page is public — no token required."""
+        resp = client.get("/sing/rules")
+        assert resp.status_code == 200
+        body = resp.get_data(as_text=True)
+        assert "First come, first sing" in body
+        assert "New singers get priority" in body
+        assert "Multiple songs welcome" in body
+        assert "Need to leave early" in body
+        assert "Paid priority" in body

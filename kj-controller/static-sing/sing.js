@@ -109,8 +109,15 @@ function back(to) {
 
 // --- Views -----------------------------------------------------------------
 
+// Stub — implemented in Task 5. Returns a hidden placeholder element so the
+// landing + confirm render paths have a stable call site.
+function renderNowPlaying() {
+  return el("div", { class: "now-playing", hidden: "" });
+}
+
 function renderLanding() {
   return el("main", { class: "sing-card" },
+    renderNowPlaying(),   // Task 5 populates this; stub is harmless
     el("h1", {}, "Request a song"),
     el("p", {},
       "Tap below to add your song to the rotation. The KJ will call you up when you're on."),
@@ -125,8 +132,16 @@ function renderLanding() {
     }, state.name ? "Continue" : "Get started"),
     state.name ? el("p", { class: "hint" },
       `Not ${state.name}? `,
-      el("a", { href: "#", onclick: (e) => { e.preventDefault(); state.name = state.phone = ""; LS.set("sing_name", ""); LS.set("sing_phone", ""); state.step = "identity"; render(); } }, "switch")
+      el("a", { href: "#", onclick: (e) => {
+        e.preventDefault();
+        state.name = state.phone = "";
+        LS.set("sing_name", ""); LS.set("sing_phone", "");
+        state.step = "identity"; render();
+      } }, "switch")
     ) : null,
+    el("p", { class: "sing-footer-links" },
+      el("a", { href: "/sing/rules", target: "_blank" }, "House rules"),
+    ),
   );
 }
 
@@ -411,6 +426,18 @@ function renderDone() {
     el("details", { class: "upcoming" },
       el("summary", {}, "Show upcoming singers"),
       el("div", { class: "queue-list" }, "Loading…"),
+    ),
+    el("details", { class: "rules-inline" },
+      el("summary", {}, "🎤 House rules"),
+      el("ul", { class: "rules-short" },
+        el("li", {}, "First come, first sing"),
+        el("li", {}, "New singers get priority"),
+        el("li", {}, "Multiple songs? We'll spread them out"),
+        el("li", {}, "Need to leave? Ask the KJ"),
+        el("li", {}, "♥ = paid priority ($20+)"),
+      ),
+      el("p", {},
+        el("a", { href: "/sing/rules", target: "_blank" }, "Read full rules →")),
     ),
     el("p", { class: "hint" },
       "Keep this page open — it'll update automatically. Good luck!"),
