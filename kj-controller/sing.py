@@ -450,13 +450,7 @@ def push_unsubscribe():
     endpoint = (data.get("endpoint") or "").strip()
     if not endpoint:
         return jsonify({"error": "endpoint required"}), 400
-    conn = store._get_conn()
-    row = conn.execute(
-        "SELECT id FROM sing_push_subscriptions WHERE token=? AND endpoint=?",
-        (token, endpoint),
-    ).fetchone()
-    if row:
-        store.disable_push_subscription(row["id"])
+    store.disable_push_subscription_by_endpoint(token, endpoint)
     return ("", 204)
 
 

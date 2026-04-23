@@ -306,6 +306,36 @@ class TestDispatcher:
             d.executor.shutdown(wait=True)
         wp.assert_not_called()
 
+    def test_state_reserved_before_send(self):
+        """last_sent_state should be updated synchronously in _dispatch_now
+        BEFORE the webpush send, so a re-entrant dispatch sees the reserved
+        state and dedups."""
+        sub = {
+            "id": 99, "endpoint": "ep", "p256dh": "p", "auth": "a",
+            "phone": "+1", "last_sent_state": None,
+        }
+        d, store, _ = self._make_dispatcher(sub_list=[sub])
+        d.rotation.get_rotation.return_value = [
+            _entry(3, status="Now Singing", singer="+1"),
+        ]
+        # Patch webpush to block — the state should still be reserved by the time
+        # webpush is CALLED (not after).
+        import threading
+        wp_called = threading.Event()
+        wp_release = threading.Event()
+        def slow_webpush(*args, **kwargs):
+            wp_called.set()
+            wp_release.wait(timeout=1)  # wait until the test releases
+        with patch("push_dispatcher.webpush", side_effect=slow_webpush):
+            d._dispatch_now()
+            # At this point the executor is running webpush (or about to).
+            # The reservation must have happened synchronously.
+            store.update_push_sent_state.assert_called_with(
+                99, {"entry_id": 3, "ladder_step": "now_singing"},
+            )
+            wp_release.set()
+            d.executor.shutdown(wait=True)
+
     def test_notify_rotation_changed_debounces(self):
         """Multiple calls within debounce window coalesce into one _dispatch_now."""
         import time

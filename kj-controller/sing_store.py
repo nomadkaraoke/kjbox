@@ -401,6 +401,22 @@ class SingStore:
         )
         conn.commit()
 
+    def disable_push_subscription_by_endpoint(self, token, endpoint):
+        """Soft-disable a subscription by (token, endpoint).
+
+        Returns True if a row was disabled, False if no matching row existed.
+        Silent no-op on unknown endpoint — callers treat it as idempotent.
+        """
+        conn = self._get_conn()
+        cur = conn.execute(
+            "UPDATE sing_push_subscriptions "
+            "SET disabled_at=datetime('now', 'localtime') "
+            "WHERE token=? AND endpoint=? AND disabled_at IS NULL",
+            (token, endpoint),
+        )
+        conn.commit()
+        return cur.rowcount > 0
+
     def update_push_sent_state(self, sub_id, state_dict):
         import json as _json
         conn = self._get_conn()
@@ -413,17 +429,17 @@ class SingStore:
         conn.commit()
 
     def cleanup_stale_push_subscriptions(self, current_token):
-        """Delete subs on tokens other than the current, older than 7 days.
+        """Delete subs on tokens other than the current, not refreshed in >7 days.
 
-        Keeps recent subs on other tokens (so someone who reopens a bookmark
-        from earlier today still receives pushes) but garbage-collects the
-        long tail.
+        Uses updated_at (bumped on every upsert) rather than created_at so a
+        singer who's been actively re-subscribing on a different token keeps
+        their row.
         """
         conn = self._get_conn()
         conn.execute(
             "DELETE FROM sing_push_subscriptions "
             "WHERE token != ? "
-            "  AND created_at < datetime('now', '-7 days', 'localtime')",
+            "  AND updated_at < datetime('now', '-7 days', 'localtime')",
             (current_token,),
         )
         conn.commit()

@@ -436,10 +436,10 @@ class TestPushSubscriptions:
             token="tok1", phone="+1", singer_name="Old",
             endpoint="old-ep", p256dh="p", auth="a",
         )
-        # Manually age the row by 8 days
+        # Manually age the row by 8 days via updated_at (the new cleanup predicate)
         store._get_conn().execute(
             "UPDATE sing_push_subscriptions "
-            "SET created_at = datetime('now', '-8 days', 'localtime')"
+            "SET updated_at = datetime('now', '-8 days', 'localtime')"
         )
         store._get_conn().commit()
         # New sub on tok2 (today)
@@ -451,6 +451,33 @@ class TestPushSubscriptions:
         # old sub on tok1 (>7d) deleted; new sub on tok2 kept
         assert store.list_active_push_subscriptions("tok1") == []
         assert len(store.list_active_push_subscriptions("tok2")) == 1
+
+    def test_cleanup_keeps_refreshed_old_sub(self, store):
+        """A sub created long ago but recently refreshed (upsert) should survive."""
+        store.insert_push_subscription(
+            token="tok1", phone="+1", singer_name="R",
+            endpoint="ep", p256dh="p", auth="a",
+        )
+        # Simulate: created_at 30 days ago, updated_at today (just upserted)
+        store._get_conn().execute(
+            "UPDATE sing_push_subscriptions "
+            "SET created_at = datetime('now', '-30 days', 'localtime')"
+        )
+        store._get_conn().commit()
+        store.cleanup_stale_push_subscriptions(current_token="tok2")
+        # Even though it's 30 days old by created_at, updated_at is today → kept
+        assert len(store.list_active_push_subscriptions("tok1")) == 1
+
+    def test_disable_by_endpoint_helper(self, store):
+        store.insert_push_subscription(
+            token="tok1", phone="+1", singer_name="A",
+            endpoint="ep1", p256dh="p", auth="a",
+        )
+        assert store.disable_push_subscription_by_endpoint("tok1", "ep1") is True
+        assert store.list_active_push_subscriptions("tok1") == []
+
+    def test_disable_by_endpoint_unknown_is_false(self, store):
+        assert store.disable_push_subscription_by_endpoint("tok1", "never") is False
 
     def test_cleanup_preserves_recent_other_token_subs(self, store):
         """A sub on a different token that's still recent (<7d) should survive cleanup."""

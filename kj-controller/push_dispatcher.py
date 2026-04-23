@@ -192,6 +192,13 @@ class PushDispatcher:
             if (last.get("entry_id") == proposed["entry_id"]
                     and last.get("ladder_step") == proposed["ladder_step"]):
                 continue
+            # Reserve the state BEFORE submitting the send, so a second
+            # _dispatch_now() landing while the send is in flight sees the
+            # reserved state and skips. On send failure we accept missing
+            # this one push — the next rotation change picks up the next
+            # ladder step, and polling remains the safety net.
+            self.store.update_push_sent_state(sub["id"], proposed)
+            sub["last_sent_state"] = json.dumps(proposed)  # keep in-memory view consistent too
             payload = render_payload(step, target, request_id=None)
             self.executor.submit(self._send, sub, payload, proposed)
 
@@ -208,7 +215,7 @@ class PushDispatcher:
                     "sub": self.cfg.get("vapid_subject", "mailto:admin@nomadkaraoke.com"),
                 },
             )
-            self.store.update_push_sent_state(sub["id"], proposed_state)
+            # Sent state was already reserved in _dispatch_now() before submit.
         except WebPushException as e:
             status = None
             resp = getattr(e, "response", None)
