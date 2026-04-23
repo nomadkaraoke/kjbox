@@ -312,6 +312,32 @@ class SingStore:
         conn.commit()
         return self.get_request(request_id)
 
+    def update_request_source(self, request_id, source_type, source_ref, source_meta):
+        """Rewrite only the source_* fields on a request.
+
+        Used when a ``kj_pick`` request gets bound to a concrete version at
+        approval time — we want the post-approval row to reflect the picked
+        version (so downstream audit trails, "now playing" history, and any
+        future retry logic see ``local`` / ``divebar`` / ``youtube`` instead
+        of the transient ``kj_pick`` placeholder).
+
+        ``source_meta`` is stored verbatim as JSON; pass ``None`` to clear it.
+        """
+        if self.get_request(request_id) is None:
+            raise ValueError(f"Request {request_id} not found")
+        meta_json = json.dumps(source_meta) if source_meta is not None else None
+        conn = self._get_conn()
+        conn.execute(
+            """
+            UPDATE sing_requests
+               SET source_type = ?, source_ref = ?, source_meta = ?
+             WHERE id = ?
+            """,
+            (source_type, source_ref, meta_json, request_id),
+        )
+        conn.commit()
+        return self.get_request(request_id)
+
     def mark_approved(self, request_id, linked_entry_id=None):
         """Set status=approved, reviewed_at=now, linked_entry_id if provided."""
         if self.get_request(request_id) is None:

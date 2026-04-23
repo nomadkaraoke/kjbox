@@ -177,6 +177,117 @@ class TestApprove:
         assert resp.status_code == 404
 
 
+def _make_kj_pick_pending(app, versions):
+    """Insert a pending kj_pick request carrying the given versions snapshot."""
+    return app.sing_store.create_request(
+        singer_name="KJPickSinger",
+        phone="+1 555 9999",
+        song_artist="Queen",
+        song_title="Bohemian Rhapsody",
+        source_type="kj_pick",
+        source_ref=None,
+        source_meta={"versions": versions},
+    )
+
+
+class TestApproveKjPick:
+    def test_approve_with_local_version(self, admin_client, admin_app):
+        req = _make_kj_pick_pending(admin_app, [
+            {"source": "local", "local": {"path": "/media/queen.mp4"}},
+            {"source": "kn", "kn": {"youtube_url": "https://yt/x"}},
+        ])
+        resp = admin_client.post(
+            f"/rotation/requests/{req['id']}/approve",
+            json={"version_index": 0},
+        )
+        assert resp.status_code == 200
+        data = resp.get_json()
+        # Row was rewritten to reflect the chosen version — audit trail shows
+        # what actually played, not the ambiguous kj_pick placeholder.
+        assert data["request"]["source_type"] == "local"
+        assert data["request"]["source_ref"] == "/media/queen.mp4"
+        # Rotation entry exists and is linked.
+        entries = admin_app.rotation.get_rotation()
+        assert any(e["singer"] == "KJPickSinger" for e in entries)
+
+    def test_approve_with_youtube_version_queues_download(
+        self, admin_client, admin_app,
+    ):
+        req = _make_kj_pick_pending(admin_app, [
+            {"source": "local", "local": {"path": "/media/queen.mp4"}},
+            {"source": "kn", "kn": {
+                "brand_code": "KV", "youtube_url": "https://yt/abc",
+            }},
+        ])
+        with patch("routes._download_worker"):
+            resp = admin_client.post(
+                f"/rotation/requests/{req['id']}/approve",
+                json={"version_index": 1},
+            )
+        assert resp.status_code == 200
+        # Stored as youtube (not kj_pick) so the download worker + history
+        # see a concrete source type.
+        stored = admin_app.sing_store.get_request(req["id"])
+        assert stored["source_type"] == "youtube"
+        assert stored["source_ref"] == "https://yt/abc"
+        items = admin_app.download_queue["items"]
+        assert any(it["url"] == "https://yt/abc" for it in items)
+
+    def test_approve_with_divebar_version_queues_download(
+        self, admin_client, admin_app,
+    ):
+        req = _make_kj_pick_pending(admin_app, [
+            {"source": "kn", "kn": {
+                "brand_code": "SF",
+                "divebar": {"file_id": "drive-xyz", "drive_path": "/SF/q.mp4"},
+                "youtube_url": "https://yt/backup",
+            }},
+        ])
+        with patch(
+            "routes.divebar.get_download_url",
+            return_value="https://dl/q.mp4",
+        ), patch("routes._download_worker"):
+            resp = admin_client.post(
+                f"/rotation/requests/{req['id']}/approve",
+                json={"version_index": 0},
+            )
+        assert resp.status_code == 200
+        items = admin_app.download_queue["items"]
+        assert items[-1]["source"] == "divebar"
+        assert items[-1]["url"] == "https://dl/q.mp4"
+
+    def test_approve_without_version_index_400(self, admin_client, admin_app):
+        req = _make_kj_pick_pending(admin_app, [
+            {"source": "local", "local": {"path": "/x.mp4"}},
+        ])
+        resp = admin_client.post(f"/rotation/requests/{req['id']}/approve")
+        assert resp.status_code == 400
+        assert "version_index" in resp.get_json()["error"]
+        # Row stays pending so the admin can retry with an index.
+        assert admin_app.sing_store.get_request(req["id"])["status"] == "pending"
+
+    def test_approve_with_out_of_range_index_400(self, admin_client, admin_app):
+        req = _make_kj_pick_pending(admin_app, [
+            {"source": "local", "local": {"path": "/x.mp4"}},
+        ])
+        resp = admin_client.post(
+            f"/rotation/requests/{req['id']}/approve",
+            json={"version_index": 5},
+        )
+        assert resp.status_code == 400
+        assert admin_app.sing_store.get_request(req["id"])["status"] == "pending"
+
+    def test_version_index_ignored_for_non_kj_pick(self, admin_client, admin_app):
+        """Backwards-compat — existing Approve button on non-kj_pick requests
+        keeps working even if a stray version_index lands in the body."""
+        req = _make_pending(admin_app)  # source_type=local, no source_meta
+        resp = admin_client.post(
+            f"/rotation/requests/{req['id']}/approve",
+            json={"version_index": 3},
+        )
+        assert resp.status_code == 200
+
+
 class TestEdit:
     def test_edit_applies_updates(self, admin_client, admin_app):
         req = _make_pending(admin_app, singer_name="Andrew")

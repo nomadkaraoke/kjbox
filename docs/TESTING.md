@@ -153,3 +153,16 @@ one Android device and one iPhone before shipping push changes to prod.
 - [ ] Landing page with no rotation entries → empty-state "Rotation hasn't started yet — you could be the first!".
 - [ ] KJ adds an entry and marks it Now Singing → within 15s the widget shows "🎤 Now: {singer} — {song}".
 - [ ] Second entry added → within 15s widget updates to include "Up next: {name}".
+
+### Song selection — grouped search + KJ picks version (Phase A)
+
+- [ ] Search for a song with multiple versions (e.g. "bohemian rhapsody") → one card per unique `(artist, title)`, not one per version. Card shows "Let the KJ pick the best version →" CTA and an inert "N versions available →" hint below it.
+- [ ] Search for a song with exactly one version (e.g. an obscure title with only a single KN track) → card shows "Add to queue" CTA (no KJ-picks framing, no "N versions" hint).
+- [ ] Tap "Let the KJ pick" → confirm page shows "{title} — {artist} (KJ picks best version)". Submit → admin sees a pending row with an amber `kj_pick` badge and inline picker.
+- [ ] Admin picker shows candidates ranked: locals (📁) first, then Divebar (💿), then community (🎤), then YouTube (📺). Each row has its own "Approve with this →" button.
+- [ ] Tap "Approve with this" on a local version → no download queued, rotation entry file_path set, request row's `source_type` = `local`.
+- [ ] Tap "Approve with this" on a KN+divebar version → download queued with source=divebar. Request row's `source_type` = `divebar`.
+- [ ] Tap "Approve with this" on a KN YouTube-only version → download queued with source=youtube. Request row's `source_type` = `youtube`.
+- [ ] With auto-approve **enabled**, submit a `kj_pick` → still lands in pending queue (auto-approve is skipped for `kj_pick`). Submit a `local` → still auto-approves.
+- [ ] Reject a `kj_pick` request (no version picked) → request row's `source_type` stays `kj_pick` (unbound), status = `rejected`.
+- [ ] Admin sends `POST /rotation/requests/<id>/approve` with no `version_index` on a `kj_pick` → 400 with "version_index required". Row stays pending.

@@ -75,15 +75,81 @@ class TestSearch:
         resp = client.get(f"/sing/search?q=ab&t={token}")
         assert resp.status_code == 400
 
-    def test_search_returns_shape(self, client, token, monkeypatch):
-        # Stub out karaoke_nerds to avoid network
+    def test_search_returns_grouped_shape(self, client, token, monkeypatch):
+        """Phase A contract: /sing/search returns ``{songs: [...]}`` — not the
+        old flat ``{local, karaoke_nerds}`` shape. One entry per unique song,
+        each with a ``versions[]`` snapshot."""
         import karaoke_nerds
         monkeypatch.setattr(karaoke_nerds, "search", lambda *a, **kw: [])
         resp = client.get(f"/sing/search?q=hello&t={token}")
         assert resp.status_code == 200
         data = resp.get_json()
-        assert "local" in data
-        assert "karaoke_nerds" in data
+        assert "songs" in data
+        assert isinstance(data["songs"], list)
+        # Old keys must be gone — clients updated in the same PR and nothing
+        # else should depend on them.
+        assert "local" not in data
+        assert "karaoke_nerds" not in data
+
+    def test_search_groups_same_song(self, client, token, monkeypatch):
+        """Two KN tracks for the same artist+title collapse to one group with
+        two versions."""
+        import karaoke_nerds
+        monkeypatch.setattr(karaoke_nerds, "search", lambda *a, **kw: [{
+            "artist": "Queen",
+            "title": "Bohemian Rhapsody",
+            "tracks": [
+                {"brand_code": "KV", "brand_name": "Karaoke Version",
+                 "youtube_url": "https://youtu.be/a", "is_community": False},
+                {"brand_code": "SK", "brand_name": "Sound Choice",
+                 "youtube_url": "https://youtu.be/b", "is_community": False},
+            ],
+        }])
+        resp = client.get(f"/sing/search?q=bohemian&t={token}")
+        data = resp.get_json()
+        assert len(data["songs"]) == 1
+        g = data["songs"][0]
+        assert g["artist"] == "Queen"
+        assert g["title"] == "Bohemian Rhapsody"
+        assert g["version_count"] == 2
+        assert g["in_library"] is False  # YouTube only, no local/divebar
+        assert len(g["versions"]) == 2
+        assert all(v["source"] == "kn" for v in g["versions"])
+
+    def test_search_defensive_filter_drops_unapprovable_kn_tracks(
+        self, client, token, monkeypatch,
+    ):
+        """A KN track with no YouTube URL AND no divebar mirror is unapprovable
+        — it must be filtered out before grouping so the singer never sees it.
+        (Design: Phase B §4)"""
+        import karaoke_nerds
+        monkeypatch.setattr(karaoke_nerds, "search", lambda *a, **kw: [{
+            "artist": "Queen",
+            "title": "Bohemian Rhapsody",
+            "tracks": [
+                # Good track with YouTube URL.
+                {"brand_code": "KV", "brand_name": "Karaoke Version",
+                 "youtube_url": "https://youtu.be/a", "is_community": False},
+                # Bad: blank youtube_url, no divebar.
+                {"brand_code": "ORPHAN", "brand_name": "Orphan",
+                 "youtube_url": "", "is_community": False},
+            ],
+        }])
+        resp = client.get(f"/sing/search?q=bohemian&t={token}")
+        data = resp.get_json()
+        assert len(data["songs"]) == 1
+        # Orphan is stripped; only the KV track appears.
+        assert data["songs"][0]["version_count"] == 1
+        assert data["songs"][0]["versions"][0]["kn"]["brand_code"] == "KV"
+
+    def test_search_empty_result(self, client, token, monkeypatch):
+        """Empty query produces an empty `songs` list — Phase C's empty-state
+        triage will consume this shape."""
+        import karaoke_nerds
+        monkeypatch.setattr(karaoke_nerds, "search", lambda *a, **kw: [])
+        resp = client.get(f"/sing/search?q=nothingmatchesthisquery&t={token}")
+        data = resp.get_json()
+        assert data["songs"] == []
 
 
 class TestSubmit:

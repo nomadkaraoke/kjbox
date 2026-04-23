@@ -278,7 +278,32 @@ def install_public_host_rewriter(flask_app):
 # --- Routes --------------------------------------------------------------
 
 _PHONE_RE = re.compile(r"^\+?[0-9 \-()]{7,20}$")
-_ALLOWED_SOURCES = {"local", "divebar", "kn", "youtube", "make"}
+_ALLOWED_SOURCES = {"local", "divebar", "kn", "youtube", "make", "kj_pick"}
+_KJ_PICK_MAX_VERSIONS = 50  # refuse pathological snapshots (see Phase A §3a)
+
+
+def _validate_kj_pick_payload(data):
+    """Return an error string for a malformed kj_pick payload, or None.
+
+    A kj_pick request defers version selection to the KJ at approval time — so
+    the singer must submit the full candidate snapshot in ``source_meta.versions``
+    and the server must round-trip it faithfully (stored as JSON on the
+    ``sing_requests`` row). This validates the shape without introspecting
+    individual version objects; the admin approval path (Phase A §4c) is
+    responsible for translating a picked version into a concrete source ref.
+    """
+    meta = data.get("source_meta") or {}
+    versions = meta.get("versions") or []
+    if not isinstance(versions, list) or not versions:
+        return "kj_pick requires source_meta.versions[]"
+    if len(versions) > _KJ_PICK_MAX_VERSIONS:
+        # Guardrail — if we hit this in practice, grouping normalization
+        # missed a dedup opportunity and should be widened.
+        return (
+            f"kj_pick too many versions ({len(versions)} > "
+            f"{_KJ_PICK_MAX_VERSIONS}) — refusing"
+        )
+    return None
 
 
 @sing_bp.route("/", methods=["GET"])
@@ -412,10 +437,10 @@ def service_worker():
 def search():
     """Thin wrapper over the shared unified search helper.
 
-    Uses the same code path as /rotation/search so singer-facing results
-    include Divebar cross-reference (`track.divebar`) and `in_library` flags
-    — without which every KN track would show "Download needed" even when we
-    already have a community file ready to pull.
+    Returns the grouped shape (``{songs: [...], karaoke_nerds_timeout}``) —
+    one entry per unique song, each carrying a ``versions[]`` snapshot of all
+    available candidates. See
+    ``docs/archive/2026-04-23-song-selection-phase-a-design.md`` §1.
     """
     query = (request.args.get("q") or "").strip()
     if len(query) < 3:
@@ -424,8 +449,10 @@ def search():
     # Lazy import avoids a circular dependency at module import time.
     from routes import unified_search
 
-    data = unified_search(query, current_app._get_current_object())
-    response = {"local": data["local"], "karaoke_nerds": data["karaoke_nerds"]}
+    data = unified_search(
+        query, current_app._get_current_object(), grouped=True,
+    )
+    response = {"songs": data["songs"]}
     if data.get("karaoke_nerds_timeout"):
         response["karaoke_nerds_timeout"] = True
     return jsonify(response)
@@ -466,6 +493,12 @@ def submit():
         return jsonify({"error": "source_ref is required for this source_type"}), 400
     if source_type == "make" and not (song_artist and song_title):
         return jsonify({"error": "song_artist and song_title are required for make"}), 400
+    if source_type == "kj_pick":
+        err = _validate_kj_pick_payload(data)
+        if err:
+            return jsonify({"error": err}), 400
+        if not (song_artist and song_title):
+            return jsonify({"error": "song_artist and song_title are required for kj_pick"}), 400
 
     req = store.create_request(
         singer_name=singer_name,
@@ -479,7 +512,10 @@ def submit():
     )
 
     auto_approved = False
-    if store.is_auto_approve():
+    # Auto-approve skips kj_pick — the whole point is to defer version binding
+    # to the KJ, so bypassing review would leave the rotation entry without a
+    # file attached.
+    if store.is_auto_approve() and source_type != "kj_pick":
         try:
             from routes import approve_sing_request
 

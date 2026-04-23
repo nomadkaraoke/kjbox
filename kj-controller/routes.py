@@ -1,6 +1,7 @@
 """Flask Blueprint with all route handlers."""
 
 import glob
+import json
 import os
 import random
 import re
@@ -38,6 +39,128 @@ def _check_sleep_mode():
             "error": "Sleep mode is active. Disable sleep mode first."
         }), 409
     return None
+
+
+# --- Search-result grouping (for the singer-facing /sing/search) -----------
+#
+# Two results share a group key iff their normalized (artist, title) forms are
+# byte-equal. No fuzzy matching in v1 — see
+# docs/archive/2026-04-23-song-selection-ux-master-plan.md decision #1.
+
+_FEAT_RE = re.compile(
+    r"\s*[\[(]?\s*(?:feat\.?|ft\.?|featuring)\s+[^\])]+[\])]?\s*",
+    re.IGNORECASE,
+)
+_PAREN_RE = re.compile(r"\s*[\[(][^\])]*[\])]\s*")
+# Apostrophes (straight + curly + backtick) strip to nothing so "Don't" and
+# "Dont" collapse to the same key. Other punctuation becomes whitespace.
+_APOS_RE = re.compile(r"[‘’ʼ'`]+")
+_PUNCT_RE = re.compile(r"[^\w\s]+")
+_WS_RE = re.compile(r"\s+")
+
+
+def _normalize_song_key(artist, title):
+    """Deterministic (artist, title) → group key for collapsing search results.
+
+    Lowercases, strips feat./ft./featuring qualifiers, strips any bracketed
+    qualifier (e.g. ``(Live)``, ``[Radio Edit]``), drops apostrophes, replaces
+    remaining punctuation with whitespace, collapses whitespace. Returns a
+    single string so callers can use it as a dict key.
+
+    None-safe — callers pass parsed filename fields that may be missing.
+    """
+    def _norm(s):
+        s = (s or "").lower()
+        s = _FEAT_RE.sub(" ", s)
+        s = _PAREN_RE.sub(" ", s)
+        s = _APOS_RE.sub("", s)
+        s = _PUNCT_RE.sub(" ", s)
+        s = _WS_RE.sub(" ", s).strip()
+        return s
+    return f"{_norm(artist)}|||{_norm(title)}"
+
+
+def _group_search_results(local_results, kn_results):
+    """Collapse local + KN results into one group per normalized (artist, title).
+
+    Args:
+        local_results: list of local-file search hits, shape matches what
+            ``unified_search`` produces — ``{path, filename, artist, title, ...}``.
+        kn_results: list of Karaoke Nerds songs, each with a ``tracks`` sub-list
+            already (optionally) cross-referenced against Divebar.
+
+    Returns a list of group dicts:
+
+        {
+            "key":               normalized group key,
+            "artist":            canonical display artist,
+            "title":             canonical display title,
+            "version_count":     len(versions),
+            "in_library":        True iff any version is local or KN+divebar,
+            "has_community_only": True iff every version is KN+is_community,
+            "versions": [
+                {"source": "local", "local": <full local result>},
+                {"source": "kn",    "kn":    <full KN track, with parent
+                                              song_artist/song_title folded in>},
+                ...
+            ],
+        }
+
+    Grouping rules:
+        * Locals win display-name arbitration (inserted first into the group).
+        * KN songs only set the display name if no local has claimed it.
+        * Within a group, versions appear in insertion order: locals first,
+          then KN tracks in the order the KN search returned them.
+    """
+    groups = {}  # key -> group dict (py3.7+ dict preserves insertion order)
+
+    for r in local_results or []:
+        key = _normalize_song_key(r.get("artist"), r.get("title"))
+        g = groups.setdefault(key, {
+            "key": key,
+            "artist": r.get("artist") or "",
+            "title": r.get("title") or "",
+            "versions": [],
+        })
+        g["versions"].append({"source": "local", "local": r})
+
+    for song in kn_results or []:
+        song_artist = song.get("artist") or ""
+        song_title = song.get("title") or ""
+        for track in song.get("tracks") or []:
+            key = _normalize_song_key(song_artist, song_title)
+            g = groups.setdefault(key, {
+                "key": key,
+                "artist": song_artist,
+                "title": song_title,
+                "versions": [],
+            })
+            g["versions"].append({
+                "source": "kn",
+                "kn": {**track, "song_artist": song_artist,
+                       "song_title": song_title},
+            })
+
+    out = []
+    for g in groups.values():
+        versions = g["versions"]
+        kn_versions = [v for v in versions if v["source"] == "kn"]
+        g["version_count"] = len(versions)
+        g["in_library"] = any(
+            v["source"] == "local"
+            or (v["source"] == "kn" and (v["kn"].get("divebar") or {}).get("file_id"))
+            for v in versions
+        )
+        # "has_community_only" only makes sense when we have KN versions AND no
+        # locals — a normie-facing hint for Phase B's UI copy. False when empty.
+        g["has_community_only"] = (
+            bool(kn_versions)
+            and not any(v["source"] == "local" for v in versions)
+            and all(v["kn"].get("is_community") for v in kn_versions)
+        )
+        out.append(g)
+
+    return out
 
 # --- Debounced volume persistence ---
 _volume_save_timer = None
@@ -2491,12 +2614,17 @@ def split_singer_route():
         return jsonify({"error": str(e)}), 500
 
 
-def unified_search(query, app):
+def unified_search(query, app, *, grouped=False):
     """Unified search helper: local catalog + Karaoke Nerds + Divebar cross-reference.
 
     Shared by /rotation/search (KJ-side) and /sing/search (singer-side) so
     the same result shape (including Divebar file_id cross-ref and in_library
     flags) reaches both consumers.
+
+    When ``grouped=True`` (singer-facing flow only) the return shape changes to
+    ``{"songs": [...group dicts...], "karaoke_nerds_timeout": bool}`` — see
+    ``_group_search_results``. The admin-side flow keeps ``grouped=False`` so
+    existing callers aren't disrupted.
     """
     cfg = app.kj_config
     local_results = []
@@ -2572,6 +2700,24 @@ def unified_search(query, app):
                     and r.get("title", "").lower() == song.get("title", "").lower()
                     for r in local_results
                 )
+
+    if grouped:
+        # Defensive filter (Phase B §4): a KN track with neither a YouTube URL
+        # nor a divebar mirror is unapprovable — strip it so the singer never
+        # sees it, which also keeps per-group `versions` cleaner.
+        filtered_kn = []
+        for song in kn_results:
+            good_tracks = [
+                t for t in song.get("tracks") or []
+                if (t.get("youtube_url") or "").strip()
+                or (t.get("divebar") or {}).get("file_id")
+            ]
+            if good_tracks:
+                filtered_kn.append({**song, "tracks": good_tracks})
+        return {
+            "songs": _group_search_results(local_results, filtered_kn),
+            "karaoke_nerds_timeout": kn_timeout,
+        }
 
     return {
         "local": local_results,
@@ -2879,6 +3025,62 @@ def _format_song_text(artist, title):
     return title or artist
 
 
+def _pick_version_from_kj_pick(req, index):
+    """Translate a ``kj_pick`` request + picked index into concrete source_* fields.
+
+    Returns ``(source_type, source_ref, source_meta_dict_or_None)`` ready to be
+    written back into the request row via ``SingStore.update_request_source``.
+
+    Raises ``ValueError`` for a missing / out-of-range index so the approval
+    route can return a 400 instead of 500 — the admin UI should always pass a
+    valid index, but a cURL caller could trip this.
+    """
+    meta_raw = req.get("source_meta")
+    if not meta_raw:
+        raise ValueError("request has no source_meta — not a kj_pick?")
+    try:
+        meta = meta_raw if isinstance(meta_raw, dict) else json.loads(meta_raw)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"source_meta is not valid JSON: {exc}") from exc
+    versions = meta.get("versions") or []
+    if index is None:
+        raise ValueError("version_index required for kj_pick requests")
+    try:
+        index = int(index)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"version_index must be an integer: {exc}") from exc
+    if not (0 <= index < len(versions)):
+        raise ValueError(
+            f"version_index out of range (got {index}, have {len(versions)} versions)"
+        )
+    v = versions[index]
+    src = v.get("source")
+    if src == "local":
+        local = v.get("local") or {}
+        path = local.get("path")
+        if not path:
+            raise ValueError("picked local version has no path")
+        return ("local", path, None)
+    if src == "kn":
+        kn = v.get("kn") or {}
+        divebar_info = kn.get("divebar") or {}
+        file_id = divebar_info.get("file_id")
+        if file_id:
+            return (
+                "divebar",
+                file_id,
+                {
+                    "brand_code": kn.get("brand_code"),
+                    "disc_id": divebar_info.get("drive_path"),
+                },
+            )
+        youtube_url = kn.get("youtube_url")
+        if not youtube_url:
+            raise ValueError("picked KN version has neither divebar nor youtube_url")
+        return ("youtube", youtube_url, {"brand_code": kn.get("brand_code")})
+    raise ValueError(f"unknown version source: {src!r}")
+
+
 def approve_sing_request(app, req):
     """Dispatch approval of a sing request; create/link a rotation entry.
 
@@ -3076,6 +3278,25 @@ def approve_sing_request_route(req_id):
         return jsonify({"error": "Request not found"}), 404
     if req["status"] != "pending":
         return jsonify({"error": f"Request is already {req['status']}"}), 409
+
+    # kj_pick: the singer deferred version selection — the admin's approval
+    # body must carry version_index so we can rewrite the row to a concrete
+    # source_type/ref before approve_sing_request sees it.
+    if req["source_type"] == "kj_pick":
+        body = request.get_json(silent=True) or {}
+        version_index = body.get("version_index")
+        if version_index is None:
+            return jsonify({
+                "error": "version_index required for kj_pick requests"
+            }), 400
+        try:
+            src_type, src_ref, src_meta = _pick_version_from_kj_pick(
+                req, version_index
+            )
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
+        req = store.update_request_source(req_id, src_type, src_ref, src_meta)
+
     try:
         entry_id = approve_sing_request(current_app._get_current_object(), req)
     except Exception as exc:

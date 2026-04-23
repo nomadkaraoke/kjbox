@@ -305,6 +305,48 @@ class TestUpdateAndStatus:
         with pytest.raises(ValueError):
             store.update_request(9999, singer_name="X")
 
+    def test_update_request_source_rewrites_source_fields(self, store):
+        """kj_pick approval path calls this to swap the placeholder for the
+        picked version — other fields (singer/notes) must not be touched."""
+        req = store.create_request(
+            singer_name="Andrew", phone="+1",
+            song_artist="Queen", song_title="Bo Rhap",
+            source_type="kj_pick", source_ref=None,
+            source_meta={"versions": [{"source": "local"}]},
+            notes="keep me",
+        )
+        updated = store.update_request_source(
+            req["id"],
+            source_type="local",
+            source_ref="/media/queen.mp4",
+            source_meta=None,
+        )
+        assert updated["source_type"] == "local"
+        assert updated["source_ref"] == "/media/queen.mp4"
+        assert updated["source_meta"] is None
+        # Untouched fields survive.
+        assert updated["singer_name"] == "Andrew"
+        assert updated["song_artist"] == "Queen"
+        assert updated["notes"] == "keep me"
+
+    def test_update_request_source_stores_meta_as_json(self, store):
+        req = store.create_request(
+            singer_name="A", phone="+1", source_type="kj_pick",
+        )
+        updated = store.update_request_source(
+            req["id"],
+            source_type="divebar",
+            source_ref="drive-file-123",
+            source_meta={"brand_code": "SF", "disc_id": "SF-001"},
+        )
+        assert json.loads(updated["source_meta"]) == {
+            "brand_code": "SF", "disc_id": "SF-001",
+        }
+
+    def test_update_request_source_unknown_raises(self, store):
+        with pytest.raises(ValueError):
+            store.update_request_source(9999, "local", "/x.mp4", None)
+
     def test_mark_approved_sets_fields(self, store):
         req = store.create_request(
             singer_name="A", phone="+1", source_type="local"

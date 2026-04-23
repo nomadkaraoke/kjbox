@@ -2,6 +2,46 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-04-23 - Feature: Song selection UX — grouped search + KJ-picks-version (Phase A)
+
+The "Pick your song" page now shows **one tile per unique song** instead of N tiles per N versions. The common-case singer — who wants "Bohemian Rhapsody" and doesn't care whether it's SoundChoice SC6523 or Karaoke Version's cover — taps once and submits a `kj_pick` request. The KJ sees the full candidate snapshot on the admin side and picks the best-quality version in one tap. Phase A of the three-phase song-selection-ux overhaul (see [master plan](archive/2026-04-23-song-selection-ux-master-plan.md)).
+
+**Data shape changes:**
+- `GET /sing/search` response now returns `{songs: [{key, artist, title, version_count, in_library, has_community_only, versions: [...]}]}`. The old flat `{local, karaoke_nerds}` keys are gone. `unified_search()` in `routes.py` gained a `grouped` kwarg; admin-side search callers still get the flat shape (kwarg default).
+- Grouping is exact-match on a normalized `(artist, title)` key — `_normalize_song_key` strips "feat." / "ft.", parenthetical suffixes, apostrophes, punctuation, and collapses whitespace. No fuzzy matching; "Don't Stop Believin'" and "Dont Stop Believin" will still render as two tiles until we revisit.
+- Each group's `versions[]` carries the full unchanged local / KN track objects (for KN: `{source:"kn", kn:{...}}`) so the admin picker can render richly from the snapshot — no re-query needed at approval time.
+
+**New source_type: `kj_pick`:**
+- `_ALLOWED_SOURCES` in `sing.py` gains `"kj_pick"`. A `kj_pick` submit stores the `versions[]` snapshot in `source_meta` verbatim (JSON TEXT column). `_validate_kj_pick_payload` rejects empty arrays + snapshots >50 versions.
+- **Auto-approve is skipped for `kj_pick`** — the whole point is to defer binding to the KJ, so bypassing review would leave the rotation entry with no file attached. All other source types continue to auto-approve as before.
+
+**Approval flow:**
+- `POST /rotation/requests/<id>/approve` now accepts `{version_index: N}` in the JSON body. For `kj_pick` requests it's required — `_pick_version_from_kj_pick` in `routes.py` translates the picked version into concrete `source_type` / `source_ref` / `source_meta` fields (local path / divebar file_id / YouTube URL), writes them back via new `SingStore.update_request_source`, then hands off to the existing `approve_sing_request` dispatch.
+- Post-approval the `sing_requests` row reflects what actually played (local / divebar / youtube) — the transient `kj_pick` placeholder is gone. Important for audit trails and the "now playing" history view.
+- Missing / out-of-range index returns 400 and leaves the row pending so the admin can retry. On non-`kj_pick` requests `version_index` is ignored (backwards-compat).
+
+**UI:**
+- Singer side (`static-sing/sing.js`): `renderSearch()` rewritten to consume `results.songs` and produce one card per group with a "Let the KJ pick the best version →" CTA. Single-version groups short-circuit to today's per-version flow ("Add to queue" CTA, no `kj_pick` submission). "N versions available →" hint is present but inert — Phase B wires the real expander to it.
+- Admin side (`static/app.js`): pending `kj_pick` rows grow a picker below the singer summary, one mini-card per candidate (`📁 Local file` / `💿 Divebar mirror` / `🎤 Community` / `📺 YouTube`). Candidates ranked locals first, then KN+divebar, then KN community, then KN YouTube-only. Each card has its own "Approve with this →" button that passes `version_index`.
+
+**Modified files:**
+- `kj-controller/routes.py` — `_normalize_song_key`, `_group_search_results`, `unified_search(grouped=True)` path, `_pick_version_from_kj_pick`, `approve_sing_request_route` kj_pick branch. Top-level `import json`.
+- `kj-controller/sing.py` — `kj_pick` in `_ALLOWED_SOURCES`, `_validate_kj_pick_payload`, `/sing/submit` validation + auto-approve skip.
+- `kj-controller/sing_store.py` — new `update_request_source()` method.
+- `kj-controller/static-sing/sing.js` — grouped rendering + `pickKjChoice` + `pickSingleVersion`.
+- `kj-controller/static-sing/sing.css` — `.result-row.grouped` grid layout.
+- `kj-controller/static/app.js` — inline version picker for `kj_pick` rows + `approve(id, versionIndex)`.
+- `kj-controller/static/style.css` — `.pr-picker` + `.pr-version` styles, amber `.pr-badge.pr-kj_pick`.
+- Tests: `tests/unit/test_search_grouping.py` (29 cases), `tests/integration/test_sing_public_routes.py::TestSearch` (5 new), `tests/integration/test_sing_kj_pick.py` (23 cases), `tests/unit/test_sing_store.py::TestUpdateAndStatus` (3 new), `tests/integration/test_sing_admin_routes.py::TestApproveKjPick` (6 cases), `tests/integration/test_sing_kj_pick_e2e.py` (3 cases).
+
+**Version:** `0.24.0` → `0.25.0` (minor — new response shape, new source_type).
+
+**Manual ops steps required (post-deploy):** none. Frontend + backend changes land together; restart kj-controller as normal. No schema migration needed — `source_meta` JSON column already exists from sub-project #1.
+
+**Not yet shipped (follow-ups):**
+- Phase B: per-group version expander on the singer side, showing metadata (brand, format, filepath) + commercial-vs-community explainer. Design: [phase-b-design.md](archive/2026-04-23-song-selection-phase-b-design.md).
+- Phase C: empty-state triage (YouTube / make-request / DIY-via-gen.nomadkaraoke.com). Design: [phase-c-design.md](archive/2026-04-23-song-selection-phase-c-design.md).
+
 ## 2026-04-22 - UX tweaks: 4-digit event codes, `/sing/` path hidden, rules inlined
 
 Follow-up iteration on the singer UI that shipped earlier today. Three visible changes, one structural one.

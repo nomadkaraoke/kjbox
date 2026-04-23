@@ -2689,6 +2689,53 @@ body {
     font-size: 0.85rem;
 }
 
+/* kj_pick inline version picker — one mini-card per candidate so the KJ
+   can bind the version with one tap. Full row width, stacked beneath
+   the singer summary. */
+.pr-badge.pr-kj_pick { background: #d4a32a; color: #111; }
+.pr-approve-hint {
+    color: #d4a32a;
+    font-size: 0.8rem;
+    font-style: italic;
+    padding: 0.2rem 0.5rem;
+}
+.pr-picker {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    margin-top: 0.3rem;
+    padding: 0.4rem 0.5rem;
+    background: #111;
+    border: 1px solid #333;
+    border-radius: 6px;
+}
+.pr-picker.empty { color: #888; font-size: 0.85rem; font-style: italic; }
+.pr-version {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.35rem 0.5rem;
+    background: #1a1a1a;
+    border: 1px solid #2a2a2a;
+    border-radius: 4px;
+}
+.pr-v-icon { font-size: 1.1rem; }
+.pr-v-main { flex: 1; min-width: 0; }
+.pr-v-primary { font-size: 0.85rem; color: #eee; font-weight: 600; }
+.pr-v-secondary { font-size: 0.75rem; color: #aaa; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.btn-approve-version {
+    padding: 0.3rem 0.6rem;
+    border-radius: 4px;
+    border: 1px solid #3b8a4a;
+    background: #2f6f3a;
+    color: #fff;
+    cursor: pointer;
+    font-size: 0.8rem;
+    white-space: nowrap;
+}
+.btn-approve-version:hover { background: #3b8a4a; }
+
 /* Sing requests settings modal */
 .sing-requests-modal-content {
     max-width: 640px;
