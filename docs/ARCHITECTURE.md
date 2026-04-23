@@ -77,9 +77,11 @@ KJ Controller is a web-based karaoke show management application. A Flask backen
 | `gen_client.py` | ~100 | `GenClient` HTTP client for gen API: job creation, status polling, download URL retrieval |
 | `gen_poller.py` | ~90 | `GenPoller` background thread: polls gen API for active jobs, auto-downloads completed videos |
 | `sleep_mode.py` | ~100 | `SleepManager` class: enter/exit low-power sleep mode, stop services, unmount SSD |
-| `sing.py` | ~280 | Public `/sing/*` blueprint (landing, search, submit, status) + token-gate decorator + per-IP rate limiter + host-based route guard + QR-overlay auto-sync helper |
-| `sing_store.py` | ~260 | `SingStore` class: SQLite CRUD for `sing_requests` + event-token helpers (regenerate / enable / auto-approve) on `rotation_meta` |
+| `push_dispatcher.py` | ~200 | `PushDispatcher` class: VAPID config, subscription scan, ladder decision (`now_singing`/`up_next`/`up_in_2`), dedup via `last_sent_state`, 500ms debounce, `ThreadPoolExecutor` send pool. Pure helpers at module level (`decide_ladder_step`, `next_entry_for_phone`, `render_payload`). |
+| `sing.py` | ~280 | Public `/sing/*` blueprint (landing, search, submit, status, rules, now, manifest, sw, push subscribe/unsubscribe) + token-gate decorator + per-IP rate limiter + host-based route guard + QR-overlay auto-sync helper |
+| `sing_store.py` | ~260 | `SingStore` class: SQLite CRUD for `sing_requests` + `sing_push_subscriptions` + event-token helpers (regenerate / enable / auto-approve) on `rotation_meta` |
 | `routes.py` | ~1000 | Flask Blueprint with all route handlers (includes `/rotation/requests/*` admin endpoints for the public request form) |
+| `wait_estimate.py` | ~80 | Pure function `compute_estimate(entries, target_id, cfg)` producing `{position, expected_s, range_low_s, range_high_s, spread_source, close_to_front, now_singing}`. Uses tonight's sung-entry variance for the range; falls back to a configurable minimum spread. |
 
 ### Dependency Flow
 
@@ -344,6 +346,23 @@ Singers submit song requests from their own phones via a QR code instead of hand
 **QR-overlay auto-sync:** `qr_code` overlays with `config.follow_event_url=True` are automatically updated to point at the current event URL whenever the token regenerates. KJs opt in by ticking the checkbox on the overlay editor.
 
 **Singer UI** lives under `static-sing/` (separate tree from the KJ UI's `static/`) and is served from `sing_bp`'s `/sing/static/*` URL path. Minimal vanilla-JS SPA with four steps: landing → identity (name + phone, persisted to `localStorage`) → search → confirm → confirmation that polls `/sing/status/<id>` every 15s.
+
+Additional `static-sing/` assets added in sub-project #4:
+- `static-sing/sw.js` — service worker, scope `/sing/`. Handles `push` + `notificationclick`. Shell cache for offline page render. Served dynamically at `GET /sing/sw.js` (so the SW scope is `/sing/` not `/sing/static/`).
+- `static-sing/manifest.json` — served dynamically by `GET /sing/manifest.json` with the current token injected into `start_url` so installed home-screen icons land on the gated page.
+
+**Response shape change (sub-project #4):** `GET /sing/status/<id>` now includes `estimate` and `now_playing` sub-objects. Legacy top-level `position`, `estimated_wait_s`, `queue` keys are kept for the client rollout window.
+
+### Singer Web Push (sub-project #4)
+
+- `push_dispatcher.py` hooks into `RotationManager._after_mutation()`. Every rotation mutation triggers a 500ms-debounced dispatch that scans active subscriptions in `sing_push_subscriptions` (scoped to the current event token) and sends `up_in_2` / `up_next` / `now_singing` pushes via `pywebpush` on a 2-worker thread pool.
+- Dedup is via a `last_sent_state` JSON column on each subscription — the same `(entry_id, ladder_step)` pair never fires twice. When the target entry changes (previous Done'd, next-closest becomes the new target), the ladder resets cleanly.
+- Approve/reject from admin routes bypass the rotation scan and call `notify_request_decision(...)` for immediate singer feedback.
+- VAPID keypair auto-generates on first boot in `_bootstrap_vapid_keys` (app.py) and persists to `config.json` (gitignored). Public key is exposed to the singer page via `<meta name="vapid-public-key">`.
+- Client registers `/sing/sw.js?t=<token>` so the SW has the token for constructing `notificationclick` URLs. Dynamic `/sing/manifest.json` also carries the token in `start_url`.
+- Offline events (no internet): singer's page surfaces an honest banner via `navigator.onLine` + consecutive-poll-failure detection. Push itself can't work without internet (FCM/APNS round-trip); the held-tab polling flow remains the fallback.
+- iOS Safari requires Add-to-Home-Screen (installed PWA) before push works. The confirmation page detects iOS non-standalone and renders an instructional card explaining the install flow.
+- Housekeeping: on event-token regeneration, `cleanup_stale_push_subscriptions` deletes subs on other tokens older than 7 days. Keeps the table bounded.
 
 ## VNC Screen Preview
 

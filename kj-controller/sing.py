@@ -23,6 +23,7 @@ from flask import (
     session,
     url_for,
 )
+from wait_estimate import compute_estimate
 
 
 sing_bp = Blueprint(
@@ -255,7 +256,68 @@ def landing():
         closed=False,
         token=token,
         request_id=request.args.get("r", ""),
+        vapid_public_key=current_app.kj_config.get("vapid_public_key", ""),
     )
+
+
+@sing_bp.route("/rules", methods=["GET"])
+def rules():
+    """Public rules page — no token gate (bookmarkable, shareable)."""
+    return render_template("sing_rules.html")
+
+
+@sing_bp.route("/manifest.json", methods=["GET"])
+@require_token
+def manifest():
+    """Dynamic PWA manifest — start_url carries the current event token."""
+    token = _extract_token()
+    return jsonify({
+        "name": "Nomad Karaoke",
+        "short_name": "Nomad",
+        "description": "Request a song at the karaoke night.",
+        "start_url": f"/sing/?t={token}",
+        "scope": "/sing/",
+        "display": "standalone",
+        "orientation": "portrait",
+        "background_color": "#0a0a0a",
+        "theme_color": "#ff4dcf",
+        "icons": [
+            {
+                "src": url_for("sing.static", filename="icon-192.png"),
+                "sizes": "192x192",
+                "type": "image/png",
+                "purpose": "any maskable",
+            },
+            {
+                "src": url_for("sing.static", filename="icon-512.png"),
+                "sizes": "512x512",
+                "type": "image/png",
+                "purpose": "any",
+            },
+        ],
+    })
+
+
+@sing_bp.route("/sw.js", methods=["GET"])
+def service_worker():
+    """Serve sw.js with the app version injected as the cache key.
+
+    Bumping APP_VERSION (via the version file) automatically invalidates
+    the shell cache so singers don't run stale assets after a deploy.
+
+    Not token-gated — browsers fetch updates independent of token state.
+    """
+    import os
+    from flask import make_response
+    sw_path = os.path.join(sing_bp.static_folder, "sw.js")
+    with open(sw_path, "r") as f:
+        body = f.read()
+    version = current_app.config.get("APP_VERSION", "dev")
+    body = body.replace("__APP_VERSION__", version)
+    resp = make_response(body)
+    resp.headers["Content-Type"] = "application/javascript"
+    resp.headers["Cache-Control"] = "no-cache"
+    return resp
 
 
 @sing_bp.route("/search", methods=["GET"])
@@ -349,6 +411,60 @@ def submit():
     )
 
 
+@sing_bp.route("/push/subscribe", methods=["POST"])
+@require_token
+def push_subscribe():
+    """Persist a Web Push subscription for the current event token + singer."""
+    store = current_app.sing_store
+    token = _extract_token()
+    data = request.get_json(force=True, silent=True) or {}
+    phone = (data.get("phone") or "").strip()
+    singer_name = (data.get("singer_name") or "").strip()
+    sub = data.get("subscription") or {}
+    endpoint = (sub.get("endpoint") or "").strip()
+    keys = sub.get("keys") or {}
+    p256dh = (keys.get("p256dh") or "").strip()
+    auth_key = (keys.get("auth") or "").strip()
+
+    if not (phone and singer_name and endpoint and p256dh and auth_key):
+        return jsonify({"error": "missing fields"}), 400
+    if not _PHONE_RE.match(phone):
+        return jsonify({"error": "phone format invalid"}), 400
+
+    user_agent = request.headers.get("User-Agent", "")[:500]
+    store.insert_push_subscription(
+        token=token, phone=phone, singer_name=singer_name,
+        endpoint=endpoint, p256dh=p256dh, auth=auth_key,
+        user_agent=user_agent,
+    )
+    return ("", 204)
+
+
+@sing_bp.route("/push/unsubscribe", methods=["POST"])
+@require_token
+def push_unsubscribe():
+    """Soft-disable a subscription by endpoint for the current event token."""
+    store = current_app.sing_store
+    token = _extract_token()
+    data = request.get_json(force=True, silent=True) or {}
+    endpoint = (data.get("endpoint") or "").strip()
+    if not endpoint:
+        return jsonify({"error": "endpoint required"}), 400
+    store.disable_push_subscription_by_endpoint(token, endpoint)
+    return ("", 204)
+
+
+@sing_bp.route("/now", methods=["GET"])
+@require_token
+def now_playing():
+    """Lightweight 'what's playing now' payload for the landing page widget."""
+    rotation = getattr(current_app, "rotation", None)
+    if rotation is None:
+        return jsonify({"now_singing": None, "up_next": None, "queued_count": 0})
+    _entries, _active, now_playing_dict = _build_now_playing(rotation)
+    return jsonify(now_playing_dict)
+
+
 @sing_bp.route("/status/<int:request_id>", methods=["GET"])
 def status(request_id):
     """Return the singer's own request status.
@@ -378,23 +494,57 @@ def status(request_id):
     response = {"request": _public_request_view(req)}
 
     rotation = getattr(current_app, "rotation", None)
-    if rotation is not None and req.get("linked_entry_id"):
-        entries = rotation.get_rotation()
-        position = None
-        estimated_wait_s = 0
-        for i, entry in enumerate(entries):
-            if entry.get("id") == req["linked_entry_id"]:
-                position = i + 1  # 1-based from top
-                break
-            if entry.get("status", "").lower() not in {"done", "left"}:
-                estimated_wait_s += int(entry.get("duration") or 240)
-        response["position"] = position
-        response["estimated_wait_s"] = estimated_wait_s
-        response["queue"] = _public_queue_view(entries)
+    if rotation is not None:
+        entries, _active, now_playing_dict = _build_now_playing(rotation)
+        response["now_playing"] = now_playing_dict
+
+        if req.get("linked_entry_id"):
+            estimate = compute_estimate(entries, req["linked_entry_id"], current_app.kj_config)
+            response["estimate"] = estimate
+            response["queue"] = _public_queue_view(entries)
+
     return jsonify(response)
 
 
 # --- Response shaping ----------------------------------------------------
+
+def _build_now_playing(rotation):
+    """Return (entries, active, now_playing_dict) for the /sing/now response body.
+
+    `entries` is the full rotation list (useful to the caller for estimate
+    computation). `active` is entries filtered to non-done/non-left (useful
+    for `queued_count` and any further filtering). `now_playing_dict` has
+    the three keys `now_singing`, `up_next`, `queued_count` matching the
+    /sing/now response shape and ready to embed as a sub-object of any
+    response.
+    """
+    entries = rotation.get_rotation()
+    active = [
+        e for e in entries
+        if (e.get("status") or "").lower() not in ("done", "left")
+    ]
+    now = next(
+        (e for e in active if (e.get("status") or "").lower() == "now singing"),
+        None,
+    )
+    nxt = next((e for e in active if e is not now), None)
+    return entries, active, {
+        "now_singing": _now_view(now),
+        "up_next": _now_view(nxt),
+        "queued_count": len(active),
+    }
+
+
+def _now_view(entry):
+    """Minimal singer/song view for now_playing payloads."""
+    if not entry:
+        return None
+    singer = entry.get("singer") or ""
+    return {
+        "first_name": singer.split()[0] if singer else "",
+        "song_artist": entry.get("song_artist") or "",
+    }
+
 
 def _public_request_view(req):
     """Hide internal/PII fields from singer-facing responses."""

@@ -30,6 +30,31 @@ const state = {
   status: null,     // /sing/status response
 };
 
+// --- Offline detection -----------------------------------------------------
+
+let consecutivePollFailures = 0;
+const OFFLINE_FAIL_THRESHOLD = 2;
+
+function setOfflineBanner(visible) {
+  const banner = document.getElementById("sing-offline");
+  if (!banner) return;
+  if (visible) banner.removeAttribute("hidden");
+  else banner.setAttribute("hidden", "");
+}
+
+function onPollSuccess() {
+  consecutivePollFailures = 0;
+  setOfflineBanner(false);
+}
+
+function onPollFailure() {
+  consecutivePollFailures++;
+  if (consecutivePollFailures >= OFFLINE_FAIL_THRESHOLD) setOfflineBanner(true);
+}
+
+window.addEventListener("online", () => setOfflineBanner(false));
+window.addEventListener("offline", () => setOfflineBanner(true));
+
 // --- Network ---------------------------------------------------------------
 
 async function fetchJson(url, opts = {}) {
@@ -92,6 +117,10 @@ function el(tag, attrs = {}, ...children) {
 }
 
 function render() {
+  if (nowPlayingTimer && state.step !== "landing" && state.step !== "done") {
+    clearInterval(nowPlayingTimer);
+    nowPlayingTimer = null;
+  }
   root.innerHTML = "";
   const view = {
     landing: renderLanding,
@@ -109,8 +138,75 @@ function back(to) {
 
 // --- Views -----------------------------------------------------------------
 
+// --- "What's playing now" widget -------------------------------------------
+
+let nowPlayingTimer = null;
+
+function renderNowPlaying() {
+  const node = el("div", { class: "now-playing", "data-loading": "true" },
+    el("div", { class: "np-loading" }, "Checking rotation…"),
+  );
+  fetchNowPlaying(node);
+  return node;
+}
+
+async function fetchNowPlaying(node) {
+  if (nowPlayingTimer) { clearInterval(nowPlayingTimer); nowPlayingTimer = null; }
+  const tick = async () => {
+    try {
+      const resp = await fetch(`/sing/now?t=${encodeURIComponent(TOKEN)}`, {
+        credentials: "same-origin",
+      });
+      if (!resp.ok) { onPollFailure(); return renderNowError(node); }
+      onPollSuccess();
+      updateNowPlaying(node, await resp.json());
+    } catch {
+      onPollFailure();
+      renderNowError(node);
+    }
+  };
+  await tick();
+  nowPlayingTimer = setInterval(tick, 15000);
+}
+
+function updateNowPlaying(node, data) {
+  node.innerHTML = "";
+  node.removeAttribute("data-loading");
+  const { now_singing, up_next, queued_count } = data || {};
+  if (!now_singing && !up_next && !queued_count) {
+    node.appendChild(el("div", { class: "np-empty" },
+      "Rotation hasn't started yet — you could be the first!"));
+    return;
+  }
+  if (now_singing) {
+    node.appendChild(el("div", { class: "np-line np-now" },
+      el("span", { class: "np-label" }, "🎤 Now:"),
+      el("span", { class: "np-singer" }, now_singing.first_name || "—"),
+      now_singing.song_artist
+        ? el("span", { class: "np-song" }, `— ${now_singing.song_artist}`)
+        : null,
+    ));
+  }
+  if (up_next) {
+    node.appendChild(el("div", { class: "np-line np-next" },
+      el("span", { class: "np-label" }, "Up next:"),
+      el("span", { class: "np-singer" }, up_next.first_name || "—"),
+    ));
+  } else if (!now_singing && queued_count) {
+    node.appendChild(el("div", { class: "np-line" },
+      "Between singers — next up soon"));
+  }
+}
+
+function renderNowError(node) {
+  node.innerHTML = "";
+  node.removeAttribute("data-loading");
+  // Silent failure — don't clutter the card while the status poll still has a chance.
+}
+
 function renderLanding() {
   return el("main", { class: "sing-card" },
+    renderNowPlaying(),   // Task 5 populates this; stub is harmless
     el("h1", {}, "Request a song"),
     el("p", {},
       "Tap below to add your song to the rotation. The KJ will call you up when you're on."),
@@ -125,8 +221,16 @@ function renderLanding() {
     }, state.name ? "Continue" : "Get started"),
     state.name ? el("p", { class: "hint" },
       `Not ${state.name}? `,
-      el("a", { href: "#", onclick: (e) => { e.preventDefault(); state.name = state.phone = ""; LS.set("sing_name", ""); LS.set("sing_phone", ""); state.step = "identity"; render(); } }, "switch")
+      el("a", { href: "#", onclick: (e) => {
+        e.preventDefault();
+        state.name = state.phone = "";
+        LS.set("sing_name", ""); LS.set("sing_phone", "");
+        state.step = "identity"; render();
+      } }, "switch")
     ) : null,
+    el("p", { class: "sing-footer-links" },
+      el("a", { href: "/sing/rules", target: "_blank" }, "House rules"),
+    ),
   );
 }
 
@@ -403,19 +507,34 @@ function renderConfirm() {
 
 function renderDone() {
   const card = el("main", { class: "sing-card" },
+    renderNowPlaying(),
     el("h2", {}, state.request?.status === "approved" ? "You're in!" : "Sent!"),
     el("p", {}, state.request?.status === "approved"
       ? "The KJ has added you to the queue."
       : "The KJ will look at it and add you to the queue."),
     el("div", { class: "status-live" }, "Checking your position…"),
+    el("div", { id: "push-optin", class: "push-optin" }),
     el("details", { class: "upcoming" },
       el("summary", {}, "Show upcoming singers"),
       el("div", { class: "queue-list" }, "Loading…"),
+    ),
+    el("details", { class: "rules-inline" },
+      el("summary", {}, "🎤 House rules"),
+      el("ul", { class: "rules-short" },
+        el("li", {}, "First come, first sing"),
+        el("li", {}, "New singers get priority"),
+        el("li", {}, "Multiple songs? We'll spread them out"),
+        el("li", {}, "Need to leave? Ask the KJ"),
+        el("li", {}, "♥ = paid priority ($20+)"),
+      ),
+      el("p", {},
+        el("a", { href: "/sing/rules", target: "_blank" }, "Read full rules →")),
     ),
     el("p", { class: "hint" },
       "Keep this page open — it'll update automatically. Good luck!"),
   );
 
+  setTimeout(maybeShowPushPrompt, 2000);
   pollStatus(card);
   return card;
 }
@@ -436,14 +555,19 @@ async function pollStatus(card) {
   const tick = async () => {
     try {
       const data = await fetchStatus(reqId);
+      onPollSuccess();
       state.status = data;
-      if (data.position != null) {
-        const waitMin = Math.round((data.estimated_wait_s || 0) / 60);
-        const low = Math.max(1, Math.round(waitMin * 0.8));
-        const high = Math.max(low + 1, Math.round(waitMin * 1.2));
-        live.textContent = data.position === 1
-          ? "🎤 You're up next!"
-          : `You're #${data.position} — about ${low}–${high} min.`;
+      const est = data.estimate;
+      if (est && est.now_singing) {
+        live.textContent = "🎤 You're up — break a leg!";
+      } else if (est && est.position === 1) {
+        live.textContent = "🎤 You're next — head to the mic";
+      } else if (est && est.position === 2) {
+        live.textContent = "About 1 song to go";
+      } else if (est && est.position >= 3) {
+        const low = Math.round(est.range_low_s / 60);
+        const high = Math.round(est.range_high_s / 60);
+        live.textContent = `You're #${est.position} — about ${low}–${high} min`;
       } else if (data.request?.status === "pending") {
         live.textContent = "Waiting for KJ to approve…";
       } else if (data.request?.status === "rejected") {
@@ -461,7 +585,12 @@ async function pollStatus(card) {
           ));
         }
       }
+      if (data.now_playing) {
+        const npNode = card.querySelector(".now-playing");
+        if (npNode) updateNowPlaying(npNode, data.now_playing);
+      }
     } catch {
+      onPollFailure();
       live.textContent = "Couldn't update — checking again in a moment.";
     }
   };
@@ -475,6 +604,169 @@ async function pollStatus(card) {
 if (INITIAL_REQUEST_ID) {
   state.request = { id: parseInt(INITIAL_REQUEST_ID, 10) };
   state.step = "done";
+}
+
+// --- Service worker registration ------------------------------------------
+
+async function registerServiceWorker() {
+  if (!("serviceWorker" in navigator) || !("PushManager" in window)) return null;
+  try {
+    const scriptUrl = `/sing/sw.js?t=${encodeURIComponent(TOKEN)}`;
+    const reg = await navigator.serviceWorker.register(scriptUrl, { scope: "/sing/" });
+    return reg;
+  } catch (e) {
+    console.warn("SW registration failed:", e);
+    return null;
+  }
+}
+
+let swRegistration = null;
+registerServiceWorker().then((reg) => { swRegistration = reg; });
+
+// --- Push subscription -----------------------------------------------------
+
+function vapidPublicKey() {
+  const m = document.querySelector('meta[name="vapid-public-key"]');
+  return m ? m.getAttribute("content") : "";
+}
+
+function urlB64ToUint8Array(base64String) {
+  const padding = "=".repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const raw = atob(base64);
+  return Uint8Array.from(raw, (c) => c.charCodeAt(0));
+}
+
+async function ensurePushSubscription() {
+  if (!swRegistration || !("PushManager" in window)) return null;
+  const vapidPub = vapidPublicKey();
+  if (!vapidPub) return null;
+  let sub = await swRegistration.pushManager.getSubscription();
+  if (!sub) {
+    try {
+      sub = await swRegistration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlB64ToUint8Array(vapidPub),
+      });
+    } catch (e) {
+      console.warn("push subscribe failed:", e);
+      return null;
+    }
+  }
+  try {
+    await fetch(`/sing/push/subscribe?t=${encodeURIComponent(TOKEN)}`, {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        phone: state.phone,
+        singer_name: state.name,
+        subscription: sub.toJSON(),
+      }),
+    });
+    return sub;
+  } catch (e) {
+    console.warn("push subscribe POST failed:", e);
+    return null;
+  }
+}
+
+async function requestPushPermission() {
+  if (!("Notification" in window)) return "unsupported";
+  if (Notification.permission === "granted") {
+    await ensurePushSubscription();
+    return "granted";
+  }
+  if (Notification.permission === "denied") return "denied";
+  const result = await Notification.requestPermission();
+  if (result === "granted") await ensurePushSubscription();
+  return result;
+}
+
+// --- iOS / standalone detection -------------------------------------------
+
+const IS_IOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+const IS_STANDALONE = window.matchMedia("(display-mode: standalone)").matches
+  || window.navigator.standalone === true;
+
+// Capture the install prompt event for later use (Android/desktop Chrome).
+// Not surfaced in UI for v1 — hook is here in case a future task wires it up.
+let deferredInstallPrompt = null;
+window.addEventListener("beforeinstallprompt", (e) => {
+  e.preventDefault();
+  deferredInstallPrompt = e;
+});
+
+function maybeShowIosInstructions() {
+  if (!IS_IOS || IS_STANDALONE) return false;
+  const container = document.getElementById("push-optin");
+  if (!container) return true;
+  container.innerHTML = "";
+  container.classList.add("ios-install");
+  container.appendChild(
+    el("div", {},
+      el("strong", {}, "📱 iPhone? Get tapped when you're up."),
+      el("p", {},
+        "Tap the Share button, then ",
+        el("strong", {}, "Add to Home Screen"),
+        ", then reopen from your home screen. You'll then be able to enable notifications."),
+      el("button", {
+        class: "btn ghost",
+        onclick: (e) => { e.target.closest(".push-optin").remove(); },
+      }, "Got it"),
+    ),
+  );
+  return true;
+}
+
+// Show/hide/update the push-opt-in block based on current Notification.permission.
+// Called from renderDone() with a 2s delay so the "you're in!" line registers first.
+function maybeShowPushPrompt() {
+  const container = document.getElementById("push-optin");
+  if (!container) return;
+  // iOS Safari outside a standalone PWA can't use Web Push — show instructions instead
+  if (maybeShowIosInstructions()) return;
+  if (!("Notification" in window) || !swRegistration) {
+    container.remove();
+    return;
+  }
+  const perm = Notification.permission;
+  if (perm === "granted") {
+    ensurePushSubscription();  // idempotent — ensures server row exists for this device
+    container.innerHTML = "";
+    container.textContent = "✓ Notifications on — we'll buzz you when you're up.";
+    container.classList.add("push-on");
+    return;
+  }
+  if (perm === "denied") {
+    container.innerHTML = "";
+    container.textContent = "Notifications blocked — keep this tab open for updates.";
+    container.classList.add("push-blocked");
+    return;
+  }
+  // perm === "default" — show the prompt button
+  container.innerHTML = "";
+  const btn = el("button", {
+    class: "btn primary",
+    onclick: async () => {
+      btn.disabled = true;
+      btn.textContent = "Asking…";
+      const result = await requestPushPermission();
+      if (result === "granted") {
+        container.innerHTML = "";
+        container.textContent = "✓ Notifications on — we'll buzz you when you're up.";
+        container.classList.add("push-on");
+      } else {
+        btn.disabled = false;
+        btn.textContent = "🔔 Notify me when I'm up";
+        if (result === "denied") {
+          container.appendChild(el("p", { class: "hint" },
+            "You blocked notifications — keep this tab open for updates."));
+        }
+      }
+    },
+  }, "🔔 Notify me when I'm up");
+  container.appendChild(btn);
 }
 
 render();

@@ -6,6 +6,7 @@ import sys
 
 import pytest
 
+import sing
 from tests.fixtures import ASCII_ENTRIES, KARAOKE_CATALOG_ENTRIES
 
 # Ensure kj-controller directory is on sys.path
@@ -55,6 +56,11 @@ def mock_config(tmp_media_dir):
         "tls_key": "",
         "youtube_cookies_file": str(tmp_media_dir / "youtube_cookies.txt"),
         "rotation_db_path": ":memory:",
+        "sing_rate_limit_per_ip": 5,
+        "sing_rate_limit_window_s": 300,
+        "sing_estimate_transition_s": 30,
+        "sing_estimate_default_song_s": 240,
+        "sing_estimate_min_spread_s": 120,
     }
 
 
@@ -101,3 +107,33 @@ def flask_test_client(flask_app):
     """Flask test client for route testing."""
     with flask_app.test_client() as client:
         yield client
+
+
+# --- Shared sing-blueprint fixtures (used by integration tests) ----------
+
+@pytest.fixture(autouse=True)
+def _reset_rate_limiter():
+    """Each test starts with an empty rate-limit window."""
+    sing._rate_limit_state.clear()
+    yield
+    sing._rate_limit_state.clear()
+
+
+@pytest.fixture
+def sing_app(mock_config):
+    from app import create_app
+    app = create_app(config=mock_config)
+    app.config["TESTING"] = True
+    yield app
+    app.catalog.close()
+
+
+@pytest.fixture
+def client(sing_app):
+    with sing_app.test_client() as c:
+        yield c
+
+
+@pytest.fixture
+def token(sing_app):
+    return sing_app.sing_store.ensure_token()

@@ -3025,6 +3025,11 @@ def update_sing_config():
             sync_event_url_overlays(current_app.overlay_manager, url)
         except Exception:
             pass
+        # Garbage-collect push subs on old tokens (>7 days)
+        try:
+            store.cleanup_stale_push_subscriptions(current_token=new_token)
+        except Exception:
+            current_app.logger.exception("push subscription cleanup failed")
 
     if "enabled" in data:
         store.set_enabled(bool(data["enabled"]))
@@ -3076,6 +3081,13 @@ def approve_sing_request_route(req_id):
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500
     store.mark_approved(req_id, linked_entry_id=entry_id)
+    # Fire push notification for approval (non-critical — never block on failure)
+    dispatcher = getattr(current_app.rotation, "push_dispatcher", None)
+    if dispatcher is not None:
+        try:
+            dispatcher.notify_request_decision(req_id, "approved", req)
+        except Exception:
+            current_app.logger.exception("approve push notify failed")
     return jsonify({
         "success": True,
         "request": store.get_request(req_id),
@@ -3114,4 +3126,10 @@ def reject_sing_request_route(req_id):
     data = request.get_json(force=True, silent=True) or {}
     reason = (data.get("reason") or "").strip() or None
     store.mark_rejected(req_id, reason=reason)
+    dispatcher = getattr(current_app.rotation, "push_dispatcher", None)
+    if dispatcher is not None:
+        try:
+            dispatcher.notify_request_decision(req_id, "rejected", req)
+        except Exception:
+            current_app.logger.exception("reject push notify failed")
     return jsonify({"success": True, "request": store.get_request(req_id)})

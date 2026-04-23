@@ -26,9 +26,12 @@ KJ Controller (`kj-controller/`) is a Flask + vanilla JS web app for managing li
 - `kj-controller/karaoke_nerds.py` — Karaoke Nerds web scraper (search, parse, YouTube URLs)
 - `kj-controller/youtube_search.py` — YouTube search via yt-dlp (fast metadata-only)
 - `kj-controller/youtube_health.py` — YouTube health checks, cookie validation, EJS/Deno detection
-- `kj-controller/sing.py` — Public `/sing/*` blueprint, token gate, host-based route guard
-- `kj-controller/sing_store.py` — SingStore (SQLite CRUD for sing_requests + event-token helpers)
-- `kj-controller/app.py` — app factory + entry point
+- `kj-controller/sing.py` — Public `/sing/*` blueprint, token gate, host-based route guard, PWA manifest + service worker route
+- `kj-controller/sing_store.py` — SingStore (SQLite CRUD for sing_requests + sing_push_subscriptions + event-token helpers)
+- `kj-controller/push_dispatcher.py` — PushDispatcher (VAPID, subscription scan, ladder decision, dedup, thread-pool webpush sends — plugged into RotationManager._after_mutation)
+- `kj-controller/wait_estimate.py` — Pure `compute_estimate(entries, target_id, cfg)` for singer-facing wait times (position + honest range from tonight's variance)
+- `kj-controller/static-sing/sw.js` — Service worker, scope `/sing/`. Handles Web Push + notificationclick + shell cache
+- `kj-controller/app.py` — app factory + entry point (also bootstraps VAPID keypair on first boot)
 - `kj-controller/config.py` — constants, platform detection, config loading
 
 **Hooks**:

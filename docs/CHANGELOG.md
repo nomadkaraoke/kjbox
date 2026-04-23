@@ -2,6 +2,54 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-04-22 - Feature: Singer expectations UI (push + wait estimates + rules page, sub-project 4/4)
+
+Singers who scan the QR now get honest wait-time estimates, a rules page, a "what's playing now" widget, an offline banner, and — on Android + desktop Chrome + iOS-installed-as-PWA — Web Push notifications when they're "up in 2", "up next", and "now singing". Approve/reject decisions also push. The held-tab polling flow shipped in sub-project #1 remains the universal fallback — push is additive, not a replacement.
+
+See the design + plan docs:
+- [2026-04-22-singer-expectations-design.md](archive/2026-04-22-singer-expectations-design.md)
+- [2026-04-22-singer-expectations-plan.md](archive/2026-04-22-singer-expectations-plan.md)
+
+**New modules:**
+- `kj-controller/push_dispatcher.py` — `PushDispatcher` class (subscription scan, ladder-step decision, dedup via `last_sent_state`, 500ms debounce, 2-worker send pool) + pure helpers `decide_ladder_step`, `next_entry_for_phone`, `render_payload`.
+- `kj-controller/wait_estimate.py` — pure function `compute_estimate(entries, target_id, cfg)` returning position + honest range derived from tonight's sung-entry mean ± stdev (with a configurable fallback spread when <3 done entries).
+- `kj-controller/static-sing/sw.js` — service worker handling `push` + `notificationclick`. Shell cache for offline render. `skipWaiting` + `clients.claim` for fast rollout.
+- `kj-controller/templates/sing_rules.html` — standalone rules page template, public (no token gate), reuses the 5 rules from `desktop/rotation_rules_printable.html`.
+
+**New endpoints:**
+- Public: `GET /sing/now`, `GET /sing/rules`, `GET /sing/manifest.json` (dynamic — token-aware `start_url`), `GET /sing/sw.js` (served from `/sing/` for correct SW scope).
+- Push: `POST /sing/push/subscribe`, `POST /sing/push/unsubscribe` (token-gated).
+
+**Response shape change:**
+- `GET /sing/status/<id>` now returns `estimate` and `now_playing` sub-objects. Legacy top-level `position`, `estimated_wait_s`, `queue` keys kept for the client rollout window.
+
+**New DB table:**
+- `sing_push_subscriptions` in `rotation.db` — (token, endpoint) unique, carries `last_sent_state` JSON for dedup, soft-disabled by 404/410 response from FCM.
+
+**New config keys** (all defaulted in `config.py`):
+- `sing_estimate_transition_s` (30), `sing_estimate_default_song_s` (240), `sing_estimate_min_spread_s` (120)
+- `vapid_public_key`, `vapid_private_key`, `vapid_subject` — auto-generated on first boot by `_bootstrap_vapid_keys` in `app.py` and persisted to `config.json` (gitignored).
+
+**Integration hooks:**
+- `RotationManager._after_mutation()` now notifies `self.push_dispatcher` (debounced 500ms). No-op when the dispatcher isn't wired.
+- `/rotation/requests/<id>/approve` and `/reject` fire `notify_request_decision(...)` for immediate singer feedback.
+- `/rotation/requests/config` token regeneration calls `cleanup_stale_push_subscriptions` to garbage-collect subs on other tokens older than 7 days.
+
+**Frontend additions (sing.js):**
+- "What's playing now" widget polls `/sing/now` every 15s on landing; confirmation page consumes the `now_playing` sub-object from `/sing/status` polls.
+- Offline banner: two-signal detection (`navigator.onLine` events + 2-poll-failure threshold) so captive-portal networks still surface it.
+- Push opt-in button on confirmation page, 2s delay after "you're in!". Graceful degrade on iOS Safari non-standalone → instructional card explaining Share → Add to Home Screen.
+- Wait-estimate rendering reads from `data.estimate.*` with 4 distinct UI states (now_singing, pos 1 "up next", pos 2 "1 song to go", pos 3+ honest minute range).
+
+**New dependency:** `pywebpush>=2.0.0` (and its transitive `cryptography`).
+
+**Test coverage:** 60+ new tests across `test_wait_estimate.py`, `test_sing_now_and_status.py`, `test_sing_public_routes.py` (rules/manifest/sw), `test_sing_push_routes.py`, `test_sing_store.py` (push subscriptions), `test_vapid_bootstrap.py`, `test_push_dispatcher.py` (27 tests), `test_rotation_push_hook.py`, `test_sing_admin_routes.py` (push hooks), and `test_sing_push_e2e.py` (2 full end-to-end flows). Full suite 1411+ tests pass.
+
+**Manual ops steps required (post-deploy):**
+- First service restart on NomadPC will generate VAPID keys into `config.json` (gitignored). No manual key management.
+- Web Push on iOS requires the singer to Add-to-Home-Screen first — the confirmation page shows an inline instructional card explaining this when it detects iOS Safari outside a standalone PWA.
+- No DNS / tunnel / Cloudflare changes needed (sing.nomadkaraoke.com from sub-project #1 is reused).
+
 ## 2026-04-18 - Feature: Public singer request form (MVP, sub-project 1/4)
 
 Singers can now submit song requests from their phones by scanning a QR code, instead of handing the KJ a paper slip. The form is reachable over the internet via a new Cloudflare tunnel hostname (`sing.nomadkaraoke.com`, no Access rule) and over the venue wifi via the NomadPC's LAN IP when no internet is available. Requests land in a pending review queue on the KJ UI by default; an auto-approve toggle lets the KJ bypass review when they trust the crowd.

@@ -87,6 +87,25 @@ class SingStore:
                 key   TEXT PRIMARY KEY,
                 value TEXT
             );
+
+            CREATE TABLE IF NOT EXISTS sing_push_subscriptions (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                created_at      TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+                updated_at      TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+                token           TEXT NOT NULL,
+                phone           TEXT NOT NULL,
+                singer_name     TEXT NOT NULL,
+                endpoint        TEXT NOT NULL,
+                p256dh          TEXT NOT NULL,
+                auth            TEXT NOT NULL,
+                user_agent      TEXT,
+                last_sent_state TEXT,
+                last_seen_at    TEXT,
+                disabled_at     TEXT,
+                UNIQUE(token, endpoint)
+            );
+            CREATE INDEX IF NOT EXISTS idx_sing_push_token_phone
+                ON sing_push_subscriptions(token, phone);
             """
         )
         conn.commit()
@@ -329,3 +348,108 @@ class SingStore:
         )
         conn.commit()
         return self.get_request(request_id)
+
+    # ------------------------------------------------------------------
+    # Push subscription CRUD (sub-project #4)
+    # ------------------------------------------------------------------
+
+    def insert_push_subscription(self, token, phone, singer_name, endpoint,
+                                  p256dh, auth, user_agent=None):
+        """Insert-or-replace on UNIQUE(token, endpoint).
+
+        If a matching row is disabled, re-enable it via disabled_at=NULL.
+        Returns the row id.
+        """
+        conn = self._get_conn()
+        conn.execute(
+            "INSERT INTO sing_push_subscriptions "
+            "  (token, phone, singer_name, endpoint, p256dh, auth, user_agent, updated_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now', 'localtime')) "
+            "ON CONFLICT(token, endpoint) DO UPDATE SET "
+            "  phone=excluded.phone, singer_name=excluded.singer_name, "
+            "  p256dh=excluded.p256dh, auth=excluded.auth, "
+            "  user_agent=excluded.user_agent, "
+            "  updated_at=datetime('now', 'localtime'), "
+            "  disabled_at=NULL",
+            (token, phone, singer_name, endpoint, p256dh, auth, user_agent),
+        )
+        conn.commit()
+        row = conn.execute(
+            "SELECT id FROM sing_push_subscriptions WHERE token=? AND endpoint=?",
+            (token, endpoint),
+        ).fetchone()
+        return row["id"] if row else None
+
+    def list_active_push_subscriptions(self, token):
+        """Return all non-disabled subs for `token` as a list of dict rows."""
+        conn = self._get_conn()
+        rows = conn.execute(
+            "SELECT * FROM sing_push_subscriptions "
+            "WHERE token=? AND disabled_at IS NULL "
+            "ORDER BY id",
+            (token,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def disable_push_subscription(self, sub_id):
+        conn = self._get_conn()
+        conn.execute(
+            "UPDATE sing_push_subscriptions "
+            "SET disabled_at=datetime('now', 'localtime') "
+            "WHERE id=?",
+            (sub_id,),
+        )
+        conn.commit()
+
+    def disable_push_subscription_by_endpoint(self, token, endpoint):
+        """Soft-disable a subscription by (token, endpoint).
+
+        Returns True if a row was disabled, False if no matching row existed.
+        Silent no-op on unknown endpoint — callers treat it as idempotent.
+        """
+        conn = self._get_conn()
+        cur = conn.execute(
+            "UPDATE sing_push_subscriptions "
+            "SET disabled_at=datetime('now', 'localtime') "
+            "WHERE token=? AND endpoint=? AND disabled_at IS NULL",
+            (token, endpoint),
+        )
+        conn.commit()
+        return cur.rowcount > 0
+
+    def update_push_sent_state(self, sub_id, state_dict):
+        import json as _json
+        conn = self._get_conn()
+        conn.execute(
+            "UPDATE sing_push_subscriptions "
+            "SET last_sent_state=?, updated_at=datetime('now', 'localtime') "
+            "WHERE id=?",
+            (_json.dumps(state_dict), sub_id),
+        )
+        conn.commit()
+
+    def cleanup_stale_push_subscriptions(self, current_token):
+        """Delete subs on tokens other than the current, not refreshed in >7 days.
+
+        Uses updated_at (bumped on every upsert) rather than created_at so a
+        singer who's been actively re-subscribing on a different token keeps
+        their row.
+        """
+        conn = self._get_conn()
+        conn.execute(
+            "DELETE FROM sing_push_subscriptions "
+            "WHERE token != ? "
+            "  AND updated_at < datetime('now', '-7 days', 'localtime')",
+            (current_token,),
+        )
+        conn.commit()
+
+    def find_subs_by_phone(self, token, phone):
+        """Return all non-disabled subs matching (token, phone) as dict list."""
+        conn = self._get_conn()
+        rows = conn.execute(
+            "SELECT * FROM sing_push_subscriptions "
+            "WHERE token=? AND phone=? AND disabled_at IS NULL",
+            (token, phone),
+        ).fetchall()
+        return [dict(r) for r in rows]

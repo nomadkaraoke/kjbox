@@ -259,3 +259,109 @@ class TestSleepDisableHook:
             assert resp.status_code == 200
         # Stays disabled — KJ must re-enable manually
         assert admin_app.sing_store.is_enabled() is False
+
+
+class TestPushHooks:
+    def test_approve_triggers_push_notification(self, client, sing_app, token):
+        from unittest.mock import MagicMock
+        # Mock the dispatcher — the real one is wired but we want to inspect calls
+        dispatcher = MagicMock()
+        sing_app.rotation.push_dispatcher = dispatcher
+
+        gen = MagicMock()
+        gen.create_job.return_value = {"job_id": "job_push_1", "status": "pending"}
+        sing_app.gen_client = gen
+
+        sing_app.sing_store.set_enabled(True)
+        # Submit a request via the public route
+        resp = client.post(f"/sing/submit?t={token}", json={
+            "singer_name": "Bob",
+            "phone": "+61400000099",
+            "song_artist": "Queen",
+            "song_title": "Radio Ga Ga",
+            "source_type": "make",
+        })
+        assert resp.status_code == 200
+        req_id = resp.get_json()["request"]["id"]
+
+        # Approve via admin route
+        resp = client.post(f"/rotation/requests/{req_id}/approve")
+        assert resp.status_code == 200, resp.get_data(as_text=True)
+
+        dispatcher.notify_request_decision.assert_called_once()
+        args, _ = dispatcher.notify_request_decision.call_args
+        # Signature: (request_id, decision, request_dict)
+        assert args[0] == req_id
+        assert args[1] == "approved"
+        assert args[2]["phone"] == "+61400000099"
+
+    def test_reject_triggers_push_notification(self, client, sing_app, token):
+        from unittest.mock import MagicMock
+        dispatcher = MagicMock()
+        sing_app.rotation.push_dispatcher = dispatcher
+
+        sing_app.sing_store.set_enabled(True)
+        resp = client.post(f"/sing/submit?t={token}", json={
+            "singer_name": "Carol",
+            "phone": "+61400000088",
+            "song_artist": "Beatles",
+            "song_title": "Yesterday",
+            "source_type": "make",
+        })
+        req_id = resp.get_json()["request"]["id"]
+
+        resp = client.post(f"/rotation/requests/{req_id}/reject",
+                           json={"reason": "song unavailable"})
+        assert resp.status_code == 200
+
+        dispatcher.notify_request_decision.assert_called_once()
+        args, _ = dispatcher.notify_request_decision.call_args
+        assert args[0] == req_id
+        assert args[1] == "rejected"
+        assert args[2]["phone"] == "+61400000088"
+
+    def test_token_regenerate_triggers_cleanup(self, client, sing_app, token):
+        from unittest.mock import patch
+        # Seed a sub so we can observe cleanup behaviour
+        sing_app.sing_store.insert_push_subscription(
+            token=token, phone="+1", singer_name="X",
+            endpoint="ep", p256dh="p", auth="a",
+        )
+        with patch.object(
+            sing_app.sing_store, "cleanup_stale_push_subscriptions",
+            wraps=sing_app.sing_store.cleanup_stale_push_subscriptions,
+        ) as mock_cleanup:
+            resp = client.post("/rotation/requests/config",
+                               json={"regenerate": True})
+            assert resp.status_code == 200
+            mock_cleanup.assert_called_once()
+            args, kwargs = mock_cleanup.call_args
+            # Current token is the freshly-regenerated one
+            new_token = resp.get_json()["changed"]["token"]
+            # cleanup was called with the new token (either positional or kwarg)
+            call_token = kwargs.get("current_token") or (args[0] if args else None)
+            assert call_token == new_token
+
+    def test_push_hook_failure_does_not_fail_approve(self, client, sing_app, token):
+        """A crashing dispatcher must not break the approve admin route."""
+        from unittest.mock import MagicMock
+        dispatcher = MagicMock()
+        dispatcher.notify_request_decision.side_effect = RuntimeError("boom")
+        sing_app.rotation.push_dispatcher = dispatcher
+
+        gen = MagicMock()
+        gen.create_job.return_value = {"job_id": "job_push_2", "status": "pending"}
+        sing_app.gen_client = gen
+
+        sing_app.sing_store.set_enabled(True)
+        resp = client.post(f"/sing/submit?t={token}", json={
+            "singer_name": "Dan",
+            "phone": "+61400000077",
+            "song_artist": "Pink Floyd",
+            "song_title": "Money",
+            "source_type": "make",
+        })
+        req_id = resp.get_json()["request"]["id"]
+        resp = client.post(f"/rotation/requests/{req_id}/approve")
+        # Approve still succeeds despite dispatcher exception
+        assert resp.status_code == 200

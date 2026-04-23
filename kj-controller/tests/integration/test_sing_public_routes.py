@@ -5,35 +5,6 @@ from unittest.mock import MagicMock
 import pytest
 
 import sing
-from app import create_app
-
-
-@pytest.fixture(autouse=True)
-def _reset_rate_limiter():
-    """Each test starts with an empty rate-limit window."""
-    sing._rate_limit_state.clear()
-    yield
-    sing._rate_limit_state.clear()
-
-
-@pytest.fixture
-def sing_app(mock_config):
-    # Use a real in-memory rotation + sing_store via create_app
-    app = create_app(config=mock_config)
-    app.config["TESTING"] = True
-    yield app
-    app.catalog.close()
-
-
-@pytest.fixture
-def client(sing_app):
-    with sing_app.test_client() as c:
-        yield c
-
-
-@pytest.fixture
-def token(sing_app):
-    return sing_app.sing_store.ensure_token()
 
 
 class TestLanding:
@@ -234,7 +205,8 @@ class TestStatus:
         resp = client.get(f"/sing/status/{req_id}?t={token}")
         data = resp.get_json()
         assert data["request"]["status"] == "approved"
-        assert data["position"] is not None
+        assert "estimate" in data
+        assert data["estimate"]["position"] is not None
         assert "queue" in data
 
     def test_status_from_previous_event_rejected(self, client, sing_app, token):
@@ -274,3 +246,59 @@ class TestOverlaySync:
         assert overlay_manager.get_overlay(linked["id"])["config"]["url"] == "new-url"
         assert overlay_manager.get_overlay(unlinked["id"])["config"]["url"] == "leaveme"
         assert overlay_manager.get_overlay(ticker["id"])["config"]["text"] == "don't touch"
+
+
+class TestRulesPage:
+    def test_rules_page_unauthenticated(self, client):
+        """Rules page is public — no token required."""
+        resp = client.get("/sing/rules")
+        assert resp.status_code == 200
+        body = resp.get_data(as_text=True)
+        assert "First come, first sing" in body
+        assert "New singers get priority" in body
+        assert "Multiple songs welcome" in body
+        assert "Need to leave early" in body
+        assert "Paid priority" in body
+
+
+class TestPWAManifest:
+    def test_manifest_served_with_current_token(self, client, sing_app, token):
+        """Manifest.json carries the current token in start_url."""
+        sing_app.sing_store.set_enabled(True)
+        resp = client.get(f"/sing/manifest.json?t={token}")
+        assert resp.status_code == 200
+        assert resp.content_type.startswith("application/json")
+        data = resp.get_json()
+        assert data["name"] == "Nomad Karaoke"
+        assert data["display"] == "standalone"
+        assert data["start_url"] == f"/sing/?t={token}"
+        assert any(icon["sizes"] == "192x192" for icon in data["icons"])
+        assert any(icon["sizes"] == "512x512" for icon in data["icons"])
+
+    def test_manifest_rejects_without_token(self, client):
+        resp = client.get("/sing/manifest.json")
+        assert resp.status_code == 403
+
+
+class TestServiceWorker:
+    def test_sw_served_at_sing_scope(self, client):
+        """sw.js must be served from /sing/ so its scope is /sing/.
+
+        Not token-gated — the browser must be able to fetch updates
+        independent of token state.
+        """
+        resp = client.get("/sing/sw.js")
+        assert resp.status_code == 200
+        assert "javascript" in resp.content_type
+        body = resp.get_data(as_text=True)
+        assert "self.addEventListener('push'" in body
+        assert "self.addEventListener('notificationclick'" in body
+
+    def test_sw_cache_includes_app_version(self, client, sing_app):
+        """SW cache key must be substituted with the app version, not left as a placeholder."""
+        resp = client.get("/sing/sw.js")
+        body = resp.get_data(as_text=True)
+        # Placeholder should be replaced
+        assert "__APP_VERSION__" not in body
+        # Cache constant should appear (with some version)
+        assert "nomad-sing-shell-" in body
