@@ -407,6 +407,55 @@ def submit():
     )
 
 
+@sing_bp.route("/push/subscribe", methods=["POST"])
+@require_token
+def push_subscribe():
+    """Persist a Web Push subscription for the current event token + singer."""
+    store = current_app.sing_store
+    token = _extract_token()
+    data = request.get_json(force=True, silent=True) or {}
+    phone = (data.get("phone") or "").strip()
+    singer_name = (data.get("singer_name") or "").strip()
+    sub = data.get("subscription") or {}
+    endpoint = (sub.get("endpoint") or "").strip()
+    keys = sub.get("keys") or {}
+    p256dh = (keys.get("p256dh") or "").strip()
+    auth_key = (keys.get("auth") or "").strip()
+
+    if not (phone and singer_name and endpoint and p256dh and auth_key):
+        return jsonify({"error": "missing fields"}), 400
+    if not _PHONE_RE.match(phone):
+        return jsonify({"error": "phone format invalid"}), 400
+
+    user_agent = request.headers.get("User-Agent", "")[:500]
+    store.insert_push_subscription(
+        token=token, phone=phone, singer_name=singer_name,
+        endpoint=endpoint, p256dh=p256dh, auth=auth_key,
+        user_agent=user_agent,
+    )
+    return ("", 204)
+
+
+@sing_bp.route("/push/unsubscribe", methods=["POST"])
+@require_token
+def push_unsubscribe():
+    """Soft-disable a subscription by endpoint for the current event token."""
+    store = current_app.sing_store
+    token = _extract_token()
+    data = request.get_json(force=True, silent=True) or {}
+    endpoint = (data.get("endpoint") or "").strip()
+    if not endpoint:
+        return jsonify({"error": "endpoint required"}), 400
+    conn = store._get_conn()
+    row = conn.execute(
+        "SELECT id FROM sing_push_subscriptions WHERE token=? AND endpoint=?",
+        (token, endpoint),
+    ).fetchone()
+    if row:
+        store.disable_push_subscription(row["id"])
+    return ("", 204)
+
+
 @sing_bp.route("/now", methods=["GET"])
 @require_token
 def now_playing():
