@@ -198,6 +198,38 @@ def create_app(config=None):
         cfg.get('rotation_db_path', os.path.expanduser('~/kjdata/rotation.db'))
     )
     flask_app.sing_store.ensure_token()
+
+    # ----------------------------------------------------------------
+    # PushDispatcher — Web Push for singer-facing expectations UI
+    # ----------------------------------------------------------------
+    from push_dispatcher import PushDispatcher
+
+    def _phone_for_rotation_entry(entry):
+        """Look up the phone of the sing_request linked to this entry, if any.
+
+        Used by the push dispatcher to find which subscribed singer an entry
+        belongs to. Returns None for manual/un-linked KJ entries (those are
+        correctly ignored by the dispatcher's lookup).
+        """
+        entry_id = entry.get("id")
+        if entry_id is None:
+            return None
+        conn = flask_app.sing_store._get_conn()
+        row = conn.execute(
+            "SELECT phone FROM sing_requests WHERE linked_entry_id = ? "
+            "ORDER BY created_at DESC LIMIT 1",
+            (entry_id,),
+        ).fetchone()
+        return row["phone"] if row else None
+
+    flask_app.rotation.push_dispatcher = PushDispatcher(
+        store=flask_app.sing_store,
+        rotation=flask_app.rotation,
+        cfg=cfg,
+        get_current_token=lambda: flask_app.sing_store.get_token(),
+        get_linked_phone_for_entry=_phone_for_rotation_entry,
+    )
+
     flask_app.sleep_manager = SleepManager()
     flask_app.download_queue = {'items': [], 'worker_running': False}
     flask_app._download_lock = threading.Lock()

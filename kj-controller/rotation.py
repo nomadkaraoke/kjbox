@@ -34,6 +34,7 @@ class RotationManager:
         self.store = RotationStore(db_path)
         self.sync = None
         self.media = None  # Set by app.py if MediaIndex is available
+        self.push_dispatcher = None  # Set by app.py if Web Push is configured
 
         if sheet_id and credentials_file:
             from rotation_sync import SheetSync
@@ -248,8 +249,15 @@ class RotationManager:
     # ------------------------------------------------------------------
 
     def _after_mutation(self):
-        """Write display cache and trigger a background sync cycle."""
+        """Write display cache, trigger sync cycle, and notify push dispatcher."""
         self._write_display_cache()
+        if self.push_dispatcher is not None:
+            try:
+                self.push_dispatcher.notify_rotation_changed()
+            except Exception:
+                # Push is non-critical — never let a dispatcher bug block rotation ops.
+                import logging
+                logging.getLogger(__name__).exception("push dispatch notify failed")
         if self.sync is not None:
             # Fire-and-forget: sync runs in its own daemon thread already.
             # Calling sync_now() here would block; instead, the background
