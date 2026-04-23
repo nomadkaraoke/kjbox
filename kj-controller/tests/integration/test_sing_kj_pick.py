@@ -13,7 +13,12 @@ lock down:
     the KJ, otherwise the rotation entry would have no file attached.
 """
 
+import json
+
+import pytest
+
 from sing import _validate_kj_pick_payload
+from routes import _pick_version_from_kj_pick
 
 
 def _kj_pick_body(**overrides):
@@ -81,7 +86,6 @@ class TestSubmitKjPick:
         assert req["status"] == "pending"
         # Public view hides source_meta (it's admin-only) — fetch from the store
         # to confirm the versions snapshot round-tripped through JSON storage.
-        import json
         stored = sing_app.sing_store.get_request(req["id"])
         versions = json.loads(stored["source_meta"])["versions"]
         assert versions[0]["kind"] == "local"
@@ -140,3 +144,96 @@ class TestSubmitKjPick:
         assert resp.status_code == 200
         data = resp.get_json()
         assert data["auto_approved"] is True
+
+
+def _req_with_versions(versions):
+    """Build the minimum row shape ``_pick_version_from_kj_pick`` reads."""
+    return {"source_meta": json.dumps({"versions": versions})}
+
+
+class TestPickVersionFromKjPick:
+    def test_picks_local(self):
+        req = _req_with_versions([
+            {"source": "local", "local": {"path": "/media/foo.mp4"}},
+        ])
+        assert _pick_version_from_kj_pick(req, 0) == ("local", "/media/foo.mp4", None)
+
+    def test_picks_kn_with_divebar(self):
+        req = _req_with_versions([
+            {
+                "source": "kn",
+                "kn": {
+                    "brand_code": "SF",
+                    "divebar": {"file_id": "drive-123", "drive_path": "/SF/001.mp4"},
+                    "youtube_url": "https://yt/x",
+                },
+            },
+        ])
+        src_type, src_ref, meta = _pick_version_from_kj_pick(req, 0)
+        assert src_type == "divebar"
+        assert src_ref == "drive-123"
+        assert meta == {"brand_code": "SF", "disc_id": "/SF/001.mp4"}
+
+    def test_picks_kn_youtube_only(self):
+        req = _req_with_versions([
+            {
+                "source": "kn",
+                "kn": {
+                    "brand_code": "KV",
+                    "youtube_url": "https://yt/abc",
+                },
+            },
+        ])
+        src_type, src_ref, meta = _pick_version_from_kj_pick(req, 0)
+        assert src_type == "youtube"
+        assert src_ref == "https://yt/abc"
+        assert meta == {"brand_code": "KV"}
+
+    def test_picks_specific_index_from_mixed_list(self):
+        req = _req_with_versions([
+            {"source": "local", "local": {"path": "/v0.mp4"}},
+            {"source": "kn", "kn": {"youtube_url": "https://yt/v1"}},
+            {"source": "local", "local": {"path": "/v2.mp4"}},
+        ])
+        assert _pick_version_from_kj_pick(req, 1)[0] == "youtube"
+        assert _pick_version_from_kj_pick(req, 2) == ("local", "/v2.mp4", None)
+
+    def test_missing_index_raises(self):
+        req = _req_with_versions([{"source": "local", "local": {"path": "/x.mp4"}}])
+        with pytest.raises(ValueError):
+            _pick_version_from_kj_pick(req, None)
+
+    def test_out_of_range_raises(self):
+        req = _req_with_versions([{"source": "local", "local": {"path": "/x.mp4"}}])
+        with pytest.raises(ValueError):
+            _pick_version_from_kj_pick(req, 1)
+        with pytest.raises(ValueError):
+            _pick_version_from_kj_pick(req, -1)
+
+    def test_non_integer_index_raises(self):
+        req = _req_with_versions([{"source": "local", "local": {"path": "/x.mp4"}}])
+        with pytest.raises(ValueError):
+            _pick_version_from_kj_pick(req, "first")
+
+    def test_corrupt_source_meta_raises(self):
+        with pytest.raises(ValueError):
+            _pick_version_from_kj_pick({"source_meta": "{not-json"}, 0)
+
+    def test_empty_source_meta_raises(self):
+        with pytest.raises(ValueError):
+            _pick_version_from_kj_pick({"source_meta": None}, 0)
+
+    def test_local_without_path_raises(self):
+        req = _req_with_versions([{"source": "local", "local": {}}])
+        with pytest.raises(ValueError):
+            _pick_version_from_kj_pick(req, 0)
+
+    def test_kn_without_divebar_or_youtube_raises(self):
+        req = _req_with_versions([{"source": "kn", "kn": {"brand_code": "XX"}}])
+        with pytest.raises(ValueError):
+            _pick_version_from_kj_pick(req, 0)
+
+    def test_unknown_source_raises(self):
+        req = _req_with_versions([{"source": "spotify", "spotify": {"id": "x"}}])
+        with pytest.raises(ValueError):
+            _pick_version_from_kj_pick(req, 0)

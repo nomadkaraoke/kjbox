@@ -1,6 +1,7 @@
 """Flask Blueprint with all route handlers."""
 
 import glob
+import json
 import os
 import random
 import re
@@ -3022,6 +3023,62 @@ def _format_song_text(artist, title):
     if artist and title:
         return f"{title} - {artist}"
     return title or artist
+
+
+def _pick_version_from_kj_pick(req, index):
+    """Translate a ``kj_pick`` request + picked index into concrete source_* fields.
+
+    Returns ``(source_type, source_ref, source_meta_dict_or_None)`` ready to be
+    written back into the request row via ``SingStore.update_request_source``.
+
+    Raises ``ValueError`` for a missing / out-of-range index so the approval
+    route can return a 400 instead of 500 — the admin UI should always pass a
+    valid index, but a cURL caller could trip this.
+    """
+    meta_raw = req.get("source_meta")
+    if not meta_raw:
+        raise ValueError("request has no source_meta — not a kj_pick?")
+    try:
+        meta = meta_raw if isinstance(meta_raw, dict) else json.loads(meta_raw)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"source_meta is not valid JSON: {exc}") from exc
+    versions = meta.get("versions") or []
+    if index is None:
+        raise ValueError("version_index required for kj_pick requests")
+    try:
+        index = int(index)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"version_index must be an integer: {exc}") from exc
+    if not (0 <= index < len(versions)):
+        raise ValueError(
+            f"version_index out of range (got {index}, have {len(versions)} versions)"
+        )
+    v = versions[index]
+    src = v.get("source")
+    if src == "local":
+        local = v.get("local") or {}
+        path = local.get("path")
+        if not path:
+            raise ValueError("picked local version has no path")
+        return ("local", path, None)
+    if src == "kn":
+        kn = v.get("kn") or {}
+        divebar_info = kn.get("divebar") or {}
+        file_id = divebar_info.get("file_id")
+        if file_id:
+            return (
+                "divebar",
+                file_id,
+                {
+                    "brand_code": kn.get("brand_code"),
+                    "disc_id": divebar_info.get("drive_path"),
+                },
+            )
+        youtube_url = kn.get("youtube_url")
+        if not youtube_url:
+            raise ValueError("picked KN version has neither divebar nor youtube_url")
+        return ("youtube", youtube_url, {"brand_code": kn.get("brand_code")})
+    raise ValueError(f"unknown version source: {src!r}")
 
 
 def approve_sing_request(app, req):
