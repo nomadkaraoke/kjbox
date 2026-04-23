@@ -121,35 +121,134 @@ input:focus {
 .r-title { font-weight: 600; }
 .r-sub { color: var(--nk-text-dim); font-size: 0.85rem; flex: 1; }
 
-/* Grouped-result card — one per unique song. Lays the title/artist/CTA
-   stacked rather than inline so the primary action reads clearly. */
+/* Grouped-result card — one per unique song. Column layout so the primary
+   CTA sits cleanly below the title and the expander (Phase B) flows below
+   that without disturbing alignment. */
 .result-row.grouped {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  grid-template-areas:
-    "title  badge"
-    "sub    badge"
-    "cta    badge"
-    "hint   badge";
-  gap: 0.2rem 0.5rem;
-  align-items: center;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.3rem;
   padding: 0.9rem;
+  cursor: default;
 }
-.result-row.grouped .r-title { grid-area: title; }
-.result-row.grouped .r-sub { grid-area: sub; }
-.result-row.grouped .r-cta {
-  grid-area: cta;
+.result-row.grouped .r-title { font-weight: 600; }
+.result-row.grouped .r-sub { color: var(--nk-text-dim); font-size: 0.85rem; }
+.result-row.grouped .badge { align-self: flex-start; }
+.result-row.grouped .btn-primary-cta {
+  width: 100%;
+  padding: 0.75rem;
   margin-top: 0.4rem;
-  color: var(--nk-accent);
+  background: var(--nk-accent);
+  color: var(--nk-bg);
+  border: 0;
+  border-radius: 6px;
+  font-size: 0.95rem;
   font-weight: 600;
-  font-size: 0.9rem;
+  cursor: pointer;
 }
-.result-row.grouped .r-versions-hint {
-  grid-area: hint;
+.result-row.grouped .btn-primary-cta:hover { opacity: 0.9; }
+
+/* Phase B — inline version expander. Toggle button flips the caret/label
+   between collapsed and expanded. */
+.sing-versions-toggle {
+  background: transparent;
+  border: 0;
   color: var(--nk-text-dim);
-  font-size: 0.75rem;
+  padding: 0.25rem 0;
+  margin-top: 0.1rem;
+  font-size: 0.8rem;
+  cursor: pointer;
+  text-align: left;
+  align-self: flex-start;
 }
-.result-row.grouped .badge { grid-area: badge; align-self: start; }
+.sing-versions-toggle:hover { color: var(--nk-accent); }
+.sing-version-expander {
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px dashed var(--nk-border);
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.sing-version-section h4 {
+  margin: 0 0 0.3rem 0;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--nk-text-dim);
+}
+.sing-version-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  padding: 0.5rem 0.6rem;
+  margin-bottom: 0.3rem;
+  background: var(--nk-card);
+  border: 1px solid var(--nk-border);
+  border-radius: 6px;
+}
+.sing-version-card:last-child { margin-bottom: 0; }
+.sing-version-icon { font-size: 1.1rem; line-height: 1.4; }
+.sing-version-main { flex: 1; min-width: 0; }
+.sing-version-primary { font-weight: 600; font-size: 0.9rem; }
+.sing-version-secondary { color: var(--nk-text-dim); font-size: 0.8rem; }
+.sing-version-path-wrap { margin-top: 0.2rem; }
+.sing-version-path-summary {
+  color: var(--nk-text-dim);
+  font-size: 0.72rem;
+  cursor: pointer;
+  list-style: none;
+}
+.sing-version-path-summary::-webkit-details-marker { display: none; }
+.sing-version-path-summary::before { content: "▸ "; }
+.sing-version-path-wrap[open] .sing-version-path-summary::before { content: "▾ "; }
+.sing-version-path {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.75rem;
+  color: var(--nk-text-dim);
+  word-break: break-all;
+  line-height: 1.25;
+  margin-top: 0.2rem;
+}
+.sing-version-pick {
+  align-self: center;
+  padding: 0.4rem 0.7rem;
+  background: var(--nk-card-2);
+  border: 1px solid var(--nk-accent);
+  color: var(--nk-accent);
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.sing-version-pick:hover { background: var(--nk-accent); color: var(--nk-bg); }
+
+/* Phase B — Commercial vs Community explainer. One-time strip, dismissed
+   permanently via localStorage. Styled as a soft info callout. */
+.sing-cc-explainer {
+  padding: 0.7rem 0.8rem;
+  background: var(--nk-card);
+  border: 1px solid var(--nk-accent);
+  border-radius: 6px;
+  margin-bottom: 0.5rem;
+}
+.sing-cc-title { font-weight: 700; font-size: 0.85rem; margin-bottom: 0.3rem; }
+.sing-cc-list { margin: 0.2rem 0; padding-left: 1.1rem; font-size: 0.8rem; line-height: 1.45; }
+.sing-cc-list li { margin-bottom: 0.25rem; }
+.sing-cc-hint { color: var(--nk-text-dim); font-size: 0.75rem; margin: 0.3rem 0 0.5rem 0; }
+.sing-cc-dismiss {
+  padding: 0.3rem 0.7rem;
+  background: var(--nk-accent);
+  color: var(--nk-bg);
+  border: 0;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+}
 
 .badge {
   font-size: 0.75rem;

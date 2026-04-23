@@ -154,6 +154,22 @@ one Android device and one iPhone before shipping push changes to prod.
 - [ ] KJ adds an entry and marks it Now Singing → within 15s the widget shows "🎤 Now: {singer} — {song}".
 - [ ] Second entry added → within 15s widget updates to include "Up next: {name}".
 
+### Song selection — per-version expander (Phase B)
+
+- [ ] Search a multi-version song. Tap "N versions available →" → card expands inline, Primary "Let the KJ pick" CTA remains at top, toggle flips to "Hide versions ↑".
+- [ ] First expand (cleared localStorage) shows the Commercial vs Community callout with two bullets + "Got it" button.
+- [ ] Tap "Got it" → callout disappears; reload → still dismissed. Expand another song → no callout.
+- [ ] A local version card shows brand/format (e.g. "EEK-00391 — CDG+MP3"), filename, and a collapsed "show full path ▸" chevron. Tapping reveals the monospace full path with word-break wrapping.
+- [ ] A KN+divebar version card shows brand, divebar format + quality, "via Divebar · NN MB", collapsed drive_path.
+- [ ] A KN online-only (commercial) card shows brand + "Commercial · YouTube (download required)". No path block.
+- [ ] A KN community card shows brand + "Community · YouTube (download required)". No path block.
+- [ ] Sections that have zero candidates are not rendered at all (no empty "Online only" header).
+- [ ] Tap "Pick this version →" on a local version → confirmation shows `{title} — {artist} ({filename})`. Submit → admin sees a normal `source_type=local` pending row with a green Approve button (no kj_pick picker).
+- [ ] Tap "Pick this version →" on a KN+divebar → confirmation shows brand name, submit → admin sees `source_type=divebar`.
+- [ ] Tap "Pick this version →" on a KN-only → submit → admin sees `source_type=kn` / `youtube`.
+- [ ] After expanding, the primary "Let the KJ pick" button still works (submits `kj_pick` as Phase A).
+- [ ] Re-tap the toggle → card collapses back. Expand again → no CC explainer (it stays dismissed).
+
 ### Song selection — grouped search + KJ picks version (Phase A)
 
 - [ ] Search for a song with multiple versions (e.g. "bohemian rhapsody") → one card per unique `(artist, title)`, not one per version. Card shows "Let the KJ pick the best version →" CTA and an inert "N versions available →" hint below it.
