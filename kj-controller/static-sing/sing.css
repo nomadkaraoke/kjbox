@@ -250,6 +250,105 @@ input:focus {
   cursor: pointer;
 }
 
+/* Phase C — empty-state triage. Three stacked cards each explain what the
+   singer is committing to in terms of time and effort. */
+.sing-empty-triage {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-top: 0.6rem;
+}
+.sing-empty-header h3 {
+  margin: 0 0 0.3rem 0;
+  font-size: 1rem;
+  font-weight: 700;
+}
+.sing-empty-header p {
+  margin: 0;
+  color: var(--nk-text-dim);
+  font-size: 0.85rem;
+}
+.sing-empty-card {
+  padding: 0.9rem 1rem;
+  background: var(--nk-card-2);
+  border: 1px solid var(--nk-border);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+.sing-empty-card h4 {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+.sing-empty-desc {
+  margin: 0;
+  color: var(--nk-text-dim);
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+.sing-empty-label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  font-size: 0.8rem;
+  color: var(--nk-text-dim);
+}
+.sing-empty-input {
+  padding: 0.55rem 0.7rem;
+  background: var(--nk-card);
+  border: 1px solid var(--nk-border);
+  border-radius: 6px;
+  color: var(--nk-text);
+  font-size: 0.9rem;
+  width: 100%;
+  box-sizing: border-box;
+}
+.sing-empty-submit {
+  width: 100%;
+  padding: 0.7rem;
+  margin-top: 0.1rem;
+  background: var(--nk-accent);
+  color: var(--nk-bg);
+  border: 0;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: center;
+  text-decoration: none;
+  display: inline-block;
+}
+.sing-empty-submit:hover { opacity: 0.9; }
+.sing-empty-external { /* hint that this one opens a new tab */ }
+
+.sing-empty-howto {
+  padding: 0.5rem 0.7rem;
+  background: var(--nk-card);
+  border: 1px solid var(--nk-border);
+  border-radius: 6px;
+}
+.sing-empty-howto summary {
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--nk-accent);
+}
+.sing-empty-howto-steps {
+  margin: 0.5rem 0 0 1.2rem;
+  padding: 0;
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+.sing-empty-howto-steps li { margin-bottom: 0.25rem; }
+.sing-empty-howto-note {
+  margin: 0.45rem 0 0 0;
+  color: var(--nk-text-dim);
+  font-size: 0.75rem;
+  font-style: italic;
+}
+
 .badge {
   font-size: 0.75rem;
   padding: 0.2rem 0.5rem;

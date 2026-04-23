@@ -14,6 +14,7 @@ import sqlite3
 TOKEN_KEY = "request_token"
 ENABLED_KEY = "request_token_enabled"
 AUTO_APPROVE_KEY = "request_auto_approve"
+ACCEPT_MAKE_REQUESTS_KEY = "sing_accept_make_requests"
 
 # Token is a 4-digit numeric code. 10 000 combinations — small enough to read off
 # the venue screen and type on a phone numpad, large enough that the rate-limited
@@ -179,6 +180,19 @@ class SingStore:
 
     def set_auto_approve(self, enabled):
         self._set_meta(AUTO_APPROVE_KEY, "1" if enabled else "0")
+
+    def is_accepting_make_requests(self):
+        """Return True if singers can submit ``source_type="make"`` requests.
+
+        Default on. The KJ flips this off when they're too busy to do same-
+        night lyrics reviews. When off, the empty-state triage in the singer
+        UI hides the "ask the KJ to make it" card AND ``/sing/submit`` rejects
+        any ``make`` payloads (defence-in-depth for stale clients).
+        """
+        return self._get_meta(ACCEPT_MAKE_REQUESTS_KEY, "1") == "1"
+
+    def set_accepting_make_requests(self, enabled):
+        self._set_meta(ACCEPT_MAKE_REQUESTS_KEY, "1" if enabled else "0")
 
     # ------------------------------------------------------------------
     # Request CRUD

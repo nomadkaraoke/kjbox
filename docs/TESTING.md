@@ -154,6 +154,19 @@ one Android device and one iPhone before shipping push changes to prod.
 - [ ] KJ adds an entry and marks it Now Singing → within 15s the widget shows "🎤 Now: {singer} — {song}".
 - [ ] Second entry added → within 15s widget updates to include "Up next: {name}".
 
+### Song selection — empty-state triage for punks (Phase C)
+
+- [ ] Search a nonsense query that returns zero hits. The empty-state triage renders: three stacked cards (or two if `accept_make_requests` is off).
+- [ ] Card 1 "Paste a YouTube link" has a URL input and "Use this YouTube link →" button. Submit a valid YouTube URL → routes to confirm page with `YouTube: {url}` label.
+- [ ] Card 2 "Ask the KJ to make it tonight" shows artist + title inputs and an "Ask the KJ →" button. Tap → confirm dialog warns about time (20 min to 1 hour) and possible decline. OK → submits as `source_type=make`, KJ sees it in the pending queue.
+- [ ] Card 3 "Make it yourself" has a "How it works (takes ~5 min if you focus)" collapsible. Expand → six-step recipe appears inline. "Open gen.nomadkaraoke.com →" is a new-tab link.
+- [ ] KJ opens Requests settings modal → new "Accept 'make it' requests tonight" checkbox appears (default checked). Uncheck → API confirms update.
+- [ ] After flag is off, the singer refreshes search → card 2 is hidden; cards 1 and 3 remain.
+- [ ] With flag off, stale client POSTs `source_type=make` → `/sing/submit` returns 400 `make_requests_disabled`. Row does not land in pending queue.
+- [ ] Flip the flag back on → card 2 reappears on next search; submit works again.
+- [ ] Paste a gen.nomadkaraoke.com-published YouTube URL into card 1 → KJ approves → rotation plays it correctly end-to-end (one-time full integration check).
+- [ ] With non-empty search results, no triage shows; the old bottom `<details>` fallbacks are gone (retired in Phase C).
+
 ### Song selection — per-version expander (Phase B)
 
 - [ ] Search a multi-version song. Tap "N versions available →" → card expands inline, Primary "Let the KJ pick" CTA remains at top, toggle flips to "Hide versions ↑".

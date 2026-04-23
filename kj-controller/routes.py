@@ -3202,6 +3202,7 @@ def get_sing_config():
         "token": token,
         "enabled": store.is_enabled(),
         "auto_approve": store.is_auto_approve(),
+        "accept_make_requests": store.is_accepting_make_requests(),
         "public_url": get_event_url(cfg, token, scope="public"),
         "local_url": get_event_url(cfg, token, scope="local"),
         "pending_count": store.count_pending(),
@@ -3240,6 +3241,10 @@ def update_sing_config():
     if "auto_approve" in data:
         store.set_auto_approve(bool(data["auto_approve"]))
         changed["auto_approve"] = bool(data["auto_approve"])
+
+    if "accept_make_requests" in data:
+        store.set_accepting_make_requests(bool(data["accept_make_requests"]))
+        changed["accept_make_requests"] = bool(data["accept_make_requests"])
 
     return jsonify({"success": True, "changed": changed})
 
