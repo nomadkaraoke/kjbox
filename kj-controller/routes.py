@@ -2613,12 +2613,17 @@ def split_singer_route():
         return jsonify({"error": str(e)}), 500
 
 
-def unified_search(query, app):
+def unified_search(query, app, *, grouped=False):
     """Unified search helper: local catalog + Karaoke Nerds + Divebar cross-reference.
 
     Shared by /rotation/search (KJ-side) and /sing/search (singer-side) so
     the same result shape (including Divebar file_id cross-ref and in_library
     flags) reaches both consumers.
+
+    When ``grouped=True`` (singer-facing flow only) the return shape changes to
+    ``{"songs": [...group dicts...], "karaoke_nerds_timeout": bool}`` — see
+    ``_group_search_results``. The admin-side flow keeps ``grouped=False`` so
+    existing callers aren't disrupted.
     """
     cfg = app.kj_config
     local_results = []
@@ -2694,6 +2699,24 @@ def unified_search(query, app):
                     and r.get("title", "").lower() == song.get("title", "").lower()
                     for r in local_results
                 )
+
+    if grouped:
+        # Defensive filter (Phase B §4): a KN track with neither a YouTube URL
+        # nor a divebar mirror is unapprovable — strip it so the singer never
+        # sees it, which also keeps per-group `versions` cleaner.
+        filtered_kn = []
+        for song in kn_results:
+            good_tracks = [
+                t for t in song.get("tracks") or []
+                if (t.get("youtube_url") or "").strip()
+                or (t.get("divebar") or {}).get("file_id")
+            ]
+            if good_tracks:
+                filtered_kn.append({**song, "tracks": good_tracks})
+        return {
+            "songs": _group_search_results(local_results, filtered_kn),
+            "karaoke_nerds_timeout": kn_timeout,
+        }
 
     return {
         "local": local_results,

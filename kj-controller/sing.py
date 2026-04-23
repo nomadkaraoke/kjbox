@@ -412,10 +412,10 @@ def service_worker():
 def search():
     """Thin wrapper over the shared unified search helper.
 
-    Uses the same code path as /rotation/search so singer-facing results
-    include Divebar cross-reference (`track.divebar`) and `in_library` flags
-    — without which every KN track would show "Download needed" even when we
-    already have a community file ready to pull.
+    Returns the grouped shape (``{songs: [...], karaoke_nerds_timeout}``) —
+    one entry per unique song, each carrying a ``versions[]`` snapshot of all
+    available candidates. See
+    ``docs/archive/2026-04-23-song-selection-phase-a-design.md`` §1.
     """
     query = (request.args.get("q") or "").strip()
     if len(query) < 3:
@@ -424,8 +424,10 @@ def search():
     # Lazy import avoids a circular dependency at module import time.
     from routes import unified_search
 
-    data = unified_search(query, current_app._get_current_object())
-    response = {"local": data["local"], "karaoke_nerds": data["karaoke_nerds"]}
+    data = unified_search(
+        query, current_app._get_current_object(), grouped=True,
+    )
+    response = {"songs": data["songs"]}
     if data.get("karaoke_nerds_timeout"):
         response["karaoke_nerds_timeout"] = True
     return jsonify(response)
