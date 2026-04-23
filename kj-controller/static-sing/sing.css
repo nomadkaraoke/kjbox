@@ -121,6 +121,36 @@ input:focus {
 .r-title { font-weight: 600; }
 .r-sub { color: var(--nk-text-dim); font-size: 0.85rem; flex: 1; }
 
+/* Grouped-result card — one per unique song. Lays the title/artist/CTA
+   stacked rather than inline so the primary action reads clearly. */
+.result-row.grouped {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-areas:
+    "title  badge"
+    "sub    badge"
+    "cta    badge"
+    "hint   badge";
+  gap: 0.2rem 0.5rem;
+  align-items: center;
+  padding: 0.9rem;
+}
+.result-row.grouped .r-title { grid-area: title; }
+.result-row.grouped .r-sub { grid-area: sub; }
+.result-row.grouped .r-cta {
+  grid-area: cta;
+  margin-top: 0.4rem;
+  color: var(--nk-accent);
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+.result-row.grouped .r-versions-hint {
+  grid-area: hint;
+  color: var(--nk-text-dim);
+  font-size: 0.75rem;
+}
+.result-row.grouped .badge { grid-area: badge; align-self: start; }
+
 .badge {
   font-size: 0.75rem;
   padding: 0.2rem 0.5rem;

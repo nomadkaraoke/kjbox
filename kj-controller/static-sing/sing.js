@@ -298,7 +298,7 @@ function renderIdentity() {
 }
 
 function renderSearch() {
-  let results = { local: [], karaoke_nerds: [] };
+  let results = { songs: [] };
   let loading = false;
   let err = "";
 
@@ -306,7 +306,7 @@ function renderSearch() {
   const doSearch = (q) => {
     clearTimeout(debounceTimer);
     debounceTimer = setTimeout(async () => {
-      if (q.trim().length < 3) { results = { local: [], karaoke_nerds: [] }; update(); return; }
+      if (q.trim().length < 3) { results = { songs: [] }; update(); return; }
       loading = true; err = ""; update();
       try {
         const data = await search(q.trim());
@@ -319,37 +319,58 @@ function renderSearch() {
     }, 300);
   };
 
-  const pickLocal = (r) => {
+  // Single-version short-circuit — when a group has exactly one version, we
+  // skip the "KJ picks" framing and bind the concrete source immediately.
+  // Mirrors the old pickLocal / pickKN flow.
+  const pickSingleLocal = (localRow) => {
     state.selected = {
       source_type: "local",
-      source_ref: r.path,
-      song_artist: r.artist || "",
-      song_title: r.title || "",
-      label: `${r.title || r.filename} — ${r.artist || ""} (in library)`,
+      source_ref: localRow.path,
+      song_artist: localRow.artist || "",
+      song_title: localRow.title || "",
+      label: `${localRow.title || localRow.filename} — ${localRow.artist || ""} (in library)`,
     };
     state.step = "confirm"; render();
   };
-
-  const pickKN = (song, track) => {
-    const youtubeUrl = track.youtube_url || track.url || "";
+  const pickSingleKN = (group, track) => {
     const hasDivebar = !!(track.divebar && track.divebar.file_id);
+    const youtubeUrl = track.youtube_url || track.url || "";
     state.selected = hasDivebar
       ? {
           source_type: "divebar",
           source_ref: track.divebar.file_id,
-          song_artist: song.artist,
-          song_title: song.title,
-          label: `${song.title} — ${song.artist} (community karaoke)`,
+          song_artist: group.artist,
+          song_title: group.title,
+          label: `${group.title} — ${group.artist} (community karaoke)`,
           source_meta: { brand_code: track.brand_code, disc_id: track.disc_id },
         }
       : {
           source_type: "kn",
           source_ref: youtubeUrl,
-          song_artist: song.artist,
-          song_title: song.title,
-          label: `${song.title} — ${song.artist} (online karaoke)`,
+          song_artist: group.artist,
+          song_title: group.title,
+          label: `${group.title} — ${group.artist} (online karaoke)`,
           source_meta: { brand_code: track.brand_code, disc_id: track.disc_id },
         };
+    state.step = "confirm"; render();
+  };
+
+  // Multi-version: defer to the KJ. The full versions snapshot rides along
+  // in source_meta so the admin approval UI can render the picker without a
+  // fresh search.
+  const pickKjChoice = (group) => {
+    state.selected = {
+      source_type: "kj_pick",
+      source_ref: null,
+      song_artist: group.artist,
+      song_title: group.title,
+      label: `${group.title} — ${group.artist} (KJ picks best version)`,
+      source_meta: {
+        group_key: group.key,
+        version_count: group.version_count,
+        versions: group.versions,
+      },
+    };
     state.step = "confirm"; render();
   };
 
@@ -381,41 +402,51 @@ function renderSearch() {
     if (resultsEl) resultsEl.replaceWith(renderResults());
   }
 
+  function pickSingleVersion(group) {
+    // Only called when group.version_count === 1.
+    const v = group.versions[0];
+    if (v.source === "local") return pickSingleLocal(v.local);
+    if (v.source === "kn") return pickSingleKN(group, v.kn);
+  }
+
   function renderResults() {
     const container = el("div", { class: "results" });
     if (loading) container.appendChild(el("p", { class: "hint" }, "Searching…"));
     if (err) container.appendChild(el("p", { class: "error" }, err));
 
-    if (results.local?.length) {
-      container.appendChild(el("h3", {}, "In our library"));
-      for (const r of results.local) {
-        container.appendChild(el("button", {
-          class: "result-row",
-          onclick: () => pickLocal(r),
-        },
-          el("div", { class: "r-title" }, r.title || r.filename),
-          el("div", { class: "r-sub" }, r.artist || ""),
-          el("span", { class: "badge good" }, "Good to go"),
-        ));
-      }
+    const songs = results.songs || [];
+    if (!loading && !err && state.query?.trim().length >= 3 && songs.length === 0) {
+      container.appendChild(el("p", { class: "hint" },
+        "No matches. Paste a YouTube link or ask the KJ to make this one."));
     }
 
-    if (results.karaoke_nerds?.length) {
-      container.appendChild(el("h3", {}, "Community karaoke"));
-      for (const song of results.karaoke_nerds) {
-        for (const track of song.tracks || []) {
-          const hasDivebar = !!(track.divebar && track.divebar.file_id);
-          container.appendChild(el("button", {
-            class: "result-row",
-            onclick: () => pickKN(song, track),
-          },
-            el("div", { class: "r-title" }, song.title),
-            el("div", { class: "r-sub" }, `${song.artist} — ${track.brand_code || ""}`),
-            el("span", { class: "badge " + (hasDivebar ? "good" : "warn") },
-                hasDivebar ? "Good to go" : "Download needed"),
-          ));
-        }
+    for (const group of songs) {
+      const isSingle = group.version_count === 1;
+      const ctaLabel = isSingle
+        ? "Add to queue"
+        : "Let the KJ pick the best version →";
+      const onClick = isSingle
+        ? () => pickSingleVersion(group)
+        : () => pickKjChoice(group);
+
+      const children = [
+        el("div", { class: "r-title" }, group.title || ""),
+        el("div", { class: "r-sub" }, group.artist || ""),
+        el("div", { class: "r-cta" }, ctaLabel),
+      ];
+      if (!isSingle) {
+        // Phase B activates this expander. Phase A shows it as an inert hint
+        // so the layout doesn't churn between phases.
+        children.push(el("div", { class: "r-versions-hint" },
+          `${group.version_count} versions available →`));
       }
+      if (group.in_library) {
+        children.push(el("span", { class: "badge good" }, "In our library"));
+      }
+      container.appendChild(el("button", {
+        class: "result-row grouped",
+        onclick: onClick,
+      }, ...children));
     }
 
     return container;
