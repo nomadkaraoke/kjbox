@@ -327,6 +327,7 @@ def start_app():  # pragma: no cover
 
     # Create Flask app with services
     flask_app = Flask(__name__)
+    flask_app.config['APP_VERSION'] = _get_version()
     flask_app.kj_config = cfg
     flask_app.secret_key = _get_secret_key(cfg)
     media = MediaIndex(cfg)
