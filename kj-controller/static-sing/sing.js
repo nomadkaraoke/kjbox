@@ -604,4 +604,21 @@ if (INITIAL_REQUEST_ID) {
   state.step = "done";
 }
 
+// --- Service worker registration ------------------------------------------
+
+async function registerServiceWorker() {
+  if (!("serviceWorker" in navigator) || !("PushManager" in window)) return null;
+  try {
+    const scriptUrl = `/sing/sw.js?t=${encodeURIComponent(TOKEN)}`;
+    const reg = await navigator.serviceWorker.register(scriptUrl, { scope: "/sing/" });
+    return reg;
+  } catch (e) {
+    console.warn("SW registration failed:", e);
+    return null;
+  }
+}
+
+let swRegistration = null;
+registerServiceWorker().then((reg) => { swRegistration = reg; });
+
 render();

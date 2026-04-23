@@ -297,6 +297,25 @@ def manifest():
     })
 
 
+@sing_bp.route("/sw.js", methods=["GET"])
+def service_worker():
+    """Serve sw.js from /sing/ so its scope covers the sing route.
+
+    Deliberately NOT token-gated — the SW file itself must be reachable
+    with or without a token so the browser can fetch updates. The token
+    comes through as a query-string param for building notificationclick
+    URLs, not for auth.
+    """
+    from flask import send_from_directory, make_response
+    resp = make_response(send_from_directory(
+        sing_bp.static_folder,
+        "sw.js",
+        mimetype="application/javascript",
+    ))
+    resp.headers["Cache-Control"] = "no-cache"
+    return resp
+
+
 @sing_bp.route("/search", methods=["GET"])
 @require_token
 def search():

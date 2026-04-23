@@ -277,3 +277,18 @@ class TestPWAManifest:
     def test_manifest_rejects_without_token(self, client):
         resp = client.get("/sing/manifest.json")
         assert resp.status_code == 403
+
+
+class TestServiceWorker:
+    def test_sw_served_at_sing_scope(self, client):
+        """sw.js must be served from /sing/ so its scope is /sing/.
+
+        Not token-gated — the browser must be able to fetch updates
+        independent of token state.
+        """
+        resp = client.get("/sing/sw.js")
+        assert resp.status_code == 200
+        assert "javascript" in resp.content_type
+        body = resp.get_data(as_text=True)
+        assert "self.addEventListener('push'" in body
+        assert "self.addEventListener('notificationclick'" in body
