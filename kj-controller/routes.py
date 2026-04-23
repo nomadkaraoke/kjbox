@@ -39,6 +39,128 @@ def _check_sleep_mode():
         }), 409
     return None
 
+
+# --- Search-result grouping (for the singer-facing /sing/search) -----------
+#
+# Two results share a group key iff their normalized (artist, title) forms are
+# byte-equal. No fuzzy matching in v1 — see
+# docs/archive/2026-04-23-song-selection-ux-master-plan.md decision #1.
+
+_FEAT_RE = re.compile(
+    r"\s*[\[(]?\s*(?:feat\.?|ft\.?|featuring)\s+[^\])]+[\])]?\s*",
+    re.IGNORECASE,
+)
+_PAREN_RE = re.compile(r"\s*[\[(][^\])]*[\])]\s*")
+# Apostrophes (straight + curly + backtick) strip to nothing so "Don't" and
+# "Dont" collapse to the same key. Other punctuation becomes whitespace.
+_APOS_RE = re.compile(r"[‘’ʼ'`]+")
+_PUNCT_RE = re.compile(r"[^\w\s]+")
+_WS_RE = re.compile(r"\s+")
+
+
+def _normalize_song_key(artist, title):
+    """Deterministic (artist, title) → group key for collapsing search results.
+
+    Lowercases, strips feat./ft./featuring qualifiers, strips any bracketed
+    qualifier (e.g. ``(Live)``, ``[Radio Edit]``), drops apostrophes, replaces
+    remaining punctuation with whitespace, collapses whitespace. Returns a
+    single string so callers can use it as a dict key.
+
+    None-safe — callers pass parsed filename fields that may be missing.
+    """
+    def _norm(s):
+        s = (s or "").lower()
+        s = _FEAT_RE.sub(" ", s)
+        s = _PAREN_RE.sub(" ", s)
+        s = _APOS_RE.sub("", s)
+        s = _PUNCT_RE.sub(" ", s)
+        s = _WS_RE.sub(" ", s).strip()
+        return s
+    return f"{_norm(artist)}|||{_norm(title)}"
+
+
+def _group_search_results(local_results, kn_results):
+    """Collapse local + KN results into one group per normalized (artist, title).
+
+    Args:
+        local_results: list of local-file search hits, shape matches what
+            ``unified_search`` produces — ``{path, filename, artist, title, ...}``.
+        kn_results: list of Karaoke Nerds songs, each with a ``tracks`` sub-list
+            already (optionally) cross-referenced against Divebar.
+
+    Returns a list of group dicts:
+
+        {
+            "key":               normalized group key,
+            "artist":            canonical display artist,
+            "title":             canonical display title,
+            "version_count":     len(versions),
+            "in_library":        True iff any version is local or KN+divebar,
+            "has_community_only": True iff every version is KN+is_community,
+            "versions": [
+                {"source": "local", "local": <full local result>},
+                {"source": "kn",    "kn":    <full KN track, with parent
+                                              song_artist/song_title folded in>},
+                ...
+            ],
+        }
+
+    Grouping rules:
+        * Locals win display-name arbitration (inserted first into the group).
+        * KN songs only set the display name if no local has claimed it.
+        * Within a group, versions appear in insertion order: locals first,
+          then KN tracks in the order the KN search returned them.
+    """
+    groups = {}  # key -> group dict (py3.7+ dict preserves insertion order)
+
+    for r in local_results or []:
+        key = _normalize_song_key(r.get("artist"), r.get("title"))
+        g = groups.setdefault(key, {
+            "key": key,
+            "artist": r.get("artist") or "",
+            "title": r.get("title") or "",
+            "versions": [],
+        })
+        g["versions"].append({"source": "local", "local": r})
+
+    for song in kn_results or []:
+        song_artist = song.get("artist") or ""
+        song_title = song.get("title") or ""
+        for track in song.get("tracks") or []:
+            key = _normalize_song_key(song_artist, song_title)
+            g = groups.setdefault(key, {
+                "key": key,
+                "artist": song_artist,
+                "title": song_title,
+                "versions": [],
+            })
+            g["versions"].append({
+                "source": "kn",
+                "kn": {**track, "song_artist": song_artist,
+                       "song_title": song_title},
+            })
+
+    out = []
+    for g in groups.values():
+        versions = g["versions"]
+        kn_versions = [v for v in versions if v["source"] == "kn"]
+        g["version_count"] = len(versions)
+        g["in_library"] = any(
+            v["source"] == "local"
+            or (v["source"] == "kn" and (v["kn"].get("divebar") or {}).get("file_id"))
+            for v in versions
+        )
+        # "has_community_only" only makes sense when we have KN versions AND no
+        # locals — a normie-facing hint for Phase B's UI copy. False when empty.
+        g["has_community_only"] = (
+            bool(kn_versions)
+            and not any(v["source"] == "local" for v in versions)
+            and all(v["kn"].get("is_community") for v in kn_versions)
+        )
+        out.append(g)
+
+    return out
+
 # --- Debounced volume persistence ---
 _volume_save_timer = None
 _volume_save_lock = threading.Lock()
