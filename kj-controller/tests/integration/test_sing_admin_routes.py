@@ -84,6 +84,32 @@ class TestConfig:
         assert resp.status_code == 200
         assert admin_app.sing_store.is_auto_approve() is True
 
+    def test_get_config_exposes_accept_make_requests(self, admin_client):
+        resp = admin_client.get("/rotation/requests/config")
+        data = resp.get_json()
+        assert data["accept_make_requests"] is True  # default on
+
+    def test_toggle_accept_make_requests_off(self, admin_client, admin_app):
+        resp = admin_client.post(
+            "/rotation/requests/config",
+            json={"accept_make_requests": False},
+        )
+        assert resp.status_code == 200
+        assert admin_app.sing_store.is_accepting_make_requests() is False
+        # Reflects in the GET response too.
+        resp2 = admin_client.get("/rotation/requests/config")
+        assert resp2.get_json()["accept_make_requests"] is False
+
+    def test_partial_post_does_not_touch_other_flags(
+        self, admin_client, admin_app,
+    ):
+        """Toggling accept_make_requests must not reset auto_approve."""
+        admin_app.sing_store.set_auto_approve(True)
+        admin_client.post(
+            "/rotation/requests/config", json={"accept_make_requests": False}
+        )
+        assert admin_app.sing_store.is_auto_approve() is True
+
 
 class TestQr:
     def test_qr_svg_returns_svg(self, admin_client):

@@ -142,6 +142,19 @@ class TestSearch:
         assert data["songs"][0]["version_count"] == 1
         assert data["songs"][0]["versions"][0]["kn"]["brand_code"] == "KV"
 
+    def test_search_exposes_make_requests_flag(self, client, token, monkeypatch, sing_app):
+        """Phase C — singer UI uses this to show/hide the empty-state 'ask the
+        KJ to make' card without a second round-trip."""
+        import karaoke_nerds
+        monkeypatch.setattr(karaoke_nerds, "search", lambda *a, **kw: [])
+        resp = client.get(f"/sing/search?q=hello&t={token}")
+        data = resp.get_json()
+        assert data["make_requests_enabled"] is True  # default on
+
+        sing_app.sing_store.set_accepting_make_requests(False)
+        resp2 = client.get(f"/sing/search?q=hello&t={token}")
+        assert resp2.get_json()["make_requests_enabled"] is False
+
     def test_search_empty_result(self, client, token, monkeypatch):
         """Empty query produces an empty `songs` list — Phase C's empty-state
         triage will consume this shape."""
@@ -202,6 +215,31 @@ class TestSubmit:
         body = self._body(source_type="make", song_artist="", song_title="", source_ref=None)
         resp = client.post(f"/sing/submit?t={token}", json=body)
         assert resp.status_code == 400
+
+    def test_make_rejected_when_flag_off(self, client, sing_app, token):
+        """Phase C — the KJ can turn make-requests off; submits must 400."""
+        sing_app.sing_store.set_accepting_make_requests(False)
+        body = self._body(
+            source_type="make",
+            song_artist="Radiohead",
+            song_title="Creep",
+            source_ref=None,
+        )
+        resp = client.post(f"/sing/submit?t={token}", json=body)
+        assert resp.status_code == 400
+        assert "make_requests_disabled" in resp.get_json()["error"]
+        assert sing_app.sing_store.count_pending() == 0
+
+    def test_make_accepted_when_flag_on(self, client, sing_app, token):
+        """Regression guard — make submissions still work when flag is on (default)."""
+        body = self._body(
+            source_type="make",
+            song_artist="Radiohead",
+            song_title="Creep",
+            source_ref=None,
+        )
+        resp = client.post(f"/sing/submit?t={token}", json=body)
+        assert resp.status_code == 200
 
     def test_rate_limit_blocks_after_limit(self, client, sing_app, token):
         sing_app.kj_config["sing_rate_limit_per_ip"] = 2

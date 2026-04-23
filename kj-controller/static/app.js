@@ -5313,12 +5313,16 @@ const SingRequests = (() => {
     function applyConfigToModal() {
         const eEl = document.getElementById('sing-enabled-toggle');
         const aEl = document.getElementById('sing-auto-approve-toggle');
+        const mEl = document.getElementById('sing-accept-make-toggle');
         const pub = document.getElementById('sing-public-url');
         const loc = document.getElementById('sing-local-url');
         const qp = document.getElementById('sing-qr-public');
         const ql = document.getElementById('sing-qr-local');
         if (eEl) eEl.checked = !!config.enabled;
         if (aEl) aEl.checked = !!config.auto_approve;
+        // Phase C — defaults to true since the backend defaults are "1"; if the
+        // field is missing (older backend) we still show enabled.
+        if (mEl) mEl.checked = config.accept_make_requests !== false;
         if (pub) pub.textContent = config.public_url || '—';
         if (loc) loc.textContent = config.local_url || '—';
         const bust = Date.now();
@@ -5351,6 +5355,15 @@ const SingRequests = (() => {
         const ok = await postConfig({ auto_approve: checked });
         if (!ok) {
             const el = document.getElementById('sing-auto-approve-toggle');
+            if (el) el.checked = !checked;
+        }
+        await fetchConfig();
+    }
+
+    async function toggleAcceptMake(checked) {
+        const ok = await postConfig({ accept_make_requests: checked });
+        if (!ok) {
+            const el = document.getElementById('sing-accept-make-toggle');
             if (el) el.checked = !checked;
         }
         await fetchConfig();
@@ -5395,13 +5408,14 @@ const SingRequests = (() => {
         pollTimer = setInterval(fetchPending, 5000);
     }
 
-    return { start, openModal, closeModal, toggleEnabled, toggleAutoApprove, regenerate, copyUrl };
+    return { start, openModal, closeModal, toggleEnabled, toggleAutoApprove, toggleAcceptMake, regenerate, copyUrl };
 })();
 
 function openSingRequestsModal()   { SingRequests.openModal(); }
 function closeSingRequestsModal()  { SingRequests.closeModal(); }
 function toggleSingEnabled(c)      { SingRequests.toggleEnabled(c); }
 function toggleSingAutoApprove(c)  { SingRequests.toggleAutoApprove(c); }
+function toggleSingAcceptMake(c)   { SingRequests.toggleAcceptMake(c); }
 function regenerateSingToken()     { SingRequests.regenerate(); }
 function copySingUrl(scope)        { SingRequests.copyUrl(scope); }
 

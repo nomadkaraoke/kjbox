@@ -343,6 +343,7 @@ def landing():
         token=token,
         request_id=request.args.get("r", ""),
         vapid_public_key=current_app.kj_config.get("vapid_public_key", ""),
+        make_requests_enabled=store.is_accepting_make_requests(),
     )
 
 
@@ -452,7 +453,14 @@ def search():
     data = unified_search(
         query, current_app._get_current_object(), grouped=True,
     )
-    response = {"songs": data["songs"]}
+    # Phase C — carries the KJ's current "accept make requests" flag alongside
+    # the results so the empty-state triage can show/hide card 2 without a
+    # second round-trip. Cheap: one SQLite read already hot in the connection.
+    store = current_app.sing_store
+    response = {
+        "songs": data["songs"],
+        "make_requests_enabled": store.is_accepting_make_requests(),
+    }
     if data.get("karaoke_nerds_timeout"):
         response["karaoke_nerds_timeout"] = True
     return jsonify(response)
@@ -491,8 +499,14 @@ def submit():
         return jsonify({"error": f"source_type must be one of {sorted(_ALLOWED_SOURCES)}"}), 400
     if source_type in {"local", "divebar", "kn", "youtube"} and not source_ref:
         return jsonify({"error": "source_ref is required for this source_type"}), 400
-    if source_type == "make" and not (song_artist and song_title):
-        return jsonify({"error": "song_artist and song_title are required for make"}), 400
+    if source_type == "make":
+        # Phase C — the KJ can turn this feature off per-event when they're
+        # too busy to do same-night lyrics reviews. Defence-in-depth against
+        # a stale sing.js from before the toggle flipped.
+        if not store.is_accepting_make_requests():
+            return jsonify({"error": "make_requests_disabled"}), 400
+        if not (song_artist and song_title):
+            return jsonify({"error": "song_artist and song_title are required for make"}), 400
     if source_type == "kj_pick":
         err = _validate_kj_pick_payload(data)
         if err:

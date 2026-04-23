@@ -9,6 +9,7 @@ from sing_store import (
     TOKEN_KEY,
     ENABLED_KEY,
     AUTO_APPROVE_KEY,
+    ACCEPT_MAKE_REQUESTS_KEY,
 )
 
 
@@ -121,6 +122,24 @@ class TestTokenHelpers:
         assert store.is_enabled() is False
         store.set_enabled(True)
         assert store.is_enabled() is True
+
+    def test_accept_make_requests_default_true(self, store):
+        assert store.is_accepting_make_requests() is True
+
+    def test_accept_make_requests_round_trip(self, store):
+        store.set_accepting_make_requests(False)
+        assert store.is_accepting_make_requests() is False
+        store.set_accepting_make_requests(True)
+        assert store.is_accepting_make_requests() is True
+
+    def test_accept_make_requests_persists_across_instances(self, tmp_path):
+        db = tmp_path / "a.db"
+        s1 = SingStore(str(db))
+        s1.set_accepting_make_requests(False)
+        s1.close()
+        s2 = SingStore(str(db))
+        assert s2.is_accepting_make_requests() is False
+        s2.close()
 
     def test_auto_approve_default_false(self, store):
         assert store.is_auto_approve() is False
@@ -389,6 +408,7 @@ class TestConstants:
         assert TOKEN_KEY == "request_token"
         assert ENABLED_KEY == "request_token_enabled"
         assert AUTO_APPROVE_KEY == "request_auto_approve"
+        assert ACCEPT_MAKE_REQUESTS_KEY == "sing_accept_make_requests"
 
 
 # ---------------------------------------------------------------------------

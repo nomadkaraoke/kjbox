@@ -11,9 +11,13 @@ const codeEntryEl = document.getElementById("sing-enter-code");
 
 let TOKEN = "";
 let INITIAL_REQUEST_ID = "";
+let INITIAL_MAKE_REQUESTS_ENABLED = true;
 if (root) {
   TOKEN = root.dataset.token;
   INITIAL_REQUEST_ID = root.dataset.requestId;
+  // Phase C — landing carries the flag so the empty-state triage has it
+  // before the first /sing/search completes. Absence or "1" = enabled.
+  INITIAL_MAKE_REQUESTS_ENABLED = root.dataset.makeRequestsEnabled !== "0";
 }
 
 const LS = {
@@ -33,6 +37,9 @@ const state = {
   makeTitle: "",
   request: null,    // after submit
   status: null,     // /sing/status response
+  // Phase C — updated on every /sing/search response so a KJ flipping the
+  // toggle mid-session takes effect on the next keystroke-triggered search.
+  makeRequestsEnabled: INITIAL_MAKE_REQUESTS_ENABLED,
 };
 
 // --- Offline detection -----------------------------------------------------
@@ -345,6 +352,11 @@ function renderSearch() {
       try {
         const data = await search(q.trim());
         results = data;
+        // Phase C — mirror the server's current flag so a mid-session KJ
+        // toggle takes effect on the next search without a page reload.
+        if (typeof data.make_requests_enabled === "boolean") {
+          state.makeRequestsEnabled = data.make_requests_enabled;
+        }
       } catch (e) {
         err = "Search failed. Try again.";
       } finally {
@@ -597,15 +609,116 @@ function renderSearch() {
     return wrapper;
   }
 
+  function renderEmptyStateTriage() {
+    // Phase C — three-card triage surfaces when search returns nothing but
+    // the singer has clearly tried (query >= 3 chars). Cards are ordered by
+    // ascending singer-effort: paste URL (fastest) → ask KJ (variable time,
+    // may be declined) → make it yourself on gen.nomadkaraoke.com (fastest
+    // for niche songs if the singer is willing to focus on their phone).
+    const wrap = el("div", { class: "sing-empty-triage" });
+
+    wrap.appendChild(el("div", { class: "sing-empty-header" },
+      el("h3", {}, "Can't find it in our catalogue."),
+      el("p", {}, "Three ways forward — pick the one that fits how much effort you want."),
+    ));
+
+    // Card 1 — paste YouTube link.
+    const ytInput = el("input", {
+      type: "url",
+      placeholder: "https://youtu.be/…",
+      class: "sing-empty-input",
+    });
+    const card1 = el("div", { class: "sing-empty-card" },
+      el("h4", {}, "1. Paste a YouTube link"),
+      el("p", { class: "sing-empty-desc" },
+        "Fastest. If you can find the song on YouTube, paste the link and we'll use that directly. Quality varies."),
+      ytInput,
+      el("button", {
+        class: "btn primary sing-empty-submit",
+        onclick: () => {
+          const v = (ytInput.value || "").trim();
+          if (v) pickYouTube(v);
+        },
+      }, "Use this YouTube link →"),
+    );
+    wrap.appendChild(card1);
+
+    // Card 2 — ask KJ to make it tonight. Only when flag is on.
+    if (state.makeRequestsEnabled) {
+      const mkArtist = el("input", {
+        type: "text", placeholder: "Artist",
+        class: "sing-empty-input",
+        value: state.makeArtist || "",
+        oninput: (e) => { state.makeArtist = e.target.value; },
+      });
+      const mkTitle = el("input", {
+        type: "text", placeholder: "Song title",
+        class: "sing-empty-input",
+        value: state.makeTitle || "",
+        oninput: (e) => { state.makeTitle = e.target.value; },
+      });
+      const card2 = el("div", { class: "sing-empty-card" },
+        el("h4", {}, "2. Ask the KJ to make it tonight"),
+        el("p", { class: "sing-empty-desc" },
+          "Free, but takes time — usually 20 min to 1 hour. The KJ can't always fit it in on a busy night, and some songs are too complex to do live. If they can't do it tonight, they'll let you know."),
+        el("label", { class: "sing-empty-label" }, "Artist", mkArtist),
+        el("label", { class: "sing-empty-label" }, "Song title", mkTitle),
+        el("button", {
+          class: "btn primary sing-empty-submit",
+          onclick: () => {
+            if (!state.makeArtist || !state.makeTitle) return;
+            // Confirm dialog surfaces the caveats the singer can't un-know.
+            const ok = confirm(
+              `Asking the KJ to make "${state.makeTitle}" by ${state.makeArtist} — `
+              + `this can take 20 min to 1 hour, or may not be possible tonight. Sure?`
+            );
+            if (ok) pickMake();
+          },
+        }, "Ask the KJ →"),
+      );
+      wrap.appendChild(card2);
+    }
+
+    // Card 3 — DIY via gen.nomadkaraoke.com.
+    const howDetails = el("details", { class: "sing-empty-howto" },
+      el("summary", {}, "How it works (takes ~5 min if you focus)"),
+      el("ol", { class: "sing-empty-howto-steps" },
+        el("li", {}, "Find your song on YouTube — any version with clear vocals."),
+        el("li", {}, "Open ", el("strong", {}, "gen.nomadkaraoke.com"), ", paste the link, pay nothing."),
+        el("li", {}, "Wait ~2 min while we separate the vocal from the audio."),
+        el("li", {}, "A lyrics review screen appears. Tap any wrong line, fix it, save. This is the focused-phone bit — usually ~3 min."),
+        el("li", {}, "We render the karaoke video and publish it to YouTube."),
+        el("li", {}, "Copy the new YouTube URL, come back here, paste it into option 1 above."),
+      ),
+      el("p", { class: "sing-empty-howto-note" },
+        "Total time: ~5–10 min if you focus. The KJ does nothing — your song lands in the rotation like any YouTube submission."),
+    );
+    const card3 = el("div", { class: "sing-empty-card" },
+      el("h4", {}, "3. Make it yourself (fastest for niche songs)"),
+      el("p", { class: "sing-empty-desc" },
+        "If you don't mind some phone time, you can make the karaoke track yourself on gen.nomadkaraoke.com — takes ~5 min if you do the lyrics review, longer if you don't. Then paste the YouTube URL back here."),
+      howDetails,
+      el("a", {
+        href: "https://gen.nomadkaraoke.com",
+        target: "_blank",
+        rel: "noopener",
+        class: "btn primary sing-empty-submit sing-empty-external",
+      }, "Open gen.nomadkaraoke.com →"),
+    );
+    wrap.appendChild(card3);
+
+    return wrap;
+  }
+
   function renderResults() {
     const container = el("div", { class: "results" });
     if (loading) container.appendChild(el("p", { class: "hint" }, "Searching…"));
     if (err) container.appendChild(el("p", { class: "error" }, err));
 
     const songs = results.songs || [];
+    // Phase C — genuine empty-state (query was long enough to have searched).
     if (!loading && !err && state.query?.trim().length >= 3 && songs.length === 0) {
-      container.appendChild(el("p", { class: "hint" },
-        "No matches. Paste a YouTube link or ask the KJ to make this one."));
+      container.appendChild(renderEmptyStateTriage());
     }
 
     for (const group of songs) {
@@ -656,7 +769,7 @@ function renderSearch() {
 
   const card = el("main", { class: "sing-card" },
     el("h2", {}, "Pick your song"),
-    el("p", { class: "hint" }, `Hi ${state.name.split(/\s+/)[0]} — find your song below, or paste a YouTube link / ask the KJ to make one.`),
+    el("p", { class: "hint" }, `Hi ${state.name.split(/\s+/)[0]} — search for a song below. If we don't have it, you'll get options for how to get it on screen.`),
     el("input", {
       type: "search",
       placeholder: "Type artist or song title…",
@@ -665,23 +778,12 @@ function renderSearch() {
       value: state.query,
     }),
     renderResults(),
-    el("details", { class: "fallback" },
-      el("summary", {}, "Paste a YouTube link"),
-      el("input", {
-        type: "url", placeholder: "https://youtu.be/…",
-        onchange: (e) => { const v = e.target.value.trim(); if (v) pickYouTube(v); },
-      }),
-    ),
-    el("details", { class: "fallback" },
-      el("summary", {}, "Ask the KJ to make this one"),
-      el("input", { type: "text", placeholder: "Artist",
-        oninput: (e) => { state.makeArtist = e.target.value; } }),
-      el("input", { type: "text", placeholder: "Song title",
-        oninput: (e) => { state.makeTitle = e.target.value; } }),
-      el("button", { class: "btn primary",
-        onclick: () => { if (state.makeArtist && state.makeTitle) pickMake(); } },
-        "Send make request"),
-    ),
+    // Phase C retired the always-visible <details> fallbacks here — empty
+    // search results now render a dedicated 3-card triage (paste URL / ask
+    // KJ / DIY via gen) via renderEmptyStateTriage(). A singer with a valid
+    // result set doesn't need them as secondary options; if they want them,
+    // they can clear the search box and type a nonsense query to reach
+    // empty-state.
     el("div", { class: "row" },
       el("button", { class: "btn ghost", onclick: back("identity") }, "Back"),
     ),

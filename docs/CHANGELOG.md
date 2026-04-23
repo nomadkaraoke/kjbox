@@ -2,6 +2,45 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-04-23 - Feature: Song selection UX — empty-state triage for punks (Phase C)
+
+Final phase of the song-selection-ux overhaul (see [master plan](archive/2026-04-23-song-selection-ux-master-plan.md), [phase C design](archive/2026-04-23-song-selection-phase-c-design.md)).
+
+When a punk searches for their niche local band's song and gets zero hits, the singer UI used to show two tiny `<details>` fallbacks buried at the bottom. Phase C replaces that with a deliberate three-card triage:
+
+1. **Paste a YouTube link** — fastest, quality varies.
+2. **Ask the KJ to make it tonight** — free, 20 min to 1 hour, may be declined. *Only shown when the KJ has enabled the toggle.*
+3. **Make it yourself on gen.nomadkaraoke.com** — ~5 min if you do the lyrics review. Has an inline "How it works" explainer with the full 6-step recipe.
+
+Order is ascending singer-effort. The singer picks based on how much work they're willing to do; the KJ loses no agency (they still review + approve).
+
+**New KJ toggle: "Accept 'make it' requests tonight"** — stored as `sing_accept_make_requests` in `rotation_meta` (default on). KJ flips it off when they're too busy for same-night lyrics reviews.
+
+**Backend changes:**
+- `SingStore.is_accepting_make_requests()` / `.set_accepting_make_requests()`.
+- `GET /rotation/requests/config` exposes `accept_make_requests` (bool).
+- `POST /rotation/requests/config` accepts `accept_make_requests` updates (partial-POST preserved; other flags untouched).
+- `GET /sing/search` response carries `make_requests_enabled` alongside `songs[]` so the singer UI can show/hide card 2 without a second round-trip.
+- `GET /sing/` landing template forwards the flag on `#sing-root` dataset so the UI has it before the first search.
+- `POST /sing/submit` with `source_type=make` returns 400 `make_requests_disabled` when the flag is off — defence-in-depth against stale clients that cached `sing.js` from before the toggle flipped.
+
+**UI changes:**
+- Singer side (`static-sing/sing.js`): new `renderEmptyStateTriage()` renders the three cards when `songs.length === 0` and query length ≥ 3. Card 2 conditionally rendered from `state.makeRequestsEnabled` (updated on every `/sing/search` response). The always-visible bottom `<details>` fallbacks for "Paste a YouTube link" / "Ask the KJ to make this one" are retired — their functionality moves into the triage cards.
+- Card 2 submit goes through a `confirm()` with the time-cost caveat ("this can take 20 min to 1 hour, or may not be possible tonight. Sure?").
+- Card 3's "Open gen.nomadkaraoke.com" is a standard `<a target="_blank" rel="noopener">` — no backend, no tracking.
+- Admin side (`static/app.js`, `templates/index.html`): Requests settings modal gains a "Accept 'make it' requests tonight" checkbox in the same style as the existing auto-approve toggle. `toggleSingAcceptMake` wires it to `POST /rotation/requests/config`.
+
+**Codebase audit confirmed:** a gen-published YouTube URL pasted into card 1 flows through the existing `source_type=youtube` path with no special handling — yt-dlp treats it like any other YouTube URL. Zero backend changes needed for the DIY path.
+
+**Modified files:**
+- `kj-controller/sing_store.py`, `kj-controller/sing.py`, `kj-controller/routes.py`
+- `kj-controller/static-sing/sing.js`, `kj-controller/static-sing/sing.css`
+- `kj-controller/static/app.js`, `kj-controller/templates/index.html`, `kj-controller/templates/sing.html`
+- Tests: `tests/unit/test_sing_store.py` (3 new cases), `tests/integration/test_sing_admin_routes.py` (3 new cases in TestConfig), `tests/integration/test_sing_public_routes.py` (3 new cases across search + submit), `tests/integration/test_sing_make_request_disable_e2e.py` (new, 2 cases).
+- `kj-controller/pyproject.toml` — `0.26.0` → `0.27.0`.
+
+**Manual ops steps required (post-deploy):** none. Frontend + backend changes land together; restart kj-controller as normal. The default for `sing_accept_make_requests` is `"1"` (on) so existing events behave identically to before until the KJ flips the new toggle.
+
 ## 2026-04-23 - Feature: Song selection UX — per-version expander for nerds (Phase B)
 
 Builds on Phase A's one-tile-per-song grouping. A nerd who wants to pick a specific version now taps "N versions available →" on any multi-version tile and gets an inline expander listing every candidate categorized by source, with the metadata the codebase actually has — brand, format, quality (where known), filepath for local/divebar. A first-time expanded singer sees a one-time "Commercial vs Community" explainer that dismisses permanently.
