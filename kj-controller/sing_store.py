@@ -15,9 +15,10 @@ TOKEN_KEY = "request_token"
 ENABLED_KEY = "request_token_enabled"
 AUTO_APPROVE_KEY = "request_auto_approve"
 
-# Token length: ~16 URL-safe chars — short enough for a QR, long enough to resist
-# guessing. `secrets.token_urlsafe(12)` yields 16 chars.
-TOKEN_BYTES = 12
+# Token is a 4-digit numeric code. 10 000 combinations — small enough to read off
+# the venue screen and type on a phone numpad, large enough that the rate-limited
+# /validate endpoint (see sing.py) makes brute-force impractical in one sitting.
+TOKEN_DIGITS = 4
 
 
 class SingStore:
@@ -144,8 +145,17 @@ class SingStore:
         return self._get_meta(TOKEN_KEY)
 
     def regenerate_token(self):
-        """Generate a fresh token, store it, return it."""
-        new_token = secrets.token_urlsafe(TOKEN_BYTES)
+        """Generate a fresh 4-digit token, store it, return it.
+
+        Never returns the same token twice in a row — a KJ rotating the token
+        mid-event expects "rotate" to actually invalidate the old one.
+        """
+        previous = self.get_token()
+        upper = 10 ** TOKEN_DIGITS
+        while True:
+            new_token = str(secrets.randbelow(upper)).zfill(TOKEN_DIGITS)
+            if new_token != previous:
+                break
         self._set_meta(TOKEN_KEY, new_token)
         return new_token
 

@@ -333,7 +333,13 @@ Singers submit song requests from their own phones via a QR code instead of hand
                                                    rotation_meta token rows)
 ```
 
-**Public routes** (`sing_bp`): `GET /sing/`, `GET /sing/search`, `POST /sing/submit`, `GET /sing/status/<id>`. All require a valid, enabled event token — provided as `?t=<token>` in the QR URL and kept in a session cookie. No auth beyond the token and the per-IP sliding-window rate limit (5 submits / 5 min by default).
+**Public routes** (`sing_bp`): `GET /sing/`, `GET /sing/search`, `POST /sing/submit`, `POST /sing/validate`, `GET /sing/status/<id>`. All except `/` and `/validate` require a valid, enabled event token — provided as `?t=<token>` in the QR URL and kept in a session cookie. Rate limiting: 5 submits / 5 min per IP on `/submit`, 10 attempts / 5 min per IP on `/validate` (separate bucket so legit submissions aren't blocked by a brute-force scanner).
+
+**Public host mounts `sing_bp` at root:** on `sing.nomadkaraoke.com` the QR target is `https://sing.nomadkaraoke.com/?t=XXXX` — no `/sing/` segment for singers to read off the screen. `install_public_host_rewriter` (in `sing.py`) is a small WSGI middleware that prepends `/sing` to `PATH_INFO` when `Host` matches the configured public-host set. The blueprint stays mounted at `/sing/` internally so the admin host (`nomadpc.local`, `kjbox.nomadkaraoke.com`) — where `/` is the KJ controller UI — keeps working unchanged. Both `create_app()` and `start_app()` install it; the duplication is tracked as a follow-up consolidation.
+
+**Event token:** a 4-digit numeric code (`0000–9999`). Short enough to read off the venue screen and type on a phone numpad; brute-force-protected by the `/validate` rate limiter. `regenerate_token()` never returns the same code twice in a row.
+
+**No-token visitor flow:** `GET /sing/` (or `/` on the public host) when the store is enabled but no valid token is present renders a code-entry form instead of the old "closed" message. The form auto-submits on the 4th digit via `POST /sing/validate` and redirects to `/?t=XXXX` on match. The "closed" template branch is now only used when the KJ has actually paused requests (`store.is_enabled() is False`).
 
 **Admin routes** (on `routes_bp`): `/rotation/requests/*` — list, approve, edit, reject, config (token + flags), and `qr.svg` QR generator. Never mounted under `/sing/*`, so they cannot leak via the public tunnel.
 
@@ -348,8 +354,8 @@ Singers submit song requests from their own phones via a QR code instead of hand
 **Singer UI** lives under `static-sing/` (separate tree from the KJ UI's `static/`) and is served from `sing_bp`'s `/sing/static/*` URL path. Minimal vanilla-JS SPA with four steps: landing → identity (name + phone, persisted to `localStorage`) → search → confirm → confirmation that polls `/sing/status/<id>` every 15s.
 
 Additional `static-sing/` assets added in sub-project #4:
-- `static-sing/sw.js` — service worker, scope `/sing/`. Handles `push` + `notificationclick`. Shell cache for offline page render. Served dynamically at `GET /sing/sw.js` (so the SW scope is `/sing/` not `/sing/static/`).
-- `static-sing/manifest.json` — served dynamically by `GET /sing/manifest.json` with the current token injected into `start_url` so installed home-screen icons land on the gated page.
+- `static-sing/sw.js` — service worker. Handles `push` + `notificationclick`. Shell cache for offline page render. Served dynamically at `/sw.js` (rewritten internally to `/sing/sw.js`) on the public host with scope `/`, and at `/sing/sw.js` with scope `/sing/` on the admin host. `sing.js` detects the base path at runtime from `window.location.pathname` and registers accordingly.
+- `static-sing/manifest.json` — served dynamically by `GET /sing/manifest.json` (or `/manifest.json` on the public host) with the current token injected into `start_url`. `start_url` / `scope` are host-aware: `/` on the public host, `/sing/` on the admin host.
 
 **Response shape change (sub-project #4):** `GET /sing/status/<id>` now includes `estimate` and `now_playing` sub-objects. Legacy top-level `position`, `estimated_wait_s`, `queue` keys are kept for the client rollout window.
 
@@ -359,7 +365,7 @@ Additional `static-sing/` assets added in sub-project #4:
 - Dedup is via a `last_sent_state` JSON column on each subscription — the same `(entry_id, ladder_step)` pair never fires twice. When the target entry changes (previous Done'd, next-closest becomes the new target), the ladder resets cleanly.
 - Approve/reject from admin routes bypass the rotation scan and call `notify_request_decision(...)` for immediate singer feedback.
 - VAPID keypair auto-generates on first boot in `_bootstrap_vapid_keys` (app.py) and persists to `config.json` (gitignored). Public key is exposed to the singer page via `<meta name="vapid-public-key">`.
-- Client registers `/sing/sw.js?t=<token>` so the SW has the token for constructing `notificationclick` URLs. Dynamic `/sing/manifest.json` also carries the token in `start_url`.
+- Client registers the SW at a runtime-detected base (`/sw.js?t=<token>` with scope `/` on the public host; `/sing/sw.js?t=<token>` with scope `/sing/` on the admin host) so the SW has the token for constructing `notificationclick` URLs. Dynamic manifest also carries the token in `start_url`.
 - Offline events (no internet): singer's page surfaces an honest banner via `navigator.onLine` + consecutive-poll-failure detection. Push itself can't work without internet (FCM/APNS round-trip); the held-tab polling flow remains the fallback.
 - iOS Safari requires Add-to-Home-Screen (installed PWA) before push works. The confirmation page detects iOS non-standalone and renders an instructional card explaining the install flow.
 - Housekeeping: on event-token regeneration, `cleanup_stale_push_subscriptions` deletes subs on other tokens older than 7 days. Keeps the table bounded.

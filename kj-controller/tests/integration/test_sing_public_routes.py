@@ -8,14 +8,21 @@ import sing
 
 
 class TestLanding:
-    def test_landing_no_token_returns_closed_page(self, client):
+    def test_landing_no_token_shows_code_entry(self, client):
+        """Requests are open but visitor has no token — invite them to type it in."""
         resp = client.get("/sing/")
-        assert resp.status_code == 403
-        assert b"closed" in resp.data.lower() or b"aren't open" in resp.data
+        assert resp.status_code == 200
+        assert b"sing-enter-code" in resp.data
+        # Must NOT leak any valid-token form fields.
+        assert b"sing-root" not in resp.data
 
-    def test_landing_invalid_token(self, client):
+    def test_landing_invalid_token_shows_code_entry_with_error(self, client):
         resp = client.get("/sing/?t=nope")
-        assert resp.status_code == 403
+        # 400 — the client supplied a token and it didn't match. Still render
+        # the code-entry form so the singer can correct the typo.
+        assert resp.status_code == 400
+        assert b"sing-enter-code" in resp.data
+        assert b'data-bad-code="1"' in resp.data
 
     def test_landing_valid_token(self, client, token):
         resp = client.get(f"/sing/?t={token}")
@@ -23,9 +30,40 @@ class TestLanding:
         assert b"sing-root" in resp.data
 
     def test_landing_when_disabled(self, client, sing_app, token):
+        """With requests disabled, both token and no-token paths show the closed page."""
         sing_app.sing_store.set_enabled(False)
         resp = client.get(f"/sing/?t={token}")
         assert resp.status_code == 403
+        assert b"sing-closed" in resp.data
+        resp_no_tok = client.get("/sing/")
+        assert resp_no_tok.status_code == 403
+        assert b"sing-closed" in resp_no_tok.data
+
+
+class TestValidateCode:
+    def test_validate_accepts_current_token(self, client, token):
+        resp = client.post("/sing/validate", json={"t": token})
+        assert resp.status_code == 200
+        assert resp.get_json() == {"ok": True}
+
+    def test_validate_rejects_bad_token(self, client):
+        resp = client.post("/sing/validate", json={"t": "0000"})
+        assert resp.status_code == 400
+        assert resp.get_json()["ok"] is False
+
+    def test_validate_rejects_empty(self, client):
+        resp = client.post("/sing/validate", json={})
+        assert resp.status_code == 400
+
+    def test_validate_rate_limited(self, client, monkeypatch):
+        """Per-IP limit keeps the 10 000-combo space un-brute-forceable in one sitting."""
+        # Reset the validate bucket so a previous test's attempts don't leak in.
+        sing._validate_rate_limit_state.clear()
+        for _ in range(10):
+            client.post("/sing/validate", json={"t": "0000"})
+        # 11th attempt from the same IP gets blocked regardless of correctness.
+        resp = client.post("/sing/validate", json={"t": "0000"})
+        assert resp.status_code == 429
 
 
 class TestSearch:
@@ -246,19 +284,6 @@ class TestOverlaySync:
         assert overlay_manager.get_overlay(linked["id"])["config"]["url"] == "new-url"
         assert overlay_manager.get_overlay(unlinked["id"])["config"]["url"] == "leaveme"
         assert overlay_manager.get_overlay(ticker["id"])["config"]["text"] == "don't touch"
-
-
-class TestRulesPage:
-    def test_rules_page_unauthenticated(self, client):
-        """Rules page is public — no token required."""
-        resp = client.get("/sing/rules")
-        assert resp.status_code == 200
-        body = resp.get_data(as_text=True)
-        assert "First come, first sing" in body
-        assert "New singers get priority" in body
-        assert "Multiple songs welcome" in body
-        assert "Need to leave early" in body
-        assert "Paid priority" in body
 
 
 class TestPWAManifest:

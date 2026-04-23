@@ -26,7 +26,7 @@ KJ Controller (`kj-controller/`) is a Flask + vanilla JS web app for managing li
 - `kj-controller/karaoke_nerds.py` — Karaoke Nerds web scraper (search, parse, YouTube URLs)
 - `kj-controller/youtube_search.py` — YouTube search via yt-dlp (fast metadata-only)
 - `kj-controller/youtube_health.py` — YouTube health checks, cookie validation, EJS/Deno detection
-- `kj-controller/sing.py` — Public `/sing/*` blueprint, token gate, host-based route guard, PWA manifest + service worker route
+- `kj-controller/sing.py` — Public `/sing/*` blueprint, token gate, host-based route guard, PWA manifest + service worker route. Also installs a WSGI rewrite that mounts the blueprint at the ROOT of the public host (`sing.nomadkaraoke.com/`) so singers never see the `/sing/` segment.
 - `kj-controller/sing_store.py` — SingStore (SQLite CRUD for sing_requests + sing_push_subscriptions + event-token helpers)
 - `kj-controller/push_dispatcher.py` — PushDispatcher (VAPID, subscription scan, ladder decision, dedup, thread-pool webpush sends — plugged into RotationManager._after_mutation)
 - `kj-controller/wait_estimate.py` — Pure `compute_estimate(entries, target_id, cfg)` for singer-facing wait times (position + honest range from tonight's variance)

@@ -115,8 +115,10 @@ def flask_test_client(flask_app):
 def _reset_rate_limiter():
     """Each test starts with an empty rate-limit window."""
     sing._rate_limit_state.clear()
+    sing._validate_rate_limit_state.clear()
     yield
     sing._rate_limit_state.clear()
+    sing._validate_rate_limit_state.clear()
 
 
 @pytest.fixture

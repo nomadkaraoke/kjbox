@@ -83,6 +83,50 @@ class TestPublicHostAllows:
         assert resp.status_code in (200, 429)
 
 
+class TestPublicHostRootRewrite:
+    """On the public host, `/` and `/<path>` map to the sing blueprint without
+    needing the visible `/sing/` prefix. This is what singers see in the QR URL."""
+
+    def test_root_serves_sing_landing(self, guarded_client, token):
+        resp = guarded_client.get(
+            f"/?t={token}", headers={"Host": PUBLIC_HOST}
+        )
+        assert resp.status_code == 200
+        assert b"sing-root" in resp.data
+
+    def test_bare_root_shows_code_entry(self, guarded_client):
+        resp = guarded_client.get("/", headers={"Host": PUBLIC_HOST})
+        assert resp.status_code == 200
+        assert b"sing-enter-code" in resp.data
+
+    def test_submit_at_root_works(self, guarded_client, token):
+        resp = guarded_client.post(
+            f"/submit?t={token}",
+            headers={"Host": PUBLIC_HOST},
+            json={
+                "singer_name": "Andrew", "phone": "+1 5551234",
+                "source_type": "local", "source_ref": "/x.mp4",
+            },
+        )
+        assert resp.status_code in (200, 429)
+
+    def test_static_at_root_works(self, guarded_client):
+        resp = guarded_client.get(
+            "/static/sing.css", headers={"Host": PUBLIC_HOST}
+        )
+        assert resp.status_code == 200
+        assert b"sing-card" in resp.data
+
+    def test_validate_at_root_works(self, guarded_client, token):
+        resp = guarded_client.post(
+            "/validate",
+            headers={"Host": PUBLIC_HOST},
+            json={"t": token},
+        )
+        assert resp.status_code == 200
+        assert resp.get_json() == {"ok": True}
+
+
 class TestPrivateHostUnaffected:
     def test_status_reachable_on_kjbox(self, guarded_client):
         resp = guarded_client.get(
@@ -101,6 +145,16 @@ class TestPrivateHostUnaffected:
             f"/sing/?t={token}", headers={"Host": "nomadpc.local"}
         )
         assert resp.status_code == 200
+
+    def test_root_on_lan_hits_admin_not_sing(self, guarded_client):
+        """On the admin host, `/` must stay pinned to the KJ controller UI —
+        the public-host rewrite must not leak to other hosts."""
+        resp = guarded_client.get("/", headers={"Host": "nomadpc.local"})
+        # Admin index renders HTML; the thing we care about is that it's NOT
+        # the sing UI (no sing-root / sing-enter-code in the body).
+        assert resp.status_code == 200
+        assert b"sing-enter-code" not in resp.data
+        assert b"sing-root" not in resp.data
 
 
 class TestGuardConfigEdgeCases:
