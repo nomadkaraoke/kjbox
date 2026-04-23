@@ -7,3 +7,4 @@ qrcode
 requests
 websockify
 yt-dlp[default]
+pywebpush>=2.0.0

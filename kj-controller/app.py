@@ -98,6 +98,51 @@ def _get_version():
     return str(int(time.time()))
 
 
+def _bootstrap_vapid_keys(cfg, config_path):
+    """Ensure cfg has vapid_public_key + vapid_private_key; generate on first boot.
+
+    Writes the generated pair back to config.json on disk. On write failure
+    (read-only FS, missing file), logs an error and proceeds with in-memory
+    keys — push still works for this process lifetime, but subscriptions
+    invalidate on restart.
+
+    Keys format: raw P-256 scalar (private) and uncompressed point (public),
+    both base64url-encoded without padding. This is what pywebpush expects.
+    """
+    cfg.setdefault("vapid_subject", "mailto:andrew@beveridge.uk")
+    if cfg.get("vapid_public_key") and cfg.get("vapid_private_key"):
+        return
+    import base64
+    from cryptography.hazmat.primitives.asymmetric import ec
+    from cryptography.hazmat.primitives import serialization
+    priv = ec.generate_private_key(ec.SECP256R1())
+    priv_bytes = priv.private_numbers().private_value.to_bytes(32, "big")
+    pub_bytes = priv.public_key().public_bytes(
+        encoding=serialization.Encoding.X962,
+        format=serialization.PublicFormat.UncompressedPoint,
+    )
+    cfg["vapid_private_key"] = base64.urlsafe_b64encode(priv_bytes).decode("ascii").rstrip("=")
+    cfg["vapid_public_key"] = base64.urlsafe_b64encode(pub_bytes).decode("ascii").rstrip("=")
+
+    # Persist back to config.json so subsequent restarts re-use the same keypair.
+    try:
+        import json
+        with open(config_path, "r") as f:
+            on_disk = json.load(f)
+        on_disk["vapid_public_key"] = cfg["vapid_public_key"]
+        on_disk["vapid_private_key"] = cfg["vapid_private_key"]
+        on_disk["vapid_subject"] = cfg["vapid_subject"]
+        with open(config_path, "w") as f:
+            json.dump(on_disk, f, indent=2)
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(
+            "VAPID key generation succeeded but persisting to %s failed: %s. "
+            "Keys will be regenerated on next restart.",
+            config_path, e,
+        )
+
+
 def _get_secret_key(cfg):
     """Load (or create + persist) a per-device secret key for Flask sessions.
 
@@ -127,6 +172,12 @@ def create_app(config=None):
     flask_app = Flask(__name__)
     flask_app.config['APP_VERSION'] = _get_version()
     cfg = config or load_config()
+
+    # Generate + persist VAPID keys on first boot so Web Push works.
+    # Uses the repo-local config.json path from config.py.
+    from config import CONFIG_FILE
+    _bootstrap_vapid_keys(cfg, CONFIG_FILE)
+
     flask_app.kj_config = cfg
     flask_app.secret_key = _get_secret_key(cfg)
     flask_app.media = MediaIndex(cfg)
