@@ -3278,6 +3278,25 @@ def approve_sing_request_route(req_id):
         return jsonify({"error": "Request not found"}), 404
     if req["status"] != "pending":
         return jsonify({"error": f"Request is already {req['status']}"}), 409
+
+    # kj_pick: the singer deferred version selection — the admin's approval
+    # body must carry version_index so we can rewrite the row to a concrete
+    # source_type/ref before approve_sing_request sees it.
+    if req["source_type"] == "kj_pick":
+        body = request.get_json(silent=True) or {}
+        version_index = body.get("version_index")
+        if version_index is None:
+            return jsonify({
+                "error": "version_index required for kj_pick requests"
+            }), 400
+        try:
+            src_type, src_ref, src_meta = _pick_version_from_kj_pick(
+                req, version_index
+            )
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
+        req = store.update_request_source(req_id, src_type, src_ref, src_meta)
+
     try:
         entry_id = approve_sing_request(current_app._get_current_object(), req)
     except Exception as exc:
