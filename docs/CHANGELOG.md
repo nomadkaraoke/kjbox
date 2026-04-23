@@ -2,6 +2,43 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-04-23 - Feature: Song selection UX — per-version expander for nerds (Phase B)
+
+Builds on Phase A's one-tile-per-song grouping. A nerd who wants to pick a specific version now taps "N versions available →" on any multi-version tile and gets an inline expander listing every candidate categorized by source, with the metadata the codebase actually has — brand, format, quality (where known), filepath for local/divebar. A first-time expanded singer sees a one-time "Commercial vs Community" explainer that dismisses permanently.
+
+**Phase B design:** [archive/2026-04-23-song-selection-phase-b-design.md](archive/2026-04-23-song-selection-phase-b-design.md).
+
+**UX:**
+- Grouped-result card now uses a column layout: title + artist + "In our library" badge + big primary "Let the KJ pick the best version →" CTA, then a secondary "N versions available →" toggle. Tapping the toggle expands inline (no modal, no navigation).
+- Expander sections in fixed order, empties omitted:
+  - **In our library** — `source: "local"` → brand+format, filename, expandable full path.
+  - **Community karaoke (in our library)** — `source: "kn"` with divebar.file_id → brand + divebar format/quality/size, expandable drive_path.
+  - **Online only (download needed)** — `source: "kn"`, non-community, no divebar → brand + "Commercial · YouTube".
+  - **Community (AI vocal removal)** — `source: "kn"`, community, no divebar → brand + "Community · YouTube".
+- Each version card has its own "Pick this version →" button. Submission is **not** `kj_pick`; it's a direct `local` / `divebar` / `kn` request with the chosen version baked in, so auto-approve still works and the admin sees a normal one-tap Approve.
+- Long filepaths (local.path, divebar.drive_path) live inside a `<details>` block so they're hidden by default ("show full path" chevron) and expand in a mono-font line-break block when the singer taps.
+- Primary "Let the KJ pick" CTA continues to work after interacting with the expander. Re-tapping the toggle re-collapses.
+
+**Commercial vs Community explainer:**
+- Soft info callout above the version list on first expand. Two bullets (commercial = pro track, cover band, classic; community = original recording, AI vocal removal).
+- Dismissed with "Got it" — `localStorage['sing_rules_commercial_community_seen'] = "1"` persists across tabs and reloads. Private browsing (where localStorage throws) silently falls back to "reshow every visit".
+
+**Architectural notes:**
+- All changes are client-side — backend contract is unchanged since Phase A already snapshots `versions[]` into `/sing/search`.
+- Pure-rendering helpers added inside `renderSearch` closure (not extracted to a module — sing.js is 1108 LOC vs the "split at 1000 LOC" guidance, but the closure state coupling argues for keeping it inline this PR; extraction is a follow-up).
+- `_humanFileSize`, `_versionSection`, `_ccExplainerSeen`, `_markCcExplainerSeen` hoisted to module scope as pure utilities.
+
+**Modified files:**
+- `kj-controller/static-sing/sing.js` — `renderVersionsExpander`, `renderVersionRow`, `pickSpecificVersion`, `toggleExpanded`, `dismissCcExplainer`. renderResults now emits a div-not-button with primary CTA + toggle + optional expander.
+- `kj-controller/static-sing/sing.css` — `.sing-versions-toggle`, `.sing-version-expander`, `.sing-version-section`, `.sing-version-card`, `.sing-version-path`, `.sing-cc-explainer` styles. Rewrote `.result-row.grouped` to flex-column so the expander flows below.
+
+**Version:** `0.25.0` → `0.26.0` (minor — new visible singer UX, no API break).
+
+**Manual ops steps required (post-deploy):** none. Frontend-only; auto-deploy picks it up on next browser refresh.
+
+**Not yet shipped (final phase):**
+- Phase C: empty-state triage when search returns nothing (YouTube link, ask KJ to make, DIY-via-gen.nomadkaraoke.com). Design: [phase-c-design.md](archive/2026-04-23-song-selection-phase-c-design.md).
+
 ## 2026-04-23 - Feature: Song selection UX — grouped search + KJ-picks-version (Phase A)
 
 The "Pick your song" page now shows **one tile per unique song** instead of N tiles per N versions. The common-case singer — who wants "Bohemian Rhapsody" and doesn't care whether it's SoundChoice SC6523 or Karaoke Version's cover — taps once and submits a `kj_pick` request. The KJ sees the full candidate snapshot on the admin side and picks the best-quality version in one tap. Phase A of the three-phase song-selection-ux overhaul (see [master plan](archive/2026-04-23-song-selection-ux-master-plan.md)).

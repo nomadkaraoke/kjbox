@@ -297,10 +297,44 @@ function renderIdentity() {
   );
 }
 
+// Phase B — Commercial vs Community explainer is dismissed once per
+// browser. localStorage may be unavailable in private browsing; treat a
+// throw as "never seen".
+const RULES_CC_SEEN_KEY = "sing_rules_commercial_community_seen";
+function _ccExplainerSeen() {
+  try { return localStorage.getItem(RULES_CC_SEEN_KEY) === "1"; }
+  catch (e) { return false; }
+}
+function _markCcExplainerSeen() {
+  try { localStorage.setItem(RULES_CC_SEEN_KEY, "1"); }
+  catch (e) { /* private browsing — reshows are acceptable */ }
+}
+
+function _humanFileSize(bytes) {
+  if (!bytes || bytes < 0) return "";
+  const kb = bytes / 1024;
+  if (kb < 1024) return `${kb.toFixed(0)} KB`;
+  const mb = kb / 1024;
+  if (mb < 1024) return `${mb.toFixed(0)} MB`;
+  return `${(mb / 1024).toFixed(1)} GB`;
+}
+
+function _versionSection(version) {
+  if (version.source === "local") return "library";
+  const kn = version.kn || {};
+  if (kn.divebar && kn.divebar.file_id) return "divebar";
+  if (kn.is_community) return "community";
+  return "online";
+}
+
 function renderSearch() {
   let results = { songs: [] };
   let loading = false;
   let err = "";
+  // Phase B — group keys the singer has expanded. Persists across re-renders
+  // triggered by search keystrokes but resets on back/forward navigation.
+  const expandedSongs = new Set();
+  let ccExplainerDismissed = _ccExplainerSeen();
 
   let debounceTimer = null;
   const doSearch = (q) => {
@@ -409,6 +443,160 @@ function renderSearch() {
     if (v.source === "kn") return pickSingleKN(group, v.kn);
   }
 
+  // Phase B — a nerd picking a specific version from the expander. The
+  // submission is NOT a kj_pick; it's a direct concrete-source request, so
+  // auto-approve (if the KJ enables it) still works and the admin sees the
+  // usual "Approve" flow — no picker shown.
+  function pickSpecificVersion(group, version) {
+    if (version.source === "local") {
+      const local = version.local || {};
+      state.selected = {
+        source_type: "local",
+        source_ref: local.path,
+        song_artist: local.artist || group.artist,
+        song_title: local.title || group.title,
+        label: `${group.title} — ${group.artist} (${local.filename || "library"})`,
+      };
+    } else {
+      const kn = version.kn || {};
+      const hasDivebar = !!(kn.divebar && kn.divebar.file_id);
+      if (hasDivebar) {
+        state.selected = {
+          source_type: "divebar",
+          source_ref: kn.divebar.file_id,
+          song_artist: group.artist,
+          song_title: group.title,
+          label: `${group.title} — ${group.artist} (${kn.brand_name || kn.brand_code || "community"})`,
+          source_meta: {
+            brand_code: kn.brand_code,
+            disc_id: kn.divebar.drive_path,
+          },
+        };
+      } else {
+        state.selected = {
+          source_type: "kn",
+          source_ref: kn.youtube_url || kn.url || "",
+          song_artist: group.artist,
+          song_title: group.title,
+          label: `${group.title} — ${group.artist} (${kn.brand_name || kn.brand_code || "online"})`,
+          source_meta: { brand_code: kn.brand_code },
+        };
+      }
+    }
+    state.step = "confirm"; render();
+  }
+
+  function dismissCcExplainer() {
+    ccExplainerDismissed = true;
+    _markCcExplainerSeen();
+    update();
+  }
+
+  function toggleExpanded(groupKey) {
+    if (expandedSongs.has(groupKey)) expandedSongs.delete(groupKey);
+    else expandedSongs.add(groupKey);
+    update();
+  }
+
+  function renderVersionRow(group, version) {
+    let icon, primary, secondary = "", pathBlock = null;
+    if (version.source === "local") {
+      const local = version.local || {};
+      icon = "📁";
+      const format = (local.format || "").toUpperCase();
+      primary = format
+        ? `${local.disc_id || "Local"} — ${format}`
+        : (local.disc_id || "Local file");
+      secondary = local.filename || "";
+      if (local.path) {
+        pathBlock = el("details", { class: "sing-version-path-wrap" },
+          el("summary", { class: "sing-version-path-summary" }, "show full path"),
+          el("div", { class: "sing-version-path" }, local.path),
+        );
+      }
+    } else {
+      const kn = version.kn || {};
+      const hasDivebar = !!(kn.divebar && kn.divebar.file_id);
+      const isCommunity = !!kn.is_community;
+      const brand = kn.brand_name || kn.brand_code || "Unknown brand";
+      if (hasDivebar) {
+        icon = "🎤";
+        const format = (kn.divebar.format || "").toUpperCase();
+        const quality = kn.divebar.quality ? ` (${kn.divebar.quality})` : "";
+        primary = format ? `${brand} — ${format}${quality}` : brand;
+        const size = _humanFileSize(kn.divebar.file_size);
+        secondary = size ? `via Divebar · ${size}` : "via Divebar";
+        if (kn.divebar.drive_path) {
+          pathBlock = el("details", { class: "sing-version-path-wrap" },
+            el("summary", { class: "sing-version-path-summary" }, "show full path"),
+            el("div", { class: "sing-version-path" }, kn.divebar.drive_path),
+          );
+        }
+      } else if (isCommunity) {
+        icon = "🧑‍🤝‍🧑";
+        primary = brand;
+        secondary = "Community · YouTube (download required)";
+      } else {
+        icon = "🌐";
+        primary = brand;
+        secondary = "Commercial · YouTube (download required)";
+      }
+    }
+    const card = el("div", { class: "sing-version-card" },
+      el("div", { class: "sing-version-icon" }, icon),
+      el("div", { class: "sing-version-main" },
+        el("div", { class: "sing-version-primary" }, primary),
+        secondary ? el("div", { class: "sing-version-secondary" }, secondary) : null,
+        pathBlock,
+      ),
+      el("button", {
+        class: "sing-version-pick",
+        onclick: (e) => { e.stopPropagation(); pickSpecificVersion(group, version); },
+      }, "Pick this version →"),
+    );
+    return card;
+  }
+
+  function renderVersionsExpander(group) {
+    const wrapper = el("div", { class: "sing-version-expander" });
+
+    if (!ccExplainerDismissed) {
+      wrapper.appendChild(el("div", { class: "sing-cc-explainer" },
+        el("div", { class: "sing-cc-title" }, "ℹ️ Commercial vs Community"),
+        el("ul", { class: "sing-cc-list" },
+          el("li", {}, el("strong", {}, "Commercial"), " — a professional karaoke track: a cover band records the backing, lyrics are on screen, you sing the lead. Sounds like karaoke."),
+          el("li", {}, el("strong", {}, "Community"), " — the original recording, with the lead vocal removed by AI. Sounds like the real song."),
+        ),
+        el("div", { class: "sing-cc-hint" },
+          "Most singers pick commercial for classics and community for recent or niche songs."),
+        el("button", {
+          class: "sing-cc-dismiss",
+          onclick: (e) => { e.stopPropagation(); dismissCcExplainer(); },
+        }, "Got it"),
+      ));
+    }
+
+    const sections = [
+      { key: "library", label: "In our library" },
+      { key: "divebar", label: "Community karaoke (in our library)" },
+      { key: "online", label: "Online only (download needed)" },
+      { key: "community", label: "Community (AI vocal removal)" },
+    ];
+    const byKey = { library: [], divebar: [], online: [], community: [] };
+    for (const v of (group.versions || [])) byKey[_versionSection(v)].push(v);
+
+    for (const { key, label } of sections) {
+      const versions = byKey[key];
+      if (!versions.length) continue;
+      const section = el("div", { class: "sing-version-section", "data-section": key },
+        el("h4", {}, label),
+      );
+      for (const v of versions) section.appendChild(renderVersionRow(group, v));
+      wrapper.appendChild(section);
+    }
+    return wrapper;
+  }
+
   function renderResults() {
     const container = el("div", { class: "results" });
     if (loading) container.appendChild(el("p", { class: "hint" }, "Searching…"));
@@ -422,30 +610,44 @@ function renderSearch() {
 
     for (const group of songs) {
       const isSingle = group.version_count === 1;
+      const isExpanded = expandedSongs.has(group.key);
+
+      // Primary action — stays a big button so a normie in a hurry can tap.
+      // Multi-version groups: "Let the KJ pick". Single-version: "Add to queue".
       const ctaLabel = isSingle
         ? "Add to queue"
         : "Let the KJ pick the best version →";
-      const onClick = isSingle
+      const onCtaClick = isSingle
         ? () => pickSingleVersion(group)
         : () => pickKjChoice(group);
 
       const children = [
         el("div", { class: "r-title" }, group.title || ""),
         el("div", { class: "r-sub" }, group.artist || ""),
-        el("div", { class: "r-cta" }, ctaLabel),
       ];
-      if (!isSingle) {
-        // Phase B activates this expander. Phase A shows it as an inert hint
-        // so the layout doesn't churn between phases.
-        children.push(el("div", { class: "r-versions-hint" },
-          `${group.version_count} versions available →`));
-      }
       if (group.in_library) {
         children.push(el("span", { class: "badge good" }, "In our library"));
       }
-      container.appendChild(el("button", {
-        class: "result-row grouped",
-        onclick: onClick,
+      children.push(el("button", {
+        class: "btn-primary-cta",
+        onclick: (e) => { e.stopPropagation(); onCtaClick(); },
+      }, ctaLabel));
+
+      // Phase B — only multi-version groups get an expander affordance.
+      if (!isSingle) {
+        const toggleLabel = isExpanded
+          ? "Hide versions ↑"
+          : `${group.version_count} versions available →`;
+        children.push(el("button", {
+          class: "sing-versions-toggle",
+          "aria-expanded": isExpanded ? "true" : "false",
+          onclick: (e) => { e.stopPropagation(); toggleExpanded(group.key); },
+        }, toggleLabel));
+        if (isExpanded) children.push(renderVersionsExpander(group));
+      }
+
+      container.appendChild(el("div", {
+        class: "result-row grouped" + (isExpanded ? " expanded" : ""),
       }, ...children));
     }
 
