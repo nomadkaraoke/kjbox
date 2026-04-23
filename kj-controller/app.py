@@ -10,7 +10,7 @@ import time
 from flask import Flask
 
 from catalog import ExternalCatalog
-from config import is_pi, load_config
+from config import CONFIG_FILE, is_pi, load_config
 from media import MediaIndex
 from overlay import OverlayManager
 from playback import PlaybackCoordinator
@@ -261,6 +261,10 @@ def start_app():  # pragma: no cover
 
     # Load config
     cfg = load_config()
+    # Generate + persist VAPID keys on first boot so Web Push works.
+    # Mirrors create_app(); the duplication exists because start_app()
+    # builds the Flask app inline rather than delegating to create_app.
+    _bootstrap_vapid_keys(cfg, CONFIG_FILE)
     os.makedirs(cfg['download_folder'], exist_ok=True)
 
     # Create shared overlay manager
@@ -344,6 +348,33 @@ def start_app():  # pragma: no cover
     )
     flask_app.sing_store.ensure_token()
     log_message("Sing store ready (public request form).", cfg)
+
+    # PushDispatcher — Web Push for singer-facing expectations UI.
+    # Mirrors create_app(); duplication tracked for future consolidation.
+    from push_dispatcher import PushDispatcher
+
+    def _phone_for_rotation_entry(entry):
+        """Look up the phone of the sing_request linked to this entry, if any."""
+        entry_id = entry.get("id")
+        if entry_id is None:
+            return None
+        conn = flask_app.sing_store._get_conn()
+        row = conn.execute(
+            "SELECT phone FROM sing_requests WHERE linked_entry_id = ? "
+            "ORDER BY created_at DESC LIMIT 1",
+            (entry_id,),
+        ).fetchone()
+        return row["phone"] if row else None
+
+    flask_app.rotation.push_dispatcher = PushDispatcher(
+        store=flask_app.sing_store,
+        rotation=flask_app.rotation,
+        cfg=cfg,
+        get_current_token=lambda: flask_app.sing_store.get_token(),
+        get_linked_phone_for_entry=_phone_for_rotation_entry,
+    )
+    log_message("Push dispatcher ready (Web Push).", cfg)
+
     flask_app.sleep_manager = SleepManager()
     if flask_app.sleep_manager.is_sleeping():
         log_message("Sleep mode is active (from previous session).", cfg)
