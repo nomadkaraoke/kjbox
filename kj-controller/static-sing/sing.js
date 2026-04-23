@@ -683,11 +683,49 @@ async function requestPushPermission() {
   return result;
 }
 
+// --- iOS / standalone detection -------------------------------------------
+
+const IS_IOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+const IS_STANDALONE = window.matchMedia("(display-mode: standalone)").matches
+  || window.navigator.standalone === true;
+
+// Capture the install prompt event for later use (Android/desktop Chrome).
+// Not surfaced in UI for v1 — hook is here in case a future task wires it up.
+let deferredInstallPrompt = null;
+window.addEventListener("beforeinstallprompt", (e) => {
+  e.preventDefault();
+  deferredInstallPrompt = e;
+});
+
+function maybeShowIosInstructions() {
+  if (!IS_IOS || IS_STANDALONE) return false;
+  const container = document.getElementById("push-optin");
+  if (!container) return true;
+  container.innerHTML = "";
+  container.classList.add("ios-install");
+  container.appendChild(
+    el("div", {},
+      el("strong", {}, "📱 iPhone? Get tapped when you're up."),
+      el("p", {},
+        "Tap the Share button, then ",
+        el("strong", {}, "Add to Home Screen"),
+        ", then reopen from your home screen. You'll then be able to enable notifications."),
+      el("button", {
+        class: "btn ghost",
+        onclick: (e) => { e.target.closest(".push-optin").remove(); },
+      }, "Got it"),
+    ),
+  );
+  return true;
+}
+
 // Show/hide/update the push-opt-in block based on current Notification.permission.
 // Called from renderDone() with a 2s delay so the "you're in!" line registers first.
 function maybeShowPushPrompt() {
   const container = document.getElementById("push-optin");
   if (!container) return;
+  // iOS Safari outside a standalone PWA can't use Web Push — show instructions instead
+  if (maybeShowIosInstructions()) return;
   if (!("Notification" in window) || !swRegistration) {
     container.remove();
     return;

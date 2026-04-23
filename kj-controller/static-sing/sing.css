@@ -233,3 +233,13 @@ input:focus {
 .push-optin .btn { min-width: 240px; }
 .push-optin.push-on { color: #6ad29a; font-size: 0.9rem; }
 .push-optin.push-blocked { color: var(--nk-text-dim); font-size: 0.9rem; font-style: italic; }
+.push-optin.ios-install {
+  padding: 0.9rem;
+  border-radius: 10px;
+  background: rgba(255,77,207,0.08);
+  border: 1px solid rgba(255,77,207,0.25);
+  text-align: left;
+}
+.push-optin.ios-install strong { display: block; margin-bottom: 0.4rem; }
+.push-optin.ios-install p { font-size: 0.9rem; color: var(--nk-text-dim); margin-bottom: 0.6rem; }
+.push-optin.ios-install .btn { width: 100%; }
