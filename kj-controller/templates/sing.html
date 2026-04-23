@@ -6,7 +6,7 @@
 <title>Nomad Karaoke — Request a song</title>
 <link rel="icon" href="{{ url_for('sing.static', filename='favicon.ico') }}">
 <link rel="stylesheet" href="{{ url_for('sing.static', filename='sing.css') }}">
-{% if not closed %}
+{% if not closed and not code_entry %}
 <link rel="manifest" href="{{ url_for('sing.manifest') }}?t={{ token }}">
 <meta name="theme-color" content="#ff4dcf">
 <meta name="mobile-web-app-capable" content="yes">
@@ -28,12 +28,33 @@
   <h1>Requests aren't open right now</h1>
   <p>The KJ hasn't started a new event, or has paused requests. Please ask them.</p>
 </main>
+{% elif code_entry %}
+<main class="sing-card sing-enter-code" id="sing-enter-code"
+      data-bad-code="{{ '1' if bad_code else '' }}">
+  <h1>Enter your code</h1>
+  <p>Look for the 4-digit code on the karaoke screen.</p>
+  <form id="sing-code-form" novalidate>
+    <input type="text"
+           id="sing-code-input"
+           inputmode="numeric"
+           pattern="[0-9]*"
+           autocomplete="one-time-code"
+           maxlength="4"
+           minlength="4"
+           placeholder="0000"
+           aria-label="4-digit event code"
+           autofocus>
+    <button type="submit">Continue</button>
+    <p class="sing-code-error" id="sing-code-error" hidden></p>
+  </form>
+</main>
 {% else %}
 <div id="sing-root"
      data-token="{{ token }}"
      data-request-id="{{ request_id }}">
 </div>
-<script type="module" src="{{ url_for('sing.static', filename='sing.js') }}"></script>
 {% endif %}
+<div id="sing-rules-footer"></div>
+<script type="module" src="{{ url_for('sing.static', filename='sing.js') }}"></script>
 </body>
 </html>

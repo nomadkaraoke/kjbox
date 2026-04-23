@@ -92,7 +92,9 @@ class TestTokenHelpers:
     def test_regenerate_creates_token(self, store):
         tok = store.regenerate_token()
         assert isinstance(tok, str)
-        assert len(tok) >= 12
+        # 4-digit numeric code — singers type this from the venue screen.
+        assert len(tok) == 4
+        assert tok.isdigit()
         assert store.get_token() == tok
 
     def test_regenerate_changes_token(self, store):
@@ -100,6 +102,7 @@ class TestTokenHelpers:
         t2 = store.regenerate_token()
         assert t1 != t2
         assert store.get_token() == t2
+        assert t2.isdigit() and len(t2) == 4
 
     def test_ensure_token_creates_if_absent(self, store):
         assert store.get_token() is None

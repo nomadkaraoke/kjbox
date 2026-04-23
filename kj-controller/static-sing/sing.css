@@ -176,20 +176,52 @@ input:focus {
 .q-song { color: var(--nk-text-dim); }
 .q-status { color: var(--nk-accent); font-size: 0.8rem; }
 
-/* --- Rules page ----------------------------------------------------------- */
-.sing-rules { max-width: 640px; }
-.sing-rules h1 { margin-bottom: 4px; }
-.sing-rules .subtitle { color: var(--nk-text-dim); margin-bottom: 24px; }
-.sing-rules .rules-list { list-style: decimal; padding-left: 1.5rem; }
-.sing-rules .rules-list li { margin-bottom: 1.25rem; }
-.sing-rules .rules-list h2 { font-size: 1.1rem; margin-bottom: 4px; }
-.sing-rules .rules-list p { color: var(--nk-text-dim); }
-.sing-rules .heart { color: var(--nk-error); }
-.sing-rules .rules-back { margin-top: 2rem; text-align: center; }
+/* --- Code-entry card ------------------------------------------------------ */
+.sing-enter-code { text-align: center; }
+.sing-enter-code h1 { font-size: 1.4rem; }
+.sing-enter-code p { color: var(--nk-text-dim); }
+.sing-enter-code #sing-code-input {
+  font-size: 2rem;
+  letter-spacing: 0.8rem;
+  text-align: center;
+  padding-left: 0.8rem;  /* compensate for letter-spacing pushing last char off-centre */
+  font-variant-numeric: tabular-nums;
+  margin: 1rem auto;
+  max-width: 12rem;
+}
+.sing-enter-code button {
+  display: inline-block;
+  padding: 0.75rem 1.5rem;
+  background: var(--nk-accent);
+  color: #fff;
+  border: 0;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.sing-code-error { color: var(--nk-error); font-size: 0.9rem; margin-top: 0.75rem; }
 
-/* --- Footer link (landing + done) ----------------------------------------- */
-.sing-footer-links { text-align: center; font-size: 0.85rem; margin-top: 1.5rem; }
-.sing-footer-links a { color: var(--nk-text-dim); }
+/* --- Rules footer (every page) -------------------------------------------- */
+.rules-footer {
+  max-width: 480px;
+  margin: 0 auto 2rem;
+  padding: 1.25rem 1.5rem;
+  background: var(--nk-card-2);
+  border: 1px solid var(--nk-border);
+  border-radius: 12px;
+  color: var(--nk-text-dim);
+  font-size: 0.9rem;
+}
+.rules-footer h3 { margin-top: 0; color: var(--nk-text); }
+.rules-footer .rules-short { list-style: none; padding-left: 0; margin: 0.25rem 0 0.75rem; }
+.rules-footer .rules-short li { padding: 0.35rem 0; border-bottom: 1px solid var(--nk-border); }
+.rules-footer .rules-short li:last-child { border-bottom: 0; }
+.rules-footer .rules-full summary { cursor: pointer; font-weight: 600; color: var(--nk-text); }
+.rules-footer .rules-list { list-style: decimal; padding-left: 1.25rem; margin-top: 0.75rem; }
+.rules-footer .rules-list li { margin-bottom: 0.75rem; }
+.rules-footer .rules-list h4 { margin: 0 0 0.2rem; color: var(--nk-text); font-size: 0.95rem; }
+.rules-footer .rules-list p { margin: 0; }
 
 /* --- Now playing widget ---------------------------------------------------- */
 .now-playing {
@@ -206,14 +238,6 @@ input:focus {
 .np-label { font-weight: 600; color: var(--nk-accent); }
 .np-singer { font-weight: 500; color: var(--nk-text); }
 .np-song { color: var(--nk-text-dim); }
-
-/* --- Inline rules short-form (confirm / done step) ------------------------ */
-.rules-inline { margin-top: 1rem; padding: 0.75rem; border-radius: 8px;
-                background: var(--nk-card-2); border: 1px solid var(--nk-border); }
-.rules-inline summary { cursor: pointer; font-weight: 600; }
-.rules-inline .rules-short { list-style: none; padding-left: 0; margin-top: 0.75rem; }
-.rules-inline .rules-short li { padding: 0.25rem 0; border-bottom: 1px solid var(--nk-border); }
-.rules-inline a { color: var(--nk-accent); }
 
 /* --- Offline banner --------------------------------------------------------- */
 .offline-banner {

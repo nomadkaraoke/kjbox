@@ -2,6 +2,40 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-04-22 - UX tweaks: 4-digit event codes, `/sing/` path hidden, rules inlined
+
+Follow-up iteration on the singer UI that shipped earlier today. Three visible changes, one structural one.
+
+**Event token is now a 4-digit numeric code.** Previously a 16-char `secrets.token_urlsafe` string — too long to read off the venue screen and awkward to type. Now a zero-padded `0000–9999` code generated via `secrets.randbelow`. `regenerate_token()` refuses to return the same code twice in a row. The 10 000-combo space is protected by a new per-IP rate limit (10 attempts per 5 min) on the code-validation endpoint.
+
+**Public host serves the singer UI at the ROOT** — no more `/sing/` segment for singers to type. `sing.nomadkaraoke.com/?t=4321` now works. A tiny WSGI middleware (`install_public_host_rewriter` in `sing.py`) prepends `/sing` to the PATH_INFO on the public host so the blueprint stays mounted at `/sing/` internally while the admin host (`nomadpc.local`, `kjbox.nomadkaraoke.com`) keeps the KJ controller UI at `/`. Installed from both `create_app()` and `start_app()` — the duplication code-smell is still there, tracked as a follow-up.
+
+**No-token visitors get a code-entry form.** Typing `sing.nomadkaraoke.com` into a browser now shows a 4-digit numeric input (autocomplete="one-time-code" so iOS / Android keyboards surface the code-entry UX) that auto-submits on the 4th digit, validates via new `POST /sing/validate`, and redirects to `/?t=XXXX`. The old "Requests aren't open right now" page is reserved for when the KJ has actually paused requests (`is_enabled() is False`).
+
+**House rules are inlined on every page.** The separate `/sing/rules` route and `templates/sing_rules.html` are gone. Instead, `renderRulesFooter()` in `sing.js` populates a persistent `<div id="sing-rules-footer">` present in every template branch (closed / code_entry / main SPA). Short bullets are always visible; a `<details>` "Read the full rules" expands the long copy.
+
+**Breaking changes** (all shipped an hour ago — no deployed clients yet):
+- `sing_store.regenerate_token()` now emits 4 digits, not 16 URL-safe chars. `TOKEN_BYTES` constant renamed to `TOKEN_DIGITS`.
+- `get_event_url(cfg, token, scope="public")` returns `{base}/?t=TOK` (no `/sing/`). `scope="local"` still returns `{base}/sing/?t=TOK` because the admin device serves its KJ controller UI at `/`.
+- `GET /sing/` with no/invalid token no longer returns 403 — it returns 200 (missing token) or 400 (bad token) with a code-entry form.
+- `/sing/rules` route removed; `sing_rules.html` deleted.
+- Manifest `start_url` is host-aware: `/` on the public host, `/sing/` on the admin host.
+- Service worker registration reads `window.location.pathname` to decide between `/sw.js` (scope `/`) and `/sing/sw.js` (scope `/sing/`).
+
+**New endpoint:**
+- `POST /sing/validate` — rate-limited (10/IP/5min) token-verify endpoint backing the code-entry form. Returns `{ok: true}` on match, 400 on miss, 429 when throttled.
+
+**Modified files:**
+- `kj-controller/sing_store.py` — token generator
+- `kj-controller/sing.py` — new `/validate`, rewritten `landing()`, `get_event_url`, `manifest()`, `install_public_host_rewriter`; split validate rate-limit bucket
+- `kj-controller/app.py` — wires `install_public_host_rewriter` in both `create_app()` and `start_app()`
+- `kj-controller/templates/sing.html` — three-way branch (closed / code_entry / main)
+- `kj-controller/static-sing/sing.js` — `BASE` detection, `initCodeEntry()`, `renderRulesFooter()`, removed inline-rules `<details>` and identity-screen house-rules link
+- `kj-controller/static-sing/sing.css` — `.sing-enter-code` + `.rules-footer` styles, removed `.rules-inline` + `.sing-rules` + `.sing-footer-links`
+- Tests: `test_sing_store.py` asserts 4-digit format; `test_sing_public_routes.py` new `TestValidateCode` class + rewritten `TestLanding`; `test_host_guard.py` new `TestPublicHostRootRewrite` class
+
+**Manual ops steps required (post-deploy):** none. Frontend-only + Python route changes; restart kj-controller as normal. The in-flight event token (if any) is no longer in the expected 4-digit format but will keep working until the KJ rotates it via the admin UI — there's no live event right now and nobody has used yesterday's deployment yet, so no singer impact.
+
 ## 2026-04-22 - Feature: Singer expectations UI (push + wait estimates + rules page, sub-project 4/4)
 
 Singers who scan the QR now get honest wait-time estimates, a rules page, a "what's playing now" widget, an offline banner, and — on Android + desktop Chrome + iOS-installed-as-PWA — Web Push notifications when they're "up in 2", "up next", and "now singing". Approve/reject decisions also push. The held-tab polling flow shipped in sub-project #1 remains the universal fallback — push is additive, not a replacement.

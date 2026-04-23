@@ -38,7 +38,11 @@ sing_bp = Blueprint(
 
 # --- Rate limiter --------------------------------------------------------
 
+# Separate buckets per concern: guessing the event token (`/validate`) should
+# not eat into the legit-submission budget, and vice versa. Both are keyed by
+# client IP within the same lock since contention is minimal.
 _rate_limit_state = defaultdict(deque)
+_validate_rate_limit_state = defaultdict(deque)
 _rate_limit_lock = threading.Lock()
 
 
@@ -79,11 +83,11 @@ def _client_ip(req):
     return peer or "unknown"
 
 
-def _rate_limit_exceeded(ip, limit, window_s):
-    """Slide a window over timestamps in `_rate_limit_state[ip]`, mutate in place."""
+def _rate_limit_exceeded(ip, limit, window_s, state=_rate_limit_state):
+    """Slide a window over timestamps in ``state[ip]``, mutate in place."""
     now = time.monotonic()
     with _rate_limit_lock:
-        q = _rate_limit_state[ip]
+        q = state[ip]
         cutoff = now - window_s
         while q and q[0] < cutoff:
             q.popleft()
@@ -159,7 +163,13 @@ def require_token(view):
 # --- Helpers for event URL -----------------------------------------------
 
 def get_event_url(cfg, token, scope="public"):
-    """Build the event URL (QR target) for the given scope."""
+    """Build the event URL (QR target) for the given scope.
+
+    Public scope serves the singer UI at the host root via WSGI path rewrite
+    (see ``install_public_host_rewriter``), so we emit ``<base>/?t=TOK`` — no
+    ``/sing/`` segment for singers to read or type. Local scope still uses
+    ``/sing/`` because the admin device serves its KJ controller at ``/``.
+    """
     if scope == "local":
         base = (cfg.get("sing_local_url_base") or "").rstrip("/")
         if not base:
@@ -168,11 +178,14 @@ def get_event_url(cfg, token, scope="public"):
                 base = f"{request.scheme}://{request.host}"
             except RuntimeError:  # outside request context
                 base = ""
-    else:
-        base = cfg.get("sing_public_url_base", "https://sing.nomadkaraoke.com").rstrip("/")
+        if not token:
+            return f"{base}/sing/"
+        return f"{base}/sing/?t={token}"
+
+    base = cfg.get("sing_public_url_base", "https://sing.nomadkaraoke.com").rstrip("/")
     if not token:
-        return f"{base}/sing/"
-    return f"{base}/sing/?t={token}"
+        return f"{base}/"
+    return f"{base}/?t={token}"
 
 
 def sync_event_url_overlays(overlay_manager, url):
@@ -233,6 +246,35 @@ def install_host_guard(flask_app):
     return _sing_host_guard
 
 
+def install_public_host_rewriter(flask_app):
+    """Mount the sing blueprint at the ROOT of the public host.
+
+    Internally the blueprint stays at ``/sing/`` so the admin host (nomadpc.local,
+    kjbox.nomadkaraoke.com) keeps working unchanged — but on ``sing.nomadkaraoke.com``
+    the ``/sing/`` prefix is ugly on a printed QR target and impossible to type. A
+    tiny WSGI middleware prepends ``/sing`` to incoming paths on the public host so
+    both ``/`` and ``/sing/`` hit the same routes.
+
+    Must be installed BEFORE routing — hence a WSGI middleware rather than a
+    ``before_request`` hook (those run after routing and can't change dispatch).
+    """
+    original_wsgi = flask_app.wsgi_app
+
+    def _rewritten(environ, start_response):
+        cfg = getattr(flask_app, "kj_config", None) or {}
+        hosts = _public_hosts(cfg)
+        if hosts:
+            incoming = (environ.get("HTTP_HOST") or "").split(":")[0].lower()
+            if incoming in hosts:
+                path = environ.get("PATH_INFO", "/")
+                if not (path == "/sing" or path.startswith("/sing/")):
+                    environ["PATH_INFO"] = "/sing" + (path if path != "/" else "/")
+        return original_wsgi(environ, start_response)
+
+    flask_app.wsgi_app = _rewritten
+    return _rewritten
+
+
 # --- Routes --------------------------------------------------------------
 
 _PHONE_RE = re.compile(r"^\+?[0-9 \-()]{7,20}$")
@@ -241,14 +283,33 @@ _ALLOWED_SOURCES = {"local", "divebar", "kn", "youtube", "make"}
 
 @sing_bp.route("/", methods=["GET"])
 def landing():
-    """Singer-facing SPA entry point. Token required."""
+    """Singer-facing SPA entry point.
+
+    Three states, same template:
+
+    * ``closed=True`` — the KJ has disabled public requests entirely.
+    * ``code_entry=True`` — requests are open, but the visitor hasn't supplied
+      a valid event token. Shows the 4-digit code entry form.
+    * default — valid token, render the main SPA.
+    """
     store = getattr(current_app, "sing_store", None)
     if store is None:
         return render_template("sing.html", closed=True), 503
 
+    if not store.is_enabled():
+        return render_template("sing.html", closed=True), 403
+
     token = _extract_token()
     if not token or not _is_token_valid(store, token):
-        return render_template("sing.html", closed=True), 403
+        # Requests are open; invite the singer to enter the code shown on the
+        # venue screen. Invalid-token paths flow here too, so brute-force
+        # scanners don't learn anything from this response.
+        bad_code = bool(token) and token != ""
+        return render_template(
+            "sing.html",
+            code_entry=True,
+            bad_code=bad_code,
+        ), (400 if bad_code else 200)
 
     session["sing_token"] = token
     return render_template(
@@ -260,23 +321,49 @@ def landing():
     )
 
 
-@sing_bp.route("/rules", methods=["GET"])
-def rules():
-    """Public rules page — no token gate (bookmarkable, shareable)."""
-    return render_template("sing_rules.html")
+@sing_bp.route("/validate", methods=["POST"])
+def validate_code():
+    """Check a singer-entered event code without leaking a response time signal.
+
+    Rate-limited per IP (10 attempts per 5 minutes) so the 10 000-combo token
+    space isn't brute-forceable from a single attacker. Legitimate singers who
+    mistype one or two codes won't hit the limit.
+    """
+    store = getattr(current_app, "sing_store", None)
+    if store is None:
+        return jsonify({"ok": False, "error": "not_configured"}), 503
+
+    ip = _client_ip(request)
+    if _rate_limit_exceeded(ip, 10, 300, state=_validate_rate_limit_state):
+        return jsonify({"ok": False, "error": "rate_limited"}), 429
+
+    data = request.get_json(silent=True) or {}
+    code = (data.get("t") or "").strip()
+    if not code or not _is_token_valid(store, code):
+        return jsonify({"ok": False}), 400
+    return jsonify({"ok": True})
 
 
 @sing_bp.route("/manifest.json", methods=["GET"])
 @require_token
 def manifest():
-    """Dynamic PWA manifest — start_url carries the current event token."""
+    """Dynamic PWA manifest — start_url carries the current event token.
+
+    On the public host (``sing.nomadkaraoke.com``) the singer UI lives at the
+    host root, so ``start_url`` and ``scope`` are root-relative. On the admin
+    host the same page is under ``/sing/``; detect which by inspecting the
+    inbound request host.
+    """
     token = _extract_token()
+    cfg = getattr(current_app, "kj_config", None) or {}
+    on_public_host = (request.host or "").split(":")[0].lower() in _public_hosts(cfg)
+    base = "/" if on_public_host else "/sing/"
     return jsonify({
         "name": "Nomad Karaoke",
         "short_name": "Nomad",
         "description": "Request a song at the karaoke night.",
-        "start_url": f"/sing/?t={token}",
-        "scope": "/sing/",
+        "start_url": f"{base}?t={token}",
+        "scope": base,
         "display": "standalone",
         "orientation": "portrait",
         "background_color": "#0a0a0a",

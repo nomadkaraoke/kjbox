@@ -1,15 +1,20 @@
 // Nomad Karaoke — singer-facing request SPA.
 // Vanilla JS, no framework, no build step. Mobile-first.
 
+// Blueprint mount point. On the public host (sing.nomadkaraoke.com) the singer
+// UI lives at `/` via a WSGI rewrite; on the admin host it's under `/sing/`.
+// Detect at runtime so fetches and SW registration work in both places.
+const BASE = window.location.pathname.startsWith("/sing/") ? "/sing" : "";
+
 const root = document.getElementById("sing-root");
-if (!root) {
-  // Template rendered the "closed" variant which has no #sing-root — this
-  // script shouldn't load in that case, but guard in case of future template
-  // changes so we don't throw on .dataset access.
-  throw new Error("sing-root element missing — requests are closed");
+const codeEntryEl = document.getElementById("sing-enter-code");
+
+let TOKEN = "";
+let INITIAL_REQUEST_ID = "";
+if (root) {
+  TOKEN = root.dataset.token;
+  INITIAL_REQUEST_ID = root.dataset.requestId;
 }
-const TOKEN = root.dataset.token;
-const INITIAL_REQUEST_ID = root.dataset.requestId;
 
 const LS = {
   get: (k) => { try { return localStorage.getItem(k) || ""; } catch { return ""; } },
@@ -79,11 +84,11 @@ async function fetchJson(url, opts = {}) {
 
 async function search(query) {
   const q = encodeURIComponent(query);
-  return fetchJson(`/sing/search?q=${q}`);
+  return fetchJson(`${BASE}/search?q=${q}`);
 }
 
 async function submit(payload) {
-  return fetchJson("/sing/submit", {
+  return fetchJson(`${BASE}/submit`, {
     method: "POST",
     body: JSON.stringify(payload),
   });
@@ -94,7 +99,7 @@ async function fetchStatus(id) {
   // backend cross-references the request's stored token to prevent cross-
   // event reads, so we must pass ours on every poll.
   const t = encodeURIComponent(TOKEN);
-  const resp = await fetch(`/sing/status/${id}?t=${t}`, { credentials: "same-origin" });
+  const resp = await fetch(`${BASE}/status/${id}?t=${t}`, { credentials: "same-origin" });
   if (!resp.ok) throw new Error("status fetch failed");
   return resp.json();
 }
@@ -154,7 +159,7 @@ async function fetchNowPlaying(node) {
   if (nowPlayingTimer) { clearInterval(nowPlayingTimer); nowPlayingTimer = null; }
   const tick = async () => {
     try {
-      const resp = await fetch(`/sing/now?t=${encodeURIComponent(TOKEN)}`, {
+      const resp = await fetch(`${BASE}/now?t=${encodeURIComponent(TOKEN)}`, {
         credentials: "same-origin",
       });
       if (!resp.ok) { onPollFailure(); return renderNowError(node); }
@@ -228,9 +233,6 @@ function renderLanding() {
         state.step = "identity"; render();
       } }, "switch")
     ) : null,
-    el("p", { class: "sing-footer-links" },
-      el("a", { href: "/sing/rules", target: "_blank" }, "House rules"),
-    ),
   );
 }
 
@@ -518,18 +520,6 @@ function renderDone() {
       el("summary", {}, "Show upcoming singers"),
       el("div", { class: "queue-list" }, "Loading…"),
     ),
-    el("details", { class: "rules-inline" },
-      el("summary", {}, "🎤 House rules"),
-      el("ul", { class: "rules-short" },
-        el("li", {}, "First come, first sing"),
-        el("li", {}, "New singers get priority"),
-        el("li", {}, "Multiple songs? We'll spread them out"),
-        el("li", {}, "Need to leave? Ask the KJ"),
-        el("li", {}, "♥ = paid priority ($20+)"),
-      ),
-      el("p", {},
-        el("a", { href: "/sing/rules", target: "_blank" }, "Read full rules →")),
-    ),
     el("p", { class: "hint" },
       "Keep this page open — it'll update automatically. Good luck!"),
   );
@@ -599,20 +589,13 @@ async function pollStatus(card) {
   state._statusPollTimer = setInterval(tick, 15000);
 }
 
-// --- Bootstrap -------------------------------------------------------------
-
-if (INITIAL_REQUEST_ID) {
-  state.request = { id: parseInt(INITIAL_REQUEST_ID, 10) };
-  state.step = "done";
-}
-
 // --- Service worker registration ------------------------------------------
 
 async function registerServiceWorker() {
   if (!("serviceWorker" in navigator) || !("PushManager" in window)) return null;
   try {
-    const scriptUrl = `/sing/sw.js?t=${encodeURIComponent(TOKEN)}`;
-    const reg = await navigator.serviceWorker.register(scriptUrl, { scope: "/sing/" });
+    const scriptUrl = `${BASE}/sw.js?t=${encodeURIComponent(TOKEN)}`;
+    const reg = await navigator.serviceWorker.register(scriptUrl, { scope: `${BASE}/` });
     return reg;
   } catch (e) {
     console.warn("SW registration failed:", e);
@@ -621,7 +604,6 @@ async function registerServiceWorker() {
 }
 
 let swRegistration = null;
-registerServiceWorker().then((reg) => { swRegistration = reg; });
 
 // --- Push subscription -----------------------------------------------------
 
@@ -654,7 +636,7 @@ async function ensurePushSubscription() {
     }
   }
   try {
-    await fetch(`/sing/push/subscribe?t=${encodeURIComponent(TOKEN)}`, {
+    await fetch(`${BASE}/push/subscribe?t=${encodeURIComponent(TOKEN)}`, {
       method: "POST",
       credentials: "same-origin",
       headers: { "Content-Type": "application/json" },
@@ -769,4 +751,125 @@ function maybeShowPushPrompt() {
   container.appendChild(btn);
 }
 
-render();
+// --- Persistent rules footer ----------------------------------------------
+
+function renderRulesFooter() {
+  const slot = document.getElementById("sing-rules-footer");
+  if (!slot) return;
+  slot.innerHTML = "";
+  slot.appendChild(el("section", { class: "rules-footer" },
+    el("h3", {}, "🎤 House rules"),
+    el("ul", { class: "rules-short" },
+      el("li", {}, "First come, first sing"),
+      el("li", {}, "New singers get priority"),
+      el("li", {}, "Multiple songs? We'll spread them out"),
+      el("li", {}, "Need to leave? Ask the KJ"),
+      el("li", {}, "♥ = paid priority ($20+)"),
+    ),
+    el("details", { class: "rules-full" },
+      el("summary", {}, "Read the full rules"),
+      el("ol", { class: "rules-list" },
+        el("li", {},
+          el("h4", {}, "First come, first sing"),
+          el("p", {}, "The default order is the order you submit your request. "
+            + "If Jim, Bob, and Jenny each send in a song, they'll sing in that order."),
+        ),
+        el("li", {},
+          el("h4", {}, "New singers get priority"),
+          el("p", {}, "First time singing tonight? You'll get bumped up to sing within "
+            + "the next few songs, so everyone gets a chance to perform at least once. "
+            + "The next 2 people in line won't be moved — we respect their spot too."),
+        ),
+        el("li", {},
+          el("h4", {}, "Multiple songs welcome"),
+          el("p", {}, "Submit as many songs as you want! We'll spread them out in the "
+            + "rotation so nobody sings twice in a row."),
+        ),
+        el("li", {},
+          el("h4", {}, "Need to leave early?"),
+          el("p", {}, "Let the KJ know and we'll try to get you one last song before "
+            + "you go. On a busy night when you've already sung 5+ times we may not be "
+            + "able to accommodate — but we'll always try."),
+        ),
+        el("li", {},
+          el("h4", {}, "Paid priority ♥"),
+          el("p", {}, "Want to skip ahead? Pay $20+ and you'll be bumped up to sing "
+            + "very soon. Paid entries are marked with a ♥ on the rotation screen so "
+            + "everyone can see it's fair."),
+        ),
+      ),
+    ),
+  ));
+}
+
+// --- Code-entry mode (no valid token yet) ---------------------------------
+
+function initCodeEntry() {
+  const form = document.getElementById("sing-code-form");
+  const input = document.getElementById("sing-code-input");
+  const errEl = document.getElementById("sing-code-error");
+  if (!form || !input || !errEl) return;
+
+  if (codeEntryEl.dataset.badCode) {
+    errEl.textContent = "That code didn't match — check with the KJ.";
+    errEl.hidden = false;
+  }
+
+  async function submitCode(raw) {
+    const code = (raw || "").replace(/\D/g, "");
+    if (code.length !== 4) {
+      errEl.textContent = "Enter the 4-digit code from the screen.";
+      errEl.hidden = false;
+      return;
+    }
+    errEl.hidden = true;
+    try {
+      const resp = await fetch(`${BASE}/validate`, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ t: code }),
+      });
+      if (resp.ok) {
+        window.location.href = `${BASE}/?t=${encodeURIComponent(code)}`;
+        return;
+      }
+      errEl.textContent = resp.status === 429
+        ? "Too many attempts — please wait a few minutes."
+        : "That code didn't match — check the screen again.";
+      errEl.hidden = false;
+    } catch {
+      errEl.textContent = "Couldn't check — are you online?";
+      errEl.hidden = false;
+    }
+  }
+
+  // Auto-submit once a full 4 digits are entered. The form submit handler
+  // covers the same path for users who prefer tapping the button.
+  input.addEventListener("input", (e) => {
+    const cleaned = e.target.value.replace(/\D/g, "").slice(0, 4);
+    if (cleaned !== e.target.value) e.target.value = cleaned;
+    errEl.hidden = true;
+    if (cleaned.length === 4) submitCode(cleaned);
+  });
+  form.addEventListener("submit", (e) => {
+    e.preventDefault();
+    submitCode(input.value);
+  });
+}
+
+// --- Bootstrap ------------------------------------------------------------
+
+renderRulesFooter();
+
+if (codeEntryEl) {
+  initCodeEntry();
+} else if (root) {
+  if (INITIAL_REQUEST_ID) {
+    state.request = { id: parseInt(INITIAL_REQUEST_ID, 10) };
+    state.step = "done";
+  }
+  // SW + push only make sense in the main SPA path (requires a valid token).
+  registerServiceWorker().then((reg) => { swRegistration = reg; });
+  render();
+}

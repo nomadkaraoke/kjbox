@@ -135,10 +135,18 @@ one Android device and one iPhone before shipping push changes to prod.
 
 - [ ] Subscribe as a singer, submit a request, KJ rejects with a reason → phone receives a "The KJ needs a word" push.
 
-### Rules page
+### Rules footer
 
-- [ ] Open `/sing/rules` in a fresh browser tab (no token). All 5 rules render styled; "← Back" link works.
-- [ ] On the submit confirmation screen, expand "🎤 House rules" — 5 short lines + "Read full rules →" link point to /sing/rules.
+- [ ] On every singer screen (code entry, landing, identity, search, confirm, done), the "🎤 House rules" footer is visible with 5 short bullets. Expanding "Read the full rules" shows the full numbered copy.
+- [ ] No separate `/sing/rules` page or external link — rules are inline only.
+
+### Event-code entry
+
+- [ ] Visit `https://sing.nomadkaraoke.com` (no `?t=...`). Code-entry form loads with a 4-digit numeric input; mobile keyboard shows digits.
+- [ ] Type the wrong 4 digits → "That code didn't match" error; input clears on next keystroke.
+- [ ] Type the correct 4 digits → auto-submits on the 4th digit and lands on the singer UI.
+- [ ] Hit `POST /sing/validate` with bad codes 11 times from the same IP → 11th returns 429.
+- [ ] Visit `https://sing.nomadkaraoke.com/?t=WRONG` → code-entry form renders with an inline "didn't match" error pre-populated.
 
 ### What's playing now widget
 

@@ -16,7 +16,7 @@ from overlay import OverlayManager
 from playback import PlaybackCoordinator
 from rotation import RotationManager
 from routes import routes_bp
-from sing import install_host_guard, sing_bp
+from sing import install_host_guard, install_public_host_rewriter, sing_bp
 from sing_store import SingStore
 from sleep_mode import SleepManager
 from utils import log_message
@@ -252,6 +252,7 @@ def create_app(config=None):
     flask_app.register_blueprint(routes_bp)
     flask_app.register_blueprint(sing_bp)
     install_host_guard(flask_app)
+    install_public_host_rewriter(flask_app)
     return flask_app
 
 
@@ -402,6 +403,7 @@ def start_app():  # pragma: no cover
     flask_app.register_blueprint(routes_bp)
     flask_app.register_blueprint(sing_bp)
     install_host_guard(flask_app)
+    install_public_host_rewriter(flask_app)
 
     # Log external catalog status
     if flask_app.catalog.is_available():
