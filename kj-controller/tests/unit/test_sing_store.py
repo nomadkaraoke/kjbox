@@ -344,3 +344,120 @@ class TestConstants:
         assert TOKEN_KEY == "request_token"
         assert ENABLED_KEY == "request_token_enabled"
         assert AUTO_APPROVE_KEY == "request_auto_approve"
+
+
+# ---------------------------------------------------------------------------
+# Push subscription CRUD
+# ---------------------------------------------------------------------------
+
+class TestPushSubscriptions:
+    def test_insert_subscription(self, store):
+        sub_id = store.insert_push_subscription(
+            token="tok1", phone="+61400000001", singer_name="Alice",
+            endpoint="https://fcm.googleapis.com/fcm/send/abc",
+            p256dh="p256dh1", auth="auth1", user_agent="Mozilla/5.0",
+        )
+        assert sub_id > 0
+        subs = store.list_active_push_subscriptions("tok1")
+        assert len(subs) == 1
+        assert subs[0]["phone"] == "+61400000001"
+        assert subs[0]["disabled_at"] is None
+        assert subs[0]["singer_name"] == "Alice"
+
+    def test_insert_or_replace_on_same_endpoint(self, store):
+        store.insert_push_subscription(
+            token="tok1", phone="+61400000001", singer_name="Alice",
+            endpoint="https://fcm.googleapis.com/fcm/send/same", p256dh="a", auth="a",
+        )
+        # Re-subscribe same (token, endpoint) with fresh keys
+        store.insert_push_subscription(
+            token="tok1", phone="+61400000001", singer_name="Alice",
+            endpoint="https://fcm.googleapis.com/fcm/send/same", p256dh="b", auth="b",
+        )
+        subs = store.list_active_push_subscriptions("tok1")
+        assert len(subs) == 1
+        assert subs[0]["p256dh"] == "b"
+
+    def test_insert_re_enables_previously_disabled_sub(self, store):
+        sid = store.insert_push_subscription(
+            token="tok1", phone="+1", singer_name="Alice",
+            endpoint="ep", p256dh="a", auth="a",
+        )
+        store.disable_push_subscription(sid)
+        # Re-insert same (token, endpoint) — disabled_at should clear
+        store.insert_push_subscription(
+            token="tok1", phone="+1", singer_name="Alice",
+            endpoint="ep", p256dh="b", auth="b",
+        )
+        subs = store.list_active_push_subscriptions("tok1")
+        assert len(subs) == 1
+
+    def test_disable_subscription_filters_it_out(self, store):
+        sid = store.insert_push_subscription(
+            token="tok1", phone="+61400000001", singer_name="Alice",
+            endpoint="https://fcm.googleapis.com/fcm/send/abc", p256dh="p", auth="a",
+        )
+        store.disable_push_subscription(sid)
+        assert store.list_active_push_subscriptions("tok1") == []
+
+    def test_update_last_sent_state(self, store):
+        sid = store.insert_push_subscription(
+            token="tok1", phone="+61400000001", singer_name="Alice",
+            endpoint="ep", p256dh="p", auth="a",
+        )
+        store.update_push_sent_state(sid, {"entry_id": 5, "ladder_step": "up_next"})
+        subs = store.list_active_push_subscriptions("tok1")
+        assert json.loads(subs[0]["last_sent_state"])["ladder_step"] == "up_next"
+
+    def test_find_subs_by_phone_scopes_to_token(self, store):
+        store.insert_push_subscription(
+            token="tok1", phone="+1", singer_name="A",
+            endpoint="ep1", p256dh="p", auth="a",
+        )
+        store.insert_push_subscription(
+            token="tok2", phone="+1", singer_name="A",
+            endpoint="ep2", p256dh="p", auth="a",
+        )
+        assert len(store.find_subs_by_phone("tok1", "+1")) == 1
+        assert len(store.find_subs_by_phone("tok2", "+1")) == 1
+        assert len(store.find_subs_by_phone("tok1", "+2")) == 0
+
+    def test_find_subs_by_phone_excludes_disabled(self, store):
+        sid = store.insert_push_subscription(
+            token="tok1", phone="+1", singer_name="A",
+            endpoint="ep1", p256dh="p", auth="a",
+        )
+        store.disable_push_subscription(sid)
+        assert store.find_subs_by_phone("tok1", "+1") == []
+
+    def test_token_rotation_cleanup(self, store):
+        # Old sub on tok1
+        store.insert_push_subscription(
+            token="tok1", phone="+1", singer_name="Old",
+            endpoint="old-ep", p256dh="p", auth="a",
+        )
+        # Manually age the row by 8 days
+        store._get_conn().execute(
+            "UPDATE sing_push_subscriptions "
+            "SET created_at = datetime('now', '-8 days', 'localtime')"
+        )
+        store._get_conn().commit()
+        # New sub on tok2 (today)
+        store.insert_push_subscription(
+            token="tok2", phone="+2", singer_name="New",
+            endpoint="new-ep", p256dh="p", auth="a",
+        )
+        store.cleanup_stale_push_subscriptions(current_token="tok2")
+        # old sub on tok1 (>7d) deleted; new sub on tok2 kept
+        assert store.list_active_push_subscriptions("tok1") == []
+        assert len(store.list_active_push_subscriptions("tok2")) == 1
+
+    def test_cleanup_preserves_recent_other_token_subs(self, store):
+        """A sub on a different token that's still recent (<7d) should survive cleanup."""
+        store.insert_push_subscription(
+            token="tok1", phone="+1", singer_name="R",
+            endpoint="ep", p256dh="p", auth="a",
+        )
+        store.cleanup_stale_push_subscriptions(current_token="tok2")
+        # tok1 sub is recent, not deleted
+        assert len(store.list_active_push_subscriptions("tok1")) == 1
