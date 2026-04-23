@@ -205,7 +205,8 @@ class TestStatus:
         resp = client.get(f"/sing/status/{req_id}?t={token}")
         data = resp.get_json()
         assert data["request"]["status"] == "approved"
-        assert data["position"] is not None
+        assert "estimate" in data
+        assert data["estimate"]["position"] is not None
         assert "queue" in data
 
     def test_status_from_previous_event_rejected(self, client, sing_app, token):
@@ -292,3 +293,12 @@ class TestServiceWorker:
         body = resp.get_data(as_text=True)
         assert "self.addEventListener('push'" in body
         assert "self.addEventListener('notificationclick'" in body
+
+    def test_sw_cache_includes_app_version(self, client, sing_app):
+        """SW cache key must be substituted with the app version, not left as a placeholder."""
+        resp = client.get("/sing/sw.js")
+        body = resp.get_data(as_text=True)
+        # Placeholder should be replaced
+        assert "__APP_VERSION__" not in body
+        # Cache constant should appear (with some version)
+        assert "nomad-sing-shell-" in body

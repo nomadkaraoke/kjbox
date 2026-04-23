@@ -79,19 +79,23 @@ def load_config(config_file=None):
     return defaults
 
 
-def save_config_value(key, value):
-    """Persists a runtime setting to config.json so it survives restarts.
+def save_config_value(key, value, config_file=None):
+    """Persists a runtime setting to a config file (default CONFIG_FILE).
 
     Uses atomic write (temp file + fsync + rename) so power loss mid-write
     cannot corrupt the config file.
+
+    An optional ``config_file`` path overrides the module-level ``CONFIG_FILE``
+    constant — useful in tests that target a temporary path.
     """
+    target = config_file or CONFIG_FILE
     try:
         config_data = {}
-        if os.path.exists(CONFIG_FILE):
-            with open(CONFIG_FILE, 'r') as f:
+        if os.path.exists(target):
+            with open(target, 'r') as f:
                 config_data = json.load(f)
         config_data[key] = value
-        dir_name = os.path.dirname(CONFIG_FILE)
+        dir_name = os.path.dirname(target)
         fd, tmp_path = tempfile.mkstemp(dir=dir_name, suffix='.json')
         try:
             with os.fdopen(fd, 'w') as f:
@@ -99,7 +103,7 @@ def save_config_value(key, value):
                 f.write('\n')
                 f.flush()
                 os.fsync(f.fileno())
-            os.replace(tmp_path, CONFIG_FILE)
+            os.replace(tmp_path, target)
         except Exception:
             try:
                 os.unlink(tmp_path)
@@ -108,3 +112,4 @@ def save_config_value(key, value):
             raise
     except Exception as e:
         print(f"Error saving config value {key}: {e}")
+        raise

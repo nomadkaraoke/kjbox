@@ -300,19 +300,22 @@ def manifest():
 
 @sing_bp.route("/sw.js", methods=["GET"])
 def service_worker():
-    """Serve sw.js from /sing/ so its scope covers the sing route.
+    """Serve sw.js with the app version injected as the cache key.
 
-    Deliberately NOT token-gated — the SW file itself must be reachable
-    with or without a token so the browser can fetch updates. The token
-    comes through as a query-string param for building notificationclick
-    URLs, not for auth.
+    Bumping APP_VERSION (via the version file) automatically invalidates
+    the shell cache so singers don't run stale assets after a deploy.
+
+    Not token-gated — browsers fetch updates independent of token state.
     """
-    from flask import send_from_directory, make_response
-    resp = make_response(send_from_directory(
-        sing_bp.static_folder,
-        "sw.js",
-        mimetype="application/javascript",
-    ))
+    import os
+    from flask import make_response
+    sw_path = os.path.join(sing_bp.static_folder, "sw.js")
+    with open(sw_path, "r") as f:
+        body = f.read()
+    version = current_app.config.get("APP_VERSION", "dev")
+    body = body.replace("__APP_VERSION__", version)
+    resp = make_response(body)
+    resp.headers["Content-Type"] = "application/javascript"
     resp.headers["Cache-Control"] = "no-cache"
     return resp
 
@@ -504,15 +507,6 @@ def status(request_id):
         if req.get("linked_entry_id"):
             estimate = compute_estimate(entries, req["linked_entry_id"], current_app.kj_config)
             response["estimate"] = estimate
-            # Legacy fields kept during transition — client will stop reading them in Task 3
-            response["position"] = estimate["position"]
-            ahead = 0
-            for entry in entries:
-                if entry.get("id") == req["linked_entry_id"]:
-                    break
-                if (entry.get("status") or "").lower() not in ("done", "left"):
-                    ahead += int(entry.get("duration") or current_app.kj_config["sing_estimate_default_song_s"])
-            response["estimated_wait_s"] = ahead
             response["queue"] = _public_queue_view(entries)
 
     return jsonify(response)

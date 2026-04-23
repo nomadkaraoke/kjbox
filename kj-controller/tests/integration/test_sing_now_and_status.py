@@ -57,6 +57,4 @@ class TestStatusResponseShape:
             "spread_source", "close_to_front", "now_singing",
         }
         assert "now_playing" in data
-        # Legacy keys kept during transition
-        assert "position" in data
-        assert "estimated_wait_s" in data
+        assert "queue" in data  # still read by the client

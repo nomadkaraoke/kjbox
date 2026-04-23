@@ -2,7 +2,7 @@
 // Handles Web Push + notification click. Scope: /sing/
 // sw-v0.22.0
 
-const CACHE = 'nomad-sing-shell-v1';
+const CACHE = 'nomad-sing-shell-__APP_VERSION__';
 const SHELL = [
   '/sing/static/sing.css',
   '/sing/static/sing.js',

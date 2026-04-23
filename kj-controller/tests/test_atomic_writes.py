@@ -72,7 +72,8 @@ class TestConfigAtomicWrite:
         with patch('config.CONFIG_FILE', str(config_file)):
             with patch('json.dump', side_effect=IOError("disk full")):
                 from config import save_config_value
-                save_config_value('bad', 'data')
+                with pytest.raises(Exception):
+                    save_config_value('bad', 'data')
 
         # Original file should be intact
         data = json.loads(config_file.read_text())
@@ -86,7 +87,8 @@ class TestConfigAtomicWrite:
         with patch('config.CONFIG_FILE', str(config_file)):
             with patch('json.dump', side_effect=IOError("disk full")):
                 from config import save_config_value
-                save_config_value('bad', 'data')
+                with pytest.raises(Exception):
+                    save_config_value('bad', 'data')
 
         # Only the original config.json should remain
         files = list(tmp_path.iterdir())

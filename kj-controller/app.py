@@ -126,14 +126,10 @@ def _bootstrap_vapid_keys(cfg, config_path):
 
     # Persist back to config.json so subsequent restarts re-use the same keypair.
     try:
-        import json
-        with open(config_path, "r") as f:
-            on_disk = json.load(f)
-        on_disk["vapid_public_key"] = cfg["vapid_public_key"]
-        on_disk["vapid_private_key"] = cfg["vapid_private_key"]
-        on_disk["vapid_subject"] = cfg["vapid_subject"]
-        with open(config_path, "w") as f:
-            json.dump(on_disk, f, indent=2)
+        from config import save_config_value
+        save_config_value("vapid_public_key", cfg["vapid_public_key"], config_path)
+        save_config_value("vapid_private_key", cfg["vapid_private_key"], config_path)
+        save_config_value("vapid_subject", cfg["vapid_subject"], config_path)
     except Exception as e:
         import logging
         logging.getLogger(__name__).error(
