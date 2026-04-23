@@ -513,6 +513,7 @@ function renderDone() {
       ? "The KJ has added you to the queue."
       : "The KJ will look at it and add you to the queue."),
     el("div", { class: "status-live" }, "Checking your position…"),
+    el("div", { id: "push-optin", class: "push-optin" }),
     el("details", { class: "upcoming" },
       el("summary", {}, "Show upcoming singers"),
       el("div", { class: "queue-list" }, "Loading…"),
@@ -533,6 +534,7 @@ function renderDone() {
       "Keep this page open — it'll update automatically. Good luck!"),
   );
 
+  setTimeout(maybeShowPushPrompt, 2000);
   pollStatus(card);
   return card;
 }
@@ -620,5 +622,113 @@ async function registerServiceWorker() {
 
 let swRegistration = null;
 registerServiceWorker().then((reg) => { swRegistration = reg; });
+
+// --- Push subscription -----------------------------------------------------
+
+function vapidPublicKey() {
+  const m = document.querySelector('meta[name="vapid-public-key"]');
+  return m ? m.getAttribute("content") : "";
+}
+
+function urlB64ToUint8Array(base64String) {
+  const padding = "=".repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const raw = atob(base64);
+  return Uint8Array.from(raw, (c) => c.charCodeAt(0));
+}
+
+async function ensurePushSubscription() {
+  if (!swRegistration || !("PushManager" in window)) return null;
+  const vapidPub = vapidPublicKey();
+  if (!vapidPub) return null;
+  let sub = await swRegistration.pushManager.getSubscription();
+  if (!sub) {
+    try {
+      sub = await swRegistration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlB64ToUint8Array(vapidPub),
+      });
+    } catch (e) {
+      console.warn("push subscribe failed:", e);
+      return null;
+    }
+  }
+  try {
+    await fetch(`/sing/push/subscribe?t=${encodeURIComponent(TOKEN)}`, {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        phone: state.phone,
+        singer_name: state.name,
+        subscription: sub.toJSON(),
+      }),
+    });
+    return sub;
+  } catch (e) {
+    console.warn("push subscribe POST failed:", e);
+    return null;
+  }
+}
+
+async function requestPushPermission() {
+  if (!("Notification" in window)) return "unsupported";
+  if (Notification.permission === "granted") {
+    await ensurePushSubscription();
+    return "granted";
+  }
+  if (Notification.permission === "denied") return "denied";
+  const result = await Notification.requestPermission();
+  if (result === "granted") await ensurePushSubscription();
+  return result;
+}
+
+// Show/hide/update the push-opt-in block based on current Notification.permission.
+// Called from renderDone() with a 2s delay so the "you're in!" line registers first.
+function maybeShowPushPrompt() {
+  const container = document.getElementById("push-optin");
+  if (!container) return;
+  if (!("Notification" in window) || !swRegistration) {
+    container.remove();
+    return;
+  }
+  const perm = Notification.permission;
+  if (perm === "granted") {
+    ensurePushSubscription();  // idempotent — ensures server row exists for this device
+    container.innerHTML = "";
+    container.textContent = "✓ Notifications on — we'll buzz you when you're up.";
+    container.classList.add("push-on");
+    return;
+  }
+  if (perm === "denied") {
+    container.innerHTML = "";
+    container.textContent = "Notifications blocked — keep this tab open for updates.";
+    container.classList.add("push-blocked");
+    return;
+  }
+  // perm === "default" — show the prompt button
+  container.innerHTML = "";
+  const btn = el("button", {
+    class: "btn primary",
+    onclick: async () => {
+      btn.disabled = true;
+      btn.textContent = "Asking…";
+      const result = await requestPushPermission();
+      if (result === "granted") {
+        container.innerHTML = "";
+        container.textContent = "✓ Notifications on — we'll buzz you when you're up.";
+        container.classList.add("push-on");
+      } else {
+        btn.disabled = false;
+        btn.textContent = "🔔 Notify me when I'm up";
+        if (result === "denied") {
+          container.appendChild(el("p", { class: "hint" },
+            "You blocked notifications — keep this tab open for updates."));
+        }
+      }
+    },
+  }, "🔔 Notify me when I'm up");
+  container.appendChild(btn);
+}
 
 render();

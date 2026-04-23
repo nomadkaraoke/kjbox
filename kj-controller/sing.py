@@ -256,6 +256,7 @@ def landing():
         closed=False,
         token=token,
         request_id=request.args.get("r", ""),
+        vapid_public_key=current_app.kj_config.get("vapid_public_key", ""),
     )
 
 
