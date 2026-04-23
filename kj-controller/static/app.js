@@ -5147,6 +5147,10 @@ const SingRequests = (() => {
         const row = document.createElement('div');
         row.className = 'pending-req-row';
         const song = [req.song_title, req.song_artist].filter(Boolean).join(' — ');
+        const isKjPick = req.source_type === 'kj_pick';
+        const approveButton = isKjPick
+            ? `<span class="pr-approve-hint">pick a version below ↓</span>`
+            : `<button class="btn-approve" data-id="${req.id}">Approve</button>`;
         row.innerHTML = `
           <div class="pr-main">
             <strong>${escapeHtml(req.singer_name)}</strong>
@@ -5155,20 +5159,101 @@ const SingRequests = (() => {
             <span class="pr-badge pr-${escapeHtml(req.source_type)}">${escapeHtml(req.source_type)}</span>
           </div>
           <div class="pr-actions">
-            <button class="btn-approve" data-id="${req.id}">Approve</button>
+            ${approveButton}
             <button class="btn-edit" data-id="${req.id}">Edit</button>
             <button class="btn-reject" data-id="${req.id}">Reject</button>
           </div>
         `;
-        row.querySelector('.btn-approve').addEventListener('click', () => approve(req.id));
+        const approveBtn = row.querySelector('.btn-approve');
+        if (approveBtn) approveBtn.addEventListener('click', () => approve(req.id));
         row.querySelector('.btn-edit').addEventListener('click', () => editInline(row, req));
         row.querySelector('.btn-reject').addEventListener('click', () => reject(req.id));
+        if (isKjPick) {
+            const picker = renderKjPickPicker(req);
+            if (picker) row.appendChild(picker);
+        }
         return row;
     }
 
-    async function approve(id) {
+    function renderKjPickPicker(req) {
+        // Parse the versions snapshot the singer submitted. Sort locals first,
+        // then KN+divebar, then KN community, then KN YouTube-only so the KJ
+        // can pick the best-quality option with a single glance.
+        let versions;
         try {
-            const resp = await fetch(`/rotation/requests/${id}/approve`, { method: 'POST' });
+            const meta = typeof req.source_meta === 'string'
+                ? JSON.parse(req.source_meta || '{}')
+                : (req.source_meta || {});
+            versions = meta.versions || [];
+        } catch (e) {
+            return null;
+        }
+        if (!versions.length) {
+            const empty = document.createElement('div');
+            empty.className = 'pr-picker empty';
+            empty.textContent = 'No versions in snapshot — edit or reject.';
+            return empty;
+        }
+        const ranked = versions
+            .map((v, idx) => ({ v, idx, bucket: versionBucket(v) }))
+            .sort((a, b) => a.bucket - b.bucket);
+        const container = document.createElement('div');
+        container.className = 'pr-picker';
+        for (const { v, idx } of ranked) {
+            container.appendChild(renderVersionCard(req.id, v, idx));
+        }
+        return container;
+    }
+
+    function versionBucket(v) {
+        if (v.source === 'local') return 0;
+        if (v.source === 'kn' && v.kn && v.kn.divebar && v.kn.divebar.file_id) return 1;
+        if (v.source === 'kn' && v.kn && v.kn.is_community) return 2;
+        return 3;  // kn youtube-only
+    }
+
+    function renderVersionCard(reqId, v, idx) {
+        const card = document.createElement('div');
+        card.className = 'pr-version';
+        let icon = '🎵';
+        let primary = '';
+        let secondary = '';
+        if (v.source === 'local') {
+            icon = '📁';
+            primary = 'Local file';
+            secondary = (v.local && (v.local.filename || v.local.path)) || '';
+        } else if (v.source === 'kn' && v.kn) {
+            const hasDivebar = v.kn.divebar && v.kn.divebar.file_id;
+            const isCommunity = !!v.kn.is_community;
+            icon = hasDivebar ? '💿' : (isCommunity ? '🎤' : '📺');
+            const brand = v.kn.brand_code || v.kn.brand || 'Karaoke Nerds';
+            if (hasDivebar) primary = `${brand} — Divebar mirror`;
+            else if (isCommunity) primary = `${brand} — community`;
+            else primary = `${brand} — YouTube`;
+            secondary = v.kn.title || '';
+        }
+        card.innerHTML = `
+          <div class="pr-v-icon">${icon}</div>
+          <div class="pr-v-main">
+            <div class="pr-v-primary">${escapeHtml(primary)}</div>
+            <div class="pr-v-secondary">${escapeHtml(secondary)}</div>
+          </div>
+          <button class="btn-approve-version" data-idx="${idx}">Approve with this →</button>
+        `;
+        card.querySelector('.btn-approve-version').addEventListener('click', () => {
+            approve(reqId, idx);
+        });
+        return card;
+    }
+
+    async function approve(id, versionIndex) {
+        try {
+            const init = { method: 'POST' };
+            if (versionIndex !== undefined) {
+                init.headers = { 'Content-Type': 'application/json' };
+                init.body = JSON.stringify({ version_index: versionIndex });
+            }
+            const resp = await fetch(`/rotation/requests/${id}/approve`, init);
             if (!resp.ok) {
                 const data = await resp.json().catch(() => ({}));
                 alert('Approval failed: ' + (data.error || resp.statusText));
