@@ -265,6 +265,38 @@ def rules():
     return render_template("sing_rules.html")
 
 
+@sing_bp.route("/manifest.json", methods=["GET"])
+@require_token
+def manifest():
+    """Dynamic PWA manifest — start_url carries the current event token."""
+    token = _extract_token()
+    return jsonify({
+        "name": "Nomad Karaoke",
+        "short_name": "Nomad",
+        "description": "Request a song at the karaoke night.",
+        "start_url": f"/sing/?t={token}",
+        "scope": "/sing/",
+        "display": "standalone",
+        "orientation": "portrait",
+        "background_color": "#0a0a0a",
+        "theme_color": "#ff4dcf",
+        "icons": [
+            {
+                "src": url_for("sing.static", filename="icon-192.png"),
+                "sizes": "192x192",
+                "type": "image/png",
+                "purpose": "any maskable",
+            },
+            {
+                "src": url_for("sing.static", filename="icon-512.png"),
+                "sizes": "512x512",
+                "type": "image/png",
+                "purpose": "any",
+            },
+        ],
+    })
+
+
 @sing_bp.route("/search", methods=["GET"])
 @require_token
 def search():

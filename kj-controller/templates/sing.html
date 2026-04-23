@@ -6,6 +6,15 @@
 <title>Nomad Karaoke — Request a song</title>
 <link rel="icon" href="{{ url_for('sing.static', filename='favicon.ico') }}">
 <link rel="stylesheet" href="{{ url_for('sing.static', filename='sing.css') }}">
+{% if not closed %}
+<link rel="manifest" href="{{ url_for('sing.manifest') }}?t={{ token }}">
+<meta name="theme-color" content="#ff4dcf">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Nomad">
+<link rel="apple-touch-icon" href="{{ url_for('sing.static', filename='icon-192.png') }}">
+{% endif %}
 </head>
 <body class="sing">
 <div id="sing-offline" class="offline-banner" hidden>

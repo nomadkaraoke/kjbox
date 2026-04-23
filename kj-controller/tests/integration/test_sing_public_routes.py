@@ -258,3 +258,22 @@ class TestRulesPage:
         assert "Multiple songs welcome" in body
         assert "Need to leave early" in body
         assert "Paid priority" in body
+
+
+class TestPWAManifest:
+    def test_manifest_served_with_current_token(self, client, sing_app, token):
+        """Manifest.json carries the current token in start_url."""
+        sing_app.sing_store.set_enabled(True)
+        resp = client.get(f"/sing/manifest.json?t={token}")
+        assert resp.status_code == 200
+        assert resp.content_type.startswith("application/json")
+        data = resp.get_json()
+        assert data["name"] == "Nomad Karaoke"
+        assert data["display"] == "standalone"
+        assert data["start_url"] == f"/sing/?t={token}"
+        assert any(icon["sizes"] == "192x192" for icon in data["icons"])
+        assert any(icon["sizes"] == "512x512" for icon in data["icons"])
+
+    def test_manifest_rejects_without_token(self, client):
+        resp = client.get("/sing/manifest.json")
+        assert resp.status_code == 403
