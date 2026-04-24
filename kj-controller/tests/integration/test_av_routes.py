@@ -196,10 +196,11 @@ def test_av_reset_sets_vlc_device_to_hdmiout(flask_test_client, flask_app, mocke
 # --- /av/vlc-device ---
 
 def test_av_vlc_device_switches_hw_device(flask_test_client, flask_app, mocker):
-    """POST /av/vlc-device accepts hw:X,Y format and restarts VLC."""
+    """POST /av/vlc-device accepts hw:X,Y format and restarts playback."""
     flask_app.vlc.audio_device = 'hdmiout'
     mocker.patch.object(flask_app.vlc, 'restart_instances')
     mocker.patch('routes.threading.Thread')
+    mocker.patch('routes.save_config_value')
 
     response = flask_test_client.post('/av/vlc-device',
         data=json.dumps({'device': 'hw:0,7'}),
@@ -216,6 +217,7 @@ def test_av_vlc_device_accepts_configured_named_device(flask_test_client, flask_
     flask_app.kj_config['audio_devices'] = {'hdmiout': 'HDMI Output', 'usbmixer': 'USB Mixer'}
     flask_app.vlc.audio_device = 'hdmiout'
     mocker.patch('routes.threading.Thread')
+    mocker.patch('routes.save_config_value')
 
     response = flask_test_client.post('/av/vlc-device',
         data=json.dumps({'device': 'usbmixer'}),
@@ -223,6 +225,22 @@ def test_av_vlc_device_accepts_configured_named_device(flask_test_client, flask_
 
     assert response.status_code == 200
     assert flask_app.vlc.audio_device == 'usbmixer'
+
+
+def test_av_vlc_device_persists_to_config(flask_test_client, flask_app, mocker):
+    """POST /av/vlc-device writes default_audio_device so the choice survives
+    a kj-controller restart (previously "temporary — reset on restart")."""
+    flask_app.vlc.audio_device = 'hdmiout'
+    flask_app.kj_config['default_audio_device'] = 'hdmiout'
+    mock_save = mocker.patch('routes.save_config_value')
+    mocker.patch('routes.threading.Thread')
+
+    flask_test_client.post('/av/vlc-device',
+        data=json.dumps({'device': 'hw:0,0'}),
+        content_type='application/json')
+
+    mock_save.assert_any_call('default_audio_device', 'hw:0,0')
+    assert flask_app.kj_config['default_audio_device'] == 'hw:0,0'
 
 
 def test_av_vlc_device_rejects_unknown_named_device(flask_test_client):

@@ -38,6 +38,7 @@ def load_config(config_file=None):
         "filler_vlc_password": "filler",
         "audio_devices": {
             "hdmiout": "HDMI Output",
+            "hw:0,0": "Analog / 3.5mm jack",
             "usbmixer": "USB Mixer",
         },
         "default_audio_device": "hdmiout",

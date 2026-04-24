@@ -1230,7 +1230,7 @@ async function avSwitchHdmiPcm(device) {
 
 async function avSetVlcDevice(device) {
     if (!device) return;
-    log(`Switching VLC audio device to ${device}...`);
+    log(`Setting playback audio device to ${device}...`);
     const data = await apiCall('/av/vlc-device', { device });
     if (data && data.success) {
         log(data.message, 'success');

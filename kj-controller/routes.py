@@ -1810,10 +1810,11 @@ def av_reset():
 
 @routes_bp.route('/av/vlc-device', methods=['POST'])
 def av_set_vlc_device():
-    """Temporarily sets VLC's audio output device without persisting to config.
+    """Sets the ALSA audio output device for both karaoke player and filler.
 
     Accepts any valid ALSA device string (hw:X,Y format) or named device
-    from the audio_devices config. Restarts VLC with the new device.
+    from the audio_devices config. Persists to config.default_audio_device
+    and restarts both playback instances so the new device takes effect.
     """
     vlc = current_app.vlc
     cfg = current_app.kj_config
@@ -1828,13 +1829,15 @@ def av_set_vlc_device():
         if device not in available:
             return jsonify({'error': f"Unknown device '{device}'. Use hw:X,Y format or a configured device name."}), 400
 
-    if device == vlc.audio_device:
+    if device == vlc.audio_device and cfg.get('default_audio_device') == device:
         return jsonify({'success': True, 'message': 'Already using that device.'})
 
-    log_message(f"AV: switching VLC audio to '{device}' (temporary)...", cfg)
+    log_message(f"AV: setting playback audio device to '{device}' (persisted)...", cfg)
+    save_config_value('default_audio_device', device)
+    cfg['default_audio_device'] = device
     vlc.audio_device = device
     threading.Thread(target=vlc.restart_instances).start()
-    return jsonify({'success': True, 'message': f'Switching VLC to {device}. Restarting...'})
+    return jsonify({'success': True, 'message': f'Switching playback to {device}. Restarting...'})
 
 
 # --- Audio Monitor Routes ---

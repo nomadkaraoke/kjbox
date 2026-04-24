@@ -183,6 +183,40 @@ def test_audio_device_setter_updates_both(mock_config):
     assert c.filler.audio_device == 'usbmixer'
 
 
+def test_switch_renderer_preserves_audio_device(mock_config, mocker):
+    """Non-default audio_device survives a renderer swap (rebuild doesn't
+    clobber it via config defaults)."""
+    c = PlaybackCoordinator(mock_config, enabled=False)
+    c.audio_device = 'hw:0,0'
+    mocker.patch('playback.save_config_value')
+    mocker.patch.object(c, '_start_monitor')
+
+    c.switch_renderer(RENDER_MODE_VLC)
+    assert c.player.audio_device == 'hw:0,0'
+
+
+def test_restart_instances_preserves_audio_device_override(mock_config, mocker):
+    """Runtime audio_device override must persist across restart_instances
+    — the player is rebuilt, which would otherwise revert to config default."""
+    c = PlaybackCoordinator(mock_config, enabled=True)
+    # Simulate an override set via coordinator (e.g. /av/vlc-device)
+    c.audio_device = 'hw:0,0'
+    assert c.player.audio_device == 'hw:0,0'
+
+    mocker.patch.object(c.player, 'shutdown')
+    mocker.patch.object(c.filler, 'shutdown')
+    mocker.patch.object(c.filler, 'launch')
+    mocker.patch.object(c.filler, 'fade_in')
+    # Prevent the rebuilt player from actually launching mpv/vlc in the test
+    mocker.patch.object(MpvKaraokePlayer, 'launch')
+    mocker.patch.object(VlcKaraokePlayer, 'launch')
+    mocker.patch.object(c, '_start_monitor')
+    mocker.patch('playback.time.sleep')
+
+    c.restart_instances()
+    assert c.player.audio_device == 'hw:0,0'
+
+
 # --- Delegation: method passthrough ---
 
 def test_set_pitch_goes_to_player(mock_config, mocker):

@@ -102,13 +102,17 @@ class PlaybackCoordinator:
             self.config,
         )
         old_player = self.player
-        # Capture on_karaoke_end so the new player keeps the same callback
+        # Capture state that would otherwise be lost in the rebuilt player
+        # (new instance re-reads defaults from config — filler survives because
+        # it is shutdown-then-relaunched on the same instance).
         on_end = old_player.on_karaoke_end
+        old_audio_device = old_player.audio_device
         old_player.shutdown()
 
         self.render_mode = mode
         self.player = self._build_player(mode)
         self.player.on_karaoke_end = on_end
+        self.player.audio_device = old_audio_device
         self.player.launch()
 
         # Start a fresh monitor thread for the new player
@@ -179,15 +183,23 @@ class PlaybackCoordinator:
             self.config,
         )
 
+        # Preserve state that would be lost in the rebuilt player. Without this,
+        # a runtime audio-device override (e.g. from /av/vlc-device) would revert
+        # to config.default_audio_device because the new MpvKaraokePlayer /
+        # VlcKaraokePlayer __init__ re-reads it from config. The filler survives
+        # naturally — it is shutdown-then-relaunched on the same instance.
+        on_end = self.player.on_karaoke_end
+        old_audio_device = self.player.audio_device
+
         # Shut down player (clears its monitor thread)
         self.player.shutdown()
         self.filler.shutdown()
         time.sleep(1)
 
         # Re-build player (the shutdown'd one has its stop event set)
-        on_end = self.player.on_karaoke_end
         self.player = self._build_player(self.render_mode)
         self.player.on_karaoke_end = on_end
+        self.player.audio_device = old_audio_device
 
         self.player.launch()
         self.filler.launch(media_file=self.filler.current_media_path(), loop=True)

@@ -664,8 +664,8 @@
                         <select id="av-hdmi-pcm-select" onchange="avSwitchHdmiPcm(this.value)"></select>
                     </div>
                     <div class="av-control-row">
-                        <label for="av-vlc-device-select">VLC Audio Output Device</label>
-                        <p class="av-help">Overrides which ALSA device VLC uses directly. <strong>hdmiout</strong> (ALSA alias) is correct for normal operation. Temporary &mdash; reset on restart.</p>
+                        <label for="av-vlc-device-select">Audio Output Device</label>
+                        <p class="av-help">ALSA device used by the karaoke player (mpv/VLC) and filler music. <strong>hdmiout</strong> (ALSA alias) is correct for normal HDMI operation; pick <strong>hw:0,0</strong> to route everything through the 3.5mm jack. Persisted across restarts.</p>
                         <select id="av-vlc-device-select" onchange="avSetVlcDevice(this.value)"></select>
                     </div>
                 </div>
