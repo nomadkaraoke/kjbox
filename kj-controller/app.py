@@ -163,6 +163,26 @@ def _get_secret_key(cfg):
         return os.urandom(32)
 
 
+def _make_on_karaoke_end(overlay_mgr, coordinator):
+    """Callback fired by the active renderer when a karaoke track ends naturally.
+
+    Mirrors the /control stop action: hide the overlay and fade the filler back
+    in, so the KJ doesn't have to press stop when a song finishes on its own.
+    The player calls this AFTER ensure_released(), so ALSA is free when filler
+    reclaims it (docs/AUDIO.md § Filler Audio Handoff).
+    """
+    def _on_end():
+        try:
+            overlay_mgr.set_karaoke_playing(False)
+        except Exception:
+            pass
+        try:
+            coordinator.fade_in_filler()
+        except Exception:
+            pass
+    return _on_end
+
+
 def create_app(config=None):
     """Create and configure the Flask application."""
     flask_app = Flask(__name__)
@@ -289,7 +309,7 @@ def start_app():  # pragma: no cover
     else:
         log_message("WARNING: No filler music track configured or found.", cfg)
 
-    vlc.on_karaoke_end = lambda: overlay_mgr.set_karaoke_playing(False)
+    vlc.on_karaoke_end = _make_on_karaoke_end(overlay_mgr, vlc)
 
     # Platform-specific setup
     if is_pi():
