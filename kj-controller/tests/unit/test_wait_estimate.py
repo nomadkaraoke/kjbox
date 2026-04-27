@@ -2,7 +2,7 @@
 
 import pytest
 
-from wait_estimate import compute_estimate
+from wait_estimate import compute_all_estimates, compute_estimate
 
 
 DEFAULT_CFG = {
@@ -112,3 +112,104 @@ class TestComputeEstimate:
         assert compute_estimate(entries, 2, DEFAULT_CFG)["close_to_front"] is True
         # position 3 → not close
         assert compute_estimate(entries, 3, DEFAULT_CFG)["close_to_front"] is False
+
+
+class TestComputeAllEstimates:
+    def test_empty_entries(self):
+        estimates, spread_source = compute_all_estimates([], DEFAULT_CFG)
+        assert estimates == []
+        assert spread_source == "fallback"
+
+    def test_done_and_left_excluded(self):
+        entries = [
+            _entry(1, status="Done", duration=200),
+            _entry(2, status="Left"),
+            _entry(3),
+            _entry(4),
+        ]
+        estimates, _ = compute_all_estimates(entries, DEFAULT_CFG)
+        assert [e["position"] for e in estimates] == [1, 2]
+
+    def test_cumulative_sum_with_known_durations(self):
+        entries = [
+            _entry(1, duration=180),
+            _entry(2, duration=240),
+            _entry(3, duration=200),
+        ]
+        estimates, _ = compute_all_estimates(entries, DEFAULT_CFG)
+        # transition_s=30
+        assert estimates[0]["expected_s"] == 0
+        assert estimates[1]["expected_s"] == 180 + 30
+        assert estimates[2]["expected_s"] == 180 + 240 + 30 + 30
+
+    def test_parity_with_compute_estimate(self):
+        # For every active entry, compute_all_estimates[i] must produce the
+        # same expected_s / range_low_s / range_high_s as
+        # compute_estimate(entries, target_id, cfg).
+        entries = [
+            _entry(10, status="done", duration=180),
+            _entry(11, status="done", duration=240),
+            _entry(12, status="done", duration=300),
+            _entry(1, duration=210),
+            _entry(2, duration=180),
+            _entry(3),
+            _entry(4, duration=300),
+        ]
+        all_ests, _ = compute_all_estimates(entries, DEFAULT_CFG)
+        active_ids = [1, 2, 3, 4]
+        for i, target_id in enumerate(active_ids):
+            single = compute_estimate(entries, target_id, DEFAULT_CFG)
+            assert all_ests[i]["expected_s"] == single["expected_s"]
+            assert all_ests[i]["range_low_s"] == single["range_low_s"]
+            assert all_ests[i]["range_high_s"] == single["range_high_s"]
+            assert all_ests[i]["position"] == single["position"]
+
+    def test_spread_source_tonight_with_three_done(self):
+        entries = [
+            _entry(10, status="done", duration=180),
+            _entry(11, status="done", duration=240),
+            _entry(12, status="done", duration=300),
+            _entry(1),
+        ]
+        _, spread_source = compute_all_estimates(entries, DEFAULT_CFG)
+        assert spread_source == "tonight"
+
+    def test_spread_source_fallback_with_two_done(self):
+        entries = [
+            _entry(10, status="done", duration=180),
+            _entry(11, status="done", duration=240),
+            _entry(1),
+        ]
+        _, spread_source = compute_all_estimates(entries, DEFAULT_CFG)
+        assert spread_source == "fallback"
+
+    def test_now_singing_flag_case_insensitive(self):
+        entries = [
+            _entry(1, status="now singing"),
+            _entry(2, status="Now Singing"),
+            _entry(3),
+        ]
+        estimates, _ = compute_all_estimates(entries, DEFAULT_CFG)
+        assert estimates[0]["now_singing"] is True
+        assert estimates[1]["now_singing"] is True
+        assert estimates[2]["now_singing"] is False
+
+    def test_close_to_front_flags(self):
+        entries = [_entry(1), _entry(2), _entry(3), _entry(4)]
+        estimates, _ = compute_all_estimates(entries, DEFAULT_CFG)
+        assert estimates[0]["close_to_front"] is True
+        assert estimates[1]["close_to_front"] is True
+        assert estimates[2]["close_to_front"] is False
+        assert estimates[3]["close_to_front"] is False
+
+    def test_range_low_clamped_to_zero(self):
+        # Position 1 has expected_s = 0; range_low_s must be max(0, ...).
+        entries = [_entry(1)]
+        estimates, _ = compute_all_estimates(entries, DEFAULT_CFG)
+        assert estimates[0]["range_low_s"] == 0
+
+    def test_negative_or_zero_durations_use_baseline(self):
+        # Entry 1 has duration=0 → ahead total uses baseline (240) for entry 2.
+        entries = [_entry(1, duration=0), _entry(2)]
+        estimates, _ = compute_all_estimates(entries, DEFAULT_CFG)
+        assert estimates[1]["expected_s"] == 240 + 30
