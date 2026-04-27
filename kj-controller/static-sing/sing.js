@@ -37,6 +37,7 @@ const state = {
   makeTitle: "",
   request: null,    // after submit
   status: null,     // /sing/status response
+  rotationCache: null,   // {fetchedAt: number, payload: object} — survives back-from-search
   // Phase C — updated on every /sing/search response so a KJ flipping the
   // toggle mid-session takes effect on the next keystroke-triggered search.
   makeRequestsEnabled: INITIAL_MAKE_REQUESTS_ENABLED,
@@ -216,9 +217,145 @@ function renderNowError(node) {
   // Silent failure — don't clutter the card while the status poll still has a chance.
 }
 
+// --- Full rotation expander -----------------------------------------------
+
+const ROTATION_CACHE_TTL_MS = 30000;
+
+async function fetchRotation() {
+  const t = encodeURIComponent(TOKEN);
+  const resp = await fetch(`${BASE}/rotation?t=${t}`, { credentials: "same-origin" });
+  if (!resp.ok) {
+    const err = new Error("rotation fetch failed");
+    err.status = resp.status;
+    throw err;
+  }
+  return resp.json();
+}
+
+function _waitText(entry) {
+  // Apply rules in order — first match wins.
+  if (entry.now_singing) return "on now";
+  if (entry.position === 1) return "up next";
+  // Position 2 is "up next" only when there is actually someone on stage at #1.
+  // Detected via the cached payload: the caller passes a hasNowSinging flag.
+  if (entry._hasNowSinging && entry.position === 2) return "up next";
+  const low = Math.round(entry.range_low_s / 60);
+  const high = Math.round(entry.range_high_s / 60);
+  return `~${low}–${high} min`;
+}
+
+function _formatUpdatedAt(fetchedAt) {
+  const ageS = Math.round((Date.now() - fetchedAt) / 1000);
+  if (ageS < 10) return "updated just now";
+  if (ageS < 60) return `updated ${ageS}s ago`;
+  const ageM = Math.round(ageS / 60);
+  return ageM === 1 ? "updated 1 min ago" : `updated ${ageM} min ago`;
+}
+
+function _renderRotationBody(payload) {
+  const body = el("div", { class: "rotation-body" });
+  body.appendChild(el("p", { class: "rotation-caveat" },
+    el("em", {},
+      "Order can change — new singers get bumped up, paid spots jump ahead, "
+      + "and times are rough. Treat this as a guide."),
+  ));
+
+  const entries = payload?.entries || [];
+  if (entries.length === 0) {
+    body.appendChild(el("p", { class: "rotation-empty" },
+      "Rotation hasn't started yet — you could be the first!"));
+    return body;
+  }
+
+  const hasNowSinging = entries.some((e) => e.now_singing);
+  const list = el("ol", { class: "rotation-list" });
+  for (const entry of entries) {
+    const augmented = { ...entry, _hasNowSinging: hasNowSinging };
+    list.appendChild(el("li", { class: "rotation-row" },
+      el("span", { class: "rotation-pos" }, `#${entry.position}`),
+      el("span", { class: "rotation-name" },
+        entry.now_singing ? `🎤 ${entry.first_name || "—"}` : (entry.first_name || "—")),
+      el("span", { class: "rotation-song" }, entry.song_artist || ""),
+      el("span", { class: "rotation-wait" }, _waitText(augmented)),
+    ));
+  }
+  body.appendChild(list);
+  body.appendChild(el("p", { class: "rotation-updated" },
+    _formatUpdatedAt(payload._fetchedAt)));
+  return body;
+}
+
+function _renderRotationLoading() {
+  return el("div", { class: "rotation-body" },
+    el("p", { class: "rotation-loading" }, "Loading rotation…"));
+}
+
+function _renderRotationError(status) {
+  const body = el("div", { class: "rotation-body" });
+  if (status === 403) {
+    body.appendChild(el("p", { class: "rotation-error" },
+      "Requests just closed — ask the KJ."));
+  } else {
+    body.appendChild(el("p", { class: "rotation-error" },
+      "Couldn't load rotation — close and tap again to retry."));
+  }
+  return body;
+}
+
+function _updateRotationSummary(detailsEl, count) {
+  const summary = detailsEl.querySelector("summary");
+  if (!summary) return;
+  summary.textContent = count > 0
+    ? `See full rotation (${count} ${count === 1 ? "singer" : "singers"})`
+    : "See full rotation";
+}
+
+function renderRotationExpander() {
+  const details = el("details", { class: "rotation-expander" },
+    el("summary", {}, "See full rotation"),
+    el("div", { class: "rotation-body" }),  // placeholder; populated on toggle
+  );
+
+  // If we already have a fresh cache, populate the body up-front so that
+  // returning to the landing screen after Back-from-Search renders instantly
+  // when the user re-expands.
+  if (state.rotationCache && Date.now() - state.rotationCache.fetchedAt < ROTATION_CACHE_TTL_MS) {
+    const payload = { ...state.rotationCache.payload, _fetchedAt: state.rotationCache.fetchedAt };
+    details.querySelector(".rotation-body").replaceWith(_renderRotationBody(payload));
+    _updateRotationSummary(details, payload.entries?.length || 0);
+  }
+
+  details.addEventListener("toggle", async () => {
+    if (!details.open) return;
+    // Serve from cache if fresh.
+    if (state.rotationCache && Date.now() - state.rotationCache.fetchedAt < ROTATION_CACHE_TTL_MS) {
+      const payload = { ...state.rotationCache.payload, _fetchedAt: state.rotationCache.fetchedAt };
+      details.querySelector(".rotation-body").replaceWith(_renderRotationBody(payload));
+      _updateRotationSummary(details, payload.entries?.length || 0);
+      return;
+    }
+    // Otherwise refetch.
+    details.querySelector(".rotation-body").replaceWith(_renderRotationLoading());
+    try {
+      const payload = await fetchRotation();
+      const fetchedAt = Date.now();
+      state.rotationCache = { fetchedAt, payload };
+      details.querySelector(".rotation-body").replaceWith(
+        _renderRotationBody({ ...payload, _fetchedAt: fetchedAt }),
+      );
+      _updateRotationSummary(details, payload.entries?.length || 0);
+    } catch (e) {
+      details.querySelector(".rotation-body").replaceWith(_renderRotationError(e.status));
+    }
+  });
+
+  return details;
+}
+
 function renderLanding() {
   return el("main", { class: "sing-card" },
     renderNowPlaying(),   // Task 5 populates this; stub is harmless
+    renderRotationExpander(),
     el("h1", {}, "Request a song"),
     el("p", {},
       "Tap below to add your song to the rotation. The KJ will call you up when you're on."),
