@@ -26,7 +26,7 @@ A new singer scanning the QR code wants to answer one question fast: *"How long 
 
 **New files:**
 
-- `kj-controller/tests/test_sing_rotation_route.py` — integration tests for the new route.
+- `kj-controller/tests/integration/test_sing_rotation_route.py` — integration tests for the new route.
 
 **Modified files:**
 
@@ -34,7 +34,7 @@ A new singer scanning the QR code wants to answer one question fast: *"How long 
 - `kj-controller/sing.py` — add `GET /sing/rotation` route; reuse `_build_now_playing` for the active list.
 - `kj-controller/static-sing/sing.js` — add inline `<details>` expander to `renderLanding()`; lazy fetch `/sing/rotation` on expand; render rows + caveat copy.
 - `kj-controller/static-sing/sing.css` — styles for the expander rows (position, name, song, estimate columns; mobile-friendly truncation; max-height + scroll on long rotations).
-- `kj-controller/tests/test_wait_estimate.py` — unit tests for `compute_all_estimates`.
+- `kj-controller/tests/unit/test_wait_estimate.py` — unit tests for `compute_all_estimates`.
 
 **No changes:**
 
@@ -228,7 +228,7 @@ No live polling. Rationale captured in the non-goals.
 
 ## Section 4 — Testing
 
-### 4.1 Unit — `tests/test_wait_estimate.py`
+### 4.1 Unit — `tests/unit/test_wait_estimate.py`
 
 Add tests for `compute_all_estimates`:
 
@@ -239,7 +239,7 @@ Add tests for `compute_all_estimates`:
 5. **Spread source: fallback** — given <3 done entries, `spread_source === "fallback"` and spread is `max(min_spread_s, 180)`.
 6. **Now-singing flag** — entry with status `"Now Singing"` (any case) gets `now_singing: true`; others `false`.
 
-### 4.2 Integration — `tests/test_sing_rotation_route.py`
+### 4.2 Integration — `tests/integration/test_sing_rotation_route.py`
 
 1. **200 with token** — given a stocked `app.rotation`, returns the expected JSON shape; entries list length matches active rotation; first row has `position: 1`.
 2. **403 without token** — returns 403 JSON `{error: "not_open"}`.

@@ -224,12 +224,14 @@ class TestSingRotationRoute:
     def test_stale_token_rejected(self, client, sing_app, token):
         _enable_requests(sing_app)
         # Rotate the event token — the previously-handed-out one is now stale.
-        sing_app.sing_store.rotate_token()
+        sing_app.sing_store.regenerate_token()
         resp = client.get(f"/sing/rotation?t={token}")
         assert resp.status_code == 403
 
     def test_disabled_when_sing_not_enabled(self, client, sing_app, token):
-        # Default state: sing_store.is_enabled() is False until set_enabled(True).
+        # Explicitly disable; SingStore defaults to enabled when the meta key
+        # is unset, so we must force it off to exercise this path.
+        sing_app.sing_store.set_enabled(False)
         resp = client.get(f"/sing/rotation?t={token}")
         assert resp.status_code == 403
 
