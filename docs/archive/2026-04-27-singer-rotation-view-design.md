@@ -200,9 +200,11 @@ Inline `<details>` matching the established pattern:
 Wait-text rules (apply in order, first match wins):
 
 - `entry.now_singing === true` → `"on now"` (and prepend 🎤 to the first-name cell)
-- `position === 1` and not now-singing → `"up next"`
-- `position === 2` → `"up next"` (matches the existing landing-status copy "About 1 song to go")
-- `position >= 3` → `~${Math.round(range_low_s/60)}–${Math.round(range_high_s/60)} min` (mirrors `pollStatus()`)
+- `position === 1` and not now-singing → `"up next"` (no-one currently on stage; this entry is first in line)
+- `position === 2` and the rotation contains a now-singing entry at position 1 → `"up next"` (their wait is roughly the rest of the current song)
+- otherwise → `~${Math.round(range_low_s/60)}–${Math.round(range_high_s/60)} min` (mirrors `pollStatus()`)
+
+Note: the "position 2 = up next" branch only fires when there's actually a singer on stage. If position 1 is queued (no one on stage), position 2 falls through to the time-range branch — its expected wait is approximately one song length, which the time range already captures.
 
 Long-name / long-song titles truncate with CSS `text-overflow: ellipsis` on the name and song columns. The estimate column is fixed-width-right.
 
@@ -210,7 +212,7 @@ Long-name / long-song titles truncate with CSS `text-overflow: ellipsis` on the 
 
 - The `<details>` element is rendered collapsed on first paint.
 - A `toggle` event listener on the element fetches `/sing/rotation` only when expanding. On collapse, no work.
-- Data is cached on the closure (or the `state.rotationCache = {fetchedAt, payload}` field). On second expand, if `Date.now() - fetchedAt < 30000`, render the cached payload immediately. Otherwise refetch.
+- Data is cached on `state.rotationCache = {fetchedAt, payload}` (state-level so the cache survives a back-from-search re-render of the landing view). On second expand, if `Date.now() - fetchedAt < 30000`, render the cached payload immediately. Otherwise refetch.
 - The `<summary>` text updates from "See full rotation" to "See full rotation (12 singers)" once the payload arrives.
 - "updated just now" / "updated 2 min ago" timestamp under the list, computed at render time from `fetchedAt`.
 
@@ -219,7 +221,7 @@ No live polling. Rationale captured in the non-goals.
 ### 3.5 Empty / error / closed states
 
 - **Empty rotation** (`entries.length === 0`) → body shows *"Rotation hasn't started yet — you could be the first!"* (verbatim reuse of the now-playing empty-state line).
-- **Fetch failure / network error** → body shows *"Couldn't load rotation — close and tap again to retry."*
+- **Fetch failure / network error** → body shows *"Couldn't load rotation — close and tap again to retry."* (collapsing the `<details>` clears the cache failure flag; re-expanding fires the `toggle` listener and refetches.)
 - **403 (token revoked)** → body shows *"Requests just closed — ask the KJ."* The page itself will reload to the closed/code-entry state on the next `/sing/now` poll cycle, so this is a brief transitional state.
 
 ---
