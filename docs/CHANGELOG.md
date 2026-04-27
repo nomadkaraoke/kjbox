@@ -2,6 +2,30 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-04-27 - Feature: Singer full-rotation view on landing page
+
+Singers visiting `sing.nomadkaraoke.com/?t=<token>` now see a "See full rotation (N singers)" expander between the now-playing widget and the "Request a song" CTA. On expand, the body shows every active rotation entry with position, first name, song/artist, and a rough wait estimate (`on now` / `up next` / `~low–high min`), preceded by a caveat that order can change (new singers get bumped, paid spots jump, times are rough).
+
+Decision-useful for the QR-scanning visitor's first question — *"how long is the line?"* — without forcing them to submit a request to find out. See [design](archive/2026-04-27-singer-rotation-view-design.md) and [plan](archive/2026-04-27-singer-rotation-view-plan.md).
+
+**Backend changes:**
+- `wait_estimate.compute_all_estimates(entries, cfg)` — new helper that computes cumulative estimates for every active entry in one pass, asserting parity with `compute_estimate` for any single target.
+- `GET /sing/rotation` — new token-gated route returning `{entries: [...], spread_source}`. Each entry has `position`, `first_name`, `song_artist`, `status`, `now_singing`, `expected_s`, `range_low_s`, `range_high_s`. Done/left entries filtered out.
+
+**UI changes:**
+- `static-sing/sing.js` — `renderRotationExpander()` rendered inside `renderLanding()`. Lazy-fetches on first expand, caches for 30s on `state.rotationCache` so back-from-search renders instantly. No live polling — singers wanting live updates submit and get the done-screen status flow.
+- `static-sing/sing.css` — `.rotation-expander` + grid-row layout with mobile breakpoint at 380px.
+
+**Test changes:**
+- `tests/unit/test_wait_estimate.py` — 10 new cases for `compute_all_estimates` including a parity test against `compute_estimate`.
+- `tests/integration/test_sing_rotation_route.py` — new file, 7 cases for the new endpoint.
+- `tests/integration/test_host_guard.py::test_rotation_blocked` — updated to expect 403 (token-gated singer endpoint) instead of 404 on the public host. Same security guarantee — admin data does not leak.
+
+**Modified files:**
+- `kj-controller/wait_estimate.py`, `kj-controller/sing.py`
+- `kj-controller/static-sing/sing.js`, `kj-controller/static-sing/sing.css`
+- `kj-controller/pyproject.toml` — `0.27.0` → `0.28.0`.
+
 ## 2026-04-23 - Feature: Song selection UX — empty-state triage for punks (Phase C)
 
 Final phase of the song-selection-ux overhaul (see [master plan](archive/2026-04-23-song-selection-ux-master-plan.md), [phase C design](archive/2026-04-23-song-selection-phase-c-design.md)).
