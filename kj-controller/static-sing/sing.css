@@ -495,3 +495,107 @@ input:focus {
 .push-optin.ios-install strong { display: block; margin-bottom: 0.4rem; }
 .push-optin.ios-install p { font-size: 0.9rem; color: var(--nk-text-dim); margin-bottom: 0.6rem; }
 .push-optin.ios-install .btn { width: 100%; }
+
+/* --- Full rotation expander (landing page) -------------------------------- */
+.rotation-expander {
+  margin: 0 0 1rem 0;
+  padding: 0;
+  background: var(--nk-card-2);
+  border: 1px solid var(--nk-border);
+  border-radius: 10px;
+}
+.rotation-expander > summary {
+  padding: 0.75rem 1rem;
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--nk-text);
+  list-style: none;
+}
+.rotation-expander > summary::marker { content: ""; }
+.rotation-expander > summary::-webkit-details-marker { display: none; }
+.rotation-expander > summary::before {
+  content: "▸ ";
+  display: inline-block;
+  margin-right: 0.25rem;
+  transition: transform 0.15s ease;
+}
+.rotation-expander[open] > summary::before {
+  content: "▾ ";
+}
+
+.rotation-body {
+  padding: 0 1rem 0.75rem;
+}
+.rotation-caveat {
+  margin: 0 0 0.75rem 0;
+  font-size: 0.85rem;
+  color: var(--nk-text-dim);
+}
+.rotation-loading,
+.rotation-empty,
+.rotation-error {
+  margin: 0.5rem 0;
+  font-size: 0.9rem;
+  color: var(--nk-text-dim);
+  font-style: italic;
+}
+.rotation-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 360px;
+  overflow-y: auto;
+}
+.rotation-row {
+  display: grid;
+  grid-template-columns: 2.4rem 1fr 2fr auto;
+  gap: 0.5rem;
+  align-items: baseline;
+  padding: 0.4rem 0;
+  border-bottom: 1px solid var(--nk-border);
+  font-size: 0.9rem;
+}
+.rotation-row:last-child { border-bottom: 0; }
+.rotation-pos {
+  color: var(--nk-text-dim);
+  font-variant-numeric: tabular-nums;
+}
+.rotation-name {
+  font-weight: 600;
+  color: var(--nk-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rotation-song {
+  color: var(--nk-text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rotation-wait {
+  color: var(--nk-accent);
+  font-size: 0.85rem;
+  white-space: nowrap;
+  text-align: right;
+}
+.rotation-updated {
+  margin: 0.5rem 0 0;
+  font-size: 0.75rem;
+  color: var(--nk-text-dim);
+  text-align: right;
+}
+
+@media (max-width: 380px) {
+  .rotation-row {
+    grid-template-columns: 1.8rem 1fr auto;
+    grid-template-areas:
+      "pos name wait"
+      "pos song wait";
+    row-gap: 0.1rem;
+  }
+  .rotation-pos  { grid-area: pos; align-self: center; }
+  .rotation-name { grid-area: name; }
+  .rotation-song { grid-area: song; font-size: 0.8rem; }
+  .rotation-wait { grid-area: wait; align-self: center; }
+}

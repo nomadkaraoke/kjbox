@@ -40,8 +40,16 @@ class TestPublicHostBlocks:
         assert resp.status_code == 404
 
     def test_rotation_blocked(self, guarded_client):
+        # The admin /rotation endpoint must NOT be reachable from the public
+        # host. Since the WSGI rewriter prefixes /sing on the public host,
+        # /rotation now resolves to the token-gated singer rotation endpoint
+        # (/sing/rotation) — without a token it returns 403, never the admin
+        # rotation manager's data.
         resp = guarded_client.get("/rotation", headers={"Host": PUBLIC_HOST})
-        assert resp.status_code == 404
+        assert resp.status_code == 403
+        # Defence in depth: confirm the response shape is the singer error
+        # JSON, not the admin rotation manager body.
+        assert resp.get_json() == {"error": "not_open"}
 
     def test_admin_requests_blocked(self, guarded_client):
         resp = guarded_client.get(

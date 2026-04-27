@@ -23,7 +23,7 @@ from flask import (
     session,
     url_for,
 )
-from wait_estimate import compute_estimate
+from wait_estimate import compute_all_estimates, compute_estimate
 
 
 sing_bp = Blueprint(
@@ -600,6 +600,38 @@ def now_playing():
         return jsonify({"now_singing": None, "up_next": None, "queued_count": 0})
     _entries, _active, now_playing_dict = _build_now_playing(rotation)
     return jsonify(now_playing_dict)
+
+
+@sing_bp.route("/rotation", methods=["GET"])
+@require_token
+def rotation():
+    """Full active rotation with cumulative wait estimates per entry.
+
+    Singer-facing landing page expander. Token-gated like /sing/now.
+    Returns first-name + song + status + (expected_s, range_low_s,
+    range_high_s) for every active (non-done/non-left) entry.
+    """
+    rotation_mgr = getattr(current_app, "rotation", None)
+    if rotation_mgr is None:
+        return jsonify({"entries": [], "spread_source": "fallback"})
+
+    entries, active, _np = _build_now_playing(rotation_mgr)
+    estimates, spread_source = compute_all_estimates(entries, current_app.kj_config)
+
+    out = []
+    for entry, est in zip(active, estimates):
+        singer = entry.get("singer") or ""
+        out.append({
+            "position": est["position"],
+            "first_name": singer.split()[0] if singer else "",
+            "song_artist": entry.get("song_artist") or "",
+            "status": entry.get("status") or "",
+            "now_singing": est["now_singing"],
+            "expected_s": est["expected_s"],
+            "range_low_s": est["range_low_s"],
+            "range_high_s": est["range_high_s"],
+        })
+    return jsonify({"entries": out, "spread_source": spread_source})
 
 
 @sing_bp.route("/status/<int:request_id>", methods=["GET"])

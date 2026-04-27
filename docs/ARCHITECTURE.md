@@ -209,6 +209,8 @@ utils.py → (stdlib only)
 | GET  | `/sing/search` | **PUBLIC** — search local + Karaoke Nerds catalog (requires token) |
 | POST | `/sing/submit` | **PUBLIC** — create a pending request (rate-limited per IP) |
 | GET  | `/sing/status/<id>` | **PUBLIC** — singer's own request status + rotation position |
+| GET  | `/sing/now` | **PUBLIC** — lightweight now-singing / up-next / queued-count for the landing widget |
+| GET  | `/sing/rotation` | **PUBLIC** — full active rotation with cumulative wait estimates for the landing-page expander |
 | POST | `/upload` | Upload a media file to the download folder (validates extension, sanitizes filename, triggers rescan) |
 | POST | `/browser-mode/enable` | Enable Browser Mode: stop VLC, launch fullscreen Chromium at URL |
 | POST | `/browser-mode/disable` | Disable Browser Mode: kill Chromium, restart VLC |
@@ -333,7 +335,7 @@ Singers submit song requests from their own phones via a QR code instead of hand
                                                    rotation_meta token rows)
 ```
 
-**Public routes** (`sing_bp`): `GET /sing/`, `GET /sing/search`, `POST /sing/submit`, `POST /sing/validate`, `GET /sing/status/<id>`. All except `/` and `/validate` require a valid, enabled event token — provided as `?t=<token>` in the QR URL and kept in a session cookie. Rate limiting: 5 submits / 5 min per IP on `/submit`, 10 attempts / 5 min per IP on `/validate` (separate bucket so legit submissions aren't blocked by a brute-force scanner).
+**Public routes** (`sing_bp`): `GET /sing/`, `GET /sing/search`, `POST /sing/submit`, `POST /sing/validate`, `GET /sing/status/<id>`, `GET /sing/now`, `GET /sing/rotation`. All except `/` and `/validate` require a valid, enabled event token — provided as `?t=<token>` in the QR URL and kept in a session cookie. Rate limiting: 5 submits / 5 min per IP on `/submit`, 10 attempts / 5 min per IP on `/validate` (separate bucket so legit submissions aren't blocked by a brute-force scanner).
 
 **Public host mounts `sing_bp` at root:** on `sing.nomadkaraoke.com` the QR target is `https://sing.nomadkaraoke.com/?t=XXXX` — no `/sing/` segment for singers to read off the screen. `install_public_host_rewriter` (in `sing.py`) is a small WSGI middleware that prepends `/sing` to `PATH_INFO` when `Host` matches the configured public-host set. The blueprint stays mounted at `/sing/` internally so the admin host (`nomadpc.local`, `kjbox.nomadkaraoke.com`) — where `/` is the KJ controller UI — keeps working unchanged. Both `create_app()` and `start_app()` install it; the duplication is tracked as a follow-up consolidation.
 
