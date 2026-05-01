@@ -456,6 +456,27 @@ class TestFileLink:
         assert fetched["file_path"] is None
         assert fetched["duration"] is None
 
+    def test_unlink_file_clears_download_tracking(self, store):
+        # Regression: a previously-completed download leaves
+        # download_status='complete' on the entry. Without clearing it,
+        # the UI hides the link button after unlink (entry shows
+        # "UNLINKED" but offers no way to attach a new song).
+        e = store.add_entry("Alice")
+        store.set_download_status(e["id"], "youtube", "queued", download_id="dl-1")
+        store.set_url_fallback(e["id"], "https://youtu.be/abc")
+        store.link_file(e["id"], "/path/to/file.cdg", duration=210)
+        store.set_download_status(e["id"], "youtube", "complete", download_id="dl-1")
+
+        store.unlink_file(e["id"])
+
+        fetched = store.get_entry(e["id"])
+        assert fetched["file_path"] is None
+        assert fetched["duration"] is None
+        assert fetched["download_status"] is None
+        assert fetched["download_id"] is None
+        assert fetched["download_source"] is None
+        assert fetched["url_fallback"] is None
+
     def test_unlink_file_nonexistent_raises(self, store):
         with pytest.raises(ValueError):
             store.unlink_file(9999)

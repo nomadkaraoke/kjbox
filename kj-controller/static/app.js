@@ -3564,7 +3564,10 @@ function renderRotation(entries) {
             playBtn.title = 'Play via browser mode';
             playBtn.onclick = () => { enableBrowserMode(entry.url_fallback); advanceRotationStatus(entry, idx, entries); };
             actions.appendChild(playBtn);
-        } else if (!effDlStatus || effDlStatus === 'failed') {
+        } else if (effDlStatus !== 'queued' && effDlStatus !== 'downloading') {
+            // No playable source and no in-flight download — offer link.
+            // Covers the stale-'complete' case after unlinking a prior
+            // successful download (download_status lingers on the row).
             const linkBtn = document.createElement('button');
             linkBtn.className = 'rotation-btn rotation-btn-link';
             linkBtn.textContent = '\uD83D\uDD17';  // 🔗

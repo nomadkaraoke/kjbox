@@ -460,7 +460,13 @@ class RotationStore:
         conn.commit()
 
     def unlink_file(self, entry_id):
-        """Set file_path and duration to NULL on an entry.
+        """Reset an entry to a fully-unlinked state.
+
+        Clears file_path/duration AND the download tracking fields
+        (download_status/download_id/download_source/url_fallback).
+        Without clearing download_status, a stale 'complete' from a
+        prior successful download hides the UI's link button after
+        unlink. Leaves singer/song_artist/status/gen_status alone.
 
         Raises ValueError if entry_id not found.
         """
@@ -470,6 +476,8 @@ class RotationStore:
         conn.execute(
             "UPDATE rotation_entries "
             "SET file_path = NULL, duration = NULL, "
+            "    download_status = NULL, download_id = NULL, "
+            "    download_source = NULL, url_fallback = NULL, "
             "    updated_at = datetime('now', 'localtime') "
             "WHERE id = ?",
             (entry_id,),
