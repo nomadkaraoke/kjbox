@@ -5318,6 +5318,7 @@ const SingRequests = (() => {
         const loc = document.getElementById('sing-local-url');
         const qp = document.getElementById('sing-qr-public');
         const ql = document.getElementById('sing-qr-local');
+        const tok = document.getElementById('sing-current-token');
         if (eEl) eEl.checked = !!config.enabled;
         if (aEl) aEl.checked = !!config.auto_approve;
         // Phase C — defaults to true since the backend defaults are "1"; if the
@@ -5325,6 +5326,7 @@ const SingRequests = (() => {
         if (mEl) mEl.checked = config.accept_make_requests !== false;
         if (pub) pub.textContent = config.public_url || '—';
         if (loc) loc.textContent = config.local_url || '—';
+        if (tok) tok.textContent = config.token || '—';
         const bust = Date.now();
         if (qp) qp.src = `/rotation/requests/qr.svg?scope=public&cb=${bust}`;
         if (ql) ql.src = `/rotation/requests/qr.svg?scope=local&cb=${bust}`;
@@ -5374,6 +5376,35 @@ const SingRequests = (() => {
         if (await postConfig({ regenerate: true })) await fetchConfig();
     }
 
+    async function setCustom() {
+        const input = document.getElementById('sing-custom-token-input');
+        if (!input) return;
+        const raw = (input.value || '').trim();
+        if (!/^\d{4}$/.test(raw)) {
+            alert('Code must be exactly 4 digits.');
+            input.focus();
+            return;
+        }
+        if (raw === (config.token || '') ) {
+            // Same as current — no point asking the singer to retype.
+            input.value = '';
+            return;
+        }
+        if (!confirm(`Set the event code to ${raw}? The current QR will keep working only if the new code matches its URL.`)) return;
+        const resp = await fetch('/rotation/requests/config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token: raw }),
+        });
+        if (!resp.ok) {
+            const data = await resp.json().catch(() => ({}));
+            alert('Set code failed: ' + (data.error || resp.statusText));
+            return;
+        }
+        input.value = '';
+        await fetchConfig();
+    }
+
     function copyUrl(scope) {
         const el = document.getElementById(scope === 'local' ? 'sing-local-url' : 'sing-public-url');
         if (!el) return;
@@ -5408,7 +5439,7 @@ const SingRequests = (() => {
         pollTimer = setInterval(fetchPending, 5000);
     }
 
-    return { start, openModal, closeModal, toggleEnabled, toggleAutoApprove, toggleAcceptMake, regenerate, copyUrl };
+    return { start, openModal, closeModal, toggleEnabled, toggleAutoApprove, toggleAcceptMake, regenerate, setCustom, copyUrl };
 })();
 
 function openSingRequestsModal()   { SingRequests.openModal(); }
@@ -5417,6 +5448,7 @@ function toggleSingEnabled(c)      { SingRequests.toggleEnabled(c); }
 function toggleSingAutoApprove(c)  { SingRequests.toggleAutoApprove(c); }
 function toggleSingAcceptMake(c)   { SingRequests.toggleAcceptMake(c); }
 function regenerateSingToken()     { SingRequests.regenerate(); }
+function setCustomSingToken()      { SingRequests.setCustom(); }
 function copySingUrl(scope)        { SingRequests.copyUrl(scope); }
 
 window.addEventListener('DOMContentLoaded', () => SingRequests.start());

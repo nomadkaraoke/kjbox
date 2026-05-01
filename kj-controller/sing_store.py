@@ -160,6 +160,20 @@ class SingStore:
         self._set_meta(TOKEN_KEY, new_token)
         return new_token
 
+    def set_token(self, token):
+        """Set a specific 4-digit token (e.g. KJ pinning a memorable code).
+
+        Raises ValueError on malformed input — the route translates to HTTP 400.
+        Same-token writes are allowed (idempotent) so the UI can re-pin without
+        a special path.
+        """
+        if not isinstance(token, str):
+            raise ValueError("token must be a string")
+        if len(token) != TOKEN_DIGITS or not token.isdigit():
+            raise ValueError(f"token must be exactly {TOKEN_DIGITS} digits")
+        self._set_meta(TOKEN_KEY, token)
+        return token
+
     def ensure_token(self):
         """Return the current token, generating one if absent."""
         tok = self.get_token()

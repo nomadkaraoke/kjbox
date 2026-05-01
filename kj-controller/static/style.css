@@ -2760,10 +2760,32 @@ body {
 }
 .sing-regen-btn {
     padding: 0.5rem 1rem;
+    background: #333; color: #eee;
+    border: 1px solid #555; border-radius: 4px;
+    cursor: pointer;
+    font-weight: 500;
+}
+.sing-set-btn {
+    padding: 0.5rem 1rem;
     background: #ff4dcf; color: #0a0a0a;
     border: none; border-radius: 4px;
     cursor: pointer;
     font-weight: 600;
+}
+.sing-token-controls {
+    display: flex; flex-direction: column; gap: 0.5rem;
+}
+.sing-current-token {
+    color: #ccc; font-size: 0.95rem;
+}
+.sing-current-token strong {
+    color: #ff4dcf; font-family: monospace; font-size: 1.15rem; margin-left: 0.25rem;
+}
+.sing-token-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
+.sing-token-input {
+    width: 6rem; padding: 0.5rem; font-family: monospace;
+    background: #0e0e0e; color: #ff4dcf; border: 1px solid #444; border-radius: 4px;
+    font-size: 1rem; text-align: center; letter-spacing: 0.1em;
 }
 .sing-qr-row { display: flex; gap: 1rem; }
 .sing-qr-card { flex: 1; text-align: center; }

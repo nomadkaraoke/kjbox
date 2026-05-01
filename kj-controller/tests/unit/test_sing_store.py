@@ -114,6 +114,37 @@ class TestTokenHelpers:
         tok = store.regenerate_token()
         assert store.ensure_token() == tok
 
+    def test_set_token_pins_specific_value(self, store):
+        store.regenerate_token()  # start with a random token
+        result = store.set_token("2121")
+        assert result == "2121"
+        assert store.get_token() == "2121"
+
+    def test_set_token_idempotent(self, store):
+        store.set_token("2121")
+        store.set_token("2121")
+        assert store.get_token() == "2121"
+
+    def test_set_token_rejects_non_string(self, store):
+        with pytest.raises(ValueError):
+            store.set_token(2121)
+
+    def test_set_token_rejects_wrong_length(self, store):
+        with pytest.raises(ValueError):
+            store.set_token("123")
+        with pytest.raises(ValueError):
+            store.set_token("12345")
+
+    def test_set_token_rejects_non_digits(self, store):
+        with pytest.raises(ValueError):
+            store.set_token("abcd")
+        with pytest.raises(ValueError):
+            store.set_token("12a4")
+
+    def test_set_token_rejects_empty(self, store):
+        with pytest.raises(ValueError):
+            store.set_token("")
+
     def test_enabled_default_true(self, store):
         assert store.is_enabled() is True
 

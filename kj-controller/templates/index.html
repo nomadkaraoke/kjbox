@@ -1038,8 +1038,19 @@
                     </div>
                 </div>
                 <div class="sing-requests-row">
-                    <button class="sing-regen-btn" onclick="regenerateSingToken()">Regenerate token</button>
-                    <p class="sing-hint">Invalidates the current QR. Singers already on the confirmation page keep updating.</p>
+                    <div class="sing-token-controls">
+                        <div class="sing-current-token">
+                            Current code: <strong id="sing-current-token">—</strong>
+                        </div>
+                        <div class="sing-token-actions">
+                            <input type="text" id="sing-custom-token-input" class="sing-token-input"
+                                inputmode="numeric" pattern="[0-9]{4}" maxlength="4"
+                                placeholder="e.g. 2121" autocomplete="off">
+                            <button class="sing-set-btn" onclick="setCustomSingToken()">Set code</button>
+                            <button class="sing-regen-btn" onclick="regenerateSingToken()">Regenerate</button>
+                        </div>
+                    </div>
+                    <p class="sing-hint">Pin a memorable 4-digit code, or generate a random one. Either way invalidates the previous QR.</p>
                 </div>
                 <div class="sing-requests-row sing-qr-row">
                     <div class="sing-qr-card">

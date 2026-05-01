@@ -2330,9 +2330,11 @@ def move_rotation_entry():
 def archive_rotation():
     """Archive all rotation entries and clear the rotation.
 
-    Also regenerates the event token for the public request form so a
-    new night gets a new QR — and re-enables requests in case they were
-    paused during the previous event.
+    Re-enables public requests in case they were paused during the previous
+    event. The event token is intentionally NOT regenerated here — KJs print
+    a QR for the night and expect it to keep working across archive cycles.
+    Use the modal's "Regenerate token" or "Set custom token" controls when a
+    fresh code is actually wanted.
     """
     rotation = current_app.rotation
     if not hasattr(current_app, 'rotation') or current_app.rotation is None:
@@ -2341,18 +2343,9 @@ def archive_rotation():
     try:
         count = rotation.archive_rotation()
         entries = rotation.get_rotation()
-        # Regen the sing token for the new event so yesterday's QR stops working.
         sing_store = getattr(current_app, 'sing_store', None)
         if sing_store is not None:
-            new_token = sing_store.regenerate_token()
             sing_store.set_enabled(True)
-            # Push new URL to any qr_code overlays linked to the event URL.
-            try:
-                from sing import get_event_url, sync_event_url_overlays
-                url = get_event_url(current_app.kj_config, new_token, scope="public")
-                sync_event_url_overlays(current_app.overlay_manager, url)
-            except Exception:
-                pass  # Best-effort — the main archive must still succeed.
         return jsonify({"success": True, "archived": count, "entries": entries})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -3221,21 +3214,34 @@ def update_sing_config():
     data = request.get_json(force=True, silent=True) or {}
     changed = {}
 
-    if data.get("regenerate"):
-        new_token = store.regenerate_token()
-        changed["token"] = new_token
-        # Also refresh any linked overlays.
+    def _on_token_changed(new_token):
+        """Side effects shared by regenerate and explicit set: overlay URLs
+        and push-sub cleanup must follow the new token."""
         try:
             from sing import get_event_url, sync_event_url_overlays
             url = get_event_url(current_app.kj_config, new_token, scope="public")
             sync_event_url_overlays(current_app.overlay_manager, url)
         except Exception:
             pass
-        # Garbage-collect push subs on old tokens (>7 days)
         try:
             store.cleanup_stale_push_subscriptions(current_token=new_token)
         except Exception:
             current_app.logger.exception("push subscription cleanup failed")
+
+    if data.get("regenerate"):
+        new_token = store.regenerate_token()
+        changed["token"] = new_token
+        _on_token_changed(new_token)
+    elif "token" in data and data["token"] is not None:
+        # Explicit set — the KJ pinned a memorable 4-digit code (e.g. 2121)
+        # and wants the printed QR to keep working across archives. Validation
+        # mirrors regenerate's invariant (4 digits) so /sing keeps working.
+        try:
+            new_token = store.set_token(str(data["token"]).strip())
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
+        changed["token"] = new_token
+        _on_token_changed(new_token)
 
     if "enabled" in data:
         store.set_enabled(bool(data["enabled"]))

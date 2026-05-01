@@ -72,6 +72,41 @@ class TestConfig:
         new_token = admin_app.sing_store.get_token()
         assert new_token != original
 
+    def test_set_custom_token(self, admin_client, admin_app):
+        resp = admin_client.post(
+            "/rotation/requests/config", json={"token": "2121"}
+        )
+        assert resp.status_code == 200
+        assert resp.get_json()["changed"]["token"] == "2121"
+        assert admin_app.sing_store.get_token() == "2121"
+
+    def test_set_custom_token_validates_format(self, admin_client, admin_app):
+        original = admin_app.sing_store.get_token()
+        resp = admin_client.post(
+            "/rotation/requests/config", json={"token": "abc"}
+        )
+        assert resp.status_code == 400
+        assert admin_app.sing_store.get_token() == original
+
+    def test_set_custom_token_syncs_overlay(self, admin_client, admin_app):
+        overlay = admin_app.overlay_manager.create_overlay({
+            "type": "qr_code", "name": "Event QR",
+            "config": {"url": "stale", "follow_event_url": True},
+        })
+        admin_client.post("/rotation/requests/config", json={"token": "2121"})
+        updated = admin_app.overlay_manager.get_overlay(overlay["id"])
+        assert "2121" in updated["config"]["url"]
+
+    def test_regenerate_takes_precedence_over_token(self, admin_client, admin_app):
+        # If both fields are sent, regenerate wins — the explicit-set path
+        # is for pinning a chosen value, the random regen is the safer default.
+        resp = admin_client.post(
+            "/rotation/requests/config",
+            json={"regenerate": True, "token": "2121"},
+        )
+        assert resp.status_code == 200
+        assert admin_app.sing_store.get_token() != "2121"
+
     def test_toggle_enabled(self, admin_client, admin_app):
         resp = admin_client.post("/rotation/requests/config", json={"enabled": False})
         assert resp.status_code == 200
@@ -358,28 +393,20 @@ class TestReject:
 # ---------------------------------------------------------------------------
 
 class TestArchiveRegenHook:
-    def test_archive_regenerates_token(self, admin_client, admin_app):
+    def test_archive_preserves_token(self, admin_client, admin_app):
+        # Regression guard for the surprise-changing-token bug: KJs print a QR
+        # for the night and expect it to keep working across archive cycles.
+        # A fresh code is opt-in via the modal's Regenerate / Set buttons.
         original = admin_app.sing_store.get_token()
         resp = admin_client.post("/rotation/archive")
         assert resp.status_code == 200
-        assert admin_app.sing_store.get_token() != original
+        assert admin_app.sing_store.get_token() == original
 
     def test_archive_reenables_requests(self, admin_client, admin_app):
         admin_app.sing_store.set_enabled(False)
         resp = admin_client.post("/rotation/archive")
         assert resp.status_code == 200
         assert admin_app.sing_store.is_enabled() is True
-
-    def test_archive_syncs_linked_overlay(self, admin_client, admin_app):
-        # Create an overlay linked to the event URL
-        overlay = admin_app.overlay_manager.create_overlay({
-            "type": "qr_code", "name": "Event QR",
-            "config": {"url": "stale", "follow_event_url": True},
-        })
-        admin_client.post("/rotation/archive")
-        updated = admin_app.overlay_manager.get_overlay(overlay["id"])
-        assert updated["config"]["url"] != "stale"
-        assert admin_app.sing_store.get_token() in updated["config"]["url"]
 
 
 class TestSleepDisableHook:
