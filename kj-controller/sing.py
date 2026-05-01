@@ -491,9 +491,10 @@ def submit():
 
     if not singer_name:
         return jsonify({"error": "singer_name is required"}), 400
-    if not phone:
-        return jsonify({"error": "phone is required"}), 400
-    if not _PHONE_RE.match(phone):
+    # Phone is optional — KJs use it to text singers when they're up, but
+    # singers can opt out. If supplied, the format must still parse so the
+    # KJ doesn't waste time trying to dial garbage.
+    if phone and not _PHONE_RE.match(phone):
         return jsonify({"error": "phone format invalid"}), 400
     if source_type not in _ALLOWED_SOURCES:
         return jsonify({"error": f"source_type must be one of {sorted(_ALLOWED_SOURCES)}"}), 400

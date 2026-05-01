@@ -247,9 +247,22 @@ class TestCreateRequest:
         with pytest.raises(ValueError):
             store.create_request(singer_name="", phone="+123", source_type="local")
 
-    def test_missing_phone_raises(self, store):
-        with pytest.raises(ValueError):
-            store.create_request(singer_name="Andrew", phone="", source_type="local")
+    def test_phone_optional(self, store):
+        # Phone is optional at the store layer too — empty stays empty so
+        # /push/subscribe (which requires phone) won't accidentally bind a
+        # subscription to a singer who skipped it.
+        req = store.create_request(
+            singer_name="Andrew", phone="", source_type="local",
+        )
+        assert req["phone"] == ""
+
+    def test_missing_phone_treated_as_empty(self, store):
+        # Defensive: None coerces to empty string, not crash, since the
+        # column is NOT NULL.
+        req = store.create_request(
+            singer_name="Andrew", phone=None, source_type="local",
+        )
+        assert req["phone"] == ""
 
     def test_missing_source_type_raises(self, store):
         with pytest.raises(ValueError):

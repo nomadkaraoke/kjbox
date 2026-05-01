@@ -199,11 +199,21 @@ class TestSubmit:
         resp = client.post(f"/sing/submit?t={token}", json=self._body(singer_name=""))
         assert resp.status_code == 400
 
-    def test_missing_phone(self, client, token):
+    def test_phone_optional(self, client, sing_app, token):
+        # Phone is optional — KJs use it to text singers when they're up,
+        # but a singer can still submit without one (KJ just calls the name).
         resp = client.post(f"/sing/submit?t={token}", json=self._body(phone=""))
-        assert resp.status_code == 400
+        assert resp.status_code == 200
+        # The empty phone is stored as-is so /push/subscribe (which still
+        # requires phone) won't accidentally succeed for this singer.
+        req_id = resp.get_json()["request"]["id"]
+        stored = sing_app.sing_store.get_request(req_id)
+        assert stored["phone"] == ""
 
     def test_invalid_phone_format(self, client, token):
+        # When supplied, the phone must still parse — empty stays valid
+        # (covered above) but garbage is rejected so the KJ doesn't waste
+        # time dialling it.
         resp = client.post(f"/sing/submit?t={token}", json=self._body(phone="abc"))
         assert resp.status_code == 400
 

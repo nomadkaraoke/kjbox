@@ -362,9 +362,10 @@ function renderLanding() {
     el("button", {
       class: "btn primary",
       onclick: () => {
-        state.step = state.name && state.phone && PHONE_RE.test(state.phone)
-          ? "search"
-          : "identity";
+        // Phone is optional — only the name gates progression. If present,
+        // it must still parse (defence against a corrupted LS value).
+        const phoneOk = !state.phone || PHONE_RE.test(state.phone);
+        state.step = state.name && phoneOk ? "search" : "identity";
         render();
       },
     }, state.name ? "Continue" : "Get started"),
@@ -395,12 +396,14 @@ function renderIdentity() {
       draft.err = "Please enter your name.";
       rerender(); return;
     }
-    if (!PHONE_RE.test(draft.phone.trim())) {
-      draft.err = "Please enter a valid phone number (digits, spaces, or + allowed).";
+    // Phone is optional — only validate format when present.
+    const phoneTrimmed = draft.phone.trim();
+    if (phoneTrimmed && !PHONE_RE.test(phoneTrimmed)) {
+      draft.err = "Please enter a valid phone number (digits, spaces, or + allowed), or leave it blank.";
       rerender(); return;
     }
     state.name = draft.name.trim();
-    state.phone = draft.phone.trim();
+    state.phone = phoneTrimmed;
     LS.set("sing_name", state.name);
     LS.set("sing_phone", state.phone);
     state._identityDraft = null;
@@ -415,22 +418,22 @@ function renderIdentity() {
 
   return el("main", { class: "sing-card" },
     el("h2", {}, "Your details"),
-    el("p", { class: "hint" },
-      "The KJ uses your phone number to tell you apart from other singers with the same first name. It's not shared with anyone else."),
     el("form", { onsubmit: onSubmit },
-      el("label", {}, "Your name",
+      el("label", {}, "First name + last initial",
         el("input", {
           type: "text", autocomplete: "given-name",
-          value: draft.name, placeholder: "e.g. Andrew",
+          value: draft.name, placeholder: "e.g. Andrew B.",
           oninput: (e) => { draft.name = e.target.value; },
         }),
       ),
-      el("label", {}, "Phone number",
+      el("label", {}, "Phone number (optional)",
         el("input", {
           type: "tel", autocomplete: "tel",
           value: draft.phone, placeholder: "+61 400 123 456",
           oninput: (e) => { draft.phone = e.target.value; },
         }),
+        el("span", { class: "hint" },
+          "We'll text you when you're up. Leave blank to skip — the KJ will just call your name."),
       ),
       draft.err ? el("p", { class: "error" }, draft.err) : null,
       el("div", { class: "row" },
@@ -970,7 +973,9 @@ function renderConfirm() {
       el("div", { class: "pick-label" }, state.selected?.label || ""),
     ),
     el("p", { class: "hint" },
-      `Your details: ${state.name} · ${state.phone}`),
+      state.phone
+        ? `Your details: ${state.name} · ${state.phone}`
+        : `Your details: ${state.name}`),
     el("div", { class: "row" },
       el("button", { class: "btn ghost", onclick: back("search") }, "Change"),
       el("button", { class: "btn primary submit-btn", onclick: send }, "Send to KJ"),

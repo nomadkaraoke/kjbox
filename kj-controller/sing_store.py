@@ -227,10 +227,12 @@ class SingStore:
         """Insert a new pending request and return the created row as a dict."""
         if not singer_name:
             raise ValueError("singer_name is required")
-        if not phone:
-            raise ValueError("phone is required")
         if not source_type:
             raise ValueError("source_type is required")
+        # Phone is optional — KJs text singers when they're up, but the
+        # public form lets singers opt out. Stored as empty string so the
+        # NOT NULL column constraint still holds.
+        phone = phone or ""
 
         request_token = token if token is not None else (self.get_token() or "")
         meta_json = json.dumps(source_meta) if source_meta is not None else None
