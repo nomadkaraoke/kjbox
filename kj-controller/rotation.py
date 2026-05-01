@@ -144,12 +144,20 @@ class RotationManager:
         self._after_mutation()
         return entry
 
-    def complete_download(self, download_id, file_path):
-        """Called by download worker when a rotation-linked download completes."""
+    def complete_download(self, download_id, file_path, title=None):
+        """Called by download worker when a rotation-linked download completes.
+
+        If ``title`` is given and the entry's ``song_artist`` is empty, write the
+        resolved download title into ``song_artist`` — so sing-UI submissions
+        that omit artist/title display the YouTube/divebar title instead of a
+        blank row. Never overwrites an existing value.
+        """
         entry = self.store.get_entry_by_download_id(download_id)
         if entry is None:
             return None
         self.store.link_file(entry["id"], file_path, self._lookup_duration(file_path))
+        if title and not (entry.get("song_artist") or "").strip():
+            self.store.update_entry(entry["id"], song_artist=title.strip())
         self.store.set_download_status(entry["id"], entry["download_source"], "complete")
         self._after_mutation()
         return self.store.get_entry(entry["id"])

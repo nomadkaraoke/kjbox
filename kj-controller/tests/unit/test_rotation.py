@@ -360,6 +360,38 @@ class TestCoordinatorDownload:
     def test_complete_download_missing_returns_none(self, mgr):
         assert mgr.complete_download("nonexistent", "/media/song.mp4") is None
 
+    def test_complete_download_backfills_empty_song_artist(self, mgr):
+        """When song_artist is empty (sing-UI submission with bare URL),
+        complete_download writes the resolved download title into it so the
+        rotation row isn't blank on screen."""
+        entry = mgr.add_entry("bill", "")
+        mgr.set_download_status(entry["id"], "youtube", "downloading", "uuid-yt")
+        updated = mgr.complete_download(
+            "uuid-yt", "/media/song.mp4",
+            title="DABABY - POP DAT THANG (Official Video)",
+        )
+        assert updated["song_artist"] == "DABABY - POP DAT THANG (Official Video)"
+        assert updated["file_path"] == "/media/song.mp4"
+        assert updated["download_status"] == "complete"
+
+    def test_complete_download_preserves_existing_song_artist(self, mgr):
+        """A KJ-curated song_artist must never be overwritten by the
+        download-resolved title."""
+        entry = mgr.add_entry("Alice", "Hello - Adele")
+        mgr.set_download_status(entry["id"], "youtube", "downloading", "uuid-yt")
+        updated = mgr.complete_download(
+            "uuid-yt", "/media/song.mp4", title="some random youtube title",
+        )
+        assert updated["song_artist"] == "Hello - Adele"
+
+    def test_complete_download_no_title_leaves_song_artist_blank(self, mgr):
+        """If the worker has no title (download fn returned None), don't
+        invent one — leave the entry untouched."""
+        entry = mgr.add_entry("bill", "")
+        mgr.set_download_status(entry["id"], "youtube", "downloading", "uuid-yt")
+        updated = mgr.complete_download("uuid-yt", "/media/song.mp4")
+        assert updated["song_artist"] == ""
+
 
 # ---------------------------------------------------------------------------
 # TestCoordinatorGen

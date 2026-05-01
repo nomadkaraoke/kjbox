@@ -371,7 +371,10 @@ def _download_worker(app):
                 try:
                     download_id = next_item.get('id')
                     if download_id:
-                        app.rotation.complete_download(download_id, file_path)
+                        app.rotation.complete_download(
+                            download_id, file_path,
+                            title=next_item.get('title'),
+                        )
                 except Exception:
                     pass  # Best-effort; entry can be linked manually
         else:
