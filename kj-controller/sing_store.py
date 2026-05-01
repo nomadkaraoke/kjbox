@@ -8,6 +8,7 @@ provides helpers for the short-lived event token that gates that form.
 import json
 import secrets
 import sqlite3
+import threading
 
 
 # Meta keys stored in rotation_meta (same table RotationStore uses)
@@ -25,33 +26,57 @@ TOKEN_DIGITS = 4
 class SingStore:
     """Local SQLite storage for public sing requests + event token.
 
-    Follows the same connection pattern as RotationStore: WAL mode,
-    check_same_thread=False, Row factory, cache tuning.
+    Per-thread connections via ``threading.local`` — see RotationStore for
+    the rationale (2026-05-01 outage caused by sharing one sqlite3
+    connection across Flask + background threads).
     """
+
+    _MEMORY = ":memory:"
 
     def __init__(self, db_path):
         self.db_path = db_path
-        self._conn = None
+        self._local = threading.local()
+        self._memory_conn = None
+        self._memory_lock = threading.Lock()
         self.init_schema()
 
     # ------------------------------------------------------------------
     # Connection
     # ------------------------------------------------------------------
 
+    def _open_conn(self):
+        conn = sqlite3.connect(self.db_path, timeout=10)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA busy_timeout=10000")
+        conn.execute("PRAGMA cache_size=-8192")  # 8 MB
+        conn.execute("PRAGMA synchronous=NORMAL")
+        return conn
+
     def _get_conn(self):
-        if self._conn is None:
-            self._conn = sqlite3.connect(self.db_path, check_same_thread=False)
-            self._conn.row_factory = sqlite3.Row
-            self._conn.execute("PRAGMA journal_mode=WAL")
-            self._conn.execute("PRAGMA busy_timeout=5000")
-            self._conn.execute("PRAGMA cache_size=-8192")  # 8 MB
-            self._conn.execute("PRAGMA synchronous=NORMAL")
-        return self._conn
+        if self.db_path == self._MEMORY:
+            if self._memory_conn is None:
+                self._memory_conn = sqlite3.connect(
+                    self.db_path, check_same_thread=False, timeout=10,
+                )
+                self._memory_conn.row_factory = sqlite3.Row
+            return self._memory_conn
+        conn = getattr(self._local, "conn", None)
+        if conn is None:
+            conn = self._open_conn()
+            self._local.conn = conn
+        return conn
 
     def close(self):
-        if self._conn:
-            self._conn.close()
-            self._conn = None
+        if self.db_path == self._MEMORY:
+            if self._memory_conn is not None:
+                self._memory_conn.close()
+                self._memory_conn = None
+            return
+        conn = getattr(self._local, "conn", None)
+        if conn is not None:
+            conn.close()
+            self._local.conn = None
 
     # ------------------------------------------------------------------
     # Schema

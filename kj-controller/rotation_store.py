@@ -2,40 +2,79 @@
 
 import json
 import sqlite3
+import threading
 
 
 class RotationStore:
     """Pure local SQLite storage for rotation entries.
 
-    Follows the same connection pattern as ExternalCatalog in catalog.py:
-    WAL mode, check_same_thread=False, Row factory, cache tuning.
+    Connections are per-thread via ``threading.local``. Sharing a single
+    sqlite3 connection across Flask request threads + the SheetSync background
+    thread caused a 2026-05-01 outage: an implicit BEGIN in one thread
+    pinned the write lock for every other thread, AND concurrent cursor
+    use on the shared connection corrupted the API state. Per-thread
+    connections give each thread its own implicit-transaction scope; the
+    file-level WAL lock is the only thing that serialises writers, and a
+    10s busy_timeout is plenty for that.
     """
+
+    # In-memory databases (":memory:") are tied to a single connection.
+    # Tests use them and need to share the connection across threads, so
+    # treat them specially — share one connection with a process-wide lock.
+    _MEMORY = ":memory:"
 
     def __init__(self, db_path):
         self.db_path = db_path
-        self._conn = None
+        self._local = threading.local()
+        # Memory-db fallback: one shared connection, lock-serialised.
+        self._memory_conn = None
+        self._memory_lock = threading.Lock()
         self.init_schema()
 
     # ------------------------------------------------------------------
     # Connection
     # ------------------------------------------------------------------
 
+    def _open_conn(self):
+        """Open and configure a fresh sqlite3 connection."""
+        conn = sqlite3.connect(self.db_path, timeout=10)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA busy_timeout=10000")
+        conn.execute("PRAGMA cache_size=-8192")   # 8 MB
+        conn.execute("PRAGMA synchronous=NORMAL")
+        return conn
+
     def _get_conn(self):
-        """Lazy SQLite connection with WAL mode and optimised settings."""
-        if self._conn is None:
-            self._conn = sqlite3.connect(self.db_path, check_same_thread=False)
-            self._conn.row_factory = sqlite3.Row
-            self._conn.execute("PRAGMA journal_mode=WAL")
-            self._conn.execute("PRAGMA busy_timeout=5000")
-            self._conn.execute("PRAGMA cache_size=-8192")   # 8 MB
-            self._conn.execute("PRAGMA synchronous=NORMAL")
-        return self._conn
+        """Return this thread's sqlite3 connection (lazily created).
+
+        For ``:memory:`` databases the connection is process-shared because
+        each connect() opens a different in-memory db.
+        """
+        if self.db_path == self._MEMORY:
+            if self._memory_conn is None:
+                self._memory_conn = sqlite3.connect(
+                    self.db_path, check_same_thread=False, timeout=10,
+                )
+                self._memory_conn.row_factory = sqlite3.Row
+            return self._memory_conn
+        conn = getattr(self._local, "conn", None)
+        if conn is None:
+            conn = self._open_conn()
+            self._local.conn = conn
+        return conn
 
     def close(self):
-        """Close the database connection."""
-        if self._conn:
-            self._conn.close()
-            self._conn = None
+        """Close this thread's connection (or the shared memory conn)."""
+        if self.db_path == self._MEMORY:
+            if self._memory_conn is not None:
+                self._memory_conn.close()
+                self._memory_conn = None
+            return
+        conn = getattr(self._local, "conn", None)
+        if conn is not None:
+            conn.close()
+            self._local.conn = None
 
     # ------------------------------------------------------------------
     # Schema

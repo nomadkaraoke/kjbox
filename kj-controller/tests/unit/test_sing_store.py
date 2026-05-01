@@ -181,6 +181,44 @@ class TestTokenHelpers:
         store.set_auto_approve(False)
         assert store.is_auto_approve() is False
 
+    def test_concurrent_writes_from_many_threads(self, tmp_path):
+        """Regression: 2026-05-01 outage. SingStore shared one sqlite3
+        connection across Flask + background threads; an implicit BEGIN
+        in one thread blocked every other writer until busy_timeout.
+        Per-thread connections must isolate transactions.
+        """
+        import threading
+        import time
+
+        db_path = str(tmp_path / "rotation.db")
+        s = SingStore(db_path)
+        try:
+            errors = []
+
+            def worker(idx):
+                try:
+                    s.create_request(
+                        singer_name=f"singer_{idx}",
+                        phone="+1 555 0000",
+                        source_type="local",
+                        source_ref=f"/x/{idx}.mp4",
+                    )
+                except Exception as exc:
+                    errors.append((idx, str(exc)))
+
+            threads = [threading.Thread(target=worker, args=(i,))
+                       for i in range(20)]
+            t0 = time.time()
+            for t in threads: t.start()
+            for t in threads: t.join(timeout=15)
+            elapsed = time.time() - t0
+            assert not errors, (
+                f"{len(errors)} concurrent writes raised, e.g. {errors[0]}")
+            assert elapsed < 10, f"writes took {elapsed:.1f}s — likely lock contention"
+            assert s.count_pending() == 20
+        finally:
+            s.close()
+
     def test_meta_keys_persist_across_instances(self, tmp_path):
         db_path = str(tmp_path / "rotation.db")
         s1 = SingStore(db_path)

@@ -100,6 +100,44 @@ class TestSchemaInit:
         s1.close()
         s2.close()
 
+    def test_concurrent_writes_from_many_threads(self, tmp_path):
+        """Regression: 2026-05-01 outage — sharing one sqlite3 connection
+        across threads with default isolation_level let an implicit BEGIN
+        in one thread block every other writer for the busy_timeout window.
+        Per-thread connections must isolate transactions so concurrent
+        writers each succeed within busy_timeout.
+        """
+        import threading
+        import time
+
+        db_path = str(tmp_path / "rotation.db")
+        s = RotationStore(db_path)
+        try:
+            errors = []
+
+            def worker(idx):
+                try:
+                    s.add_entry(f"singer_{idx}", f"song_{idx}")
+                except sqlite3.OperationalError as exc:
+                    errors.append((idx, str(exc)))
+
+            threads = [threading.Thread(target=worker, args=(i,))
+                       for i in range(20)]
+            t0 = time.time()
+            for t in threads: t.start()
+            for t in threads: t.join(timeout=15)
+            elapsed = time.time() - t0
+            assert not errors, (
+                f"{len(errors)} concurrent writes raised, e.g. {errors[0]}")
+            # 20 sequential writes against WAL should comfortably finish
+            # well inside busy_timeout (10s) even on a slow disk.
+            assert elapsed < 10, f"writes took {elapsed:.1f}s — likely lock contention"
+
+            entries = s.get_all_entries()
+            assert len(entries) == 20
+        finally:
+            s.close()
+
 
 # ---------------------------------------------------------------------------
 # Task 2: Add and Get Entries
