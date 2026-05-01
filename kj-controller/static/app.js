@@ -187,6 +187,21 @@ async function rotationMutate(endpoint, body) {
     const data = await apiCall(endpoint, body);
     if (data === null) return false;
     if (data.entries) {
+        // Pre-seed the queue snapshot for any newly-tracked download.
+        // Without this, a freshly-created entry's row briefly renders as
+        // "failed" — effectiveDownloadStatus treats a missing entry in
+        // lastRotationDownloads as "queue item gone" — for ~2s until the
+        // next /status poll catches up. Visible as a "failed" flash on
+        // every DL & Link click.
+        for (const e of data.entries) {
+            const id = String(e.id);
+            const stored = e.download_status;
+            if (e.download_id
+                && (stored === 'queued' || stored === 'downloading')
+                && !lastRotationDownloads[id]) {
+                lastRotationDownloads[id] = { status: stored, file_path: e.file_path };
+            }
+        }
         rotationData = data.entries;
         renderRotation(rotationData);
     }
