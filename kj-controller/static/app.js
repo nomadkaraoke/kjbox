@@ -246,6 +246,13 @@ async function uploadFile(input) {
         if (resp.ok && data.success) {
             progress.innerHTML = '<div class="dl-queue-item dl-queue-completed"><span class="dl-queue-icon">✅</span><span class="dl-queue-label">' + (data.filename || file.name) + '</span></div>';
             log('Uploaded: ' + (data.filename || file.name));
+            await refreshMediaData();
+            if (searchActive) {
+                const q = document.getElementById('catalog-search').value.trim();
+                if (q) catalogSearch(q); else clearSearch();
+            } else {
+                renderFolderView(applyMediaFilter(localMediaItems));
+            }
         } else {
             progress.innerHTML = '<div class="dl-queue-item dl-queue-error"><span class="dl-queue-icon">❌</span><span class="dl-queue-label">' + (data.error || 'Upload failed') + '</span></div>';
         }
