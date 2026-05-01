@@ -2353,21 +2353,24 @@ def archive_rotation():
 
 @routes_bp.route('/rotation/link', methods=['POST'])
 def link_rotation_file():
-    """Link a media file to a rotation entry."""
+    """Link a media file to a rotation entry — or create one and link it.
+
+    Two-mode body: pass ``id`` to link an existing entry, OR
+    ``singers``/``song_artist`` to create a new entry and link in one call.
+    Mirrors /rotation/download-and-link and /rotation/make so the frontend
+    can build a single body shape for any add-with-source flow.
+    """
     rotation = current_app.rotation
     if not hasattr(current_app, 'rotation') or current_app.rotation is None:
         return jsonify({"error": "Rotation not configured"}), 503
     data = request.get_json(force=True)
-    raw_id = data.get('id')
     file_path = data.get('file_path')
-    if raw_id is None:
-        return jsonify({"error": "id is required"}), 400
     if not file_path:
         return jsonify({"error": "file_path is required"}), 400
-    try:
-        entry_id = int(raw_id)
-    except (TypeError, ValueError):
-        return jsonify({"error": "id must be an integer"}), 400
+
+    entry_id, err = _resolve_or_create_rotation_entry_id(data, rotation)
+    if err:
+        return err
     if entry_id < 1:
         return jsonify({"error": "id must be >= 1"}), 400
 

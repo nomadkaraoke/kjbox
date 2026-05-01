@@ -402,11 +402,31 @@ class TestLinkRotationFile:
         assert resp.status_code == 200
         mock_rotation.link_file.assert_called_once_with(3, "/media/song.cdg")
 
-    def test_missing_id_returns_400(self, rotation_client):
+    def test_missing_id_and_singer_returns_400(self, rotation_client):
+        # Without either an id or a singer, there's no entry to link to
+        # and nothing to create — this is a malformed body.
         resp = rotation_client.post('/rotation/link',
             data=json.dumps({"file_path": "/media/song.cdg"}),
             content_type='application/json')
         assert resp.status_code == 400
+
+    def test_link_creates_entry_when_no_id(self, rotation_client, mock_rotation):
+        # Add-mode: the search dropdown's "Link" button on a local result
+        # while no entry exists yet. /rotation/link must create the entry
+        # AND link the file in one call (not 400).
+        mock_rotation.add_entry.return_value = {"id": 99}
+        resp = rotation_client.post(
+            '/rotation/link',
+            data=json.dumps({
+                "singers": ["Andrew"],
+                "song_artist": "Let Down - Radiohead",
+                "file_path": "/media/letdown.mp4",
+            }),
+            content_type='application/json',
+        )
+        assert resp.status_code == 200, resp.get_data(as_text=True)
+        mock_rotation.add_entry.assert_called_once()
+        mock_rotation.link_file.assert_called_once_with(99, "/media/letdown.mp4")
 
     def test_missing_file_path_returns_400(self, rotation_client):
         resp = rotation_client.post('/rotation/link',
