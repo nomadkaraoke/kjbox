@@ -582,3 +582,19 @@ class TestPushHooks:
         resp = client.post(f"/rotation/requests/{req_id}/approve")
         # Approve still succeeds despite dispatcher exception
         assert resp.status_code == 200
+
+
+class TestListRequestsExposesPartners:
+    def test_list_includes_additional_singers(self, admin_client, admin_app):
+        admin_app.sing_store.create_request(
+            singer_name="Alice", phone="", source_type="local",
+            source_ref="/tmp/x.mp4",
+            additional_singers=[{"name": "Sarah", "phone": "+61 400 111 222"}],
+        )
+        resp = admin_client.get("/rotation/requests?status=pending")
+        assert resp.status_code == 200
+        rows = resp.get_json()["requests"]
+        assert any(
+            r.get("additional_singers") == [{"name": "Sarah", "phone": "+61 400 111 222"}]
+            for r in rows
+        )

@@ -5193,6 +5193,38 @@ const SingRequests = (() => {
         if (approveBtn) approveBtn.addEventListener('click', () => approve(req.id));
         row.querySelector('.btn-edit').addEventListener('click', () => editInline(row, req));
         row.querySelector('.btn-reject').addEventListener('click', () => reject(req.id));
+        if (Array.isArray(req.additional_singers) && req.additional_singers.length > 0) {
+            const block = document.createElement('div');
+            block.className = 'request-duet-partners';
+            const title = document.createElement('div');
+            title.className = 'request-duet-title';
+            title.textContent = `👥 Singing with ${req.additional_singers.length} other${req.additional_singers.length === 1 ? '' : 's'}`;
+            block.appendChild(title);
+            const list = document.createElement('ul');
+            list.className = 'request-duet-list';
+            for (const p of req.additional_singers) {
+                const li = document.createElement('li');
+                const name = document.createElement('span');
+                name.className = 'duet-name';
+                name.textContent = p.name;
+                li.appendChild(name);
+                if (p.phone) {
+                    const phone = document.createElement('a');
+                    phone.className = 'duet-phone';
+                    phone.href = `sms:${p.phone}`;
+                    phone.textContent = p.phone;
+                    li.appendChild(phone);
+                } else {
+                    const noPhone = document.createElement('span');
+                    noPhone.className = 'duet-no-phone';
+                    noPhone.textContent = '(no phone)';
+                    li.appendChild(noPhone);
+                }
+                list.appendChild(li);
+            }
+            block.appendChild(list);
+            row.appendChild(block);
+        }
         if (isKjPick) {
             const picker = renderKjPickPicker(req);
             if (picker) row.appendChild(picker);
