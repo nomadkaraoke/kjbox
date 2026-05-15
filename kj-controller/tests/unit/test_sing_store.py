@@ -66,6 +66,20 @@ class TestSchemaInit:
         s.close()
         assert mode == "wal"
 
+    def test_additional_singers_column_present(self, store):
+        conn = store._get_conn()
+        cols = {row[1] for row in conn.execute(
+            "PRAGMA table_info(sing_requests)"
+        ).fetchall()}
+        assert "additional_singers" in cols
+
+    def test_additional_singers_migration_idempotent(self, tmp_path):
+        """Re-initialising on an existing DB must not fail on the new column."""
+        db_path = str(tmp_path / "rotation.db")
+        SingStore(db_path).close()
+        # Second open re-runs init_schema; must not raise.
+        SingStore(db_path).close()
+
     def test_shares_rotation_meta_with_rotation_store(self, tmp_path):
         """SingStore and RotationStore both use rotation_meta in the same DB."""
         from rotation_store import RotationStore

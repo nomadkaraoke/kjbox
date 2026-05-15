@@ -135,6 +135,17 @@ class SingStore:
                 ON sing_push_subscriptions(token, phone);
             """
         )
+        # Additive migration — `additional_singers` was added 2026-05-15 for
+        # duet-partner support. Existing rows get NULL (= solo request).
+        try:
+            conn.execute(
+                "ALTER TABLE sing_requests "
+                "ADD COLUMN additional_singers TEXT DEFAULT NULL"
+            )
+        except sqlite3.OperationalError as e:
+            # Column already exists on this DB; safe to ignore.
+            if "duplicate column name" not in str(e).lower():
+                raise
         conn.commit()
 
     # ------------------------------------------------------------------
