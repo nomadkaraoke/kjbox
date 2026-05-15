@@ -494,3 +494,74 @@ class TestServiceWorker:
         assert "__APP_VERSION__" not in body
         # Cache constant should appear (with some version)
         assert "nomad-sing-shell-" in body
+
+
+class TestMyRequests:
+    """`GET /sing/my-requests?ids=...` — multi-song done-screen feed."""
+
+    def _create(self, sing_app, **overrides):
+        token = sing_app.sing_store.ensure_token()
+        body = {
+            "singer_name": "Alice",
+            "phone": "",
+            "source_type": "local",
+            "source_ref": "/tmp/x.mp4",
+        }
+        body.update(overrides)
+        return sing_app.sing_store.create_request(token=token, **body)
+
+    def test_returns_requests_in_requested_order(self, client, sing_app, token):
+        r1 = self._create(sing_app, song_artist="Queen", song_title="Bohemian Rhapsody")
+        r2 = self._create(sing_app, song_artist="Oasis", song_title="Wonderwall")
+        r3 = self._create(sing_app, song_artist="Abba",  song_title="Dancing Queen")
+        ids = f"{r2['id']},{r3['id']},{r1['id']}"
+        resp = client.get(f"/sing/my-requests?ids={ids}&t={token}")
+        assert resp.status_code == 200
+        out = resp.get_json()
+        assert [r["request"]["id"] for r in out["requests"]] == [
+            r2["id"], r3["id"], r1["id"],
+        ]
+        # now_playing is present and structurally sane (may be empty).
+        assert "now_playing" in out
+
+    def test_drops_unknown_ids_silently(self, client, sing_app, token):
+        r1 = self._create(sing_app)
+        resp = client.get(f"/sing/my-requests?ids=999999,{r1['id']}&t={token}")
+        assert resp.status_code == 200
+        ids = [r["request"]["id"] for r in resp.get_json()["requests"]]
+        assert ids == [r1["id"]]
+
+    def test_drops_foreign_token_rows(self, client, sing_app, token):
+        # Create a row, then rotate the token; the old row's token no longer matches.
+        r1 = self._create(sing_app)
+        sing_app.sing_store.regenerate_token()
+        new_token = sing_app.sing_store.get_token()
+        resp = client.get(f"/sing/my-requests?ids={r1['id']}&t={new_token}")
+        assert resp.status_code == 200
+        assert resp.get_json()["requests"] == []
+
+    def test_requires_token(self, client, sing_app):
+        r1 = self._create(sing_app)
+        resp = client.get(f"/sing/my-requests?ids={r1['id']}")
+        assert resp.status_code == 403
+
+    def test_caps_ids_count(self, client, token):
+        too_many = ",".join(str(i) for i in range(21))
+        resp = client.get(f"/sing/my-requests?ids={too_many}&t={token}")
+        assert resp.status_code == 400
+
+    def test_empty_ids_returns_empty_list(self, client, token):
+        resp = client.get(f"/sing/my-requests?ids=&t={token}")
+        assert resp.status_code == 200
+        assert resp.get_json()["requests"] == []
+
+    def test_estimate_present_when_linked(self, client, sing_app, token):
+        r1 = self._create(sing_app)
+        # Approve so a linked entry exists.
+        from routes import approve_sing_request
+        entry_id = approve_sing_request(sing_app, sing_app.sing_store.get_request(r1["id"]))
+        sing_app.sing_store.mark_approved(r1["id"], linked_entry_id=entry_id)
+        resp = client.get(f"/sing/my-requests?ids={r1['id']}&t={token}")
+        item = resp.get_json()["requests"][0]
+        assert "estimate" in item
+        assert item["estimate"]["position"] >= 1

@@ -718,6 +718,53 @@ def status(request_id):
     return jsonify(response)
 
 
+_MY_REQUESTS_MAX_IDS = 20
+
+
+@sing_bp.route("/my-requests", methods=["GET"])
+@require_token
+def my_requests():
+    """Multi-id status feed for the singer's 'your night' done screen.
+
+    Returns the requested ids in order, dropping unknown ids and ids whose
+    stored token differs from the current event token (cross-event safety,
+    matches /sing/status). `now_playing` is included once at the top level so
+    the done screen doesn't need a second round trip to populate the header.
+    """
+    store = current_app.sing_store
+    raw = request.args.get("ids", "") or ""
+    pieces = [p for p in raw.split(",") if p.strip()]
+    if len(pieces) > _MY_REQUESTS_MAX_IDS:
+        return jsonify({"error": f"max {_MY_REQUESTS_MAX_IDS} ids per call"}), 400
+    try:
+        ids = [int(p) for p in pieces]
+    except ValueError:
+        return jsonify({"error": "ids must be integers"}), 400
+
+    token = _extract_token()
+    rotation_mgr = getattr(current_app, "rotation", None)
+
+    entries = []
+    now_playing_dict = {"now_singing": None, "up_next": None, "queued_count": 0}
+    if rotation_mgr is not None:
+        entries, _active, now_playing_dict = _build_now_playing(rotation_mgr)
+
+    out = []
+    for rid in ids:
+        req = store.get_request(rid)
+        if req is None or req.get("token") != token:
+            continue
+        item = {"request": _public_request_view(req)}
+        if req.get("linked_entry_id") and entries:
+            estimate = compute_estimate(
+                entries, req["linked_entry_id"], current_app.kj_config,
+            )
+            item["estimate"] = estimate
+        out.append(item)
+
+    return jsonify({"now_playing": now_playing_dict, "requests": out})
+
+
 # --- Response shaping ----------------------------------------------------
 
 def _build_now_playing(rotation):
