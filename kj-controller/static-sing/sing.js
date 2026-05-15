@@ -1408,6 +1408,7 @@ function renderRulesFooter() {
       el("li", {}, "First come, first sing"),
       el("li", {}, "New singers get priority"),
       el("li", {}, "Multiple songs? We'll spread them out"),
+      el("li", {}, "Duets welcome — add partners on the confirm screen"),
       el("li", {}, "Need to leave? Ask the KJ"),
       el("li", {}, "♥ = paid priority ($20+)"),
     ),
@@ -1429,6 +1430,15 @@ function renderRulesFooter() {
           el("h4", {}, "Multiple songs welcome"),
           el("p", {}, "Submit as many songs as you want! We'll spread them out in the "
             + "rotation so nobody sings twice in a row."),
+        ),
+        el("li", {},
+          el("h4", {}, "Duets welcome"),
+          el("p", {}, "Singing with friends? On the 'Looking good?' screen "
+            + "before sending the request, tap '+ Add a singer' to attach "
+            + "up to 3 extra people. We'll list everyone on the rotation "
+            + "so the KJ knows who to call up. Phone numbers for extras "
+            + "are optional — they just help the KJ text them when you're "
+            + "close to the front of the queue."),
         ),
         el("li", {},
           el("h4", {}, "Need to leave early?"),
