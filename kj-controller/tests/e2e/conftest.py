@@ -1,7 +1,9 @@
 """Playwright e2e test fixtures — starts a live Flask server for browser tests."""
 
+import json
 import threading
 import time
+import urllib.request
 
 import pytest
 
@@ -58,7 +60,6 @@ def live_server(tmp_path_factory, flask_port):
     server_thread.start()
 
     # Wait for server to be ready
-    import urllib.request
     for _ in range(30):
         try:
             urllib.request.urlopen(f"http://127.0.0.1:{flask_port}/status")
@@ -71,6 +72,23 @@ def live_server(tmp_path_factory, flask_port):
     yield f"http://127.0.0.1:{flask_port}"
 
     # Server thread is daemon — dies with the test process
+
+
+@pytest.fixture(scope="session")
+def live_token(live_server):
+    """Fetch the current event token from the live server's admin API.
+
+    The app factory calls ensure_token() at startup, so there is always a
+    token available.  We retrieve it via the unauthenticated admin endpoint
+    rather than coupling to the Flask app object.
+    """
+    url = f"{live_server}/rotation/requests/config"
+    with urllib.request.urlopen(url) as resp:
+        data = json.loads(resp.read())
+    tok = data.get("token")
+    assert tok, f"No token returned from {url}: {data}"
+    return tok
+
 
 
 @pytest.fixture

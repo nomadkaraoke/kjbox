@@ -599,3 +599,51 @@ input:focus {
   .rotation-song { grid-area: song; font-size: 0.8rem; }
   .rotation-wait { grid-area: wait; align-self: center; }
 }
+
+/* Duet partners on confirm screen. */
+.partners-section {
+  margin: 14px 0;
+  padding: 10px 12px;
+  background: rgba(255, 77, 207, 0.06);
+  border: 1px solid rgba(255, 77, 207, 0.18);
+  border-radius: 6px;
+}
+.partners-title {
+  font-size: 0.95em;
+  color: #ddd;
+  margin-bottom: 8px;
+}
+.partner-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.partner-row input {
+  font-size: 0.95em;
+  padding: 8px;
+}
+.partner-remove {
+  background: transparent;
+  border: 1px solid #555;
+  color: #ccc;
+  width: 36px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.partner-remove:hover { background: #2a2a2a; color: #fff; }
+.partners-add {
+  background: transparent;
+  border: 1px dashed #ff4dcf;
+  color: #ff4dcf;
+  padding: 8px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  width: 100%;
+}
+.partners-add:hover { background: rgba(255, 77, 207, 0.08); }
+.partners-cap-hint {
+  font-size: 0.85em;
+  color: #888;
+  font-style: italic;
+}

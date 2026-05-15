@@ -25,6 +25,36 @@ const LS = {
   set: (k, v) => { try { localStorage.setItem(k, v); } catch { /* ignore */ } },
 };
 
+// Tracks the singer's submitted request ids for the current token so the
+// done screen can render a multi-song "your night" list. We scope by token
+// so that yesterday's ids don't leak into tonight's event.
+const MY_REQUESTS_KEY = "sing_my_request_ids";
+
+function _readMyRequestStore() {
+  try {
+    const raw = localStorage.getItem(MY_REQUESTS_KEY);
+    if (!raw) return null;
+    const obj = JSON.parse(raw);
+    if (obj && typeof obj === "object" && Array.isArray(obj.ids)) return obj;
+    return null;
+  } catch { return null; }
+}
+
+function rememberRequestId(token, id) {
+  if (!token || !id) return;
+  let store = _readMyRequestStore();
+  if (!store || store.token !== token) store = { token, ids: [] };
+  if (!store.ids.includes(id)) store.ids.push(id);
+  try { localStorage.setItem(MY_REQUESTS_KEY, JSON.stringify(store)); }
+  catch { /* private browsing — best-effort */ }
+}
+
+function readMyRequestIds(token) {
+  const store = _readMyRequestStore();
+  if (!store || store.token !== token) return [];
+  return store.ids.slice();
+}
+
 const PHONE_RE = /^\+?[0-9 \-()]{7,20}$/;
 
 const state = {
@@ -35,6 +65,9 @@ const state = {
   selected: null,   // { source_type, source_ref, song_artist, song_title, label }
   makeArtist: "",
   makeTitle: "",
+  // New: duet partners typed on the confirm screen. Array of
+  // {name, phone}. Capped at MAX_PARTNERS in the render.
+  additional: [],
   request: null,    // after submit
   status: null,     // /sing/status response
   rotationCache: null,   // {fetchedAt: number, payload: object} — survives back-from-search
@@ -42,6 +75,8 @@ const state = {
   // toggle mid-session takes effect on the next keystroke-triggered search.
   makeRequestsEnabled: INITIAL_MAKE_REQUESTS_ENABLED,
 };
+
+const MAX_PARTNERS = 3;
 
 // --- Offline detection -----------------------------------------------------
 
@@ -936,12 +971,45 @@ function renderSearch() {
 function renderConfirm() {
   let submitting = false;
   let err = "";
+
+  function rerender() {
+    root.innerHTML = "";
+    root.appendChild(renderConfirm());
+  }
+
   const send = async () => {
     if (submitting) return;
     submitting = true; err = "";
-    root.querySelector(".submit-btn").disabled = true;
-    root.querySelector(".submit-btn").textContent = "Sending…";
+    const submitBtn = root.querySelector(".submit-btn");
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.textContent = "Sending…";
+    }
     try {
+      // Normalise partners — drop rows where the name is blank.
+      const cleaned = state.additional
+        .map((p) => ({
+          name: (p.name || "").trim(),
+          phone: (p.phone || "").trim(),
+        }))
+        .filter((p) => p.name.length > 0);
+
+      // Per-row phone format check — surface the first error inline.
+      for (let i = 0; i < cleaned.length; i++) {
+        const ph = cleaned[i].phone;
+        if (ph && !PHONE_RE.test(ph)) {
+          err = `Partner ${i + 1}: phone format looks off.`;
+          submitting = false;
+          if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.textContent = "Send to KJ";
+          }
+          const errEl = root.querySelector(".error");
+          if (errEl) errEl.textContent = err;
+          return;
+        }
+      }
+
       const payload = {
         singer_name: state.name,
         phone: state.phone,
@@ -951,8 +1019,13 @@ function renderConfirm() {
         source_ref: state.selected.source_ref,
         source_meta: state.selected.source_meta || null,
       };
+      if (cleaned.length > 0) payload.additional_singers = cleaned;
+
       const data = await submit(payload);
       state.request = data.request;
+      // Remember this request id on this device (per token) so the done
+      // screen's "your songs tonight" list survives reloads.
+      rememberRequestId(TOKEN, data.request.id);
       state.step = "done";
       render();
     } catch (e) {
@@ -960,12 +1033,62 @@ function renderConfirm() {
         ? "You've submitted a lot — please wait a few minutes."
         : "Couldn't send — ask the KJ if requests are paused.";
       submitting = false;
-      root.querySelector(".submit-btn").disabled = false;
-      root.querySelector(".submit-btn").textContent = "Send to KJ";
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.textContent = "Send to KJ";
+      }
       const errEl = root.querySelector(".error");
       if (errEl) errEl.textContent = err;
     }
   };
+
+  function renderPartnersSection() {
+    const wrap = el("div", { class: "partners-section" },
+      el("div", { class: "partners-title" }, "Singing with anyone else? (optional)"),
+    );
+    state.additional.forEach((p, i) => {
+      wrap.appendChild(el("div", {
+        class: "partner-row",
+        "data-testid": "partner-row",
+      },
+        el("input", {
+          type: "text",
+          placeholder: "Name (e.g. Sarah B.)",
+          value: p.name || "",
+          "data-testid": `partner-name-${i}`,
+          oninput: (e) => { state.additional[i].name = e.target.value; },
+        }),
+        el("input", {
+          type: "tel",
+          placeholder: "Phone (optional)",
+          value: p.phone || "",
+          "data-testid": `partner-phone-${i}`,
+          oninput: (e) => { state.additional[i].phone = e.target.value; },
+        }),
+        el("button", {
+          type: "button",
+          class: "partner-remove",
+          "aria-label": "Remove",
+          onclick: () => { state.additional.splice(i, 1); rerender(); },
+        }, "×"),
+      ));
+    });
+    if (state.additional.length < MAX_PARTNERS) {
+      wrap.appendChild(el("button", {
+        type: "button",
+        class: "partners-add",
+        "data-testid": "add-singer",
+        onclick: () => {
+          state.additional.push({ name: "", phone: "" });
+          rerender();
+        },
+      }, state.additional.length === 0 ? "+ Add a singer" : "+ Add another singer"));
+    } else {
+      wrap.appendChild(el("div", { class: "partners-cap-hint" },
+        `That's the max — ${MAX_PARTNERS + 1} singers total.`));
+    }
+    return wrap;
+  }
 
   return el("main", { class: "sing-card" },
     el("h2", {}, "Looking good?"),
@@ -976,6 +1099,7 @@ function renderConfirm() {
       state.phone
         ? `Your details: ${state.name} · ${state.phone}`
         : `Your details: ${state.name}`),
+    renderPartnersSection(),
     el("div", { class: "row" },
       el("button", { class: "btn ghost", onclick: back("search") }, "Change"),
       el("button", { class: "btn primary submit-btn", onclick: send }, "Send to KJ"),
@@ -1333,6 +1457,13 @@ function initCodeEntry() {
     e.preventDefault();
     submitCode(input.value);
   });
+}
+
+// Test bridge — only used by Playwright e2e tests. Cheap to leave in
+// production: two globals on the window object, no behaviour change.
+if (typeof window !== 'undefined') {
+  window.__sing_state = state;
+  window.__sing_render = render;
 }
 
 // --- Bootstrap ------------------------------------------------------------
