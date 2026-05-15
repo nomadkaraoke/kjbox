@@ -32,6 +32,7 @@ class SingStore:
     """
 
     _MEMORY = ":memory:"
+    _SENTINEL = object()
 
     def __init__(self, db_path):
         self.db_path = db_path
@@ -156,7 +157,16 @@ class SingStore:
     def _row_to_dict(row):
         if row is None:
             return None
-        return dict(row)
+        d = dict(row)
+        # additional_singers is stored as JSON; deserialise for callers.
+        # NULL → None (solo). Empty array → [] (cleared list).
+        raw = d.get("additional_singers")
+        if raw is not None:
+            try:
+                d["additional_singers"] = json.loads(raw)
+            except (TypeError, ValueError):
+                d["additional_singers"] = None
+        return d
 
     def _get_meta(self, key, default=None):
         conn = self._get_conn()
@@ -259,6 +269,7 @@ class SingStore:
         source_meta=None,
         notes="",
         token=None,
+        additional_singers=None,
     ):
         """Insert a new pending request and return the created row as a dict."""
         if not singer_name:
@@ -272,13 +283,17 @@ class SingStore:
 
         request_token = token if token is not None else (self.get_token() or "")
         meta_json = json.dumps(source_meta) if source_meta is not None else None
+        partners_json = (
+            json.dumps(additional_singers) if additional_singers is not None else None
+        )
         conn = self._get_conn()
         cur = conn.execute(
             """
             INSERT INTO sing_requests
                 (token, singer_name, phone, song_artist, song_title,
-                 source_type, source_ref, source_meta, notes)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 source_type, source_ref, source_meta, notes,
+                 additional_singers)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 request_token,
@@ -290,6 +305,7 @@ class SingStore:
                 source_ref,
                 meta_json,
                 notes.strip(),
+                partners_json,
             ),
         )
         conn.commit()
@@ -343,11 +359,26 @@ class SingStore:
         source_ref=None,
         source_meta=None,
         notes=None,
+        additional_singers=_SENTINEL,
     ):
-        """Edit mutable fields on a request. Returns the updated row."""
+        """Edit mutable fields on a request. Returns the updated row.
+
+        For `additional_singers`: pass a list (incl. empty) to overwrite, or
+        leave default to preserve the existing value. There is no "set to
+        NULL" path through update_request — create with None instead.
+        """
         existing = self.get_request(request_id)
         if existing is None:
             raise ValueError(f"Request {request_id} not found")
+
+        if additional_singers is self._SENTINEL:
+            partners_json = (
+                json.dumps(existing["additional_singers"])
+                if existing.get("additional_singers") is not None
+                else None
+            )
+        else:
+            partners_json = json.dumps(additional_singers)
 
         new_vals = {
             "singer_name": singer_name.strip() if singer_name is not None else existing["singer_name"],
@@ -357,7 +388,11 @@ class SingStore:
             "source_ref": source_ref if source_ref is not None else existing["source_ref"],
             "source_meta": (
                 json.dumps(source_meta) if source_meta is not None
-                else existing["source_meta"]
+                else (
+                    json.dumps(existing["source_meta"])
+                    if isinstance(existing.get("source_meta"), (dict, list))
+                    else existing["source_meta"]
+                )
             ),
             "notes": notes.strip() if notes is not None else existing["notes"],
         }
@@ -366,13 +401,14 @@ class SingStore:
             """
             UPDATE sing_requests
                SET singer_name = ?, song_artist = ?, song_title = ?,
-                   source_type = ?, source_ref = ?, source_meta = ?, notes = ?
+                   source_type = ?, source_ref = ?, source_meta = ?,
+                   notes = ?, additional_singers = ?
              WHERE id = ?
             """,
             (
                 new_vals["singer_name"], new_vals["song_artist"], new_vals["song_title"],
                 new_vals["source_type"], new_vals["source_ref"], new_vals["source_meta"],
-                new_vals["notes"], request_id,
+                new_vals["notes"], partners_json, request_id,
             ),
         )
         conn.commit()
