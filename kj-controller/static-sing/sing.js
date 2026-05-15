@@ -69,7 +69,6 @@ const state = {
   // {name, phone}. Capped at MAX_PARTNERS in the render.
   additional: [],
   request: null,    // after submit
-  status: null,     // /sing/status response
   rotationCache: null,   // {fetchedAt: number, payload: object} — survives back-from-search
   // Phase C — updated on every /sing/search response so a KJ flipping the
   // toggle mid-session takes effect on the next keystroke-triggered search.
@@ -135,16 +134,6 @@ async function submit(payload) {
     method: "POST",
     body: JSON.stringify(payload),
   });
-}
-
-async function fetchStatus(id) {
-  // Status now requires the same token gate as other sing routes — the
-  // backend cross-references the request's stored token to prevent cross-
-  // event reads, so we must pass ours on every poll.
-  const t = encodeURIComponent(TOKEN);
-  const resp = await fetch(`${BASE}/status/${id}?t=${t}`, { credentials: "same-origin" });
-  if (!resp.ok) throw new Error("status fetch failed");
-  return resp.json();
 }
 
 // --- Render helpers --------------------------------------------------------
@@ -1108,81 +1097,136 @@ function renderConfirm() {
   );
 }
 
+async function fetchMyRequests(ids) {
+  if (!ids || !ids.length) {
+    return { now_playing: { now_singing: null, up_next: null, queued_count: 0 }, requests: [] };
+  }
+  const q = ids.join(",");
+  const resp = await fetch(
+    `${BASE}/my-requests?ids=${encodeURIComponent(q)}&t=${encodeURIComponent(TOKEN)}`,
+    { credentials: "same-origin" },
+  );
+  if (!resp.ok) {
+    const err = new Error("my-requests fetch failed");
+    err.status = resp.status;
+    throw err;
+  }
+  return resp.json();
+}
+
+function _statusLine(item) {
+  const req = item.request;
+  if (req.status === "rejected") {
+    return "The KJ needs to talk to you — see them at the desk.";
+  }
+  if (req.status === "pending") return "Waiting for KJ to approve…";
+  const est = item.estimate;
+  if (!est) return "Added to the queue.";
+  if (est.now_singing) return "🎤 You're up — break a leg!";
+  if (est.position === 1) return "🎤 You're next — head to the mic";
+  if (est.position === 2) return "About 1 song to go";
+  if (est.position >= 3) {
+    const low = Math.round(est.range_low_s / 60);
+    const high = Math.round(est.range_high_s / 60);
+    return `You're #${est.position} — about ${low}–${high} min`;
+  }
+  return "Added to the queue.";
+}
+
+function _renderSongCard(item) {
+  const req = item.request;
+  const song = (req.song_title || "") + (req.song_artist ? ` — ${req.song_artist}` : "");
+  const partners = req.additional_singers || [];
+  const card = el("div", { class: "song-card", "data-status": req.status },
+    el("div", { class: "song-card-title" }, song || "(song)"),
+    el("div", { class: "song-card-status" }, _statusLine(item)),
+  );
+  if (partners.length > 0) {
+    const names = partners.map((p) => p.name).join(", ");
+    card.appendChild(el("div", { class: "song-card-partners" },
+      `with ${names}`));
+  }
+  return card;
+}
+
 function renderDone() {
   const card = el("main", { class: "sing-card" },
     renderNowPlaying(),
-    el("h2", {}, state.request?.status === "approved" ? "You're in!" : "Sent!"),
-    el("p", {}, state.request?.status === "approved"
-      ? "The KJ has added you to the queue."
-      : "The KJ will look at it and add you to the queue."),
-    el("div", { class: "status-live" }, "Checking your position…"),
+    el("h2", {}, "Your songs tonight"),
+    el("div", { class: "songs-list" }, "Loading your songs…"),
+    el("button", {
+      class: "btn primary request-another",
+      "data-testid": "request-another",
+      onclick: () => {
+        // Re-sync identity from localStorage in case it was set after module load.
+        state.name = LS.get("sing_name") || state.name;
+        state.phone = LS.get("sing_phone") || state.phone;
+        state.selected = null;
+        state.makeArtist = "";
+        state.makeTitle = "";
+        state.additional = [];
+        state.step = "search";
+        render();
+      },
+    }, "+ Request another song"),
     el("div", { id: "push-optin", class: "push-optin" }),
     el("details", { class: "upcoming" },
       el("summary", {}, "Show upcoming singers"),
-      el("div", { class: "queue-list" }, "Loading…"),
+      el("div", { class: "rotation-body" }, "Open to load…"),
     ),
     el("p", { class: "hint" },
       "Keep this page open — it'll update automatically. Good luck!"),
   );
 
   setTimeout(maybeShowPushPrompt, 2000);
-  pollStatus(card);
+  pollMyRequests(card);
+  // The rotation expander still uses the existing /sing/rotation path.
+  const upcoming = card.querySelector(".upcoming");
+  upcoming.addEventListener("toggle", async (e) => {
+    if (!e.target.open) return;
+    if (upcoming.dataset.loaded === "1") return;
+    const slot = upcoming.querySelector(".rotation-body");
+    if (!slot) return;
+    slot.textContent = "Loading…";
+    try {
+      const payload = await fetchRotation();
+      upcoming.dataset.loaded = "1";
+      slot.replaceWith(_renderRotationBody({ ...payload, _fetchedAt: Date.now() }));
+    } catch {
+      slot.textContent = "Couldn't load — try closing and reopening.";
+    }
+  });
   return card;
 }
 
-async function pollStatus(card) {
-  const live = card.querySelector(".status-live");
-  const queueEl = card.querySelector(".queue-list");
-  const reqId = state.request?.id;
-  if (!reqId || !live) return;
-
-  // Clear any previous poll timer so re-rendering the "done" step doesn't
-  // leak overlapping intervals.
+async function pollMyRequests(card) {
   if (state._statusPollTimer) {
     clearInterval(state._statusPollTimer);
     state._statusPollTimer = null;
   }
 
   const tick = async () => {
+    const ids = readMyRequestIds(TOKEN);
+    if (state.request?.id && !ids.includes(state.request.id)) {
+      ids.unshift(state.request.id);
+    }
     try {
-      const data = await fetchStatus(reqId);
+      const data = await fetchMyRequests(ids);
       onPollSuccess();
-      state.status = data;
-      const est = data.estimate;
-      if (est && est.now_singing) {
-        live.textContent = "🎤 You're up — break a leg!";
-      } else if (est && est.position === 1) {
-        live.textContent = "🎤 You're next — head to the mic";
-      } else if (est && est.position === 2) {
-        live.textContent = "About 1 song to go";
-      } else if (est && est.position >= 3) {
-        const low = Math.round(est.range_low_s / 60);
-        const high = Math.round(est.range_high_s / 60);
-        live.textContent = `You're #${est.position} — about ${low}–${high} min`;
-      } else if (data.request?.status === "pending") {
-        live.textContent = "Waiting for KJ to approve…";
-      } else if (data.request?.status === "rejected") {
-        live.textContent = "The KJ needs to talk to you — see them at the desk.";
-      } else {
-        live.textContent = "Added to the queue.";
-      }
-      if (queueEl && data.queue) {
-        queueEl.innerHTML = "";
-        for (const entry of data.queue) {
-          queueEl.appendChild(el("div", { class: "queue-row" },
-            el("span", { class: "q-name" }, entry.first_name || "—"),
-            el("span", { class: "q-song" }, entry.song_artist || ""),
-            el("span", { class: "q-status" }, entry.status || ""),
-          ));
+      const npNode = card.querySelector(".now-playing");
+      if (npNode) updateNowPlaying(npNode, data.now_playing);
+      const slot = card.querySelector(".songs-list");
+      if (slot) {
+        slot.innerHTML = "";
+        if (!data.requests.length) {
+          slot.appendChild(el("p", { class: "hint" },
+            "No songs yet — tap 'Request another song' below."));
+        } else {
+          for (const item of data.requests) slot.appendChild(_renderSongCard(item));
         }
-      }
-      if (data.now_playing) {
-        const npNode = card.querySelector(".now-playing");
-        if (npNode) updateNowPlaying(npNode, data.now_playing);
       }
     } catch {
       onPollFailure();
-      live.textContent = "Couldn't update — checking again in a moment.";
     }
   };
 

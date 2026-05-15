@@ -1,5 +1,7 @@
 """End-to-end tests for the public /sing/* singer UI."""
 
+import json
+
 from playwright.sync_api import expect
 
 
@@ -70,9 +72,61 @@ class TestConfirmPartners:
         page.locator('[data-testid="partner-name-0"]').fill('Sarah B.')
         page.locator('[data-testid="partner-phone-0"]').fill('+61 400 111 222')
         page.locator('.submit-btn').click()
-        # TODO: enable after Task 8 — multi-song done screen not yet implemented.
-        # expect(page.locator('text=Your songs tonight')).to_be_visible(timeout=5000)
-        # TODO: enable after Task 8 — assertion depends on done-screen transition above.
-        # assert captured['body']['additional_singers'] == [
-        #     {"name": "Sarah B.", "phone": "+61 400 111 222"},
-        # ]
+        expect(page.locator('text=Your songs tonight')).to_be_visible(timeout=5000)
+        assert captured['body']['additional_singers'] == [
+            {"name": "Sarah B.", "phone": "+61 400 111 222"},
+        ]
+
+
+class TestDoneMultiSong:
+    def _submit_one(self, live_server, live_token, song="Wonderwall"):
+        """Create a request via the live server's HTTP API.
+        Returns the parsed request dict."""
+        import urllib.request as _ur
+        body = {
+            "singer_name": "Alice", "phone": "",
+            "song_artist": "Oasis", "song_title": song,
+            "source_type": "local", "source_ref": "/tmp/x.mp4",
+        }
+        data = json.dumps(body).encode()
+        req = _ur.Request(
+            f"{live_server}/sing/submit?t={live_token}",
+            data=data, headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with _ur.urlopen(req) as r:
+            return json.loads(r.read())["request"]
+
+    def test_done_lists_all_submitted_songs(self, page, live_server, live_token):
+        r1 = self._submit_one(live_server, live_token, song="Wonderwall")
+        r2 = self._submit_one(live_server, live_token, song="Don't Look Back in Anger")
+        page.goto(f"{live_server}/sing/?t={live_token}")
+        page.evaluate(
+            "(payload) => localStorage.setItem('sing_my_request_ids', JSON.stringify(payload))",
+            {"token": live_token, "ids": [r1["id"], r2["id"]]},
+        )
+        page.evaluate("localStorage.setItem('sing_name', 'Alice')")
+        page.evaluate("localStorage.setItem('sing_phone', '')")
+        page.evaluate(
+            "(rid) => { window.__sing_state.request = {id: rid}; window.__sing_state.step = 'done'; window.__sing_render(); }",
+            r1["id"],
+        )
+        expect(page.locator("text=Wonderwall")).to_be_visible()
+        expect(page.locator("text=Don't Look Back in Anger")).to_be_visible()
+        expect(page.locator('[data-testid="request-another"]')).to_be_visible()
+
+    def test_request_another_returns_to_search(self, page, live_server, live_token):
+        r1 = self._submit_one(live_server, live_token)
+        page.goto(f"{live_server}/sing/?t={live_token}")
+        page.evaluate(
+            "(payload) => localStorage.setItem('sing_my_request_ids', JSON.stringify(payload))",
+            {"token": live_token, "ids": [r1["id"]]},
+        )
+        page.evaluate("localStorage.setItem('sing_name', 'Alice')")
+        page.evaluate(
+            "(rid) => { window.__sing_state.request = {id: rid}; window.__sing_state.step = 'done'; window.__sing_render(); }",
+            r1["id"],
+        )
+        page.locator('[data-testid="request-another"]').click()
+        expect(page.locator('input[type="search"]')).to_be_visible()
+        expect(page.locator("text=Hi Alice")).to_be_visible()

@@ -647,3 +647,26 @@ input:focus {
   color: #888;
   font-style: italic;
 }
+
+/* Multi-song done-screen list. */
+.songs-list { margin: 10px 0; }
+.song-card {
+  margin: 8px 0;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border-left: 3px solid #ff4dcf;
+  border-radius: 4px;
+}
+.song-card[data-status="rejected"] { border-left-color: #ff6655; }
+.song-card[data-status="pending"]  { border-left-color: #888; }
+.song-card-title { font-weight: 600; margin-bottom: 4px; }
+.song-card-status { font-size: 0.92em; color: #ccc; }
+.song-card-partners {
+  font-size: 0.85em;
+  color: #ff4dcf;
+  margin-top: 4px;
+}
+.request-another {
+  width: 100%;
+  margin: 12px 0;
+}
