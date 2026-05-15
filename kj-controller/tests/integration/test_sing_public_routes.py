@@ -322,6 +322,59 @@ class TestSubmit:
         entries = sing_app.rotation.get_rotation()
         assert any(e["singer"] == "Andrew" for e in entries)
 
+    def test_submit_with_partners(self, client, sing_app, token):
+        body = self._body()
+        body["additional_singers"] = [
+            {"name": "Sarah B.", "phone": "+61 400 111 222"},
+            {"name": "Mike", "phone": ""},
+        ]
+        resp = client.post(f"/sing/submit?t={token}", json=body)
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["request"]["additional_singers"] == [
+            {"name": "Sarah B.", "phone": "+61 400 111 222"},
+            {"name": "Mike", "phone": ""},
+        ]
+
+    def test_submit_partners_omitted_is_solo(self, client, sing_app, token):
+        resp = client.post(f"/sing/submit?t={token}", json=self._body())
+        assert resp.status_code == 200
+        assert resp.get_json()["request"]["additional_singers"] is None
+
+    def test_submit_rejects_too_many_partners(self, client, token):
+        body = self._body()
+        body["additional_singers"] = [
+            {"name": f"Singer {i}"} for i in range(4)
+        ]
+        resp = client.post(f"/sing/submit?t={token}", json=body)
+        assert resp.status_code == 400
+        assert "additional_singers" in resp.get_json()["error"]
+
+    def test_submit_rejects_empty_partner_name(self, client, token):
+        body = self._body()
+        body["additional_singers"] = [{"name": "  ", "phone": ""}]
+        resp = client.post(f"/sing/submit?t={token}", json=body)
+        assert resp.status_code == 400
+        assert "additional_singers" in resp.get_json()["error"]
+
+    def test_submit_rejects_malformed_partner_phone(self, client, token):
+        body = self._body()
+        body["additional_singers"] = [
+            {"name": "Sarah", "phone": "not-a-phone"}
+        ]
+        resp = client.post(f"/sing/submit?t={token}", json=body)
+        assert resp.status_code == 400
+        assert "additional_singers" in resp.get_json()["error"]
+
+    def test_submit_accepts_partner_without_phone(self, client, sing_app, token):
+        body = self._body()
+        body["additional_singers"] = [{"name": "Phoneless Pete"}]
+        resp = client.post(f"/sing/submit?t={token}", json=body)
+        assert resp.status_code == 200
+        partners = resp.get_json()["request"]["additional_singers"]
+        # Server normalises missing phone → "".
+        assert partners == [{"name": "Phoneless Pete", "phone": ""}]
+
 
 class TestStatus:
     def test_status_without_token_rejected(self, client):

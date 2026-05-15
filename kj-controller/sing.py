@@ -306,6 +306,43 @@ def _validate_kj_pick_payload(data):
     return None
 
 
+_MAX_ADDITIONAL_SINGERS = 3
+
+
+def _validate_additional_singers(raw):
+    """Return (normalised_list, error_message). One of the two is None.
+
+    `None` raw → (None, None) — solo request, no partners.
+    `[]`        → ([], None) — explicit clear (treated as solo).
+    Otherwise: list of dicts, each `{"name": <required>, "phone": <opt>}`.
+    Length must be ≤ _MAX_ADDITIONAL_SINGERS. Names are .strip()-ed and
+    must be non-empty. Phones, when present, must match _PHONE_RE.
+    """
+    if raw is None:
+        return None, None
+    if not isinstance(raw, list):
+        return None, "additional_singers must be a list"
+    if len(raw) > _MAX_ADDITIONAL_SINGERS:
+        return None, (
+            f"additional_singers: max {_MAX_ADDITIONAL_SINGERS} extras "
+            f"(got {len(raw)})"
+        )
+    out = []
+    for i, item in enumerate(raw):
+        if not isinstance(item, dict):
+            return None, f"additional_singers[{i}]: must be an object"
+        name = (item.get("name") or "").strip()
+        phone = (item.get("phone") or "").strip()
+        if not name:
+            return None, f"additional_singers[{i}]: name is required"
+        if len(name) > 100:
+            return None, f"additional_singers[{i}]: name too long"
+        if phone and not _PHONE_RE.match(phone):
+            return None, f"additional_singers[{i}]: phone format invalid"
+        out.append({"name": name, "phone": phone})
+    return out, None
+
+
 @sing_bp.route("/", methods=["GET"])
 def landing():
     """Singer-facing SPA entry point.
@@ -488,6 +525,10 @@ def submit():
     source_ref = data.get("source_ref") or None
     source_meta = data.get("source_meta") or None
     notes = (data.get("notes") or "").strip()
+    additional_raw = data.get("additional_singers")
+    additional, additional_err = _validate_additional_singers(additional_raw)
+    if additional_err:
+        return jsonify({"error": additional_err}), 400
 
     if not singer_name:
         return jsonify({"error": "singer_name is required"}), 400
@@ -524,6 +565,7 @@ def submit():
         source_ref=source_ref,
         source_meta=source_meta,
         notes=notes,
+        additional_singers=additional,
     )
 
     auto_approved = False
@@ -727,6 +769,7 @@ def _public_request_view(req):
         "status": req["status"],
         "created_at": req["created_at"],
         "linked_entry_id": req.get("linked_entry_id"),
+        "additional_singers": req.get("additional_singers"),
     }
 
 
