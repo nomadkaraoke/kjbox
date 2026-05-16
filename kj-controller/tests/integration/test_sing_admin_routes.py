@@ -1,5 +1,6 @@
 """Integration tests for the admin /rotation/requests/* endpoints and token hooks."""
 
+import json
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -236,6 +237,83 @@ class TestApprove:
     def test_approve_unknown_404(self, admin_client):
         resp = admin_client.post("/rotation/requests/9999/approve")
         assert resp.status_code == 404
+
+    def test_approve_local_with_duet_partners(self, admin_client, admin_app):
+        req = _make_pending(
+            admin_app,
+            singer_name="Alice",
+            source_type="local",
+            source_ref="/tmp/song.mp4",
+            additional_singers=[
+                {"name": "Sarah B.", "phone": "+61 400 111 222"},
+                {"name": "Mike", "phone": ""},
+            ],
+        )
+        resp = admin_client.post(f"/rotation/requests/{req['id']}/approve")
+        assert resp.status_code == 200
+        linked_id = resp.get_json()["request"]["linked_entry_id"]
+        entry = admin_app.rotation.store.get_entry(linked_id)
+        # Joined singer string for legacy text column.
+        assert entry["singer"] == "Alice & Sarah B. & Mike"
+        # Structured list survives in singers_json.
+        names = json.loads(entry["singers_json"])
+        assert names == ["Alice", "Sarah B.", "Mike"]
+
+    def test_approve_solo_unchanged(self, admin_client, admin_app):
+        """Solo approvals must still produce a single-singer entry (no singers_json)."""
+        req = _make_pending(
+            admin_app, singer_name="SoloAndrew",
+            source_type="local", source_ref="/tmp/x.mp4",
+        )
+        resp = admin_client.post(f"/rotation/requests/{req['id']}/approve")
+        assert resp.status_code == 200
+        linked_id = resp.get_json()["request"]["linked_entry_id"]
+        entry = admin_app.rotation.store.get_entry(linked_id)
+        assert entry["singer"] == "SoloAndrew"
+        assert entry["singers_json"] is None
+
+    def test_approve_partners_all_blank_names_is_solo(self, admin_client, admin_app):
+        """Defensive: if partners list contains only blank names (bypassing
+        /submit validation via direct store write), approve still produces
+        a solo entry — singers_json stays NULL."""
+        req = _make_pending(
+            admin_app,
+            singer_name="Alice",
+            source_type="local",
+            source_ref="/tmp/x.mp4",
+            additional_singers=[{"name": "", "phone": ""}],
+        )
+        resp = admin_client.post(f"/rotation/requests/{req['id']}/approve")
+        assert resp.status_code == 200
+        linked_id = resp.get_json()["request"]["linked_entry_id"]
+        entry = admin_app.rotation.store.get_entry(linked_id)
+        assert entry["singer"] == "Alice"
+        assert entry["singers_json"] is None
+
+    def test_approve_youtube_with_duet_partners(self, admin_client, admin_app):
+        """Branch coverage: the YouTube/divebar/kn branch passes singers= too.
+        A kwarg drift between source-type branches would silently regress duets
+        on non-local sources without this test."""
+        req = _make_pending(
+            admin_app,
+            singer_name="Alice",
+            source_type="youtube",
+            source_ref="https://youtu.be/abc123",
+            additional_singers=[{"name": "Sarah B.", "phone": "+61 400 111 222"}],
+        )
+        with patch("routes._download_worker"):
+            resp = admin_client.post(f"/rotation/requests/{req['id']}/approve")
+        assert resp.status_code == 200
+        linked_id = resp.get_json()["request"]["linked_entry_id"]
+        entry = admin_app.rotation.store.get_entry(linked_id)
+        assert entry["singer"] == "Alice & Sarah B."
+        names = json.loads(entry["singers_json"])
+        assert names == ["Alice", "Sarah B."]
+        # Sanity: download was still queued.
+        assert any(
+            item["rotation_entry_id"] == linked_id
+            for item in admin_app.download_queue["items"]
+        )
 
 
 def _make_kj_pick_pending(app, versions):
@@ -529,3 +607,19 @@ class TestPushHooks:
         resp = client.post(f"/rotation/requests/{req_id}/approve")
         # Approve still succeeds despite dispatcher exception
         assert resp.status_code == 200
+
+
+class TestListRequestsExposesPartners:
+    def test_list_includes_additional_singers(self, admin_client, admin_app):
+        admin_app.sing_store.create_request(
+            singer_name="Alice", phone="", source_type="local",
+            source_ref="/tmp/x.mp4",
+            additional_singers=[{"name": "Sarah", "phone": "+61 400 111 222"}],
+        )
+        resp = admin_client.get("/rotation/requests?status=pending")
+        assert resp.status_code == 200
+        rows = resp.get_json()["requests"]
+        assert any(
+            r.get("additional_singers") == [{"name": "Sarah", "phone": "+61 400 111 222"}]
+            for r in rows
+        )

@@ -43,7 +43,7 @@ class TestSchemaInit:
             "id", "created_at", "token", "singer_name", "phone",
             "song_artist", "song_title", "source_type", "source_ref",
             "source_meta", "notes", "status", "rejected_reason",
-            "reviewed_at", "linked_entry_id",
+            "reviewed_at", "linked_entry_id", "additional_singers",
         }
         assert expected <= cols
 
@@ -65,6 +65,20 @@ class TestSchemaInit:
         mode = s._get_conn().execute("PRAGMA journal_mode").fetchone()[0]
         s.close()
         assert mode == "wal"
+
+    def test_additional_singers_column_present(self, store):
+        conn = store._get_conn()
+        cols = {row[1] for row in conn.execute(
+            "PRAGMA table_info(sing_requests)"
+        ).fetchall()}
+        assert "additional_singers" in cols
+
+    def test_additional_singers_migration_idempotent(self, tmp_path):
+        """Re-initialising on an existing DB must not fail on the new column."""
+        db_path = str(tmp_path / "rotation.db")
+        SingStore(db_path).close()
+        # Second open re-runs init_schema; must not raise.
+        SingStore(db_path).close()
 
     def test_shares_rotation_meta_with_rotation_store(self, tmp_path):
         """SingStore and RotationStore both use rotation_meta in the same DB."""
@@ -635,3 +649,66 @@ class TestPushSubscriptions:
         store.cleanup_stale_push_subscriptions(current_token="tok2")
         # tok1 sub is recent, not deleted
         assert len(store.list_active_push_subscriptions("tok1")) == 1
+
+
+# ---------------------------------------------------------------------------
+# additional_singers JSON column round-trips
+# ---------------------------------------------------------------------------
+
+class TestAdditionalSingers:
+    """additional_singers JSON column round-trips through create / get / update."""
+
+    def _partners(self):
+        return [
+            {"name": "Sarah B.", "phone": "+61 400 111 222"},
+            {"name": "Mike", "phone": ""},
+        ]
+
+    def test_create_with_partners_round_trips(self, store):
+        req = store.create_request(
+            singer_name="Alice",
+            phone="+61 400 000 000",
+            source_type="local",
+            source_ref="/tmp/x.mp4",
+            additional_singers=self._partners(),
+        )
+        assert req["additional_singers"] == self._partners()
+        again = store.get_request(req["id"])
+        assert again["additional_singers"] == self._partners()
+
+    def test_create_without_partners_is_none(self, store):
+        req = store.create_request(
+            singer_name="Solo",
+            phone="",
+            source_type="local",
+            source_ref="/tmp/y.mp4",
+        )
+        assert req["additional_singers"] is None
+
+    def test_update_can_set_partners(self, store):
+        req = store.create_request(
+            singer_name="Alice", phone="", source_type="local",
+            source_ref="/tmp/x.mp4",
+        )
+        updated = store.update_request(req["id"], additional_singers=self._partners())
+        assert updated["additional_singers"] == self._partners()
+
+    def test_update_can_clear_partners(self, store):
+        req = store.create_request(
+            singer_name="Alice", phone="", source_type="local",
+            source_ref="/tmp/x.mp4",
+            additional_singers=self._partners(),
+        )
+        cleared = store.update_request(req["id"], additional_singers=[])
+        assert cleared["additional_singers"] == []
+
+    def test_update_preserves_partners_when_not_passed(self, store):
+        """Sentinel default: omitting additional_singers leaves it untouched."""
+        req = store.create_request(
+            singer_name="Alice", phone="", source_type="local",
+            source_ref="/tmp/x.mp4",
+            additional_singers=self._partners(),
+        )
+        updated = store.update_request(req["id"], singer_name="Alicia")
+        assert updated["singer_name"] == "Alicia"
+        assert updated["additional_singers"] == self._partners()

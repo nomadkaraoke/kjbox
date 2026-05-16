@@ -2790,3 +2790,30 @@ body {
 .sing-qr-row { display: flex; gap: 1rem; }
 .sing-qr-card { flex: 1; text-align: center; }
 .sing-qr { width: 100%; max-width: 240px; background: #fff; padding: 0.5rem; border-radius: 4px; }
+
+/* Duet-partner block on admin approval cards (sing requests). */
+.request-duet-partners {
+  margin: 6px 0;
+  padding: 6px 10px;
+  background: rgba(255, 91, 184, 0.08);
+  border-left: 3px solid #ff5bb8;
+  border-radius: 4px;
+  font-size: 0.92em;
+}
+.request-duet-title {
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+.request-duet-list {
+  margin: 0;
+  padding-left: 18px;
+}
+.request-duet-list li {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+}
+.duet-name { font-weight: 500; }
+.duet-phone { color: #ff5bb8; text-decoration: none; }
+.duet-phone:hover { text-decoration: underline; }
+.duet-no-phone { color: #888; font-style: italic; }

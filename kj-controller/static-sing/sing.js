@@ -25,6 +25,36 @@ const LS = {
   set: (k, v) => { try { localStorage.setItem(k, v); } catch { /* ignore */ } },
 };
 
+// Tracks the singer's submitted request ids for the current token so the
+// done screen can render a multi-song "your night" list. We scope by token
+// so that yesterday's ids don't leak into tonight's event.
+const MY_REQUESTS_KEY = "sing_my_request_ids";
+
+function _readMyRequestStore() {
+  try {
+    const raw = localStorage.getItem(MY_REQUESTS_KEY);
+    if (!raw) return null;
+    const obj = JSON.parse(raw);
+    if (obj && typeof obj === "object" && Array.isArray(obj.ids)) return obj;
+    return null;
+  } catch { return null; }
+}
+
+function rememberRequestId(token, id) {
+  if (!token || !id) return;
+  let store = _readMyRequestStore();
+  if (!store || store.token !== token) store = { token, ids: [] };
+  if (!store.ids.includes(id)) store.ids.push(id);
+  try { localStorage.setItem(MY_REQUESTS_KEY, JSON.stringify(store)); }
+  catch { /* private browsing — best-effort */ }
+}
+
+function readMyRequestIds(token) {
+  const store = _readMyRequestStore();
+  if (!store || store.token !== token) return [];
+  return store.ids.slice();
+}
+
 const PHONE_RE = /^\+?[0-9 \-()]{7,20}$/;
 
 const state = {
@@ -35,13 +65,17 @@ const state = {
   selected: null,   // { source_type, source_ref, song_artist, song_title, label }
   makeArtist: "",
   makeTitle: "",
+  // New: duet partners typed on the confirm screen. Array of
+  // {name, phone}. Capped at MAX_PARTNERS in the render.
+  additional: [],
   request: null,    // after submit
-  status: null,     // /sing/status response
   rotationCache: null,   // {fetchedAt: number, payload: object} — survives back-from-search
   // Phase C — updated on every /sing/search response so a KJ flipping the
   // toggle mid-session takes effect on the next keystroke-triggered search.
   makeRequestsEnabled: INITIAL_MAKE_REQUESTS_ENABLED,
 };
+
+const MAX_PARTNERS = 3;
 
 // --- Offline detection -----------------------------------------------------
 
@@ -102,16 +136,6 @@ async function submit(payload) {
   });
 }
 
-async function fetchStatus(id) {
-  // Status now requires the same token gate as other sing routes — the
-  // backend cross-references the request's stored token to prevent cross-
-  // event reads, so we must pass ours on every poll.
-  const t = encodeURIComponent(TOKEN);
-  const resp = await fetch(`${BASE}/status/${id}?t=${t}`, { credentials: "same-origin" });
-  if (!resp.ok) throw new Error("status fetch failed");
-  return resp.json();
-}
-
 // --- Render helpers --------------------------------------------------------
 
 function el(tag, attrs = {}, ...children) {
@@ -133,6 +157,10 @@ function render() {
   if (nowPlayingTimer && state.step !== "landing" && state.step !== "done") {
     clearInterval(nowPlayingTimer);
     nowPlayingTimer = null;
+  }
+  if (state._statusPollTimer && state.step !== "done") {
+    clearInterval(state._statusPollTimer);
+    state._statusPollTimer = null;
   }
   root.innerHTML = "";
   const view = {
@@ -936,12 +964,45 @@ function renderSearch() {
 function renderConfirm() {
   let submitting = false;
   let err = "";
+
+  function rerender() {
+    root.innerHTML = "";
+    root.appendChild(renderConfirm());
+  }
+
   const send = async () => {
     if (submitting) return;
     submitting = true; err = "";
-    root.querySelector(".submit-btn").disabled = true;
-    root.querySelector(".submit-btn").textContent = "Sending…";
+    const submitBtn = root.querySelector(".submit-btn");
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.textContent = "Sending…";
+    }
     try {
+      // Normalise partners — drop rows where the name is blank.
+      const cleaned = state.additional
+        .map((p) => ({
+          name: (p.name || "").trim(),
+          phone: (p.phone || "").trim(),
+        }))
+        .filter((p) => p.name.length > 0);
+
+      // Per-row phone format check — surface the first error inline.
+      for (let i = 0; i < cleaned.length; i++) {
+        const ph = cleaned[i].phone;
+        if (ph && !PHONE_RE.test(ph)) {
+          err = `Partner ${i + 1}: phone format looks off.`;
+          submitting = false;
+          if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.textContent = "Send to KJ";
+          }
+          const errEl = root.querySelector(".error");
+          if (errEl) errEl.textContent = err;
+          return;
+        }
+      }
+
       const payload = {
         singer_name: state.name,
         phone: state.phone,
@@ -951,8 +1012,13 @@ function renderConfirm() {
         source_ref: state.selected.source_ref,
         source_meta: state.selected.source_meta || null,
       };
+      if (cleaned.length > 0) payload.additional_singers = cleaned;
+
       const data = await submit(payload);
       state.request = data.request;
+      // Remember this request id on this device (per token) so the done
+      // screen's "your songs tonight" list survives reloads.
+      rememberRequestId(TOKEN, data.request.id);
       state.step = "done";
       render();
     } catch (e) {
@@ -960,12 +1026,62 @@ function renderConfirm() {
         ? "You've submitted a lot — please wait a few minutes."
         : "Couldn't send — ask the KJ if requests are paused.";
       submitting = false;
-      root.querySelector(".submit-btn").disabled = false;
-      root.querySelector(".submit-btn").textContent = "Send to KJ";
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.textContent = "Send to KJ";
+      }
       const errEl = root.querySelector(".error");
       if (errEl) errEl.textContent = err;
     }
   };
+
+  function renderPartnersSection() {
+    const wrap = el("div", { class: "partners-section" },
+      el("div", { class: "partners-title" }, "Singing with anyone else? (optional)"),
+    );
+    state.additional.forEach((p, i) => {
+      wrap.appendChild(el("div", {
+        class: "partner-row",
+        "data-testid": "partner-row",
+      },
+        el("input", {
+          type: "text",
+          placeholder: "Name (e.g. Sarah B.)",
+          value: p.name || "",
+          "data-testid": `partner-name-${i}`,
+          oninput: (e) => { state.additional[i].name = e.target.value; },
+        }),
+        el("input", {
+          type: "tel",
+          placeholder: "Phone (optional)",
+          value: p.phone || "",
+          "data-testid": `partner-phone-${i}`,
+          oninput: (e) => { state.additional[i].phone = e.target.value; },
+        }),
+        el("button", {
+          type: "button",
+          class: "partner-remove",
+          "aria-label": "Remove",
+          onclick: () => { state.additional.splice(i, 1); rerender(); },
+        }, "×"),
+      ));
+    });
+    if (state.additional.length < MAX_PARTNERS) {
+      wrap.appendChild(el("button", {
+        type: "button",
+        class: "partners-add",
+        "data-testid": "add-singer",
+        onclick: () => {
+          state.additional.push({ name: "", phone: "" });
+          rerender();
+        },
+      }, state.additional.length === 0 ? "+ Add a singer" : "+ Add another singer"));
+    } else {
+      wrap.appendChild(el("div", { class: "partners-cap-hint" },
+        `That's the max — ${MAX_PARTNERS + 1} singers total.`));
+    }
+    return wrap;
+  }
 
   return el("main", { class: "sing-card" },
     el("h2", {}, "Looking good?"),
@@ -976,6 +1092,7 @@ function renderConfirm() {
       state.phone
         ? `Your details: ${state.name} · ${state.phone}`
         : `Your details: ${state.name}`),
+    renderPartnersSection(),
     el("div", { class: "row" },
       el("button", { class: "btn ghost", onclick: back("search") }, "Change"),
       el("button", { class: "btn primary submit-btn", onclick: send }, "Send to KJ"),
@@ -984,81 +1101,136 @@ function renderConfirm() {
   );
 }
 
+async function fetchMyRequests(ids) {
+  if (!ids || !ids.length) {
+    return { now_playing: { now_singing: null, up_next: null, queued_count: 0 }, requests: [] };
+  }
+  const q = ids.join(",");
+  const resp = await fetch(
+    `${BASE}/my-requests?ids=${encodeURIComponent(q)}&t=${encodeURIComponent(TOKEN)}`,
+    { credentials: "same-origin" },
+  );
+  if (!resp.ok) {
+    const err = new Error("my-requests fetch failed");
+    err.status = resp.status;
+    throw err;
+  }
+  return resp.json();
+}
+
+function _statusLine(item) {
+  const req = item.request;
+  if (req.status === "rejected") {
+    return "The KJ needs to talk to you — see them at the desk.";
+  }
+  if (req.status === "pending") return "Waiting for KJ to approve…";
+  const est = item.estimate;
+  if (!est) return "Added to the queue.";
+  if (est.now_singing) return "🎤 You're up — break a leg!";
+  if (est.position === 1) return "🎤 You're next — head to the mic";
+  if (est.position === 2) return "About 1 song to go";
+  if (est.position >= 3) {
+    const low = Math.round(est.range_low_s / 60);
+    const high = Math.round(est.range_high_s / 60);
+    return `You're #${est.position} — about ${low}–${high} min`;
+  }
+  return "Added to the queue.";
+}
+
+function _renderSongCard(item) {
+  const req = item.request;
+  const song = (req.song_title || "") + (req.song_artist ? ` — ${req.song_artist}` : "");
+  const partners = req.additional_singers || [];
+  const card = el("div", { class: "song-card", "data-status": req.status },
+    el("div", { class: "song-card-title" }, song || "(song)"),
+    el("div", { class: "song-card-status" }, _statusLine(item)),
+  );
+  if (partners.length > 0) {
+    const names = partners.map((p) => p.name).join(", ");
+    card.appendChild(el("div", { class: "song-card-partners" },
+      `with ${names}`));
+  }
+  return card;
+}
+
 function renderDone() {
   const card = el("main", { class: "sing-card" },
     renderNowPlaying(),
-    el("h2", {}, state.request?.status === "approved" ? "You're in!" : "Sent!"),
-    el("p", {}, state.request?.status === "approved"
-      ? "The KJ has added you to the queue."
-      : "The KJ will look at it and add you to the queue."),
-    el("div", { class: "status-live" }, "Checking your position…"),
+    el("h2", {}, "Your songs tonight"),
+    el("div", { class: "songs-list" }, "Loading your songs…"),
+    el("button", {
+      class: "btn primary request-another",
+      "data-testid": "request-another",
+      onclick: () => {
+        // Re-sync identity from localStorage in case it was set after module load.
+        state.name = LS.get("sing_name") || state.name;
+        state.phone = LS.get("sing_phone") || state.phone;
+        state.selected = null;
+        state.makeArtist = "";
+        state.makeTitle = "";
+        state.additional = [];
+        state.step = "search";
+        render();
+      },
+    }, "+ Request another song"),
     el("div", { id: "push-optin", class: "push-optin" }),
     el("details", { class: "upcoming" },
       el("summary", {}, "Show upcoming singers"),
-      el("div", { class: "queue-list" }, "Loading…"),
+      el("div", { class: "rotation-body" }, "Open to load…"),
     ),
     el("p", { class: "hint" },
       "Keep this page open — it'll update automatically. Good luck!"),
   );
 
   setTimeout(maybeShowPushPrompt, 2000);
-  pollStatus(card);
+  pollMyRequests(card);
+  // The rotation expander still uses the existing /sing/rotation path.
+  const upcoming = card.querySelector(".upcoming");
+  upcoming.addEventListener("toggle", async (e) => {
+    if (!e.target.open) return;
+    if (upcoming.dataset.loaded === "1") return;
+    const slot = upcoming.querySelector(".rotation-body");
+    if (!slot) return;
+    slot.textContent = "Loading…";
+    try {
+      const payload = await fetchRotation();
+      upcoming.dataset.loaded = "1";
+      slot.replaceWith(_renderRotationBody({ ...payload, _fetchedAt: Date.now() }));
+    } catch {
+      slot.textContent = "Couldn't load — try closing and reopening.";
+    }
+  });
   return card;
 }
 
-async function pollStatus(card) {
-  const live = card.querySelector(".status-live");
-  const queueEl = card.querySelector(".queue-list");
-  const reqId = state.request?.id;
-  if (!reqId || !live) return;
-
-  // Clear any previous poll timer so re-rendering the "done" step doesn't
-  // leak overlapping intervals.
+async function pollMyRequests(card) {
   if (state._statusPollTimer) {
     clearInterval(state._statusPollTimer);
     state._statusPollTimer = null;
   }
 
   const tick = async () => {
+    const ids = readMyRequestIds(TOKEN);
+    if (state.request?.id && !ids.includes(state.request.id)) {
+      ids.unshift(state.request.id);
+    }
     try {
-      const data = await fetchStatus(reqId);
+      const data = await fetchMyRequests(ids);
       onPollSuccess();
-      state.status = data;
-      const est = data.estimate;
-      if (est && est.now_singing) {
-        live.textContent = "🎤 You're up — break a leg!";
-      } else if (est && est.position === 1) {
-        live.textContent = "🎤 You're next — head to the mic";
-      } else if (est && est.position === 2) {
-        live.textContent = "About 1 song to go";
-      } else if (est && est.position >= 3) {
-        const low = Math.round(est.range_low_s / 60);
-        const high = Math.round(est.range_high_s / 60);
-        live.textContent = `You're #${est.position} — about ${low}–${high} min`;
-      } else if (data.request?.status === "pending") {
-        live.textContent = "Waiting for KJ to approve…";
-      } else if (data.request?.status === "rejected") {
-        live.textContent = "The KJ needs to talk to you — see them at the desk.";
-      } else {
-        live.textContent = "Added to the queue.";
-      }
-      if (queueEl && data.queue) {
-        queueEl.innerHTML = "";
-        for (const entry of data.queue) {
-          queueEl.appendChild(el("div", { class: "queue-row" },
-            el("span", { class: "q-name" }, entry.first_name || "—"),
-            el("span", { class: "q-song" }, entry.song_artist || ""),
-            el("span", { class: "q-status" }, entry.status || ""),
-          ));
+      const npNode = card.querySelector(".now-playing");
+      if (npNode) updateNowPlaying(npNode, data.now_playing);
+      const slot = card.querySelector(".songs-list");
+      if (slot) {
+        slot.innerHTML = "";
+        if (!data.requests.length) {
+          slot.appendChild(el("p", { class: "hint" },
+            "No songs yet — tap 'Request another song' below."));
+        } else {
+          for (const item of data.requests) slot.appendChild(_renderSongCard(item));
         }
-      }
-      if (data.now_playing) {
-        const npNode = card.querySelector(".now-playing");
-        if (npNode) updateNowPlaying(npNode, data.now_playing);
       }
     } catch {
       onPollFailure();
-      live.textContent = "Couldn't update — checking again in a moment.";
     }
   };
 
@@ -1240,6 +1412,7 @@ function renderRulesFooter() {
       el("li", {}, "First come, first sing"),
       el("li", {}, "New singers get priority"),
       el("li", {}, "Multiple songs? We'll spread them out"),
+      el("li", {}, "Duets welcome — add partners on the confirm screen (up to 3 extras)"),
       el("li", {}, "Need to leave? Ask the KJ"),
       el("li", {}, "♥ = paid priority ($20+)"),
     ),
@@ -1261,6 +1434,15 @@ function renderRulesFooter() {
           el("h4", {}, "Multiple songs welcome"),
           el("p", {}, "Submit as many songs as you want! We'll spread them out in the "
             + "rotation so nobody sings twice in a row."),
+        ),
+        el("li", {},
+          el("h4", {}, "Duets welcome"),
+          el("p", {}, "Singing with friends? On the 'Looking good?' screen "
+            + "before sending the request, tap '+ Add a singer' to attach "
+            + "up to 3 extra people. We'll list everyone on the rotation "
+            + "so the KJ knows who to call up. Phone numbers for extras "
+            + "are optional — they just help the KJ text them when you're "
+            + "close to the front of the queue."),
         ),
         el("li", {},
           el("h4", {}, "Need to leave early?"),
@@ -1335,6 +1517,13 @@ function initCodeEntry() {
   });
 }
 
+// Test bridge — only used by Playwright e2e tests. Cheap to leave in
+// production: two globals on the window object, no behaviour change.
+if (typeof window !== 'undefined') {
+  window.__sing_state = state;
+  window.__sing_render = render;
+}
+
 // --- Bootstrap ------------------------------------------------------------
 
 renderRulesFooter();
@@ -1343,7 +1532,12 @@ if (codeEntryEl) {
   initCodeEntry();
 } else if (root) {
   if (INITIAL_REQUEST_ID) {
-    state.request = { id: parseInt(INITIAL_REQUEST_ID, 10) };
+    const legacyId = parseInt(INITIAL_REQUEST_ID, 10);
+    state.request = { id: legacyId };
+    // Persist so a legacy ?r=<id> entry survives a "Request another song"
+    // — otherwise the next submit overwrites state.request and the original
+    // id disappears from the done-screen list.
+    rememberRequestId(TOKEN, legacyId);
     state.step = "done";
   }
   // SW + push only make sense in the main SPA path (requires a valid token).

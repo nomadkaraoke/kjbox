@@ -3098,9 +3098,16 @@ def approve_sing_request(app, req):
     source_type = req["source_type"]
     source_ref = req.get("source_ref")
 
+    # Build the multi-singer list, primary first, when partners are attached.
+    # Passing None keeps the existing solo-entry behaviour (no singers_json).
+    partners = req.get("additional_singers") or []
+    partner_names = [p["name"] for p in partners if p.get("name")]
+    singers_list = ([singer] + partner_names) if partner_names else None
+
     if source_type == "local":
         entry = rotation.add_entry(
-            singer, song_text, file_path=source_ref or None
+            singer, song_text, file_path=source_ref or None,
+            singers=singers_list,
         )
         return entry["id"]
 
@@ -3127,7 +3134,7 @@ def approve_sing_request(app, req):
             queue_url = source_ref
             title = song_text or (req.get("song_title") or "")
 
-        entry = rotation.add_entry(singer, song_text)
+        entry = rotation.add_entry(singer, song_text, singers=singers_list)
         queue_item = {
             "id": download_id,
             "url": queue_url,
@@ -3153,7 +3160,7 @@ def approve_sing_request(app, req):
         gen_client = getattr(app, "gen_client", None)
         if gen_client is None:
             raise RuntimeError("Gen API not configured")
-        entry = rotation.add_entry(singer, song_text)
+        entry = rotation.add_entry(singer, song_text, singers=singers_list)
         result = gen_client.create_job(
             req.get("song_artist", ""), req.get("song_title", "")
         )

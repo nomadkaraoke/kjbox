@@ -209,6 +209,7 @@ utils.py → (stdlib only)
 | GET  | `/sing/search` | **PUBLIC** — search local + Karaoke Nerds catalog (requires token) |
 | POST | `/sing/submit` | **PUBLIC** — create a pending request (rate-limited per IP) |
 | GET  | `/sing/status/<id>` | **PUBLIC** — singer's own request status + rotation position |
+| GET  | `/sing/my-requests` | **PUBLIC** — multi-id status feed (`?ids=1,2,3`, max 20) for the multi-song done screen |
 | GET  | `/sing/now` | **PUBLIC** — lightweight now-singing / up-next / queued-count for the landing widget |
 | GET  | `/sing/rotation` | **PUBLIC** — full active rotation with cumulative wait estimates for the landing-page expander |
 | POST | `/upload` | Upload a media file to the download folder (validates extension, sanitizes filename, triggers rescan) |
@@ -366,6 +367,8 @@ Additional `static-sing/` assets added in sub-project #4:
 - `static-sing/manifest.json` — served dynamically by `GET /sing/manifest.json` (or `/manifest.json` on the public host) with the current token injected into `start_url`. `start_url` / `scope` are host-aware: `/` on the public host, `/sing/` on the admin host.
 
 **Response shape change (sub-project #4):** `GET /sing/status/<id>` now includes `estimate` and `now_playing` sub-objects. Legacy top-level `position`, `estimated_wait_s`, `queue` keys are kept for the client rollout window.
+
+**Duet partners + multi-song done screen (2026-05-15):** Singers can attach up to 3 duet partners (name + optional phone) on the confirm screen via a new `additional_singers TEXT NULL` column on `sing_requests` (JSON array). `POST /sing/submit` validates the field (max 3, name required, phone format optional). `approve_sing_request` builds a `singers=[primary, …partner_names]` list and passes it to `rotation.add_entry(...)` — the existing `singers_json` plumbing on `rotation_entries` joins names with ` & ` for the legacy `singer` text column and persists the structured list. KJ admin approval card renders a duet block with `sms:` links for partner phones. The singer's done screen now lists all their submitted requests via a new `GET /sing/my-requests?ids=…` endpoint (max 20 ids per call, returns `{now_playing, requests:[{request, estimate?}]}`) and includes a "+ Request another song" button that resets song-picking state while preserving identity. Request ids are tracked in `localStorage` (`sing_my_request_ids`) scoped per token so yesterday's ids don't leak into a new event. Partner phones are display-only (no push subscriptions for partners) — the KJ texts them manually from the admin card.
 
 ### Singer Web Push (sub-project #4)
 

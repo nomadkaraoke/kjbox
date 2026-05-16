@@ -2,6 +2,25 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-05-15 - Feature: Singer duet partners + multi-song done screen
+
+Two papercuts in the singer UI fixed. (1) Singers can attach up to 3 duet partners (name + optional phone) on the confirm screen — partners surface in the KJ admin approval card with `sms:` links, then ride through `approve_sing_request` into `rotation_entries.singers_json` (joined `"Alice & Sarah & Mike"` in the legacy `singer` column). (2) The post-submit "done" screen lists every song the singer has submitted this event with live status, and a "+ Request another song" button that preserves identity. See [design](archive/2026-05-15-singer-duets-and-multi-song-design.md) and [plan](archive/2026-05-15-singer-duets-and-multi-song-plan.md).
+
+**Backend changes:**
+- `sing_requests.additional_singers TEXT NULL` — new column, additive idempotent ALTER, JSON array of `{name, phone}`.
+- `POST /sing/submit` — validates `additional_singers` (max 3, name required, phone optional).
+- `approve_sing_request` — passes `singers=[primary, …partner_names]` to `rotation.add_entry(...)` in all source-type branches.
+- `GET /sing/my-requests?ids=…` — new endpoint, multi-id status feed (max 20 ids), returns `{now_playing, requests:[{request, estimate?}]}`. Filters foreign-token rows for cross-event safety.
+
+**UI changes:**
+- `static-sing/sing.js` — partners section on `renderConfirm`, new multi-song `renderDone` + `pollMyRequests` (15s tick), "+ Request another song" button, rules-footer copy, localStorage `sing_my_request_ids` scoped per token, test bridge globals (`window.__sing_state` / `__sing_render`).
+- `static/app.js` — duet-partners block on the admin approval card, partner phones rendered as `sms:` links.
+
+**Test changes:**
+- 5 new unit tests covering `additional_singers` round-trip + sentinel-preserve behaviour on `update_request`.
+- 14 new integration tests across `/sing/submit` validation, `/sing/my-requests`, and `approve_sing_request` (local + youtube duet paths, solo-unchanged, all-blank-names defensive, auto-approve+duet, admin list endpoint exposes partners).
+- 6 new e2e tests (Playwright) covering the confirm-screen partners section, partner-row removal, multi-song done screen, and "Request another song" button.
+
 ## 2026-04-27 - Feature: Singer full-rotation view on landing page
 
 Singers visiting `sing.nomadkaraoke.com/?t=<token>` now see a "See full rotation (N singers)" expander between the now-playing widget and the "Request a song" CTA. On expand, the body shows every active rotation entry with position, first name, song/artist, and a rough wait estimate (`on now` / `up next` / `~low–high min`), preceded by a caveat that order can change (new singers get bumped, paid spots jump, times are rough).

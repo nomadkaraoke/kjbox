@@ -322,6 +322,88 @@ class TestSubmit:
         entries = sing_app.rotation.get_rotation()
         assert any(e["singer"] == "Andrew" for e in entries)
 
+    def test_submit_with_partners(self, client, sing_app, token):
+        body = self._body()
+        body["additional_singers"] = [
+            {"name": "Sarah B.", "phone": "+61 400 111 222"},
+            {"name": "Mike", "phone": ""},
+        ]
+        resp = client.post(f"/sing/submit?t={token}", json=body)
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["request"]["additional_singers"] == [
+            {"name": "Sarah B.", "phone": "+61 400 111 222"},
+            {"name": "Mike", "phone": ""},
+        ]
+
+    def test_submit_partners_omitted_is_solo(self, client, sing_app, token):
+        resp = client.post(f"/sing/submit?t={token}", json=self._body())
+        assert resp.status_code == 200
+        assert resp.get_json()["request"]["additional_singers"] is None
+
+    def test_submit_rejects_too_many_partners(self, client, token):
+        body = self._body()
+        body["additional_singers"] = [
+            {"name": f"Singer {i}"} for i in range(4)
+        ]
+        resp = client.post(f"/sing/submit?t={token}", json=body)
+        assert resp.status_code == 400
+        assert "additional_singers" in resp.get_json()["error"]
+
+    def test_submit_rejects_empty_partner_name(self, client, token):
+        body = self._body()
+        body["additional_singers"] = [{"name": "  ", "phone": ""}]
+        resp = client.post(f"/sing/submit?t={token}", json=body)
+        assert resp.status_code == 400
+        assert "additional_singers" in resp.get_json()["error"]
+
+    def test_submit_rejects_malformed_partner_phone(self, client, token):
+        body = self._body()
+        body["additional_singers"] = [
+            {"name": "Sarah", "phone": "not-a-phone"}
+        ]
+        resp = client.post(f"/sing/submit?t={token}", json=body)
+        assert resp.status_code == 400
+        assert "additional_singers" in resp.get_json()["error"]
+
+    def test_submit_accepts_partner_without_phone(self, client, sing_app, token):
+        body = self._body()
+        body["additional_singers"] = [{"name": "Phoneless Pete"}]
+        resp = client.post(f"/sing/submit?t={token}", json=body)
+        assert resp.status_code == 200
+        partners = resp.get_json()["request"]["additional_singers"]
+        # Server normalises missing phone → "".
+        assert partners == [{"name": "Phoneless Pete", "phone": ""}]
+
+    def test_submit_auto_approve_with_partners_creates_multi_singer_entry(
+        self, client, sing_app, token,
+    ):
+        """Auto-approve path: a duet request flows through approve_sing_request,
+        and the rotation entry gets the joined singer name + singers_json."""
+        sing_app.sing_store.set_auto_approve(True)
+        try:
+            body = self._body()
+            body["additional_singers"] = [
+                {"name": "Sarah B.", "phone": "+61 400 111 222"},
+                {"name": "Mike", "phone": ""},
+            ]
+            # Use a source_type that doesn't require external services.
+            body["source_type"] = "local"
+            body["source_ref"] = "/tmp/x.mp4"
+            resp = client.post(f"/sing/submit?t={token}", json=body)
+            assert resp.status_code == 200
+            data = resp.get_json()
+            assert data["auto_approved"] is True
+            linked_id = data["request"]["linked_entry_id"]
+            assert linked_id is not None
+            entry = sing_app.rotation.store.get_entry(linked_id)
+            assert entry["singer"] == "Andrew & Sarah B. & Mike"
+            import json as _json
+            names = _json.loads(entry["singers_json"])
+            assert names == ["Andrew", "Sarah B.", "Mike"]
+        finally:
+            sing_app.sing_store.set_auto_approve(False)
+
 
 class TestStatus:
     def test_status_without_token_rejected(self, client):
@@ -441,3 +523,74 @@ class TestServiceWorker:
         assert "__APP_VERSION__" not in body
         # Cache constant should appear (with some version)
         assert "nomad-sing-shell-" in body
+
+
+class TestMyRequests:
+    """`GET /sing/my-requests?ids=...` — multi-song done-screen feed."""
+
+    def _create(self, sing_app, **overrides):
+        token = sing_app.sing_store.ensure_token()
+        body = {
+            "singer_name": "Alice",
+            "phone": "",
+            "source_type": "local",
+            "source_ref": "/tmp/x.mp4",
+        }
+        body.update(overrides)
+        return sing_app.sing_store.create_request(token=token, **body)
+
+    def test_returns_requests_in_requested_order(self, client, sing_app, token):
+        r1 = self._create(sing_app, song_artist="Queen", song_title="Bohemian Rhapsody")
+        r2 = self._create(sing_app, song_artist="Oasis", song_title="Wonderwall")
+        r3 = self._create(sing_app, song_artist="Abba",  song_title="Dancing Queen")
+        ids = f"{r2['id']},{r3['id']},{r1['id']}"
+        resp = client.get(f"/sing/my-requests?ids={ids}&t={token}")
+        assert resp.status_code == 200
+        out = resp.get_json()
+        assert [r["request"]["id"] for r in out["requests"]] == [
+            r2["id"], r3["id"], r1["id"],
+        ]
+        # now_playing is present and structurally sane (may be empty).
+        assert "now_playing" in out
+
+    def test_drops_unknown_ids_silently(self, client, sing_app, token):
+        r1 = self._create(sing_app)
+        resp = client.get(f"/sing/my-requests?ids=999999,{r1['id']}&t={token}")
+        assert resp.status_code == 200
+        ids = [r["request"]["id"] for r in resp.get_json()["requests"]]
+        assert ids == [r1["id"]]
+
+    def test_drops_foreign_token_rows(self, client, sing_app, token):
+        # Create a row, then rotate the token; the old row's token no longer matches.
+        r1 = self._create(sing_app)
+        sing_app.sing_store.regenerate_token()
+        new_token = sing_app.sing_store.get_token()
+        resp = client.get(f"/sing/my-requests?ids={r1['id']}&t={new_token}")
+        assert resp.status_code == 200
+        assert resp.get_json()["requests"] == []
+
+    def test_requires_token(self, client, sing_app):
+        r1 = self._create(sing_app)
+        resp = client.get(f"/sing/my-requests?ids={r1['id']}")
+        assert resp.status_code == 403
+
+    def test_caps_ids_count(self, client, token):
+        too_many = ",".join(str(i) for i in range(21))
+        resp = client.get(f"/sing/my-requests?ids={too_many}&t={token}")
+        assert resp.status_code == 400
+
+    def test_empty_ids_returns_empty_list(self, client, token):
+        resp = client.get(f"/sing/my-requests?ids=&t={token}")
+        assert resp.status_code == 200
+        assert resp.get_json()["requests"] == []
+
+    def test_estimate_present_when_linked(self, client, sing_app, token):
+        r1 = self._create(sing_app)
+        # Approve so a linked entry exists.
+        from routes import approve_sing_request
+        entry_id = approve_sing_request(sing_app, sing_app.sing_store.get_request(r1["id"]))
+        sing_app.sing_store.mark_approved(r1["id"], linked_entry_id=entry_id)
+        resp = client.get(f"/sing/my-requests?ids={r1['id']}&t={token}")
+        item = resp.get_json()["requests"][0]
+        assert "estimate" in item
+        assert item["estimate"]["position"] >= 1
