@@ -1532,7 +1532,12 @@ if (codeEntryEl) {
   initCodeEntry();
 } else if (root) {
   if (INITIAL_REQUEST_ID) {
-    state.request = { id: parseInt(INITIAL_REQUEST_ID, 10) };
+    const legacyId = parseInt(INITIAL_REQUEST_ID, 10);
+    state.request = { id: legacyId };
+    // Persist so a legacy ?r=<id> entry survives a "Request another song"
+    // — otherwise the next submit overwrites state.request and the original
+    // id disappears from the done-screen list.
+    rememberRequestId(TOKEN, legacyId);
     state.step = "done";
   }
   // SW + push only make sense in the main SPA path (requires a valid token).
