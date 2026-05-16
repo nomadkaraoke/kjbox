@@ -52,6 +52,24 @@ class TestConfirmPartners:
         expect(page.locator('[data-testid="partner-row"]')).to_have_count(3)
         expect(page.locator('[data-testid="add-singer"]')).to_be_hidden()
 
+    def test_can_remove_a_partner_row(self, page, live_server, live_token):
+        """Tapping the × removes the row and re-opens the add affordance."""
+        _login(page, live_server, live_token)
+        page.evaluate("""
+            window.__sing_state.selected = { source_type: 'local',
+                source_ref: '/tmp/x.mp4',
+                song_artist: 'Q', song_title: 'B', label: 'X' };
+            window.__sing_state.step = 'confirm';
+            window.__sing_render();
+        """)
+        for _ in range(3):
+            page.locator('[data-testid="add-singer"]').click()
+        expect(page.locator('[data-testid="partner-row"]')).to_have_count(3)
+        # Remove the first row; cap should release.
+        page.locator('.partner-remove').first.click()
+        expect(page.locator('[data-testid="partner-row"]')).to_have_count(2)
+        expect(page.locator('[data-testid="add-singer"]')).to_be_visible()
+
     def test_submit_sends_partners(self, page, live_server, live_token):
         _login(page, live_server, live_token)
         captured = {}

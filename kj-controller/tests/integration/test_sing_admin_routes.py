@@ -290,6 +290,31 @@ class TestApprove:
         assert entry["singer"] == "Alice"
         assert entry["singers_json"] is None
 
+    def test_approve_youtube_with_duet_partners(self, admin_client, admin_app):
+        """Branch coverage: the YouTube/divebar/kn branch passes singers= too.
+        A kwarg drift between source-type branches would silently regress duets
+        on non-local sources without this test."""
+        req = _make_pending(
+            admin_app,
+            singer_name="Alice",
+            source_type="youtube",
+            source_ref="https://youtu.be/abc123",
+            additional_singers=[{"name": "Sarah B.", "phone": "+61 400 111 222"}],
+        )
+        with patch("routes._download_worker"):
+            resp = admin_client.post(f"/rotation/requests/{req['id']}/approve")
+        assert resp.status_code == 200
+        linked_id = resp.get_json()["request"]["linked_entry_id"]
+        entry = admin_app.rotation.store.get_entry(linked_id)
+        assert entry["singer"] == "Alice & Sarah B."
+        names = json.loads(entry["singers_json"])
+        assert names == ["Alice", "Sarah B."]
+        # Sanity: download was still queued.
+        assert any(
+            item["rotation_entry_id"] == linked_id
+            for item in admin_app.download_queue["items"]
+        )
+
 
 def _make_kj_pick_pending(app, versions):
     """Insert a pending kj_pick request carrying the given versions snapshot."""
