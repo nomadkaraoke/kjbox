@@ -375,6 +375,35 @@ class TestSubmit:
         # Server normalises missing phone → "".
         assert partners == [{"name": "Phoneless Pete", "phone": ""}]
 
+    def test_submit_auto_approve_with_partners_creates_multi_singer_entry(
+        self, client, sing_app, token,
+    ):
+        """Auto-approve path: a duet request flows through approve_sing_request,
+        and the rotation entry gets the joined singer name + singers_json."""
+        sing_app.sing_store.set_auto_approve(True)
+        try:
+            body = self._body()
+            body["additional_singers"] = [
+                {"name": "Sarah B.", "phone": "+61 400 111 222"},
+                {"name": "Mike", "phone": ""},
+            ]
+            # Use a source_type that doesn't require external services.
+            body["source_type"] = "local"
+            body["source_ref"] = "/tmp/x.mp4"
+            resp = client.post(f"/sing/submit?t={token}", json=body)
+            assert resp.status_code == 200
+            data = resp.get_json()
+            assert data["auto_approved"] is True
+            linked_id = data["request"]["linked_entry_id"]
+            assert linked_id is not None
+            entry = sing_app.rotation.store.get_entry(linked_id)
+            assert entry["singer"] == "Andrew & Sarah B. & Mike"
+            import json as _json
+            names = _json.loads(entry["singers_json"])
+            assert names == ["Andrew", "Sarah B.", "Mike"]
+        finally:
+            sing_app.sing_store.set_auto_approve(False)
+
 
 class TestStatus:
     def test_status_without_token_rejected(self, client):

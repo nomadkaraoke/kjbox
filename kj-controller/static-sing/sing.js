@@ -158,6 +158,10 @@ function render() {
     clearInterval(nowPlayingTimer);
     nowPlayingTimer = null;
   }
+  if (state._statusPollTimer && state.step !== "done") {
+    clearInterval(state._statusPollTimer);
+    state._statusPollTimer = null;
+  }
   root.innerHTML = "";
   const view = {
     landing: renderLanding,
@@ -1408,7 +1412,7 @@ function renderRulesFooter() {
       el("li", {}, "First come, first sing"),
       el("li", {}, "New singers get priority"),
       el("li", {}, "Multiple songs? We'll spread them out"),
-      el("li", {}, "Duets welcome — add partners on the confirm screen"),
+      el("li", {}, "Duets welcome — add partners on the confirm screen (up to 3 extras)"),
       el("li", {}, "Need to leave? Ask the KJ"),
       el("li", {}, "♥ = paid priority ($20+)"),
     ),
