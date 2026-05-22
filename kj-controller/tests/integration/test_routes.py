@@ -1283,3 +1283,41 @@ def test_status_includes_volume_with_vlc_enabled(flask_test_client, flask_app, m
     data = json.loads(response.data)
     assert data['karaoke_volume'] == 210
     assert data['filler_volume'] == 90
+
+
+class TestDivebarDownloadFilename:
+    """Server-side filename construction for /divebar/download."""
+
+    def test_uses_structured_fields(self, flask_test_client, flask_app):
+        with patch('routes.divebar.get_download_url',
+                   return_value="https://storage.googleapis.com/m/x.mp4"):
+            resp = flask_test_client.post('/divebar/download', json={
+                "file_id": "abc123",
+                "artist": "Queen",
+                "title": "Bohemian Rhapsody",
+                "brand_code": "WTF",
+            })
+        assert resp.status_code == 200
+        items = flask_app.download_queue['items']
+        assert items[-1]['title'] == "WTF - Queen - Bohemian Rhapsody.mp4"
+        assert items[-1]['divebar_file_id'] == "abc123"
+
+    def test_falls_back_to_db_when_brand_missing(self, flask_test_client, flask_app):
+        with patch('routes.divebar.get_download_url',
+                   return_value="https://storage.googleapis.com/m/x.mp4"):
+            resp = flask_test_client.post('/divebar/download', json={
+                "file_id": "abc",
+                "artist": "Queen",
+                "title": "Bohemian Rhapsody",
+            })
+        assert resp.status_code == 200
+        items = flask_app.download_queue['items']
+        assert items[-1]['title'] == "DB - Queen - Bohemian Rhapsody.mp4"
+
+    def test_falls_back_to_file_id_when_no_metadata(self, flask_test_client, flask_app):
+        with patch('routes.divebar.get_download_url',
+                   return_value="https://storage.googleapis.com/m/x.mp4"):
+            resp = flask_test_client.post('/divebar/download', json={"file_id": "abc"})
+        assert resp.status_code == 200
+        items = flask_app.download_queue['items']
+        assert items[-1]['title'] == "divebar-abc.mp4"
