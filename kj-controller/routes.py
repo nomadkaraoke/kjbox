@@ -15,6 +15,7 @@ from flask import Blueprint, Response, current_app, jsonify, render_template, re
 
 import divebar
 import karaoke_nerds
+import version_priority
 import youtube_health
 import youtube_search
 from catalog import LATIN_SPECIAL_MAP
@@ -141,6 +142,11 @@ def _group_search_results(local_results, kn_results):
                        "song_title": song_title},
             })
 
+    try:
+        cfg = current_app.kj_config
+    except (RuntimeError, AttributeError):
+        cfg = {}
+
     out = []
     for g in groups.values():
         versions = g["versions"]
@@ -158,6 +164,10 @@ def _group_search_results(local_results, kn_results):
             and not any(v["source"] == "local" for v in versions)
             and all(v["kn"].get("is_community") for v in kn_versions)
         )
+        # Annotate every version with priority_rank/brand/class, then sort
+        # in-place so clients that ignore the rank field still see best-first.
+        version_priority.annotate_versions(versions, cfg, shape="kj_pick")
+        versions.sort(key=lambda v: v.get("priority_rank", 9999))
         out.append(g)
 
     return out
@@ -189,8 +199,7 @@ def index():
     """Serves the main remote control page."""
     cfg = current_app.kj_config
     return render_template('index.html', latin_special_map=LATIN_SPECIAL_MAP,
-                           config=cfg,
-                           kn_preferred_brands=cfg.get('kn_preferred_brands', []))
+                           config=cfg)
 
 
 @routes_bp.route('/download', methods=['POST'])
@@ -1196,33 +1205,90 @@ def kn_search():
     cfg = current_app.kj_config
     log_message(f"Karaoke Nerds search: {query}", cfg)
     results = karaoke_nerds.search(query, config=cfg)
+    # Annotate each track with priority_rank and sort the per-song track
+    # lists best-first so the frontend can render in order without
+    # duplicating the brand registry.
+    for song in results:
+        version_priority.annotate_versions(
+            song.get("tracks") or [], cfg, shape="rotation_search_kn")
+        (song.get("tracks") or []).sort(
+            key=lambda t: t.get("priority_rank", 9999))
     return jsonify(results)
 
 
 @routes_bp.route('/karaoke-nerds/config', methods=['GET'])
 def kn_get_config():
-    """Returns Karaoke Nerds preferred brands config."""
+    """Returns the brand-priority config: two ranked lists + alias hints.
+
+    Design spec: docs/archive/2026-05-22-choose-best-version-design.md § 3b.
+    """
     cfg = current_app.kj_config
+
+    def _list_or_default(key, default):
+        v = cfg.get(key)
+        if not v:
+            return list(default)
+        return [str(c).upper().strip() for c in v if str(c).strip()]
+
+    aliases = {}
+    for canonical, alias_list, _display in version_priority.COMMUNITY_BRANDS:
+        aliases[canonical] = list(alias_list)
+    for canonical, alias_list, _display in version_priority.COMMERCIAL_BRANDS:
+        aliases[canonical] = list(alias_list)
+
     return jsonify({
-        "preferred_brands": cfg.get('kn_preferred_brands', []),
+        "priority_community": _list_or_default(
+            "kn_priority_community", version_priority.COMMUNITY_DEFAULTS),
+        "priority_commercial": _list_or_default(
+            "kn_priority_commercial", version_priority.COMMERCIAL_DEFAULTS),
+        "aliases": aliases,
     })
 
 
 @routes_bp.route('/karaoke-nerds/config', methods=['POST'])
 def kn_set_config():
-    """Updates Karaoke Nerds preferred brands config."""
+    """Updates brand-priority config (two lists of canonical codes)."""
     data = request.get_json(silent=True) or {}
-    preferred = data.get('preferred_brands')
-    if preferred is None or not isinstance(preferred, list):
-        return jsonify({"error": "preferred_brands must be a list"}), 400
+    community = data.get("priority_community")
+    commercial = data.get("priority_commercial")
 
-    # Sanitize: uppercase, strip whitespace, remove empties
-    preferred = [b.strip().upper() for b in preferred if b.strip()]
+    if not isinstance(community, list) or not isinstance(commercial, list):
+        return jsonify({
+            "error": "priority_community and priority_commercial must be lists"
+        }), 400
 
-    current_app.kj_config['kn_preferred_brands'] = preferred
-    save_config_value('kn_preferred_brands', preferred)
-    log_message(f"Updated KN preferred brands: {preferred}", current_app.kj_config)
-    return jsonify({"preferred_brands": preferred})
+    community = [str(c).upper().strip() for c in community if str(c).strip()]
+    commercial = [str(c).upper().strip() for c in commercial if str(c).strip()]
+
+    valid_community = {c for (c, _, _) in version_priority.COMMUNITY_BRANDS}
+    valid_commercial = {c for (c, _, _) in version_priority.COMMERCIAL_BRANDS}
+
+    bad_community = [c for c in community if c not in valid_community]
+    bad_commercial = [c for c in commercial if c not in valid_commercial]
+    if bad_community or bad_commercial:
+        problems = []
+        if bad_community:
+            problems.append(
+                f"Unknown community codes: {bad_community}. "
+                f"Valid: {sorted(valid_community)}")
+        if bad_commercial:
+            problems.append(
+                f"Unknown commercial codes: {bad_commercial}. "
+                f"Valid: {sorted(valid_commercial)}")
+        return jsonify({"error": " | ".join(problems)}), 400
+
+    current_app.kj_config['kn_priority_community'] = community
+    current_app.kj_config['kn_priority_commercial'] = commercial
+    save_config_value('kn_priority_community', community)
+    save_config_value('kn_priority_commercial', commercial)
+    log_message(
+        f"Updated brand priorities: community={community}, commercial={commercial}",
+        current_app.kj_config,
+    )
+    return jsonify({
+        "priority_community": community,
+        "priority_commercial": commercial,
+    })
 
 
 # --- YouTube Search ---
@@ -2734,6 +2800,16 @@ def unified_search(query, app, *, grouped=False):
             "songs": _group_search_results(local_results, filtered_kn),
             "karaoke_nerds_timeout": kn_timeout,
         }
+
+    # Flat path: annotate local results and every KN track in-place so the
+    # frontend can sort + render with section headers without duplicating
+    # the brand registry.
+    cfg = app.kj_config if hasattr(app, "kj_config") else {}
+    version_priority.annotate_versions(
+        local_results, cfg, shape="rotation_search_local")
+    for song in kn_results:
+        version_priority.annotate_versions(
+            song.get("tracks") or [], cfg, shape="rotation_search_kn")
 
     return {
         "local": local_results,

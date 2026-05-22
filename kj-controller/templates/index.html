@@ -272,12 +272,28 @@
                     <button class="kn-prefs-btn" id="kn-prefs-toggle" onclick="toggleKNPrefs()" title="Preferred brands settings">Prefs</button>
                 </div>
                 <div id="kn-prefs-panel" class="kn-prefs hidden">
-                    <label for="kn-prefs-input">Preferred brand codes (comma-separated):</label>
-                    <div class="kn-prefs-row">
-                        <input type="text" id="kn-prefs-input" placeholder="e.g. KV, KFN">
-                        <button class="kn-prefs-save" onclick="saveKNPrefs()">Save</button>
+                    <div class="kn-prefs-section">
+                        <label for="kn-prefs-community-input">
+                            Community brands (top wins):
+                        </label>
+                        <textarea id="kn-prefs-community-input" class="kn-prefs-textarea"
+                                  rows="2"
+                                  placeholder="CC, LC, FBK, BELLY, NOMAD, FAKEY, PMK, OBSK"></textarea>
+                        <div id="kn-prefs-community-aliases" class="kn-prefs-aliases"></div>
                     </div>
-                    <div id="kn-prefs-tags" class="kn-prefs-tags"></div>
+                    <div class="kn-prefs-section">
+                        <label for="kn-prefs-commercial-input">
+                            Commercial brands (used when no community version):
+                        </label>
+                        <textarea id="kn-prefs-commercial-input" class="kn-prefs-textarea"
+                                  rows="2"
+                                  placeholder="KV, SC, SBI, SF, CB, ZM"></textarea>
+                        <div id="kn-prefs-commercial-aliases" class="kn-prefs-aliases"></div>
+                    </div>
+                    <div class="kn-prefs-actions">
+                        <button class="kn-prefs-save" onclick="saveKNPrefs()">Save</button>
+                        <button class="kn-prefs-reset" onclick="resetKNPrefs()">Reset to defaults</button>
+                    </div>
                 </div>
                 <div class="kn-search-row">
                     <input type="text" id="kn-query" placeholder="Search for karaoke tracks..." onkeyup="if(event.keyCode === 13) searchKaraokeNerds()">
@@ -759,8 +775,7 @@
         window.KJ_CONFIG = {
             latinSpecialMap: {{ latin_special_map | tojson }},
             websockifyPort: {{ config.get('websockify_port', 6080) | tojson }},
-            websockifyHost: {{ config.get('websockify_host', '') | tojson }},
-            knPreferredBrands: {{ kn_preferred_brands | tojson }}
+            websockifyHost: {{ config.get('websockify_host', '') | tojson }}
         };
     </script>
     <script src="/static/app.js?v={{ config.get('APP_VERSION', '') }}"></script>
