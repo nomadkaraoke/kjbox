@@ -250,6 +250,48 @@ class TestApprove:
         assert items[0]["source"] == "divebar"
         assert items[0]["url"] == "https://dl/x.mp4"
 
+    def test_approve_divebar_builds_filename_from_song_metadata(
+        self, admin_client, admin_app
+    ):
+        # The sing-request approval used to hardcode `divebar-{file_id}.mp4`
+        # for the queue title, throwing away the song_artist/song_title that
+        # are right there on the request. This is the regression guard.
+        req = _make_pending(
+            admin_app,
+            singer_name="Divebar Dan",
+            song_artist="Queen",
+            song_title="Bohemian Rhapsody",
+            source_type="divebar",
+            source_ref="gdrive_abc",
+        )
+        with patch("routes.divebar.get_download_url", return_value="https://dl/x.mp4"), \
+             patch("routes._download_worker"):
+            resp = admin_client.post(f"/rotation/requests/{req['id']}/approve")
+        assert resp.status_code == 200
+        items = admin_app.download_queue["items"]
+        assert items[-1]["title"] == "DB - Queen - Bohemian Rhapsody.mp4"
+
+    def test_approve_divebar_uses_brand_code_from_source_meta(
+        self, admin_client, admin_app
+    ):
+        # kj_pick path writes brand_code into source_meta; the approval
+        # path should honour it so we get 'WTF - Queen - ...' not 'DB - ...'.
+        req = _make_pending(
+            admin_app,
+            singer_name="Pick Pete",
+            song_artist="Queen",
+            song_title="We Will Rock You",
+            source_type="divebar",
+            source_ref="gdrive_xyz",
+            source_meta={"brand_code": "WTF"},
+        )
+        with patch("routes.divebar.get_download_url", return_value="https://dl/y.mp4"), \
+             patch("routes._download_worker"):
+            resp = admin_client.post(f"/rotation/requests/{req['id']}/approve")
+        assert resp.status_code == 200
+        items = admin_app.download_queue["items"]
+        assert items[-1]["title"] == "WTF - Queen - We Will Rock You.mp4"
+
     def test_approve_make_creates_gen_job(self, admin_client, admin_app):
         gen = MagicMock()
         gen.create_job.return_value = {"job_id": "job_42", "status": "pending"}

@@ -3153,7 +3153,24 @@ def approve_sing_request(app, req, skip_download=False):
                 raise RuntimeError(f"Divebar URL failed: {exc}") from exc
             if not download_url:
                 raise RuntimeError("Failed to get download URL from Divebar")
-            title = f"divebar-{source_ref}.mp4"
+            # source_meta carries brand_code when this came via kj_pick;
+            # direct singer-divebar picks won't have it — falls back to "DB".
+            meta_raw = req.get("source_meta")
+            if isinstance(meta_raw, str):
+                try:
+                    meta = json.loads(meta_raw)
+                except (TypeError, ValueError):
+                    meta = {}
+            elif isinstance(meta_raw, dict):
+                meta = meta_raw
+            else:
+                meta = {}
+            brand_code = meta.get("brand_code") or ""
+            title = build_divebar_filename(
+                brand_code,
+                req.get("song_artist"),
+                req.get("song_title"),
+            ) or f"divebar-{source_ref}.mp4"
             queue_src = "divebar"
             queue_url = download_url
         else:
