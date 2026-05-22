@@ -1015,36 +1015,42 @@ def test_kn_search_handles_error(mock_get, flask_test_client):
 
 
 def test_kn_get_config(flask_test_client):
-    """GET /karaoke-nerds/config returns preferred brands."""
+    """GET /karaoke-nerds/config returns the two priority lists + aliases."""
     response = flask_test_client.get('/karaoke-nerds/config')
     assert response.status_code == 200
     data = json.loads(response.data)
-    assert "preferred_brands" in data
-    assert isinstance(data["preferred_brands"], list)
+    assert "priority_community" in data
+    assert isinstance(data["priority_community"], list)
+    assert "priority_commercial" in data
+    assert isinstance(data["priority_commercial"], list)
+    assert "aliases" in data
 
 
 def test_kn_set_config(flask_test_client, flask_app, tmp_media_dir):
-    """POST /karaoke-nerds/config saves preferred brands."""
+    """POST /karaoke-nerds/config saves both priority lists, uppercased + trimmed."""
     response = flask_test_client.post('/karaoke-nerds/config',
-        data=json.dumps({"preferred_brands": ["kv", " kfn ", "sk"]}),
+        data=json.dumps({"priority_community": [" lc ", "cc"],
+                         "priority_commercial": ["kv", "sf"]}),
         content_type='application/json')
     assert response.status_code == 200
     data = json.loads(response.data)
-    # Should be uppercased and trimmed
-    assert data["preferred_brands"] == ["KV", "KFN", "SK"]
-    assert flask_app.kj_config["kn_preferred_brands"] == ["KV", "KFN", "SK"]
+    assert data["priority_community"] == ["LC", "CC"]
+    assert data["priority_commercial"] == ["KV", "SF"]
+    assert flask_app.kj_config["kn_priority_community"] == ["LC", "CC"]
+    assert flask_app.kj_config["kn_priority_commercial"] == ["KV", "SF"]
 
 
 def test_kn_set_config_invalid(flask_test_client):
     """POST /karaoke-nerds/config with non-list returns 400."""
     response = flask_test_client.post('/karaoke-nerds/config',
-        data=json.dumps({"preferred_brands": "not a list"}),
+        data=json.dumps({"priority_community": "not a list",
+                         "priority_commercial": []}),
         content_type='application/json')
     assert response.status_code == 400
 
 
 def test_kn_set_config_empty_body(flask_test_client):
-    """POST /karaoke-nerds/config without preferred_brands returns 400."""
+    """POST /karaoke-nerds/config without the two list keys returns 400."""
     response = flask_test_client.post('/karaoke-nerds/config',
         data=json.dumps({}),
         content_type='application/json')
