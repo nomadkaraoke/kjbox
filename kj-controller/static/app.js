@@ -2930,7 +2930,12 @@ function renderDBResults(songs) {
                 dlBtn.textContent = 'Download';
                 dlBtn.onclick = (e) => {
                     e.stopPropagation();
-                    downloadDivebarTrack(track.file_id, track.drive_path || track.brand);
+                    downloadDivebarTrack({
+                        file_id: track.file_id,
+                        artist: song.artist,
+                        title: song.title,
+                        brand_code: track.brand_code,
+                    });
                     dlBtn.disabled = true;
                     dlBtn.textContent = 'Queued';
                 };
@@ -2946,9 +2951,10 @@ function renderDBResults(songs) {
     });
 }
 
-function downloadDivebarTrack(fileId, filename) {
-    log(`Queuing Divebar download: ${filename}`);
-    apiCall('/divebar/download', { file_id: fileId, filename: filename });
+function downloadDivebarTrack(payload) {
+    const label = [payload.artist, payload.title].filter(Boolean).join(' - ') || payload.file_id;
+    log(`Queuing Divebar download: ${label}`);
+    apiCall('/divebar/download', payload);
 }
 
 function formatFileSize(bytes) {
