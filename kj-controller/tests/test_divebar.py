@@ -130,3 +130,46 @@ class TestGroupResults:
         grouped = divebar._group_results(results)
         assert len(grouped) == 1
         assert grouped[0]["artist"] == "Unknown"
+
+
+class TestClassifyDownloadUrl:
+    """Tests for divebar.classify_download_url() — surfaces fast-mirror vs Drive
+    so the KJ knows whether an active download is GCS or Drive-backed."""
+
+    def test_gcs_bucket_root(self):
+        assert divebar.classify_download_url(
+            "https://storage.googleapis.com/divebar-mirror/abc.mp4"
+        ) == "gcs"
+
+    def test_gcs_bucket_subdomain(self):
+        # Virtual-host style: bucket-name.storage.googleapis.com/path
+        assert divebar.classify_download_url(
+            "https://divebar-mirror.storage.googleapis.com/abc.mp4"
+        ) == "gcs"
+
+    def test_drive_google_com(self):
+        assert divebar.classify_download_url(
+            "https://drive.google.com/uc?export=download&id=abc"
+        ) == "drive"
+
+    def test_drive_usercontent(self):
+        # Drive sometimes redirects through this host for the actual blob
+        assert divebar.classify_download_url(
+            "https://drive.usercontent.google.com/download?id=abc"
+        ) == "drive"
+
+    def test_googleusercontent_subdomain(self):
+        assert divebar.classify_download_url(
+            "https://lh3.googleusercontent.com/foo"
+        ) == "drive"
+
+    def test_unknown_host_returns_none(self):
+        assert divebar.classify_download_url("https://example.com/file.mp4") is None
+
+    def test_empty_or_none(self):
+        assert divebar.classify_download_url("") is None
+        assert divebar.classify_download_url(None) is None
+
+    def test_malformed_url_does_not_raise(self):
+        # urlparse is forgiving — should not crash on garbage input
+        assert divebar.classify_download_url("not a url") is None

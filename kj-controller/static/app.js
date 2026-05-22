@@ -265,6 +265,23 @@ async function uploadFile(input) {
     setTimeout(() => { progress.innerHTML = ''; }, 5000);
 }
 
+// Map a queue item's (source, source_detail) into a short badge label + class.
+// The KJ glances at this to know whether the download is hitting the fast
+// GCS community mirror, slow Google Drive, or YouTube via yt-dlp.
+function downloadSourceBadge(item) {
+    if (item.source === 'divebar') {
+        if (item.source_detail === 'gcs') return { label: 'GCS', cls: 'dl-source-gcs',
+            title: 'Downloading from the GCS community mirror (fast)' };
+        if (item.source_detail === 'drive') return { label: 'DRIVE', cls: 'dl-source-drive',
+            title: 'Downloading from Google Drive (slower — no GCS mirror yet)' };
+        return { label: 'DIVEBAR', cls: 'dl-source-divebar',
+            title: 'Downloading from Divebar' };
+    }
+    if (item.source === 'youtube') return { label: 'YT', cls: 'dl-source-yt',
+        title: 'Downloading from YouTube via yt-dlp' };
+    return null;
+}
+
 function renderDownloadQueue(items) {
     const container = document.getElementById('download-queue');
     if (!items || items.length === 0) {
@@ -276,13 +293,17 @@ function renderDownloadQueue(items) {
         const icon = icons[item.status] || '';
         const label = item.title || item.url;
         const spinner = item.status === 'downloading' ? '<span class="download-spinner"></span>' : '';
+        const badge = downloadSourceBadge(item);
+        const badgeHtml = badge
+            ? `<span class="dl-source-badge ${badge.cls}" title="${escapeHtml(badge.title)}">${badge.label}</span>`
+            : '';
         let action = '';
         if (item.status === 'queued') {
             action = `<button class="dl-queue-action" onclick="cancelQueueItem('${item.id}')">Cancel</button>`;
         } else if (item.status === 'error') {
             action = `<button class="dl-queue-action" onclick="ackQueueItem('${item.id}')">Dismiss</button>`;
         }
-        return `<div class="dl-queue-item dl-queue-${item.status}">${spinner}<span class="dl-queue-icon">${icon}</span><span class="dl-queue-label" title="${item.url}">${label}</span>${action}</div>`;
+        return `<div class="dl-queue-item dl-queue-${item.status}">${spinner}${badgeHtml}<span class="dl-queue-icon">${icon}</span><span class="dl-queue-label" title="${escapeHtml(item.url || '')}">${escapeHtml(label || '')}</span>${action}</div>`;
     }).join('');
 }
 
@@ -3519,9 +3540,33 @@ function renderRotation(entries) {
             prepBadge.classList.add('prep-ready');
             prepBadge.title = 'Song file linked and ready to play';
         } else if (effDlStatus === 'queued' || effDlStatus === 'downloading') {
-            prepBadge.textContent = 'DOWNLOADING';
-            prepBadge.classList.add(entry.download_source === 'youtube' ? 'prep-downloading-orange' : 'prep-downloading-green');
-            prepBadge.title = 'Song is downloading from ' + (entry.download_source || 'source') + ' \u2014 will be ready soon';
+            // Pull source detail from the in-flight queue snapshot so the KJ
+            // can tell at a glance whether this is hitting the fast GCS
+            // community mirror or slower Drive/YouTube. Falls back to
+            // entry.download_source when the live snapshot is missing.
+            const dl = lastRotationDownloads[String(entry.id)] || {};
+            const source = dl.source || entry.download_source;
+            const detail = dl.source_detail;
+            const prefix = effDlStatus === 'queued' ? 'QUEUED ' : '';
+            let label, cls, title;
+            if (source === 'divebar' && detail === 'gcs') {
+                label = 'GCS DL'; cls = 'prep-downloading-gcs';
+                title = 'Downloading from the GCS community mirror (fast)';
+            } else if (source === 'divebar' && detail === 'drive') {
+                label = 'DRIVE DL'; cls = 'prep-downloading-drive';
+                title = 'Downloading from Google Drive (slower \u2014 no GCS mirror yet)';
+            } else if (source === 'youtube') {
+                label = 'YT DL'; cls = 'prep-downloading-orange';
+                title = 'Downloading from YouTube via yt-dlp';
+            } else {
+                // Divebar pre-classification (rotation entry from before this
+                // change) or unknown source \u2014 generic green badge.
+                label = 'DOWNLOADING'; cls = 'prep-downloading-green';
+                title = 'Song is downloading from ' + (source || 'source') + ' \u2014 will be ready soon';
+            }
+            prepBadge.textContent = prefix + label;
+            prepBadge.classList.add(cls);
+            prepBadge.title = title;
         } else if (effDlStatus === 'failed') {
             prepBadge.textContent = 'FAILED';
             prepBadge.classList.add('prep-failed');

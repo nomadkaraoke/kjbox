@@ -772,6 +772,8 @@ def get_status():
                         "status": item.get('status', 'unknown'),
                         "progress": item.get('progress', 0),
                         "file_path": item.get('file_path'),
+                        "source": item.get('source'),
+                        "source_detail": item.get('source_detail'),
                     }
 
     return jsonify({
@@ -1389,6 +1391,7 @@ def divebar_download():
             'added_at': time.time(),
             'completed_at': None,
             'source': 'divebar',
+            'source_detail': divebar.classify_download_url(url),
             'divebar_file_id': file_id,
         }
         items.append(item)
@@ -2798,6 +2801,7 @@ def download_and_link_rotation():
                 'url': download_url,
                 'title': filename or f"divebar-{file_id}.mp4",
                 'source': 'divebar',
+                'source_detail': divebar.classify_download_url(download_url),
                 'status': 'queued',
                 'error': None,
                 'rotation_entry_id': entry_id,
@@ -3151,6 +3155,10 @@ def approve_sing_request(app, req, skip_download=False):
             "url": queue_url,
             "title": title,
             "source": queue_src,
+            "source_detail": (
+                divebar.classify_download_url(queue_url)
+                if queue_src == "divebar" else None
+            ),
             "status": "queued",
             "error": None,
             "rotation_entry_id": entry["id"],

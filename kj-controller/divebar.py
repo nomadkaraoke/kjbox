@@ -160,6 +160,33 @@ def get_download_url(file_id, config=None):
         return None
 
 
+def classify_download_url(url):
+    """Classify a Divebar download URL as 'gcs' or 'drive'.
+
+    The Divebar Cloud Function returns either a GCS mirror URL (fast,
+    direct from the community mirror bucket) or a Google Drive URL
+    (slower, original storage) depending on whether the track has been
+    mirrored. The kjbox UI surfaces this so the KJ knows what to expect
+    for the active download.
+
+    Returns 'gcs', 'drive', or None for unrecognised hosts.
+    """
+    if not url:
+        return None
+    from urllib.parse import urlparse
+    try:
+        host = (urlparse(url).hostname or "").lower()
+    except Exception:
+        return None
+    if host == "storage.googleapis.com" or host.endswith(".storage.googleapis.com"):
+        return "gcs"
+    if host == "drive.google.com" or host.endswith(".drive.google.com") \
+            or host == "drive.usercontent.google.com" \
+            or host.endswith(".googleusercontent.com"):
+        return "drive"
+    return None
+
+
 def _group_results(results):
     """Group flat search results into songs with tracks."""
     songs = {}
