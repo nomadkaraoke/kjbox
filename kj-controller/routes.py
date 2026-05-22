@@ -2160,6 +2160,7 @@ def _singer_action_response(rotation):
     entries = rotation.get_rotation()
     _add_time_estimates(entries)
     _add_songs_sung(entries, rotation)
+    _add_sms_status(entries)
     singer_stats = rotation.get_singer_stats()
     return jsonify({"success": True, "entries": entries, "singer_stats": singer_stats})
 
@@ -2224,6 +2225,60 @@ def _resolve_or_create_rotation_entry_id(data, rotation, song_artist_fallback=No
     return entry["id"], None
 
 
+def _add_sms_status(entries, app=None):
+    """Attach an ``sms`` block to each rotation entry.
+
+    Shape per entry:
+        sms = {
+            "available": bool,        # row has a phone we can text
+            "last_sent_at": str|null, # timestamp of most recent send
+            "last_status": "sent"|"failed"|null,
+        }
+
+    "Available" requires linked_entry_id resolving to a sing_request with a
+    non-empty phone. KJ-added rows have no link and thus no SMS button. The
+    bulk lookup is one tiny SQL query so this is cheap even for long rotations.
+    """
+    app = app or current_app._get_current_object()
+    sing_store = getattr(app, "sing_store", None)
+    sms_store = getattr(app, "sms_store", None)
+    if sing_store is None or sms_store is None:
+        for e in entries:
+            e["sms"] = {"available": False, "last_sent_at": None, "last_status": None}
+        return
+
+    entry_ids = [e["id"] for e in entries if e.get("id") is not None]
+    if not entry_ids:
+        return
+
+    # Map rotation_entry_id → sing_requests.phone (empty string if no phone).
+    # One JOIN-style query over sing_requests using linked_entry_id, then we
+    # match up in Python. The sing_requests table is small per event.
+    conn = sing_store._get_conn()
+    placeholders = ",".join("?" * len(entry_ids))
+    phone_rows = conn.execute(
+        f"""
+        SELECT linked_entry_id, phone
+        FROM sing_requests
+        WHERE linked_entry_id IN ({placeholders})
+        """,
+        tuple(entry_ids),
+    ).fetchall()
+    phone_by_entry = {row["linked_entry_id"]: (row["phone"] or "") for row in phone_rows}
+
+    latest_by_entry = sms_store.get_latest_for_entries(entry_ids)
+
+    for entry in entries:
+        eid = entry.get("id")
+        phone = phone_by_entry.get(eid, "")
+        latest = latest_by_entry.get(eid)
+        entry["sms"] = {
+            "available": bool(phone.strip()),
+            "last_sent_at": latest["sent_at"] if latest else None,
+            "last_status": latest["status"] if latest else None,
+        }
+
+
 def _add_time_estimates(entries):
     """Add estimated_time field to each entry based on cumulative durations."""
     from datetime import datetime, timedelta
@@ -2249,6 +2304,7 @@ def get_rotation():
         entries = rotation.get_rotation()
         _add_time_estimates(entries)
         _add_songs_sung(entries, rotation)
+        _add_sms_status(entries)
         singer_stats = rotation.get_singer_stats()
         return jsonify({"entries": entries, "singer_stats": singer_stats})
     except Exception as e:
@@ -2494,6 +2550,196 @@ def unlink_rotation_file():
         return jsonify({"success": True, "entry": entry, "entries": entries})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+# ---------------------------------------------------------------------------
+# SMS notifications — manual "you're up" texts from the rotation row
+# ---------------------------------------------------------------------------
+
+def _resolve_sms_target(entry_id):
+    """Look up the rotation entry + its linked sing_request + a normalized phone.
+
+    Returns ``(payload_or_None, err_or_None)`` where err is a ready-to-return
+    ``(jsonify, status)`` tuple. payload has keys: entry, sing_request,
+    phone_e164, first_name, song, artist.
+    """
+    import sms as sms_mod
+
+    rotation = current_app.rotation
+    sing_store = getattr(current_app, "sing_store", None)
+    sms_cfg = getattr(current_app, "sms_config", None) or {}
+
+    if rotation is None or sing_store is None:
+        return None, (jsonify({"error": "Rotation not configured"}), 503)
+    if not sms_cfg.get("api_key") or not sms_cfg.get("from_number"):
+        return None, (jsonify({"error": "SMS not configured"}), 503)
+
+    entry = rotation.store.get_entry(entry_id)
+    if entry is None:
+        return None, (jsonify({"error": "entry not found"}), 404)
+
+    # Find the most recent sing_request that produced this rotation entry.
+    conn = sing_store._get_conn()
+    req_row = conn.execute(
+        """
+        SELECT id, singer_name, phone, song_artist, song_title
+        FROM sing_requests
+        WHERE linked_entry_id = ?
+        ORDER BY id DESC LIMIT 1
+        """,
+        (entry_id,),
+    ).fetchone()
+    if req_row is None or not (req_row["phone"] or "").strip():
+        return None, (
+            jsonify({"error": "no phone on file for this entry"}), 400,
+        )
+
+    default_region = sing_store.get_sms_default_region() or "US"
+    try:
+        phone_e164 = sms_mod.normalize_phone(req_row["phone"], default_region=default_region)
+    except sms_mod.PhoneNormalizationError as exc:
+        return None, (jsonify({"error": f"invalid phone: {exc}"}), 400)
+
+    # Split "Andrew B." → "Andrew" for the {first_name} variable.
+    first_name = (req_row["singer_name"] or "").split()[0] if req_row["singer_name"] else ""
+
+    # Prefer the sing_request's structured song/title since the rotation
+    # entry's song_artist is "Song - Artist" formatted. Fall back to the
+    # rotation entry if the request didn't carry structured fields.
+    song = (req_row["song_title"] or "").strip()
+    artist = (req_row["song_artist"] or "").strip()
+    if not song and entry.get("song_artist"):
+        # Rotation entries are typically "Title - Artist".
+        parts = entry["song_artist"].split(" - ", 1)
+        song = parts[0].strip()
+        artist = parts[1].strip() if len(parts) > 1 else ""
+
+    return {
+        "entry": entry,
+        "sing_request": dict(req_row),
+        "phone_e164": phone_e164,
+        "first_name": first_name,
+        "song": song,
+        "artist": artist,
+    }, None
+
+
+@routes_bp.route('/rotation/sms/preview', methods=['POST'])
+def sms_preview():
+    """Render the current SMS template for a row so the preview panel can
+    populate without re-implementing rendering in JS (single source of truth)."""
+    import sms as sms_mod
+
+    data = request.get_json(force=True, silent=True) or {}
+    raw_id = data.get('entry_id')
+    if raw_id is None:
+        return jsonify({"error": "entry_id is required"}), 400
+    try:
+        entry_id = int(raw_id)
+    except (TypeError, ValueError):
+        return jsonify({"error": "entry_id must be an integer"}), 400
+
+    target, err = _resolve_sms_target(entry_id)
+    if err:
+        return err
+
+    sing_store = current_app.sing_store
+    template = sing_store.get_sms_template() or sms_mod.DEFAULT_TEMPLATE
+    body = sms_mod.render_template(
+        template,
+        {
+            "first_name": target["first_name"],
+            "song": target["song"],
+            "artist": target["artist"],
+        },
+    )
+
+    return jsonify({
+        "phone_e164": target["phone_e164"],
+        "first_name": target["first_name"],
+        "song": target["song"],
+        "artist": target["artist"],
+        "body": body,
+        "length": len(body),
+        "segments": sms_mod.segment_count(body),
+    })
+
+
+@routes_bp.route('/rotation/sms/send', methods=['POST'])
+def sms_send():
+    """Send the SMS body the KJ approved in the preview panel.
+
+    The body is sent verbatim (no server-side re-templating) so per-singer
+    edits in the preview are preserved exactly. Every attempt — success or
+    failure — is logged to sms_log for the audit trail.
+    """
+    import sms as sms_mod
+
+    data = request.get_json(force=True, silent=True) or {}
+    raw_id = data.get('entry_id')
+    body = (data.get('body') or '').strip()
+
+    if raw_id is None:
+        return jsonify({"error": "entry_id is required"}), 400
+    try:
+        entry_id = int(raw_id)
+    except (TypeError, ValueError):
+        return jsonify({"error": "entry_id must be an integer"}), 400
+    if not body:
+        return jsonify({"error": "body is required"}), 400
+    if len(body) > sms_mod.MAX_BODY_LEN:
+        return jsonify({
+            "error": f"body too long ({len(body)} > {sms_mod.MAX_BODY_LEN})"
+        }), 400
+
+    target, err = _resolve_sms_target(entry_id)
+    if err:
+        return err
+
+    sms_cfg = current_app.sms_config
+    sms_store = current_app.sms_store
+    user_agent = request.headers.get("User-Agent", "")[:500]
+
+    try:
+        message_id = sms_mod.send(
+            api_key=sms_cfg["api_key"],
+            from_number=sms_cfg["from_number"],
+            to_e164=target["phone_e164"],
+            body=body,
+        )
+    except sms_mod.TelnyxError as exc:
+        log_row = sms_store.record_send(
+            rotation_entry_id=entry_id,
+            sing_request_id=target["sing_request"]["id"],
+            phone_e164=target["phone_e164"],
+            body=body,
+            status="failed",
+            telnyx_message_id=None,
+            error=str(exc),
+            kj_user_agent=user_agent,
+        )
+        return jsonify({
+            "success": False,
+            "error": str(exc),
+            "sms_log_id": log_row["id"],
+        }), 502
+
+    log_row = sms_store.record_send(
+        rotation_entry_id=entry_id,
+        sing_request_id=target["sing_request"]["id"],
+        phone_e164=target["phone_e164"],
+        body=body,
+        status="sent",
+        telnyx_message_id=message_id,
+        error=None,
+        kj_user_agent=user_agent,
+    )
+    return jsonify({
+        "success": True,
+        "sms_log_id": log_row["id"],
+        "sent_at": log_row["sent_at"],
+        "telnyx_message_id": message_id,
+    })
 
 
 @routes_bp.route('/rotation/set-paid', methods=['POST'])
@@ -3334,6 +3580,8 @@ def get_sing_config():
     cfg = current_app.kj_config
     token = store.ensure_token()
     from sing import get_event_url
+    import sms as sms_mod
+    sms_cfg = getattr(current_app, "sms_config", {}) or {}
     return jsonify({
         "token": token,
         "enabled": store.is_enabled(),
@@ -3342,6 +3590,12 @@ def get_sing_config():
         "public_url": get_event_url(cfg, token, scope="public"),
         "local_url": get_event_url(cfg, token, scope="local"),
         "pending_count": store.count_pending(),
+        # SMS config — template defaults to in-code value if KJ hasn't set one.
+        "sms_enabled": bool(sms_cfg.get("api_key") and sms_cfg.get("from_number")),
+        "sms_template": store.get_sms_template() or sms_mod.DEFAULT_TEMPLATE,
+        "sms_template_is_custom": store.get_sms_template() is not None,
+        "sms_default_region": store.get_sms_default_region(),
+        "sms_from_number": sms_cfg.get("from_number") or None,
     })
 
 
@@ -3394,6 +3648,23 @@ def update_sing_config():
     if "accept_make_requests" in data:
         store.set_accepting_make_requests(bool(data["accept_make_requests"]))
         changed["accept_make_requests"] = bool(data["accept_make_requests"])
+
+    # ``sms_template`` is included on the same POST so the modal can save
+    # everything in one call. Passing ``None`` clears the override and the
+    # in-code default takes over.
+    if "sms_template" in data:
+        try:
+            store.set_sms_template(data["sms_template"])
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
+        changed["sms_template"] = data["sms_template"]
+
+    if "sms_default_region" in data and data["sms_default_region"] is not None:
+        try:
+            store.set_sms_default_region(data["sms_default_region"])
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
+        changed["sms_default_region"] = data["sms_default_region"]
 
     return jsonify({"success": True, "changed": changed})
 

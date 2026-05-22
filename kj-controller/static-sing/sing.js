@@ -461,7 +461,7 @@ function renderIdentity() {
           oninput: (e) => { draft.phone = e.target.value; },
         }),
         el("span", { class: "hint" },
-          "We'll text you when you're up. Leave blank to skip — the KJ will just call your name."),
+          "By providing your number, you agree to receive a one-off SMS when you're up to sing. Msg & data rates may apply. Reply STOP to opt out. Leave blank to skip — the KJ will just call your name."),
       ),
       draft.err ? el("p", { class: "error" }, draft.err) : null,
       el("div", { class: "row" },

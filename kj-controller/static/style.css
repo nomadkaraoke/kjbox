@@ -2005,6 +2005,116 @@ body {
 .rotation-btn-sing:hover {
     background: rgba(34, 197, 94, 0.15);
 }
+.rotation-btn-sms {
+    border-color: rgba(255, 77, 207, 0.4);
+    color: #ff4dcf;
+    font-size: 0.8rem;
+}
+.rotation-btn-sms:hover { background: rgba(255, 77, 207, 0.12); }
+.rotation-btn-sms-resent {
+    border-color: rgba(255, 77, 207, 0.25);
+    color: #d6a3c5;
+}
+.rotation-sms-marker {
+    margin-left: 0.25rem;
+    color: #888;
+    font-size: 0.72rem;
+    font-style: italic;
+    align-self: center;
+}
+.rotation-sms-marker-failed { color: #f87171; font-style: normal; }
+.sms-preview-panel {
+    margin: 0.25rem 0 0.5rem;
+    padding: 0.75rem;
+    background: #1a1a1a;
+    border: 1px solid #3a3a3a;
+    border-left: 3px solid #ff4dcf;
+    border-radius: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+.sms-preview-loading { color: #888; font-style: italic; }
+.sms-preview-header { color: #eee; font-size: 0.9rem; }
+.sms-preview-phone { color: #ff4dcf; font-family: monospace; margin-left: 0.5rem; font-size: 0.85rem; }
+.sms-preview-body {
+    width: 100%;
+    min-height: 70px;
+    padding: 0.5rem;
+    background: #0e0e0e;
+    color: #eee;
+    border: 1px solid #444;
+    border-radius: 4px;
+    font-family: inherit;
+    font-size: 0.9rem;
+    resize: vertical;
+    box-sizing: border-box;
+}
+.sms-preview-meta { font-size: 0.78rem; color: #888; }
+.sms-meta-len { color: #888; }
+.sms-meta-multi { color: #fbbf24; }
+.sms-meta-over { color: #f87171; font-weight: 600; }
+.sms-preview-actions {
+    display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;
+}
+.sms-preview-error { color: #f87171; font-size: 0.85rem; flex: 1 1 100%; }
+.sms-preview-cancel-btn, .sms-preview-close-btn {
+    padding: 0.4rem 0.8rem;
+    background: #2a2a2a;
+    color: #ccc;
+    border: 1px solid #444;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.85rem;
+}
+.sms-preview-send-btn {
+    padding: 0.4rem 1rem;
+    background: #ff4dcf;
+    color: #0a0a0a;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 0.85rem;
+    margin-left: auto;
+}
+.sms-preview-send-btn:disabled { opacity: 0.55; cursor: wait; }
+.sing-sms-row { display: flex; flex-direction: column; gap: 0.5rem; }
+.sing-sms-header { display: flex; justify-content: space-between; align-items: center; }
+.sing-sms-status { font-size: 0.8rem; }
+.sing-sms-status-ok { color: #86efac; }
+.sing-sms-status-off { color: #fbbf24; }
+.sing-sms-template {
+    width: 100%;
+    padding: 0.5rem;
+    background: #0e0e0e; color: #eee;
+    border: 1px solid #444; border-radius: 4px;
+    font-family: inherit; font-size: 0.9rem;
+    resize: vertical;
+    box-sizing: border-box;
+}
+.sing-sms-actions {
+    display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;
+}
+.sing-sms-region-label { color: #ccc; font-size: 0.9rem; display: flex; gap: 0.4rem; align-items: center; }
+.sing-sms-region-label select {
+    background: #0e0e0e; color: #eee;
+    border: 1px solid #444; border-radius: 4px;
+    padding: 0.3rem 0.4rem;
+}
+.sing-sms-spacer { flex: 1; }
+.sing-sms-reset-btn {
+    padding: 0.4rem 0.8rem;
+    background: #2a2a2a; color: #ccc;
+    border: 1px solid #444; border-radius: 4px;
+    cursor: pointer; font-size: 0.85rem;
+}
+.sing-sms-save-btn {
+    padding: 0.4rem 1rem;
+    background: #ff4dcf; color: #0a0a0a;
+    border: none; border-radius: 4px;
+    cursor: pointer; font-weight: 600; font-size: 0.85rem;
+}
 .rotation-btn-done {
     border-color: rgba(139, 92, 246, 0.3);
     color: #c4b5fd;
