@@ -192,3 +192,168 @@ class TestResolveBrandIsCommunityOverride:
         code, cls = resolve_brand(brand_code="WHATEVER", is_community=True)
         assert code is None
         assert cls == "community"
+
+
+from version_priority import rank_version, annotate_versions
+
+
+def _cfg(**overrides):
+    """Minimal config dict for ranking tests."""
+    base = {}
+    base.update(overrides)
+    return base
+
+
+class TestRankVersionTiers:
+    def test_recognized_community_below_1000(self):
+        v = {"source": "kn", "kn": {"brand_code": "CC", "is_community": True}}
+        r = rank_version(v, _cfg())
+        assert r < 1000
+
+    def test_unrecognized_community_in_1000s(self):
+        v = {"source": "kn", "kn": {"brand_code": "WHATEVER", "is_community": True}}
+        r = rank_version(v, _cfg())
+        assert 1000 <= r < 2000
+
+    def test_recognized_commercial_in_2000s(self):
+        v = {"source": "kn", "kn": {"brand_code": "KV"}}
+        r = rank_version(v, _cfg())
+        assert 2000 <= r < 3000
+
+    def test_unrecognized_commercial_in_3000s(self):
+        # Real KN data always has is_community set; default real-world value
+        # for commercial tracks is False.
+        v = {"source": "kn", "kn": {"brand_code": "WHATEVER", "is_community": False}}
+        r = rank_version(v, _cfg())
+        assert 3000 <= r < 4000
+
+    def test_unknown_at_4000(self):
+        # Pure-unknown: a local entry with no parseable brand info at all.
+        v = {"source": "local", "local": {"disc_id": "",
+                                          "filename": "plain song.mp4"}}
+        r = rank_version(v, _cfg())
+        assert r >= 4000
+
+
+class TestRankVersionPriorityOrder:
+    def test_cc_outranks_lc(self):
+        cc = {"source": "kn", "kn": {"brand_code": "CC", "is_community": True}}
+        lc = {"source": "kn", "kn": {"brand_code": "LC", "is_community": True}}
+        assert rank_version(cc, _cfg()) < rank_version(lc, _cfg())
+
+    def test_lc_outranks_fbk(self):
+        lc = {"source": "kn", "kn": {"brand_code": "LC", "is_community": True}}
+        fbk = {"source": "kn", "kn": {"brand_code": "FBK", "is_community": True}}
+        assert rank_version(lc, _cfg()) < rank_version(fbk, _cfg())
+
+    def test_community_always_beats_commercial(self):
+        # Worst-positioned recognized community beats best commercial
+        last_community = COMMUNITY_BRANDS[-1][0]
+        community = {"source": "kn", "kn": {"brand_code": last_community,
+                                            "is_community": True}}
+        commercial = {"source": "kn", "kn": {"brand_code": "KV"}}
+        assert rank_version(community, _cfg()) < rank_version(commercial, _cfg())
+
+    def test_unrecognized_community_beats_recognized_commercial(self):
+        unrec = {"source": "kn", "kn": {"brand_code": "WEIRD", "is_community": True}}
+        kv = {"source": "kn", "kn": {"brand_code": "KV"}}
+        assert rank_version(unrec, _cfg()) < rank_version(kv, _cfg())
+
+    def test_kv_outranks_sc(self):
+        kv = {"source": "kn", "kn": {"brand_code": "KV"}}
+        sc = {"source": "kn", "kn": {"brand_code": "SC"}}
+        assert rank_version(kv, _cfg()) < rank_version(sc, _cfg())
+
+
+class TestRankVersionSourceTiebreaker:
+    def test_local_beats_divebar_beats_youtube_same_brand(self):
+        local = {"source": "local", "local": {"disc_id": "LEMMY-001"}}
+        divebar = {"source": "kn", "kn": {"brand_code": "LC", "is_community": True,
+                                          "divebar": {"file_id": "abc"}}}
+        youtube = {"source": "kn", "kn": {"brand_code": "LC", "is_community": True}}
+        assert rank_version(local, _cfg()) < rank_version(divebar, _cfg())
+        assert rank_version(divebar, _cfg()) < rank_version(youtube, _cfg())
+
+    def test_tiebreaker_does_not_cross_brand_boundary(self):
+        # Worst source of CC (youtube) still beats best source of LC (local)
+        cc_youtube = {"source": "kn", "kn": {"brand_code": "CC", "is_community": True}}
+        lc_local = {"source": "local", "local": {"disc_id": "LEMMY-001"}}
+        assert rank_version(cc_youtube, _cfg()) < rank_version(lc_local, _cfg())
+
+
+class TestRankVersionConfigOverride:
+    def test_community_config_reorders(self):
+        # Default has CC at 0, LC at 1. Override to put LC first.
+        cfg = _cfg(kn_priority_community=["LC", "CC"])
+        cc = {"source": "kn", "kn": {"brand_code": "CC", "is_community": True}}
+        lc = {"source": "kn", "kn": {"brand_code": "LC", "is_community": True}}
+        assert rank_version(lc, cfg) < rank_version(cc, cfg)
+
+    def test_brand_dropped_from_config_becomes_unrecognized(self):
+        # Override that omits CC entirely — CC should classify as
+        # unrecognized community (tier 1000s).
+        cfg = _cfg(kn_priority_community=["LC", "FBK"])
+        cc = {"source": "kn", "kn": {"brand_code": "CC", "is_community": True}}
+        r = rank_version(cc, cfg)
+        assert 1000 <= r < 2000
+
+    def test_empty_config_falls_back_to_defaults(self):
+        cfg_empty = _cfg(kn_priority_community=[])
+        cfg_default = _cfg()
+        cc = {"source": "kn", "kn": {"brand_code": "CC", "is_community": True}}
+        assert rank_version(cc, cfg_empty) == rank_version(cc, cfg_default)
+
+
+class TestAnnotateVersionsKjPickShape:
+    def test_annotates_local(self):
+        versions = [
+            {"source": "local", "local": {"disc_id": "CCK-042",
+                                          "path": "/a.zip"}},
+        ]
+        annotate_versions(versions, _cfg(), shape="kj_pick")
+        assert versions[0]["priority_brand"] == "CC"
+        assert versions[0]["priority_class"] == "community"
+        assert versions[0]["priority_rank"] < 1000
+
+    def test_annotates_kn_with_divebar(self):
+        versions = [
+            {"source": "kn", "kn": {"brand_code": "LC", "is_community": True,
+                                    "divebar": {"file_id": "abc"}}},
+        ]
+        annotate_versions(versions, _cfg(), shape="kj_pick")
+        assert versions[0]["priority_brand"] == "LC"
+        assert versions[0]["priority_class"] == "community"
+
+    def test_annotates_unknown_kn(self):
+        versions = [
+            {"source": "kn", "kn": {"brand_code": "WHATEVER",
+                                    "youtube_url": "https://yt"}},
+        ]
+        annotate_versions(versions, _cfg(), shape="kj_pick")
+        assert versions[0]["priority_brand"] is None
+        assert versions[0]["priority_class"] == "unknown"
+
+
+class TestAnnotateVersionsRotationSearchShape:
+    def test_annotates_local_row(self):
+        rows = [{"path": "/a.zip", "disc_id": "KVD-22524", "filename": "x.zip"}]
+        annotate_versions(rows, _cfg(), shape="rotation_search_local")
+        assert rows[0]["priority_brand"] == "KV"
+        assert rows[0]["priority_class"] == "commercial"
+
+    def test_annotates_kn_track(self):
+        tracks = [{"brand_code": "LC", "brand_name": "Lemmy Caution",
+                   "youtube_url": "https://yt", "is_community": True}]
+        annotate_versions(tracks, _cfg(), shape="rotation_search_kn")
+        assert tracks[0]["priority_brand"] == "LC"
+        assert tracks[0]["priority_class"] == "community"
+
+    def test_annotates_kn_track_with_divebar_gets_better_rank(self):
+        tracks = [
+            {"brand_code": "LC", "youtube_url": "https://yt", "is_community": True},
+            {"brand_code": "LC", "youtube_url": "https://yt", "is_community": True,
+             "divebar": {"file_id": "abc"}},
+        ]
+        annotate_versions(tracks, _cfg(), shape="rotation_search_kn")
+        # divebar-mirrored LC should rank better than youtube-only LC
+        assert tracks[1]["priority_rank"] < tracks[0]["priority_rank"]
