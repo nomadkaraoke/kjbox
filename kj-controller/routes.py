@@ -2734,6 +2734,16 @@ def unified_search(query, app, *, grouped=False):
             "karaoke_nerds_timeout": kn_timeout,
         }
 
+    # Flat path: annotate local results and every KN track in-place so the
+    # frontend can sort + render with section headers without duplicating
+    # the brand registry.
+    cfg = app.kj_config if hasattr(app, "kj_config") else {}
+    version_priority.annotate_versions(
+        local_results, cfg, shape="rotation_search_local")
+    for song in kn_results:
+        version_priority.annotate_versions(
+            song.get("tracks") or [], cfg, shape="rotation_search_kn")
+
     return {
         "local": local_results,
         "karaoke_nerds": kn_results,
