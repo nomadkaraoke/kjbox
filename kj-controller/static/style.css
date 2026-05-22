@@ -1798,12 +1798,53 @@ body {
     display: flex;
     align-items: center;
     justify-content: space-between;
+    flex-wrap: wrap;
     padding: 4px 8px;
     border-radius: 6px;
     margin-bottom: 2px;
     background: #1a1a1a;
     transition: background 0.15s;
     position: relative;
+}
+
+/* File path row — hidden by default; revealed by the Paths toggle button
+   in the rotation header (toggleRotationFilePaths). Wraps to its own line
+   inside the flex .rotation-entry container. */
+.rotation-file-path { display: none; }
+.rotation-list.show-file-paths .rotation-file-path {
+    display: block;
+    flex-basis: 100%;
+    margin-top: 2px;
+    padding: 2px 6px;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 0.72rem;
+    color: #888;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 3px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.rotation-list.show-file-paths .rotation-file-path-unlinked {
+    color: #d4a32a;
+    font-style: italic;
+    background: rgba(212, 163, 42, 0.08);
+}
+
+.rotation-paths-btn {
+    background: #222;
+    color: #ccc;
+    border: 1px solid #444;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.8rem;
+}
+.rotation-paths-btn:hover { background: #2a2a2a; }
+.rotation-paths-btn-active {
+    background: #2f4a6f;
+    border-color: #3b6a8a;
+    color: #fff;
 }
 .rotation-entry:hover {
     background: #222;
@@ -2674,6 +2715,8 @@ body {
 }
 .pr-actions .btn-approve { background: #2f6f3a; border-color: #3b8a4a; }
 .pr-actions .btn-approve:hover { background: #3b8a4a; }
+.pr-actions .btn-approve-skip { background: #2f4a6f; border-color: #3b6a8a; }
+.pr-actions .btn-approve-skip:hover { background: #3b6a8a; }
 .pr-actions .btn-reject { background: #6a2a2a; border-color: #8a3535; }
 .pr-actions .btn-reject:hover { background: #8a3535; }
 .pr-actions .btn-save { background: #2f6f3a; border-color: #3b8a4a; color: #fff; }
@@ -2790,6 +2833,58 @@ body {
 .sing-qr-row { display: flex; gap: 1rem; }
 .sing-qr-card { flex: 1; text-align: center; }
 .sing-qr { width: 100%; max-width: 240px; background: #fff; padding: 0.5rem; border-radius: 4px; }
+
+/* YouTube preview block on admin approval cards — KJ can verify pasted
+   URLs are actual karaoke versions before approving. Full-width row
+   inside the flex .pending-req-row container. */
+.pr-youtube-preview {
+  flex-basis: 100%;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin: 6px 0 2px;
+  padding: 6px 10px;
+  background: rgba(196, 48, 43, 0.08);
+  border-left: 3px solid #c4302b;
+  border-radius: 4px;
+}
+.pr-yt-thumb {
+  width: 80px;
+  height: 60px;
+  object-fit: cover;
+  border-radius: 3px;
+  background: #000;
+  flex-shrink: 0;
+}
+.pr-yt-thumb-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #c4302b;
+  font-size: 1.5rem;
+}
+.pr-yt-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+.pr-yt-link {
+  color: #ff6b66;
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+.pr-yt-link:hover { text-decoration: underline; }
+.pr-yt-link-unsafe { color: #d4a32a; cursor: default; }
+.pr-yt-url {
+  color: #888;
+  font-size: 0.75rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 /* Duet-partner block on admin approval cards (sing requests). */
 .request-duet-partners {

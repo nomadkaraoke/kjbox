@@ -54,6 +54,22 @@ class TestList:
         assert data["counts"]["pending"] == 1
         assert data["counts"]["rejected"] == 1
 
+    def test_youtube_request_exposes_url_for_kj_preview(self, admin_client, admin_app):
+        # The KJ UI shows a clickable YouTube link so the KJ can verify the
+        # pasted URL is an actual karaoke version before approving. That
+        # depends on source_ref (the URL the singer pasted) being present in
+        # the admin response — guard against future projections stripping it.
+        _make_pending(
+            admin_app,
+            source_type="youtube",
+            source_ref="https://youtu.be/dQw4w9WgXcQ",
+        )
+        resp = admin_client.get("/rotation/requests?status=pending")
+        assert resp.status_code == 200
+        req = resp.get_json()["requests"][0]
+        assert req["source_type"] == "youtube"
+        assert req["source_ref"] == "https://youtu.be/dQw4w9WgXcQ"
+
 
 class TestConfig:
     def test_get_config_shape(self, admin_client):
@@ -192,6 +208,31 @@ class TestApprove:
         # Rotation entry marked queued
         entry = admin_app.rotation.store.get_entry(items[0]["rotation_entry_id"])
         assert entry["download_status"] == "queued"
+
+    def test_approve_youtube_skip_download_creates_unlinked_entry(self, admin_client, admin_app):
+        # KJ watched the pasted URL, decided it's not actually a karaoke
+        # version, but wants to keep the singer in rotation and link a
+        # proper file manually. skip_download bypasses the download queue
+        # and leaves the entry without a file_path, so the rotation 🔗 link
+        # button appears.
+        req = _make_pending(
+            admin_app,
+            singer_name="Wrong Url Wendy",
+            source_type="youtube",
+            source_ref="https://youtu.be/notKaraoke",
+        )
+        with patch("routes._download_worker") as _w:
+            resp = admin_client.post(
+                f"/rotation/requests/{req['id']}/approve",
+                json={"skip_download": True},
+            )
+            assert resp.status_code == 200
+            _w.assert_not_called()
+        assert admin_app.download_queue["items"] == []
+        entry_id = resp.get_json()["entry_id"]
+        entry = admin_app.rotation.store.get_entry(entry_id)
+        assert entry["file_path"] is None
+        assert entry["download_status"] is None
 
     def test_approve_divebar_queues_download(self, admin_client, admin_app):
         req = _make_pending(

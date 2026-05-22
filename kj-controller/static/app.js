@@ -3718,9 +3718,59 @@ function renderRotation(entries) {
 
         row.appendChild(info);
         row.appendChild(actions);
+
+        // File-path row (always rendered; visibility toggled by
+        // .show-file-paths class on parent #rotation-list — see
+        // toggleRotationFilePaths). Helps the KJ scan for entries
+        // that need unlinking + re-linking with a better version.
+        const pathRow = document.createElement('div');
+        pathRow.className = 'rotation-file-path';
+        if (entry.file_path) {
+            const parts = entry.file_path.split('/');
+            const basename = parts[parts.length - 1];
+            pathRow.textContent = basename;
+            pathRow.title = entry.file_path;
+        } else {
+            pathRow.classList.add('rotation-file-path-unlinked');
+            pathRow.textContent = '(no file linked)';
+        }
+        row.appendChild(pathRow);
+
         list.appendChild(row);
     });
 }
+
+function toggleRotationFilePaths() {
+    const list = document.getElementById('rotation-list');
+    const btn = document.getElementById('rotation-paths-btn');
+    if (!list) return;
+    const showing = list.classList.toggle('show-file-paths');
+    if (showing) {
+        localStorage.setItem('kj-rotation-show-paths', '1');
+        if (btn) btn.classList.add('rotation-paths-btn-active');
+    } else {
+        localStorage.removeItem('kj-rotation-show-paths');
+        if (btn) btn.classList.remove('rotation-paths-btn-active');
+    }
+}
+
+// Apply persisted file-paths toggle state once #rotation-list exists.
+(function initRotationFilePathsToggle() {
+    const apply = () => {
+        const list = document.getElementById('rotation-list');
+        const btn = document.getElementById('rotation-paths-btn');
+        if (!list) return;
+        if (localStorage.getItem('kj-rotation-show-paths') === '1') {
+            list.classList.add('show-file-paths');
+            if (btn) btn.classList.add('rotation-paths-btn-active');
+        }
+    };
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', apply);
+    } else {
+        apply();
+    }
+})();
 
 // --- Singer Stats Panel ---
 
@@ -5173,9 +5223,21 @@ const SingRequests = (() => {
         row.className = 'pending-req-row';
         const song = [req.song_title, req.song_artist].filter(Boolean).join(' — ');
         const isKjPick = req.source_type === 'kj_pick';
-        const approveButton = isKjPick
-            ? `<span class="pr-approve-hint">pick a version below ↓</span>`
-            : `<button class="btn-approve" data-id="${req.id}">Approve</button>`;
+        const isYoutube = req.source_type === 'youtube';
+        let approveButton;
+        if (isKjPick) {
+            approveButton = `<span class="pr-approve-hint">pick a version below ↓</span>`;
+        } else if (isYoutube) {
+            // Two-button: KJ may approve-and-download the pasted URL, or
+            // approve-without-download when the URL isn't a karaoke version
+            // (they'll use the rotation 🔗 button to link a better file).
+            approveButton = `
+              <button class="btn-approve" data-id="${req.id}" title="Approve and download this YouTube URL as the karaoke video">Approve</button>
+              <button class="btn-approve-skip" data-id="${req.id}" title="Approve without downloading — adds the singer to rotation; use the 🔗 button on the rotation row to link a better file">Approve, link later</button>
+            `;
+        } else {
+            approveButton = `<button class="btn-approve" data-id="${req.id}">Approve</button>`;
+        }
         row.innerHTML = `
           <div class="pr-main">
             <strong>${escapeHtml(req.singer_name)}</strong>
@@ -5191,8 +5253,14 @@ const SingRequests = (() => {
         `;
         const approveBtn = row.querySelector('.btn-approve');
         if (approveBtn) approveBtn.addEventListener('click', () => approve(req.id));
+        const approveSkipBtn = row.querySelector('.btn-approve-skip');
+        if (approveSkipBtn) approveSkipBtn.addEventListener('click', () => approve(req.id, { skipDownload: true }));
         row.querySelector('.btn-edit').addEventListener('click', () => editInline(row, req));
         row.querySelector('.btn-reject').addEventListener('click', () => reject(req.id));
+        if (req.source_type === 'youtube' && req.source_ref) {
+            const preview = renderYouTubePreview(req.source_ref);
+            if (preview) row.appendChild(preview);
+        }
         if (Array.isArray(req.additional_singers) && req.additional_singers.length > 0) {
             const block = document.createElement('div');
             block.className = 'request-duet-partners';
@@ -5230,6 +5298,33 @@ const SingRequests = (() => {
             if (picker) row.appendChild(picker);
         }
         return row;
+    }
+
+    function renderYouTubePreview(url) {
+        // Singers paste arbitrary URLs — only render an anchor if it's http(s).
+        // Anything else (javascript:, data:, mailto:) gets shown as text only.
+        let safeHref = null;
+        try {
+            const u = new URL(url);
+            if (u.protocol === 'http:' || u.protocol === 'https:') safeHref = u.href;
+        } catch (e) { /* not a valid URL — fall through to text-only */ }
+        const ytId = extractYouTubeId(url);
+        const wrap = document.createElement('div');
+        wrap.className = 'pr-youtube-preview';
+        const thumbHtml = ytId
+            ? `<img class="pr-yt-thumb" src="https://i.ytimg.com/vi/${ytId}/default.jpg" alt="" loading="lazy" referrerpolicy="no-referrer">`
+            : `<div class="pr-yt-thumb pr-yt-thumb-fallback" aria-hidden="true">▶</div>`;
+        const linkHtml = safeHref
+            ? `<a class="pr-yt-link" href="${escapeHtml(safeHref)}" target="_blank" rel="noopener noreferrer">▶ Watch on YouTube</a>`
+            : `<span class="pr-yt-link pr-yt-link-unsafe">⚠ Unsafe URL — review manually</span>`;
+        wrap.innerHTML = `
+          ${thumbHtml}
+          <div class="pr-yt-info">
+            ${linkHtml}
+            <div class="pr-yt-url" title="${escapeHtml(url)}">${escapeHtml(url)}</div>
+          </div>
+        `;
+        return wrap;
     }
 
     function renderKjPickPicker(req) {
@@ -5298,17 +5393,21 @@ const SingRequests = (() => {
           <button class="btn-approve-version" data-idx="${idx}">Approve with this →</button>
         `;
         card.querySelector('.btn-approve-version').addEventListener('click', () => {
-            approve(reqId, idx);
+            approve(reqId, { versionIndex: idx });
         });
         return card;
     }
 
-    async function approve(id, versionIndex) {
+    async function approve(id, opts) {
+        const { versionIndex, skipDownload } = opts || {};
         try {
+            const body = {};
+            if (versionIndex !== undefined) body.version_index = versionIndex;
+            if (skipDownload) body.skip_download = true;
             const init = { method: 'POST' };
-            if (versionIndex !== undefined) {
+            if (Object.keys(body).length) {
                 init.headers = { 'Content-Type': 'application/json' };
-                init.body = JSON.stringify({ version_index: versionIndex });
+                init.body = JSON.stringify(body);
             }
             const resp = await fetch(`/rotation/requests/${id}/approve`, init);
             if (!resp.ok) {

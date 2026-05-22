@@ -3083,11 +3083,17 @@ def _pick_version_from_kj_pick(req, index):
     raise ValueError(f"unknown version source: {src!r}")
 
 
-def approve_sing_request(app, req):
+def approve_sing_request(app, req, skip_download=False):
     """Dispatch approval of a sing request; create/link a rotation entry.
 
     Called from the admin /rotation/requests/<id>/approve route and from the
     auto-approve path in sing_bp.submit. Returns the rotation entry_id.
+
+    ``skip_download``: only meaningful for download-style sources
+    (divebar/youtube/kn). When True, create the rotation entry without
+    queuing a download — the KJ will use the rotation 🔗 link button to
+    attach a proper file (used when a pasted YouTube URL turns out not to
+    be a karaoke version, but the singer should still be added to rotation).
     """
     rotation = getattr(app, 'rotation', None)
     if rotation is None:
@@ -3112,6 +3118,11 @@ def approve_sing_request(app, req):
         return entry["id"]
 
     if source_type in ("divebar", "youtube", "kn"):
+        if skip_download:
+            # Unlinked entry — KJ will use the rotation 🔗 link button to
+            # attach the file once they've found a proper karaoke version.
+            entry = rotation.add_entry(singer, song_text, singers=singers_list)
+            return entry["id"]
         # Resolve the download URL FIRST so we don't leave an orphan
         # rotation entry behind when upstream validation fails.
         from uuid import uuid4
@@ -3306,11 +3317,13 @@ def approve_sing_request_route(req_id):
     if req["status"] != "pending":
         return jsonify({"error": f"Request is already {req['status']}"}), 409
 
+    body = request.get_json(silent=True) or {}
+    skip_download = bool(body.get("skip_download"))
+
     # kj_pick: the singer deferred version selection — the admin's approval
     # body must carry version_index so we can rewrite the row to a concrete
     # source_type/ref before approve_sing_request sees it.
     if req["source_type"] == "kj_pick":
-        body = request.get_json(silent=True) or {}
         version_index = body.get("version_index")
         if version_index is None:
             return jsonify({
@@ -3325,7 +3338,9 @@ def approve_sing_request_route(req_id):
         req = store.update_request_source(req_id, src_type, src_ref, src_meta)
 
     try:
-        entry_id = approve_sing_request(current_app._get_current_object(), req)
+        entry_id = approve_sing_request(
+            current_app._get_current_object(), req, skip_download=skip_download
+        )
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500
     store.mark_approved(req_id, linked_entry_id=entry_id)
