@@ -47,6 +47,36 @@ class TestDownloadAndLink:
             assert data["entry"]["download_source"] == "divebar"
             assert data["entry"]["download_status"] == "queued"
 
+    def test_divebar_download_classifies_gcs_url(self, dl_client, dl_app):
+        """Queue item carries source_detail='gcs' when divebar returns a GCS URL."""
+        resp = dl_client.post('/rotation/add',
+            data=json.dumps({"singer": "Alice", "song_artist": "Song"}),
+            content_type='application/json')
+        entry_id = resp.get_json()["entry"]["id"]
+        with patch('routes.divebar.get_download_url',
+                   return_value="https://storage.googleapis.com/divebar-mirror/x.mp4"):
+            dl_client.post('/rotation/download-and-link',
+                data=json.dumps({"id": entry_id, "source": "divebar",
+                                 "file_id": "abc", "filename": "x.mp4"}),
+                content_type='application/json')
+        items = dl_app.download_queue['items']
+        assert items[-1]['source_detail'] == 'gcs'
+
+    def test_divebar_download_classifies_drive_url(self, dl_client, dl_app):
+        """Queue item carries source_detail='drive' when divebar returns a Drive URL."""
+        resp = dl_client.post('/rotation/add',
+            data=json.dumps({"singer": "Alice", "song_artist": "Song"}),
+            content_type='application/json')
+        entry_id = resp.get_json()["entry"]["id"]
+        with patch('routes.divebar.get_download_url',
+                   return_value="https://drive.google.com/uc?export=download&id=xyz"):
+            dl_client.post('/rotation/download-and-link',
+                data=json.dumps({"id": entry_id, "source": "divebar",
+                                 "file_id": "xyz", "filename": "x.mp4"}),
+                content_type='application/json')
+        items = dl_app.download_queue['items']
+        assert items[-1]['source_detail'] == 'drive'
+
     def test_youtube_download(self, dl_client, dl_app):
         """YouTube download sets download_source and queues download."""
         resp = dl_client.post('/rotation/add',

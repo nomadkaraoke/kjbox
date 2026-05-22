@@ -65,6 +65,36 @@ def test_status_without_vlc(flask_test_client):
     assert data['vlc_enabled'] is False
 
 
+def test_status_rotation_downloads_surfaces_source_detail(flask_test_client, flask_app):
+    """GET /status exposes source + source_detail per active rotation download
+    so the UI can show GCS-vs-Drive-vs-YouTube on the prep badge."""
+    # Seed a rotation entry + queue items: one GCS, one Drive, one YouTube.
+    e1 = flask_app.rotation.add_entry("Alice", "Song A")
+    e2 = flask_app.rotation.add_entry("Bob", "Song B")
+    e3 = flask_app.rotation.add_entry("Carol", "Song C")
+    with flask_app._download_lock:
+        flask_app.download_queue['items'].extend([
+            {'id': 'd1', 'status': 'downloading', 'source': 'divebar',
+             'source_detail': 'gcs', 'rotation_entry_id': e1['id'],
+             'url': 'https://storage.googleapis.com/divebar/x.mp4', 'progress': 0.42},
+            {'id': 'd2', 'status': 'queued', 'source': 'divebar',
+             'source_detail': 'drive', 'rotation_entry_id': e2['id'],
+             'url': 'https://drive.google.com/uc?id=y', 'progress': 0},
+            {'id': 'd3', 'status': 'downloading', 'source': 'youtube',
+             'source_detail': None, 'rotation_entry_id': e3['id'],
+             'url': 'https://youtu.be/abc', 'progress': 0.1},
+        ])
+
+    response = flask_test_client.get('/status')
+    assert response.status_code == 200
+    rd = json.loads(response.data)['rotation_downloads']
+    assert rd[str(e1['id'])]['source'] == 'divebar'
+    assert rd[str(e1['id'])]['source_detail'] == 'gcs'
+    assert rd[str(e2['id'])]['source_detail'] == 'drive'
+    assert rd[str(e3['id'])]['source'] == 'youtube'
+    assert rd[str(e3['id'])]['source_detail'] is None
+
+
 def test_play_requires_file_path(flask_test_client):
     """POST /play without file_path returns 400."""
     response = flask_test_client.post('/play',

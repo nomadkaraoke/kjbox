@@ -438,6 +438,21 @@ button:disabled:hover {
     font-size: 0.85em;
 }
 .dl-queue-action:hover { background: #333; color: #fff; }
+/* Per-item source badge — KJ glance-check for GCS vs Drive vs YouTube */
+.dl-source-badge {
+    flex-shrink: 0;
+    font-size: 0.7em;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    padding: 2px 6px;
+    border-radius: 3px;
+    min-width: 38px;
+    text-align: center;
+}
+.dl-source-gcs     { background: #22c55e33; color: #22c55e; }
+.dl-source-drive   { background: #f59e0b33; color: #f59e0b; }
+.dl-source-divebar { background: #1e7cbf33; color: #1e7cbf; }
+.dl-source-yt      { background: #c4302b33; color: #c4302b; }
 
 /* --- Layout --- */
 
@@ -2317,6 +2332,9 @@ body {
 .prep-ready { background: #2d8a4e33; color: #2d8a4e; }
 .prep-downloading-green { background: #2d8a4e33; color: #2d8a4e; }
 .prep-downloading-orange { background: #d4720a33; color: #d4720a; }
+/* GCS = fast community mirror, vivid green. Drive = slower, amber. */
+.prep-downloading-gcs { background: #22c55e33; color: #22c55e; font-weight: 600; }
+.prep-downloading-drive { background: #f59e0b33; color: #f59e0b; }
 .prep-url { background: #55555533; color: #888; }
 .prep-unlinked { background: #55555533; color: #888; }
 .prep-failed { background: #ef444433; color: #ef4444; }
