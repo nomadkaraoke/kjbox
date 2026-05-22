@@ -2398,7 +2398,6 @@ function extractYouTubeId(url) {
     return m ? m[1] : null;
 }
 
-let knPreferredBrands = window.KJ_CONFIG.knPreferredBrands || [];
 let knExpandedSongs = {};
 let knSongData = {};
 
@@ -2437,20 +2436,6 @@ async function searchKaraokeNerds() {
 function clearKNResults() {
     document.getElementById('kn-results').innerHTML = '';
     document.getElementById('kn-query').value = '';
-}
-
-function sortKNTracks(tracks) {
-    const prefUpper = knPreferredBrands.map(b => b.toUpperCase());
-    return [...tracks].sort((a, b) => {
-        const tierA = a.is_community ? 0 : prefUpper.includes(a.brand_code.toUpperCase()) ? 1 : 2;
-        const tierB = b.is_community ? 0 : prefUpper.includes(b.brand_code.toUpperCase()) ? 1 : 2;
-        if (tierA !== tierB) return tierA - tierB;
-        // Within preferred tier, sort by config order
-        if (tierA === 1) {
-            return prefUpper.indexOf(a.brand_code.toUpperCase()) - prefUpper.indexOf(b.brand_code.toUpperCase());
-        }
-        return a.brand_name.localeCompare(b.brand_name);
-    });
 }
 
 function renderKNResults(songs) {
@@ -2499,11 +2484,11 @@ function renderKNResults(songs) {
         trackList.className = 'kn-track-list' + (isExpanded ? '' : ' collapsed');
         trackList.id = songId;
 
-        const sorted = sortKNTracks(song.tracks);
-        sorted.forEach(track => {
+        // Backend has sorted tracks by priority_rank already.
+        song.tracks.forEach(track => {
             const trackEl = document.createElement('div');
-            const prefUpper = knPreferredBrands.map(b => b.toUpperCase());
-            const isPreferred = prefUpper.includes(track.brand_code.toUpperCase());
+            const isPreferred = track.priority_class === 'community'
+                && (track.priority_rank ?? 9999) < 1000;
             trackEl.className = 'kn-track' +
                 (track.is_community ? ' community' : '') +
                 (isPreferred ? ' preferred' : '');
@@ -2661,41 +2646,113 @@ function downloadKNTrack(youtubeUrl) {
     apiCall('/download', { url: youtubeUrl });
 }
 
-function toggleKNPrefs() {
+// --- KN brand-priority preferences (two ranked lists + alias hints) ---
+let knPriorityCommunity = [];
+let knPriorityCommercial = [];
+let knAliases = {};
+
+async function fetchKnPrefs() {
+    try {
+        const resp = await fetch('/karaoke-nerds/config');
+        if (!resp.ok) return;
+        const data = await resp.json();
+        knPriorityCommunity = data.priority_community || [];
+        knPriorityCommercial = data.priority_commercial || [];
+        knAliases = data.aliases || {};
+    } catch (_) { /* leave empty */ }
+}
+
+function renderKnAliasHints(canonicals, containerId) {
+    const el = document.getElementById(containerId);
+    if (!el) return;
+    const hints = canonicals
+        .filter(c => (knAliases[c] || []).some(a => a.toUpperCase() !== c.toUpperCase()))
+        .slice(0, 6)
+        .map(c => {
+            const extra = (knAliases[c] || [])
+                .filter(a => a.toUpperCase() !== c.toUpperCase());
+            return `${c} → ${extra.join(', ')}`;
+        });
+    el.textContent = hints.length
+        ? 'Aliases recognized: ' + hints.join('; ')
+        : '';
+}
+
+async function toggleKNPrefs() {
     const panel = document.getElementById('kn-prefs-panel');
     panel.classList.toggle('hidden');
     if (!panel.classList.contains('hidden')) {
-        document.getElementById('kn-prefs-input').value = knPreferredBrands.join(', ');
-        renderKNPrefsTags();
+        await fetchKnPrefs();
+        document.getElementById('kn-prefs-community-input').value =
+            knPriorityCommunity.join(', ');
+        document.getElementById('kn-prefs-commercial-input').value =
+            knPriorityCommercial.join(', ');
+        renderKnAliasHints(knPriorityCommunity, 'kn-prefs-community-aliases');
+        renderKnAliasHints(knPriorityCommercial, 'kn-prefs-commercial-aliases');
     }
 }
 
-function renderKNPrefsTags() {
-    const container = document.getElementById('kn-prefs-tags');
-    container.innerHTML = '';
-    knPreferredBrands.forEach(code => {
-        const tag = document.createElement('span');
-        tag.className = 'kn-brand-tag';
-        tag.textContent = code;
-        container.appendChild(tag);
+async function saveKNPrefs() {
+    const community = document.getElementById('kn-prefs-community-input').value
+        .split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
+    const commercial = document.getElementById('kn-prefs-commercial-input').value
+        .split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
+
+    const resp = await fetch('/karaoke-nerds/config', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            priority_community: community,
+            priority_commercial: commercial,
+        }),
     });
+    const data = await resp.json();
+    if (!resp.ok) {
+        log(`Save failed: ${data.error || resp.statusText}`, 'error');
+        return;
+    }
+    knPriorityCommunity = data.priority_community;
+    knPriorityCommercial = data.priority_commercial;
+    log('Updated brand priorities', 'success');
+    // Re-trigger a search if one is currently rendered so the new order applies.
+    const results = document.getElementById('kn-results');
+    if (results && results.children.length > 0) searchKaraokeNerds();
 }
 
-async function saveKNPrefs() {
-    const input = document.getElementById('kn-prefs-input').value;
-    const brands = input.split(',').map(s => s.trim().toUpperCase()).filter(s => s);
-
-    const data = await apiCall('/karaoke-nerds/config', { preferred_brands: brands });
-    if (data && data.preferred_brands) {
-        knPreferredBrands = data.preferred_brands;
-        renderKNPrefsTags();
-        log(`Updated preferred brands: ${knPreferredBrands.join(', ')}`, 'success');
-        // Re-render results if we have them
+async function resetKNPrefs() {
+    if (!confirm('Reset brand priorities to defaults?')) return;
+    // Clear backend config first so GET returns defaults, then read + re-save
+    // so the persisted config matches what the UI shows.
+    try {
+        await fetch('/karaoke-nerds/config', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({priority_community: [], priority_commercial: []}),
+        });
+    } catch (_) { /* ignore — GET defaults still works */ }
+    const resp = await fetch('/karaoke-nerds/config');
+    const data = await resp.json();
+    const saveResp = await fetch('/karaoke-nerds/config', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            priority_community: data.priority_community,
+            priority_commercial: data.priority_commercial,
+        }),
+    });
+    if (saveResp.ok) {
+        knPriorityCommunity = data.priority_community;
+        knPriorityCommercial = data.priority_commercial;
+        document.getElementById('kn-prefs-community-input').value =
+            knPriorityCommunity.join(', ');
+        document.getElementById('kn-prefs-commercial-input').value =
+            knPriorityCommercial.join(', ');
+        renderKnAliasHints(knPriorityCommunity, 'kn-prefs-community-aliases');
+        renderKnAliasHints(knPriorityCommercial, 'kn-prefs-commercial-aliases');
+        log('Reset brand priorities to defaults', 'success');
+        // Refresh any currently-rendered KN results to reflect the new order.
         const results = document.getElementById('kn-results');
-        if (results.children.length > 0) {
-            // Trigger a fresh search to re-sort
-            searchKaraokeNerds();
-        }
+        if (results && results.children.length > 0) searchKaraokeNerds();
     }
 }
 
@@ -4830,7 +4887,6 @@ function renderRotSearchDropdown(data) {
 
     const localResults = data.local || [];
     const knSongs = data.karaoke_nerds || [];
-    const prefUpper = knPreferredBrands.map(b => b.toUpperCase());
     const downloadedIdToPath = new Map(
         localMediaItems.filter(i => i.youtube_id).map(i => [i.youtube_id, i.file_path])
     );
@@ -4845,82 +4901,61 @@ function renderRotSearchDropdown(data) {
         return;
     }
 
-    // --- "IN YOUR COLLECTION" section (local matches) ---
-    if (localResults.length > 0) {
-        html += '<div class="kn-local-section">';
-        html += '<div class="kn-local-header">In your collection (' + localResults.length + ')</div>';
-        localResults.forEach(match => {
-            const idx = rotSearchResults.length;
+    // Build a single flat list of renderable rows with priority info, then
+    // sort across the WHOLE result set so community always beats commercial
+    // regardless of source. Backend annotates each result with priority_rank.
+    const rows = [];
+    for (const match of localResults) {
+        rows.push({
+            kind: 'local',
+            rank: typeof match.priority_rank === 'number' ? match.priority_rank : 9999,
+            klass: match.priority_class || 'unknown',
+            brand: match.priority_brand,
+            data: match,
+        });
+    }
+    for (const song of knSongs) {
+        for (const track of (song.tracks || [])) {
+            rows.push({
+                kind: 'kn',
+                rank: typeof track.priority_rank === 'number' ? track.priority_rank : 9999,
+                klass: track.priority_class || 'unknown',
+                brand: track.priority_brand,
+                song, track,
+            });
+        }
+    }
+    rows.sort((a, b) => a.rank - b.rank);
+
+    // Walk sorted rows, emit section headers when priority class changes,
+    // and highlight top community rows (or top-3 if no community matches).
+    let currentClass = null;
+    const topCount = Math.min(3, rows.length);
+    const highlightAll = !rows.some(r => r.klass === 'community' && r.rank < 1000);
+
+    rows.forEach((r, displayIdx) => {
+        if (r.klass !== currentClass) {
+            html += renderRotSectionHeader(r.klass, r.brand, displayIdx === 0);
+            currentClass = r.klass;
+        }
+        const idx = rotSearchResults.length;
+        const isTop = (r.klass === 'community' && r.rank < 1000)
+            || (highlightAll && displayIdx < topCount);
+        const isBest = displayIdx === 0;
+        if (r.kind === 'local') {
+            html += renderRotLocalRow(r.data, idx, isTop, isBest);
+            const match = r.data;
             rotSearchResults.push({
                 type: 'local', path: match.path, duration: match.duration,
                 song_artist: (match.title || '') + ' - ' + (match.artist || ''),
             });
-            const fname = match.filename ? match.filename.replace(/\.\w+$/, '') : (match.disc_id || '') + ' - ' + (match.artist || '') + ' - ' + (match.title || '');
-            const formatClass = match.format ? getFormatBadgeClass(match.format) : 'other';
-            html += '<div class="kn-local-match rs-clickable' + (idx === rotSearchSelectedIdx ? ' selected' : '') + '" data-idx="' + idx + '" onclick="selectRotSearchResult(rotSearchResults[' + idx + '])">';
-            html += '<div class="catalog-detail">';
-            html += '<span>' + escHtml(fname) + ' ';
-            if (match.format) html += '<span class="format-badge ' + formatClass + '">' + escHtml(match.format) + '</span>';
-            html += '</span>';
-            if (match.path) {
-                const folder = match.path.replace(/\/[^/]+$/, '').replace(/^\/media\/nomad\//, '').replace(/^\/opt\/nomad\//, '');
-                html += '<div class="catalog-folder" title="' + escHtml(match.path) + '">' + escHtml(folder) + '</div>';
+        } else {
+            const built = renderRotKnRow(r.song, r.track, idx, isTop, isBest, downloadedIdToPath);
+            if (built) {
+                html += built.html;
+                rotSearchResults.push(built.result);
             }
-            html += '</div>';
-            html += '<span class="kn-play-btn">Link</span>';
-            html += '</div>';
-        });
-        html += '</div>';
-    }
-
-    // --- KN tracks (same rendering as KN search) ---
-    knSongs.forEach(song => {
-        const sorted = sortKNTracks(song.tracks || []);
-        sorted.forEach(track => {
-            // Don't skip in_library tracks — show all versions like KN panel does
-            const isCommunity = !!track.is_community;
-            const isPreferred = prefUpper.includes((track.brand_code || '').toUpperCase());
-            const videoId = extractYouTubeId(track.youtube_url || '');
-            const downloadedPath = videoId ? downloadedIdToPath.get(videoId) : null;
-            const idx = rotSearchResults.length;
-
-            // Build result object for selectRotSearchResult
-            const result = { song_artist: song.title + ' - ' + song.artist };
-            if (downloadedPath) {
-                result.type = 'local';
-                result.path = downloadedPath;
-            } else if (track.divebar) {
-                result.type = 'divebar';
-                result.file_id = track.divebar.file_id;
-                result.filename = (track.brand_code || 'DB') + ' - ' + song.artist + ' - ' + song.title + '.mp4';
-            } else if (track.youtube_url) {
-                result.type = 'youtube';
-                result.youtube_url = track.youtube_url;
-                result.filename = (track.brand_code || 'YT') + ' - ' + song.artist + ' - ' + song.title + '.mp4';
-            } else {
-                return;
-            }
-            rotSearchResults.push(result);
-
-            const rowClass = isCommunity ? ' community' : isPreferred ? ' preferred' : '';
-            html += '<div class="kn-track' + rowClass + (idx === rotSearchSelectedIdx ? ' selected' : '') + ' rs-clickable" data-idx="' + idx + '" onclick="selectRotSearchResult(rotSearchResults[' + idx + '])">';
-            html += '<span class="kn-track-info">';
-            html += '<span class="kn-brand-name">' + escHtml(track.brand_name || '') + '</span>';
-            html += '<span class="kn-brand-code">' + escHtml(track.brand_code || '') + '</span>';
-            if (isCommunity) html += '<span class="kn-community-badge">Community</span>';
-            else if (isPreferred) html += '<span class="kn-preferred-badge">\u2605</span>';
-            html += '<span class="kn-song-title">' + escHtml(song.title + ' - ' + song.artist) + '</span>';
-            html += '</span>';
-            html += '<span class="kn-track-actions">';
-            if (downloadedPath) {
-                html += '<span class="kn-downloaded-badge">\u2713 Downloaded</span>';
-                html += '<span class="kn-play-btn">Link</span>';
-            } else {
-                html += '<span class="kn-download-btn">DL & Link</span>';
-            }
-            html += '</span>';
-            html += '</div>';
-        });
+        }
     });
 
     // MAKE option always at the bottom
@@ -4945,6 +4980,101 @@ function renderRotSearchDropdown(data) {
 
     dropdown.innerHTML = html;
     dropdown.classList.remove('hidden');
+
+    // Default-select the top row so Enter picks the best version.
+    if (rotSearchResults.length > 0) {
+        rotSearchSelectedIdx = 0;
+        highlightRotSearchResult();
+    }
+}
+
+function renderRotSectionHeader(klass, brand, isFirst) {
+    if (klass === 'community' && isFirst) {
+        const brandLabel = brand ? brand : 'community';
+        return '<div class="kn-section-header rs-section-best">\u2B50 Best \u2014 ' + escHtml(brandLabel) + ' (community)</div>';
+    }
+    if (klass === 'community') {
+        return '<div class="kn-section-header">\u2500\u2500\u2500 Community \u2500\u2500\u2500</div>';
+    }
+    if (klass === 'commercial') {
+        return '<div class="kn-section-header">\u2500\u2500\u2500 Commercial \u2500\u2500\u2500</div>';
+    }
+    return '<div class="kn-section-header">\u2500\u2500\u2500 Unknown \u2500\u2500\u2500</div>';
+}
+
+function renderRotLocalRow(match, idx, isTop, isBest) {
+    const fname = match.filename
+        ? match.filename.replace(/\.\w+$/, '')
+        : (match.disc_id || '') + ' - ' + (match.artist || '') + ' - ' + (match.title || '');
+    const formatClass = match.format ? getFormatBadgeClass(match.format) : 'other';
+    const rowClass = 'kn-local-match rs-clickable'
+        + (idx === rotSearchSelectedIdx ? ' selected' : '')
+        + (isTop ? ' rs-top' : '')
+        + (isBest ? ' rs-best' : '');
+    let html = '<div class="' + rowClass + '" data-idx="' + idx + '" onclick="selectRotSearchResult(rotSearchResults[' + idx + '])">';
+    html += '<div class="catalog-detail">';
+    html += '<span>';
+    if (isBest) html += '<span class="rs-best-pill">Best</span> ';
+    else if (isTop) html += '<span class="rs-top-star">\u2B50</span> ';
+    html += escHtml(fname) + ' ';
+    if (match.format) html += '<span class="format-badge ' + formatClass + '">' + escHtml(match.format) + '</span>';
+    if (match.priority_brand) html += '<span class="rs-brand-pill">' + escHtml(match.priority_brand) + '</span>';
+    html += '</span>';
+    if (match.path) {
+        const folder = match.path
+            .replace(/\/[^/]+$/, '')
+            .replace(/^\/media\/nomad\//, '')
+            .replace(/^\/opt\/nomad\//, '');
+        html += '<div class="catalog-folder" title="' + escHtml(match.path) + '">' + escHtml(folder) + '</div>';
+    }
+    html += '</div>';
+    html += '<span class="kn-play-btn">Link</span>';
+    html += '</div>';
+    return html;
+}
+
+function renderRotKnRow(song, track, idx, isTop, isBest, downloadedIdToPath) {
+    const videoId = extractYouTubeId(track.youtube_url || '');
+    const downloadedPath = videoId ? downloadedIdToPath.get(videoId) : null;
+    const result = { song_artist: song.title + ' - ' + song.artist };
+    if (downloadedPath) {
+        result.type = 'local';
+        result.path = downloadedPath;
+    } else if (track.divebar) {
+        result.type = 'divebar';
+        result.file_id = track.divebar.file_id;
+        result.filename = (track.brand_code || 'DB') + ' - ' + song.artist + ' - ' + song.title + '.mp4';
+    } else if (track.youtube_url) {
+        result.type = 'youtube';
+        result.youtube_url = track.youtube_url;
+        result.filename = (track.brand_code || 'YT') + ' - ' + song.artist + ' - ' + song.title + '.mp4';
+    } else {
+        return null;
+    }
+    const rowClass = 'kn-track rs-clickable'
+        + (idx === rotSearchSelectedIdx ? ' selected' : '')
+        + (track.is_community ? ' community' : '')
+        + (isTop ? ' rs-top' : '')
+        + (isBest ? ' rs-best' : '');
+    let html = '<div class="' + rowClass + '" data-idx="' + idx + '" onclick="selectRotSearchResult(rotSearchResults[' + idx + '])">';
+    html += '<span class="kn-track-info">';
+    if (isBest) html += '<span class="rs-best-pill">Best</span> ';
+    else if (isTop) html += '<span class="rs-top-star">\u2B50</span> ';
+    html += '<span class="kn-brand-name">' + escHtml(track.brand_name || '') + '</span>';
+    html += '<span class="kn-brand-code">' + escHtml(track.brand_code || '') + '</span>';
+    if (track.is_community) html += '<span class="kn-community-badge">Community</span>';
+    html += '<span class="kn-song-title">' + escHtml(song.title + ' - ' + song.artist) + '</span>';
+    html += '</span>';
+    html += '<span class="kn-track-actions">';
+    if (downloadedPath) {
+        html += '<span class="kn-downloaded-badge">\u2713 Downloaded</span>';
+        html += '<span class="kn-play-btn">Link</span>';
+    } else {
+        html += '<span class="kn-download-btn">DL & Link</span>';
+    }
+    html += '</span>';
+    html += '</div>';
+    return { html, result };
 }
 
 function highlightRotSearchResult() {
@@ -5373,9 +5503,6 @@ const SingRequests = (() => {
     }
 
     function renderKjPickPicker(req) {
-        // Parse the versions snapshot the singer submitted. Sort locals first,
-        // then KN+divebar, then KN community, then KN YouTube-only so the KJ
-        // can pick the best-quality option with a single glance.
         let versions;
         try {
             const meta = typeof req.source_meta === 'string'
@@ -5391,56 +5518,140 @@ const SingRequests = (() => {
             empty.textContent = 'No versions in snapshot — edit or reject.';
             return empty;
         }
+
+        // Prefer backend-computed priority_rank; fall back to legacy
+        // 4-bucket sort for snapshots written before this deploy.
+        const hasRank = versions.some(v => typeof v.priority_rank === 'number');
         const ranked = versions
-            .map((v, idx) => ({ v, idx, bucket: versionBucket(v) }))
-            .sort((a, b) => a.bucket - b.bucket);
+            .map((v, idx) => ({
+                v, idx,
+                rank: hasRank
+                    ? (typeof v.priority_rank === 'number' ? v.priority_rank : 9999)
+                    : versionBucketLegacy(v),
+            }))
+            .sort((a, b) => a.rank - b.rank);
+
         const container = document.createElement('div');
         container.className = 'pr-picker';
-        for (const { v, idx } of ranked) {
-            container.appendChild(renderVersionCard(req.id, v, idx));
+
+        // Hero card for the best version
+        const best = ranked[0];
+        container.appendChild(renderHeroCard(req.id, best.v, best.idx));
+
+        // Alternates inside <details>, collapsed by default unless every
+        // option is tier-unknown (rank >= 4000) — then open so the KJ sees
+        // them all without an extra click.
+        if (ranked.length > 1) {
+            const alternates = ranked.slice(1);
+            const details = document.createElement('details');
+            details.className = 'pr-picker-alternates';
+            const allUnknown = ranked.every(r => r.rank >= 4000);
+            if (allUnknown) details.setAttribute('open', '');
+            const summary = document.createElement('summary');
+            summary.textContent = `Show ${alternates.length} other version${alternates.length === 1 ? '' : 's'}`;
+            details.appendChild(summary);
+            for (const { v, idx } of alternates) {
+                details.appendChild(renderVersionCard(req.id, v, idx));
+            }
+            container.appendChild(details);
         }
+
         return container;
     }
 
-    function versionBucket(v) {
+    // Legacy bucket sort, retained for back-compat with snapshots written
+    // before priority_rank was added to the version schema.
+    function versionBucketLegacy(v) {
         if (v.source === 'local') return 0;
         if (v.source === 'kn' && v.kn && v.kn.divebar && v.kn.divebar.file_id) return 1;
         if (v.source === 'kn' && v.kn && v.kn.is_community) return 2;
-        return 3;  // kn youtube-only
+        return 3;
+    }
+
+    function renderHeroCard(reqId, v, idx) {
+        const meta = describeVersion(v);
+        const card = document.createElement('div');
+        card.className = 'pr-version-hero pr-class-' + meta.klass;
+        card.innerHTML = `
+          <div class="pr-hero-header">
+            <span class="pr-hero-star">⭐</span>
+            <span class="pr-hero-title">BEST: ${escapeHtml(meta.primary)}</span>
+            <span class="pr-hero-class">${escapeHtml(meta.klass)}</span>
+          </div>
+          <div class="pr-hero-secondary">${escapeHtml(meta.secondary)}</div>
+          <div class="pr-hero-source">${escapeHtml(meta.sourceLabel)}</div>
+          <div class="pr-hero-cta-wrap">
+            <button class="pr-hero-cta btn-approve-version" data-idx="${idx}">
+              Approve with this →
+            </button>
+          </div>
+        `;
+        card.querySelector('.pr-hero-cta').addEventListener('click', () => {
+            approve(reqId, { versionIndex: idx });
+        });
+        return card;
     }
 
     function renderVersionCard(reqId, v, idx) {
+        const meta = describeVersion(v);
         const card = document.createElement('div');
-        card.className = 'pr-version';
-        let icon = '🎵';
-        let primary = '';
-        let secondary = '';
-        if (v.source === 'local') {
-            icon = '📁';
-            primary = 'Local file';
-            secondary = (v.local && (v.local.filename || v.local.path)) || '';
-        } else if (v.source === 'kn' && v.kn) {
-            const hasDivebar = v.kn.divebar && v.kn.divebar.file_id;
-            const isCommunity = !!v.kn.is_community;
-            icon = hasDivebar ? '💿' : (isCommunity ? '🎤' : '📺');
-            const brand = v.kn.brand_code || v.kn.brand || 'Karaoke Nerds';
-            if (hasDivebar) primary = `${brand} — Divebar mirror`;
-            else if (isCommunity) primary = `${brand} — community`;
-            else primary = `${brand} — YouTube`;
-            secondary = v.kn.title || '';
-        }
+        card.className = 'pr-version pr-class-' + meta.klass;
         card.innerHTML = `
-          <div class="pr-v-icon">${icon}</div>
+          <div class="pr-v-icon">${meta.icon}</div>
           <div class="pr-v-main">
-            <div class="pr-v-primary">${escapeHtml(primary)}</div>
-            <div class="pr-v-secondary">${escapeHtml(secondary)}</div>
+            <div class="pr-v-primary">${escapeHtml(meta.primary)}</div>
+            <div class="pr-v-secondary">${escapeHtml(meta.secondary)}</div>
           </div>
-          <button class="btn-approve-version" data-idx="${idx}">Approve with this →</button>
+          <button class="btn-approve-version" data-idx="${idx}">Approve →</button>
         `;
         card.querySelector('.btn-approve-version').addEventListener('click', () => {
             approve(reqId, { versionIndex: idx });
         });
         return card;
+    }
+
+    // Describe a version for both hero card and alternate card rendering.
+    function describeVersion(v) {
+        const klass = v.priority_class || 'unknown';
+        if (v.source === 'local') {
+            const local = v.local || {};
+            const brand = v.priority_brand
+                ? `${v.priority_brand} (local file)`
+                : 'Local file';
+            return {
+                icon: '📁',
+                primary: brand,
+                secondary: local.filename || local.path || '',
+                sourceLabel: 'Local file — plays instantly',
+                klass,
+            };
+        }
+        if (v.source === 'kn' && v.kn) {
+            const kn = v.kn;
+            const hasDivebar = kn.divebar && kn.divebar.file_id;
+            const isCommunity = !!kn.is_community;
+            const icon = hasDivebar ? '💿' : (isCommunity ? '🎤' : '📺');
+            const brandLabel = v.priority_brand
+                ? `${kn.brand_name || kn.brand_code || v.priority_brand} (${v.priority_brand})`
+                : (kn.brand_name || kn.brand_code || 'Karaoke Nerds');
+            const sourceLabel = hasDivebar
+                ? 'Divebar mirror — will download on approve'
+                : 'YouTube — will download on approve';
+            return {
+                icon,
+                primary: `${brandLabel} — ${isCommunity ? 'community' : 'commercial'}`,
+                secondary: kn.title || kn.song_title || '',
+                sourceLabel,
+                klass,
+            };
+        }
+        return {
+            icon: '🎵',
+            primary: 'Unknown source',
+            secondary: '',
+            sourceLabel: '',
+            klass,
+        };
     }
 
     async function approve(id, opts) {

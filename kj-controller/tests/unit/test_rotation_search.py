@@ -214,3 +214,37 @@ class TestUnifiedSearch:
             data = resp.get_json()
             assert len(data["local"]) >= 1
             assert len(data["karaoke_nerds"]) >= 1
+
+
+class TestPriorityAnnotation:
+    def test_local_results_annotated(self, search_client, search_app):
+        with patch.object(search_app.catalog, 'is_available', return_value=True), \
+             patch.object(search_app.catalog, 'search', return_value=[
+                 {"path": "/media/song.zip", "artist": "Queen",
+                  "title": "Bohemian Rhapsody", "format": "cdg+mp3",
+                  "disc_id": "KVD-22524",
+                  "filename": "KVD-22524 - Queen - Bohemian Rhapsody.zip"}
+             ]), \
+             patch('routes.karaoke_nerds.search', return_value=[]):
+            resp = search_client.get('/rotation/search?q=bohemian')
+            data = resp.get_json()
+            assert data["local"][0]["priority_brand"] == "KV"
+            assert data["local"][0]["priority_class"] == "commercial"
+            assert "priority_rank" in data["local"][0]
+
+    def test_kn_tracks_annotated(self, search_client, search_app):
+        with patch.object(search_app.catalog, 'is_available', return_value=True), \
+             patch.object(search_app.catalog, 'search', return_value=[]), \
+             patch('routes.karaoke_nerds.search', return_value=[
+                 {"title": "Bohemian Rhapsody", "artist": "Queen", "tracks": [
+                     {"brand_name": "Lemmy Caution", "brand_code": "LC",
+                      "youtube_url": "https://youtube.com/watch?v=abc",
+                      "is_community": True}
+                 ]}
+             ]):
+            resp = search_client.get('/rotation/search?q=bohemian')
+            data = resp.get_json()
+            track = data["karaoke_nerds"][0]["tracks"][0]
+            assert track["priority_brand"] == "LC"
+            assert track["priority_class"] == "community"
+            assert "priority_rank" in track

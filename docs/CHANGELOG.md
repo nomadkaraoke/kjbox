@@ -2,6 +2,39 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-05-22 - Feature: Brand-priority ranking for kj_pick approval + rotation search
+
+Surfaces the KJ's in-head version-quality rules ("community always beats commercial; CC > LC > FBK …") in the two places where version selection happens. Backend now annotates every karaoke version with a `priority_rank` integer; frontend reads it to drive the new UX. Data-informed: alias map and unlisted-brand defaults seeded from analysis of 104 approved requests + 10 diverse song searches on the live show 2026-05-22.
+
+**New module `kj-controller/version_priority.py`:**
+- Canonical brand registry with two ordered lists (community / commercial), each entry has `(canonical_code, aliases, display_name)`. Defaults include the KJ-stated top brands (CC, LC, FBK, BELLY, NOMAD, FAKEY, PMK, OBSK for community; KV, SC, SBI, SF, CB, ZM for commercial) plus high-frequency unlisted brands (SDK, DBK; VS, SK, MR, PT, EK) appended at the end so they outrank truly unknown brands.
+- Aliases collapse cross-source naming inconsistencies: `LEMMY`/`LC`/`Lemmy Caution` → LC; `KVD`/`KCD`/`Karaoke Cloud Digitrax`/`Karafun` → KV; `ZOOM` → ZM; `CCK`/`CCX`/`CC Karaoke X` → CC.
+- `resolve_brand(...)` accepts disc_id, filename, brand_code, brand_name, is_community and returns `(canonical, classification)`. Local disc_id parsed by alpha-prefix regex; YouTube-download filename pattern `VIDEOID__BrandName__rest.ext` recognized so OBSK/SK YouTube rips classify correctly.
+- `rank_version(version, cfg)` returns a sortable int with tier-based gaps (community 0–999, unrecognized community 1000s, commercial 2000s, unrecognized commercial 3000s, unknown 4000s); source tiebreaker `local < divebar < youtube` within the same brand slot.
+- Config overrides via two new keys: `kn_priority_community` + `kn_priority_commercial` (lists of canonical codes). Legacy single `kn_preferred_brands` field is ignored (left untouched for rollback safety).
+
+**Backend wiring (`routes.py`):**
+- `_group_search_results` annotates + sorts versions in the kj_pick snapshot.
+- `unified_search` flat-return path annotates local results + KN tracks.
+- `/karaoke-nerds/search` annotates + sorts per-song tracks.
+- `/karaoke-nerds/config` rewritten: GET returns `{priority_community, priority_commercial, aliases}`, POST validates canonicals and rejects unknown codes with a 400 listing valid options.
+
+**Frontend (`static/app.js` + `templates/index.html` + `static/style.css`):**
+- kj_pick approval card renders a hero card for the best version with prominent green CTA + collapsed `<details>` for alternates (auto-open if every option is tier-unknown). Legacy 4-bucket sort retained as fallback for pre-deploy snapshots.
+- Rotation Add/Link dropdown does a global priority sort across local + KN results, emits section headers when class changes (⭐ Best — CC (community), ── Community ──, ── Commercial ──, ── Unknown ──), highlights top community rows with a gold left-border + ⭐ icon + "Best" pill on row 0. Default-selects row 0 so Enter picks the best.
+- KN search panel reads `priority_rank` from backend; legacy `sortKNTracks` and `knPreferredBrands` removed.
+- KN prefs settings panel grows from one input to two textareas (community + commercial) with alias hints + Reset to defaults button.
+- New CSS for `.pr-version-hero`, `.pr-picker-alternates`, `.rs-best-pill`, `.rs-top-star`, `.kn-section-header`, `.kn-prefs-textarea`.
+
+**Tests:** 53 new unit tests in `test_version_priority.py` covering alias resolution, disc_id parsing, YT filename parsing, tier ranges, priority order, source tiebreaker, config override, is_community semantics. New `test_karaoke_nerds_config.py` covers the two-list endpoint. `test_search_grouping.py` and `test_rotation_search.py` extended with annotation assertions. Existing integration test for `/karaoke-nerds/config` updated for the new shape. Total: 1673 backend tests pass.
+
+**Out of scope (separate PRs):**
+- Tracking `original_source_type` on `sing_requests` so kj_pick approval history is preserved (currently the source_type gets overwritten on approve).
+- Auto-approving kj_pick on the singer side when confidence is high.
+- Brand badges on the rotation table itself.
+
+Design spec: `docs/archive/2026-05-22-choose-best-version-design.md`. Implementation plan: `docs/archive/2026-05-22-choose-best-version-plan.md`.
+
 ## 2026-05-21 - Feature: Active-download source visibility (GCS / Drive / YouTube)
 
 The "DOWNLOADING" prep badge previously only hinted at source via colour (orange=youtube, green=other), so the KJ couldn't tell whether an active divebar download was hitting the fast GCS community mirror or falling back to slow Google Drive. Both surfaces now show the source explicitly.
