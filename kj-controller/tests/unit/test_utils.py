@@ -1,6 +1,11 @@
 """Tests for utility functions: sanitize_filename_part, parse_youtube_filename."""
 
-from utils import sanitize_filename_part, parse_youtube_filename, log_message
+from utils import (
+    sanitize_filename_part,
+    parse_youtube_filename,
+    log_message,
+    build_divebar_filename,
+)
 
 
 def test_sanitize_filename_part_removes_unsafe_chars():
@@ -69,3 +74,45 @@ def test_log_message_writes_to_file(tmp_path):
     cfg = {"log_file": str(log_file)}
     log_message("file output", config=cfg)
     assert "file output" in log_file.read_text()
+
+
+def test_build_divebar_filename_all_fields():
+    assert build_divebar_filename("WTF", "Queen", "Bohemian Rhapsody") == \
+        "WTF - Queen - Bohemian Rhapsody.mp4"
+
+
+def test_build_divebar_filename_missing_brand_code_uses_db():
+    assert build_divebar_filename(None, "Queen", "Bohemian Rhapsody") == \
+        "DB - Queen - Bohemian Rhapsody.mp4"
+
+
+def test_build_divebar_filename_empty_brand_code_uses_db():
+    assert build_divebar_filename("", "Queen", "Bohemian Rhapsody") == \
+        "DB - Queen - Bohemian Rhapsody.mp4"
+
+
+def test_build_divebar_filename_missing_artist():
+    assert build_divebar_filename("WTF", None, "Bohemian Rhapsody") == \
+        "WTF - Bohemian Rhapsody.mp4"
+
+
+def test_build_divebar_filename_missing_title():
+    assert build_divebar_filename("WTF", "Queen", None) == \
+        "WTF - Queen.mp4"
+
+
+def test_build_divebar_filename_only_brand_returns_none():
+    assert build_divebar_filename("WTF", None, None) is None
+    assert build_divebar_filename(None, None, None) is None
+    assert build_divebar_filename("WTF", "", "") is None
+
+
+def test_build_divebar_filename_sanitizes_unsafe_chars():
+    result = build_divebar_filename("WTF", "Queen/Bowie", "Under Pressure")
+    assert "/" not in result
+    assert result.endswith(".mp4")
+
+
+def test_build_divebar_filename_custom_extension():
+    assert build_divebar_filename("WTF", "Queen", "Song", ext=".zip") == \
+        "WTF - Queen - Song.zip"
