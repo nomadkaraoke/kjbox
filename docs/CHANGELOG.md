@@ -2,6 +2,23 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-05-21 - Feature: YouTube-request preview + approve-link-later + rotation file-paths toggle
+
+Three additions that close the loop on singer-pasted YouTube URLs not always being karaoke versions. (1) The KJ admin pending-request card now shows a thumbnail + clickable "▶ Watch on YouTube" link (singer-pasted URL is sanitised — `http(s)` only; `javascript:`/`data:` get a manual-review warning). (2) For `source_type=youtube` only, a second "Approve, link later" button creates the rotation entry **without** queuing a download — the KJ then uses the existing rotation 🔗 button to attach a proper file. (3) New "📁 Paths" toggle in the Rotation header reveals each entry's filename (full path on hover); unlinked entries flagged in amber so the KJ can scan for ones that still need relinking. Toggle state persists in `localStorage`.
+
+**Backend changes:**
+- `approve_sing_request(app, req, skip_download=False)` — new kwarg. When `True` for `youtube|kn|divebar`, creates the rotation entry via `rotation.add_entry(...)` with no `file_path` and skips the download queue. Default `False` preserves existing behaviour (auto-approve callsite unchanged).
+- `POST /rotation/requests/<id>/approve` — accepts `{skip_download: true}` in JSON body and threads it through. Unknown body fields ignored.
+
+**UI changes:**
+- `static/app.js` — `SingRequests.renderYouTubePreview(url)` renders the thumbnail (`i.ytimg.com/vi/{id}/default.jpg`) + link block for `source_type=youtube` rows; `extractYouTubeId` reused from existing helper. `approve(id, opts)` signature now takes an options object (`{versionIndex, skipDownload}`) to keep the signature extensible. YouTube rows get a two-button approve area; other source types unchanged. New `toggleRotationFilePaths()` + persisted state, with file-path elements always rendered (CSS-toggled via `.show-file-paths` class on `#rotation-list`).
+- `static/style.css` — `.pr-youtube-preview` (full-width wrap inside the flex pending-req-row), `.pr-actions .btn-approve-skip`, `.rotation-file-path` (hidden by default; flex-basis 100% when shown), `.rotation-paths-btn` + active state.
+- `templates/index.html` — new "📁 Paths" button in `.rotation-header-btns` between Refresh and `+ Add`.
+
+**Test changes:**
+- `test_youtube_request_exposes_url_for_kj_preview` — regression guard that `/rotation/requests` returns `source_ref` for `source_type=youtube` requests (the UI's data dependency for the preview block).
+- `test_approve_youtube_skip_download_creates_unlinked_entry` — verifies `skip_download=true` on a youtube request: download worker never invoked, queue stays empty, rotation entry has `file_path is None` and `download_status is None` (so the existing 🔗 link button auto-appears).
+
 ## 2026-05-15 - Feature: Singer duet partners + multi-song done screen
 
 Two papercuts in the singer UI fixed. (1) Singers can attach up to 3 duet partners (name + optional phone) on the confirm screen — partners surface in the KJ admin approval card with `sms:` links, then ride through `approve_sing_request` into `rotation_entries.singers_json` (joined `"Alice & Sarah & Mike"` in the legacy `singer` column). (2) The post-submit "done" screen lists every song the singer has submitted this event with live status, and a "+ Request another song" button that preserves identity. See [design](archive/2026-05-15-singer-duets-and-multi-song-design.md) and [plan](archive/2026-05-15-singer-duets-and-multi-song-plan.md).

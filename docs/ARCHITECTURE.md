@@ -202,7 +202,7 @@ utils.py → (stdlib only)
 | GET  | `/rotation/requests/config` | Current event token, enabled flag, auto-approve flag, public/local URLs, pending count |
 | POST | `/rotation/requests/config` | Regenerate token / toggle enabled / toggle auto-approve |
 | GET  | `/rotation/requests/qr.svg` | SVG QR code for event URL (`?scope=public\|local`) |
-| POST | `/rotation/requests/<id>/approve` | Approve request → create rotation entry via source-specific dispatch |
+| POST | `/rotation/requests/<id>/approve` | Approve request → create rotation entry via source-specific dispatch. Optional body `{skip_download: true}` for `youtube`/`kn`/`divebar` creates an unlinked entry (KJ uses the rotation 🔗 button to attach a file manually) |
 | POST | `/rotation/requests/<id>/edit` | Edit singer name / artist / title on a pending request |
 | POST | `/rotation/requests/<id>/reject` | Mark request rejected (silent to singer) |
 | GET  | `/sing/` | **PUBLIC** — singer-facing landing page (requires `?t=<token>`) |
@@ -350,7 +350,7 @@ Singers submit song requests from their own phones via a QR code instead of hand
 
 **Event token lifecycle:** stored in `rotation_meta` as `request_token` + `request_token_enabled` + `request_auto_approve`. Regenerated automatically when the KJ archives a rotation, and manually from the Requests settings modal. Sleep-mode entry disables requests; exit does **not** auto-re-enable (prevents surprise re-opening).
 
-**Approval dispatch:** `approve_sing_request(app, req)` in `routes.py` creates a rotation entry based on `source_type` — `local` uses `rotation.add_entry(..., file_path=...)`, `divebar|youtube|kn` adds an entry + queues a download on the existing worker, `make` creates a gen-API job via the existing `GenClient`. Auto-approve on submission calls the same helper inline.
+**Approval dispatch:** `approve_sing_request(app, req, skip_download=False)` in `routes.py` creates a rotation entry based on `source_type` — `local` uses `rotation.add_entry(..., file_path=...)`, `divebar|youtube|kn` adds an entry + queues a download on the existing worker, `make` creates a gen-API job via the existing `GenClient`. `skip_download=True` (route reads it from JSON body) suppresses the download for the `divebar|youtube|kn` branch and creates an unlinked entry — used when the KJ has previewed the pasted YouTube URL and wants to attach a different file via the rotation 🔗 button. Auto-approve on submission calls the same helper inline (always `skip_download=False`).
 
 **Grouped search + `kj_pick` (Phase A, 2026-04-23):** `GET /sing/search` returns `{songs: [{artist, title, version_count, in_library, versions: [...]}]}` — one group per unique `(artist, title)` after normalization (feat./paren/apos/punct/WS stripping). `_group_search_results` in `routes.py` does the collapsing; admin-side `unified_search()` callers still receive the flat shape via the kwarg default. The singer's "Let the KJ pick" CTA submits `source_type="kj_pick"` with the full `versions[]` snapshot in `source_meta`. The admin approval route (`POST /rotation/requests/<id>/approve`) then accepts `{version_index}` — `_pick_version_from_kj_pick` translates the picked version into concrete `source_type/ref/meta` fields, `SingStore.update_request_source` writes them back, and `approve_sing_request` dispatches normally. Auto-approve is explicitly skipped for `kj_pick` (otherwise the rotation entry would have no file attached).
 
