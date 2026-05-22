@@ -1211,28 +1211,77 @@ def kn_search():
 
 @routes_bp.route('/karaoke-nerds/config', methods=['GET'])
 def kn_get_config():
-    """Returns Karaoke Nerds preferred brands config."""
+    """Returns the brand-priority config: two ranked lists + alias hints.
+
+    Design spec: docs/archive/2026-05-22-choose-best-version-design.md § 3b.
+    """
     cfg = current_app.kj_config
+
+    def _list_or_default(key, default):
+        v = cfg.get(key)
+        if not v:
+            return list(default)
+        return [str(c).upper().strip() for c in v if str(c).strip()]
+
+    aliases = {}
+    for canonical, alias_list, _display in version_priority.COMMUNITY_BRANDS:
+        aliases[canonical] = list(alias_list)
+    for canonical, alias_list, _display in version_priority.COMMERCIAL_BRANDS:
+        aliases[canonical] = list(alias_list)
+
     return jsonify({
-        "preferred_brands": cfg.get('kn_preferred_brands', []),
+        "priority_community": _list_or_default(
+            "kn_priority_community", version_priority.COMMUNITY_DEFAULTS),
+        "priority_commercial": _list_or_default(
+            "kn_priority_commercial", version_priority.COMMERCIAL_DEFAULTS),
+        "aliases": aliases,
     })
 
 
 @routes_bp.route('/karaoke-nerds/config', methods=['POST'])
 def kn_set_config():
-    """Updates Karaoke Nerds preferred brands config."""
+    """Updates brand-priority config (two lists of canonical codes)."""
     data = request.get_json(silent=True) or {}
-    preferred = data.get('preferred_brands')
-    if preferred is None or not isinstance(preferred, list):
-        return jsonify({"error": "preferred_brands must be a list"}), 400
+    community = data.get("priority_community")
+    commercial = data.get("priority_commercial")
 
-    # Sanitize: uppercase, strip whitespace, remove empties
-    preferred = [b.strip().upper() for b in preferred if b.strip()]
+    if not isinstance(community, list) or not isinstance(commercial, list):
+        return jsonify({
+            "error": "priority_community and priority_commercial must be lists"
+        }), 400
 
-    current_app.kj_config['kn_preferred_brands'] = preferred
-    save_config_value('kn_preferred_brands', preferred)
-    log_message(f"Updated KN preferred brands: {preferred}", current_app.kj_config)
-    return jsonify({"preferred_brands": preferred})
+    community = [str(c).upper().strip() for c in community if str(c).strip()]
+    commercial = [str(c).upper().strip() for c in commercial if str(c).strip()]
+
+    valid_community = {c for (c, _, _) in version_priority.COMMUNITY_BRANDS}
+    valid_commercial = {c for (c, _, _) in version_priority.COMMERCIAL_BRANDS}
+
+    bad_community = [c for c in community if c not in valid_community]
+    bad_commercial = [c for c in commercial if c not in valid_commercial]
+    if bad_community or bad_commercial:
+        problems = []
+        if bad_community:
+            problems.append(
+                f"Unknown community codes: {bad_community}. "
+                f"Valid: {sorted(valid_community)}")
+        if bad_commercial:
+            problems.append(
+                f"Unknown commercial codes: {bad_commercial}. "
+                f"Valid: {sorted(valid_commercial)}")
+        return jsonify({"error": " | ".join(problems)}), 400
+
+    current_app.kj_config['kn_priority_community'] = community
+    current_app.kj_config['kn_priority_commercial'] = commercial
+    save_config_value('kn_priority_community', community)
+    save_config_value('kn_priority_commercial', commercial)
+    log_message(
+        f"Updated brand priorities: community={community}, commercial={commercial}",
+        current_app.kj_config,
+    )
+    return jsonify({
+        "priority_community": community,
+        "priority_commercial": commercial,
+    })
 
 
 # --- YouTube Search ---
