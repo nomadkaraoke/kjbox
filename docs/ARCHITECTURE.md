@@ -148,7 +148,7 @@ utils.py → (stdlib only)
 | POST | `/rescan` | Reload config and rescan media folders |
 | GET | `/filler_music` | List available filler music files |
 | POST | `/filler_music` | Change active filler music track |
-| GET | `/status` | Get player state, current track, timing |
+| GET | `/status` | Get player state, current track, timing. Also surfaces the `download_queue` (all queue items, with `source`/`source_detail`) and per-rotation `rotation_downloads` map (`status`/`progress`/`file_path`/`source`/`source_detail`) so the UI can show GCS-vs-Drive-vs-YouTube on download badges in real time. |
 | POST | `/fix_audio` | Emergency: restart VLC instances |
 | GET | `/audio_device` | Get current and available audio devices |
 | POST | `/audio_device` | Switch audio output device (temporary, not persisted) |
@@ -307,6 +307,8 @@ The rotation system manages the singer queue during live karaoke shows, with an 
 **Reordering:** Drag-and-drop in the UI calls `POST /rotation/move` with `{id, new_position}`. The store atomically shifts positions — no delete+insert, so entries can't be lost mid-operation.
 
 **File linking:** Rotation entries can be linked to media files from the catalog (`POST /rotation/link`). Duration is looked up from MediaIndex and stored in the entry. This enables estimated sing times (shown in the UI) and one-click playback from the rotation view. The unified search dropdown can also link files at add time, and `POST /rotation/download-and-link` queues a download (Divebar or YouTube) that auto-links to the rotation entry on completion. Each entry tracks `download_source`, `download_status`, `download_id`, and `url_fallback` for preparation status.
+
+**Download source classification:** Divebar serves either a GCS community-mirror URL (fast) or a Google Drive URL (slower, original storage) per file. `divebar.classify_download_url(url)` inspects the host and returns `'gcs'` / `'drive'` / `None`; every divebar enqueue site stamps `source_detail` on the queue item, and `/status` surfaces it on both the `download_queue` items and the per-entry `rotation_downloads` map. The KJ admin UI uses this to render distinct badges (`GCS DL` / `DRIVE DL` / `YT DL`) on the rotation prep-badge and a coloured source pill in the download-queue panel.
 
 **Configuration:** `rotation_db_path` (default: `~/kjdata/rotation.db`) is always used. `rotation_sheet_id` + `rotation_credentials_file` in `config.json` are optional — if present, Sheet sync is enabled. `rotation_sync_interval` (default: 30s) controls push frequency.
 

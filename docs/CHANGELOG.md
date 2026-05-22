@@ -2,6 +2,25 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-05-21 - Feature: Active-download source visibility (GCS / Drive / YouTube)
+
+The "DOWNLOADING" prep badge previously only hinted at source via colour (orange=youtube, green=other), so the KJ couldn't tell whether an active divebar download was hitting the fast GCS community mirror or falling back to slow Google Drive. Both surfaces now show the source explicitly.
+
+**Backend changes:**
+- `divebar.classify_download_url(url)` — new helper. Returns `'gcs'` for `storage.googleapis.com` (or `*.storage.googleapis.com`), `'drive'` for `drive.google.com` / `drive.usercontent.google.com` / `*.googleusercontent.com`, else `None`.
+- All three divebar enqueue sites stamp `source_detail` on the queue item: `/download` (divebar), `/download-and-link` (divebar), `approve_sing_request` (divebar branch).
+- `/status` `rotation_downloads` map now includes `source` + `source_detail` per active download (alongside the existing `status` / `progress` / `file_path`). The UI uses the live in-flight snapshot rather than only the persisted `download_source` field.
+
+**UI changes:**
+- `static/app.js` — `downloadSourceBadge(item)` maps (source, source_detail) to a label + class. `renderDownloadQueue` prepends a coloured pill before the spinner: `GCS` (green), `DRIVE` (amber), `YT` (red), `DIVEBAR` (blue, fallback for old/unknown). Rotation prep-badge reads `lastRotationDownloads[id].source_detail` and renders `GCS DL` / `DRIVE DL` / `YT DL` instead of plain `DOWNLOADING`. Pre-classification entries fall back to the original label.
+- `static/style.css` — new `.dl-source-*` and `.prep-downloading-{gcs,drive}` rules.
+- Inline fix: `escapeHtml` on URL + label in the download-queue HTML template (singers' pasted YouTube URLs reach this code path).
+
+**Test changes:**
+- 8 unit tests in `tests/test_divebar.py::TestClassifyDownloadUrl` covering every host variant (path-style GCS, virtual-host GCS, Drive, usercontent, googleusercontent, unknown, empty, malformed).
+- 2 integration tests in `test_download_link_routes.py` round-trip the `/rotation/download-and-link` divebar path with mocked GCS and Drive URLs, asserting the queue item's `source_detail`.
+- 1 integration test in `test_routes.py` asserts the `/status` `rotation_downloads` payload carries `source` + `source_detail` for in-flight items.
+
 ## 2026-05-21 - Feature: YouTube-request preview + approve-link-later + rotation file-paths toggle
 
 Three additions that close the loop on singer-pasted YouTube URLs not always being karaoke versions. (1) The KJ admin pending-request card now shows a thumbnail + clickable "▶ Watch on YouTube" link (singer-pasted URL is sanitised — `http(s)` only; `javascript:`/`data:` get a manual-review warning). (2) For `source_type=youtube` only, a second "Approve, link later" button creates the rotation entry **without** queuing a download — the KJ then uses the existing rotation 🔗 button to attach a proper file. (3) New "📁 Paths" toggle in the Rotation header reveals each entry's filename (full path on hover); unlinked entries flagged in amber so the KJ can scan for ones that still need relinking. Toggle state persists in `localStorage`.
