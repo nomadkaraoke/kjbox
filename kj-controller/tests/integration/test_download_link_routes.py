@@ -324,3 +324,57 @@ class TestRotationDownloadStateSync:
         data = resp.get_json()
         assert data["entry"]["download_status"] == "queued"
         assert data["entry"]["download_id"] is not None
+
+
+class TestDownloadAndLinkDivebarFilename:
+    """Server-side filename construction for /rotation/download-and-link
+    when source=divebar."""
+
+    def test_builds_filename_from_structured_fields(self, dl_client, dl_app):
+        resp = dl_client.post('/rotation/add',
+            data=json.dumps({"singer": "Alice", "song_artist": "Bohemian Rhapsody"}),
+            content_type='application/json')
+        entry_id = resp.get_json()["entry"]["id"]
+        with patch('routes.divebar.get_download_url',
+                   return_value="https://storage.googleapis.com/m/x.mp4"):
+            dl_client.post('/rotation/download-and-link',
+                data=json.dumps({
+                    "id": entry_id, "source": "divebar", "file_id": "abc",
+                    "artist": "Queen", "title": "Bohemian Rhapsody",
+                    "brand_code": "WTF",
+                }),
+                content_type='application/json')
+        items = dl_app.download_queue['items']
+        assert items[-1]['title'] == "WTF - Queen - Bohemian Rhapsody.mp4"
+        assert items[-1]['divebar_file_id'] == "abc"
+
+    def test_falls_back_to_db_when_brand_missing(self, dl_client, dl_app):
+        resp = dl_client.post('/rotation/add',
+            data=json.dumps({"singer": "Bob", "song_artist": "Song"}),
+            content_type='application/json')
+        entry_id = resp.get_json()["entry"]["id"]
+        with patch('routes.divebar.get_download_url',
+                   return_value="https://storage.googleapis.com/m/x.mp4"):
+            dl_client.post('/rotation/download-and-link',
+                data=json.dumps({
+                    "id": entry_id, "source": "divebar", "file_id": "abc",
+                    "artist": "Queen", "title": "Bohemian Rhapsody",
+                }),
+                content_type='application/json')
+        items = dl_app.download_queue['items']
+        assert items[-1]['title'] == "DB - Queen - Bohemian Rhapsody.mp4"
+
+    def test_falls_back_to_file_id_when_no_metadata(self, dl_client, dl_app):
+        resp = dl_client.post('/rotation/add',
+            data=json.dumps({"singer": "Carol", "song_artist": "X"}),
+            content_type='application/json')
+        entry_id = resp.get_json()["entry"]["id"]
+        with patch('routes.divebar.get_download_url',
+                   return_value="https://storage.googleapis.com/m/x.mp4"):
+            dl_client.post('/rotation/download-and-link',
+                data=json.dumps({
+                    "id": entry_id, "source": "divebar", "file_id": "xyz",
+                }),
+                content_type='application/json')
+        items = dl_app.download_queue['items']
+        assert items[-1]['title'] == "divebar-xyz.mp4"

@@ -2987,7 +2987,12 @@ function renderDBResults(songs) {
                 dlBtn.textContent = 'Download';
                 dlBtn.onclick = (e) => {
                     e.stopPropagation();
-                    downloadDivebarTrack(track.file_id, track.drive_path || track.brand);
+                    downloadDivebarTrack({
+                        file_id: track.file_id,
+                        artist: song.artist,
+                        title: song.title,
+                        brand_code: track.brand_code,
+                    });
                     dlBtn.disabled = true;
                     dlBtn.textContent = 'Queued';
                 };
@@ -3003,9 +3008,10 @@ function renderDBResults(songs) {
     });
 }
 
-function downloadDivebarTrack(fileId, filename) {
-    log(`Queuing Divebar download: ${filename}`);
-    apiCall('/divebar/download', { file_id: fileId, filename: filename });
+function downloadDivebarTrack(payload) {
+    const label = [payload.artist, payload.title].filter(Boolean).join(' - ') || payload.file_id;
+    log(`Queuing Divebar download: ${label}`);
+    apiCall('/divebar/download', payload);
 }
 
 function formatFileSize(bytes) {
@@ -5043,10 +5049,13 @@ function renderRotKnRow(song, track, idx, isTop, isBest, downloadedIdToPath) {
     } else if (track.divebar) {
         result.type = 'divebar';
         result.file_id = track.divebar.file_id;
-        result.filename = (track.brand_code || 'DB') + ' - ' + song.artist + ' - ' + song.title + '.mp4';
+        result.artist = song.artist;
+        result.title = song.title;
+        result.brand_code = track.brand_code;
     } else if (track.youtube_url) {
         result.type = 'youtube';
         result.youtube_url = track.youtube_url;
+        // YouTube keeps client-built filename — backend's youtube branch still reads `filename`.
         result.filename = (track.brand_code || 'YT') + ' - ' + song.artist + ' - ' + song.title + '.mp4';
     } else {
         return null;
@@ -5108,7 +5117,8 @@ async function selectRotSearchResult(result) {
         }
         if (result.type === 'divebar') {
             return { endpoint: '/rotation/download-and-link', body: {
-                ...base, source: 'divebar', file_id: result.file_id, filename: result.filename,
+                ...base, source: 'divebar', file_id: result.file_id,
+                artist: result.artist, title: result.title, brand_code: result.brand_code,
             }};
         }
         if (result.type === 'youtube') {

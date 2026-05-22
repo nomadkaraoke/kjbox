@@ -2,6 +2,30 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-05-22 - Fix: Divebar GCS-mirror downloads use human-readable filenames
+
+GCS-mirror divebar downloads were landing on disk as `divebar__divebar-{file_id}.mp4` — three enqueue paths dropped the artist/title metadata they already had. The smoking gun was `approve_sing_request` (sing-request approval), which hardcoded `title = f"divebar-{source_ref}.mp4"` despite `req.song_title` / `req.song_artist` being available on the request row.
+
+**Backend changes:**
+- `utils.build_divebar_filename(brand_code, artist, title)` — new pure helper. Returns `"WTF - Queen - Bohemian Rhapsody.mp4"` (or `"DB - …"` when brand_code is missing). Returns `None` when neither artist nor title is present, so callers can fall back to the old `divebar-{file_id}.mp4`.
+- All three divebar enqueue sites in `routes.py` now call the helper with structured fields the call site already has:
+  - `/divebar/download` (panel button) — accepts `{file_id, artist, title, brand_code}`.
+  - `/rotation/download-and-link` (divebar branch) — same payload shape, replacing the previous client-supplied `filename`. Queue item also now carries `divebar_file_id`. YouTube branch unchanged.
+  - `approve_sing_request` (divebar branch) — uses `req.song_artist` / `req.song_title`, and `brand_code` from `source_meta` when available (kj_pick path).
+
+**UI changes:**
+- `static/app.js` — Divebar search panel "Download" button (`downloadDivebarTrack`) and rotation-search divebar result now send `{file_id, artist, title, brand_code}` instead of a pre-built `filename`. Server is the single source of truth.
+
+**One-off cleanup (live device):** Five existing `divebar__divebar-*.mp4` files on nomadpc renamed to `divebar__DB - <artist> - <title>.mp4`, with matching updates to `rotation_entries.file_path` and `rotation_archive.file_path`. Rotation DB backed up to `~/kjdata/rotation.db.bak-divebar-rename-20260522`.
+
+**Test changes:**
+- 8 unit tests for `build_divebar_filename` (`tests/unit/test_utils.py::test_build_divebar_filename_*`).
+- 3 integration tests for `/divebar/download` (`tests/integration/test_routes.py::TestDivebarDownloadFilename`).
+- 3 integration tests for `/rotation/download-and-link` divebar branch (`tests/integration/test_download_link_routes.py::TestDownloadAndLinkDivebarFilename`).
+- 2 integration tests for sing-request approval (`tests/integration/test_sing_admin_routes.py::TestApprove::test_approve_divebar_*`).
+
+**Spec / plan:** `docs/archive/2026-05-22-divebar-filename-design.md`, `docs/archive/2026-05-22-divebar-filename-plan.md`.
+
 ## 2026-05-22 - Feature: Brand-priority ranking for kj_pick approval + rotation search
 
 Surfaces the KJ's in-head version-quality rules ("community always beats commercial; CC > LC > FBK …") in the two places where version selection happens. Backend now annotates every karaoke version with a `priority_rank` integer; frontend reads it to drive the new UX. Data-informed: alias map and unlisted-brand defaults seeded from analysis of 104 approved requests + 10 diverse song searches on the live show 2026-05-22.

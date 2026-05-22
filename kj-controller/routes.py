@@ -22,7 +22,7 @@ from catalog import LATIN_SPECIAL_MAP
 from config import APP_DIR, RENDER_MODES, load_config, save_config_value
 from playback import RendererSwitchRejected
 from sleep_mode import SleepManager
-from utils import log_message
+from utils import log_message, build_divebar_filename
 
 # --- Browser mode state ---
 # Tracks whether the system is in Browser mode (Chromium) vs VLC mode (default).
@@ -1426,17 +1426,28 @@ def divebar_status():
 
 @routes_bp.route('/divebar/download', methods=['POST'])
 def divebar_download():
-    """Download a Divebar track by file_id. Queues it like a YouTube download."""
+    """Download a Divebar track by file_id. Queues it like a YouTube download.
+
+    Body: ``{file_id (required), artist, title, brand_code}``. Filename is
+    built server-side via ``build_divebar_filename`` so all enqueue paths
+    produce consistent on-disk names.
+    """
     data = request.get_json(silent=True) or {}
     file_id = data.get('file_id', '').strip()
-    filename = data.get('filename', '').strip()
     if not file_id:
         return jsonify({"error": "file_id is required"}), 400
+
+    artist = (data.get('artist') or '').strip()
+    title = (data.get('title') or '').strip()
+    brand_code = (data.get('brand_code') or '').strip()
 
     cfg = current_app.kj_config
     url = divebar.get_download_url(file_id, config=cfg)
     if not url:
         return jsonify({"error": "Could not get download URL"}), 500
+
+    filename = build_divebar_filename(brand_code, artist, title) \
+               or f"divebar-{file_id}.mp4"
 
     # Reuse the existing download queue with the Drive URL
     app = current_app._get_current_object()
@@ -1451,7 +1462,7 @@ def divebar_download():
             'id': str(uuid4()),
             'url': url,
             'status': 'queued',
-            'title': filename or f"Divebar track {file_id[:8]}",
+            'title': filename,
             'error': None,
             'file_path': None,
             'added_at': time.time(),
@@ -1461,7 +1472,7 @@ def divebar_download():
             'divebar_file_id': file_id,
         }
         items.append(item)
-        log_message(f"Queued Divebar download: {filename or file_id}", cfg)
+        log_message(f"Queued Divebar download: {filename}", cfg)
 
         if not app.download_queue['worker_running']:
             app.download_queue['worker_running'] = True
@@ -2839,7 +2850,9 @@ def download_and_link_rotation():
     # Validate source-specific fields BEFORE creating any rotation entry
     if source == "divebar":
         file_id = data.get('file_id', '').strip()
-        filename = data.get('filename', '').strip()
+        artist = (data.get('artist') or '').strip()
+        title = (data.get('title') or '').strip()
+        brand_code = (data.get('brand_code') or '').strip()
         if not file_id:
             return jsonify({"error": "file_id is required for divebar"}), 400
     elif source == "youtube":
@@ -2875,12 +2888,14 @@ def download_and_link_rotation():
             queue_item = {
                 'id': download_id,
                 'url': download_url,
-                'title': filename or f"divebar-{file_id}.mp4",
+                'title': build_divebar_filename(brand_code, artist, title)
+                         or f"divebar-{file_id}.mp4",
                 'source': 'divebar',
                 'source_detail': divebar.classify_download_url(download_url),
                 'status': 'queued',
                 'error': None,
                 'rotation_entry_id': entry_id,
+                'divebar_file_id': file_id,
             }
         else:  # youtube (already validated above)
             queue_item = {
@@ -3214,7 +3229,24 @@ def approve_sing_request(app, req, skip_download=False):
                 raise RuntimeError(f"Divebar URL failed: {exc}") from exc
             if not download_url:
                 raise RuntimeError("Failed to get download URL from Divebar")
-            title = f"divebar-{source_ref}.mp4"
+            # source_meta carries brand_code when this came via kj_pick;
+            # direct singer-divebar picks won't have it — falls back to "DB".
+            meta_raw = req.get("source_meta")
+            if isinstance(meta_raw, str):
+                try:
+                    meta = json.loads(meta_raw)
+                except (TypeError, ValueError):
+                    meta = {}
+            elif isinstance(meta_raw, dict):
+                meta = meta_raw
+            else:
+                meta = {}
+            brand_code = meta.get("brand_code") or ""
+            title = build_divebar_filename(
+                brand_code,
+                req.get("song_artist"),
+                req.get("song_title"),
+            ) or f"divebar-{source_ref}.mp4"
             queue_src = "divebar"
             queue_url = download_url
         else:
