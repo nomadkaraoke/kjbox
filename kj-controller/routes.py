@@ -199,8 +199,7 @@ def index():
     """Serves the main remote control page."""
     cfg = current_app.kj_config
     return render_template('index.html', latin_special_map=LATIN_SPECIAL_MAP,
-                           config=cfg,
-                           kn_preferred_brands=cfg.get('kn_preferred_brands', []))
+                           config=cfg)
 
 
 @routes_bp.route('/download', methods=['POST'])
@@ -1206,6 +1205,14 @@ def kn_search():
     cfg = current_app.kj_config
     log_message(f"Karaoke Nerds search: {query}", cfg)
     results = karaoke_nerds.search(query, config=cfg)
+    # Annotate each track with priority_rank and sort the per-song track
+    # lists best-first so the frontend can render in order without
+    # duplicating the brand registry.
+    for song in results:
+        version_priority.annotate_versions(
+            song.get("tracks") or [], cfg, shape="rotation_search_kn")
+        (song.get("tracks") or []).sort(
+            key=lambda t: t.get("priority_rank", 9999))
     return jsonify(results)
 
 
