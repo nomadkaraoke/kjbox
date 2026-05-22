@@ -15,6 +15,7 @@ from flask import Blueprint, Response, current_app, jsonify, render_template, re
 
 import divebar
 import karaoke_nerds
+import version_priority
 import youtube_health
 import youtube_search
 from catalog import LATIN_SPECIAL_MAP
@@ -141,6 +142,11 @@ def _group_search_results(local_results, kn_results):
                        "song_title": song_title},
             })
 
+    try:
+        cfg = current_app.kj_config
+    except (RuntimeError, AttributeError):
+        cfg = {}
+
     out = []
     for g in groups.values():
         versions = g["versions"]
@@ -158,6 +164,10 @@ def _group_search_results(local_results, kn_results):
             and not any(v["source"] == "local" for v in versions)
             and all(v["kn"].get("is_community") for v in kn_versions)
         )
+        # Annotate every version with priority_rank/brand/class, then sort
+        # in-place so clients that ignore the rank field still see best-first.
+        version_priority.annotate_versions(versions, cfg, shape="kj_pick")
+        versions.sort(key=lambda v: v.get("priority_rank", 9999))
         out.append(g)
 
     return out

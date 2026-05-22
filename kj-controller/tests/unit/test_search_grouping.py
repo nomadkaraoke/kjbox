@@ -158,7 +158,10 @@ class TestGroupSearchResults:
         assert len(groups) == 1
         assert groups[0]["version_count"] == 2
         sources = [v["source"] for v in groups[0]["versions"]]
-        assert sources == ["local", "kn"]  # locals ordered first
+        # Priority-driven sort: KN's KV is recognized commercial (tier 2000s);
+        # local has no parseable disc_id so it's unknown (tier 4000s). KN wins.
+        # (See docs/archive/2026-05-22-choose-best-version-design.md § Ranking.)
+        assert sources == ["kn", "local"]
 
     def test_locals_win_display_name_arbitration(self):
         # The local result's casing/form wins the display name, even if KN's
@@ -303,3 +306,41 @@ class TestGroupSearchResults:
         )
         assert len(groups) == 1
         assert groups[0]["version_count"] == 2
+
+
+class TestGroupedResultPriorityAnnotation:
+    def test_versions_get_priority_rank(self):
+        local = [{"path": "/a.zip", "disc_id": "KVD-22524",
+                  "artist": "Queen", "title": "Bohemian Rhapsody"}]
+        kn = [{"title": "Bohemian Rhapsody", "artist": "Queen",
+               "tracks": [{"brand_code": "LC", "brand_name": "Lemmy Caution",
+                           "is_community": True,
+                           "youtube_url": "https://yt"}]}]
+        groups = _group_search_results(local, kn)
+        assert len(groups) == 1
+        for v in groups[0]["versions"]:
+            assert "priority_rank" in v
+            assert "priority_brand" in v
+            assert "priority_class" in v
+
+    def test_versions_sorted_by_priority(self):
+        # LC community on KN should sort above local KVD (community > commercial)
+        local = [{"path": "/a.zip", "disc_id": "KVD-22524",
+                  "artist": "Queen", "title": "Bohemian Rhapsody"}]
+        kn = [{"title": "Bohemian Rhapsody", "artist": "Queen",
+               "tracks": [{"brand_code": "LC", "brand_name": "Lemmy Caution",
+                           "is_community": True,
+                           "youtube_url": "https://yt"}]}]
+        groups = _group_search_results(local, kn)
+        versions = groups[0]["versions"]
+        assert versions[0]["priority_class"] == "community"
+        assert versions[0]["priority_brand"] == "LC"
+        assert versions[1]["priority_class"] == "commercial"
+        assert versions[1]["priority_brand"] == "KV"
+
+    def test_unparseable_local_versions_classify_as_unknown(self):
+        local = [{"path": "/a.zip", "disc_id": "",
+                  "filename": "plain.zip",
+                  "artist": "X", "title": "Y"}]
+        groups = _group_search_results(local, [])
+        assert groups[0]["versions"][0]["priority_class"] == "unknown"
