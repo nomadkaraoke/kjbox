@@ -2750,6 +2750,9 @@ async function resetKNPrefs() {
         renderKnAliasHints(knPriorityCommunity, 'kn-prefs-community-aliases');
         renderKnAliasHints(knPriorityCommercial, 'kn-prefs-commercial-aliases');
         log('Reset brand priorities to defaults', 'success');
+        // Refresh any currently-rendered KN results to reflect the new order.
+        const results = document.getElementById('kn-results');
+        if (results && results.children.length > 0) searchKaraokeNerds();
     }
 }
 

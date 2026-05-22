@@ -2991,6 +2991,10 @@ body {
     transition: background 0.15s;
 }
 .pr-hero-cta:hover { background: #5cbf60; }
+.pr-hero-cta:focus-visible {
+    outline: 2px solid #fff;
+    outline-offset: 2px;
+}
 
 .pr-picker-alternates { margin-top: 8px; }
 .pr-picker-alternates summary {
