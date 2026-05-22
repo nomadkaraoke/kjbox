@@ -2774,7 +2774,9 @@ def download_and_link_rotation():
     # Validate source-specific fields BEFORE creating any rotation entry
     if source == "divebar":
         file_id = data.get('file_id', '').strip()
-        filename = data.get('filename', '').strip()
+        artist = (data.get('artist') or '').strip()
+        title = (data.get('title') or '').strip()
+        brand_code = (data.get('brand_code') or '').strip()
         if not file_id:
             return jsonify({"error": "file_id is required for divebar"}), 400
     elif source == "youtube":
@@ -2810,12 +2812,14 @@ def download_and_link_rotation():
             queue_item = {
                 'id': download_id,
                 'url': download_url,
-                'title': filename or f"divebar-{file_id}.mp4",
+                'title': build_divebar_filename(brand_code, artist, title)
+                         or f"divebar-{file_id}.mp4",
                 'source': 'divebar',
                 'source_detail': divebar.classify_download_url(download_url),
                 'status': 'queued',
                 'error': None,
                 'rotation_entry_id': entry_id,
+                'divebar_file_id': file_id,
             }
         else:  # youtube (already validated above)
             queue_item = {
