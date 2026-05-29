@@ -2,6 +2,29 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-05-28 - Feature: Simple KJ Mode (stand-in operator UI)
+
+A toggle in the KJ controller's System section that shrinks both the singer SPA and the KJ UI to a "good enough" surface area for a novice stand-in. The singer side restricts requests to `local` / `divebar` / `kn` sources (no YouTube paste, no make-on-demand, no defer-to-KJ). The KJ side hides the right column (search panels, downloads, library browser), manual rotation entry, the overlay panel, and every System subsection except the Mode toggle itself. Designed for QR-only nights where the operator just approves → plays → marks done → announces.
+
+**Persistent flag:** `kj_simple_mode` in `sing_meta` (default off). New `SingStore.is_simple_mode()` / `set_simple_mode()` mirror the existing `is_accepting_make_requests` pattern.
+
+**API surface (no new routes):**
+- `GET /rotation/requests/config` now returns `simple_mode`.
+- `POST /rotation/requests/config` accepts `simple_mode`.
+- `GET /status` carries `simple_mode` so the 2s heartbeat poll keeps the body class in lockstep with the server.
+- `GET /sing/` template context includes `simple_mode` (forwarded as `data-simple-mode` on `#sing-root`).
+- `GET /sing/search` response includes `simple_mode` so the singer SPA stays in sync mid-session.
+- `POST /sing/submit` narrows the source allowlist to `{local, divebar, kn}` when the flag is on (returns 400 `simple_mode_disabled_source` otherwise) — defence-in-depth for stale singer PWAs.
+
+**KJ UI (CSS-driven):** `app.js` sets `body.simple-mode` from each `/status` poll. A single CSS block in `style.css` hides panels, the rotation manual-add controls, the now-playing pitch buttons, and every `system-subsection:not(#kj-mode-section)`. A guidance banner above the rotation list reads "Simple Mode is ON · Approve incoming requests → tap a row to play → mark done → announce next singer."
+
+**Singer SPA (vanilla JS):** Empty-state triage cards (paste YT / ask KJ / DIY-via-gen) are suppressed in favour of a single instructional message. Multi-version songs auto-expand to show the versions list directly (no `kj_pick` shortcut). Confirm-screen subtitle adapts. The submit-error handler shows a "Refresh the page" hint if a stale PWA hits the server's `simple_mode_disabled_source` 400.
+
+**Tests:** 11 new automated tests (3 unit, 4 integration, 4 E2E). Manual smoke runbook added to `docs/TESTING.md` covering KJ-side toggle behaviour, singer SPA changes, server-side allowlist via curl, stale-PWA recovery copy, toggle isolation, and pre-existing pending requests.
+
+**Spec:** [docs/archive/2026-05-22-simple-kj-mode-design.md](archive/2026-05-22-simple-kj-mode-design.md)
+**Plan:** [docs/archive/2026-05-28-simple-kj-mode-plan.md](archive/2026-05-28-simple-kj-mode-plan.md)
+
 ## 2026-05-22 - Feature: Brand-priority ranking for kj_pick approval + rotation search
 
 Surfaces the KJ's in-head version-quality rules ("community always beats commercial; CC > LC > FBK …") in the two places where version selection happens. Backend now annotates every karaoke version with a `priority_rank` integer; frontend reads it to drive the new UX. Data-informed: alias map and unlisted-brand defaults seeded from analysis of 104 approved requests + 10 diverse song searches on the live show 2026-05-22.
