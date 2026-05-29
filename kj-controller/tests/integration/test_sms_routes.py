@@ -144,6 +144,53 @@ class TestRotationSmsBlock:
         assert celeste["sms"]["available"] is True
         assert celeste["sms"]["last_sent_at"] is None
 
+    def test_newest_request_wins_when_multiple_link_to_same_entry(self, sms_client, sms_app):
+        """Regression: a rotation_entry_id pointed at by multiple sing_requests
+        must use the NEWEST request's phone for the button visibility — mirroring
+        what /sms/send does — so the KJ never sees a flickering button or one
+        that would 400 on click.
+
+        2026-05-28 outage: the listing query had no ORDER BY and let SQLite pick
+        whichever order it felt like, so a row with several requests (one with a
+        phone, one without) flickered visible/hidden between polls.
+        """
+        _, entry_id = _seed_request_and_link(
+            sms_app, phone="843-259-4507", singer="Celeste",
+        )
+        # Newer request linked to the same entry, no phone (e.g. KJ re-approved
+        # the request after the singer opted out by editing the row).
+        req2 = sms_app.sing_store.create_request(
+            singer_name="Celeste", phone="", source_type="local",
+            source_ref="/x.mp4", song_title="Plump", song_artist="Hole",
+        )
+        sms_app.sing_store.mark_approved(req2["id"], linked_entry_id=entry_id)
+
+        resp = sms_client.get("/rotation")
+        celeste = [e for e in resp.get_json()["entries"] if e["id"] == entry_id][0]
+        # Newest request has no phone → button must be hidden, deterministically.
+        assert celeste["sms"]["available"] is False
+
+    def test_newest_request_with_phone_keeps_button_visible(self, sms_client, sms_app):
+        """The flip side of the above: an OLDER no-phone request must not
+        suppress the button when the newest request DOES have a phone."""
+        # First (oldest) request: no phone.
+        first = sms_app.sing_store.create_request(
+            singer_name="Celeste", phone="", source_type="local",
+            source_ref="/x.mp4", song_title="Plump", song_artist="Hole",
+        )
+        entry = sms_app.rotation.add_entry("Celeste", "Plump - Hole")
+        sms_app.sing_store.mark_approved(first["id"], linked_entry_id=entry["id"])
+        # Newer request: same entry, has a phone.
+        newer = sms_app.sing_store.create_request(
+            singer_name="Celeste", phone="843-259-4507", source_type="local",
+            source_ref="/x.mp4", song_title="Plump", song_artist="Hole",
+        )
+        sms_app.sing_store.mark_approved(newer["id"], linked_entry_id=entry["id"])
+
+        resp = sms_client.get("/rotation")
+        celeste = [e for e in resp.get_json()["entries"] if e["id"] == entry["id"]][0]
+        assert celeste["sms"]["available"] is True
+
     def test_button_hidden_when_telnyx_unconfigured(self, unconfigured_app):
         # Regression: even a linked entry with a real phone must report
         # sms.available=False if Telnyx env vars aren't set, so the KJ UI

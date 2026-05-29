@@ -2315,20 +2315,31 @@ def _add_sms_status(entries, app=None):
     if not entry_ids:
         return
 
-    # Map rotation_entry_id → sing_requests.phone (empty string if no phone).
-    # One JOIN-style query over sing_requests using linked_entry_id, then we
-    # match up in Python. The sing_requests table is small per event.
+    # Map rotation_entry_id → newest sing_request's phone for that entry.
+    #
+    # Multiple sing_requests can link to one rotation_entry_id (duplicate
+    # approval, cross-event ID reuse after restore_from_sheet, etc.). The
+    # SEND path (_resolve_sms_target) deterministically picks the NEWEST
+    # via ORDER BY id DESC LIMIT 1; we mirror that here so the button's
+    # visibility matches what /sms/send would actually do. Without ORDER BY,
+    # sqlite returned rows in implementation-defined order and the button
+    # flickered between polls on the 2026-05-28 show.
     conn = sing_store._get_conn()
     placeholders = ",".join("?" * len(entry_ids))
     phone_rows = conn.execute(
         f"""
-        SELECT linked_entry_id, phone
+        SELECT linked_entry_id, phone, id
         FROM sing_requests
         WHERE linked_entry_id IN ({placeholders})
+        ORDER BY id DESC
         """,
         tuple(entry_ids),
     ).fetchall()
-    phone_by_entry = {row["linked_entry_id"]: (row["phone"] or "") for row in phone_rows}
+    phone_by_entry = {}
+    for row in phone_rows:
+        eid = row["linked_entry_id"]
+        if eid not in phone_by_entry:  # first occurrence wins → newest
+            phone_by_entry[eid] = row["phone"] or ""
 
     latest_by_entry = sms_store.get_latest_for_entries(entry_ids)
 
