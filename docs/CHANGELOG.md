@@ -2,6 +2,14 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-05-28 - Overlay system: rotation ticker + Scan-to-Sing preset
+
+- Ticker overlays gained a `source: rotation` mode whose text is composed by the backend on every rotation mutation. New `prefix`, `count`, `separator`, `empty_text` config fields. The engine stays a dumb renderer of `config.text`.
+- New `POST /overlays/presets/scan-to-sing` plus a "Scan to Sing" button in the overlay panel creates a small QR overlay (top-right, `follow_event_url=True`, `show_over_video=True`) ready for singers to scan.
+- QR overlays gained `bg_opacity` (semi-transparent padding) and `corner_radius` (rounded card) for better appearance over video and ticker.
+- Overlay engine restacks QR windows above any visible ticker by destroying+recreating the QR window after every reload / visibility change, so the QR reliably sits on top of an always-on-top ticker bar.
+- Design + implementation plan: `docs/archive/2026-05-28-overlays-ticker-qr-design.md` and `docs/archive/2026-05-28-overlays-ticker-qr-plan.md`.
+
 ## 2026-05-22 - Fix: Divebar GCS-mirror downloads use human-readable filenames
 
 GCS-mirror divebar downloads were landing on disk as `divebar__divebar-{file_id}.mp4` — three enqueue paths dropped the artist/title metadata they already had. The smoking gun was `approve_sing_request` (sing-request approval), which hardcoded `title = f"divebar-{source_ref}.mp4"` despite `req.song_title` / `req.song_artist` being available on the request row.
