@@ -2235,19 +2235,27 @@ def _add_sms_status(entries, app=None):
 
     Shape per entry:
         sms = {
-            "available": bool,        # row has a phone we can text
+            "available": bool,        # SMS is globally configured AND row has a phone
             "last_sent_at": str|null, # timestamp of most recent send
             "last_status": "sent"|"failed"|null,
         }
 
-    "Available" requires linked_entry_id resolving to a sing_request with a
-    non-empty phone. KJ-added rows have no link and thus no SMS button. The
-    bulk lookup is one tiny SQL query so this is cheap even for long rotations.
+    "Available" requires BOTH (a) Telnyx env vars set so /sms/send won't
+    503, AND (b) linked_entry_id resolving to a sing_request with a
+    non-empty phone. KJ-added rows have no link and thus no SMS button.
+    The bulk lookup is one tiny SQL query so this is cheap even for long
+    rotations.
     """
     app = app or current_app._get_current_object()
     sing_store = getattr(app, "sing_store", None)
     sms_store = getattr(app, "sms_store", None)
-    if sing_store is None or sms_store is None:
+    sms_cfg = getattr(app, "sms_config", None) or {}
+    sms_enabled = bool(sms_cfg.get("api_key") and sms_cfg.get("from_number"))
+
+    if sing_store is None or sms_store is None or not sms_enabled:
+        # Feature disabled: every row reports unavailable so the frontend
+        # hides the button entirely (rather than offering a button that
+        # would 503 on click).
         for e in entries:
             e["sms"] = {"available": False, "last_sent_at": None, "last_status": None}
         return

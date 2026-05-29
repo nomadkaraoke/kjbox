@@ -144,6 +144,16 @@ class TestRotationSmsBlock:
         assert celeste["sms"]["available"] is True
         assert celeste["sms"]["last_sent_at"] is None
 
+    def test_button_hidden_when_telnyx_unconfigured(self, unconfigured_app):
+        # Regression: even a linked entry with a real phone must report
+        # sms.available=False if Telnyx env vars aren't set, so the KJ UI
+        # doesn't render a button that would 503 on click.
+        _seed_request_and_link(unconfigured_app)
+        with unconfigured_app.test_client() as c:
+            resp = c.get("/rotation")
+            entries = resp.get_json()["entries"]
+            assert all(e["sms"]["available"] is False for e in entries)
+
     def test_send_reflects_on_next_fetch(self, sms_client, sms_app):
         _, entry_id = _seed_request_and_link(sms_app)
         sms_app.sms_store.record_send(
