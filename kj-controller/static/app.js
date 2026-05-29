@@ -2269,7 +2269,12 @@ async function toggleAutoDeploy(active) {
 
 // --- Simple KJ Mode ---
 
+// Sequence counter so out-of-order POST responses can't override the latest
+// user intent (rare, but possible if the user spam-toggles).
+let _simpleModeReqSeq = 0;
+
 async function toggleSimpleMode(checked) {
+    const reqSeq = ++_simpleModeReqSeq;
     try {
         const resp = await fetch('/rotation/requests/config', {
             method: 'POST',
@@ -2278,8 +2283,10 @@ async function toggleSimpleMode(checked) {
         });
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
         // Apply optimistically; /status poll will reconcile in <=2s anyway.
-        applySimpleMode(!!checked);
+        // Skip if a newer toggle has fired since — its response will win.
+        if (reqSeq === _simpleModeReqSeq) applySimpleMode(!!checked);
     } catch (e) {
+        if (reqSeq !== _simpleModeReqSeq) return;
         console.error('toggleSimpleMode failed:', e);
         alert('Could not change Simple Mode. Please try again.');
         // The next /status poll will revert the checkbox to actual server state.
