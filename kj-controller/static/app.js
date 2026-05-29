@@ -1737,6 +1737,20 @@ const OVERLAY_TYPE_LABELS = {
     qr_code: 'QR',
 };
 
+async function addScanToSingQR() {
+    try {
+        const resp = await fetch('/overlays/presets/scan-to-sing', { method: 'POST' });
+        if (!resp.ok) {
+            const err = await resp.json().catch(() => ({}));
+            alert(`Failed to add Scan-to-Sing QR: ${err.error || resp.statusText}`);
+            return;
+        }
+        await loadOverlays();
+    } catch (e) {
+        alert(`Failed to add Scan-to-Sing QR: ${e.message || e}`);
+    }
+}
+
 async function backupOverlays() {
     try {
         const response = await fetch('/overlays');
