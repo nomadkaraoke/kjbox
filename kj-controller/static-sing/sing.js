@@ -965,7 +965,9 @@ function renderSearch() {
 
   const card = el("main", { class: "sing-card" },
     el("h2", {}, "Pick your song"),
-    el("p", { class: "hint" }, `Hi ${state.name.split(/\s+/)[0]} — search for a song below. If we don't have it, you'll get options for how to get it on screen.`),
+    el("p", { class: "hint" }, state.simpleMode
+      ? `Hi ${state.name.split(/\s+/)[0]} — search for a song below. If we don't have it, just ask the KJ at the front.`
+      : `Hi ${state.name.split(/\s+/)[0]} — search for a song below. If we don't have it, you'll get options for how to get it on screen.`),
     el("input", {
       type: "search",
       placeholder: "Type artist or song title…",
@@ -1052,7 +1054,9 @@ function renderConfirm() {
     } catch (e) {
       err = e.status === 429
         ? "You've submitted a lot — please wait a few minutes."
-        : "Couldn't send — ask the KJ if requests are paused.";
+        : e.data?.error === "simple_mode_disabled_source"
+          ? "Song requests are currently restricted. Please refresh this page for the updated options."
+          : "Couldn't send — ask the KJ if requests are paused.";
       submitting = false;
       if (submitBtn) {
         submitBtn.disabled = false;
