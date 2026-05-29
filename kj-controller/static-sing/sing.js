@@ -12,12 +12,16 @@ const codeEntryEl = document.getElementById("sing-enter-code");
 let TOKEN = "";
 let INITIAL_REQUEST_ID = "";
 let INITIAL_MAKE_REQUESTS_ENABLED = true;
+let INITIAL_SIMPLE_MODE = false;
 if (root) {
   TOKEN = root.dataset.token;
   INITIAL_REQUEST_ID = root.dataset.requestId;
   // Phase C — landing carries the flag so the empty-state triage has it
   // before the first /sing/search completes. Absence or "1" = enabled.
   INITIAL_MAKE_REQUESTS_ENABLED = root.dataset.makeRequestsEnabled !== "0";
+  // Simple KJ Mode — landing forwards this so the SPA can trim its UI on
+  // first paint (no triage cards, no kj_pick deferral). "1" = on.
+  INITIAL_SIMPLE_MODE = root.dataset.simpleMode === "1";
 }
 
 const LS = {
@@ -73,6 +77,9 @@ const state = {
   // Phase C — updated on every /sing/search response so a KJ flipping the
   // toggle mid-session takes effect on the next keystroke-triggered search.
   makeRequestsEnabled: INITIAL_MAKE_REQUESTS_ENABLED,
+  // Simple KJ Mode — restricts source allowlist and trims UI; mirrors
+  // server's kj_simple_mode flag, kept in sync via /sing/search response.
+  simpleMode: INITIAL_SIMPLE_MODE,
 };
 
 const MAX_PARTNERS = 3;
@@ -525,6 +532,9 @@ function renderSearch() {
         if (typeof data.make_requests_enabled === "boolean") {
           state.makeRequestsEnabled = data.make_requests_enabled;
         }
+        if (typeof data.simple_mode === "boolean") {
+          state.simpleMode = data.simple_mode;
+        }
       } catch (e) {
         err = "Search failed. Try again.";
       } finally {
@@ -785,6 +795,16 @@ function renderSearch() {
     // for niche songs if the singer is willing to focus on their phone).
     const wrap = el("div", { class: "sing-empty-triage" });
 
+    // Simple KJ Mode — no triage cards. Singer can only pick from search
+    // results; if there's nothing, they ask the KJ in person.
+    if (state.simpleMode) {
+      wrap.appendChild(el("div", { class: "sing-empty-header" },
+        el("h3", {}, "We don't have that one."),
+        el("p", {}, "Try another search, or talk to the KJ at the front."),
+      ));
+      return wrap;
+    }
+
     wrap.appendChild(el("div", { class: "sing-empty-header" },
       el("h3", {}, "Can't find it in our catalogue."),
       el("p", {}, "Three ways forward — pick the one that fits how much effort you want."),
@@ -909,22 +929,30 @@ function renderSearch() {
       if (group.in_library) {
         children.push(el("span", { class: "badge good" }, "In our library"));
       }
-      children.push(el("button", {
-        class: "btn-primary-cta",
-        onclick: (e) => { e.stopPropagation(); onCtaClick(); },
-      }, ctaLabel));
+      if (isSingle || !state.simpleMode) {
+        children.push(el("button", {
+          class: "btn-primary-cta",
+          onclick: (e) => { e.stopPropagation(); onCtaClick(); },
+        }, ctaLabel));
+      }
 
       // Phase B — only multi-version groups get an expander affordance.
+      // In simple mode, the expander is always open (no kj_pick CTA to
+      // tuck behind) — the singer's only path is picking a specific version.
       if (!isSingle) {
-        const toggleLabel = isExpanded
-          ? "Hide versions ↑"
-          : `${group.version_count} versions available →`;
-        children.push(el("button", {
-          class: "sing-versions-toggle",
-          "aria-expanded": isExpanded ? "true" : "false",
-          onclick: (e) => { e.stopPropagation(); toggleExpanded(group.key); },
-        }, toggleLabel));
-        if (isExpanded) children.push(renderVersionsExpander(group));
+        if (state.simpleMode) {
+          children.push(renderVersionsExpander(group));
+        } else {
+          const toggleLabel = isExpanded
+            ? "Hide versions ↑"
+            : `${group.version_count} versions available →`;
+          children.push(el("button", {
+            class: "sing-versions-toggle",
+            "aria-expanded": isExpanded ? "true" : "false",
+            onclick: (e) => { e.stopPropagation(); toggleExpanded(group.key); },
+          }, toggleLabel));
+          if (isExpanded) children.push(renderVersionsExpander(group));
+        }
       }
 
       container.appendChild(el("div", {
