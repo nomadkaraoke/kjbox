@@ -65,6 +65,17 @@ def test_status_without_vlc(flask_test_client):
     assert data['vlc_enabled'] is False
 
 
+def test_status_includes_simple_mode(flask_test_client, flask_app):
+    # Default off
+    resp = flask_test_client.get("/status")
+    assert resp.status_code == 200
+    assert resp.get_json().get("simple_mode") is False
+    # Flip it on, status reflects it
+    flask_app.sing_store.set_simple_mode(True)
+    resp2 = flask_test_client.get("/status")
+    assert resp2.get_json().get("simple_mode") is True
+
+
 def test_status_rotation_downloads_surfaces_source_detail(flask_test_client, flask_app):
     """GET /status exposes source + source_detail per active rotation download
     so the UI can show GCS-vs-Drive-vs-YouTube on the prep badge."""

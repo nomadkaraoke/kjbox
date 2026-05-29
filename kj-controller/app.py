@@ -18,6 +18,7 @@ from rotation import RotationManager
 from routes import routes_bp
 from sing import install_host_guard, install_public_host_rewriter, sing_bp
 from sing_store import SingStore
+from sms_store import SmsStore
 from sleep_mode import SleepManager
 from utils import log_message
 from audio_monitor import AudioMonitor
@@ -214,6 +215,16 @@ def create_app(config=None):
         cfg.get('rotation_db_path', os.path.expanduser('~/kjdata/rotation.db'))
     )
     flask_app.sing_store.ensure_token()
+    flask_app.sms_store = SmsStore(
+        cfg.get('rotation_db_path', os.path.expanduser('~/kjdata/rotation.db'))
+    )
+    # Telnyx credentials live in env (see .envrc). Feature is disabled at
+    # runtime if either is missing — the rotation row button hides and the
+    # modal shows "⚠ Not configured".
+    flask_app.sms_config = {
+        "api_key": os.environ.get("TELNYX_API_KEY") or None,
+        "from_number": os.environ.get("TELNYX_FROM_NUMBER") or None,
+    }
 
     # ----------------------------------------------------------------
     # PushDispatcher — Web Push for singer-facing expectations UI
@@ -384,6 +395,16 @@ def start_app():  # pragma: no cover
         cfg.get('rotation_db_path', os.path.expanduser('~/kjdata/rotation.db'))
     )
     flask_app.sing_store.ensure_token()
+    flask_app.sms_store = SmsStore(
+        cfg.get('rotation_db_path', os.path.expanduser('~/kjdata/rotation.db'))
+    )
+    # Telnyx credentials live in env (see .envrc). Feature is disabled at
+    # runtime if either is missing — the rotation row button hides and the
+    # modal shows "⚠ Not configured".
+    flask_app.sms_config = {
+        "api_key": os.environ.get("TELNYX_API_KEY") or None,
+        "from_number": os.environ.get("TELNYX_FROM_NUMBER") or None,
+    }
     log_message("Sing store ready (public request form).", cfg)
 
     # PushDispatcher — Web Push for singer-facing expectations UI.

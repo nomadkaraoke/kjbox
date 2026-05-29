@@ -836,6 +836,11 @@ async function updateStatus() {
         const data = await response.json();
         if (response.ok) {
             const state = data.state || 'stopped';
+            // Simple KJ Mode — apply body class first so subsequent renders
+            // see the right CSS state. /status carries the authoritative flag.
+            if (typeof data.simple_mode === 'boolean') {
+                applySimpleMode(data.simple_mode);
+            }
             document.getElementById('player-state').textContent = state;
             document.getElementById('current-filler').textContent = data.current_filler_track || 'None';
 
@@ -2301,6 +2306,58 @@ async function toggleAutoDeploy(active) {
     } catch (e) {
         log('Failed to toggle auto-deploy', 'error');
         fetchAutoDeployStatus(); // revert switch to actual state
+    }
+}
+
+// --- Simple KJ Mode ---
+
+// Sequence counter so out-of-order POST responses can't override the latest
+// user intent (rare, but possible if the user spam-toggles).
+let _simpleModeReqSeq = 0;
+
+async function toggleSimpleMode(checked) {
+    const reqSeq = ++_simpleModeReqSeq;
+    try {
+        const resp = await fetch('/rotation/requests/config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ simple_mode: !!checked }),
+        });
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        // Apply optimistically; /status poll will reconcile in <=2s anyway.
+        // Skip if a newer toggle has fired since — its response will win.
+        if (reqSeq === _simpleModeReqSeq) applySimpleMode(!!checked);
+    } catch (e) {
+        if (reqSeq !== _simpleModeReqSeq) return;
+        console.error('toggleSimpleMode failed:', e);
+        alert('Could not change Simple Mode. Please try again.');
+        // The next /status poll will revert the checkbox to actual server state.
+    }
+}
+
+function applySimpleMode(on) {
+    document.body.classList.toggle('simple-mode', !!on);
+    // Keep the switch reflecting reality even if /status changed underfoot.
+    const sw = document.getElementById('simple-mode-switch');
+    if (sw) sw.checked = !!on;
+    // Banner — render or remove based on flag.
+    const rotationPanel = document.querySelector('.rotation-panel');
+    let banner = document.getElementById('simple-mode-banner');
+    if (on && rotationPanel && !banner) {
+        banner = document.createElement('div');
+        banner.id = 'simple-mode-banner';
+        banner.className = 'simple-mode-banner';
+        banner.textContent =
+            'Simple Mode is ON · Approve incoming requests → tap a row to play → mark done → announce next singer.';
+        // Insert before the rotation list (after the header).
+        const list = document.getElementById('rotation-list');
+        if (list) {
+            rotationPanel.insertBefore(banner, list);
+        } else {
+            rotationPanel.appendChild(banner);
+        }
+    } else if (!on && banner) {
+        banner.remove();
     }
 }
 
@@ -3866,6 +3923,35 @@ function renderRotation(entries) {
         };
         actions.appendChild(editBtn);
 
+        // SMS button — only when phone is available for this entry
+        // (rows the KJ added by hand have no linked sing_request).
+        const sms = entry.sms || {};
+        if (sms.available) {
+            const sent = !!sms.last_sent_at;
+            const smsBtn = document.createElement('button');
+            smsBtn.className = 'rotation-btn rotation-btn-sms' + (sent ? ' rotation-btn-sms-resent' : '');
+            smsBtn.innerHTML = sent
+                ? '✉ Re-send'   // ✉ Re-send
+                : '✉ Send SMS'; // ✉ Send SMS
+            smsBtn.title = sent
+                ? 'Re-send the "you’re up" SMS to this singer'
+                : 'Send the "you’re up" SMS to this singer';
+            smsBtn.onclick = (e) => {
+                e.stopPropagation();
+                openSmsPreview(row, entry);
+            };
+            actions.appendChild(smsBtn);
+            if (sent) {
+                const marker = document.createElement('span');
+                marker.className = 'rotation-sms-marker';
+                marker.textContent = 'sent ' + formatSmsTimestamp(sms.last_sent_at);
+                marker.title = 'Last sent at ' + sms.last_sent_at +
+                    (sms.last_status === 'failed' ? ' (failed)' : '');
+                if (sms.last_status === 'failed') marker.classList.add('rotation-sms-marker-failed');
+                actions.appendChild(marker);
+            }
+        }
+
         row.appendChild(info);
         row.appendChild(actions);
 
@@ -4680,6 +4766,158 @@ async function advanceRotationStatus(entry, idx, entries) {
     if (nextEntry) {
         await updateRotationStatus(nextEntry.id, 'Up Next', { skipUndo: true });
     }
+}
+
+// ---------------------------------------------------------------------------
+// SMS preview + send (manual "you’re up" texts from the rotation row)
+// ---------------------------------------------------------------------------
+
+function formatSmsTimestamp(serverTs) {
+    // Server returns "YYYY-MM-DD HH:MM:SS" in localtime. Format as H:MM AM/PM.
+    if (!serverTs) return '';
+    const m = serverTs.match(/(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})/);
+    if (!m) return serverTs;
+    const d = new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]);
+    return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+}
+
+function closeAnySmsPanel() {
+    document.querySelectorAll('.sms-preview-panel').forEach(p => p.remove());
+}
+
+async function openSmsPreview(row, entry) {
+    closeAnySmsPanel();
+
+    // Insert a placeholder panel immediately so the click feels responsive.
+    const panel = document.createElement('div');
+    panel.className = 'sms-preview-panel';
+    panel.innerHTML = '<div class="sms-preview-loading">Loading preview…</div>';
+    row.parentNode.insertBefore(panel, row.nextSibling);
+
+    let preview;
+    try {
+        const resp = await fetch('/rotation/sms/preview', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ entry_id: entry.id }),
+        });
+        preview = await resp.json();
+        if (!resp.ok) {
+            panel.innerHTML = '';
+            const err = document.createElement('div');
+            err.className = 'sms-preview-error';
+            err.textContent = preview.error || ('Preview failed (HTTP ' + resp.status + ')');
+            panel.appendChild(err);
+            const close = document.createElement('button');
+            close.className = 'sms-preview-close-btn';
+            close.textContent = 'Close';
+            close.onclick = () => panel.remove();
+            panel.appendChild(close);
+            return;
+        }
+    } catch (e) {
+        panel.innerHTML = '';
+        const err = document.createElement('div');
+        err.className = 'sms-preview-error';
+        err.textContent = 'Preview failed: ' + e.message;
+        panel.appendChild(err);
+        return;
+    }
+
+    panel.innerHTML = '';
+    const header = document.createElement('div');
+    header.className = 'sms-preview-header';
+    header.innerHTML = 'Send SMS to <strong>' + escHtml(preview.first_name || entry.singer || '') +
+        '</strong> <span class="sms-preview-phone">' + escHtml(preview.phone_e164) + '</span>';
+    panel.appendChild(header);
+
+    const textarea = document.createElement('textarea');
+    textarea.className = 'sms-preview-body';
+    textarea.value = preview.body;
+    panel.appendChild(textarea);
+
+    const meta = document.createElement('div');
+    meta.className = 'sms-preview-meta';
+    const lenSpan = document.createElement('span');
+    const segSpan = document.createElement('span');
+    const updateMeta = () => {
+        const len = textarea.value.length;
+        const segs = len === 0 ? 0 : (len <= 160 ? 1 : Math.ceil(len / 153));
+        lenSpan.textContent = len + ' chars';
+        segSpan.textContent = segs + ' segment' + (segs === 1 ? '' : 's');
+        lenSpan.className = 'sms-meta-len' +
+            (len > 1600 ? ' sms-meta-over' : len > 160 ? ' sms-meta-multi' : '');
+    };
+    meta.appendChild(lenSpan);
+    meta.appendChild(document.createTextNode(' · '));
+    meta.appendChild(segSpan);
+    panel.appendChild(meta);
+    textarea.addEventListener('input', updateMeta);
+    updateMeta();
+
+    const actions = document.createElement('div');
+    actions.className = 'sms-preview-actions';
+    const errEl = document.createElement('div');
+    errEl.className = 'sms-preview-error';
+    errEl.style.display = 'none';
+    actions.appendChild(errEl);
+
+    const cancelBtn = document.createElement('button');
+    cancelBtn.className = 'sms-preview-cancel-btn';
+    cancelBtn.textContent = 'Cancel';
+    cancelBtn.onclick = () => panel.remove();
+    actions.appendChild(cancelBtn);
+
+    const sendBtn = document.createElement('button');
+    sendBtn.className = 'sms-preview-send-btn';
+    sendBtn.textContent = 'Send';
+    const doSend = async () => {
+        errEl.style.display = 'none';
+        sendBtn.disabled = true;
+        cancelBtn.disabled = true;
+        sendBtn.textContent = 'Sending…';
+        try {
+            const resp = await fetch('/rotation/sms/send', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ entry_id: entry.id, body: textarea.value }),
+            });
+            const data = await resp.json().catch(() => ({}));
+            if (!resp.ok || !data.success) {
+                errEl.textContent = data.error || ('Send failed (HTTP ' + resp.status + ')');
+                errEl.style.display = '';
+                sendBtn.disabled = false;
+                cancelBtn.disabled = false;
+                sendBtn.textContent = 'Retry';
+                return;
+            }
+            panel.remove();
+            showRotationIndicator('success');
+            // Refresh row data so the ✉ marker updates.
+            fetchRotation();
+        } catch (e) {
+            errEl.textContent = 'Send failed: ' + e.message;
+            errEl.style.display = '';
+            sendBtn.disabled = false;
+            cancelBtn.disabled = false;
+            sendBtn.textContent = 'Retry';
+        }
+    };
+    sendBtn.onclick = doSend;
+    actions.appendChild(sendBtn);
+    panel.appendChild(actions);
+
+    textarea.focus();
+    textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+
+    // Keyboard shortcuts within the textarea.
+    textarea.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') { e.preventDefault(); panel.remove(); return; }
+        if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+            e.preventDefault();
+            if (!sendBtn.disabled) doSend();
+        }
+    });
 }
 
 async function updateRotationStatus(entryId, status, { skipUndo = false } = {}) {
@@ -5794,6 +6032,27 @@ const SingRequests = (() => {
         const bust = Date.now();
         if (qp) qp.src = `/rotation/requests/qr.svg?scope=public&cb=${bust}`;
         if (ql) ql.src = `/rotation/requests/qr.svg?scope=local&cb=${bust}`;
+
+        // --- SMS section ---
+        const smsStatus = document.getElementById('sing-sms-status');
+        const smsTpl = document.getElementById('sing-sms-template');
+        const smsRegion = document.getElementById('sing-sms-region');
+        if (smsStatus) {
+            if (config.sms_enabled) {
+                smsStatus.textContent = '✓ Telnyx configured' +
+                    (config.sms_from_number ? ' · from ' + config.sms_from_number : '');
+                smsStatus.className = 'sing-sms-status sing-sms-status-ok';
+            } else {
+                smsStatus.textContent = '⚠ Not configured (set TELNYX_API_KEY + TELNYX_FROM_NUMBER)';
+                smsStatus.className = 'sing-sms-status sing-sms-status-off';
+            }
+        }
+        if (smsTpl && document.activeElement !== smsTpl) {
+            smsTpl.value = config.sms_template || '';
+        }
+        if (smsRegion && config.sms_default_region) {
+            smsRegion.value = config.sms_default_region;
+        }
     }
 
     async function postConfig(body) {
@@ -5903,7 +6162,20 @@ const SingRequests = (() => {
         pollTimer = setInterval(fetchPending, 5000);
     }
 
-    return { start, openModal, closeModal, toggleEnabled, toggleAutoApprove, toggleAcceptMake, regenerate, setCustom, copyUrl };
+    async function saveSmsTemplate() {
+        const tpl = document.getElementById('sing-sms-template');
+        const region = document.getElementById('sing-sms-region');
+        if (!tpl) return;
+        const body = { sms_template: tpl.value, sms_default_region: region ? region.value : 'US' };
+        if (await postConfig(body)) await fetchConfig();
+    }
+
+    async function resetSmsTemplate() {
+        if (!confirm('Reset the SMS template to the default?')) return;
+        if (await postConfig({ sms_template: null })) await fetchConfig();
+    }
+
+    return { start, openModal, closeModal, toggleEnabled, toggleAutoApprove, toggleAcceptMake, regenerate, setCustom, saveSmsTemplate, resetSmsTemplate, copyUrl };
 })();
 
 function openSingRequestsModal()   { SingRequests.openModal(); }
@@ -5913,6 +6185,8 @@ function toggleSingAutoApprove(c)  { SingRequests.toggleAutoApprove(c); }
 function toggleSingAcceptMake(c)   { SingRequests.toggleAcceptMake(c); }
 function regenerateSingToken()     { SingRequests.regenerate(); }
 function setCustomSingToken()      { SingRequests.setCustom(); }
+function saveSingSmsTemplate()     { SingRequests.saveSmsTemplate(); }
+function resetSingSmsTemplate()    { SingRequests.resetSmsTemplate(); }
 function copySingUrl(scope)        { SingRequests.copyUrl(scope); }
 
 window.addEventListener('DOMContentLoaded', () => SingRequests.start());
