@@ -16,6 +16,7 @@ TOKEN_KEY = "request_token"
 ENABLED_KEY = "request_token_enabled"
 AUTO_APPROVE_KEY = "request_auto_approve"
 ACCEPT_MAKE_REQUESTS_KEY = "sing_accept_make_requests"
+SIMPLE_MODE_KEY = "kj_simple_mode"
 
 # Token is a 4-digit numeric code. 10 000 combinations — small enough to read off
 # the venue screen and type on a phone numpad, large enough that the rate-limited
@@ -253,6 +254,20 @@ class SingStore:
 
     def set_accepting_make_requests(self, enabled):
         self._set_meta(ACCEPT_MAKE_REQUESTS_KEY, "1" if enabled else "0")
+
+    def is_simple_mode(self):
+        """Return True if the KJ controller is in stand-in / simple-operator mode.
+
+        When on, the singer UI restricts the source allowlist to local/
+        divebar/kn (no YouTube paste, make, or kj_pick deferral), and the KJ
+        UI hides search panels, manual rotation entry, and most System
+        controls. Persistent across rotation archives; toggled from the KJ
+        controller's System → Mode subsection.
+        """
+        return self._get_meta(SIMPLE_MODE_KEY, "0") == "1"
+
+    def set_simple_mode(self, enabled):
+        self._set_meta(SIMPLE_MODE_KEY, "1" if enabled else "0")
 
     # ------------------------------------------------------------------
     # Request CRUD

@@ -186,6 +186,25 @@ class TestTokenHelpers:
         assert s2.is_accepting_make_requests() is False
         s2.close()
 
+    def test_simple_mode_default_false(self, store):
+        assert store.is_simple_mode() is False
+
+    def test_simple_mode_round_trip(self, store):
+        store.set_simple_mode(True)
+        assert store.is_simple_mode() is True
+        store.set_simple_mode(False)
+        assert store.is_simple_mode() is False
+
+    def test_simple_mode_persists_across_instances(self, tmp_path):
+        from sing_store import SingStore
+        db = tmp_path / "simple_mode.db"
+        s1 = SingStore(str(db))
+        s1.set_simple_mode(True)
+        s1.close()
+        s2 = SingStore(str(db))
+        assert s2.is_simple_mode() is True
+        s2.close()
+
     def test_auto_approve_default_false(self, store):
         assert store.is_auto_approve() is False
 
