@@ -2,6 +2,14 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-05-28 - Overlay system: rotation ticker + Scan-to-Sing preset
+
+- Ticker overlays gained a `source: rotation` mode whose text is composed by the backend on every rotation mutation. New `prefix`, `count`, `separator`, `empty_text` config fields. The engine stays a dumb renderer of `config.text`.
+- New `POST /overlays/presets/scan-to-sing` plus a "Scan to Sing" button in the overlay panel creates a small QR overlay (top-right, `follow_event_url=True`, `show_over_video=True`) ready for singers to scan.
+- QR overlays gained `bg_opacity` (semi-transparent padding) and `corner_radius` (rounded card) for better appearance over video and ticker.
+- Overlay engine restacks QR windows above any visible ticker by destroying+recreating the QR window after every reload / visibility change, so the QR reliably sits on top of an always-on-top ticker bar.
+- Design + implementation plan: `docs/archive/2026-05-28-overlays-ticker-qr-design.md` and `docs/archive/2026-05-28-overlays-ticker-qr-plan.md`.
+
 ## 2026-05-28 - Feature: Simple KJ Mode (stand-in operator UI)
 
 A toggle in the KJ controller's System section that shrinks both the singer SPA and the KJ UI to a "good enough" surface area for a novice stand-in. The singer side restricts requests to `local` / `divebar` / `kn` sources (no YouTube paste, no make-on-demand, no defer-to-KJ). The KJ side hides the right column (search panels, downloads, library browser), manual rotation entry, the overlay panel, and every System subsection except the Mode toggle itself. Designed for QR-only nights where the operator just approves → plays → marks done → announces.

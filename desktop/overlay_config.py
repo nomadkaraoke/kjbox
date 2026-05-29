@@ -32,6 +32,12 @@ TYPE_DEFAULTS = {
         'bg_color': '#1a1a2e',
         'bg_opacity': 0.85,
         'padding': 10,
+        # Rotation-driven ticker fields. Engine ignores them when source=='static'.
+        'source': 'static',
+        'prefix': 'Up next: ',
+        'count': 5,
+        'separator': '   ',
+        'empty_text': 'Sign up at the booth!',
     },
     'static_text': {
         'text': '',
@@ -77,6 +83,10 @@ TYPE_DEFAULTS = {
         'custom_y': None,
         'size': 180,
         'padding': 10,
+        # Visual polish so QR can sit on top of video/ticker.
+        'bg_color': '#000000',
+        'bg_opacity': 1.0,
+        'corner_radius': 0,
     },
 }
 
@@ -121,8 +131,9 @@ def validate_overlay(overlay):
 
     # Type-specific validation
     if overlay_type == 'ticker':
-        if not config.get('text'):
-            return False, 'Ticker overlay requires text'
+        source = config.get('source', 'static')
+        if source == 'static' and not config.get('text'):
+            return False, 'Static ticker overlay requires text'
     elif overlay_type == 'static_text':
         if not config.get('text'):
             return False, 'Static text overlay requires text'

@@ -1,5 +1,6 @@
 """OverlayManager: CRUD operations and state management for display overlays."""
 
+import copy
 import json
 import os
 import tempfile
@@ -13,6 +14,26 @@ _DEFAULT_PATH = os.path.join(
 )
 
 OVERLAY_TYPES = {'ticker', 'static_text', 'image', 'countdown', 'qr_code'}
+
+OVERLAY_PRESETS = {
+    'scan-to-sing': {
+        'type': 'qr_code',
+        'name': 'Scan to Sing',
+        'enabled': True,
+        'show_over_video': True,
+        'config': {
+            'url': '',  # Filled in by sync_event_url_overlays after creation
+            'follow_event_url': True,
+            'label': 'Scan to sing',
+            'size': 110,
+            'position': 'top-right',
+            'padding': 8,
+            'bg_color': '#000000',
+            'bg_opacity': 0.85,
+            'corner_radius': 12,
+        },
+    },
+}
 
 
 class OverlayManager:
@@ -138,6 +159,16 @@ class OverlayManager:
         self._data['overlays'] = imported
         self._save()
         return imported
+
+    def create_preset(self, preset_name):
+        """Create a new overlay from a named preset. Returns the created overlay.
+
+        Raises ValueError if the preset name is unknown.
+        """
+        if preset_name not in OVERLAY_PRESETS:
+            raise ValueError(f'Unknown preset: {preset_name}')
+        template = copy.deepcopy(OVERLAY_PRESETS[preset_name])
+        return self.create_overlay(template)
 
     def set_karaoke_playing(self, playing):
         """Update the karaoke_playing state flag."""

@@ -1742,6 +1742,20 @@ const OVERLAY_TYPE_LABELS = {
     qr_code: 'QR',
 };
 
+async function addScanToSingQR() {
+    try {
+        const resp = await fetch('/overlays/presets/scan-to-sing', { method: 'POST' });
+        if (!resp.ok) {
+            const err = await resp.json().catch(() => ({}));
+            alert(`Failed to add Scan-to-Sing QR: ${err.error || resp.statusText}`);
+            return;
+        }
+        await loadOverlays();
+    } catch (e) {
+        alert(`Failed to add Scan-to-Sing QR: ${e.message || e}`);
+    }
+}
+
 async function backupOverlays() {
     try {
         const response = await fetch('/overlays');
@@ -1872,14 +1886,20 @@ function renderOverlayList(overlays) {
 
 function onOverlayTypeChange() {
     const type = document.getElementById('overlay-type').value;
+    const source = document.getElementById('overlay-source')?.value || 'static';
     document.querySelectorAll('.overlay-field').forEach(el => {
         const types = el.dataset.types.split(',');
-        el.classList.toggle('hidden', !types.includes(type));
+        const sourceFilter = el.dataset.source;
+        let visible = types.includes(type);
+        if (visible && sourceFilter) {
+            visible = (type === 'ticker' && source === sourceFilter);
+        }
+        el.classList.toggle('hidden', !visible);
     });
-    // Set sensible default position based on type
+    // Set sensible default position based on type (and source for ticker)
     const posSelect = document.getElementById('overlay-position');
     if (type === 'ticker') {
-        posSelect.value = 'bottom';
+        posSelect.value = (source === 'rotation') ? 'top' : 'bottom';
     } else if (type === 'qr_code') {
         posSelect.value = 'bottom-right';
     } else if (type === 'countdown') {
@@ -1889,6 +1909,10 @@ function onOverlayTypeChange() {
     } else if (type === 'image') {
         posSelect.value = 'top-right';
     }
+}
+
+function onOverlayTickerSourceChange() {
+    onOverlayTypeChange();
 }
 
 function onOverlayPositionChange() {
@@ -1943,6 +1967,12 @@ function showOverlayForm(overlay) {
     document.getElementById('overlay-qr-label').value = cfg.label || '';
     document.getElementById('overlay-qr-size').value = cfg.size || 180;
 
+    document.getElementById('overlay-source').value = cfg.source || 'static';
+    document.getElementById('overlay-prefix').value = cfg.prefix != null ? cfg.prefix : 'Up next: ';
+    document.getElementById('overlay-count').value = cfg.count != null ? cfg.count : 5;
+    document.getElementById('overlay-separator').value = cfg.separator != null ? cfg.separator : '   ';
+    document.getElementById('overlay-empty-text').value = cfg.empty_text != null ? cfg.empty_text : 'Sign up at the booth!';
+
     onOverlayTypeChange();
     onOverlayPositionChange();
     onOverlayMaxWidthChange();
@@ -1967,11 +1997,23 @@ function buildOverlayConfig() {
         config.custom_y = parseInt(document.getElementById('overlay-custom-y').value) || 0;
     }
 
-    if (type === 'ticker' || type === 'static_text') {
+    if (type === 'static_text') {
         config.text = document.getElementById('overlay-text').value;
     }
     if (type === 'ticker') {
+        const source = document.getElementById('overlay-source').value;
+        config.source = source;
         config.speed = parseFloat(document.getElementById('overlay-speed').value);
+        if (source === 'rotation') {
+            config.prefix = document.getElementById('overlay-prefix').value;
+            config.count = parseInt(document.getElementById('overlay-count').value, 10) || 5;
+            config.separator = document.getElementById('overlay-separator').value;
+            config.empty_text = document.getElementById('overlay-empty-text').value;
+            // text is derived by the backend on save (rotation_ticker_sync.refresh)
+            config.text = '';
+        } else {
+            config.text = document.getElementById('overlay-text').value;
+        }
     }
     if (type === 'ticker' || type === 'static_text' || type === 'countdown') {
         config.font_size = parseInt(document.getElementById('overlay-font-size').value) || 28;

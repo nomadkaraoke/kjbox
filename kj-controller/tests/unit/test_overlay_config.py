@@ -172,3 +172,48 @@ class TestValidateOverlay:
 
     def test_all_types_recognized(self):
         assert OVERLAY_TYPES == {'ticker', 'static_text', 'image', 'countdown', 'qr_code'}
+
+
+class TestNewFieldDefaults:
+    def test_ticker_gains_source_default(self):
+        overlay = {"type": "ticker", "config": {}}
+        apply_defaults(overlay)
+        assert overlay["config"]["source"] == "static"
+        assert overlay["config"]["prefix"] == "Up next: "
+        assert overlay["config"]["count"] == 5
+        assert overlay["config"]["separator"] == "   "
+        assert overlay["config"]["empty_text"] == "Sign up at the booth!"
+
+    def test_qr_gains_bg_opacity_and_corner_radius_defaults(self):
+        overlay = {"type": "qr_code", "config": {}}
+        apply_defaults(overlay)
+        assert overlay["config"]["bg_opacity"] == 1.0
+        assert overlay["config"]["corner_radius"] == 0
+
+    def test_apply_defaults_preserves_explicit_values(self):
+        overlay = {
+            "type": "ticker",
+            "config": {"source": "rotation", "count": 3, "prefix": "Queue: "},
+        }
+        apply_defaults(overlay)
+        assert overlay["config"]["source"] == "rotation"
+        assert overlay["config"]["count"] == 3
+        assert overlay["config"]["prefix"] == "Queue: "
+
+
+class TestValidateRotationTicker:
+    def test_rotation_ticker_is_valid_without_text(self):
+        valid, err = validate_overlay({
+            "id": "x",
+            "type": "ticker",
+            "config": {"source": "rotation"},
+        })
+        assert valid, err
+
+    def test_static_ticker_still_requires_text(self):
+        valid, err = validate_overlay({
+            "id": "x",
+            "type": "ticker",
+            "config": {"source": "static"},
+        })
+        assert not valid

@@ -114,6 +114,7 @@
                         <button class="overlay-header-btn" onclick="backupOverlays()" title="Download overlay config">Backup</button>
                         <button class="overlay-header-btn" onclick="restoreOverlays()" title="Restore overlay config from file">Restore</button>
                         <input type="file" id="overlay-restore-input" accept=".json" class="hidden" onchange="handleOverlayRestore(this)">
+                        <button class="overlay-header-btn" onclick="addScanToSingQR()" title="Add a small QR code in the top-right for singers to scan">Scan to Sing</button>
                         <button class="overlay-add-btn" id="overlay-add-btn" onclick="showOverlayForm()">+ Add</button>
                     </div>
                 </div>
@@ -438,10 +439,37 @@
                     </select>
                 </div>
 
+                <!-- Ticker: source (static vs rotation) -->
+                <div class="overlay-form-row overlay-field" data-types="ticker">
+                    <label for="overlay-source">Source</label>
+                    <select id="overlay-source" onchange="onOverlayTickerSourceChange()">
+                        <option value="static">Static text</option>
+                        <option value="rotation">Rotation: upcoming singers</option>
+                    </select>
+                </div>
+
                 <!-- Ticker & Static Text: text -->
                 <div class="overlay-form-row overlay-field" data-types="ticker,static_text">
                     <label for="overlay-text">Text</label>
                     <textarea id="overlay-text" rows="2" placeholder="Enter overlay text..."></textarea>
+                </div>
+
+                <!-- Ticker (rotation source): prefix / count / separator / empty -->
+                <div class="overlay-form-row overlay-field" data-types="ticker" data-source="rotation">
+                    <label for="overlay-prefix">Prefix</label>
+                    <input type="text" id="overlay-prefix" value="Up next: " placeholder="Up next: ">
+                </div>
+                <div class="overlay-form-row overlay-field" data-types="ticker" data-source="rotation">
+                    <label for="overlay-count">Show next N singers</label>
+                    <input type="number" id="overlay-count" min="1" max="20" value="5">
+                </div>
+                <div class="overlay-form-row overlay-field" data-types="ticker" data-source="rotation">
+                    <label for="overlay-separator">Separator</label>
+                    <input type="text" id="overlay-separator" value="   " placeholder="   ">
+                </div>
+                <div class="overlay-form-row overlay-field" data-types="ticker" data-source="rotation">
+                    <label for="overlay-empty-text">When rotation is empty</label>
+                    <input type="text" id="overlay-empty-text" value="Sign up at the booth!" placeholder="Sign up at the booth!">
                 </div>
 
                 <!-- Static Text: font family -->

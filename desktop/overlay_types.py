@@ -286,6 +286,24 @@ def _make_bg_color(hex_color, opacity):
     return (int(r * opacity), int(g * opacity), int(b * opacity))
 
 
+def _build_rounded_mask(width, height, radius):
+    """Return an 8-bit alpha mask (PIL Image, mode='L') for a rounded rectangle.
+
+    Returns None when radius<=0 (caller should skip the mask step).
+    """
+    if not _pil_available or radius <= 0 or width <= 0 or height <= 0:
+        return None
+    radius = min(int(radius), min(width, height) // 2)
+    mask = Image.new('L', (width, height), 0)
+    draw = ImageDraw.Draw(mask)
+    try:
+        draw.rounded_rectangle([(0, 0), (width - 1, height - 1)], radius=radius, fill=255)
+    except (AttributeError, TypeError):
+        # Older Pillow without rounded_rectangle — fall back to plain rect
+        draw.rectangle([(0, 0), (width - 1, height - 1)], fill=255)
+    return mask
+
+
 class BaseOverlay:
     """Base class for all overlay types."""
 
@@ -686,6 +704,15 @@ class QRCodeOverlay(BaseOverlay):
         custom_y = self.config.get('custom_y')
         self._x, self._y = calculate_position(position, self._width, self._height, custom_x, custom_y)
 
+        self._bg_color = _make_bg_color(
+            self.config.get('bg_color', '#000000'),
+            self.config.get('bg_opacity', 1.0),
+        )
+        self._rounded_mask = _build_rounded_mask(
+            self._width, self._height,
+            int(self.config.get('corner_radius', 0) or 0),
+        )
+
     def _generate_qr(self, url, size):
         """Generate a QR code as a pygame surface."""
         if not qrcode or not url:
@@ -720,7 +747,18 @@ class QRCodeOverlay(BaseOverlay):
     def render(self):
         if not self.window or not self.surface:
             return
-        self.surface.fill((0, 0, 0))
+
+        if self._rounded_mask is None:
+            self.surface.fill(self._bg_color)
+        else:
+            # Build the full overlay card in PIL, then blit to pygame as one surface
+            r, g, b = self._bg_color
+            card = Image.new('RGBA', (self._width, self._height), (r, g, b, 255))
+            card.putalpha(self._rounded_mask)
+            raw = card.tobytes()
+            bg_surf = pygame.image.frombytes(raw, card.size, 'RGBA')
+            self.surface.fill((0, 0, 0))
+            self.surface.blit(bg_surf, (0, 0))
 
         # Draw QR code
         if self._qr_surface:
