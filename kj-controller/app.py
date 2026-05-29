@@ -246,6 +246,21 @@ def create_app(config=None):
         get_linked_phone_for_entry=_phone_for_rotation_entry,
     )
 
+    # ----------------------------------------------------------------
+    # RotationTickerSync — keeps rotation-driven ticker overlays in sync
+    # ----------------------------------------------------------------
+    from rotation_ticker_sync import RotationTickerSync
+
+    flask_app.rotation.rotation_ticker_sync = RotationTickerSync(
+        overlay_manager=flask_app.overlay_manager,
+        rotation_store=flask_app.rotation.store,
+    )
+    try:
+        flask_app.rotation.rotation_ticker_sync.refresh()
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception("initial rotation ticker refresh failed")
+
     flask_app.sleep_manager = SleepManager()
     flask_app.download_queue = {'items': [], 'worker_running': False}
     flask_app._download_lock = threading.Lock()
@@ -396,6 +411,19 @@ def start_app():  # pragma: no cover
         get_linked_phone_for_entry=_phone_for_rotation_entry,
     )
     log_message("Push dispatcher ready (Web Push).", cfg)
+
+    # RotationTickerSync — keeps rotation-driven ticker overlays in sync.
+    from rotation_ticker_sync import RotationTickerSync
+
+    flask_app.rotation.rotation_ticker_sync = RotationTickerSync(
+        overlay_manager=flask_app.overlay_manager,
+        rotation_store=flask_app.rotation.store,
+    )
+    try:
+        flask_app.rotation.rotation_ticker_sync.refresh()
+    except Exception:
+        log_message("Initial rotation ticker refresh failed (non-critical).", cfg)
+    log_message("Rotation ticker sync ready.", cfg)
 
     flask_app.sleep_manager = SleepManager()
     if flask_app.sleep_manager.is_sleeping():
