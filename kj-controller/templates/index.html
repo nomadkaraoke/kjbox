@@ -1084,6 +1084,35 @@
                     </div>
                     <p class="sing-hint">Pin a memorable 4-digit code, or generate a random one. Either way invalidates the previous QR.</p>
                 </div>
+                <div class="sing-requests-row sing-sms-row">
+                    <div class="sing-sms-header">
+                        <strong>SMS notifications</strong>
+                        <span id="sing-sms-status" class="sing-sms-status"></span>
+                    </div>
+                    <textarea id="sing-sms-template" class="sing-sms-template" rows="3"
+                        placeholder="Loading template…"></textarea>
+                    <p class="sing-hint">
+                        Variables: <code>{first_name}</code> (max 20),
+                        <code>{song}</code> (max 60), <code>{artist}</code> (max 40).
+                        Truncated with “…” if longer.
+                    </p>
+                    <div class="sing-sms-actions">
+                        <label class="sing-sms-region-label">
+                            Default country code:
+                            <select id="sing-sms-region">
+                                <option value="US">US (+1)</option>
+                                <option value="AU">AU (+61)</option>
+                                <option value="GB">GB (+44)</option>
+                                <option value="CA">CA (+1)</option>
+                                <option value="NZ">NZ (+64)</option>
+                                <option value="IE">IE (+353)</option>
+                            </select>
+                        </label>
+                        <span class="sing-sms-spacer"></span>
+                        <button class="sing-sms-reset-btn" onclick="resetSingSmsTemplate()">Reset to default</button>
+                        <button class="sing-sms-save-btn" onclick="saveSingSmsTemplate()">Save</button>
+                    </div>
+                </div>
                 <div class="sing-requests-row sing-qr-row">
                     <div class="sing-qr-card">
                         <div>Tunnel QR</div>

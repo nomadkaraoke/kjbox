@@ -17,6 +17,10 @@ ENABLED_KEY = "request_token_enabled"
 AUTO_APPROVE_KEY = "request_auto_approve"
 ACCEPT_MAKE_REQUESTS_KEY = "sing_accept_make_requests"
 SIMPLE_MODE_KEY = "kj_simple_mode"
+SMS_TEMPLATE_KEY = "sms_template"
+SMS_DEFAULT_REGION_KEY = "sms_default_region"
+
+DEFAULT_SMS_REGION = "US"
 
 # Token is a 4-digit numeric code. 10 000 combinations — small enough to read off
 # the venue screen and type on a phone numpad, large enough that the rate-limited
@@ -268,6 +272,40 @@ class SingStore:
 
     def set_simple_mode(self, enabled):
         self._set_meta(SIMPLE_MODE_KEY, "1" if enabled else "0")
+
+    # ------------------------------------------------------------------
+    # SMS settings — per-event template + default region for normalization
+    # ------------------------------------------------------------------
+
+    def get_sms_template(self):
+        """Return the per-event SMS template, or None if unset (caller falls
+        back to the in-code DEFAULT_TEMPLATE)."""
+        return self._get_meta(SMS_TEMPLATE_KEY)
+
+    def set_sms_template(self, template):
+        """Persist a custom template. ``None`` clears the override so the
+        in-code default takes over again."""
+        if template is None:
+            conn = self._get_conn()
+            conn.execute("DELETE FROM rotation_meta WHERE key = ?", (SMS_TEMPLATE_KEY,))
+            conn.commit()
+            return
+        if not isinstance(template, str):
+            raise ValueError("template must be a string")
+        template = template.strip()
+        if not template:
+            raise ValueError("template must not be empty")
+        self._set_meta(SMS_TEMPLATE_KEY, template)
+
+    def get_sms_default_region(self):
+        """ISO 3166-1 alpha-2 region used to normalize bare local-format
+        phones. Defaults to US for our most common venue."""
+        return self._get_meta(SMS_DEFAULT_REGION_KEY, DEFAULT_SMS_REGION)
+
+    def set_sms_default_region(self, region):
+        if not isinstance(region, str) or len(region) != 2 or not region.isalpha():
+            raise ValueError("region must be an ISO 3166-1 alpha-2 code (e.g. 'US')")
+        self._set_meta(SMS_DEFAULT_REGION_KEY, region.upper())
 
     # ------------------------------------------------------------------
     # Request CRUD
