@@ -3307,6 +3307,7 @@ def get_sing_config():
         "enabled": store.is_enabled(),
         "auto_approve": store.is_auto_approve(),
         "accept_make_requests": store.is_accepting_make_requests(),
+        "simple_mode": store.is_simple_mode(),
         "public_url": get_event_url(cfg, token, scope="public"),
         "local_url": get_event_url(cfg, token, scope="local"),
         "pending_count": store.count_pending(),

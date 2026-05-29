@@ -141,6 +141,14 @@ class TestConfig:
         data = resp.get_json()
         assert data["accept_make_requests"] is True  # default on
 
+    def test_get_config_exposes_simple_mode(self, admin_client):
+        """The admin config endpoint surfaces the simple_mode flag (default off)."""
+        resp = admin_client.get("/rotation/requests/config")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert "simple_mode" in data
+        assert data["simple_mode"] is False  # default off
+
     def test_toggle_accept_make_requests_off(self, admin_client, admin_app):
         resp = admin_client.post(
             "/rotation/requests/config",
