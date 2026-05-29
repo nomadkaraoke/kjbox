@@ -33,3 +33,55 @@ def compose_ticker_text(entries, prefix, count, separator, empty_text):
 
     slots = [f"{i}. {e['singer']}" for i, e in enumerate(slice_, start=1)]
     return f"{prefix}{separator.join(slots)}"
+
+
+class RotationTickerSync:
+    """Updates ticker overlays whose source is 'rotation' from the rotation queue.
+
+    Hooked into RotationManager._after_mutation(). Best-effort: never raises.
+    """
+
+    def __init__(self, overlay_manager, rotation_store):
+        self.overlay_manager = overlay_manager
+        self.rotation_store = rotation_store
+
+    def refresh(self):
+        """Recompose text for every rotation ticker. Returns count updated."""
+        try:
+            overlays = self.overlay_manager.list_overlays()
+        except Exception:
+            logger.exception("rotation_ticker_sync: list_overlays failed")
+            return 0
+
+        try:
+            entries = self.rotation_store.get_entries()
+        except Exception:
+            logger.exception("rotation_ticker_sync: get_entries failed")
+            return 0
+
+        updated = 0
+        for overlay in overlays:
+            if overlay.get('type') != 'ticker':
+                continue
+            cfg = overlay.get('config') or {}
+            if cfg.get('source') != 'rotation':
+                continue
+
+            new_text = compose_ticker_text(
+                entries=entries,
+                prefix=cfg.get('prefix', 'Up next: '),
+                count=int(cfg.get('count', 5) or 0),
+                separator=cfg.get('separator', '   '),
+                empty_text=cfg.get('empty_text', ''),
+            )
+            if cfg.get('text') == new_text:
+                continue  # No-op: avoid spurious file write
+
+            new_cfg = dict(cfg)
+            new_cfg['text'] = new_text
+            try:
+                self.overlay_manager.update_overlay(overlay['id'], {'config': new_cfg})
+                updated += 1
+            except Exception:
+                logger.exception("rotation_ticker_sync: update_overlay failed")
+        return updated
