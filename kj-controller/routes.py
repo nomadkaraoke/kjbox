@@ -21,6 +21,7 @@ import youtube_search
 from catalog import LATIN_SPECIAL_MAP
 from config import APP_DIR, RENDER_MODES, load_config, save_config_value
 from playback import RendererSwitchRejected
+from sing import get_event_url, sync_event_url_overlays
 from sleep_mode import SleepManager
 from utils import log_message, build_divebar_filename
 
@@ -1044,9 +1045,56 @@ def create_overlay():
         return jsonify({"error": "type is required"}), 400
     try:
         overlay = current_app.overlay_manager.create_overlay(data)
-        return jsonify(overlay), 201
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
+
+    _maybe_refresh_rotation_ticker(overlay)
+    overlay = current_app.overlay_manager.get_overlay(overlay['id'])
+    return jsonify(overlay), 201
+
+
+@routes_bp.route('/overlays/presets/<preset_name>', methods=['POST'])
+def create_overlay_preset(preset_name):
+    """Create a new overlay from a named preset."""
+    try:
+        overlay = current_app.overlay_manager.create_preset(preset_name)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+
+    if preset_name == 'scan-to-sing':
+        try:
+            url = _scan_to_sing_url()
+            sync_event_url_overlays(current_app.overlay_manager, url)
+            overlay = current_app.overlay_manager.get_overlay(overlay['id'])
+        except Exception:
+            import logging
+            logging.getLogger(__name__).exception("scan-to-sing url sync failed")
+
+    return jsonify(overlay), 201
+
+
+def _scan_to_sing_url():
+    """Compose the current public sing URL for the active token."""
+    cfg = current_app.kj_config or {}
+    token = current_app.sing_store.get_token()
+    return get_event_url(cfg, token, scope='public')
+
+
+def _maybe_refresh_rotation_ticker(overlay):
+    """If the overlay is a rotation-driven ticker, trigger an immediate refresh."""
+    if (overlay or {}).get('type') != 'ticker':
+        return
+    cfg = (overlay.get('config') or {})
+    if cfg.get('source') != 'rotation':
+        return
+    sync = getattr(current_app.rotation, 'rotation_ticker_sync', None)
+    if sync is None:
+        return
+    try:
+        sync.refresh()
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception("rotation ticker refresh on save failed")
 
 
 @routes_bp.route('/overlays/<overlay_id>', methods=['GET'])
@@ -1067,6 +1115,9 @@ def update_overlay(overlay_id):
     overlay = current_app.overlay_manager.update_overlay(overlay_id, data)
     if not overlay:
         return jsonify({"error": "Overlay not found"}), 404
+
+    _maybe_refresh_rotation_ticker(overlay)
+    overlay = current_app.overlay_manager.get_overlay(overlay_id)
     return jsonify(overlay)
 
 
