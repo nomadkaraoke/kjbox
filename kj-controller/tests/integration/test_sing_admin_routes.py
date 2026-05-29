@@ -170,6 +170,33 @@ class TestConfig:
         )
         assert admin_app.sing_store.is_auto_approve() is True
 
+    def test_toggle_simple_mode_on(self, admin_client, admin_app):
+        resp = admin_client.post(
+            "/rotation/requests/config",
+            json={"simple_mode": True},
+        )
+        assert resp.status_code == 200
+        assert resp.get_json()["changed"]["simple_mode"] is True
+        # Confirm via GET
+        resp2 = admin_client.get("/rotation/requests/config")
+        assert resp2.get_json()["simple_mode"] is True
+
+    def test_toggle_simple_mode_isolated_from_other_flags(
+        self, admin_client, admin_app,
+    ):
+        """Toggling simple_mode must not reset auto_approve or
+        accept_make_requests."""
+        admin_app.sing_store.set_auto_approve(True)
+        admin_app.sing_store.set_accepting_make_requests(False)
+        resp = admin_client.post(
+            "/rotation/requests/config", json={"simple_mode": True},
+        )
+        assert resp.status_code == 200
+        cfg = admin_client.get("/rotation/requests/config").get_json()
+        assert cfg["simple_mode"] is True
+        assert cfg["auto_approve"] is True
+        assert cfg["accept_make_requests"] is False
+
 
 class TestQr:
     def test_qr_svg_returns_svg(self, admin_client):

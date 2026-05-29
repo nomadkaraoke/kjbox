@@ -3364,6 +3364,10 @@ def update_sing_config():
         store.set_accepting_make_requests(bool(data["accept_make_requests"]))
         changed["accept_make_requests"] = bool(data["accept_make_requests"])
 
+    if "simple_mode" in data:
+        store.set_simple_mode(bool(data["simple_mode"]))
+        changed["simple_mode"] = bool(data["simple_mode"])
+
     return jsonify({"success": True, "changed": changed})
 
 
