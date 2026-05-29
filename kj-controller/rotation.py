@@ -35,6 +35,7 @@ class RotationManager:
         self.sync = None
         self.media = None  # Set by app.py if MediaIndex is available
         self.push_dispatcher = None  # Set by app.py if Web Push is configured
+        self.rotation_ticker_sync = None  # Set by app.py
 
         if sheet_id and credentials_file:
             from rotation_sync import SheetSync
@@ -266,6 +267,12 @@ class RotationManager:
                 # Push is non-critical — never let a dispatcher bug block rotation ops.
                 import logging
                 logging.getLogger(__name__).exception("push dispatch notify failed")
+        if self.rotation_ticker_sync is not None:
+            try:
+                self.rotation_ticker_sync.refresh()
+            except Exception:
+                import logging
+                logging.getLogger(__name__).exception("rotation_ticker_sync refresh failed")
         if self.sync is not None:
             # Fire-and-forget: sync runs in its own daemon thread already.
             # Calling sync_now() here would block; instead, the background
