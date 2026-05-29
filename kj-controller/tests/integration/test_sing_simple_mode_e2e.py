@@ -123,3 +123,31 @@ class TestSimpleModeE2E:
             ),
         )
         assert sub_kn.status_code == 200, sub_kn.get_json()
+
+    def test_landing_dataset_carries_simple_mode_flag(
+        self, client, sing_app, token,
+    ):
+        """The landing template forwards the flag so singer JS has it before
+        the first search."""
+        # Default off
+        resp = client.get(f"/sing/?t={token}")
+        assert resp.status_code == 200
+        assert b'data-simple-mode="0"' in resp.data
+        # Flip on
+        sing_app.sing_store.set_simple_mode(True)
+        resp2 = client.get(f"/sing/?t={token}")
+        assert b'data-simple-mode="1"' in resp2.data
+
+    def test_search_response_includes_simple_mode(
+        self, client, sing_app, token, monkeypatch,
+    ):
+        import karaoke_nerds
+        monkeypatch.setattr(karaoke_nerds, "search", lambda *a, **kw: [])
+        # Default off
+        r1 = client.get(f"/sing/search?q=anything&t={token}")
+        assert r1.status_code == 200
+        assert r1.get_json()["simple_mode"] is False
+        # Flip on
+        sing_app.sing_store.set_simple_mode(True)
+        r2 = client.get(f"/sing/search?q=anything&t={token}")
+        assert r2.get_json()["simple_mode"] is True

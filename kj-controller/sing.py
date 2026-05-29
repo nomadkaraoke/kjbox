@@ -382,6 +382,7 @@ def landing():
         request_id=request.args.get("r", ""),
         vapid_public_key=current_app.kj_config.get("vapid_public_key", ""),
         make_requests_enabled=store.is_accepting_make_requests(),
+        simple_mode=store.is_simple_mode(),
     )
 
 
@@ -498,6 +499,7 @@ def search():
     response = {
         "songs": data["songs"],
         "make_requests_enabled": store.is_accepting_make_requests(),
+        "simple_mode": store.is_simple_mode(),
     }
     if data.get("karaoke_nerds_timeout"):
         response["karaoke_nerds_timeout"] = True
