@@ -22,7 +22,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import pygame
 
 from overlay_config import apply_defaults, get_overlays_path
-from overlay_types import create_overlay
+from overlay_types import QRCodeOverlay, TickerOverlay, create_overlay
 
 FPS = 30
 CONFIG_POLL_INTERVAL = 1.0  # seconds between checking overlays.json mtime
@@ -113,6 +113,8 @@ class OverlayEngine:
                     overlay.render()
                     self.overlays[oid] = overlay
 
+        self._restack_qr_above_ticker()
+
     def update_visibility(self):
         """Show/hide desktop-only overlays based on karaoke_playing state."""
         for overlay in self.overlays.values():
@@ -126,6 +128,30 @@ class OverlayEngine:
                     overlay.hide()
                 elif not self.karaoke_playing and not overlay.visible:
                     overlay.show()
+        self._restack_qr_above_ticker()
+
+    def _restack_qr_above_ticker(self):
+        """Ensure QR overlays are mapped on top of any visible ticker by
+        destroying and re-creating their windows. X11 maps new windows on top
+        of existing always-on-top peers, which is the cheapest deterministic
+        fix for stacking-order issues between two always_on_top windows.
+        """
+        qr_overlays = [
+            ov for ov in self.overlays.values()
+            if isinstance(ov, QRCodeOverlay) and ov.visible
+        ]
+        if not qr_overlays:
+            return
+        has_visible_ticker = any(
+            isinstance(ov, TickerOverlay) and ov.visible
+            for ov in self.overlays.values()
+        )
+        if not has_visible_ticker:
+            return
+        for ov in qr_overlays:
+            ov.destroy_window()
+            ov.create_window()
+            ov.render()
 
     def run(self):
         """Main render loop."""
