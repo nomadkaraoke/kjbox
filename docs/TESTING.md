@@ -195,3 +195,57 @@ one Android device and one iPhone before shipping push changes to prod.
 - [ ] With auto-approve **enabled**, submit a `kj_pick` → still lands in pending queue (auto-approve is skipped for `kj_pick`). Submit a `local` → still auto-approves.
 - [ ] Reject a `kj_pick` request (no version picked) → request row's `source_type` stays `kj_pick` (unbound), status = `rejected`.
 - [ ] Admin sends `POST /rotation/requests/<id>/approve` with no `version_index` on a `kj_pick` → 400 with "version_index required". Row stays pending.
+
+### Simple KJ Mode — stand-in operator UI
+
+Persistent server flag `kj_simple_mode` (in `sing_meta`); UI is CSS-driven via
+`body.simple-mode` toggled by the 2s `/status` poll. Defaults to OFF.
+
+**KJ controller side:**
+
+- [ ] System → Mode subsection is visible at the top of the System container in advanced mode (default). Hint text reads "Hides search panels, manual add, and advanced controls. Singers can only request from the local library, Divebar, or Karaoke Nerds."
+- [ ] Flip the Simple Mode switch ON → within 2s, body gains `.simple-mode` class. Right column (KN/YT/Divebar search, Upload/Download, Available Songs, Browser Mode) disappears. Overlays panel disappears. Single column centers and caps at ~720px.
+- [ ] Rotation header buttons trim: Refresh + Requests + pending-count badge stay; + Add, New Rotation, Restore, Paths, Undo/Redo are hidden.
+- [ ] Manual rotation add form (`#rotation-add-form`) cannot be opened — even if visible briefly in DOM via toggle, CSS hides it.
+- [ ] System section collapses to just the Mode subsection. Media & Output, Maintenance, Sleep Mode, Power (Restart App / Reboot / Shutdown), Stats are all hidden.
+- [ ] Now-playing bar stays visible; pitch buttons (`#np-pitch-group`) inside it are hidden but Pause / Fade Out / Stop remain.
+- [ ] Screen Preview (VNC) panel stays visible.
+- [ ] A guidance banner appears above the rotation list reading "Simple Mode is ON · Approve incoming requests → tap a row to play → mark done → announce next singer."
+- [ ] Flip Simple Mode OFF → everything restores within 2s. Banner disappears.
+- [ ] Open the same KJ UI in a second tab. Flip the toggle in tab A → tab B converges within 2s (no manual refresh).
+
+**Singer SPA side:**
+
+- [ ] With Simple Mode ON, reload the singer SPA. `#sing-root` carries `data-simple-mode="1"`.
+- [ ] Search for something that returns zero hits → empty-state shows a single header "We don't have that one." + paragraph "Try another search, or talk to the KJ at the front." No paste-YouTube card, no ask-KJ card, no DIY card.
+- [ ] Search a multi-version song (e.g. "bohemian rhapsody") → the "Let the KJ pick the best version →" CTA is absent. Versions list renders inline (no toggle button). Singer must tap a specific version's "Pick this version →" button.
+- [ ] Search a single-version song → "Add to queue" CTA still appears (singer can still pick songs with one version).
+- [ ] Singer's confirm screen subtitle reads "If we don't have it, just ask the KJ at the front." (advanced mode shows "you'll get options for how to get it on screen.").
+- [ ] Pick a `local` / `divebar` / `kn` version and submit → request lands in pending queue. KJ approves → rotation plays normally.
+
+**Server-side enforcement (defence-in-depth):**
+
+- [ ] With Simple Mode ON, simulate a stale singer client by curl:
+  ```bash
+  curl -s -X POST "https://sing.nomadkaraoke.com/sing/submit?t=<token>" \
+    -H "Content-Type: application/json" \
+    -d '{"singer_name":"Test","phone":"+1 555 0100","song_artist":"X","song_title":"Y","source_type":"youtube","source_ref":"https://youtu.be/test"}'
+  ```
+  Expect HTTP 400 with `{"error": "simple_mode_disabled_source"}`.
+- [ ] Same with `source_type=make` → 400 `simple_mode_disabled_source`. (When Simple Mode is on, simple_mode wins over the existing `make_requests_disabled` check.)
+- [ ] Same with `source_type=kj_pick` → 400 `simple_mode_disabled_source`.
+- [ ] Same with `source_type=local|divebar|kn` (and a real ref) → 200.
+
+**Stale-PWA recovery (no automated test):**
+
+- [ ] Load `/sing/?t=<token>` with Simple Mode OFF. Type a query, find a multi-version song, tap "Let the KJ pick the best version →" — but don't submit yet.
+- [ ] In another browser, KJ flips Simple Mode ON.
+- [ ] Back in the singer browser, complete the confirm screen and submit → server returns 400. Error message in the UI reads "Song requests are currently restricted. Please refresh this page for the updated options." (not the generic "ask the KJ if requests are paused").
+
+**Toggle isolation:**
+
+- [ ] Set `auto_approve=true` and `accept_make_requests=false` via the Requests modal in advanced mode. Then flip Simple Mode ON, then OFF. Confirm via `GET /rotation/requests/config` that `auto_approve` is still true and `accept_make_requests` is still false — only `simple_mode` changed.
+
+**Pre-existing pending requests when flag flips:**
+
+- [ ] In advanced mode, submit a YouTube request from the singer side (stays pending). Now flip Simple Mode ON. The pending YouTube request remains visible in the Pending Requests panel and is still approvable (server only enforces allowlist on NEW submissions, not retroactively).
