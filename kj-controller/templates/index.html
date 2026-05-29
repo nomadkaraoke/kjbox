@@ -174,6 +174,22 @@
             <div class="container system-controls">
                 <h2>System</h2>
 
+                <div class="system-subsection" id="kj-mode-section">
+                    <div class="system-subsection-label">Mode</div>
+                    <div class="system-subsection-row">
+                        <div class="simple-mode-toggle">
+                            <span>Simple Mode (for stand-in KJ)</span>
+                            <label class="overlay-toggle">
+                                <input type="checkbox" id="simple-mode-switch" onchange="toggleSimpleMode(this.checked)">
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+                    </div>
+                    <p class="simple-mode-hint">
+                        Hides search panels, manual add, and advanced controls. Singers can only request from the local library, Divebar, or Karaoke Nerds.
+                    </p>
+                </div>
+
                 <div class="system-subsection">
                     <div class="system-subsection-label">Media & Output</div>
                     <div class="controls-row">

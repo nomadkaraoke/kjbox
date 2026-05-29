@@ -3193,3 +3193,66 @@ body {
     cursor: pointer;
 }
 .kn-prefs-reset:hover { background: #666; }
+
+/* ------------------------------------------------------------------
+ * Simple Mode — stand-in KJ UI surface
+ * Toggled via body.simple-mode (set by app.js from /status response).
+ * Spec: docs/archive/2026-05-22-simple-kj-mode-design.md
+ * ------------------------------------------------------------------ */
+
+body.simple-mode .kn-search-section,
+body.simple-mode .yt-search-section,
+body.simple-mode .db-search-section,
+body.simple-mode .download-section,
+body.simple-mode .available-songs,
+body.simple-mode .browser-mode-panel,
+body.simple-mode .overlay-panel,
+body.simple-mode #col2,
+body.simple-mode .rotation-add-btn,
+body.simple-mode .rotation-new-btn,
+body.simple-mode .rotation-restore-btn,
+body.simple-mode .rotation-paths-btn,
+body.simple-mode .rotation-undo-btn,
+body.simple-mode .rotation-redo-btn,
+body.simple-mode #rotation-add-form,
+body.simple-mode #np-pitch-group,
+body.simple-mode .system-subsection:not(#kj-mode-section) {
+    display: none !important;
+}
+
+body.simple-mode .main-layout {
+    justify-content: center;
+}
+
+body.simple-mode #col1 {
+    max-width: 720px;
+    width: 100%;
+}
+
+/* Mode toggle styling — matches the existing autodeploy-toggle / sleep-mode-toggle look */
+.simple-mode-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    width: 100%;
+}
+
+.simple-mode-hint {
+    font-size: 0.85rem;
+    color: var(--muted-text, #888);
+    margin: 0.5rem 0 0 0;
+    line-height: 1.4;
+}
+
+/* The always-on guidance banner above the rotation list */
+.simple-mode-banner {
+    background: rgba(255, 77, 207, 0.12);
+    border: 1px solid rgba(255, 77, 207, 0.4);
+    border-radius: 6px;
+    padding: 0.6rem 0.8rem;
+    margin: 0 0 0.6rem 0;
+    color: #ffb3e6;
+    font-size: 0.9rem;
+    line-height: 1.4;
+}

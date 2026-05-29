@@ -836,6 +836,11 @@ async function updateStatus() {
         const data = await response.json();
         if (response.ok) {
             const state = data.state || 'stopped';
+            // Simple KJ Mode — apply body class first so subsequent renders
+            // see the right CSS state. /status carries the authoritative flag.
+            if (typeof data.simple_mode === 'boolean') {
+                applySimpleMode(data.simple_mode);
+            }
             document.getElementById('player-state').textContent = state;
             document.getElementById('current-filler').textContent = data.current_filler_track || 'None';
 
@@ -2259,6 +2264,58 @@ async function toggleAutoDeploy(active) {
     } catch (e) {
         log('Failed to toggle auto-deploy', 'error');
         fetchAutoDeployStatus(); // revert switch to actual state
+    }
+}
+
+// --- Simple KJ Mode ---
+
+// Sequence counter so out-of-order POST responses can't override the latest
+// user intent (rare, but possible if the user spam-toggles).
+let _simpleModeReqSeq = 0;
+
+async function toggleSimpleMode(checked) {
+    const reqSeq = ++_simpleModeReqSeq;
+    try {
+        const resp = await fetch('/rotation/requests/config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ simple_mode: !!checked }),
+        });
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        // Apply optimistically; /status poll will reconcile in <=2s anyway.
+        // Skip if a newer toggle has fired since — its response will win.
+        if (reqSeq === _simpleModeReqSeq) applySimpleMode(!!checked);
+    } catch (e) {
+        if (reqSeq !== _simpleModeReqSeq) return;
+        console.error('toggleSimpleMode failed:', e);
+        alert('Could not change Simple Mode. Please try again.');
+        // The next /status poll will revert the checkbox to actual server state.
+    }
+}
+
+function applySimpleMode(on) {
+    document.body.classList.toggle('simple-mode', !!on);
+    // Keep the switch reflecting reality even if /status changed underfoot.
+    const sw = document.getElementById('simple-mode-switch');
+    if (sw) sw.checked = !!on;
+    // Banner — render or remove based on flag.
+    const rotationPanel = document.querySelector('.rotation-panel');
+    let banner = document.getElementById('simple-mode-banner');
+    if (on && rotationPanel && !banner) {
+        banner = document.createElement('div');
+        banner.id = 'simple-mode-banner';
+        banner.className = 'simple-mode-banner';
+        banner.textContent =
+            'Simple Mode is ON · Approve incoming requests → tap a row to play → mark done → announce next singer.';
+        // Insert before the rotation list (after the header).
+        const list = document.getElementById('rotation-list');
+        if (list) {
+            rotationPanel.insertBefore(banner, list);
+        } else {
+            rotationPanel.appendChild(banner);
+        }
+    } else if (!on && banner) {
+        banner.remove();
     }
 }
 

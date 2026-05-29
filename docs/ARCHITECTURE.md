@@ -148,7 +148,7 @@ utils.py → (stdlib only)
 | POST | `/rescan` | Reload config and rescan media folders |
 | GET | `/filler_music` | List available filler music files |
 | POST | `/filler_music` | Change active filler music track |
-| GET | `/status` | Get player state, current track, timing. Also surfaces the `download_queue` (all queue items, with `source`/`source_detail`) and per-rotation `rotation_downloads` map (`status`/`progress`/`file_path`/`source`/`source_detail`) so the UI can show GCS-vs-Drive-vs-YouTube on download badges in real time. |
+| GET | `/status` | Get player state, current track, timing. Also surfaces the `download_queue` (all queue items, with `source`/`source_detail`) and per-rotation `rotation_downloads` map (`status`/`progress`/`file_path`/`source`/`source_detail`) so the UI can show GCS-vs-Drive-vs-YouTube on download badges in real time. Also carries `simple_mode` so the KJ UI applies the `body.simple-mode` CSS class on every 2s poll. |
 | POST | `/fix_audio` | Emergency: restart VLC instances |
 | GET | `/audio_device` | Get current and available audio devices |
 | POST | `/audio_device` | Switch audio output device (temporary, not persisted) |
@@ -199,15 +199,15 @@ utils.py → (stdlib only)
 | GET | `/rotation/sync-status` | Get Sheet sync status (`{last_sync, is_online, next_sync_in}`) |
 | POST | `/rotation/restore` | Restore rotation from snapshot (`{entries}` for undo/redo) or from Google Sheet backup (no body) |
 | GET  | `/rotation/requests` | List public sing requests (filter by `?status=pending\|approved\|rejected`) + counts |
-| GET  | `/rotation/requests/config` | Current event token, enabled flag, auto-approve flag, public/local URLs, pending count |
-| POST | `/rotation/requests/config` | Regenerate token / toggle enabled / toggle auto-approve |
+| GET  | `/rotation/requests/config` | Current event token, enabled flag, auto-approve flag, accept-make-requests flag, simple-mode flag, public/local URLs, pending count |
+| POST | `/rotation/requests/config` | Regenerate token / toggle enabled / toggle auto-approve / toggle accept-make-requests / toggle simple-mode |
 | GET  | `/rotation/requests/qr.svg` | SVG QR code for event URL (`?scope=public\|local`) |
 | POST | `/rotation/requests/<id>/approve` | Approve request → create rotation entry via source-specific dispatch. Optional body `{skip_download: true}` for `youtube`/`kn`/`divebar` creates an unlinked entry (KJ uses the rotation 🔗 button to attach a file manually) |
 | POST | `/rotation/requests/<id>/edit` | Edit singer name / artist / title on a pending request |
 | POST | `/rotation/requests/<id>/reject` | Mark request rejected (silent to singer) |
 | GET  | `/sing/` | **PUBLIC** — singer-facing landing page (requires `?t=<token>`) |
 | GET  | `/sing/search` | **PUBLIC** — search local + Karaoke Nerds catalog (requires token) |
-| POST | `/sing/submit` | **PUBLIC** — create a pending request (rate-limited per IP) |
+| POST | `/sing/submit` | **PUBLIC** — create a pending request (rate-limited per IP). When `simple_mode` is on, the source allowlist is narrowed to `local`/`divebar`/`kn` and other types return 400 `simple_mode_disabled_source`. |
 | GET  | `/sing/status/<id>` | **PUBLIC** — singer's own request status + rotation position |
 | GET  | `/sing/my-requests` | **PUBLIC** — multi-id status feed (`?ids=1,2,3`, max 20) for the multi-song done screen |
 | GET  | `/sing/now` | **PUBLIC** — lightweight now-singing / up-next / queued-count for the landing widget |
@@ -359,6 +359,8 @@ Singers submit song requests from their own phones via a QR code instead of hand
 **Per-version expander (Phase B, 2026-04-23):** `static-sing/sing.js` `renderSearch` gained an inline expander that splits the `versions[]` snapshot into 4 fixed-order sections (library → divebar → online → community). Purely client-side: the backend contract is unchanged from Phase A. A "Pick this version →" button on each candidate submits a direct `local` / `divebar` / `kn` request (not `kj_pick`), so auto-approve continues to work and the admin sees a standard one-tap Approve. Long paths (local.path, divebar.drive_path) render inside a `<details>` block with `word-break: break-all` monospace. A one-time "Commercial vs Community" explainer appears on the first expand and dismisses via localStorage key `sing_rules_commercial_community_seen`.
 
 **Empty-state triage + make-request toggle (Phase C, 2026-04-23):** When `/sing/search` returns `songs: []` and the query ≥ 3 chars, `renderEmptyStateTriage()` shows a three-card layout: paste YouTube link / ask the KJ to make it / make-it-yourself on gen.nomadkaraoke.com. The KJ controls card 2's visibility via a new `sing_accept_make_requests` meta flag (`rotation_meta` table, default on) exposed on `GET/POST /rotation/requests/config` as `accept_make_requests`. The same flag rides on `GET /sing/search` responses and the landing template dataset so the UI has it before the first search. `POST /sing/submit` enforces the flag server-side (400 `make_requests_disabled`) as defence-in-depth against stale clients. The DIY-via-gen card is just an `<a href="https://gen.nomadkaraoke.com" target="_blank">` — no backend involvement; a gen-published YouTube URL pasted back into card 1 flows through the existing `source_type=youtube` dispatch unchanged.
+
+**Simple KJ Mode (2026-05-28):** Persistent `kj_simple_mode` flag in `sing_meta` (default off) shrinks both the singer SPA and the KJ UI to the bare minimum needed for a stand-in operator running a QR-only show. Server-side, `POST /sing/submit` narrows the source allowlist to `{local, divebar, kn}` (400 `simple_mode_disabled_source` on `youtube`/`make`/`kj_pick`) — defence-in-depth against stale singer PWAs. The flag rides on `GET /status` (2s heartbeat poll) so the KJ UI applies `<body class="simple-mode">` automatically; the same flag ships on `GET /sing/` template context (`data-simple-mode` on `#sing-root`) and `GET /sing/search` responses for the singer SPA. KJ-side CSS hides the right column (KN/YT/Divebar/Upload/Songs/Browser), the rotation manual-add controls, the overlay panel, and every System subsection except the Mode toggle itself. Singer SPA suppresses the empty-state triage cards (paste YouTube / ask KJ / DIY-via-gen) — replaced by a single "We don't have that one. Talk to the KJ." message — and removes the `kj_pick` deferral on multi-version songs (the singer must pick a specific version). Toggle UI is a switch in `templates/index.html`'s System → Mode subsection, wired to `toggleSimpleMode()` in `app.js` which POSTs to the existing `/rotation/requests/config` endpoint.
 
 **QR-overlay auto-sync:** `qr_code` overlays with `config.follow_event_url=True` are automatically updated to point at the current event URL whenever the token regenerates. KJs opt in by ticking the checkbox on the overlay editor.
 

@@ -785,7 +785,7 @@ def get_status():
                         "source_detail": item.get('source_detail'),
                     }
 
-    return jsonify({
+    response_payload = {
         "state": status.get('state', 'stopped'),
         "current_playing": current_playing,
         "current_playing_path": cpp,
@@ -802,7 +802,12 @@ def get_status():
         "rotation_downloads": rotation_downloads,
         "pitch_semitones": vlc.pitch_semitones,
         "renderer": vlc.describe_renderer(),
-    })
+    }
+    try:
+        response_payload["simple_mode"] = current_app.sing_store.is_simple_mode()
+    except Exception:
+        response_payload["simple_mode"] = False
+    return jsonify(response_payload)
 
 
 @routes_bp.route('/fix_audio', methods=['POST'])
@@ -3587,6 +3592,7 @@ def get_sing_config():
         "enabled": store.is_enabled(),
         "auto_approve": store.is_auto_approve(),
         "accept_make_requests": store.is_accepting_make_requests(),
+        "simple_mode": store.is_simple_mode(),
         "public_url": get_event_url(cfg, token, scope="public"),
         "local_url": get_event_url(cfg, token, scope="local"),
         "pending_count": store.count_pending(),
@@ -3648,6 +3654,10 @@ def update_sing_config():
     if "accept_make_requests" in data:
         store.set_accepting_make_requests(bool(data["accept_make_requests"]))
         changed["accept_make_requests"] = bool(data["accept_make_requests"])
+
+    if "simple_mode" in data:
+        store.set_simple_mode(bool(data["simple_mode"]))
+        changed["simple_mode"] = bool(data["simple_mode"])
 
     # ``sms_template`` is included on the same POST so the modal can save
     # everything in one call. Passing ``None`` clears the override and the
