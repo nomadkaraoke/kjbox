@@ -785,7 +785,7 @@ def get_status():
                         "source_detail": item.get('source_detail'),
                     }
 
-    return jsonify({
+    response_payload = {
         "state": status.get('state', 'stopped'),
         "current_playing": current_playing,
         "current_playing_path": cpp,
@@ -802,7 +802,12 @@ def get_status():
         "rotation_downloads": rotation_downloads,
         "pitch_semitones": vlc.pitch_semitones,
         "renderer": vlc.describe_renderer(),
-    })
+    }
+    try:
+        response_payload["simple_mode"] = current_app.sing_store.is_simple_mode()
+    except Exception:
+        response_payload["simple_mode"] = False
+    return jsonify(response_payload)
 
 
 @routes_bp.route('/fix_audio', methods=['POST'])
