@@ -279,6 +279,7 @@ def install_public_host_rewriter(flask_app):
 
 _PHONE_RE = re.compile(r"^\+?[0-9 \-()]{7,20}$")
 _ALLOWED_SOURCES = {"local", "divebar", "kn", "youtube", "make", "kj_pick"}
+_SIMPLE_MODE_SOURCES = {"local", "divebar", "kn"}
 _KJ_PICK_MAX_VERSIONS = 50  # refuse pathological snapshots (see Phase A §3a)
 
 
@@ -539,6 +540,8 @@ def submit():
         return jsonify({"error": "phone format invalid"}), 400
     if source_type not in _ALLOWED_SOURCES:
         return jsonify({"error": f"source_type must be one of {sorted(_ALLOWED_SOURCES)}"}), 400
+    if store.is_simple_mode() and source_type not in _SIMPLE_MODE_SOURCES:
+        return jsonify({"error": "simple_mode_disabled_source"}), 400
     if source_type in {"local", "divebar", "kn", "youtube"} and not source_ref:
         return jsonify({"error": "source_ref is required for this source_type"}), 400
     if source_type == "make":
