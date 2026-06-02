@@ -25,7 +25,8 @@ def _make_deflate64_zip(zip_path, members):
         for name, payload in members.items():
             zf.writestr(name, payload)
 
-    data = bytearray(open(str(zip_path), 'rb').read())
+    with open(str(zip_path), 'rb') as fh:
+        data = bytearray(fh.read())
 
     with zipfile.ZipFile(str(zip_path)) as zf:
         infos = zf.infolist()
@@ -44,7 +45,8 @@ def _make_deflate64_zip(zip_path, members):
         cm_len = struct.unpack_from('<H', data, pos + 32)[0]
         pos += 46 + fn_len + ex_len + cm_len
 
-    open(str(zip_path), 'wb').write(bytes(data))
+    with open(str(zip_path), 'wb') as fh:
+        fh.write(bytes(data))
     return str(zip_path)
 
 
@@ -102,6 +104,7 @@ class TestZipPlayback:
         cdg_path = mp3_path.replace('.mp3', '.cdg')
         assert os.path.exists(cdg_path)
 
+    @pytest.mark.skipif(shutil.which('unzip') is None, reason="unzip not installed")
     def test_extract_deflate64_falls_back_to_unzip(self, zip_playback, deflate64_zip):
         """Deflate64 zips (unsupported by Python's zipfile) extract via unzip fallback."""
         zip_path, expected_mp3 = deflate64_zip
