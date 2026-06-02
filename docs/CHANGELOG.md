@@ -2,6 +2,12 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-06-02 - Fix: legacy Deflate64 CDG zips failed to play
+
+Some older karaoke discs (e.g. "MP3+G Toolz .NET" authored zips like the `KST` Spanish collection) compress their `.cdg`/`.mp3` with **Deflate64** (compression method 9). Python's stdlib `zipfile` only supports STORED/DEFLATE, so `ZipPlayback.extract_and_get_mp3` raised an uncaught `NotImplementedError` and the `/play` request 500'd — the song silently failed to play while standard-deflate zips worked fine.
+
+`zip_playback.py` now catches `NotImplementedError` from `extractall` and falls back to the system `unzip` binary (which handles Deflate64). Path-traversal validation still runs first via `zipfile.namelist()`; the unzip fallback returns `None` gracefully (with a logged error) if `unzip` is missing or exits non-zero. Bumped kj-controller to `0.33.1`.
+
 ## 2026-05-28 - Overlay system: rotation ticker + Scan-to-Sing preset
 
 - Ticker overlays gained a `source: rotation` mode whose text is composed by the backend on every rotation mutation. New `prefix`, `count`, `separator`, `empty_text` config fields. The engine stays a dumb renderer of `config.text`.
