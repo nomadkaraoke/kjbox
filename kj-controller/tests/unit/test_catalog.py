@@ -100,101 +100,69 @@ class TestNormalizeForSearch:
 
     # NFD-decomposable diacritics (combining marks)
     def test_diaeresis(self):
-        assert _normalize_for_search("Maxïmo Park") == "Maximo Park"
+        assert _normalize_for_search("Maxïmo Park") == "maximo park"
 
     def test_acute(self):
-        assert _normalize_for_search("Beyoncé") == "Beyonce"
+        assert _normalize_for_search("Beyoncé") == "beyonce"
 
     def test_tilde(self):
-        assert _normalize_for_search("Señor Coconut") == "Senor Coconut"
+        assert _normalize_for_search("Señor Coconut") == "senor coconut"
 
     def test_cedilla(self):
-        assert _normalize_for_search("Convicção") == "Conviccao"
+        assert _normalize_for_search("Convicção") == "conviccao"
 
     def test_circumflex(self):
-        assert _normalize_for_search("Derê") == "Dere"
+        assert _normalize_for_search("Derê") == "dere"
 
     def test_ring_above(self):
-        assert _normalize_for_search("Blå Øjne") == "Bla Ojne"
+        assert _normalize_for_search("Blå Øjne") == "bla ojne"
 
     def test_grave(self):
-        assert _normalize_for_search("Phèdre") == "Phedre"
+        assert _normalize_for_search("Phèdre") == "phedre"
 
     def test_caron(self):
-        assert _normalize_for_search("Netšajeva") == "Netsajeva"
+        assert _normalize_for_search("Netšajeva") == "netsajeva"
 
     # Non-decomposable Latin characters
     def test_o_stroke(self):
-        assert _normalize_for_search("MØ") == "MO"
-        assert _normalize_for_search("Eivør") == "Eivor"
-        assert _normalize_for_search("Kyrkjebø") == "Kyrkjebo"
+        assert _normalize_for_search("MØ") == "mo"
+        assert _normalize_for_search("Eivør") == "eivor"
+        assert _normalize_for_search("Kyrkjebø") == "kyrkjebo"
 
     def test_ae_ligature(self):
-        assert _normalize_for_search("Ænima") == "AEnima"
-        assert _normalize_for_search("Lækker") == "Laekker"
+        assert _normalize_for_search("Ænima") == "aenima"
+        assert _normalize_for_search("Lækker") == "laekker"
 
     def test_sharp_s(self):
-        assert _normalize_for_search("Straßenbande") == "Strassenbande"
+        assert _normalize_for_search("Straßenbande") == "strassenbande"
 
     def test_eth(self):
-        assert _normalize_for_search("Daði Freyr") == "Dadi Freyr"
+        assert _normalize_for_search("Daði Freyr") == "dadi freyr"
 
     def test_l_stroke(self):
         assert _normalize_for_search("biały") == "bialy"
 
     def test_dotless_i(self):
-        assert _normalize_for_search("Yalnız") == "Yalniz"
+        assert _normalize_for_search("Yalnız") == "yalniz"
 
     # Combined: diacritics + non-decomposable in same string
     def test_mixed(self):
-        assert _normalize_for_search("Millionär") == "Millionar"  # ä decomposes, no special chars
-        assert _normalize_for_search("Süsser") == "Susser"  # ü decomposes
+        assert _normalize_for_search("Millionär") == "millionar"  # ä decomposes, no special chars
+        assert _normalize_for_search("Süsser") == "susser"  # ü decomposes
 
     # Edge cases
     def test_empty(self):
         assert _normalize_for_search("") == ""
 
     def test_none(self):
-        assert _normalize_for_search(None) is None
+        assert _normalize_for_search(None) == ""
 
     def test_ascii_passthrough(self):
-        assert _normalize_for_search("Bon Jovi") == "Bon Jovi"
+        assert _normalize_for_search("Bon Jovi") == "bon jovi"
 
 
-class TestNormalizationConsistency:
-    """Verify the JS normalizeForSearch (built from LATIN_SPECIAL_MAP) matches Python."""
-
-    def _js_normalize(self, text):
-        """Pure-Python reimplementation of the JS normalizeForSearch logic.
-
-        This mirrors exactly what the browser does:
-        1. NFD decompose + strip combining marks (regex [\u0300-\u036f])
-        2. Replace chars in LATIN_SPECIAL_MAP
-        """
-        import re
-        s = unicodedata.normalize('NFD', text)
-        s = re.sub(r'[\u0300-\u036f]', '', s)
-        for char, replacement in LATIN_SPECIAL_MAP.items():
-            s = s.replace(char, replacement)
-        return s
-
-    @pytest.mark.parametrize("text", [
-        # Combining diacritics
-        "Chance Peña", "Beyoncé", "Maxïmo Park", "Jürgens",
-        "congrès", "Måneskin", "Netšajeva", "Barūn",
-        # Non-decomposable Latin
-        "MØ", "Eivør", "Ænima", "Lækker", "Straßenbande",
-        "Daði Freyr", "biały", "Yalnız", "Kyrkjebø",
-        # Mixed
-        "187 Straßenbande - Millionär",
-        # ASCII passthrough
-        "Bon Jovi", "Queen",
-        # Empty
-        "",
-    ])
-    def test_js_matches_python(self, text):
-        """JS implementation (from LATIN_SPECIAL_MAP) produces same output as Python."""
-        assert self._js_normalize(text) == _normalize_for_search(text)
+class TestNormalizerTemplateInjection:
+    """Verify the shared normalizer maps + version reach the browser template."""
 
     def test_maps_injected_to_template(self, flask_test_client):
         """Normalizer maps + version are rendered into the page."""

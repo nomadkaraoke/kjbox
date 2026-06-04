@@ -3,7 +3,14 @@
 import os
 import re
 import sqlite3
-import unicodedata
+
+from text_normalize import (
+    normalize as _normalize_for_search,
+    fts_match_query as _fts5_safe_query,
+    tokens as _query_tokens,
+    LATIN_SPECIAL_MAP,  # re-export for any external importers
+    NORMALIZER_VERSION,
+)
 
 
 def parse_karaoke_filename(filename):
@@ -29,23 +36,6 @@ def parse_karaoke_filename(filename):
         return ('', '', stem.strip())
 
 
-def _fts5_safe_query(query):
-    """Sanitize user input into a safe FTS5 query.
-
-    Strips special chars, quotes each term, prefix-matches last term.
-    "bon jovi livin" -> "bon" "jovi" "livin"*
-    """
-    # Remove FTS5 special characters
-    cleaned = re.sub(r'[^\w\s]', ' ', query, flags=re.UNICODE)
-    terms = cleaned.split()
-    if not terms:
-        return ''
-    # Quote each term, prefix-match the last one
-    quoted = [f'"{t}"' for t in terms[:-1]]
-    quoted.append(f'"{terms[-1]}"*')
-    return ' '.join(quoted)
-
-
 def _detect_format(filename):
     """Return format string from filename extension."""
     ext = os.path.splitext(filename)[1].lower()
@@ -60,29 +50,6 @@ def _detect_format(filename):
         '.cdg': 'cdg',
     }
     return format_map.get(ext, ext.lstrip('.') if ext else 'unknown')
-
-
-LATIN_SPECIAL_MAP = {
-    'ø': 'o', 'Ø': 'O', 'æ': 'ae', 'Æ': 'AE', 'ß': 'ss',
-    'ð': 'd', 'Ð': 'D', 'ł': 'l', 'Ł': 'L', 'ı': 'i',
-    'đ': 'd', 'Đ': 'D', 'þ': 'th', 'Þ': 'Th',
-}
-LATIN_SPECIAL_MAP_RE = re.compile('[' + re.escape(''.join(LATIN_SPECIAL_MAP)) + ']')
-
-
-def _normalize_for_search(text):
-    """Normalize text for search: strip diacritics and map special Latin chars.
-
-    Handles two categories:
-    1. NFD-decomposable diacritics (é→e, ï→i, ñ→n, ç→c, etc.)
-    2. Non-decomposable Latin chars (ø→o, æ→ae, ß→ss, ð→d, ł→l, ı→i, etc.)
-    """
-    if not text:
-        return text
-    s = unicodedata.normalize('NFD', text)
-    s = re.sub(r'[\u0300-\u036f]', '', s)
-    s = LATIN_SPECIAL_MAP_RE.sub(lambda m: LATIN_SPECIAL_MAP[m.group()], s)
-    return s
 
 
 class ExternalCatalog:
@@ -176,12 +143,22 @@ class ExternalCatalog:
         conn = self._get_conn()
         self.init_schema()
 
-        # Drop INSERT trigger — we populate FTS manually with normalized text
+        # Drop ALL sync triggers during build. We populate media_fts manually
+        # with NORMALIZED text, but the triggers feed RAW text. For an
+        # external-content FTS5 table the 'delete' command requires the text it
+        # is given to tokenize to the SAME terms that were indexed; raw vs.
+        # normalized diverge (apostrophes, '&'->'and', case) and corrupt the
+        # index ("database disk image is malformed"). So we manage the index
+        # ourselves here and recreate the triggers afterwards.
         conn.execute("DROP TRIGGER IF EXISTS media_ai")
+        conn.execute("DROP TRIGGER IF EXISTS media_ad")
+        conn.execute("DROP TRIGGER IF EXISTS media_au")
 
-        # Clear existing data
+        # Clear existing data. media_fts is an external-content table, so
+        # "DELETE FROM media_fts" is a silent no-op — use the special
+        # 'delete-all' command to actually empty the inverted index.
         conn.execute("DELETE FROM media")
-        conn.execute("DELETE FROM media_fts")
+        conn.execute("INSERT INTO media_fts(media_fts) VALUES('delete-all')")
 
         batch = []
         batch_size = 5000
@@ -221,9 +198,23 @@ class ExternalCatalog:
             if callback:
                 callback(total)
 
-        # Recreate INSERT trigger for any future individual inserts
+        # Recreate sync triggers for any future individual mutations.
         conn.execute("""
             CREATE TRIGGER IF NOT EXISTS media_ai AFTER INSERT ON media BEGIN
+                INSERT INTO media_fts(rowid, artist, title, disc_id)
+                VALUES (new.id, new.artist, new.title, new.disc_id);
+            END
+        """)
+        conn.execute("""
+            CREATE TRIGGER IF NOT EXISTS media_ad AFTER DELETE ON media BEGIN
+                INSERT INTO media_fts(media_fts, rowid, artist, title, disc_id)
+                VALUES ('delete', old.id, old.artist, old.title, old.disc_id);
+            END
+        """)
+        conn.execute("""
+            CREATE TRIGGER IF NOT EXISTS media_au AFTER UPDATE ON media BEGIN
+                INSERT INTO media_fts(media_fts, rowid, artist, title, disc_id)
+                VALUES ('delete', old.id, old.artist, old.title, old.disc_id);
                 INSERT INTO media_fts(rowid, artist, title, disc_id)
                 VALUES (new.id, new.artist, new.title, new.disc_id);
             END
@@ -287,7 +278,7 @@ class ExternalCatalog:
 
     def _like_fallback(self, query, limit, offset):
         """Fallback search using LIKE with punctuation stripped."""
-        terms = re.sub(r'[^\w\s]', ' ', query, flags=re.UNICODE).split()
+        terms = _query_tokens(query)
         if not terms:
             return []
         # Build WHERE clause: each term must appear in artist||title with

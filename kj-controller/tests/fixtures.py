@@ -148,7 +148,7 @@ SEARCH_NORMALIZATION_CASES = [
     ("Pena", "Peña"),               # tilde
     ("Marias", "Marías"),           # acute
     ("Jurgens", "Jürgens"),         # diaeresis
-    ("aout", "août"),               # circumflex
+    ("daout", "août"),              # circumflex; apostrophe in "D'août" drops -> "daout"
     ("congres", "congrès"),         # grave
     ("Maneskin", "Måneskin"),       # ring above
     ("Hazes", "Hazes"),             # cedilla (on preceding ç, artist is Andrç)
