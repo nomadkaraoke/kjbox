@@ -122,6 +122,15 @@ class ExternalCatalog:
                 value TEXT
             );
 
+            -- WARNING: these triggers feed RAW artist/title to media_fts, but the
+            -- index actually stores NORMALIZED tokens (see _flush_batch /
+            -- rebuild_fts, which write text_normalize.normalize(...) output and
+            -- bypass these triggers by dropping them during build). The triggers
+            -- exist only so ad-hoc INSERTs stay roughly indexed. Do NOT add a
+            -- production path that does individual DELETE/UPDATE on `media`: the
+            -- 'delete' command here passes raw text that won't match the stored
+            -- normalized postings, leaving orphans. If individual mutation is ever
+            -- needed, normalize inside these triggers first.
             CREATE TRIGGER IF NOT EXISTS media_ai AFTER INSERT ON media BEGIN
                 INSERT INTO media_fts(rowid, artist, title, disc_id)
                 VALUES (new.id, new.artist, new.title, new.disc_id);
