@@ -1571,16 +1571,11 @@ function getFormatBadgeClass(format) {
     return 'other';
 }
 
-// Character map injected from server (see index.html inline script)
-const _latinSpecialMap = window.KJ_CONFIG.latinSpecialMap;
-const _latinSpecialRe = new RegExp('[' + Object.keys(_latinSpecialMap).join('').replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ']', 'g');
+// Shared normalizer (mirror of text_normalize.py); see static/text_normalize.js
+const _normalizer = TextNormalize.makeNormalizer(window.KJ_CONFIG);
 
 function normalizeForSearch(str) {
-    // NFD decompose + strip combining marks (handles e with accent -> e, etc.)
-    let s = str.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-    // Handle non-decomposable Latin characters (ø→o, æ→ae, ß→ss, etc.)
-    s = s.replace(_latinSpecialRe, m => _latinSpecialMap[m]);
-    return s;
+    return _normalizer.normalize(str || '');
 }
 
 function filterLocalMedia(query) {

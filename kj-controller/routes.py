@@ -15,10 +15,10 @@ from flask import Blueprint, Response, current_app, jsonify, render_template, re
 
 import divebar
 import karaoke_nerds
+import text_normalize
 import version_priority
 import youtube_health
 import youtube_search
-from catalog import LATIN_SPECIAL_MAP
 from config import APP_DIR, RENDER_MODES, load_config, save_config_value
 from playback import RendererSwitchRejected
 from sing import get_event_url, sync_event_url_overlays
@@ -199,8 +199,15 @@ def _debounced_save_volumes(vlc):
 def index():
     """Serves the main remote control page."""
     cfg = current_app.kj_config
-    return render_template('index.html', latin_special_map=LATIN_SPECIAL_MAP,
-                           config=cfg)
+    return render_template(
+        'index.html',
+        latin_special_map=text_normalize.LATIN_SPECIAL_MAP,
+        abbrev_map=text_normalize.ABBREV_MAP,
+        number_words=text_normalize.NUMBER_WORDS,
+        roman_map=text_normalize.ROMAN_NUMERALS,
+        normalizer_version=text_normalize.NORMALIZER_VERSION,
+        config=cfg,
+    )
 
 
 @routes_bp.route('/download', methods=['POST'])
