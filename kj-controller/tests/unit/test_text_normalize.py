@@ -88,3 +88,21 @@ class TestAbbrevAndNumbers:
         assert ABBREV_MAP["pt"] == "part"
         assert NUMBER_WORDS["two"] == 2
         assert ROMAN_NUMERALS["iv"] == 4
+
+
+class TestQueryAndGroupKey:
+    def test_fts_quotes_and_prefixes_last(self):
+        assert fts_match_query("bon jovi livin") == '"bon" "jovi" "livin"*'
+
+    def test_fts_uses_canonical_tokens(self):
+        assert fts_match_query("Simon & Garfunkel") == '"simon" "and" "garfunkel"*'
+
+    def test_fts_empty(self):
+        assert fts_match_query("   ") == ""
+
+    def test_group_key(self):
+        assert group_key("Simon & Garfunkel", "The Sound of Silence") == \
+            "simon and garfunkel|||the sound of silence"
+
+    def test_group_key_none_safe(self):
+        assert group_key(None, None) == "|||"

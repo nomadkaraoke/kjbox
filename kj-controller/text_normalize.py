@@ -116,3 +116,21 @@ def _canonicalize_numbers(toks):
         out.append(str(val))
         i += 1
     return out
+
+
+def fts_match_query(text):
+    """Build an FTS5-safe MATCH string from canonical tokens.
+
+    Each term quoted; last term prefix-matched. "" if no tokens.
+    """
+    toks = tokens(text)
+    if not toks:
+        return ""
+    quoted = [f'"{t}"' for t in toks[:-1]]
+    quoted.append(f'"{toks[-1]}"*')
+    return ' '.join(quoted)
+
+
+def group_key(artist, title):
+    """Deterministic (artist, title) -> collapse key for grouping results."""
+    return f"{normalize(artist)}|||{normalize(title)}"
