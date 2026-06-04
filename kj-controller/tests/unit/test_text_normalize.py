@@ -57,3 +57,34 @@ class TestPunctAndFeat:
 
     def test_tokens_empty(self):
         assert tokens("") == []
+
+
+class TestAbbrevAndNumbers:
+    def test_pt_to_part(self):
+        assert normalize("Song Pt 2") == "song part 2"
+
+    def test_vs_to_versus(self):
+        assert normalize("A vs B") == "a versus b"
+
+    def test_word_to_digit(self):
+        assert normalize("Two Princes") == "2 princes"
+
+    def test_digit_passthrough(self):
+        assert normalize("Blink 182") == "blink 182"
+
+    def test_tens_ones_combine(self):
+        assert normalize("Twenty One Pilots") == "21 pilots"
+
+    def test_plain_tens(self):
+        assert normalize("Thirty Seconds To Mars") == "30 seconds to mars"
+
+    def test_roman_safe(self):
+        assert normalize("Rocky IV") == "rocky 4"
+
+    def test_ambiguous_roman_left_alone(self):
+        assert normalize("I Will Survive") == "i will survive"
+
+    def test_maps_exposed(self):
+        assert ABBREV_MAP["pt"] == "part"
+        assert NUMBER_WORDS["two"] == 2
+        assert ROMAN_NUMERALS["iv"] == 4
