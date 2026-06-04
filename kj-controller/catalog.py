@@ -321,7 +321,7 @@ class ExternalCatalog:
         like_rows = self._like_fallback(normalized, limit, offset)
         if like_rows:
             return like_rows
-        return self._fuzzy_search(query, limit)
+        return self._fuzzy_search(query, limit, offset)
 
     def _like_fallback(self, query, limit, offset):
         """Fallback search using LIKE with punctuation stripped."""
@@ -350,7 +350,7 @@ class ExternalCatalog:
         except sqlite3.OperationalError:
             return []
 
-    def _fuzzy_search(self, query, limit):
+    def _fuzzy_search(self, query, limit, offset=0):
         """Fuzzy fallback using rapidfuzz WRatio over trigram candidates.
 
         Only called when both FTS5 MATCH and LIKE fallback return nothing.
@@ -370,7 +370,7 @@ class ExternalCatalog:
             if score >= FUZZY_SCORE_CUTOFF:
                 scored.append((score, c))
         scored.sort(key=lambda s: s[0], reverse=True)
-        return [c for _, c in scored[:limit]]
+        return [c for _, c in scored[offset:offset + limit]]
 
     def normalizer_version(self):
         """Return the NORMALIZER_VERSION the index was built with (or None)."""

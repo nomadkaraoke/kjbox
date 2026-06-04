@@ -599,3 +599,21 @@ class TestFuzzySearch:
             "/m/KK-2 - Queen - Bohemian Rhapsody.zip",
         ])
         assert cat.search("zzzzxqwer plooof") == []
+
+    def test_short_query_no_fuzzy(self, tmp_path):
+        cat = _build_tiny_catalog(tmp_path, [
+            "/m/KK-2 - Queen - Bohemian Rhapsody.zip",
+        ])
+        # normalized query < 3 chars must not trigger fuzzy scoring
+        assert cat._fuzzy_search("ab", limit=10) == []
+
+    def test_fuzzy_offset_paginates(self, tmp_path):
+        # Two near-duplicate rows both fuzzy-match; offset should shift the window.
+        cat = _build_tiny_catalog(tmp_path, [
+            "/m/KK-1 - Queen - Bohemian Rhapsody.zip",
+            "/m/KK-2 - Queen - Bohemian Rhapsody (Live).zip",
+        ])
+        page1 = cat._fuzzy_search("bohemian rhapsodyy", limit=1, offset=0)
+        page2 = cat._fuzzy_search("bohemian rhapsodyy", limit=1, offset=1)
+        assert len(page1) == 1 and len(page2) == 1
+        assert page1[0]["path"] != page2[0]["path"]
