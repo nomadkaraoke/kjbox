@@ -110,6 +110,18 @@ class ExternalCatalog:
                 tokenize='unicode61 remove_diacritics 2'
             );
 
+            -- Standalone (NOT content='') trigram index over normalized
+            -- "artist title" for substring/fuzzy candidate lookup. Standalone
+            -- so plain "DELETE FROM media_trigram" works during rebuild.
+            CREATE VIRTUAL TABLE IF NOT EXISTS media_trigram USING fts5(
+                norm_text, tokenize='trigram'
+            );
+
+            CREATE TABLE IF NOT EXISTS catalog_meta (
+                key TEXT PRIMARY KEY,
+                value TEXT
+            );
+
             CREATE TRIGGER IF NOT EXISTS media_ai AFTER INSERT ON media BEGIN
                 INSERT INTO media_fts(rowid, artist, title, disc_id)
                 VALUES (new.id, new.artist, new.title, new.disc_id);
@@ -159,6 +171,8 @@ class ExternalCatalog:
         # 'delete-all' command to actually empty the inverted index.
         conn.execute("DELETE FROM media")
         conn.execute("INSERT INTO media_fts(media_fts) VALUES('delete-all')")
+        # media_trigram is a STANDALONE fts5 table, so a plain DELETE works.
+        conn.execute("DELETE FROM media_trigram")
 
         batch = []
         batch_size = 5000
@@ -220,6 +234,14 @@ class ExternalCatalog:
             END
         """)
 
+        # Stamp the normalizer version the index was built with, so we can
+        # later detect a stale index after a NORMALIZER_VERSION bump.
+        conn.execute(
+            "INSERT OR REPLACE INTO catalog_meta(key, value) VALUES('normalizer_version', ?)",
+            (str(NORMALIZER_VERSION),),
+        )
+        conn.commit()
+
         return total
 
     def _flush_batch(self, conn, batch):
@@ -240,6 +262,13 @@ class ExternalCatalog:
             "INSERT INTO media_fts(rowid, artist, title, disc_id) VALUES (?, ?, ?, ?)",
             [(r[0], _normalize_for_search(r[1] or ''), _normalize_for_search(r[2] or ''),
               _normalize_for_search(r[3] or '')) for r in rows]
+        )
+        # Populate the trigram candidate index over normalized "artist title"
+        # so a fresh build is immediately fuzzy/substring-search ready.
+        conn.executemany(
+            "INSERT INTO media_trigram(rowid, norm_text) VALUES (?, ?)",
+            [(r[0], _normalize_for_search(((r[1] or '') + ' ' + (r[2] or '')).strip()))
+             for r in rows]
         )
         conn.commit()
 
@@ -300,6 +329,88 @@ class ExternalCatalog:
                 params,
             ).fetchall()
             return [dict(row) for row in rows]
+        except sqlite3.OperationalError:
+            return []
+
+    def normalizer_version(self):
+        """Return the NORMALIZER_VERSION the index was built with (or None)."""
+        conn = self._get_conn()
+        try:
+            row = conn.execute(
+                "SELECT value FROM catalog_meta WHERE key='normalizer_version'"
+            ).fetchone()
+            return int(row[0]) if row else None
+        except sqlite3.Error:
+            return None
+
+    def index_is_stale(self):
+        """True when the FTS index was built with a different normalizer."""
+        return self.normalizer_version() != NORMALIZER_VERSION
+
+    def rebuild_fts(self, callback=None, batch_size=5000):
+        """Rebuild media_fts + media_trigram from the media table using the
+        current normalizer, then restamp NORMALIZER_VERSION.
+
+        Returns the number of media rows reindexed.
+        """
+        conn = self._get_conn()
+        # media_fts is external-content: "DELETE FROM media_fts" is a silent
+        # no-op, so use the special 'delete-all' command to clear the inverted
+        # index. media_trigram is standalone, so a plain DELETE works there.
+        conn.execute("INSERT INTO media_fts(media_fts) VALUES('delete-all')")
+        conn.execute("DELETE FROM media_trigram")
+        conn.commit()
+        rows = conn.execute(
+            "SELECT id, artist, title, disc_id FROM media"
+        ).fetchall()
+        total = len(rows)
+        for start in range(0, total, batch_size):
+            chunk = rows[start:start + batch_size]
+            conn.executemany(
+                "INSERT INTO media_fts(rowid, artist, title, disc_id) VALUES (?,?,?,?)",
+                [(r[0], _normalize_for_search(r[1] or ''),
+                  _normalize_for_search(r[2] or ''),
+                  _normalize_for_search(r[3] or '')) for r in chunk],
+            )
+            conn.executemany(
+                "INSERT INTO media_trigram(rowid, norm_text) VALUES (?,?)",
+                [(r[0], _normalize_for_search(((r[1] or '') + ' ' + (r[2] or '')).strip()))
+                 for r in chunk],
+            )
+            conn.commit()
+            if callback:
+                callback(min(start + batch_size, total), total)
+        conn.execute(
+            "INSERT OR REPLACE INTO catalog_meta(key,value) VALUES('normalizer_version', ?)",
+            (str(NORMALIZER_VERSION),),
+        )
+        conn.commit()
+        return total
+
+    def _trigram_candidates(self, query, limit=200):
+        """Return candidate rows via the trigram index (substring/fuzzy-friendly).
+
+        Builds the query's overlapping 3-grams and OR-matches them against the
+        index. OR (rather than an exact phrase MATCH of the whole query) is what
+        makes this typo-tolerant: a single transposition/insertion only breaks a
+        couple of trigrams, but the rest still hit. This is a *candidate* set
+        meant to be re-ranked downstream, so recall matters more than precision.
+        """
+        norm = _normalize_for_search(query)
+        if len(norm) < 3:
+            return []
+        trigrams = {norm[i:i + 3] for i in range(len(norm) - 2)}
+        # Quote each trigram so '"' / special chars can't break the MATCH syntax.
+        match_expr = ' OR '.join('"' + t.replace('"', '""') + '"' for t in trigrams)
+        conn = self._get_conn()
+        try:
+            rows = conn.execute(
+                "SELECT m.path, m.filename, m.folder, m.disc_id, m.artist, m.title, m.format "
+                "FROM media_trigram t JOIN media m ON t.rowid = m.id "
+                "WHERE t.norm_text MATCH ? LIMIT ?",
+                (match_expr, limit),
+            ).fetchall()
+            return [dict(r) for r in rows]
         except sqlite3.OperationalError:
             return []
 

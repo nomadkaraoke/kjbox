@@ -14,6 +14,22 @@ from tests.fixtures import (
 )
 
 
+def _build_tiny_catalog(tmp_path, paths):
+    """Build a small ExternalCatalog from an in-memory list of file paths.
+
+    Mirrors the build pattern used throughout TestExternalCatalog: write a file
+    list, create the catalog, init the schema, and run build_from_file_list.
+    Returns the open catalog (caller is responsible for close()).
+    """
+    file_list = tmp_path / "tiny_file_list.txt"
+    file_list.write_text('\n'.join(paths) + '\n', encoding='utf-8')
+    db_path = str(tmp_path / "tiny.db")
+    catalog = ExternalCatalog({}, db_path=db_path)
+    catalog.init_schema()
+    catalog.build_from_file_list(str(file_list))
+    return catalog
+
+
 # --- parse_karaoke_filename tests ---
 
 class TestParseKaraokeFilename:
@@ -520,3 +536,43 @@ class TestExternalCatalog:
         results_offset = catalog.search("Set It Off Wolf in Sheeps Clothing", limit=10, offset=1)
         assert len(results_offset) == 0  # only 1 match, offset=1 skips it
         catalog.close()
+
+
+# --- Catalog metadata + normalizer version tests ---
+
+class TestCatalogMeta:
+    def test_version_stamped_on_build(self, tmp_path):
+        from text_normalize import NORMALIZER_VERSION
+        cat = _build_tiny_catalog(tmp_path, [
+            "/m/KK-1 - Simon & Garfunkel - Sound Of Silence.zip",
+        ])
+        assert cat.normalizer_version() == NORMALIZER_VERSION
+
+    def test_is_stale_false_after_build(self, tmp_path):
+        cat = _build_tiny_catalog(tmp_path, [
+            "/m/KK-1 - Queen - Bohemian Rhapsody.zip",
+        ])
+        assert cat.index_is_stale() is False
+
+
+class TestRebuildFts:
+    def test_rebuild_refreshes_tokens_and_version(self, tmp_path):
+        from text_normalize import NORMALIZER_VERSION
+        cat = _build_tiny_catalog(tmp_path, [
+            "/m/KK-1 - Simon & Garfunkel - Sound Of Silence.zip",
+        ])
+        conn = cat._get_conn()
+        conn.execute("UPDATE catalog_meta SET value='0' WHERE key='normalizer_version'")
+        conn.commit()
+        assert cat.index_is_stale() is True
+        cat.rebuild_fts()
+        assert cat.index_is_stale() is False
+        assert any("Sound Of Silence" in r["title"]
+                   for r in cat.search("sound of silence simon and garfunkel"))
+
+    def test_trigram_candidates_returns_near_match(self, tmp_path):
+        cat = _build_tiny_catalog(tmp_path, [
+            "/m/KK-1 - Simon & Garfunkel - Sound Of Silence.zip",
+        ])
+        cands = cat._trigram_candidates("garfunkle", limit=20)  # typo
+        assert any("Garfunkel" in r["artist"] for r in cands)
