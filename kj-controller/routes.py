@@ -16,6 +16,7 @@ from flask import Blueprint, Response, current_app, jsonify, render_template, re
 import divebar
 import karaoke_nerds
 import text_normalize
+from text_normalize import normalize as _normalize_text, tokens as _tokens, group_key as _group_key
 import version_priority
 import youtube_health
 import youtube_search
@@ -49,37 +50,22 @@ def _check_sleep_mode():
 # byte-equal. No fuzzy matching in v1 — see
 # docs/archive/2026-04-23-song-selection-ux-master-plan.md decision #1.
 
-_FEAT_RE = re.compile(
-    r"\s*[\[(]?\s*(?:feat\.?|ft\.?|featuring)\s+[^\])]+[\])]?\s*",
-    re.IGNORECASE,
-)
-_PAREN_RE = re.compile(r"\s*[\[(][^\])]*[\])]\s*")
-# Apostrophes (straight + curly + backtick) strip to nothing so "Don't" and
-# "Dont" collapse to the same key. Other punctuation becomes whitespace.
-_APOS_RE = re.compile(r"[‘’ʼ'`]+")
-_PUNCT_RE = re.compile(r"[^\w\s]+")
-_WS_RE = re.compile(r"\s+")
-
-
 def _normalize_song_key(artist, title):
     """Deterministic (artist, title) → group key for collapsing search results.
 
-    Lowercases, strips feat./ft./featuring qualifiers, strips any bracketed
-    qualifier (e.g. ``(Live)``, ``[Radio Edit]``), drops apostrophes, replaces
-    remaining punctuation with whitespace, collapses whitespace. Returns a
-    single string so callers can use it as a dict key.
+    Delegates to the shared normalizer (``text_normalize.group_key``) so the
+    singer-facing grouping uses the exact same canonical space as catalog
+    indexing and FTS query building. The shared normalizer lowercases, folds
+    diacritics/Latin specials, strips feat./ft./featuring qualifiers, expands
+    ``&``/``+`` to "and", drops apostrophes, canonicalizes numbers, etc.
+
+    Note (decision D4): bracketed qualifiers such as ``(Live)`` /
+    ``[Radio Edit]`` are intentionally NOT stripped, so distinct versions stay
+    distinguishable. Grouping is therefore more granular than the legacy key.
 
     None-safe — callers pass parsed filename fields that may be missing.
     """
-    def _norm(s):
-        s = (s or "").lower()
-        s = _FEAT_RE.sub(" ", s)
-        s = _PAREN_RE.sub(" ", s)
-        s = _APOS_RE.sub("", s)
-        s = _PUNCT_RE.sub(" ", s)
-        s = _WS_RE.sub(" ", s).strip()
-        return s
-    return f"{_norm(artist)}|||{_norm(title)}"
+    return _group_key(artist, title)
 
 
 def _group_search_results(local_results, kn_results):
@@ -3047,20 +3033,17 @@ def unified_search(query, app, *, grouped=False):
         if media_entry:
             result["duration"] = media_entry.get("duration")
 
-    # Also search downloaded media files (not in external catalog)
+    # Also search downloaded media files (not in external catalog). Needles and
+    # haystack both go through the shared normalizer so they meet in one
+    # canonical space (e.g. an "and" query matches a "&" filename, diacritics
+    # fold, etc.) — same pipeline as the catalog FTS path.
     local_paths = {r.get("path") for r in local_results}
-    query_lower = query.lower()
-    query_terms = query_lower.split()
-    import re as _re
-    _strip_punct = lambda s: _re.sub(r'[^\w\s]', '', s)
-    query_terms_clean = [_strip_punct(t) for t in query_terms]
+    query_terms_clean = _tokens(query)
     for path, entry in app.media.index.items():
         if path in local_paths:
             continue
-        searchable = (entry.get("display_name") or entry.get("filename", "")).lower()
-        searchable_clean = _strip_punct(searchable)
-        if all(term in searchable or term in searchable_clean
-               for term in query_terms_clean):
+        searchable = _normalize_text(entry.get("display_name") or entry.get("filename", ""))
+        if query_terms_clean and all(term in searchable for term in query_terms_clean):
             from catalog import parse_karaoke_filename
             disc_id, artist, title = parse_karaoke_filename(entry.get("filename", ""))
             local_results.append({
@@ -3076,12 +3059,16 @@ def unified_search(query, app, *, grouped=False):
     kn_results = []
     kn_timeout = False
     try:
+        # Send the raw user query: Karaoke Nerds does its own server-side
+        # matching, so do not pre-normalize it here.
         kn_results = karaoke_nerds.search(query, cfg)
     except Exception:
         kn_timeout = True
 
     if kn_results and not kn_timeout:
         try:
+            # Send the raw user query: Divebar does its own matching, so do
+            # not pre-normalize it here.
             db_results = divebar.search(query, cfg, limit=100)
             db_index = {}
             for db_song in db_results:
