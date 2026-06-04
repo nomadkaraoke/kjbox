@@ -43,6 +43,8 @@ _PUNCT_RE = re.compile(r'[^\w\s]', re.UNICODE)
 
 def _strip_accents(text):
     s = unicodedata.normalize('NFD', text)
+    # Strip U+0300–U+036F combining marks. Kept as an explicit range (not a
+    # category check) so static/text_normalize.js can mirror it exactly.
     s = re.sub(r'[̀-ͯ]', '', s)
     s = _LATIN_SPECIAL_RE.sub(lambda m: LATIN_SPECIAL_MAP[m.group()], s)
     return s
@@ -83,7 +85,6 @@ NUMBER_WORDS = {
     "fifteen": 15, "sixteen": 16, "seventeen": 17, "eighteen": 18,
     "nineteen": 19, "twenty": 20, "thirty": 30, "forty": 40, "fifty": 50,
     "sixty": 60, "seventy": 70, "eighty": 80, "ninety": 90,
-    "hundred": 100, "thousand": 1000,
 }
 
 # Exclude ambiguous standalone i/v/x/l/c/d/m.

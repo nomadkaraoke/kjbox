@@ -1,3 +1,6 @@
+import pytest
+
+
 def test_rapidfuzz_importable():
     from rapidfuzz import fuzz
     assert fuzz.WRatio("simon and garfunkel", "simon & garfunkel") > 80
@@ -52,6 +55,12 @@ class TestPunctAndFeat:
     def test_featuring_stripped(self):
         assert normalize("Song featuring The Band") == "song"
 
+    def test_feat_with_trailing_paren_behavior(self):
+        # Locks current (intentionally lossy) feat-strip behavior. If this output
+        # ever changes, it's a deliberate decision to revisit feat handling.
+        result = normalize("Stay (Acoustic) feat. Justin Bieber (Live)")
+        assert result == "stay acoustic"
+
     def test_tokens(self):
         assert tokens("Simon & Garfunkel") == ["simon", "and", "garfunkel"]
 
@@ -89,6 +98,11 @@ class TestAbbrevAndNumbers:
         assert NUMBER_WORDS["two"] == 2
         assert ROMAN_NUMERALS["iv"] == 4
 
+    def test_compound_hundreds_out_of_scope(self):
+        # Standalone hundreds/thousands are NOT canonicalized (compound parsing
+        # is out of scope); the word passes through unchanged.
+        assert normalize("One Hundred Years") == "1 hundred years"
+
 
 class TestQueryAndGroupKey:
     def test_fts_quotes_and_prefixes_last(self):
@@ -104,5 +118,22 @@ class TestQueryAndGroupKey:
         assert group_key("Simon & Garfunkel", "The Sound of Silence") == \
             "simon and garfunkel|||the sound of silence"
 
+    def test_fts_single_token_prefix(self):
+        assert fts_match_query("jovi") == '"jovi"*'
+
     def test_group_key_none_safe(self):
         assert group_key(None, None) == "|||"
+
+
+class TestIdempotency:
+    @pytest.mark.parametrize("text", [
+        "Simon & Garfunkel - Sound Of Silence",
+        "Twenty One Pilots",
+        "Beyoncé feat. Jay-Z",
+        "Don't Stop Believin'",
+        "Blink 182",
+        "Rocky IV",
+    ])
+    def test_normalize_is_idempotent(self, text):
+        once = normalize(text)
+        assert normalize(once) == once
