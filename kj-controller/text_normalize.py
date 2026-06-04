@@ -31,6 +31,16 @@ _LATIN_SPECIAL_RE = re.compile(
 )
 
 
+# feat./ft./featuring qualifier; stops at a closing bracket or end of string.
+_FEAT_RE = re.compile(
+    r'\s*[\[(]?\s*(?:feat\.?|ft\.?|featuring)\s+[^\])]+[\])]?',
+    re.IGNORECASE,
+)
+_SYMBOL_AND_RE = re.compile(r'\s*[&+]\s*')
+_APOS_RE = re.compile("[‘’ʼ`']+")
+_PUNCT_RE = re.compile(r'[^\w\s]', re.UNICODE)
+
+
 def _strip_accents(text):
     s = unicodedata.normalize('NFD', text)
     s = re.sub(r'[̀-ͯ]', '', s)
@@ -44,4 +54,15 @@ def normalize(text):
         return ""
     s = _strip_accents(text)
     s = s.lower()
-    return s
+    s = _FEAT_RE.sub(' ', s)
+    s = _SYMBOL_AND_RE.sub(' and ', s)
+    s = _APOS_RE.sub('', s)
+    s = _PUNCT_RE.sub(' ', s)
+    toks = s.split()
+    return ' '.join(toks)
+
+
+def tokens(text):
+    """Return the canonical token list for `text`."""
+    n = normalize(text)
+    return n.split() if n else []
