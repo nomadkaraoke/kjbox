@@ -13,6 +13,7 @@ JS_FILE = os.path.abspath(os.path.join(HERE, "..", "..", "static", "text_normali
 
 CASES = [
     "Simon & Garfunkel", "Don't Stop Believin'", "Beyoncé", "MØ",
+    "Don\u2018t Stop Believin\u2019",
     "Straßenbande", "Twenty One Pilots", "Thirty Seconds To Mars",
     "Blink 182", "Two Princes", "Rocky IV", "Stay feat. Justin Bieber",
     "Florence + The Machine", "Song Pt 2", "A vs B", "I Will Survive",

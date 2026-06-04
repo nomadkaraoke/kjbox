@@ -21,7 +21,10 @@
       : null;
     const featRe = /\s*[\[(]?\s*(?:feat\.?|ft\.?|featuring)\s+[^\])]+[\])]?/ig;
     const symbolAndRe = /\s*[&+]\s*/g;
-    const aposRe = /[''ʼ'`]+/g;
+    const aposRe = /['\u2018\u2019\u02BC`]+/gu;
+    // NOTE: JS \w is ASCII-only (unlike Python re.UNICODE), so non-Latin
+    // scripts (Cyrillic/Greek/CJK) differ from the Python normalizer. Accepted:
+    // the karaoke catalog is effectively all Latin-script.
     const punctRe = /[^\w\s]/gu;
 
     function canonNumbers(toks) {

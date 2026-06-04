@@ -205,6 +205,10 @@ class TestNormalizationConsistency:
         assert 'numberWords:' in html
         assert 'romanMap:' in html
         assert 'normalizerVersion:' in html
+        import re, json
+        import text_normalize as tn
+        m = re.search(r'normalizerVersion:\s*(\d+)', html)
+        assert m and int(m.group(1)) == tn.NORMALIZER_VERSION
 
 
 # --- _detect_format tests ---
