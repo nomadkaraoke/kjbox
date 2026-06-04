@@ -1,10 +1,14 @@
 """ZipPlayback: Extract CDG+MP3 ZIPs for VLC playback."""
 
+import logging
 import os
 import shutil
 import stat
+import subprocess
 import tempfile
 import zipfile
+
+logger = logging.getLogger(__name__)
 
 
 class ZipPlayback:
@@ -34,7 +38,17 @@ class ZipPlayback:
                         return None
 
                 self._temp_dir = tempfile.mkdtemp(prefix='kj-zip-extract-')
-                zf.extractall(self._temp_dir)
+                try:
+                    zf.extractall(self._temp_dir)
+                except NotImplementedError:
+                    # Python's zipfile only handles STORED/DEFLATE. Legacy karaoke
+                    # discs (e.g. "MP3+G Toolz .NET") use Deflate64 (method 9),
+                    # which raises NotImplementedError. Fall back to system unzip,
+                    # which supports it. namelist() above already rejected any
+                    # path-traversal entries, so this extraction is safe.
+                    if not self._extract_with_unzip(zip_path, self._temp_dir):
+                        self.cleanup()
+                        return None
 
                 # Make temp dir and files world-readable (VLC runs as dietpi user)
                 os.chmod(self._temp_dir, stat.S_IRWXU | stat.S_IROTH | stat.S_IXOTH | stat.S_IRGRP | stat.S_IXGRP)
@@ -57,6 +71,31 @@ class ZipPlayback:
         # No .mp3 found
         self.cleanup()
         return None
+
+    def _extract_with_unzip(self, zip_path, dest_dir):
+        """Extract a ZIP using the system `unzip`, for compression methods
+        Python's zipfile can't handle (e.g. Deflate64). Returns True on success.
+
+        Caller must have already validated entry paths (no traversal). `unzip`
+        also refuses absolute/`..` paths by default as defence in depth.
+        """
+        try:
+            result = subprocess.run(
+                ['unzip', '-o', '-qq', zip_path, '-d', dest_dir],
+                capture_output=True,
+                timeout=120,
+            )
+        except (OSError, subprocess.SubprocessError) as exc:
+            logger.error("unzip fallback failed for %s: %s", zip_path, exc)
+            return False
+        if result.returncode != 0:
+            logger.error(
+                "unzip fallback returned %s for %s: %s",
+                result.returncode, zip_path,
+                result.stderr.decode('utf-8', 'replace').strip(),
+            )
+            return False
+        return True
 
     def cleanup(self):
         """Remove the current temporary extraction directory."""
