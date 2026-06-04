@@ -9,7 +9,7 @@ import json
 import os
 import time
 
-from rotation_store import RotationStore
+from rotation_store import RotationStore, diff_entries
 
 # Local file cache for conky rotation display (avoids sheet polling delay)
 ROTATION_CACHE_FILE = "/tmp/rotation_cache.json"
@@ -83,18 +83,21 @@ class RotationManager:
         """Add a new singer entry and return the entry dict."""
         if file_path and duration is None:
             duration = self._lookup_duration(file_path)
+        self._before_mutation(f"Add {singer}" if singer else "Add singer")
         result = self.store.add_entry(singer, song_artist, notes, file_path=file_path, duration=duration, singers=singers)
         self._after_mutation()
         return result
 
     def update_entry(self, entry_id, singer=None, song_artist=None, singers=None):
         """Update singer name and/or song for entry_id. Returns updated entry."""
+        self._before_mutation("Edit entry")
         result = self.store.update_entry(entry_id, singer=singer, song_artist=song_artist, singers=singers)
         self._after_mutation()
         return result
 
     def update_status(self, entry_id, new_status):
         """Update status for entry_id (with exclusivity rules for singing/up-next)."""
+        self._before_mutation(f"Set status: {new_status}")
         self.store.update_status(entry_id, new_status)
         self._after_mutation()
 
@@ -108,11 +111,15 @@ class RotationManager:
 
     def delete_entry(self, entry_id):
         """Delete entry_id and recompact positions."""
+        existing = self.store.get_entry(entry_id)
+        who = existing["singer"] if existing else None
+        self._before_mutation(f"Remove {who}" if who else "Remove entry")
         self.store.delete_entry(entry_id)
         self._after_mutation()
 
     def move_entry(self, entry_id, new_position):
         """Move entry_id to new_position, shifting surrounding entries."""
+        self._before_mutation("Reorder queue")
         self.store.move_entry(entry_id, new_position)
         self._after_mutation()
 
@@ -125,11 +132,13 @@ class RotationManager:
                 media_entry = self.media.index.get(file_path)
                 if media_entry is not None:
                     duration = media_entry.get("duration")
+        self._before_mutation("Link file")
         self.store.link_file(entry_id, file_path, duration)
         self._after_mutation()
 
     def unlink_file(self, entry_id):
         """Remove any linked file from entry_id."""
+        self._before_mutation("Unlink file")
         self.store.unlink_file(entry_id)
         self._after_mutation()
 
@@ -179,6 +188,7 @@ class RotationManager:
 
     def set_paid(self, entry_id, paid):
         """Set paid priority flag on a rotation entry."""
+        self._before_mutation("Toggle paid")
         entry = self.store.set_paid(entry_id, paid)
         self._after_mutation()
         return entry
@@ -196,9 +206,13 @@ class RotationManager:
     def archive_rotation(self):
         """Archive all current entries and reset the rotation.
 
+        Clears undo/redo history too — it is session-scoped and the archived
+        rotation lives safely in ``rotation_archive``.
+
         Returns the number of entries archived.
         """
         count = self.store.archive()
+        self.store.clear_history()
         self._after_mutation()
         return count
 
@@ -210,14 +224,57 @@ class RotationManager:
         """
         if self.sync is None:
             raise RuntimeError("SheetSync is not configured; cannot restore from sheet")
+        # Checkpoint first so an emergency sheet restore is itself undoable.
+        self._before_mutation("Restore from sheet")
         count = self.sync.restore_from_sheet()
         self._after_mutation()
         return count
 
     def restore_entries(self, entries):
-        """Atomically replace rotation with a snapshot (undo/redo support)."""
+        """Atomically replace rotation with a snapshot (legacy direct restore)."""
         self.store.restore_entries(entries)
         self._after_mutation()
+
+    # ------------------------------------------------------------------
+    # Undo / redo (server-side, shared across all clients)
+    # ------------------------------------------------------------------
+
+    def undo(self):
+        """Apply the most recent undo snapshot. Returns the store result dict."""
+        result = self.store.undo()
+        if result.get("ok"):
+            self._after_mutation()
+        return result
+
+    def redo(self):
+        """Re-apply the most recent redo snapshot. Returns the store result dict."""
+        result = self.store.redo()
+        if result.get("ok"):
+            self._after_mutation()
+        return result
+
+    def preview_undo(self):
+        """Return the diff an undo would apply, without applying it."""
+        return self._preview_history(self.store.peek_undo())
+
+    def preview_redo(self):
+        """Return the diff a redo would apply, without applying it."""
+        return self._preview_history(self.store.peek_redo())
+
+    def _preview_history(self, peek):
+        if peek is None:
+            return {"ok": False, "reason": "empty"}
+        current = self.store.get_all_entries()
+        return {
+            "ok": True,
+            "label": peek["label"],
+            "diff": diff_entries(current, peek["entries"]),
+            "counts": self.store.history_counts(),
+        }
+
+    def history_status(self):
+        """Return undo/redo depth + labels for surfacing on the UI buttons."""
+        return self.store.history_counts()
 
     def get_singer_stats(self):
         """Return per-singer aggregate stats."""
@@ -225,31 +282,37 @@ class RotationManager:
 
     def rename_singer(self, old_name, new_name):
         """Rename a singer across all entries."""
+        self._before_mutation(f"Rename {old_name} → {new_name}")
         self.store.rename_singer(old_name, new_name)
         self._after_mutation()
 
     def merge_singers(self, source_name, target_name):
         """Merge source singer into target across all entries."""
+        self._before_mutation(f"Merge {source_name} → {target_name}")
         self.store.merge_singers(source_name, target_name)
         self._after_mutation()
 
     def set_singer_status(self, name, new_status):
         """Set status on all non-done entries for a singer."""
+        self._before_mutation(f"Set {name}: {new_status}")
         self.store.set_singer_status(name, new_status)
         self._after_mutation()
 
     def mark_singer_left(self, name):
         """Mark a singer as having left (session-scoped meta flag)."""
+        self._before_mutation(f"{name} left")
         self.store.mark_singer_left(name)
         self._after_mutation()
 
     def unmark_singer_left(self, name):
         """Remove a singer from the left set."""
+        self._before_mutation(f"{name} back")
         self.store.unmark_singer_left(name)
         self._after_mutation()
 
     def split_singer(self, source_name, new_name, entry_ids):
         """Reassign specific entries from source_name to new_name."""
+        self._before_mutation(f"Split {source_name}")
         self.store.split_singer(source_name, new_name, entry_ids)
         self._after_mutation()
 
@@ -257,8 +320,25 @@ class RotationManager:
     # Internal helpers
     # ------------------------------------------------------------------
 
+    def _before_mutation(self, label=None):
+        """Checkpoint the current rotation for undo before a user-facing edit.
+
+        Best-effort: a history failure must never block the actual rotation
+        operation (same principle as the push dispatcher in _after_mutation).
+        """
+        try:
+            self.store.checkpoint(label)
+        except Exception:
+            import logging
+            logging.getLogger(__name__).exception("undo checkpoint failed")
+
     def _after_mutation(self):
-        """Write display cache, trigger sync cycle, and notify push dispatcher."""
+        """Bump the revision counter, write display cache, trigger sync, notify push."""
+        try:
+            self.store.bump_rev()
+        except Exception:
+            import logging
+            logging.getLogger(__name__).exception("rev bump failed")
         self._write_display_cache()
         if self.push_dispatcher is not None:
             try:

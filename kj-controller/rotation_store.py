@@ -5,6 +5,55 @@ import sqlite3
 import threading
 
 
+# Human-editable fields that define a "meaningful" difference between two
+# rotation states (position is deliberately excluded — reordering is low-stakes
+# and would make every diff noisy).
+_DIFF_FIELDS = ("singer", "song_artist", "status", "notes", "paid")
+
+
+def _human_view(entry):
+    """A compact, display-friendly projection of an entry for diff output."""
+    return {
+        "id": entry.get("id"),
+        "singer": entry.get("singer", ""),
+        "song_artist": entry.get("song_artist", ""),
+        "status": entry.get("status", ""),
+    }
+
+
+def diff_entries(current, target):
+    """Compare two rotation snapshots by entry id.
+
+    Returns ``{"removed": [...], "added": [...], "changed": [...]}`` where:
+      - removed: present in ``current`` but not ``target`` (an undo would drop them)
+      - added:   present in ``target`` but not ``current`` (an undo would re-add them)
+      - changed: present in both but a human field differs (each item carries a
+                 ``before`` projection alongside the after-view)
+
+    Pure function — used both for the undo/redo preview and for tests.
+    """
+    cur = {e["id"]: e for e in current if e.get("id") is not None}
+    tgt = {e["id"]: e for e in target if e.get("id") is not None}
+
+    removed = [_human_view(cur[i]) for i in cur if i not in tgt]
+    added = [_human_view(tgt[i]) for i in tgt if i not in cur]
+    changed = []
+    for i in cur:
+        if i not in tgt:
+            continue
+        before = tuple(cur[i].get(f) for f in _DIFF_FIELDS)
+        after = tuple(tgt[i].get(f) for f in _DIFF_FIELDS)
+        if before != after:
+            view = _human_view(tgt[i])
+            view["before"] = _human_view(cur[i])
+            changed.append(view)
+
+    removed.sort(key=lambda e: e["id"])
+    added.sort(key=lambda e: e["id"])
+    changed.sort(key=lambda e: e["id"])
+    return {"removed": removed, "added": added, "changed": changed}
+
+
 class RotationStore:
     """Pure local SQLite storage for rotation entries.
 
@@ -22,6 +71,18 @@ class RotationStore:
     # Tests use them and need to share the connection across threads, so
     # treat them specially — share one connection with a process-wide lock.
     _MEMORY = ":memory:"
+
+    # Server-side undo/redo history depth (per stack). Snapshots are small JSON
+    # blobs, so this is a generous bound that still caps unbounded growth.
+    MAX_HISTORY = 30
+
+    # Tracking fields restored separately from human-edited fields, so an undo
+    # can preserve the *live* values (e.g. a download that completed in the
+    # background) instead of reverting them and breaking playback.
+    _TRACKING_FIELDS = (
+        "file_path", "duration", "download_source", "download_status",
+        "download_id", "url_fallback", "gen_job_id", "gen_status",
+    )
 
     def __init__(self, db_path):
         self.db_path = db_path
@@ -129,7 +190,25 @@ class RotationStore:
 
             CREATE INDEX IF NOT EXISTS idx_rotation_archive_night
                 ON rotation_archive (night_date);
+
+            CREATE TABLE IF NOT EXISTS rotation_history (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                stack        TEXT NOT NULL,          -- 'undo' | 'redo'
+                seq          INTEGER NOT NULL,       -- pop the highest seq per stack
+                label        TEXT,
+                rev          INTEGER,
+                entries_json TEXT NOT NULL,
+                created_at   TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_rotation_history_stack_seq
+                ON rotation_history (stack, seq);
         """)
+
+        # Initialise the monotonic revision counter if absent.
+        conn.execute(
+            "INSERT OR IGNORE INTO rotation_meta (key, value) VALUES ('rotation_rev', '0')"
+        )
 
         # Migrate existing databases: add columns that may be missing
         existing_cols = {row[1] for row in conn.execute(
@@ -924,40 +1003,210 @@ class RotationStore:
         """
         return self.get_entries(include_done=True)
 
-    def restore_entries(self, entries):
+    def restore_entries(self, entries, preserve_tracking=False):
         """Atomically replace all rotation entries with the given snapshot.
 
         Used by the undo/redo system. Preserves original entry IDs.
-        Each entry dict must have: id, singer, song_artist, status, notes,
-        position, file_path, duration, download_source, download_status,
-        download_id, url_fallback, gen_job_id, gen_status.
+
+        ``created_at`` is carried through from the snapshot when present (falling
+        back to the table default only when absent) so a restore never rewrites
+        the rotation's timeline — the bug that stamped every row with the restore
+        time on 2026-05-28.
+
+        When ``preserve_tracking`` is True, the *live* download/file-link fields
+        (see ``_TRACKING_FIELDS``) are kept for any entry whose id still exists,
+        instead of being reverted to the snapshot's values. This keeps an undo
+        focused on the human-edited columns and stops it breaking a download or
+        file link that completed in the background after the snapshot was taken.
         """
         conn = self._get_conn()
+
+        live = {}
+        if preserve_tracking:
+            for row in conn.execute("SELECT * FROM rotation_entries").fetchall():
+                d = dict(row)
+                live[d["id"]] = d
+
         try:
             conn.execute("DELETE FROM rotation_entries")
             conn.execute(
                 "DELETE FROM sqlite_sequence WHERE name = 'rotation_entries'"
             )
             for e in entries:
+                track = {f: e.get(f) for f in self._TRACKING_FIELDS}
+                if preserve_tracking and e.get("id") in live:
+                    src = live[e["id"]]
+                    for f in self._TRACKING_FIELDS:
+                        track[f] = src.get(f)
+
+                cols = [
+                    "id", "singer", "song_artist", "status", "notes", "position",
+                    "file_path", "duration", "download_source", "download_status",
+                    "download_id", "url_fallback", "gen_job_id", "gen_status",
+                    "singers_json", "paid",
+                ]
+                vals = [
+                    e["id"], e["singer"], e["song_artist"], e["status"],
+                    e.get("notes", ""), e["position"],
+                    track["file_path"], track["duration"],
+                    track["download_source"], track["download_status"],
+                    track["download_id"], track["url_fallback"],
+                    track["gen_job_id"], track["gen_status"],
+                    e.get("singers_json"), int(bool(e.get("paid", 0))),
+                ]
+                # Preserve created_at when the snapshot carries it.
+                if e.get("created_at"):
+                    cols.append("created_at")
+                    vals.append(e["created_at"])
+
+                placeholders = ", ".join(["?"] * len(vals))
                 conn.execute(
-                    "INSERT INTO rotation_entries "
-                    "(id, singer, song_artist, status, notes, position, "
-                    " file_path, duration, download_source, download_status, "
-                    " download_id, url_fallback, gen_job_id, gen_status, "
-                    " singers_json, updated_at) "
-                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "
-                    "        datetime('now', 'localtime'))",
-                    (
-                        e["id"], e["singer"], e["song_artist"], e["status"],
-                        e.get("notes", ""), e["position"],
-                        e.get("file_path"), e.get("duration"),
-                        e.get("download_source"), e.get("download_status"),
-                        e.get("download_id"), e.get("url_fallback"),
-                        e.get("gen_job_id"), e.get("gen_status"),
-                        e.get("singers_json"),
-                    ),
+                    f"INSERT INTO rotation_entries ({', '.join(cols)}, updated_at) "
+                    f"VALUES ({placeholders}, datetime('now', 'localtime'))",
+                    vals,
                 )
             conn.commit()
         except Exception:
             conn.rollback()
             raise
+
+    # ------------------------------------------------------------------
+    # Revision counter + server-side undo/redo history
+    # ------------------------------------------------------------------
+
+    def get_rev(self):
+        """Return the monotonic rotation revision counter (0 if unset)."""
+        conn = self._get_conn()
+        row = conn.execute(
+            "SELECT value FROM rotation_meta WHERE key = 'rotation_rev'"
+        ).fetchone()
+        return int(row[0]) if row and row[0] is not None else 0
+
+    def bump_rev(self):
+        """Increment and return the rotation revision counter."""
+        conn = self._get_conn()
+        new_rev = self.get_rev() + 1
+        conn.execute(
+            "INSERT OR REPLACE INTO rotation_meta (key, value) "
+            "VALUES ('rotation_rev', ?)",
+            (str(new_rev),),
+        )
+        conn.commit()
+        return new_rev
+
+    def _snapshot_json(self, conn):
+        """Serialise the full current rotation (all statuses) to JSON."""
+        rows = conn.execute(
+            "SELECT * FROM rotation_entries ORDER BY position"
+        ).fetchall()
+        return json.dumps([dict(r) for r in rows])
+
+    def _stack_count(self, conn, stack):
+        return conn.execute(
+            "SELECT COUNT(*) FROM rotation_history WHERE stack = ?", (stack,)
+        ).fetchone()[0]
+
+    def _push_history(self, conn, stack, label, entries_json):
+        seq = conn.execute(
+            "SELECT COALESCE(MAX(seq), 0) + 1 FROM rotation_history WHERE stack = ?",
+            (stack,),
+        ).fetchone()[0]
+        conn.execute(
+            "INSERT INTO rotation_history (stack, seq, label, rev, entries_json) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (stack, seq, label, self.get_rev(), entries_json),
+        )
+
+    def _prune_stack(self, conn, stack, max_size):
+        ids = conn.execute(
+            "SELECT id FROM rotation_history WHERE stack = ? ORDER BY seq DESC",
+            (stack,),
+        ).fetchall()
+        for extra in ids[max_size:]:
+            conn.execute("DELETE FROM rotation_history WHERE id = ?", (extra[0],))
+
+    def checkpoint(self, label=None):
+        """Snapshot the current rotation onto the undo stack before a mutation.
+
+        Clears the redo stack (a new action invalidates any redo history) and
+        prunes the undo stack to ``MAX_HISTORY``.
+        """
+        conn = self._get_conn()
+        self._push_history(conn, "undo", label, self._snapshot_json(conn))
+        conn.execute("DELETE FROM rotation_history WHERE stack = 'redo'")
+        self._prune_stack(conn, "undo", self.MAX_HISTORY)
+        conn.commit()
+
+    def history_counts(self):
+        """Return undo/redo depth and the label of each stack's top entry."""
+        conn = self._get_conn()
+        top_undo = conn.execute(
+            "SELECT label FROM rotation_history WHERE stack = 'undo' "
+            "ORDER BY seq DESC LIMIT 1"
+        ).fetchone()
+        top_redo = conn.execute(
+            "SELECT label FROM rotation_history WHERE stack = 'redo' "
+            "ORDER BY seq DESC LIMIT 1"
+        ).fetchone()
+        return {
+            "undo": self._stack_count(conn, "undo"),
+            "redo": self._stack_count(conn, "redo"),
+            "undo_label": top_undo["label"] if top_undo else None,
+            "redo_label": top_redo["label"] if top_redo else None,
+        }
+
+    def _peek(self, stack):
+        conn = self._get_conn()
+        row = conn.execute(
+            "SELECT label, entries_json FROM rotation_history WHERE stack = ? "
+            "ORDER BY seq DESC LIMIT 1",
+            (stack,),
+        ).fetchone()
+        if row is None:
+            return None
+        return {"label": row["label"], "entries": json.loads(row["entries_json"])}
+
+    def peek_undo(self):
+        """Return the snapshot that an undo would restore, without applying it."""
+        return self._peek("undo")
+
+    def peek_redo(self):
+        """Return the snapshot that a redo would restore, without applying it."""
+        return self._peek("redo")
+
+    def _apply_from(self, from_stack, to_stack):
+        """Pop ``from_stack``, push current state to ``to_stack``, restore the pop."""
+        conn = self._get_conn()
+        top = conn.execute(
+            "SELECT id, label, entries_json FROM rotation_history "
+            "WHERE stack = ? ORDER BY seq DESC LIMIT 1",
+            (from_stack,),
+        ).fetchone()
+        if top is None:
+            return {"ok": False, "reason": "empty"}
+
+        current_json = self._snapshot_json(conn)
+        self.restore_entries(json.loads(top["entries_json"]), preserve_tracking=True)
+        conn.execute("DELETE FROM rotation_history WHERE id = ?", (top["id"],))
+        self._push_history(conn, to_stack, top["label"], current_json)
+        conn.commit()
+        return {
+            "ok": True,
+            "label": top["label"],
+            "undo": self._stack_count(conn, "undo"),
+            "redo": self._stack_count(conn, "redo"),
+        }
+
+    def undo(self):
+        """Restore the most recent undo snapshot; current state goes to redo."""
+        return self._apply_from("undo", "redo")
+
+    def redo(self):
+        """Re-apply the most recent redo snapshot; current state goes to undo."""
+        return self._apply_from("redo", "undo")
+
+    def clear_history(self):
+        """Drop all undo/redo history (called when a night is archived/reset)."""
+        conn = self._get_conn()
+        conn.execute("DELETE FROM rotation_history")
+        conn.commit()

@@ -23,6 +23,11 @@ def mock_rotation():
     rotation.get_sync_status.return_value = {"last_sync": None, "is_online": False, "next_sync_in": None}
     rotation.store.get_songs_sung_counts.return_value = {}
     rotation.get_singer_stats.return_value = []
+    # Server-side undo/redo surface (GET /rotation includes these).
+    rotation.store.get_rev.return_value = 0
+    rotation.history_status.return_value = {
+        "undo": 0, "redo": 0, "undo_label": None, "redo_label": None,
+    }
     rotation.sync = None
     rotation.media = None
     return rotation

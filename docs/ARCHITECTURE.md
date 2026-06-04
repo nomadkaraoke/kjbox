@@ -71,8 +71,8 @@ KJ Controller is a web-based karaoke show management application. A Flask backen
 | `youtube_search.py` | ~80 | YouTube search via yt-dlp: ytsearch with extract_flat for fast metadata |
 | `youtube_health.py` | ~170 | YouTube health checks: yt-dlp/EJS/Deno version detection, cookie validation, PyPI version check (24h cache), pip upgrade |
 | `divebar.py` | ~150 | Divebar catalog client: search, download URL generation via Cloud Function API |
-| `rotation.py` | ~180 | `RotationManager` coordinator: delegates to `RotationStore` (SQLite) + `SheetSync` (optional), writes display cache, download/gen tracking |
-| `rotation_store.py` | ~310 | `RotationStore` class: SQLite CRUD for rotation entries, position management, file linking, download/gen tracking, archive |
+| `rotation.py` | ~180 | `RotationManager` coordinator: delegates to `RotationStore` (SQLite) + `SheetSync` (optional), writes display cache, download/gen tracking, undo/redo + revision bump |
+| `rotation_store.py` | ~310 | `RotationStore` class: SQLite CRUD for rotation entries, position management, file linking, download/gen tracking, archive, and server-side undo/redo history (`rotation_history` table + `rotation_rev` counter, `diff_entries` helper) |
 | `rotation_sync.py` | ~230 | `SheetSync` class: background thread pushing SQLite state to Google Sheets (optional backup) |
 | `gen_client.py` | ~100 | `GenClient` HTTP client for gen API: job creation, status polling, download URL retrieval |
 | `gen_poller.py` | ~90 | `GenPoller` background thread: polls gen API for active jobs, auto-downloads completed videos |
@@ -182,7 +182,7 @@ utils.py → (stdlib only)
 | GET | `/system/sleep-mode` | Sleep mode status (active, entering, exiting, state details) |
 | POST | `/system/sleep-mode` | Enter or exit sleep mode (stops services, unmounts SSD, power-saver) |
 | GET | `/system/stats` | System metrics: CPU %, memory, disk usage (requires psutil) |
-| GET | `/rotation` | Get singer rotation queue (non-done entries, with estimated times) |
+| GET | `/rotation` | Get singer rotation queue (non-done entries, with estimated times). Also returns `rev` (monotonic revision) + `history` (`{undo, redo, undo_label, redo_label}`) for the undo/redo buttons |
 | POST | `/rotation/status` | Update a rotation entry's status (`{id, status}`) |
 | POST | `/rotation/edit` | Edit a rotation entry's singer name and/or song (`{id, singer?, song_artist?}`) |
 | POST | `/rotation/delete` | Delete a rotation entry (`{id}`) |
@@ -197,7 +197,9 @@ utils.py → (stdlib only)
 | POST | `/rotation/make` | Create gen job and link to rotation entry (`{id?, singer?, artist, title}`) |
 | GET | `/rotation/gen-status` | Get active gen job statuses for rotation entries |
 | GET | `/rotation/sync-status` | Get Sheet sync status (`{last_sync, is_online, next_sync_in}`) |
-| POST | `/rotation/restore` | Restore rotation from snapshot (`{entries}` for undo/redo) or from Google Sheet backup (no body) |
+| POST | `/rotation/undo` | Server-side undo. No `confirm` → preview diff (`{removed, added, changed}`) + `rev`, applies nothing. `{confirm: true, expected_rev}` → apply (rejected as `stale` if `expected_rev` is out of date) |
+| POST | `/rotation/redo` | Server-side redo — same two-phase preview/confirm + `expected_rev` guard as `/rotation/undo` |
+| POST | `/rotation/restore` | Restore rotation from Google Sheet backup (no body). Legacy `{entries}` snapshot path retained for compatibility; KJ undo/redo now uses `/rotation/undo` `/redo` |
 | GET  | `/rotation/requests` | List public sing requests (filter by `?status=pending\|approved\|rejected`) + counts |
 | GET  | `/rotation/requests/config` | Current event token, enabled flag, auto-approve flag, accept-make-requests flag, simple-mode flag, public/local URLs, pending count |
 | POST | `/rotation/requests/config` | Regenerate token / toggle enabled / toggle auto-approve / toggle accept-make-requests / toggle simple-mode |
@@ -298,7 +300,9 @@ The rotation system manages the singer queue during live karaoke shows, with an 
                                         └──────────────────┘
 ```
 
-**Data flow:** SQLite is the source of truth (`~/kjdata/rotation.db`). `RotationManager` delegates all CRUD to `RotationStore` (SQLite) and optionally syncs to Google Sheets via `SheetSync` (background thread, every 30s). After every mutation, the manager writes a local JSON cache to `/tmp/rotation_cache.json`. The conky display reads this cache every 3 seconds. The system works fully offline — Sheet sync is optional and gracefully handles network failures.
+**Data flow:** SQLite is the source of truth (`~/kjdata/rotation.db`). `RotationManager` delegates all CRUD to `RotationStore` (SQLite) and optionally syncs to Google Sheets via `SheetSync` (background thread, every 30s). After every mutation, the manager bumps the `rotation_rev` counter and writes a local JSON cache to `/tmp/rotation_cache.json`. The conky display reads this cache every 3 seconds. The system works fully offline — Sheet sync is optional and gracefully handles network failures.
+
+**Undo/redo:** History is server-side and shared across all KJ devices, so it survives a service restart and reflects every writer (singer self-submissions, downloads, other tabs) — unlike the old per-browser snapshot stack that silently overwrote concurrent changes. Before each *meaningful* mutation `RotationManager` checkpoints the full rotation onto the `rotation_history` undo stack (capped at `MAX_HISTORY`, redo stack cleared); background tracking updates are not checkpointed. `/rotation/undo` and `/rotation/redo` preview a `diff_entries` summary before applying, and the apply is guarded by `expected_rev` so a change between preview and confirm is rejected as `stale`. Restores preserve `created_at` and live file-link fields; archiving a night clears the history.
 
 **UI features:** The KJ Controller web UI shows the rotation queue with status badges, preparation badges (READY/DOWNLOADING/URL/UNLINKED), action buttons (Singing, Done, Next, plus more status options), drag-and-drop reordering via drag handles, inline editing (Shift+click), and one-click deletion (Ctrl/Cmd+click). The "Add Singer" form includes a search-as-you-type dropdown that queries local catalog, Karaoke Nerds, and Divebar — selecting a result adds the singer with the file linked or download queued in one action. Divebar cross-referencing works by searching the Divebar catalog with the same query, then matching results to KN tracks locally by (artist, title, brand_code). The media index search also strips punctuation for fuzzy matching. The search dropdown renders identically to the KN panel with community/preferred badges. The Play button auto-advances rotation status: sets the current entry to "Now Singing" and the next entry to "Up Next". Edit mode (inline editing) is isolated from global keyboard/click handlers and polling — the 10-second rotation poll skips re-render while an entry is being edited.
 
