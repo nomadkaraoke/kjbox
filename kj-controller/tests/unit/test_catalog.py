@@ -576,3 +576,26 @@ class TestRebuildFts:
         ])
         cands = cat._trigram_candidates("garfunkle", limit=20)  # typo
         assert any("Garfunkel" in r["artist"] for r in cands)
+
+
+class TestFuzzySearch:
+    def test_typo_in_artist_found(self, tmp_path):
+        cat = _build_tiny_catalog(tmp_path, [
+            "/m/KK-1 - Simon & Garfunkel - Sound Of Silence.zip",
+            "/m/KK-2 - Queen - Bohemian Rhapsody.zip",
+        ])
+        results = cat.search("bohemian rapsody")  # missing 'h'
+        assert any("Bohemian Rhapsody" in r["title"] for r in results)
+
+    def test_exact_still_wins_without_fuzzy(self, tmp_path):
+        cat = _build_tiny_catalog(tmp_path, [
+            "/m/KK-2 - Queen - Bohemian Rhapsody.zip",
+        ])
+        results = cat.search("bohemian rhapsody")
+        assert results and results[0]["title"] == "Bohemian Rhapsody"
+
+    def test_garbage_query_returns_nothing(self, tmp_path):
+        cat = _build_tiny_catalog(tmp_path, [
+            "/m/KK-2 - Queen - Bohemian Rhapsody.zip",
+        ])
+        assert cat.search("zzzzxqwer plooof") == []

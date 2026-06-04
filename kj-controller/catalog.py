@@ -4,6 +4,7 @@ import os
 import re
 import sqlite3
 
+from rapidfuzz import fuzz
 from text_normalize import (
     normalize as _normalize_for_search,
     fts_match_query as _fts5_safe_query,
@@ -11,6 +12,11 @@ from text_normalize import (
     LATIN_SPECIAL_MAP,  # re-export for any external importers
     NORMALIZER_VERSION,
 )
+
+
+# Fuzzy fallback score cutoff (0-100). Tunable knob; validated by the metrics
+# harness (scripts/search_metrics.py). Below this, candidates are discarded.
+FUZZY_SCORE_CUTOFF = 80
 
 
 def parse_karaoke_filename(filename):
@@ -312,7 +318,10 @@ class ExternalCatalog:
         # LIKE fallback: strip punctuation from query terms and match against
         # artist/title with punctuation stripped. Handles cases like
         # "Sheeps" matching "Sheep's" where FTS5 tokenization diverges.
-        return self._like_fallback(normalized, limit, offset)
+        like_rows = self._like_fallback(normalized, limit, offset)
+        if like_rows:
+            return like_rows
+        return self._fuzzy_search(query, limit)
 
     def _like_fallback(self, query, limit, offset):
         """Fallback search using LIKE with punctuation stripped."""
@@ -340,6 +349,28 @@ class ExternalCatalog:
             return [dict(row) for row in rows]
         except sqlite3.OperationalError:
             return []
+
+    def _fuzzy_search(self, query, limit):
+        """Fuzzy fallback using rapidfuzz WRatio over trigram candidates.
+
+        Only called when both FTS5 MATCH and LIKE fallback return nothing.
+        Uses the trigram index to retrieve candidates (typo-tolerant recall),
+        then scores each with WRatio and filters by FUZZY_SCORE_CUTOFF.
+        """
+        norm_q = _normalize_for_search(query)
+        if len(norm_q) < 3:
+            return []
+        candidates = self._trigram_candidates(query, limit=max(200, limit * 20))
+        scored = []
+        for c in candidates:
+            hay = _normalize_for_search(
+                ((c.get("artist") or "") + " " + (c.get("title") or "")).strip()
+            )
+            score = fuzz.WRatio(norm_q, hay)
+            if score >= FUZZY_SCORE_CUTOFF:
+                scored.append((score, c))
+        scored.sort(key=lambda s: s[0], reverse=True)
+        return [c for _, c in scored[:limit]]
 
     def normalizer_version(self):
         """Return the NORMALIZER_VERSION the index was built with (or None)."""
