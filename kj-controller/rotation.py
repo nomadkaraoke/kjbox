@@ -101,6 +101,19 @@ class RotationManager:
         self.store.update_status(entry_id, new_status)
         self._after_mutation()
 
+    def update_statuses(self, updates, label="Advance rotation"):
+        """Apply several status changes as a single undoable action.
+
+        ``updates`` is a list of ``(entry_id, status)`` pairs. The whole batch is
+        one checkpoint + one revision bump, so e.g. the Play button (current →
+        Now Singing, next → Up Next) is a single undo step rather than two. The
+        per-status exclusivity rules still apply (each delegates to the store).
+        """
+        self._before_mutation(label)
+        for entry_id, status in updates:
+            self.store.update_status(entry_id, status)
+        self._after_mutation()
+
     def mark_singing(self, entry_id):
         """Mark entry as 'Now Singing', clearing any other singing entries."""
         self.update_status(entry_id, "Now Singing")

@@ -2398,6 +2398,25 @@ def update_rotation_status():
     if not hasattr(current_app, 'rotation') or current_app.rotation is None:
         return jsonify({"error": "Rotation not configured"}), 503
     data = request.get_json(force=True)
+
+    # Batch path: apply several status changes as one undoable action (e.g. the
+    # Play button sets current → Now Singing and next → Up Next in one step).
+    if isinstance(data.get('updates'), list):
+        try:
+            pairs = []
+            for u in data['updates']:
+                pairs.append((int(u['id']), u.get('status', '')))
+        except (TypeError, ValueError, KeyError):
+            return jsonify({"error": "each update needs an integer id and status"}), 400
+        try:
+            rotation.update_statuses(pairs)
+            entries = rotation.get_rotation()
+            _add_time_estimates(entries)
+            _add_songs_sung(entries, rotation)
+            return jsonify({"success": True, "entries": entries})
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+
     raw_id = data.get('id')
     status = data.get('status', '')
     if raw_id is None:

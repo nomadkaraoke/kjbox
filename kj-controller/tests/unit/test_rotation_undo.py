@@ -279,6 +279,26 @@ class TestManagerUndo:
         assert "undo" in status and "redo" in status
         assert status["undo"] >= 1
 
+    def test_update_statuses_is_one_checkpoint(self, mgr):
+        # "Play" advances two entries at once — it must be a single undo step,
+        # not two (the regression CodeRabbit flagged).
+        mgr.add_entry("Alice", "Song A")   # id 1
+        mgr.add_entry("Bob", "Song B")     # id 2
+        before = mgr.store.history_counts()["undo"]
+        mgr.update_statuses([(1, "Now Singing"), (2, "Up Next")])
+        after = mgr.store.history_counts()["undo"]
+        assert after == before + 1
+        assert mgr.store.get_entry(1)["status"] == "Now Singing"
+        assert mgr.store.get_entry(2)["status"] == "Up Next"
+
+    def test_undo_after_advance_reverts_both(self, mgr):
+        mgr.add_entry("Alice", "Song A")
+        mgr.add_entry("Bob", "Song B")
+        mgr.update_statuses([(1, "Now Singing"), (2, "Up Next")])
+        mgr.undo()
+        assert mgr.store.get_entry(1)["status"] != "Now Singing"
+        assert mgr.store.get_entry(2)["status"] != "Up Next"
+
     def test_preview_undo_does_not_apply(self, mgr):
         mgr.add_entry("Alice", "Song A")
         mgr.add_entry("Bob", "Song B")

@@ -60,9 +60,11 @@ const rotationHistory = {
             });
             const data = await resp.json();
             if (data.success === false && data.reason === 'stale') {
-                this.updateButtons(data.history);
                 log('Rotation changed since preview — re-checking…', 'warn');
-                await this._run(direction);   // re-preview the real diff
+                // Reload+render the current rotation so the UI matches the
+                // freshly-previewed diff, then re-preview.
+                await fetchRotation();
+                await this._run(direction);
                 return;
             }
             if (!resp.ok || data.success === false) {
@@ -4803,12 +4805,23 @@ async function playAndAdvanceRotation(entry, idx, entries) {
 }
 
 async function advanceRotationStatus(entry, idx, entries) {
-    // Mark this entry as singing
-    await updateRotationStatus(entry.id, 'Now Singing');
-    // Mark the next entry as up next (if there is one)
+    // Mark current → Now Singing and next → Up Next in ONE request so the
+    // advance is a single undo step (one server-side checkpoint), not two.
+    const updates = [{ id: entry.id, status: 'Now Singing' }];
     const nextEntry = entries[idx + 1];
-    if (nextEntry) {
-        await updateRotationStatus(nextEntry.id, 'Up Next');
+    if (nextEntry) updates.push({ id: nextEntry.id, status: 'Up Next' });
+    showRotationIndicator('spin');
+    try {
+        const response = await fetch('/rotation/status', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ updates }),
+        });
+        const data = await response.json();
+        if (data.entries) { rotationData = data.entries; renderRotation(rotationData); }
+        showRotationIndicator(response.ok ? 'success' : 'error');
+    } catch (e) {
+        showRotationIndicator('error');
     }
 }
 

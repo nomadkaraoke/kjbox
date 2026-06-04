@@ -65,6 +65,28 @@ class TestUndoRoute:
         assert data["reason"] == "empty"
 
 
+class TestBatchStatusAdvance:
+    def test_batch_status_is_single_undo_step(self, flask_app, flask_test_client):
+        flask_app.rotation.add_entry("Alice", "Song A")
+        flask_app.rotation.add_entry("Bob", "Song B")
+        before = flask_app.rotation.store.history_counts()["undo"]
+
+        resp = flask_test_client.post(
+            "/rotation/status",
+            data=json.dumps({"updates": [
+                {"id": 1, "status": "Now Singing"},
+                {"id": 2, "status": "Up Next"},
+            ]}),
+            content_type="application/json",
+        )
+        assert resp.status_code == 200
+        assert resp.get_json()["success"] is True
+        after = flask_app.rotation.store.history_counts()["undo"]
+        assert after == before + 1
+        assert flask_app.rotation.store.get_entry(1)["status"] == "Now Singing"
+        assert flask_app.rotation.store.get_entry(2)["status"] == "Up Next"
+
+
 class TestRevGuard:
     def test_preview_includes_rev(self, flask_app, flask_test_client):
         flask_app.rotation.add_entry("Alice", "Song A")
