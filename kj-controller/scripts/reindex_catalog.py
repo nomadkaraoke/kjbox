@@ -21,6 +21,10 @@ def main():
         print("Catalog DB not found or empty; nothing to reindex.")
         return 1
 
+    # Idempotent: creates media_trigram + catalog_meta (and triggers) if the DB
+    # predates them — required on the first reindex of a DB built by older code.
+    cat.init_schema()
+
     def progress(done, total):
         if done % 50000 == 0 or done == total:
             print(f"  reindexed {done}/{total}")
