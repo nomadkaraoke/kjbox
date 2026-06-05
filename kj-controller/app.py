@@ -223,6 +223,9 @@ def create_app(config=None):
         cfg.get('rotation_db_path', os.path.expanduser('~/kjdata/rotation.db'))
     )
     flask_app.sing_store.ensure_token()
+    # Guarantee a night_started_at marker exists so the night-scoped phone
+    # lookups (SMS + push) work on a device that hasn't run a New Rotation yet.
+    flask_app.sing_store.ensure_night_started()
     flask_app.sms_store = SmsStore(
         cfg.get('rotation_db_path', os.path.expanduser('~/kjdata/rotation.db'))
     )
@@ -253,21 +256,16 @@ def create_app(config=None):
         # Scope to the current night: a New Rotation resets rotation_entries'
         # autoincrement, so a recycled entry id would otherwise phantom-match a
         # PRIOR night's request and push the "you're up" alert to the wrong
-        # singer. Mirrors the SMS path's guard (see _resolve_sms_target).
+        # singer. Mirrors the SMS path's guard (see _resolve_sms_target). Fails
+        # CLOSED if the marker is somehow unset (created_at >= NULL → no rows);
+        # ensure_night_started() guarantees it's present on boot.
         night_started = flask_app.sing_store.get_night_started_at()
-        if night_started:
-            row = conn.execute(
-                "SELECT phone FROM sing_requests "
-                "WHERE linked_entry_id = ? AND created_at >= ? "
-                "ORDER BY created_at DESC LIMIT 1",
-                (entry_id, night_started),
-            ).fetchone()
-        else:
-            row = conn.execute(
-                "SELECT phone FROM sing_requests WHERE linked_entry_id = ? "
-                "ORDER BY created_at DESC LIMIT 1",
-                (entry_id,),
-            ).fetchone()
+        row = conn.execute(
+            "SELECT phone FROM sing_requests "
+            "WHERE linked_entry_id = ? AND created_at >= ? "
+            "ORDER BY created_at DESC LIMIT 1",
+            (entry_id, night_started),
+        ).fetchone()
         return row["phone"] if row else None
 
     flask_app.rotation.push_dispatcher = PushDispatcher(
@@ -416,6 +414,9 @@ def start_app():  # pragma: no cover
         cfg.get('rotation_db_path', os.path.expanduser('~/kjdata/rotation.db'))
     )
     flask_app.sing_store.ensure_token()
+    # Guarantee a night_started_at marker exists so the night-scoped phone
+    # lookups (SMS + push) work on a device that hasn't run a New Rotation yet.
+    flask_app.sing_store.ensure_night_started()
     flask_app.sms_store = SmsStore(
         cfg.get('rotation_db_path', os.path.expanduser('~/kjdata/rotation.db'))
     )
@@ -441,21 +442,16 @@ def start_app():  # pragma: no cover
         # Scope to the current night: a New Rotation resets rotation_entries'
         # autoincrement, so a recycled entry id would otherwise phantom-match a
         # PRIOR night's request and push the "you're up" alert to the wrong
-        # singer. Mirrors the SMS path's guard (see _resolve_sms_target).
+        # singer. Mirrors the SMS path's guard (see _resolve_sms_target). Fails
+        # CLOSED if the marker is somehow unset (created_at >= NULL → no rows);
+        # ensure_night_started() guarantees it's present on boot.
         night_started = flask_app.sing_store.get_night_started_at()
-        if night_started:
-            row = conn.execute(
-                "SELECT phone FROM sing_requests "
-                "WHERE linked_entry_id = ? AND created_at >= ? "
-                "ORDER BY created_at DESC LIMIT 1",
-                (entry_id, night_started),
-            ).fetchone()
-        else:
-            row = conn.execute(
-                "SELECT phone FROM sing_requests WHERE linked_entry_id = ? "
-                "ORDER BY created_at DESC LIMIT 1",
-                (entry_id,),
-            ).fetchone()
+        row = conn.execute(
+            "SELECT phone FROM sing_requests "
+            "WHERE linked_entry_id = ? AND created_at >= ? "
+            "ORDER BY created_at DESC LIMIT 1",
+            (entry_id, night_started),
+        ).fetchone()
         return row["phone"] if row else None
 
     flask_app.rotation.push_dispatcher = PushDispatcher(

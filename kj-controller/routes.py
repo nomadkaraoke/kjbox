@@ -2328,20 +2328,20 @@ def _add_sms_status(entries, app=None):
     # would otherwise phantom-match a PRIOR night's request and attach the
     # wrong singer's phone. _resolve_sms_target applies the same guard so the
     # button's visibility matches what /sms/send would actually do.
+    # Fails CLOSED if night_started is unset (created_at >= NULL → no rows);
+    # ensure_night_started() guarantees it's present on boot.
     conn = sing_store._get_conn()
     night_started = sing_store.get_night_started_at()
     placeholders = ",".join("?" * len(entry_ids))
-    night_clause = "AND created_at >= ?" if night_started else ""
-    params = list(entry_ids) + ([night_started] if night_started else [])
     phone_rows = conn.execute(
         f"""
         SELECT linked_entry_id, phone, id
         FROM sing_requests
         WHERE linked_entry_id IN ({placeholders})
-        {night_clause}
+          AND created_at >= ?
         ORDER BY id DESC
         """,
-        tuple(params),
+        tuple(list(entry_ids) + [night_started]),
     ).fetchall()
     phone_by_entry = {}
     for row in phone_rows:
@@ -2692,28 +2692,19 @@ def _resolve_sms_target(entry_id):
     # Rotation resets rotation_entries' autoincrement counter, so without this
     # guard a recycled entry id phantom-matches a PRIOR night's request and we
     # would text the WRONG singer. _add_sms_status applies the same guard.
+    # Fails CLOSED if the marker is unset (created_at >= NULL → no rows);
+    # ensure_night_started() guarantees it's present on boot.
     conn = sing_store._get_conn()
     night_started = sing_store.get_night_started_at()
-    if night_started:
-        req_row = conn.execute(
-            """
-            SELECT id, singer_name, phone, song_artist, song_title
-            FROM sing_requests
-            WHERE linked_entry_id = ? AND created_at >= ?
-            ORDER BY id DESC LIMIT 1
-            """,
-            (entry_id, night_started),
-        ).fetchone()
-    else:
-        req_row = conn.execute(
-            """
-            SELECT id, singer_name, phone, song_artist, song_title
-            FROM sing_requests
-            WHERE linked_entry_id = ?
-            ORDER BY id DESC LIMIT 1
-            """,
-            (entry_id,),
-        ).fetchone()
+    req_row = conn.execute(
+        """
+        SELECT id, singer_name, phone, song_artist, song_title
+        FROM sing_requests
+        WHERE linked_entry_id = ? AND created_at >= ?
+        ORDER BY id DESC LIMIT 1
+        """,
+        (entry_id, night_started),
+    ).fetchone()
     if req_row is None or not (req_row["phone"] or "").strip():
         return None, (
             jsonify({"error": "no phone on file for this entry"}), 400,

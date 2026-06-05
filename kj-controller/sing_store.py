@@ -207,6 +207,23 @@ class SingStore:
         """
         return self._get_meta(NIGHT_STARTED_KEY)
 
+    def ensure_night_started(self):
+        """Set night_started_at to now on first boot if it's never been set.
+
+        Phone resolution (SMS + push) is night-scoped and fails CLOSED when the
+        marker is missing, so guaranteeing it's always present keeps SMS/push
+        working on a device that hasn't run a New Rotation yet. A device that
+        has archived already keeps its existing (newer) value — this never
+        overwrites. Returns the effective value.
+        """
+        existing = self._get_meta(NIGHT_STARTED_KEY)
+        if existing:
+            return existing
+        conn = self._get_conn()
+        now = conn.execute("SELECT datetime('now', 'localtime')").fetchone()[0]
+        self._set_meta(NIGHT_STARTED_KEY, now)
+        return now
+
     def get_token(self):
         """Return the current event token, or None if unset."""
         return self._get_meta(TOKEN_KEY)
