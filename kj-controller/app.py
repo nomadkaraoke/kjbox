@@ -250,11 +250,24 @@ def create_app(config=None):
         if entry_id is None:
             return None
         conn = flask_app.sing_store._get_conn()
-        row = conn.execute(
-            "SELECT phone FROM sing_requests WHERE linked_entry_id = ? "
-            "ORDER BY created_at DESC LIMIT 1",
-            (entry_id,),
-        ).fetchone()
+        # Scope to the current night: a New Rotation resets rotation_entries'
+        # autoincrement, so a recycled entry id would otherwise phantom-match a
+        # PRIOR night's request and push the "you're up" alert to the wrong
+        # singer. Mirrors the SMS path's guard (see _resolve_sms_target).
+        night_started = flask_app.sing_store.get_night_started_at()
+        if night_started:
+            row = conn.execute(
+                "SELECT phone FROM sing_requests "
+                "WHERE linked_entry_id = ? AND created_at >= ? "
+                "ORDER BY created_at DESC LIMIT 1",
+                (entry_id, night_started),
+            ).fetchone()
+        else:
+            row = conn.execute(
+                "SELECT phone FROM sing_requests WHERE linked_entry_id = ? "
+                "ORDER BY created_at DESC LIMIT 1",
+                (entry_id,),
+            ).fetchone()
         return row["phone"] if row else None
 
     flask_app.rotation.push_dispatcher = PushDispatcher(
@@ -425,11 +438,24 @@ def start_app():  # pragma: no cover
         if entry_id is None:
             return None
         conn = flask_app.sing_store._get_conn()
-        row = conn.execute(
-            "SELECT phone FROM sing_requests WHERE linked_entry_id = ? "
-            "ORDER BY created_at DESC LIMIT 1",
-            (entry_id,),
-        ).fetchone()
+        # Scope to the current night: a New Rotation resets rotation_entries'
+        # autoincrement, so a recycled entry id would otherwise phantom-match a
+        # PRIOR night's request and push the "you're up" alert to the wrong
+        # singer. Mirrors the SMS path's guard (see _resolve_sms_target).
+        night_started = flask_app.sing_store.get_night_started_at()
+        if night_started:
+            row = conn.execute(
+                "SELECT phone FROM sing_requests "
+                "WHERE linked_entry_id = ? AND created_at >= ? "
+                "ORDER BY created_at DESC LIMIT 1",
+                (entry_id, night_started),
+            ).fetchone()
+        else:
+            row = conn.execute(
+                "SELECT phone FROM sing_requests WHERE linked_entry_id = ? "
+                "ORDER BY created_at DESC LIMIT 1",
+                (entry_id,),
+            ).fetchone()
         return row["phone"] if row else None
 
     flask_app.rotation.push_dispatcher = PushDispatcher(

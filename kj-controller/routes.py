@@ -2279,10 +2279,15 @@ def _add_sms_status(entries, app=None):
 
     Shape per entry:
         sms = {
+            "configured": bool,       # SMS feature is globally configured at all
             "available": bool,        # SMS is globally configured AND row has a phone
             "last_sent_at": str|null, # timestamp of most recent send
             "last_status": "sent"|"failed"|null,
         }
+
+    The frontend shows the SMS button on every row when ``configured`` is
+    true (greyed-out/disabled when ``available`` is false, so rotation rows
+    stay the same width) and hides it entirely when ``configured`` is false.
 
     "Available" requires BOTH (a) Telnyx env vars set so /sms/send won't
     503, AND (b) linked_entry_id resolving to a sing_request with a
@@ -2301,7 +2306,7 @@ def _add_sms_status(entries, app=None):
         # hides the button entirely (rather than offering a button that
         # would 503 on click).
         for e in entries:
-            e["sms"] = {"available": False, "last_sent_at": None, "last_status": None}
+            e["sms"] = {"configured": False, "available": False, "last_sent_at": None, "last_status": None}
         return
 
     entry_ids = [e["id"] for e in entries if e.get("id") is not None]
@@ -2317,16 +2322,26 @@ def _add_sms_status(entries, app=None):
     # visibility matches what /sms/send would actually do. Without ORDER BY,
     # sqlite returned rows in implementation-defined order and the button
     # flickered between polls on the 2026-05-28 show.
+    #
+    # Scope to the current night (created_at >= night_started_at): a New
+    # Rotation resets rotation_entries' autoincrement, so a recycled entry id
+    # would otherwise phantom-match a PRIOR night's request and attach the
+    # wrong singer's phone. _resolve_sms_target applies the same guard so the
+    # button's visibility matches what /sms/send would actually do.
     conn = sing_store._get_conn()
+    night_started = sing_store.get_night_started_at()
     placeholders = ",".join("?" * len(entry_ids))
+    night_clause = "AND created_at >= ?" if night_started else ""
+    params = list(entry_ids) + ([night_started] if night_started else [])
     phone_rows = conn.execute(
         f"""
         SELECT linked_entry_id, phone, id
         FROM sing_requests
         WHERE linked_entry_id IN ({placeholders})
+        {night_clause}
         ORDER BY id DESC
         """,
-        tuple(entry_ids),
+        tuple(params),
     ).fetchall()
     phone_by_entry = {}
     for row in phone_rows:
@@ -2341,6 +2356,7 @@ def _add_sms_status(entries, app=None):
         phone = phone_by_entry.get(eid, "")
         latest = latest_by_entry.get(eid)
         entry["sms"] = {
+            "configured": True,
             "available": bool(phone.strip()),
             "last_sent_at": latest["sent_at"] if latest else None,
             "last_status": latest["status"] if latest else None,
@@ -2671,16 +2687,33 @@ def _resolve_sms_target(entry_id):
         return None, (jsonify({"error": "entry not found"}), 404)
 
     # Find the most recent sing_request that produced this rotation entry.
+    #
+    # Scope to the current night (created_at >= night_started_at). A New
+    # Rotation resets rotation_entries' autoincrement counter, so without this
+    # guard a recycled entry id phantom-matches a PRIOR night's request and we
+    # would text the WRONG singer. _add_sms_status applies the same guard.
     conn = sing_store._get_conn()
-    req_row = conn.execute(
-        """
-        SELECT id, singer_name, phone, song_artist, song_title
-        FROM sing_requests
-        WHERE linked_entry_id = ?
-        ORDER BY id DESC LIMIT 1
-        """,
-        (entry_id,),
-    ).fetchone()
+    night_started = sing_store.get_night_started_at()
+    if night_started:
+        req_row = conn.execute(
+            """
+            SELECT id, singer_name, phone, song_artist, song_title
+            FROM sing_requests
+            WHERE linked_entry_id = ? AND created_at >= ?
+            ORDER BY id DESC LIMIT 1
+            """,
+            (entry_id, night_started),
+        ).fetchone()
+    else:
+        req_row = conn.execute(
+            """
+            SELECT id, singer_name, phone, song_artist, song_title
+            FROM sing_requests
+            WHERE linked_entry_id = ?
+            ORDER BY id DESC LIMIT 1
+            """,
+            (entry_id,),
+        ).fetchone()
     if req_row is None or not (req_row["phone"] or "").strip():
         return None, (
             jsonify({"error": "no phone on file for this entry"}), 400,

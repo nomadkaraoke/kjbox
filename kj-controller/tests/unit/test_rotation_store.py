@@ -600,8 +600,20 @@ class TestArchive:
         # Alice from night 1, Andrew starter from night 1, Andrew starter + Bob from night 2
         assert total >= 3
 
+    def test_archive_does_not_recycle_entry_ids(self, store):
+        """Entry ids must stay globally monotonic across nights.
 
-class TestGetAllEntries:
+        Regression: archive() used to `DELETE FROM sqlite_sequence`, restarting
+        ids at 1. sing_requests (same DB) keep their linked_entry_id, so a
+        recycled id phantom-matched a prior night's request and attached the
+        wrong singer's phone to SMS/push. Not reusing ids removes the collision
+        at its source.
+        """
+        first = store.add_entry("Alice")
+        store.archive()
+        # The new night's starter entry must NOT reuse the prior id.
+        after = store.get_all_entries()
+        assert all(e["id"] > first["id"] for e in after)
     def test_get_all_includes_done(self, store):
         store.add_entry("Alice")
         e2 = store.add_entry("Bob")

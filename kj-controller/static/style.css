@@ -1998,6 +1998,17 @@ body {
     background: #333;
     color: #fff;
 }
+/* Disabled action buttons are kept in the layout (not removed) so the action
+   row stays a constant width and every button holds a stable position — the
+   KJ relies on this to avoid mis-clicks mid-show. */
+.rotation-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+.rotation-btn:disabled:hover {
+    background: #222;
+    color: #ccc;
+}
 .rotation-btn-sing {
     border-color: rgba(34, 197, 94, 0.4);
     color: #86efac;
@@ -2014,6 +2025,14 @@ body {
 .rotation-btn-sms-resent {
     border-color: rgba(255, 77, 207, 0.25);
     color: #d6a3c5;
+}
+/* No phone on file — muted pink→grey so it still reads as the SMS button.
+   Sizing/opacity/cursor come from the shared .rotation-btn:disabled rule. */
+.rotation-btn-sms-disabled,
+.rotation-btn-sms-disabled:hover {
+    border-color: #333;
+    color: #555;
+    background: #1c1c1c;
 }
 .rotation-sms-marker {
     margin-left: 0.25rem;

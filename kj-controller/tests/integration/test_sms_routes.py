@@ -136,12 +136,29 @@ class TestRotationSmsBlock:
         assert all(e["sms"]["available"] is False for e in entries)
         assert all(e["sms"]["last_sent_at"] is None for e in entries)
 
+    def test_unlinked_entry_still_marked_configured(self, sms_client, sms_app):
+        # configured=True even with no phone, so the frontend shows a disabled
+        # (greyed) SMS button and the action row keeps a constant width.
+        sms_app.rotation.add_entry("Andrew (KJ)", "Some Song")
+        resp = sms_client.get("/rotation")
+        entries = resp.get_json()["entries"]
+        assert all(e["sms"]["configured"] is True for e in entries)
+
+    def test_button_hidden_entirely_when_unconfigured(self, unconfigured_app):
+        # configured=False when Telnyx env vars are missing, so the frontend
+        # omits the SMS button rather than showing a permanently-disabled one.
+        _seed_request_and_link(unconfigured_app)
+        with unconfigured_app.test_client() as c:
+            entries = c.get("/rotation").get_json()["entries"]
+            assert all(e["sms"]["configured"] is False for e in entries)
+
     def test_linked_entry_marked_available(self, sms_client, sms_app):
         _seed_request_and_link(sms_app)
         resp = sms_client.get("/rotation")
         entries = resp.get_json()["entries"]
         celeste = [e for e in entries if e["singer"] == "Celeste"][0]
         assert celeste["sms"]["available"] is True
+        assert celeste["sms"]["configured"] is True
         assert celeste["sms"]["last_sent_at"] is None
 
     def test_newest_request_wins_when_multiple_link_to_same_entry(self, sms_client, sms_app):
@@ -212,6 +229,67 @@ class TestRotationSmsBlock:
         celeste = [e for e in resp.get_json()["entries"] if e["id"] == entry_id][0]
         assert celeste["sms"]["last_status"] == "sent"
         assert celeste["sms"]["last_sent_at"]
+
+
+# ---------------------------------------------------------------------------
+# Cross-night id-reuse phantom match (the "Connie" bug)
+# ---------------------------------------------------------------------------
+
+class TestCrossNightPhantomMatch:
+    """A New Rotation resets rotation_entries' autoincrement, so a fresh entry
+    can reuse an id that a PRIOR night's sing_request still points at. Phone
+    resolution must be scoped to the current night so the recycled id never
+    attaches the wrong singer's phone to the SMS button / send / preview.
+    """
+
+    def _seed_prior_night_request(self, sms_app, entry_id, *, phone="843-259-4507"):
+        """Stale request from a previous night, linked to ``entry_id``."""
+        from sing_store import NIGHT_STARTED_KEY
+
+        sing = sms_app.sing_store
+        sing._set_meta(NIGHT_STARTED_KEY, "2026-06-04 20:00:00")
+        stale = sing.create_request(
+            singer_name="Connie", phone=phone, source_type="local",
+            source_ref="/x.mp4", song_title="Sippy Cup",
+            song_artist="Melanie Martinez",
+        )
+        conn = sing._get_conn()
+        conn.execute(
+            "UPDATE sing_requests SET created_at = ?, linked_entry_id = ? WHERE id = ?",
+            ("2026-05-28 21:00:00", entry_id, stale["id"]),
+        )
+        conn.commit()
+        return stale["id"]
+
+    def test_button_unavailable_for_recycled_id(self, sms_client, sms_app):
+        entry = sms_app.rotation.add_entry("Brain Brawn", "Some Song")
+        self._seed_prior_night_request(sms_app, entry["id"])
+        resp = sms_client.get("/rotation")
+        row = [e for e in resp.get_json()["entries"] if e["id"] == entry["id"]][0]
+        assert row["sms"]["available"] is False
+        assert row["sms"]["configured"] is True
+
+    def test_preview_rejects_recycled_id(self, sms_client, sms_app):
+        entry = sms_app.rotation.add_entry("Brain Brawn", "Some Song")
+        self._seed_prior_night_request(sms_app, entry["id"])
+        resp = sms_client.post("/rotation/sms/preview", json={"entry_id": entry["id"]})
+        # Must NOT resolve to Connie's phone — no current-night phone on file.
+        assert resp.status_code == 400
+
+    def test_current_night_request_still_resolves(self, sms_client, sms_app):
+        """The guard must not break the normal case: a request created during
+        the current night still makes the button available and previewable."""
+        from sing_store import NIGHT_STARTED_KEY
+
+        # Night started in the distant past so the request's now() created_at is
+        # unambiguously within the current night regardless of the test clock.
+        sms_app.sing_store._set_meta(NIGHT_STARTED_KEY, "2000-01-01 00:00:00")
+        _, entry_id = _seed_request_and_link(sms_app)  # created_at = now (tonight)
+        resp = sms_client.get("/rotation")
+        row = [e for e in resp.get_json()["entries"] if e["id"] == entry_id][0]
+        assert row["sms"]["available"] is True
+        preview = sms_client.post("/rotation/sms/preview", json={"entry_id": entry_id})
+        assert preview.status_code == 200
 
 
 # ---------------------------------------------------------------------------
