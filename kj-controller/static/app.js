@@ -5178,9 +5178,10 @@ async function addRotationEntry() {
 let rotSearchTimer = null;
 let rotSearchSelectedIdx = -1;
 let rotSearchResults = [];
-// Bumped whenever a pending search should be discarded (submit, hide, cancel).
-// In-flight fetches capture this at start and must re-check before rendering,
-// so stale responses can't resurrect the dropdown after a save/reset.
+// Bumped whenever a pending search should be discarded: each new query (so an
+// older, slower in-flight request can't clobber newer results), plus submit,
+// hide, and cancel. In-flight fetches capture this at start and must re-check
+// before rendering, so stale responses can't resurrect or overwrite the dropdown.
 let rotSearchGen = 0;
 
 function initRotationSearch() {
@@ -5194,7 +5195,12 @@ function initRotationSearch() {
             hideRotSearchDropdown();
             return;
         }
-        rotSearchTimer = setTimeout(() => doRotationSearch(query), 300);
+        // 700ms (not 300): /rotation/search does a live Karaoke Nerds scrape,
+        // so a long debounce avoids firing intermediate queries on every
+        // keystroke (wasted scrapes). Correctness (latest query always wins) is
+        // guaranteed by rotSearchGen in doRotationSearch — the debounce only
+        // cuts wasted work, so it can be generous without risking stale results.
+        rotSearchTimer = setTimeout(() => doRotationSearch(query), 700);
     });
 
     songInput.addEventListener('keydown', (e) => {
@@ -5238,10 +5244,14 @@ function initRotationSearch() {
 }
 
 async function doRotationSearch(query) {
-    const myGen = rotSearchGen;
+    // Bump first so any earlier in-flight search supersedes itself: the live
+    // Karaoke Nerds scrape has wildly variable latency (up to 8s), so a broad
+    // earlier query (e.g. "frank") can otherwise land AFTER a newer one
+    // ("frank might") and overwrite the dropdown with stale results.
+    const myGen = ++rotSearchGen;
     try {
         const resp = await fetch('/rotation/search?q=' + encodeURIComponent(query));
-        if (myGen !== rotSearchGen) return;  // superseded (e.g. user pressed Enter to save)
+        if (myGen !== rotSearchGen) return;  // superseded by a newer query or save/reset
         if (!resp.ok) return;
         const data = await resp.json();
         if (myGen !== rotSearchGen) return;

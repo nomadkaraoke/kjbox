@@ -4,6 +4,28 @@ Dated entries, newest first. Each entry notes any required deploy steps.
 
 ---
 
+## 2026-06-04 — Fix stale results in rotation link search (v0.35.1)
+
+**What changed**
+- `doRotationSearch` (`static/app.js`) now bumps `rotSearchGen` at the start of every
+  query, so an earlier, slower in-flight `/rotation/search` request supersedes itself
+  and is discarded instead of rendered. Fixes the bug where the link autocomplete would
+  show results for an *earlier* partial query (e.g. `frank`) after you'd finished typing
+  a fuller one (e.g. `frank might`) — caused by out-of-order responses, since the live
+  Karaoke Nerds scrape has highly variable latency (broad queries return more, slower).
+  The latest query now always wins regardless of which response lands last.
+- Input debounce raised 300ms → 700ms. `/rotation/search` does a live Karaoke Nerds
+  scrape, so a longer debounce avoids firing intermediate queries on every keystroke
+  (fewer wasted scrapes). Correctness is guaranteed by `rotSearchGen`, not the debounce.
+- New e2e regression test `TestRotationSearchRace` reproduces the race in a real browser
+  (shims `window.fetch` so a broad query resolves after a narrow one) — fails without the
+  guard, passes with it.
+
+**Deploy steps**
+- Frontend + version-bump only (no Python behavior change). Auto-deploy pulls the code;
+  the version bump (0.35.0 → 0.35.1) busts the `app.js?v=` cache so browsers load the fix
+  on next refresh. No service restart required.
+
 ## 2026-06-04 — Unified song-text normalization + fuzzy matching
 
 **What changed**
