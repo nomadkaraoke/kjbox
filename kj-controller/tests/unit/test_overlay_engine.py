@@ -291,6 +291,43 @@ class TestOverlayEngineVisibility:
         desktop_only.hide.assert_called_once()
         always_on.hide.assert_not_called()
 
+    def test_no_restack_when_visibility_unchanged(self):
+        """Steady state must not restack — restacking destroys+recreates QR
+        windows, which flickers when run every frame (regression for QR flicker).
+        """
+        from overlay_engine import OverlayEngine
+        engine = OverlayEngine()
+        engine.karaoke_playing = True
+
+        # Both already in their correct visibility state — nothing toggles.
+        always_on = MagicMock()
+        always_on.show_over_video = True
+        always_on.visible = True
+        desktop_only = MagicMock()
+        desktop_only.show_over_video = False
+        desktop_only.visible = False
+        engine.overlays = {'a1': always_on, 'd1': desktop_only}
+
+        with patch.object(engine, '_restack_qr_above_ticker') as mock_restack:
+            engine.update_visibility()
+            mock_restack.assert_not_called()
+
+    def test_restacks_when_visibility_changes(self):
+        """A visibility toggle must trigger exactly one restack to fix Z-order."""
+        from overlay_engine import OverlayEngine
+        engine = OverlayEngine()
+        engine.karaoke_playing = True
+
+        # desktop-only overlay is visible and must be hidden → a change occurs.
+        desktop_only = MagicMock()
+        desktop_only.show_over_video = False
+        desktop_only.visible = True
+        engine.overlays = {'d1': desktop_only}
+
+        with patch.object(engine, '_restack_qr_above_ticker') as mock_restack:
+            engine.update_visibility()
+            mock_restack.assert_called_once()
+
 
 class TestOverlayEngineCheckConfig:
     """Tests for check_config() mtime polling logic."""

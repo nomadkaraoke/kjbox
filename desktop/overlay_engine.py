@@ -117,18 +117,27 @@ class OverlayEngine:
 
     def update_visibility(self):
         """Show/hide desktop-only overlays based on karaoke_playing state."""
+        changed = False
         for overlay in self.overlays.values():
             if overlay.show_over_video:
                 # Always visible — ensure shown
                 if not overlay.visible:
                     overlay.show()
+                    changed = True
             else:
                 # Desktop only — hide during video
                 if self.karaoke_playing and overlay.visible:
                     overlay.hide()
+                    changed = True
                 elif not self.karaoke_playing and not overlay.visible:
                     overlay.show()
-        self._restack_qr_above_ticker()
+                    changed = True
+        # Only restack when a visibility change actually occurred this frame.
+        # Restacking destroys+recreates QR windows, so doing it every frame (the
+        # render loop runs at 30 FPS) makes the QR overlay flicker whenever a
+        # ticker is also visible. _reload_config() handles the config-change case.
+        if changed:
+            self._restack_qr_above_ticker()
 
     def _restack_qr_above_ticker(self):
         """Ensure QR overlays are mapped on top of any visible ticker by

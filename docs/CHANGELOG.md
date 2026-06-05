@@ -2,6 +2,17 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-06-04 - Fix Scan-to-Sing QR overlay flicker
+
+The Scan-to-Sing QR overlay flickered instead of displaying solidly whenever a
+ticker overlay was also visible over video. The overlay engine's render loop
+(`desktop/overlay_engine.py`) called `_restack_qr_above_ticker()` from
+`update_visibility()` every frame (30 FPS); that helper destroys and recreates
+each QR window to fix Z-order, so running it per-frame tore down and rebuilt the
+QR window 30×/second. Fixed by only restacking when an overlay's visibility
+actually changes that frame (config-change restacks are still handled by
+`_reload_config()`). kj-controller 0.34.0 → 0.34.1.
+
 ## 2026-06-04 - Robust server-side rotation undo/redo
 
 Fixes the 2026-05-28 incident where a KJ clicked **Undo** mid-show and lost
