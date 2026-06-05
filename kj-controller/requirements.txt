@@ -4,6 +4,7 @@ gspread
 google-auth
 psutil
 qrcode
+rapidfuzz>=3.0
 requests
 websockify
 yt-dlp[default]

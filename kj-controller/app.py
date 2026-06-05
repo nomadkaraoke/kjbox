@@ -207,6 +207,14 @@ def create_app(config=None):
     )
     flask_app.audio_monitor = AudioMonitor(flask_app.vlc, cfg)
     flask_app.catalog = ExternalCatalog(cfg)
+    try:
+        if flask_app.catalog.is_available() and flask_app.catalog.index_is_stale():
+            flask_app.logger.warning(
+                "Catalog FTS index is stale (normalizer changed). "
+                "Run: python scripts/reindex_catalog.py"
+            )
+    except Exception:
+        pass
     flask_app.zip_playback = ZipPlayback(cfg)
     flask_app.chromium = ChromiumManager(cfg)
     flask_app.rotation = _init_rotation(cfg)
@@ -478,6 +486,15 @@ def start_app():  # pragma: no cover
     # Log external catalog status
     if flask_app.catalog.is_available():
         log_message(f"External catalog available: {flask_app.catalog.count()} entries.", cfg)
+        try:
+            if flask_app.catalog.index_is_stale():
+                log_message(
+                    "WARNING: Catalog FTS index is stale (normalizer changed). "
+                    "Run: python scripts/reindex_catalog.py",
+                    cfg,
+                )
+        except Exception:
+            pass
     else:
         log_message("External catalog not yet built. Use POST /catalog/build to create.", cfg)
 

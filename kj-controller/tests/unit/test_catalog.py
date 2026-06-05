@@ -14,6 +14,22 @@ from tests.fixtures import (
 )
 
 
+def _build_tiny_catalog(tmp_path, paths):
+    """Build a small ExternalCatalog from an in-memory list of file paths.
+
+    Mirrors the build pattern used throughout TestExternalCatalog: write a file
+    list, create the catalog, init the schema, and run build_from_file_list.
+    Returns the open catalog (caller is responsible for close()).
+    """
+    file_list = tmp_path / "tiny_file_list.txt"
+    file_list.write_text('\n'.join(paths) + '\n', encoding='utf-8')
+    db_path = str(tmp_path / "tiny.db")
+    catalog = ExternalCatalog({}, db_path=db_path)
+    catalog.init_schema()
+    catalog.build_from_file_list(str(file_list))
+    return catalog
+
+
 # --- parse_karaoke_filename tests ---
 
 class TestParseKaraokeFilename:
@@ -100,112 +116,83 @@ class TestNormalizeForSearch:
 
     # NFD-decomposable diacritics (combining marks)
     def test_diaeresis(self):
-        assert _normalize_for_search("Maxïmo Park") == "Maximo Park"
+        assert _normalize_for_search("Maxïmo Park") == "maximo park"
 
     def test_acute(self):
-        assert _normalize_for_search("Beyoncé") == "Beyonce"
+        assert _normalize_for_search("Beyoncé") == "beyonce"
 
     def test_tilde(self):
-        assert _normalize_for_search("Señor Coconut") == "Senor Coconut"
+        assert _normalize_for_search("Señor Coconut") == "senor coconut"
 
     def test_cedilla(self):
-        assert _normalize_for_search("Convicção") == "Conviccao"
+        assert _normalize_for_search("Convicção") == "conviccao"
 
     def test_circumflex(self):
-        assert _normalize_for_search("Derê") == "Dere"
+        assert _normalize_for_search("Derê") == "dere"
 
     def test_ring_above(self):
-        assert _normalize_for_search("Blå Øjne") == "Bla Ojne"
+        assert _normalize_for_search("Blå Øjne") == "bla ojne"
 
     def test_grave(self):
-        assert _normalize_for_search("Phèdre") == "Phedre"
+        assert _normalize_for_search("Phèdre") == "phedre"
 
     def test_caron(self):
-        assert _normalize_for_search("Netšajeva") == "Netsajeva"
+        assert _normalize_for_search("Netšajeva") == "netsajeva"
 
     # Non-decomposable Latin characters
     def test_o_stroke(self):
-        assert _normalize_for_search("MØ") == "MO"
-        assert _normalize_for_search("Eivør") == "Eivor"
-        assert _normalize_for_search("Kyrkjebø") == "Kyrkjebo"
+        assert _normalize_for_search("MØ") == "mo"
+        assert _normalize_for_search("Eivør") == "eivor"
+        assert _normalize_for_search("Kyrkjebø") == "kyrkjebo"
 
     def test_ae_ligature(self):
-        assert _normalize_for_search("Ænima") == "AEnima"
-        assert _normalize_for_search("Lækker") == "Laekker"
+        assert _normalize_for_search("Ænima") == "aenima"
+        assert _normalize_for_search("Lækker") == "laekker"
 
     def test_sharp_s(self):
-        assert _normalize_for_search("Straßenbande") == "Strassenbande"
+        assert _normalize_for_search("Straßenbande") == "strassenbande"
 
     def test_eth(self):
-        assert _normalize_for_search("Daði Freyr") == "Dadi Freyr"
+        assert _normalize_for_search("Daði Freyr") == "dadi freyr"
 
     def test_l_stroke(self):
         assert _normalize_for_search("biały") == "bialy"
 
     def test_dotless_i(self):
-        assert _normalize_for_search("Yalnız") == "Yalniz"
+        assert _normalize_for_search("Yalnız") == "yalniz"
 
     # Combined: diacritics + non-decomposable in same string
     def test_mixed(self):
-        assert _normalize_for_search("Millionär") == "Millionar"  # ä decomposes, no special chars
-        assert _normalize_for_search("Süsser") == "Susser"  # ü decomposes
+        assert _normalize_for_search("Millionär") == "millionar"  # ä decomposes, no special chars
+        assert _normalize_for_search("Süsser") == "susser"  # ü decomposes
 
     # Edge cases
     def test_empty(self):
         assert _normalize_for_search("") == ""
 
     def test_none(self):
-        assert _normalize_for_search(None) is None
+        assert _normalize_for_search(None) == ""
 
     def test_ascii_passthrough(self):
-        assert _normalize_for_search("Bon Jovi") == "Bon Jovi"
+        assert _normalize_for_search("Bon Jovi") == "bon jovi"
 
 
-class TestNormalizationConsistency:
-    """Verify the JS normalizeForSearch (built from LATIN_SPECIAL_MAP) matches Python."""
+class TestNormalizerTemplateInjection:
+    """Verify the shared normalizer maps + version reach the browser template."""
 
-    def _js_normalize(self, text):
-        """Pure-Python reimplementation of the JS normalizeForSearch logic.
-
-        This mirrors exactly what the browser does:
-        1. NFD decompose + strip combining marks (regex [\u0300-\u036f])
-        2. Replace chars in LATIN_SPECIAL_MAP
-        """
-        import re
-        s = unicodedata.normalize('NFD', text)
-        s = re.sub(r'[\u0300-\u036f]', '', s)
-        for char, replacement in LATIN_SPECIAL_MAP.items():
-            s = s.replace(char, replacement)
-        return s
-
-    @pytest.mark.parametrize("text", [
-        # Combining diacritics
-        "Chance Peña", "Beyoncé", "Maxïmo Park", "Jürgens",
-        "congrès", "Måneskin", "Netšajeva", "Barūn",
-        # Non-decomposable Latin
-        "MØ", "Eivør", "Ænima", "Lækker", "Straßenbande",
-        "Daði Freyr", "biały", "Yalnız", "Kyrkjebø",
-        # Mixed
-        "187 Straßenbande - Millionär",
-        # ASCII passthrough
-        "Bon Jovi", "Queen",
-        # Empty
-        "",
-    ])
-    def test_js_matches_python(self, text):
-        """JS implementation (from LATIN_SPECIAL_MAP) produces same output as Python."""
-        assert self._js_normalize(text) == _normalize_for_search(text)
-
-    def test_map_injected_to_template(self, flask_test_client):
-        """LATIN_SPECIAL_MAP is rendered into the page via KJ_CONFIG."""
-        import json, re
+    def test_maps_injected_to_template(self, flask_test_client):
+        """Normalizer maps + version are rendered into the page."""
         response = flask_test_client.get('/')
         html = response.data.decode('utf-8')
-        # Extract the JSON object from window.KJ_CONFIG = { latinSpecialMap: ... }
-        match = re.search(r'latinSpecialMap:\s*({.*?})\s*[,\n]', html)
-        assert match, "latinSpecialMap not found in rendered template"
-        rendered_map = json.loads(match.group(1))
-        assert rendered_map == LATIN_SPECIAL_MAP
+        assert 'latinSpecialMap:' in html
+        assert 'abbrevMap:' in html
+        assert 'numberWords:' in html
+        assert 'romanMap:' in html
+        assert 'normalizerVersion:' in html
+        import re, json
+        import text_normalize as tn
+        m = re.search(r'normalizerVersion:\s*(\d+)', html)
+        assert m and int(m.group(1)) == tn.NORMALIZER_VERSION
 
 
 # --- _detect_format tests ---
@@ -549,3 +536,100 @@ class TestExternalCatalog:
         results_offset = catalog.search("Set It Off Wolf in Sheeps Clothing", limit=10, offset=1)
         assert len(results_offset) == 0  # only 1 match, offset=1 skips it
         catalog.close()
+
+
+# --- Catalog metadata + normalizer version tests ---
+
+class TestCatalogMeta:
+    def test_version_stamped_on_build(self, tmp_path):
+        from text_normalize import NORMALIZER_VERSION
+        cat = _build_tiny_catalog(tmp_path, [
+            "/m/KK-1 - Simon & Garfunkel - Sound Of Silence.zip",
+        ])
+        assert cat.normalizer_version() == NORMALIZER_VERSION
+
+    def test_is_stale_false_after_build(self, tmp_path):
+        cat = _build_tiny_catalog(tmp_path, [
+            "/m/KK-1 - Queen - Bohemian Rhapsody.zip",
+        ])
+        assert cat.index_is_stale() is False
+
+
+class TestRebuildFts:
+    def test_rebuild_refreshes_tokens_and_version(self, tmp_path):
+        from text_normalize import NORMALIZER_VERSION
+        cat = _build_tiny_catalog(tmp_path, [
+            "/m/KK-1 - Simon & Garfunkel - Sound Of Silence.zip",
+        ])
+        conn = cat._get_conn()
+        conn.execute("UPDATE catalog_meta SET value='0' WHERE key='normalizer_version'")
+        conn.commit()
+        assert cat.index_is_stale() is True
+        cat.rebuild_fts()
+        assert cat.index_is_stale() is False
+        assert any("Sound Of Silence" in r["title"]
+                   for r in cat.search("sound of silence simon and garfunkel"))
+
+    def test_trigram_candidates_returns_near_match(self, tmp_path):
+        cat = _build_tiny_catalog(tmp_path, [
+            "/m/KK-1 - Simon & Garfunkel - Sound Of Silence.zip",
+        ])
+        cands = cat._trigram_candidates("garfunkle", limit=20)  # typo
+        assert any("Garfunkel" in r["artist"] for r in cands)
+
+
+class TestFuzzySearch:
+    def test_typo_in_artist_found(self, tmp_path):
+        cat = _build_tiny_catalog(tmp_path, [
+            "/m/KK-1 - Simon & Garfunkel - Sound Of Silence.zip",
+            "/m/KK-2 - Queen - Bohemian Rhapsody.zip",
+        ])
+        results = cat.search("bohemian rapsody")  # missing 'h'
+        assert any("Bohemian Rhapsody" in r["title"] for r in results)
+
+    def test_exact_still_wins_without_fuzzy(self, tmp_path):
+        cat = _build_tiny_catalog(tmp_path, [
+            "/m/KK-2 - Queen - Bohemian Rhapsody.zip",
+        ])
+        results = cat.search("bohemian rhapsody")
+        assert results and results[0]["title"] == "Bohemian Rhapsody"
+
+    def test_garbage_query_returns_nothing(self, tmp_path):
+        cat = _build_tiny_catalog(tmp_path, [
+            "/m/KK-2 - Queen - Bohemian Rhapsody.zip",
+        ])
+        assert cat.search("zzzzxqwer plooof") == []
+
+    def test_short_query_no_fuzzy(self, tmp_path):
+        cat = _build_tiny_catalog(tmp_path, [
+            "/m/KK-2 - Queen - Bohemian Rhapsody.zip",
+        ])
+        # normalized query < 3 chars must not trigger fuzzy scoring
+        assert cat._fuzzy_search("ab", limit=10) == []
+
+    def test_fuzzy_offset_paginates(self, tmp_path):
+        # Two near-duplicate rows both fuzzy-match; offset should shift the window.
+        cat = _build_tiny_catalog(tmp_path, [
+            "/m/KK-1 - Queen - Bohemian Rhapsody.zip",
+            "/m/KK-2 - Queen - Bohemian Rhapsody (Live).zip",
+        ])
+        page1 = cat._fuzzy_search("bohemian rhapsodyy", limit=1, offset=0)
+        page2 = cat._fuzzy_search("bohemian rhapsodyy", limit=1, offset=1)
+        assert len(page1) == 1 and len(page2) == 1
+        assert page1[0]["path"] != page2[0]["path"]
+
+    def test_no_token_overlap_rejected(self, tmp_path):
+        # Real false-positive case: query shares no significant tokens with any
+        # catalog row -> must return nothing, not a garbage WRatio match.
+        cat = _build_tiny_catalog(tmp_path, [
+            "/m/KK-1 - Fall Out Boy - Hold Me Like A Grudge.zip",
+            "/m/KK-2 - Toadies - Push The Hand.zip",
+        ])
+        assert cat.search("Avril - sk8tr boy") == []
+
+    def test_typo_with_shared_tokens_still_found(self, tmp_path):
+        cat = _build_tiny_catalog(tmp_path, [
+            "/m/KK-1 - Pat Benatar - Hit Me With Your Best Shot.zip",
+        ])
+        results = cat.search("Pat Benetar - Hit Me With Your Best Shot")  # typo in artist
+        assert any(r["artist"] == "Pat Benatar" for r in results)

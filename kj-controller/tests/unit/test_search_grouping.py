@@ -53,14 +53,17 @@ class TestNormalizeSongKey:
         assert _normalize_song_key("Beyoncé", "Crazy in Love featuring Jay-Z") \
             == _normalize_song_key("Beyoncé", "Crazy in Love")
 
-    def test_strips_bracketed_qualifiers(self):
-        # "(Radio Edit)", "(Live)", "(Remastered)" should merge with the bare title.
+    def test_keeps_bracketed_qualifiers_distinct(self):
+        # Decision D4: bracketed qualifiers like "(Live)" / "[Radio Edit]" /
+        # "(Remastered)" are NO LONGER stripped — distinct versions must stay
+        # distinguishable, so they group separately from the bare title. (The
+        # shared normalizer only strips feat./ft./featuring, not brackets.)
         assert _normalize_song_key("Queen", "Bohemian Rhapsody (Live)") \
-            == _normalize_song_key("Queen", "Bohemian Rhapsody")
+            != _normalize_song_key("Queen", "Bohemian Rhapsody")
         assert _normalize_song_key("Queen", "Bohemian Rhapsody (Remastered 2011)") \
-            == _normalize_song_key("Queen", "Bohemian Rhapsody")
+            != _normalize_song_key("Queen", "Bohemian Rhapsody")
         assert _normalize_song_key("Queen", "Bohemian Rhapsody [Radio Edit]") \
-            == _normalize_song_key("Queen", "Bohemian Rhapsody")
+            != _normalize_song_key("Queen", "Bohemian Rhapsody")
 
     def test_strips_punctuation_from_title(self):
         # Apostrophes and commas are noise; hyphens in song titles become spaces.
@@ -167,17 +170,22 @@ class TestGroupSearchResults:
         # The local result's casing/form wins the display name, even if KN's
         # version is more "canonical". Rationale: the local file is what the KJ
         # explicitly imported, so it should be the authoritative display form.
+        #
+        # D4: bracketed qualifiers are no longer stripped, so the local and KN
+        # rows must share the SAME (non-bracketed) title to land in one group.
+        # Casing differs only — the shared normalizer folds case, so they
+        # still collide, exercising display-name arbitration.
         groups = _group_search_results(
-            [self._local("Queen", "Bohemian Rhapsody (LIVE)",
-                         "/media/Queen - Bohemian Rhapsody Live.mp4")],
+            [self._local("Queen", "BOHEMIAN RHAPSODY",
+                         "/media/Queen - Bohemian Rhapsody.mp4")],
             [self._kn_song("Queen", "Bohemian Rhapsody", [
                 self._kn_track("KV", "Karaoke Version", "https://youtu.be/a"),
             ])],
         )
-        # Grouped together (bracketed "(LIVE)" strips under normalization)
+        # Grouped together (case folds under normalization).
         assert len(groups) == 1
-        # Display name came from the local entry.
-        assert groups[0]["title"] == "Bohemian Rhapsody (LIVE)"
+        # Display name came from the local entry (its casing wins).
+        assert groups[0]["title"] == "BOHEMIAN RHAPSODY"
 
     def test_kn_sets_display_when_no_local(self):
         groups = _group_search_results(

@@ -815,12 +815,17 @@
     </div>
 
     <!-- Server-injected config (Jinja2 template variable) -->
+    <script src="{{ url_for('static', filename='text_normalize.js') }}"></script>
     <script>
-        window.KJ_CONFIG = {
-            latinSpecialMap: {{ latin_special_map | tojson }},
-            websockifyPort: {{ config.get('websockify_port', 6080) | tojson }},
-            websockifyHost: {{ config.get('websockify_host', '') | tojson }}
-        };
+      window.KJ_CONFIG = Object.assign(window.KJ_CONFIG || {}, {
+        latinSpecialMap: {{ latin_special_map | tojson }},
+        abbrevMap: {{ abbrev_map | tojson }},
+        numberWords: {{ number_words | tojson }},
+        romanMap: {{ roman_map | tojson }},
+        normalizerVersion: {{ normalizer_version | tojson }},
+        websockifyPort: {{ config.get('websockify_port', 6080) | tojson }},
+        websockifyHost: {{ config.get('websockify_host', '') | tojson }}
+      });
     </script>
     <script src="/static/app.js?v={{ config.get('APP_VERSION', '') }}"></script>
 
