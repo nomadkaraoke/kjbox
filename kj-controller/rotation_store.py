@@ -978,10 +978,13 @@ class RotationStore:
             (self._LEFT_META_KEY,),
         )
 
-        # Reset the AUTOINCREMENT counter so IDs restart cleanly (optional but tidy)
-        conn.execute(
-            "DELETE FROM sqlite_sequence WHERE name = 'rotation_entries'"
-        )
+        # NOTE: deliberately do NOT reset the AUTOINCREMENT counter here.
+        # rotation_entry ids must stay globally monotonic across nights:
+        # sing_requests (in the same DB) keep their linked_entry_id, and
+        # recycling ids back to 1 made a fresh entry phantom-match a PRIOR
+        # night's request — attaching the wrong singer's phone to SMS/push.
+        # Phone resolution is also night-scoped as defense in depth, but not
+        # reusing ids removes the collision at its source.
 
         # Record night start time
         conn.execute(

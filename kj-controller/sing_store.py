@@ -19,6 +19,11 @@ ACCEPT_MAKE_REQUESTS_KEY = "sing_accept_make_requests"
 SIMPLE_MODE_KEY = "kj_simple_mode"
 SMS_TEMPLATE_KEY = "sms_template"
 SMS_DEFAULT_REGION_KEY = "sms_default_region"
+# Written by RotationStore.archive() when a New Rotation starts. Used to scope
+# phone resolution (SMS + push) to requests created during the current night so
+# a rotation_entry_id recycled by a New Rotation can't phantom-match a prior
+# night's sing_request.
+NIGHT_STARTED_KEY = "night_started_at"
 
 DEFAULT_SMS_REGION = "US"
 
@@ -191,6 +196,33 @@ class SingStore:
     # ------------------------------------------------------------------
     # Token helpers
     # ------------------------------------------------------------------
+
+    def get_night_started_at(self):
+        """Timestamp the current night began ('YYYY-MM-DD HH:MM:SS'), or None.
+
+        Set by RotationStore.archive() on a New Rotation. Phone resolution
+        scopes to ``created_at >= night_started_at`` so a recycled
+        rotation_entry_id can't resolve to a prior night's request (the
+        cross-night id-reuse bug that texted/pushed the wrong singer).
+        """
+        return self._get_meta(NIGHT_STARTED_KEY)
+
+    def ensure_night_started(self):
+        """Set night_started_at to now on first boot if it's never been set.
+
+        Phone resolution (SMS + push) is night-scoped and fails CLOSED when the
+        marker is missing, so guaranteeing it's always present keeps SMS/push
+        working on a device that hasn't run a New Rotation yet. A device that
+        has archived already keeps its existing (newer) value — this never
+        overwrites. Returns the effective value.
+        """
+        existing = self._get_meta(NIGHT_STARTED_KEY)
+        if existing:
+            return existing
+        conn = self._get_conn()
+        now = conn.execute("SELECT datetime('now', 'localtime')").fetchone()[0]
+        self._set_meta(NIGHT_STARTED_KEY, now)
+        return now
 
     def get_token(self):
         """Return the current event token, or None if unset."""

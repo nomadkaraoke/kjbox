@@ -128,6 +128,19 @@ class TestTokenHelpers:
         tok = store.regenerate_token()
         assert store.ensure_token() == tok
 
+    def test_ensure_night_started_sets_if_absent(self, store):
+        assert store.get_night_started_at() is None
+        val = store.ensure_night_started()
+        assert val
+        assert store.get_night_started_at() == val
+
+    def test_ensure_night_started_preserves_existing(self, store):
+        from sing_store import NIGHT_STARTED_KEY
+        store._set_meta(NIGHT_STARTED_KEY, "2026-05-28 21:00:00")
+        # Must never overwrite an existing (possibly newer) value.
+        assert store.ensure_night_started() == "2026-05-28 21:00:00"
+        assert store.get_night_started_at() == "2026-05-28 21:00:00"
+
     def test_set_token_pins_specific_value(self, store):
         store.regenerate_token()  # start with a random token
         result = store.set_token("2121")

@@ -3854,14 +3854,33 @@ function renderRotation(entries) {
                 } catch (e) { showRotationIndicator('error'); }
             };
             actions.appendChild(cancelBtn);
+        } else if (effDlStatus === 'queued' || effDlStatus === 'downloading') {
+            // In-flight download with no cancel handle (active download, or a
+            // queued one whose download_id hasn't been recorded yet). Render a
+            // disabled placeholder so the primary-action slot stays occupied
+            // and every button that follows keeps a stable position.
+            const dlBtn = document.createElement('button');
+            dlBtn.className = 'rotation-btn rotation-btn-play';
+            dlBtn.textContent = '\u23f3';  // \u23f3
+            dlBtn.disabled = true;
+            dlBtn.title = effDlStatus === 'downloading' ? 'Downloading\u2026' : 'Queued for download\u2026';
+            actions.appendChild(dlBtn);
         }
 
-        if (!statusLower.includes('singing') && statusLower !== 'now singing') {
+        // "Singing" \u2014 always rendered (disabled when the singer is already
+        // performing) so following buttons never shift between states.
+        {
+            const isSinging = statusLower.includes('singing') || statusLower === 'now singing';
             const singBtn = document.createElement('button');
             singBtn.className = 'rotation-btn rotation-btn-sing';
             singBtn.textContent = 'Singing';
-            singBtn.title = 'Mark this singer as currently performing';
-            singBtn.onclick = () => updateRotationStatus(entry.id, 'Now Singing');
+            if (isSinging) {
+                singBtn.disabled = true;
+                singBtn.title = 'Already marked as currently performing';
+            } else {
+                singBtn.title = 'Mark this singer as currently performing';
+                singBtn.onclick = () => updateRotationStatus(entry.id, 'Now Singing');
+            }
             actions.appendChild(singBtn);
         }
 
@@ -3872,12 +3891,20 @@ function renderRotation(entries) {
         doneBtn.onclick = () => updateRotationStatus(entry.id, 'Done');
         actions.appendChild(doneBtn);
 
-        if (!statusLower.includes('next')) {
+        // "Next" \u2014 always rendered (disabled when already up next) so the
+        // buttons after it keep a stable position.
+        {
+            const isNext = statusLower.includes('next');
             const nextBtn = document.createElement('button');
             nextBtn.className = 'rotation-btn rotation-btn-next';
             nextBtn.textContent = 'Next';
-            nextBtn.title = 'Mark as up next \u2014 give them a heads up to get ready';
-            nextBtn.onclick = () => updateRotationStatus(entry.id, 'Up Next');
+            if (isNext) {
+                nextBtn.disabled = true;
+                nextBtn.title = 'Already marked as up next';
+            } else {
+                nextBtn.title = 'Mark as up next \u2014 give them a heads up to get ready';
+                nextBtn.onclick = () => updateRotationStatus(entry.id, 'Up Next');
+            }
             actions.appendChild(nextBtn);
         }
 
@@ -3971,23 +3998,35 @@ function renderRotation(entries) {
         };
         actions.appendChild(editBtn);
 
-        // SMS button — only when phone is available for this entry
-        // (rows the KJ added by hand have no linked sing_request).
-        // Compact label ("SMS") in both states; the "sent 9:34 PM" marker
+        // SMS button — rendered on every row when the SMS feature is
+        // configured, so rotation rows stay the same width. When no phone is
+        // linked for this row (sms.available is false — e.g. rows the KJ added
+        // by hand have no linked sing_request) the button is shown
+        // disabled/greyed-out rather than omitted. When the feature isn't
+        // configured at all (sms.configured false) the button is hidden.
+        // Compact label ("SMS") in all states; the "sent 9:34 PM" marker
         // below conveys whether it's a fresh send or a re-send.
         const sms = entry.sms || {};
-        if (sms.available) {
-            const sent = !!sms.last_sent_at;
+        if (sms.configured) {
+            const smsAvailable = !!sms.available;
+            const sent = smsAvailable && !!sms.last_sent_at;
             const smsBtn = document.createElement('button');
-            smsBtn.className = 'rotation-btn rotation-btn-sms' + (sent ? ' rotation-btn-sms-resent' : '');
+            smsBtn.className = 'rotation-btn rotation-btn-sms'
+                + (sent ? ' rotation-btn-sms-resent' : '')
+                + (smsAvailable ? '' : ' rotation-btn-sms-disabled');
             smsBtn.innerHTML = '✉ SMS';
-            smsBtn.title = sent
-                ? 'Re-send the "you’re up" SMS to this singer'
-                : 'Send the "you’re up" SMS to this singer';
-            smsBtn.onclick = (e) => {
-                e.stopPropagation();
-                openSmsPreview(row, entry);
-            };
+            if (smsAvailable) {
+                smsBtn.title = sent
+                    ? 'Re-send the "you’re up" SMS to this singer'
+                    : 'Send the "you’re up" SMS to this singer';
+                smsBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    openSmsPreview(row, entry);
+                };
+            } else {
+                smsBtn.disabled = true;
+                smsBtn.title = 'No phone number on file for this singer';
+            }
             actions.appendChild(smsBtn);
             if (sent) {
                 const marker = document.createElement('span');
