@@ -22,6 +22,9 @@ SAMPLE_ROWS = [
     ("Beyoncé", "Halo"),
     ("Twenty One Pilots", "Stressed Out"),
     ("Florence + The Machine", "Dog Days Are Over"),
+    ("Earth Wind and Fire", "September"),
+    ("Guns N' Roses", "Paradise City"),
+    ("3 Doors Down", "Kryptonite"),
 ]
 
 

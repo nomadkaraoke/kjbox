@@ -13,6 +13,9 @@ ROWS = [
     # The normalization pipeline handles "ACDC" correctly via FTS.
     ("ACDC", "T.N.T."),
     ("Florence + The Machine", "Dog Days Are Over"),
+    ("Earth Wind and Fire", "September"),
+    ("Guns N' Roses", "Paradise City"),
+    ("3 Doors Down", "Kryptonite"),
 ]
 
 
