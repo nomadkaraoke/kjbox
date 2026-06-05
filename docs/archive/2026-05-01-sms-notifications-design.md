@@ -237,3 +237,42 @@ No new auth — endpoints live behind the same network boundary as the rest of `
 - Inbound STOP handling — auto-flag a phone as opted-out so we don't send again even if the KJ taps the button.
 - Auto-send on `mark_up_next` transition (would slot into the existing `_after_mutation` hook).
 - Cross-event opt-out (singer who STOP'd from last week's event shouldn't receive a button this week either).
+
+## Telnyx setup — actual outcome (2026-06-04)
+
+- Account: paid tier, balance ~$22.
+- Messaging Profile: "Nomad Karaoke KJBox" (id `40019e4e-d369-4bd2-b3bf-2ec80e0825f2`), US whitelisted, no webhook URL.
+- Toll-free path turned out to be **blocked on the user's paid tier** (account couldn't order toll-free), so we pivoted to a **local long-code**.
+- Number provisioned: **`+18038053750`** (Columbia SC local), $1/mo, assigned to the messaging profile.
+- `.envrc` + device systemd drop-in carry `TELNYX_API_KEY`, `TELNYX_PUBLIC_KEY`, `TELNYX_FROM_NUMBER`. Device returns `sms_enabled: True`.
+
+## 10DLC follow-up (blocked on account verification)
+
+The Brand registration submission below returns `403 / 20014 / "Account unverified"` until the user completes additional identity/business verifications at <https://portal.telnyx.com/#/account/verifications>. Once cleared:
+
+```json
+{
+  "entityType": "PRIVATE_PROFIT",
+  "displayName": "Nomad Karaoke",
+  "companyName": "Nomad Karaoke LLC",
+  "ein": "99-4114183",
+  "phone": "+18036363267",
+  "street": "612 Joan St",
+  "city": "Columbia",
+  "state": "SC",
+  "postalCode": "29203",
+  "country": "US",
+  "email": "admin@nomadkaraoke.com",
+  "website": "https://nomadkaraoke.com",
+  "vertical": "ENTERTAINMENT",
+  "brandRelationship": "BASIC_ACCOUNT"
+}
+```
+
+Then register a `LOW_VOLUME` Campaign against the new Brand (sample message = the default template, opt-in URL = `https://sing.nomadkaraoke.com`) and assign `+18038053750` to it. Total cost: $4 brand + ~$2-4/mo campaign. Carrier approval: 1-3 weeks.
+
+Until 10DLC is approved, Telnyx will accept sends and the button will appear to work, but US carriers may filter delivery unpredictably. Self-test sends ARE fine.
+
+## Related follow-up (low-pri)
+
+`restore_from_sheet` (`rotation_sync.py`) resets `sqlite_sequence` for `rotation_entries`, allowing cross-event ID reuse. The SMS button-visibility lookup is now defensive against this (newest sing_request wins, mirroring the SEND path), but the underlying ID reuse is still latent. Either stop resetting the sequence, or clear stale `sing_requests.linked_entry_id` on archive.
