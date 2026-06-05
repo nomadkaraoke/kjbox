@@ -473,10 +473,15 @@ class ExternalCatalog:
         match_expr = ' OR '.join('"' + t.replace('"', '""') + '"' for t in trigrams)
         conn = self._get_conn()
         try:
+            # ORDER BY rank (bm25): with an OR-of-trigrams query against a 415K-row
+            # index, an unordered LIMIT returns arbitrary rows and the true match
+            # is often outside the cap (verified: a typo'd query missed its target
+            # at LIMIT 200 unranked, hit it ranked). Ranking puts the densest
+            # trigram-overlap rows first so a modest LIMIT stays effective.
             rows = conn.execute(
                 "SELECT m.path, m.filename, m.folder, m.disc_id, m.artist, m.title, m.format "
                 "FROM media_trigram t JOIN media m ON t.rowid = m.id "
-                "WHERE t.norm_text MATCH ? LIMIT ?",
+                "WHERE t.norm_text MATCH ? ORDER BY rank LIMIT ?",
                 (match_expr, limit),
             ).fetchall()
             return [dict(r) for r in rows]
