@@ -57,7 +57,9 @@ def test_real_samples_if_present(catalog):
 
 def test_metrics_harness_runs():
     import subprocess, sys, os
-    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    # __file__ is kj-controller/tests/integration/test_search_corpus.py
+    # go up three levels: integration/ -> tests/ -> kj-controller/
+    root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     out = subprocess.check_output(
         [sys.executable, os.path.join(root, "scripts", "search_metrics.py")],
         text=True, cwd=root,
