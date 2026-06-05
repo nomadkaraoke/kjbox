@@ -3978,14 +3978,14 @@ function renderRotation(entries) {
 
         // SMS button — only when phone is available for this entry
         // (rows the KJ added by hand have no linked sing_request).
+        // Compact label ("SMS") in both states; the "sent 9:34 PM" marker
+        // below conveys whether it's a fresh send or a re-send.
         const sms = entry.sms || {};
         if (sms.available) {
             const sent = !!sms.last_sent_at;
             const smsBtn = document.createElement('button');
             smsBtn.className = 'rotation-btn rotation-btn-sms' + (sent ? ' rotation-btn-sms-resent' : '');
-            smsBtn.innerHTML = sent
-                ? '✉ Re-send'   // ✉ Re-send
-                : '✉ Send SMS'; // ✉ Send SMS
+            smsBtn.innerHTML = '✉ SMS';
             smsBtn.title = sent
                 ? 'Re-send the "you’re up" SMS to this singer'
                 : 'Send the "you’re up" SMS to this singer';
