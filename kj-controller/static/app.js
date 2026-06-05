@@ -4,44 +4,70 @@
 
 const logArea = document.getElementById('log-area');
 
-// --- Undo/Redo History ---
+// --- Undo/Redo History (server-side, shared across all KJ devices) ---
+//
+// History lives in the backend (rotation_history table), so it survives a
+// service restart and reflects every writer — singer self-submissions, other
+// devices, download completions. Undo is two-phase: a preview shows exactly
+// what will change, and only an explicit confirm applies it. This replaces the
+// old per-browser snapshot stack that silently clobbered concurrent changes.
 
 const rotationHistory = {
-    undoStack: [],
-    redoStack: [],
-    maxSize: 10,
+    // Mirror of the server's history counts, refreshed by the rotation poll.
+    latest: { undo: 0, redo: 0, undo_label: null, redo_label: null },
 
-    pushUndo(snapshot) {
-        this.undoStack.push(JSON.parse(JSON.stringify(snapshot)));
-        if (this.undoStack.length > this.maxSize) this.undoStack.shift();
-        this.redoStack = [];
-        this.updateButtons();
-    },
+    async undo() { await this._run('undo'); },
+    async redo() { await this._run('redo'); },
 
-    async undo() {
-        if (this.undoStack.length === 0) return;
-        this.redoStack.push(JSON.parse(JSON.stringify(rotationData)));
-        const snapshot = this.undoStack.pop();
-        await this._restore(snapshot);
-    },
-
-    async redo() {
-        if (this.redoStack.length === 0) return;
-        this.undoStack.push(JSON.parse(JSON.stringify(rotationData)));
-        const snapshot = this.redoStack.pop();
-        await this._restore(snapshot);
-    },
-
-    async _restore(snapshot) {
+    async _run(direction) {
+        // Phase 1: preview (no confirm) — applies nothing server-side.
+        let preview;
         showRotationIndicator('spin');
         try {
-            const response = await fetch('/rotation/restore', {
+            const resp = await fetch('/rotation/' + direction, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ entries: snapshot }),
+                body: JSON.stringify({}),
             });
-            const data = await response.json();
-            if (!response.ok) {
+            preview = await resp.json();
+            if (!resp.ok) { showRotationIndicator('error'); return; }
+        } catch (e) {
+            showRotationIndicator('error');
+            return;
+        }
+
+        if (preview.success === false) {
+            // Stack empty (e.g. another device already used it) — just resync.
+            showRotationIndicator('success');
+            fetchRotation();
+            return;
+        }
+
+        if (!confirm(this._previewMessage(direction, preview))) {
+            showRotationIndicator('success');
+            return;
+        }
+
+        // Phase 2: apply, guarded by the revision the preview was computed
+        // against. If the rotation changed in between, the server rejects with
+        // "stale" and we re-preview so the KJ confirms the real diff.
+        showRotationIndicator('spin');
+        try {
+            const resp = await fetch('/rotation/' + direction, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ confirm: true, expected_rev: preview.rev }),
+            });
+            const data = await resp.json();
+            if (data.success === false && data.reason === 'stale') {
+                log('Rotation changed since preview — re-checking…', 'warn');
+                // Reload+render the current rotation so the UI matches the
+                // freshly-previewed diff, then re-preview.
+                await fetchRotation();
+                await this._run(direction);
+                return;
+            }
+            if (!resp.ok || data.success === false) {
                 showRotationIndicator('error');
                 return;
             }
@@ -50,26 +76,53 @@ const rotationHistory = {
                 renderRotation(rotationData);
                 if (data.singer_stats) { renderSingerStats(data.singer_stats); }
             }
+            this.updateButtons(data.history);
             showRotationIndicator('success');
         } catch (e) {
             showRotationIndicator('error');
         }
-        this.updateButtons();
     },
 
-    updateButtons() {
+    _previewMessage(direction, preview) {
+        const d = preview.diff || { removed: [], added: [], changed: [] };
+        const verb = direction === 'undo' ? 'Undo' : 'Redo';
+        const fmt = (e) => `${e.singer}${e.song_artist ? ' — ' + e.song_artist : ''}`;
+        const lines = [`${verb}: ${preview.label || 'last change'}`, ''];
+        if (d.removed.length) {
+            lines.push(`Will REMOVE ${d.removed.length}:`);
+            d.removed.forEach(e => lines.push('  − ' + fmt(e)));
+        }
+        if (d.added.length) {
+            lines.push(`Will ADD BACK ${d.added.length}:`);
+            d.added.forEach(e => lines.push('  + ' + fmt(e)));
+        }
+        if (d.changed.length) {
+            lines.push(`Will CHANGE ${d.changed.length}:`);
+            d.changed.forEach(e => lines.push(
+                `  ~ ${fmt(e)} (${e.before ? e.before.status : '?'} → ${e.status})`));
+        }
+        if (!d.removed.length && !d.added.length && !d.changed.length) {
+            lines.push('(reorder only — no singers added or removed)');
+        }
+        lines.push('', 'Continue?');
+        return lines.join('\n');
+    },
+
+    updateButtons(history) {
+        if (history) this.latest = history;
+        const h = this.latest || { undo: 0, redo: 0 };
         const undoBtn = document.getElementById('rotation-undo-btn');
         const redoBtn = document.getElementById('rotation-redo-btn');
         if (undoBtn) {
-            undoBtn.disabled = this.undoStack.length === 0;
-            undoBtn.title = this.undoStack.length > 0
-                ? `Undo (${this.undoStack.length} remaining)`
+            undoBtn.disabled = !h.undo;
+            undoBtn.title = h.undo
+                ? `Undo${h.undo_label ? ' “' + h.undo_label + '”' : ''} (${h.undo} left)`
                 : 'Nothing to undo';
         }
         if (redoBtn) {
-            redoBtn.disabled = this.redoStack.length === 0;
-            redoBtn.title = this.redoStack.length > 0
-                ? `Redo (${this.redoStack.length} remaining)`
+            redoBtn.disabled = !h.redo;
+            redoBtn.title = h.redo
+                ? `Redo${h.redo_label ? ' “' + h.redo_label + '”' : ''} (${h.redo} left)`
                 : 'Nothing to redo';
         }
     },
@@ -3485,6 +3538,7 @@ async function fetchRotation() {
         rotationData = data.entries || [];
         renderRotation(rotationData);
         if (data.singer_stats) { renderSingerStats(data.singer_stats); }
+        rotationHistory.updateButtons(data.history);
     } catch (e) {
         const list = document.getElementById('rotation-list');
         if (list) list.innerHTML = '<div class="rotation-empty">Could not load rotation</div>';
@@ -3865,7 +3919,6 @@ function renderRotation(entries) {
                 unlinkItem.onclick = async (ev) => {
                     ev.stopPropagation();
                     dropdown.remove();
-                    rotationHistory.pushUndo(rotationData);
                     try {
                         const resp = await fetch('/rotation/unlink', {
                             method: 'POST',
@@ -4424,9 +4477,7 @@ function openSplitModal(singer) {
     newInput.focus();
 }
 
-async function singerAction(action, data) {
-    rotationHistory.pushUndo(rotationData);
-    showRotationIndicator('spin');
+async function singerAction(action, data) {    showRotationIndicator('spin');
     try {
         const resp = await fetch('/rotation/singer/' + action, {
             method: 'POST',
@@ -4674,9 +4725,7 @@ function enterRotationEditMode(row, entry) {
     });
 }
 
-async function saveRotationEdit(entryId, singers, songArtist) {
-    rotationHistory.pushUndo(rotationData);
-    showRotationIndicator('spin');
+async function saveRotationEdit(entryId, singers, songArtist) {    showRotationIndicator('spin');
     try {
         const response = await fetch('/rotation/edit', {
             method: 'POST',
@@ -4702,9 +4751,7 @@ async function saveRotationEdit(entryId, singers, songArtist) {
 }
 
 async function deleteRotationEntry(entryId, singerName) {
-    if (!confirm(`Delete "${singerName}" from rotation?`)) return;
-    rotationHistory.pushUndo(rotationData);
-    showRotationIndicator('spin');
+    if (!confirm(`Delete "${singerName}" from rotation?`)) return;    showRotationIndicator('spin');
     try {
         const response = await fetch('/rotation/delete', {
             method: 'POST',
@@ -4758,13 +4805,23 @@ async function playAndAdvanceRotation(entry, idx, entries) {
 }
 
 async function advanceRotationStatus(entry, idx, entries) {
-    rotationHistory.pushUndo(rotationData);
-    // Mark this entry as singing
-    await updateRotationStatus(entry.id, 'Now Singing', { skipUndo: true });
-    // Mark the next entry as up next (if there is one)
+    // Mark current → Now Singing and next → Up Next in ONE request so the
+    // advance is a single undo step (one server-side checkpoint), not two.
+    const updates = [{ id: entry.id, status: 'Now Singing' }];
     const nextEntry = entries[idx + 1];
-    if (nextEntry) {
-        await updateRotationStatus(nextEntry.id, 'Up Next', { skipUndo: true });
+    if (nextEntry) updates.push({ id: nextEntry.id, status: 'Up Next' });
+    showRotationIndicator('spin');
+    try {
+        const response = await fetch('/rotation/status', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ updates }),
+        });
+        const data = await response.json();
+        if (data.entries) { rotationData = data.entries; renderRotation(rotationData); }
+        showRotationIndicator(response.ok ? 'success' : 'error');
+    } catch (e) {
+        showRotationIndicator('error');
     }
 }
 
@@ -4920,8 +4977,7 @@ async function openSmsPreview(row, entry) {
     });
 }
 
-async function updateRotationStatus(entryId, status, { skipUndo = false } = {}) {
-    if (!skipUndo) rotationHistory.pushUndo(rotationData);
+async function updateRotationStatus(entryId, status) {
     showRotationIndicator('spin');
     try {
         const response = await fetch('/rotation/status', {
@@ -4944,9 +5000,7 @@ async function updateRotationStatus(entryId, status, { skipUndo = false } = {}) 
     }
 }
 
-async function moveRotationEntry(entryId, newPosition) {
-    rotationHistory.pushUndo(rotationData);
-    showRotationIndicator('spin');
+async function moveRotationEntry(entryId, newPosition) {    showRotationIndicator('spin');
     try {
         const response = await fetch('/rotation/move', {
             method: 'POST',
@@ -5058,9 +5112,7 @@ async function addRotationEntry() {
 
     // Cancel any pending rotation search so a late response can't pop a stale
     // dropdown whose Link/DL&Link buttons would no-op (singers already cleared).
-    hideRotSearchDropdown();
-    rotationHistory.pushUndo(rotationData);
-    showRotationIndicator('spin');
+    hideRotSearchDropdown();    showRotationIndicator('spin');
     try {
         const response = await fetch('/rotation/add', {
             method: 'POST',
@@ -5385,9 +5437,7 @@ async function selectRotSearchResult(result) {
         if (singers.length === 0) { if (singerInput) singerInput.focus(); return; }
     }
 
-    hideRotSearchDropdown();
-    rotationHistory.pushUndo(rotationData);
-    showRotationIndicator('spin');
+    hideRotSearchDropdown();    showRotationIndicator('spin');
 
     // Build (endpoint, body) for a search result given the identity fields
     // (either {id} for link mode, or {singers, song_artist} for add mode).

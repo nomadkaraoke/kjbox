@@ -2381,7 +2381,12 @@ def get_rotation():
         _add_songs_sung(entries, rotation)
         _add_sms_status(entries)
         singer_stats = rotation.get_singer_stats()
-        return jsonify({"entries": entries, "singer_stats": singer_stats})
+        return jsonify({
+            "entries": entries,
+            "singer_stats": singer_stats,
+            "rev": rotation.store.get_rev(),
+            "history": rotation.history_status(),
+        })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -2393,6 +2398,25 @@ def update_rotation_status():
     if not hasattr(current_app, 'rotation') or current_app.rotation is None:
         return jsonify({"error": "Rotation not configured"}), 503
     data = request.get_json(force=True)
+
+    # Batch path: apply several status changes as one undoable action (e.g. the
+    # Play button sets current → Now Singing and next → Up Next in one step).
+    if isinstance(data.get('updates'), list):
+        try:
+            pairs = []
+            for u in data['updates']:
+                pairs.append((int(u['id']), u.get('status', '')))
+        except (TypeError, ValueError, KeyError):
+            return jsonify({"error": "each update needs an integer id and status"}), 400
+        try:
+            rotation.update_statuses(pairs)
+            entries = rotation.get_rotation()
+            _add_time_estimates(entries)
+            _add_songs_sung(entries, rotation)
+            return jsonify({"success": True, "entries": entries})
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+
     raw_id = data.get('id')
     status = data.get('status', '')
     if raw_id is None:
@@ -2903,6 +2927,90 @@ def restore_rotation_from_sheet():
             return jsonify({"success": True, "restored": count, "entries": sheet_entries})
         except Exception as e:
             return jsonify({"error": str(e)}), 500
+
+
+def _undo_or_redo(direction):
+    """Shared handler for /rotation/undo and /rotation/redo.
+
+    Two-phase to make undo non-destructive: without ``confirm`` it returns a
+    preview diff and applies nothing; with ``confirm: true`` it applies the
+    change. The history is server-side and shared across all KJ devices.
+    """
+    rotation = current_app.rotation
+    if not hasattr(current_app, 'rotation') or current_app.rotation is None:
+        return jsonify({"error": "Rotation not configured"}), 503
+
+    data = request.get_json(force=True, silent=True) or {}
+    if not isinstance(data, dict):
+        return jsonify({"error": "request body must be a JSON object"}), 400
+    confirm = bool(data.get('confirm'))
+
+    preview_fn = rotation.preview_undo if direction == 'undo' else rotation.preview_redo
+    apply_fn = rotation.undo if direction == 'undo' else rotation.redo
+
+    try:
+        if not confirm:
+            preview = preview_fn()
+            if not preview.get('ok'):
+                return jsonify({"success": False, "reason": preview.get('reason', 'empty')})
+            return jsonify({
+                "preview": True,
+                "direction": direction,
+                "label": preview.get('label'),
+                "diff": preview.get('diff'),
+                "rev": rotation.store.get_rev(),
+                "history": rotation.history_status(),
+            })
+
+        # Version guard: if the client previewed against an older revision, the
+        # rotation changed underneath it (e.g. a singer self-submitted between
+        # preview and confirm). Reject so the client can re-preview the *real*
+        # diff instead of silently applying a stale one.
+        expected_rev = data.get('expected_rev')
+        if expected_rev is not None:
+            try:
+                expected_rev = int(expected_rev)
+            except (TypeError, ValueError):
+                return jsonify({"error": "expected_rev must be an integer"}), 400
+            if expected_rev != rotation.store.get_rev():
+                return jsonify({
+                    "success": False,
+                    "reason": "stale",
+                    "rev": rotation.store.get_rev(),
+                    "history": rotation.history_status(),
+                })
+
+        result = apply_fn()
+        if not result.get('ok'):
+            return jsonify({"success": False, "reason": result.get('reason', 'empty')})
+
+        entries = rotation.get_rotation()
+        _add_time_estimates(entries)
+        _add_songs_sung(entries, rotation)
+        _add_sms_status(entries)
+        return jsonify({
+            "success": True,
+            "direction": direction,
+            "label": result.get('label'),
+            "entries": entries,
+            "singer_stats": rotation.get_singer_stats(),
+            "history": rotation.history_status(),
+            "rev": rotation.store.get_rev(),
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@routes_bp.route('/rotation/undo', methods=['POST'])
+def undo_rotation():
+    """Preview (no body / no confirm) or apply (confirm:true) a rotation undo."""
+    return _undo_or_redo('undo')
+
+
+@routes_bp.route('/rotation/redo', methods=['POST'])
+def redo_rotation():
+    """Preview or apply a rotation redo."""
+    return _undo_or_redo('redo')
 
 
 @routes_bp.route('/rotation/singer/rename', methods=['POST'])

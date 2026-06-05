@@ -2,6 +2,34 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-06-04 - Robust server-side rotation undo/redo
+
+Fixes the 2026-05-28 incident where a KJ clicked **Undo** mid-show and lost
+rotation history. The old undo was a per-browser snapshot stack that POSTed a
+whole-rotation overwrite to `/rotation/restore`; it was blind to singer
+self-submissions and other devices, survived a mid-show restart while going
+stale, and reset every `created_at`. One click silently clobbered concurrent
+changes. See `docs/archive/2026-06-04-server-side-undo-design.md`.
+
+Undo/redo is now **server-side and shared across all KJ devices**:
+
+- New `rotation_history` table + a monotonic `rotation_meta.rotation_rev`
+  counter (bumped on every mutation). `RotationManager` checkpoints before each
+  *meaningful* edit (add/edit/delete/move/status/paid/singer ops/link); noisy
+  background tracking (download/gen status) is excluded.
+- New `POST /rotation/undo` and `/rotation/redo` are **two-phase**: without
+  `confirm` they return a preview diff (removed / added / changed) and apply
+  nothing; with `confirm: true` they apply. The apply is **revision-guarded**
+  (`expected_rev`) so a change between preview and confirm is rejected as
+  `stale` and the KJ re-previews the real diff instead of applying a stale one.
+- `restore_entries` now **preserves `created_at`** (no more timeline corruption)
+  and, on undo, **preserves live file-link/download fields** so an unrelated
+  undo never breaks a download that completed in the background.
+- Archiving a night clears the undo history (session-scoped).
+- `GET /rotation` now returns `rev` + `history` so the undo/redo buttons reflect
+  the shared server state on every 2s poll. The legacy `/rotation/restore`
+  snapshot path is retained only for Google-Sheet emergency recovery.
+
 ## 2026-06-02 - Fix: legacy Deflate64 CDG zips failed to play
 
 Some older karaoke discs (e.g. "MP3+G Toolz .NET" authored zips like the `KST` Spanish collection) compress their `.cdg`/`.mp3` with **Deflate64** (compression method 9). Python's stdlib `zipfile` only supports STORED/DEFLATE, so `ZipPlayback.extract_and_get_mp3` raised an uncaught `NotImplementedError` and the `/play` request 500'd — the song silently failed to play while standard-deflate zips worked fine.
