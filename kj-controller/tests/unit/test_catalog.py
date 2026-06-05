@@ -617,3 +617,19 @@ class TestFuzzySearch:
         page2 = cat._fuzzy_search("bohemian rhapsodyy", limit=1, offset=1)
         assert len(page1) == 1 and len(page2) == 1
         assert page1[0]["path"] != page2[0]["path"]
+
+    def test_no_token_overlap_rejected(self, tmp_path):
+        # Real false-positive case: query shares no significant tokens with any
+        # catalog row -> must return nothing, not a garbage WRatio match.
+        cat = _build_tiny_catalog(tmp_path, [
+            "/m/KK-1 - Fall Out Boy - Hold Me Like A Grudge.zip",
+            "/m/KK-2 - Toadies - Push The Hand.zip",
+        ])
+        assert cat.search("Avril - sk8tr boy") == []
+
+    def test_typo_with_shared_tokens_still_found(self, tmp_path):
+        cat = _build_tiny_catalog(tmp_path, [
+            "/m/KK-1 - Pat Benatar - Hit Me With Your Best Shot.zip",
+        ])
+        results = cat.search("Pat Benetar - Hit Me With Your Best Shot")  # typo in artist
+        assert any(r["artist"] == "Pat Benatar" for r in results)

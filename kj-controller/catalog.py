@@ -14,9 +14,16 @@ from text_normalize import (
 )
 
 
-# Fuzzy fallback score cutoff (0-100). Tunable knob; validated by the metrics
-# harness (scripts/search_metrics.py). Below this, candidates are discarded.
+# Fuzzy fallback score cutoff (0-100). Tunable; validated by scripts/search_metrics.py.
 FUZZY_SCORE_CUTOFF = 80
+# Min fraction of the query's significant tokens (len>=4) that must appear in a
+# fuzzy candidate. Precision gate: stops WRatio's partial_ratio from inventing
+# matches that share no real words (real-data analysis: 190/254 fuzzy hits were
+# zero-overlap garbage at the old WRatio>=80-only setting).
+FUZZY_MIN_TOKEN_OVERLAP = 0.5
+# When the query has NO significant (len>=4) tokens, the overlap gate can't apply;
+# require a near-exact score instead.
+FUZZY_SHORT_QUERY_CUTOFF = 95
 
 
 def parse_karaoke_filename(filename):
@@ -356,21 +363,43 @@ class ExternalCatalog:
         Only called when both FTS5 MATCH and LIKE fallback return nothing.
         Uses the trigram index to retrieve candidates (typo-tolerant recall),
         then scores each with WRatio and filters by FUZZY_SCORE_CUTOFF.
+
+        Precision gate: a candidate must share at least FUZZY_MIN_TOKEN_OVERLAP
+        of the query's significant tokens (len>=4) with the candidate text.
+        This prevents WRatio's partial_ratio component from producing false
+        positives where no real words are shared (real-data: 190/254 fuzzy hits
+        at WRatio>=80 had zero token overlap).
+
+        Ranking: overlap first (real-word agreement), then WRatio score.
         """
         norm_q = _normalize_for_search(query)
         if len(norm_q) < 3:
             return []
-        candidates = self._trigram_candidates(query, limit=max(200, limit * 20))
+        q_sig = {t for t in norm_q.split() if len(t) >= 4}
+        candidates = self._trigram_candidates(
+            query, limit=max(200, (limit + offset) * 20))
         scored = []
         for c in candidates:
             hay = _normalize_for_search(
                 ((c.get("artist") or "") + " " + (c.get("title") or "")).strip()
             )
             score = fuzz.WRatio(norm_q, hay)
-            if score >= FUZZY_SCORE_CUTOFF:
-                scored.append((score, c))
-        scored.sort(key=lambda s: s[0], reverse=True)
-        return [c for _, c in scored[offset:offset + limit]]
+            if score < FUZZY_SCORE_CUTOFF:
+                continue
+            if q_sig:
+                hay_tokens = set(hay.split())
+                overlap = len(q_sig & hay_tokens) / len(q_sig)
+                if overlap < FUZZY_MIN_TOKEN_OVERLAP:
+                    continue
+            else:
+                # No significant tokens to gate on; require near-exact match.
+                if score < FUZZY_SHORT_QUERY_CUTOFF:
+                    continue
+                overlap = 0.0
+            scored.append((overlap, score, c))
+        # Rank by overlap first (real-word agreement), then fuzzy score.
+        scored.sort(key=lambda s: (s[0], s[1]), reverse=True)
+        return [c for _, _, c in scored[offset:offset + limit]]
 
     def normalizer_version(self):
         """Return the NORMALIZER_VERSION the index was built with (or None)."""
