@@ -1,1 +1,7 @@
-[]
+[
+  {"query": "Sound of Silence - Simon and Garfunkel", "expect_artist": "Simon & Garfunkel", "expect_title": "Sound Of Silence", "note": "the original bug: 'and' must match '&'"},
+  {"query": "Mr. Brightside - Killers", "expect_artist": "The Killers", "expect_title": "Mr. Brightside", "note": "missing 'The'; title/artist order reversed"},
+  {"query": "Red Hot Chili Peppers - Snow (Hey Oh)", "expect_artist": "Red Hot Chili Peppers", "expect_title": "Snow (Hey Oh)", "note": "bracketed qualifier kept (D4)"},
+  {"query": "Bohemian Rhapsody - Queen", "expect_artist": "Queen", "expect_title": "Bohemian Rhapsody", "note": "reversed order"},
+  {"query": "Dont Stop Believin - Journey", "expect_artist": "Journey", "expect_title": "Don't Stop Believin'", "note": "dropped apostrophes"}
+]

@@ -16,6 +16,11 @@ ROWS = [
     ("Earth Wind and Fire", "September"),
     ("Guns N' Roses", "Paradise City"),
     ("3 Doors Down", "Kryptonite"),
+    # Rows backing the curated real-rotation-history samples (real_rotation_samples.json),
+    # so test_real_samples_if_present validates real messy queries end-to-end.
+    ("The Killers", "Mr. Brightside"),
+    ("Red Hot Chili Peppers", "Snow (Hey Oh)"),
+    ("Journey", "Don't Stop Believin'"),
 ]
 
 
