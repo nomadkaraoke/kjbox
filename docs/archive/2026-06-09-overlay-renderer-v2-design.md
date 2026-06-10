@@ -99,11 +99,18 @@ is swapped.
 | `desktop/overlay_engine.py` | GTK app: window setup, config-mtime polling, `karaoke_playing` visibility, redraw scheduling, compositor safety guard, dispatch to painters | gi/Gtk/Gdk, cairo, overlay_config, overlay_painters |
 | `desktop/overlay_painters.py` *(replaces `overlay_types.py`)* | `BasePainter` + `Ticker`, `StaticText`, `Image`, `Countdown`, `QRCode`, **`RotationList`**. Each: `layout()`, `draw(cr)`, `tick(dt)` for animation. Cairo drawing + PIL/qrcode for QR bitmap | cairo, PIL, qrcode, overlay_config |
 | `desktop/overlay_config.py` | unchanged: schema, defaults, positions, `hex_to_rgb`; **add** `rotation_list` defaults | — |
-| `desktop/rotation_source.py` *(refactor of `rotation_data.py`)* | parse `/tmp/rotation_cache.json` → structured `(queue, stats)` with per-entry fields; pagination helper; rules loader; staleness/offline. **No conky markup.** | — |
-| `kj-controller/overlay.py`, `routes.py`, `static/app.js`, `templates/index.html` | add `rotation_list` to `OVERLAY_TYPES`/`TYPE_DEFAULTS`/presets + CRUD form. Retire `rotation_ticker_sync.py` (renderer reads rotation data directly for both list and "up next" ticker) | — |
+| `desktop/rotation_source.py` *(refactor of `rotation_data.py`)* | parse `/tmp/rotation_cache.json` → structured `(queue, stats)` with per-entry fields; pagination helper; **"up next" filtering/ordering** + `compose_ticker_text` (moved from `rotation_ticker_sync.py`); staleness/offline. **No conky markup, no rules.** | — |
+| `kj-controller/overlay.py`, `routes.py`, `static/app.js`, `templates/index.html` | add `rotation_list` to `OVERLAY_TYPES`/`TYPE_DEFAULTS`/presets + CRUD form. **Retire `rotation_ticker_sync.py`** (renderer reads rotation data directly for both list and "up next" ticker) | — |
 
 `rotation_data.py` (conky markup CLI) is removed once conky is gone; its data-loading
-logic moves to `rotation_source.py`.
+logic moves to `rotation_source.py`. **`rotation_ticker_sync.py` is retired:** its
+push-based model (kj-controller computes the "Up next…" string and writes it into the
+ticker overlay's `config.text` after every rotation mutation) is replaced by the
+renderer composing that text itself from the rotation cache. The rotation-ticker
+**feature is unchanged**; the well-tested `compose_ticker_text` pure function is
+**moved** into `rotation_source.py` (not deleted). The renderer must apply the same
+"up next" filtering/ordering the sync relied on (exclude done/left/now-singing) so the
+ticker shows the same singers as before.
 
 ## Data flow
 
@@ -158,19 +165,16 @@ the rotation text.
 - **Pagination**: `PAGE_SIZE=10`, `PAGE_DURATION=10s`. When `len(queue) > 10`, cycle
   pages by `int(time()/10) % num_pages`; numbering offset by page start; show page
   **dots** (size 16) under the list — current page white `#ffffff`, others `#8892a4`.
-- **Rules panel** — right column x≈1020 (currently also `voffset -900`): "HOW IT WORKS"
-  header DejaVu Sans **bold 28** white, then bullet lines DejaVu Sans size 18
-  `#8892a4` from `desktop/rotation_rules.txt`.
 - **Empty/offline states**: empty queue → "No singers in queue" (size 28, `#8892a4`);
   stale/missing cache → "Offline".
 - Cache entry fields: `singer`, `song_artist`, `status`, `paid`. Stats fields:
   `started`, `singers`, `sung`, `queued`.
 
-**Known discrepancy to resolve during implementation:** the rules panel is coded at
-x≈1020 / `voffset -900` (top-right), which overlaps the static promo bubbles and is
-**not visible** in the current production screenshot. Preserve the content; confirm
-final placement with Andrew (options: reposition to a clear area, or omit if
-intentionally retired).
+**Dropped: the rules panel.** The conky "HOW IT WORKS" panel (x≈1020 / `voffset -900`,
+from `desktop/rotation_rules.txt`) was never finished — it overlaps the static promo
+bubbles and is not visible in production. It is **removed entirely** in v2 (do not port
+it, and drop the `rotation_rules.txt` dependency). A rules/info display will be rebuilt
+later as a first-class kj-controller overlay once the overlay system is solid.
 
 **Existing non-rotation overlays to re-implement in Cairo (from live `overlays.json`):**
 - Ticker (static + `source='rotation'`): full-width scrolling bar; `font_size`,
@@ -192,8 +196,11 @@ pre-blend), so rounded translucent panels look correct.
   transparent window would render opaque and could black-screen over the video.
 - **Focus/stacking:** click-through + no-focus + `keep_above` so it cannot steal focus
   or block VLC input. Verify on-device that it stacks above fullscreen VLC.
-- The "Bring video to front" recovery (`wmctrl -i -a <VLC|mpv>`) remains available as
-  an operator safety net regardless (separate small task; can ship first).
+- **No "bring video to front" recovery is needed by design:** with conky gone there is
+  no full-screen window that can sit above the video, so the recovery concept is
+  obsolete. For first-ship safety the existing per-overlay enable toggles clear
+  individual overlays, and stopping `overlay-display.service` is the ultimate kill —
+  no new kill-switch button is planned unless real-world flakiness proves it necessary.
 
 ## Error handling
 
@@ -235,10 +242,18 @@ pre-blend), so rounded translucent panels look correct.
 6. Update docs: `docs/CHANGELOG.md` entry; refresh any overlay/conky references in
    `docs/ARCHITECTURE.md`.
 
+## Resolved decisions (from spec review)
+
+1. **Rules panel:** removed entirely (not ported); rebuild later as a first-class
+   overlay.
+2. **`rotation_ticker_sync.py`:** retired; rotation-ticker feature preserved by the
+   renderer composing the text from the cache (`compose_ticker_text` moved into
+   `rotation_source.py`). Must match current up-next filtering/ordering.
+3. **"Bring video to front" button:** not built — obsolete by design once conky is
+   gone. Existing per-overlay toggles + stopping the service cover first-ship safety.
+
 ## Open questions for implementation plan
 
-1. Rules panel final placement (see discrepancy above).
-2. Confirm retiring `rotation_ticker_sync.py` end-to-end (renderer reads rotation cache
-   directly for the `source='rotation'` ticker).
-3. Whether to ship the "Bring video to front" System-section button as a small
-   precursor PR (independent value, lower risk).
+- Confirm the rotation cache (`/tmp/rotation_cache.json`) exposes enough to reproduce
+  the current "up next" filtering/ordering in the renderer, or adjust what kj-controller
+  writes so the renderer can derive it without the retired sync.
