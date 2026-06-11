@@ -316,7 +316,7 @@ Brings forward three of the deferred "Open questions for V2": delivery receipts,
 
 **Pure logic in `sms.py`:** `verify_webhook_signature`, `parse_webhook_event`, `classify_inbound_keyword` — all unit-tested with a generated Ed25519 keypair (no network). Telnyx auto-sends the carrier-side STOP/HELP replies; we only mirror the decision locally.
 
-**Not yet wired (deploy-time, per decision):** the messaging-profile `webhook_url` is still unset. Set it only after the handler is deployed — see CHANGELOG deploy steps. End-to-end verification is impossible until the 10DLC campaign is approved and real messages flow; until then it's covered by mocked unit tests only.
+**Deployed 2026-06-11 (v0.37.0, PR #104):** pulled on NomadPC + `systemctl restart` (device was idle). Webhook verified fail-closed (401 on unsigned POST) both locally and via `https://sing.nomadkaraoke.com/telnyx/webhook`. Messaging-profile `webhook_url` now set to that URL (`webhook_api_version: 2`). `cryptography 46.0.5` already in the venv; `TELNYX_PUBLIC_KEY` already in the `telnyx.conf` systemd drop-in. End-to-end webhook verification (a real signed callback) still isn't possible until the 10DLC campaign is approved and messages actually flow; until then it's mocked-unit-test + fail-closed-probe coverage only.
 
 ## Related follow-up (low-pri)
 
