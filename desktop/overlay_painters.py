@@ -365,19 +365,31 @@ class RotationListPainter(BasePainter):
     COLOR_STATS = "#8892a4"
     COLOR_PAID = "#e74c3c"
 
+    _CACHE_TTL = 1.0  # seconds between cache re-reads
+
     def layout(self):
         # Occupies the screen; bounds are the full display (used only for
         # show_over_video gating, not clipping).
         self._w, self._h = SCREEN_WIDTH, SCREEN_HEIGHT
         self._x = self._y = 0
         self._cache_path = self.config.get("cache_path", rs.CACHE_FILE)
+        self._snap = None
+        self._snap_at = 0.0
 
     def tick(self, dt):
         # Page cycling + stats are time-based; ask for periodic repaint.
         return True
 
+    def _snapshot(self):
+        import time as _t
+        now = _t.time()
+        if self._snap is None or (now - self._snap_at) >= self._CACHE_TTL:
+            self._snap = rs.load_snapshot(self._cache_path)
+            self._snap_at = now
+        return self._snap
+
     def draw(self, cr):
-        snap = rs.load_snapshot(self._cache_path)
+        snap = self._snapshot()
         # Heading
         draw_text(cr, self.LEFT_X, self.HEADING_Y, "ROTATION", self.HEADING_SIZE,
                   self.COLOR_NUMBER, bold=True)
