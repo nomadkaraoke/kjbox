@@ -2,6 +2,29 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-06-11 - Overlay renderer v2: retire conky, single GTK transparent overlay
+
+Replaced conky and the pygame-ce overlay engine with a single compositor-backed
+**GTK3 + Cairo** overlay window (`desktop/overlay_engine.py` + `overlay_painters.py`
++ `rotation_source.py`). The window is RGBA (real per-pixel transparency),
+always-on-top, click-through, and never takes focus — so it cannot hide or
+de-stack the fullscreen VLC video (root cause of the recurring "video
+backgrounded" incident, where the full-screen conky `dock` window rose above the
+demoted fullscreen VLC). The rotation home screen is now the `rotation_list`
+overlay type drawn over the desktop wallpaper; the `source='rotation'` ticker
+composes its text directly from `/tmp/rotation_cache.json` (the push-based
+`rotation_ticker_sync` is retired). A compositor guard refuses to map the window
+if no compositor is running.
+
+**Device deploy steps (manual; kj-autodeploy is OFF):**
+- `git pull` on NomadPC
+- disable the conky autostart (`~/.config/autostart/Conky.desktop`) and kill conky
+- install the updated `overlay-display.service` (now GTK/X11; daemon-reload), restart it
+- the desktop wallpaper (`/home/nomad/kjdata/wallpaper.jpg`) is unchanged and remains
+  the between-songs background
+
+kj-controller 0.35.1 -> 0.36.0.
+
 ## 2026-06-04 - Fix Scan-to-Sing QR overlay flicker
 
 The Scan-to-Sing QR overlay flickered instead of displaying solidly whenever a
