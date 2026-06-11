@@ -84,6 +84,17 @@ class SmsStore:
                 ON sms_log(rotation_entry_id);
             CREATE INDEX IF NOT EXISTS idx_sms_log_sent_at
                 ON sms_log(sent_at);
+            CREATE INDEX IF NOT EXISTS idx_sms_log_telnyx_id
+                ON sms_log(telnyx_message_id);
+
+            -- Opt-out registry. Populated by inbound STOP webhooks; consulted
+            -- by the send path so the KJ can't text a singer who replied STOP.
+            -- Keyed by E.164 so it survives across events/nights.
+            CREATE TABLE IF NOT EXISTS sms_opt_outs (
+                phone_e164    TEXT PRIMARY KEY,
+                opted_out_at  TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+                keyword       TEXT
+            );
             """
         )
         conn.commit()
@@ -136,6 +147,62 @@ class SmsStore:
         )
         conn.commit()
         return self.get_log(cur.lastrowid)
+
+    def update_status_by_telnyx_id(self, telnyx_message_id, status, error=None):
+        """Update an outbound row's status from a Telnyx delivery receipt.
+
+        Matches on ``telnyx_message_id`` (the id returned at send time). Returns
+        the number of rows updated. A blank/None id matches nothing — failed
+        sends store a NULL id and must never be blanket-overwritten by a DLR
+        that arrives without one.
+        """
+        if not telnyx_message_id:
+            return 0
+        conn = self._get_conn()
+        cur = conn.execute(
+            "UPDATE sms_log SET status = ?, error = ? "
+            "WHERE telnyx_message_id = ?",
+            (status, error, telnyx_message_id),
+        )
+        conn.commit()
+        return cur.rowcount
+
+    # ------------------------------------------------------------------
+    # Opt-out registry
+    # ------------------------------------------------------------------
+
+    def record_opt_out(self, phone_e164, keyword=None):
+        """Mark ``phone_e164`` as opted out (idempotent)."""
+        if not phone_e164:
+            return
+        conn = self._get_conn()
+        conn.execute(
+            "INSERT INTO sms_opt_outs (phone_e164, keyword) VALUES (?, ?) "
+            "ON CONFLICT(phone_e164) DO UPDATE SET "
+            "opted_out_at = datetime('now', 'localtime'), keyword = excluded.keyword",
+            (phone_e164, keyword),
+        )
+        conn.commit()
+
+    def clear_opt_out(self, phone_e164):
+        """Remove an opt-out (inbound START/UNSTOP)."""
+        if not phone_e164:
+            return
+        conn = self._get_conn()
+        conn.execute(
+            "DELETE FROM sms_opt_outs WHERE phone_e164 = ?", (phone_e164,)
+        )
+        conn.commit()
+
+    def is_opted_out(self, phone_e164):
+        """True iff ``phone_e164`` is in the opt-out registry."""
+        if not phone_e164:
+            return False
+        conn = self._get_conn()
+        row = conn.execute(
+            "SELECT 1 FROM sms_opt_outs WHERE phone_e164 = ?", (phone_e164,)
+        ).fetchone()
+        return row is not None
 
     def get_log(self, log_id):
         conn = self._get_conn()

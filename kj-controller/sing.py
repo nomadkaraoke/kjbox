@@ -639,6 +639,57 @@ def push_unsubscribe():
     return ("", 204)
 
 
+@sing_bp.route("/telnyx/webhook", methods=["POST"])
+def telnyx_webhook():
+    """Inbound Telnyx webhook: delivery receipts + STOP/HELP opt-outs.
+
+    Lives on the sing blueprint because the public host (sing.nomadkaraoke.com)
+    only routes `sing.*` endpoints — this is the one publicly-reachable surface.
+    Unauthenticated but Ed25519 signature-verified against TELNYX_PUBLIC_KEY
+    (``sms_config['public_key']``); if that's unset the check fails closed.
+
+    Always 200-acks recognised events so Telnyx won't retry. 401 only on a
+    signature failure. Carrier-side STOP responses are auto-sent by Telnyx; we
+    mirror the opt-out locally so the KJ send path refuses opted-out numbers.
+    """
+    import sms as sms_mod
+
+    sms_cfg = getattr(current_app, "sms_config", None) or {}
+    sms_store = getattr(current_app, "sms_store", None)
+
+    raw_body = request.get_data(as_text=True)
+    signature = request.headers.get("telnyx-signature-ed25519", "")
+    timestamp = request.headers.get("telnyx-timestamp", "")
+
+    if not sms_mod.verify_webhook_signature(
+        sms_cfg.get("public_key"), signature, timestamp, raw_body,
+    ):
+        return jsonify({"error": "invalid signature"}), 401
+
+    try:
+        payload = json.loads(raw_body) if raw_body else {}
+    except ValueError:
+        return ("", 200)  # acked; malformed body, nothing to act on
+
+    evt = sms_mod.parse_webhook_event(payload)
+    if sms_store is None:
+        return ("", 200)
+
+    if evt["kind"] == "dlr" and evt["message_id"]:
+        sms_store.update_status_by_telnyx_id(
+            evt["message_id"], evt["status"] or "unknown", error=evt["error"],
+        )
+    elif evt["kind"] == "inbound":
+        keyword = sms_mod.classify_inbound_keyword(evt["text"])
+        phone = evt["from"]
+        if phone and keyword == "stop":
+            sms_store.record_opt_out(phone, keyword=(evt["text"] or "").strip()[:32])
+        elif phone and keyword == "start":
+            sms_store.clear_opt_out(phone)
+
+    return ("", 200)
+
+
 @sing_bp.route("/now", methods=["GET"])
 @require_token
 def now_playing():
