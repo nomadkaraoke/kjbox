@@ -1957,6 +1957,8 @@ function onOverlayTypeChange() {
         posSelect.value = 'top-right';
     } else if (type === 'image') {
         posSelect.value = 'top-right';
+    } else if (type === 'rotation_list') {
+        posSelect.value = 'top-left';
     }
 }
 

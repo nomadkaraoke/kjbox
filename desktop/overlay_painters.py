@@ -317,7 +317,8 @@ class ImagePainter(BasePainter):
         self._surface = None
         path = cfg.get("image_path", "")
         if _pil and path and os.path.exists(path):
-            img = Image.open(path).convert("RGBA")
+            with Image.open(path) as src:
+                img = src.convert("RGBA")
             ow, oh = img.size
             scale = target_w / ow if ow else 1
             self._surface = _pil_to_surface(img.resize((target_w, max(1, int(oh * scale)))))
