@@ -27,48 +27,9 @@ class TestPresetRoute:
         resp = flask_test_client.post('/overlays/presets/does-not-exist')
         assert resp.status_code == 400
 
-
-class TestTickerRefreshOnSave:
-    def test_create_rotation_ticker_populates_text(self, flask_test_client, flask_app):
-        flask_app.rotation.add_entry('Alice')
-        resp = flask_test_client.post('/overlays', json={
-            'type': 'ticker',
-            'name': 'Rotation Bar',
-            'enabled': True,
-            'show_over_video': True,
-            'config': {
-                'source': 'rotation',
-                'prefix': 'Up next: ',
-                'count': 5,
-                'separator': '   ',
-                'empty_text': 'Sign up at the booth!',
-                'position': 'top',
-            },
-        })
+    def test_rotation_list_preset_creates_overlay(self, flask_test_client):
+        resp = flask_test_client.post('/overlays/presets/rotation-list')
         assert resp.status_code == 201
         overlay = resp.get_json()
-        # The POST response itself is read after the refresh hook so it reflects
-        # the populated text.
-        assert overlay['config']['text'] == 'Up next: 1. Alice'
-
-    def test_update_to_rotation_source_populates_text(self, flask_test_client, flask_app):
-        flask_app.rotation.add_entry('Bob')
-        create = flask_test_client.post('/overlays', json={
-            'type': 'ticker',
-            'name': 'Static',
-            'config': {'text': 'placeholder', 'source': 'static'},
-        })
-        oid = create.get_json()['id']
-
-        update = flask_test_client.put(f'/overlays/{oid}', json={
-            'config': {
-                'source': 'rotation',
-                'prefix': 'Now: ',
-                'count': 5,
-                'separator': ' | ',
-                'empty_text': '',
-                'text': 'placeholder',
-            },
-        })
-        assert update.status_code == 200
-        assert update.get_json()['config']['text'] == 'Now: 1. Bob'
+        assert overlay['type'] == 'rotation_list'
+        assert overlay['show_over_video'] is False

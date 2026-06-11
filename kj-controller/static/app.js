@@ -1788,6 +1788,7 @@ const OVERLAY_TYPE_LABELS = {
     image: 'Image',
     countdown: 'Timer',
     qr_code: 'QR',
+    rotation_list: 'Rotation',
 };
 
 async function addScanToSingQR() {

@@ -92,6 +92,29 @@ def test_ticker_layout_full_width_and_scrolls():
     assert p._scroll_x < x0
 
 
+def test_ticker_rotation_source_composes_from_cache(tmp_path):
+    cache = tmp_path / "rotation_cache.json"
+    cache.write_text(json.dumps({
+        "queue": [{"singer": "Shylo R.", "song_artist": "", "status": "waiting", "paid": False},
+                  {"singer": "Donte", "song_artist": "", "status": "waiting", "paid": False}],
+        "stats": {}, "updated": __import__("time").time(),
+    }))
+    p = op.TickerPainter("k", {
+        "source": "rotation", "cache_path": str(cache), "prefix": "Up next: ",
+        "count": 5, "separator": "   ", "empty_text": "Scan the QR!",
+        "font_size": 28, "position": "top",
+    }, True)
+    assert p._text == "Up next: 1. Shylo R.   2. Donte"
+
+
+def test_ticker_rotation_source_empty_when_offline(tmp_path):
+    p = op.TickerPainter("k", {
+        "source": "rotation", "cache_path": str(tmp_path / "missing.json"),
+        "prefix": "Up next: ", "count": 5, "empty_text": "Scan the QR!",
+    }, True)
+    assert p._text == "Up next: Scan the QR!"
+
+
 def test_ticker_resets_after_scrolling_off():
     p = op.TickerPainter("k", {"text": "X", "speed": 100, "position": "top"}, True)
     p._scroll_x = -p._text_w - 5

@@ -1046,7 +1046,6 @@ def create_overlay():
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
 
-    _maybe_refresh_rotation_ticker(overlay)
     overlay = current_app.overlay_manager.get_overlay(overlay['id'])
     return jsonify(overlay), 201
 
@@ -1078,21 +1077,6 @@ def _scan_to_sing_url():
     return get_event_url(cfg, token, scope='public')
 
 
-def _maybe_refresh_rotation_ticker(overlay):
-    """If the overlay is a rotation-driven ticker, trigger an immediate refresh."""
-    if (overlay or {}).get('type') != 'ticker':
-        return
-    cfg = (overlay.get('config') or {})
-    if cfg.get('source') != 'rotation':
-        return
-    sync = getattr(current_app.rotation, 'rotation_ticker_sync', None)
-    if sync is None:
-        return
-    try:
-        sync.refresh()
-    except Exception:
-        import logging
-        logging.getLogger(__name__).exception("rotation ticker refresh on save failed")
 
 
 @routes_bp.route('/overlays/<overlay_id>', methods=['GET'])
@@ -1114,7 +1098,6 @@ def update_overlay(overlay_id):
     if not overlay:
         return jsonify({"error": "Overlay not found"}), 404
 
-    _maybe_refresh_rotation_ticker(overlay)
     overlay = current_app.overlay_manager.get_overlay(overlay_id)
     return jsonify(overlay)
 

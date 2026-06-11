@@ -178,13 +178,23 @@ class StaticTextPainter(BasePainter):
 
 
 class TickerPainter(BasePainter):
-    """Full-width scrolling text bar (top or bottom)."""
+    """Full-width scrolling text bar (top or bottom).
+
+    For source=='rotation' the text is composed live from the rotation cache
+    (replacing the old kj-controller push-based rotation_ticker_sync); otherwise
+    the static config['text'] is used.
+    """
+
+    _ROTATION_TTL = 1.0  # seconds between cache re-reads for rotation source
 
     def layout(self):
         cfg = self.config
         self._size = cfg.get("font_size", 28)
         self._pad = cfg.get("padding", 10)
-        self._text = cfg.get("text", "") or ""
+        self._source = cfg.get("source", "static")
+        self._cache_path = cfg.get("cache_path", rs.CACHE_FILE)
+        self._compose_at = 0.0
+        self._text = self._resolve_text()
         self._text_w = text_width(self._text, self._size)
         self._w = SCREEN_WIDTH
         self._h = int(self._size + self._pad * 2)
@@ -194,7 +204,31 @@ class TickerPainter(BasePainter):
         if not hasattr(self, "_scroll_x"):
             self._scroll_x = SCREEN_WIDTH
 
+    def _resolve_text(self):
+        cfg = self.config
+        if self._source != "rotation":
+            return cfg.get("text", "") or ""
+        snap = rs.load_snapshot(self._cache_path)
+        return rs.compose_ticker_text(
+            snap.queue if snap.online else [],
+            prefix=cfg.get("prefix", "Up next: "),
+            count=int(cfg.get("count", 5) or 0),
+            separator=cfg.get("separator", "   "),
+            empty_text=cfg.get("empty_text", ""),
+        )
+
+    def _maybe_recompose(self):
+        import time as _t
+        now = _t.time()
+        if self._source == "rotation" and (now - self._compose_at) >= self._ROTATION_TTL:
+            self._compose_at = now
+            new = self._resolve_text()
+            if new != self._text:
+                self._text = new
+                self._text_w = text_width(self._text, self._size)
+
     def tick(self, dt):
+        self._maybe_recompose()
         speed = self.config.get("speed", 2)
         self._scroll_x -= speed * 100 * dt   # speed=1 => 100px/s
         if self._scroll_x < -self._text_w:

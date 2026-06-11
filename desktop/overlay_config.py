@@ -6,7 +6,7 @@ SCREEN_WIDTH = 1920
 SCREEN_HEIGHT = 1080
 MARGIN = 20
 
-OVERLAY_TYPES = {'ticker', 'static_text', 'image', 'countdown', 'qr_code'}
+OVERLAY_TYPES = {'ticker', 'static_text', 'image', 'countdown', 'qr_code', 'rotation_list'}
 
 POSITION_PRESETS = {
     'top-left': 'top-left',
@@ -87,6 +87,12 @@ TYPE_DEFAULTS = {
         'bg_color': '#000000',
         'bg_opacity': 1.0,
         'corner_radius': 0,
+    },
+    'rotation_list': {
+        # The between-songs rotation home screen (heading + stats + singer list +
+        # page dots), drawn over the desktop wallpaper. Reads the rotation cache
+        # directly; no per-instance styling is required.
+        'position': 'top-left',
     },
 }
 
