@@ -273,6 +273,51 @@ Then register a `LOW_VOLUME` Campaign against the new Brand (sample message = th
 
 Until 10DLC is approved, Telnyx will accept sends and the button will appear to work, but US carriers may filter delivery unpredictably. Self-test sends ARE fine.
 
+## 10DLC progress — actual outcome (2026-06-11)
+
+Account verification cleared. Verified the full setup live via the Telnyx REST API:
+
+- **Account:** verified. Balance ~$17.14.
+- **Brand:** registered via the Telnyx web UI and **fully approved** — `identityStatus: VERIFIED`, `status: OK`, EIN matched.
+  - `brandId: 4b20019e-b7e9-f2af-1f85-e4a1c203fd1e`, `tcrBrandId: BVPM26Y`.
+  - Note: web-UI form set `vertical: TECHNOLOGY` (the earlier draft proposed `ENTERTAINMENT`) and `companyName: "Nomad Karaoke"` (not "…LLC"). Approved as-is; no action needed.
+- **Campaign:** created via API `POST /v2/10dlc/campaignBuilder` on 2026-06-11 — `LOW_VOLUME`, sub-use-cases `ACCOUNT_NOTIFICATION` + `CUSTOMER_CARE`.
+  - `campaignId / tcrCampaignId: 4b30019e-b816-36a3-5727-0074e6af09bb`.
+  - `submissionStatus: PENDING`, `campaignStatus: TCR_PENDING`. Carrier/TCR review ~1-3 weeks.
+  - Opt-in keywords can't be blank — TCR requires `START,UNSTOP` even when real opt-in is the web form (described in `messageFlow`). STOP/HELP handled by Telnyx automatically.
+- **Number → campaign assignment:** BLOCKED. `POST /v2/10dlc/phoneNumberCampaign` returns `10036 "Campaign … is still pending and has not been approved yet."` Must retry once `campaignStatus` is approved. **This is the one remaining manual step.**
+
+### Correction: self-test sends are NOT fine pre-registration
+
+The 2026-06-04 note above ("Self-test sends ARE fine") is **wrong** under current carrier enforcement. A live test send 2026-06-11 (`from +18038053750` → `to +18036363267`, msg id `40319eb8-16b9-426b-bcdf-f89935c0d986`) was accepted/queued by Telnyx (cost $0.0141) but the carrier **hard-rejected** it:
+
+```
+status: delivery_failed
+error 40010: "The sending number is not 10DLC-registered but is required to be by the carrier."
+```
+
+So US carriers now *reject* (not merely filter) all A2P traffic from this un-registered local long-code — including self-tests. **SMS will not deliver to any US mobile until the campaign is approved and the number is assigned.** The kjbox button correctly reports `sms_enabled: True` and the API accepts sends; the failure is downstream at the carrier. No further end-to-end testing is possible until approval.
+
+### Optional config — outcome
+
+- **Messaging-profile daily spend limit:** SET to **$5.00/day** (`daily_spend_limit_enabled: true`) to bound runaway cost.
+- **Webhook + opt-out:** BUILT (v0.37.0, not the deferred-forever V2 it was). See below.
+
+## Webhook + opt-out — implemented (2026-06-11, v0.37.0)
+
+Brings forward three of the deferred "Open questions for V2": delivery receipts, inbound STOP handling, and cross-event opt-out.
+
+**Endpoint:** `POST /sing/telnyx/webhook` — lives on the `sing` blueprint because the public host (`sing.nomadkaraoke.com`) only routes `sing.*` endpoints, and that's the one publicly-reachable surface. Unauthenticated but **Ed25519 signature-verified** against `TELNYX_PUBLIC_KEY` (added to `sms_config["public_key"]`); fails closed (401) if the key is unset or the signature/timestamp is bad (300s replay window). Always 200-acks recognised events so Telnyx won't retry.
+
+**Behaviour:**
+- **Delivery receipts** (`message.finalized` / `message.sent`) → `SmsStore.update_status_by_telnyx_id()` flips `sms_log.status` to the carrier's status (`delivered` / `delivery_failed`) and records the error. The KJ now sees real delivery state, not just "Telnyx accepted".
+- **Inbound STOP** (`message.received`, first token in `_STOP_KEYWORDS`) → `SmsStore.record_opt_out(phone)`. **START/UNSTOP** → `clear_opt_out`. New `sms_opt_outs` table, keyed by E.164 so it persists across nights/events.
+- **Send path** (`/rotation/sms/send`) now checks `is_opted_out()` and refuses with **403** + a logged `failed` row before calling Telnyx.
+
+**Pure logic in `sms.py`:** `verify_webhook_signature`, `parse_webhook_event`, `classify_inbound_keyword` — all unit-tested with a generated Ed25519 keypair (no network). Telnyx auto-sends the carrier-side STOP/HELP replies; we only mirror the decision locally.
+
+**Not yet wired (deploy-time, per decision):** the messaging-profile `webhook_url` is still unset. Set it only after the handler is deployed — see CHANGELOG deploy steps. End-to-end verification is impossible until the 10DLC campaign is approved and real messages flow; until then it's covered by mocked unit tests only.
+
 ## Related follow-up (low-pri)
 
 `restore_from_sheet` (`rotation_sync.py`) resets `sqlite_sequence` for `rotation_entries`, allowing cross-event ID reuse. The SMS button-visibility lookup is now defensive against this (newest sing_request wins, mirroring the SEND path), but the underlying ID reuse is still latent. Either stop resetting the sequence, or clear stale `sing_requests.linked_entry_id` on archive.

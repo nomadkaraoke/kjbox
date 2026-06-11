@@ -223,3 +223,166 @@ class TestSend:
         with pytest.raises(sms.TelnyxError) as excinfo:
             sms.send(api_key="k", from_number=None, to_e164="+1", body="x")
         assert "TELNYX_FROM_NUMBER" in str(excinfo.value)
+
+
+# ---------------------------------------------------------------------------
+# Webhook signature verification
+# ---------------------------------------------------------------------------
+
+import base64
+
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+
+def _make_keypair():
+    """Return (public_key_b64, sign(timestamp, body) -> signature_b64)."""
+    priv = Ed25519PrivateKey.generate()
+    pub = priv.public_key()
+    from cryptography.hazmat.primitives import serialization
+    pub_raw = pub.public_bytes(
+        encoding=serialization.Encoding.Raw,
+        format=serialization.PublicFormat.Raw,
+    )
+    pub_b64 = base64.b64encode(pub_raw).decode()
+
+    def sign(timestamp, body):
+        signed = f"{timestamp}|{body}".encode()
+        return base64.b64encode(priv.sign(signed)).decode()
+
+    return pub_b64, sign
+
+
+class TestVerifyWebhookSignature:
+    def test_valid_signature_passes(self):
+        pub_b64, sign = _make_keypair()
+        body = '{"data":{"event_type":"message.finalized"}}'
+        ts = "1700000000"
+        sig = sign(ts, body)
+        assert sms.verify_webhook_signature(
+            pub_b64, sig, ts, body, now=1700000010
+        ) is True
+
+    def test_tampered_body_fails(self):
+        pub_b64, sign = _make_keypair()
+        ts = "1700000000"
+        sig = sign(ts, '{"original":true}')
+        assert sms.verify_webhook_signature(
+            pub_b64, sig, ts, '{"tampered":true}', now=1700000010
+        ) is False
+
+    def test_wrong_key_fails(self):
+        _, sign = _make_keypair()
+        other_pub_b64, _ = _make_keypair()
+        ts = "1700000000"
+        body = "{}"
+        sig = sign(ts, body)
+        assert sms.verify_webhook_signature(
+            other_pub_b64, sig, ts, body, now=1700000010
+        ) is False
+
+    def test_stale_timestamp_fails(self):
+        pub_b64, sign = _make_keypair()
+        ts = "1700000000"
+        body = "{}"
+        sig = sign(ts, body)
+        # 10 minutes later, default tolerance 300s -> reject (replay guard).
+        assert sms.verify_webhook_signature(
+            pub_b64, sig, ts, body, now=1700000000 + 600
+        ) is False
+
+    def test_missing_pieces_fail(self):
+        pub_b64, sign = _make_keypair()
+        assert sms.verify_webhook_signature(pub_b64, "", "1", "{}", now=1) is False
+        assert sms.verify_webhook_signature(pub_b64, "sig", "", "{}", now=1) is False
+        assert sms.verify_webhook_signature(None, "sig", "1", "{}", now=1) is False
+
+    def test_garbage_signature_fails(self):
+        pub_b64, _ = _make_keypair()
+        assert sms.verify_webhook_signature(
+            pub_b64, "!!!not-base64!!!", "1700000000", "{}", now=1700000000
+        ) is False
+
+
+# ---------------------------------------------------------------------------
+# Webhook event parsing
+# ---------------------------------------------------------------------------
+
+class TestParseWebhookEvent:
+    def _payload(self, **payload):
+        # Telnyx serialises the sender under the JSON key "from"; map the
+        # Python-safe kwarg from_ onto it.
+        if "from_" in payload:
+            payload["from"] = payload.pop("from_")
+        return {"data": {"event_type": payload.pop("event_type"),
+                         "payload": payload}}
+
+    def test_dlr_delivered(self):
+        evt = sms.parse_webhook_event(self._payload(
+            event_type="message.finalized",
+            direction="outbound",
+            id="msg_abc",
+            to=[{"phone_number": "+18432594507", "status": "delivered"}],
+        ))
+        assert evt["kind"] == "dlr"
+        assert evt["message_id"] == "msg_abc"
+        assert evt["status"] == "delivered"
+        assert evt["error"] is None
+
+    def test_dlr_failed_includes_error(self):
+        evt = sms.parse_webhook_event(self._payload(
+            event_type="message.finalized",
+            direction="outbound",
+            id="msg_abc",
+            to=[{"phone_number": "+1", "status": "delivery_failed"}],
+            errors=[{"code": "40010", "title": "Not 10DLC registered"}],
+        ))
+        assert evt["kind"] == "dlr"
+        assert evt["status"] == "delivery_failed"
+        assert "40010" in evt["error"]
+
+    def test_inbound_stop(self):
+        evt = sms.parse_webhook_event(self._payload(
+            event_type="message.received",
+            direction="inbound",
+            id="in_1",
+            from_={"phone_number": "+18432594507"},
+            text="STOP",
+        ))
+        assert evt["kind"] == "inbound"
+        assert evt["from"] == "+18432594507"
+        assert evt["text"] == "STOP"
+
+    def test_inbound_uses_from_key(self):
+        # Telnyx serialises the sender under the JSON key "from"; ensure the
+        # parser reads it (our _payload helper passes from_ -> normalised).
+        payload = {"data": {"event_type": "message.received", "payload": {
+            "direction": "inbound", "id": "in_2",
+            "from": {"phone_number": "+19998887777"}, "text": "hello",
+        }}}
+        evt = sms.parse_webhook_event(payload)
+        assert evt["from"] == "+19998887777"
+
+    def test_unknown_event(self):
+        evt = sms.parse_webhook_event({"data": {"event_type": "call.hangup",
+                                                "payload": {}}})
+        assert evt["kind"] == "unknown"
+
+    def test_malformed_payload(self):
+        assert sms.parse_webhook_event({})["kind"] == "unknown"
+        assert sms.parse_webhook_event(None)["kind"] == "unknown"
+
+
+class TestIsOptOutKeyword:
+    def test_stop_variants(self):
+        for kw in ["STOP", "stop", " Stop ", "STOPALL", "UNSUBSCRIBE", "CANCEL",
+                   "QUIT", "END"]:
+            assert sms.classify_inbound_keyword(kw) == "stop"
+
+    def test_start_variants(self):
+        for kw in ["START", "start", "UNSTOP", "YES"]:
+            assert sms.classify_inbound_keyword(kw) == "start"
+
+    def test_other_text_is_none(self):
+        assert sms.classify_inbound_keyword("can I sing next?") is None
+        assert sms.classify_inbound_keyword("") is None
+        assert sms.classify_inbound_keyword(None) is None

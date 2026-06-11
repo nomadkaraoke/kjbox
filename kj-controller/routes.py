@@ -2799,6 +2799,26 @@ def sms_send():
     sms_store = current_app.sms_store
     user_agent = request.headers.get("User-Agent", "")[:500]
 
+    # Respect opt-outs recorded from inbound STOP webhooks. Telnyx would reject
+    # the send carrier-side anyway, but blocking here keeps us honest and gives
+    # the KJ a clear reason instead of a cryptic Telnyx error.
+    if sms_store.is_opted_out(target["phone_e164"]):
+        log_row = sms_store.record_send(
+            rotation_entry_id=entry_id,
+            sing_request_id=target["sing_request"]["id"],
+            phone_e164=target["phone_e164"],
+            body=body,
+            status="failed",
+            telnyx_message_id=None,
+            error="recipient opted out (replied STOP)",
+            kj_user_agent=user_agent,
+        )
+        return jsonify({
+            "success": False,
+            "error": "Recipient has opted out (replied STOP); not sent.",
+            "sms_log_id": log_row["id"],
+        }), 403
+
     try:
         message_id = sms_mod.send(
             api_key=sms_cfg["api_key"],

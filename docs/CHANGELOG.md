@@ -2,6 +2,33 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-06-11 - SMS: Telnyx 10DLC campaign + inbound webhook (delivery receipts + STOP)
+
+**Telnyx account config (done via API, no deploy needed):**
+- Created a `LOW_VOLUME` 10DLC campaign (`campaignId 4b30019e-b816-36a3-5727-0074e6af09bb`)
+  against the verified "Nomad Karaoke" brand and set a $5/day messaging-profile
+  spend cap. Number `+18038053750` will be assigned once the campaign is
+  carrier-approved (~1-3 weeks). See `archive/2026-05-01-sms-notifications-design.md`.
+- **Carrier hard-rejects unregistered sends** (`40010`) until then — no US delivery
+  is possible, even self-tests.
+
+**Code (v0.37.0 — needs deploy + restart to take effect):**
+- New inbound webhook `POST /sing/telnyx/webhook` (`sing.py`), Ed25519
+  signature-verified against `TELNYX_PUBLIC_KEY`. Handles delivery receipts
+  (updates `sms_log.status` → delivered/delivery_failed) and inbound STOP/START
+  (opt-out registry in `sms_store`). The KJ send path now refuses opted-out
+  numbers (403).
+- New dep: `cryptography` (already present transitively via pywebpush).
+
+**Deploy steps (manual; kj-autodeploy is OFF):**
+- `git pull` on NomadPC, then `sudo systemctl restart kj-controller` (interrupts playback).
+- Point Telnyx at the webhook (only after deploy):
+  `curl -X PATCH -H "Authorization: Bearer $TELNYX_API_KEY" -H "Content-Type: application/json" \`
+  `-d '{"webhook_url":"https://sing.nomadkaraoke.com/telnyx/webhook"}' \`
+  `https://api.telnyx.com/v2/messaging_profiles/40019e4e-d369-4bd2-b3bf-2ec80e0825f2`
+- End-to-end webhook verification isn't possible until the 10DLC campaign is
+  approved and real messages flow.
+
 ## 2026-06-11 - Overlay renderer v2: retire conky, single GTK transparent overlay
 
 Replaced conky and the pygame-ce overlay engine with a single compositor-backed

@@ -421,3 +421,107 @@ class TestSend:
                 "entry_id": entry_id, "body": "x",
             })
             assert resp.status_code == 503
+
+    @patch("sms.requests.post")
+    def test_send_to_opted_out_refused(self, mock_post, sms_client, sms_app):
+        _, entry_id = _seed_request_and_link(sms_app, phone="843-259-4507")
+        sms_app.sms_store.record_opt_out("+18432594507", keyword="STOP")
+        resp = sms_client.post("/rotation/sms/send", json={
+            "entry_id": entry_id, "body": "Hi Celeste!",
+        })
+        assert resp.status_code == 403
+        data = resp.get_json()
+        assert data["success"] is False
+        assert "opted out" in data["error"].lower()
+        # Never hit Telnyx, and logged for the audit trail.
+        mock_post.assert_not_called()
+        log = sms_app.sms_store.get_log(data["sms_log_id"])
+        assert log["status"] == "failed"
+
+
+# ---------------------------------------------------------------------------
+# Telnyx inbound webhook — /sing/telnyx/webhook
+# ---------------------------------------------------------------------------
+
+import base64
+import json
+import time
+
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+
+def _keypair():
+    priv = Ed25519PrivateKey.generate()
+    pub_raw = priv.public_key().public_bytes(
+        encoding=serialization.Encoding.Raw,
+        format=serialization.PublicFormat.Raw,
+    )
+    return priv, base64.b64encode(pub_raw).decode()
+
+
+class TestTelnyxWebhook:
+    def _signed_post(self, client, app, body_dict, *, valid=True):
+        priv, pub_b64 = _keypair()
+        app.sms_config["public_key"] = pub_b64
+        raw = json.dumps(body_dict)
+        ts = str(int(time.time()))
+        if valid:
+            sig = base64.b64encode(priv.sign(f"{ts}|{raw}".encode())).decode()
+        else:
+            sig = base64.b64encode(b"x" * 64).decode()  # valid b64, wrong sig
+        return client.post(
+            "/sing/telnyx/webhook", data=raw,
+            headers={
+                "telnyx-signature-ed25519": sig,
+                "telnyx-timestamp": ts,
+                "Content-Type": "application/json",
+            },
+        )
+
+    def test_valid_dlr_updates_status(self, sms_client, sms_app):
+        sms_app.sms_store.record_send(
+            rotation_entry_id=1, sing_request_id=None, phone_e164="+1",
+            body="hi", status="sent", telnyx_message_id="msg_abc",
+        )
+        resp = self._signed_post(sms_client, sms_app, {"data": {
+            "event_type": "message.finalized",
+            "payload": {"id": "msg_abc", "direction": "outbound",
+                        "to": [{"phone_number": "+1", "status": "delivered"}]},
+        }})
+        assert resp.status_code == 200
+        assert sms_app.sms_store.get_latest_for_entry(1)["status"] == "delivered"
+
+    def test_invalid_signature_401(self, sms_client, sms_app):
+        resp = self._signed_post(sms_client, sms_app, {"data": {
+            "event_type": "message.finalized", "payload": {"id": "x"},
+        }}, valid=False)
+        assert resp.status_code == 401
+
+    def test_inbound_stop_records_optout(self, sms_client, sms_app):
+        assert sms_app.sms_store.is_opted_out("+18432594507") is False
+        resp = self._signed_post(sms_client, sms_app, {"data": {
+            "event_type": "message.received",
+            "payload": {"id": "in_1", "direction": "inbound",
+                        "from": {"phone_number": "+18432594507"},
+                        "text": "STOP"},
+        }})
+        assert resp.status_code == 200
+        assert sms_app.sms_store.is_opted_out("+18432594507") is True
+
+    def test_inbound_start_clears_optout(self, sms_client, sms_app):
+        sms_app.sms_store.record_opt_out("+18432594507", keyword="STOP")
+        resp = self._signed_post(sms_client, sms_app, {"data": {
+            "event_type": "message.received",
+            "payload": {"id": "in_2", "direction": "inbound",
+                        "from": {"phone_number": "+18432594507"},
+                        "text": "START"},
+        }})
+        assert resp.status_code == 200
+        assert sms_app.sms_store.is_opted_out("+18432594507") is False
+
+    def test_unknown_event_acked_200(self, sms_client, sms_app):
+        resp = self._signed_post(sms_client, sms_app, {"data": {
+            "event_type": "call.hangup", "payload": {},
+        }})
+        assert resp.status_code == 200

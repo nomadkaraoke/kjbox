@@ -10,3 +10,4 @@ websockify
 yt-dlp[default]
 pywebpush>=2.0.3
 phonenumbers>=8.13
+cryptography>=42  # Ed25519 verification of inbound Telnyx webhook signatures

@@ -103,6 +103,63 @@ class TestLookup:
         assert result[2]["status"] == "failed"
 
 
+class TestUpdateStatusByTelnyxId:
+    def test_updates_matching_row(self, store):
+        store.record_send(
+            rotation_entry_id=64, sing_request_id=12, phone_e164="+1",
+            body="hi", status="sent", telnyx_message_id="msg_abc",
+        )
+        updated = store.update_status_by_telnyx_id("msg_abc", "delivered")
+        assert updated == 1
+        row = store.get_latest_for_entry(64)
+        assert row["status"] == "delivered"
+
+    def test_updates_error_on_failure(self, store):
+        store.record_send(
+            rotation_entry_id=64, sing_request_id=12, phone_e164="+1",
+            body="hi", status="sent", telnyx_message_id="msg_abc",
+        )
+        store.update_status_by_telnyx_id(
+            "msg_abc", "delivery_failed", error="40010 not 10DLC-registered",
+        )
+        row = store.get_latest_for_entry(64)
+        assert row["status"] == "delivery_failed"
+        assert row["error"] == "40010 not 10DLC-registered"
+
+    def test_no_match_returns_zero(self, store):
+        assert store.update_status_by_telnyx_id("nope", "delivered") == 0
+
+    def test_blank_message_id_returns_zero(self, store):
+        # A failed send logs telnyx_message_id=None; a DLR with an empty id
+        # must never blanket-match those NULL rows.
+        store.record_send(
+            rotation_entry_id=64, sing_request_id=12, phone_e164="+1",
+            body="hi", status="failed", telnyx_message_id=None, error="x",
+        )
+        assert store.update_status_by_telnyx_id("", "delivered") == 0
+        assert store.update_status_by_telnyx_id(None, "delivered") == 0
+
+
+class TestOptOut:
+    def test_record_then_is_opted_out(self, store):
+        assert store.is_opted_out("+18432594507") is False
+        store.record_opt_out("+18432594507", keyword="STOP")
+        assert store.is_opted_out("+18432594507") is True
+
+    def test_clear_opt_out(self, store):
+        store.record_opt_out("+18432594507", keyword="STOP")
+        store.clear_opt_out("+18432594507")
+        assert store.is_opted_out("+18432594507") is False
+
+    def test_record_opt_out_is_idempotent(self, store):
+        store.record_opt_out("+18432594507", keyword="STOP")
+        store.record_opt_out("+18432594507", keyword="STOP")
+        assert store.is_opted_out("+18432594507") is True
+
+    def test_unknown_phone_not_opted_out(self, store):
+        assert store.is_opted_out("+19998887777") is False
+
+
 class TestConcurrentWrites:
     def test_concurrent_writes_from_many_threads(self, tmp_path):
         """Regression guard for the 2026-05-01 shared-connection bug.

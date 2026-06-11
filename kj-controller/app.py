@@ -235,6 +235,9 @@ def create_app(config=None):
     flask_app.sms_config = {
         "api_key": os.environ.get("TELNYX_API_KEY") or None,
         "from_number": os.environ.get("TELNYX_FROM_NUMBER") or None,
+        # Ed25519 public key for verifying inbound Telnyx webhook signatures
+        # (delivery receipts + STOP/HELP). None → webhook fails closed (401).
+        "public_key": os.environ.get("TELNYX_PUBLIC_KEY") or None,
     }
 
     # ----------------------------------------------------------------
@@ -411,6 +414,9 @@ def start_app():  # pragma: no cover
     flask_app.sms_config = {
         "api_key": os.environ.get("TELNYX_API_KEY") or None,
         "from_number": os.environ.get("TELNYX_FROM_NUMBER") or None,
+        # Ed25519 public key for verifying inbound Telnyx webhook signatures
+        # (delivery receipts + STOP/HELP). None → webhook fails closed (401).
+        "public_key": os.environ.get("TELNYX_PUBLIC_KEY") or None,
     }
     log_message("Sing store ready (public request form).", cfg)
 
