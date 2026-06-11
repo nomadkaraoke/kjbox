@@ -28,8 +28,7 @@ A more powerful replacement/companion — Intel N97 mini PC running Linux Mint.
 |-----------|---------|
 | VLC | Video/audio playback |
 | KJ Controller | Web-based karaoke show management (Flask + yt-dlp + VLC) |
-| Rotation Display | Singer queue overlay via local cache from KJ Controller (Conky + Python, ~3s refresh) |
-| Overlay Engine | Dynamic display overlays (ticker, countdown, QR, etc.) |
+| Overlay Engine | Single compositor-backed GTK3 window rendering all overlays (rotation list, ticker, countdown, QR, text) with real transparency over the wallpaper/video |
 
 ## Repository Structure
 
@@ -51,13 +50,13 @@ kjbox/
     archive/
       NOMADPI-DETAILS.md       # Device reference: hardware, network, display, services
       NETWORK-CONFIG-BACKUP.md # Tailscale & Cloudflare tunnel backup
-  desktop/
-    rotation.conkyrc           # Conky config for singer queue overlay (full-screen, 3s refresh)
-    rotation_data.py           # Data fetcher: local cache → conky markup (falls back to Sheet CSV)
-    rotation_rules.txt         # Rotation policy bullets (read by rotation_data.py --rules)
+  desktop/                     # Overlay renderer (overlay-display.service)
+    overlay_engine.py          # GTK3 app: single transparent click-through window + render loop
+    overlay_painters.py        # pycairo painters (ticker, text, countdown, image, QR, rotation list)
+    overlay_config.py          # Overlay schema, defaults, position calc
+    rotation_source.py         # Reads /tmp/rotation_cache.json -> structured rotation data
     rotation_rules_printable.html  # Printable rotation rules (laminate for KJ desk)
-    rotation-bg.png            # 1920x1080 wallpaper background (faux transparency)
-    nomad-kjbox-desktop-background-4k.jpg  # 4K source wallpaper
+    nomad-kjbox-desktop-background-4k.jpg  # 4K source wallpaper (desktop background)
   kj-controller/               # KJ Remote Controller web app
     app.py                     # App factory (create_app) + entry point
     config.py                  # Constants, platform detection, config loading

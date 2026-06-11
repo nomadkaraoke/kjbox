@@ -171,7 +171,7 @@ class TestValidateOverlay:
         assert 'url' in err
 
     def test_all_types_recognized(self):
-        assert OVERLAY_TYPES == {'ticker', 'static_text', 'image', 'countdown', 'qr_code'}
+        assert OVERLAY_TYPES == {'ticker', 'static_text', 'image', 'countdown', 'qr_code', 'rotation_list'}
 
 
 class TestNewFieldDefaults:

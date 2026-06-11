@@ -1788,6 +1788,7 @@ const OVERLAY_TYPE_LABELS = {
     image: 'Image',
     countdown: 'Timer',
     qr_code: 'QR',
+    rotation_list: 'Rotation',
 };
 
 async function addScanToSingQR() {
@@ -1956,6 +1957,8 @@ function onOverlayTypeChange() {
         posSelect.value = 'top-right';
     } else if (type === 'image') {
         posSelect.value = 'top-right';
+    } else if (type === 'rotation_list') {
+        posSelect.value = 'top-left';
     }
 }
 

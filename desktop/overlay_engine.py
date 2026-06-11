@@ -1,317 +1,270 @@
 #!/usr/bin/env python3
-"""Overlay Engine — renders configurable overlays on the NomadPi display.
+"""Overlay Engine v2 -- compositor-backed GTK overlay renderer.
 
-Reads overlay configuration from data/overlays.json (written by KJ Controller).
-Creates pygame-ce windows for each enabled overlay, handles smooth scrolling
-for ticker overlays, and auto-hides desktop-only overlays during video playback.
+Renders all overlays (ticker, QR, countdown, text, and the rotation list) into a
+SINGLE always-on-top, transparent (RGBA), click-through, non-focus-stealing GTK3
+window on top of the desktop wallpaper / live video. Replaces conky and the old
+pygame engine.
+
+Why one passive transparent window: with true compositor alpha, empty regions show
+the video/wallpaper through; being click-through + never-focused, it cannot steal
+focus from VLC or cover the video. See docs/archive/2026-06-09-overlay-renderer-v2-design.md.
 
 Usage:
     python3 overlay_engine.py [--config PATH]
+    python3 overlay_engine.py --render-png OUT.png [--config PATH] [--bg WALLPAPER] [--playing]
+        # headless render of the current overlays to a PNG (no display / GTK needed)
 """
 
 import argparse
 import json
 import os
-import signal
 import sys
 import time
 
-# Add desktop/ dir to path so overlay_config and overlay_types are importable
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-import pygame
+import cairo  # gi-free; safe everywhere
 
-from overlay_config import apply_defaults, get_overlays_path
-from overlay_types import QRCodeOverlay, TickerOverlay, create_overlay
+from overlay_config import SCREEN_HEIGHT, SCREEN_WIDTH, apply_defaults, get_overlays_path
+from overlay_painters import PAINTERS, make_painter
 
 FPS = 30
-CONFIG_POLL_INTERVAL = 1.0  # seconds between checking overlays.json mtime
+CONFIG_POLL_INTERVAL = 1.0  # seconds between overlays.json mtime checks
 
 
-class OverlayEngine:
-    """Main overlay engine: manages overlay lifecycle and render loop."""
+def _log(msg):
+    print(f"overlay_engine: {msg}", file=sys.stderr, flush=True)
 
-    def __init__(self, config_path=None):
-        self.config_path = config_path or get_overlays_path()
-        self.overlays = {}  # id -> overlay instance
-        self.karaoke_playing = False
-        self._last_config_mtime = 0
-        self._last_config_check = 0
-        self._running = True
 
-    def load_config(self):
-        """Load overlays.json and return (karaoke_playing, overlay_list)."""
+def load_config(path):
+    """Return (karaoke_playing, [overlay dicts with defaults applied])."""
+    try:
+        with open(path) as f:
+            data = json.load(f)
+    except (OSError, ValueError) as e:
+        _log(f"config load error: {e}")
+        return False, []
+    overlays = data.get("overlays", [])
+    for o in overlays:
+        apply_defaults(o)
+    return bool(data.get("karaoke_playing", False)), overlays
+
+
+def visible_overlays(karaoke_playing, overlays):
+    """Overlays that should currently be drawn (enabled + visibility rule)."""
+    out = []
+    for o in overlays:
+        if not o.get("enabled", False):
+            continue
+        if karaoke_playing and not o.get("show_over_video", False):
+            continue  # desktop-only overlay hidden during video
+        out.append(o)
+    return out
+
+
+# ----------------------------------------------------------------------------
+# Headless PNG render (no GTK) -- for tests and on-device visual verification
+# ----------------------------------------------------------------------------
+def render_to_png(out_path, config_path, bg_path=None,
+                  width=SCREEN_WIDTH, height=SCREEN_HEIGHT, karaoke_playing=None):
+    """Render the currently-visible overlays to a PNG. gi-free.
+
+    If bg_path is given it is drawn underneath (e.g. the wallpaper) for a realistic
+    preview; otherwise the background is transparent.
+    """
+    surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, width, height)
+    cr = cairo.Context(surface)
+    if bg_path and os.path.exists(bg_path):
         try:
-            with open(self.config_path, 'r') as f:
-                data = json.load(f)
-        except (FileNotFoundError, json.JSONDecodeError) as e:
-            print(f'overlay_engine: config load error: {e}', file=sys.stderr)
-            return self.karaoke_playing, []
+            import io
+            from PIL import Image
+            img = Image.open(bg_path).convert("RGBA").resize((width, height))
+            buf = io.BytesIO()
+            img.save(buf, format="PNG")
+            buf.seek(0)
+            bg = cairo.ImageSurface.create_from_png(buf)
+            cr.set_source_surface(bg, 0, 0)
+            cr.paint()
+        except Exception as e:  # pragma: no cover
+            _log(f"bg load failed: {e}")
+    playing, overlays = load_config(config_path)
+    if karaoke_playing is not None:
+        playing = karaoke_playing
+    for o in visible_overlays(playing, overlays):
+        p = make_painter(o)
+        if p:
+            try:
+                p.draw(cr)
+            except Exception as e:  # pragma: no cover
+                _log(f"painter {o.get('id')} draw failed: {e}")
+    surface.write_to_png(out_path)
+    _log(f"rendered {out_path}")
 
-        karaoke_playing = data.get('karaoke_playing', False)
-        overlay_list = data.get('overlays', [])
 
-        # Apply defaults to each overlay
-        for overlay in overlay_list:
-            apply_defaults(overlay)
+# ----------------------------------------------------------------------------
+# GTK application (imports gi lazily so --render-png works without GTK)
+# ----------------------------------------------------------------------------
+class OverlayApp:
+    """Single transparent, click-through, non-focus-stealing GTK overlay window."""
 
-        return karaoke_playing, overlay_list
+    def __init__(self, config_path):
+        self.config_path = config_path
+        self.painters = {}            # overlay_id -> painter
+        self.playing = False
+        self._overlays = []
+        self._config_mtime = -1
+        self._last_frame = time.monotonic()
 
-    def check_config(self):
-        """Check if overlays.json has changed (mtime-based) and reload if so."""
-        now = time.monotonic()
-        if now - self._last_config_check < CONFIG_POLL_INTERVAL:
-            return
-        self._last_config_check = now
+        import gi
+        gi.require_version("Gtk", "3.0")
+        from gi.repository import Gdk, GLib, Gtk
+        self.Gdk, self.GLib, self.Gtk = Gdk, GLib, Gtk
 
+        self.win = Gtk.Window(type=Gtk.WindowType.TOPLEVEL)
+        self.win.set_title("kjbox-overlay")
+        screen = self.win.get_screen()
+        visual = screen.get_rgba_visual()
+        if visual is None:
+            _log("FATAL: no RGBA visual; a compositor is required.")
+            raise SystemExit(1)
+        self.win.set_visual(visual)
+        self.win.set_app_paintable(True)
+        self.win.set_decorated(False)
+        self.win.set_resizable(False)
+        self.win.set_keep_above(True)
+        self.win.set_skip_taskbar_hint(True)
+        self.win.set_skip_pager_hint(True)
+        self.win.set_accept_focus(False)
+        self.win.set_focus_on_map(False)
+        self.win.set_type_hint(Gdk.WindowTypeHint.UTILITY)
+        self.win.stick()  # show on all workspaces
+
+        w = screen.get_width() or SCREEN_WIDTH
+        h = screen.get_height() or SCREEN_HEIGHT
+        self.win.move(0, 0)
+        self.win.set_default_size(w, h)
+        self.win.resize(w, h)
+
+        self.win.connect("draw", self._on_draw)
+        self.win.connect("realize", self._on_realize)
+        self.win.connect("destroy", lambda *_: self.Gtk.main_quit())
+
+    def _on_realize(self, *_):
+        # Click-through: empty input shape means all clicks pass to VLC/desktop.
+        gdk_win = self.win.get_window()
+        if gdk_win is not None:
+            gdk_win.input_shape_combine_region(cairo.Region(), 0, 0)
+
+    def _compositor_ok(self):
+        return bool(self.win.get_screen().is_composited())
+
+    def _reload_config(self):
+        self.playing, overlays = load_config(self.config_path)
+        wanted = {o["id"]: o for o in overlays if o.get("id")}
+        for oid in list(self.painters):
+            if oid not in wanted:
+                self.painters.pop(oid).cleanup()
+        for oid, o in wanted.items():
+            cls = PAINTERS.get(o.get("type"))
+            if oid in self.painters and self.painters[oid].__class__ is cls:
+                self.painters[oid].update_config(o.get("config", {}), o.get("show_over_video", False))
+            else:
+                if oid in self.painters:
+                    self.painters.pop(oid).cleanup()
+                p = make_painter(o)
+                if p:
+                    self.painters[oid] = p
+        self._overlays = overlays
+
+    def _poll_config(self):
         try:
             mtime = os.path.getmtime(self.config_path)
         except OSError:
-            return
+            return True
+        if mtime != self._config_mtime:
+            self._config_mtime = mtime
+            self._reload_config()
+            self.win.queue_draw()
+        return True  # keep the timeout
 
-        if mtime == self._last_config_mtime:
-            return
+    def _on_frame(self):
+        now = time.monotonic()
+        dt = now - self._last_frame
+        self._last_frame = now
+        needs = False
+        for o in visible_overlays(self.playing, self._overlays):
+            p = self.painters.get(o["id"])
+            if p and p.tick(dt):
+                needs = True
+        if needs:
+            self.win.queue_draw()
+        return True
 
-        self._last_config_mtime = mtime
-        self._reload_config()
-
-    def _reload_config(self):
-        """Reload config and sync overlay instances."""
-        karaoke_playing, overlay_list = self.load_config()
-        self.karaoke_playing = karaoke_playing
-
-        # Build a map of new overlay configs by id
-        new_configs = {}
-        for overlay_data in overlay_list:
-            oid = overlay_data.get('id')
-            if oid:
-                new_configs[oid] = overlay_data
-
-        # Remove overlays that are no longer in config or are disabled
-        for oid in list(self.overlays.keys()):
-            if oid not in new_configs or not new_configs[oid].get('enabled', False):
-                self.overlays[oid].cleanup()
-                del self.overlays[oid]
-
-        # Create or update overlays
-        for oid, data in new_configs.items():
-            if not data.get('enabled', False):
+    def _on_draw(self, _widget, cr):
+        # Clear to fully transparent.
+        cr.set_operator(cairo.OPERATOR_SOURCE)
+        cr.set_source_rgba(0, 0, 0, 0)
+        cr.paint()
+        cr.set_operator(cairo.OPERATOR_OVER)
+        for o in visible_overlays(self.playing, self._overlays):
+            p = self.painters.get(o["id"])
+            if not p:
                 continue
-
-            if oid in self.overlays:
-                # Update existing overlay config
-                existing = self.overlays[oid]
-                existing.update_config(
-                    data.get('config', {}),
-                    data.get('show_over_video', False),
-                )
-            else:
-                # Create new overlay
-                overlay = create_overlay(data)
-                if overlay:
-                    overlay.create_window()
-                    overlay.render()
-                    self.overlays[oid] = overlay
-
-        self._restack_qr_above_ticker()
-
-    def update_visibility(self):
-        """Show/hide desktop-only overlays based on karaoke_playing state."""
-        changed = False
-        for overlay in self.overlays.values():
-            if overlay.show_over_video:
-                # Always visible — ensure shown
-                if not overlay.visible:
-                    overlay.show()
-                    changed = True
-            else:
-                # Desktop only — hide during video
-                if self.karaoke_playing and overlay.visible:
-                    overlay.hide()
-                    changed = True
-                elif not self.karaoke_playing and not overlay.visible:
-                    overlay.show()
-                    changed = True
-        # Only restack when a visibility change actually occurred this frame.
-        # Restacking destroys+recreates QR windows, so doing it every frame (the
-        # render loop runs at 30 FPS) makes the QR overlay flicker whenever a
-        # ticker is also visible. _reload_config() handles the config-change case.
-        if changed:
-            self._restack_qr_above_ticker()
-
-    def _restack_qr_above_ticker(self):
-        """Ensure QR overlays are mapped on top of any visible ticker by
-        destroying and re-creating their windows. X11 maps new windows on top
-        of existing always-on-top peers, which is the cheapest deterministic
-        fix for stacking-order issues between two always_on_top windows.
-        """
-        qr_overlays = [
-            ov for ov in self.overlays.values()
-            if isinstance(ov, QRCodeOverlay) and ov.visible
-        ]
-        if not qr_overlays:
-            return
-        has_visible_ticker = any(
-            isinstance(ov, TickerOverlay) and ov.visible
-            for ov in self.overlays.values()
-        )
-        if not has_visible_ticker:
-            return
-        for ov in qr_overlays:
-            ov.destroy_window()
-            ov.create_window()
-            ov.render()
+            try:
+                cr.save()
+                p.draw(cr)
+                cr.restore()
+            except Exception as e:
+                cr.restore()
+                _log(f"painter {o.get('id')} draw failed: {e}")
+        return False
 
     def run(self):
-        """Main render loop."""
-        pygame.init()
-        clock = pygame.time.Clock()
+        if not self._compositor_ok():
+            _log("WARNING: screen is not composited; overlays would be opaque. "
+                 "Waiting for a compositor before mapping the window.")
+            self.GLib.timeout_add(2000, self._wait_for_compositor)
+        else:
+            self._start()
+        self.Gtk.main()
 
-        print(f'overlay_engine: started, config={self.config_path}', file=sys.stderr)
+    def _wait_for_compositor(self):
+        if self._compositor_ok():
+            _log("compositor available; starting overlay.")
+            self._start()
+            return False
+        return True
 
-        # Initial config load
-        self._reload_config()
-
-        while self._running:
-            # Check for config changes
-            self.check_config()
-
-            # Process pygame events
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                    self._running = False
-
-            # Update visibility based on playback state
-            self.update_visibility()
-
-            # Update and render each overlay
-            for overlay in list(self.overlays.values()):
-                if overlay.visible:
-                    overlay.update()
-                    overlay.render()
-
-            clock.tick(FPS)
-
-        self.shutdown()
-
-    def shutdown(self):
-        """Clean up all overlays and quit pygame."""
-        print('overlay_engine: shutting down...', file=sys.stderr)
-        for overlay in self.overlays.values():
-            overlay.cleanup()
-        self.overlays.clear()
-        pygame.quit()
-
-    def handle_signal(self, signum, frame):
-        """Handle SIGTERM/SIGINT for graceful shutdown."""
-        print(f'overlay_engine: received signal {signum}', file=sys.stderr)
-        self._running = False
-
-
-def write_demo_config(path):
-    """Write a demo overlays.json with one of each overlay type."""
-    from datetime import datetime, timedelta
-    target = (datetime.now() + timedelta(minutes=30)).strftime('%Y-%m-%dT%H:%M:%S')
-    demo = {
-        'karaoke_playing': False,
-        'overlays': [
-            {
-                'id': 'demo-ticker',
-                'type': 'ticker',
-                'name': 'Demo Ticker',
-                'enabled': True,
-                'show_over_video': False,
-                'config': {
-                    'text': '    Welcome to Nomad Karaoke!  Sign up at the DJ booth!  Next singer: YOU!    ',
-                    'speed': 1.5,
-                    'position': 'bottom',
-                    'font_size': 28,
-                    'text_color': '#FFFFFF',
-                    'bg_color': '#1a1a2e',
-                    'bg_opacity': 0.9,
-                    'padding': 10,
-                },
-            },
-            {
-                'id': 'demo-text',
-                'type': 'static_text',
-                'name': 'Demo Static Text',
-                'enabled': True,
-                'show_over_video': True,
-                'config': {
-                    'text': 'Happy Birthday Sarah!',
-                    'position': 'top-right',
-                    'font_size': 32,
-                    'text_color': '#FFD700',
-                    'bg_color': '#000000',
-                    'bg_opacity': 0.75,
-                    'padding': 14,
-                },
-            },
-            {
-                'id': 'demo-countdown',
-                'type': 'countdown',
-                'name': 'Demo Countdown',
-                'enabled': True,
-                'show_over_video': False,
-                'config': {
-                    'target_time': target,
-                    'label': 'Last call in',
-                    'expired_text': 'LAST CALL!',
-                    'position': 'top-center',
-                    'font_size': 36,
-                    'text_color': '#FF4444',
-                    'bg_color': '#000000',
-                    'bg_opacity': 0.85,
-                    'padding': 14,
-                },
-            },
-            {
-                'id': 'demo-qr',
-                'type': 'qr_code',
-                'name': 'Demo QR Code',
-                'enabled': True,
-                'show_over_video': False,
-                'config': {
-                    'url': 'https://nomadkaraoke.com',
-                    'label': 'Scan to request a song',
-                    'position': 'bottom-right',
-                    'size': 160,
-                    'padding': 10,
-                },
-            },
-        ],
-    }
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, 'w') as f:
-        json.dump(demo, f, indent=2)
-    return path
+    def _start(self):
+        self._poll_config()
+        self.win.show_all()
+        self.GLib.timeout_add(int(CONFIG_POLL_INTERVAL * 1000), self._poll_config)
+        self.GLib.timeout_add(int(1000 / FPS), self._on_frame)
+        _log(f"started; config={self.config_path}")
 
 
 def main():
-    parser = argparse.ArgumentParser(description='NomadPi Overlay Engine')
-    parser.add_argument('--config', help='Path to overlays.json')
-    parser.add_argument('--demo', action='store_true',
-                        help='Run with demo overlays (ticker, text, countdown, QR code)')
-    args = parser.parse_args()
+    ap = argparse.ArgumentParser(description="kjbox overlay engine v2")
+    ap.add_argument("--config", help="Path to overlays.json")
+    ap.add_argument("--render-png", metavar="OUT", help="Headless: render overlays to a PNG and exit")
+    ap.add_argument("--bg", help="Background image to composite under --render-png output")
+    ap.add_argument("--playing", action="store_true", help="Render the over-video (karaoke playing) state")
+    args = ap.parse_args()
 
-    config_path = args.config
-    if args.demo:
-        import tempfile
-        demo_dir = tempfile.mkdtemp(prefix='overlay-demo-')
-        config_path = write_demo_config(os.path.join(demo_dir, 'overlays.json'))
-        print(f'Demo mode: config at {config_path}', file=sys.stderr)
-        print('Overlays: ticker (bottom), static text (top-right), countdown (top-center), QR (bottom-right)', file=sys.stderr)
-        print('Edit the JSON file to test hot-reload. Ctrl+C to quit.', file=sys.stderr)
+    config_path = args.config or get_overlays_path()
 
-    engine = OverlayEngine(config_path=config_path)
+    if args.render_png:
+        render_to_png(args.render_png, config_path, bg_path=args.bg,
+                      karaoke_playing=True if args.playing else None)
+        return
 
-    # Register signal handlers for graceful shutdown
-    signal.signal(signal.SIGTERM, engine.handle_signal)
-    signal.signal(signal.SIGINT, engine.handle_signal)
-
-    engine.run()
+    app = OverlayApp(config_path)
+    import signal
+    signal.signal(signal.SIGTERM, lambda *_: app.Gtk.main_quit())
+    signal.signal(signal.SIGINT, lambda *_: app.Gtk.main_quit())
+    app.run()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

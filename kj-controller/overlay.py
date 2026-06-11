@@ -13,7 +13,7 @@ _DEFAULT_PATH = os.path.join(
     'data', 'overlays.json',
 )
 
-OVERLAY_TYPES = {'ticker', 'static_text', 'image', 'countdown', 'qr_code'}
+OVERLAY_TYPES = {'ticker', 'static_text', 'image', 'countdown', 'qr_code', 'rotation_list'}
 
 OVERLAY_PRESETS = {
     'scan-to-sing': {
@@ -31,6 +31,15 @@ OVERLAY_PRESETS = {
             'bg_color': '#000000',
             'bg_opacity': 0.85,
             'corner_radius': 12,
+        },
+    },
+    'rotation-list': {
+        'type': 'rotation_list',
+        'name': 'Rotation list',
+        'enabled': True,
+        'show_over_video': False,  # between-songs home screen; hidden during video
+        'config': {
+            'position': 'top-left',
         },
     },
 }
