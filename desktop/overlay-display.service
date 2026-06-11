@@ -5,8 +5,9 @@ Wants=graphical.target
 
 [Service]
 Type=simple
-User=root
-# GTK3 overlay renderer. Connects to the nomad user's X session on :0.
+# Runs as the X session owner (nomad). Uses the SYSTEM python3, which has
+# PyGObject (gi) + pycairo + qrcode + PIL; the kj-controller venv does NOT have gi.
+User=nomad
 Environment=DISPLAY=:0
 Environment=XAUTHORITY=/home/nomad/.Xauthority
 Environment=GDK_BACKEND=x11

@@ -118,6 +118,7 @@ class OverlayApp:
 
         import gi
         gi.require_version("Gtk", "3.0")
+        gi.require_version("Gdk", "3.0")  # pin before import; system default Gdk is 4.0
         from gi.repository import Gdk, GLib, Gtk
         self.Gdk, self.GLib, self.Gtk = Gdk, GLib, Gtk
 
