@@ -173,3 +173,61 @@ class TestClassifyDownloadUrl:
     def test_malformed_url_does_not_raise(self):
         # urlparse is forgiving — should not crash on garbage input
         assert divebar.classify_download_url("not a url") is None
+
+
+class TestRefresh:
+    """Tests for divebar.refresh()."""
+
+    def test_error_when_no_api_url(self):
+        result = divebar.refresh(config={"divebar_refresh_token": "t"})
+        assert result["status"] == "error"
+        assert "divebar_api_url" in result["message"]
+
+    def test_error_when_no_token(self):
+        result = divebar.refresh(config={"divebar_api_url": "http://test"})
+        assert result["status"] == "error"
+        assert "divebar_refresh_token" in result["message"]
+
+    @patch("divebar.requests.post")
+    def test_sends_action_and_token(self, mock_post):
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {
+            "status": "ok", "triggered": ["divebar-mirror-daily"], "failed": [],
+        }
+        mock_post.return_value = mock_resp
+
+        result = divebar.refresh(config={
+            "divebar_api_url": "http://test",
+            "divebar_refresh_token": "s3cret",
+        })
+
+        assert result["status"] == "ok"
+        assert result["triggered"] == ["divebar-mirror-daily"]
+        sent = mock_post.call_args.kwargs["json"]
+        assert sent == {"action": "refresh", "token": "s3cret"}
+
+    @patch("divebar.requests.post")
+    def test_403_returns_token_rejected(self, mock_post):
+        mock_resp = MagicMock()
+        mock_resp.status_code = 403
+        mock_post.return_value = mock_resp
+
+        result = divebar.refresh(config={
+            "divebar_api_url": "http://test",
+            "divebar_refresh_token": "wrong",
+        })
+        assert result["status"] == "error"
+        assert "403" in result["message"]
+
+    @patch("divebar.requests.post")
+    def test_network_error_returns_error_dict(self, mock_post):
+        import requests as req
+        mock_post.side_effect = req.RequestException("boom")
+
+        result = divebar.refresh(config={
+            "divebar_api_url": "http://test",
+            "divebar_refresh_token": "t",
+        })
+        assert result["status"] == "error"
+        assert "boom" in result["message"]
