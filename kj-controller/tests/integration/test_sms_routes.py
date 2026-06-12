@@ -231,6 +231,61 @@ class TestRotationSmsBlock:
         assert celeste["sms"]["last_sent_at"]
 
 
+class TestMutationResponsesIncludeSmsBlock:
+    """Every rotation endpoint that returns ``entries`` must attach the ``sms``
+    block, not just the ``/rotation`` poll.
+
+    Regression (2026-06-11): the mutation endpoints (status change, edit, move,
+    delete, set-paid, link/unlink, restore, …) decorated entries with time
+    estimates and songs-sung but skipped ``_add_sms_status``. The frontend sets
+    ``rotationData = data.entries`` from those responses and re-renders, so the
+    whole SMS button column vanished after every action and only reappeared on
+    the next 2-second ``/rotation`` poll — an unpredictable appear/disappear
+    that made it a coin-flip which button the KJ would actually click.
+    """
+
+    def _entries(self, resp):
+        data = resp.get_json()
+        assert resp.status_code == 200, data
+        return data["entries"]
+
+    def _assert_sms_block(self, entries):
+        assert entries, "expected at least one rotation entry"
+        for e in entries:
+            assert "sms" in e, f"entry {e.get('id')} missing sms block"
+            assert e["sms"]["configured"] is True
+
+    def test_status_change_includes_sms_block(self, sms_client, sms_app):
+        _, entry_id = _seed_request_and_link(sms_app)
+        resp = sms_client.post("/rotation/status", json={"id": entry_id, "status": "Up Next"})
+        self._assert_sms_block(self._entries(resp))
+
+    def test_move_includes_sms_block(self, sms_client, sms_app):
+        _seed_request_and_link(sms_app)
+        _, entry_id = _seed_request_and_link(sms_app, singer="Dana", phone="843-111-2222")
+        resp = sms_client.post("/rotation/move", json={"id": entry_id, "new_position": 1})
+        self._assert_sms_block(self._entries(resp))
+
+    def test_edit_includes_sms_block(self, sms_client, sms_app):
+        _, entry_id = _seed_request_and_link(sms_app)
+        resp = sms_client.post("/rotation/edit", json={"id": entry_id, "singer": "Celeste B."})
+        self._assert_sms_block(self._entries(resp))
+
+    def test_set_paid_includes_sms_block(self, sms_client, sms_app):
+        _, entry_id = _seed_request_and_link(sms_app)
+        resp = sms_client.post("/rotation/set-paid", json={"id": entry_id, "paid": True})
+        self._assert_sms_block(self._entries(resp))
+
+    def test_add_includes_sms_block(self, sms_client, sms_app):
+        resp = sms_client.post("/rotation/add", json={"singer": "Walk-in", "song_artist": "Song"})
+        self._assert_sms_block(self._entries(resp))
+
+    def test_unlink_includes_sms_block(self, sms_client, sms_app):
+        entry = sms_app.rotation.add_entry("Celeste", "Plump - Hole", file_path="/x.mp4")
+        resp = sms_client.post("/rotation/unlink", json={"id": entry["id"]})
+        self._assert_sms_block(self._entries(resp))
+
+
 # ---------------------------------------------------------------------------
 # Cross-night id-reuse phantom match (the "Connie" bug)
 # ---------------------------------------------------------------------------
