@@ -1338,3 +1338,41 @@ class TestDivebarDownloadFilename:
         assert resp.status_code == 200
         items = flask_app.download_queue['items']
         assert items[-1]['title'] == "divebar-abc.mp4"
+
+
+class TestDivebarRefresh:
+    """On-demand pipeline refresh trigger: POST /divebar/refresh."""
+
+    def test_503_when_not_configured(self, flask_test_client, flask_app):
+        flask_app.kj_config.pop('divebar_api_url', None)
+        resp = flask_test_client.post('/divebar/refresh')
+        assert resp.status_code == 503
+
+    def test_503_when_token_missing(self, flask_test_client, flask_app):
+        flask_app.kj_config['divebar_api_url'] = 'http://test'
+        flask_app.kj_config.pop('divebar_refresh_token', None)
+        resp = flask_test_client.post('/divebar/refresh')
+        assert resp.status_code == 503
+        assert 'token' in json.loads(resp.data)['error'].lower()
+
+    def test_200_on_success(self, flask_test_client, flask_app):
+        flask_app.kj_config['divebar_api_url'] = 'http://test'
+        flask_app.kj_config['divebar_refresh_token'] = 's3cret'
+        with patch('routes.divebar.refresh',
+                   return_value={"status": "ok", "triggered": ["divebar-mirror-daily"],
+                                 "failed": []}) as mock_refresh:
+            resp = flask_test_client.post('/divebar/refresh')
+        assert resp.status_code == 200
+        data = json.loads(resp.data)
+        assert data['triggered'] == ["divebar-mirror-daily"]
+        # The route passes the app config through to the client helper.
+        assert mock_refresh.call_args.kwargs['config'] is flask_app.kj_config
+
+    def test_502_when_helper_reports_error(self, flask_test_client, flask_app):
+        flask_app.kj_config['divebar_api_url'] = 'http://test'
+        flask_app.kj_config['divebar_refresh_token'] = 's3cret'
+        with patch('routes.divebar.refresh',
+                   return_value={"status": "error", "message": "refresh token rejected (403)"}):
+            resp = flask_test_client.post('/divebar/refresh')
+        assert resp.status_code == 502
+        assert '403' in json.loads(resp.data)['error']

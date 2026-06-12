@@ -1456,6 +1456,28 @@ def divebar_status():
     return jsonify({"error": "Could not fetch Divebar status", "configured": True}), 502
 
 
+@routes_bp.route('/divebar/refresh', methods=['POST'])
+def divebar_refresh():
+    """Trigger an on-demand refresh of the Divebar pipeline.
+
+    Force-runs the Drive→BigQuery index, Drive→GCS file sync, and xref-rebuild
+    scheduler jobs so a track just published to the Nomad Drive (e.g. via
+    gen.nomadkaraoke.com) shows up in the catalog without waiting for the
+    nightly 2/3/6 AM runs.
+    """
+    cfg = current_app.kj_config
+    if not cfg.get('divebar_api_url'):
+        return jsonify({"error": "Divebar not configured"}), 503
+    if not cfg.get('divebar_refresh_token'):
+        return jsonify({"error": "Divebar refresh token not configured"}), 503
+
+    log_message("Divebar refresh triggered", cfg)
+    result = divebar.refresh(config=cfg)
+    if result.get("status") == "ok":
+        return jsonify(result)
+    return jsonify({"error": result.get("message", "Refresh failed")}), 502
+
+
 @routes_bp.route('/divebar/download', methods=['POST'])
 def divebar_download():
     """Download a Divebar track by file_id. Queues it like a YouTube download.

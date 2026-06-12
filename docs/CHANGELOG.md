@@ -2,9 +2,9 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
-## 2026-06-12 - Fix: MAKE-request approval stuck pending + duplicate gen jobs (v0.37.2)
+## 2026-06-12 - Fix: MAKE-request approval stuck pending + duplicate gen jobs (v0.38.1)
 
-**Code (v0.37.2 — needs deploy + restart to take effect):**
+**Code (v0.38.1 — needs deploy + restart to take effect):**
 - Bug: approving a "made for you" (MAKE) sing-request submitted a karaoke-gen job
   but left the request stuck `pending`, and re-clicking Approve spawned a
   **duplicate** gen job. Root cause: gen's `/api/audio-search/search?auto_download`

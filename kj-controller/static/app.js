@@ -3253,6 +3253,12 @@ async function loadDbStatusModal() {
 
     body.innerHTML = `
         <div class="av-section">
+            <div class="av-section-title">Refresh Now</div>
+            <p class="db-refresh-hint">Just published a track to the Nomad Drive (e.g. via gen.nomadkaraoke.com)? Trigger the Drive&rarr;catalog index, GCS file sync, and cross-reference rebuild now instead of waiting for the nightly runs. New tracks appear a few minutes after the index completes.</p>
+            <button id="db-refresh-btn" class="btn-primary" onclick="refreshDivebarCatalog()">Refresh catalog</button>
+            <span id="db-refresh-result" class="db-refresh-result"></span>
+        </div>
+        <div class="av-section">
             <div class="av-section-title">Catalog Index</div>
             <div class="av-grid">
                 <span class="av-label">Total files</span><span class="av-value">${c.total_files?.toLocaleString() || 0}</span>
@@ -3291,6 +3297,36 @@ async function loadDbStatusModal() {
             </div>
         </div>
     `;
+}
+
+async function refreshDivebarCatalog() {
+    const btn = document.getElementById('db-refresh-btn');
+    const result = document.getElementById('db-refresh-result');
+    if (!btn || !result) return;
+
+    btn.disabled = true;
+    btn.textContent = 'Refreshing…';
+    result.textContent = '';
+    result.className = 'db-refresh-result';
+
+    try {
+        const resp = await fetch('/divebar/refresh', { method: 'POST' });
+        const data = await resp.json().catch(() => ({}));
+        if (resp.ok && data.status === 'ok') {
+            const n = (data.triggered || []).length;
+            result.textContent = `✓ Triggered ${n} job${n === 1 ? '' : 's'}. New tracks appear in a few minutes.`;
+            result.classList.add('db-refresh-ok');
+        } else {
+            result.textContent = `✗ ${data.error || data.message || 'Refresh failed'}`;
+            result.classList.add('db-refresh-err');
+        }
+    } catch (e) {
+        result.textContent = `✗ ${e.message || 'Network error'}`;
+        result.classList.add('db-refresh-err');
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Refresh catalog';
+    }
 }
 
 // --- Initialization ---
