@@ -2190,9 +2190,7 @@ def _add_songs_sung(entries, rotation):
 def _singer_action_response(rotation):
     """Build standard response for singer action routes."""
     entries = rotation.get_rotation()
-    _add_time_estimates(entries)
-    _add_songs_sung(entries, rotation)
-    _add_sms_status(entries)
+    _decorate_rotation_entries(entries, rotation)
     singer_stats = rotation.get_singer_stats()
     return jsonify({"success": True, "entries": entries, "singer_stats": singer_stats})
 
@@ -2361,6 +2359,27 @@ def _add_time_estimates(entries):
         cumulative += entry.get("duration") or default_duration
 
 
+def _decorate_rotation_entries(entries, rotation):
+    """Attach every frontend-facing computed field to rotation entries.
+
+    Single source of truth for the three decorators so that EVERY endpoint
+    returning ``entries`` decorates them identically. The frontend sets
+    ``rotationData = data.entries`` from any rotation response (not just the
+    ``/rotation`` poll) and re-renders, so an endpoint that forgot one of
+    these made the corresponding UI element flicker.
+
+    Regression that motivated this helper (2026-06-11): the mutation endpoints
+    called ``_add_time_estimates`` + ``_add_songs_sung`` but skipped
+    ``_add_sms_status``. After any rotation action (move/edit/status/…) the
+    re-render saw entries with no ``sms`` block, so the whole SMS button column
+    disappeared until the next 2s ``/rotation`` poll re-added it — making it
+    unpredictable which button the KJ would click.
+    """
+    _add_time_estimates(entries)
+    _add_songs_sung(entries, rotation)
+    _add_sms_status(entries)
+
+
 @routes_bp.route('/rotation', methods=['GET'])
 def get_rotation():
     """Returns the current singer rotation queue (non-done entries)."""
@@ -2369,9 +2388,7 @@ def get_rotation():
         return jsonify({"error": "Rotation not configured"}), 503
     try:
         entries = rotation.get_rotation()
-        _add_time_estimates(entries)
-        _add_songs_sung(entries, rotation)
-        _add_sms_status(entries)
+        _decorate_rotation_entries(entries, rotation)
         singer_stats = rotation.get_singer_stats()
         return jsonify({
             "entries": entries,
@@ -2403,8 +2420,7 @@ def update_rotation_status():
         try:
             rotation.update_statuses(pairs)
             entries = rotation.get_rotation()
-            _add_time_estimates(entries)
-            _add_songs_sung(entries, rotation)
+            _decorate_rotation_entries(entries, rotation)
             return jsonify({"success": True, "entries": entries})
         except Exception as e:
             return jsonify({"error": str(e)}), 500
@@ -2428,8 +2444,7 @@ def update_rotation_status():
         else:
             rotation.update_status(entry_id, status)
         entries = rotation.get_rotation()
-        _add_time_estimates(entries)
-        _add_songs_sung(entries, rotation)
+        _decorate_rotation_entries(entries, rotation)
         return jsonify({"success": True, "entries": entries})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -2466,8 +2481,7 @@ def edit_rotation_entry():
     try:
         rotation.update_entry(entry_id, singer=singer, song_artist=song_artist, singers=singers)
         entries = rotation.get_rotation()
-        _add_time_estimates(entries)
-        _add_songs_sung(entries, rotation)
+        _decorate_rotation_entries(entries, rotation)
         return jsonify({"success": True, "entries": entries})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -2493,8 +2507,7 @@ def delete_rotation_entry():
     try:
         rotation.delete_entry(entry_id)
         entries = rotation.get_rotation()
-        _add_time_estimates(entries)
-        _add_songs_sung(entries, rotation)
+        _decorate_rotation_entries(entries, rotation)
         return jsonify({"success": True, "entries": entries})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -2520,8 +2533,7 @@ def add_rotation_entry():
             rotation.set_url_fallback(entry["id"], url_fallback)
             entry = rotation.store.get_entry(entry["id"])
         entries = rotation.get_rotation()
-        _add_time_estimates(entries)
-        _add_songs_sung(entries, rotation)
+        _decorate_rotation_entries(entries, rotation)
         return jsonify({"success": True, "entry": entry, "entries": entries})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -2549,8 +2561,7 @@ def move_rotation_entry():
     try:
         rotation.move_entry(entry_id, new_position)
         entries = rotation.get_rotation()
-        _add_time_estimates(entries)
-        _add_songs_sung(entries, rotation)
+        _decorate_rotation_entries(entries, rotation)
         return jsonify({"success": True, "entries": entries})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -2607,8 +2618,7 @@ def link_rotation_file():
     try:
         rotation.link_file(entry_id, file_path)
         entries = rotation.get_rotation()
-        _add_time_estimates(entries)
-        _add_songs_sung(entries, rotation)
+        _decorate_rotation_entries(entries, rotation)
         entry = next((e for e in entries if e.get('id') == entry_id), None)
         return jsonify({"success": True, "entry": entry, "entries": entries})
     except Exception as e:
@@ -2635,8 +2645,7 @@ def unlink_rotation_file():
     try:
         rotation.unlink_file(entry_id)
         entries = rotation.get_rotation()
-        _add_time_estimates(entries)
-        _add_songs_sung(entries, rotation)
+        _decorate_rotation_entries(entries, rotation)
         entry = next((e for e in entries if e.get('id') == entry_id), None)
         return jsonify({"success": True, "entry": entry, "entries": entries})
     except Exception as e:
@@ -2886,8 +2895,7 @@ def set_rotation_paid():
     try:
         rotation.set_paid(entry_id, paid)
         entries = rotation.get_rotation()
-        _add_time_estimates(entries)
-        _add_songs_sung(entries, rotation)
+        _decorate_rotation_entries(entries, rotation)
         return jsonify({"success": True, "entries": entries})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -2932,8 +2940,7 @@ def restore_rotation_from_sheet():
         try:
             rotation.restore_entries(entries)
             updated = rotation.get_rotation()
-            _add_time_estimates(updated)
-            _add_songs_sung(updated, rotation)
+            _decorate_rotation_entries(updated, rotation)
             return jsonify({"success": True, "entries": updated})
         except Exception as e:
             return jsonify({"error": str(e)}), 500
@@ -2942,8 +2949,7 @@ def restore_rotation_from_sheet():
         try:
             count = rotation.restore_from_sheet()
             sheet_entries = rotation.get_rotation()
-            _add_time_estimates(sheet_entries)
-            _add_songs_sung(sheet_entries, rotation)
+            _decorate_rotation_entries(sheet_entries, rotation)
             return jsonify({"success": True, "restored": count, "entries": sheet_entries})
         except Exception as e:
             return jsonify({"error": str(e)}), 500
@@ -3005,9 +3011,7 @@ def _undo_or_redo(direction):
             return jsonify({"success": False, "reason": result.get('reason', 'empty')})
 
         entries = rotation.get_rotation()
-        _add_time_estimates(entries)
-        _add_songs_sung(entries, rotation)
-        _add_sms_status(entries)
+        _decorate_rotation_entries(entries, rotation)
         return jsonify({
             "success": True,
             "direction": direction,
@@ -3374,8 +3378,7 @@ def download_and_link_rotation():
                 t = threading.Thread(target=_download_worker, args=(app,), daemon=True)
                 t.start()
 
-        _add_time_estimates(entries)
-        _add_songs_sung(entries, rotation)
+        _decorate_rotation_entries(entries, rotation)
         return jsonify({"success": True, "entry": entry, "entries": entries})
 
     except Exception as e:
@@ -3419,8 +3422,7 @@ def make_rotation_entry():
 
         entry = rotation.store.get_entry(entry_id)
         entries = rotation.get_rotation()
-        _add_time_estimates(entries)
-        _add_songs_sung(entries, rotation)
+        _decorate_rotation_entries(entries, rotation)
         return jsonify({"success": True, "entry": entry, "entries": entries, "job_id": job_id})
 
     except Exception as e:
