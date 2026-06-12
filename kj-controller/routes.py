@@ -3739,17 +3739,53 @@ def approve_sing_request(app, req, skip_download=False):
         gen_client = getattr(app, "gen_client", None)
         if gen_client is None:
             raise RuntimeError("Gen API not configured")
-        entry = rotation.add_entry(singer, song_text, singers=singers_list)
-        result = gen_client.create_job(
-            req.get("song_artist", ""), req.get("song_title", "")
-        )
-        job_id = result.get("job_id")
-        if not job_id:
-            raise RuntimeError("Gen API did not return a job_id")
+        # Queue the singer immediately, then *try* to start generation. Approval
+        # must always succeed (so the request leaves the pending list and can
+        # never be double-submitted): when gen can't start the job — transient
+        # no-results, expired distribution creds, etc. — we keep the rotation
+        # entry but leave it UNLINKED with a "Being Made (!)" status so the KJ
+        # can start generation later via the rotation row's make button. Gen's
+        # search endpoint creates its job *before* the flaky search runs, so a
+        # raise here used to leave the request stuck pending AND spawn a fresh
+        # gen job on every re-click — this avoids both.
         from gen_client import map_gen_status
-        rotation.set_gen_status(
-            entry["id"], job_id, map_gen_status(result.get("status", "pending"))
-        )
+        entry = rotation.add_entry(singer, song_text, singers=singers_list)
+        job_id = None
+        try:
+            result = gen_client.create_job(
+                req.get("song_artist", ""), req.get("song_title", "")
+            )
+            job_id = result.get("job_id")
+            if not job_id:
+                raise RuntimeError("Gen API did not return a job_id")
+        except Exception as exc:
+            app.logger.warning(
+                "Make-approval: gen job did not start for entry %s (%s) — "
+                "leaving it unlinked as 'Being Made (!)': %s",
+                entry["id"], song_text, exc,
+            )
+            try:
+                rotation.update_status(entry["id"], "Being Made (!)")
+            except Exception:
+                app.logger.exception(
+                    "Failed to set 'Being Made (!)' status on entry %s",
+                    entry["id"],
+                )
+            return entry["id"]
+
+        # Gen job created — link it. The job is real even if this local write
+        # fails, so never treat a set_gen_status error as a make failure (that
+        # would risk a duplicate job when the KJ re-makes the row).
+        try:
+            rotation.set_gen_status(
+                entry["id"], job_id,
+                map_gen_status(result.get("status", "pending")),
+            )
+        except Exception:
+            app.logger.exception(
+                "Make-approval: gen job %s created but linking it to entry %s "
+                "failed", job_id, entry["id"],
+            )
         return entry["id"]
 
     raise ValueError(f"Unknown source_type: {source_type}")
