@@ -346,6 +346,75 @@ class TestApprove:
         entry = admin_app.rotation.store.get_entry(entry_id)
         assert entry["gen_job_id"] == "job_42"
 
+    def test_approve_make_gen_failure_keeps_entry_being_made_unlinked(
+        self, admin_client, admin_app
+    ):
+        """When gen can't start the job (transient no-results / cred error), the
+        approval must still succeed: singer is queued, the entry is left
+        unlinked with a 'Being Made (!)' status, and the request is approved."""
+        gen = MagicMock()
+        gen.create_job.side_effect = RuntimeError("404 no_results")
+        admin_app.gen_client = gen
+        req = _make_pending(
+            admin_app,
+            singer_name="Make Mary",
+            source_type="make",
+            source_ref=None,
+            song_artist="Jessie Reyez",
+            song_title="N.Y.F.F.",
+        )
+        resp = admin_client.post(f"/rotation/requests/{req['id']}/approve")
+        assert resp.status_code == 200
+        body = resp.get_json()
+        assert body["request"]["status"] == "approved"
+        entry = admin_app.rotation.store.get_entry(body["entry_id"])
+        assert entry["gen_job_id"] is None
+        assert entry["status"] == "Being Made (!)"
+
+    def test_approve_make_gen_failure_no_duplicate_on_retry(
+        self, admin_client, admin_app
+    ):
+        """Re-clicking Approve after a gen failure must NOT create a second job:
+        the request is already approved (409) and create_job ran exactly once."""
+        gen = MagicMock()
+        gen.create_job.side_effect = RuntimeError("transient gen error")
+        admin_app.gen_client = gen
+        req = _make_pending(
+            admin_app,
+            singer_name="Make Mary",
+            source_type="make",
+            source_ref=None,
+            song_artist="Radiohead",
+            song_title="Creep",
+        )
+        first = admin_client.post(f"/rotation/requests/{req['id']}/approve")
+        assert first.status_code == 200
+        second = admin_client.post(f"/rotation/requests/{req['id']}/approve")
+        assert second.status_code == 409
+        gen.create_job.assert_called_once_with("Radiohead", "Creep")
+
+    def test_approve_make_no_job_id_treated_as_failure(
+        self, admin_client, admin_app
+    ):
+        """A 2xx gen response with no job_id is a failure: keep the singer in
+        rotation as Being Made + unlinked rather than 500-ing."""
+        gen = MagicMock()
+        gen.create_job.return_value = {"status": "pending"}  # no job_id
+        admin_app.gen_client = gen
+        req = _make_pending(
+            admin_app,
+            singer_name="Make Mary",
+            source_type="make",
+            source_ref=None,
+            song_artist="Radiohead",
+            song_title="Creep",
+        )
+        resp = admin_client.post(f"/rotation/requests/{req['id']}/approve")
+        assert resp.status_code == 200
+        entry = admin_app.rotation.store.get_entry(resp.get_json()["entry_id"])
+        assert entry["gen_job_id"] is None
+        assert entry["status"] == "Being Made (!)"
+
     def test_approve_twice_conflicts(self, admin_client, admin_app):
         req = _make_pending(admin_app)
         admin_client.post(f"/rotation/requests/{req['id']}/approve")

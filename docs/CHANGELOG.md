@@ -2,6 +2,26 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-06-12 - Fix: MAKE-request approval stuck pending + duplicate gen jobs (v0.38.1)
+
+**Code (v0.38.1 — needs deploy + restart to take effect):**
+- Bug: approving a "made for you" (MAKE) sing-request submitted a karaoke-gen job
+  but left the request stuck `pending`, and re-clicking Approve spawned a
+  **duplicate** gen job. Root cause: gen's `/api/audio-search/search?auto_download`
+  creates its job *before* the flaky audio search; on a transient search failure
+  (`404 no_results`, expired Dropbox creds) it returned 4xx/5xx, so kjbox's
+  `approve_sing_request` make-branch raised *after* `add_entry` but *before*
+  `mark_approved` → request stayed pending, orphan entry, no dedup.
+- Fix: the make-branch now **always succeeds** — the singer is queued; if gen
+  can't start the job the entry is left UNLINKED with a `"Being Made (!)"`
+  status (KJ starts generation later via the rotation row's make button). The
+  request is always marked approved, so re-clicking returns 409 — **no duplicate
+  gen jobs**. (`kj-controller/routes.py`)
+
+**Deploy steps (manual; kj-autodeploy is OFF):**
+- `git pull` on NomadPC, then `sudo systemctl restart kj-controller` (backend
+  change — interrupts active playback).
+
 ## 2026-06-11 - SMS: Telnyx 10DLC campaign + inbound webhook (delivery receipts + STOP)
 
 **Telnyx account config (done via API, no deploy needed):**
