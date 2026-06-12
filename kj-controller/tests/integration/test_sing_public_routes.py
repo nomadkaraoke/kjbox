@@ -569,6 +569,35 @@ class TestMyRequests:
         assert resp.status_code == 200
         assert resp.get_json()["requests"] == []
 
+    def test_drops_prior_night_rows_even_when_token_matches(self, client, sing_app, token):
+        # The event token is reused across nights (KJs pin a memorable code and
+        # a New Rotation does not rotate it), so token-match alone must not let
+        # a returning singer's PRIOR-night request ids resolve into "tonight".
+        old = self._create(sing_app, song_title="Old Song")
+        conn = sing_app.sing_store._get_conn()
+        conn.execute(
+            "UPDATE sing_requests SET created_at = ? WHERE id = ?",
+            ("2026-01-01 12:00:00", old["id"]),
+        )
+        conn.commit()
+        new = self._create(sing_app, song_title="Tonight Song")
+        # A New Rotation happened tonight, after the old request but before the new one.
+        sing_app.sing_store._set_meta("night_started_at", "2026-06-01 00:00:00")
+
+        resp = client.get(f"/sing/my-requests?ids={old['id']},{new['id']}&t={token}")
+        assert resp.status_code == 200
+        ids = [r["request"]["id"] for r in resp.get_json()["requests"]]
+        assert ids == [new["id"]]  # old prior-night row dropped despite token match
+
+    def test_fails_closed_when_night_marker_unset(self, client, sing_app, token):
+        r1 = self._create(sing_app)
+        conn = sing_app.sing_store._get_conn()
+        conn.execute("DELETE FROM rotation_meta WHERE key = 'night_started_at'")
+        conn.commit()
+        resp = client.get(f"/sing/my-requests?ids={r1['id']}&t={token}")
+        assert resp.status_code == 200
+        assert resp.get_json()["requests"] == []
+
     def test_requires_token(self, client, sing_app):
         r1 = self._create(sing_app)
         resp = client.get(f"/sing/my-requests?ids={r1['id']}")

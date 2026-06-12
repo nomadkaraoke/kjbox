@@ -122,6 +122,22 @@ def _is_token_valid(store, token):
     return bool(current) and current == token
 
 
+def _belongs_to_current_night(store, req):
+    """True if ``req`` was created during the current night.
+
+    Token-match alone is NOT enough to scope a singer-facing read to "tonight":
+    the event token is reused across nights — a New Rotation does not rotate it,
+    and KJs pin a memorable code — so a returning singer's device still holds
+    prior-night request ids that resolve under the still-current token. Mirror
+    the night-scoping defense applied to phone/push resolution: only requests
+    with ``created_at >= night_started_at`` count as tonight's. Fails CLOSED when
+    the marker is unset (``ensure_night_started()`` guarantees it on boot)."""
+    night_started = store.get_night_started_at()
+    if not night_started:
+        return False
+    return (req.get("created_at") or "") >= night_started
+
+
 def _unauthorised_response():
     """Return a 403 page for browsers, JSON for AJAX calls."""
     if request.accept_mimetypes.best == "application/json" or request.path != "/sing/":
@@ -756,7 +772,9 @@ def status(request_id):
 
     # Scope the lookup to the current event — an old request from last week's
     # event must not be readable via today's token, even if the id is known.
-    if req.get("token") != token:
+    # Token-match is necessary but not sufficient: the token is reused across
+    # nights, so also night-scope by created_at (see _belongs_to_current_night).
+    if req.get("token") != token or not _belongs_to_current_night(store, req):
         return jsonify({"error": "not_found"}), 404
 
     response = {"request": _public_request_view(req)}
@@ -782,10 +800,12 @@ _MY_REQUESTS_MAX_IDS = 20
 def my_requests():
     """Multi-id status feed for the singer's 'your night' done screen.
 
-    Returns the requested ids in order, dropping unknown ids and ids whose
-    stored token differs from the current event token (cross-event safety,
-    matches /sing/status). `now_playing` is included once at the top level so
-    the done screen doesn't need a second round trip to populate the header.
+    Returns the requested ids in order, dropping unknown ids, ids whose stored
+    token differs from the current event token, AND prior-night ids (the token
+    is reused across nights, so token-match alone leaks yesterday's songs into
+    "tonight" — see _belongs_to_current_night). Matches /sing/status.
+    `now_playing` is included once at the top level so the done screen doesn't
+    need a second round trip to populate the header.
     """
     store = current_app.sing_store
     raw = request.args.get("ids", "") or ""
@@ -808,7 +828,12 @@ def my_requests():
     out = []
     for rid in ids:
         req = store.get_request(rid)
+        # Drop unknown ids, foreign-token rows, and prior-night rows. The token
+        # is reused across nights, so night-scope by created_at as well — else a
+        # returning singer's stale localStorage ids leak into "tonight".
         if req is None or req.get("token") != token:
+            continue
+        if not _belongs_to_current_night(store, req):
             continue
         item = {"request": _public_request_view(req)}
         if req.get("linked_entry_id") and entries:
