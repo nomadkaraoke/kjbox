@@ -33,6 +33,11 @@ const LS = {
 // done screen can render a multi-song "your night" list. We scope by token
 // so that yesterday's ids don't leak into tonight's event.
 const MY_REQUESTS_KEY = "sing_my_request_ids";
+// Mirror the server's /sing/my-requests id cap. The stored id list grows across
+// a persistent event token (a New Rotation doesn't rotate it), so we send only
+// the most-recent ids — sending more would 400 and blank the list for a
+// returning singer. The server also night-scopes the rows it returns.
+const MY_REQUESTS_MAX = 20;
 
 function _readMyRequestStore() {
   try {
@@ -1242,10 +1247,13 @@ async function pollMyRequests(card) {
   }
 
   const tick = async () => {
-    const ids = readMyRequestIds(TOKEN);
+    // Keep only the most-recent stored ids (oldest→newest), then prepend the
+    // just-submitted request, staying within the server's MY_REQUESTS_MAX cap.
+    let ids = readMyRequestIds(TOKEN).slice(-MY_REQUESTS_MAX);
     if (state.request?.id && !ids.includes(state.request.id)) {
       ids.unshift(state.request.id);
     }
+    if (ids.length > MY_REQUESTS_MAX) ids = ids.slice(0, MY_REQUESTS_MAX);
     try {
       const data = await fetchMyRequests(ids);
       onPollSuccess();

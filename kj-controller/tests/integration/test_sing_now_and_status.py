@@ -58,3 +58,23 @@ class TestStatusResponseShape:
         }
         assert "now_playing" in data
         assert "queue" in data  # still read by the client
+
+    def test_prior_night_request_not_readable_via_reused_token(self, client, sing_app, token):
+        # Token is reused across nights; a prior-night request must 404 even
+        # though its stored token equals the current (still-unchanged) token.
+        _enable_requests(sing_app)
+        old = sing_app.sing_store.create_request(
+            singer_name="Angelina S", phone="", song_artist="Train",
+            song_title="Ordinary", source_type="local", source_ref="/tmp/x.mp4",
+            token=token,
+        )
+        conn = sing_app.sing_store._get_conn()
+        conn.execute(
+            "UPDATE sing_requests SET created_at = ? WHERE id = ?",
+            ("2026-01-01 12:00:00", old["id"]),
+        )
+        conn.commit()
+        sing_app.sing_store._set_meta("night_started_at", "2026-06-01 00:00:00")
+
+        resp = client.get(f"/sing/status/{old['id']}?t={token}")
+        assert resp.status_code == 404
