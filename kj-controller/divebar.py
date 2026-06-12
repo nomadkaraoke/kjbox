@@ -130,6 +130,45 @@ def get_stats(config=None):
         return None
 
 
+def refresh(config=None):
+    """Trigger an on-demand refresh of the Divebar pipeline.
+
+    Calls the divebar-lookup ``refresh`` action, which force-runs the
+    Drive→BigQuery index, Drive→GCS file sync, and xref-rebuild scheduler jobs
+    so a track just published to the Nomad Drive shows up without waiting for
+    the nightly runs.
+
+    The action is token-gated (the endpoint is otherwise public), so a
+    ``divebar_refresh_token`` must be configured. Returns the parsed response
+    dict on success, or a ``{"status": "error", "message": ...}`` dict on
+    failure (never raises).
+    """
+    config = config or {}
+    api_url = _get_api_url(config)
+    if not api_url:
+        return {"status": "error", "message": "divebar_api_url not configured"}
+
+    token = config.get("divebar_refresh_token")
+    if not token:
+        return {"status": "error", "message": "divebar_refresh_token not configured"}
+
+    try:
+        resp = requests.post(
+            api_url,
+            json={"action": "refresh", "token": token},
+            # Force-running the scheduler jobs is quick (they run async), but
+            # allow a little more headroom than a plain search.
+            timeout=30,
+        )
+        if resp.status_code == 403:
+            return {"status": "error", "message": "refresh token rejected (403)"}
+        resp.raise_for_status()
+        return resp.json()
+    except requests.RequestException as e:
+        logger.error("Divebar refresh failed: %s", e)
+        return {"status": "error", "message": str(e)}
+
+
 def get_download_url(file_id, config=None):
     """
     Get a download URL for a Divebar file.

@@ -1019,6 +1019,11 @@ body {
     border-bottom: 1px solid #333;
 }
 .db-format-table td { padding: 3px 8px; color: #ccc; }
+.db-refresh-hint { font-size: 0.8em; color: #999; margin: 0 0 8px; line-height: 1.4; }
+.db-refresh-result { font-size: 0.82em; margin-left: 10px; }
+.db-refresh-result.db-refresh-ok { color: #22c55e; }
+.db-refresh-result.db-refresh-err { color: #f87171; }
+#db-refresh-btn[disabled] { opacity: 0.6; cursor: default; }
 .av-grid {
     display: grid; grid-template-columns: auto 1fr; gap: 4px 12px;
     font-size: 0.85em; margin-top: 4px;
