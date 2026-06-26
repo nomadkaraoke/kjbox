@@ -864,6 +864,19 @@ class TestRestoreEntries:
         assert entry["singer"] == "Zara"
         assert entry["notes"] == "test"
 
+    def test_restore_preserves_done_at(self, store):
+        """Restored Done entries keep done_at so last-sang survives undo/redo."""
+        snapshot = [
+            {"id": 7, "singer": "Alice", "song_artist": "Song A", "status": "Done",
+             "notes": "", "position": 1, "file_path": None, "duration": None,
+             "download_source": None, "download_status": None, "download_id": None,
+             "url_fallback": None, "gen_job_id": None, "gen_status": None,
+             "done_at": "2026-06-25 21:00:00"},
+        ]
+        store.restore_entries(snapshot)
+        entry = store.get_entry(7)
+        assert entry["done_at"] == "2026-06-25 21:00:00"
+
     def test_restore_to_empty(self, store):
         """Restoring an empty snapshot clears the rotation."""
         store.add_entry("Alice", "Song A")

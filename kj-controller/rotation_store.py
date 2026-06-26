@@ -1122,6 +1122,11 @@ class RotationStore:
                 if e.get("created_at"):
                     cols.append("created_at")
                     vals.append(e["created_at"])
+                # Preserve done_at (the last-sang timestamp) when present, so an
+                # undo/redo doesn't wipe a restored Done entry's last-sang time.
+                if e.get("done_at"):
+                    cols.append("done_at")
+                    vals.append(e["done_at"])
 
                 placeholders = ", ".join(["?"] * len(vals))
                 conn.execute(
