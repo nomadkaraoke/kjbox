@@ -2490,6 +2490,14 @@ body {
 .pill-few  { background: #d4720a33; color: #d4720a; }
 .pill-many { background: #e74c3c33; color: #e74c3c; }
 
+/* "Last sang" elapsed time — rendered inside the count pill after a "·"
+   separator (e.g. ×4 · 1h15m). Dimmer + lighter than the count so the two
+   read as primary (how many) and secondary (how recently). */
+.rotation-songs-pill .rotation-lastsang {
+    font-weight: 400;
+    opacity: 0.72;
+}
+
 /* Singer pill input (add form) */
 .singer-input-container {
     display: flex;

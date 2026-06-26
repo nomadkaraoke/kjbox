@@ -2,6 +2,28 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-06-25 - Feature: "time since last sang" on the rotation count pill (v0.39.0)
+
+**Code (v0.39.0 — frontend takes effect on browser refresh after `git pull`; backend field needs deploy + restart to populate):**
+- The rotation count pill showed how many songs each singer has sung tonight
+  (`×4` / `NEW`) but not *how recently* — which matters as much when reordering
+  to keep things fair. A `×4` who just sang is very different from a `×4` who
+  hasn't had the mic in over an hour.
+- The pill now appends a compact, dimmer "· <elapsed>" (e.g. `×4 · 1h15m`,
+  `×1 · 22m`). `NEW` singers stay clean (nothing to show yet).
+- Backend: a new `done_at` column is stamped only when an entry transitions to
+  Done (and never touched by reorders/edits, unlike `updated_at`, so the time
+  stays accurate after the rotation is shuffled). `rotation_store.get_last_sang_times()`
+  returns minutes since each singer's most recent `done_at`, mirroring
+  `get_songs_sung_counts` (done-only, case-insensitive, credits each member of
+  a duet). `routes._add_last_sang()` attaches `last_sang_minutes` per entry via
+  the single `_decorate_rotation_entries` helper. Multi-singer entries surface
+  the longest wait. Elapsed time is computed server-side (device localtime) so
+  there's no device-vs-browser timezone drift.
+- **Until the service is restarted**, the backend serves the old code without
+  `last_sang_minutes`; the frontend degrades gracefully (shows the count pill
+  only, no time).
+
 ## 2026-06-12 - Fix: MAKE-request approval stuck pending + duplicate gen jobs (v0.38.1)
 
 **Code (v0.38.1 — needs deploy + restart to take effect):**

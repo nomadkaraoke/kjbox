@@ -161,7 +161,8 @@ class RotationStore:
                 gen_job_id  TEXT DEFAULT NULL,
                 gen_status  TEXT DEFAULT NULL,
                 created_at  TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
-                updated_at  TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+                updated_at  TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+                done_at     TEXT DEFAULT NULL
             );
 
             CREATE TABLE IF NOT EXISTS rotation_meta (
@@ -223,12 +224,23 @@ class RotationStore:
             ("gen_status", "TEXT DEFAULT NULL"),
             ("paid", "INTEGER NOT NULL DEFAULT 0"),
             ("singers_json", "TEXT DEFAULT NULL"),
+            ("done_at", "TEXT DEFAULT NULL"),
         ]
+        added_cols = []
         for col_name, col_type in migrations:
             if col_name not in existing_cols:
                 conn.execute(
                     f"ALTER TABLE rotation_entries ADD COLUMN {col_name} {col_type}"
                 )
+                added_cols.append(col_name)
+        # Best-effort backfill of done_at for entries marked done before this
+        # column existed, so "time since last sang" survives the upgrade. We use
+        # updated_at as an approximation (it was the previous source).
+        if "done_at" in added_cols:
+            conn.execute(
+                "UPDATE rotation_entries SET done_at = updated_at "
+                "WHERE LOWER(status) = 'done' AND done_at IS NULL"
+            )
         conn.commit()
 
     # ------------------------------------------------------------------
@@ -381,11 +393,17 @@ class RotationStore:
                 (entry_id,),
             )
 
+        # Stamp done_at when (and only when) an entry transitions to Done. This
+        # is a dedicated "last sang" timestamp: unlike updated_at it is NOT
+        # touched by reorders/edits/paid toggles, so get_last_sang_times stays
+        # accurate after the rotation is shuffled.
         conn.execute(
             "UPDATE rotation_entries "
-            "SET status = ?, updated_at = datetime('now', 'localtime') "
+            "SET status = ?, updated_at = datetime('now', 'localtime'), "
+            "    done_at = CASE WHEN LOWER(?) = 'done' "
+            "                   THEN datetime('now', 'localtime') ELSE done_at END "
             "WHERE id = ?",
-            (new_status, entry_id),
+            (new_status, new_status, entry_id),
         )
         conn.commit()
 
@@ -455,6 +473,49 @@ class RotationStore:
                 key = name.lower()
                 counts[key] = counts.get(key, 0) + 1
         return counts
+
+    def get_last_sang_times(self):
+        """Return a dict mapping singer name → minutes since they last sang.
+
+        "Last sang" = the most recent 'done' entry for that singer tonight,
+        using its ``done_at`` (stamped only when the entry was marked done — and
+        never touched by reorders/edits, so it stays accurate after the rotation
+        is shuffled). The value is whole minutes elapsed from now, floored at 0.
+
+        Case-insensitive matching on singer name (lowered keys), mirroring
+        ``get_songs_sung_counts``. When ``singers_json`` is set, each individual
+        singer is credited separately. Only entries in the current rotation
+        (not the archive) are considered. Singers with no 'done' entry (or whose
+        done entry predates the ``done_at`` column) are absent from the result.
+        """
+        conn = self._get_conn()
+        rows = conn.execute(
+            "SELECT singer, singers_json, "
+            "       CAST((julianday('now', 'localtime') "
+            "             - julianday(done_at)) * 1440 AS INTEGER) AS mins_ago "
+            "FROM rotation_entries "
+            "WHERE LOWER(status) = 'done' AND done_at IS NOT NULL"
+        ).fetchall()
+        result = {}
+        for row in rows:
+            mins = row["mins_ago"]
+            if mins is None:
+                continue
+            if mins < 0:
+                mins = 0
+            if row["singers_json"] is not None:
+                try:
+                    names = json.loads(row["singers_json"])
+                except (ValueError, TypeError):
+                    names = [row["singer"]]
+            else:
+                names = [row["singer"]]
+            for name in names:
+                key = name.lower()
+                # Keep the smallest elapsed time = the singer's MOST RECENT song.
+                if key not in result or mins < result[key]:
+                    result[key] = mins
+        return result
 
     def get_singer_stats(self):
         """Return per-singer aggregate stats from all entries (including done/left).
@@ -1061,6 +1122,11 @@ class RotationStore:
                 if e.get("created_at"):
                     cols.append("created_at")
                     vals.append(e["created_at"])
+                # Preserve done_at (the last-sang timestamp) when present, so an
+                # undo/redo doesn't wipe a restored Done entry's last-sang time.
+                if e.get("done_at"):
+                    cols.append("done_at")
+                    vals.append(e["done_at"])
 
                 placeholders = ", ".join(["?"] * len(vals))
                 conn.execute(

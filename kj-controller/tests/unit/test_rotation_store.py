@@ -463,6 +463,97 @@ class TestGetSongsSungCounts:
         assert counts["alice"] == 1
 
 
+class TestGetLastSangTimes:
+    def _backdate(self, store, entry_id, minutes):
+        """Force an entry's done_at to ``minutes`` ago (device localtime)."""
+        conn = store._get_conn()
+        conn.execute(
+            "UPDATE rotation_entries "
+            "SET done_at = datetime('now', 'localtime', ?) WHERE id = ?",
+            ("-{} minutes".format(minutes), entry_id),
+        )
+        conn.commit()
+
+    def test_empty(self, store):
+        assert store.get_last_sang_times() == {}
+
+    def test_no_done_entries(self, store):
+        store.add_entry("Alice")
+        store.add_entry("Bob")
+        assert store.get_last_sang_times() == {}
+
+    def test_recent_done_is_near_zero(self, store):
+        e1 = store.add_entry("Alice")
+        store.update_status(e1["id"], "Done")
+        times = store.get_last_sang_times()
+        assert "alice" in times
+        assert 0 <= times["alice"] <= 1
+
+    def test_reports_minutes_since_done(self, store):
+        e1 = store.add_entry("Alice")
+        store.update_status(e1["id"], "Done")
+        self._backdate(store, e1["id"], 45)
+        assert store.get_last_sang_times()["alice"] == 45
+
+    def test_uses_most_recent_done(self, store):
+        # Two songs sung: one 90m ago, one 10m ago — report the recent one.
+        e1 = store.add_entry("Alice")
+        e2 = store.add_entry("Alice")
+        store.update_status(e1["id"], "Done")
+        store.update_status(e2["id"], "Done")
+        self._backdate(store, e1["id"], 90)
+        self._backdate(store, e2["id"], 10)
+        assert store.get_last_sang_times()["alice"] == 10
+
+    def test_case_insensitive(self, store):
+        e1 = store.add_entry("Alice")
+        store.update_status(e1["id"], "Done")
+        self._backdate(store, e1["id"], 20)
+        e2 = store.add_entry("alice")
+        store.update_status(e2["id"], "Done")
+        self._backdate(store, e2["id"], 5)
+        assert store.get_last_sang_times()["alice"] == 5
+
+    def test_excludes_non_done(self, store):
+        e1 = store.add_entry("Alice")
+        store.add_entry("Alice")  # still waiting
+        store.update_status(e1["id"], "Done")
+        self._backdate(store, e1["id"], 30)
+        assert store.get_last_sang_times()["alice"] == 30
+
+    def test_credits_each_singer_in_group(self, store):
+        e1 = store.add_entry(None, singers=["Alice", "Bob"])
+        store.update_status(e1["id"], "Done")
+        self._backdate(store, e1["id"], 15)
+        times = store.get_last_sang_times()
+        assert times["alice"] == 15
+        assert times["bob"] == 15
+
+    def test_done_at_survives_updated_at_bump(self, store):
+        # Regression: reorders/edits bump updated_at even on done rows. The
+        # "last sang" time must read done_at, so it stays put after a shuffle.
+        e1 = store.add_entry("Alice")
+        store.update_status(e1["id"], "Done")
+        self._backdate(store, e1["id"], 40)
+        # Simulate an unrelated action touching the row (e.g. a reorder).
+        conn = store._get_conn()
+        conn.execute(
+            "UPDATE rotation_entries "
+            "SET updated_at = datetime('now', 'localtime') WHERE id = ?",
+            (e1["id"],),
+        )
+        conn.commit()
+        assert store.get_last_sang_times()["alice"] == 40
+
+    def test_done_at_refreshes_on_resing(self, store):
+        # If a singer is re-marked Done (sang again), done_at moves to now.
+        e1 = store.add_entry("Alice")
+        store.update_status(e1["id"], "Done")
+        self._backdate(store, e1["id"], 60)
+        store.update_status(e1["id"], "Done")  # sang again
+        assert store.get_last_sang_times()["alice"] <= 1
+
+
 class TestFileLink:
     def test_link_file(self, store):
         e = store.add_entry("Alice")
@@ -772,6 +863,19 @@ class TestRestoreEntries:
         assert entry is not None
         assert entry["singer"] == "Zara"
         assert entry["notes"] == "test"
+
+    def test_restore_preserves_done_at(self, store):
+        """Restored Done entries keep done_at so last-sang survives undo/redo."""
+        snapshot = [
+            {"id": 7, "singer": "Alice", "song_artist": "Song A", "status": "Done",
+             "notes": "", "position": 1, "file_path": None, "duration": None,
+             "download_source": None, "download_status": None, "download_id": None,
+             "url_fallback": None, "gen_job_id": None, "gen_status": None,
+             "done_at": "2026-06-25 21:00:00"},
+        ]
+        store.restore_entries(snapshot)
+        entry = store.get_entry(7)
+        assert entry["done_at"] == "2026-06-25 21:00:00"
 
     def test_restore_to_empty(self, store):
         """Restoring an empty snapshot clears the rotation."""
