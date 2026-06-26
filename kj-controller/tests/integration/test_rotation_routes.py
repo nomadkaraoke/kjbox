@@ -678,6 +678,33 @@ class TestMultiSingerSongsSung:
         assert entries[0]['songs_sung'] == 2
 
 
+class TestMultiSingerLastSang:
+    def test_last_sang_max_for_multi_singer(self, rotation_client, mock_rotation):
+        # The pill surfaces the LONGEST wait across the group, mirroring how
+        # songs_sung surfaces the least-served member.
+        mock_rotation.store.get_last_sang_times.return_value = {"phil": 5, "anya": 90}
+        mock_rotation.get_rotation.return_value = [
+            {"id": 1, "position": 1, "singer": "Phil & Anya",
+             "singers_json": '["Phil", "Anya"]', "status": "Waiting",
+             "song_artist": "Duet", "notes": "", "file_path": None, "duration": None},
+        ]
+        resp = rotation_client.get('/rotation')
+        entries = resp.get_json()['entries']
+        assert entries[0]['last_sang_minutes'] == 90  # max(phil=5, anya=90)
+
+    def test_last_sang_none_when_a_member_never_sang(self, rotation_client, mock_rotation):
+        # Only members who have sung are in the dict; if none has, it's None.
+        mock_rotation.store.get_last_sang_times.return_value = {}
+        mock_rotation.get_rotation.return_value = [
+            {"id": 1, "position": 1, "singer": "Phil & Anya",
+             "singers_json": '["Phil", "Anya"]', "status": "Waiting",
+             "song_artist": "Duet", "notes": "", "file_path": None, "duration": None},
+        ]
+        resp = rotation_client.get('/rotation')
+        entries = resp.get_json()['entries']
+        assert entries[0]['last_sang_minutes'] is None
+
+
 class TestSetPaidRoute:
     def test_set_paid_success(self, rotation_client, mock_rotation):
         mock_rotation.set_paid.return_value = {
