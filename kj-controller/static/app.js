@@ -3579,6 +3579,28 @@ async function fetchRotation() {
     }
 }
 
+// Compact "time since last sang" for the rotation pill, e.g. "0m", "22m",
+// "1h5m", "2h". Input is whole minutes (computed server-side).
+function formatMinsAgo(mins) {
+    const m = Math.max(0, Math.round(mins));
+    if (m < 60) return m + 'm';
+    const h = Math.floor(m / 60);
+    const rem = m % 60;
+    return rem ? (h + 'h' + rem + 'm') : (h + 'h');
+}
+
+// Verbose form for tooltips, e.g. "22 minutes", "1 hour 5 minutes".
+function formatMinsAgoLong(mins) {
+    const m = Math.max(0, Math.round(mins));
+    if (m < 1) return 'less than a minute';
+    const h = Math.floor(m / 60);
+    const rem = m % 60;
+    const parts = [];
+    if (h) parts.push(h + (h === 1 ? ' hour' : ' hours'));
+    if (rem) parts.push(rem + (rem === 1 ? ' minute' : ' minutes'));
+    return parts.join(' ');
+}
+
 function renderRotation(entries) {
     const list = document.getElementById('rotation-list');
     if (!list) return;
@@ -3712,18 +3734,27 @@ function renderRotation(entries) {
             pill.classList.add('pill-new');
             pill.textContent = 'NEW';
             pill.title = 'Hasn\u2019t sung yet tonight \u2014 prioritise this singer';
-        } else if (sung === 1) {
-            pill.classList.add('pill-once');
-            pill.textContent = '\u00d71';
-            pill.title = '1 song sung tonight';
-        } else if (sung <= 4) {
-            pill.classList.add('pill-few');
-            pill.textContent = '\u00d7' + sung;
-            pill.title = sung + ' songs sung tonight';
         } else {
-            pill.classList.add('pill-many');
+            if (sung === 1) {
+                pill.classList.add('pill-once');
+            } else if (sung <= 4) {
+                pill.classList.add('pill-few');
+            } else {
+                pill.classList.add('pill-many');
+            }
             pill.textContent = '\u00d7' + sung;
-            pill.title = sung + ' songs sung tonight';
+            pill.title = (sung === 1 ? '1 song' : sung + ' songs') + ' sung tonight';
+            // "Last sang" elapsed time, rendered inside the same pill after a
+            // "\u00b7" separator (e.g. \u00d74 \u00b7 1h15m) so the KJ can weigh
+            // recency \u2014 not just how many \u2014 when keeping things fair.
+            if (entry.last_sang_minutes != null) {
+                const ago = document.createElement('span');
+                ago.className = 'rotation-lastsang';
+                ago.textContent = ' \u00b7 ' + formatMinsAgo(entry.last_sang_minutes);
+                pill.appendChild(ago);
+                pill.title += ' \u2022 last sang ' +
+                    formatMinsAgoLong(entry.last_sang_minutes) + ' ago';
+            }
         }
         info.appendChild(pill);
         if (entry.paid) {

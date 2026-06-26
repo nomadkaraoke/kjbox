@@ -2209,6 +2209,33 @@ def _add_songs_sung(entries, rotation):
         entry["songs_sung"] = counts.get(entry["singer"].lower(), 0)
 
 
+def _add_last_sang(entries, rotation):
+    """Add last_sang_minutes field to each entry.
+
+    The value is whole minutes since the singer most recently finished a song
+    tonight, or ``None`` if they have not sung yet. For multi-singer entries we
+    surface the LONGEST wait across the group (max minutes) so the figure tracks
+    the most under-served member — consistent with ``songs_sung`` showing the
+    least-sung member's count.
+    """
+    import json as _json
+    times = rotation.store.get_last_sang_times()
+    for entry in entries:
+        singers_json = entry.get("singers_json")
+        names = None
+        if singers_json:
+            try:
+                parsed = _json.loads(singers_json)
+            except (ValueError, TypeError):
+                parsed = None
+            if isinstance(parsed, list) and parsed:
+                names = parsed
+        if names is None:
+            names = [entry["singer"]]
+        mins = [times[n.strip().lower()] for n in names if n.strip().lower() in times]
+        entry["last_sang_minutes"] = max(mins) if mins else None
+
+
 def _singer_action_response(rotation):
     """Build standard response for singer action routes."""
     entries = rotation.get_rotation()
@@ -2399,6 +2426,7 @@ def _decorate_rotation_entries(entries, rotation):
     """
     _add_time_estimates(entries)
     _add_songs_sung(entries, rotation)
+    _add_last_sang(entries, rotation)
     _add_sms_status(entries)
 
 

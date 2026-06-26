@@ -456,6 +456,44 @@ class RotationStore:
                 counts[key] = counts.get(key, 0) + 1
         return counts
 
+    def get_last_sang_times(self):
+        """Return a dict mapping singer name → minutes since they last sang.
+
+        "Last sang" = the most recent 'done' entry for that singer tonight,
+        using its ``updated_at`` (set when the entry was marked done). The value
+        is whole minutes elapsed from now, floored at 0.
+
+        Case-insensitive matching on singer name (lowered keys), mirroring
+        ``get_songs_sung_counts``. When ``singers_json`` is set, each individual
+        singer is credited separately. Only entries in the current rotation
+        (not the archive) are considered. Singers with no 'done' entry are
+        absent from the result.
+        """
+        conn = self._get_conn()
+        rows = conn.execute(
+            "SELECT singer, singers_json, "
+            "       CAST((julianday('now', 'localtime') "
+            "             - julianday(updated_at)) * 1440 AS INTEGER) AS mins_ago "
+            "FROM rotation_entries WHERE LOWER(status) = 'done'"
+        ).fetchall()
+        result = {}
+        for row in rows:
+            mins = row["mins_ago"]
+            if mins is None:
+                continue
+            if mins < 0:
+                mins = 0
+            if row["singers_json"] is not None:
+                names = json.loads(row["singers_json"])
+            else:
+                names = [row["singer"]]
+            for name in names:
+                key = name.lower()
+                # Keep the smallest elapsed time = the singer's MOST RECENT song.
+                if key not in result or mins < result[key]:
+                    result[key] = mins
+        return result
+
     def get_singer_stats(self):
         """Return per-singer aggregate stats from all entries (including done/left).
 
