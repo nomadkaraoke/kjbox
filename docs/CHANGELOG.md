@@ -11,8 +11,10 @@ Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](a
   hasn't had the mic in over an hour.
 - The pill now appends a compact, dimmer "· <elapsed>" (e.g. `×4 · 1h15m`,
   `×1 · 22m`). `NEW` singers stay clean (nothing to show yet).
-- Backend: `rotation_store.get_last_sang_times()` returns minutes since each
-  singer's most recent `done` entry (via its `updated_at`), mirroring
+- Backend: a new `done_at` column is stamped only when an entry transitions to
+  Done (and never touched by reorders/edits, unlike `updated_at`, so the time
+  stays accurate after the rotation is shuffled). `rotation_store.get_last_sang_times()`
+  returns minutes since each singer's most recent `done_at`, mirroring
   `get_songs_sung_counts` (done-only, case-insensitive, credits each member of
   a duet). `routes._add_last_sang()` attaches `last_sang_minutes` per entry via
   the single `_decorate_rotation_entries` helper. Multi-singer entries surface

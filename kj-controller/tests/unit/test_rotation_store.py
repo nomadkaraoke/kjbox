@@ -465,11 +465,11 @@ class TestGetSongsSungCounts:
 
 class TestGetLastSangTimes:
     def _backdate(self, store, entry_id, minutes):
-        """Force an entry's updated_at to ``minutes`` ago (device localtime)."""
+        """Force an entry's done_at to ``minutes`` ago (device localtime)."""
         conn = store._get_conn()
         conn.execute(
             "UPDATE rotation_entries "
-            "SET updated_at = datetime('now', 'localtime', ?) WHERE id = ?",
+            "SET done_at = datetime('now', 'localtime', ?) WHERE id = ?",
             ("-{} minutes".format(minutes), entry_id),
         )
         conn.commit()
@@ -528,6 +528,30 @@ class TestGetLastSangTimes:
         times = store.get_last_sang_times()
         assert times["alice"] == 15
         assert times["bob"] == 15
+
+    def test_done_at_survives_updated_at_bump(self, store):
+        # Regression: reorders/edits bump updated_at even on done rows. The
+        # "last sang" time must read done_at, so it stays put after a shuffle.
+        e1 = store.add_entry("Alice")
+        store.update_status(e1["id"], "Done")
+        self._backdate(store, e1["id"], 40)
+        # Simulate an unrelated action touching the row (e.g. a reorder).
+        conn = store._get_conn()
+        conn.execute(
+            "UPDATE rotation_entries "
+            "SET updated_at = datetime('now', 'localtime') WHERE id = ?",
+            (e1["id"],),
+        )
+        conn.commit()
+        assert store.get_last_sang_times()["alice"] == 40
+
+    def test_done_at_refreshes_on_resing(self, store):
+        # If a singer is re-marked Done (sang again), done_at moves to now.
+        e1 = store.add_entry("Alice")
+        store.update_status(e1["id"], "Done")
+        self._backdate(store, e1["id"], 60)
+        store.update_status(e1["id"], "Done")  # sang again
+        assert store.get_last_sang_times()["alice"] <= 1
 
 
 class TestFileLink:
