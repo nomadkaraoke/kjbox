@@ -277,8 +277,18 @@ class MediaIndex:
             if not gate.verdict.get("overall_ok"):
                 reason = "; ".join(gate.verdict.get("reasons") or ["not playable"])
                 log_message(f"Download rejected (not playable): {os.path.basename(file_path)} — {reason}", self.config)
+                # Remove the file AND any yt-dlp sidecars (writethumbnail=True
+                # leaves a .webp/.jpg next to it) so rejected downloads don't leak.
+                base_no_ext = os.path.splitext(file_path)[0]
+                parent = os.path.dirname(file_path)
                 try:
-                    os.remove(file_path)
+                    for fname in os.listdir(parent):
+                        full = os.path.join(parent, fname)
+                        if os.path.splitext(full)[0] == base_no_ext:
+                            try:
+                                os.remove(full)
+                            except OSError:
+                                pass
                 except OSError:
                     pass
                 return None, None
@@ -357,8 +367,18 @@ class MediaIndex:
             if not gate.verdict.get("overall_ok"):
                 reason = "; ".join(gate.verdict.get("reasons") or ["not playable"])
                 log_message(f"Download rejected (not playable): {os.path.basename(file_path)} — {reason}", self.config)
+                # Remove the file AND any yt-dlp sidecars (writethumbnail=True
+                # leaves a .webp/.jpg next to it) so rejected downloads don't leak.
+                base_no_ext = os.path.splitext(file_path)[0]
+                parent = os.path.dirname(file_path)
                 try:
-                    os.remove(file_path)
+                    for fname in os.listdir(parent):
+                        full = os.path.join(parent, fname)
+                        if os.path.splitext(full)[0] == base_no_ext:
+                            try:
+                                os.remove(full)
+                            except OSError:
+                                pass
                 except OSError:
                     pass
                 return None, None
