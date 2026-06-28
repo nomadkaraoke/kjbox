@@ -42,31 +42,72 @@ def build_vlc_capture_cmd(path, display, out_dir, start_s, window_s=3, scene_rat
     ]
 
 
-class XvfbDisplay:
-    """On-demand off-screen X display so VLC can render without touching :0."""
+def _display_in_use(n):
+    """True if X display ``:n`` already has a server socket or lock file."""
+    return os.path.exists(f"/tmp/.X11-unix/X{n}") or os.path.exists(f"/tmp/.X{n}-lock")
 
-    def __init__(self, display=":99", resolution="1280x720x24", ready_timeout=5.0):
+
+def pick_free_display(in_use=_display_in_use, start=99, limit=199):
+    """Return the first free ``:N`` display string at or above ``start``.
+
+    A single hard-coded ``:99`` collides when two render checks (e.g. a tier-2
+    background check and a manually-run batch sweep) run at once. Probing for a
+    free number keeps each check on its own display.
+    """
+    for n in range(start, limit + 1):
+        if not in_use(n):
+            return f":{n}"
+    raise RuntimeError(f"no free X display in :{start}..:{limit}")
+
+
+class XvfbDisplay:
+    """On-demand off-screen X display so VLC can render without touching :0.
+
+    ``display=None`` (the default) auto-picks a free display at enter time so
+    concurrent checks don't collide; pass an explicit ``":N"`` to force one
+    (e.g. a batch that wants a single shared display).
+    """
+
+    def __init__(self, display=None, resolution="1280x720x24", ready_timeout=5.0):
         self.display = display
+        self._forced = display is not None
         self.resolution = resolution
         self.ready_timeout = ready_timeout
         self._proc = None
 
+    def _resolve_display(self, in_use=_display_in_use):
+        """The display to launch on: explicit if forced, else the first free one."""
+        if self._forced:
+            return self.display
+        return pick_free_display(in_use=in_use)
+
     def __enter__(self):
-        num = self.display.lstrip(":")
-        sock = f"/tmp/.X11-unix/X{num}"
-        self._proc = subprocess.Popen(
-            ["Xvfb", self.display, "-screen", "0", self.resolution, "-nolisten", "tcp"],
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-        )
-        deadline = time.monotonic() + self.ready_timeout
-        while time.monotonic() < deadline:
-            if os.path.exists(sock):
-                return self
-            if self._proc.poll() is not None:
-                raise RuntimeError(f"Xvfb {self.display} exited early")
-            time.sleep(0.1)
-        self.__exit__(None, None, None)
-        raise RuntimeError(f"Xvfb {self.display} not ready in {self.ready_timeout}s")
+        # Resolve (auto-pick) here, not in __init__, so the probe sees display
+        # state right before launch. On a lost race — the picked display gets
+        # grabbed between probe and launch and Xvfb exits early — re-pick the
+        # next free one. A forced display is never re-picked.
+        last_err = None
+        for _ in range(5):
+            self.display = self._resolve_display()
+            num = self.display.lstrip(":")
+            sock = f"/tmp/.X11-unix/X{num}"
+            self._proc = subprocess.Popen(
+                ["Xvfb", self.display, "-screen", "0", self.resolution,
+                 "-nolisten", "tcp"],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            )
+            deadline = time.monotonic() + self.ready_timeout
+            while time.monotonic() < deadline:
+                if os.path.exists(sock):
+                    return self
+                if self._proc.poll() is not None:
+                    break
+                time.sleep(0.1)
+            self.__exit__(None, None, None)
+            last_err = RuntimeError(f"Xvfb {self.display} not ready/exited early")
+            if self._forced:
+                break
+        raise last_err or RuntimeError("Xvfb failed to start")
 
     def __exit__(self, *exc):
         if self._proc and self._proc.poll() is None:

@@ -112,3 +112,33 @@ def test_render_check_no_keep_dir_leaves_saved_frame_none(tmp_path):
     res = pr.render_check(fake_run, "/x/song.mp4", "mpv", duration=100.0,
                           tmp_root=str(tmp_path))
     assert res["saved_frame"] is None
+
+
+# ---------------------------------------------------------------------------
+# Dynamic free-display selection (so concurrent / batch render checks never
+# collide on a single hard-coded :99).
+# ---------------------------------------------------------------------------
+
+def test_pick_free_display_default_when_nothing_taken():
+    assert pr.pick_free_display(in_use=lambda n: False, start=99) == ":99"
+
+
+def test_pick_free_display_skips_taken():
+    taken = {99, 100}
+    assert pr.pick_free_display(in_use=lambda n: n in taken, start=99) == ":101"
+
+
+def test_pick_free_display_raises_when_none_free():
+    with pytest.raises(RuntimeError):
+        pr.pick_free_display(in_use=lambda n: True, start=99, limit=101)
+
+
+def test_xvfb_auto_picks_free_display_when_display_none():
+    d = pr.XvfbDisplay(display=None)
+    assert d._resolve_display(in_use=lambda n: n == 99) == ":100"
+
+
+def test_xvfb_honours_explicit_display_without_probing():
+    d = pr.XvfbDisplay(display=":42")
+    # Even with everything "in use", an explicit display is returned verbatim.
+    assert d._resolve_display(in_use=lambda n: True) == ":42"
