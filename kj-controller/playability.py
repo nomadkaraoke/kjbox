@@ -163,7 +163,7 @@ class PlayabilityChecker:
         result = {
             "ok": False, "zip_ok": False, "has_cdg": False, "has_audio": False,
             "cdg_decodes": False, "audio_decodes": False, "error": None,
-            "extracted_audio": None, "extracted_cdg": None,
+            "extracted_audio": None, "extracted_cdg": None, "duration": None,
         }
         zp = ZipPlayback(self.config)
         mp3 = zp.extract_and_get_mp3(path)  # extracts into a temp dir, returns .mp3
@@ -195,6 +195,11 @@ class PlayabilityChecker:
         result["audio_decodes"] = self.decode_file(mp3)["ok"]
         result["cdg_decodes"] = self.decode_file(cdg_path)["ok"]
         result["extracted_audio"] = mp3
+        # CD+G builds its image incrementally from the START, and the first
+        # seconds are black before any graphics are drawn. Record the audio
+        # duration so the renderer captures mid-file (where graphics exist)
+        # instead of the black intro — otherwise valid CDGs read as "no video".
+        result["duration"] = self.probe_integrity(mp3).get("duration")
         result["ok"] = result["audio_decodes"] and result["cdg_decodes"]
         if not result["ok"]:
             bad = []
@@ -251,6 +256,7 @@ class PlayabilityChecker:
                 res.cdg = _timed("cdg", lambda: self.check_cdg(path))
                 audio = res.cdg.get("extracted_audio")
                 extracted_cdg = res.cdg.get("extracted_cdg")
+                cdg_dur = res.cdg.get("duration")
                 if audio and (res.cdg.get("ok") or not short_circuit):
                     for r in renderers:
                         # VLC auto-discovers the sibling .cdg from the .mp3; mpv
@@ -258,8 +264,11 @@ class PlayabilityChecker:
                         src = extracted_cdg if r == "mpv" else audio
                         if src is None:
                             continue
+                        # Pass the audio duration so capture seeks mid-file: a
+                        # CD+G screen is black at the start (graphics accrue over
+                        # the first seconds), so capturing start=0 reads as blank.
                         res.renderers[r] = render_mod.render_check(
-                            self._run, src, r, duration=None, display=display,
+                            self._run, src, r, duration=cdg_dur, display=display,
                             keep_dir=frames_dir)
                         timings[f"render_{r}"] = res.renderers[r].get("elapsed_s")
                         if short_circuit and not res.renderers[r].get("frame_nonblank"):
