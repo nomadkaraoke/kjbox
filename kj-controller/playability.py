@@ -325,17 +325,20 @@ def compute_verdict(kind, result, renderers):
 
     per = {}
     render_needed = kind in ("video", "cdg_zip")
+    # mpv cannot render CD+G graphics; for CDG its result is recorded (for the
+    # mpv-vs-VLC matrix) but does NOT gate overall_ok or add a failure reason.
+    gating = [r for r in renderers if not (kind == "cdg_zip" and r == "mpv")]
     for r in renderers:
         rr = result.renderers.get(r, {})
         if render_needed:
             playable = bool(base_ok and rr.get("frame_nonblank"))
-            if base_ok and not rr.get("frame_nonblank"):
+            if base_ok and not rr.get("frame_nonblank") and r in gating:
                 reasons.append(f"{r}: {rr.get('error') or 'no video frame rendered'}")
         else:
             playable = bool(base_ok)
         per[r + "_playable"] = playable
 
     overall_ok = bool(
-        base_ok and all(per.get(r + "_playable", False) for r in renderers)
-    ) if renderers else bool(base_ok)
+        base_ok and all(per.get(r + "_playable", False) for r in gating)
+    ) if gating else bool(base_ok)
     return {"overall_ok": overall_ok, "reasons": reasons, **per}

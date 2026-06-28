@@ -297,6 +297,18 @@ def test_check_cdg_feeds_mpv_the_cdg_and_vlc_the_mp3(tmp_path, mocker):
     assert src_by_renderer["mpv"].endswith(".cdg")
 
 
+def test_compute_verdict_cdg_mpv_recorded_but_not_required():
+    res = pl.PlayabilityResult(path="/x/a.zip", kind="cdg_zip")
+    res.cdg = {"ok": True}
+    res.renderers = {"vlc": {"frame_nonblank": True},
+                     "mpv": {"frame_nonblank": False, "error": "mpv exited 2"}}
+    v = pl.compute_verdict("cdg_zip", res, ("vlc", "mpv"))
+    assert v["overall_ok"] is True          # vlc gates; mpv excluded for CDG
+    assert v["vlc_playable"] is True
+    assert v["mpv_playable"] is False        # still recorded for the matrix
+    assert not any("mpv" in r for r in v["reasons"])
+
+
 def test_check_records_per_stage_timings(tmp_path, mocker):
     f = tmp_path / "a.mp4"
     f.write_bytes(b"x")
