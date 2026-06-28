@@ -168,11 +168,11 @@ def build_arg_parser():
                    help="Directories to scan (default: box media folders + 4TB SSD).")
     p.add_argument("--jsonl", default="playability_results.jsonl",
                    help="JSONL output path (default: playability_results.jsonl in cwd).")
-    p.add_argument("--csv", default="playability_results.csv",
+    p.add_argument("--csv", default="playability_report.csv",
                    help="CSV report output path.")
-    p.add_argument("--md", default="playability_results.md",
+    p.add_argument("--md", default="playability_report.md",
                    help="Markdown report output path.")
-    p.add_argument("--throttle", type=float, default=0.0,
+    p.add_argument("--throttle", type=float, default=0.2,
                    help="Seconds to sleep between files (default: 0.0).")
     p.add_argument("--depth", choices=["deep", "quick"], default="deep",
                    help="Probe depth (default: deep).")
@@ -184,13 +184,17 @@ def build_arg_parser():
 
 
 def main(argv=None):
-    from playability import PlayabilityChecker  # local import keeps module testable without ffmpeg
     args = build_arg_parser().parse_args(argv)
-    checker = PlayabilityChecker()
-    run_batch(checker, args.roots, args.jsonl,
-              throttle=args.throttle, depth=args.depth,
-              recheck_failed=args.recheck_failed, limit=args.limit)
-    write_reports(args.jsonl, args.csv, args.md)
+    from playability import PlayabilityChecker
+
+    checker = PlayabilityChecker(config={})
+    n = run_batch(checker, args.roots, args.jsonl, throttle=args.throttle,
+                  depth=args.depth, recheck_failed=args.recheck_failed, limit=args.limit)
+    agg = write_reports(args.jsonl, args.csv, args.md)
+    print(f"Checked {n} new/changed files. Total {agg['total']}: "
+          f"{len(agg['ok'])} OK, {len(agg['unplayable'])} unplayable, "
+          f"{len(agg['mpv_not_vlc'])} mpv-only, {len(agg['vlc_not_mpv'])} vlc-only.")
+    print(f"Reports: {args.csv}, {args.md}")
     return 0
 
 
