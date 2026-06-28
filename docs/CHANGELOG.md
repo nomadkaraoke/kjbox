@@ -2,6 +2,32 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-06-28 - Feature: Playability checker (verify render before play) — built + validated, NOT yet deployed
+
+**Why:** On 2026-06-25 a queued file (`Mirah - Gone Sugaring`) "played" but showed a black
+screen — a truncated download (`moov atom not found`). Audio-but-no-video failures are also
+invisible in logs (the song finishes normally). New checker verifies a file actually *renders
+video* before it can be linked/uploaded/downloaded.
+
+**What (new modules in `kj-controller/`):** `frame_analysis.py`, `playability.py`,
+`playability_render.py`, `playability_batch.py` (see ARCHITECTURE.md § Module Structure).
+`PlayabilityChecker.check()` runs ffprobe integrity → ffmpeg decode → **off-screen Xvfb render
+proof in VLC + mpv** (never touches the live `:0` display or `hw:0,0` audio) → verdict.
+Supports CDG zips. A resumable batch tool produces a VLC-vs-mpv playability matrix.
+
+**Gates (inline, tier-1):** `/rotation/link`, `/upload`, and `media.py` downloads now run a
+fast integrity+decode check and **hard-block** unplayable files (422 / reject+delete). Tier-2
+(async full render verification flagging linked entries) is the next piece — see handoff doc.
+
+**Validated on NomadPC** against all 77 files from the 2026-06-25 show: caught the truncated +
+an audio-only file; found and fixed a CDG false-positive (was capturing the black CD+G intro —
+now seeks mid-file); confirmed **mpv can't render CD+G** (mpv-primary switch must keep CDG on
+VLC). Timing: integrity ~0.15s, decode 2–21s, VLC render ~3.5–7s.
+
+**Deploy notes (NOT yet deployed):** backend change → needs `kj-controller` restart (interrupts
+playback). Requires **`xvfb`** (system pkg) + **`Pillow`** (venv) on the device — installed on
+NomadPC, verify on NomadPi. Design/plan/findings/handoff in `docs/archive/2026-06-2*-playability-*`.
+
 ## 2026-06-25 - Feature: "time since last sang" on the rotation count pill (v0.39.0)
 
 **Code (v0.39.0 — frontend takes effect on browser refresh after `git pull`; backend field needs deploy + restart to populate):**

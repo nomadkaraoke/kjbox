@@ -66,6 +66,10 @@ KJ Controller is a web-based karaoke show management application. A Flask backen
 | `chromium.py` | ~160 | `ChromiumManager` class: launch/kill fullscreen Chromium for Browser Mode, PipeWire audio routing |
 | `catalog.py` | ~230 | `ExternalCatalog` class: SQLite FTS5 search over external media |
 | `zip_playback.py` | ~50 | `ZipPlayback` class: CDG+MP3 ZIP extraction for VLC |
+| `frame_analysis.py` | ~80 | Pure Pillow frame math: blank/black detection, frame-diff (motion), `judge_renderer_frames` |
+| `playability.py` | ~360 | `PlayabilityChecker`: ffprobe integrity + ffmpeg decode + CDG sub-pipeline + render verdict + `check()`; per-stage `timings`. Inline gate helper used by routes/media |
+| `playability_render.py` | ~190 | `XvfbDisplay` (off-screen X, never `:0`) + VLC/mpv frame-capture command builders + `render_check()` (optional saved frame) |
+| `playability_batch.py` | ~200 | Resumable library walker (mtime/size skip-manifest), JSONL stream, CSV+Markdown VLC-vs-mpv matrix report, CLI `main()` |
 | `overlay.py` | ~100 | `OverlayManager` class: CRUD, toggle, karaoke_playing state, JSON persistence |
 | `karaoke_nerds.py` | ~140 | Karaoke Nerds web scraper: search, parse HTML results, extract YouTube URLs |
 | `youtube_search.py` | ~80 | YouTube search via yt-dlp: ytsearch with extract_flat for fast metadata |
