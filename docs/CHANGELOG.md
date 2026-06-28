@@ -2,6 +2,40 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-06-28 - Feature: Playability tier-2 async render verification + frontend — built, NOT yet deployed
+
+**Why:** Tier-1 (the inline gate) hard-blocks on integrity+decode but skips the expensive
+render proof. A file can pass the gate yet still fail to render video in the *active* renderer
+(e.g. an odd codec under mpv). Tier-2 catches that off the request path so the KJ sees a warning
+before hitting play.
+
+**What:**
+- **`rotation_store.py`** — new `playability_warning` column + `set_playability_warning(id, reason)`
+  setter (deliberately does NOT bump `updated_at` — that feeds the "last sang" pill).
+- **`routes.py`** — single-worker queue + daemon worker. After a file passes the tier-1 gate and
+  is linked (`/rotation/link`), a background `check(path, renderers=(active,), depth="deep")` runs
+  against `current_app.vlc.render_mode`; on failure it stamps the entry's `playability_warning`,
+  on success clears any stale one. Best-effort — never affects the already-successful link;
+  pure-audio files are skipped. One worker ⇒ one off-screen Xvfb render at a time.
+- **`playability_render.py`** — `XvfbDisplay` now auto-picks a *free* display (`pick_free_display`
+  probes sockets + lock files) instead of a hard-coded `:99`, so a tier-2 check and a manual batch
+  sweep can't collide. Explicit displays still honoured.
+- **Frontend (`static/app.js` + `style.css`)** — rotation rows with a `playability_warning` show a
+  ⚠️ next to the song (reason on hover; click for a full toast). A tier-1 422 reject on
+  link/upload now pops a prominent, auto-dismissing toast naming the reason, instead of only a
+  fleeting log line.
+
+**Tests:** `test_playability_tier2.py` (worker logic + enqueue + plumbing), `test_link_gate.py`
+(enqueue-on-link / not-on-block), `test_playability_render.py` (free-display picker),
+`test_rotation_store.py::TestPlayabilityWarning`. Full unit+integration suite green (1 expected
+Xvfb skip). Frontend syntax-checked; visual verification deferred to on-device.
+
+**Deploy notes (NOT yet deployed):** backend change → needs `kj-controller` restart (interrupts
+playback); same `xvfb`+`Pillow` device deps as tier-1. Still-open follow-ups in the handoff:
+tier-2 background concurrency is serialized (single worker) — if it's ever parallelised, the
+free-display picker already covers Xvfb collisions; download-auto-link paths don't yet enqueue
+tier-2 (only `/rotation/link` does).
+
 ## 2026-06-28 - Feature: Playability checker (verify render before play) — built + validated, NOT yet deployed
 
 **Why:** On 2026-06-25 a queued file (`Mirah - Gone Sugaring`) "played" but showed a black
@@ -17,7 +51,7 @@ Supports CDG zips. A resumable batch tool produces a VLC-vs-mpv playability matr
 
 **Gates (inline, tier-1):** `/rotation/link`, `/upload`, and `media.py` downloads now run a
 fast integrity+decode check and **hard-block** unplayable files (422 / reject+delete). Tier-2
-(async full render verification flagging linked entries) is the next piece — see handoff doc.
+(async full render verification flagging linked entries) is now built — see the tier-2 entry above.
 
 **Validated on NomadPC** against all 77 files from the 2026-06-25 show: caught the truncated +
 an audio-only file; found and fixed a CDG false-positive (was capturing the black CD+G intro —

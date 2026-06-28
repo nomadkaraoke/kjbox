@@ -1,5 +1,28 @@
 # Playability Checker — Session Handoff (2026-06-28)
 
+> ## UPDATE (2026-06-28, later session) — tier-2 + frontend now BUILT
+> Handoff items **#1 (tier-2 async render verification)** and **#3 (frontend: surface
+> verdict)** are now implemented + tested on the branch (still NOT deployed). New commits:
+> - `rotation_store`: `playability_warning` column + `set_playability_warning()` (no
+>   `updated_at` bump).
+> - `XvfbDisplay`: auto-picks a free display (`pick_free_display`) — no more hard `:99`
+>   collision risk between a tier-2 check and a batch sweep. **This closes the §1
+>   concurrency decision (chose: single-worker queue serialises tier-2 + dynamic display
+>   as belt-and-braces) AND the "Xvfb :99 hard-coded" gotcha below.**
+> - `routes.py`: single-worker queue + `_run_tier2_check` (full render check vs
+>   `current_app.vlc.render_mode`) enqueued after a successful `/rotation/link`; stamps the
+>   warning on fail, clears on pass. Best-effort, skips pure-audio.
+> - Frontend: ⚠️ badge on flagged rotation rows + prominent auto-dismiss toast for tier-1
+>   422 rejects (link/upload).
+> - Version bumped 0.39.0 → **0.40.0**. Full suite green (1 expected Xvfb skip). Frontend
+>   syntax-checked only — **not yet visually verified on a running instance.**
+>
+> **Remaining (unchanged priority):** #2 full-library batch run (on box, Andrew-gated),
+> frontend on-device visual check, #4 deploy (Andrew-gated, off-show), #5 tuning.
+> **New small follow-up:** only `/rotation/link` enqueues tier-2 — download-auto-link paths
+> don't yet (downloads still get tier-1 at download time).
+
+
 **For the next Claude session.** This documents everything built so far on the kjbox
 playability-checker, the on-device validation done, and the remaining work. Read this first,
 then the design + plan + findings docs linked below.

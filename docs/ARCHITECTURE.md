@@ -68,7 +68,7 @@ KJ Controller is a web-based karaoke show management application. A Flask backen
 | `zip_playback.py` | ~50 | `ZipPlayback` class: CDG+MP3 ZIP extraction for VLC |
 | `frame_analysis.py` | ~80 | Pure Pillow frame math: blank/black detection, frame-diff (motion), `judge_renderer_frames` |
 | `playability.py` | ~360 | `PlayabilityChecker`: ffprobe integrity + ffmpeg decode + CDG sub-pipeline + render verdict + `check()`; per-stage `timings`. Inline gate helper used by routes/media |
-| `playability_render.py` | ~190 | `XvfbDisplay` (off-screen X, never `:0`) + VLC/mpv frame-capture command builders + `render_check()` (optional saved frame) |
+| `playability_render.py` | ~210 | `XvfbDisplay` (off-screen X, never `:0`; auto-picks a free display via `pick_free_display` so concurrent/batch checks don't collide) + VLC/mpv frame-capture command builders + `render_check()` (optional saved frame) |
 | `playability_batch.py` | ~200 | Resumable library walker (mtime/size skip-manifest), JSONL stream, CSV+Markdown VLC-vs-mpv matrix report, CLI `main()` |
 | `overlay.py` | ~100 | `OverlayManager` class: CRUD, toggle, karaoke_playing state, JSON persistence |
 | `karaoke_nerds.py` | ~140 | Karaoke Nerds web scraper: search, parse HTML results, extract YouTube URLs |
@@ -76,7 +76,7 @@ KJ Controller is a web-based karaoke show management application. A Flask backen
 | `youtube_health.py` | ~170 | YouTube health checks: yt-dlp/EJS/Deno version detection, cookie validation, PyPI version check (24h cache), pip upgrade |
 | `divebar.py` | ~150 | Divebar catalog client: search, download URL generation via Cloud Function API |
 | `rotation.py` | ~180 | `RotationManager` coordinator: delegates to `RotationStore` (SQLite) + `SheetSync` (optional), writes display cache, download/gen tracking, undo/redo + revision bump |
-| `rotation_store.py` | ~310 | `RotationStore` class: SQLite CRUD for rotation entries, position management, file linking, download/gen tracking, archive, and server-side undo/redo history (`rotation_history` table + `rotation_rev` counter, `diff_entries` helper) |
+| `rotation_store.py` | ~330 | `RotationStore` class: SQLite CRUD for rotation entries, position management, file linking, download/gen tracking, archive, server-side undo/redo history (`rotation_history` table + `rotation_rev` counter, `diff_entries` helper), and the `playability_warning` column + `set_playability_warning()` (tier-2 render-verification flag; setter does not bump `updated_at`) |
 | `rotation_sync.py` | ~230 | `SheetSync` class: background thread pushing SQLite state to Google Sheets (optional backup) |
 | `gen_client.py` | ~100 | `GenClient` HTTP client for gen API: job creation, status polling, download URL retrieval |
 | `gen_poller.py` | ~90 | `GenPoller` background thread: polls gen API for active jobs, auto-downloads completed videos |
@@ -84,7 +84,7 @@ KJ Controller is a web-based karaoke show management application. A Flask backen
 | `push_dispatcher.py` | ~200 | `PushDispatcher` class: VAPID config, subscription scan, ladder decision (`now_singing`/`up_next`/`up_in_2`), dedup via `last_sent_state`, 500ms debounce, `ThreadPoolExecutor` send pool. Pure helpers at module level (`decide_ladder_step`, `next_entry_for_phone`, `render_payload`). |
 | `sing.py` | ~280 | Public `/sing/*` blueprint (landing, search, submit, status, rules, now, manifest, sw, push subscribe/unsubscribe) + token-gate decorator + per-IP rate limiter + host-based route guard + QR-overlay auto-sync helper |
 | `sing_store.py` | ~260 | `SingStore` class: SQLite CRUD for `sing_requests` + `sing_push_subscriptions` + event-token helpers (regenerate / enable / auto-approve) on `rotation_meta` |
-| `routes.py` | ~1000 | Flask Blueprint with all route handlers (includes `/rotation/requests/*` admin endpoints for the public request form) |
+| `routes.py` | ~1000 | Flask Blueprint with all route handlers (includes `/rotation/requests/*` admin endpoints for the public request form). Hosts the playability gates: tier-1 inline `_playability_gate` (link/upload/download hard-block) + tier-2 async render verification (`_enqueue_tier2` → single-worker queue → `_run_tier2_check` against the active renderer, stamps `playability_warning`) |
 | `wait_estimate.py` | ~80 | Pure function `compute_estimate(entries, target_id, cfg)` producing `{position, expected_s, range_low_s, range_high_s, spread_source, close_to_front, now_singing}`. Uses tonight's sung-entry variance for the range; falls back to a configurable minimum spread. |
 
 ### Dependency Flow
