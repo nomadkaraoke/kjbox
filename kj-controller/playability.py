@@ -97,18 +97,16 @@ class PlayabilityResult:
         return cls(**known)
 
 
-_DECODE_ERR_RE = re.compile(r"error while decoding", re.IGNORECASE)
+_DECODE_ERR_RE = re.compile(r"\berror\b", re.IGNORECASE)
 
 
 def parse_decode(returncode: int, stderr: str) -> dict:
     stderr = stderr or ""
-    matches = _DECODE_ERR_RE.findall(stderr)
-    decode_errors = len(matches)
+    decode_errors = len([ln for ln in stderr.splitlines() if _DECODE_ERR_RE.search(ln)])
     ok = returncode == 0 and decode_errors == 0
     error = None
     if not ok:
-        lines = [ln for ln in stderr.splitlines() if ln.strip()]
-        error = lines[-1] if lines else f"ffmpeg exit {returncode}"
+        error = (stderr.strip().splitlines() or ["decode failed"])[-1]
     return {"ok": ok, "decode_errors": decode_errors, "error": error}
 
 
