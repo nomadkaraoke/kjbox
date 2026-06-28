@@ -3309,6 +3309,102 @@ def split_singer_route():
         return jsonify({"error": str(e)}), 500
 
 
+def _divebar_row_is_better(candidate, incumbent):
+    """True if mirror row ``candidate`` should win over ``incumbent`` for the
+    same (song, brand): prefer an in-GCS file, then a smaller file."""
+    if bool(candidate.get("in_gcs")) != bool(incumbent.get("in_gcs")):
+        return bool(candidate.get("in_gcs"))
+    cand_size = candidate.get("file_size") or float("inf")
+    inc_size = incumbent.get("file_size") or float("inf")
+    return cand_size < inc_size
+
+
+def _surface_divebar_versions(local_results, kn_results, db_results, cfg):
+    """Cross-reference Divebar GCS-mirror results against local + KN results.
+
+    Matching is on ``(normalized song, canonical brand)`` — the canonical brand
+    folds differing code granularity (KN ``FBK`` vs mirror ``FBK204``) and
+    brand-name-only entries together, so same-brand mirror files are recognised
+    even when the raw codes differ.
+
+    Mutates KN tracks in place: when a mirror file matches a KN track, attaches
+    it as ``track['divebar']`` so that row downloads from the mirror (GCS)
+    instead of YouTube.
+
+    Returns a list of *standalone* Divebar rows — mirror versions of a brand
+    that neither a local file nor a KN track already represents — so the KJ can
+    pick a GCS-mirror version directly. Collapsed to one row per (song, brand),
+    preferring in-GCS files then smaller files. Rows are annotated with
+    priority_rank/brand/class so the frontend sorts them into the right section.
+    """
+    cbm = version_priority.canonical_brand_for_match
+
+    # (song_key, canonical_brand) already represented by a local file.
+    local_keys = set()
+    for r in local_results or []:
+        brand = cbm(disc_id=r.get("disc_id"), filename=r.get("filename"))
+        local_keys.add((_normalize_song_key(r.get("artist"), r.get("title")), brand))
+
+    # (song_key, canonical_brand) -> KN track, for same-brand attach.
+    kn_index = {}
+    for song in kn_results or []:
+        song_key = _normalize_song_key(song.get("artist"), song.get("title"))
+        for track in song.get("tracks") or []:
+            brand = cbm(brand_code=track.get("brand_code"),
+                        brand_name=track.get("brand_name"))
+            kn_index.setdefault((song_key, brand), track)
+
+    standalone = {}  # (song_key, canonical_brand) -> best mirror row
+    for db_song in db_results or []:
+        s_artist = db_song.get("artist") or ""
+        s_title = db_song.get("title") or ""
+        song_key = _normalize_song_key(s_artist, s_title)
+        for db_track in db_song.get("tracks") or []:
+            file_id = db_track.get("file_id")
+            if not file_id:
+                continue
+            raw_code = db_track.get("brand_code")
+            brand_name = db_track.get("brand")
+            brand = cbm(brand_code=raw_code, brand_name=brand_name)
+            key = (song_key, brand)
+            if key in local_keys:
+                continue  # we already have this exact version locally
+            kn_track = kn_index.get(key)
+            if kn_track is not None:
+                # Same brand as a KN row -> upgrade that row to the GCS mirror,
+                # preferring an in-GCS / smaller file if one is already attached.
+                existing = kn_track.get("divebar")
+                if not (existing or {}).get("file_id") or \
+                        _divebar_row_is_better(db_track, existing):
+                    kn_track["divebar"] = db_track
+                continue
+            # resolve_brand short-circuits on an unrecognized specific code
+            # (e.g. "FBK204") and never consults the brand name. When the brand
+            # resolves to a *registered* family, annotate/rank/display by the
+            # canonical code so the row lands in the right tier; otherwise keep
+            # the raw code so it classifies (correctly) as unknown.
+            registered, _ = version_priority.resolve_brand(brand_code=brand)
+            display_code = brand if registered else raw_code
+            row = {
+                "source": "divebar",
+                "file_id": file_id,
+                "brand_code": display_code,
+                "brand_name": brand_name,
+                "artist": s_artist,
+                "title": s_title,
+                "format": db_track.get("format"),
+                "file_size": db_track.get("file_size"),
+                "in_gcs": bool(db_track.get("in_gcs")),
+            }
+            incumbent = standalone.get(key)
+            if incumbent is None or _divebar_row_is_better(row, incumbent):
+                standalone[key] = row
+
+    rows = list(standalone.values())
+    version_priority.annotate_versions(rows, cfg, shape="rotation_search_divebar")
+    return rows
+
+
 def unified_search(query, app, *, grouped=False):
     """Unified search helper: local catalog + Karaoke Nerds + Divebar cross-reference.
 
@@ -3364,38 +3460,33 @@ def unified_search(query, app, *, grouped=False):
     except Exception:
         kn_timeout = True
 
-    if kn_results and not kn_timeout:
-        try:
-            # Send the raw user query: Divebar does its own matching, so do
-            # not pre-normalize it here.
-            db_results = divebar.search(query, cfg, limit=100)
-            db_index = {}
-            for db_song in db_results:
-                for db_track in db_song.get("tracks", []):
-                    key = (
-                        (db_song.get("artist") or "").lower().strip(),
-                        (db_song.get("title") or "").lower().strip(),
-                        (db_track.get("brand_code") or "").upper().strip(),
-                    )
-                    db_index[key] = db_track
-            for song in kn_results:
-                artist_lower = (song.get("artist") or "").lower().strip()
-                title_lower = (song.get("title") or "").lower().strip()
-                for track in song.get("tracks", []):
-                    brand = (track.get("brand_code") or "").upper().strip()
-                    db_match = db_index.get((artist_lower, title_lower, brand))
-                    if db_match and db_match.get("file_id"):
-                        track["divebar"] = db_match
-        except Exception:
-            pass  # Divebar cross-ref is best-effort
+    # Divebar GCS-mirror search runs independently of Karaoke Nerds so mirror
+    # versions surface even when KN is slow or returns nothing. Best-effort.
+    db_results = []
+    try:
+        # Raw user query: Divebar does its own server-side matching.
+        db_results = divebar.search(query, cfg, limit=100)
+    except Exception:
+        db_results = []
 
-        for song in kn_results:
-            for track in song.get("tracks", []):
-                track["in_library"] = any(
-                    r.get("artist", "").lower() == song.get("artist", "").lower()
-                    and r.get("title", "").lower() == song.get("title", "").lower()
-                    for r in local_results
-                )
+    # Mark KN tracks already present in the local library (singer-facing hint).
+    for song in kn_results:
+        for track in song.get("tracks", []):
+            track["in_library"] = any(
+                r.get("artist", "").lower() == song.get("artist", "").lower()
+                and r.get("title", "").lower() == song.get("title", "").lower()
+                for r in local_results
+            )
+
+    # Cross-reference mirror files against local + KN: attaches track['divebar']
+    # for same-brand matches (so that row downloads from GCS, not YouTube) and
+    # returns standalone mirror rows the KJ can pick directly.
+    divebar_rows = []
+    try:
+        divebar_rows = _surface_divebar_versions(
+            local_results, kn_results, db_results, cfg)
+    except Exception:
+        divebar_rows = []  # best-effort; never break search
 
     if grouped:
         # Defensive filter (Phase B §4): a KN track with neither a YouTube URL
@@ -3428,6 +3519,7 @@ def unified_search(query, app, *, grouped=False):
     return {
         "local": local_results,
         "karaoke_nerds": kn_results,
+        "divebar": divebar_rows,
         "karaoke_nerds_timeout": kn_timeout,
     }
 
@@ -3443,7 +3535,8 @@ def rotation_search():
 
     # Back-compat shape: legacy response omitted the timeout flag when False,
     # and placed it at the top level when True. Preserve that.
-    response = {"local": result["local"], "karaoke_nerds": result["karaoke_nerds"]}
+    response = {"local": result["local"], "karaoke_nerds": result["karaoke_nerds"],
+                "divebar": result.get("divebar", [])}
     if result["karaoke_nerds_timeout"]:
         response["karaoke_nerds_timeout"] = True
     return jsonify(response)

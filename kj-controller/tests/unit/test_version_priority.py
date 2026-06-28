@@ -357,3 +357,67 @@ class TestAnnotateVersionsRotationSearchShape:
         annotate_versions(tracks, _cfg(), shape="rotation_search_kn")
         # divebar-mirrored LC should rank better than youtube-only LC
         assert tracks[1]["priority_rank"] < tracks[0]["priority_rank"]
+
+
+class TestCanonicalBrandForMatch:
+    """canonical_brand_for_match: stable cross-source brand key for cross-ref."""
+
+    def test_registered_code_resolves_to_canonical(self):
+        from version_priority import canonical_brand_for_match
+        assert canonical_brand_for_match(brand_code="FBK") == "FBK"
+
+    def test_numeric_suffix_code_matches_via_brand_name(self):
+        # Anna Molly bug: KN says "FBK", mirror says "FBK204" + "Funbox Karaoke".
+        from version_priority import canonical_brand_for_match
+        assert canonical_brand_for_match(
+            brand_code="FBK204", brand_name="Funbox Karaoke") == "FBK"
+
+    def test_numeric_suffix_code_matches_via_prefix_fallback(self):
+        # Even with no brand_name, "FBK204" should fold to the "FBK" family.
+        from version_priority import canonical_brand_for_match
+        assert canonical_brand_for_match(brand_code="FBK204") == "FBK"
+
+    def test_cc_aliases_collapse_together(self):
+        from version_priority import canonical_brand_for_match
+        assert canonical_brand_for_match(brand_code="CCK") == "CC"
+        assert canonical_brand_for_match(brand_code="CCX") == "CC"
+
+    def test_local_disc_id_resolves(self):
+        from version_priority import canonical_brand_for_match
+        assert canonical_brand_for_match(disc_id="KVD-22524") == "KV"
+
+    def test_unregistered_brand_folds_to_alpha_prefix(self):
+        from version_priority import canonical_brand_for_match
+        # KFN not in registry -> stable "KFN" key from the alpha prefix
+        assert canonical_brand_for_match(brand_code="KFN-1234") == "KFN"
+
+    def test_unregistered_code_but_known_name_resolves_via_name(self):
+        # A code whose prefix is NOT a registered family must still fold via the
+        # reliable brand name rather than the meaningless code prefix.
+        from version_priority import canonical_brand_for_match
+        assert canonical_brand_for_match(
+            brand_code="XYZ1", brand_name="Funbox Karaoke") == "FBK"
+
+    def test_empty_inputs_return_empty_string(self):
+        from version_priority import canonical_brand_for_match
+        assert canonical_brand_for_match() == ""
+
+
+class TestAnnotateVersionsDivebarShape:
+    def test_divebar_community_row_ranks_in_community_tier(self):
+        rows = [{"source": "divebar", "file_id": "x", "brand_code": "CC",
+                 "brand_name": "CC Karaoke", "artist": "Queen", "title": "X",
+                 "in_gcs": True}]
+        annotate_versions(rows, _cfg(), shape="rotation_search_divebar")
+        assert rows[0]["priority_brand"] == "CC"
+        assert rows[0]["priority_class"] == "community"
+        assert rows[0]["priority_rank"] < 1000
+
+    def test_divebar_row_beats_youtube_only_kn_same_brand(self):
+        # A standalone divebar (GCS) LC row should outrank a youtube-only LC KN row.
+        kn = {"brand_code": "LC", "youtube_url": "https://yt", "is_community": True}
+        db = {"source": "divebar", "file_id": "x", "brand_code": "LC",
+              "brand_name": "Lemmy Caution", "artist": "Q", "title": "X"}
+        annotate_versions([kn], _cfg(), shape="rotation_search_kn")
+        annotate_versions([db], _cfg(), shape="rotation_search_divebar")
+        assert db["priority_rank"] < kn["priority_rank"]
