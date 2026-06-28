@@ -5,6 +5,7 @@ Produces structured evidence (PlayabilityResult), never policy. Callers
 """
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import re
@@ -161,48 +162,48 @@ class PlayabilityChecker:
         result = {
             "ok": False, "zip_ok": False, "has_cdg": False, "has_audio": False,
             "cdg_decodes": False, "audio_decodes": False, "error": None,
-            "extracted_audio": None,
+            "extracted_audio": None, "extracted_cdg": None,
         }
         zp = ZipPlayback(self.config)
         mp3 = zp.extract_and_get_mp3(path)  # extracts into a temp dir, returns .mp3
-        try:
-            if mp3 is None:
-                # Could be a bad zip OR a zip with no mp3. Distinguish by reopening.
-                import zipfile
-                try:
-                    with zipfile.ZipFile(path) as zf:
-                        names = zf.namelist()
-                    result["zip_ok"] = True
-                    result["error"] = "no .mp3 in CDG zip"
-                except (zipfile.BadZipFile, OSError):
-                    result["error"] = "not a valid zip"
-                return result
-            result["zip_ok"] = True
-            result["has_audio"] = True
-            extract_dir = os.path.dirname(mp3)
-            cdgs = [f for f in os.listdir(extract_dir) if f.lower().endswith(".cdg")]
-            result["has_cdg"] = bool(cdgs)
-            if not cdgs:
-                result["error"] = "no .cdg graphics in zip"
-                return result
-            cdg_path = os.path.join(extract_dir, cdgs[0])
-            result["audio_decodes"] = self.decode_file(mp3)["ok"]
-            result["cdg_decodes"] = self.decode_file(cdg_path)["ok"]
-            result["extracted_audio"] = mp3
-            result["ok"] = result["audio_decodes"] and result["cdg_decodes"]
-            if not result["ok"]:
-                bad = []
-                if not result["audio_decodes"]:
-                    bad.append("audio")
-                if not result["cdg_decodes"]:
-                    bad.append("cdg graphics")
-                result["error"] = " and ".join(bad) + " failed to decode"
-            # NOTE: caller (check()) runs the renderer frame-capture on extracted_audio
-            # BEFORE this ZipPlayback instance is cleaned up.
-            self._last_zip = zp  # keep extraction alive for the render step
-        finally:
-            # Cleanup deferred to check() via _cleanup_cdg(); see Task 7.
-            pass
+        if mp3 is None:
+            # Could be a bad zip OR a zip with no mp3. Distinguish by reopening.
+            import zipfile
+            try:
+                with zipfile.ZipFile(path) as zf:
+                    zf.namelist()
+                result["zip_ok"] = True
+                result["error"] = "no .mp3 in CDG zip"
+            except (zipfile.BadZipFile, OSError):
+                result["error"] = "not a valid zip"
+            return result
+        # Extraction produced a temp dir; register it NOW so check()'s
+        # _cleanup_cdg() removes it on EVERY post-extraction return path
+        # (e.g. the no-.cdg early return below would otherwise leak it).
+        self._last_zip = zp
+        result["zip_ok"] = True
+        result["has_audio"] = True
+        extract_dir = os.path.dirname(mp3)
+        cdgs = [f for f in os.listdir(extract_dir) if f.lower().endswith(".cdg")]
+        result["has_cdg"] = bool(cdgs)
+        if not cdgs:
+            result["error"] = "no .cdg graphics in zip"
+            return result
+        cdg_path = os.path.join(extract_dir, cdgs[0])
+        result["extracted_cdg"] = cdg_path
+        result["audio_decodes"] = self.decode_file(mp3)["ok"]
+        result["cdg_decodes"] = self.decode_file(cdg_path)["ok"]
+        result["extracted_audio"] = mp3
+        result["ok"] = result["audio_decodes"] and result["cdg_decodes"]
+        if not result["ok"]:
+            bad = []
+            if not result["audio_decodes"]:
+                bad.append("audio")
+            if not result["cdg_decodes"]:
+                bad.append("cdg graphics")
+            result["error"] = " and ".join(bad) + " failed to decode"
+        # NOTE: caller (check()) runs the renderer frame-capture on the extracted
+        # files BEFORE this ZipPlayback instance is cleaned up via _cleanup_cdg().
         return result
 
     def _cleanup_cdg(self):
@@ -211,7 +212,8 @@ class PlayabilityChecker:
             zp.cleanup()
             self._last_zip = None
 
-    def check(self, path, renderers=("vlc", "mpv"), depth="deep", short_circuit=False):
+    def check(self, path, renderers=("vlc", "mpv"), depth="deep", short_circuit=False,
+              display=None):
         import playability_render as render_mod
 
         t0 = time.monotonic()
@@ -224,34 +226,51 @@ class PlayabilityChecker:
             checked_at=time.time(),
         )
 
-        if kind == "cdg_zip":
-            res.cdg = self.check_cdg(path)
-            audio = res.cdg.get("extracted_audio")
-            if audio and (res.cdg.get("ok") or not short_circuit):
-                for r in renderers:
-                    res.renderers[r] = render_mod.render_check(self._run, audio, r, duration=None)
-                    if short_circuit and not res.renderers[r].get("frame_nonblank"):
-                        break
-            self._cleanup_cdg()
-        elif kind == "audio":
-            res.integrity = self.probe_integrity(path)
-        else:  # video / unknown
-            res.integrity = self.probe_integrity(path)
-            dur = res.integrity.get("duration")
-            if res.integrity.get("ok") or not short_circuit:
-                res.decode = self.decode_video(
-                    path,
-                    start=render_mod.capture_start(dur) if depth == "quick" else None,
-                    length=5.0 if depth == "quick" else None,
-                )
-                if res.decode.get("ok") or not short_circuit:
+        # VLC renders against an X display; mpv uses --vo=image (no display).
+        # Only start an off-screen Xvfb if a VLC render will actually run here
+        # AND the caller (e.g. the batch) hasn't already supplied a shared one.
+        need_vlc = ("vlc" in renderers) and kind in ("video", "cdg_zip")
+        with contextlib.ExitStack() as stack:
+            if need_vlc and display is None:
+                xvfb = stack.enter_context(render_mod.XvfbDisplay())
+                display = xvfb.display
+
+            if kind == "cdg_zip":
+                res.cdg = self.check_cdg(path)
+                audio = res.cdg.get("extracted_audio")
+                extracted_cdg = res.cdg.get("extracted_cdg")
+                if audio and (res.cdg.get("ok") or not short_circuit):
                     for r in renderers:
-                        res.renderers[r] = render_mod.render_check(self._run, path, r, duration=dur)
+                        # VLC auto-discovers the sibling .cdg from the .mp3; mpv
+                        # must be handed the .cdg directly or it renders no video.
+                        src = extracted_cdg if r == "mpv" else audio
+                        if src is None:
+                            continue
+                        res.renderers[r] = render_mod.render_check(
+                            self._run, src, r, duration=None, display=display)
                         if short_circuit and not res.renderers[r].get("frame_nonblank"):
                             break
+                self._cleanup_cdg()
+            elif kind == "audio":
+                res.integrity = self.probe_integrity(path)
+            else:  # video / unknown
+                res.integrity = self.probe_integrity(path)
+                dur = res.integrity.get("duration")
+                if res.integrity.get("ok") or not short_circuit:
+                    res.decode = self.decode_video(
+                        path,
+                        start=render_mod.capture_start(dur) if depth == "quick" else None,
+                        length=5.0 if depth == "quick" else None,
+                    )
+                    if res.decode.get("ok") or not short_circuit:
+                        for r in renderers:
+                            res.renderers[r] = render_mod.render_check(
+                                self._run, path, r, duration=dur, display=display)
+                            if short_circuit and not res.renderers[r].get("frame_nonblank"):
+                                break
 
-        res.verdict = compute_verdict(kind, res, renderers)
-        res.elapsed_s = round(time.monotonic() - t0, 3)
+            res.verdict = compute_verdict(kind, res, renderers)
+            res.elapsed_s = round(time.monotonic() - t0, 3)
         return res
 
 

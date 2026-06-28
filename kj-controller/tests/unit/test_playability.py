@@ -6,6 +6,15 @@ import zipfile
 import playability as pl
 
 
+def _fake_xvfb(mocker, module="playability_render", display=":99"):
+    """Patch <module>.XvfbDisplay with a context manager yielding `.display`,
+    so check()/run_batch never launch a real off-screen X server in unit tests."""
+    cls = mocker.patch(f"{module}.XvfbDisplay")
+    cls.return_value.__enter__.return_value.display = display
+    cls.return_value.__exit__.return_value = False
+    return cls
+
+
 def test_classify_kind():
     assert pl.classify_kind("/x/song.mp4") == "video"
     assert pl.classify_kind("/x/song.MKV") == "video"
@@ -172,6 +181,7 @@ def test_compute_verdict_truncated_no_render_needed():
 
 def test_check_video_short_circuits_on_bad_integrity(mocker):
     chk = pl.PlayabilityChecker(config={})
+    _fake_xvfb(mocker)
     mocker.patch.object(chk, "probe_integrity",
                         return_value={"ok": False, "has_video": False, "moov_ok": False,
                                       "error": "moov atom not found (truncated/incomplete file)", "duration": None})
@@ -186,6 +196,7 @@ def test_check_video_short_circuits_on_bad_integrity(mocker):
 def test_check_video_runs_all_layers_in_batch_mode(mocker, tmp_path):
     f = tmp_path / "a.mp4"; f.write_bytes(b"x")
     chk = pl.PlayabilityChecker(config={})
+    _fake_xvfb(mocker)
     mocker.patch.object(chk, "probe_integrity",
                         return_value={"ok": True, "has_video": True, "duration": 100.0, "error": None})
     mocker.patch.object(chk, "decode_video", return_value={"ok": True, "decode_errors": 0, "error": None})
@@ -194,3 +205,93 @@ def test_check_video_runs_all_layers_in_batch_mode(mocker, tmp_path):
     res = chk.check(str(f), renderers=("vlc", "mpv"), short_circuit=False)
     assert res.verdict["overall_ok"] is True
     assert set(res.renderers) == {"vlc", "mpv"}
+
+
+# ---- C1: Xvfb wiring in check() -------------------------------------------
+
+def test_check_starts_xvfb_when_display_none_and_vlc_needed(mocker, tmp_path):
+    f = tmp_path / "a.mp4"; f.write_bytes(b"x")
+    chk = pl.PlayabilityChecker(config={})
+    xvfb = _fake_xvfb(mocker, display=":99")
+    mocker.patch.object(chk, "probe_integrity",
+                        return_value={"ok": True, "has_video": True, "duration": 100.0, "error": None})
+    mocker.patch.object(chk, "decode_video", return_value={"ok": True, "decode_errors": 0, "error": None})
+    rc = mocker.patch("playability_render.render_check",
+                      return_value={"frame_nonblank": True, "error": None})
+    chk.check(str(f), renderers=("vlc", "mpv"), short_circuit=False)
+    # Xvfb was started (context-managed) for the duration of the call.
+    xvfb.assert_called_once()
+    xvfb.return_value.__enter__.assert_called_once()
+    # Every render_check got the started display.
+    assert rc.call_args_list, "render_check should have been called"
+    for call in rc.call_args_list:
+        assert call.kwargs["display"] == ":99"
+
+
+def test_check_does_not_start_xvfb_for_mpv_only(mocker, tmp_path):
+    f = tmp_path / "a.mp4"; f.write_bytes(b"x")
+    chk = pl.PlayabilityChecker(config={})
+    xvfb = _fake_xvfb(mocker)
+    mocker.patch.object(chk, "probe_integrity",
+                        return_value={"ok": True, "has_video": True, "duration": 100.0, "error": None})
+    mocker.patch.object(chk, "decode_video", return_value={"ok": True, "decode_errors": 0, "error": None})
+    rc = mocker.patch("playability_render.render_check",
+                      return_value={"frame_nonblank": True, "error": None})
+    chk.check(str(f), renderers=("mpv",), short_circuit=False)
+    xvfb.assert_not_called()
+    # mpv still rendered, just with display left as None.
+    assert rc.call_args_list and rc.call_args_list[0].kwargs["display"] is None
+
+
+def test_check_does_not_start_xvfb_for_audio_kind(mocker, tmp_path):
+    f = tmp_path / "a.mp3"; f.write_bytes(b"x")
+    chk = pl.PlayabilityChecker(config={})
+    xvfb = _fake_xvfb(mocker)
+    mocker.patch.object(chk, "probe_integrity",
+                        return_value={"ok": True, "has_audio": True, "duration": 100.0, "error": None})
+    chk.check(str(f), renderers=("vlc", "mpv"), short_circuit=False)
+    xvfb.assert_not_called()
+
+
+def test_check_uses_provided_display_without_starting_xvfb(mocker, tmp_path):
+    f = tmp_path / "a.mp4"; f.write_bytes(b"x")
+    chk = pl.PlayabilityChecker(config={})
+    xvfb = _fake_xvfb(mocker)
+    mocker.patch.object(chk, "probe_integrity",
+                        return_value={"ok": True, "has_video": True, "duration": 100.0, "error": None})
+    mocker.patch.object(chk, "decode_video", return_value={"ok": True, "decode_errors": 0, "error": None})
+    rc = mocker.patch("playability_render.render_check",
+                      return_value={"frame_nonblank": True, "error": None})
+    chk.check(str(f), renderers=("vlc", "mpv"), short_circuit=False, display=":55")
+    xvfb.assert_not_called()
+    for call in rc.call_args_list:
+        assert call.kwargs["display"] == ":55"
+
+
+# ---- I3: CDG mpv gets the .cdg, vlc gets the .mp3 -------------------------
+
+def test_check_cdg_exposes_extracted_cdg(tmp_path, mocker):
+    chk = pl.PlayabilityChecker(config={})
+    zp = _make_cdg_zip(tmp_path, with_cdg=True, with_audio=True)
+    mocker.patch.object(chk, "_run", return_value=(0, "", ""))
+    try:
+        r = chk.check_cdg(zp)
+        assert r["extracted_cdg"] and r["extracted_cdg"].endswith(".cdg")
+        assert os.path.dirname(r["extracted_cdg"]) == os.path.dirname(r["extracted_audio"])
+    finally:
+        chk._cleanup_cdg()
+
+
+def test_check_cdg_feeds_mpv_the_cdg_and_vlc_the_mp3(tmp_path, mocker):
+    chk = pl.PlayabilityChecker(config={})
+    zp = _make_cdg_zip(tmp_path, with_cdg=True, with_audio=True)
+    _fake_xvfb(mocker)
+    mocker.patch.object(chk, "_run", return_value=(0, "", ""))  # decode_file calls
+    rc = mocker.patch("playability_render.render_check",
+                      return_value={"frame_nonblank": True, "error": None})
+    chk.check(zp, renderers=("vlc", "mpv"), short_circuit=False)
+    # Map renderer -> input path that render_check was handed.
+    src_by_renderer = {call.args[2]: call.args[1] for call in rc.call_args_list}
+    assert set(src_by_renderer) == {"vlc", "mpv"}
+    assert src_by_renderer["vlc"].endswith(".mp3")
+    assert src_by_renderer["mpv"].endswith(".cdg")

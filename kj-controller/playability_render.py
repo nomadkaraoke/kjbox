@@ -99,7 +99,8 @@ def render_check(run, path, renderer, duration, display=":99", tmp_root=None,
             raise ValueError(f"unknown renderer {renderer}")
         rc, _out, err = run(cmd, capture_timeout)
         if rc not in (0, None):
-            error = (err or f"{renderer} exited {rc}").strip().splitlines()[-1] if err else f"{renderer} exited {rc}"
+            # Guard against whitespace-only stderr: splitlines() would be empty.
+            error = ((err or "").strip().splitlines() or [f"{renderer} exited {rc}"])[-1]
         frames = sorted(glob.glob(os.path.join(out_dir, "*.png")))
         verdict = judge_renderer_frames(frames)
     finally:

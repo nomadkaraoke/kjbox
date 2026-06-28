@@ -26,10 +26,20 @@ def test_manifest_skip_unchanged(tmp_path):
     assert pb.is_unchanged(str(f), manifest2) is False
 
 
+def _fake_xvfb(mocker, display=":99"):
+    """Stub playability_batch.XvfbDisplay so run_batch never launches a real
+    off-screen X server in unit tests."""
+    cls = mocker.patch("playability_batch.XvfbDisplay")
+    cls.return_value.__enter__.return_value.display = display
+    cls.return_value.__exit__.return_value = False
+    return cls
+
+
 def test_run_batch_streams_and_skips(tmp_path, mocker):
     (tmp_path / "a.mp4").write_bytes(b"x")
     (tmp_path / "b.mp4").write_bytes(b"x")
     jsonl = tmp_path / "out.jsonl"
+    _fake_xvfb(mocker)
 
     class FakeChecker:
         def __init__(self): self.calls = 0
@@ -49,6 +59,29 @@ def test_run_batch_streams_and_skips(tmp_path, mocker):
     assert n2 == 0 and chk.calls == 2
     lines = [json.loads(l) for l in open(jsonl)]
     assert len(lines) == 2
+
+
+def test_run_batch_wraps_in_xvfb_and_passes_display(tmp_path, mocker):
+    (tmp_path / "a.mp4").write_bytes(b"x")
+    jsonl = tmp_path / "out.jsonl"
+    xvfb = _fake_xvfb(mocker, display=":99")
+
+    class FakeChecker:
+        def __init__(self): self.seen = []
+        def check(self, path, **kw):
+            self.seen.append(kw.get("display"))
+            from playability import PlayabilityResult
+            r = PlayabilityResult(path=path, kind="video",
+                                  size=os.stat(path).st_size, mtime=os.stat(path).st_mtime)
+            r.verdict = {"overall_ok": True}
+            return r
+
+    chk = FakeChecker()
+    pb.run_batch(chk, [str(tmp_path)], str(jsonl), throttle=0.0, log=lambda *a: None)
+    # One shared Xvfb started for the whole run, and its display threaded into check().
+    xvfb.assert_called_once()
+    xvfb.return_value.__enter__.assert_called_once()
+    assert chk.seen == [":99"]
 
 
 def _row(path, vlc, mpv, kind="video", overall=None):

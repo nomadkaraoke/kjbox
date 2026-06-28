@@ -8,6 +8,8 @@ import json
 import os
 import time
 
+from playability_render import XvfbDisplay
+
 DEFAULT_EXTS = {".mp4", ".mkv", ".avi", ".webm", ".mov", ".zip"}
 
 
@@ -61,24 +63,28 @@ def run_batch(checker, roots, jsonl_path, throttle=0.0, depth="deep",
               recheck_failed=False, limit=None, log=print):
     manifest = load_manifest(jsonl_path)
     checked = 0
-    for path in iter_media_files(roots, DEFAULT_EXTS):
-        if is_unchanged(path, manifest):
-            if not (recheck_failed and manifest[path].get("overall_ok") is False):
-                continue
-        try:
-            result = checker.check(path, depth=depth)
-            append_jsonl(jsonl_path, result.to_dict())
-            ok = result.verdict.get("overall_ok")
-            log(f"[{'OK ' if ok else 'BAD'}] {path}")
-        except Exception as exc:  # never let one file kill the batch
-            append_jsonl(jsonl_path, {"path": path, "kind": "unknown",
-                                      "verdict": {"overall_ok": False, "reasons": [f"checker crashed: {exc}"]}})
-            log(f"[ERR] {path}: {exc}")
-        checked += 1
-        if limit and checked >= limit:
-            break
-        if throttle:
-            time.sleep(throttle)
+    # Start ONE off-screen X display for the whole run and share it across every
+    # VLC render (the design's intent). If Xvfb can't start, fail loud — the
+    # operator must install it for the VLC render path to work at all.
+    with XvfbDisplay() as _xvfb:
+        for path in iter_media_files(roots, DEFAULT_EXTS):
+            if is_unchanged(path, manifest):
+                if not (recheck_failed and manifest[path].get("overall_ok") is False):
+                    continue
+            try:
+                result = checker.check(path, depth=depth, display=_xvfb.display)
+                append_jsonl(jsonl_path, result.to_dict())
+                ok = result.verdict.get("overall_ok")
+                log(f"[{'OK ' if ok else 'BAD'}] {path}")
+            except Exception as exc:  # never let one file kill the batch
+                append_jsonl(jsonl_path, {"path": path, "kind": "unknown",
+                                          "verdict": {"overall_ok": False, "reasons": [f"checker crashed: {exc}"]}})
+                log(f"[ERR] {path}: {exc}")
+            checked += 1
+            if limit and checked >= limit:
+                break
+            if throttle:
+                time.sleep(throttle)
     return checked
 
 
@@ -173,7 +179,7 @@ def build_arg_parser():
     p.add_argument("--md", default="playability_report.md",
                    help="Markdown report output path.")
     p.add_argument("--throttle", type=float, default=0.2,
-                   help="Seconds to sleep between files (default: 0.0).")
+                   help="Seconds to sleep between files (default: 0.2).")
     p.add_argument("--depth", choices=["deep", "quick"], default="deep",
                    help="Probe depth (default: deep).")
     p.add_argument("--limit", type=int, default=None,
