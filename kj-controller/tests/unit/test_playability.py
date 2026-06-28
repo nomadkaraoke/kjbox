@@ -138,3 +138,59 @@ def test_check_cdg_bad_zip(tmp_path):
         f.write(b"not a zip")
     r = chk.check_cdg(bad)
     assert r["zip_ok"] is False and r["ok"] is False
+
+
+def test_compute_verdict_video_all_pass():
+    res = pl.PlayabilityResult(path="/x/a.mp4", kind="video")
+    res.integrity = {"ok": True, "has_video": True}
+    res.decode = {"ok": True}
+    res.renderers = {"vlc": {"frame_nonblank": True}, "mpv": {"frame_nonblank": True}}
+    v = pl.compute_verdict("video", res, ("vlc", "mpv"))
+    assert v["overall_ok"] is True
+    assert v["vlc_playable"] and v["mpv_playable"]
+    assert v["reasons"] == []
+
+
+def test_compute_verdict_video_mpv_only():
+    res = pl.PlayabilityResult(path="/x/a.mp4", kind="video")
+    res.integrity = {"ok": True, "has_video": True}
+    res.decode = {"ok": True}
+    res.renderers = {"vlc": {"frame_nonblank": False}, "mpv": {"frame_nonblank": True}}
+    v = pl.compute_verdict("video", res, ("vlc", "mpv"))
+    assert v["mpv_playable"] is True and v["vlc_playable"] is False
+    assert v["overall_ok"] is False
+    assert any("vlc" in r for r in v["reasons"])
+
+
+def test_compute_verdict_truncated_no_render_needed():
+    res = pl.PlayabilityResult(path="/x/a.mp4", kind="video")
+    res.integrity = {"ok": False, "has_video": False, "error": "moov atom not found (truncated/incomplete file)"}
+    v = pl.compute_verdict("video", res, ("vlc", "mpv"))
+    assert v["overall_ok"] is False
+    assert any("moov" in r for r in v["reasons"])
+
+
+def test_check_video_short_circuits_on_bad_integrity(mocker):
+    chk = pl.PlayabilityChecker(config={})
+    mocker.patch.object(chk, "probe_integrity",
+                        return_value={"ok": False, "has_video": False, "moov_ok": False,
+                                      "error": "moov atom not found (truncated/incomplete file)", "duration": None})
+    spy_decode = mocker.patch.object(chk, "decode_video")
+    spy_render = mocker.patch("playability_render.render_check")
+    res = chk.check("/x/a.mp4", short_circuit=True)
+    assert res.verdict["overall_ok"] is False
+    spy_decode.assert_not_called()
+    spy_render.assert_not_called()
+
+
+def test_check_video_runs_all_layers_in_batch_mode(mocker, tmp_path):
+    f = tmp_path / "a.mp4"; f.write_bytes(b"x")
+    chk = pl.PlayabilityChecker(config={})
+    mocker.patch.object(chk, "probe_integrity",
+                        return_value={"ok": True, "has_video": True, "duration": 100.0, "error": None})
+    mocker.patch.object(chk, "decode_video", return_value={"ok": True, "decode_errors": 0, "error": None})
+    mocker.patch("playability_render.render_check",
+                 return_value={"frame_captured": True, "frame_nonblank": True, "frame_varies": True, "error": None, "elapsed_s": 1.0})
+    res = chk.check(str(f), renderers=("vlc", "mpv"), short_circuit=False)
+    assert res.verdict["overall_ok"] is True
+    assert set(res.renderers) == {"vlc", "mpv"}

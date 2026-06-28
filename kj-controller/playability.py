@@ -210,3 +210,86 @@ class PlayabilityChecker:
         if zp is not None:
             zp.cleanup()
             self._last_zip = None
+
+    def check(self, path, renderers=("vlc", "mpv"), depth="deep", short_circuit=False):
+        import playability_render as render_mod
+
+        t0 = time.monotonic()
+        kind = classify_kind(path)
+        res = PlayabilityResult(
+            path=path,
+            kind=kind,
+            size=os.path.getsize(path) if os.path.exists(path) else 0,
+            mtime=os.path.getmtime(path) if os.path.exists(path) else 0.0,
+            checked_at=time.time(),
+        )
+
+        if kind == "cdg_zip":
+            res.cdg = self.check_cdg(path)
+            audio = res.cdg.get("extracted_audio")
+            if audio and (res.cdg.get("ok") or not short_circuit):
+                for r in renderers:
+                    res.renderers[r] = render_mod.render_check(self._run, audio, r, duration=None)
+                    if short_circuit and not res.renderers[r].get("frame_nonblank"):
+                        break
+            self._cleanup_cdg()
+        elif kind == "audio":
+            res.integrity = self.probe_integrity(path)
+        else:  # video / unknown
+            res.integrity = self.probe_integrity(path)
+            dur = res.integrity.get("duration")
+            if res.integrity.get("ok") or not short_circuit:
+                res.decode = self.decode_video(
+                    path,
+                    start=render_mod.capture_start(dur) if depth == "quick" else None,
+                    length=5.0 if depth == "quick" else None,
+                )
+                if res.decode.get("ok") or not short_circuit:
+                    for r in renderers:
+                        res.renderers[r] = render_mod.render_check(self._run, path, r, duration=dur)
+                        if short_circuit and not res.renderers[r].get("frame_nonblank"):
+                            break
+
+        res.verdict = compute_verdict(kind, res, renderers)
+        res.elapsed_s = round(time.monotonic() - t0, 3)
+        return res
+
+
+def compute_verdict(kind, result, renderers):
+    reasons = []
+    if kind == "cdg_zip":
+        base_ok = (result.cdg or {}).get("ok", False)
+        if not base_ok:
+            reasons.append((result.cdg or {}).get("error") or "CDG validation failed")
+    elif kind == "audio":
+        integ = result.integrity or {}
+        base_ok = integ.get("ok", False) and integ.get("has_audio", False)
+        if not base_ok:
+            reasons.append(integ.get("error") or "no playable audio")
+    else:  # video / unknown
+        integ = result.integrity or {}
+        dec = result.decode or {}
+        base_ok = integ.get("ok", False) and integ.get("has_video", False) and dec.get("ok", True)
+        if not integ.get("ok", False):
+            reasons.append(integ.get("error") or "integrity check failed")
+        elif not integ.get("has_video", False):
+            reasons.append("no video stream")
+        elif not dec.get("ok", True):
+            reasons.append(dec.get("error") or "decode failed")
+
+    per = {}
+    render_needed = kind in ("video", "cdg_zip")
+    for r in renderers:
+        rr = result.renderers.get(r, {})
+        if render_needed:
+            playable = bool(base_ok and rr.get("frame_nonblank"))
+            if base_ok and not rr.get("frame_nonblank"):
+                reasons.append(f"{r}: {rr.get('error') or 'no video frame rendered'}")
+        else:
+            playable = bool(base_ok)
+        per[r + "_playable"] = playable
+
+    overall_ok = bool(
+        base_ok and all(per.get(r + "_playable", False) for r in renderers)
+    ) if renderers else bool(base_ok)
+    return {"overall_ok": overall_ok, "reasons": reasons, **per}
