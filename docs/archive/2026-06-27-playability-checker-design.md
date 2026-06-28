@@ -138,11 +138,16 @@ the live `:0`. Audio is forced to a null sink (`mpv --ao=null`, `cvlc --aout dum
   `--play-and-exit`, snapshot at the same spaced timestamps.
 
 **Frame judging** (a pure function, independently testable): a renderer "produces video"
-if at least one captured frame is a real, non-uniform image (variance / edge content above
-a floor) **and** frames differ across timestamps (motion / lyrics moving). Sampling from
-**mid-file** (not 0s) with **lenient** thresholds avoids false-positives on legit black
-intros or static title cards. The full-library run calibrates these thresholds before the
-checker ever hard-blocks.
+if **at least one captured frame is a real, non-uniform image** (variance / edge content
+above a floor). Whether frames **differ across timestamps** (motion / lyrics moving) is
+also computed and **recorded as a diagnostic signal (`frame_varies`)**, but it is
+deliberately **NOT** part of the gate — requiring motion would false-positive on a
+legitimately static title card sampled during a held frame, which would violate the
+zero-false-positive requirement of the hard block. (Implementation decision, 2026-06-27,
+ratified in the final code review: gate on non-blank only; keep `frame_varies` as recorded
+evidence for analysis.) Sampling from **mid-file** (not 0s) with **lenient** thresholds
+further avoids false-positives on legit black intros or static title cards. The full-library
+run calibrates these thresholds before the checker ever hard-blocks.
 
 **CDG zips** reuse the existing `ZipPlayback` extraction, then: valid zip → has `.cdg` +
 audio → ffmpeg `cdgraphics` decodes the `.cdg` + audio decodes → then the VLC/mpv
