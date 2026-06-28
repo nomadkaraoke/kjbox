@@ -3371,8 +3371,11 @@ def _surface_divebar_versions(local_results, kn_results, db_results, cfg):
                 continue  # we already have this exact version locally
             kn_track = kn_index.get(key)
             if kn_track is not None:
-                # Same brand as a KN row -> upgrade that row to the GCS mirror.
-                if not (kn_track.get("divebar") or {}).get("file_id"):
+                # Same brand as a KN row -> upgrade that row to the GCS mirror,
+                # preferring an in-GCS / smaller file if one is already attached.
+                existing = kn_track.get("divebar")
+                if not (existing or {}).get("file_id") or \
+                        _divebar_row_is_better(db_track, existing):
                     kn_track["divebar"] = db_track
                 continue
             # resolve_brand short-circuits on an unrecognized specific code

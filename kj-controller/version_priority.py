@@ -160,6 +160,14 @@ def canonical_brand_for_match(*, brand_code=None, brand_name=None,
                                  disc_id=disc_id, filename=filename)
     if canonical:
         return canonical
+    # resolve_brand short-circuits on an unrecognized brand_code and never
+    # consults the name. The brand name is more reliable than a code prefix
+    # (e.g. mirror code "XYZ1" + name "Funbox Karaoke" should fold to FBK, not
+    # "XYZ"), so try a name-only resolve before the alpha-prefix fallback.
+    if brand_name:
+        canon_name, _ = resolve_brand(brand_name=brand_name)
+        if canon_name:
+            return canon_name
     for raw in (brand_code, disc_id):
         m = _DISC_ID_PREFIX_RE.match((raw or "").upper().strip())
         if m:

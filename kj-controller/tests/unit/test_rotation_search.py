@@ -363,3 +363,27 @@ class TestDivebarSurfacing:
             data = resp.get_json()
             assert "local" in data
             assert "karaoke_nerds" in data
+            assert "divebar" in data
+
+    def test_kn_attach_prefers_in_gcs_mirror(self, search_client, search_app):
+        """When several mirror files match one KN track, the in-GCS one attaches."""
+        with patch.object(search_app.catalog, 'search', return_value=[]), \
+             patch('routes.karaoke_nerds.search', return_value=[
+                 {"title": "Drive", "artist": "Incubus", "tracks": [
+                     {"brand_name": "CC Karaoke", "brand_code": "CC",
+                      "youtube_url": "https://youtube.com/watch?v=abc",
+                      "is_community": True}
+                 ]}
+             ]), \
+             patch('routes.divebar.search', return_value=[
+                 {"artist": "Incubus", "title": "Drive", "tracks": [
+                     {"file_id": "drive_only", "brand": "CC Karaoke",
+                      "brand_code": "CC", "format": "mp4", "in_gcs": False},
+                     {"file_id": "gcs_one", "brand": "CC Karaoke",
+                      "brand_code": "CCK", "format": "mp4", "in_gcs": True},
+                 ]}
+             ]):
+            resp = search_client.get('/rotation/search?q=incubus drive')
+            data = resp.get_json()
+            track = data["karaoke_nerds"][0]["tracks"][0]
+            assert (track.get("divebar") or {}).get("file_id") == "gcs_one"

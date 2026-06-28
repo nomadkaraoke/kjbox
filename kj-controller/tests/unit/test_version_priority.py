@@ -391,6 +391,13 @@ class TestCanonicalBrandForMatch:
         # KFN not in registry -> stable "KFN" key from the alpha prefix
         assert canonical_brand_for_match(brand_code="KFN-1234") == "KFN"
 
+    def test_unregistered_code_but_known_name_resolves_via_name(self):
+        # A code whose prefix is NOT a registered family must still fold via the
+        # reliable brand name rather than the meaningless code prefix.
+        from version_priority import canonical_brand_for_match
+        assert canonical_brand_for_match(
+            brand_code="XYZ1", brand_name="Funbox Karaoke") == "FBK"
+
     def test_empty_inputs_return_empty_string(self):
         from version_priority import canonical_brand_for_match
         assert canonical_brand_for_match() == ""
