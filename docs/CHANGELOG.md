@@ -2,7 +2,31 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
-## 2026-06-28 - Feature: Playability tier-2 async render verification + frontend — built, NOT yet deployed
+## 2026-06-28 - Ops: Full-library playability run launched on device + harness committed
+
+**Why:** With the playability checker shipped+deployed (v0.40.0), sweep the *entire*
+karaoke library once to find corrupt / unplayable files to review and delete. Internal
+storage first (smaller, more diverse, higher corruption risk — fresh YouTube pulls + the
+period divebar downloads were truncating), then the 4TB SSD archive. Must be monitorable,
+resumable, gentle on the SSD, thermally safe, and pausable around live events.
+
+**What:**
+- **`kj-controller/scripts/playability-run/`** — committed the operational harness
+  (`start.sh`, `pause.sh`, `run_all.sh`, `ssd_runner.py`, `monitor.sh`, `progress.sh`,
+  `report.sh`), deployed to `/opt/nomad/playability-run/` on the device.
+- **Phase A** (internal: YTDownloads + MP4-720p, ~2,485 mp4) — deep render in **both VLC
+  and mpv** (the matrix), ~16–18 h. **Phase B** (4TB SSD: HyperMule ~398k CDG zips +
+  NomadKaraoke ~1,982 mp4) — integrity-only, no render, gentle, ~20 days active, pausable.
+- Resumable JSONL manifests (skip checked files by mtime/size, durable append-per-file);
+  transient systemd units running the batch as **`nomad`** with `Nice=19` +
+  `IOSchedulingClass=idle` + `CPUQuota=200%` + `MemoryMax=2G` + 0.3 s/file throttle;
+  `monitor.sh` logs temp/load every 5 min and hard-stops at 92 °C.
+- **⚠️ Gotcha baked into `start.sh`:** the batch MUST run as `nomad` — VLC refuses to run
+  as root ("cannot be run by non-trusted users") and would falsely flag every video.
+- **Runbook:** [PLAYABILITY-FULL-LIBRARY-RUN.md](PLAYABILITY-FULL-LIBRARY-RUN.md) — full
+  check / pause / resume / read-results / reinstall instructions for future sessions.
+
+## 2026-06-28 - Feature: Playability tier-2 async render verification + frontend — shipped + deployed (v0.40.0, PR #112)
 
 **Why:** Tier-1 (the inline gate) hard-blocks on integrity+decode but skips the expensive
 render proof. A file can pass the gate yet still fail to render video in the *active* renderer
