@@ -86,3 +86,34 @@ class TestLinkPlayabilityGate:
             )
         assert resp.status_code == 200
         mock_rotation.link_file.assert_called_once_with(1, "/media/good.mp4")
+
+    def test_link_enqueues_tier2_render_check(self, gate_client, mock_rotation):
+        """A successful link schedules a background tier-2 render check."""
+        good_result = types.SimpleNamespace(
+            verdict={"overall_ok": True, "reasons": []}
+        )
+        with patch("routes._playability_gate", return_value=good_result), \
+             patch("routes._resolve_or_create_rotation_entry_id", return_value=(1, None)), \
+             patch("routes._enqueue_tier2") as enq:
+            gate_client.post(
+                "/rotation/link",
+                data=json.dumps({"id": 1, "file_path": "/media/good.mp4"}),
+                content_type="application/json",
+            )
+        enq.assert_called_once()
+        # entry_id + file_path are threaded through (app is positional first).
+        assert enq.call_args.args[1:] == (1, "/media/good.mp4")
+
+    def test_link_does_not_enqueue_tier2_when_blocked(self, gate_client):
+        """A gate-blocked (422) link never schedules a tier-2 check."""
+        bad_result = types.SimpleNamespace(
+            verdict={"overall_ok": False, "reasons": ["no video stream"]}
+        )
+        with patch("routes._playability_gate", return_value=bad_result), \
+             patch("routes._enqueue_tier2") as enq:
+            gate_client.post(
+                "/rotation/link",
+                data=json.dumps({"id": 1, "file_path": "/media/bad.mp4"}),
+                content_type="application/json",
+            )
+        enq.assert_not_called()

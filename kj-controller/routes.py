@@ -3,6 +3,7 @@
 import glob
 import json
 import os
+import queue
 import random
 import re
 import struct
@@ -2663,6 +2664,82 @@ def _playability_gate(file_path):
     return checker.check(file_path, renderers=(), depth="quick")
 
 
+# ---------------------------------------------------------------------------
+# Tier-2: async render verification
+#
+# The inline gate (tier-1) hard-blocks on integrity + sampled decode but skips
+# the expensive render proof. Tier-2 runs that proof against the *active*
+# renderer off the request path after a file is linked, and stamps a
+# playability_warning on the entry if the live renderer can't actually render
+# it — so the KJ sees a ⚠️ before hitting play. A single worker thread drains
+# the queue, so at most one off-screen Xvfb render runs at a time.
+# ---------------------------------------------------------------------------
+
+_tier2_queue = queue.Queue()
+_tier2_worker_started = False
+_tier2_worker_lock = threading.Lock()
+
+
+def _run_tier2_check(app, entry_id, file_path, checker=None):
+    """Render-verify a just-linked file against the active renderer.
+
+    Stamps a playability_warning when the active renderer can't render it,
+    clears a stale one when it can. Best-effort — never raises (a tier-2
+    failure must not affect the already-successful link)."""
+    try:
+        from playability import PlayabilityChecker, classify_kind
+        if classify_kind(file_path) == "audio":
+            return  # nothing to render-verify for pure audio
+        renderer = getattr(app.vlc, "render_mode", "vlc")
+        chk = checker or PlayabilityChecker(config=app.kj_config)
+        res = chk.check(file_path, renderers=(renderer,), depth="deep")
+        store = app.rotation.store
+        if not res.verdict.get("overall_ok"):
+            reasons = "; ".join(res.verdict.get("reasons") or ["not playable"])
+            store.set_playability_warning(entry_id, reasons)
+            log_message(
+                f"Tier-2: entry {entry_id} can't render in {renderer} — {reasons}",
+                app.kj_config,
+            )
+        else:
+            store.set_playability_warning(entry_id, None)
+    except Exception as e:  # pragma: no cover - defensive, best-effort
+        try:
+            log_message(f"Tier-2 render check error (entry {entry_id}): {e}",
+                        app.kj_config)
+        except Exception:
+            pass
+
+
+def _tier2_worker(app):
+    while True:
+        entry_id, file_path = _tier2_queue.get()
+        try:
+            _run_tier2_check(app, entry_id, file_path)
+        finally:
+            _tier2_queue.task_done()
+
+
+def _enqueue_tier2(app, entry_id, file_path):
+    """Queue a background tier-2 render check (skips pure-audio files).
+
+    Best-effort: any failure here is swallowed so it can never break the link
+    flow that just succeeded."""
+    try:
+        from playability import classify_kind
+        if classify_kind(file_path) == "audio":
+            return
+        global _tier2_worker_started
+        with _tier2_worker_lock:
+            if not _tier2_worker_started:
+                _tier2_worker_started = True
+                threading.Thread(target=_tier2_worker, args=(app,),
+                                 daemon=True).start()
+        _tier2_queue.put((entry_id, file_path))
+    except Exception:  # pragma: no cover - defensive
+        pass
+
+
 @routes_bp.route('/rotation/link', methods=['POST'])
 def link_rotation_file():
     """Link a media file to a rotation entry — or create one and link it.
@@ -2695,6 +2772,10 @@ def link_rotation_file():
                 "verdict": gate.verdict,
             }), 422
         rotation.link_file(entry_id, file_path)
+        # Tier-1 (gate above) confirmed integrity+decode; tier-2 now render-
+        # verifies against the active renderer in the background and flags the
+        # entry if the live renderer can't actually render it.
+        _enqueue_tier2(current_app._get_current_object(), entry_id, file_path)
         entries = rotation.get_rotation()
         _decorate_rotation_entries(entries, rotation)
         entry = next((e for e in entries if e.get('id') == entry_id), None)
