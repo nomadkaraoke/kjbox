@@ -84,3 +84,31 @@ def test_xvfb_starts_and_stops():
         assert d.display == ":97"
     # after exit the socket is gone
     assert not os.path.exists("/tmp/.X11-unix/X97")
+
+
+def test_render_check_keep_dir_saves_representative_frame(tmp_path):
+    from PIL import Image
+
+    keep = tmp_path / "keep"
+
+    def fake_run(cmd, timeout):
+        out_dir = [a.split("=", 1)[1] for a in cmd if a.startswith("--vo-image-outdir=")][0]
+        img = Image.new("L", (32, 24))
+        img.putdata([(i * 9) % 256 for i in range(32 * 24)])  # real, non-blank
+        img.save(os.path.join(out_dir, "00000001.png"))
+        return (0, "", "")
+
+    res = pr.render_check(fake_run, "/x/song.mp4", "mpv", duration=100.0, display=":99",
+                          tmp_root=str(tmp_path), keep_dir=str(keep))
+    assert res["saved_frame"] is not None
+    assert os.path.isfile(res["saved_frame"])
+    assert res["saved_frame"].endswith("song.mp4__mpv.png")
+
+
+def test_render_check_no_keep_dir_leaves_saved_frame_none(tmp_path):
+    def fake_run(cmd, timeout):
+        return (0, "", "")
+
+    res = pr.render_check(fake_run, "/x/song.mp4", "mpv", duration=100.0,
+                          tmp_root=str(tmp_path))
+    assert res["saved_frame"] is None

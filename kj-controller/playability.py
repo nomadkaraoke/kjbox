@@ -88,6 +88,7 @@ class PlayabilityResult:
     renderers: dict = field(default_factory=dict)
     cdg: dict = field(default_factory=dict)
     verdict: dict = field(default_factory=dict)
+    timings: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -213,10 +214,19 @@ class PlayabilityChecker:
             self._last_zip = None
 
     def check(self, path, renderers=("vlc", "mpv"), depth="deep", short_circuit=False,
-              display=None):
+              display=None, frames_dir=None):
         import playability_render as render_mod
 
         t0 = time.monotonic()
+        timings = {}
+
+        def _timed(name, fn):
+            s = time.monotonic()
+            try:
+                return fn()
+            finally:
+                timings[name] = round(time.monotonic() - s, 3)
+
         kind = classify_kind(path)
         res = PlayabilityResult(
             path=path,
@@ -232,11 +242,13 @@ class PlayabilityChecker:
         need_vlc = ("vlc" in renderers) and kind in ("video", "cdg_zip")
         with contextlib.ExitStack() as stack:
             if need_vlc and display is None:
+                xs = time.monotonic()
                 xvfb = stack.enter_context(render_mod.XvfbDisplay())
                 display = xvfb.display
+                timings["xvfb_start"] = round(time.monotonic() - xs, 3)
 
             if kind == "cdg_zip":
-                res.cdg = self.check_cdg(path)
+                res.cdg = _timed("cdg", lambda: self.check_cdg(path))
                 audio = res.cdg.get("extracted_audio")
                 extracted_cdg = res.cdg.get("extracted_cdg")
                 if audio and (res.cdg.get("ok") or not short_circuit):
@@ -247,30 +259,36 @@ class PlayabilityChecker:
                         if src is None:
                             continue
                         res.renderers[r] = render_mod.render_check(
-                            self._run, src, r, duration=None, display=display)
+                            self._run, src, r, duration=None, display=display,
+                            keep_dir=frames_dir)
+                        timings[f"render_{r}"] = res.renderers[r].get("elapsed_s")
                         if short_circuit and not res.renderers[r].get("frame_nonblank"):
                             break
                 self._cleanup_cdg()
             elif kind == "audio":
-                res.integrity = self.probe_integrity(path)
+                res.integrity = _timed("integrity", lambda: self.probe_integrity(path))
             else:  # video / unknown
-                res.integrity = self.probe_integrity(path)
+                res.integrity = _timed("integrity", lambda: self.probe_integrity(path))
                 dur = res.integrity.get("duration")
                 if res.integrity.get("ok") or not short_circuit:
-                    res.decode = self.decode_video(
+                    res.decode = _timed("decode", lambda: self.decode_video(
                         path,
                         start=render_mod.capture_start(dur) if depth == "quick" else None,
                         length=5.0 if depth == "quick" else None,
-                    )
+                    ))
                     if res.decode.get("ok") or not short_circuit:
                         for r in renderers:
                             res.renderers[r] = render_mod.render_check(
-                                self._run, path, r, duration=dur, display=display)
+                                self._run, path, r, duration=dur, display=display,
+                                keep_dir=frames_dir)
+                            timings[f"render_{r}"] = res.renderers[r].get("elapsed_s")
                             if short_circuit and not res.renderers[r].get("frame_nonblank"):
                                 break
 
             res.verdict = compute_verdict(kind, res, renderers)
             res.elapsed_s = round(time.monotonic() - t0, 3)
+            timings["total"] = res.elapsed_s
+            res.timings = timings
         return res
 
 

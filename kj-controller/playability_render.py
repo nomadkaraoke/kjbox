@@ -78,10 +78,36 @@ class XvfbDisplay:
         self._proc = None
 
 
+def _save_representative_frame(frames, keep_dir, path, renderer):
+    """Copy one representative captured frame to keep_dir for human review.
+
+    Prefers the first non-blank frame (the evidence the verdict relied on);
+    falls back to the first captured frame. Returns the saved path or None.
+    """
+    from frame_analysis import analyze_frame
+
+    if not frames:
+        return None
+    chosen = next((f for f in frames if not analyze_frame(f).is_blank), frames[0])
+    os.makedirs(keep_dir, exist_ok=True)
+    safe = os.path.basename(path).replace(os.sep, "_")[:150]
+    dest = os.path.join(keep_dir, f"{safe}__{renderer}.png")
+    try:
+        shutil.copyfile(chosen, dest)
+    except OSError:
+        return None
+    return dest
+
+
 def render_check(run, path, renderer, duration, display=":99", tmp_root=None,
-                 capture_timeout=90):
+                 capture_timeout=90, keep_dir=None):
     """Capture frames from `renderer` and judge them. `run(cmd, timeout)` does
-    the actual subprocess call (injected so this is unit-testable)."""
+    the actual subprocess call (injected so this is unit-testable).
+
+    When `keep_dir` is set, a single representative captured frame is copied
+    there (named `<file>__<renderer>.png`) for human review, and its path is
+    recorded as `saved_frame` in the returned verdict.
+    """
     import tempfile
 
     from frame_analysis import judge_renderer_frames
@@ -89,6 +115,7 @@ def render_check(run, path, renderer, duration, display=":99", tmp_root=None,
     start = capture_start(duration)
     out_dir = tempfile.mkdtemp(prefix=f"kj-cap-{renderer}-", dir=tmp_root)
     error = None
+    saved_frame = None
     t0 = time.monotonic()
     try:
         if renderer == "mpv":
@@ -103,8 +130,11 @@ def render_check(run, path, renderer, duration, display=":99", tmp_root=None,
             error = ((err or "").strip().splitlines() or [f"{renderer} exited {rc}"])[-1]
         frames = sorted(glob.glob(os.path.join(out_dir, "*.png")))
         verdict = judge_renderer_frames(frames)
+        if keep_dir:
+            saved_frame = _save_representative_frame(frames, keep_dir, path, renderer)
     finally:
         shutil.rmtree(out_dir, ignore_errors=True)
     verdict["error"] = error if not verdict.get("frame_nonblank") else None
     verdict["elapsed_s"] = round(time.monotonic() - t0, 3)
+    verdict["saved_frame"] = saved_frame
     return verdict

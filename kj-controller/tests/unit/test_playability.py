@@ -295,3 +295,20 @@ def test_check_cdg_feeds_mpv_the_cdg_and_vlc_the_mp3(tmp_path, mocker):
     assert set(src_by_renderer) == {"vlc", "mpv"}
     assert src_by_renderer["vlc"].endswith(".mp3")
     assert src_by_renderer["mpv"].endswith(".cdg")
+
+
+def test_check_records_per_stage_timings(tmp_path, mocker):
+    f = tmp_path / "a.mp4"
+    f.write_bytes(b"x")
+    chk = pl.PlayabilityChecker(config={})
+    _fake_xvfb(mocker)
+    mocker.patch.object(chk, "probe_integrity",
+                        return_value={"ok": True, "has_video": True, "duration": 100.0, "error": None})
+    mocker.patch.object(chk, "decode_video",
+                        return_value={"ok": True, "decode_errors": 0, "error": None})
+    mocker.patch("playability_render.render_check",
+                 return_value={"frame_nonblank": True, "elapsed_s": 1.0, "error": None})
+    res = chk.check(str(f), renderers=("vlc", "mpv"))
+    for key in ("integrity", "decode", "render_vlc", "render_mpv", "total"):
+        assert key in res.timings, f"missing timing stage: {key}"
+    assert res.timings["render_vlc"] == 1.0
