@@ -1,5 +1,7 @@
 """Unit tests for playability parsers, classification, result schema."""
 import json
+import os
+import zipfile
 
 import playability as pl
 
@@ -95,3 +97,44 @@ def test_decode_video_builds_sampled_window(mocker):
     assert "-ss" in cmd and "30.0" in cmd
     assert "-t" in cmd and "5.0" in cmd
     assert "-f" in cmd and "null" in cmd
+
+
+def _make_cdg_zip(tmp_path, with_cdg=True, with_audio=True):
+    zp = os.path.join(str(tmp_path), "song.zip")
+    with zipfile.ZipFile(zp, "w") as zf:
+        if with_audio:
+            zf.writestr("song.mp3", b"ID3fakeaudio")
+        if with_cdg:
+            zf.writestr("song.cdg", b"\x00" * 96)  # 4 CDG packets (24 bytes each)
+    return zp
+
+
+def test_check_cdg_missing_cdg(tmp_path):
+    chk = pl.PlayabilityChecker(config={})
+    zp = _make_cdg_zip(tmp_path, with_cdg=False)
+    r = chk.check_cdg(zp)
+    assert r["zip_ok"] is True
+    assert r["has_cdg"] is False
+    assert r["ok"] is False
+    assert "cdg" in r["error"].lower()
+
+
+def test_check_cdg_decodes(tmp_path, mocker):
+    chk = pl.PlayabilityChecker(config={})
+    zp = _make_cdg_zip(tmp_path, with_cdg=True, with_audio=True)
+    # Both ffmpeg decode calls succeed.
+    mocker.patch.object(chk, "_run", return_value=(0, "", ""))
+    r = chk.check_cdg(zp)
+    assert r["zip_ok"] and r["has_cdg"] and r["has_audio"]
+    assert r["cdg_decodes"] and r["audio_decodes"]
+    assert r["ok"] is True
+    assert r["extracted_audio"] and r["extracted_audio"].endswith(".mp3")
+
+
+def test_check_cdg_bad_zip(tmp_path):
+    chk = pl.PlayabilityChecker(config={})
+    bad = os.path.join(str(tmp_path), "bad.zip")
+    with open(bad, "wb") as f:
+        f.write(b"not a zip")
+    r = chk.check_cdg(bad)
+    assert r["zip_ok"] is False and r["ok"] is False

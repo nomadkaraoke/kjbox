@@ -146,3 +146,67 @@ class PlayabilityChecker:
         cmd += ["-map", "0:v:0", "-f", "null", "-"]
         rc, _out, err = self._run(cmd, timeout=180)
         return parse_decode(rc, err)
+
+    def decode_file(self, path, timeout=120):
+        """Decode any A/V file to null (used for cdg + audio sub-checks)."""
+        rc, _out, err = self._run(
+            ["ffmpeg", "-v", "error", "-xerror", "-i", path, "-f", "null", "-"],
+            timeout=timeout,
+        )
+        return parse_decode(rc, err)
+
+    def check_cdg(self, path):
+        from zip_playback import ZipPlayback
+
+        result = {
+            "ok": False, "zip_ok": False, "has_cdg": False, "has_audio": False,
+            "cdg_decodes": False, "audio_decodes": False, "error": None,
+            "extracted_audio": None,
+        }
+        zp = ZipPlayback(self.config)
+        mp3 = zp.extract_and_get_mp3(path)  # extracts into a temp dir, returns .mp3
+        try:
+            if mp3 is None:
+                # Could be a bad zip OR a zip with no mp3. Distinguish by reopening.
+                import zipfile
+                try:
+                    with zipfile.ZipFile(path) as zf:
+                        names = zf.namelist()
+                    result["zip_ok"] = True
+                    result["error"] = "no .mp3 in CDG zip"
+                except (zipfile.BadZipFile, OSError):
+                    result["error"] = "not a valid zip"
+                return result
+            result["zip_ok"] = True
+            result["has_audio"] = True
+            extract_dir = os.path.dirname(mp3)
+            cdgs = [f for f in os.listdir(extract_dir) if f.lower().endswith(".cdg")]
+            result["has_cdg"] = bool(cdgs)
+            if not cdgs:
+                result["error"] = "no .cdg graphics in zip"
+                return result
+            cdg_path = os.path.join(extract_dir, cdgs[0])
+            result["audio_decodes"] = self.decode_file(mp3)["ok"]
+            result["cdg_decodes"] = self.decode_file(cdg_path)["ok"]
+            result["extracted_audio"] = mp3
+            result["ok"] = result["audio_decodes"] and result["cdg_decodes"]
+            if not result["ok"]:
+                bad = []
+                if not result["audio_decodes"]:
+                    bad.append("audio")
+                if not result["cdg_decodes"]:
+                    bad.append("cdg graphics")
+                result["error"] = " and ".join(bad) + " failed to decode"
+            # NOTE: caller (check()) runs the renderer frame-capture on extracted_audio
+            # BEFORE this ZipPlayback instance is cleaned up.
+            self._last_zip = zp  # keep extraction alive for the render step
+        finally:
+            # Cleanup deferred to check() via _cleanup_cdg(); see Task 7.
+            pass
+        return result
+
+    def _cleanup_cdg(self):
+        zp = getattr(self, "_last_zip", None)
+        if zp is not None:
+            zp.cleanup()
+            self._last_zip = None
