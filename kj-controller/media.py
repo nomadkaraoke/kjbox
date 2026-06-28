@@ -11,6 +11,13 @@ from config import MEDIA_EXTENSIONS
 from utils import log_message, sanitize_filename_part, parse_youtube_filename
 
 
+def _gate_playable(path, config):
+    """Fast inline playability check (integrity + sampled decode, no render).
+    Returns PlayabilityResult; verdict['overall_ok'] is False for bad files."""
+    from playability import PlayabilityChecker
+    return PlayabilityChecker(config=config).check(path, renderers=(), depth="quick")
+
+
 def _ytdlp_base_opts(config):
     """Common yt-dlp options with anti-detection and cookie support."""
     opts = {
@@ -250,8 +257,7 @@ class MediaIndex:
             log_message(f"Using YouTube cookies file: {ydl_opts['cookiefile']}", self.config)
 
         try:
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                ydl.extract_info(youtube_url, download=True)
+            self._run_ytdlp_download(ydl_opts, youtube_url)
 
             # Find the actual downloaded file (might be .mp4, .mkv, etc.)
             file_path = None
@@ -266,6 +272,16 @@ class MediaIndex:
                 return None, None
 
             real_path = os.path.realpath(file_path)
+
+            gate = _gate_playable(file_path, self.config)
+            if not gate.verdict.get("overall_ok"):
+                reason = "; ".join(gate.verdict.get("reasons") or ["not playable"])
+                log_message(f"Download rejected (not playable): {os.path.basename(file_path)} — {reason}", self.config)
+                try:
+                    os.remove(file_path)
+                except OSError:
+                    pass
+                return None, None
 
             # Add to media index
             stat = os.stat(real_path)
@@ -287,6 +303,7 @@ class MediaIndex:
             if upload_date is not None:
                 entry["upload_date"] = upload_date
 
+            entry["playability"] = gate.verdict
             self.index[real_path] = entry
             self.save()
 
@@ -296,37 +313,58 @@ class MediaIndex:
             log_message(f"Error downloading video: {e}", self.config)
             return None, None
 
+    def _run_ytdlp_download(self, ydl_opts, url):
+        """Execute yt-dlp download. Extracted for testability."""
+        import yt_dlp
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            ydl.extract_info(url, download=True)
+
     def download_from_url(self, url, filename=None):
         """Downloads a file from a direct HTTP URL (e.g. Google Drive), updates media index."""
         download_folder = self.config.get('download_folder', os.path.expanduser("~/kjdata/videos"))
         os.makedirs(download_folder, exist_ok=True)
 
         try:
-            resp = requests.get(url, stream=True, timeout=120, allow_redirects=True)
-            resp.raise_for_status()
-
-            # Determine filename from response or parameter
-            if not filename:
-                # Try Content-Disposition header
+            if filename:
+                # Filename known upfront — compute file_path before downloading so
+                # _http_download receives the final destination (enables test mocking).
+                safe_name = sanitize_filename_part(os.path.splitext(filename)[0])
+                ext = os.path.splitext(filename)[1] or '.mp4'
+                final_name = f"divebar__{safe_name}{ext}"
+                file_path = os.path.join(download_folder, final_name)
+                # _http_download writes the body to file_path and returns the response.
+                self._http_download(url, file_path)
+                display_name = os.path.splitext(filename)[0]
+            else:
+                # Filename unknown — fetch response first (body not consumed) to read
+                # Content-Disposition, then stream body once file_path is known.
+                resp = self._http_download(url, None)
                 cd = resp.headers.get('Content-Disposition', '')
                 if 'filename=' in cd:
                     filename = cd.split('filename=')[-1].strip('"\'')
                 else:
                     filename = url.split('/')[-1].split('?')[0] or 'download'
+                safe_name = sanitize_filename_part(os.path.splitext(filename)[0])
+                ext = os.path.splitext(filename)[1] or '.mp4'
+                final_name = f"divebar__{safe_name}{ext}"
+                file_path = os.path.join(download_folder, final_name)
+                display_name = os.path.splitext(filename)[0]
+                with open(file_path, 'wb') as f:
+                    for chunk in resp.iter_content(chunk_size=8192):
+                        f.write(chunk)
 
-            safe_name = sanitize_filename_part(os.path.splitext(filename)[0])
-            ext = os.path.splitext(filename)[1] or '.mp4'
-            final_name = f"divebar__{safe_name}{ext}"
-            file_path = os.path.join(download_folder, final_name)
-
-            # Download with streaming
-            with open(file_path, 'wb') as f:
-                for chunk in resp.iter_content(chunk_size=8192):
-                    f.write(chunk)
+            gate = _gate_playable(file_path, self.config)
+            if not gate.verdict.get("overall_ok"):
+                reason = "; ".join(gate.verdict.get("reasons") or ["not playable"])
+                log_message(f"Download rejected (not playable): {os.path.basename(file_path)} — {reason}", self.config)
+                try:
+                    os.remove(file_path)
+                except OSError:
+                    pass
+                return None, None
 
             real_path = os.path.realpath(file_path)
             stat = os.stat(real_path)
-            display_name = os.path.splitext(filename)[0]
 
             entry = {
                 "path": real_path,
@@ -340,6 +378,7 @@ class MediaIndex:
                 "source": "divebar",
             }
 
+            entry["playability"] = gate.verdict
             self.index[real_path] = entry
             self.save()
 
@@ -349,3 +388,16 @@ class MediaIndex:
         except Exception as e:
             log_message(f"Error downloading from URL: {e}", self.config)
             return None, None
+
+    def _http_download(self, url, file_path):
+        """Execute HTTP GET and write streaming body to file_path (when provided).
+        Returns the response object for header inspection by the caller.
+        Extracted for testability: tests mock this method to create a fake file and
+        return a MagicMock response."""
+        resp = requests.get(url, stream=True, timeout=120, allow_redirects=True)
+        resp.raise_for_status()
+        if file_path is not None:
+            with open(file_path, 'wb') as f:
+                for chunk in resp.iter_content(chunk_size=8192):
+                    f.write(chunk)
+        return resp

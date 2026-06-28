@@ -275,6 +275,18 @@ def handle_upload():
     file.save(dest)
     log_message(f"Uploaded file: {safe_name} ({os.path.getsize(dest)} bytes)", cfg)
 
+    gate = _playability_gate(dest)
+    if not gate.verdict.get("overall_ok"):
+        try:
+            os.remove(dest)
+        except OSError:
+            pass
+        reasons = "; ".join(gate.verdict.get("reasons") or ["file is not playable"])
+        return jsonify({
+            "error": f"Upload rejected — not playable: {reasons}",
+            "verdict": gate.verdict,
+        }), 422
+
     # Add to media index
     current_app.media.scan()
 

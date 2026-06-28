@@ -331,6 +331,11 @@ def test_download_video_success(mock_config, tmp_media_dir, mocker):
     expected_file = download_dir / "abc12345678__TestChannel__Test Song.mp4"
     expected_file.write_text("fake video data")
 
+    # Mock the playability gate so a fake file isn't rejected
+    mock_gate = mocker.MagicMock()
+    mock_gate.verdict = {'overall_ok': True, 'reasons': []}
+    mocker.patch('media._gate_playable', return_value=mock_gate)
+
     file_path, title = mi.download_video("https://youtube.com/watch?v=abc12345678")
     assert title == "Test Song"
     assert file_path is not None
