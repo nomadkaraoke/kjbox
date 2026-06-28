@@ -225,6 +225,7 @@ class RotationStore:
             ("paid", "INTEGER NOT NULL DEFAULT 0"),
             ("singers_json", "TEXT DEFAULT NULL"),
             ("done_at", "TEXT DEFAULT NULL"),
+            ("playability_warning", "TEXT DEFAULT NULL"),
         ]
         added_cols = []
         for col_name, col_type in migrations:
@@ -691,6 +692,26 @@ class RotationStore:
             """UPDATE rotation_entries SET url_fallback = ?, updated_at = datetime('now', 'localtime')
                WHERE id = ?""",
             (url, entry_id),
+        )
+        conn.commit()
+        return self.get_entry(entry_id)
+
+    def set_playability_warning(self, entry_id, warning):
+        """Stamp (or clear, with ``None``) the tier-2 playability warning.
+
+        Written by the background render-verification worker after a file is
+        linked: if the active renderer cannot actually render video for the
+        file, ``warning`` describes why so the KJ sees a ⚠️ before playing it.
+
+        Deliberately does NOT bump ``updated_at`` — that timestamp feeds the
+        "time since last sang" pill, and a background stamp must not reset it.
+        """
+        if self.get_entry(entry_id) is None:
+            raise ValueError(f"Entry {entry_id} not found")
+        conn = self._get_conn()
+        conn.execute(
+            "UPDATE rotation_entries SET playability_warning = ? WHERE id = ?",
+            (warning, entry_id),
         )
         conn.commit()
         return self.get_entry(entry_id)

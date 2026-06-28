@@ -1434,3 +1434,48 @@ class TestSplitSinger:
         assert updated["song_artist"] == "Song A"
         assert updated["notes"] == "vip"
         assert updated["status"] == "Done"
+
+
+# ---------------------------------------------------------------------------
+# Playability Warning Column (tier-2 async render verification)
+# ---------------------------------------------------------------------------
+
+class TestPlayabilityWarning:
+    def test_add_entry_has_no_warning_by_default(self, store):
+        entry = store.add_entry("Alice", "Song A")
+        assert entry["playability_warning"] is None
+
+    def test_set_playability_warning(self, store):
+        entry = store.add_entry("Alice", "Song A")
+        updated = store.set_playability_warning(
+            entry["id"], "mpv: no video frame rendered"
+        )
+        assert updated["playability_warning"] == "mpv: no video frame rendered"
+        # Survives a re-read.
+        assert store.get_entry(entry["id"])["playability_warning"] == \
+            "mpv: no video frame rendered"
+
+    def test_clear_playability_warning(self, store):
+        entry = store.add_entry("Alice", "Song A")
+        store.set_playability_warning(entry["id"], "transient")
+        cleared = store.set_playability_warning(entry["id"], None)
+        assert cleared["playability_warning"] is None
+
+    def test_set_playability_warning_not_found_raises(self, store):
+        with pytest.raises(ValueError):
+            store.set_playability_warning(9999, "boom")
+
+    def test_set_playability_warning_does_not_bump_updated_at(self, store):
+        """A background tier-2 stamp must NOT touch updated_at — otherwise a
+        done singer's "time since last sang" (derived from done_at/updated_at)
+        would reset every time the warning is written."""
+        entry = store.add_entry("Alice", "Song A")
+        # Force a known, far-past updated_at sentinel.
+        conn = store._get_conn()
+        conn.execute(
+            "UPDATE rotation_entries SET updated_at = ? WHERE id = ?",
+            ("2000-01-01 00:00:00", entry["id"]),
+        )
+        conn.commit()
+        store.set_playability_warning(entry["id"], "mpv: no video frame rendered")
+        assert store.get_entry(entry["id"])["updated_at"] == "2000-01-01 00:00:00"
