@@ -46,6 +46,15 @@ def test_parse_integrity_no_video_stream():
     assert r["ok"] is True  # structurally valid; video requirement applied in verdict
 
 
+def test_parse_integrity_zero_streams_clean_exit():
+    import json as _json
+    stdout = _json.dumps({"streams": [], "format": {"format_name": "data", "duration": "0"}})
+    r = pl.parse_integrity(0, stdout, "")
+    assert r["ok"] is False
+    assert r["has_video"] is False and r["has_audio"] is False
+    assert r["error"] == "no decodable streams"
+
+
 def test_result_roundtrip():
     res = pl.PlayabilityResult(path="/x/a.mp4", kind="video", size=10, mtime=1.0)
     res.integrity = {"ok": True}

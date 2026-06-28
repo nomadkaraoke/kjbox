@@ -50,15 +50,14 @@ def parse_integrity(returncode: int, stdout: str, stderr: str) -> dict:
                 duration = float(raw_dur)
             except (TypeError, ValueError):
                 duration = None
-    ok = returncode == 0 and moov_ok
+    ok = returncode == 0 and moov_ok and (has_video or has_audio)
     error = None
-    if not ok:
-        if not moov_ok:
-            error = "moov atom not found"
-        elif stderr.strip():
-            error = stderr.strip()
-        else:
-            error = f"ffprobe exited {returncode}"
+    if not moov_ok:
+        error = "moov atom not found (truncated/incomplete file)"
+    elif returncode != 0:
+        error = (stderr.strip().splitlines() or ["ffprobe failed"])[-1]
+    elif not (has_video or has_audio):
+        error = "no decodable streams"
     return {
         "ok": ok,
         "has_video": has_video,
