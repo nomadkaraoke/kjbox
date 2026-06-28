@@ -221,6 +221,13 @@ async function apiCall(endpoint, body) {
         const data = await response.json();
         if (!response.ok) {
             let errorMessage = data.error || 'API request failed';
+            // Playability hard-block (tier-1): a 422 with a verdict means the
+            // file won't actually play. Surface it prominently — a fleeting log
+            // line is too easy to miss, leaving the KJ wondering why nothing
+            // got added.
+            if (response.status === 422 && data.verdict) {
+                showPlayabilityToast(errorMessage);
+            }
             if (data.vlc_status) {
                 errorMessage += ` | VLC Status: ${JSON.stringify(data.vlc_status)}`;
             }
@@ -308,6 +315,10 @@ async function uploadFile(input) {
             }
         } else {
             progress.innerHTML = '<div class="dl-queue-item dl-queue-error"><span class="dl-queue-icon">❌</span><span class="dl-queue-label">' + (data.error || 'Upload failed') + '</span></div>';
+            // Playability hard-block: also surface prominently so it can't be missed.
+            if (resp.status === 422 && data.verdict) {
+                showPlayabilityToast(data.error || 'Upload rejected — file won’t play');
+            }
         }
     } catch (e) {
         progress.innerHTML = '<div class="dl-queue-item dl-queue-error"><span class="dl-queue-icon">❌</span><span class="dl-queue-label">Upload failed</span></div>';
@@ -3766,6 +3777,21 @@ function renderRotation(entries) {
         }
         if (entry.song_artist) info.appendChild(song);
 
+        // Tier-2 render-verification flag: the linked file passed the inline
+        // gate but the active renderer couldn't actually render its video.
+        // Glanceable ⚠️ next to the song; click for the full reason.
+        if (entry.playability_warning) {
+            const warn = document.createElement('span');
+            warn.className = 'rotation-playability-warning';
+            warn.textContent = '⚠';
+            warn.title = 'May not play: ' + entry.playability_warning;
+            warn.onclick = (ev) => {
+                ev.stopPropagation();
+                showPlayabilityToast('⚠ This linked file may not play — ' + entry.playability_warning);
+            };
+            info.appendChild(warn);
+        }
+
         if (entry.duration) {
             const dur = document.createElement('span');
             dur.className = 'rotation-duration';
@@ -4885,6 +4911,25 @@ function copyRotationText(el) {
         el.classList.add('rotation-copied');
         setTimeout(() => el.classList.remove('rotation-copied'), 600);
     });
+}
+
+// Prominent, auto-dismissing toast for playability problems — a tier-1 reject
+// (file won't play, so it was NOT added/uploaded) or a click on a tier-2 ⚠️
+// badge. The KJ needs to actually see WHY, not hunt the log panel. Click to
+// dismiss; auto-hides after 7s.
+function showPlayabilityToast(message) {
+    let toast = document.getElementById('playability-toast');
+    if (!toast) {
+        toast = document.createElement('div');
+        toast.id = 'playability-toast';
+        toast.className = 'playability-toast';
+        toast.onclick = () => toast.classList.add('hidden');
+        document.body.appendChild(toast);
+    }
+    toast.textContent = message;
+    toast.classList.remove('hidden');
+    clearTimeout(toast._dismissTimer);
+    toast._dismissTimer = setTimeout(() => toast.classList.add('hidden'), 7000);
 }
 
 function showRotationIndicator(state) {
