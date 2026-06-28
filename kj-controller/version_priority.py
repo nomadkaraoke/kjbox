@@ -139,6 +139,36 @@ def resolve_brand(
     return (canonical, cls)
 
 
+def canonical_brand_for_match(*, brand_code=None, brand_name=None,
+                              disc_id=None, filename=None):
+    """Return a stable uppercase brand key for cross-source matching.
+
+    Used to cross-reference the same brand across local catalog, Karaoke Nerds
+    and the Divebar GCS mirror, where the same brand can show up under codes of
+    differing granularity (KN ``FBK`` vs mirror ``FBK204``) or only via the
+    brand display name.
+
+    Resolution: the registry canonical when ``resolve_brand`` recognises any
+    identifier; otherwise the alpha prefix of ``brand_code``/``disc_id`` (so
+    ``FBK204`` and ``KFN-1234`` fold to ``FBK``/``KFN``); otherwise the
+    upper-cased brand name. Empty string when nothing usable is supplied.
+
+    Unlike ``resolve_brand``, this never returns ``None`` — callers use it as a
+    dict key, so a deterministic string (possibly empty) is required.
+    """
+    canonical, _ = resolve_brand(brand_code=brand_code, brand_name=brand_name,
+                                 disc_id=disc_id, filename=filename)
+    if canonical:
+        return canonical
+    for raw in (brand_code, disc_id):
+        m = _DISC_ID_PREFIX_RE.match((raw or "").upper().strip())
+        if m:
+            prefix = m.group(1)
+            canon2, _ = resolve_brand(brand_code=prefix)
+            return canon2 or prefix
+    return (brand_name or "").strip().upper()
+
+
 # --- Ranking ---
 # Rank tier constants. See design spec § Section 1 Ranking.
 TIER_COMMUNITY_BASE        = 0
@@ -167,6 +197,8 @@ def _source_tiebreaker(version):
     src = version.get("source")
     if src == "local":
         return SOURCE_TIEBREAKER_LOCAL
+    if src == "divebar":
+        return SOURCE_TIEBREAKER_DIVEBAR
     if src == "kn":
         kn = version.get("kn") or {}
         if (kn.get("divebar") or {}).get("file_id"):
@@ -196,6 +228,10 @@ def _extract_brand_inputs(version):
         return {"brand_code": kn.get("brand_code"),
                 "brand_name": kn.get("brand_name"),
                 "is_community": kn.get("is_community")}
+    if src == "divebar":
+        return {"brand_code": version.get("brand_code"),
+                "brand_name": version.get("brand_name"),
+                "is_community": version.get("is_community")}
     # rotation_search shapes have no "source" key — use field presence.
     if version.get("path") or version.get("disc_id"):
         return {"disc_id": version.get("disc_id"),
@@ -252,6 +288,9 @@ def annotate_versions(versions, cfg, *, shape="kj_pick"):
         "rotation_search_kn"     - raw KN track dicts
                                    (brand_code, brand_name, youtube_url,
                                     is_community, divebar?)
+        "rotation_search_divebar"- raw Divebar GCS-mirror row dicts
+                                   (source: "divebar", brand_code, brand_name,
+                                    file_id, ...)
     """
     if not versions:
         return versions
@@ -259,7 +298,7 @@ def annotate_versions(versions, cfg, *, shape="kj_pick"):
         if shape == "rotation_search_local":
             inputs = {"disc_id": v.get("disc_id"),
                       "filename": v.get("filename")}
-        elif shape == "rotation_search_kn":
+        elif shape in ("rotation_search_kn", "rotation_search_divebar"):
             inputs = {"brand_code": v.get("brand_code"),
                       "brand_name": v.get("brand_name"),
                       "is_community": v.get("is_community")}

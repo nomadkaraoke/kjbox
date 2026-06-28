@@ -5384,13 +5384,14 @@ function renderRotSearchDropdown(data) {
 
     const localResults = data.local || [];
     const knSongs = data.karaoke_nerds || [];
+    const divebarVersions = data.divebar || [];
     const downloadedIdToPath = new Map(
         localMediaItems.filter(i => i.youtube_id).map(i => [i.youtube_id, i.file_path])
     );
 
     let html = '';
 
-    if (localResults.length === 0 && knSongs.length === 0) {
+    if (localResults.length === 0 && knSongs.length === 0 && divebarVersions.length === 0) {
         html = '<div class="search-header">No results found</div>';
         html += '<div class="rotation-search-hint">\u2191\u2193 navigate \u00B7 Enter select \u00B7 Tab skip \u00B7 Esc close</div>';
         dropdown.innerHTML = html;
@@ -5422,6 +5423,17 @@ function renderRotSearchDropdown(data) {
             });
         }
     }
+    // GCS-mirror (divebar) versions surfaced as their own selectable rows so
+    // the KJ can pick a mirror version over a YouTube one.
+    for (const dv of divebarVersions) {
+        rows.push({
+            kind: 'divebar',
+            rank: typeof dv.priority_rank === 'number' ? dv.priority_rank : 9999,
+            klass: dv.priority_class || 'unknown',
+            brand: dv.priority_brand,
+            data: dv,
+        });
+    }
     rows.sort((a, b) => a.rank - b.rank);
 
     // Walk sorted rows, emit section headers when priority class changes,
@@ -5446,6 +5458,10 @@ function renderRotSearchDropdown(data) {
                 type: 'local', path: match.path, duration: match.duration,
                 song_artist: (match.title || '') + ' - ' + (match.artist || ''),
             });
+        } else if (r.kind === 'divebar') {
+            const built = renderRotDivebarRow(r.data, idx, isTop, isBest);
+            html += built.html;
+            rotSearchResults.push(built.result);
         } else {
             const built = renderRotKnRow(r.song, r.track, idx, isTop, isBest, downloadedIdToPath);
             if (built) {
@@ -5572,6 +5588,45 @@ function renderRotKnRow(song, track, idx, isTop, isBest, downloadedIdToPath) {
     } else {
         html += '<span class="kn-download-btn">DL & Link</span>';
     }
+    html += '</span>';
+    html += '</div>';
+    return { html, result };
+}
+
+// A standalone GCS-mirror (divebar) version row. The download action reuses the
+// existing `type:'divebar'` path (selectRotSearchResult -> /rotation/download-and-link),
+// so selecting it pulls from our own community mirror instead of YouTube.
+function renderRotDivebarRow(dv, idx, isTop, isBest) {
+    const isCommunity = dv.priority_class === 'community';
+    const result = {
+        type: 'divebar',
+        file_id: dv.file_id,
+        artist: dv.artist,
+        title: dv.title,
+        brand_code: dv.brand_code,
+        song_artist: (dv.title || '') + ' - ' + (dv.artist || ''),
+    };
+    const rowClass = 'kn-track rs-clickable'
+        + (idx === rotSearchSelectedIdx ? ' selected' : '')
+        + (isCommunity ? ' community' : '')
+        + (isTop ? ' rs-top' : '')
+        + (isBest ? ' rs-best' : '');
+    const mirror = dv.in_gcs
+        ? { label: 'GCS', cls: 'dl-source-gcs', title: 'Our community mirror (fast GCS download)' }
+        : { label: 'DRIVE', cls: 'dl-source-drive', title: 'Our community mirror (Google Drive — slower)' };
+    let html = '<div class="' + rowClass + '" data-idx="' + idx + '" onclick="selectRotSearchResult(rotSearchResults[' + idx + '])">';
+    html += '<span class="kn-track-info">';
+    if (isBest) html += '<span class="rs-best-pill">Best</span> ';
+    else if (isTop) html += '<span class="rs-top-star">⭐</span> ';
+    html += '<span class="dl-source-badge ' + mirror.cls + '" title="' + escHtml(mirror.title) + '">' + mirror.label + '</span>';
+    html += '<span class="kn-brand-name">' + escHtml(dv.brand_name || '') + '</span>';
+    html += '<span class="kn-brand-code">' + escHtml(dv.brand_code || '') + '</span>';
+    if (isCommunity) html += '<span class="kn-community-badge">Community</span>';
+    html += '<span class="kn-song-title">' + escHtml((dv.title || '') + ' - ' + (dv.artist || '')) + '</span>';
+    if (dv.format) html += '<span class="format-badge ' + getFormatBadgeClass(dv.format) + '">' + escHtml(dv.format) + '</span>';
+    html += '</span>';
+    html += '<span class="kn-track-actions">';
+    html += '<span class="kn-download-btn">DL & Link</span>';
     html += '</span>';
     html += '</div>';
     return { html, result };
