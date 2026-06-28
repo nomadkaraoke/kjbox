@@ -2,6 +2,7 @@
 to JSONL (resumable via mtime/size manifest), then aggregate a report."""
 from __future__ import annotations
 
+import csv
 import json
 import os
 import time
@@ -78,3 +79,80 @@ def run_batch(checker, roots, jsonl_path, throttle=0.0, depth="deep",
         if throttle:
             time.sleep(throttle)
     return checked
+
+
+def _read_results(jsonl_path):
+    out = []
+    if not os.path.isfile(jsonl_path):
+        return out
+    with open(jsonl_path, encoding="utf-8") as fh:
+        for line in fh:
+            line = line.strip()
+            if line:
+                try:
+                    out.append(json.loads(line))
+                except json.JSONDecodeError:
+                    pass
+    # de-dup by path, keeping the last occurrence (re-checks supersede)
+    by_path = {}
+    for d in out:
+        if d.get("path"):
+            by_path[d["path"]] = d
+    return list(by_path.values())
+
+
+def aggregate(jsonl_path):
+    rows = _read_results(jsonl_path)
+    agg = {"total": len(rows), "ok": [], "unplayable": [],
+           "mpv_not_vlc": [], "vlc_not_mpv": [], "cdg_problems": []}
+    for d in rows:
+        v = d.get("verdict", {})
+        vlc, mpv = v.get("vlc_playable"), v.get("mpv_playable")
+        p = d["path"]
+        if v.get("overall_ok"):
+            agg["ok"].append(p)
+        if not vlc and not mpv:
+            agg["unplayable"].append(p)
+        elif mpv and not vlc:
+            agg["mpv_not_vlc"].append(p)
+        elif vlc and not mpv:
+            agg["vlc_not_mpv"].append(p)
+        if d.get("kind") == "cdg_zip" and not (d.get("cdg") or {}).get("ok", True):
+            agg["cdg_problems"].append(p)
+    return agg
+
+
+def write_reports(jsonl_path, csv_path, md_path):
+    rows = _read_results(jsonl_path)
+    with open(csv_path, "w", newline="", encoding="utf-8") as fh:
+        w = csv.writer(fh)
+        w.writerow(["path", "kind", "vlc", "mpv", "vcodec", "acodec", "reasons"])
+        for d in rows:
+            v = d.get("verdict", {})
+            integ = d.get("integrity", {})
+            w.writerow([
+                d.get("path"), d.get("kind"),
+                "OK" if v.get("vlc_playable") else "FAIL",
+                "OK" if v.get("mpv_playable") else "FAIL",
+                integ.get("vcodec", ""), integ.get("acodec", ""),
+                "; ".join(v.get("reasons", [])),
+            ])
+    agg = aggregate(jsonl_path)
+    with open(md_path, "w", encoding="utf-8") as fh:
+        fh.write("# Playability Report\n\n")
+        fh.write(f"- Total: {agg['total']}\n")
+        fh.write(f"- Fully OK: {len(agg['ok'])}\n")
+        fh.write(f"- Totally unplayable: {len(agg['unplayable'])}\n")
+        fh.write(f"- Plays in mpv but NOT VLC: {len(agg['mpv_not_vlc'])}\n")
+        fh.write(f"- Plays in VLC but NOT mpv: {len(agg['vlc_not_mpv'])}\n")
+        fh.write(f"- CDG problems: {len(agg['cdg_problems'])}\n\n")
+        for title, key in [("Totally unplayable", "unplayable"),
+                           ("Plays in mpv but NOT VLC", "mpv_not_vlc"),
+                           ("Plays in VLC but NOT mpv", "vlc_not_mpv"),
+                           ("CDG problems", "cdg_problems")]:
+            if agg[key]:
+                fh.write(f"## {title}\n\n")
+                for p in sorted(agg[key]):
+                    fh.write(f"- {p}\n")
+                fh.write("\n")
+    return agg

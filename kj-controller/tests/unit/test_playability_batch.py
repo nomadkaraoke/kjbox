@@ -49,3 +49,38 @@ def test_run_batch_streams_and_skips(tmp_path, mocker):
     assert n2 == 0 and chk.calls == 2
     lines = [json.loads(l) for l in open(jsonl)]
     assert len(lines) == 2
+
+
+def _row(path, vlc, mpv, kind="video", overall=None):
+    return {
+        "path": path, "kind": kind,
+        "integrity": {"vcodec": "h264", "acodec": "aac"},
+        "renderers": {"vlc": {"frame_nonblank": vlc}, "mpv": {"frame_nonblank": mpv}},
+        "verdict": {"overall_ok": overall if overall is not None else (vlc and mpv),
+                    "vlc_playable": vlc, "mpv_playable": mpv, "reasons": []},
+    }
+
+
+def test_aggregate_buckets(tmp_path):
+    jsonl = tmp_path / "r.jsonl"
+    for r in [_row("/a.mp4", True, True), _row("/b.mp4", False, True),
+              _row("/c.mp4", True, False), _row("/d.mp4", False, False)]:
+        pb.append_jsonl(str(jsonl), r)
+    agg = pb.aggregate(str(jsonl))
+    assert agg["total"] == 4
+    assert "/a.mp4" in agg["ok"]
+    assert "/b.mp4" in agg["mpv_not_vlc"]
+    assert "/c.mp4" in agg["vlc_not_mpv"]
+    assert "/d.mp4" in agg["unplayable"]
+
+
+def test_write_reports_emits_files(tmp_path):
+    jsonl = tmp_path / "r.jsonl"
+    pb.append_jsonl(str(jsonl), _row("/a.mp4", True, False))
+    csv_p, md_p = tmp_path / "out.csv", tmp_path / "out.md"
+    agg = pb.write_reports(str(jsonl), str(csv_p), str(md_p))
+    assert csv_p.exists() and md_p.exists()
+    head = open(csv_p).readline()
+    assert "path" in head and "vlc" in head and "mpv" in head
+    assert "/a.mp4" in open(md_p).read()
+    assert agg["total"] == 1
