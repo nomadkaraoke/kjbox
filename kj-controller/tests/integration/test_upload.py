@@ -32,6 +32,16 @@ def _make_file_data(filename, content=b"fake video data", field='file'):
 
 
 class TestUpload:
+    @pytest.fixture(autouse=True)
+    def _pass_playability_gate(self):
+        # These tests exercise upload behaviour, not the playability gate (which
+        # has its own tests in test_upload_gate.py). The tiny fake files used here
+        # aren't real media, so stub the gate to pass.
+        from types import SimpleNamespace
+        with patch('routes._playability_gate',
+                   return_value=SimpleNamespace(verdict={"overall_ok": True, "reasons": []})):
+            yield
+
     def test_upload_valid_media_file(self, upload_client, upload_app):
         """Upload an .mp4 file returns 200 with success, filename, path, and file on disk."""
         resp = upload_client.post(
