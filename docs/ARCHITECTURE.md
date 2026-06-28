@@ -69,7 +69,7 @@ KJ Controller is a web-based karaoke show management application. A Flask backen
 | `frame_analysis.py` | ~80 | Pure Pillow frame math: blank/black detection, frame-diff (motion), `judge_renderer_frames` |
 | `playability.py` | ~360 | `PlayabilityChecker`: ffprobe integrity + ffmpeg decode + CDG sub-pipeline + render verdict + `check()`; per-stage `timings`. Inline gate helper used by routes/media |
 | `playability_render.py` | ~210 | `XvfbDisplay` (off-screen X, never `:0`; auto-picks a free display via `pick_free_display` so concurrent/batch checks don't collide) + VLC/mpv frame-capture command builders + `render_check()` (optional saved frame) |
-| `playability_batch.py` | ~200 | Resumable library walker (mtime/size skip-manifest), JSONL stream, CSV+Markdown VLC-vs-mpv matrix report, CLI `main()` |
+| `playability_batch.py` | ~200 | Resumable library walker (mtime/size skip-manifest), JSONL stream, CSV+Markdown VLC-vs-mpv matrix report, CLI `main()`. The full-library sweep harness built on this lives in `scripts/playability-run/` — see the runbook [docs/PLAYABILITY-FULL-LIBRARY-RUN.md](PLAYABILITY-FULL-LIBRARY-RUN.md) (check/pause/resume the device run) |
 | `overlay.py` | ~100 | `OverlayManager` class: CRUD, toggle, karaoke_playing state, JSON persistence |
 | `karaoke_nerds.py` | ~140 | Karaoke Nerds web scraper: search, parse HTML results, extract YouTube URLs |
 | `youtube_search.py` | ~80 | YouTube search via yt-dlp: ytsearch with extract_flat for fast metadata |
