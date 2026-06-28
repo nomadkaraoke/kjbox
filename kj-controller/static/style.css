@@ -1761,6 +1761,33 @@ body {
 }
 .rotation-link-banner.hidden { display: none; }
 .rotation-link-banner strong { color: #fde68a; }
+
+/* --- Playability: tier-2 ⚠️ row badge + tier-1 rejection toast --- */
+.rotation-playability-warning {
+    margin-left: 6px;
+    color: #fbbf24;
+    cursor: pointer;
+    font-size: 0.95em;
+}
+.playability-toast {
+    position: fixed;
+    left: 50%;
+    bottom: 24px;
+    transform: translateX(-50%);
+    z-index: 4000;
+    max-width: min(640px, 92vw);
+    padding: 12px 18px;
+    border-radius: 8px;
+    background: rgba(127, 29, 29, 0.96);
+    border: 1px solid #ef4444;
+    color: #fee2e2;
+    font-size: 0.9em;
+    font-weight: 600;
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.5);
+    cursor: pointer;
+    text-align: center;
+}
+.playability-toast.hidden { display: none; }
 .rotation-link-cancel {
     padding: 2px 10px;
     border-radius: 4px;
