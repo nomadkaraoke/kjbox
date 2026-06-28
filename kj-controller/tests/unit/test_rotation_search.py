@@ -387,3 +387,39 @@ class TestDivebarSurfacing:
             data = resp.get_json()
             track = data["karaoke_nerds"][0]["tracks"][0]
             assert (track.get("divebar") or {}).get("file_id") == "gcs_one"
+
+
+class TestDivebarAttachBeatsLocalDrop:
+    """A KN row must be upgraded to the GCS mirror even when we also hold the
+    same brand locally — the KN row is independently selectable and should
+    prefer GCS over YouTube. Only the *standalone* mirror row is suppressed
+    when a local file already covers that brand."""
+
+    def test_kn_attached_even_when_same_brand_is_local(self, search_client, search_app):
+        with patch.object(search_app.catalog, 'is_available', return_value=True), \
+             patch.object(search_app.catalog, 'search', return_value=[
+                 {"path": "/media/FATBIRD-163 - Incubus - I Miss You.zip",
+                  "artist": "Incubus", "title": "I Miss You", "format": "cdg+mp3",
+                  "disc_id": "FATBIRD-163",
+                  "filename": "FATBIRD-163 - Incubus - I Miss You.zip"}
+             ]), \
+             patch('routes.karaoke_nerds.search', return_value=[
+                 {"title": "I Miss You", "artist": "Incubus", "tracks": [
+                     {"brand_name": "Fatbird Karaoke", "brand_code": "FATBIRD",
+                      "youtube_url": "https://youtube.com/watch?v=abc",
+                      "is_community": True}
+                 ]}
+             ]), \
+             patch('routes.divebar.search', return_value=[
+                 {"artist": "Incubus", "title": "I Miss You", "tracks": [
+                     {"file_id": "fb163", "brand": "Fatbird Karaoke",
+                      "brand_code": "FATBIRD", "format": "zip", "in_gcs": True}
+                 ]}
+             ]):
+            resp = search_client.get('/rotation/search?q=incubus i miss you')
+            data = resp.get_json()
+            track = data["karaoke_nerds"][0]["tracks"][0]
+            # KN row upgraded to GCS even though FATBIRD is also local
+            assert (track.get("divebar") or {}).get("file_id") == "fb163"
+            # ...but no redundant standalone row (local already covers it)
+            assert "fb163" not in [r["file_id"] for r in data.get("divebar", [])]

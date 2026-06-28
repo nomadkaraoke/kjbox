@@ -3367,16 +3367,21 @@ def _surface_divebar_versions(local_results, kn_results, db_results, cfg):
             brand_name = db_track.get("brand")
             brand = cbm(brand_code=raw_code, brand_name=brand_name)
             key = (song_key, brand)
-            if key in local_keys:
-                continue  # we already have this exact version locally
             kn_track = kn_index.get(key)
             if kn_track is not None:
                 # Same brand as a KN row -> upgrade that row to the GCS mirror,
                 # preferring an in-GCS / smaller file if one is already attached.
+                # Always do this even when we also hold the brand locally: the KN
+                # row is independently selectable and should prefer GCS over
+                # YouTube (the local file shows as its own, higher-ranked row).
                 existing = kn_track.get("divebar")
                 if not (existing or {}).get("file_id") or \
                         _divebar_row_is_better(db_track, existing):
                     kn_track["divebar"] = db_track
+                continue
+            if key in local_keys:
+                # No KN row to upgrade and a local file already covers this
+                # brand -> skip a redundant standalone mirror row.
                 continue
             # resolve_brand short-circuits on an unrecognized specific code
             # (e.g. "FBK204") and never consults the brand name. When the brand
