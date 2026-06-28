@@ -1465,6 +1465,15 @@ class TestPlayabilityWarning:
         with pytest.raises(ValueError):
             store.set_playability_warning(9999, "boom")
 
+    def test_warning_surfaces_through_get_rotation(self, store):
+        """The column flows through the list path every endpoint uses, so the
+        frontend ⚠️ badge sees it without any extra decoration."""
+        entry = store.add_entry("Alice", "Song A")
+        store.set_playability_warning(entry["id"], "mpv: no video frame rendered")
+        rows = store.get_entries()
+        match = next(r for r in rows if r["id"] == entry["id"])
+        assert match["playability_warning"] == "mpv: no video frame rendered"
+
     def test_set_playability_warning_does_not_bump_updated_at(self, store):
         """A background tier-2 stamp must NOT touch updated_at — otherwise a
         done singer's "time since last sang" (derived from done_at/updated_at)
