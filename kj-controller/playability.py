@@ -7,6 +7,9 @@ from __future__ import annotations
 
 import json
 import os
+import re
+import shutil
+import subprocess
 import time
 from dataclasses import asdict, dataclass, field
 
@@ -92,3 +95,56 @@ class PlayabilityResult:
     def from_dict(cls, d: dict) -> "PlayabilityResult":
         known = {k: d[k] for k in d if k in cls.__dataclass_fields__}
         return cls(**known)
+
+
+_DECODE_ERR_RE = re.compile(r"error while decoding", re.IGNORECASE)
+
+
+def parse_decode(returncode: int, stderr: str) -> dict:
+    stderr = stderr or ""
+    matches = _DECODE_ERR_RE.findall(stderr)
+    decode_errors = len(matches)
+    ok = returncode == 0 and decode_errors == 0
+    error = None
+    if not ok:
+        lines = [ln for ln in stderr.splitlines() if ln.strip()]
+        error = lines[-1] if lines else f"ffmpeg exit {returncode}"
+    return {"ok": ok, "decode_errors": decode_errors, "error": error}
+
+
+class PlayabilityChecker:
+    """Runs layered playability pipeline and returns PlayabilityResult."""
+
+    def __init__(self, config=None, *, low_priority=True):
+        self.config = config or {}
+        self.low_priority = low_priority
+
+    def _run(self, cmd, timeout):
+        """Run subprocess at low priority; return (rc, stdout, stderr)."""
+        wrapped = cmd
+        if self.low_priority and shutil.which("nice") and shutil.which("ionice"):
+            wrapped = ["nice", "-n", "19", "ionice", "-c3"] + cmd
+        try:
+            p = subprocess.run(wrapped, capture_output=True, text=True, timeout=timeout)
+            return p.returncode, p.stdout, p.stderr
+        except subprocess.TimeoutExpired:
+            return 124, "", f"timeout after {timeout}s"
+        except FileNotFoundError as e:
+            return 127, "", str(e)
+
+    def probe_integrity(self, path):
+        cmd = ["ffprobe", "-v", "error", "-print_format", "json",
+               "-show_format", "-show_streams", path]
+        rc, out, err = self._run(cmd, timeout=30)
+        return parse_integrity(rc, out, err)
+
+    def decode_video(self, path, start=None, length=None):
+        cmd = ["ffmpeg", "-v", "error", "-xerror"]
+        if start is not None:
+            cmd += ["-ss", str(start)]
+        cmd += ["-i", path]
+        if length is not None:
+            cmd += ["-t", str(length)]
+        cmd += ["-map", "0:v:0", "-f", "null", "-"]
+        rc, _out, err = self._run(cmd, timeout=180)
+        return parse_decode(rc, err)

@@ -62,3 +62,36 @@ def test_result_roundtrip():
     assert json.loads(json.dumps(d))["integrity"]["ok"] is True
     back = pl.PlayabilityResult.from_dict(d)
     assert back.path == "/x/a.mp4" and back.kind == "video"
+
+
+def test_parse_decode_clean():
+    r = pl.parse_decode(0, "")
+    assert r["ok"] is True and r["decode_errors"] == 0
+
+
+def test_parse_decode_errors():
+    stderr = "[h264 @ 0x] error while decoding MB 1 2\n[h264 @ 0x] concealing errors\n"
+    r = pl.parse_decode(1, stderr)
+    assert r["ok"] is False
+    assert r["decode_errors"] >= 1
+    assert r["error"]
+
+
+def test_probe_integrity_invokes_ffprobe(mocker):
+    chk = pl.PlayabilityChecker(config={})
+    fake = mocker.patch.object(chk, "_run", return_value=(0, '{"streams":[{"codec_type":"video","codec_name":"h264"}],"format":{"duration":"10.0"}}', ""))
+    r = chk.probe_integrity("/x/a.mp4")
+    assert r["ok"] is True and r["has_video"] is True
+    cmd = fake.call_args[0][0]
+    assert "ffprobe" in cmd and "/x/a.mp4" in cmd
+
+
+def test_decode_video_builds_sampled_window(mocker):
+    chk = pl.PlayabilityChecker(config={})
+    fake = mocker.patch.object(chk, "_run", return_value=(0, "", ""))
+    chk.decode_video("/x/a.mp4", start=30.0, length=5.0)
+    cmd = fake.call_args[0][0]
+    assert "ffmpeg" in cmd
+    assert "-ss" in cmd and "30.0" in cmd
+    assert "-t" in cmd and "5.0" in cmd
+    assert "-f" in cmd and "null" in cmd
