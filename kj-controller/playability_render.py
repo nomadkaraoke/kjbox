@@ -4,6 +4,12 @@ Builds mpv / cvlc CLI arg lists used to grab PNG frames from a video file.
 Captures mid-file to skip black intros/outros; short/unknown -> start 0.
 """
 
+import glob
+import os
+import shutil
+import subprocess
+import time
+
 MID_FILE_FRACTION = 0.4
 MIN_DURATION_FOR_MIDFILE = 6.0
 
@@ -34,3 +40,70 @@ def build_vlc_capture_cmd(path, display, out_dir, start_s, window_s=3, scene_rat
         f"--start-time={start_s}", f"--stop-time={start_s + window_s}",
         "--play-and-exit", path, "vlc://quit",
     ]
+
+
+class XvfbDisplay:
+    """On-demand off-screen X display so VLC can render without touching :0."""
+
+    def __init__(self, display=":99", resolution="1280x720x24", ready_timeout=5.0):
+        self.display = display
+        self.resolution = resolution
+        self.ready_timeout = ready_timeout
+        self._proc = None
+
+    def __enter__(self):
+        num = self.display.lstrip(":")
+        sock = f"/tmp/.X11-unix/X{num}"
+        self._proc = subprocess.Popen(
+            ["Xvfb", self.display, "-screen", "0", self.resolution, "-nolisten", "tcp"],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+        deadline = time.monotonic() + self.ready_timeout
+        while time.monotonic() < deadline:
+            if os.path.exists(sock):
+                return self
+            if self._proc.poll() is not None:
+                raise RuntimeError(f"Xvfb {self.display} exited early")
+            time.sleep(0.1)
+        self.__exit__(None, None, None)
+        raise RuntimeError(f"Xvfb {self.display} not ready in {self.ready_timeout}s")
+
+    def __exit__(self, *exc):
+        if self._proc and self._proc.poll() is None:
+            self._proc.terminate()
+            try:
+                self._proc.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                self._proc.kill()
+        self._proc = None
+
+
+def render_check(run, path, renderer, duration, display=":99", tmp_root=None,
+                 capture_timeout=90):
+    """Capture frames from `renderer` and judge them. `run(cmd, timeout)` does
+    the actual subprocess call (injected so this is unit-testable)."""
+    import tempfile
+
+    from frame_analysis import judge_renderer_frames
+
+    start = capture_start(duration)
+    out_dir = tempfile.mkdtemp(prefix=f"kj-cap-{renderer}-", dir=tmp_root)
+    error = None
+    t0 = time.monotonic()
+    try:
+        if renderer == "mpv":
+            cmd = build_mpv_capture_cmd(path, out_dir, start)
+        elif renderer == "vlc":
+            cmd = build_vlc_capture_cmd(path, display, out_dir, start)
+        else:
+            raise ValueError(f"unknown renderer {renderer}")
+        rc, _out, err = run(cmd, capture_timeout)
+        if rc not in (0, None):
+            error = (err or f"{renderer} exited {rc}").strip().splitlines()[-1] if err else f"{renderer} exited {rc}"
+        frames = sorted(glob.glob(os.path.join(out_dir, "*.png")))
+        verdict = judge_renderer_frames(frames)
+    finally:
+        shutil.rmtree(out_dir, ignore_errors=True)
+    verdict["error"] = error if not verdict.get("frame_nonblank") else None
+    verdict["elapsed_s"] = round(time.monotonic() - t0, 3)
+    return verdict
