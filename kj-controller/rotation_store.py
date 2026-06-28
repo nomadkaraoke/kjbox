@@ -82,6 +82,10 @@ class RotationStore:
     _TRACKING_FIELDS = (
         "file_path", "duration", "download_source", "download_status",
         "download_id", "url_fallback", "gen_job_id", "gen_status",
+        # Tier-2 render-verification flag: tied to the live linked file, so a
+        # restore must keep the live value (not revert to the snapshot) and
+        # never drop it entirely.
+        "playability_warning",
     )
 
     def __init__(self, db_path):
@@ -1128,7 +1132,7 @@ class RotationStore:
                     "id", "singer", "song_artist", "status", "notes", "position",
                     "file_path", "duration", "download_source", "download_status",
                     "download_id", "url_fallback", "gen_job_id", "gen_status",
-                    "singers_json", "paid",
+                    "playability_warning", "singers_json", "paid",
                 ]
                 vals = [
                     e["id"], e["singer"], e["song_artist"], e["status"],
@@ -1137,6 +1141,7 @@ class RotationStore:
                     track["download_source"], track["download_status"],
                     track["download_id"], track["url_fallback"],
                     track["gen_job_id"], track["gen_status"],
+                    track["playability_warning"],
                     e.get("singers_json"), int(bool(e.get("paid", 0))),
                 ]
                 # Preserve created_at when the snapshot carries it.

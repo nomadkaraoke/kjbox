@@ -61,6 +61,31 @@ def test_run_batch_streams_and_skips(tmp_path, mocker):
     assert len(lines) == 2
 
 
+def test_run_batch_crash_row_is_resumable(tmp_path, mocker):
+    """A file whose check() crashes must still get a row with mtime/size, so a
+    resume skips it instead of re-crashing on it every restart (matters for the
+    multi-day full-library sweep)."""
+    f = tmp_path / "bad.mp4"
+    f.write_bytes(b"x")
+    jsonl = tmp_path / "out.jsonl"
+    _fake_xvfb(mocker)
+
+    class CrashChecker:
+        def __init__(self): self.calls = 0
+        def check(self, path, **kw):
+            self.calls += 1
+            raise RuntimeError("boom")
+
+    chk = CrashChecker()
+    pb.run_batch(chk, [str(tmp_path)], str(jsonl), throttle=0.0, log=lambda *a: None)
+    row = json.loads(open(jsonl).readline())
+    assert row["size"] == os.stat(f).st_size
+    assert row["mtime"] == os.stat(f).st_mtime
+    # Resume must skip the crashed file rather than re-running it.
+    pb.run_batch(chk, [str(tmp_path)], str(jsonl), throttle=0.0, log=lambda *a: None)
+    assert chk.calls == 1
+
+
 def test_run_batch_wraps_in_xvfb_and_passes_display(tmp_path, mocker):
     (tmp_path / "a.mp4").write_bytes(b"x")
     jsonl = tmp_path / "out.jsonl"

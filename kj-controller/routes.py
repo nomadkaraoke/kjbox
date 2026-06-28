@@ -2711,9 +2711,9 @@ def _run_tier2_check(app, entry_id, file_path, checker=None):
             pass
 
 
-def _tier2_worker(app):
+def _tier2_worker():
     while True:
-        entry_id, file_path = _tier2_queue.get()
+        app, entry_id, file_path = _tier2_queue.get()
         try:
             _run_tier2_check(app, entry_id, file_path)
         finally:
@@ -2723,8 +2723,10 @@ def _tier2_worker(app):
 def _enqueue_tier2(app, entry_id, file_path):
     """Queue a background tier-2 render check (skips pure-audio files).
 
-    Best-effort: any failure here is swallowed so it can never break the link
-    flow that just succeeded."""
+    The app object is threaded through each queue item rather than captured at
+    worker-thread start, so warnings always land in the right store even if
+    multiple app instances exist. Best-effort: any failure here is swallowed so
+    it can never break the link flow that just succeeded."""
     try:
         from playability import classify_kind
         if classify_kind(file_path) == "audio":
@@ -2733,9 +2735,8 @@ def _enqueue_tier2(app, entry_id, file_path):
         with _tier2_worker_lock:
             if not _tier2_worker_started:
                 _tier2_worker_started = True
-                threading.Thread(target=_tier2_worker, args=(app,),
-                                 daemon=True).start()
-        _tier2_queue.put((entry_id, file_path))
+                threading.Thread(target=_tier2_worker, daemon=True).start()
+        _tier2_queue.put((app, entry_id, file_path))
     except Exception:  # pragma: no cover - defensive
         pass
 

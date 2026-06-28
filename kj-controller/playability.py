@@ -244,7 +244,9 @@ class PlayabilityChecker:
         # VLC renders against an X display; mpv uses --vo=image (no display).
         # Only start an off-screen Xvfb if a VLC render will actually run here
         # AND the caller (e.g. the batch) hasn't already supplied a shared one.
-        need_vlc = ("vlc" in renderers) and kind in ("video", "cdg_zip")
+        # "unknown" falls through to the video render branch below, so it needs
+        # an X display for VLC just like "video"/"cdg_zip" do.
+        need_vlc = ("vlc" in renderers) and kind in ("video", "cdg_zip", "unknown")
         with contextlib.ExitStack() as stack:
             if need_vlc and display is None:
                 xs = time.monotonic()

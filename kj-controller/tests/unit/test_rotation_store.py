@@ -1474,6 +1474,26 @@ class TestPlayabilityWarning:
         match = next(r for r in rows if r["id"] == entry["id"])
         assert match["playability_warning"] == "mpv: no video frame rendered"
 
+    def test_warning_survives_restore_entries(self, store):
+        """Undo/redo (restore_entries) must not drop the tier-2 warning — it is
+        tied to the linked file, so it has to round-trip through a restore."""
+        entry = store.add_entry("Alice", "Song A")
+        store.set_playability_warning(entry["id"], "mpv: no video frame rendered")
+        snapshot = store.get_entries()  # snapshot carries the warning
+        store.set_playability_warning(entry["id"], None)  # diverge live state
+        store.restore_entries(snapshot)  # full restore → snapshot value
+        assert store.get_entry(entry["id"])["playability_warning"] == \
+            "mpv: no video frame rendered"
+
+    def test_warning_preserved_live_through_undo(self, store):
+        """With preserve_tracking=True (an undo of human edits), the *live*
+        warning is kept — it tracks the live file_path, not the snapshot."""
+        entry = store.add_entry("Alice", "Song A")
+        snapshot = store.get_entries()  # no warning yet
+        store.set_playability_warning(entry["id"], "live warning")
+        store.restore_entries(snapshot, preserve_tracking=True)
+        assert store.get_entry(entry["id"])["playability_warning"] == "live warning"
+
     def test_set_playability_warning_does_not_bump_updated_at(self, store):
         """A background tier-2 stamp must NOT touch updated_at — otherwise a
         done singer's "time since last sang" (derived from done_at/updated_at)

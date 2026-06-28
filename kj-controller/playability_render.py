@@ -98,10 +98,14 @@ class XvfbDisplay:
             )
             deadline = time.monotonic() + self.ready_timeout
             while time.monotonic() < deadline:
-                if os.path.exists(sock):
-                    return self
+                # Check liveness first: only treat the socket as ready when the
+                # server *we* just launched is still alive (a dead proc means
+                # the display was taken or failed — re-pick instead of latching
+                # onto a competing server's socket).
                 if self._proc.poll() is not None:
                     break
+                if os.path.exists(sock):
+                    return self
                 time.sleep(0.1)
             self.__exit__(None, None, None)
             last_err = RuntimeError(f"Xvfb {self.display} not ready/exited early")
@@ -116,6 +120,7 @@ class XvfbDisplay:
                 self._proc.wait(timeout=3)
             except subprocess.TimeoutExpired:
                 self._proc.kill()
+                self._proc.wait()  # reap so we don't leak a zombie Xvfb
         self._proc = None
 
 

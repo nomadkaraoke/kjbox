@@ -77,9 +77,10 @@ class TestEnqueueTier2:
         q = _queue_mod.Queue()
         monkeypatch.setattr(routes, "_tier2_queue", q)
         monkeypatch.setattr(routes, "_tier2_worker_started", True)  # no worker
-        routes._enqueue_tier2(MagicMock(), 7, "/x/v.mp4")
+        app = object()  # sentinel app threaded through per-task
+        routes._enqueue_tier2(app, 7, "/x/v.mp4")
         assert q.qsize() == 1
-        assert q.get_nowait() == (7, "/x/v.mp4")
+        assert q.get_nowait() == (app, 7, "/x/v.mp4")
 
     def test_skips_pure_audio(self, monkeypatch):
         q = _queue_mod.Queue()
@@ -95,9 +96,11 @@ class TestEnqueueTier2:
         called = []
         monkeypatch.setattr(
             routes, "_run_tier2_check",
-            lambda app, eid, path, **kw: called.append((eid, path)),
+            lambda app, eid, path, **kw: called.append((app, eid, path)),
         )
-        app = MagicMock()
+        app = object()
         routes._enqueue_tier2(app, 9, "/x/v.mp4")
         q.join()  # blocks until the worker calls task_done()
-        assert called == [(9, "/x/v.mp4")]
+        # The worker must use the app threaded through *this* task, not one
+        # captured at thread start.
+        assert called == [(app, 9, "/x/v.mp4")]

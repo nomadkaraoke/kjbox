@@ -161,8 +161,10 @@ box (done on NomadPC; check NomadPi if it's also used). Add `Pillow` to the depl
 - Re-confirm thresholds (`BLANK_SPREAD_THRESHOLD = 6.0`) against the full-library results.
 
 ## Gotchas learned this session
-- **Xvfb display `:99` is hard-coded.** Concurrent checks collide. Fine for single-KJ inline
-  use; must be addressed for parallel/tier-2 background use (dynamic display or a lock).
+- **~~Xvfb display `:99` is hard-coded.~~ RESOLVED (later session):** `XvfbDisplay` now
+  auto-picks a free display via `pick_free_display` (probes sockets + lock files), so concurrent
+  tier-2 and batch checks no longer collide. (Earlier text below describing a fixed `:99` is
+  historical.)
 - **The cloudflared SSH tunnel (`nomadpctunnel`) drops** intermittently (exit 255). Run long
   jobs detached with `nohup … &` and poll the logfile; don't rely on a foreground ssh.
 - **`sqlite3` CLI is not installed** on the box — use the venv python's `sqlite3` module.

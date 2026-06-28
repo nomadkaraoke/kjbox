@@ -77,7 +77,14 @@ def run_batch(checker, roots, jsonl_path, throttle=0.0, depth="deep",
                 ok = result.verdict.get("overall_ok")
                 log(f"[{'OK ' if ok else 'BAD'}] {path}")
             except Exception as exc:  # never let one file kill the batch
-                append_jsonl(jsonl_path, {"path": path, "kind": "unknown",
+                # Persist the same mtime/size as a normal row so a resume can
+                # skip this file instead of re-crashing on it every restart.
+                try:
+                    st = os.stat(path)
+                    meta = {"mtime": st.st_mtime, "size": st.st_size}
+                except OSError:
+                    meta = {"mtime": None, "size": None}
+                append_jsonl(jsonl_path, {"path": path, "kind": "unknown", **meta,
                                           "verdict": {"overall_ok": False, "reasons": [f"checker crashed: {exc}"]}})
                 log(f"[ERR] {path}: {exc}")
             checked += 1
