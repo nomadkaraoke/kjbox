@@ -84,3 +84,12 @@ def test_write_reports_emits_files(tmp_path):
     assert "path" in head and "vlc" in head and "mpv" in head
     assert "/a.mp4" in open(md_p).read()
     assert agg["total"] == 1
+
+
+def test_arg_parser_defaults_and_overrides():
+    p = pb.build_arg_parser()
+    ns = p.parse_args([])
+    assert ns.throttle >= 0.0
+    assert ns.depth in ("deep", "quick")
+    ns2 = p.parse_args(["--roots", "/x", "/y", "--throttle", "0.5", "--limit", "3", "--depth", "quick"])
+    assert ns2.roots == ["/x", "/y"] and ns2.throttle == 0.5 and ns2.limit == 3 and ns2.depth == "quick"

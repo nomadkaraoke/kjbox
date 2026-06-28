@@ -2,6 +2,7 @@
 to JSONL (resumable via mtime/size manifest), then aggregate a report."""
 from __future__ import annotations
 
+import argparse
 import csv
 import json
 import os
@@ -156,3 +157,42 @@ def write_reports(jsonl_path, csv_path, md_path):
                     fh.write(f"- {p}\n")
                 fh.write("\n")
     return agg
+
+
+DEFAULT_ROOTS = ["/opt/nomad/YTDownloads", "/opt/nomad/MP4-720p", "/media/nomad/Nomad4TBOne"]
+
+
+def build_arg_parser():
+    p = argparse.ArgumentParser(description="Check playability of a karaoke library.")
+    p.add_argument("--roots", nargs="+", default=list(DEFAULT_ROOTS),
+                   help="Directories to scan (default: box media folders + 4TB SSD).")
+    p.add_argument("--jsonl", default="playability_results.jsonl",
+                   help="JSONL output path (default: playability_results.jsonl in cwd).")
+    p.add_argument("--csv", default="playability_results.csv",
+                   help="CSV report output path.")
+    p.add_argument("--md", default="playability_results.md",
+                   help="Markdown report output path.")
+    p.add_argument("--throttle", type=float, default=0.0,
+                   help="Seconds to sleep between files (default: 0.0).")
+    p.add_argument("--depth", choices=["deep", "quick"], default="deep",
+                   help="Probe depth (default: deep).")
+    p.add_argument("--limit", type=int, default=None,
+                   help="Stop after N files (default: no limit).")
+    p.add_argument("--recheck-failed", action="store_true",
+                   help="Re-probe files previously marked unplayable.")
+    return p
+
+
+def main(argv=None):
+    from playability import PlayabilityChecker  # local import keeps module testable without ffmpeg
+    args = build_arg_parser().parse_args(argv)
+    checker = PlayabilityChecker()
+    run_batch(checker, args.roots, args.jsonl,
+              throttle=args.throttle, depth=args.depth,
+              recheck_failed=args.recheck_failed, limit=args.limit)
+    write_reports(args.jsonl, args.csv, args.md)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
