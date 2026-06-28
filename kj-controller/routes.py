@@ -2642,6 +2642,15 @@ def archive_rotation():
         return jsonify({"error": str(e)}), 500
 
 
+def _playability_gate(file_path):
+    """Fast inline playability check (integrity + sampled decode, no render).
+    Returns the PlayabilityResult; verdict.overall_ok is False for truncated,
+    audio-only, or undecodable files."""
+    from playability import PlayabilityChecker
+    checker = PlayabilityChecker(config=current_app.kj_config)
+    return checker.check(file_path, renderers=(), depth="quick")
+
+
 @routes_bp.route('/rotation/link', methods=['POST'])
 def link_rotation_file():
     """Link a media file to a rotation entry — or create one and link it.
@@ -2666,6 +2675,13 @@ def link_rotation_file():
         return jsonify({"error": "id must be >= 1"}), 400
 
     try:
+        gate = _playability_gate(file_path)
+        if not gate.verdict.get("overall_ok"):
+            reasons = "; ".join(gate.verdict.get("reasons") or ["file is not playable"])
+            return jsonify({
+                "error": f"Playability check failed — not linked: {reasons}",
+                "verdict": gate.verdict,
+            }), 422
         rotation.link_file(entry_id, file_path)
         entries = rotation.get_rotation()
         _decorate_rotation_entries(entries, rotation)
