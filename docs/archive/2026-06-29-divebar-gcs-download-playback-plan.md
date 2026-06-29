@@ -134,9 +134,12 @@ suite green (1 expected skip: Xvfb not installed locally).
 - **Gate (real ffmpeg on device):** `PlayabilityChecker.check` on the real `.zip` →
   `kind=cdg_zip`, `overall_ok=True`, cdg+audio both decode. Confirms no `_gate_playable`
   change was needed.
-- **mpv spike:** mpv 0.37 on device. `loadfile <cdg> replace "audio-file=%<n>%<mp3>"`
-  (length-prefixed escaping) loads `video=cdgraphics` + `audio=mp3 (external)`. Both the
-  plain `--audio-file` and the escaped IPC form verified.
+- **mpv spike:** mpv 0.37 on device. The spike verified that `loadfile <cdg> replace
+  "audio-file=%<n>%<mp3>"` (length-prefixed escaping) loads `video=cdgraphics` +
+  `audio=mp3 (external)`. **Shipped form differs:** CodeRabbit review flagged that the
+  `loadfile` options-arg position changed between mpv 0.37 and 0.38+, so the shipped code
+  uses the version-stable `["loadfile", <cdg>, "replace"]` then `["audio-add", <mp3>,
+  "select"]` instead (re-verified live, both renderers), and aborts if the attach fails.
 - **Playback VLC (production renderer):** played the downloaded zip → CDG title card
   rendered on the HDMI display (screenshot).
 - **Playback mpv (the fix):** switched renderer → played zip → log

@@ -113,7 +113,14 @@ Filler music is always a single shared VLC on :8081 — it keeps playing while t
 
 Render mode persists to `config.json` (`render_mode: mpv`) and survives service restarts. See `docs/ARCHITECTURE.md § PlaybackCoordinator + KaraokePlayer Protocol` for the code-side architecture.
 
-Use the toggle as an escape hatch if a specific file (or environmental quirk) misbehaves on one engine. Both engines support CDG+MP3 rendering in principle — in practice, there may be per-file differences worth testing.
+Use the toggle as an escape hatch if a specific file (or environmental quirk) misbehaves on one engine.
+
+**CDG+MP3 (`.zip`) playback differs between the engines** — both render it, but they must be fed differently, and kjbox does this automatically in `/play`:
+
+- **VLC** is handed the extracted `.mp3` and natively auto-discovers the sibling `.cdg` in the same directory for graphics. Nothing extra needed.
+- **mpv** renders no graphics from the `.mp3` (audio only) and a bare `.cdg` has no audio. So mpv is handed the `.cdg` for graphics with the `.mp3` attached as an external audio track via the IPC command `audio-add <mp3> select` (after `loadfile <cdg>`). `audio-add` is used rather than a `loadfile` option because the `loadfile` options-arg position changed between mpv 0.37 (the device) and 0.38+; `audio-add` is version-stable. If the audio fails to attach, mpv playback is aborted rather than starting a silent video.
+
+This was verified live on the device (mpv 0.37): a downloaded CKK CDG zip rendered graphics on the HDMI display with synced mp3 audio (track-list `video=cdgraphics` + external `audio=mp3`, time-pos advancing). The code-side detail lives in `docs/ARCHITECTURE.md § CDG+MP3 ZIP Playback`. (`KaraokePlayer.supports_cdg` advertises the capability; both backends report `True`.)
 
 ### Filler Audio Handoff (karaoke engine ↔ VLC filler)
 
