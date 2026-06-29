@@ -17,6 +17,7 @@ class ZipPlayback:
     def __init__(self, config):
         self.config = config
         self._temp_dir = None
+        self._mp3_path = None
 
     def extract_and_get_mp3(self, zip_path):
         """Extract a ZIP file and return the path to the .mp3 file inside.
@@ -62,7 +63,8 @@ class ZipPlayback:
                 for root, _dirs, files in os.walk(self._temp_dir):
                     for fname in files:
                         if fname.lower().endswith('.mp3'):
-                            return os.path.join(root, fname)
+                            self._mp3_path = os.path.join(root, fname)
+                            return self._mp3_path
 
         except (zipfile.BadZipFile, OSError):
             self.cleanup()
@@ -73,19 +75,33 @@ class ZipPlayback:
         return None
 
     def current_cdg_path(self):
-        """Return the .cdg path in the current extraction dir, or None.
+        """Return the .cdg matching the extracted .mp3, or None.
 
         Valid only after a successful ``extract_and_get_mp3`` (before
         ``cleanup``). mpv must be handed the .cdg directly to render the CDG
         graphics (with the .mp3 supplied as an external audio track); VLC
         instead auto-discovers the sibling .cdg from the .mp3.
+
+        The result is tied to the specific .mp3 ``extract_and_get_mp3`` chose:
+        a zip could (rarely) hold more than one CDG/MP3 pair, so we return the
+        .cdg that lives beside that .mp3 and shares its stem, never just the
+        first .cdg anywhere in the temp tree.
         """
-        if not self._temp_dir or not os.path.isdir(self._temp_dir):
+        if not self._mp3_path or not os.path.isfile(self._mp3_path):
             return None
-        for root, _dirs, files in os.walk(self._temp_dir):
-            for fname in files:
-                if fname.lower().endswith('.cdg'):
-                    return os.path.join(root, fname)
+        mp3_dir = os.path.dirname(self._mp3_path)
+        mp3_stem = os.path.splitext(os.path.basename(self._mp3_path))[0].lower()
+        try:
+            cdgs = [f for f in os.listdir(mp3_dir) if f.lower().endswith('.cdg')]
+        except OSError:
+            return None
+        # Prefer the .cdg sharing the .mp3's stem (the normal X.mp3 / X.cdg pair).
+        for fname in cdgs:
+            if os.path.splitext(fname)[0].lower() == mp3_stem:
+                return os.path.join(mp3_dir, fname)
+        # Otherwise fall back to a .cdg sitting beside the chosen .mp3.
+        if cdgs:
+            return os.path.join(mp3_dir, sorted(cdgs)[0])
         return None
 
     def _extract_with_unzip(self, zip_path, dest_dir):
@@ -118,3 +134,4 @@ class ZipPlayback:
         if self._temp_dir and os.path.isdir(self._temp_dir):
             shutil.rmtree(self._temp_dir, ignore_errors=True)
         self._temp_dir = None
+        self._mp3_path = None

@@ -29,19 +29,6 @@ PITCH_MIN = -6
 PITCH_MAX = 6
 
 
-def _audio_file_option(audio_file):
-    """Build the mpv ``loadfile`` option that attaches an external audio track.
-
-    Used for CDG zips: mpv plays the .cdg (graphics) as the main file and the
-    matching .mp3 as an external audio track. mpv's loadfile options are a
-    comma-separated ``key=value`` list, so a path containing a comma would
-    corrupt parsing — use mpv's length-prefixed value escaping (``%n%value``,
-    where n is the byte length) which is literal and safe for any path.
-    """
-    n = len(audio_file.encode('utf-8'))
-    return f"audio-file=%{n}%{audio_file}"
-
-
 class MpvKaraokePlayer:
     """Karaoke backend that uses mpv + rubberband via IPC."""
 
@@ -292,11 +279,7 @@ class MpvKaraokePlayer:
             if overlay_manager is not None:
                 overlay_manager.set_karaoke_playing(True)
 
-            load_cmd = ["loadfile", file_path, "replace"]
-            if audio_file:
-                # mpv 0.37: loadfile <url> <flags> <options-string>.
-                load_cmd.append(_audio_file_option(audio_file))
-            resp = self._send_ipc(load_cmd)
+            resp = self._send_ipc(["loadfile", file_path, "replace"])
             if resp is None or resp.get("error") != "success":
                 log_message(f"ERROR: mpv failed to load {file_path}", self.config)
                 self.audio_error = True
@@ -304,6 +287,14 @@ class MpvKaraokePlayer:
                     overlay_manager.set_karaoke_playing(False)
                 self.current_path = None
                 return
+
+            # For a CDG zip, file_path is the .cdg (graphics); attach the matching
+            # .mp3 as an external audio track. `audio-add` is used rather than a
+            # loadfile option because the loadfile options-arg position differs
+            # between mpv 0.37 and 0.38+, whereas `audio-add` is stable across
+            # versions and needs no value escaping (path is a discrete IPC arg).
+            if audio_file:
+                self._send_ipc(["audio-add", audio_file, "select"])
 
             time.sleep(0.5)
             mpv_vol = self._vlc_to_mpv_volume(self.karaoke_volume)
