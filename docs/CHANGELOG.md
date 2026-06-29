@@ -2,6 +2,41 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-06-29 - Divebar GCS-mirror downloads land + CDG renders on mpv (v0.42.0)
+
+**Why:** Selecting a GCS community-mirror (Divebar) version to download/link/play failed
+for CDG zips with a "Download failed" toast, and even once downloaded a CDG zip played
+audio-only (no graphics) on the default mpv renderer. The GCS mirror is mostly `mp4` +
+`zip` (CDG+MP3), so both bugs hit the common case.
+
+**What:**
+- **Download extension (`utils.divebar_ext`)** — the on-disk extension was hardcoded `.mp4`
+  at all three divebar enqueue sites (`divebar_download`, `download_and_link_rotation`,
+  `approve_sing_request`), so a CDG zip landed as `…​.mp4`, was classified `video`, failed
+  the ffprobe gate, and was deleted. Now derived server-side from the resolved download URL
+  path (the GCS mirror always carries the real extension), falling back to the frontend-
+  threaded catalog `format`, then `.mp4`. Frontend now threads `format` through the divebar
+  download payloads (`app.js`, `static-sing/sing.js`). No `_gate_playable` change needed —
+  a correctly-named `.zip` already validates via the existing `cdg_zip` path.
+- **CDG graphics on mpv** — `/play` now feeds each renderer correctly: VLC gets the `.mp3`
+  (auto-discovers the sibling `.cdg`); **mpv gets the `.cdg`** (graphics) with the `.mp3`
+  attached as an external audio track via `audio-add <mp3> select` (after `loadfile <cdg>`).
+  `audio-add` is used rather than a `loadfile` option because the `loadfile` options-arg
+  position changed between mpv 0.37 (device) and 0.38+; `audio-add` is version-stable. mpv
+  playback **aborts** if the audio fails to attach (a bare `.cdg` is silent). New
+  `ZipPlayback.current_cdg_path()`; `audio_file` threaded through the `KaraokePlayer`
+  protocol (`PlaybackCoordinator.play_video` → `play`), accepted+ignored by VLC.
+- **Verified live on NomadPC** (mpv 0.37): repro CKK CDG zip downloads as `.zip`
+  (`overall_ok: True`), and plays graphics + synced audio on **both** renderers
+  (track-list `video=cdgraphics` + external `audio=mp3`, time-pos advancing, HDMI screenshot).
+- Builds on the search-surfacing work in #114/#115 (GCS mirror rows in rotation search).
+  Out of scope: bare `.cdg` (no audio) / bare `.mp3` (no video) catalog entries.
+
+**Deploy steps**
+- Backend change ⇒ **service restart required** (`git pull` + `sudo systemctl restart
+  kj-controller`; interrupts active playback). kj-autodeploy is OFF. Already deployed to
+  NomadPC (commit `9c656ac`, v0.42.0) and reverted to the persisted `render_mode = vlc`.
+
 ## 2026-06-28 - Ops: Full-library playability run launched on device + harness committed
 
 **Why:** With the playability checker shipped+deployed (v0.40.0), sweep the *entire*
