@@ -8,7 +8,7 @@
     <link rel="icon" href="/static/favicon-16x16.png" sizes="16x16" type="image/png">
     <link rel="icon" href="/static/favicon-32x32.png" sizes="32x32" type="image/png">
     <link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
-    <link rel="stylesheet" href="/static/style.css?v={{ config.get('APP_VERSION', '') }}">
+    <link rel="stylesheet" href="/static/style.css?v={{ app_version }}">
 </head>
 <body>
     <div id="audio-warning">
@@ -831,7 +831,7 @@
         websockifyHost: {{ config.get('websockify_host', '') | tojson }}
       });
     </script>
-    <script src="/static/app.js?v={{ config.get('APP_VERSION', '') }}"></script>
+    <script src="/static/app.js?v={{ app_version }}"></script>
 
     <!-- VNC Preview (noVNC ES6 module) -->
     <script type="module">
