@@ -72,6 +72,22 @@ class ZipPlayback:
         self.cleanup()
         return None
 
+    def current_cdg_path(self):
+        """Return the .cdg path in the current extraction dir, or None.
+
+        Valid only after a successful ``extract_and_get_mp3`` (before
+        ``cleanup``). mpv must be handed the .cdg directly to render the CDG
+        graphics (with the .mp3 supplied as an external audio track); VLC
+        instead auto-discovers the sibling .cdg from the .mp3.
+        """
+        if not self._temp_dir or not os.path.isdir(self._temp_dir):
+            return None
+        for root, _dirs, files in os.walk(self._temp_dir):
+            for fname in files:
+                if fname.lower().endswith('.cdg'):
+                    return os.path.join(root, fname)
+        return None
+
     def _extract_with_unzip(self, zip_path, dest_dir):
         """Extract a ZIP using the system `unzip`, for compression methods
         Python's zipfile can't handle (e.g. Deflate64). Returns True on success.

@@ -29,6 +29,19 @@ PITCH_MIN = -6
 PITCH_MAX = 6
 
 
+def _audio_file_option(audio_file):
+    """Build the mpv ``loadfile`` option that attaches an external audio track.
+
+    Used for CDG zips: mpv plays the .cdg (graphics) as the main file and the
+    matching .mp3 as an external audio track. mpv's loadfile options are a
+    comma-separated ``key=value`` list, so a path containing a comma would
+    corrupt parsing — use mpv's length-prefixed value escaping (``%n%value``,
+    where n is the byte length) which is literal and safe for any path.
+    """
+    n = len(audio_file.encode('utf-8'))
+    return f"audio-file=%{n}%{audio_file}"
+
+
 class MpvKaraokePlayer:
     """Karaoke backend that uses mpv + rubberband via IPC."""
 
@@ -260,7 +273,7 @@ class MpvKaraokePlayer:
 
     # ── Playback control ───────────────────────────────────────────────
 
-    def play(self, file_path, display_path=None, overlay_manager=None):
+    def play(self, file_path, display_path=None, overlay_manager=None, audio_file=None):
         if not os.path.exists(file_path):
             log_message(f"ERROR: File not found: {file_path}", self.config)
             return
@@ -279,7 +292,11 @@ class MpvKaraokePlayer:
             if overlay_manager is not None:
                 overlay_manager.set_karaoke_playing(True)
 
-            resp = self._send_ipc(["loadfile", file_path, "replace"])
+            load_cmd = ["loadfile", file_path, "replace"]
+            if audio_file:
+                # mpv 0.37: loadfile <url> <flags> <options-string>.
+                load_cmd.append(_audio_file_option(audio_file))
+            resp = self._send_ipc(load_cmd)
             if resp is None or resp.get("error") != "success":
                 log_message(f"ERROR: mpv failed to load {file_path}", self.config)
                 self.audio_error = True

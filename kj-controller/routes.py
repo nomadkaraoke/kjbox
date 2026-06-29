@@ -21,7 +21,7 @@ from text_normalize import normalize as _normalize_text, tokens as _tokens, grou
 import version_priority
 import youtube_health
 import youtube_search
-from config import APP_DIR, RENDER_MODES, load_config, save_config_value
+from config import APP_DIR, RENDER_MODE_MPV, RENDER_MODES, load_config, save_config_value
 from playback import RendererSwitchRejected
 from sing import get_event_url, sync_event_url_overlays
 from sleep_mode import SleepManager
@@ -484,12 +484,21 @@ def handle_play():
 
     # Handle ZIP files (CDG+MP3)
     actual_play_path = validated
+    audio_file = None
     if validated.lower().endswith('.zip'):
         zip_playback = current_app.zip_playback
         mp3_path = zip_playback.extract_and_get_mp3(validated)
         if not mp3_path:
             return jsonify({"error": "ZIP file does not contain a playable .mp3 file"}), 400
         actual_play_path = mp3_path
+        # mpv renders the CDG graphics only when handed the .cdg directly, with
+        # the .mp3 attached as an external audio track. VLC instead auto-
+        # discovers the sibling .cdg from the .mp3, so it keeps the mp3.
+        if getattr(vlc, 'render_mode', None) == RENDER_MODE_MPV:
+            cdg_path = zip_playback.current_cdg_path()
+            if cdg_path:
+                actual_play_path = cdg_path
+                audio_file = mp3_path
 
     # Auto-disable browser mode before playing — kill Chromium and reset PipeWire
     # so VLC has exclusive access to the audio device and display.
@@ -505,7 +514,8 @@ def handle_play():
     log_message(f"Received play request for {os.path.basename(validated)}.", cfg)
     threading.Thread(target=vlc.play_video, args=(actual_play_path,),
                      kwargs={'display_path': validated,
-                             'overlay_manager': current_app.overlay_manager}).start()
+                             'overlay_manager': current_app.overlay_manager,
+                             'audio_file': audio_file}).start()
     return jsonify({"success": True, "message": "Playback initiated."})
 
 

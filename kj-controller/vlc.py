@@ -241,8 +241,13 @@ class VlcKaraokePlayer:
 
     # ── Playback control ───────────────────────────────────────────────
 
-    def play(self, file_path, display_path=None, overlay_manager=None):
-        """Play a karaoke file. Caller (coordinator) must stop filler first."""
+    def play(self, file_path, display_path=None, overlay_manager=None, audio_file=None):
+        """Play a karaoke file. Caller (coordinator) must stop filler first.
+
+        ``audio_file`` is accepted for interface parity with the mpv renderer
+        but ignored: for CDG zips the caller hands VLC the .mp3 and VLC
+        auto-discovers the sibling .cdg, so no external audio track is needed.
+        """
         if not os.path.exists(file_path):
             log_message(f"ERROR: File not found: {file_path}", self.config)
             return

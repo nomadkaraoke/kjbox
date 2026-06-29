@@ -1231,6 +1231,68 @@ def test_play_passes_display_path_and_overlay(flask_test_client, flask_app, tmp_
     assert 'overlay_manager' in kwargs
 
 
+def test_play_zip_mpv_renderer_plays_cdg_with_audio_file(
+    flask_test_client, flask_app, tmp_media_dir, mocker
+):
+    """On the mpv renderer a CDG zip is played as the .cdg with the mp3 as an
+    external audio track — handing mpv the mp3 alone renders no graphics."""
+    media_dir = tmp_media_dir / "media"
+    zip_file = media_dir / "song.zip"
+    zip_file.write_text("zip")
+    mp3 = str(media_dir / "x.mp3")
+    cdg = str(media_dir / "x.cdg")
+
+    flask_app.vlc.enabled = True
+    flask_app.vlc.render_mode = 'mpv'
+    mocker.patch.object(flask_app.zip_playback, 'extract_and_get_mp3', return_value=mp3)
+    mocker.patch.object(flask_app.zip_playback, 'current_cdg_path', return_value=cdg)
+    play_mock = mocker.patch.object(flask_app.vlc, 'play_video')
+
+    response = flask_test_client.post('/play',
+        data=json.dumps({"file_path": str(zip_file)}),
+        content_type='application/json')
+    assert response.status_code == 200
+
+    import time
+    time.sleep(0.2)
+    play_mock.assert_called_once()
+    args, kwargs = play_mock.call_args
+    assert args[0] == cdg
+    assert kwargs['audio_file'] == mp3
+    # The display path stays the original zip so the UI shows the song name.
+    assert kwargs['display_path'] == str(zip_file)
+
+
+def test_play_zip_vlc_renderer_plays_mp3_without_audio_file(
+    flask_test_client, flask_app, tmp_media_dir, mocker
+):
+    """On VLC a CDG zip is played as the mp3 (VLC auto-discovers the sibling
+    .cdg); no external audio file is attached."""
+    media_dir = tmp_media_dir / "media"
+    zip_file = media_dir / "song.zip"
+    zip_file.write_text("zip")
+    mp3 = str(media_dir / "x.mp3")
+
+    flask_app.vlc.enabled = True
+    flask_app.vlc.render_mode = 'vlc'
+    mocker.patch.object(flask_app.zip_playback, 'extract_and_get_mp3', return_value=mp3)
+    cdg_mock = mocker.patch.object(flask_app.zip_playback, 'current_cdg_path', return_value=str(media_dir / "x.cdg"))
+    play_mock = mocker.patch.object(flask_app.vlc, 'play_video')
+
+    response = flask_test_client.post('/play',
+        data=json.dumps({"file_path": str(zip_file)}),
+        content_type='application/json')
+    assert response.status_code == 200
+
+    import time
+    time.sleep(0.2)
+    play_mock.assert_called_once()
+    args, kwargs = play_mock.call_args
+    assert args[0] == mp3
+    assert kwargs['audio_file'] is None
+    cdg_mock.assert_not_called()
+
+
 # --- Volume persistence ---
 
 def test_status_includes_volume(flask_test_client, flask_app):

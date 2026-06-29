@@ -293,8 +293,11 @@ class PlaybackCoordinator:
         self.player.on_karaoke_end = fn
 
     # -- Karaoke playback --
-    def play_video(self, file_path, display_path=None, overlay_manager=None):
-        """Stop filler, then play on the current renderer."""
+    def play_video(self, file_path, display_path=None, overlay_manager=None, audio_file=None):
+        """Stop filler, then play on the current renderer.
+
+        ``audio_file`` is forwarded to the player (external audio track for CDG
+        zips on mpv); see ``KaraokePlayer.play``."""
         if not self.enabled:
             log_message(f"Playback disabled — cannot play {os.path.basename(file_path)}", self.config)
             return
@@ -308,7 +311,8 @@ class PlaybackCoordinator:
             time.sleep(0.3)
             self.filler.ensure_stopped()
 
-        self.player.play(file_path, display_path=display_path, overlay_manager=overlay)
+        self.player.play(file_path, display_path=display_path, overlay_manager=overlay,
+                         audio_file=audio_file)
 
     def stop_karaoke(self):
         self.player.stop()

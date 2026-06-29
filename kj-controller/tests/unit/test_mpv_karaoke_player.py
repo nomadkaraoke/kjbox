@@ -188,6 +188,33 @@ def test_play_loadfile_failure_rollback(player, mocker, tmp_path):
     overlay.set_karaoke_playing.assert_any_call(False)
 
 
+def test_play_without_audio_file_sends_plain_loadfile(player, mocker, tmp_path):
+    f = tmp_path / "song.mp4"
+    f.write_text("")
+    player.enabled = True
+    send = mocker.patch.object(player, '_send_ipc', return_value={'error': 'success'})
+    player.play(str(f))
+    assert send.call_args_list[0].args[0] == ["loadfile", str(f), "replace"]
+
+
+def test_play_with_audio_file_attaches_external_audio(player, mocker, tmp_path):
+    # mpv renders CDG graphics only when handed the .cdg directly; the matching
+    # mp3 is attached as an external audio track via a loadfile option. The
+    # value uses mpv's length-prefixed escaping so paths with commas/spaces are
+    # safe.
+    cdg = tmp_path / "song.cdg"
+    cdg.write_text("")
+    mp3 = tmp_path / "song.mp3"
+    mp3.write_text("")
+    player.enabled = True
+    send = mocker.patch.object(player, '_send_ipc', return_value={'error': 'success'})
+    player.play(str(cdg), audio_file=str(mp3))
+    cmd = send.call_args_list[0].args[0]
+    assert cmd[:3] == ["loadfile", str(cdg), "replace"]
+    n = len(str(mp3).encode("utf-8"))
+    assert cmd[3] == f"audio-file=%{n}%{mp3}"
+
+
 # --- _handle_karaoke_ended: race fix wired up ---
 
 def test_handle_karaoke_ended_calls_ensure_released_before_callback(player, mocker):
