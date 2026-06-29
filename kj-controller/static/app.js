@@ -5209,6 +5209,9 @@ async function restoreFromSheet() {
 function openLinkSearch(entryId, songText) {
     const form = document.getElementById('rotation-add-form');
     if (form.classList.contains('hidden')) form.classList.remove('hidden');
+    // Clear any results left over from a previous link/add so a stale row can't
+    // be selected against this new target before the fresh search lands.
+    hideRotSearchDropdown();
     // Store the target entry ID so selectRotSearchResult can link instead of add
     form.dataset.linkTargetId = entryId;
     form.classList.add('link-mode');
@@ -5343,12 +5346,10 @@ function initRotationSearch() {
 
         if (e.key === 'ArrowDown') {
             e.preventDefault();
-            rotSearchSelectedIdx = Math.min(rotSearchSelectedIdx + 1, rotSearchResults.length - 1);
-            highlightRotSearchResult();
+            rotMoveSelection(1);
         } else if (e.key === 'ArrowUp') {
             e.preventDefault();
-            rotSearchSelectedIdx = Math.max(rotSearchSelectedIdx - 1, -1);
-            highlightRotSearchResult();
+            rotMoveSelection(-1);
         } else if (e.key === 'Enter' && rotSearchSelectedIdx >= 0) {
             e.preventDefault();
             selectRotSearchResult(rotSearchResults[rotSearchSelectedIdx]);
@@ -5783,6 +5784,30 @@ function highlightRotSearchResult() {
         const idx = parseInt(el.dataset.idx, 10);
         el.classList.toggle('selected', idx === rotSearchSelectedIdx);
     });
+}
+
+// Result indices that are currently navigable — i.e. not hidden inside a
+// collapsed "more commercial versions" container. DOM-driven so it stays
+// correct as the KJ expands/collapses without any extra bookkeeping.
+function rotVisibleIndices() {
+    return Array.from(document.querySelectorAll('#rotation-search-dropdown [data-idx]'))
+        .filter(el => !el.closest('.rs-collapse.hidden'))
+        .map(el => parseInt(el.dataset.idx, 10))
+        .filter(n => !Number.isNaN(n))
+        .sort((a, b) => a - b);
+}
+
+// Move the highlight by `dir` (+1 down / -1 up) across only the visible rows,
+// so Enter can never select a row hidden inside a collapsed section.
+function rotMoveSelection(dir) {
+    const vis = rotVisibleIndices();
+    if (vis.length === 0) return;
+    const pos = vis.indexOf(rotSearchSelectedIdx);
+    let newPos;
+    if (dir > 0) newPos = pos < 0 ? 0 : Math.min(pos + 1, vis.length - 1);
+    else newPos = pos < 0 ? -1 : pos - 1; // ArrowUp past the first row deselects
+    rotSearchSelectedIdx = newPos < 0 ? -1 : vis[newPos];
+    highlightRotSearchResult();
 }
 
 async function selectRotSearchResult(result) {

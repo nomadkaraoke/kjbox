@@ -49,8 +49,9 @@ def path_in_download_folder(path, cfg):
 def _library_folder_label(path, cfg):
     """Derive a section label from a 4TB-SSD file's folder."""
     folder = os.path.dirname(path or "")
-    mount = (cfg or {}).get("external_media_mount") or ""
-    if mount and folder.startswith(mount):
+    mount = ((cfg or {}).get("external_media_mount") or "").rstrip("/")
+    # Boundary-aware strip so "/mnt/ssd2/..." isn't mistaken for "/mnt/ssd".
+    if mount and (folder == mount or folder.startswith(mount + os.sep)):
         folder = folder[len(mount):]
     folder = _MOUNT_STRIP_RE.sub("", folder)
     segs = [s for s in folder.strip("/").split("/") if s]

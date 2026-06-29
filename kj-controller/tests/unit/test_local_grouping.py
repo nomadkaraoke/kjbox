@@ -41,6 +41,15 @@ class TestLibraryFolderGrouping:
                is_download=False, cfg=cfg)
         assert g["label"] == "Library — Karaoke - Digital/Active"
 
+    def test_mount_strip_is_boundary_aware(self):
+        # "/mnt/ssd2" must NOT be treated as living under mount "/mnt/ssd".
+        cfg = {"external_media_mount": "/mnt/ssd"}
+        g = _g("/mnt/ssd2/Karaoke - Digital/Dead/foo/f.zip", "f.zip",
+               is_download=False, cfg=cfg)
+        # The "Karaoke - Digital/Dead" detection still works (it doesn't depend
+        # on the mount), and crucially the mount wasn't mis-stripped.
+        assert g["label"] == "Library — Karaoke - Digital/Dead"
+
     def test_fallback_label_when_no_known_pattern(self):
         g = _g("/media/nomad/SomeCollection/Sub/file.zip", "file.zip",
                is_download=False)
