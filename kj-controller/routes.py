@@ -195,6 +195,11 @@ def index():
         roman_map=text_normalize.ROMAN_NUMERALS,
         normalizer_version=text_normalize.NORMALIZER_VERSION,
         config=cfg,
+        # Pass the app version explicitly: `config=cfg` above shadows Flask's
+        # auto-injected app config (which holds APP_VERSION) with kj_config,
+        # which doesn't — so the static-asset cache-bust query string was always
+        # empty and frontend deploys never busted the browser cache.
+        app_version=current_app.config.get('APP_VERSION', ''),
     )
 
 
