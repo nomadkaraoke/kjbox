@@ -260,7 +260,7 @@ class MpvKaraokePlayer:
 
     # ── Playback control ───────────────────────────────────────────────
 
-    def play(self, file_path, display_path=None, overlay_manager=None):
+    def play(self, file_path, display_path=None, overlay_manager=None, audio_file=None):
         if not os.path.exists(file_path):
             log_message(f"ERROR: File not found: {file_path}", self.config)
             return
@@ -287,6 +287,26 @@ class MpvKaraokePlayer:
                     overlay_manager.set_karaoke_playing(False)
                 self.current_path = None
                 return
+
+            # For a CDG zip, file_path is the .cdg (graphics); attach the matching
+            # .mp3 as an external audio track. `audio-add` is used rather than a
+            # loadfile option because the loadfile options-arg position differs
+            # between mpv 0.37 and 0.38+, whereas `audio-add` is stable across
+            # versions and needs no value escaping (path is a discrete IPC arg).
+            if audio_file:
+                aresp = self._send_ipc(["audio-add", audio_file, "select"])
+                if aresp is None or aresp.get("error") != "success":
+                    # A CDG .cdg has no audio of its own, so without the mp3 this
+                    # would play silent video. Abort rather than start a song the
+                    # singer can't hear.
+                    log_message(
+                        f"ERROR: mpv failed to attach audio {audio_file}", self.config)
+                    self._send_ipc(["stop"])
+                    self.audio_error = True
+                    if overlay_manager is not None:
+                        overlay_manager.set_karaoke_playing(False)
+                    self.current_path = None
+                    return
 
             time.sleep(0.5)
             mpv_vol = self._vlc_to_mpv_volume(self.karaoke_volume)

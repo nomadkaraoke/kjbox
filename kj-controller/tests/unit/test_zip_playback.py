@@ -100,9 +100,25 @@ class TestZipPlayback:
         assert mp3_path is not None
         assert mp3_path.endswith('.mp3')
         assert os.path.exists(mp3_path)
-        # Verify matching .cdg exists in same dir
-        cdg_path = mp3_path.replace('.mp3', '.cdg')
+
+    def test_current_cdg_path_after_extract(self, zip_playback, cdg_zip):
+        """The matching .cdg is exposed so mpv can be handed it directly."""
+        zip_playback.extract_and_get_mp3(cdg_zip)
+        cdg_path = zip_playback.current_cdg_path()
+        assert cdg_path is not None
+        assert cdg_path.endswith('.cdg')
         assert os.path.exists(cdg_path)
+
+    def test_current_cdg_path_none_before_extract(self, zip_playback):
+        assert zip_playback.current_cdg_path() is None
+
+    def test_current_cdg_path_none_when_no_cdg(self, zip_playback, tmp_path):
+        # A zip with an mp3 but no cdg: mp3 extracts, but there is no cdg.
+        zp = tmp_path / "audio_only.zip"
+        with zipfile.ZipFile(str(zp), 'w') as zf:
+            zf.writestr("song.mp3", b"fake mp3 data")
+        zip_playback.extract_and_get_mp3(str(zp))
+        assert zip_playback.current_cdg_path() is None
 
     @pytest.mark.skipif(shutil.which('unzip') is None, reason="unzip not installed")
     def test_extract_deflate64_falls_back_to_unzip(self, zip_playback, deflate64_zip):

@@ -378,3 +378,36 @@ class TestDownloadAndLinkDivebarFilename:
                 content_type='application/json')
         items = dl_app.download_queue['items']
         assert items[-1]['title'] == "divebar-xyz.mp4"
+
+    def test_zip_url_produces_zip_extension(self, dl_client, dl_app):
+        # CDG+MP3 zip must land as .zip so the gate classifies it as cdg_zip.
+        resp = dl_client.post('/rotation/add',
+            data=json.dumps({"singer": "Dan", "song_artist": "Admiration"}),
+            content_type='application/json')
+        entry_id = resp.get_json()["entry"]["id"]
+        with patch('routes.divebar.get_download_url',
+                   return_value="https://storage.googleapis.com/m/CKK%20-%20Incubus%20-%20Admiration.zip"):
+            dl_client.post('/rotation/download-and-link',
+                data=json.dumps({
+                    "id": entry_id, "source": "divebar", "file_id": "z9",
+                    "artist": "Incubus", "title": "Admiration", "brand_code": "CKK",
+                }),
+                content_type='application/json')
+        items = dl_app.download_queue['items']
+        assert items[-1]['title'] == "CKK - Incubus - Admiration.zip"
+
+    def test_drive_url_uses_format_for_extension(self, dl_client, dl_app):
+        resp = dl_client.post('/rotation/add',
+            data=json.dumps({"singer": "Eve", "song_artist": "Y"}),
+            content_type='application/json')
+        entry_id = resp.get_json()["entry"]["id"]
+        with patch('routes.divebar.get_download_url',
+                   return_value="https://drive.google.com/uc?export=download&id=d2"):
+            dl_client.post('/rotation/download-and-link',
+                data=json.dumps({
+                    "id": entry_id, "source": "divebar", "file_id": "d2",
+                    "artist": "A", "title": "B", "brand_code": "RSK", "format": "zip",
+                }),
+                content_type='application/json')
+        items = dl_app.download_queue['items']
+        assert items[-1]['title'] == "RSK - A - B.zip"

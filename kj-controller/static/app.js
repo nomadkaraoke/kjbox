@@ -3153,6 +3153,7 @@ function renderDBResults(songs) {
                         artist: song.artist,
                         title: song.title,
                         brand_code: track.brand_code,
+                        format: track.format,
                     });
                     dlBtn.disabled = true;
                     dlBtn.textContent = 'Queued';
@@ -5559,6 +5560,7 @@ function renderRotKnRow(song, track, idx, isTop, isBest, downloadedIdToPath) {
         result.artist = song.artist;
         result.title = song.title;
         result.brand_code = track.brand_code;
+        result.format = track.divebar.format;
     } else if (track.youtube_url) {
         result.type = 'youtube';
         result.youtube_url = track.youtube_url;
@@ -5604,6 +5606,7 @@ function renderRotDivebarRow(dv, idx, isTop, isBest) {
         artist: dv.artist,
         title: dv.title,
         brand_code: dv.brand_code,
+        format: dv.format,
         song_artist: (dv.title || '') + ' - ' + (dv.artist || ''),
     };
     const rowClass = 'kn-track rs-clickable'
@@ -5663,6 +5666,7 @@ async function selectRotSearchResult(result) {
             return { endpoint: '/rotation/download-and-link', body: {
                 ...base, source: 'divebar', file_id: result.file_id,
                 artist: result.artist, title: result.title, brand_code: result.brand_code,
+                format: result.format,
             }};
         }
         if (result.type === 'youtube') {

@@ -571,7 +571,7 @@ function renderSearch() {
           song_artist: group.artist,
           song_title: group.title,
           label: `${group.title} — ${group.artist} (community karaoke)`,
-          source_meta: { brand_code: track.brand_code, disc_id: track.disc_id },
+          source_meta: { brand_code: track.brand_code, disc_id: track.disc_id, format: track.divebar.format },
         }
       : {
           source_type: "kn",
@@ -665,6 +665,7 @@ function renderSearch() {
           source_meta: {
             brand_code: kn.brand_code,
             disc_id: kn.divebar.drive_path,
+            format: kn.divebar.format,
           },
         };
       } else {

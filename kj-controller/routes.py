@@ -21,11 +21,11 @@ from text_normalize import normalize as _normalize_text, tokens as _tokens, grou
 import version_priority
 import youtube_health
 import youtube_search
-from config import APP_DIR, RENDER_MODES, load_config, save_config_value
+from config import APP_DIR, RENDER_MODE_MPV, RENDER_MODES, load_config, save_config_value
 from playback import RendererSwitchRejected
 from sing import get_event_url, sync_event_url_overlays
 from sleep_mode import SleepManager
-from utils import log_message, build_divebar_filename
+from utils import log_message, build_divebar_filename, divebar_ext
 
 # --- Browser mode state ---
 # Tracks whether the system is in Browser mode (Chromium) vs VLC mode (default).
@@ -484,12 +484,21 @@ def handle_play():
 
     # Handle ZIP files (CDG+MP3)
     actual_play_path = validated
+    audio_file = None
     if validated.lower().endswith('.zip'):
         zip_playback = current_app.zip_playback
         mp3_path = zip_playback.extract_and_get_mp3(validated)
         if not mp3_path:
             return jsonify({"error": "ZIP file does not contain a playable .mp3 file"}), 400
         actual_play_path = mp3_path
+        # mpv renders the CDG graphics only when handed the .cdg directly, with
+        # the .mp3 attached as an external audio track. VLC instead auto-
+        # discovers the sibling .cdg from the .mp3, so it keeps the mp3.
+        if getattr(vlc, 'render_mode', None) == RENDER_MODE_MPV:
+            cdg_path = zip_playback.current_cdg_path()
+            if cdg_path:
+                actual_play_path = cdg_path
+                audio_file = mp3_path
 
     # Auto-disable browser mode before playing — kill Chromium and reset PipeWire
     # so VLC has exclusive access to the audio device and display.
@@ -505,7 +514,8 @@ def handle_play():
     log_message(f"Received play request for {os.path.basename(validated)}.", cfg)
     threading.Thread(target=vlc.play_video, args=(actual_play_path,),
                      kwargs={'display_path': validated,
-                             'overlay_manager': current_app.overlay_manager}).start()
+                             'overlay_manager': current_app.overlay_manager,
+                             'audio_file': audio_file}).start()
     return jsonify({"success": True, "message": "Playback initiated."})
 
 
@@ -1507,14 +1517,19 @@ def divebar_download():
     artist = (data.get('artist') or '').strip()
     title = (data.get('title') or '').strip()
     brand_code = (data.get('brand_code') or '').strip()
+    fmt = (data.get('format') or '').strip()
 
     cfg = current_app.kj_config
     url = divebar.get_download_url(file_id, config=cfg)
     if not url:
         return jsonify({"error": "Could not get download URL"}), 500
 
-    filename = build_divebar_filename(brand_code, artist, title) \
-               or f"divebar-{file_id}.mp4"
+    # Derive the on-disk extension from the (GCS) URL — falling back to the
+    # catalog format for Drive URLs — so CDG/zip files don't land as .mp4 and
+    # get rejected by the playability gate (which classifies by extension).
+    ext = divebar_ext(url, fmt)
+    filename = build_divebar_filename(brand_code, artist, title, ext=ext) \
+               or f"divebar-{file_id}{ext}"
 
     # Reuse the existing download queue with the Drive URL
     app = current_app._get_current_object()
@@ -3565,6 +3580,7 @@ def download_and_link_rotation():
         artist = (data.get('artist') or '').strip()
         title = (data.get('title') or '').strip()
         brand_code = (data.get('brand_code') or '').strip()
+        fmt = (data.get('format') or '').strip()
         if not file_id:
             return jsonify({"error": "file_id is required for divebar"}), 400
     elif source == "youtube":
@@ -3597,11 +3613,12 @@ def download_and_link_rotation():
             download_url = divebar.get_download_url(file_id, cfg)
             if not download_url:
                 return jsonify({"error": "Failed to get download URL from Divebar"}), 502
+            ext = divebar_ext(download_url, fmt)
             queue_item = {
                 'id': download_id,
                 'url': download_url,
-                'title': build_divebar_filename(brand_code, artist, title)
-                         or f"divebar-{file_id}.mp4",
+                'title': build_divebar_filename(brand_code, artist, title, ext=ext)
+                         or f"divebar-{file_id}{ext}",
                 'source': 'divebar',
                 'source_detail': divebar.classify_download_url(download_url),
                 'status': 'queued',
@@ -3952,11 +3969,13 @@ def approve_sing_request(app, req, skip_download=False):
             else:
                 meta = {}
             brand_code = meta.get("brand_code") or ""
+            ext = divebar_ext(download_url, meta.get("format"))
             title = build_divebar_filename(
                 brand_code,
                 req.get("song_artist"),
                 req.get("song_title"),
-            ) or f"divebar-{source_ref}.mp4"
+                ext=ext,
+            ) or f"divebar-{source_ref}{ext}"
             queue_src = "divebar"
             queue_url = download_url
         else:

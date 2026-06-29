@@ -188,6 +188,58 @@ def test_play_loadfile_failure_rollback(player, mocker, tmp_path):
     overlay.set_karaoke_playing.assert_any_call(False)
 
 
+def test_play_without_audio_file_sends_plain_loadfile(player, mocker, tmp_path):
+    f = tmp_path / "song.mp4"
+    f.write_text("")
+    player.enabled = True
+    send = mocker.patch.object(player, '_send_ipc', return_value={'error': 'success'})
+    player.play(str(f))
+    calls = [c.args[0] for c in send.call_args_list]
+    assert calls[0] == ["loadfile", str(f), "replace"]
+    # No external audio is attached for an ordinary (non-CDG) file.
+    assert not any(c and c[0] == "audio-add" for c in calls)
+
+
+def test_play_aborts_when_audio_add_fails(player, mocker, tmp_path):
+    # A CDG .cdg has no audio; if the mp3 can't attach, don't start a silent song.
+    cdg = tmp_path / "song.cdg"
+    cdg.write_text("")
+    mp3 = tmp_path / "song.mp3"
+    mp3.write_text("")
+    player.enabled = True
+    overlay = mocker.Mock()
+
+    def fake_ipc(cmd):
+        if cmd and cmd[0] == "audio-add":
+            return {"error": "no audio track"}
+        return {"error": "success"}
+
+    mocker.patch.object(player, '_send_ipc', side_effect=fake_ipc)
+    player.play(str(cdg), audio_file=str(mp3), overlay_manager=overlay)
+    assert player.audio_error is True
+    overlay.set_karaoke_playing.assert_any_call(False)
+    assert player.current_path is None
+
+
+def test_play_with_audio_file_attaches_external_audio(player, mocker, tmp_path):
+    # mpv renders CDG graphics only when handed the .cdg directly; the matching
+    # mp3 is attached afterwards as an external audio track via `audio-add`
+    # (stable across mpv versions; the loadfile options-arg position is not).
+    cdg = tmp_path / "song.cdg"
+    cdg.write_text("")
+    mp3 = tmp_path / "song.mp3"
+    mp3.write_text("")
+    player.enabled = True
+    send = mocker.patch.object(player, '_send_ipc', return_value={'error': 'success'})
+    player.play(str(cdg), audio_file=str(mp3))
+    calls = [c.args[0] for c in send.call_args_list]
+    # The .cdg is loaded with a plain loadfile (no options string)...
+    assert calls[0] == ["loadfile", str(cdg), "replace"]
+    # ...then the mp3 is attached and selected as an external audio track.
+    assert ["audio-add", str(mp3), "select"] in calls
+    assert calls.index(["audio-add", str(mp3), "select"]) > 0
+
+
 # --- _handle_karaoke_ended: race fix wired up ---
 
 def test_handle_karaoke_ended_calls_ensure_released_before_callback(player, mocker):

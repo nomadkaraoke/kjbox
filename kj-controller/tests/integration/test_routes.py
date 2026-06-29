@@ -1231,6 +1231,68 @@ def test_play_passes_display_path_and_overlay(flask_test_client, flask_app, tmp_
     assert 'overlay_manager' in kwargs
 
 
+def test_play_zip_mpv_renderer_plays_cdg_with_audio_file(
+    flask_test_client, flask_app, tmp_media_dir, mocker
+):
+    """On the mpv renderer a CDG zip is played as the .cdg with the mp3 as an
+    external audio track — handing mpv the mp3 alone renders no graphics."""
+    media_dir = tmp_media_dir / "media"
+    zip_file = media_dir / "song.zip"
+    zip_file.write_text("zip")
+    mp3 = str(media_dir / "x.mp3")
+    cdg = str(media_dir / "x.cdg")
+
+    flask_app.vlc.enabled = True
+    flask_app.vlc.render_mode = 'mpv'
+    mocker.patch.object(flask_app.zip_playback, 'extract_and_get_mp3', return_value=mp3)
+    mocker.patch.object(flask_app.zip_playback, 'current_cdg_path', return_value=cdg)
+    play_mock = mocker.patch.object(flask_app.vlc, 'play_video')
+
+    response = flask_test_client.post('/play',
+        data=json.dumps({"file_path": str(zip_file)}),
+        content_type='application/json')
+    assert response.status_code == 200
+
+    import time
+    time.sleep(0.2)
+    play_mock.assert_called_once()
+    args, kwargs = play_mock.call_args
+    assert args[0] == cdg
+    assert kwargs['audio_file'] == mp3
+    # The display path stays the original zip so the UI shows the song name.
+    assert kwargs['display_path'] == str(zip_file)
+
+
+def test_play_zip_vlc_renderer_plays_mp3_without_audio_file(
+    flask_test_client, flask_app, tmp_media_dir, mocker
+):
+    """On VLC a CDG zip is played as the mp3 (VLC auto-discovers the sibling
+    .cdg); no external audio file is attached."""
+    media_dir = tmp_media_dir / "media"
+    zip_file = media_dir / "song.zip"
+    zip_file.write_text("zip")
+    mp3 = str(media_dir / "x.mp3")
+
+    flask_app.vlc.enabled = True
+    flask_app.vlc.render_mode = 'vlc'
+    mocker.patch.object(flask_app.zip_playback, 'extract_and_get_mp3', return_value=mp3)
+    cdg_mock = mocker.patch.object(flask_app.zip_playback, 'current_cdg_path', return_value=str(media_dir / "x.cdg"))
+    play_mock = mocker.patch.object(flask_app.vlc, 'play_video')
+
+    response = flask_test_client.post('/play',
+        data=json.dumps({"file_path": str(zip_file)}),
+        content_type='application/json')
+    assert response.status_code == 200
+
+    import time
+    time.sleep(0.2)
+    play_mock.assert_called_once()
+    args, kwargs = play_mock.call_args
+    assert args[0] == mp3
+    assert kwargs['audio_file'] is None
+    cdg_mock.assert_not_called()
+
+
 # --- Volume persistence ---
 
 def test_status_includes_volume(flask_test_client, flask_app):
@@ -1338,6 +1400,39 @@ class TestDivebarDownloadFilename:
         assert resp.status_code == 200
         items = flask_app.download_queue['items']
         assert items[-1]['title'] == "divebar-abc.mp4"
+
+    def test_zip_url_produces_zip_extension(self, flask_test_client, flask_app):
+        # A CDG+MP3 zip mirror file must land on disk as .zip, not .mp4, or the
+        # playability gate misclassifies it as video and rejects the download.
+        with patch('routes.divebar.get_download_url',
+                   return_value="https://storage.googleapis.com/m/CKK%20-%20Incubus%20-%20Admiration.zip"):
+            resp = flask_test_client.post('/divebar/download', json={
+                "file_id": "z1", "artist": "Incubus", "title": "Admiration",
+                "brand_code": "CKK",
+            })
+        assert resp.status_code == 200
+        items = flask_app.download_queue['items']
+        assert items[-1]['title'] == "CKK - Incubus - Admiration.zip"
+
+    def test_zip_fallback_name_uses_zip_extension(self, flask_test_client, flask_app):
+        with patch('routes.divebar.get_download_url',
+                   return_value="https://storage.googleapis.com/m/y.zip"):
+            resp = flask_test_client.post('/divebar/download', json={"file_id": "z2"})
+        assert resp.status_code == 200
+        items = flask_app.download_queue['items']
+        assert items[-1]['title'] == "divebar-z2.zip"
+
+    def test_drive_url_uses_format_for_extension(self, flask_test_client, flask_app):
+        # Drive URLs carry no path extension — the client-supplied format wins.
+        with patch('routes.divebar.get_download_url',
+                   return_value="https://drive.google.com/uc?export=download&id=d1"):
+            resp = flask_test_client.post('/divebar/download', json={
+                "file_id": "d1", "artist": "A", "title": "B",
+                "brand_code": "RSK", "format": "zip",
+            })
+        assert resp.status_code == 200
+        items = flask_app.download_queue['items']
+        assert items[-1]['title'] == "RSK - A - B.zip"
 
 
 class TestDivebarRefresh:

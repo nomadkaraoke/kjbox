@@ -269,7 +269,24 @@ def test_play_video_stops_filler_first(mock_config, mocker, tmp_path):
     c.play_video(str(f))
     fade_out.assert_called_once()
     ensure.assert_called_once()
-    play.assert_called_once_with(str(f), display_path=None, overlay_manager=None)
+    play.assert_called_once_with(str(f), display_path=None, overlay_manager=None, audio_file=None)
+
+
+def test_play_video_threads_audio_file_to_player(mock_config, mocker, tmp_path):
+    """An external audio file (CDG zip on mpv) is forwarded to the player."""
+    cdg = tmp_path / "song.cdg"
+    cdg.write_text("")
+    mp3 = tmp_path / "song.mp3"
+    mp3.write_text("")
+    c = PlaybackCoordinator(mock_config, enabled=True)
+    mocker.patch.object(c.filler, 'send', return_value={"state": "stopped"})
+    play = mocker.patch.object(c.player, 'play')
+    mocker.patch('playback.time.sleep')
+
+    c.play_video(str(cdg), display_path=str(cdg), audio_file=str(mp3))
+    play.assert_called_once_with(
+        str(cdg), display_path=str(cdg), overlay_manager=None, audio_file=str(mp3)
+    )
 
 
 def test_play_video_skips_fadeout_when_filler_stopped(mock_config, mocker, tmp_path):

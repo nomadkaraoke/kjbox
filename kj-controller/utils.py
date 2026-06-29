@@ -48,6 +48,43 @@ def build_divebar_filename(brand_code, artist, title, ext=".mp4"):
     return " - ".join(parts) + ext
 
 
+def divebar_ext(url=None, fmt=None):
+    """Pick the on-disk extension for a Divebar download.
+
+    A Divebar file may be mp4/mkv/avi/… video, a CDG+MP3 ``.zip``, a bare
+    ``.cdg`` or a bare ``.mp3``. The extension must be correct on disk because
+    playability classification (and therefore the download gate) keys off it —
+    a CDG zip written as ``.mp4`` is misclassified as video and rejected.
+
+    Resolution order:
+      1. The real extension in the (GCS) URL path — the most authoritative
+         source; GCS mirror URLs encode the object's true filename.
+      2. The catalog ``format`` (e.g. ``"zip"``) — the fallback for Drive URLs
+         whose path carries no extension.
+      3. ``.mp4`` default.
+
+    Only ever returns a known media extension (``config.MEDIA_EXTENSIONS``).
+    """
+    from config import MEDIA_EXTENSIONS
+
+    if url:
+        from urllib.parse import urlparse, unquote
+        try:
+            path = unquote(urlparse(url).path)
+        except (ValueError, TypeError):
+            path = ""
+        url_ext = os.path.splitext(path)[1].lower()
+        if url_ext in MEDIA_EXTENSIONS:
+            return url_ext
+
+    if fmt:
+        candidate = "." + str(fmt).strip().lower().lstrip(".")
+        if candidate in MEDIA_EXTENSIONS:
+            return candidate
+
+    return ".mp4"
+
+
 def parse_youtube_filename(filename):
     """Parse youtube_id, channel, title from filename like {id}__{channel}__{title}.ext.
     Returns (youtube_id, channel, title) or None if not in this format."""
