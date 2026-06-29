@@ -25,7 +25,7 @@ from config import APP_DIR, RENDER_MODES, load_config, save_config_value
 from playback import RendererSwitchRejected
 from sing import get_event_url, sync_event_url_overlays
 from sleep_mode import SleepManager
-from utils import log_message, build_divebar_filename
+from utils import log_message, build_divebar_filename, divebar_ext
 
 # --- Browser mode state ---
 # Tracks whether the system is in Browser mode (Chromium) vs VLC mode (default).
@@ -1507,14 +1507,19 @@ def divebar_download():
     artist = (data.get('artist') or '').strip()
     title = (data.get('title') or '').strip()
     brand_code = (data.get('brand_code') or '').strip()
+    fmt = (data.get('format') or '').strip()
 
     cfg = current_app.kj_config
     url = divebar.get_download_url(file_id, config=cfg)
     if not url:
         return jsonify({"error": "Could not get download URL"}), 500
 
-    filename = build_divebar_filename(brand_code, artist, title) \
-               or f"divebar-{file_id}.mp4"
+    # Derive the on-disk extension from the (GCS) URL — falling back to the
+    # catalog format for Drive URLs — so CDG/zip files don't land as .mp4 and
+    # get rejected by the playability gate (which classifies by extension).
+    ext = divebar_ext(url, fmt)
+    filename = build_divebar_filename(brand_code, artist, title, ext=ext) \
+               or f"divebar-{file_id}{ext}"
 
     # Reuse the existing download queue with the Drive URL
     app = current_app._get_current_object()
@@ -3565,6 +3570,7 @@ def download_and_link_rotation():
         artist = (data.get('artist') or '').strip()
         title = (data.get('title') or '').strip()
         brand_code = (data.get('brand_code') or '').strip()
+        fmt = (data.get('format') or '').strip()
         if not file_id:
             return jsonify({"error": "file_id is required for divebar"}), 400
     elif source == "youtube":
@@ -3597,11 +3603,12 @@ def download_and_link_rotation():
             download_url = divebar.get_download_url(file_id, cfg)
             if not download_url:
                 return jsonify({"error": "Failed to get download URL from Divebar"}), 502
+            ext = divebar_ext(download_url, fmt)
             queue_item = {
                 'id': download_id,
                 'url': download_url,
-                'title': build_divebar_filename(brand_code, artist, title)
-                         or f"divebar-{file_id}.mp4",
+                'title': build_divebar_filename(brand_code, artist, title, ext=ext)
+                         or f"divebar-{file_id}{ext}",
                 'source': 'divebar',
                 'source_detail': divebar.classify_download_url(download_url),
                 'status': 'queued',
@@ -3952,11 +3959,13 @@ def approve_sing_request(app, req, skip_download=False):
             else:
                 meta = {}
             brand_code = meta.get("brand_code") or ""
+            ext = divebar_ext(download_url, meta.get("format"))
             title = build_divebar_filename(
                 brand_code,
                 req.get("song_artist"),
                 req.get("song_title"),
-            ) or f"divebar-{source_ref}.mp4"
+                ext=ext,
+            ) or f"divebar-{source_ref}{ext}"
             queue_src = "divebar"
             queue_url = download_url
         else:

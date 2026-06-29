@@ -1339,6 +1339,39 @@ class TestDivebarDownloadFilename:
         items = flask_app.download_queue['items']
         assert items[-1]['title'] == "divebar-abc.mp4"
 
+    def test_zip_url_produces_zip_extension(self, flask_test_client, flask_app):
+        # A CDG+MP3 zip mirror file must land on disk as .zip, not .mp4, or the
+        # playability gate misclassifies it as video and rejects the download.
+        with patch('routes.divebar.get_download_url',
+                   return_value="https://storage.googleapis.com/m/CKK%20-%20Incubus%20-%20Admiration.zip"):
+            resp = flask_test_client.post('/divebar/download', json={
+                "file_id": "z1", "artist": "Incubus", "title": "Admiration",
+                "brand_code": "CKK",
+            })
+        assert resp.status_code == 200
+        items = flask_app.download_queue['items']
+        assert items[-1]['title'] == "CKK - Incubus - Admiration.zip"
+
+    def test_zip_fallback_name_uses_zip_extension(self, flask_test_client, flask_app):
+        with patch('routes.divebar.get_download_url',
+                   return_value="https://storage.googleapis.com/m/y.zip"):
+            resp = flask_test_client.post('/divebar/download', json={"file_id": "z2"})
+        assert resp.status_code == 200
+        items = flask_app.download_queue['items']
+        assert items[-1]['title'] == "divebar-z2.zip"
+
+    def test_drive_url_uses_format_for_extension(self, flask_test_client, flask_app):
+        # Drive URLs carry no path extension — the client-supplied format wins.
+        with patch('routes.divebar.get_download_url',
+                   return_value="https://drive.google.com/uc?export=download&id=d1"):
+            resp = flask_test_client.post('/divebar/download', json={
+                "file_id": "d1", "artist": "A", "title": "B",
+                "brand_code": "RSK", "format": "zip",
+            })
+        assert resp.status_code == 200
+        items = flask_app.download_queue['items']
+        assert items[-1]['title'] == "RSK - A - B.zip"
+
 
 class TestDivebarRefresh:
     """On-demand pipeline refresh trigger: POST /divebar/refresh."""
