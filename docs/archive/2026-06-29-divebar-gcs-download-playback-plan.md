@@ -120,6 +120,46 @@ versions prominently and selecting reliably downloads + plays. Fill gaps found.
 3. Part D verification + gap fills.
 4. Full live verification (task #6), then `/shipit`.
 
+## Verification results (2026-06-29, live on NomadPC via `nomadpctunnel`)
+
+Implemented in two commits on `feat/sess-20260629-1227-divebar-gcs-playback` (v0.42.0):
+`d54f7fc` (download extension) + `103da0e` (mpv CDG playback). Full unit+integration
+suite green (1 expected skip: Xvfb not installed locally).
+
+- **Download (real app, branch deployed):** `/divebar/download` for the repro zip →
+  log `Queued Divebar download: CKK - Incubus - Admiration.zip` (was `.mp4`) →
+  `Successfully downloaded … from Divebar` (was "Download failed"). File landed as
+  `divebar__CKK - Incubus - Admiration.zip`; media index shows `overall_ok: True`,
+  `source: divebar`.
+- **Gate (real ffmpeg on device):** `PlayabilityChecker.check` on the real `.zip` →
+  `kind=cdg_zip`, `overall_ok=True`, cdg+audio both decode. Confirms no `_gate_playable`
+  change was needed.
+- **mpv spike:** mpv 0.37 on device. `loadfile <cdg> replace "audio-file=%<n>%<mp3>"`
+  (length-prefixed escaping) loads `video=cdgraphics` + `audio=mp3 (external)`. Both the
+  plain `--audio-file` and the escaped IPC form verified.
+- **Playback VLC (production renderer):** played the downloaded zip → CDG title card
+  rendered on the HDMI display (screenshot).
+- **Playback mpv (the fix):** switched renderer → played zip → log
+  `Playback started for …Admiration.cdg` (handed the .cdg, not the mp3) → screenshot shows
+  CDG graphics; live IPC: `time-pos≈52s`, `vid=1`, `aid=1`, `audio-codec=mp3`, not paused →
+  **graphics + synced audio**.
+- **Surfacing:** `/rotation/search` returns standalone selectable `divebar` mirror rows
+  (zip format) for mirrored songs; direct `/divebar/search` panel works. (A locally-held
+  song is correctly reclassified from a divebar row to a local row — #115 behaviour.)
+- **Device restored:** renderer back to `vlc`, checked out `main`, service active. The test
+  download (`divebar__CKK - Incubus - Admiration.zip`) was left in the library — a valid
+  playable song.
+
+### Known limitations / follow-ups (out of scope here)
+- **Bare `.cdg` mirror entries** (4052) have no audio and are not independently playable;
+  bare `.mp3` (4023) are audio-only. Likely incomplete/split catalog entries. The extension
+  fix lets them download, but a lone `.cdg` won't render usefully. Not addressed.
+- Some surfaced divebar rows show `brand_code: None` / `priority_class: unknown` for brands
+  without a registered canonical code — pre-existing cosmetic surfacing nuance, unrelated to
+  download/playback correctness.
+- Device deploy is manual (kj-autodeploy OFF): `git pull` + `sudo systemctl restart
+  kj-controller` (interrupts playback). Backend change ⇒ restart required.
+
 ## Risks / notes
 - mpv CDG playback invocation is the main unknown → spike before coding Part C.
 - Backend changes require a device service restart (interrupts playback) — coordinate with Andrew;
