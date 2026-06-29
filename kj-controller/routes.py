@@ -16,6 +16,7 @@ from flask import Blueprint, Response, current_app, jsonify, render_template, re
 
 import divebar
 import karaoke_nerds
+import local_grouping
 import text_normalize
 from text_normalize import normalize as _normalize_text, tokens as _tokens, group_key as _group_key
 import version_priority
@@ -3535,6 +3536,22 @@ def unified_search(query, app, *, grouped=False):
     for song in kn_results:
         version_priority.annotate_versions(
             song.get("tracks") or [], cfg, shape="rotation_search_kn")
+
+    # Home the unknown-brand local files (the old "Unknown" dumping ground) into
+    # meaningful groups: 4TB-SSD library by folder, YTDownloads by trust.
+    # Recognized-brand local files keep their Community/Commercial tier.
+    community_brand_keys = local_grouping.collect_community_brand_keys(
+        kn_results, divebar_rows)
+    media_is_download = getattr(app.media, "is_in_download_folder", None)
+    for r in local_results:
+        if r.get("priority_class") == "unknown":
+            path = r.get("path") or ""
+            is_dl = (media_is_download(path) if media_is_download
+                     else local_grouping.path_in_download_folder(path, cfg))
+            r["group"] = local_grouping.classify_local_file(
+                path, r.get("filename"), cfg,
+                is_download=is_dl,
+                known_community_brands=community_brand_keys)
 
     return {
         "local": local_results,

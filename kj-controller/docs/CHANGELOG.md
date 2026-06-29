@@ -4,6 +4,43 @@ Dated entries, newest first. Each entry notes any required deploy steps.
 
 ---
 
+## 2026-06-29 - Rotation "Link song" search UX overhaul (v0.43.0)
+
+**Why:** Linking a song to a rotation entry was slow and noisy during live shows:
+the initial search didn't fire until you typed a throwaway character; there was no
+"searching" feedback so you'd mash space and waste scrapes; clicking anywhere off the
+results list wiped them (forcing a multi-second re-scrape); file type and download
+source were shown inconsistently; popular tracks buried the good versions under 50+
+low-quality commercial cover-band downloads; and the "Unknown" section lumped the
+trusted 4TB-SSD library together with messy YouTube downloads.
+
+**What (all in the rotation Link/Add search dropdown):**
+- **Instant initial search.** Opening Link now fires the search immediately. Root cause
+  of the old lag was a global "close on outside click" handler that fired on the *same*
+  click that opened link mode and cleared the pending search timer — that handler is
+  removed (#1, #4). The list now persists until Cancel / Esc / a completed link.
+- **Dedicated Search button + "Searching…" indicator** beside the song input, so you can
+  re-trigger on demand and always see when a search is in flight (#2).
+- **File-type badge on every row** (mp4 / cdg+mp3 / …) and a **source badge** (GCS / Drive
+  / YouTube) beside every "DL & Link" button so you know what you're downloading (#3).
+- **Collapse low-quality commercial noise.** Non-"KJ-stated" commercial *download* options
+  fold under a "▸ N more commercial versions to download" expander whenever a good option
+  (community, or a stated-commercial brand) is already visible. The trusted set is the
+  single source of truth already in `version_priority.py` (`COMMERCIAL_STATED` /
+  `COMMUNITY_STATED`); stars now mark stated brands (#5A).
+- **Meaningful groups instead of "Unknown."** Unknown-brand local files are split by the
+  backend (`local_grouping.py`) into "Library — Karaoke - Digital/Active|Dead|…" (by SSD
+  folder) and "From YouTube — community brand" vs "From YouTube — unverified" (by filename
+  brand / our GCS-mirror naming / cross-reference against community brands in the same
+  search) (#5B). Recognized-brand local files still sort into Community/Commercial.
+
+**Deploy:** kj-autodeploy is OFF — deploy manually (`git pull` + service restart). This
+release includes backend changes (`routes.py`, `version_priority.py`, new
+`local_grouping.py`), so a **service restart is required** and will interrupt active
+playback — restart between singers.
+
+---
+
 ## 2026-06-04 — Fix stale results in rotation link search (v0.35.1)
 
 **What changed**

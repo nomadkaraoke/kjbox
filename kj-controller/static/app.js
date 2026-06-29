@@ -5209,6 +5209,9 @@ async function restoreFromSheet() {
 function openLinkSearch(entryId, songText) {
     const form = document.getElementById('rotation-add-form');
     if (form.classList.contains('hidden')) form.classList.remove('hidden');
+    // Clear any results left over from a previous link/add so a stale row can't
+    // be selected against this new target before the fresh search lands.
+    hideRotSearchDropdown();
     // Store the target entry ID so selectRotSearchResult can link instead of add
     form.dataset.linkTargetId = entryId;
     form.classList.add('link-mode');
@@ -5224,8 +5227,11 @@ function openLinkSearch(entryId, songText) {
     songInput.value = songText || '';
     songInput.select();
     songInput.focus();
-    if (songText && songText.length >= 3) {
-        songInput.dispatchEvent(new Event('input'));
+    // Fire the initial search immediately (not via a debounced input event,
+    // which the opening click used to cancel) so results appear without the
+    // KJ having to type a throwaway character to re-trigger.
+    if (songText && songText.trim().length >= 3) {
+        triggerRotationSearchNow();
     }
 }
 
@@ -5294,6 +5300,11 @@ async function addRotationEntry() {
 let rotSearchTimer = null;
 let rotSearchSelectedIdx = -1;
 let rotSearchResults = [];
+// True while a search is pending (debouncing) or in flight, so the Search
+// button can show a "Searching…" indicator. Cleared by the latest search only.
+let rotSearchInFlight = false;
+// Monotonic id for the collapsible "more commercial versions" containers.
+let rotCollapseSeq = 0;
 // Bumped whenever a pending search should be discarded: each new query (so an
 // older, slower in-flight request can't clobber newer results), plus submit,
 // hide, and cancel. In-flight fetches capture this at start and must re-check
@@ -5311,6 +5322,11 @@ function initRotationSearch() {
             hideRotSearchDropdown();
             return;
         }
+        // Show the searching indicator immediately on type so the KJ gets
+        // feedback during the debounce window (and doesn't re-trigger by mashing
+        // space, thinking nothing is happening).
+        rotSearchInFlight = true;
+        updateSearchBtn();
         // 700ms (not 300): /rotation/search does a live Karaoke Nerds scrape,
         // so a long debounce avoids firing intermediate queries on every
         // keystroke (wasted scrapes). Correctness (latest query always wins) is
@@ -5330,12 +5346,10 @@ function initRotationSearch() {
 
         if (e.key === 'ArrowDown') {
             e.preventDefault();
-            rotSearchSelectedIdx = Math.min(rotSearchSelectedIdx + 1, rotSearchResults.length - 1);
-            highlightRotSearchResult();
+            rotMoveSelection(1);
         } else if (e.key === 'ArrowUp') {
             e.preventDefault();
-            rotSearchSelectedIdx = Math.max(rotSearchSelectedIdx - 1, -1);
-            highlightRotSearchResult();
+            rotMoveSelection(-1);
         } else if (e.key === 'Enter' && rotSearchSelectedIdx >= 0) {
             e.preventDefault();
             selectRotSearchResult(rotSearchResults[rotSearchSelectedIdx]);
@@ -5351,12 +5365,11 @@ function initRotationSearch() {
         }
     });
 
-    // Close dropdown when clicking outside
-    document.addEventListener('click', (e) => {
-        if (!e.target.closest('.rotation-add-form, .rotation-search-dropdown')) {
-            hideRotSearchDropdown();
-        }
-    });
+    // NB: intentionally NO "close on outside click" handler. The KJ exits the
+    // search via the Cancel button, Escape, Tab, or by completing a link/add.
+    // Hiding on every stray click off the list forced an expensive re-search
+    // (several seconds of live scraping) just to get the results back.
+    updateSearchBtn();
 }
 
 async function doRotationSearch(query) {
@@ -5365,6 +5378,8 @@ async function doRotationSearch(query) {
     // earlier query (e.g. "frank") can otherwise land AFTER a newer one
     // ("frank might") and overwrite the dropdown with stale results.
     const myGen = ++rotSearchGen;
+    rotSearchInFlight = true;
+    updateSearchBtn();
     try {
         const resp = await fetch('/rotation/search?q=' + encodeURIComponent(query));
         if (myGen !== rotSearchGen) return;  // superseded by a newer query or save/reset
@@ -5373,8 +5388,37 @@ async function doRotationSearch(query) {
         if (myGen !== rotSearchGen) return;
         renderRotSearchDropdown(data);
     } catch (e) {
-        hideRotSearchDropdown();
+        if (myGen === rotSearchGen) hideRotSearchDropdown();
+    } finally {
+        // Only the latest search owns the indicator: a superseded search must
+        // not clear the spinner the newer one just turned on.
+        if (myGen === rotSearchGen) {
+            rotSearchInFlight = false;
+            updateSearchBtn();
+        }
     }
+}
+
+// Run a search for the current input text right now, bypassing the type-ahead
+// debounce. Wired to the Search button and the initial link-mode open.
+function triggerRotationSearchNow() {
+    const songInput = document.getElementById('rotation-song');
+    if (!songInput) return;
+    const query = songInput.value.trim();
+    if (query.length < 3) { songInput.focus(); return; }
+    clearTimeout(rotSearchTimer);
+    doRotationSearch(query);
+}
+
+// Reflect search state on the Search button: idle shows "Search", in-flight
+// shows a spinner + "Searching…".
+function updateSearchBtn() {
+    const btn = document.getElementById('rotation-search-btn');
+    if (!btn) return;
+    btn.classList.toggle('searching', rotSearchInFlight);
+    btn.innerHTML = rotSearchInFlight
+        ? '<span class="btn-spinner"></span>Searching…'
+        : 'Search';
 }
 
 function renderRotSearchDropdown(data) {
@@ -5410,6 +5454,7 @@ function renderRotSearchDropdown(data) {
             rank: typeof match.priority_rank === 'number' ? match.priority_rank : 9999,
             klass: match.priority_class || 'unknown',
             brand: match.priority_brand,
+            stated: !!match.priority_stated,
             data: match,
         });
     }
@@ -5420,6 +5465,7 @@ function renderRotSearchDropdown(data) {
                 rank: typeof track.priority_rank === 'number' ? track.priority_rank : 9999,
                 klass: track.priority_class || 'unknown',
                 brand: track.priority_brand,
+                stated: !!track.priority_stated,
                 song, track,
             });
         }
@@ -5432,45 +5478,64 @@ function renderRotSearchDropdown(data) {
             rank: typeof dv.priority_rank === 'number' ? dv.priority_rank : 9999,
             klass: dv.priority_class || 'unknown',
             brand: dv.priority_brand,
+            stated: !!dv.priority_stated,
             data: dv,
         });
     }
-    rows.sort((a, b) => a.rank - b.rank);
+    // Assign each row to a display group (Community/Commercial come from the
+    // brand tier; the old "Unknown" dumping ground is split by the backend into
+    // Library-folder and YouTube-trust groups). Sort by (group, brand-rank) so
+    // rows in the same group are contiguous and the best option leads overall.
+    rows.forEach(r => { r.group = computeRotRowGroup(r); });
+    rows.sort((a, b) =>
+        a.group.sort - b.group.sort
+        || (a.group.label < b.group.label ? -1 : a.group.label > b.group.label ? 1 : 0)
+        || a.rank - b.rank);
 
-    // Walk sorted rows, emit section headers when priority class changes,
-    // and highlight top community rows (or top-3 if no community matches).
-    let currentClass = null;
-    const topCount = Math.min(3, rows.length);
-    const highlightAll = !rows.some(r => r.klass === 'community' && r.rank < 1000);
+    // Collapse "noise" commercial downloads (non-KJ-stated brands we'd rarely
+    // pick) under an expander — but only when a genuinely good option is already
+    // visible (a community version, or a stated-commercial one).
+    const collapseActive = rows.some(
+        r => r.klass === 'community' || (r.klass === 'commercial' && r.stated));
+
+    let prevGroupKey = null;
+    let firstGroup = true;
+    let collapsedHtml = '';
+    let collapsedCount = 0;
+    const flushCollapsed = () => {
+        if (collapsedCount > 0) {
+            const cid = 'rs-collapse-' + (rotCollapseSeq++);
+            html += '<div class="rs-collapse-toggle" data-target="' + cid + '" data-count="' + collapsedCount + '" onclick="toggleRotCollapse(this)">'
+                + '▸ ' + collapsedCount + ' more commercial version' + (collapsedCount === 1 ? '' : 's') + ' to download</div>';
+            html += '<div class="rs-collapse hidden" id="' + cid + '">' + collapsedHtml + '</div>';
+        }
+        collapsedHtml = '';
+        collapsedCount = 0;
+    };
 
     rows.forEach((r, displayIdx) => {
-        if (r.klass !== currentClass) {
-            html += renderRotSectionHeader(r.klass, r.brand, displayIdx === 0);
-            currentClass = r.klass;
+        if (r.group.key !== prevGroupKey) {
+            flushCollapsed(); // close out a commercial group's collapsed buffer first
+            html += renderRotGroupHeader(r.group, r, firstGroup);
+            prevGroupKey = r.group.key;
+            firstGroup = false;
         }
         const idx = rotSearchResults.length;
-        const isTop = (r.klass === 'community' && r.rank < 1000)
-            || (highlightAll && displayIdx < topCount);
         const isBest = displayIdx === 0;
-        if (r.kind === 'local') {
-            html += renderRotLocalRow(r.data, idx, isTop, isBest);
-            const match = r.data;
-            rotSearchResults.push({
-                type: 'local', path: match.path, duration: match.duration,
-                song_artist: (match.title || '') + ' - ' + (match.artist || ''),
-            });
-        } else if (r.kind === 'divebar') {
-            const built = renderRotDivebarRow(r.data, idx, isTop, isBest);
-            html += built.html;
-            rotSearchResults.push(built.result);
+        const isStarred = !!r.stated && !isBest;
+        const built = buildRotRow(r, idx, isBest, isStarred, downloadedIdToPath);
+        if (!built) return;
+        rotSearchResults.push(built.result);
+        const isNoise = collapseActive && r.klass === 'commercial' && !r.stated
+            && rotRowRequiresDownload(r, downloadedIdToPath);
+        if (isNoise) {
+            collapsedHtml += built.html;
+            collapsedCount++;
         } else {
-            const built = renderRotKnRow(r.song, r.track, idx, isTop, isBest, downloadedIdToPath);
-            if (built) {
-                html += built.html;
-                rotSearchResults.push(built.result);
-            }
+            html += built.html;
         }
     });
+    flushCollapsed();
 
     // MAKE option always at the bottom
     const songInput = document.getElementById('rotation-song');
@@ -5502,18 +5567,78 @@ function renderRotSearchDropdown(data) {
     }
 }
 
-function renderRotSectionHeader(klass, brand, isFirst) {
-    if (klass === 'community' && isFirst) {
-        const brandLabel = brand ? brand : 'community';
+// Assign a row to a display group. Community/Commercial come straight from the
+// brand tier; unknown-brand local files carry a backend-provided `group`
+// (Library folder or YouTube-trust); anything else unknown is "Other".
+function computeRotRowGroup(r) {
+    if (r.klass === 'community') return { key: 'community', label: 'Community', sort: 10 };
+    if (r.klass === 'commercial') return { key: 'commercial', label: 'Commercial', sort: 20 };
+    const g = r.data && r.data.group;
+    if (g && g.key) return { key: g.key, label: g.label, sort: g.sort };
+    return { key: 'other', label: 'Other', sort: 60 };
+}
+
+function renderRotGroupHeader(group, r, isFirst) {
+    if (group.key === 'community' && isFirst) {
+        const brandLabel = r.brand ? r.brand : 'community';
         return '<div class="kn-section-header rs-section-best">\u2B50 Best \u2014 ' + escHtml(brandLabel) + ' (community)</div>';
     }
-    if (klass === 'community') {
+    if (group.key === 'community') {
         return '<div class="kn-section-header">\u2500\u2500\u2500 Community \u2500\u2500\u2500</div>';
     }
-    if (klass === 'commercial') {
+    if (group.key === 'commercial') {
         return '<div class="kn-section-header">\u2500\u2500\u2500 Commercial \u2500\u2500\u2500</div>';
     }
-    return '<div class="kn-section-header">\u2500\u2500\u2500 Unknown \u2500\u2500\u2500</div>';
+    return '<div class="kn-section-header">\u2500\u2500\u2500 ' + escHtml(group.label) + ' \u2500\u2500\u2500</div>';
+}
+
+// Dispatch a row to its renderer, returning {html, result} for all kinds.
+function buildRotRow(r, idx, isBest, isStarred, downloadedIdToPath) {
+    if (r.kind === 'local') {
+        const match = r.data;
+        const html = renderRotLocalRow(match, idx, isStarred, isBest);
+        const result = {
+            type: 'local', path: match.path, duration: match.duration,
+            song_artist: (match.title || '') + ' - ' + (match.artist || ''),
+        };
+        return { html, result };
+    }
+    if (r.kind === 'divebar') {
+        return renderRotDivebarRow(r.data, idx, isStarred, isBest);
+    }
+    return renderRotKnRow(r.song, r.track, idx, isStarred, isBest, downloadedIdToPath);
+}
+
+// True when picking this row would require a download (so it's a candidate for
+// the "more commercial versions to download" collapse). Already-local files and
+// already-downloaded KN tracks are never collapsed.
+function rotRowRequiresDownload(r, downloadedIdToPath) {
+    if (r.kind === 'local') return false;
+    if (r.kind === 'divebar') return true;
+    const vid = extractYouTubeId((r.track && r.track.youtube_url) || '');
+    const dp = vid ? downloadedIdToPath.get(vid) : null;
+    return !dp;
+}
+
+function toggleRotCollapse(el) {
+    const target = document.getElementById(el.dataset.target);
+    if (!target) return;
+    const nowHidden = target.classList.toggle('hidden');
+    el.classList.toggle('expanded', !nowHidden);
+    const n = el.dataset.count;
+    el.innerHTML = (nowHidden ? '\u25B8 ' : '\u25BE ') + n + ' more commercial version' + (n === '1' ? '' : 's') + ' to download';
+}
+
+// Normalise a path/filename extension into a display format label.
+function extToFormat(pathOrName) {
+    const ext = (pathOrName || '').toLowerCase().split('?')[0].split('.').pop();
+    if (ext === 'zip') return 'cdg+mp3';
+    return ext || '';
+}
+
+// Build a source badge (GCS / DRIVE / YouTube) shown beside a download button.
+function rotSourceBadge(label, cls, title) {
+    return '<span class="dl-source-badge ' + cls + '" title="' + escHtml(title) + '">' + escHtml(label) + '</span>';
 }
 
 function renderRotLocalRow(match, idx, isTop, isBest) {
@@ -5582,12 +5707,29 @@ function renderRotKnRow(song, track, idx, isTop, isBest, downloadedIdToPath) {
     html += '<span class="kn-brand-code">' + escHtml(track.brand_code || '') + '</span>';
     if (track.is_community) html += '<span class="kn-community-badge">Community</span>';
     html += '<span class="kn-song-title">' + escHtml(song.title + ' - ' + song.artist) + '</span>';
+    // File-type badge on every row: downloaded file's real ext, the mirror
+    // file's format, or mp4 for a plain YouTube download.
+    let fmt = '';
+    if (downloadedPath) fmt = extToFormat(downloadedPath);
+    else if (track.divebar) fmt = track.divebar.format || '';
+    else if (track.youtube_url) fmt = 'mp4';
+    if (fmt) html += '<span class="format-badge ' + getFormatBadgeClass(fmt) + '">' + escHtml(fmt) + '</span>';
     html += '</span>';
     html += '<span class="kn-track-actions">';
     if (downloadedPath) {
         html += '<span class="kn-downloaded-badge">\u2713 Downloaded</span>';
         html += '<span class="kn-play-btn">Link</span>';
     } else {
+        // Source badge beside the download button so the KJ knows where it
+        // comes from before committing to the download.
+        if (track.divebar) {
+            const mirror = (track.divebar.in_gcs === false)
+                ? { label: 'DRIVE', cls: 'dl-source-drive', title: 'Our community mirror (Google Drive \u2014 slower)' }
+                : { label: 'GCS', cls: 'dl-source-gcs', title: 'Our community mirror (fast GCS download)' };
+            html += rotSourceBadge(mirror.label, mirror.cls, mirror.title);
+        } else {
+            html += rotSourceBadge('YouTube', 'dl-source-yt', 'Downloads from YouTube via yt-dlp');
+        }
         html += '<span class="kn-download-btn">DL & Link</span>';
     }
     html += '</span>';
@@ -5621,7 +5763,6 @@ function renderRotDivebarRow(dv, idx, isTop, isBest) {
     html += '<span class="kn-track-info">';
     if (isBest) html += '<span class="rs-best-pill">Best</span> ';
     else if (isTop) html += '<span class="rs-top-star">⭐</span> ';
-    html += '<span class="dl-source-badge ' + mirror.cls + '" title="' + escHtml(mirror.title) + '">' + mirror.label + '</span>';
     html += '<span class="kn-brand-name">' + escHtml(dv.brand_name || '') + '</span>';
     html += '<span class="kn-brand-code">' + escHtml(dv.brand_code || '') + '</span>';
     if (isCommunity) html += '<span class="kn-community-badge">Community</span>';
@@ -5629,6 +5770,9 @@ function renderRotDivebarRow(dv, idx, isTop, isBest) {
     if (dv.format) html += '<span class="format-badge ' + getFormatBadgeClass(dv.format) + '">' + escHtml(dv.format) + '</span>';
     html += '</span>';
     html += '<span class="kn-track-actions">';
+    // Source badge beside the button (moved here from the left so it's clear
+    // which download source the DL & Link button will hit).
+    html += rotSourceBadge(mirror.label, mirror.cls, mirror.title);
     html += '<span class="kn-download-btn">DL & Link</span>';
     html += '</span>';
     html += '</div>';
@@ -5640,6 +5784,30 @@ function highlightRotSearchResult() {
         const idx = parseInt(el.dataset.idx, 10);
         el.classList.toggle('selected', idx === rotSearchSelectedIdx);
     });
+}
+
+// Result indices that are currently navigable — i.e. not hidden inside a
+// collapsed "more commercial versions" container. DOM-driven so it stays
+// correct as the KJ expands/collapses without any extra bookkeeping.
+function rotVisibleIndices() {
+    return Array.from(document.querySelectorAll('#rotation-search-dropdown [data-idx]'))
+        .filter(el => !el.closest('.rs-collapse.hidden'))
+        .map(el => parseInt(el.dataset.idx, 10))
+        .filter(n => !Number.isNaN(n))
+        .sort((a, b) => a - b);
+}
+
+// Move the highlight by `dir` (+1 down / -1 up) across only the visible rows,
+// so Enter can never select a row hidden inside a collapsed section.
+function rotMoveSelection(dir) {
+    const vis = rotVisibleIndices();
+    if (vis.length === 0) return;
+    const pos = vis.indexOf(rotSearchSelectedIdx);
+    let newPos;
+    if (dir > 0) newPos = pos < 0 ? 0 : Math.min(pos + 1, vis.length - 1);
+    else newPos = pos < 0 ? -1 : pos - 1; // ArrowUp past the first row deselects
+    rotSearchSelectedIdx = newPos < 0 ? -1 : vis[newPos];
+    highlightRotSearchResult();
 }
 
 async function selectRotSearchResult(result) {
@@ -5742,6 +5910,8 @@ function hideRotSearchDropdown() {
     // Cancel any pending/in-flight search so a late response can't re-show stale results
     rotSearchGen++;
     clearTimeout(rotSearchTimer);
+    rotSearchInFlight = false;
+    updateSearchBtn();
 }
 
 function fmtDur(seconds) {

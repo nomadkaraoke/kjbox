@@ -421,3 +421,63 @@ class TestAnnotateVersionsDivebarShape:
         annotate_versions([kn], _cfg(), shape="rotation_search_kn")
         annotate_versions([db], _cfg(), shape="rotation_search_divebar")
         assert db["priority_rank"] < kn["priority_rank"]
+
+
+from version_priority import (
+    is_stated_brand, COMMUNITY_STATED, COMMERCIAL_STATED,
+)
+
+
+class TestStatedBrands:
+    def test_commercial_stated_set_is_the_kj_stated_top_six(self):
+        assert COMMERCIAL_STATED == {"KV", "SC", "SBI", "SF", "CB", "ZM"}
+
+    def test_community_stated_set_is_the_kj_stated_top_eight(self):
+        assert COMMUNITY_STATED == {
+            "CC", "LC", "FBK", "BELLY", "NOMAD", "FAKEY", "PMK", "OBSK"}
+
+    def test_stated_sets_match_registry_boundary(self):
+        # Single source of truth: stated sets must equal the brands listed
+        # above the "high-frequency unlisted" boundary in each registry list.
+        assert COMMERCIAL_STATED == {c for (c, _, _) in COMMERCIAL_BRANDS[:6]}
+        assert COMMUNITY_STATED == {c for (c, _, _) in COMMUNITY_BRANDS[:8]}
+
+    def test_kv_is_stated_commercial(self):
+        assert is_stated_brand("KV", "commercial") is True
+
+    def test_vocal_star_is_not_stated_commercial(self):
+        # VS is high-frequency but explicitly NOT in the KJ's stated list.
+        assert is_stated_brand("VS", "commercial") is False
+
+    def test_cc_is_stated_community(self):
+        assert is_stated_brand("CC", "community") is True
+
+    def test_sndl_is_not_stated_community(self):
+        assert is_stated_brand("SDK", "community") is False
+
+    def test_unknown_brand_is_not_stated(self):
+        assert is_stated_brand(None, "commercial") is False
+        assert is_stated_brand(None, "community") is False
+
+    def test_classification_must_match_tier(self):
+        # A community canonical only counts as stated under the community tier.
+        assert is_stated_brand("CC", "commercial") is False
+        assert is_stated_brand("KV", "community") is False
+        assert is_stated_brand("KV", "unknown") is False
+
+
+class TestAnnotateVersionsSetsStatedFlag:
+    def test_stated_commercial_local_row(self):
+        rows = [{"disc_id": "KVD-07383", "filename": "KVD-07383 - Q - X.zip"}]
+        annotate_versions(rows, _cfg(), shape="rotation_search_local")
+        assert rows[0]["priority_stated"] is True
+
+    def test_non_stated_commercial_kn_track(self):
+        tracks = [{"brand_code": "VS", "youtube_url": "https://yt"}]
+        annotate_versions(tracks, _cfg(), shape="rotation_search_kn")
+        assert tracks[0]["priority_stated"] is False
+
+    def test_unknown_row_is_not_stated(self):
+        rows = [{"disc_id": "ASK-011277", "filename": "ASK-011277 - Q - X.zip"}]
+        annotate_versions(rows, _cfg(), shape="rotation_search_local")
+        assert rows[0]["priority_stated"] is False
