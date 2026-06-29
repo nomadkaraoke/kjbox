@@ -423,3 +423,49 @@ class TestDivebarAttachBeatsLocalDrop:
             assert (track.get("divebar") or {}).get("file_id") == "fb163"
             # ...but no redundant standalone row (local already covers it)
             assert "fb163" not in [r["file_id"] for r in data.get("divebar", [])]
+
+
+class TestSearchAnnotations:
+    def test_unknown_local_file_gets_library_group(self, search_client, search_app):
+        """An unknown-brand SSD file is homed into a Library folder group."""
+        with patch.object(search_app.catalog, 'is_available', return_value=True), \
+             patch.object(search_app.catalog, 'search', return_value=[
+                 {"path": "/media/nomad/Nomad4TBOne/HyperMule/Master Karaoke Folder/"
+                          "Karaoke - Digital/Active/ASK/ASK-011277 - Q - X.zip",
+                  "filename": "ASK-011277 - Q - X.zip", "artist": "Q",
+                  "title": "X", "format": "cdg+mp3", "disc_id": "ASK-011277"}
+             ]), \
+             patch('routes.karaoke_nerds.search', return_value=[]), \
+             patch('routes.divebar.search', return_value=[]):
+            resp = search_client.get('/rotation/search?q=kryptonite')
+            row = resp.get_json()["local"][0]
+            assert row["priority_class"] == "unknown"
+            assert row["group"]["label"] == "Library — Karaoke - Digital/Active"
+
+    def test_recognized_local_file_has_no_group_override(self, search_client, search_app):
+        """A recognized-brand local file keeps its tier (no Library group)."""
+        with patch.object(search_app.catalog, 'is_available', return_value=True), \
+             patch.object(search_app.catalog, 'search', return_value=[
+                 {"path": "/media/nomad/x/KVD-07383 - Q - X.zip",
+                  "filename": "KVD-07383 - Q - X.zip", "artist": "Q",
+                  "title": "X", "format": "cdg+mp3", "disc_id": "KVD-07383"}
+             ]), \
+             patch('routes.karaoke_nerds.search', return_value=[]), \
+             patch('routes.divebar.search', return_value=[]):
+            resp = search_client.get('/rotation/search?q=kryptonite')
+            row = resp.get_json()["local"][0]
+            assert row["priority_class"] == "commercial"
+            assert "group" not in row
+
+    def test_kn_track_carries_priority_stated(self, search_client, search_app):
+        with patch.object(search_app.catalog, 'search', return_value=[]), \
+             patch('routes.karaoke_nerds.search', return_value=[
+                 {"title": "X", "artist": "Q", "tracks": [
+                     {"brand_name": "Vocal Star", "brand_code": "VS",
+                      "youtube_url": "https://yt/abc"}
+                 ]}
+             ]), \
+             patch('routes.divebar.search', return_value=[]):
+            resp = search_client.get('/rotation/search?q=kryptonite')
+            track = resp.get_json()["karaoke_nerds"][0]["tracks"][0]
+            assert track["priority_stated"] is False

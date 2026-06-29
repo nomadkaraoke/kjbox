@@ -46,6 +46,31 @@ COMMERCIAL_BRANDS = [
 COMMUNITY_DEFAULTS = [c for (c, _, _) in COMMUNITY_BRANDS]
 COMMERCIAL_DEFAULTS = [c for (c, _, _) in COMMERCIAL_BRANDS]
 
+# The "KJ-stated" brands: the producers the KJ has explicitly named as reliably
+# high quality — everything listed ABOVE the "high-frequency unlisted" boundary
+# in each registry list above. This is the SINGLE SOURCE OF TRUTH for "trusted"
+# brands, consumed by the rotation Link search to collapse low-quality commercial
+# noise. The high-frequency-but-unstated brands (VS/SK/MR/PT/EK; SDK/DBK) sit
+# below the boundary and are NOT stated.
+# See docs/archive/2026-05-22-choose-best-version-design.md.
+COMMUNITY_STATED = frozenset(
+    {"CC", "LC", "FBK", "BELLY", "NOMAD", "FAKEY", "PMK", "OBSK"})
+COMMERCIAL_STATED = frozenset({"KV", "SC", "SBI", "SF", "CB", "ZM"})
+
+
+def is_stated_brand(canonical, classification) -> bool:
+    """True if ``canonical`` is a KJ-stated (reliably-high-quality) brand for its
+    tier. Unknown brands (``canonical is None``) and the "unknown" classification
+    are never stated.
+    """
+    if not canonical:
+        return False
+    if classification == "community":
+        return canonical in COMMUNITY_STATED
+    if classification == "commercial":
+        return canonical in COMMERCIAL_STATED
+    return False
+
 
 # Module-level alias lookup table, built once on import.
 # Maps alias.upper() -> (canonical, classification).
@@ -284,10 +309,11 @@ def rank_version(version, cfg) -> int:
 
 
 def annotate_versions(versions, cfg, *, shape="kj_pick"):
-    """Mutate each version dict in `versions` to add three fields:
+    """Mutate each version dict in `versions` to add four fields:
         priority_rank: int          (lower = better)
         priority_brand: str | None  (canonical code)
         priority_class: str         ("community" | "commercial" | "unknown")
+        priority_stated: bool       (KJ-stated reliably-high-quality brand)
 
     shape controls how brand inputs are extracted:
         "kj_pick"                - versions in kj_pick snapshot format
@@ -316,4 +342,5 @@ def annotate_versions(versions, cfg, *, shape="kj_pick"):
         v["priority_brand"] = canonical
         v["priority_class"] = classification
         v["priority_rank"] = rank_version(v, cfg)
+        v["priority_stated"] = is_stated_brand(canonical, classification)
     return versions
