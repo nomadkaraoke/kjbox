@@ -8,7 +8,7 @@
     <link rel="icon" href="/static/favicon-16x16.png" sizes="16x16" type="image/png">
     <link rel="icon" href="/static/favicon-32x32.png" sizes="32x32" type="image/png">
     <link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
-    <link rel="stylesheet" href="/static/style.css?v={{ config.get('APP_VERSION', '') }}">
+    <link rel="stylesheet" href="/static/style.css?v={{ app_version }}">
 </head>
 <body>
     <div id="audio-warning">
@@ -91,7 +91,10 @@
                     <div id="singer-input-container" class="singer-input-container" onclick="document.getElementById('rotation-singer').focus()">
                         <input type="text" id="rotation-singer" placeholder="Singer name" autocomplete="off">
                     </div>
-                    <input type="text" id="rotation-song" placeholder="Song & Artist" autocomplete="off">
+                    <div class="rotation-song-row">
+                        <input type="text" id="rotation-song" placeholder="Song & Artist" autocomplete="off">
+                        <button type="button" id="rotation-search-btn" class="rotation-search-btn" onclick="triggerRotationSearchNow()" title="Search now for a matching song link">Search</button>
+                    </div>
                     <button id="rotation-add-btn-submit" onclick="addRotationEntry()" title="Add this singer and song to the rotation queue">Add</button>
                 </div>
                 <div id="rotation-search-dropdown" class="rotation-search-dropdown hidden"></div>
@@ -828,7 +831,7 @@
         websockifyHost: {{ config.get('websockify_host', '') | tojson }}
       });
     </script>
-    <script src="/static/app.js?v={{ config.get('APP_VERSION', '') }}"></script>
+    <script src="/static/app.js?v={{ app_version }}"></script>
 
     <!-- VNC Preview (noVNC ES6 module) -->
     <script type="module">
@@ -1160,5 +1163,20 @@
             </div>
         </div>
     </div>
+
+    <!-- Browser preview playback: audition any file in the browser, never on the
+         device output. See preview.js / cdg.js. -->
+    <div id="preview-modal" class="modal-backdrop hidden" onclick="if(event.target===this) closePreview()">
+        <div class="modal-content preview-modal-content">
+            <div class="modal-header">
+                <h3 id="preview-modal-title">Preview</h3>
+                <button class="modal-close" onclick="closePreview()">&times;</button>
+            </div>
+            <div id="preview-modal-body" class="preview-body"></div>
+            <div id="preview-modal-footer" class="preview-footer"></div>
+        </div>
+    </div>
+    <script src="/static/cdg.js?v={{ app_version }}"></script>
+    <script src="/static/preview.js?v={{ app_version }}"></script>
 </body>
 </html>

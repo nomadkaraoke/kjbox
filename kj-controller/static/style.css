@@ -948,6 +948,33 @@ body {
 }
 .kn-play-btn:hover { background-color: rgba(34, 197, 94, 0.25); color: #4ade80; box-shadow: none; }
 
+/* --- Rotation search rows: consistent right-aligned tag + action columns so
+   format pills and brand codes line up regardless of source/group. --- */
+.rs-line { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.rs-line .rs-best-pill, .rs-line .rs-top-star { flex-shrink: 0; margin-right: 0; }
+.rs-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.rs-tags { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.rs-tag-fmt { width: 78px; display: flex; justify-content: flex-end; }
+.rs-tag-brand { width: 50px; display: flex; justify-content: flex-end; }
+.rs-tag-fmt .format-badge, .rs-tag-brand .rs-brand-pill { margin: 0; }
+/* Fixed action-column width keeps the tag columns to its left aligned across
+   rows even when some rows carry a source/Downloaded badge and others don't. */
+.rotation-search-dropdown .kn-track-actions { min-width: 160px; justify-content: flex-end; margin-left: 0; }
+/* Normalize inter-column spacing so the format/brand tag columns land at the
+   same x on every row type. Local rows (.kn-local-match) carried gap:8px while
+   KN/divebar rows (.kn-track) relied on the actions' margin-left:6px — leaving
+   the tag columns 8px out of sync. One gap for all, margin dropped above. */
+.rotation-search-dropdown .kn-track,
+.rotation-search-dropdown .kn-local-match { gap: 8px; }
+/* Uniform action buttons (Link / DL & Link) regardless of row type or the
+   font-size of their container row — anchored to rem, not em. */
+.rotation-search-dropdown .kn-play-btn,
+.rotation-search-dropdown .kn-download-btn {
+    font-size: 0.72rem; padding: 4px 12px; min-width: 64px;
+    text-align: center; line-height: 1.4; border-radius: 4px; box-sizing: border-box;
+    margin-left: 0;
+}
+
 /* --- YouTube Search --- */
 
 .yt-search-row { display: flex; gap: 8px; }
@@ -1761,6 +1788,33 @@ body {
 }
 .rotation-link-banner.hidden { display: none; }
 .rotation-link-banner strong { color: #fde68a; }
+
+/* --- Playability: tier-2 ⚠️ row badge + tier-1 rejection toast --- */
+.rotation-playability-warning {
+    margin-left: 6px;
+    color: #fbbf24;
+    cursor: pointer;
+    font-size: 0.95em;
+}
+.playability-toast {
+    position: fixed;
+    left: 50%;
+    bottom: 24px;
+    transform: translateX(-50%);
+    z-index: 4000;
+    max-width: min(640px, 92vw);
+    padding: 12px 18px;
+    border-radius: 8px;
+    background: rgba(127, 29, 29, 0.96);
+    border: 1px solid #ef4444;
+    color: #fee2e2;
+    font-size: 0.9em;
+    font-weight: 600;
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.5);
+    cursor: pointer;
+    text-align: center;
+}
+.playability-toast.hidden { display: none; }
 .rotation-link-cancel {
     padding: 2px 10px;
     border-radius: 4px;
@@ -1773,8 +1827,55 @@ body {
 .rotation-link-cancel:hover { background: rgba(251, 191, 36, 0.25); }
 .rotation-add-form.link-mode { flex-wrap: wrap; }
 .rotation-add-form.link-mode #singer-input-container { display: none !important; }
-.rotation-add-form.link-mode #rotation-song { flex-basis: 100%; }
+.rotation-add-form.link-mode .rotation-song-row { flex-basis: 100%; }
 .rotation-add-form.link-mode #rotation-add-btn-submit { display: none !important; }
+
+/* Song input + dedicated Search button sit on one row. */
+.rotation-song-row {
+    display: flex;
+    flex: 1;
+    gap: 6px;
+    min-width: 0;
+}
+.rotation-song-row #rotation-song { flex: 1; min-width: 0; }
+.rotation-search-btn {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-width: 104px;
+    white-space: nowrap;
+}
+/* While searching, the button turns amber and shows a spinner. */
+.rotation-search-btn.searching {
+    border-color: rgba(251, 191, 36, 0.4) !important;
+    background: rgba(251, 191, 36, 0.15) !important;
+    color: #fbbf24 !important;
+    cursor: default;
+}
+.btn-spinner {
+    display: inline-block;
+    width: 11px; height: 11px;
+    border: 2px solid currentColor;
+    border-top-color: transparent;
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    flex-shrink: 0;
+}
+
+/* "N more commercial versions to download" collapsible (low-quality noise). */
+.rs-collapse-toggle {
+    padding: 7px 12px;
+    color: #9ca3af;
+    font-size: 0.8em;
+    cursor: pointer;
+    user-select: none;
+    background: #141414;
+    border-top: 1px dashed #2a2a2a;
+}
+.rs-collapse-toggle:hover { color: #e5e5e5; background: #1c1c1c; }
+.rs-collapse.hidden { display: none; }
 .rotation-indicator {
     display: inline-flex;
     align-items: center;
@@ -3287,4 +3388,120 @@ body.simple-mode #col1 {
     color: #ffb3e6;
     font-size: 0.9rem;
     line-height: 1.4;
+}
+
+/* --- Browser preview playback --- */
+.preview-btn {
+    background: transparent;
+    border: 1px solid rgba(255, 91, 184, 0.4);
+    color: #ff7acc;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.8rem;
+    line-height: 1;
+    padding: 3px 7px;
+    margin-right: 6px;
+}
+.preview-btn:hover {
+    background: rgba(255, 91, 184, 0.15);
+    color: #ff9bd6;
+}
+.preview-modal-content {
+    max-width: 620px;
+    width: 92vw;
+}
+.preview-body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    min-height: 80px;
+    justify-content: center;
+}
+.preview-body video,
+.preview-body canvas.preview-cdg-canvas {
+    width: 100%;
+    max-width: 560px;
+    background: #000;
+    border-radius: 6px;
+}
+/* Pixelate only the low-res CDG canvas; native/HLS video should scale smoothly. */
+.preview-body canvas.preview-cdg-canvas {
+    image-rendering: pixelated;
+}
+.preview-body audio {
+    width: 100%;
+    max-width: 560px;
+}
+.preview-body iframe.preview-yt {
+    width: 100%;
+    max-width: 560px;
+    aspect-ratio: 16 / 9;
+    border: 0;
+    border-radius: 6px;
+}
+.preview-loading,
+.preview-unavailable {
+    color: #aaa;
+    padding: 18px;
+    text-align: center;
+}
+.preview-unavailable { color: #ff8a8a; }
+.preview-footer {
+    margin-top: 12px;
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+}
+.preview-link-btn {
+    background: rgba(255, 91, 184, 0.15);
+    border: 1px solid rgba(255, 91, 184, 0.5);
+    color: #ff9bd6;
+    border-radius: 5px;
+    padding: 7px 14px;
+    cursor: pointer;
+}
+.preview-link-btn:hover { background: rgba(255, 91, 184, 0.28); }
+
+/* --- Available Songs file-type badges --- */
+.media-type-badge {
+    display: inline-block;
+    font-size: 0.7rem;
+    color: #888;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 4px;
+    padding: 1px 6px;
+    margin-left: 6px;
+    vertical-align: middle;
+    white-space: nowrap;
+}
+.media-no-audio-tag {
+    display: inline-block;
+    font-size: 0.7rem;
+    color: #ff8a8a;
+    background: rgba(255,90,90,0.12);
+    border: 1px solid rgba(255,90,90,0.35);
+    border-radius: 4px;
+    padding: 1px 6px;
+    margin-left: 6px;
+    vertical-align: middle;
+    white-space: nowrap;
+}
+li.media-no-audio {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.preview-type-badge {
+    display: inline-block;
+    font-size: 0.7rem;
+    font-weight: normal;
+    color: #aaa;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 4px;
+    padding: 1px 7px;
+    margin-left: 8px;
+    vertical-align: middle;
 }

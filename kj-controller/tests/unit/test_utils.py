@@ -1,10 +1,12 @@
 """Tests for utility functions: sanitize_filename_part, parse_youtube_filename."""
 
 from utils import (
+    media_type_label,
     sanitize_filename_part,
     parse_youtube_filename,
     log_message,
     build_divebar_filename,
+    divebar_ext,
 )
 
 
@@ -116,3 +118,82 @@ def test_build_divebar_filename_sanitizes_unsafe_chars():
 def test_build_divebar_filename_custom_extension():
     assert build_divebar_filename("WTF", "Queen", "Song", ext=".zip") == \
         "WTF - Queen - Song.zip"
+
+
+class TestDivebarExt:
+    """divebar_ext picks the on-disk extension for a Divebar download.
+
+    The GCS mirror URL path carries the real extension, which is the most
+    authoritative source. The catalog ``format`` is the fallback for Drive
+    URLs (whose path has no extension). Default is ``.mp4``.
+    """
+
+    def test_gcs_zip_url(self):
+        assert divebar_ext(
+            "https://storage.googleapis.com/nomadkaraoke-divebar-files/files/x/y.zip"
+        ) == ".zip"
+
+    def test_gcs_cdg_url(self):
+        assert divebar_ext(
+            "https://storage.googleapis.com/nomadkaraoke-divebar-files/files/x/y.cdg"
+        ) == ".cdg"
+
+    def test_gcs_mp4_url(self):
+        assert divebar_ext(
+            "https://storage.googleapis.com/nomadkaraoke-divebar-files/files/x/y.mp4"
+        ) == ".mp4"
+
+    def test_url_encoded_path_with_spaces(self):
+        # Real GCS URLs percent-encode spaces in the object path.
+        assert divebar_ext(
+            "https://storage.googleapis.com/nomadkaraoke-divebar-files/"
+            "files/Cereal%20Killer%20Karaoke/CKK%20-%20Incubus%20-%20Admiration.zip"
+        ) == ".zip"
+
+    def test_url_extension_is_case_insensitive(self):
+        assert divebar_ext("https://storage.googleapis.com/m/Y.ZIP") == ".zip"
+
+    def test_query_string_is_ignored(self):
+        assert divebar_ext("https://storage.googleapis.com/m/y.zip?X-Goog-Signature=abc") == ".zip"
+
+    def test_drive_url_without_extension_falls_back_to_format(self):
+        # Drive URLs carry no extension in the path — use the catalog format.
+        assert divebar_ext(
+            "https://drive.google.com/uc?export=download&id=abc", fmt="zip"
+        ) == ".zip"
+
+    def test_drive_url_without_extension_no_format_defaults_mp4(self):
+        assert divebar_ext("https://drive.google.com/uc?export=download&id=abc") == ".mp4"
+
+    def test_format_only_no_url(self):
+        assert divebar_ext(None, fmt="cdg") == ".cdg"
+
+    def test_url_with_unknown_extension_falls_back_to_format(self):
+        # A non-media extension in the URL must not be trusted; use format.
+        assert divebar_ext("https://drive.usercontent.google.com/download.html", fmt="mp4") == ".mp4"
+
+    def test_unknown_format_defaults_mp4(self):
+        assert divebar_ext(None, fmt="banana") == ".mp4"
+
+    def test_all_empty_defaults_mp4(self):
+        assert divebar_ext() == ".mp4"
+        assert divebar_ext("", "") == ".mp4"
+
+    def test_url_extension_wins_over_format(self):
+        # When both are present and disagree, the concrete URL path wins.
+        assert divebar_ext("https://storage.googleapis.com/m/y.zip", fmt="mp4") == ".zip"
+
+    def test_malformed_url_does_not_raise(self):
+        assert divebar_ext("not a url", fmt="zip") == ".zip"
+        assert divebar_ext("not a url") == ".mp4"
+
+
+def test_media_type_label():
+    assert media_type_label("song.zip") == "cdg-zip"
+    assert media_type_label("song.cdg") == "cdg"
+    assert media_type_label("/a/b/song.MP4") == "mp4"
+    assert media_type_label("song.mkv") == "mkv"
+    assert media_type_label("song.mp3") == "mp3"
+    assert media_type_label(".webm") == "webm"
+    assert media_type_label("") == "file"
+    assert media_type_label("noext") == "file"

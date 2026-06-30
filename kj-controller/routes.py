@@ -3,6 +3,7 @@
 import glob
 import json
 import os
+import queue
 import random
 import re
 import struct
@@ -11,20 +12,22 @@ import threading
 import time
 import unicodedata
 
-from flask import Blueprint, Response, current_app, jsonify, render_template, request
+from flask import Blueprint, Response, current_app, jsonify, render_template, request, send_file
 
 import divebar
 import karaoke_nerds
+import local_grouping
 import text_normalize
 from text_normalize import normalize as _normalize_text, tokens as _tokens, group_key as _group_key
 import version_priority
 import youtube_health
 import youtube_search
-from config import APP_DIR, RENDER_MODES, load_config, save_config_value
+from config import APP_DIR, RENDER_MODE_MPV, RENDER_MODES, load_config, save_config_value
 from playback import RendererSwitchRejected
 from sing import get_event_url, sync_event_url_overlays
 from sleep_mode import SleepManager
-from utils import log_message, build_divebar_filename
+from utils import log_message, build_divebar_filename, divebar_ext
+from preview import parse_range
 
 # --- Browser mode state ---
 # Tracks whether the system is in Browser mode (Chromium) vs VLC mode (default).
@@ -193,6 +196,11 @@ def index():
         roman_map=text_normalize.ROMAN_NUMERALS,
         normalizer_version=text_normalize.NORMALIZER_VERSION,
         config=cfg,
+        # Pass the app version explicitly: `config=cfg` above shadows Flask's
+        # auto-injected app config (which holds APP_VERSION) with kj_config,
+        # which doesn't — so the static-asset cache-bust query string was always
+        # empty and frontend deploys never busted the browser cache.
+        app_version=current_app.config.get('APP_VERSION', ''),
     )
 
 
@@ -275,6 +283,18 @@ def handle_upload():
     file.save(dest)
     log_message(f"Uploaded file: {safe_name} ({os.path.getsize(dest)} bytes)", cfg)
 
+    gate = _playability_gate(dest)
+    if not gate.verdict.get("overall_ok"):
+        try:
+            os.remove(dest)
+        except OSError:
+            pass
+        reasons = "; ".join(gate.verdict.get("reasons") or ["file is not playable"])
+        return jsonify({
+            "error": f"Upload rejected — not playable: {reasons}",
+            "verdict": gate.verdict,
+        }), 422
+
     # Add to media index
     current_app.media.scan()
 
@@ -335,6 +355,60 @@ def _clear_rotation_download_for_item(app, item):
         pass  # Best-effort
 
 
+def _resolve_divebar_spec(file_id, artist, title, brand_code, fmt, cfg):
+    """Resolve a divebar track into a download-queue spec, pairing a loose CDG
+    with its sibling audio so a bare, silent .cdg is never queued.
+
+    Some brands (e.g. Sandell Karaoke) store a CDG's graphics and audio as two
+    separate Drive files rather than one cdg+mp3 zip, exposed by the index as
+    independent track rows. The pairing decision is keyed off the *resolved*
+    on-disk extension (``.cdg``) rather than the catalog ``fmt`` alone, so a CDG
+    whose ``format`` is missing can never slip through to the single-file path
+    and queue a silent, audioless ``.cdg``.
+
+    Returns ``(spec, error)``. ``spec`` is a queue-item fragment to merge into
+    the caller's item dict; ``error`` is ``None`` on success or a
+    ``(message, http_status)`` tuple the caller maps to its own convention.
+    """
+    url = divebar.get_download_url(file_id, cfg)
+    if not url:
+        return None, ("Failed to get download URL from Divebar", 502)
+    ext = divebar_ext(url, fmt)
+
+    if ext == ".cdg":
+        # A bare .cdg is graphics-only. Pair it with its sibling audio and ship a
+        # cdg+mp3 zip, or fail closed — never queue a silent .cdg.
+        sibling = divebar.find_sibling_audio(file_id, artist, title, brand_code, cfg)
+        if not sibling:
+            return None, ("This CDG has no audio track available in the mirror — "
+                          "pick another version.", 422)
+        mp3_url = divebar.get_download_url(sibling["file_id"], cfg)
+        if not mp3_url:
+            return None, ("Failed to get audio download URL from Divebar", 502)
+        zip_title = build_divebar_filename(brand_code, artist, title, ext=".zip") \
+            or f"divebar-{file_id}.zip"
+        return {
+            "pair": True,
+            "cdg_url": url,
+            "mp3_url": mp3_url,
+            "title": zip_title,
+            "source": "divebar",
+            "source_detail": divebar.classify_download_url(url),
+            "divebar_file_id": file_id,
+        }, None
+
+    filename = build_divebar_filename(brand_code, artist, title, ext=ext) \
+        or f"divebar-{file_id}{ext}"
+    return {
+        "pair": False,
+        "url": url,
+        "title": filename,
+        "source": "divebar",
+        "source_detail": divebar.classify_download_url(url),
+        "divebar_file_id": file_id,
+    }, None
+
+
 def _download_worker(app):
     """Process queued downloads sequentially until queue is drained."""
     while True:
@@ -351,8 +425,15 @@ def _download_worker(app):
 
         try:
             if next_item.get('source') == 'divebar':
-                file_path, title = app.media.download_from_url(
-                    next_item['url'], filename=next_item.get('title'))
+                if next_item.get('pair'):
+                    # Loose CDG: fetch the .cdg + its sibling .mp3 and package
+                    # them into a single playable cdg+mp3 zip.
+                    file_path, title = app.media.download_cdg_pair(
+                        next_item['cdg_url'], next_item['mp3_url'],
+                        filename=next_item.get('title'))
+                else:
+                    file_path, title = app.media.download_from_url(
+                        next_item['url'], filename=next_item.get('title'))
             else:
                 file_path, title = app.media.download_video(next_item['url'])
         except Exception:
@@ -471,12 +552,35 @@ def handle_play():
 
     # Handle ZIP files (CDG+MP3)
     actual_play_path = validated
+    audio_file = None
     if validated.lower().endswith('.zip'):
         zip_playback = current_app.zip_playback
         mp3_path = zip_playback.extract_and_get_mp3(validated)
         if not mp3_path:
             return jsonify({"error": "ZIP file does not contain a playable .mp3 file"}), 400
         actual_play_path = mp3_path
+        # mpv renders the CDG graphics only when handed the .cdg directly, with
+        # the .mp3 attached as an external audio track. VLC instead auto-
+        # discovers the sibling .cdg from the .mp3, so it keeps the mp3.
+        if getattr(vlc, 'render_mode', None) == RENDER_MODE_MPV:
+            cdg_path = zip_playback.current_cdg_path()
+            if cdg_path:
+                actual_play_path = cdg_path
+                audio_file = mp3_path
+    elif validated.lower().endswith('.cdg'):
+        # A bare .cdg is graphics-only — playing it alone is silent. Only allow it
+        # when a same-stem audio file sits beside it (the un-zipped X.cdg/X.mp3 pair),
+        # wired the same way as the .zip branch.
+        from playability import sibling_cdg_audio
+        audio_sibling = sibling_cdg_audio(validated)
+        if not audio_sibling:
+            return jsonify({"error": "This is a graphics-only .cdg with no audio track — "
+                                     "use the CDG+MP3 zip version instead."}), 400
+        if getattr(vlc, 'render_mode', None) == RENDER_MODE_MPV:
+            actual_play_path = validated         # mpv renders the .cdg directly
+            audio_file = audio_sibling
+        else:
+            actual_play_path = audio_sibling     # VLC auto-discovers the sibling .cdg
 
     # Auto-disable browser mode before playing — kill Chromium and reset PipeWire
     # so VLC has exclusive access to the audio device and display.
@@ -492,7 +596,8 @@ def handle_play():
     log_message(f"Received play request for {os.path.basename(validated)}.", cfg)
     threading.Thread(target=vlc.play_video, args=(actual_play_path,),
                      kwargs={'display_path': validated,
-                             'overlay_manager': current_app.overlay_manager}).start()
+                             'overlay_manager': current_app.overlay_manager,
+                             'audio_file': audio_file}).start()
     return jsonify({"success": True, "message": "Playback initiated."})
 
 
@@ -1494,16 +1599,17 @@ def divebar_download():
     artist = (data.get('artist') or '').strip()
     title = (data.get('title') or '').strip()
     brand_code = (data.get('brand_code') or '').strip()
+    fmt = (data.get('format') or '').strip()
 
     cfg = current_app.kj_config
-    url = divebar.get_download_url(file_id, config=cfg)
-    if not url:
-        return jsonify({"error": "Could not get download URL"}), 500
+    # Resolve the download spec — pairing a loose CDG with its sibling audio so a
+    # bare, silent .cdg is never queued. divebar_ext keeps CDG/zip files off .mp4.
+    spec, err = _resolve_divebar_spec(file_id, artist, title, brand_code, fmt, cfg)
+    if err:
+        msg, status = err
+        return jsonify({"error": msg}), status
 
-    filename = build_divebar_filename(brand_code, artist, title) \
-               or f"divebar-{file_id}.mp4"
-
-    # Reuse the existing download queue with the Drive URL
+    # Reuse the existing download queue with the Drive/GCS URL(s)
     app = current_app._get_current_object()
     from uuid import uuid4
     with app._download_lock:
@@ -1514,19 +1620,15 @@ def divebar_download():
 
         item = {
             'id': str(uuid4()),
-            'url': url,
             'status': 'queued',
-            'title': filename,
             'error': None,
             'file_path': None,
             'added_at': time.time(),
             'completed_at': None,
-            'source': 'divebar',
-            'source_detail': divebar.classify_download_url(url),
-            'divebar_file_id': file_id,
+            **spec,
         }
         items.append(item)
-        log_message(f"Queued Divebar download: {filename}", cfg)
+        log_message(f"Queued Divebar download: {item['title']}", cfg)
 
         if not app.download_queue['worker_running']:
             app.download_queue['worker_running'] = True
@@ -2657,6 +2759,92 @@ def archive_rotation():
         return jsonify({"error": str(e)}), 500
 
 
+def _playability_gate(file_path):
+    """Fast inline playability check (integrity + sampled decode, no render).
+    Returns the PlayabilityResult; verdict.overall_ok is False for truncated,
+    audio-only, or undecodable files."""
+    from playability import PlayabilityChecker
+    checker = PlayabilityChecker(config=current_app.kj_config)
+    return checker.check(file_path, renderers=(), depth="quick")
+
+
+# ---------------------------------------------------------------------------
+# Tier-2: async render verification
+#
+# The inline gate (tier-1) hard-blocks on integrity + sampled decode but skips
+# the expensive render proof. Tier-2 runs that proof against the *active*
+# renderer off the request path after a file is linked, and stamps a
+# playability_warning on the entry if the live renderer can't actually render
+# it — so the KJ sees a ⚠️ before hitting play. A single worker thread drains
+# the queue, so at most one off-screen Xvfb render runs at a time.
+# ---------------------------------------------------------------------------
+
+_tier2_queue = queue.Queue()
+_tier2_worker_started = False
+_tier2_worker_lock = threading.Lock()
+
+
+def _run_tier2_check(app, entry_id, file_path, checker=None):
+    """Render-verify a just-linked file against the active renderer.
+
+    Stamps a playability_warning when the active renderer can't render it,
+    clears a stale one when it can. Best-effort — never raises (a tier-2
+    failure must not affect the already-successful link)."""
+    try:
+        from playability import PlayabilityChecker, classify_kind
+        if classify_kind(file_path) == "audio":
+            return  # nothing to render-verify for pure audio
+        renderer = getattr(app.vlc, "render_mode", "vlc")
+        chk = checker or PlayabilityChecker(config=app.kj_config)
+        res = chk.check(file_path, renderers=(renderer,), depth="deep")
+        store = app.rotation.store
+        if not res.verdict.get("overall_ok"):
+            reasons = "; ".join(res.verdict.get("reasons") or ["not playable"])
+            store.set_playability_warning(entry_id, reasons)
+            log_message(
+                f"Tier-2: entry {entry_id} can't render in {renderer} — {reasons}",
+                app.kj_config,
+            )
+        else:
+            store.set_playability_warning(entry_id, None)
+    except Exception as e:  # pragma: no cover - defensive, best-effort
+        try:
+            log_message(f"Tier-2 render check error (entry {entry_id}): {e}",
+                        app.kj_config)
+        except Exception:
+            pass
+
+
+def _tier2_worker():
+    while True:
+        app, entry_id, file_path = _tier2_queue.get()
+        try:
+            _run_tier2_check(app, entry_id, file_path)
+        finally:
+            _tier2_queue.task_done()
+
+
+def _enqueue_tier2(app, entry_id, file_path):
+    """Queue a background tier-2 render check (skips pure-audio files).
+
+    The app object is threaded through each queue item rather than captured at
+    worker-thread start, so warnings always land in the right store even if
+    multiple app instances exist. Best-effort: any failure here is swallowed so
+    it can never break the link flow that just succeeded."""
+    try:
+        from playability import classify_kind
+        if classify_kind(file_path) == "audio":
+            return
+        global _tier2_worker_started
+        with _tier2_worker_lock:
+            if not _tier2_worker_started:
+                _tier2_worker_started = True
+                threading.Thread(target=_tier2_worker, daemon=True).start()
+        _tier2_queue.put((app, entry_id, file_path))
+    except Exception:  # pragma: no cover - defensive
+        pass
+
+
 @routes_bp.route('/rotation/link', methods=['POST'])
 def link_rotation_file():
     """Link a media file to a rotation entry — or create one and link it.
@@ -2681,7 +2869,18 @@ def link_rotation_file():
         return jsonify({"error": "id must be >= 1"}), 400
 
     try:
+        gate = _playability_gate(file_path)
+        if not gate.verdict.get("overall_ok"):
+            reasons = "; ".join(gate.verdict.get("reasons") or ["file is not playable"])
+            return jsonify({
+                "error": f"Playability check failed — not linked: {reasons}",
+                "verdict": gate.verdict,
+            }), 422
         rotation.link_file(entry_id, file_path)
+        # Tier-1 (gate above) confirmed integrity+decode; tier-2 now render-
+        # verifies against the active renderer in the background and flags the
+        # entry if the live renderer can't actually render it.
+        _enqueue_tier2(current_app._get_current_object(), entry_id, file_path)
         entries = rotation.get_rotation()
         _decorate_rotation_entries(entries, rotation)
         entry = next((e for e in entries if e.get('id') == entry_id), None)
@@ -3216,6 +3415,107 @@ def split_singer_route():
         return jsonify({"error": str(e)}), 500
 
 
+def _divebar_row_is_better(candidate, incumbent):
+    """True if mirror row ``candidate`` should win over ``incumbent`` for the
+    same (song, brand): prefer an in-GCS file, then a smaller file."""
+    if bool(candidate.get("in_gcs")) != bool(incumbent.get("in_gcs")):
+        return bool(candidate.get("in_gcs"))
+    cand_size = candidate.get("file_size") or float("inf")
+    inc_size = incumbent.get("file_size") or float("inf")
+    return cand_size < inc_size
+
+
+def _surface_divebar_versions(local_results, kn_results, db_results, cfg):
+    """Cross-reference Divebar GCS-mirror results against local + KN results.
+
+    Matching is on ``(normalized song, canonical brand)`` — the canonical brand
+    folds differing code granularity (KN ``FBK`` vs mirror ``FBK204``) and
+    brand-name-only entries together, so same-brand mirror files are recognised
+    even when the raw codes differ.
+
+    Mutates KN tracks in place: when a mirror file matches a KN track, attaches
+    it as ``track['divebar']`` so that row downloads from the mirror (GCS)
+    instead of YouTube.
+
+    Returns a list of *standalone* Divebar rows — mirror versions of a brand
+    that neither a local file nor a KN track already represents — so the KJ can
+    pick a GCS-mirror version directly. Collapsed to one row per (song, brand),
+    preferring in-GCS files then smaller files. Rows are annotated with
+    priority_rank/brand/class so the frontend sorts them into the right section.
+    """
+    cbm = version_priority.canonical_brand_for_match
+
+    # (song_key, canonical_brand) already represented by a local file.
+    local_keys = set()
+    for r in local_results or []:
+        brand = cbm(disc_id=r.get("disc_id"), filename=r.get("filename"))
+        local_keys.add((_normalize_song_key(r.get("artist"), r.get("title")), brand))
+
+    # (song_key, canonical_brand) -> KN track, for same-brand attach.
+    kn_index = {}
+    for song in kn_results or []:
+        song_key = _normalize_song_key(song.get("artist"), song.get("title"))
+        for track in song.get("tracks") or []:
+            brand = cbm(brand_code=track.get("brand_code"),
+                        brand_name=track.get("brand_name"))
+            kn_index.setdefault((song_key, brand), track)
+
+    standalone = {}  # (song_key, canonical_brand) -> best mirror row
+    for db_song in db_results or []:
+        s_artist = db_song.get("artist") or ""
+        s_title = db_song.get("title") or ""
+        song_key = _normalize_song_key(s_artist, s_title)
+        for db_track in db_song.get("tracks") or []:
+            file_id = db_track.get("file_id")
+            if not file_id:
+                continue
+            raw_code = db_track.get("brand_code")
+            brand_name = db_track.get("brand")
+            brand = cbm(brand_code=raw_code, brand_name=brand_name)
+            key = (song_key, brand)
+            kn_track = kn_index.get(key)
+            if kn_track is not None:
+                # Same brand as a KN row -> upgrade that row to the GCS mirror,
+                # preferring an in-GCS / smaller file if one is already attached.
+                # Always do this even when we also hold the brand locally: the KN
+                # row is independently selectable and should prefer GCS over
+                # YouTube (the local file shows as its own, higher-ranked row).
+                existing = kn_track.get("divebar")
+                if not (existing or {}).get("file_id") or \
+                        _divebar_row_is_better(db_track, existing):
+                    kn_track["divebar"] = db_track
+                continue
+            if key in local_keys:
+                # No KN row to upgrade and a local file already covers this
+                # brand -> skip a redundant standalone mirror row.
+                continue
+            # resolve_brand short-circuits on an unrecognized specific code
+            # (e.g. "FBK204") and never consults the brand name. When the brand
+            # resolves to a *registered* family, annotate/rank/display by the
+            # canonical code so the row lands in the right tier; otherwise keep
+            # the raw code so it classifies (correctly) as unknown.
+            registered, _ = version_priority.resolve_brand(brand_code=brand)
+            display_code = brand if registered else raw_code
+            row = {
+                "source": "divebar",
+                "file_id": file_id,
+                "brand_code": display_code,
+                "brand_name": brand_name,
+                "artist": s_artist,
+                "title": s_title,
+                "format": db_track.get("format"),
+                "file_size": db_track.get("file_size"),
+                "in_gcs": bool(db_track.get("in_gcs")),
+            }
+            incumbent = standalone.get(key)
+            if incumbent is None or _divebar_row_is_better(row, incumbent):
+                standalone[key] = row
+
+    rows = list(standalone.values())
+    version_priority.annotate_versions(rows, cfg, shape="rotation_search_divebar")
+    return rows
+
+
 def unified_search(query, app, *, grouped=False):
     """Unified search helper: local catalog + Karaoke Nerds + Divebar cross-reference.
 
@@ -3271,38 +3571,33 @@ def unified_search(query, app, *, grouped=False):
     except Exception:
         kn_timeout = True
 
-    if kn_results and not kn_timeout:
-        try:
-            # Send the raw user query: Divebar does its own matching, so do
-            # not pre-normalize it here.
-            db_results = divebar.search(query, cfg, limit=100)
-            db_index = {}
-            for db_song in db_results:
-                for db_track in db_song.get("tracks", []):
-                    key = (
-                        (db_song.get("artist") or "").lower().strip(),
-                        (db_song.get("title") or "").lower().strip(),
-                        (db_track.get("brand_code") or "").upper().strip(),
-                    )
-                    db_index[key] = db_track
-            for song in kn_results:
-                artist_lower = (song.get("artist") or "").lower().strip()
-                title_lower = (song.get("title") or "").lower().strip()
-                for track in song.get("tracks", []):
-                    brand = (track.get("brand_code") or "").upper().strip()
-                    db_match = db_index.get((artist_lower, title_lower, brand))
-                    if db_match and db_match.get("file_id"):
-                        track["divebar"] = db_match
-        except Exception:
-            pass  # Divebar cross-ref is best-effort
+    # Divebar GCS-mirror search runs independently of Karaoke Nerds so mirror
+    # versions surface even when KN is slow or returns nothing. Best-effort.
+    db_results = []
+    try:
+        # Raw user query: Divebar does its own server-side matching.
+        db_results = divebar.search(query, cfg, limit=100)
+    except Exception:
+        db_results = []
 
-        for song in kn_results:
-            for track in song.get("tracks", []):
-                track["in_library"] = any(
-                    r.get("artist", "").lower() == song.get("artist", "").lower()
-                    and r.get("title", "").lower() == song.get("title", "").lower()
-                    for r in local_results
-                )
+    # Mark KN tracks already present in the local library (singer-facing hint).
+    for song in kn_results:
+        for track in song.get("tracks", []):
+            track["in_library"] = any(
+                r.get("artist", "").lower() == song.get("artist", "").lower()
+                and r.get("title", "").lower() == song.get("title", "").lower()
+                for r in local_results
+            )
+
+    # Cross-reference mirror files against local + KN: attaches track['divebar']
+    # for same-brand matches (so that row downloads from GCS, not YouTube) and
+    # returns standalone mirror rows the KJ can pick directly.
+    divebar_rows = []
+    try:
+        divebar_rows = _surface_divebar_versions(
+            local_results, kn_results, db_results, cfg)
+    except Exception:
+        divebar_rows = []  # best-effort; never break search
 
     if grouped:
         # Defensive filter (Phase B §4): a KN track with neither a YouTube URL
@@ -3332,9 +3627,26 @@ def unified_search(query, app, *, grouped=False):
         version_priority.annotate_versions(
             song.get("tracks") or [], cfg, shape="rotation_search_kn")
 
+    # Home the unknown-brand local files (the old "Unknown" dumping ground) into
+    # meaningful groups: 4TB-SSD library by folder, YTDownloads by trust.
+    # Recognized-brand local files keep their Community/Commercial tier.
+    community_brand_keys = local_grouping.collect_community_brand_keys(
+        kn_results, divebar_rows)
+    media_is_download = getattr(app.media, "is_in_download_folder", None)
+    for r in local_results:
+        if r.get("priority_class") == "unknown":
+            path = r.get("path") or ""
+            is_dl = (media_is_download(path) if media_is_download
+                     else local_grouping.path_in_download_folder(path, cfg))
+            r["group"] = local_grouping.classify_local_file(
+                path, r.get("filename"), cfg,
+                is_download=is_dl,
+                known_community_brands=community_brand_keys)
+
     return {
         "local": local_results,
         "karaoke_nerds": kn_results,
+        "divebar": divebar_rows,
         "karaoke_nerds_timeout": kn_timeout,
     }
 
@@ -3350,7 +3662,8 @@ def rotation_search():
 
     # Back-compat shape: legacy response omitted the timeout flag when False,
     # and placed it at the top level when True. Preserve that.
-    response = {"local": result["local"], "karaoke_nerds": result["karaoke_nerds"]}
+    response = {"local": result["local"], "karaoke_nerds": result["karaoke_nerds"],
+                "divebar": result.get("divebar", [])}
     if result["karaoke_nerds_timeout"]:
         response["karaoke_nerds_timeout"] = True
     return jsonify(response)
@@ -3374,6 +3687,7 @@ def download_and_link_rotation():
         artist = (data.get('artist') or '').strip()
         title = (data.get('title') or '').strip()
         brand_code = (data.get('brand_code') or '').strip()
+        fmt = (data.get('format') or '').strip()
         if not file_id:
             return jsonify({"error": "file_id is required for divebar"}), 400
     elif source == "youtube":
@@ -3384,6 +3698,28 @@ def download_and_link_rotation():
     else:
         return jsonify({"error": f"Unknown source: {source}"}), 400
 
+    # A rotation target (an existing id, or a new singer) is required up-front, so
+    # we reject a malformed request — keeping the missing-target 400 ahead of any
+    # network work — BEFORE resolving the download or creating an entry. An id may
+    # arrive as an int or a string; treat a blank/whitespace string as absent.
+    _id = data.get('id')
+    has_id = _id is not None and (not isinstance(_id, str) or _id.strip())
+    if not has_id and not data.get('singers') and not (
+            isinstance(data.get('singer'), str) and data['singer'].strip()):
+        return jsonify({"error": "id or singer is required"}), 400
+
+    # Resolve the divebar download spec (single file, or a paired loose-CDG)
+    # BEFORE creating a rotation entry, so a failure (no audio sibling / URL error)
+    # can never leave an orphan entry behind.
+    divebar_spec = None
+    if source == "divebar":
+        cfg = current_app.kj_config
+        divebar_spec, err = _resolve_divebar_spec(
+            file_id, artist, title, brand_code, fmt, cfg)
+        if err:
+            msg, status = err
+            return jsonify({"error": msg}), status
+
     # Check queue capacity
     app = current_app._get_current_object()
     with app._download_lock:
@@ -3391,7 +3727,7 @@ def download_and_link_rotation():
         if len(active) >= 5:
             return jsonify({"error": "Download queue is full (max 5)"}), 409
 
-    # Get or create rotation entry (only after all validations pass)
+    # Get or create rotation entry (only after all validations + spec resolution pass)
     entry_id, err = _resolve_or_create_rotation_entry_id(data, rotation)
     if err:
         return err
@@ -3400,23 +3736,13 @@ def download_and_link_rotation():
     download_id = str(uuid4())
 
     try:
-        cfg = current_app.kj_config
-
         if source == "divebar":
-            download_url = divebar.get_download_url(file_id, cfg)
-            if not download_url:
-                return jsonify({"error": "Failed to get download URL from Divebar"}), 502
             queue_item = {
                 'id': download_id,
-                'url': download_url,
-                'title': build_divebar_filename(brand_code, artist, title)
-                         or f"divebar-{file_id}.mp4",
-                'source': 'divebar',
-                'source_detail': divebar.classify_download_url(download_url),
                 'status': 'queued',
                 'error': None,
                 'rotation_entry_id': entry_id,
-                'divebar_file_id': file_id,
+                **divebar_spec,
             }
         else:  # youtube (already validated above)
             queue_item = {
@@ -3741,15 +4067,10 @@ def approve_sing_request(app, req, skip_download=False):
         # rotation entry behind when upstream validation fails.
         from uuid import uuid4
         download_id = str(uuid4())
+        divebar_spec = None
         if source_type == "divebar":
-            try:
-                download_url = divebar.get_download_url(source_ref, app.kj_config)
-            except Exception as exc:
-                raise RuntimeError(f"Divebar URL failed: {exc}") from exc
-            if not download_url:
-                raise RuntimeError("Failed to get download URL from Divebar")
             # source_meta carries brand_code when this came via kj_pick;
-            # direct singer-divebar picks won't have it — falls back to "DB".
+            # direct singer-divebar picks won't have it.
             meta_raw = req.get("source_meta")
             if isinstance(meta_raw, str):
                 try:
@@ -3761,13 +4082,17 @@ def approve_sing_request(app, req, skip_download=False):
             else:
                 meta = {}
             brand_code = meta.get("brand_code") or ""
-            title = build_divebar_filename(
-                brand_code,
-                req.get("song_artist"),
-                req.get("song_title"),
-            ) or f"divebar-{source_ref}.mp4"
+            if not source_ref:
+                raise RuntimeError("source_ref (Divebar file_id) required")
+            # Resolve the spec (pairing a loose CDG with its audio) before
+            # creating the rotation entry, so an unusable version fails cleanly
+            # without leaving an orphan entry behind.
+            divebar_spec, err = _resolve_divebar_spec(
+                source_ref, req.get("song_artist"), req.get("song_title"),
+                brand_code, meta.get("format"), app.kj_config)
+            if err:
+                raise RuntimeError(err[0])
             queue_src = "divebar"
-            queue_url = download_url
         else:
             # youtube / kn — source_ref is a YouTube URL
             if not source_ref:
@@ -3777,19 +4102,25 @@ def approve_sing_request(app, req, skip_download=False):
             title = song_text or (req.get("song_title") or "")
 
         entry = rotation.add_entry(singer, song_text, singers=singers_list)
-        queue_item = {
-            "id": download_id,
-            "url": queue_url,
-            "title": title,
-            "source": queue_src,
-            "source_detail": (
-                divebar.classify_download_url(queue_url)
-                if queue_src == "divebar" else None
-            ),
-            "status": "queued",
-            "error": None,
-            "rotation_entry_id": entry["id"],
-        }
+        if divebar_spec is not None:
+            queue_item = {
+                "id": download_id,
+                "status": "queued",
+                "error": None,
+                "rotation_entry_id": entry["id"],
+                **divebar_spec,
+            }
+        else:
+            queue_item = {
+                "id": download_id,
+                "url": queue_url,
+                "title": title,
+                "source": queue_src,
+                "source_detail": None,
+                "status": "queued",
+                "error": None,
+                "rotation_entry_id": entry["id"],
+            }
         rotation.set_download_status(
             entry["id"], queue_src, "queued", download_id
         )
@@ -4097,3 +4428,99 @@ def reject_sing_request_route(req_id):
         except Exception:
             current_app.logger.exception("reject push notify failed")
     return jsonify({"success": True, "request": store.get_request(req_id)})
+
+
+# --- Browser preview playback -------------------------------------------
+# Audition any supported file in the KJ's browser (small video render + audio),
+# with seek, without ever touching the live primary player / device A/V output.
+# See preview.py + docs/archive/2026-06-30-browser-preview-playback-design.md.
+
+_PREVIEW_CHUNK = 262144
+
+
+@routes_bp.route('/preview/resolve', methods=['POST'])
+def preview_resolve():
+    descriptor = request.get_json(silent=True) or {}
+    if not isinstance(descriptor, dict):
+        return jsonify({"mode": "unavailable", "reason": "Invalid request"}), 400
+    return jsonify(current_app.preview.resolve(descriptor))
+
+
+@routes_bp.route('/preview/close', methods=['POST'])
+def preview_close():
+    payload = request.get_json(silent=True) or {}
+    if not isinstance(payload, dict):
+        return jsonify({"ok": False}), 400
+    current_app.preview.close(payload.get('token'))
+    return jsonify({"ok": True})
+
+
+def _preview_full_response(path, size, mime):
+    def gen():
+        with open(path, "rb") as fh:
+            while True:
+                chunk = fh.read(_PREVIEW_CHUNK)
+                if not chunk:
+                    break
+                yield chunk
+    resp = Response(gen(), status=200, mimetype=mime)
+    resp.headers["Accept-Ranges"] = "bytes"
+    resp.headers["Content-Length"] = str(size)
+    return resp
+
+
+@routes_bp.route('/preview/stream/<token>', methods=['GET'])
+def preview_stream(token):
+    info = current_app.preview.token_info(token)
+    if not info or info.get("kind") not in ("native_video", "native_audio"):
+        return ("Not found", 404)
+    path = info["path"]
+    mime = info.get("mime", "application/octet-stream")
+    try:
+        size = os.path.getsize(path)
+    except OSError:
+        return ("Not found", 404)
+    rng = parse_range(request.headers.get("Range"), size)
+    if rng is None:
+        if request.headers.get("Range"):
+            resp = Response(status=416)
+            resp.headers["Content-Range"] = f"bytes */{size}"
+            return resp
+        return _preview_full_response(path, size, mime)
+    start, end = rng
+    length = end - start + 1
+
+    def gen():
+        with open(path, "rb") as fh:
+            fh.seek(start)
+            remaining = length
+            while remaining > 0:
+                chunk = fh.read(min(_PREVIEW_CHUNK, remaining))
+                if not chunk:
+                    break
+                remaining -= len(chunk)
+                yield chunk
+
+    resp = Response(gen(), status=206, mimetype=mime)
+    resp.headers["Content-Range"] = f"bytes {start}-{end}/{size}"
+    resp.headers["Accept-Ranges"] = "bytes"
+    resp.headers["Content-Length"] = str(length)
+    return resp
+
+
+@routes_bp.route('/preview/cdg/<token>/<part>', methods=['GET'])
+def preview_cdg(token, part):
+    p = current_app.preview.cdg_part_path(token, part)
+    if not p or not os.path.exists(p):
+        return ("Not found", 404)
+    mime = "audio/mpeg" if part == "audio" else "application/octet-stream"
+    return send_file(p, mimetype=mime, conditional=True)
+
+
+@routes_bp.route('/preview/hls/<token>/<path:name>', methods=['GET'])
+def preview_hls(token, name):
+    p = current_app.preview.hls_path(token, name)
+    if not p or not os.path.exists(p):
+        return ("Not found", 404)
+    mime = "application/vnd.apple.mpegurl" if name.endswith(".m3u8") else "video/mp2t"
+    return send_file(p, mimetype=mime, conditional=True)

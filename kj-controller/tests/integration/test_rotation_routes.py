@@ -415,6 +415,16 @@ class TestArchiveRotation:
 
 
 class TestLinkRotationFile:
+    @pytest.fixture(autouse=True)
+    def _pass_playability_gate(self):
+        # These tests exercise link behaviour, not the playability gate (which
+        # has its own tests in test_link_gate.py). Stub the gate to pass so the
+        # fake paths used here aren't hard-blocked.
+        from types import SimpleNamespace
+        with patch('routes._playability_gate',
+                   return_value=SimpleNamespace(verdict={"overall_ok": True, "reasons": []})):
+            yield
+
     def test_link_file(self, rotation_client, mock_rotation):
         entries = list(SAMPLE_ENTRIES)
         entries[2] = {**entries[2], "file_path": "/media/song.cdg"}

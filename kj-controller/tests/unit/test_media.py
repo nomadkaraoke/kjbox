@@ -98,6 +98,58 @@ def test_scan_finds_media_files(mock_config, tmp_media_dir):
     assert "song2.mkv" in paths
 
 
+def test_scan_skips_quarantine_dir(mock_config, tmp_media_dir):
+    """Quarantined (rejected) downloads must never be re-indexed as playable."""
+    import media
+    mi = MediaIndex(mock_config)
+    media_dir = tmp_media_dir / "media"
+    (media_dir / "good.mp4").write_text("ok")
+    qdir = media_dir / media.QUARANTINE_DIRNAME
+    qdir.mkdir()
+    (qdir / "rejected.mp4").write_text("bad")
+
+    mi.scan()
+    names = [entry["filename"] for entry in mi.index.values()]
+    assert "good.mp4" in names
+    assert "rejected.mp4" not in names
+
+
+def test_scan_skips_preview_cache_dir(mock_config, tmp_media_dir):
+    """Preview-cache artifacts must never be re-indexed, even if the cache is
+    (mis)configured inside an indexed folder."""
+    media_dir = tmp_media_dir / "media"
+    (media_dir / "good.mp4").write_text("ok")
+    pc = media_dir / ".preview-cache" / "cdg" / "abc"
+    pc.mkdir(parents=True)
+    (pc / "graphics.cdg").write_text("g")
+    (pc / "audio.mp3").write_text("a")
+    mock_config["preview_cache_dir"] = str(media_dir / ".preview-cache")
+
+    mi = MediaIndex(mock_config)
+    mi.scan()
+    names = [entry["filename"] for entry in mi.index.values()]
+    assert "good.mp4" in names
+    assert "graphics.cdg" not in names
+    assert "audio.mp3" not in names
+
+
+def test_quarantine_download_moves_not_deletes(tmp_path):
+    """A rejected download (and its yt-dlp sidecars) is moved aside, never
+    deleted — an automated verdict can be wrong."""
+    import media
+    f = tmp_path / "song.mp4"; f.write_bytes(b"video")
+    side = tmp_path / "song.webp"; side.write_bytes(b"thumb")
+
+    q = media._quarantine_download(str(f), "moov atom not found", config={})
+
+    assert q is not None
+    assert not f.exists() and not side.exists()        # moved, not deleted
+    qdir = tmp_path / media.QUARANTINE_DIRNAME
+    assert (qdir / "song.mp4").is_file()
+    assert (qdir / "song.webp").is_file()               # sidecar moved too
+    assert (qdir / "song.mp4.reason.txt").is_file()     # reason recorded
+
+
 def test_scan_preserves_metadata(mock_config, tmp_media_dir):
     """Existing index metadata (duration, upload_date) survives rescan."""
     mi = MediaIndex(mock_config)
@@ -134,6 +186,28 @@ def test_list_items_format(mock_config, tmp_media_dir):
     assert "is_download" in item
     assert "mtime" in item
     assert "size" in item
+    assert item["ext"] == ".mp4"
+    assert item["media_kind"] == "mp4"
+
+
+def test_list_items_type_labels_and_bare_cdg(mock_config, tmp_media_dir):
+    """ext + media_kind per item; bare .cdg flagged cdg_no_audio unless paired."""
+    mi = MediaIndex(mock_config)
+    media_dir = tmp_media_dir / "media"
+    (media_dir / "pack.zip").write_text("fake")
+    (media_dir / "lonely.cdg").write_text("g")        # no sibling -> no audio
+    (media_dir / "paired.cdg").write_text("g")
+    (media_dir / "paired.mp3").write_text("a")        # sibling for paired.cdg
+    mi.scan()
+
+    by_name = {i["filename"]: i for i in mi.list_items()}
+    assert by_name["pack.zip"]["media_kind"] == "cdg-zip"
+    assert by_name["pack.zip"]["ext"] == ".zip"
+    assert by_name["lonely.cdg"]["media_kind"] == "cdg"
+    assert by_name["lonely.cdg"]["cdg_no_audio"] is True
+    assert by_name["paired.cdg"]["cdg_no_audio"] is False
+    # non-cdg items don't carry the flag
+    assert "cdg_no_audio" not in by_name["paired.mp3"]
 
 
 def test_delete_removes_file_and_sidecars(mock_config, tmp_media_dir):
@@ -330,6 +404,11 @@ def test_download_video_success(mock_config, tmp_media_dir, mocker):
     # Create the expected output file (simulating yt_dlp download)
     expected_file = download_dir / "abc12345678__TestChannel__Test Song.mp4"
     expected_file.write_text("fake video data")
+
+    # Mock the playability gate so a fake file isn't rejected
+    mock_gate = mocker.MagicMock()
+    mock_gate.verdict = {'overall_ok': True, 'reasons': []}
+    mocker.patch('media._gate_playable', return_value=mock_gate)
 
     file_path, title = mi.download_video("https://youtube.com/watch?v=abc12345678")
     assert title == "Test Song"

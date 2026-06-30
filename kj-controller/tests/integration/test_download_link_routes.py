@@ -378,3 +378,112 @@ class TestDownloadAndLinkDivebarFilename:
                 content_type='application/json')
         items = dl_app.download_queue['items']
         assert items[-1]['title'] == "divebar-xyz.mp4"
+
+    def test_zip_url_produces_zip_extension(self, dl_client, dl_app):
+        # CDG+MP3 zip must land as .zip so the gate classifies it as cdg_zip.
+        resp = dl_client.post('/rotation/add',
+            data=json.dumps({"singer": "Dan", "song_artist": "Admiration"}),
+            content_type='application/json')
+        entry_id = resp.get_json()["entry"]["id"]
+        with patch('routes.divebar.get_download_url',
+                   return_value="https://storage.googleapis.com/m/CKK%20-%20Incubus%20-%20Admiration.zip"):
+            dl_client.post('/rotation/download-and-link',
+                data=json.dumps({
+                    "id": entry_id, "source": "divebar", "file_id": "z9",
+                    "artist": "Incubus", "title": "Admiration", "brand_code": "CKK",
+                }),
+                content_type='application/json')
+        items = dl_app.download_queue['items']
+        assert items[-1]['title'] == "CKK - Incubus - Admiration.zip"
+
+    def test_drive_url_uses_format_for_extension(self, dl_client, dl_app):
+        resp = dl_client.post('/rotation/add',
+            data=json.dumps({"singer": "Eve", "song_artist": "Y"}),
+            content_type='application/json')
+        entry_id = resp.get_json()["entry"]["id"]
+        with patch('routes.divebar.get_download_url',
+                   return_value="https://drive.google.com/uc?export=download&id=d2"):
+            dl_client.post('/rotation/download-and-link',
+                data=json.dumps({
+                    "id": entry_id, "source": "divebar", "file_id": "d2",
+                    "artist": "A", "title": "B", "brand_code": "RSK", "format": "zip",
+                }),
+                content_type='application/json')
+        items = dl_app.download_queue['items']
+        assert items[-1]['title'] == "RSK - A - B.zip"
+
+
+class TestDownloadAndLinkCdgPairing:
+    """A loose CDG track (format=cdg) must be paired with its sibling audio and
+    queued as a cdg+mp3 zip — never a bare, silent .cdg."""
+
+    GCS = "https://storage.googleapis.com/divebar-mirror/"
+
+    def _add_singer(self, dl_client, name="Alice", song="ABBA - Dancing Queen"):
+        resp = dl_client.post('/rotation/add',
+            data=json.dumps({"singer": name, "song_artist": song}),
+            content_type='application/json')
+        return resp.get_json()["entry"]["id"]
+
+    def test_cdg_pairs_with_sibling_audio(self, dl_client, dl_app):
+        entry_id = self._add_singer(dl_client)
+
+        def fake_url(file_id, *a, **k):
+            return self.GCS + ("sdk.cdg" if file_id == "cdg_fid" else "sdk.mp3")
+
+        with patch('routes._download_worker'), \
+             patch('routes.divebar.get_download_url', side_effect=fake_url), \
+             patch('routes.divebar.find_sibling_audio',
+                   return_value={"file_id": "mp3_fid", "format": "mp3"}):
+            resp = dl_client.post('/rotation/download-and-link',
+                data=json.dumps({
+                    "id": entry_id, "source": "divebar", "file_id": "cdg_fid",
+                    "format": "cdg", "artist": "ABBA", "title": "Dancing Queen",
+                    "brand_code": "SDK",
+                }), content_type='application/json')
+
+        assert resp.status_code == 200
+        item = dl_app.download_queue['items'][-1]
+        assert item.get('pair') is True
+        assert item['cdg_url'].endswith("sdk.cdg")
+        assert item['mp3_url'].endswith("sdk.mp3")
+        assert item['title'].endswith(".zip")
+
+    def test_cdg_without_sibling_audio_is_rejected_and_not_queued(self, dl_client, dl_app):
+        entry_id = self._add_singer(dl_client, name="Bob", song="Orphan")
+        before = len(dl_app.download_queue['items'])
+
+        with patch('routes._download_worker'), \
+             patch('routes.divebar.get_download_url', return_value=self.GCS + "x.cdg"), \
+             patch('routes.divebar.find_sibling_audio', return_value=None):
+            resp = dl_client.post('/rotation/download-and-link',
+                data=json.dumps({
+                    "id": entry_id, "source": "divebar", "file_id": "cdg_fid",
+                    "format": "cdg", "artist": "Nobody", "title": "Orphan",
+                    "brand_code": "SDK",
+                }), content_type='application/json')
+
+        assert resp.status_code == 422
+        assert "audio" in (resp.get_json().get("error") or "").lower()
+        assert len(dl_app.download_queue['items']) == before
+
+    def test_worker_dispatches_pair_item_to_download_cdg_pair(self, dl_app, mocker):
+        import routes
+        mocker.patch.object(dl_app.media, 'download_cdg_pair',
+                            return_value=("/tmp/foo.zip", "foo"))
+        mocker.patch.object(dl_app.media, 'download_from_url',
+                            return_value=("/tmp/should_not.mp4", "x"))
+        dl_app.download_queue['items'] = [{
+            'id': 'd1', 'pair': True,
+            'cdg_url': 'http://gcs/cdg', 'mp3_url': 'http://gcs/mp3',
+            'title': 'SDK - ABBA - Dancing Queen.zip',
+            'source': 'divebar', 'status': 'queued', 'error': None,
+            'rotation_entry_id': None,
+        }]
+        dl_app.download_queue['worker_running'] = True
+
+        routes._download_worker(dl_app)
+
+        dl_app.media.download_cdg_pair.assert_called_once_with(
+            'http://gcs/cdg', 'http://gcs/mp3', filename='SDK - ABBA - Dancing Queen.zip')
+        dl_app.media.download_from_url.assert_not_called()

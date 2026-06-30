@@ -357,3 +357,127 @@ class TestAnnotateVersionsRotationSearchShape:
         annotate_versions(tracks, _cfg(), shape="rotation_search_kn")
         # divebar-mirrored LC should rank better than youtube-only LC
         assert tracks[1]["priority_rank"] < tracks[0]["priority_rank"]
+
+
+class TestCanonicalBrandForMatch:
+    """canonical_brand_for_match: stable cross-source brand key for cross-ref."""
+
+    def test_registered_code_resolves_to_canonical(self):
+        from version_priority import canonical_brand_for_match
+        assert canonical_brand_for_match(brand_code="FBK") == "FBK"
+
+    def test_numeric_suffix_code_matches_via_brand_name(self):
+        # Anna Molly bug: KN says "FBK", mirror says "FBK204" + "Funbox Karaoke".
+        from version_priority import canonical_brand_for_match
+        assert canonical_brand_for_match(
+            brand_code="FBK204", brand_name="Funbox Karaoke") == "FBK"
+
+    def test_numeric_suffix_code_matches_via_prefix_fallback(self):
+        # Even with no brand_name, "FBK204" should fold to the "FBK" family.
+        from version_priority import canonical_brand_for_match
+        assert canonical_brand_for_match(brand_code="FBK204") == "FBK"
+
+    def test_cc_aliases_collapse_together(self):
+        from version_priority import canonical_brand_for_match
+        assert canonical_brand_for_match(brand_code="CCK") == "CC"
+        assert canonical_brand_for_match(brand_code="CCX") == "CC"
+
+    def test_local_disc_id_resolves(self):
+        from version_priority import canonical_brand_for_match
+        assert canonical_brand_for_match(disc_id="KVD-22524") == "KV"
+
+    def test_unregistered_brand_folds_to_alpha_prefix(self):
+        from version_priority import canonical_brand_for_match
+        # KFN not in registry -> stable "KFN" key from the alpha prefix
+        assert canonical_brand_for_match(brand_code="KFN-1234") == "KFN"
+
+    def test_unregistered_code_but_known_name_resolves_via_name(self):
+        # A code whose prefix is NOT a registered family must still fold via the
+        # reliable brand name rather than the meaningless code prefix.
+        from version_priority import canonical_brand_for_match
+        assert canonical_brand_for_match(
+            brand_code="XYZ1", brand_name="Funbox Karaoke") == "FBK"
+
+    def test_empty_inputs_return_empty_string(self):
+        from version_priority import canonical_brand_for_match
+        assert canonical_brand_for_match() == ""
+
+
+class TestAnnotateVersionsDivebarShape:
+    def test_divebar_community_row_ranks_in_community_tier(self):
+        rows = [{"source": "divebar", "file_id": "x", "brand_code": "CC",
+                 "brand_name": "CC Karaoke", "artist": "Queen", "title": "X",
+                 "in_gcs": True}]
+        annotate_versions(rows, _cfg(), shape="rotation_search_divebar")
+        assert rows[0]["priority_brand"] == "CC"
+        assert rows[0]["priority_class"] == "community"
+        assert rows[0]["priority_rank"] < 1000
+
+    def test_divebar_row_beats_youtube_only_kn_same_brand(self):
+        # A standalone divebar (GCS) LC row should outrank a youtube-only LC KN row.
+        kn = {"brand_code": "LC", "youtube_url": "https://yt", "is_community": True}
+        db = {"source": "divebar", "file_id": "x", "brand_code": "LC",
+              "brand_name": "Lemmy Caution", "artist": "Q", "title": "X"}
+        annotate_versions([kn], _cfg(), shape="rotation_search_kn")
+        annotate_versions([db], _cfg(), shape="rotation_search_divebar")
+        assert db["priority_rank"] < kn["priority_rank"]
+
+
+from version_priority import (
+    is_stated_brand, COMMUNITY_STATED, COMMERCIAL_STATED,
+)
+
+
+class TestStatedBrands:
+    def test_commercial_stated_set_is_the_kj_stated_top_six(self):
+        assert COMMERCIAL_STATED == {"KV", "SC", "SBI", "SF", "CB", "ZM"}
+
+    def test_community_stated_set_is_the_kj_stated_top_eight(self):
+        assert COMMUNITY_STATED == {
+            "CC", "LC", "FBK", "BELLY", "NOMAD", "FAKEY", "PMK", "OBSK"}
+
+    def test_stated_sets_match_registry_boundary(self):
+        # Single source of truth: stated sets must equal the brands listed
+        # above the "high-frequency unlisted" boundary in each registry list.
+        assert COMMERCIAL_STATED == {c for (c, _, _) in COMMERCIAL_BRANDS[:6]}
+        assert COMMUNITY_STATED == {c for (c, _, _) in COMMUNITY_BRANDS[:8]}
+
+    def test_kv_is_stated_commercial(self):
+        assert is_stated_brand("KV", "commercial") is True
+
+    def test_vocal_star_is_not_stated_commercial(self):
+        # VS is high-frequency but explicitly NOT in the KJ's stated list.
+        assert is_stated_brand("VS", "commercial") is False
+
+    def test_cc_is_stated_community(self):
+        assert is_stated_brand("CC", "community") is True
+
+    def test_sndl_is_not_stated_community(self):
+        assert is_stated_brand("SDK", "community") is False
+
+    def test_unknown_brand_is_not_stated(self):
+        assert is_stated_brand(None, "commercial") is False
+        assert is_stated_brand(None, "community") is False
+
+    def test_classification_must_match_tier(self):
+        # A community canonical only counts as stated under the community tier.
+        assert is_stated_brand("CC", "commercial") is False
+        assert is_stated_brand("KV", "community") is False
+        assert is_stated_brand("KV", "unknown") is False
+
+
+class TestAnnotateVersionsSetsStatedFlag:
+    def test_stated_commercial_local_row(self):
+        rows = [{"disc_id": "KVD-07383", "filename": "KVD-07383 - Q - X.zip"}]
+        annotate_versions(rows, _cfg(), shape="rotation_search_local")
+        assert rows[0]["priority_stated"] is True
+
+    def test_non_stated_commercial_kn_track(self):
+        tracks = [{"brand_code": "VS", "youtube_url": "https://yt"}]
+        annotate_versions(tracks, _cfg(), shape="rotation_search_kn")
+        assert tracks[0]["priority_stated"] is False
+
+    def test_unknown_row_is_not_stated(self):
+        rows = [{"disc_id": "ASK-011277", "filename": "ASK-011277 - Q - X.zip"}]
+        annotate_versions(rows, _cfg(), shape="rotation_search_local")
+        assert rows[0]["priority_stated"] is False

@@ -199,6 +199,69 @@ def get_download_url(file_id, config=None):
         return None
 
 
+# Audio container formats a loose CDG track may be paired with. Sandell ships
+# .mp3, but commercial discs sometimes carry .m4a/.wav/.ogg/etc.
+_CDG_AUDIO_FORMATS = {"mp3", "m4a", "wav", "flac", "ogg", "opus", "aac", "mp2"}
+
+
+def find_sibling_audio(cdg_file_id, artist, title, brand_code, config=None):
+    """Resolve the audio track that belongs to a loose (un-zipped) CDG track.
+
+    Some brands (e.g. Sandell Karaoke) store a CDG's graphics and its audio as
+    two separate Drive files in the same folder rather than a single cdg+mp3
+    ``.zip``. The divebar index therefore exposes them as two independent track
+    rows, and downloading the ``cdg`` row alone yields a silent, useless file —
+    so callers pair it with its audio before download.
+
+    Re-runs the public ``search`` for the same song, locates the cdg row by
+    ``cdg_file_id`` to read its ``drive_path``, then finds the audio track in the
+    SAME brand whose filename (basename minus extension) matches the cdg's. The
+    brand + basename match avoids pairing across brands, or across different
+    versions of the same song within one brand.
+
+    Returns ``{"file_id": ..., "format": ...}`` for the sibling audio, or
+    ``None`` when no companion audio exists (a genuinely orphaned CDG).
+    """
+    import os
+
+    artist = (artist or "").strip()
+    title = (title or "").strip()
+    results = search(f"{artist} {title}".strip(), config=config) or []
+
+    # Flatten the grouped songs into a single list of tracks.
+    tracks = [t for song in results for t in song.get("tracks", [])]
+
+    def _stem(p):
+        return os.path.splitext(os.path.basename(p or ""))[0].lower().strip()
+
+    cdg = next((t for t in tracks if t.get("file_id") == cdg_file_id), None)
+    if cdg is None:
+        # The cdg row didn't come back in the fresh search, so we can't read its
+        # drive_path to confirm a basename match. Fail closed rather than guess:
+        # pairing the wrong song's audio is worse than pairing none.
+        return None
+    cdg_stem = _stem(cdg.get("drive_path"))
+    if not cdg_stem:
+        # No usable basename to match on — refuse rather than risk an empty-stem
+        # match against another empty-stem track.
+        return None
+
+    for t in tracks:
+        if t.get("file_id") == cdg_file_id:
+            continue
+        if (t.get("format") or "").lower() not in _CDG_AUDIO_FORMATS:
+            continue
+        if brand_code and t.get("brand_code") != brand_code:
+            continue
+        # Require a basename match so we never pair the wrong audio when a brand
+        # has several tracks for one song.
+        if _stem(t.get("drive_path")) != cdg_stem:
+            continue
+        return {"file_id": t.get("file_id"), "format": (t.get("format") or "").lower()}
+
+    return None
+
+
 def classify_download_url(url):
     """Classify a Divebar download URL as 'gcs' or 'drive'.
 

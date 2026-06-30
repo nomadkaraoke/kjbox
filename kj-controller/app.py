@@ -198,6 +198,8 @@ def create_app(config=None):
     flask_app.kj_config = cfg
     flask_app.secret_key = _get_secret_key(cfg)
     flask_app.media = MediaIndex(cfg)
+    from preview import PreviewService
+    flask_app.preview = PreviewService(cfg, flask_app.media)
     overlay_path = cfg.get('overlays_path') if config else None
     flask_app.overlay_manager = OverlayManager(config_path=overlay_path)
     flask_app.vlc = PlaybackCoordinator(
@@ -386,6 +388,8 @@ def start_app():  # pragma: no cover
     media = MediaIndex(cfg)
     media.load()
     flask_app.media = media
+    from preview import PreviewService
+    flask_app.preview = PreviewService(cfg, media)
     flask_app.vlc = vlc
     flask_app.audio_monitor = AudioMonitor(vlc, cfg)
     flask_app.catalog = ExternalCatalog(cfg)

@@ -327,6 +327,49 @@ class TestApprove:
         items = admin_app.download_queue["items"]
         assert items[-1]["title"] == "WTF - Queen - We Will Rock You.mp4"
 
+    def test_approve_divebar_zip_url_produces_zip_extension(
+        self, admin_client, admin_app
+    ):
+        # CDG+MP3 zip mirror must land as .zip, not .mp4, or the playability
+        # gate misclassifies it as video and rejects the singer-approved download.
+        req = _make_pending(
+            admin_app,
+            singer_name="Divebar Dan",
+            song_artist="Incubus",
+            song_title="Admiration",
+            source_type="divebar",
+            source_ref="gdrive_zip",
+            source_meta={"brand_code": "CKK"},
+        )
+        with patch("routes.divebar.get_download_url",
+                   return_value="https://storage.googleapis.com/m/CKK%20-%20Incubus%20-%20Admiration.zip"), \
+             patch("routes._download_worker"):
+            resp = admin_client.post(f"/rotation/requests/{req['id']}/approve")
+        assert resp.status_code == 200
+        items = admin_app.download_queue["items"]
+        assert items[-1]["title"] == "CKK - Incubus - Admiration.zip"
+
+    def test_approve_divebar_drive_url_uses_format_from_source_meta(
+        self, admin_client, admin_app
+    ):
+        # Drive URLs have no path extension — fall back to source_meta.format.
+        req = _make_pending(
+            admin_app,
+            singer_name="Divebar Dan",
+            song_artist="A",
+            song_title="B",
+            source_type="divebar",
+            source_ref="gdrive_drv",
+            source_meta={"brand_code": "RSK", "format": "zip"},
+        )
+        with patch("routes.divebar.get_download_url",
+                   return_value="https://drive.google.com/uc?export=download&id=drv"), \
+             patch("routes._download_worker"):
+            resp = admin_client.post(f"/rotation/requests/{req['id']}/approve")
+        assert resp.status_code == 200
+        items = admin_app.download_queue["items"]
+        assert items[-1]["title"] == "RSK - A - B.zip"
+
     def test_approve_make_creates_gen_job(self, admin_client, admin_app):
         gen = MagicMock()
         gen.create_job.return_value = {"job_id": "job_42", "status": "pending"}

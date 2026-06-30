@@ -50,9 +50,14 @@ class KaraokePlayer(Protocol):
     # ── Playback control ───────────────────────────────────────────────
 
     def play(self, file_path: str, display_path: str | None = None,
-             overlay_manager=None) -> None:
+             overlay_manager=None, audio_file: str | None = None) -> None:
         """Load and start playback. Caller is responsible for stopping filler
-        before calling (the coordinator does this)."""
+        before calling (the coordinator does this).
+
+        ``audio_file`` optionally supplies an external audio track (used for
+        CDG zips on the mpv renderer, where the .cdg is the main file and the
+        .mp3 is attached as audio). Renderers that auto-discover sibling audio
+        (VLC) may ignore it."""
 
     def stop(self) -> None:
         """Stop playback, release the audio device, clear playback state."""

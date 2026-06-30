@@ -2,13 +2,70 @@
 
 import json
 import os
+import shutil
 import tempfile
 import unicodedata
+import zipfile
 
 import requests
 
-from config import MEDIA_EXTENSIONS
+from config import MEDIA_EXTENSIONS, resolve_preview_cache_dir
 from utils import log_message, sanitize_filename_part, parse_youtube_filename
+
+# Rejected downloads are moved here (a subdir of the download folder) instead of
+# being deleted. scan() skips this dir so quarantined files are never re-indexed.
+QUARANTINE_DIRNAME = "_playability_quarantine"
+
+
+def _gate_playable(path, config):
+    """Fast inline playability check (integrity + sampled decode, no render).
+    Returns PlayabilityResult; verdict['overall_ok'] is False for bad files."""
+    from playability import PlayabilityChecker
+    return PlayabilityChecker(config=config).check(path, renderers=(), depth="quick")
+
+
+def _quarantine_download(file_path, reason, config):
+    """Move a rejected download (and its sidecars) into a quarantine subdir
+    instead of deleting it.
+
+    An automated playability verdict can be wrong, so it must never irreversibly
+    destroy a file. The quarantine dir lives beside the download and is skipped
+    by scan(), so quarantined files are never re-indexed as playable. Returns
+    the quarantined path of the main file, or None if nothing was moved.
+    """
+    parent = os.path.dirname(file_path)
+    qdir = os.path.join(parent, QUARANTINE_DIRNAME)
+    base_no_ext = os.path.splitext(file_path)[0]
+    try:
+        os.makedirs(qdir, exist_ok=True)
+    except OSError as exc:
+        log_message(f"Quarantine dir create failed for {file_path}: {exc}", config)
+        return None
+    moved_main = None
+    try:
+        siblings = os.listdir(parent)
+    except OSError:
+        siblings = [os.path.basename(file_path)]
+    for fname in siblings:
+        full = os.path.join(parent, fname)
+        # Match the rejected file and its yt-dlp sidecars (same stem, e.g. a
+        # .webp/.jpg thumbnail) — same matching the old delete path used.
+        if not os.path.isfile(full) or os.path.splitext(full)[0] != base_no_ext:
+            continue
+        try:
+            dest = os.path.join(qdir, fname)
+            shutil.move(full, dest)
+            if os.path.abspath(full) == os.path.abspath(file_path):
+                moved_main = dest
+        except OSError as exc:
+            log_message(f"Quarantine move failed for {full}: {exc}", config)
+    if moved_main:
+        try:
+            with open(moved_main + ".reason.txt", "w", encoding="utf-8") as fh:
+                fh.write((reason or "not playable") + "\n")
+        except OSError:
+            pass
+    return moved_main
 
 
 def _ytdlp_base_opts(config):
@@ -40,6 +97,11 @@ class MediaIndex:
         """Walk all configured media_folders, build index, persist to disk."""
         new_index = {}
         download_folder = os.path.realpath(self.config.get('download_folder', ''))
+        # The browser-preview cache normally lives outside every indexed path, but
+        # prune it defensively in case it's ever configured inside one — otherwise
+        # its transcode/CDG artifacts get indexed as phantom "graphics"/"audio"
+        # download rows.
+        preview_cache_dir = os.path.realpath(resolve_preview_cache_dir(self.config))
         existing = self._load_file()
 
         for folder in self.config.get('media_folders', []):
@@ -47,7 +109,13 @@ class MediaIndex:
             if not os.path.isdir(folder):
                 log_message(f"Media folder not found, skipping: {folder}", self.config)
                 continue
-            for dirpath, _dirnames, filenames in os.walk(folder):
+            for dirpath, dirnames, filenames in os.walk(folder):
+                # Never index quarantined (rejected) downloads or preview-cache artifacts.
+                dirnames[:] = [
+                    d for d in dirnames
+                    if d != QUARANTINE_DIRNAME
+                    and os.path.realpath(os.path.join(dirpath, d)) != preview_cache_dir
+                ]
                 for fname in filenames:
                     ext = os.path.splitext(fname)[1].lower()
                     if ext not in MEDIA_EXTENSIONS:
@@ -162,20 +230,28 @@ class MediaIndex:
 
     def list_items(self):
         """Return media index as a list of dicts with display info, sorted by mtime desc."""
+        from utils import media_type_label
+        from playability import sibling_cdg_audio
         items = []
         for path, entry in self.index.items():
             folder = entry.get('folder', '')
             folder_name = os.path.basename(folder) if folder else 'Unknown'
+            ext = os.path.splitext(entry.get("filename", ""))[1].lower()
             item = {
                 "file_path": entry["path"],
                 "display_name": entry.get("display_name", entry.get("filename", "")),
                 "filename": entry.get("filename", ""),
                 "folder_name": folder_name,
                 "folder": folder,
+                "ext": ext,
+                "media_kind": media_type_label(ext),
                 "is_download": entry.get("is_download", False),
                 "mtime": entry.get("mtime", 0),
                 "size": entry.get("size", 0),
             }
+            # A bare .cdg is graphics-only unless a same-stem audio file sits beside it.
+            if ext == ".cdg":
+                item["cdg_no_audio"] = sibling_cdg_audio(entry["path"]) is None
             if "channel" in entry:
                 item["channel"] = entry["channel"]
             if "youtube_id" in entry:
@@ -250,8 +326,7 @@ class MediaIndex:
             log_message(f"Using YouTube cookies file: {ydl_opts['cookiefile']}", self.config)
 
         try:
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                ydl.extract_info(youtube_url, download=True)
+            self._run_ytdlp_download(ydl_opts, youtube_url)
 
             # Find the actual downloaded file (might be .mp4, .mkv, etc.)
             file_path = None
@@ -266,6 +341,18 @@ class MediaIndex:
                 return None, None
 
             real_path = os.path.realpath(file_path)
+
+            gate = _gate_playable(file_path, self.config)
+            if not gate.verdict.get("overall_ok"):
+                reason = "; ".join(gate.verdict.get("reasons") or ["not playable"])
+                log_message(f"Download rejected (not playable): {os.path.basename(file_path)} — {reason}", self.config)
+                # Quarantine (never delete) — an automated verdict can be wrong,
+                # so move the file + yt-dlp sidecars aside for review instead of
+                # irreversibly removing them. scan() skips the quarantine dir.
+                qpath = _quarantine_download(file_path, reason, self.config)
+                if qpath:
+                    log_message(f"Quarantined to {qpath}", self.config)
+                return None, None
 
             # Add to media index
             stat = os.stat(real_path)
@@ -287,6 +374,7 @@ class MediaIndex:
             if upload_date is not None:
                 entry["upload_date"] = upload_date
 
+            entry["playability"] = gate.verdict
             self.index[real_path] = entry
             self.save()
 
@@ -296,37 +384,60 @@ class MediaIndex:
             log_message(f"Error downloading video: {e}", self.config)
             return None, None
 
+    def _run_ytdlp_download(self, ydl_opts, url):
+        """Execute yt-dlp download. Extracted for testability."""
+        import yt_dlp
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            ydl.extract_info(url, download=True)
+
     def download_from_url(self, url, filename=None):
         """Downloads a file from a direct HTTP URL (e.g. Google Drive), updates media index."""
         download_folder = self.config.get('download_folder', os.path.expanduser("~/kjdata/videos"))
         os.makedirs(download_folder, exist_ok=True)
 
         try:
-            resp = requests.get(url, stream=True, timeout=120, allow_redirects=True)
-            resp.raise_for_status()
-
-            # Determine filename from response or parameter
-            if not filename:
-                # Try Content-Disposition header
+            if filename:
+                # Filename known upfront — compute file_path before downloading so
+                # _http_download receives the final destination (enables test mocking).
+                safe_name = sanitize_filename_part(os.path.splitext(filename)[0])
+                ext = os.path.splitext(filename)[1] or '.mp4'
+                final_name = f"divebar__{safe_name}{ext}"
+                file_path = os.path.join(download_folder, final_name)
+                # _http_download writes the body to file_path and returns the response.
+                self._http_download(url, file_path)
+                display_name = os.path.splitext(filename)[0]
+            else:
+                # Filename unknown — fetch response first (body not consumed) to read
+                # Content-Disposition, then stream body once file_path is known.
+                resp = self._http_download(url, None)
                 cd = resp.headers.get('Content-Disposition', '')
                 if 'filename=' in cd:
                     filename = cd.split('filename=')[-1].strip('"\'')
                 else:
                     filename = url.split('/')[-1].split('?')[0] or 'download'
+                safe_name = sanitize_filename_part(os.path.splitext(filename)[0])
+                ext = os.path.splitext(filename)[1] or '.mp4'
+                final_name = f"divebar__{safe_name}{ext}"
+                file_path = os.path.join(download_folder, final_name)
+                display_name = os.path.splitext(filename)[0]
+                with open(file_path, 'wb') as f:
+                    for chunk in resp.iter_content(chunk_size=8192):
+                        f.write(chunk)
 
-            safe_name = sanitize_filename_part(os.path.splitext(filename)[0])
-            ext = os.path.splitext(filename)[1] or '.mp4'
-            final_name = f"divebar__{safe_name}{ext}"
-            file_path = os.path.join(download_folder, final_name)
-
-            # Download with streaming
-            with open(file_path, 'wb') as f:
-                for chunk in resp.iter_content(chunk_size=8192):
-                    f.write(chunk)
+            gate = _gate_playable(file_path, self.config)
+            if not gate.verdict.get("overall_ok"):
+                reason = "; ".join(gate.verdict.get("reasons") or ["not playable"])
+                log_message(f"Download rejected (not playable): {os.path.basename(file_path)} — {reason}", self.config)
+                # Quarantine (never delete) — an automated verdict can be wrong,
+                # so move the file + yt-dlp sidecars aside for review instead of
+                # irreversibly removing them. scan() skips the quarantine dir.
+                qpath = _quarantine_download(file_path, reason, self.config)
+                if qpath:
+                    log_message(f"Quarantined to {qpath}", self.config)
+                return None, None
 
             real_path = os.path.realpath(file_path)
             stat = os.stat(real_path)
-            display_name = os.path.splitext(filename)[0]
 
             entry = {
                 "path": real_path,
@@ -340,6 +451,7 @@ class MediaIndex:
                 "source": "divebar",
             }
 
+            entry["playability"] = gate.verdict
             self.index[real_path] = entry
             self.save()
 
@@ -349,3 +461,94 @@ class MediaIndex:
         except Exception as e:
             log_message(f"Error downloading from URL: {e}", self.config)
             return None, None
+
+    def download_cdg_pair(self, cdg_url, mp3_url, filename):
+        """Download a loose CDG + its sibling audio and package them into a single
+        cdg+mp3 ``.zip`` — the playable form the rest of the pipeline expects.
+
+        Some brands (e.g. Sandell Karaoke) store a CDG's graphics and its audio as
+        two separate Drive files rather than one zip, so the divebar index exposes
+        them as independent track rows. Downloading the ``.cdg`` alone yields a
+        silent, useless file; this fetches both and zips them, then runs the same
+        playability gate every other download passes through.
+
+        Returns ``(real_path, display_name)`` on success, or ``(None, None)`` when
+        a download fails or the resulting zip is rejected by the gate (in which
+        case the zip is quarantined rather than left clickable)."""
+        download_folder = self.config.get('download_folder', os.path.expanduser("~/kjdata/videos"))
+        os.makedirs(download_folder, exist_ok=True)
+
+        base = sanitize_filename_part(os.path.splitext(filename)[0]) if filename else "cdg-download"
+        display_name = os.path.splitext(filename)[0] if filename else base
+        final_name = f"divebar__{base}.zip"
+        file_path = os.path.join(download_folder, final_name)
+
+        # Stage the two members in a system temp dir (NOT the download folder, so a
+        # concurrent scan() can never index the loose cdg/mp3 before they're zipped).
+        tmpdir = None
+        try:
+            tmpdir = tempfile.mkdtemp(prefix="cdgpair_")
+            cdg_tmp = os.path.join(tmpdir, base + ".cdg")
+            mp3_tmp = os.path.join(tmpdir, base + ".mp3")
+            self._http_download(cdg_url, cdg_tmp)
+            self._http_download(mp3_url, mp3_tmp)
+
+            # Store (not deflate): .cdg/.mp3 are already compact, and the zip play
+            # path only needs to read the members back out.
+            with zipfile.ZipFile(file_path, 'w', zipfile.ZIP_STORED) as zf:
+                zf.write(cdg_tmp, arcname=os.path.basename(cdg_tmp))
+                zf.write(mp3_tmp, arcname=os.path.basename(mp3_tmp))
+
+            gate = _gate_playable(file_path, self.config)
+            if not gate.verdict.get("overall_ok"):
+                reason = "; ".join(gate.verdict.get("reasons") or ["not playable"])
+                log_message(f"Download rejected (not playable): {os.path.basename(file_path)} — {reason}", self.config)
+                qpath = _quarantine_download(file_path, reason, self.config)
+                if qpath:
+                    log_message(f"Quarantined to {qpath}", self.config)
+                return None, None
+
+            real_path = os.path.realpath(file_path)
+            stat = os.stat(real_path)
+            entry = {
+                "path": real_path,
+                "filename": os.path.basename(real_path),
+                "folder": os.path.realpath(download_folder),
+                "size": stat.st_size,
+                "mtime": stat.st_mtime,
+                "is_download": True,
+                "display_name": display_name,
+                "original_url": cdg_url,
+                "source": "divebar",
+                "playability": gate.verdict,
+            }
+            self.index[real_path] = entry
+            self.save()
+            log_message(f"Successfully downloaded '{display_name}' (cdg+mp3 zip) from Divebar", self.config)
+            return real_path, display_name
+
+        except Exception as e:
+            log_message(f"Error downloading CDG pair from URL: {e}", self.config)
+            # Remove any partial/failed zip so it can't be picked up later.
+            try:
+                if os.path.exists(file_path):
+                    os.remove(file_path)
+            except OSError:
+                pass
+            return None, None
+        finally:
+            if tmpdir and os.path.isdir(tmpdir):
+                shutil.rmtree(tmpdir, ignore_errors=True)
+
+    def _http_download(self, url, file_path):
+        """Execute HTTP GET and write streaming body to file_path (when provided).
+        Returns the response object for header inspection by the caller.
+        Extracted for testability: tests mock this method to create a fake file and
+        return a MagicMock response."""
+        resp = requests.get(url, stream=True, timeout=120, allow_redirects=True)
+        resp.raise_for_status()
+        if file_path is not None:
+            with open(file_path, 'wb') as f:
+                for chunk in resp.iter_content(chunk_size=8192):
+                    f.write(chunk)
+        return resp

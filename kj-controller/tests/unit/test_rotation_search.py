@@ -248,3 +248,224 @@ class TestPriorityAnnotation:
             assert track["priority_brand"] == "LC"
             assert track["priority_class"] == "community"
             assert "priority_rank" in track
+
+
+class TestDivebarSurfacing:
+    """GCS-mirror (divebar) versions are surfaced as their own selectable rows."""
+
+    def test_standalone_divebar_version_surfaced(self, search_client, search_app):
+        """A divebar brand KN did NOT return appears under the new 'divebar' key."""
+        with patch.object(search_app.catalog, 'search', return_value=[]), \
+             patch('routes.karaoke_nerds.search', return_value=[
+                 {"title": "Drive", "artist": "Incubus", "tracks": [
+                     {"brand_name": "KFN", "brand_code": "KFN-1",
+                      "youtube_url": "https://youtube.com/watch?v=abc",
+                      "is_community": False}
+                 ]}
+             ]), \
+             patch('routes.divebar.search', return_value=[
+                 {"artist": "Incubus", "title": "Drive", "tracks": [
+                     {"file_id": "db1", "brand": "CC Karaoke", "brand_code": "CC",
+                      "format": "mp4", "in_gcs": True}
+                 ]}
+             ]):
+            resp = search_client.get('/rotation/search?q=incubus drive')
+            data = resp.get_json()
+            assert "divebar" in data
+            fids = [r["file_id"] for r in data["divebar"]]
+            assert "db1" in fids
+            row = next(r for r in data["divebar"] if r["file_id"] == "db1")
+            assert row["artist"] == "Incubus"
+            assert row["title"] == "Drive"
+            assert row["priority_brand"] == "CC"
+
+    def test_same_brand_canonical_crossref_attaches_to_kn(self, search_client, search_app):
+        """Anna Molly: KN 'FBK' matches mirror 'FBK204' (Funbox) -> attached, not standalone."""
+        with patch.object(search_app.catalog, 'search', return_value=[]), \
+             patch('routes.karaoke_nerds.search', return_value=[
+                 {"title": "Anna Molly", "artist": "Incubus", "tracks": [
+                     {"brand_name": "Funbox Karaoke", "brand_code": "FBK",
+                      "youtube_url": "https://youtube.com/watch?v=abc",
+                      "is_community": True}
+                 ]}
+             ]), \
+             patch('routes.divebar.search', return_value=[
+                 {"artist": "Incubus", "title": "Anna Molly", "tracks": [
+                     {"file_id": "fbk204", "brand": "Funbox Karaoke",
+                      "brand_code": "FBK204", "format": "zip", "in_gcs": True}
+                 ]}
+             ]):
+            resp = search_client.get('/rotation/search?q=incubus anna molly')
+            data = resp.get_json()
+            track = data["karaoke_nerds"][0]["tracks"][0]
+            assert (track.get("divebar") or {}).get("file_id") == "fbk204"
+            # Not also surfaced as a duplicate standalone row
+            assert "fbk204" not in [r["file_id"] for r in data.get("divebar", [])]
+
+    def test_divebar_covered_locally_not_surfaced(self, search_client, search_app):
+        """If the same (song, brand) is already local, the divebar row is suppressed."""
+        with patch.object(search_app.catalog, 'is_available', return_value=True), \
+             patch.object(search_app.catalog, 'search', return_value=[
+                 {"path": "/media/CCK-01298 - Incubus - Love Hurts.zip",
+                  "artist": "Incubus", "title": "Love Hurts", "format": "cdg+mp3",
+                  "disc_id": "CCK-01298",
+                  "filename": "CCK-01298 - Incubus - Love Hurts.zip"}
+             ]), \
+             patch('routes.karaoke_nerds.search', return_value=[]), \
+             patch('routes.divebar.search', return_value=[
+                 {"artist": "Incubus", "title": "Love Hurts", "tracks": [
+                     {"file_id": "cc1", "brand": "CC Karaoke", "brand_code": "CC",
+                      "format": "mp4", "in_gcs": True}
+                 ]}
+             ]):
+            resp = search_client.get('/rotation/search?q=incubus love hurts')
+            data = resp.get_json()
+            assert "cc1" not in [r["file_id"] for r in data.get("divebar", [])]
+
+    def test_divebar_searched_even_when_kn_empty(self, search_client, search_app):
+        """Divebar is searched independently of KN (GCS rows show even if KN empty)."""
+        with patch.object(search_app.catalog, 'search', return_value=[]), \
+             patch('routes.karaoke_nerds.search', return_value=[]), \
+             patch('routes.divebar.search', return_value=[
+                 {"artist": "Incubus", "title": "Drive", "tracks": [
+                     {"file_id": "db1", "brand": "CC Karaoke", "brand_code": "CC",
+                      "format": "mp4", "in_gcs": True}
+                 ]}
+             ]):
+            resp = search_client.get('/rotation/search?q=incubus drive')
+            data = resp.get_json()
+            assert "db1" in [r["file_id"] for r in data.get("divebar", [])]
+
+    def test_divebar_collapses_to_one_row_per_brand_prefer_gcs(self, search_client, search_app):
+        """Multiple mirror files of the same brand collapse to one row, preferring in_gcs."""
+        with patch.object(search_app.catalog, 'search', return_value=[]), \
+             patch('routes.karaoke_nerds.search', return_value=[]), \
+             patch('routes.divebar.search', return_value=[
+                 {"artist": "Incubus", "title": "Drive", "tracks": [
+                     {"file_id": "drive_only", "brand": "CC Karaoke", "brand_code": "CC",
+                      "format": "mp4", "in_gcs": False},
+                     {"file_id": "gcs_one", "brand": "CC Karaoke", "brand_code": "CCK",
+                      "format": "mp4", "in_gcs": True},
+                 ]}
+             ]):
+            resp = search_client.get('/rotation/search?q=incubus drive')
+            data = resp.get_json()
+            cc_rows = [r for r in data.get("divebar", []) if r["priority_brand"] == "CC"]
+            assert len(cc_rows) == 1
+            assert cc_rows[0]["file_id"] == "gcs_one"  # in_gcs preferred
+
+    def test_backcompat_keys_present(self, search_client, search_app):
+        """Adding 'divebar' must not drop the legacy 'local'/'karaoke_nerds' keys."""
+        with patch.object(search_app.catalog, 'search', return_value=[]), \
+             patch('routes.karaoke_nerds.search', return_value=[]), \
+             patch('routes.divebar.search', return_value=[]):
+            resp = search_client.get('/rotation/search?q=incubus drive')
+            data = resp.get_json()
+            assert "local" in data
+            assert "karaoke_nerds" in data
+            assert "divebar" in data
+
+    def test_kn_attach_prefers_in_gcs_mirror(self, search_client, search_app):
+        """When several mirror files match one KN track, the in-GCS one attaches."""
+        with patch.object(search_app.catalog, 'search', return_value=[]), \
+             patch('routes.karaoke_nerds.search', return_value=[
+                 {"title": "Drive", "artist": "Incubus", "tracks": [
+                     {"brand_name": "CC Karaoke", "brand_code": "CC",
+                      "youtube_url": "https://youtube.com/watch?v=abc",
+                      "is_community": True}
+                 ]}
+             ]), \
+             patch('routes.divebar.search', return_value=[
+                 {"artist": "Incubus", "title": "Drive", "tracks": [
+                     {"file_id": "drive_only", "brand": "CC Karaoke",
+                      "brand_code": "CC", "format": "mp4", "in_gcs": False},
+                     {"file_id": "gcs_one", "brand": "CC Karaoke",
+                      "brand_code": "CCK", "format": "mp4", "in_gcs": True},
+                 ]}
+             ]):
+            resp = search_client.get('/rotation/search?q=incubus drive')
+            data = resp.get_json()
+            track = data["karaoke_nerds"][0]["tracks"][0]
+            assert (track.get("divebar") or {}).get("file_id") == "gcs_one"
+
+
+class TestDivebarAttachBeatsLocalDrop:
+    """A KN row must be upgraded to the GCS mirror even when we also hold the
+    same brand locally — the KN row is independently selectable and should
+    prefer GCS over YouTube. Only the *standalone* mirror row is suppressed
+    when a local file already covers that brand."""
+
+    def test_kn_attached_even_when_same_brand_is_local(self, search_client, search_app):
+        with patch.object(search_app.catalog, 'is_available', return_value=True), \
+             patch.object(search_app.catalog, 'search', return_value=[
+                 {"path": "/media/FATBIRD-163 - Incubus - I Miss You.zip",
+                  "artist": "Incubus", "title": "I Miss You", "format": "cdg+mp3",
+                  "disc_id": "FATBIRD-163",
+                  "filename": "FATBIRD-163 - Incubus - I Miss You.zip"}
+             ]), \
+             patch('routes.karaoke_nerds.search', return_value=[
+                 {"title": "I Miss You", "artist": "Incubus", "tracks": [
+                     {"brand_name": "Fatbird Karaoke", "brand_code": "FATBIRD",
+                      "youtube_url": "https://youtube.com/watch?v=abc",
+                      "is_community": True}
+                 ]}
+             ]), \
+             patch('routes.divebar.search', return_value=[
+                 {"artist": "Incubus", "title": "I Miss You", "tracks": [
+                     {"file_id": "fb163", "brand": "Fatbird Karaoke",
+                      "brand_code": "FATBIRD", "format": "zip", "in_gcs": True}
+                 ]}
+             ]):
+            resp = search_client.get('/rotation/search?q=incubus i miss you')
+            data = resp.get_json()
+            track = data["karaoke_nerds"][0]["tracks"][0]
+            # KN row upgraded to GCS even though FATBIRD is also local
+            assert (track.get("divebar") or {}).get("file_id") == "fb163"
+            # ...but no redundant standalone row (local already covers it)
+            assert "fb163" not in [r["file_id"] for r in data.get("divebar", [])]
+
+
+class TestSearchAnnotations:
+    def test_unknown_local_file_gets_library_group(self, search_client, search_app):
+        """An unknown-brand SSD file is homed into a Library folder group."""
+        with patch.object(search_app.catalog, 'is_available', return_value=True), \
+             patch.object(search_app.catalog, 'search', return_value=[
+                 {"path": "/media/nomad/Nomad4TBOne/HyperMule/Master Karaoke Folder/"
+                          "Karaoke - Digital/Active/ASK/ASK-011277 - Q - X.zip",
+                  "filename": "ASK-011277 - Q - X.zip", "artist": "Q",
+                  "title": "X", "format": "cdg+mp3", "disc_id": "ASK-011277"}
+             ]), \
+             patch('routes.karaoke_nerds.search', return_value=[]), \
+             patch('routes.divebar.search', return_value=[]):
+            resp = search_client.get('/rotation/search?q=kryptonite')
+            row = resp.get_json()["local"][0]
+            assert row["priority_class"] == "unknown"
+            assert row["group"]["label"] == "Library — Karaoke - Digital/Active"
+
+    def test_recognized_local_file_has_no_group_override(self, search_client, search_app):
+        """A recognized-brand local file keeps its tier (no Library group)."""
+        with patch.object(search_app.catalog, 'is_available', return_value=True), \
+             patch.object(search_app.catalog, 'search', return_value=[
+                 {"path": "/media/nomad/x/KVD-07383 - Q - X.zip",
+                  "filename": "KVD-07383 - Q - X.zip", "artist": "Q",
+                  "title": "X", "format": "cdg+mp3", "disc_id": "KVD-07383"}
+             ]), \
+             patch('routes.karaoke_nerds.search', return_value=[]), \
+             patch('routes.divebar.search', return_value=[]):
+            resp = search_client.get('/rotation/search?q=kryptonite')
+            row = resp.get_json()["local"][0]
+            assert row["priority_class"] == "commercial"
+            assert "group" not in row
+
+    def test_kn_track_carries_priority_stated(self, search_client, search_app):
+        with patch.object(search_app.catalog, 'search', return_value=[]), \
+             patch('routes.karaoke_nerds.search', return_value=[
+                 {"title": "X", "artist": "Q", "tracks": [
+                     {"brand_name": "Vocal Star", "brand_code": "VS",
+                      "youtube_url": "https://yt/abc"}
+                 ]}
+             ]), \
+             patch('routes.divebar.search', return_value=[]):
+            resp = search_client.get('/rotation/search?q=kryptonite')
+            track = resp.get_json()["karaoke_nerds"][0]["tracks"][0]
+            assert track["priority_stated"] is False

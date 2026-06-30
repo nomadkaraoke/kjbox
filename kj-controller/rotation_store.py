@@ -82,6 +82,10 @@ class RotationStore:
     _TRACKING_FIELDS = (
         "file_path", "duration", "download_source", "download_status",
         "download_id", "url_fallback", "gen_job_id", "gen_status",
+        # Tier-2 render-verification flag: tied to the live linked file, so a
+        # restore must keep the live value (not revert to the snapshot) and
+        # never drop it entirely.
+        "playability_warning",
     )
 
     def __init__(self, db_path):
@@ -225,6 +229,7 @@ class RotationStore:
             ("paid", "INTEGER NOT NULL DEFAULT 0"),
             ("singers_json", "TEXT DEFAULT NULL"),
             ("done_at", "TEXT DEFAULT NULL"),
+            ("playability_warning", "TEXT DEFAULT NULL"),
         ]
         added_cols = []
         for col_name, col_type in migrations:
@@ -695,6 +700,26 @@ class RotationStore:
         conn.commit()
         return self.get_entry(entry_id)
 
+    def set_playability_warning(self, entry_id, warning):
+        """Stamp (or clear, with ``None``) the tier-2 playability warning.
+
+        Written by the background render-verification worker after a file is
+        linked: if the active renderer cannot actually render video for the
+        file, ``warning`` describes why so the KJ sees a ⚠️ before playing it.
+
+        Deliberately does NOT bump ``updated_at`` — that timestamp feeds the
+        "time since last sang" pill, and a background stamp must not reset it.
+        """
+        if self.get_entry(entry_id) is None:
+            raise ValueError(f"Entry {entry_id} not found")
+        conn = self._get_conn()
+        conn.execute(
+            "UPDATE rotation_entries SET playability_warning = ? WHERE id = ?",
+            (warning, entry_id),
+        )
+        conn.commit()
+        return self.get_entry(entry_id)
+
     def get_entry_by_download_id(self, download_id):
         """Find a rotation entry by its download queue correlation ID."""
         conn = self._get_conn()
@@ -1107,7 +1132,7 @@ class RotationStore:
                     "id", "singer", "song_artist", "status", "notes", "position",
                     "file_path", "duration", "download_source", "download_status",
                     "download_id", "url_fallback", "gen_job_id", "gen_status",
-                    "singers_json", "paid",
+                    "playability_warning", "singers_json", "paid",
                 ]
                 vals = [
                     e["id"], e["singer"], e["song_artist"], e["status"],
@@ -1116,6 +1141,7 @@ class RotationStore:
                     track["download_source"], track["download_status"],
                     track["download_id"], track["url_fallback"],
                     track["gen_job_id"], track["gen_status"],
+                    track["playability_warning"],
                     e.get("singers_json"), int(bool(e.get("paid", 0))),
                 ]
                 # Preserve created_at when the snapshot carries it.

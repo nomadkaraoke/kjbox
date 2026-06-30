@@ -2,9 +2,9 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
-## 2026-06-27 - Feature: "Last sang" time in Singers list (v0.40.0)
+## 2026-06-30 - Feature: "Last sang" time in Singers list (v0.49.0)
 
-**Code (v0.40.0 — frontend takes effect on browser refresh after `git pull`; backend change needs deploy + restart):**
+**Code (v0.49.0 — frontend takes effect on browser refresh after `git pull`; backend change needs deploy + restart):**
 - The Singers list already showed "Joined: Xh Xm ago" and a "Sung: ×N" pill per singer.
   It now also shows "Last sang: Xh Xm ago" immediately after the Sung pill, using the same
   compact elapsed-time format as the rotation count pill (e.g. "30m ago", "1h15m ago").
@@ -14,6 +14,145 @@ Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](a
   `_add_last_sang()` for rotation entries.
 - Frontend: `buildSingerRow()` in `app.js` renders the label when
   `last_sang_minutes` is present; hidden when the singer has not yet sung tonight.
+
+## 2026-06-30 - Preview cache relocated out of the download folder + content-addressed (v0.47.0)
+
+**Why:** The "Available Downloads" (YTDOWNLOADS) list showed phantom `graphics` / `audio`
+rows. They were browser-preview cache artifacts (extracted CDG halves): the preview cache
+defaulted to `<download_folder>/.preview-cache`, *inside* the indexed download folder, so
+`MediaIndex.scan()` indexed them as downloads. Separately, local-file cache keys were
+`realpath|size|mtime`, so renaming/moving a source file orphaned its cached preview.
+
+**What:**
+- Preview cache now resolves to a **sibling** of the download folder
+  (`/opt/nomad/preview-cache` on device) via `config.resolve_preview_cache_dir()` — outside
+  every indexed path, so artifacts can never be indexed again.
+- Local-file cache keys are **content-addressed**: `sha1(size + sha1(head 1MiB) + sha1(tail
+  1MiB))` (`preview_cache.content_signature`), surviving renames/moves at ~2 MiB read cost.
+  `PARAMS_VERSION` bumped `1`→`2`. GCS/divebar keying (by `file_id`) unchanged.
+- `MediaIndex.scan()` also prunes the resolved preview-cache dir defensively.
+- **Deploy:** one-time `rm -rf /opt/nomad/YTDownloads/.preview-cache` (old cache, 1 day old,
+  regenerable); push; `systemctl restart kj-controller`. See
+  [archive/2026-06-30-preview-cache-relocation-design.md](archive/2026-06-30-preview-cache-relocation-design.md).
+
+## 2026-06-29 - Divebar GCS-mirror downloads land + CDG renders on mpv (v0.42.0)
+
+**Why:** Selecting a GCS community-mirror (Divebar) version to download/link/play failed
+for CDG zips with a "Download failed" toast, and even once downloaded a CDG zip played
+audio-only (no graphics) on the default mpv renderer. The GCS mirror is mostly `mp4` +
+`zip` (CDG+MP3), so both bugs hit the common case.
+
+**What:**
+- **Download extension (`utils.divebar_ext`)** — the on-disk extension was hardcoded `.mp4`
+  at all three divebar enqueue sites (`divebar_download`, `download_and_link_rotation`,
+  `approve_sing_request`), so a CDG zip landed as `…​.mp4`, was classified `video`, failed
+  the ffprobe gate, and was deleted. Now derived server-side from the resolved download URL
+  path (the GCS mirror always carries the real extension), falling back to the frontend-
+  threaded catalog `format`, then `.mp4`. Frontend now threads `format` through the divebar
+  download payloads (`app.js`, `static-sing/sing.js`). No `_gate_playable` change needed —
+  a correctly-named `.zip` already validates via the existing `cdg_zip` path.
+- **CDG graphics on mpv** — `/play` now feeds each renderer correctly: VLC gets the `.mp3`
+  (auto-discovers the sibling `.cdg`); **mpv gets the `.cdg`** (graphics) with the `.mp3`
+  attached as an external audio track via `audio-add <mp3> select` (after `loadfile <cdg>`).
+  `audio-add` is used rather than a `loadfile` option because the `loadfile` options-arg
+  position changed between mpv 0.37 (device) and 0.38+; `audio-add` is version-stable. mpv
+  playback **aborts** if the audio fails to attach (a bare `.cdg` is silent). New
+  `ZipPlayback.current_cdg_path()`; `audio_file` threaded through the `KaraokePlayer`
+  protocol (`PlaybackCoordinator.play_video` → `play`), accepted+ignored by VLC.
+- **Verified live on NomadPC** (mpv 0.37): repro CKK CDG zip downloads as `.zip`
+  (`overall_ok: True`), and plays graphics + synced audio on **both** renderers
+  (track-list `video=cdgraphics` + external `audio=mp3`, time-pos advancing, HDMI screenshot).
+- Builds on the search-surfacing work in #114/#115 (GCS mirror rows in rotation search).
+  Out of scope: bare `.cdg` (no audio) / bare `.mp3` (no video) catalog entries.
+
+**Deploy steps**
+- Backend change ⇒ **service restart required** (`git pull` + `sudo systemctl restart
+  kj-controller`; interrupts active playback). kj-autodeploy is OFF. Already deployed to
+  NomadPC (commit `9c656ac`, v0.42.0) and reverted to the persisted `render_mode = vlc`.
+
+## 2026-06-28 - Ops: Full-library playability run launched on device + harness committed
+
+**Why:** With the playability checker shipped+deployed (v0.40.0), sweep the *entire*
+karaoke library once to find corrupt / unplayable files to review and delete. Internal
+storage first (smaller, more diverse, higher corruption risk — fresh YouTube pulls + the
+period divebar downloads were truncating), then the 4TB SSD archive. Must be monitorable,
+resumable, gentle on the SSD, thermally safe, and pausable around live events.
+
+**What:**
+- **`kj-controller/scripts/playability-run/`** — committed the operational harness
+  (`start.sh`, `pause.sh`, `run_all.sh`, `ssd_runner.py`, `monitor.sh`, `progress.sh`,
+  `report.sh`), deployed to `/opt/nomad/playability-run/` on the device.
+- **Phase A** (internal: YTDownloads + MP4-720p, ~2,485 mp4) — deep render in **both VLC
+  and mpv** (the matrix), ~16–18 h. **Phase B** (4TB SSD: HyperMule ~398k CDG zips +
+  NomadKaraoke ~1,982 mp4) — integrity-only, no render, gentle, ~20 days active, pausable.
+- Resumable JSONL manifests (skip checked files by mtime/size, durable append-per-file);
+  transient systemd units running the batch as **`nomad`** with `Nice=19` +
+  `IOSchedulingClass=idle` + `CPUQuota=200%` + `MemoryMax=2G` + 0.3 s/file throttle;
+  `monitor.sh` logs temp/load every 5 min and hard-stops at 92 °C.
+- **⚠️ Gotcha baked into `start.sh`:** the batch MUST run as `nomad` — VLC refuses to run
+  as root ("cannot be run by non-trusted users") and would falsely flag every video.
+- **Runbook:** [PLAYABILITY-FULL-LIBRARY-RUN.md](PLAYABILITY-FULL-LIBRARY-RUN.md) — full
+  check / pause / resume / read-results / reinstall instructions for future sessions.
+
+## 2026-06-28 - Feature: Playability tier-2 async render verification + frontend — shipped + deployed (v0.40.0, PR #112)
+
+**Why:** Tier-1 (the inline gate) hard-blocks on integrity+decode but skips the expensive
+render proof. A file can pass the gate yet still fail to render video in the *active* renderer
+(e.g. an odd codec under mpv). Tier-2 catches that off the request path so the KJ sees a warning
+before hitting play.
+
+**What:**
+- **`rotation_store.py`** — new `playability_warning` column + `set_playability_warning(id, reason)`
+  setter (deliberately does NOT bump `updated_at` — that feeds the "last sang" pill).
+- **`routes.py`** — single-worker queue + daemon worker. After a file passes the tier-1 gate and
+  is linked (`/rotation/link`), a background `check(path, renderers=(active,), depth="deep")` runs
+  against `current_app.vlc.render_mode`; on failure it stamps the entry's `playability_warning`,
+  on success clears any stale one. Best-effort — never affects the already-successful link;
+  pure-audio files are skipped. One worker ⇒ one off-screen Xvfb render at a time.
+- **`playability_render.py`** — `XvfbDisplay` now auto-picks a *free* display (`pick_free_display`
+  probes sockets + lock files) instead of a hard-coded `:99`, so a tier-2 check and a manual batch
+  sweep can't collide. Explicit displays still honoured.
+- **Frontend (`static/app.js` + `style.css`)** — rotation rows with a `playability_warning` show a
+  ⚠️ next to the song (reason on hover; click for a full toast). A tier-1 422 reject on
+  link/upload now pops a prominent, auto-dismissing toast naming the reason, instead of only a
+  fleeting log line.
+
+**Tests:** `test_playability_tier2.py` (worker logic + enqueue + plumbing), `test_link_gate.py`
+(enqueue-on-link / not-on-block), `test_playability_render.py` (free-display picker),
+`test_rotation_store.py::TestPlayabilityWarning`. Full unit+integration suite green (1 expected
+Xvfb skip). Frontend syntax-checked; visual verification deferred to on-device.
+
+**Deploy notes (NOT yet deployed):** backend change → needs `kj-controller` restart (interrupts
+playback); same `xvfb`+`Pillow` device deps as tier-1. Still-open follow-ups in the handoff:
+tier-2 background concurrency is serialized (single worker) — if it's ever parallelised, the
+free-display picker already covers Xvfb collisions; download-auto-link paths don't yet enqueue
+tier-2 (only `/rotation/link` does).
+
+## 2026-06-28 - Feature: Playability checker (verify render before play) — built + validated, NOT yet deployed
+
+**Why:** On 2026-06-25 a queued file (`Mirah - Gone Sugaring`) "played" but showed a black
+screen — a truncated download (`moov atom not found`). Audio-but-no-video failures are also
+invisible in logs (the song finishes normally). New checker verifies a file actually *renders
+video* before it can be linked/uploaded/downloaded.
+
+**What (new modules in `kj-controller/`):** `frame_analysis.py`, `playability.py`,
+`playability_render.py`, `playability_batch.py` (see ARCHITECTURE.md § Module Structure).
+`PlayabilityChecker.check()` runs ffprobe integrity → ffmpeg decode → **off-screen Xvfb render
+proof in VLC + mpv** (never touches the live `:0` display or `hw:0,0` audio) → verdict.
+Supports CDG zips. A resumable batch tool produces a VLC-vs-mpv playability matrix.
+
+**Gates (inline, tier-1):** `/rotation/link`, `/upload`, and `media.py` downloads now run a
+fast integrity+decode check and **hard-block** unplayable files (422 / reject+delete). Tier-2
+(async full render verification flagging linked entries) is now built — see the tier-2 entry above.
+
+**Validated on NomadPC** against all 77 files from the 2026-06-25 show: caught the truncated +
+an audio-only file; found and fixed a CDG false-positive (was capturing the black CD+G intro —
+now seeks mid-file); confirmed **mpv can't render CD+G** (mpv-primary switch must keep CDG on
+VLC). Timing: integrity ~0.15s, decode 2–21s, VLC render ~3.5–7s.
+
+**Deploy notes (NOT yet deployed):** backend change → needs `kj-controller` restart (interrupts
+playback). Requires **`xvfb`** (system pkg) + **`Pillow`** (venv) on the device — installed on
+NomadPC, verify on NomadPi. Design/plan/findings/handoff in `docs/archive/2026-06-2*-playability-*`.
 
 ## 2026-06-25 - Feature: "time since last sang" on the rotation count pill (v0.39.0)
 
