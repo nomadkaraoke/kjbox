@@ -36,6 +36,11 @@ KJ Controller is a Flask + vanilla JS web app for managing live karaoke shows. I
 | `utils.py` | `log_message` helper |
 | `version_priority.py` | Version selection logic for multi-format catalogs |
 | `zip_playback.py` | `ZipPlayback` — plays zipped CDG+MP3 karaoke packs |
+| `preview.py` | `PreviewService` — resolve a file/candidate to a browser-preview delivery mode + opaque serving tokens; `parse_range` |
+| `preview_cache.py` | `PreviewCache` — content-addressed, `.done`-gated, LRU-evicted on-disk cache for transcodes / GCS blobs / CDG extracts |
+| `preview_transcode.py` | `TranscodeManager` — single-job, niced ffmpeg→HLS transcode for exotic video previews |
+| `static/preview.js` | Preview modal + per-mode player dispatch + `previewButtonHtml` factory (frontend) |
+| `static/cdg.js` | Dependency-free CD+G canvas renderer driven by `<audio>` currentTime (frontend) |
 
 ---
 
@@ -134,3 +139,35 @@ See [HDMI.md](HDMI.md) for the full signal chain, EDID captures, and known issue
 
 See [CHANGELOG.md](CHANGELOG.md) for deploy steps associated with each release.
 See [TROUBLESHOOTING.md](TROUBLESHOOTING.md) for common operational issues.
+
+## Browser Preview Playback
+
+Audition any supported file **in the KJ's browser** (small video render + audio,
+with seek) from every link/play surface — the rotation "Link song" search rows and
+the Available Songs list. The preview renders entirely in the browser and **never
+touches the device's primary player or HDMI/PA output**, so it is safe to use while
+a singer is performing. The only shared resource is CPU, and only the exotic-video
+case uses any (capped, niced, and cached so it is paid at most once per file).
+
+Delivery is chosen per candidate by `PreviewService.resolve(descriptor)`:
+
+| Candidate | Mode | Device CPU | Seek |
+|-----------|------|-----------|------|
+| H.264/AAC mp4, webm (local or GCS) | `native_video` — HTTP byte-range → `<video>` | none | native |
+| CDG zip (local or GCS) | `cdg` — inner `.mp3` + `.cdg` → `cdg.js` canvas synced to `<audio>` | none | native |
+| audio (mp3/wav/flac/…) | `native_audio` — byte-range → `<audio>` | none | native |
+| mkv/avi/mov/odd-codec mp4 | `hls` — ffmpeg→HLS (≈480p, cached) → hls.js | capped, once | coarse live / full cached |
+| YouTube candidate | `youtube` — IFrame embed | none | native |
+
+Descriptors come in three shapes: `{source:'local', file_path}`,
+`{source:'divebar', file_id, format}`, `{source:'youtube', youtube_url}`. Divebar
+candidates are downloaded once into the cache and then handled exactly like a local
+file. Local paths are validated with `MediaIndex.validate_path` (+ `external_media_mount`);
+the browser only ever holds an opaque `token`, never a raw filesystem path.
+
+Routes: `POST /preview/resolve`, `GET /preview/stream/<token>` (206 range),
+`GET /preview/cdg/<token>/{audio,graphics}`, `GET /preview/hls/<token>/<name>`,
+`POST /preview/close`. The transcode/blob/CDG cache lives under `preview_cache_dir`
+(default `<download_folder>/.preview-cache`), size-capped by `preview_cache_max_bytes`.
+A transcode is only served if its dir has a `.done` sentinel (written after ffmpeg
+exits 0), so a truncated transcode is never replayed.

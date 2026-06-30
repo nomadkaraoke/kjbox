@@ -700,6 +700,19 @@ function createMediaItemLi(item) {
     }
 
     const rightSide = document.createElement('span');
+    if (item.file_path) {
+        const previewBtn = document.createElement('button');
+        previewBtn.type = 'button';
+        previewBtn.className = 'preview-btn';
+        previewBtn.title = 'Preview playback';
+        previewBtn.textContent = '▶';
+        previewBtn.onclick = (e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            openPreview({ source: 'local', file_path: item.file_path, title: item.display_name });
+        };
+        rightSide.appendChild(previewBtn);
+    }
     rightSide.appendChild(createCopyBtn(item.display_name));
     if (item.is_download) {
         const deleteBtn = document.createElement('button');
@@ -5685,7 +5698,12 @@ function renderRotLocalRow(match, idx, isTop, isBest) {
     }
     html += '</div>';
     html += rotTagsHtml(match.format || '', match.priority_brand || '');
-    html += '<span class="kn-track-actions"><span class="kn-play-btn">Link</span></span>';
+    html += '<span class="kn-track-actions">';
+    if (match.path) {
+        html += previewButtonHtml({ source: 'local', file_path: match.path, title: fname,
+            link_idx: idx, link_label: 'Link this version' });
+    }
+    html += '<span class="kn-play-btn">Link</span></span>';
     html += '</div>';
     return html;
 }
@@ -5733,6 +5751,20 @@ function renderRotKnRow(song, track, idx, isTop, isBest, downloadedIdToPath) {
     else if (track.youtube_url) fmt = 'mp4';
     html += rotTagsHtml(fmt, track.brand_code || '');
     html += '<span class="kn-track-actions">';
+    {
+        let pvd = null;
+        if (downloadedPath) {
+            pvd = { source: 'local', file_path: downloadedPath, title: result.song_artist,
+                link_idx: idx, link_label: 'Link this version' };
+        } else if (track.divebar) {
+            pvd = { source: 'divebar', file_id: track.divebar.file_id, format: track.divebar.format,
+                title: result.song_artist, link_idx: idx, link_label: 'Download & Link' };
+        } else if (track.youtube_url) {
+            pvd = { source: 'youtube', youtube_url: track.youtube_url,
+                title: result.song_artist, link_idx: idx, link_label: 'Download & Link' };
+        }
+        if (pvd) html += previewButtonHtml(pvd);
+    }
     if (downloadedPath) {
         html += '<span class="kn-downloaded-badge">\u2713 Downloaded</span>';
         html += '<span class="kn-play-btn">Link</span>';
@@ -5785,6 +5817,8 @@ function renderRotDivebarRow(dv, idx, isTop, isBest) {
     html += '</span>';
     html += rotTagsHtml(dv.format || '', dv.brand_code || '');
     html += '<span class="kn-track-actions">';
+    html += previewButtonHtml({ source: 'divebar', file_id: dv.file_id, format: dv.format,
+        title: result.song_artist, link_idx: idx, link_label: 'Download & Link' });
     // Source badge beside the button (moved here from the left so it's clear
     // which download source the DL & Link button will hit).
     html += rotSourceBadge(mirror.label, mirror.cls, mirror.title);
