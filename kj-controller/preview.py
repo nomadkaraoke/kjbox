@@ -252,7 +252,7 @@ class PreviewService:
     def _resolve_hls(self, source_path, key, title):
         dest = self.cache.transcode_dir(key)
         if self.cache.is_done(key):
-            self.cache.touch(dest)
+            self.cache.touch_transcode(key)   # refresh LRU (orders by .done mtime)
         else:
             self.transcoder.ensure_hls(source_path, dest,
                                        mark_done=lambda: self.cache.mark_done(key))

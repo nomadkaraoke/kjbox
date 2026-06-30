@@ -1,5 +1,7 @@
 import os
 
+import pytest
+
 import preview_transcode as pt
 
 
@@ -97,10 +99,9 @@ def test_self_failed_transcode_cleans_partial_dir(tmp_path, monkeypatch):
     monkeypatch.setattr(pt.shutil, "which", lambda name: "/usr/bin/" + name)
     monkeypatch.setattr(pt.subprocess, "Popen", fake_popen)
     m = pt.TranscodeManager({})
-    try:
+    # A failed transcode must raise (never return a partial playlist as usable).
+    with pytest.raises(pt.TranscodeError):
         m.ensure_hls(str(tmp_path / "src.mkv"), str(dest), mark_done=lambda: None)
-    except pt.TranscodeError:
-        pass
     for _ in range(50):  # let the watch thread run
         if not os.path.isdir(dest):
             break

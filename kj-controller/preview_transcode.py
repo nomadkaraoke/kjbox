@@ -96,28 +96,40 @@ class TranscodeManager:
 
         def _watch(p=proc, d=dest_dir):
             rc = p.wait()
-            if rc == 0:
-                try:
-                    mark_done()
-                except Exception:
-                    pass
             with self._lock:
-                if self._active is p:   # don't clobber a newer job's refs
-                    self._active = None
-                    self._active_dest = None
-                    # Self-failed (ffmpeg errored on its own): clean the partial dir
-                    # so it doesn't leak. A success (rc==0) keeps the dir + .done; a
-                    # kill via _kill_active_locked already cleaned it (refs cleared).
-                    if rc != 0:
+                # Only act if this job is still the active one — a newer preview may
+                # have bumped (killed + cleaned) it, in which case we must not mark a
+                # rebuilt/removed dir done.
+                if self._active is p:
+                    try:
+                        if rc == 0:
+                            mark_done()            # success: keep dir + .done
+                        else:
+                            shutil.rmtree(d, ignore_errors=True)  # self-failed: clean
+                    except Exception:
                         shutil.rmtree(d, ignore_errors=True)
+                    finally:
+                        self._active = None
+                        self._active_dest = None
 
         threading.Thread(target=_watch, daemon=True).start()
 
         deadline = time.time() + 15
         while time.time() < deadline:
+            # Check process failure BEFORE playlist existence so a partial playlist
+            # written by an already-failing ffmpeg is never returned as usable.
+            rc = proc.poll()
+            if rc is not None and rc != 0:
+                with self._lock:
+                    if self._active is proc:
+                        shutil.rmtree(dest_dir, ignore_errors=True)
+                        self._active = None
+                        self._active_dest = None
+                raise TranscodeError("ffmpeg exited before producing a playlist")
             if os.path.exists(playlist):
                 return playlist
-            if proc.poll() is not None and proc.returncode != 0:
-                raise TranscodeError("ffmpeg exited before producing a playlist")
             time.sleep(0.1)
+        with self._lock:
+            if self._active is proc:
+                self._kill_active_locked()
         raise TranscodeError("transcode did not produce a playlist in time")

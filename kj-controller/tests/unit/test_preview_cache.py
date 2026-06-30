@@ -65,6 +65,22 @@ def test_evict_covers_gcsblob_and_cdg(tmp_path):
     assert os.path.isdir(cdir)
 
 
+def test_touch_transcode_refreshes_lru_position(tmp_path):
+    c = PreviewCache(str(tmp_path), max_bytes=50)
+    for name in ("k1", "k2"):
+        d = c.transcode_dir(name)
+        os.makedirs(d)
+        with open(os.path.join(d, "seg-0.ts"), "wb") as fh:
+            fh.write(b"y" * 40)
+        c.mark_done(name)
+    os.utime(os.path.join(c.transcode_dir("k1"), ".done"), (1000, 1000))  # k1 older
+    os.utime(os.path.join(c.transcode_dir("k2"), ".done"), (2000, 2000))
+    c.touch_transcode("k1")  # accessing k1 must move it to the front of the queue
+    c.evict_if_needed()      # now k2 is oldest -> evicted instead of k1
+    assert os.path.isdir(c.transcode_dir("k1"))
+    assert not os.path.isdir(c.transcode_dir("k2"))
+
+
 def test_evict_keeps_incomplete(tmp_path):
     c = PreviewCache(str(tmp_path), max_bytes=10)
     d = c.transcode_dir("k")

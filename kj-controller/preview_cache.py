@@ -66,6 +66,10 @@ class PreviewCache:
         except OSError:
             pass
 
+    def touch_transcode(self, key):
+        """Refresh a transcode's LRU position (eviction orders by the .done mtime)."""
+        self.touch(self._done_marker(key))
+
     def _dir_size(self, d):
         total = 0
         for root, _dirs, files in os.walk(d):
