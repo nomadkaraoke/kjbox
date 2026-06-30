@@ -86,27 +86,41 @@ def test_run_batch_crash_row_is_resumable(tmp_path, mocker):
     assert chk.calls == 1
 
 
-def test_run_batch_wraps_in_xvfb_and_passes_display(tmp_path, mocker):
+class _SeenChecker:
+    def __init__(self): self.seen = []
+    def check(self, path, **kw):
+        self.seen.append((kw.get("display"), kw.get("renderers")))
+        from playability import PlayabilityResult
+        r = PlayabilityResult(path=path, kind="video",
+                              size=os.stat(path).st_size, mtime=os.stat(path).st_mtime)
+        r.verdict = {"overall_ok": True}
+        return r
+
+
+def test_run_batch_decode_only_by_default(tmp_path, mocker):
     (tmp_path / "a.mp4").write_bytes(b"x")
     jsonl = tmp_path / "out.jsonl"
     xvfb = _fake_xvfb(mocker, display=":99")
 
-    class FakeChecker:
-        def __init__(self): self.seen = []
-        def check(self, path, **kw):
-            self.seen.append(kw.get("display"))
-            from playability import PlayabilityResult
-            r = PlayabilityResult(path=path, kind="video",
-                                  size=os.stat(path).st_size, mtime=os.stat(path).st_mtime)
-            r.verdict = {"overall_ok": True}
-            return r
-
-    chk = FakeChecker()
+    chk = _SeenChecker()
     pb.run_batch(chk, [str(tmp_path)], str(jsonl), throttle=0.0, log=lambda *a: None)
-    # One shared Xvfb started for the whole run, and its display threaded into check().
+    # Decode-only by default: no Xvfb spun up, no renderers, display=None.
+    xvfb.assert_not_called()
+    assert chk.seen == [(None, ())]
+
+
+def test_run_batch_render_matrix_starts_xvfb_and_renders(tmp_path, mocker):
+    (tmp_path / "a.mp4").write_bytes(b"x")
+    jsonl = tmp_path / "out.jsonl"
+    xvfb = _fake_xvfb(mocker, display=":99")
+
+    chk = _SeenChecker()
+    pb.run_batch(chk, [str(tmp_path)], str(jsonl), throttle=0.0, render=True,
+                 log=lambda *a: None)
+    # render=True: one shared Xvfb, its display threaded in, both renderers asked.
     xvfb.assert_called_once()
     xvfb.return_value.__enter__.assert_called_once()
-    assert chk.seen == [":99"]
+    assert chk.seen == [(":99", ("vlc", "mpv"))]
 
 
 def _row(path, vlc, mpv, kind="video", overall=None):

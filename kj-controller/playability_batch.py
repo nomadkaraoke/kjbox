@@ -3,6 +3,7 @@ to JSONL (resumable via mtime/size manifest), then aggregate a report."""
 from __future__ import annotations
 
 import argparse
+import contextlib
 import csv
 import json
 import os
@@ -60,19 +61,26 @@ def is_unchanged(path, manifest):
 
 
 def run_batch(checker, roots, jsonl_path, throttle=0.0, depth="deep",
-              recheck_failed=False, limit=None, log=print):
+              recheck_failed=False, limit=None, render=False, log=print):
     manifest = load_manifest(jsonl_path)
     checked = 0
-    # Start ONE off-screen X display for the whole run and share it across every
-    # VLC render (the design's intent). If Xvfb can't start, fail loud — the
-    # operator must install it for the VLC render path to work at all.
-    with XvfbDisplay() as _xvfb:
+    # The verdict is deterministic (integrity + decode) and does NOT depend on
+    # the render frame-capture, so the scan is decode-only by default — fast and
+    # with no X display dependency. The render pass (VLC-vs-mpv matrix, for
+    # evaluating an mpv switch) is opt-in via render=True; only then do we spin
+    # up the shared off-screen X display that VLC needs.
+    renderers = ("vlc", "mpv") if render else ()
+    with contextlib.ExitStack() as stack:
+        xvfb_display = None
+        if render:
+            xvfb_display = stack.enter_context(XvfbDisplay()).display
         for path in iter_media_files(roots, DEFAULT_EXTS):
             if is_unchanged(path, manifest):
                 if not (recheck_failed and manifest[path].get("overall_ok") is False):
                     continue
             try:
-                result = checker.check(path, depth=depth, display=_xvfb.display)
+                result = checker.check(path, depth=depth, renderers=renderers,
+                                       display=xvfb_display)
                 append_jsonl(jsonl_path, result.to_dict())
                 ok = result.verdict.get("overall_ok")
                 log(f"[{'OK ' if ok else 'BAD'}] {path}")
@@ -123,14 +131,19 @@ def aggregate(jsonl_path):
         v = d.get("verdict", {})
         vlc, mpv = v.get("vlc_playable"), v.get("mpv_playable")
         p = d["path"]
+        # The cleanup list keys on the deterministic verdict, NOT the render
+        # matrix (which is absent in decode-only scans).
         if v.get("overall_ok"):
             agg["ok"].append(p)
-        if not vlc and not mpv:
+        else:
             agg["unplayable"].append(p)
-        elif mpv and not vlc:
-            agg["mpv_not_vlc"].append(p)
-        elif vlc and not mpv:
-            agg["vlc_not_mpv"].append(p)
+        # Render matrix — only meaningful when a render pass ran (both keys are
+        # absent in decode-only scans).
+        if vlc is not None or mpv is not None:
+            if mpv and not vlc:
+                agg["mpv_not_vlc"].append(p)
+            elif vlc and not mpv:
+                agg["vlc_not_mpv"].append(p)
         if d.get("kind") == "cdg_zip" and not (d.get("cdg") or {}).get("ok", True):
             agg["cdg_problems"].append(p)
     return agg
@@ -193,6 +206,10 @@ def build_arg_parser():
                    help="Stop after N files (default: no limit).")
     p.add_argument("--recheck-failed", action="store_true",
                    help="Re-probe files previously marked unplayable.")
+    p.add_argument("--render-matrix", action="store_true",
+                   help="Also run the VLC-vs-mpv render capture (slow, needs "
+                        "Xvfb; for evaluating an mpv switch). Default is "
+                        "decode-only — the verdict needs no render.")
     return p
 
 
@@ -202,7 +219,8 @@ def main(argv=None):
 
     checker = PlayabilityChecker(config={})
     n = run_batch(checker, args.roots, args.jsonl, throttle=args.throttle,
-                  depth=args.depth, recheck_failed=args.recheck_failed, limit=args.limit)
+                  depth=args.depth, recheck_failed=args.recheck_failed,
+                  limit=args.limit, render=args.render_matrix)
     agg = write_reports(args.jsonl, args.csv, args.md)
     print(f"Checked {n} new/changed files. Total {agg['total']}: "
           f"{len(agg['ok'])} OK, {len(agg['unplayable'])} unplayable, "

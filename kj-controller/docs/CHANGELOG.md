@@ -4,6 +4,53 @@ Dated entries, newest first. Each entry notes any required deploy steps.
 
 ---
 
+## 2026-06-30 - Playability checker made deterministic (v0.44.0)
+
+**Why:** A manual review of 166 files flagged by the full-library playability sweep
+found **~90% were false positives** (88% of flagged video, 91% of flagged CD+G). Whole
+commercial discs were flagged 100% yet played fine. The checker's verdict leaned on
+signals that are environment-fragile rather than deterministic, so it could not be
+trusted as a delete list — and because the CD+G verdict also feeds the live
+link/upload/download gates, the box was false-rejecting playable commercial CD+G discs.
+
+**Root causes (all fixed):**
+- **Render frame-capture was a hard gate.** Headless-Xvfb pixel-proof is too
+  environment-sensitive (51 video false positives). Now a **diagnostic only** — it never
+  gates `overall_ok`; per-renderer "playable" flags are still recorded for the VLC-vs-mpv
+  matrix.
+- **`ffmpeg -xerror`** aborted on the *recoverable* cdgraphics `tile is out of range`
+  warning, failing valid discs (~57 CD+G false positives). Removed; decode `ok` now means
+  ffmpeg ran to completion (rc == 0). Recoverable warnings are recorded, never gate.
+- **180 s decode timeout** was too short under the `nice -n19 ionice -c3` throttle for long
+  files (15 false positives). Deep-decode timeout now scales with duration.
+- **CD+G audio detection was `.mp3`-only**, missing `.m4a`/`.wav`/etc. (7 false positives).
+  Now accepts all common audio formats.
+- **Fragile unzip** crashed on a single corrupt member (`zlib Error -3`) where the good
+  `.cdg`/`.mp3` extract fine (6 false positives). Now falls back to system `unzip`, which
+  skips the bad member.
+
+**Also:**
+- **mpv CD+G render fixed.** The mpv diagnostic now attaches the companion audio
+  (`--audio-file=`, mirroring production `loadfile` + `audio-add`) so mpv has a timeline to
+  seek into — the earlier "mpv can't render CD+G" finding was a test artifact of handing it
+  a bare, timeline-less `.cdg`.
+- **Download gate quarantines, never deletes.** A rejected download (and its sidecars) is
+  moved to a `_playability_quarantine/` subdir (skipped by `scan()`) instead of being
+  deleted — an automated verdict can be wrong, so it must never irreversibly destroy a file.
+  Link/upload still hard-block (recoverable 422).
+- **Batch is decode-only by default** (fast, no Xvfb). The VLC-vs-mpv render matrix is now
+  opt-in via `--render-matrix`. The report's "unplayable" list keys on the deterministic
+  verdict.
+
+Validated against the 166-file review set: the fixed checker flags only the genuinely-broken
+files (truncated downloads, no-audio/no-stream, corrupt zips) and passes the rest.
+
+**Deploy:** backend change — requires `git pull` + `sudo systemctl restart kj-controller`
+(interrupts playback; do off-show). The pending full-library batch should be re-run with the
+fixed, decode-only checker.
+
+---
+
 ## 2026-06-29 - Rotation "Link song" search row polish (v0.43.2)
 
 **Why:** Follow-up polish to the v0.43.0 search dropdown. The format pills

@@ -2,6 +2,7 @@
 
 import json
 import os
+import shutil
 import tempfile
 import unicodedata
 
@@ -10,12 +11,60 @@ import requests
 from config import MEDIA_EXTENSIONS
 from utils import log_message, sanitize_filename_part, parse_youtube_filename
 
+# Rejected downloads are moved here (a subdir of the download folder) instead of
+# being deleted. scan() skips this dir so quarantined files are never re-indexed.
+QUARANTINE_DIRNAME = "_playability_quarantine"
+
 
 def _gate_playable(path, config):
     """Fast inline playability check (integrity + sampled decode, no render).
     Returns PlayabilityResult; verdict['overall_ok'] is False for bad files."""
     from playability import PlayabilityChecker
     return PlayabilityChecker(config=config).check(path, renderers=(), depth="quick")
+
+
+def _quarantine_download(file_path, reason, config):
+    """Move a rejected download (and its sidecars) into a quarantine subdir
+    instead of deleting it.
+
+    An automated playability verdict can be wrong, so it must never irreversibly
+    destroy a file. The quarantine dir lives beside the download and is skipped
+    by scan(), so quarantined files are never re-indexed as playable. Returns
+    the quarantined path of the main file, or None if nothing was moved.
+    """
+    parent = os.path.dirname(file_path)
+    qdir = os.path.join(parent, QUARANTINE_DIRNAME)
+    base_no_ext = os.path.splitext(file_path)[0]
+    try:
+        os.makedirs(qdir, exist_ok=True)
+    except OSError as exc:
+        log_message(f"Quarantine dir create failed for {file_path}: {exc}", config)
+        return None
+    moved_main = None
+    try:
+        siblings = os.listdir(parent)
+    except OSError:
+        siblings = [os.path.basename(file_path)]
+    for fname in siblings:
+        full = os.path.join(parent, fname)
+        # Match the rejected file and its yt-dlp sidecars (same stem, e.g. a
+        # .webp/.jpg thumbnail) — same matching the old delete path used.
+        if not os.path.isfile(full) or os.path.splitext(full)[0] != base_no_ext:
+            continue
+        try:
+            dest = os.path.join(qdir, fname)
+            shutil.move(full, dest)
+            if os.path.abspath(full) == os.path.abspath(file_path):
+                moved_main = dest
+        except OSError as exc:
+            log_message(f"Quarantine move failed for {full}: {exc}", config)
+    if moved_main:
+        try:
+            with open(moved_main + ".reason.txt", "w", encoding="utf-8") as fh:
+                fh.write((reason or "not playable") + "\n")
+        except OSError:
+            pass
+    return moved_main
 
 
 def _ytdlp_base_opts(config):
@@ -54,7 +103,9 @@ class MediaIndex:
             if not os.path.isdir(folder):
                 log_message(f"Media folder not found, skipping: {folder}", self.config)
                 continue
-            for dirpath, _dirnames, filenames in os.walk(folder):
+            for dirpath, dirnames, filenames in os.walk(folder):
+                # Never index quarantined (rejected) downloads.
+                dirnames[:] = [d for d in dirnames if d != QUARANTINE_DIRNAME]
                 for fname in filenames:
                     ext = os.path.splitext(fname)[1].lower()
                     if ext not in MEDIA_EXTENSIONS:
@@ -277,20 +328,12 @@ class MediaIndex:
             if not gate.verdict.get("overall_ok"):
                 reason = "; ".join(gate.verdict.get("reasons") or ["not playable"])
                 log_message(f"Download rejected (not playable): {os.path.basename(file_path)} — {reason}", self.config)
-                # Remove the file AND any yt-dlp sidecars (writethumbnail=True
-                # leaves a .webp/.jpg next to it) so rejected downloads don't leak.
-                base_no_ext = os.path.splitext(file_path)[0]
-                parent = os.path.dirname(file_path)
-                try:
-                    for fname in os.listdir(parent):
-                        full = os.path.join(parent, fname)
-                        if os.path.splitext(full)[0] == base_no_ext:
-                            try:
-                                os.remove(full)
-                            except OSError:
-                                pass
-                except OSError:
-                    pass
+                # Quarantine (never delete) — an automated verdict can be wrong,
+                # so move the file + yt-dlp sidecars aside for review instead of
+                # irreversibly removing them. scan() skips the quarantine dir.
+                qpath = _quarantine_download(file_path, reason, self.config)
+                if qpath:
+                    log_message(f"Quarantined to {qpath}", self.config)
                 return None, None
 
             # Add to media index
@@ -367,20 +410,12 @@ class MediaIndex:
             if not gate.verdict.get("overall_ok"):
                 reason = "; ".join(gate.verdict.get("reasons") or ["not playable"])
                 log_message(f"Download rejected (not playable): {os.path.basename(file_path)} — {reason}", self.config)
-                # Remove the file AND any yt-dlp sidecars (writethumbnail=True
-                # leaves a .webp/.jpg next to it) so rejected downloads don't leak.
-                base_no_ext = os.path.splitext(file_path)[0]
-                parent = os.path.dirname(file_path)
-                try:
-                    for fname in os.listdir(parent):
-                        full = os.path.join(parent, fname)
-                        if os.path.splitext(full)[0] == base_no_ext:
-                            try:
-                                os.remove(full)
-                            except OSError:
-                                pass
-                except OSError:
-                    pass
+                # Quarantine (never delete) — an automated verdict can be wrong,
+                # so move the file + yt-dlp sidecars aside for review instead of
+                # irreversibly removing them. scan() skips the quarantine dir.
+                qpath = _quarantine_download(file_path, reason, self.config)
+                if qpath:
+                    log_message(f"Quarantined to {qpath}", self.config)
                 return None, None
 
             real_path = os.path.realpath(file_path)

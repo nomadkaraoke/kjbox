@@ -178,6 +178,30 @@ class TestZipPlayback:
         assert dir_stat.st_mode & stat.S_IXOTH
         assert os.stat(mp3_path).st_mode & stat.S_IROTH
 
+    @pytest.mark.skipif(shutil.which('unzip') is None, reason="unzip not installed")
+    def test_extractall_zlib_error_falls_back_to_unzip(self, zip_playback, cdg_zip, monkeypatch):
+        """A corrupt member raising zlib.error mid-extract must not abort the
+        whole zip (Python's extractall does). Fall back to system unzip, which
+        skips the bad member and still extracts the good .cdg/.mp3 — this was the
+        root of the batch's 'checker crashed: Error -3' false positives."""
+        import zlib
+
+        def boom(self, path):
+            raise zlib.error("Error -3 while decompressing data: invalid code lengths set")
+
+        monkeypatch.setattr(zipfile.ZipFile, "extractall", boom)
+        mp3_path = zip_playback.extract_and_get_mp3(cdg_zip)
+        assert mp3_path is not None and mp3_path.endswith('.mp3')
+        assert os.path.exists(mp3_path)
+
+    def test_extract_returns_dir_for_checker(self, zip_playback, cdg_zip):
+        """extract() returns the temp dir so the checker can scan it for the
+        .cdg + audio of any supported format (not just .mp3)."""
+        extract_dir = zip_playback.extract(cdg_zip)
+        assert extract_dir is not None and os.path.isdir(extract_dir)
+        names = os.listdir(extract_dir)
+        assert any(n.lower().endswith('.cdg') for n in names)
+
     def test_cleanup_removes_temp_dir(self, zip_playback, cdg_zip):
         """Cleanup removes the temp extraction directory."""
         zip_playback.extract_and_get_mp3(cdg_zip)
@@ -212,6 +236,18 @@ class TestZipPlayback:
             zf.writestr("song.mp3", b"fake mp3 data")
         result = zip_playback.extract_and_get_mp3(str(zip_path))
         assert result is None
+
+    def test_double_dot_filename_not_treated_as_traversal(self, zip_playback, tmp_path):
+        """A song title producing a double dot before the extension (e.g.
+        'S.O.S..cdg', 'Y.M.C.A..cdg') is a legitimate filename, NOT path
+        traversal — the old `'..' in name` check wrongly rejected these, which
+        both broke live playback and produced playability false positives."""
+        zip_path = tmp_path / "sos.zip"
+        with zipfile.ZipFile(str(zip_path), 'w') as zf:
+            zf.writestr("S.O.S..cdg", b"\x00" * 96)
+            zf.writestr("S.O.S..mp3", b"fake mp3 data")
+        result = zip_playback.extract_and_get_mp3(str(zip_path))
+        assert result is not None and result.endswith("S.O.S..mp3")
 
     def test_extract_cleans_previous(self, zip_playback, cdg_zip):
         """Second extraction cleans up first temp dir."""

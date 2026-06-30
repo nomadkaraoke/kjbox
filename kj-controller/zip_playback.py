@@ -26,53 +26,88 @@ class ZipPlayback:
         directory for lyrics/graphics overlay.
         Returns the .mp3 path, or None if no .mp3 found.
         """
+        extract_dir = self._extract_to_temp(zip_path)
+        if extract_dir is None:
+            return None
+        # Find .mp3 file (VLC opens this; auto-discovers matching .cdg)
+        for root, _dirs, files in os.walk(extract_dir):
+            for fname in files:
+                if fname.lower().endswith('.mp3'):
+                    self._mp3_path = os.path.join(root, fname)
+                    return self._mp3_path
+        # No .mp3 found
         self.cleanup()
+        return None
 
+    def extract(self, zip_path):
+        """Extract a ZIP into a temp dir and return that dir (or None).
+
+        Unlike ``extract_and_get_mp3`` this does not look for a specific audio
+        file — the playability checker scans the returned dir for the .cdg and
+        an audio track of any supported format. The temp dir persists until
+        ``cleanup()`` is called.
+        """
+        return self._extract_to_temp(zip_path)
+
+    def _extract_to_temp(self, zip_path):
+        """Extract the whole zip into a fresh temp dir; return the dir or None.
+
+        Robust against (a) Deflate64 members (Python can't inflate → system
+        ``unzip``) and (b) a single corrupt member raising ``zlib.error``
+        mid-extract — Python's ``extractall`` aborts the entire zip, but system
+        ``unzip`` skips only the bad member and still extracts the good
+        .cdg/.mp3. A genuinely-invalid zip (unreadable central directory)
+        returns None so the caller can report "not a valid zip".
+        """
+        import zlib
+
+        self.cleanup()
         if not os.path.isfile(zip_path):
             return None
 
         try:
             with zipfile.ZipFile(zip_path, 'r') as zf:
-                # Validate: no path traversal
-                for member in zf.namelist():
-                    if '..' in member or os.path.isabs(member):
-                        return None
-
                 self._temp_dir = tempfile.mkdtemp(prefix='kj-zip-extract-')
+                # Reject only genuine path traversal — a member that resolves
+                # OUTSIDE the temp dir. A naive `'..' in name` check wrongly
+                # rejects legitimate filenames like "S.O.S..cdg" (a double dot
+                # before the extension), which are common karaoke titles.
+                dest_real = os.path.realpath(self._temp_dir)
+                for member in zf.namelist():
+                    target = os.path.realpath(os.path.join(self._temp_dir, member))
+                    if target != dest_real and not target.startswith(dest_real + os.sep):
+                        self.cleanup()
+                        return None
                 try:
                     zf.extractall(self._temp_dir)
-                except NotImplementedError:
-                    # Python's zipfile only handles STORED/DEFLATE. Legacy karaoke
-                    # discs (e.g. "MP3+G Toolz .NET") use Deflate64 (method 9),
-                    # which raises NotImplementedError. Fall back to system unzip,
-                    # which supports it. namelist() above already rejected any
-                    # path-traversal entries, so this extraction is safe.
+                except (NotImplementedError, zlib.error, zipfile.BadZipFile,
+                        OSError, EOFError) as exc:
+                    # Deflate64 (NotImplementedError) or a corrupt member
+                    # (zlib.error/EOFError). namelist() above already rejected
+                    # path-traversal entries, so the unzip fallback is safe.
+                    logger.warning(
+                        "zipfile.extractall failed for %s (%s); trying system unzip",
+                        zip_path, exc,
+                    )
                     if not self._extract_with_unzip(zip_path, self._temp_dir):
                         self.cleanup()
                         return None
-
-                # Make temp dir and files world-readable (VLC runs as dietpi user)
-                os.chmod(self._temp_dir, stat.S_IRWXU | stat.S_IROTH | stat.S_IXOTH | stat.S_IRGRP | stat.S_IXGRP)
-                for root, dirs, files in os.walk(self._temp_dir):
-                    for d in dirs:
-                        os.chmod(os.path.join(root, d), stat.S_IRWXU | stat.S_IROTH | stat.S_IXOTH | stat.S_IRGRP | stat.S_IXGRP)
-                    for f in files:
-                        os.chmod(os.path.join(root, f), stat.S_IRUSR | stat.S_IWUSR | stat.S_IROTH | stat.S_IRGRP)
-
-                # Find .mp3 file (VLC opens this; auto-discovers matching .cdg)
-                for root, _dirs, files in os.walk(self._temp_dir):
-                    for fname in files:
-                        if fname.lower().endswith('.mp3'):
-                            self._mp3_path = os.path.join(root, fname)
-                            return self._mp3_path
-
         except (zipfile.BadZipFile, OSError):
             self.cleanup()
             return None
 
-        # No .mp3 found
-        self.cleanup()
-        return None
+        self._chmod_tree(self._temp_dir)
+        return self._temp_dir
+
+    def _chmod_tree(self, root):
+        """Make the extracted tree world-readable (players may run as another
+        user, e.g. VLC as ``dietpi``)."""
+        os.chmod(root, stat.S_IRWXU | stat.S_IROTH | stat.S_IXOTH | stat.S_IRGRP | stat.S_IXGRP)
+        for dirpath, dirs, files in os.walk(root):
+            for d in dirs:
+                os.chmod(os.path.join(dirpath, d), stat.S_IRWXU | stat.S_IROTH | stat.S_IXOTH | stat.S_IRGRP | stat.S_IXGRP)
+            for f in files:
+                os.chmod(os.path.join(dirpath, f), stat.S_IRUSR | stat.S_IWUSR | stat.S_IROTH | stat.S_IRGRP)
 
     def current_cdg_path(self):
         """Return the .cdg matching the extracted .mp3, or None.
@@ -121,13 +156,19 @@ class ZipPlayback:
             logger.error("unzip fallback failed for %s: %s", zip_path, exc)
             return False
         if result.returncode != 0:
-            logger.error(
-                "unzip fallback returned %s for %s: %s",
+            # unzip returns non-zero (typically 1/2) when it skips a corrupt
+            # member, but it still extracts every good one. Treat the run as a
+            # success as long as something landed on disk; only a truly empty
+            # extraction is a real failure.
+            logger.warning(
+                "unzip returned %s for %s: %s",
                 result.returncode, zip_path,
                 result.stderr.decode('utf-8', 'replace').strip(),
             )
-            return False
-        return True
+        for _root, _dirs, files in os.walk(dest_dir):
+            if files:
+                return True
+        return False
 
     def cleanup(self):
         """Remove the current temporary extraction directory."""
