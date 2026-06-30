@@ -9,6 +9,7 @@ import json
 import os
 import time
 
+from media import QUARANTINE_DIRNAME
 from playability_render import XvfbDisplay
 
 DEFAULT_EXTS = {".mp4", ".mkv", ".avi", ".webm", ".mov", ".zip"}
@@ -16,7 +17,10 @@ DEFAULT_EXTS = {".mp4", ".mkv", ".avi", ".webm", ".mov", ".zip"}
 
 def iter_media_files(roots, exts):
     for root in roots:
-        for dirpath, _dirs, files in os.walk(root):
+        for dirpath, dirs, files in os.walk(root):
+            # Don't re-scan quarantined (rejected) downloads — they'd inflate
+            # the unplayable count. Mirrors media.scan()'s prune.
+            dirs[:] = [d for d in dirs if d != QUARANTINE_DIRNAME]
             for name in sorted(files):
                 if os.path.splitext(name)[1].lower() in exts:
                     yield os.path.join(dirpath, name)
@@ -149,6 +153,15 @@ def aggregate(jsonl_path):
     return agg
 
 
+def _render_col(verdict, key):
+    """'OK'/'FAIL' when a render pass ran; 'N/A' in decode-only mode where the
+    key is absent. Without this, decode-only runs (the default) would write
+    'FAIL' for every row and read as "nothing plays"."""
+    if key not in verdict:
+        return "N/A"
+    return "OK" if verdict[key] else "FAIL"
+
+
 def write_reports(jsonl_path, csv_path, md_path):
     rows = _read_results(jsonl_path)
     with open(csv_path, "w", newline="", encoding="utf-8") as fh:
@@ -159,8 +172,8 @@ def write_reports(jsonl_path, csv_path, md_path):
             integ = d.get("integrity", {})
             w.writerow([
                 d.get("path"), d.get("kind"),
-                "OK" if v.get("vlc_playable") else "FAIL",
-                "OK" if v.get("mpv_playable") else "FAIL",
+                _render_col(v, "vlc_playable"),
+                _render_col(v, "mpv_playable"),
                 integ.get("vcodec", ""), integ.get("acodec", ""),
                 "; ".join(v.get("reasons", [])),
             ])

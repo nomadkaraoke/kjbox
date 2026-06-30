@@ -158,6 +158,23 @@ def test_write_reports_emits_files(tmp_path):
     assert agg["total"] == 1
 
 
+def test_write_reports_decode_only_marks_render_na(tmp_path):
+    # Decode-only output (renderers=()) has no vlc_playable/mpv_playable keys —
+    # the CSV must show N/A for the render columns, not FAIL for every row.
+    jsonl = tmp_path / "r.jsonl"
+    pb.append_jsonl(str(jsonl), {
+        "path": "/x.mp4", "kind": "video",
+        "integrity": {"vcodec": "h264", "acodec": "aac"},
+        "renderers": {},
+        "verdict": {"overall_ok": True, "reasons": []},
+    })
+    csv_p, md_p = tmp_path / "o.csv", tmp_path / "o.md"
+    pb.write_reports(str(jsonl), str(csv_p), str(md_p))
+    content = open(csv_p).read()
+    assert "N/A" in content
+    assert "FAIL" not in content  # a playable file must never read as FAIL
+
+
 def test_arg_parser_defaults_and_overrides():
     p = pb.build_arg_parser()
     ns = p.parse_args([])
