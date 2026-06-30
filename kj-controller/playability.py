@@ -55,9 +55,29 @@ def classify_kind(path: str) -> str:
         return "video"
     if ext in CDG_ZIP_EXTS:
         return "cdg_zip"
+    if ext == ".cdg":
+        return "cdg_bare"
     if ext in AUDIO_EXTS:
         return "audio"
     return "unknown"
+
+
+def sibling_cdg_audio(cdg_path):
+    """Path to a same-stem audio file beside a bare ``.cdg``, or None.
+
+    A standalone ``.cdg`` is graphics-only; it is only playable karaoke if an audio
+    file sharing its stem (the un-zipped ``X.cdg`` + ``X.mp3`` pair) sits next to it.
+    """
+    try:
+        d = os.path.dirname(cdg_path)
+        stem = os.path.splitext(os.path.basename(cdg_path))[0].lower()
+        for fname in sorted(os.listdir(d)):
+            root, ext = os.path.splitext(fname)
+            if ext.lower() in CDG_AUDIO_EXTS and root.lower() == stem:
+                return os.path.join(d, fname)
+    except OSError:
+        pass
+    return None
 
 
 def parse_integrity(returncode: int, stdout: str, stderr: str) -> dict:
@@ -330,6 +350,18 @@ class PlayabilityChecker:
                         if short_circuit and not res.renderers[r].get("frame_nonblank"):
                             break
                 self._cleanup_cdg()
+            elif kind == "cdg_bare":
+                # A standalone .cdg is graphics-only; it's playable karaoke only if
+                # a same-stem audio file sits beside it (the un-zipped pair). No
+                # render check — the verdict rests purely on sibling-audio presence.
+                audio = sibling_cdg_audio(path)
+                res.cdg = {
+                    "has_cdg": True,
+                    "has_audio": audio is not None,
+                    "sibling_audio": audio,
+                    "ok": audio is not None,
+                    "error": None if audio is not None else "graphics-only .cdg — no audio track",
+                }
             elif kind == "audio":
                 res.integrity = _timed("integrity", lambda: self.probe_integrity(path))
             else:  # video / unknown
@@ -360,7 +392,7 @@ class PlayabilityChecker:
 
 def compute_verdict(kind, result, renderers):
     reasons = []
-    if kind == "cdg_zip":
+    if kind in ("cdg_zip", "cdg_bare"):
         base_ok = (result.cdg or {}).get("ok", False)
         if not base_ok:
             reasons.append((result.cdg or {}).get("error") or "CDG validation failed")

@@ -1263,6 +1263,81 @@ def test_play_zip_mpv_renderer_plays_cdg_with_audio_file(
     assert kwargs['display_path'] == str(zip_file)
 
 
+def test_play_bare_cdg_without_audio_rejected(
+    flask_test_client, flask_app, tmp_media_dir, mocker
+):
+    """A bare .cdg with no sibling audio is rejected (would be silent on screen)."""
+    media_dir = tmp_media_dir / "media"
+    cdg = media_dir / "SDK - ABBA - Dancing Queen.cdg"
+    cdg.write_text("graphics only")
+
+    flask_app.vlc.enabled = True
+    play_mock = mocker.patch.object(flask_app.vlc, 'play_video')
+
+    response = flask_test_client.post('/play',
+        data=json.dumps({"file_path": str(cdg)}),
+        content_type='application/json')
+    assert response.status_code == 400
+    assert "no audio" in response.get_json()["error"].lower()
+
+    import time
+    time.sleep(0.2)
+    play_mock.assert_not_called()
+
+
+def test_play_bare_cdg_with_sibling_mpv(
+    flask_test_client, flask_app, tmp_media_dir, mocker
+):
+    """A bare .cdg WITH a same-stem audio sibling plays on mpv as the .cdg + audio."""
+    media_dir = tmp_media_dir / "media"
+    cdg = media_dir / "pair.cdg"
+    mp3 = media_dir / "pair.mp3"
+    cdg.write_text("g")
+    mp3.write_text("a")
+
+    flask_app.vlc.enabled = True
+    flask_app.vlc.render_mode = 'mpv'
+    play_mock = mocker.patch.object(flask_app.vlc, 'play_video')
+
+    response = flask_test_client.post('/play',
+        data=json.dumps({"file_path": str(cdg)}),
+        content_type='application/json')
+    assert response.status_code == 200
+
+    import time
+    time.sleep(0.2)
+    play_mock.assert_called_once()
+    args, kwargs = play_mock.call_args
+    assert args[0] == str(cdg)
+    assert kwargs['audio_file'] == str(mp3)
+
+
+def test_play_bare_cdg_with_sibling_vlc(
+    flask_test_client, flask_app, tmp_media_dir, mocker
+):
+    """On VLC the sibling audio is played (VLC auto-discovers the .cdg)."""
+    media_dir = tmp_media_dir / "media"
+    cdg = media_dir / "pair2.cdg"
+    mp3 = media_dir / "pair2.mp3"
+    cdg.write_text("g")
+    mp3.write_text("a")
+
+    flask_app.vlc.enabled = True
+    flask_app.vlc.render_mode = 'vlc'
+    play_mock = mocker.patch.object(flask_app.vlc, 'play_video')
+
+    response = flask_test_client.post('/play',
+        data=json.dumps({"file_path": str(cdg)}),
+        content_type='application/json')
+    assert response.status_code == 200
+
+    import time
+    time.sleep(0.2)
+    play_mock.assert_called_once()
+    args, kwargs = play_mock.call_args
+    assert args[0] == str(mp3)
+
+
 def test_play_zip_vlc_renderer_plays_mp3_without_audio_file(
     flask_test_client, flask_app, tmp_media_dir, mocker
 ):
