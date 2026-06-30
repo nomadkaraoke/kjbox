@@ -195,14 +195,18 @@
 
   function _renderFooter(footer, descriptor) {
     footer.innerHTML = '';
-    // Reuse the row's existing link flow if a result object was passed through.
-    if (descriptor._linkResult && typeof selectRotSearchResult === 'function') {
-      var label = descriptor.link_label || 'Use this version';
+    // Reuse the rotation row's existing link flow (selectRotSearchResult over the
+    // live rotSearchResults array) so auditioning → linking is one click.
+    var canLink = descriptor.link_idx != null
+      && typeof selectRotSearchResult === 'function'
+      && typeof rotSearchResults !== 'undefined'
+      && rotSearchResults[descriptor.link_idx];
+    if (canLink) {
       var btn = document.createElement('button');
       btn.className = 'preview-link-btn';
-      btn.textContent = label;
+      btn.textContent = descriptor.link_label || 'Use this version';
       btn.onclick = function () {
-        try { selectRotSearchResult(descriptor._linkResult); } catch (e) {}
+        try { selectRotSearchResult(rotSearchResults[descriptor.link_idx]); } catch (e) {}
         closePreview();
       };
       footer.appendChild(btn);

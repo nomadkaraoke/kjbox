@@ -1163,5 +1163,20 @@
             </div>
         </div>
     </div>
+
+    <!-- Browser preview playback: audition any file in the browser, never on the
+         device output. See preview.js / cdg.js. -->
+    <div id="preview-modal" class="modal-backdrop hidden" onclick="if(event.target===this) closePreview()">
+        <div class="modal-content preview-modal-content">
+            <div class="modal-header">
+                <h3 id="preview-modal-title">Preview</h3>
+                <button class="modal-close" onclick="closePreview()">&times;</button>
+            </div>
+            <div id="preview-modal-body" class="preview-body"></div>
+            <div id="preview-modal-footer" class="preview-footer"></div>
+        </div>
+    </div>
+    <script src="/static/cdg.js?v={{ app_version }}"></script>
+    <script src="/static/preview.js?v={{ app_version }}"></script>
 </body>
 </html>
