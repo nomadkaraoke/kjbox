@@ -157,7 +157,16 @@ Delivery is chosen per candidate by `PreviewService.resolve(descriptor)`:
 | CDG zip (local or GCS) | `cdg` — inner `.mp3` + `.cdg` → `cdg.js` canvas synced to `<audio>` | none | native |
 | audio (mp3/wav/flac/…) | `native_audio` — byte-range → `<audio>` | none | native |
 | mkv/avi/mov/odd-codec mp4 | `hls` — ffmpeg→HLS (≈480p, cached) → hls.js | capped, once | coarse live / full cached |
+| bare `.cdg` + same-stem sibling audio | `cdg` — raw `.cdg` + sibling → `cdg.js` canvas | none | native |
+| bare `.cdg` with no sibling audio | `unavailable` — "Graphics-only .cdg — no audio track" | — | — |
 | YouTube candidate | `youtube` — IFrame embed | none | native |
+
+Every resolve response also carries `format` + `ext` (via `utils.media_type_label`) for
+the modal header. A standalone `.cdg` is graphics-only: `classify_kind` returns
+`cdg_bare`, and it is only playable/linkable/previewable when a same-stem audio file
+sits beside it (`playability.sibling_cdg_audio`). This is enforced at the playability
+verdict (so `/rotation/link` + downloads reject an audioless `.cdg`) and with an explicit
+`/play` guard; the Available Songs list dims such rows with a "no audio" tag.
 
 Descriptors come in three shapes: `{source:'local', file_path}`,
 `{source:'divebar', file_id, format}`, `{source:'youtube', youtube_url}`. Divebar

@@ -34,8 +34,48 @@ def test_local_audio(svc, tmp_path):
     f.write_bytes(b"ID3" + b"\0" * 100)
     r = svc.resolve({"source": "local", "file_path": str(f)})
     assert r["mode"] == "native_audio" and r["token"]
+    assert r["format"] == "mp3" and r["ext"] == ".mp3"
     info = svc.token_info(r["token"])
     assert info["path"] == os.path.realpath(str(f))
+
+
+def test_resolve_includes_format_and_ext(svc, tmp_path, monkeypatch):
+    f = tmp_path / "v.mp4"
+    f.write_bytes(b"\0" * 200)
+    monkeypatch.setattr(preview, "_ffprobe_codecs", lambda p: ("h264", "aac"))
+    r = svc.resolve({"source": "local", "file_path": str(f)})
+    assert r["mode"] == "native_video"
+    assert r["format"] == "mp4" and r["ext"] == ".mp4"
+
+
+def test_bare_cdg_without_audio_unavailable(svc, tmp_path):
+    f = tmp_path / "lonely.cdg"
+    f.write_bytes(b"\0" * 50)
+    r = svc.resolve({"source": "local", "file_path": str(f)})
+    assert r["mode"] == "unavailable"
+    assert "no audio" in r["reason"].lower()
+    assert r["format"] == "cdg" and r["ext"] == ".cdg"
+
+
+def test_bare_cdg_sibling_outside_roots_rejected(svc, tmp_path, monkeypatch):
+    cdg = tmp_path / "x.cdg"
+    cdg.write_bytes(b"\0" * 10)
+    # A sibling that resolves outside the allowed roots must not be served.
+    monkeypatch.setattr(preview, "sibling_cdg_audio", lambda p: "/etc/evil.mp3")
+    r = svc.resolve({"source": "local", "file_path": str(cdg)})
+    assert r["mode"] == "unavailable"
+    assert "outside allowed" in r["reason"].lower()
+
+
+def test_bare_cdg_with_sibling_previews_as_cdg(svc, tmp_path):
+    cdg = tmp_path / "pair.cdg"
+    mp3 = tmp_path / "pair.mp3"
+    cdg.write_bytes(b"\0" * 50)
+    mp3.write_bytes(b"\0" * 50)
+    r = svc.resolve({"source": "local", "file_path": str(cdg)})
+    assert r["mode"] == "cdg"
+    assert svc.cdg_part_path(r["token"], "graphics") == os.path.realpath(str(cdg))
+    assert svc.cdg_part_path(r["token"], "audio") == os.path.realpath(str(mp3))
 
 
 def test_local_unknown_unavailable(svc, tmp_path):

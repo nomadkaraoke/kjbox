@@ -4,6 +4,36 @@ Dated entries, newest first. Each entry notes any required deploy steps.
 
 ---
 
+## 2026-06-30 - Block silent bare .cdg + show file type/extension (v0.46.0)
+
+**Why:** A bare `.cdg` (graphics-only, e.g. `divebar__SDK - ABBA - Dancing Queen.cdg`)
+is a first-class indexed media type, so it showed in Available Songs and was
+link/play-eligible — but playing it on the main screen is **silent** (embarrassing
+mid-show). The old gate even allowed it (ffmpeg's `cdgraphics` demuxer presents a
+`.cdg` as a video stream, so the verdict's video-only check passed), and `/play`
+didn't gate at all. The UI also showed no file type/extension, so a KJ couldn't tell
+a `cdg-zip` from a bare `.cdg` from an `.mp4` before clicking.
+
+**What:**
+- `classify_kind` now returns `cdg_bare` for a standalone `.cdg`. A bare `.cdg` is
+  playable/linkable **only** when a same-stem audio file sits beside it (`X.cdg` +
+  `X.mp3` — `playability.sibling_cdg_audio`). The playability verdict folds `cdg_bare`
+  into the `cdg_zip` branch, so `/rotation/link` **and** downloads reject an audioless
+  `.cdg` automatically. `/play` gains the matching guard (400 + clear message; when a
+  sibling exists, mpv plays the `.cdg`+sibling, VLC plays the sibling and auto-finds
+  the `.cdg`).
+- Available Songs rows now show a `kind · .ext` badge (`cdg-zip · .zip`, `mp4 · .mp4`,
+  …) via `utils.media_type_label`; a no-audio `.cdg` gets a red "no audio" tag, is
+  dimmed, and its click no longer attempts a silent play.
+- The preview modal header shows the file type + extension; a bare `.cdg` with a
+  sibling previews as CDG, without one shows "Graphics-only .cdg — no audio track."
+
+**Deploy steps:** Backend change → requires a service restart (interrupts active
+playback); deploy off-show: `git pull` + `sudo systemctl restart kj-controller`, then
+hard-refresh the KJ browser. No new dependencies.
+
+---
+
 ## 2026-06-30 - Playability checker made deterministic (v0.45.0)
 
 **Why:** A manual review of 166 files flagged by the full-library playability sweep

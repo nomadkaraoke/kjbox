@@ -506,6 +506,20 @@ def handle_play():
             if cdg_path:
                 actual_play_path = cdg_path
                 audio_file = mp3_path
+    elif validated.lower().endswith('.cdg'):
+        # A bare .cdg is graphics-only — playing it alone is silent. Only allow it
+        # when a same-stem audio file sits beside it (the un-zipped X.cdg/X.mp3 pair),
+        # wired the same way as the .zip branch.
+        from playability import sibling_cdg_audio
+        audio_sibling = sibling_cdg_audio(validated)
+        if not audio_sibling:
+            return jsonify({"error": "This is a graphics-only .cdg with no audio track — "
+                                     "use the CDG+MP3 zip version instead."}), 400
+        if getattr(vlc, 'render_mode', None) == RENDER_MODE_MPV:
+            actual_play_path = validated         # mpv renders the .cdg directly
+            audio_file = audio_sibling
+        else:
+            actual_play_path = audio_sibling     # VLC auto-discovers the sibling .cdg
 
     # Auto-disable browser mode before playing — kill Chromium and reset PipeWire
     # so VLC has exclusive access to the audio device and display.

@@ -94,6 +94,15 @@
     }
     _currentToken = res.token || null;
 
+    // Show file type + extension in the header (e.g. "cdg-zip · .zip").
+    if (titleEl && (res.format || res.ext)) {
+      var badge = document.createElement('span');
+      badge.className = 'preview-type-badge';
+      badge.textContent = res.ext ? (res.format + ' · ' + res.ext) : res.format;
+      titleEl.appendChild(document.createTextNode(' '));
+      titleEl.appendChild(badge);
+    }
+
     switch (res.mode) {
       case 'native_video': _mountVideo(body, '/preview/stream/' + res.token, descriptor); break;
       case 'native_audio': _mountAudio(body, '/preview/stream/' + res.token); break;

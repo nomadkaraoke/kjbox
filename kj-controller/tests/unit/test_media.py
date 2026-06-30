@@ -167,6 +167,28 @@ def test_list_items_format(mock_config, tmp_media_dir):
     assert "is_download" in item
     assert "mtime" in item
     assert "size" in item
+    assert item["ext"] == ".mp4"
+    assert item["media_kind"] == "mp4"
+
+
+def test_list_items_type_labels_and_bare_cdg(mock_config, tmp_media_dir):
+    """ext + media_kind per item; bare .cdg flagged cdg_no_audio unless paired."""
+    mi = MediaIndex(mock_config)
+    media_dir = tmp_media_dir / "media"
+    (media_dir / "pack.zip").write_text("fake")
+    (media_dir / "lonely.cdg").write_text("g")        # no sibling -> no audio
+    (media_dir / "paired.cdg").write_text("g")
+    (media_dir / "paired.mp3").write_text("a")        # sibling for paired.cdg
+    mi.scan()
+
+    by_name = {i["filename"]: i for i in mi.list_items()}
+    assert by_name["pack.zip"]["media_kind"] == "cdg-zip"
+    assert by_name["pack.zip"]["ext"] == ".zip"
+    assert by_name["lonely.cdg"]["media_kind"] == "cdg"
+    assert by_name["lonely.cdg"]["cdg_no_audio"] is True
+    assert by_name["paired.cdg"]["cdg_no_audio"] is False
+    # non-cdg items don't carry the flag
+    assert "cdg_no_audio" not in by_name["paired.mp3"]
 
 
 def test_delete_removes_file_and_sidecars(mock_config, tmp_media_dir):
