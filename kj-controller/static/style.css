@@ -948,6 +948,33 @@ body {
 }
 .kn-play-btn:hover { background-color: rgba(34, 197, 94, 0.25); color: #4ade80; box-shadow: none; }
 
+/* --- Rotation search rows: consistent right-aligned tag + action columns so
+   format pills and brand codes line up regardless of source/group. --- */
+.rs-line { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.rs-line .rs-best-pill, .rs-line .rs-top-star { flex-shrink: 0; margin-right: 0; }
+.rs-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.rs-tags { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.rs-tag-fmt { width: 78px; display: flex; justify-content: flex-end; }
+.rs-tag-brand { width: 50px; display: flex; justify-content: flex-end; }
+.rs-tag-fmt .format-badge, .rs-tag-brand .rs-brand-pill { margin: 0; }
+/* Fixed action-column width keeps the tag columns to its left aligned across
+   rows even when some rows carry a source/Downloaded badge and others don't. */
+.rotation-search-dropdown .kn-track-actions { min-width: 160px; justify-content: flex-end; margin-left: 0; }
+/* Normalize inter-column spacing so the format/brand tag columns land at the
+   same x on every row type. Local rows (.kn-local-match) carried gap:8px while
+   KN/divebar rows (.kn-track) relied on the actions' margin-left:6px — leaving
+   the tag columns 8px out of sync. One gap for all, margin dropped above. */
+.rotation-search-dropdown .kn-track,
+.rotation-search-dropdown .kn-local-match { gap: 8px; }
+/* Uniform action buttons (Link / DL & Link) regardless of row type or the
+   font-size of their container row — anchored to rem, not em. */
+.rotation-search-dropdown .kn-play-btn,
+.rotation-search-dropdown .kn-download-btn {
+    font-size: 0.72rem; padding: 4px 12px; min-width: 64px;
+    text-align: center; line-height: 1.4; border-radius: 4px; box-sizing: border-box;
+    margin-left: 0;
+}
+
 /* --- YouTube Search --- */
 
 .yt-search-row { display: flex; gap: 8px; }

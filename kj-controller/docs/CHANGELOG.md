@@ -4,6 +4,34 @@ Dated entries, newest first. Each entry notes any required deploy steps.
 
 ---
 
+## 2026-06-29 - Rotation "Link song" search row polish (v0.43.2)
+
+**Why:** Follow-up polish to the v0.43.0 search dropdown. The format pills
+(e.g. `cdg+mp3`) and brand codes (e.g. `KV`) didn't line up into clean columns —
+local rows sat 8px out of step with Karaoke Nerds / Divebar rows because each row
+type used different inter-column spacing. One "Link" button also rendered smaller
+than the rest (its font-size wasn't rem-anchored), and the ⭐ trusted-brand marker
+had no explanation on hover.
+
+**What:**
+- **Aligned tag columns.** Format and brand pills now occupy fixed-width, right-aligned
+  slots (`rotTagsHtml`) so they form consistent columns across every row type and group.
+  Normalized the row flex spacing in the dropdown (`.kn-track` / `.kn-local-match` share
+  one `gap`; the actions column's stray `margin-left` is dropped) so the slots land at the
+  same x regardless of source.
+- **Uniform controls.** Unified `.kn-play-btn` / `.kn-download-btn` sizing
+  (rem-anchored font-size, shared padding/min-width) — all Link / DL & Link buttons now
+  match. Fixed the one-off smaller button.
+- **Tooltips.** ⭐ now has a "Reliably high-quality brand (KJ-trusted)" title and the
+  **Best** pill a "Best available version for this song" title.
+- Fixed a stale `test_css_loaded` e2e assertion left by the v0.43.1 cache-bust (the
+  stylesheet `href` now carries a `?v=` query string).
+
+**Deploy:** Frontend-only (JS/CSS) + version bump. `git pull` + restart busts the
+cache via the new `?v=0.43.2`; takes effect on next browser refresh.
+
+---
+
 ## 2026-06-29 - Rotation "Link song" search UX overhaul (v0.43.0)
 
 **Why:** Linking a song to a rotation entry was slow and noisy during live shows:
