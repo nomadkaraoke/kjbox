@@ -56,6 +56,16 @@ def test_bare_cdg_without_audio_unavailable(svc, tmp_path):
     assert r["format"] == "cdg" and r["ext"] == ".cdg"
 
 
+def test_bare_cdg_sibling_outside_roots_rejected(svc, tmp_path, monkeypatch):
+    cdg = tmp_path / "x.cdg"
+    cdg.write_bytes(b"\0" * 10)
+    # A sibling that resolves outside the allowed roots must not be served.
+    monkeypatch.setattr(preview, "sibling_cdg_audio", lambda p: "/etc/evil.mp3")
+    r = svc.resolve({"source": "local", "file_path": str(cdg)})
+    assert r["mode"] == "unavailable"
+    assert "outside allowed" in r["reason"].lower()
+
+
 def test_bare_cdg_with_sibling_previews_as_cdg(svc, tmp_path):
     cdg = tmp_path / "pair.cdg"
     mp3 = tmp_path / "pair.mp3"

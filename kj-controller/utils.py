@@ -9,7 +9,8 @@ import time
 def media_type_label(name_or_ext):
     """Friendly file-type label for the UI, e.g. 'cdg-zip', 'cdg', 'mp4', 'mp3'.
 
-    Accepts a filename, a full path, or a bare extension (with or without the dot).
+    Accepts a filename, a full path, or a bare extension *with* the leading dot
+    (e.g. '.mp4'). Anything with no recognizable extension returns 'file'.
     """
     if not name_or_ext:
         return "file"

@@ -69,7 +69,7 @@ def sibling_cdg_audio(cdg_path):
     file sharing its stem (the un-zipped ``X.cdg`` + ``X.mp3`` pair) sits next to it.
     """
     try:
-        d = os.path.dirname(cdg_path)
+        d = os.path.dirname(cdg_path) or "."
         stem = os.path.splitext(os.path.basename(cdg_path))[0].lower()
         for fname in sorted(os.listdir(d)):
             root, ext = os.path.splitext(fname)

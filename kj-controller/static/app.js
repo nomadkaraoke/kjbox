@@ -717,7 +717,7 @@ function createMediaItemLi(item) {
     }
 
     const rightSide = document.createElement('span');
-    if (item.file_path) {
+    if (item.file_path && !item.cdg_no_audio) {
         const previewBtn = document.createElement('button');
         previewBtn.type = 'button';
         previewBtn.className = 'preview-btn';

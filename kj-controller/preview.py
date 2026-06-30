@@ -225,10 +225,19 @@ class PreviewService:
             return self._resolve_cdg(real, key, title)
         if kind == "cdg_bare":
             # Graphics-only .cdg: previewable only with a same-stem sibling audio.
-            audio = sibling_cdg_audio(real)
-            if not audio:
+            audio_candidate = sibling_cdg_audio(real)
+            if not audio_candidate:
                 return self._unavailable("Graphics-only .cdg — no audio track")
-            audio = self.media.validate_path(audio) or audio
+            # Validate the sibling against the same trust boundaries — never serve a
+            # path (e.g. a symlink) that escapes the allowed media roots.
+            audio = self.media.validate_path(audio_candidate)
+            if not audio and self.config.get("external_media_mount"):
+                cand = os.path.realpath(audio_candidate)
+                mount = os.path.realpath(self.config["external_media_mount"])
+                if _path_inside(cand, mount) and os.path.exists(cand):
+                    audio = cand
+            if not audio:
+                return self._unavailable("Graphics-only .cdg — sibling audio is outside allowed folders")
             return self._mk(title, "cdg", audio=audio, graphics=real)
         if kind == "video":
             ext = os.path.splitext(real)[1].lower()
