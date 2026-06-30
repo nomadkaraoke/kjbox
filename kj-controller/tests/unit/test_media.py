@@ -114,6 +114,25 @@ def test_scan_skips_quarantine_dir(mock_config, tmp_media_dir):
     assert "rejected.mp4" not in names
 
 
+def test_scan_skips_preview_cache_dir(mock_config, tmp_media_dir):
+    """Preview-cache artifacts must never be re-indexed, even if the cache is
+    (mis)configured inside an indexed folder."""
+    media_dir = tmp_media_dir / "media"
+    (media_dir / "good.mp4").write_text("ok")
+    pc = media_dir / ".preview-cache" / "cdg" / "abc"
+    pc.mkdir(parents=True)
+    (pc / "graphics.cdg").write_text("g")
+    (pc / "audio.mp3").write_text("a")
+    mock_config["preview_cache_dir"] = str(media_dir / ".preview-cache")
+
+    mi = MediaIndex(mock_config)
+    mi.scan()
+    names = [entry["filename"] for entry in mi.index.values()]
+    assert "good.mp4" in names
+    assert "graphics.cdg" not in names
+    assert "audio.mp3" not in names
+
+
 def test_quarantine_download_moves_not_deletes(tmp_path):
     """A rejected download (and its yt-dlp sidecars) is moved aside, never
     deleted — an automated verdict can be wrong."""

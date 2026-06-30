@@ -2,6 +2,26 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-06-30 - Preview cache relocated out of the download folder + content-addressed (v0.47.0)
+
+**Why:** The "Available Downloads" (YTDOWNLOADS) list showed phantom `graphics` / `audio`
+rows. They were browser-preview cache artifacts (extracted CDG halves): the preview cache
+defaulted to `<download_folder>/.preview-cache`, *inside* the indexed download folder, so
+`MediaIndex.scan()` indexed them as downloads. Separately, local-file cache keys were
+`realpath|size|mtime`, so renaming/moving a source file orphaned its cached preview.
+
+**What:**
+- Preview cache now resolves to a **sibling** of the download folder
+  (`/opt/nomad/preview-cache` on device) via `config.resolve_preview_cache_dir()` — outside
+  every indexed path, so artifacts can never be indexed again.
+- Local-file cache keys are **content-addressed**: `sha1(size + sha1(head 1MiB) + sha1(tail
+  1MiB))` (`preview_cache.content_signature`), surviving renames/moves at ~2 MiB read cost.
+  `PARAMS_VERSION` bumped `1`→`2`. GCS/divebar keying (by `file_id`) unchanged.
+- `MediaIndex.scan()` also prunes the resolved preview-cache dir defensively.
+- **Deploy:** one-time `rm -rf /opt/nomad/YTDownloads/.preview-cache` (old cache, 1 day old,
+  regenerable); push; `systemctl restart kj-controller`. See
+  [archive/2026-06-30-preview-cache-relocation-design.md](archive/2026-06-30-preview-cache-relocation-design.md).
+
 ## 2026-06-29 - Divebar GCS-mirror downloads land + CDG renders on mpv (v0.42.0)
 
 **Why:** Selecting a GCS community-mirror (Divebar) version to download/link/play failed

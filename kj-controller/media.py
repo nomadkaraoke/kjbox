@@ -8,7 +8,7 @@ import unicodedata
 
 import requests
 
-from config import MEDIA_EXTENSIONS
+from config import MEDIA_EXTENSIONS, resolve_preview_cache_dir
 from utils import log_message, sanitize_filename_part, parse_youtube_filename
 
 # Rejected downloads are moved here (a subdir of the download folder) instead of
@@ -96,6 +96,11 @@ class MediaIndex:
         """Walk all configured media_folders, build index, persist to disk."""
         new_index = {}
         download_folder = os.path.realpath(self.config.get('download_folder', ''))
+        # The browser-preview cache normally lives outside every indexed path, but
+        # prune it defensively in case it's ever configured inside one — otherwise
+        # its transcode/CDG artifacts get indexed as phantom "graphics"/"audio"
+        # download rows.
+        preview_cache_dir = os.path.realpath(resolve_preview_cache_dir(self.config))
         existing = self._load_file()
 
         for folder in self.config.get('media_folders', []):
@@ -104,8 +109,12 @@ class MediaIndex:
                 log_message(f"Media folder not found, skipping: {folder}", self.config)
                 continue
             for dirpath, dirnames, filenames in os.walk(folder):
-                # Never index quarantined (rejected) downloads.
-                dirnames[:] = [d for d in dirnames if d != QUARANTINE_DIRNAME]
+                # Never index quarantined (rejected) downloads or preview-cache artifacts.
+                dirnames[:] = [
+                    d for d in dirnames
+                    if d != QUARANTINE_DIRNAME
+                    and os.path.realpath(os.path.join(dirpath, d)) != preview_cache_dir
+                ]
                 for fname in filenames:
                     ext = os.path.splitext(fname)[1].lower()
                     if ext not in MEDIA_EXTENSIONS:

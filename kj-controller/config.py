@@ -68,7 +68,7 @@ def load_config(config_file=None):
         "sing_estimate_min_spread_s": 120,
         # Browser preview playback (audition files in the KJ browser; never the
         # device A/V output). Cache transcodes once, ever.
-        "preview_cache_dir": "",  # "" -> <download_folder>/.preview-cache
+        "preview_cache_dir": "",  # "" -> resolve_preview_cache_dir(): sibling "preview-cache" of download_folder
         "preview_cache_max_bytes": 8 * 1024 * 1024 * 1024,  # 8 GiB LRU cap
         "preview_transcode_height": 480,
         "preview_transcode_preset": "veryfast",
@@ -84,6 +84,28 @@ def load_config(config_file=None):
     else:
         print(f"No config file at {config_file}, using defaults.")
     return defaults
+
+
+def resolve_preview_cache_dir(config):
+    """Resolve the browser-preview cache directory.
+
+    An explicit ``preview_cache_dir`` wins. Otherwise the cache lives in a
+    ``preview-cache`` directory that is a *sibling* of the download folder, NOT a
+    child of it — so its artifacts (transcodes, extracted CDG halves) fall outside
+    every indexed media path and can never be re-indexed as library/download items.
+    On the device ``dirname(/opt/nomad/YTDownloads)`` -> ``/opt/nomad/preview-cache``.
+    """
+    configured = (config or {}).get("preview_cache_dir")
+    if configured:
+        return configured
+    download_folder = (config or {}).get("download_folder")
+    if download_folder:
+        base_dir = os.path.dirname(os.path.realpath(download_folder))
+    else:
+        # No download folder configured: fall back to a writable temp location,
+        # NOT dirname("/tmp") (which is "/" on Linux).
+        base_dir = "/tmp"
+    return os.path.join(base_dir, "preview-cache")
 
 
 def save_config_value(key, value, config_file=None):
