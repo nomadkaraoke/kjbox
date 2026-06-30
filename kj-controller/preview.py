@@ -23,8 +23,9 @@ import requests
 
 import divebar
 import utils
-from playability import classify_kind
+from playability import classify_kind, sibling_cdg_audio
 from preview_cache import PreviewCache
+from utils import media_type_label
 from preview_transcode import TranscodeManager, TranscodeError, TranscodeBusy
 from zip_playback import ZipPlayback
 
@@ -156,7 +157,8 @@ class PreviewService:
                     return self._unavailable("No YouTube URL")
                 if not _is_allowed_youtube_url(url):
                     return self._unavailable("Not a valid YouTube link")
-                return {"mode": "youtube", "youtube_url": url, "title": descriptor.get("title", "")}
+                return {"mode": "youtube", "youtube_url": url,
+                        "title": descriptor.get("title", ""), "format": "YouTube", "ext": ""}
             if src == "divebar":
                 return self._resolve_divebar(descriptor)
             if src == "local":
@@ -209,11 +211,25 @@ class PreviewService:
 
     # ---- shared classification (trusted path) ---------------------------
     def _classify_and_mode(self, real, descriptor, title, key):
+        res = self._classify_and_mode_inner(real, descriptor, title, key)
+        # Always surface the file type + extension for the modal header.
+        res.setdefault("format", media_type_label(real))
+        res.setdefault("ext", os.path.splitext(real)[1].lower())
+        return res
+
+    def _classify_and_mode_inner(self, real, descriptor, title, key):
         kind = classify_kind(real)
         if kind == "audio":
             return self._mk(title, "native_audio", path=real, mime=_mime_for(real))
         if kind == "cdg_zip":
             return self._resolve_cdg(real, key, title)
+        if kind == "cdg_bare":
+            # Graphics-only .cdg: previewable only with a same-stem sibling audio.
+            audio = sibling_cdg_audio(real)
+            if not audio:
+                return self._unavailable("Graphics-only .cdg — no audio track")
+            audio = self.media.validate_path(audio) or audio
+            return self._mk(title, "cdg", audio=audio, graphics=real)
         if kind == "video":
             ext = os.path.splitext(real)[1].lower()
             vco, aco = _ffprobe_codecs(real)
