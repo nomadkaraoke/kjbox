@@ -355,6 +355,60 @@ def _clear_rotation_download_for_item(app, item):
         pass  # Best-effort
 
 
+def _resolve_divebar_spec(file_id, artist, title, brand_code, fmt, cfg):
+    """Resolve a divebar track into a download-queue spec, pairing a loose CDG
+    with its sibling audio so a bare, silent .cdg is never queued.
+
+    Some brands (e.g. Sandell Karaoke) store a CDG's graphics and audio as two
+    separate Drive files rather than one cdg+mp3 zip, exposed by the index as
+    independent track rows. The pairing decision is keyed off the *resolved*
+    on-disk extension (``.cdg``) rather than the catalog ``fmt`` alone, so a CDG
+    whose ``format`` is missing can never slip through to the single-file path
+    and queue a silent, audioless ``.cdg``.
+
+    Returns ``(spec, error)``. ``spec`` is a queue-item fragment to merge into
+    the caller's item dict; ``error`` is ``None`` on success or a
+    ``(message, http_status)`` tuple the caller maps to its own convention.
+    """
+    url = divebar.get_download_url(file_id, cfg)
+    if not url:
+        return None, ("Failed to get download URL from Divebar", 502)
+    ext = divebar_ext(url, fmt)
+
+    if ext == ".cdg":
+        # A bare .cdg is graphics-only. Pair it with its sibling audio and ship a
+        # cdg+mp3 zip, or fail closed — never queue a silent .cdg.
+        sibling = divebar.find_sibling_audio(file_id, artist, title, brand_code, cfg)
+        if not sibling:
+            return None, ("This CDG has no audio track available in the mirror — "
+                          "pick another version.", 422)
+        mp3_url = divebar.get_download_url(sibling["file_id"], cfg)
+        if not mp3_url:
+            return None, ("Failed to get audio download URL from Divebar", 502)
+        zip_title = build_divebar_filename(brand_code, artist, title, ext=".zip") \
+            or f"divebar-{file_id}.zip"
+        return {
+            "pair": True,
+            "cdg_url": url,
+            "mp3_url": mp3_url,
+            "title": zip_title,
+            "source": "divebar",
+            "source_detail": divebar.classify_download_url(url),
+            "divebar_file_id": file_id,
+        }, None
+
+    filename = build_divebar_filename(brand_code, artist, title, ext=ext) \
+        or f"divebar-{file_id}{ext}"
+    return {
+        "pair": False,
+        "url": url,
+        "title": filename,
+        "source": "divebar",
+        "source_detail": divebar.classify_download_url(url),
+        "divebar_file_id": file_id,
+    }, None
+
+
 def _download_worker(app):
     """Process queued downloads sequentially until queue is drained."""
     while True:
@@ -371,8 +425,15 @@ def _download_worker(app):
 
         try:
             if next_item.get('source') == 'divebar':
-                file_path, title = app.media.download_from_url(
-                    next_item['url'], filename=next_item.get('title'))
+                if next_item.get('pair'):
+                    # Loose CDG: fetch the .cdg + its sibling .mp3 and package
+                    # them into a single playable cdg+mp3 zip.
+                    file_path, title = app.media.download_cdg_pair(
+                        next_item['cdg_url'], next_item['mp3_url'],
+                        filename=next_item.get('title'))
+                else:
+                    file_path, title = app.media.download_from_url(
+                        next_item['url'], filename=next_item.get('title'))
             else:
                 file_path, title = app.media.download_video(next_item['url'])
         except Exception:
@@ -1541,18 +1602,14 @@ def divebar_download():
     fmt = (data.get('format') or '').strip()
 
     cfg = current_app.kj_config
-    url = divebar.get_download_url(file_id, config=cfg)
-    if not url:
-        return jsonify({"error": "Could not get download URL"}), 500
+    # Resolve the download spec — pairing a loose CDG with its sibling audio so a
+    # bare, silent .cdg is never queued. divebar_ext keeps CDG/zip files off .mp4.
+    spec, err = _resolve_divebar_spec(file_id, artist, title, brand_code, fmt, cfg)
+    if err:
+        msg, status = err
+        return jsonify({"error": msg}), status
 
-    # Derive the on-disk extension from the (GCS) URL — falling back to the
-    # catalog format for Drive URLs — so CDG/zip files don't land as .mp4 and
-    # get rejected by the playability gate (which classifies by extension).
-    ext = divebar_ext(url, fmt)
-    filename = build_divebar_filename(brand_code, artist, title, ext=ext) \
-               or f"divebar-{file_id}{ext}"
-
-    # Reuse the existing download queue with the Drive URL
+    # Reuse the existing download queue with the Drive/GCS URL(s)
     app = current_app._get_current_object()
     from uuid import uuid4
     with app._download_lock:
@@ -1563,19 +1620,15 @@ def divebar_download():
 
         item = {
             'id': str(uuid4()),
-            'url': url,
             'status': 'queued',
-            'title': filename,
             'error': None,
             'file_path': None,
             'added_at': time.time(),
             'completed_at': None,
-            'source': 'divebar',
-            'source_detail': divebar.classify_download_url(url),
-            'divebar_file_id': file_id,
+            **spec,
         }
         items.append(item)
-        log_message(f"Queued Divebar download: {filename}", cfg)
+        log_message(f"Queued Divebar download: {item['title']}", cfg)
 
         if not app.download_queue['worker_running']:
             app.download_queue['worker_running'] = True
@@ -3628,6 +3681,28 @@ def download_and_link_rotation():
     else:
         return jsonify({"error": f"Unknown source: {source}"}), 400
 
+    # A rotation target (an existing id, or a new singer) is required up-front, so
+    # we reject a malformed request — keeping the missing-target 400 ahead of any
+    # network work — BEFORE resolving the download or creating an entry. An id may
+    # arrive as an int or a string; treat a blank/whitespace string as absent.
+    _id = data.get('id')
+    has_id = _id is not None and (not isinstance(_id, str) or _id.strip())
+    if not has_id and not data.get('singers') and not (
+            isinstance(data.get('singer'), str) and data['singer'].strip()):
+        return jsonify({"error": "id or singer is required"}), 400
+
+    # Resolve the divebar download spec (single file, or a paired loose-CDG)
+    # BEFORE creating a rotation entry, so a failure (no audio sibling / URL error)
+    # can never leave an orphan entry behind.
+    divebar_spec = None
+    if source == "divebar":
+        cfg = current_app.kj_config
+        divebar_spec, err = _resolve_divebar_spec(
+            file_id, artist, title, brand_code, fmt, cfg)
+        if err:
+            msg, status = err
+            return jsonify({"error": msg}), status
+
     # Check queue capacity
     app = current_app._get_current_object()
     with app._download_lock:
@@ -3635,7 +3710,7 @@ def download_and_link_rotation():
         if len(active) >= 5:
             return jsonify({"error": "Download queue is full (max 5)"}), 409
 
-    # Get or create rotation entry (only after all validations pass)
+    # Get or create rotation entry (only after all validations + spec resolution pass)
     entry_id, err = _resolve_or_create_rotation_entry_id(data, rotation)
     if err:
         return err
@@ -3644,24 +3719,13 @@ def download_and_link_rotation():
     download_id = str(uuid4())
 
     try:
-        cfg = current_app.kj_config
-
         if source == "divebar":
-            download_url = divebar.get_download_url(file_id, cfg)
-            if not download_url:
-                return jsonify({"error": "Failed to get download URL from Divebar"}), 502
-            ext = divebar_ext(download_url, fmt)
             queue_item = {
                 'id': download_id,
-                'url': download_url,
-                'title': build_divebar_filename(brand_code, artist, title, ext=ext)
-                         or f"divebar-{file_id}{ext}",
-                'source': 'divebar',
-                'source_detail': divebar.classify_download_url(download_url),
                 'status': 'queued',
                 'error': None,
                 'rotation_entry_id': entry_id,
-                'divebar_file_id': file_id,
+                **divebar_spec,
             }
         else:  # youtube (already validated above)
             queue_item = {
@@ -3986,15 +4050,10 @@ def approve_sing_request(app, req, skip_download=False):
         # rotation entry behind when upstream validation fails.
         from uuid import uuid4
         download_id = str(uuid4())
+        divebar_spec = None
         if source_type == "divebar":
-            try:
-                download_url = divebar.get_download_url(source_ref, app.kj_config)
-            except Exception as exc:
-                raise RuntimeError(f"Divebar URL failed: {exc}") from exc
-            if not download_url:
-                raise RuntimeError("Failed to get download URL from Divebar")
             # source_meta carries brand_code when this came via kj_pick;
-            # direct singer-divebar picks won't have it — falls back to "DB".
+            # direct singer-divebar picks won't have it.
             meta_raw = req.get("source_meta")
             if isinstance(meta_raw, str):
                 try:
@@ -4006,15 +4065,17 @@ def approve_sing_request(app, req, skip_download=False):
             else:
                 meta = {}
             brand_code = meta.get("brand_code") or ""
-            ext = divebar_ext(download_url, meta.get("format"))
-            title = build_divebar_filename(
-                brand_code,
-                req.get("song_artist"),
-                req.get("song_title"),
-                ext=ext,
-            ) or f"divebar-{source_ref}{ext}"
+            if not source_ref:
+                raise RuntimeError("source_ref (Divebar file_id) required")
+            # Resolve the spec (pairing a loose CDG with its audio) before
+            # creating the rotation entry, so an unusable version fails cleanly
+            # without leaving an orphan entry behind.
+            divebar_spec, err = _resolve_divebar_spec(
+                source_ref, req.get("song_artist"), req.get("song_title"),
+                brand_code, meta.get("format"), app.kj_config)
+            if err:
+                raise RuntimeError(err[0])
             queue_src = "divebar"
-            queue_url = download_url
         else:
             # youtube / kn — source_ref is a YouTube URL
             if not source_ref:
@@ -4024,19 +4085,25 @@ def approve_sing_request(app, req, skip_download=False):
             title = song_text or (req.get("song_title") or "")
 
         entry = rotation.add_entry(singer, song_text, singers=singers_list)
-        queue_item = {
-            "id": download_id,
-            "url": queue_url,
-            "title": title,
-            "source": queue_src,
-            "source_detail": (
-                divebar.classify_download_url(queue_url)
-                if queue_src == "divebar" else None
-            ),
-            "status": "queued",
-            "error": None,
-            "rotation_entry_id": entry["id"],
-        }
+        if divebar_spec is not None:
+            queue_item = {
+                "id": download_id,
+                "status": "queued",
+                "error": None,
+                "rotation_entry_id": entry["id"],
+                **divebar_spec,
+            }
+        else:
+            queue_item = {
+                "id": download_id,
+                "url": queue_url,
+                "title": title,
+                "source": queue_src,
+                "source_detail": None,
+                "status": "queued",
+                "error": None,
+                "rotation_entry_id": entry["id"],
+            }
         rotation.set_download_status(
             entry["id"], queue_src, "queued", download_id
         )

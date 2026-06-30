@@ -5,6 +5,7 @@ import os
 import shutil
 import tempfile
 import unicodedata
+import zipfile
 
 import requests
 
@@ -460,6 +461,84 @@ class MediaIndex:
         except Exception as e:
             log_message(f"Error downloading from URL: {e}", self.config)
             return None, None
+
+    def download_cdg_pair(self, cdg_url, mp3_url, filename):
+        """Download a loose CDG + its sibling audio and package them into a single
+        cdg+mp3 ``.zip`` — the playable form the rest of the pipeline expects.
+
+        Some brands (e.g. Sandell Karaoke) store a CDG's graphics and its audio as
+        two separate Drive files rather than one zip, so the divebar index exposes
+        them as independent track rows. Downloading the ``.cdg`` alone yields a
+        silent, useless file; this fetches both and zips them, then runs the same
+        playability gate every other download passes through.
+
+        Returns ``(real_path, display_name)`` on success, or ``(None, None)`` when
+        a download fails or the resulting zip is rejected by the gate (in which
+        case the zip is quarantined rather than left clickable)."""
+        download_folder = self.config.get('download_folder', os.path.expanduser("~/kjdata/videos"))
+        os.makedirs(download_folder, exist_ok=True)
+
+        base = sanitize_filename_part(os.path.splitext(filename)[0]) if filename else "cdg-download"
+        display_name = os.path.splitext(filename)[0] if filename else base
+        final_name = f"divebar__{base}.zip"
+        file_path = os.path.join(download_folder, final_name)
+
+        # Stage the two members in a system temp dir (NOT the download folder, so a
+        # concurrent scan() can never index the loose cdg/mp3 before they're zipped).
+        tmpdir = None
+        try:
+            tmpdir = tempfile.mkdtemp(prefix="cdgpair_")
+            cdg_tmp = os.path.join(tmpdir, base + ".cdg")
+            mp3_tmp = os.path.join(tmpdir, base + ".mp3")
+            self._http_download(cdg_url, cdg_tmp)
+            self._http_download(mp3_url, mp3_tmp)
+
+            # Store (not deflate): .cdg/.mp3 are already compact, and the zip play
+            # path only needs to read the members back out.
+            with zipfile.ZipFile(file_path, 'w', zipfile.ZIP_STORED) as zf:
+                zf.write(cdg_tmp, arcname=os.path.basename(cdg_tmp))
+                zf.write(mp3_tmp, arcname=os.path.basename(mp3_tmp))
+
+            gate = _gate_playable(file_path, self.config)
+            if not gate.verdict.get("overall_ok"):
+                reason = "; ".join(gate.verdict.get("reasons") or ["not playable"])
+                log_message(f"Download rejected (not playable): {os.path.basename(file_path)} — {reason}", self.config)
+                qpath = _quarantine_download(file_path, reason, self.config)
+                if qpath:
+                    log_message(f"Quarantined to {qpath}", self.config)
+                return None, None
+
+            real_path = os.path.realpath(file_path)
+            stat = os.stat(real_path)
+            entry = {
+                "path": real_path,
+                "filename": os.path.basename(real_path),
+                "folder": os.path.realpath(download_folder),
+                "size": stat.st_size,
+                "mtime": stat.st_mtime,
+                "is_download": True,
+                "display_name": display_name,
+                "original_url": cdg_url,
+                "source": "divebar",
+                "playability": gate.verdict,
+            }
+            self.index[real_path] = entry
+            self.save()
+            log_message(f"Successfully downloaded '{display_name}' (cdg+mp3 zip) from Divebar", self.config)
+            return real_path, display_name
+
+        except Exception as e:
+            log_message(f"Error downloading CDG pair from URL: {e}", self.config)
+            # Remove any partial/failed zip so it can't be picked up later.
+            try:
+                if os.path.exists(file_path):
+                    os.remove(file_path)
+            except OSError:
+                pass
+            return None, None
+        finally:
+            if tmpdir and os.path.isdir(tmpdir):
+                shutil.rmtree(tmpdir, ignore_errors=True)
 
     def _http_download(self, url, file_path):
         """Execute HTTP GET and write streaming body to file_path (when provided).
