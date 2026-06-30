@@ -4,7 +4,7 @@ Dated entries, newest first. Each entry notes any required deploy steps.
 
 ---
 
-## 2026-06-30 - Playability checker made deterministic (v0.44.0)
+## 2026-06-30 - Playability checker made deterministic (v0.45.0)
 
 **Why:** A manual review of 166 files flagged by the full-library playability sweep
 found **~90% were false positives** (88% of flagged video, 91% of flagged CD+G). Whole
@@ -48,6 +48,43 @@ files (truncated downloads, no-audio/no-stream, corrupt zips) and passes the res
 **Deploy:** backend change — requires `git pull` + `sudo systemctl restart kj-controller`
 (interrupts playback; do off-show). The pending full-library batch should be re-run with the
 fixed, decode-only checker.
+
+---
+
+## 2026-06-30 - In-browser file preview playback (v0.44.0)
+
+**Why:** When several versions of a song surface in the rotation "Link song"
+search (local downloads, KaraokeNerds/YouTube, divebar GCS mirror), there was no
+way to audition them before linking — the only way to hear/see a file was to play
+it on the device's HDMI/PA, impossible mid-show.
+
+**What:** A `▶` preview button on every link-search row and Available Songs row
+opens a modal that plays the file **in the browser** (small video render + audio,
+with seek), without ever touching the primary player or device A/V output — safe to
+use while a singer is performing. Delivery is chosen per file:
+
+- H.264/AAC mp4 + webm (local or GCS) → HTTP byte-range to `<video>` (zero CPU).
+- CDG zips → inner `.mp3` + `.cdg` rendered in a `<canvas>` synced to `<audio>`
+  (zero CPU, perfect seek) via the new dependency-free `static/cdg.js`.
+- audio → byte-range `<audio>`.
+- mkv/avi/odd-codec mp4 → ffmpeg→HLS transcode (≈480p, niced, single-job),
+  **cached on disk** so any file transcodes at most once, ever.
+- YouTube candidates → IFrame embed; divebar GCS files → fetched once into the
+  cache then handled like a local file.
+
+New modules: `preview.py` (`PreviewService` + `parse_range`), `preview_cache.py`,
+`preview_transcode.py`; frontend `static/preview.js`, `static/cdg.js`,
+`static/vendor/hls.min.js`. New routes under `/preview/*`. New config:
+`preview_cache_dir`, `preview_cache_max_bytes` (8 GiB LRU), `preview_transcode_height`,
+`preview_transcode_preset`.
+
+**Deploy steps:** Backend change → requires a service restart (interrupts active
+playback); deploy off-show: `git pull` + `sudo systemctl restart kj-controller`.
+Frontend assets are served versioned (`?v={{ app_version }}`); hard-refresh the KJ
+browser if it had the old page cached. Requires `ffmpeg`/`ffprobe` on the device
+(already present). The preview cache directory is created on first use under
+`<download_folder>/.preview-cache` unless `preview_cache_dir` is set; point it at the
+roomiest mount (e.g. the 4TB SSD) if desired.
 
 ---
 
