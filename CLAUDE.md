@@ -72,6 +72,20 @@ ssh nomadpc 'journalctl -u kj-controller -f'         # tail logs (safe)
 
 Web UI: `http://nomadpc.local` (LAN) or `https://kjbox.nomadkaraoke.com` (tunnel)
 
+### Reaching the tunnel URL past Cloudflare Access
+
+`https://kjbox.nomadkaraoke.com` is gated by Cloudflare Access (team `beveradb.cloudflareaccess.com`). A **service token** is provisioned so automation/curl can get through without the email login (the human email-login policy is untouched and still applies to browsers).
+
+`WebFetch` can't send custom headers, so use `curl` with the service-token headers, sourced from env vars that direnv loads from the workspace `.envrc` (gitignored — secrets are **not** in this repo):
+
+```bash
+curl -s -H "CF-Access-Client-Id: $KJBOX_CF_ACCESS_CLIENT_ID" \
+        -H "CF-Access-Client-Secret: $KJBOX_CF_ACCESS_CLIENT_SECRET" \
+        https://kjbox.nomadkaraoke.com/
+```
+
+For a browser (e.g. Playwright), set those same two values as extra HTTP headers on the context before navigating. To bypass Cloudflare entirely, read-only `ssh nomadpc 'curl -s http://localhost/...'` hits the Flask app directly.
+
 ## Testing
 
 ```bash
