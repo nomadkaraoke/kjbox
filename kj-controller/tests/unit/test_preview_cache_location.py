@@ -21,5 +21,6 @@ def test_empty_string_falls_back_to_default():
 
 
 def test_handles_missing_download_folder():
-    expected = os.path.join(os.path.dirname(os.path.realpath("/tmp")), "preview-cache")
-    assert resolve_preview_cache_dir({}) == expected
+    # No download_folder configured -> a sane, writable fallback, not a path
+    # derived from dirname("/tmp") (which would be "/" on Linux).
+    assert resolve_preview_cache_dir({}) == os.path.join("/tmp", "preview-cache")

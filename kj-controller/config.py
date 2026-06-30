@@ -98,8 +98,14 @@ def resolve_preview_cache_dir(config):
     configured = (config or {}).get("preview_cache_dir")
     if configured:
         return configured
-    download_folder = (config or {}).get("download_folder") or "/tmp"
-    return os.path.join(os.path.dirname(os.path.realpath(download_folder)), "preview-cache")
+    download_folder = (config or {}).get("download_folder")
+    if download_folder:
+        base_dir = os.path.dirname(os.path.realpath(download_folder))
+    else:
+        # No download folder configured: fall back to a writable temp location,
+        # NOT dirname("/tmp") (which is "/" on Linux).
+        base_dir = "/tmp"
+    return os.path.join(base_dir, "preview-cache")
 
 
 def save_config_value(key, value, config_file=None):
