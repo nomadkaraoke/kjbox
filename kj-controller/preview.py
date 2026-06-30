@@ -23,6 +23,7 @@ import requests
 
 import divebar
 import utils
+from config import resolve_preview_cache_dir
 from playability import classify_kind, sibling_cdg_audio
 from preview_cache import PreviewCache
 from utils import media_type_label
@@ -140,8 +141,7 @@ class PreviewService:
     def __init__(self, config, media):
         self.config = config or {}
         self.media = media
-        root = self.config.get("preview_cache_dir") or os.path.join(
-            self.config.get("download_folder", "/tmp"), ".preview-cache")
+        root = resolve_preview_cache_dir(self.config)
         self.cache = PreviewCache(root, self.config.get("preview_cache_max_bytes", 8 * 1024 ** 3))
         self.transcoder = TranscodeManager(self.config)
         self._tokens = {}  # token -> entry

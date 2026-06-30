@@ -1,21 +1,74 @@
 import os
 import time
 
-from preview_cache import PreviewCache
+from preview_cache import PreviewCache, content_signature
 
 
 def _cache(tmp_path):
     return PreviewCache(str(tmp_path), max_bytes=1000)
 
 
-def test_local_key_changes_with_mtime(tmp_path):
+def test_local_key_stable_across_mtime_and_rename(tmp_path):
+    """Content-addressed: same bytes -> same key, regardless of path or mtime."""
     f = tmp_path / "a.mp4"
     f.write_bytes(b"x" * 10)
     c = _cache(tmp_path)
     k1 = c.local_key(str(f))
+    # An mtime touch (content unchanged) must NOT invalidate the cache.
     os.utime(f, (time.time() + 50, time.time() + 50))
-    k2 = c.local_key(str(f))
-    assert k1 != k2 and len(k1) == 40
+    assert c.local_key(str(f)) == k1
+    # A rename/move (content unchanged) must NOT invalidate the cache.
+    g = tmp_path / "renamed.mp4"
+    os.rename(f, g)
+    assert c.local_key(str(g)) == k1
+    assert len(k1) == 40
+
+
+def test_local_key_changes_with_content(tmp_path):
+    f = tmp_path / "a.mp4"
+    f.write_bytes(b"x" * 10)
+    c = _cache(tmp_path)
+    k1 = c.local_key(str(f))
+    f.write_bytes(b"y" * 10)  # same size, different bytes
+    assert c.local_key(str(f)) != k1
+
+
+def test_content_signature_same_content_different_path(tmp_path):
+    sub = tmp_path / "sub"
+    sub.mkdir()
+    a = tmp_path / "a.mp4"
+    b = sub / "b.mp4"
+    a.write_bytes(b"hello world" * 100)
+    b.write_bytes(b"hello world" * 100)
+    assert content_signature(str(a)) == content_signature(str(b))
+
+
+def test_content_signature_differs_on_one_byte(tmp_path):
+    a = tmp_path / "a.mp4"
+    b = tmp_path / "b.mp4"
+    a.write_bytes(b"A" + b"x" * 100)
+    b.write_bytes(b"B" + b"x" * 100)  # same size, one differing byte
+    assert content_signature(str(a)) != content_signature(str(b))
+
+
+def test_content_signature_large_file_uses_head_tail(tmp_path):
+    """>2 MiB exercises the head/tail-sample branch; a differing tail is caught,
+    identical large content matches."""
+    base = b"\0" * (3 * 1024 * 1024)
+    a = tmp_path / "a.bin"
+    b = tmp_path / "b.bin"
+    c = tmp_path / "c.bin"
+    a.write_bytes(base + b"TAILA")
+    b.write_bytes(base + b"TAILB")
+    c.write_bytes(base + b"TAILA")
+    assert content_signature(str(a)) != content_signature(str(b))
+    assert content_signature(str(a)) == content_signature(str(c))
+
+
+def test_content_signature_empty_file(tmp_path):
+    f = tmp_path / "empty.mp4"
+    f.write_bytes(b"")
+    assert len(content_signature(str(f))) == 40
 
 
 def test_gcs_key_stable(tmp_path):
