@@ -5641,6 +5641,28 @@ function rotSourceBadge(label, cls, title) {
     return '<span class="dl-source-badge ' + cls + '" title="' + escHtml(title) + '">' + escHtml(label) + '</span>';
 }
 
+// Leading Best pill / trusted-brand star, with tooltips. `isTop` here means the
+// row's brand is KJ-stated (reliably high quality).
+function rotLeadMark(isBest, isTop) {
+    if (isBest) return '<span class="rs-best-pill" title="Best available version for this song">Best</span> ';
+    if (isTop) return '<span class="rs-top-star" title="Reliably high-quality brand (KJ-trusted)">⭐</span> ';
+    return '';
+}
+
+// Right-aligned tags column. Fixed-width slots keep the format pills in one
+// column and the brand codes in another, lined up across every row regardless
+// of source or group.
+function rotTagsHtml(fmt, brand) {
+    const fmtHtml = fmt
+        ? '<span class="format-badge ' + getFormatBadgeClass(fmt) + '">' + escHtml(fmt) + '</span>'
+        : '';
+    const brandHtml = brand
+        ? '<span class="rs-brand-pill">' + escHtml(brand) + '</span>'
+        : '';
+    return '<span class="rs-tags"><span class="rs-tag-fmt">' + fmtHtml
+        + '</span><span class="rs-tag-brand">' + brandHtml + '</span></span>';
+}
+
 function renderRotLocalRow(match, idx, isTop, isBest) {
     const fname = match.filename
         ? match.filename.replace(/\.\w+$/, '')
@@ -5652,13 +5674,8 @@ function renderRotLocalRow(match, idx, isTop, isBest) {
         + (isBest ? ' rs-best' : '');
     let html = '<div class="' + rowClass + '" data-idx="' + idx + '" onclick="selectRotSearchResult(rotSearchResults[' + idx + '])">';
     html += '<div class="catalog-detail">';
-    html += '<span>';
-    if (isBest) html += '<span class="rs-best-pill">Best</span> ';
-    else if (isTop) html += '<span class="rs-top-star">\u2B50</span> ';
-    html += escHtml(fname) + ' ';
-    if (match.format) html += '<span class="format-badge ' + formatClass + '">' + escHtml(match.format) + '</span>';
-    if (match.priority_brand) html += '<span class="rs-brand-pill">' + escHtml(match.priority_brand) + '</span>';
-    html += '</span>';
+    html += '<span class="rs-line">' + rotLeadMark(isBest, isTop)
+        + '<span class="rs-title">' + escHtml(fname) + '</span></span>';
     if (match.path) {
         const folder = match.path
             .replace(/\/[^/]+$/, '')
@@ -5667,7 +5684,8 @@ function renderRotLocalRow(match, idx, isTop, isBest) {
         html += '<div class="catalog-folder" title="' + escHtml(match.path) + '">' + escHtml(folder) + '</div>';
     }
     html += '</div>';
-    html += '<span class="kn-play-btn">Link</span>';
+    html += rotTagsHtml(match.format || '', match.priority_brand || '');
+    html += '<span class="kn-track-actions"><span class="kn-play-btn">Link</span></span>';
     html += '</div>';
     return html;
 }
@@ -5701,20 +5719,19 @@ function renderRotKnRow(song, track, idx, isTop, isBest, downloadedIdToPath) {
         + (isBest ? ' rs-best' : '');
     let html = '<div class="' + rowClass + '" data-idx="' + idx + '" onclick="selectRotSearchResult(rotSearchResults[' + idx + '])">';
     html += '<span class="kn-track-info">';
-    if (isBest) html += '<span class="rs-best-pill">Best</span> ';
-    else if (isTop) html += '<span class="rs-top-star">\u2B50</span> ';
+    html += rotLeadMark(isBest, isTop);
     html += '<span class="kn-brand-name">' + escHtml(track.brand_name || '') + '</span>';
-    html += '<span class="kn-brand-code">' + escHtml(track.brand_code || '') + '</span>';
     if (track.is_community) html += '<span class="kn-community-badge">Community</span>';
     html += '<span class="kn-song-title">' + escHtml(song.title + ' - ' + song.artist) + '</span>';
+    html += '</span>';
     // File-type badge on every row: downloaded file's real ext, the mirror
-    // file's format, or mp4 for a plain YouTube download.
+    // file's format, or mp4 for a plain YouTube download. Right-aligned alongside
+    // the brand code so they line up across rows.
     let fmt = '';
     if (downloadedPath) fmt = extToFormat(downloadedPath);
     else if (track.divebar) fmt = track.divebar.format || '';
     else if (track.youtube_url) fmt = 'mp4';
-    if (fmt) html += '<span class="format-badge ' + getFormatBadgeClass(fmt) + '">' + escHtml(fmt) + '</span>';
-    html += '</span>';
+    html += rotTagsHtml(fmt, track.brand_code || '');
     html += '<span class="kn-track-actions">';
     if (downloadedPath) {
         html += '<span class="kn-downloaded-badge">\u2713 Downloaded</span>';
@@ -5761,14 +5778,12 @@ function renderRotDivebarRow(dv, idx, isTop, isBest) {
         : { label: 'DRIVE', cls: 'dl-source-drive', title: 'Our community mirror (Google Drive — slower)' };
     let html = '<div class="' + rowClass + '" data-idx="' + idx + '" onclick="selectRotSearchResult(rotSearchResults[' + idx + '])">';
     html += '<span class="kn-track-info">';
-    if (isBest) html += '<span class="rs-best-pill">Best</span> ';
-    else if (isTop) html += '<span class="rs-top-star">⭐</span> ';
+    html += rotLeadMark(isBest, isTop);
     html += '<span class="kn-brand-name">' + escHtml(dv.brand_name || '') + '</span>';
-    html += '<span class="kn-brand-code">' + escHtml(dv.brand_code || '') + '</span>';
     if (isCommunity) html += '<span class="kn-community-badge">Community</span>';
     html += '<span class="kn-song-title">' + escHtml((dv.title || '') + ' - ' + (dv.artist || '')) + '</span>';
-    if (dv.format) html += '<span class="format-badge ' + getFormatBadgeClass(dv.format) + '">' + escHtml(dv.format) + '</span>';
     html += '</span>';
+    html += rotTagsHtml(dv.format || '', dv.brand_code || '');
     html += '<span class="kn-track-actions">';
     // Source badge beside the button (moved here from the left so it's clear
     // which download source the DL & Link button will hit).

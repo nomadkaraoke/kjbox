@@ -17,7 +17,8 @@ class TestPageLoad:
 
     def test_css_loaded(self, app_page):
         """External stylesheet is linked and loaded."""
-        link = app_page.locator('link[rel="stylesheet"][href="/static/style.css"]')
+        # href carries a cache-bust query string (?v=<version>), so match the prefix.
+        link = app_page.locator('link[rel="stylesheet"][href^="/static/style.css"]')
         expect(link).to_have_count(1)
         # Verify body has dark background from our CSS
         bg = app_page.evaluate("getComputedStyle(document.body).backgroundColor")
