@@ -2,7 +2,7 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
-## 2026-06-30 - Preview cache relocated out of the download folder + content-addressed (v0.46.0)
+## 2026-06-30 - Preview cache relocated out of the download folder + content-addressed (v0.47.0)
 
 **Why:** The "Available Downloads" (YTDOWNLOADS) list showed phantom `graphics` / `audio`
 rows. They were browser-preview cache artifacts (extracted CDG halves): the preview cache
