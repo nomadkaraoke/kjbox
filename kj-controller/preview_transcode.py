@@ -26,7 +26,8 @@ class TranscodeManager:
         self.height = int(self.config.get("preview_transcode_height", 480))
         self.preset = self.config.get("preview_transcode_preset", "veryfast")
         self._lock = threading.Lock()
-        self._active = None  # current Popen
+        self._active = None       # current Popen
+        self._active_dest = None  # dest dir of the current Popen (cleaned on kill)
 
     def _prefix(self):
         pre = []
@@ -48,46 +49,67 @@ class TranscodeManager:
             os.path.join(dest_dir, "index.m3u8"),
         ]
 
+    def _kill_active_locked(self):
+        """Kill the active job and delete its partial output. Caller holds _lock."""
+        p = self._active
+        if p is not None and p.poll() is None:
+            try:
+                p.kill()
+            except Exception:
+                pass
+        if self._active_dest:
+            # A killed transcode never gets a `.done` marker, so its partial dir
+            # would otherwise be invisible to eviction and leak disk. Remove it.
+            shutil.rmtree(self._active_dest, ignore_errors=True)
+        self._active = None
+        self._active_dest = None
+
     def kill_active(self):
         with self._lock:
-            p = self._active
-            if p is not None and p.poll() is None:
-                try:
-                    p.kill()
-                except Exception:
-                    pass
-            self._active = None
+            self._kill_active_locked()
 
     def ensure_hls(self, source_path, dest_dir, mark_done):
-        """Start (or reuse) an HLS transcode; return path to ``index.m3u8``.
+        """Always (re)build a fresh HLS transcode into ``dest_dir``; return its
+        ``index.m3u8`` once it first appears.
 
-        If the playlist already exists, returns it without launching ffmpeg. Otherwise
-        bumps any in-progress job, launches ffmpeg, and blocks only until the playlist
-        file first appears (segments keep filling in the background).
+        The caller (PreviewService) decides cache hits via the cache's ``.done``
+        sentinel and only calls this on a miss — so a stale partial playlist from a
+        killed job is never reused. Bumping any in-progress job + the spawn + the
+        ``_active`` assignment are done atomically under the lock so two concurrent
+        callers can't both launch ffmpeg.
         """
-        playlist = os.path.join(dest_dir, "index.m3u8")
-        if os.path.exists(playlist):
-            return playlist
-        self.kill_active()  # bump any in-progress job — one preview at a time
-        os.makedirs(dest_dir, exist_ok=True)
         if not shutil.which("ffmpeg"):
             raise TranscodeError("ffmpeg not available")
-        proc = subprocess.Popen(
-            self._cmd(source_path, dest_dir),
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
+        playlist = os.path.join(dest_dir, "index.m3u8")
         with self._lock:
+            self._kill_active_locked()           # bump any in-progress job
+            shutil.rmtree(dest_dir, ignore_errors=True)  # discard stale partial output
+            os.makedirs(dest_dir, exist_ok=True)
+            proc = subprocess.Popen(
+                self._cmd(source_path, dest_dir),
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
             self._active = proc
+            self._active_dest = dest_dir
 
-        def _watch(p=proc):
+        def _watch(p=proc, d=dest_dir):
             rc = p.wait()
             if rc == 0:
                 try:
                     mark_done()
                 except Exception:
                     pass
+            with self._lock:
+                if self._active is p:   # don't clobber a newer job's refs
+                    self._active = None
+                    self._active_dest = None
+                    # Self-failed (ffmpeg errored on its own): clean the partial dir
+                    # so it doesn't leak. A success (rc==0) keeps the dir + .done; a
+                    # kill via _kill_active_locked already cleaned it (refs cleared).
+                    if rc != 0:
+                        shutil.rmtree(d, ignore_errors=True)
 
         threading.Thread(target=_watch, daemon=True).start()
 

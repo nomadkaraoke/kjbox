@@ -4343,13 +4343,17 @@ _PREVIEW_CHUNK = 262144
 @routes_bp.route('/preview/resolve', methods=['POST'])
 def preview_resolve():
     descriptor = request.get_json(silent=True) or {}
+    if not isinstance(descriptor, dict):
+        return jsonify({"mode": "unavailable", "reason": "Invalid request"}), 400
     return jsonify(current_app.preview.resolve(descriptor))
 
 
 @routes_bp.route('/preview/close', methods=['POST'])
 def preview_close():
-    token = (request.get_json(silent=True) or {}).get('token')
-    current_app.preview.close(token)
+    payload = request.get_json(silent=True) or {}
+    if not isinstance(payload, dict):
+        return jsonify({"ok": False}), 400
+    current_app.preview.close(payload.get('token'))
     return jsonify({"ok": True})
 
 

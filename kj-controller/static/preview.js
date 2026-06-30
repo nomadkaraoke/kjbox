@@ -10,6 +10,7 @@
   var _activeHls = null;     // hls.js instance
   var _cdgRaf = null;        // requestAnimationFrame handle for CDG
   var _hlsLibPromise = null;
+  var _previewGen = 0;       // bumped on every open/close; stales out in-flight work
 
   function byId(id) { return document.getElementById(id); }
 
@@ -60,6 +61,7 @@
   }
 
   async function openPreview(descriptor) {
+    var gen = ++_previewGen;
     var modal = byId('preview-modal');
     var body = byId('preview-modal-body');
     var titleEl = byId('preview-modal-title');
@@ -81,7 +83,13 @@
       });
       res = await r.json();
     } catch (e) {
+      if (gen !== _previewGen) return;
       body.innerHTML = _unavail('Could not reach the server for preview');
+      return;
+    }
+    if (gen !== _previewGen) {
+      // A newer preview opened (or this one was closed) while resolving.
+      if (res && res.token) _postClose(res.token);
       return;
     }
     _currentToken = res.token || null;
@@ -89,8 +97,8 @@
     switch (res.mode) {
       case 'native_video': _mountVideo(body, '/preview/stream/' + res.token, descriptor); break;
       case 'native_audio': _mountAudio(body, '/preview/stream/' + res.token); break;
-      case 'cdg': _mountCdg(body, res.token); break;
-      case 'hls': _mountHls(body, res.token, descriptor); break;
+      case 'cdg': _mountCdg(body, res.token, gen); break;
+      case 'hls': _mountHls(body, res.token, descriptor, gen); break;
       case 'youtube': _mountYouTube(body, res.youtube_url); break;
       default: body.innerHTML = _unavail(res.reason || 'Preview unavailable for this file');
     }
@@ -123,7 +131,7 @@
     _activeMedia = a;
   }
 
-  async function _mountCdg(body, token) {
+  async function _mountCdg(body, token, gen) {
     body.innerHTML = '';
     var canvas = document.createElement('canvas');
     canvas.width = 300; canvas.height = 216; canvas.className = 'preview-cdg-canvas';
@@ -137,6 +145,7 @@
     try {
       var resp = await fetch('/preview/cdg/' + token + '/graphics');
       var buf = await resp.arrayBuffer();
+      if (gen !== _previewGen || _activeMedia !== audio) return;  // superseded mid-fetch
       if (typeof CDGPlayer === 'function') {
         player = new CDGPlayer(canvas);
         player.load(new Uint8Array(buf));
@@ -144,6 +153,7 @@
     } catch (e) { /* graphics failed; audio still plays */ }
 
     function tick() {
+      if (gen !== _previewGen || _activeMedia !== audio) return;  // stop after teardown
       if (player) { try { player.renderAt(audio.currentTime || 0); } catch (e) {} }
       _cdgRaf = requestAnimationFrame(tick);
     }
@@ -157,13 +167,19 @@
       var s = document.createElement('script');
       s.src = '/static/vendor/hls.min.js';
       s.onload = resolve;
-      s.onerror = reject;
+      s.onerror = function (err) {
+        // Don't cache the rejection — a transient load failure shouldn't break
+        // every future HLS preview.
+        _hlsLibPromise = null;
+        if (s.parentNode) s.parentNode.removeChild(s);
+        reject(err);
+      };
       document.head.appendChild(s);
     });
     return _hlsLibPromise;
   }
 
-  function _mountHls(body, token, descriptor) {
+  function _mountHls(body, token, descriptor, gen) {
     body.innerHTML = '';
     var v = document.createElement('video');
     v.controls = true; v.autoplay = true; v.playsInline = true;
@@ -172,6 +188,7 @@
     var url = '/preview/hls/' + token + '/index.m3u8';
     if (v.canPlayType('application/vnd.apple.mpegurl')) { v.src = url; return; }
     _loadHlsLib().then(function () {
+      if (gen !== _previewGen || _activeMedia !== v) return;  // superseded during load
       if (window.Hls && window.Hls.isSupported()) {
         var hls = new window.Hls();
         hls.loadSource(url);
@@ -181,6 +198,7 @@
         body.innerHTML = _unavail('Your browser cannot play this transcoded preview');
       }
     }).catch(function () {
+      if (gen !== _previewGen || _activeMedia !== v) return;
       body.innerHTML = _unavail('Could not load the video player');
     });
   }
@@ -224,6 +242,7 @@
   }
 
   function closePreview() {
+    ++_previewGen;  // invalidate any in-flight resolve / async mount
     _teardown();
     var modal = byId('preview-modal');
     if (modal) modal.classList.add('hidden');

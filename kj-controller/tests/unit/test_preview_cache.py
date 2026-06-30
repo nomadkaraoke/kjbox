@@ -40,10 +40,29 @@ def test_evict_drops_oldest_complete_over_cap(tmp_path):
         with open(os.path.join(d, "seg-0.ts"), "wb") as fh:
             fh.write(b"y" * 40)
         c.mark_done(name)
-        time.sleep(0.02)
+    # Set explicit mtimes (k1 older) so ordering is deterministic regardless of
+    # filesystem timestamp resolution.
+    os.utime(os.path.join(c.transcode_dir("k1"), ".done"), (1000, 1000))
+    os.utime(os.path.join(c.transcode_dir("k2"), ".done"), (2000, 2000))
     c.evict_if_needed()  # 80 bytes of complete entries > 50 cap -> oldest (k1) removed
     assert not os.path.isdir(c.transcode_dir("k1"))
     assert os.path.isdir(c.transcode_dir("k2"))
+
+
+def test_evict_covers_gcsblob_and_cdg(tmp_path):
+    c = PreviewCache(str(tmp_path), max_bytes=50)
+    blob = c.gcsblob_path("fid1", "blob.mp4")
+    with open(blob, "wb") as fh:
+        fh.write(b"y" * 80)
+    cdir = c.cdg_dir("k")
+    os.makedirs(cdir)
+    with open(os.path.join(cdir, "audio.mp3"), "wb") as fh:
+        fh.write(b"z" * 10)
+    os.utime(os.path.dirname(blob), (1000, 1000))   # oldest -> evicted first
+    os.utime(cdir, (2000, 2000))
+    c.evict_if_needed()  # 90 bytes > 50 cap -> oldest (the gcsblob) removed
+    assert not os.path.isdir(os.path.dirname(blob))
+    assert os.path.isdir(cdir)
 
 
 def test_evict_keeps_incomplete(tmp_path):
@@ -56,8 +75,21 @@ def test_evict_keeps_incomplete(tmp_path):
     assert os.path.isdir(d)
 
 
-def test_gcsblob_path_creates_dir(tmp_path):
+def test_gcsblob_path_hashes_id_and_creates_dir(tmp_path):
     c = _cache(tmp_path)
     p = c.gcsblob_path("FID", "blob.mp4")
-    assert p.endswith(os.path.join("gcsblob", "FID", "blob.mp4"))
+    # dir is keyed by the hashed file_id, not the raw id
+    assert os.path.basename(os.path.dirname(p)) == c.gcs_key("FID")
+    assert os.path.basename(p) == "blob.mp4"
     assert os.path.isdir(os.path.dirname(p))
+    # stays inside the cache root
+    assert os.path.commonpath([os.path.realpath(p), os.path.realpath(str(tmp_path))]) \
+        == os.path.realpath(str(tmp_path))
+
+
+def test_gcsblob_path_rejects_traversal_names(tmp_path):
+    import pytest
+    c = _cache(tmp_path)
+    for bad in ("../escape.mp4", "a/b.mp4", "..", ".", ""):
+        with pytest.raises(ValueError):
+            c.gcsblob_path("FID", bad)

@@ -9,6 +9,7 @@ and (for exotic video) runs a niced ffmpeg transcode. See
 docs/archive/2026-06-30-browser-preview-playback-design.md.
 """
 import json
+import logging
 import mimetypes
 import os
 import re
@@ -16,6 +17,7 @@ import shutil
 import subprocess
 import time
 import uuid
+from urllib.parse import urlparse
 
 import requests
 
@@ -26,10 +28,32 @@ from preview_cache import PreviewCache
 from preview_transcode import TranscodeManager, TranscodeError, TranscodeBusy
 from zip_playback import ZipPlayback
 
+logger = logging.getLogger(__name__)
+
 _NATIVE_VIDEO_EXTS = {".mp4", ".m4v", ".mov", ".webm"}
 _NATIVE_VCODECS = {"h264", "vp8", "vp9", "av1"}
 _NATIVE_ACODECS = {"aac", "mp3", "opus", "vorbis", None, ""}
 _TOKEN_TTL_S = 3600
+_YOUTUBE_HOSTS = {"youtube.com", "www.youtube.com", "m.youtube.com",
+                  "youtu.be", "www.youtu.be", "youtube-nocookie.com",
+                  "www.youtube-nocookie.com"}
+
+
+def _is_allowed_youtube_url(url):
+    """True only for https YouTube URLs (the iframe consumes this directly)."""
+    try:
+        p = urlparse(url)
+    except (ValueError, TypeError):
+        return False
+    return p.scheme == "https" and (p.hostname or "").lower() in _YOUTUBE_HOSTS
+
+
+def _path_inside(candidate, root):
+    """True if `candidate` is `root` or strictly within it (no sibling-prefix escape)."""
+    try:
+        return os.path.commonpath([candidate, root]) == root
+    except ValueError:  # different drives / mixed abs+rel
+        return False
 
 
 def parse_range(header, size):
@@ -38,7 +62,7 @@ def parse_range(header, size):
     Returns None for absent/malformed/unsatisfiable ranges (caller then serves the
     whole file or a 416). Only the first range of a multi-range request is honoured.
     """
-    if not header or not header.startswith("bytes="):
+    if size <= 0 or not header or not header.startswith("bytes="):
         return None
     spec = header[len("bytes="):].split(",")[0].strip()
     if "-" not in spec:
@@ -56,7 +80,10 @@ def parse_range(header, size):
         return None
     if start < 0 or start >= size:
         return None
-    return (start, min(end, size - 1))
+    end = min(end, size - 1)
+    if end < start:                       # inverted range, e.g. bytes=10-5
+        return None
+    return (start, end)
 
 
 def _is_seg(name):
@@ -127,6 +154,8 @@ class PreviewService:
                 url = descriptor.get("youtube_url")
                 if not url:
                     return self._unavailable("No YouTube URL")
+                if not _is_allowed_youtube_url(url):
+                    return self._unavailable("Not a valid YouTube link")
                 return {"mode": "youtube", "youtube_url": url, "title": descriptor.get("title", "")}
             if src == "divebar":
                 return self._resolve_divebar(descriptor)
@@ -136,10 +165,12 @@ class PreviewService:
             return self._unavailable("Unknown preview source")
         except TranscodeBusy:
             return self._unavailable("Another preview is transcoding — try again in a moment")
-        except TranscodeError as e:
-            return self._unavailable(f"Cannot transcode for preview: {e}")
-        except Exception as e:  # never leak a stack trace to the modal
-            return self._unavailable(f"Preview failed: {e}")
+        except TranscodeError:
+            logger.exception("preview transcode failed")
+            return self._unavailable("Could not prepare this file for preview")
+        except Exception:  # never leak a stack trace / path / signed URL to the modal
+            logger.exception("preview resolve failed")
+            return self._unavailable("Preview failed")
 
     def _resolve_local_path(self, file_path, descriptor, title=None):
         if not file_path:
@@ -148,7 +179,7 @@ class PreviewService:
         if not real and self.config.get("external_media_mount"):
             cand = os.path.realpath(file_path)
             mount = os.path.realpath(self.config["external_media_mount"])
-            if cand.startswith(mount) and os.path.exists(cand):
+            if _path_inside(cand, mount) and os.path.exists(cand):
                 real = cand
         if not real:
             return self._unavailable("File not found or outside allowed folders")
@@ -167,8 +198,12 @@ class PreviewService:
         if not os.path.exists(blob):
             try:
                 _download_to(url, blob)
-            except Exception as e:
-                return self._unavailable(f"Could not fetch from mirror: {e}")
+            except Exception:
+                # Don't surface the exception text — a signed mirror URL can appear in it.
+                logger.exception("divebar preview fetch failed for file_id=%s", fid)
+                return self._unavailable("Could not fetch this version from the mirror")
+            self.cache.evict_if_needed()
+        self.cache.touch(os.path.dirname(blob))
         title = descriptor.get("title") or os.path.basename(blob)
         return self._classify_and_mode(blob, descriptor, title, key=self.cache.gcs_key(fid))
 
@@ -210,6 +245,7 @@ class PreviewService:
                     zp.cleanup()
                 except Exception:
                     pass
+            self.cache.evict_if_needed()
         self.cache.touch(cdir)
         return self._mk(title, "cdg", audio=audio_dst, graphics=graphics_dst)
 
@@ -233,11 +269,21 @@ class PreviewService:
     def _unavailable(self, reason):
         return {"mode": "unavailable", "reason": reason, "title": ""}
 
+    def _entry_for_token(self, token):
+        """Return a live token entry, expiring it if it's past the TTL."""
+        e = self._tokens.get(token)
+        if not e:
+            return None
+        if time.time() - e.get("created", 0) > _TOKEN_TTL_S:
+            self._tokens.pop(token, None)
+            return None
+        return e
+
     def token_info(self, token):
-        return self._tokens.get(token)
+        return self._entry_for_token(token)
 
     def cdg_part_path(self, token, part):
-        e = self._tokens.get(token)
+        e = self._entry_for_token(token)
         if not e or e.get("kind") != "cdg":
             return None
         if part == "audio":
@@ -247,7 +293,7 @@ class PreviewService:
         return None
 
     def hls_path(self, token, name):
-        e = self._tokens.get(token)
+        e = self._entry_for_token(token)
         if not e or e.get("kind") != "hls":
             return None
         if name != "index.m3u8" and not _is_seg(name):
@@ -256,11 +302,14 @@ class PreviewService:
 
     def close(self, token=None):
         if token is None:
+            # Full teardown: drop all tokens and stop any in-flight transcode.
             self._tokens.clear()
             self.transcoder.kill_active()
             return
+        # Per-token close just forgets the token. We deliberately do NOT kill the
+        # transcoder here: the active job may belong to a different (e.g. pre-warming)
+        # preview, and letting it finish populates the cache. A new preview bumps it.
         self._tokens.pop(token, None)
-        self.transcoder.kill_active()
 
     def _gc(self):
         now = time.time()

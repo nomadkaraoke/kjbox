@@ -77,7 +77,7 @@ def test_real_transcode_caches(flask_test_client, media_dir, flask_app):
     subprocess.run(
         ["ffmpeg", "-nostdin", "-y", "-f", "lavfi", "-i", "testsrc=duration=1:size=160x120:rate=10",
          "-c:v", "mpeg4", src],
-        check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=60)
     r = flask_test_client.post("/preview/resolve", json={"source": "local", "file_path": src})
     body = r.get_json()
     assert body["mode"] == "hls"

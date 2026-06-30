@@ -22,7 +22,9 @@ class PreviewCache:
     # ---- keys -----------------------------------------------------------
     def local_key(self, real_path):
         st = os.stat(real_path)
-        raw = f"{os.path.realpath(real_path)}|{st.st_size}|{int(st.st_mtime)}|{PARAMS_VERSION}"
+        # st_mtime_ns (not int(st_mtime)) so a same-second replace of equal size
+        # still invalidates the cache.
+        raw = f"{os.path.realpath(real_path)}|{st.st_size}|{st.st_mtime_ns}|{PARAMS_VERSION}"
         return hashlib.sha1(raw.encode("utf-8")).hexdigest()
 
     def gcs_key(self, file_id):
@@ -36,9 +38,15 @@ class PreviewCache:
         return os.path.join(self.root, "cdg", key)
 
     def gcsblob_path(self, file_id, name):
-        d = os.path.join(self.root, "gcsblob", file_id)
+        # Hash the (untrusted) file_id into the path and reject any name that
+        # isn't a plain basename, so a crafted file_id/name can't escape the
+        # cache root via path separators or "..".
+        safe_name = os.path.basename(name)
+        if safe_name in ("", ".", "..") or safe_name != name:
+            raise ValueError("invalid cache filename")
+        d = os.path.join(self.root, "gcsblob", self.gcs_key(file_id))
         os.makedirs(d, exist_ok=True)
-        return os.path.join(d, name)
+        return os.path.join(d, safe_name)
 
     # ---- done gating ----------------------------------------------------
     def _done_marker(self, key):
@@ -68,19 +76,31 @@ class PreviewCache:
                     pass
         return total
 
-    def evict_if_needed(self):
-        """Delete oldest *complete* transcode entries until under the size cap.
+    def _evictable_entries(self):
+        """All cache entries eligible for eviction, as (atime, dir) tuples.
 
-        Only entries with a ``.done`` marker are eligible — in-progress transcodes
-        are never evicted. Ordered by the ``.done`` marker's mtime (access time).
+        Covers transcodes (only those with a ``.done`` marker — in-progress
+        transcodes are never evicted), downloaded GCS blobs, and extracted CDG
+        dirs, so the size cap applies cache-wide, not just to transcodes.
         """
-        tdir = os.path.join(self.root, "transcode")
         entries = []
+        tdir = os.path.join(self.root, "transcode")
         for name in os.listdir(tdir):
             d = os.path.join(tdir, name)
             marker = os.path.join(d, ".done")
             if os.path.isdir(d) and os.path.exists(marker):
                 entries.append((os.path.getmtime(marker), d))
+        for sub in ("gcsblob", "cdg"):
+            base = os.path.join(self.root, sub)
+            for name in os.listdir(base):
+                d = os.path.join(base, name)
+                if os.path.isdir(d):
+                    entries.append((os.path.getmtime(d), d))
+        return entries
+
+    def evict_if_needed(self):
+        """Delete oldest cache entries (oldest access first) until under the cap."""
+        entries = self._evictable_entries()
         total = sum(self._dir_size(d) for _t, d in entries)
         for _t, d in sorted(entries):
             if total <= self.max_bytes:

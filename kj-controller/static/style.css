@@ -3424,6 +3424,9 @@ body.simple-mode #col1 {
     max-width: 560px;
     background: #000;
     border-radius: 6px;
+}
+/* Pixelate only the low-res CDG canvas; native/HLS video should scale smoothly. */
+.preview-body canvas.preview-cdg-canvas {
     image-rendering: pixelated;
 }
 .preview-body audio {

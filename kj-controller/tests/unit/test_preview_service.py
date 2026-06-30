@@ -11,8 +11,13 @@ class FakeMedia:
         self.roots = roots
 
     def validate_path(self, p):
+        # Proper directory containment (mirrors MediaIndex.validate_path) so the
+        # path-escape tests can't pass via a mere shared prefix.
         rp = os.path.realpath(p)
-        ok = any(rp.startswith(os.path.realpath(r)) for r in self.roots) and os.path.exists(rp)
+        ok = any(
+            os.path.commonpath([rp, os.path.realpath(r)]) == os.path.realpath(r)
+            for r in self.roots
+        ) and os.path.exists(rp)
         return rp if ok else None
 
 
@@ -125,12 +130,22 @@ def test_local_cdg_extracts(svc, tmp_path, monkeypatch):
 # ---- youtube -------------------------------------------------------------
 
 def test_youtube(svc):
-    r = svc.resolve({"source": "youtube", "youtube_url": "https://youtu.be/abc"})
-    assert r["mode"] == "youtube" and r["youtube_url"].endswith("abc")
+    r = svc.resolve({"source": "youtube", "youtube_url": "https://youtu.be/abc123"})
+    assert r["mode"] == "youtube" and r["youtube_url"].endswith("abc123")
 
 
 def test_youtube_missing_url(svc):
     r = svc.resolve({"source": "youtube"})
+    assert r["mode"] == "unavailable"
+
+
+def test_youtube_rejects_non_youtube_url(svc):
+    r = svc.resolve({"source": "youtube", "youtube_url": "https://evil.example.com/x"})
+    assert r["mode"] == "unavailable"
+
+
+def test_youtube_rejects_http(svc):
+    r = svc.resolve({"source": "youtube", "youtube_url": "http://youtube.com/watch?v=x"})
     assert r["mode"] == "unavailable"
 
 

@@ -15,6 +15,9 @@ from preview import parse_range
     ("bytes=abc", 100, None),
     ("bytes=-0", 100, None),          # zero-length suffix
     ("notbytes=0-1", 100, None),
+    ("bytes=10-5", 100, None),        # inverted range
+    ("bytes=0-99", 0, None),          # empty file
+    ("bytes=-20", 0, None),           # suffix on empty file
 ])
 def test_parse_range(hdr, size, exp):
     assert parse_range(hdr, size) == exp

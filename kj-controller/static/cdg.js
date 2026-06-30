@@ -58,7 +58,7 @@
     var inst = p[1] & MASK;
     switch (inst) {
       case 1:  this._memoryPreset(p); break;   // Memory Preset
-      case 2:  this.borderIndex = p[4] & 0x0F; break;  // Border Preset
+      case 2:  this._borderPreset(p); break;   // Border Preset
       case 6:  this._tile(p, false); break;    // Tile Block (normal)
       case 38: this._tile(p, true); break;     // Tile Block (XOR)
       case 20: this._scroll(p, false); break;  // Scroll Preset
@@ -74,6 +74,25 @@
     this.pixels.fill(c);
     this.borderIndex = c;
   };
+
+  // Border Preset fills the outer one-tile ring (the screen edge outside the
+  // 288x192 visible area). _paint() only reads `pixels`, so we must write the
+  // colour into the buffer, not just track the index.
+  CDGPlayer.prototype._borderPreset = function (p) {
+    var c = p[4] & 0x0F;
+    this.borderIndex = c;
+    for (var y = 0; y < H; y++) {
+      var edgeRow = (y < TH || y >= H - TH);
+      for (var x = 0; x < W; x++) {
+        if (edgeRow || x < TW || x >= W - TW) this.pixels[y * W + x] = c;
+      }
+    }
+  };
+
+  // NOTE: CD+G fine (sub-tile) scroll offsets are not applied — only coarse,
+  // tile-aligned scrolls are handled. Tracks that use smooth pixel scrolling may
+  // look slightly less smooth in the preview; this is a known, intentional
+  // simplification (preview is for auditioning, not pixel-perfect playback).
 
   CDGPlayer.prototype._clut = function (p, base) {
     for (var i = 0; i < 8; i++) {
