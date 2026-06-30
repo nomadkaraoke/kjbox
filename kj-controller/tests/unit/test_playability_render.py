@@ -23,6 +23,21 @@ def test_build_mpv_capture_cmd():
     assert cmd[-1] == "/x/a.mp4"
 
 
+def test_build_mpv_capture_cmd_no_audio_file_by_default():
+    cmd = pr.build_mpv_capture_cmd("/x/a.mp4", "/tmp/out", 0.0)
+    assert not any(c.startswith("--audio-file") for c in cmd)
+
+
+def test_build_mpv_capture_cmd_attaches_audio_file_for_cdg():
+    # CD+G: mpv gets the .cdg as the main file with the audio attached as an
+    # external track (mirrors production loadfile + audio-add) so it has a
+    # timeline to seek into. The main file must still come last.
+    cmd = pr.build_mpv_capture_cmd("/x/song.cdg", "/tmp/out", 12.0,
+                                   audio_file="/x/song.mp3")
+    assert "--audio-file=/x/song.mp3" in cmd
+    assert cmd[-1] == "/x/song.cdg"
+
+
 def test_build_vlc_capture_cmd_targets_xvfb_and_no_audio():
     cmd = pr.build_vlc_capture_cmd("/x/a.mp4", ":99", "/tmp/out", 30.0, window_s=3, scene_ratio=25)
     assert cmd[0] == "env" and "DISPLAY=:99" in cmd

@@ -17,6 +17,36 @@ from dataclasses import asdict, dataclass, field
 VIDEO_EXTS = {".mp4", ".mkv", ".avi", ".webm", ".mov"}
 AUDIO_EXTS = {".mp3", ".wav", ".flac", ".ogg"}
 CDG_ZIP_EXTS = {".zip"}
+# Audio formats a CD+G zip might carry. Commercial discs are not always .mp3
+# (some ship .m4a/.wav/.ogg), so the checker must look beyond .mp3 or it falsely
+# reports "no audio" for a perfectly playable disc.
+CDG_AUDIO_EXTS = {".mp3", ".m4a", ".wav", ".flac", ".ogg", ".opus", ".aac", ".mp2"}
+
+# Deep-decode timeout scales with media duration: every ffmpeg/ffprobe command
+# is wrapped in `nice -n19 ionice -c3`, so a long file decoded under contention
+# can legitimately take far longer than real time. A fixed 180s cap falsely
+# flagged long/large files as "timeout". Quick (sampled) decode stays bounded.
+DECODE_TIMEOUT_FACTOR = 3.0
+MIN_DEEP_DECODE_TIMEOUT = 180
+QUICK_DECODE_TIMEOUT = 60
+
+
+def _decode_timeout(duration, depth):
+    """Decode subprocess timeout. Quick = small fixed cap (5s sample); deep =
+    scaled to duration so throttled full-file decodes don't false-timeout."""
+    if depth == "quick":
+        return QUICK_DECODE_TIMEOUT
+    return max(MIN_DEEP_DECODE_TIMEOUT, int((duration or 0) * DECODE_TIMEOUT_FACTOR))
+
+
+def _first_with_ext(root, exts):
+    """First file under ``root`` whose extension is in ``exts`` (sorted, stable),
+    or None. Used to locate the audio + .cdg inside an extracted CD+G zip."""
+    for dirpath, _dirs, files in os.walk(root):
+        for name in sorted(files):
+            if os.path.splitext(name)[1].lower() in exts:
+                return os.path.join(dirpath, name)
+    return None
 
 
 def classify_kind(path: str) -> str:
@@ -104,8 +134,13 @@ _DECODE_ERR_RE = re.compile(r"\berror\b", re.IGNORECASE)
 
 def parse_decode(returncode: int, stderr: str) -> dict:
     stderr = stderr or ""
+    # Recoverable per-frame warnings (e.g. ffmpeg's cdgraphics "tile is out of
+    # range", logged at error level on many valid commercial CD+G discs) do NOT
+    # mean a file is unplayable. The deterministic signal is whether ffmpeg ran
+    # to completion (rc == 0). decode_errors is kept as a diagnostic only and
+    # never gates the verdict.
     decode_errors = len([ln for ln in stderr.splitlines() if _DECODE_ERR_RE.search(ln)])
-    ok = returncode == 0 and decode_errors == 0
+    ok = returncode == 0
     error = None
     if not ok:
         error = (stderr.strip().splitlines() or ["decode failed"])[-1]
@@ -138,21 +173,28 @@ class PlayabilityChecker:
         rc, out, err = self._run(cmd, timeout=30)
         return parse_integrity(rc, out, err)
 
-    def decode_video(self, path, start=None, length=None):
-        cmd = ["ffmpeg", "-v", "error", "-xerror"]
+    def decode_video(self, path, start=None, length=None,
+                     timeout=MIN_DEEP_DECODE_TIMEOUT):
+        # No -xerror: one recoverable decoder warning must not abort the decode
+        # (it falsely flagged playable files). ok = ran to completion (rc == 0).
+        cmd = ["ffmpeg", "-v", "error"]
         if start is not None:
             cmd += ["-ss", str(start)]
         cmd += ["-i", path]
         if length is not None:
             cmd += ["-t", str(length)]
         cmd += ["-map", "0:v:0", "-f", "null", "-"]
-        rc, _out, err = self._run(cmd, timeout=180)
+        rc, _out, err = self._run(cmd, timeout=timeout)
         return parse_decode(rc, err)
 
     def decode_file(self, path, timeout=120):
-        """Decode any A/V file to null (used for cdg + audio sub-checks)."""
+        """Decode any A/V file to null (used for cdg + audio sub-checks).
+
+        No -xerror: a recoverable per-frame warning (e.g. cdgraphics "tile is
+        out of range", common on valid commercial CD+G discs) must not abort the
+        decode. ok = ffmpeg ran to completion (rc == 0)."""
         rc, _out, err = self._run(
-            ["ffmpeg", "-v", "error", "-xerror", "-i", path, "-f", "null", "-"],
+            ["ffmpeg", "-v", "error", "-i", path, "-f", "null", "-"],
             timeout=timeout,
         )
         return parse_decode(rc, err)
@@ -166,15 +208,16 @@ class PlayabilityChecker:
             "extracted_audio": None, "extracted_cdg": None, "duration": None,
         }
         zp = ZipPlayback(self.config)
-        mp3 = zp.extract_and_get_mp3(path)  # extracts into a temp dir, returns .mp3
-        if mp3 is None:
-            # Could be a bad zip OR a zip with no mp3. Distinguish by reopening.
+        extract_dir = zp.extract(path)  # robust extract (zlib-tolerant); temp dir
+        if extract_dir is None:
+            # Could not extract. Distinguish a genuinely-corrupt zip (Python's
+            # zipfile also cannot open it) from other extraction failures.
             import zipfile
             try:
                 with zipfile.ZipFile(path) as zf:
                     zf.namelist()
                 result["zip_ok"] = True
-                result["error"] = "no .mp3 in CDG zip"
+                result["error"] = "could not extract CDG zip"
             except (zipfile.BadZipFile, OSError):
                 result["error"] = "not a valid zip"
             return result
@@ -183,23 +226,27 @@ class PlayabilityChecker:
         # (e.g. the no-.cdg early return below would otherwise leak it).
         self._last_zip = zp
         result["zip_ok"] = True
-        result["has_audio"] = True
-        extract_dir = os.path.dirname(mp3)
-        cdgs = [f for f in os.listdir(extract_dir) if f.lower().endswith(".cdg")]
-        result["has_cdg"] = bool(cdgs)
-        if not cdgs:
+        # Audio may be .mp3 OR .m4a/.wav/.ogg/etc. on commercial discs — looking
+        # only for .mp3 falsely reported "no audio" for playable discs.
+        audio = _first_with_ext(extract_dir, CDG_AUDIO_EXTS)
+        cdg_path = _first_with_ext(extract_dir, {".cdg"})
+        result["has_audio"] = audio is not None
+        result["has_cdg"] = cdg_path is not None
+        if cdg_path is None:
             result["error"] = "no .cdg graphics in zip"
             return result
-        cdg_path = os.path.join(extract_dir, cdgs[0])
+        if audio is None:
+            result["error"] = "no audio track in CDG zip"
+            return result
         result["extracted_cdg"] = cdg_path
-        result["audio_decodes"] = self.decode_file(mp3)["ok"]
+        result["extracted_audio"] = audio
+        result["audio_decodes"] = self.decode_file(audio)["ok"]
         result["cdg_decodes"] = self.decode_file(cdg_path)["ok"]
-        result["extracted_audio"] = mp3
         # CD+G builds its image incrementally from the START, and the first
         # seconds are black before any graphics are drawn. Record the audio
         # duration so the renderer captures mid-file (where graphics exist)
         # instead of the black intro — otherwise valid CDGs read as "no video".
-        result["duration"] = self.probe_integrity(mp3).get("duration")
+        result["duration"] = self.probe_integrity(audio).get("duration")
         result["ok"] = result["audio_decodes"] and result["cdg_decodes"]
         if not result["ok"]:
             bad = []
@@ -261,9 +308,16 @@ class PlayabilityChecker:
                 cdg_dur = res.cdg.get("duration")
                 if audio and (res.cdg.get("ok") or not short_circuit):
                     for r in renderers:
-                        # VLC auto-discovers the sibling .cdg from the .mp3; mpv
-                        # must be handed the .cdg directly or it renders no video.
-                        src = extracted_cdg if r == "mpv" else audio
+                        # VLC: hand it the .mp3; it auto-discovers the sibling
+                        # .cdg. mpv: hand it the .cdg AND attach the audio track
+                        # (mirrors the shipped production loadfile + audio-add).
+                        # A bare .cdg has no timeline, so mpv can't seek mid-file
+                        # and aborts — that was the artifact behind the false
+                        # "mpv can't render CD+G" finding.
+                        if r == "mpv":
+                            src, audio_file = extracted_cdg, audio
+                        else:
+                            src, audio_file = audio, None
                         if src is None:
                             continue
                         # Pass the audio duration so capture seeks mid-file: a
@@ -271,7 +325,7 @@ class PlayabilityChecker:
                         # the first seconds), so capturing start=0 reads as blank.
                         res.renderers[r] = render_mod.render_check(
                             self._run, src, r, duration=cdg_dur, display=display,
-                            keep_dir=frames_dir)
+                            keep_dir=frames_dir, audio_file=audio_file)
                         timings[f"render_{r}"] = res.renderers[r].get("elapsed_s")
                         if short_circuit and not res.renderers[r].get("frame_nonblank"):
                             break
@@ -286,6 +340,7 @@ class PlayabilityChecker:
                         path,
                         start=render_mod.capture_start(dur) if depth == "quick" else None,
                         length=5.0 if depth == "quick" else None,
+                        timeout=_decode_timeout(dur, depth),
                     ))
                     if res.decode.get("ok") or not short_circuit:
                         for r in renderers:
@@ -325,22 +380,15 @@ def compute_verdict(kind, result, renderers):
         elif not dec.get("ok", True):
             reasons.append(dec.get("error") or "decode failed")
 
+    # Render frame-capture is a DIAGNOSTIC ONLY — it never gates overall_ok and
+    # never adds a failure reason. Headless-Xvfb pixel-proof proved ~90%
+    # false-positive (too environment-fragile), so the verdict rests purely on
+    # deterministic integrity + decode. The per-renderer "playable" flags are
+    # still recorded for the VLC-vs-mpv matrix used to evaluate an mpv switch.
     per = {}
-    render_needed = kind in ("video", "cdg_zip")
-    # mpv cannot render CD+G graphics; for CDG its result is recorded (for the
-    # mpv-vs-VLC matrix) but does NOT gate overall_ok or add a failure reason.
-    gating = [r for r in renderers if not (kind == "cdg_zip" and r == "mpv")]
     for r in renderers:
         rr = result.renderers.get(r, {})
-        if render_needed:
-            playable = bool(base_ok and rr.get("frame_nonblank"))
-            if base_ok and not rr.get("frame_nonblank") and r in gating:
-                reasons.append(f"{r}: {rr.get('error') or 'no video frame rendered'}")
-        else:
-            playable = bool(base_ok)
-        per[r + "_playable"] = playable
+        per[r + "_playable"] = bool(base_ok and rr.get("frame_nonblank"))
 
-    overall_ok = bool(
-        base_ok and all(per.get(r + "_playable", False) for r in gating)
-    ) if gating else bool(base_ok)
+    overall_ok = bool(base_ok)
     return {"overall_ok": overall_ok, "reasons": reasons, **per}

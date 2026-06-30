@@ -98,6 +98,39 @@ def test_scan_finds_media_files(mock_config, tmp_media_dir):
     assert "song2.mkv" in paths
 
 
+def test_scan_skips_quarantine_dir(mock_config, tmp_media_dir):
+    """Quarantined (rejected) downloads must never be re-indexed as playable."""
+    import media
+    mi = MediaIndex(mock_config)
+    media_dir = tmp_media_dir / "media"
+    (media_dir / "good.mp4").write_text("ok")
+    qdir = media_dir / media.QUARANTINE_DIRNAME
+    qdir.mkdir()
+    (qdir / "rejected.mp4").write_text("bad")
+
+    mi.scan()
+    names = [entry["filename"] for entry in mi.index.values()]
+    assert "good.mp4" in names
+    assert "rejected.mp4" not in names
+
+
+def test_quarantine_download_moves_not_deletes(tmp_path):
+    """A rejected download (and its yt-dlp sidecars) is moved aside, never
+    deleted — an automated verdict can be wrong."""
+    import media
+    f = tmp_path / "song.mp4"; f.write_bytes(b"video")
+    side = tmp_path / "song.webp"; side.write_bytes(b"thumb")
+
+    q = media._quarantine_download(str(f), "moov atom not found", config={})
+
+    assert q is not None
+    assert not f.exists() and not side.exists()        # moved, not deleted
+    qdir = tmp_path / media.QUARANTINE_DIRNAME
+    assert (qdir / "song.mp4").is_file()
+    assert (qdir / "song.webp").is_file()               # sidecar moved too
+    assert (qdir / "song.mp4.reason.txt").is_file()     # reason recorded
+
+
 def test_scan_preserves_metadata(mock_config, tmp_media_dir):
     """Existing index metadata (duration, upload_date) survives rescan."""
     mi = MediaIndex(mock_config)

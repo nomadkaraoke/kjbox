@@ -20,14 +20,22 @@ def capture_start(duration) -> float:
     return round(duration * MID_FILE_FRACTION, 3)
 
 
-def build_mpv_capture_cmd(path, out_dir, start_s, frames=3, fps=1):
-    return [
+def build_mpv_capture_cmd(path, out_dir, start_s, frames=3, fps=1, audio_file=None):
+    cmd = [
         "mpv", "--no-config", "--ao=null",
         "--vo=image", "--vo-image-format=png",
         f"--vo-image-outdir={out_dir}",
         f"--start={start_s}", f"--vf=fps={fps}", f"--frames={frames}",
-        "--really-quiet", path,
+        "--really-quiet",
     ]
+    # For CD+G, mpv must be handed the .cdg as the main file with the audio
+    # attached as an external track (mirrors production loadfile + audio-add).
+    # The audio supplies the timeline so mpv can seek to the mid-file capture
+    # point instead of aborting on a bare, timeline-less .cdg.
+    if audio_file:
+        cmd.append(f"--audio-file={audio_file}")
+    cmd.append(path)
+    return cmd
 
 
 def build_vlc_capture_cmd(path, display, out_dir, start_s, window_s=3, scene_ratio=25):
@@ -146,7 +154,7 @@ def _save_representative_frame(frames, keep_dir, path, renderer):
 
 
 def render_check(run, path, renderer, duration, display=":99", tmp_root=None,
-                 capture_timeout=90, keep_dir=None):
+                 capture_timeout=90, keep_dir=None, audio_file=None):
     """Capture frames from `renderer` and judge them. `run(cmd, timeout)` does
     the actual subprocess call (injected so this is unit-testable).
 
@@ -165,7 +173,7 @@ def render_check(run, path, renderer, duration, display=":99", tmp_root=None,
     t0 = time.monotonic()
     try:
         if renderer == "mpv":
-            cmd = build_mpv_capture_cmd(path, out_dir, start)
+            cmd = build_mpv_capture_cmd(path, out_dir, start, audio_file=audio_file)
         elif renderer == "vlc":
             cmd = build_vlc_capture_cmd(path, display, out_dir, start)
         else:

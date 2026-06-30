@@ -160,15 +160,20 @@ def test_compute_verdict_video_all_pass():
     assert v["reasons"] == []
 
 
-def test_compute_verdict_video_mpv_only():
+def test_compute_verdict_render_is_diagnostic_only():
+    # Render frame-capture is recorded for the VLC-vs-mpv matrix but NEVER gates
+    # the verdict (it proved ~90% false-positive). A file that passes integrity
+    # + decode is OK even if a headless renderer captured no frame.
     res = pl.PlayabilityResult(path="/x/a.mp4", kind="video")
     res.integrity = {"ok": True, "has_video": True}
     res.decode = {"ok": True}
     res.renderers = {"vlc": {"frame_nonblank": False}, "mpv": {"frame_nonblank": True}}
     v = pl.compute_verdict("video", res, ("vlc", "mpv"))
+    # matrix diagnostics still recorded ...
     assert v["mpv_playable"] is True and v["vlc_playable"] is False
-    assert v["overall_ok"] is False
-    assert any("vlc" in r for r in v["reasons"])
+    # ... but the verdict rests purely on deterministic integrity + decode
+    assert v["overall_ok"] is True
+    assert v["reasons"] == []
 
 
 def test_compute_verdict_truncated_no_render_needed():
@@ -295,6 +300,12 @@ def test_check_cdg_feeds_mpv_the_cdg_and_vlc_the_mp3(tmp_path, mocker):
     assert set(src_by_renderer) == {"vlc", "mpv"}
     assert src_by_renderer["vlc"].endswith(".mp3")
     assert src_by_renderer["mpv"].endswith(".cdg")
+    # mpv is ALSO handed the audio track (mirrors production loadfile+audio-add):
+    # a bare .cdg has no timeline so mpv can't seek mid-file. VLC needs no
+    # external audio (it auto-discovers the sibling .cdg from the .mp3).
+    audio_by_renderer = {call.args[2]: call.kwargs.get("audio_file") for call in rc.call_args_list}
+    assert audio_by_renderer["mpv"] and audio_by_renderer["mpv"].endswith(".mp3")
+    assert audio_by_renderer["vlc"] is None
 
 
 def test_compute_verdict_cdg_mpv_recorded_but_not_required():
@@ -303,7 +314,7 @@ def test_compute_verdict_cdg_mpv_recorded_but_not_required():
     res.renderers = {"vlc": {"frame_nonblank": True},
                      "mpv": {"frame_nonblank": False, "error": "mpv exited 2"}}
     v = pl.compute_verdict("cdg_zip", res, ("vlc", "mpv"))
-    assert v["overall_ok"] is True          # vlc gates; mpv excluded for CDG
+    assert v["overall_ok"] is True          # base_ok (cdg decode) gates; render is diagnostic only
     assert v["vlc_playable"] is True
     assert v["mpv_playable"] is False        # still recorded for the matrix
     assert not any("mpv" in r for r in v["reasons"])

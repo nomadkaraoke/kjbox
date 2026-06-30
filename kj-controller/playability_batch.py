@@ -3,11 +3,13 @@ to JSONL (resumable via mtime/size manifest), then aggregate a report."""
 from __future__ import annotations
 
 import argparse
+import contextlib
 import csv
 import json
 import os
 import time
 
+from media import QUARANTINE_DIRNAME
 from playability_render import XvfbDisplay
 
 DEFAULT_EXTS = {".mp4", ".mkv", ".avi", ".webm", ".mov", ".zip"}
@@ -15,7 +17,10 @@ DEFAULT_EXTS = {".mp4", ".mkv", ".avi", ".webm", ".mov", ".zip"}
 
 def iter_media_files(roots, exts):
     for root in roots:
-        for dirpath, _dirs, files in os.walk(root):
+        for dirpath, dirs, files in os.walk(root):
+            # Don't re-scan quarantined (rejected) downloads — they'd inflate
+            # the unplayable count. Mirrors media.scan()'s prune.
+            dirs[:] = [d for d in dirs if d != QUARANTINE_DIRNAME]
             for name in sorted(files):
                 if os.path.splitext(name)[1].lower() in exts:
                     yield os.path.join(dirpath, name)
@@ -60,19 +65,26 @@ def is_unchanged(path, manifest):
 
 
 def run_batch(checker, roots, jsonl_path, throttle=0.0, depth="deep",
-              recheck_failed=False, limit=None, log=print):
+              recheck_failed=False, limit=None, render=False, log=print):
     manifest = load_manifest(jsonl_path)
     checked = 0
-    # Start ONE off-screen X display for the whole run and share it across every
-    # VLC render (the design's intent). If Xvfb can't start, fail loud — the
-    # operator must install it for the VLC render path to work at all.
-    with XvfbDisplay() as _xvfb:
+    # The verdict is deterministic (integrity + decode) and does NOT depend on
+    # the render frame-capture, so the scan is decode-only by default — fast and
+    # with no X display dependency. The render pass (VLC-vs-mpv matrix, for
+    # evaluating an mpv switch) is opt-in via render=True; only then do we spin
+    # up the shared off-screen X display that VLC needs.
+    renderers = ("vlc", "mpv") if render else ()
+    with contextlib.ExitStack() as stack:
+        xvfb_display = None
+        if render:
+            xvfb_display = stack.enter_context(XvfbDisplay()).display
         for path in iter_media_files(roots, DEFAULT_EXTS):
             if is_unchanged(path, manifest):
                 if not (recheck_failed and manifest[path].get("overall_ok") is False):
                     continue
             try:
-                result = checker.check(path, depth=depth, display=_xvfb.display)
+                result = checker.check(path, depth=depth, renderers=renderers,
+                                       display=xvfb_display)
                 append_jsonl(jsonl_path, result.to_dict())
                 ok = result.verdict.get("overall_ok")
                 log(f"[{'OK ' if ok else 'BAD'}] {path}")
@@ -123,17 +135,31 @@ def aggregate(jsonl_path):
         v = d.get("verdict", {})
         vlc, mpv = v.get("vlc_playable"), v.get("mpv_playable")
         p = d["path"]
+        # The cleanup list keys on the deterministic verdict, NOT the render
+        # matrix (which is absent in decode-only scans).
         if v.get("overall_ok"):
             agg["ok"].append(p)
-        if not vlc and not mpv:
+        else:
             agg["unplayable"].append(p)
-        elif mpv and not vlc:
-            agg["mpv_not_vlc"].append(p)
-        elif vlc and not mpv:
-            agg["vlc_not_mpv"].append(p)
+        # Render matrix — only meaningful when a render pass ran (both keys are
+        # absent in decode-only scans).
+        if vlc is not None or mpv is not None:
+            if mpv and not vlc:
+                agg["mpv_not_vlc"].append(p)
+            elif vlc and not mpv:
+                agg["vlc_not_mpv"].append(p)
         if d.get("kind") == "cdg_zip" and not (d.get("cdg") or {}).get("ok", True):
             agg["cdg_problems"].append(p)
     return agg
+
+
+def _render_col(verdict, key):
+    """'OK'/'FAIL' when a render pass ran; 'N/A' in decode-only mode where the
+    key is absent. Without this, decode-only runs (the default) would write
+    'FAIL' for every row and read as "nothing plays"."""
+    if key not in verdict:
+        return "N/A"
+    return "OK" if verdict[key] else "FAIL"
 
 
 def write_reports(jsonl_path, csv_path, md_path):
@@ -146,8 +172,8 @@ def write_reports(jsonl_path, csv_path, md_path):
             integ = d.get("integrity", {})
             w.writerow([
                 d.get("path"), d.get("kind"),
-                "OK" if v.get("vlc_playable") else "FAIL",
-                "OK" if v.get("mpv_playable") else "FAIL",
+                _render_col(v, "vlc_playable"),
+                _render_col(v, "mpv_playable"),
                 integ.get("vcodec", ""), integ.get("acodec", ""),
                 "; ".join(v.get("reasons", [])),
             ])
@@ -193,6 +219,10 @@ def build_arg_parser():
                    help="Stop after N files (default: no limit).")
     p.add_argument("--recheck-failed", action="store_true",
                    help="Re-probe files previously marked unplayable.")
+    p.add_argument("--render-matrix", action="store_true",
+                   help="Also run the VLC-vs-mpv render capture (slow, needs "
+                        "Xvfb; for evaluating an mpv switch). Default is "
+                        "decode-only — the verdict needs no render.")
     return p
 
 
@@ -202,7 +232,8 @@ def main(argv=None):
 
     checker = PlayabilityChecker(config={})
     n = run_batch(checker, args.roots, args.jsonl, throttle=args.throttle,
-                  depth=args.depth, recheck_failed=args.recheck_failed, limit=args.limit)
+                  depth=args.depth, recheck_failed=args.recheck_failed,
+                  limit=args.limit, render=args.render_matrix)
     agg = write_reports(args.jsonl, args.csv, args.md)
     print(f"Checked {n} new/changed files. Total {agg['total']}: "
           f"{len(agg['ok'])} OK, {len(agg['unplayable'])} unplayable, "
