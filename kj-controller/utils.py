@@ -6,6 +6,22 @@ import sys
 import time
 
 
+def media_type_label(name_or_ext):
+    """Friendly file-type label for the UI, e.g. 'cdg-zip', 'cdg', 'mp4', 'mp3'.
+
+    Accepts a filename, a full path, or a bare extension (with or without the dot).
+    """
+    if not name_or_ext:
+        return "file"
+    ext = name_or_ext if name_or_ext.startswith(".") else os.path.splitext(name_or_ext)[1]
+    ext = ext.lower()
+    if ext == ".zip":
+        return "cdg-zip"
+    if ext == ".cdg":
+        return "cdg"
+    return ext[1:] if ext else "file"
+
+
 def log_message(message, config=None):
     """Appends a message to the log file and prints to stderr."""
     log_file = config.get('log_file') if config else None

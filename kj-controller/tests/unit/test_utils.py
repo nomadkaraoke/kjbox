@@ -1,6 +1,7 @@
 """Tests for utility functions: sanitize_filename_part, parse_youtube_filename."""
 
 from utils import (
+    media_type_label,
     sanitize_filename_part,
     parse_youtube_filename,
     log_message,
@@ -185,3 +186,14 @@ class TestDivebarExt:
     def test_malformed_url_does_not_raise(self):
         assert divebar_ext("not a url", fmt="zip") == ".zip"
         assert divebar_ext("not a url") == ".mp4"
+
+
+def test_media_type_label():
+    assert media_type_label("song.zip") == "cdg-zip"
+    assert media_type_label("song.cdg") == "cdg"
+    assert media_type_label("/a/b/song.MP4") == "mp4"
+    assert media_type_label("song.mkv") == "mkv"
+    assert media_type_label("song.mp3") == "mp3"
+    assert media_type_label(".webm") == "webm"
+    assert media_type_label("") == "file"
+    assert media_type_label("noext") == "file"

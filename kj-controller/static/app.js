@@ -699,6 +699,23 @@ function createMediaItemLi(item) {
         titleSpan.textContent = item.display_name;
     }
 
+    // File-type + extension badge (e.g. "cdg-zip · .zip", "mp4 · .mp4").
+    if (item.media_kind) {
+        const typeBadge = document.createElement('span');
+        typeBadge.className = 'media-type-badge';
+        typeBadge.textContent = item.ext ? `${item.media_kind} · ${item.ext}` : item.media_kind;
+        titleSpan.appendChild(document.createTextNode(' '));
+        titleSpan.appendChild(typeBadge);
+    }
+    if (item.cdg_no_audio) {
+        const warn = document.createElement('span');
+        warn.className = 'media-no-audio-tag';
+        warn.textContent = 'no audio';
+        warn.title = 'Graphics-only .cdg — no audio track';
+        titleSpan.appendChild(document.createTextNode(' '));
+        titleSpan.appendChild(warn);
+    }
+
     const rightSide = document.createElement('span');
     if (item.file_path) {
         const previewBtn = document.createElement('button');
@@ -727,12 +744,19 @@ function createMediaItemLi(item) {
 
     li.appendChild(titleSpan);
     li.appendChild(rightSide);
-    li.title = 'Click to play';
-    li.onclick = () => {
-        document.querySelectorAll('#media-list li').forEach(el => el.classList.remove('playing'));
-        li.classList.add('playing');
-        playMedia(item.file_path);
-    };
+    if (item.cdg_no_audio) {
+        // A bare .cdg is silent on the main screen — don't let a click play it.
+        li.classList.add('media-no-audio');
+        li.title = 'Graphics-only .cdg — no audio track. Use the CDG+MP3 zip version instead.';
+        li.onclick = () => log('This is a graphics-only .cdg with no audio track — use the CDG+MP3 zip version instead.', 'error');
+    } else {
+        li.title = 'Click to play';
+        li.onclick = () => {
+            document.querySelectorAll('#media-list li').forEach(el => el.classList.remove('playing'));
+            li.classList.add('playing');
+            playMedia(item.file_path);
+        };
+    }
     return li;
 }
 

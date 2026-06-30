@@ -220,20 +220,28 @@ class MediaIndex:
 
     def list_items(self):
         """Return media index as a list of dicts with display info, sorted by mtime desc."""
+        from utils import media_type_label
+        from playability import sibling_cdg_audio
         items = []
         for path, entry in self.index.items():
             folder = entry.get('folder', '')
             folder_name = os.path.basename(folder) if folder else 'Unknown'
+            ext = os.path.splitext(entry.get("filename", ""))[1].lower()
             item = {
                 "file_path": entry["path"],
                 "display_name": entry.get("display_name", entry.get("filename", "")),
                 "filename": entry.get("filename", ""),
                 "folder_name": folder_name,
                 "folder": folder,
+                "ext": ext,
+                "media_kind": media_type_label(ext),
                 "is_download": entry.get("is_download", False),
                 "mtime": entry.get("mtime", 0),
                 "size": entry.get("size", 0),
             }
+            # A bare .cdg is graphics-only unless a same-stem audio file sits beside it.
+            if ext == ".cdg":
+                item["cdg_no_audio"] = sibling_cdg_audio(entry["path"]) is None
             if "channel" in entry:
                 item["channel"] = entry["channel"]
             if "youtube_id" in entry:
