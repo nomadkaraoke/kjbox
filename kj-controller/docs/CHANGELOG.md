@@ -4,6 +4,32 @@ Dated entries, newest first. Each entry notes any required deploy steps.
 
 ---
 
+## 2026-06-30 - Pair a loose CDG with its sibling MP3 at download (v0.48.0)
+
+**Why:** v0.46.0 (#124) *blocks* a silent bare `.cdg`, but for brands that store a
+CDG's graphics and audio as two separate Drive files (e.g. Sandell Karaoke), the
+divebar index exposes them as independent track rows — so clicking the `cdg` row
+downloads a graphics-only file that is then rejected, leaving the song unobtainable.
+~2,665 such loose CDG+MP3 pairs are mirrored in GCS.
+
+**What:**
+- When a divebar track's `format` is `cdg`, resolve its sibling audio via the divebar
+  API (`divebar.find_sibling_audio` — re-search the song, match the same brand and the
+  same `drive_path` basename with the extension swapped), download **both** the `.cdg`
+  and the `.mp3`, and package them into a single `divebar__*.zip`
+  (`media.download_cdg_pair`). The zip passes the existing `cdg_zip` gate and plays
+  exactly like any other CDG — no `/play` changes needed.
+- A shared resolver (`routes._resolve_divebar_spec`) centralises the single-vs-paired
+  decision across all three divebar enqueue sites (`/divebar/download`,
+  `/rotation/download-and-link`, `approve_sing_request`); the download worker dispatches
+  `pair` items to `download_cdg_pair`. If no sibling audio exists in the mirror, the
+  request **fails fast** (422 / clear error) and no file is created.
+
+**Deploy:** Backend change → requires `sudo systemctl restart kj-controller` (interrupts
+active playback). Autodeploy is OFF — pull + restart manually, off-show.
+
+---
+
 ## 2026-06-30 - Block silent bare .cdg + show file type/extension (v0.46.0)
 
 **Why:** A bare `.cdg` (graphics-only, e.g. `divebar__SDK - ABBA - Dancing Queen.cdg`)

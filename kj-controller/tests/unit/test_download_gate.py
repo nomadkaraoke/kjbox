@@ -280,3 +280,75 @@ class TestDownloadFromUrlGate:
 
         assert len(captured_paths) == 1
         assert captured_paths[0].endswith('divebar__song.mp4')
+
+
+# ---------------------------------------------------------------------------
+# download_cdg_pair — loose cdg + mp3 packaged into one playable zip
+# ---------------------------------------------------------------------------
+
+class TestDownloadCdgPair:
+    """A loose (un-zipped) CDG track must be downloaded together with its sibling
+    audio and packaged into a single cdg+mp3 .zip — never a bare, silent .cdg."""
+
+    @staticmethod
+    def _writing_http_download(url, file_path):
+        # Mimic a real download by writing bytes to the destination path.
+        with open(file_path, 'wb') as f:
+            f.write(b'FAKE-' + url.encode('utf-8', 'ignore')[:8])
+        return MagicMock()
+
+    def test_packages_cdg_and_mp3_into_single_zip(self, mock_config, tmp_media_dir, mocker):
+        import zipfile
+        mi = MediaIndex(mock_config)
+        download_dir = str(tmp_media_dir / "downloads")
+        mocker.patch.object(MediaIndex, '_http_download', side_effect=self._writing_http_download)
+
+        with patch('media._gate_playable', return_value=_good_verdict()):
+            file_path, display = mi.download_cdg_pair(
+                "http://gcs/cdg", "http://gcs/mp3", "SDK - ABBA - Dancing Queen.zip")
+
+        assert file_path is not None
+        assert file_path.endswith('.zip')
+        assert os.path.exists(file_path)
+        assert display == "SDK - ABBA - Dancing Queen"
+        with zipfile.ZipFile(file_path) as zf:
+            names = zf.namelist()
+        assert any(n.lower().endswith('.cdg') for n in names), names
+        assert any(n.lower().endswith('.mp3') for n in names), names
+        # Only the zip lands in the download folder — no loose cdg/mp3 left behind.
+        leftovers = [f for f in os.listdir(download_dir)
+                     if f.lower().endswith(('.cdg', '.mp3'))]
+        assert leftovers == []
+
+    def test_indexed_on_success(self, mock_config, tmp_media_dir, mocker):
+        mi = MediaIndex(mock_config)
+        mocker.patch.object(MediaIndex, '_http_download', side_effect=self._writing_http_download)
+        with patch('media._gate_playable', return_value=_good_verdict()):
+            file_path, _ = mi.download_cdg_pair(
+                "http://gcs/cdg", "http://gcs/mp3", "SDK - ABBA - Dancing Queen.zip")
+        assert os.path.realpath(file_path) in mi.index
+
+    def test_gate_rejected_returns_none_and_not_indexed(self, mock_config, tmp_media_dir, mocker):
+        mi = MediaIndex(mock_config)
+        download_dir = str(tmp_media_dir / "downloads")
+        mocker.patch.object(MediaIndex, '_http_download', side_effect=self._writing_http_download)
+        with patch('media._gate_playable',
+                   return_value=_bad_verdict("no audio track in CDG zip")):
+            result = mi.download_cdg_pair(
+                "http://gcs/cdg", "http://gcs/mp3", "SDK - ABBA - Dancing Queen.zip")
+        assert result == (None, None)
+        assert mi.index == {}
+        # Rejected zip is quarantined, not left clickable in the download root.
+        root_zips = [f for f in os.listdir(download_dir) if f.lower().endswith('.zip')]
+        assert root_zips == []
+
+    def test_download_failure_returns_none_no_partial(self, mock_config, tmp_media_dir, mocker):
+        mi = MediaIndex(mock_config)
+        download_dir = str(tmp_media_dir / "downloads")
+        mocker.patch.object(MediaIndex, '_http_download',
+                            side_effect=RuntimeError("network boom"))
+        with patch('media._gate_playable', return_value=_good_verdict()):
+            result = mi.download_cdg_pair(
+                "http://gcs/cdg", "http://gcs/mp3", "SDK - ABBA - Dancing Queen.zip")
+        assert result == (None, None)
+        assert [f for f in os.listdir(download_dir) if f.lower().endswith('.zip')] == []

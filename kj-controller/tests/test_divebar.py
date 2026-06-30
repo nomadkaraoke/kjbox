@@ -231,3 +231,73 @@ class TestRefresh:
         })
         assert result["status"] == "error"
         assert "boom" in result["message"]
+
+
+class TestFindSiblingAudio:
+    """Tests for divebar.find_sibling_audio() — resolving the MP3 that belongs
+    to a loose (un-zipped) CDG track, e.g. Sandell Karaoke."""
+
+    # A search result mimicking Sandell's loose cdg+mp3 pair plus an unrelated
+    # Nomad zip for the same song. Grouped exactly like divebar.search() returns.
+    SDK_GROUP = [{
+        "artist": "ABBA", "title": "Dancing Queen",
+        "tracks": [
+            {"file_id": "nomad_zip", "brand_code": "NOMAD", "format": "zip",
+             "drive_path": "Nomad Karaoke/CDG/NOMAD-0520 - ABBA - Dancing Queen.zip"},
+            {"file_id": "sdk_cdg", "brand_code": "SDK", "format": "cdg",
+             "drive_path": "Sandell Karaoke/CDG/CDG #-B/(SDK) ABBA - Dancing Queen.cdg"},
+            {"file_id": "sdk_mp3", "brand_code": "SDK", "format": "mp3",
+             "drive_path": "Sandell Karaoke/CDG/CDG #-B/(SDK) ABBA - Dancing Queen.mp3"},
+        ],
+    }]
+
+    @patch("divebar.search")
+    def test_finds_sibling_mp3_by_brand_and_basename(self, mock_search):
+        mock_search.return_value = self.SDK_GROUP
+        sib = divebar.find_sibling_audio(
+            "sdk_cdg", "ABBA", "Dancing Queen", "SDK",
+            config={"divebar_api_url": "http://test"})
+        assert sib is not None
+        assert sib["file_id"] == "sdk_mp3"
+        assert sib["format"] == "mp3"
+
+    @patch("divebar.search")
+    def test_returns_none_when_no_audio_sibling(self, mock_search):
+        # Only the cdg exists in the mirror — no companion audio.
+        mock_search.return_value = [{
+            "artist": "ABBA", "title": "Dancing Queen",
+            "tracks": [
+                {"file_id": "sdk_cdg", "brand_code": "SDK", "format": "cdg",
+                 "drive_path": "Sandell Karaoke/CDG/CDG #-B/(SDK) ABBA - Dancing Queen.cdg"},
+            ],
+        }]
+        sib = divebar.find_sibling_audio(
+            "sdk_cdg", "ABBA", "Dancing Queen", "SDK",
+            config={"divebar_api_url": "http://test"})
+        assert sib is None
+
+    @patch("divebar.search")
+    def test_does_not_match_audio_from_another_brand(self, mock_search):
+        # A different brand has an mp3 for the same song; it must NOT be paired
+        # with SDK's cdg (different basename + brand).
+        mock_search.return_value = [{
+            "artist": "ABBA", "title": "Dancing Queen",
+            "tracks": [
+                {"file_id": "sdk_cdg", "brand_code": "SDK", "format": "cdg",
+                 "drive_path": "Sandell Karaoke/CDG/CDG #-B/(SDK) ABBA - Dancing Queen.cdg"},
+                {"file_id": "other_mp3", "brand_code": "ESK", "format": "mp3",
+                 "drive_path": "Easy Karaoke/(ESK) ABBA - Dancing Queen.mp3"},
+            ],
+        }]
+        sib = divebar.find_sibling_audio(
+            "sdk_cdg", "ABBA", "Dancing Queen", "SDK",
+            config={"divebar_api_url": "http://test"})
+        assert sib is None
+
+    @patch("divebar.search")
+    def test_returns_none_when_search_empty(self, mock_search):
+        mock_search.return_value = []
+        sib = divebar.find_sibling_audio(
+            "sdk_cdg", "ABBA", "Dancing Queen", "SDK",
+            config={"divebar_api_url": "http://test"})
+        assert sib is None
