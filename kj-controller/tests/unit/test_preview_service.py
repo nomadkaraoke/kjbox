@@ -44,6 +44,7 @@ def test_resolve_includes_format_and_ext(svc, tmp_path, monkeypatch):
     f.write_bytes(b"\0" * 200)
     monkeypatch.setattr(preview, "_ffprobe_codecs", lambda p: ("h264", "aac"))
     r = svc.resolve({"source": "local", "file_path": str(f)})
+    assert r["mode"] == "native_video"
     assert r["format"] == "mp4" and r["ext"] == ".mp4"
 
 
