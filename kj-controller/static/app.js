@@ -4342,6 +4342,14 @@ function buildSingerRow(singer) {
     sung.innerHTML = '<span class="singer-label-key">Sung:</span> <span class="singer-sung-pill ' + pillClass + '">' + sungCount + '</span>';
     info.appendChild(sung);
 
+    if (singer.last_sang_minutes != null) {
+        const lastSang = document.createElement('span');
+        lastSang.className = 'singer-stats-label';
+        lastSang.title = 'Last sang ' + formatMinsAgoLong(singer.last_sang_minutes) + ' ago';
+        lastSang.innerHTML = '<span class="singer-label-key">Last sang:</span> ' + formatMinsAgo(singer.last_sang_minutes) + ' ago';
+        info.appendChild(lastSang);
+    }
+
     if (singer.entries_waiting > 0) {
         const queued = document.createElement('span');
         queued.className = 'singer-stats-label';

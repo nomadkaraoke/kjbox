@@ -2,6 +2,19 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-06-30 - Feature: "Last sang" time in Singers list (v0.49.0)
+
+**Code (v0.49.0 — frontend takes effect on browser refresh after `git pull`; backend change needs deploy + restart):**
+- The Singers list already showed "Joined: Xh Xm ago" and a "Sung: ×N" pill per singer.
+  It now also shows "Last sang: Xh Xm ago" immediately after the Sung pill, using the same
+  compact elapsed-time format as the rotation count pill (e.g. "30m ago", "1h15m ago").
+- Backend: new `_add_last_sang_to_singer_stats()` helper in `routes.py` enriches
+  `singer_stats` dicts with `last_sang_minutes` at all three response sites
+  (`_singer_action_response`, GET `/rotation`, redo/undo endpoint). Mirrors
+  `_add_last_sang()` for rotation entries.
+- Frontend: `buildSingerRow()` in `app.js` renders the label when
+  `last_sang_minutes` is present; hidden when the singer has not yet sung tonight.
+
 ## 2026-06-30 - Preview cache relocated out of the download folder + content-addressed (v0.47.0)
 
 **Why:** The "Available Downloads" (YTDOWNLOADS) list showed phantom `graphics` / `audio`

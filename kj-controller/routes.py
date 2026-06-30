@@ -2338,11 +2338,25 @@ def _add_last_sang(entries, rotation):
         entry["last_sang_minutes"] = max(mins) if mins else None
 
 
+def _add_last_sang_to_singer_stats(singer_stats, rotation):
+    """Add last_sang_minutes field to each singer stat entry.
+
+    Mirrors _add_last_sang() for rotation entries but operates on the
+    consolidated per-singer dicts returned by get_singer_stats().
+    """
+    times = rotation.store.get_last_sang_times()
+    for singer in singer_stats:
+        key = singer["name"].strip().lower()
+        mins = times.get(key)
+        singer["last_sang_minutes"] = mins
+
+
 def _singer_action_response(rotation):
     """Build standard response for singer action routes."""
     entries = rotation.get_rotation()
     _decorate_rotation_entries(entries, rotation)
     singer_stats = rotation.get_singer_stats()
+    _add_last_sang_to_singer_stats(singer_stats, rotation)
     return jsonify({"success": True, "entries": entries, "singer_stats": singer_stats})
 
 
@@ -2542,6 +2556,7 @@ def get_rotation():
         entries = rotation.get_rotation()
         _decorate_rotation_entries(entries, rotation)
         singer_stats = rotation.get_singer_stats()
+        _add_last_sang_to_singer_stats(singer_stats, rotation)
         return jsonify({
             "entries": entries,
             "singer_stats": singer_stats,
@@ -3261,12 +3276,14 @@ def _undo_or_redo(direction):
 
         entries = rotation.get_rotation()
         _decorate_rotation_entries(entries, rotation)
+        singer_stats = rotation.get_singer_stats()
+        _add_last_sang_to_singer_stats(singer_stats, rotation)
         return jsonify({
             "success": True,
             "direction": direction,
             "label": result.get('label'),
             "entries": entries,
-            "singer_stats": rotation.get_singer_stats(),
+            "singer_stats": singer_stats,
             "history": rotation.history_status(),
             "rev": rotation.store.get_rev(),
         })

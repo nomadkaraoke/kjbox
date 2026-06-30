@@ -884,3 +884,61 @@ class TestSingerSplitRoute:
             }),
             content_type='application/json')
         assert resp.status_code == 400
+
+
+class TestSingerStatsLastSang:
+    """singer_stats includes last_sang_minutes from get_last_sang_times()."""
+
+    def test_singer_stats_have_last_sang_minutes_field(self, rotation_client, mock_rotation):
+        mock_rotation.get_singer_stats.return_value = [
+            {"name": "Alice", "entries_sung": 2, "entries_waiting": 1,
+             "entries_total": 3, "entries_left": 0, "first_added": "2026-06-27 20:00:00",
+             "has_tipped": False, "status": "active", "entries": []},
+        ]
+        mock_rotation.store.get_last_sang_times.return_value = {}
+        resp = rotation_client.get('/rotation')
+        stats = resp.get_json()['singer_stats']
+        assert len(stats) == 1
+        assert 'last_sang_minutes' in stats[0]
+        assert stats[0]['last_sang_minutes'] is None
+
+    def test_singer_stats_last_sang_reflects_store(self, rotation_client, mock_rotation):
+        mock_rotation.get_singer_stats.return_value = [
+            {"name": "Alice", "entries_sung": 3, "entries_waiting": 0,
+             "entries_total": 3, "entries_left": 0, "first_added": "2026-06-27 20:00:00",
+             "has_tipped": False, "status": "done", "entries": []},
+            {"name": "Bob", "entries_sung": 1, "entries_waiting": 1,
+             "entries_total": 2, "entries_left": 0, "first_added": "2026-06-27 21:00:00",
+             "has_tipped": False, "status": "active", "entries": []},
+        ]
+        mock_rotation.store.get_last_sang_times.return_value = {"alice": 45, "bob": 12}
+        resp = rotation_client.get('/rotation')
+        stats = resp.get_json()['singer_stats']
+        alice = next(s for s in stats if s['name'] == 'Alice')
+        bob = next(s for s in stats if s['name'] == 'Bob')
+        assert alice['last_sang_minutes'] == 45
+        assert bob['last_sang_minutes'] == 12
+
+    def test_singer_stats_last_sang_case_insensitive(self, rotation_client, mock_rotation):
+        mock_rotation.get_singer_stats.return_value = [
+            {"name": "ALICE", "entries_sung": 1, "entries_waiting": 0,
+             "entries_total": 1, "entries_left": 0, "first_added": "2026-06-27 20:00:00",
+             "has_tipped": False, "status": "done", "entries": []},
+        ]
+        mock_rotation.store.get_last_sang_times.return_value = {"alice": 33}
+        resp = rotation_client.get('/rotation')
+        stats = resp.get_json()['singer_stats']
+        assert stats[0]['last_sang_minutes'] == 33
+
+    def test_singer_stats_last_sang_propagated_via_singer_action(self, rotation_client, mock_rotation):
+        mock_rotation.get_singer_stats.return_value = [
+            {"name": "Carol", "entries_sung": 2, "entries_waiting": 0,
+             "entries_total": 2, "entries_left": 0, "first_added": "2026-06-27 20:00:00",
+             "has_tipped": False, "status": "done", "entries": []},
+        ]
+        mock_rotation.store.get_last_sang_times.return_value = {"carol": 77}
+        mock_rotation.set_brb.return_value = None
+        resp = rotation_client.post('/rotation/singer/brb',
+            data='{"name": "Carol"}', content_type='application/json')
+        stats = resp.get_json()['singer_stats']
+        assert stats[0]['last_sang_minutes'] == 77
