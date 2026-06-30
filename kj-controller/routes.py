@@ -12,7 +12,7 @@ import threading
 import time
 import unicodedata
 
-from flask import Blueprint, Response, current_app, jsonify, render_template, request
+from flask import Blueprint, Response, current_app, jsonify, render_template, request, send_file
 
 import divebar
 import karaoke_nerds
@@ -27,6 +27,7 @@ from playback import RendererSwitchRejected
 from sing import get_event_url, sync_event_url_overlays
 from sleep_mode import SleepManager
 from utils import log_message, build_divebar_filename, divebar_ext
+from preview import parse_range
 
 # --- Browser mode state ---
 # Tracks whether the system is in Browser mode (Chromium) vs VLC mode (default).
@@ -4329,3 +4330,95 @@ def reject_sing_request_route(req_id):
         except Exception:
             current_app.logger.exception("reject push notify failed")
     return jsonify({"success": True, "request": store.get_request(req_id)})
+
+
+# --- Browser preview playback -------------------------------------------
+# Audition any supported file in the KJ's browser (small video render + audio),
+# with seek, without ever touching the live primary player / device A/V output.
+# See preview.py + docs/archive/2026-06-30-browser-preview-playback-design.md.
+
+_PREVIEW_CHUNK = 262144
+
+
+@routes_bp.route('/preview/resolve', methods=['POST'])
+def preview_resolve():
+    descriptor = request.get_json(silent=True) or {}
+    return jsonify(current_app.preview.resolve(descriptor))
+
+
+@routes_bp.route('/preview/close', methods=['POST'])
+def preview_close():
+    token = (request.get_json(silent=True) or {}).get('token')
+    current_app.preview.close(token)
+    return jsonify({"ok": True})
+
+
+def _preview_full_response(path, size, mime):
+    def gen():
+        with open(path, "rb") as fh:
+            while True:
+                chunk = fh.read(_PREVIEW_CHUNK)
+                if not chunk:
+                    break
+                yield chunk
+    resp = Response(gen(), status=200, mimetype=mime)
+    resp.headers["Accept-Ranges"] = "bytes"
+    resp.headers["Content-Length"] = str(size)
+    return resp
+
+
+@routes_bp.route('/preview/stream/<token>', methods=['GET'])
+def preview_stream(token):
+    info = current_app.preview.token_info(token)
+    if not info or info.get("kind") not in ("native_video", "native_audio"):
+        return ("Not found", 404)
+    path = info["path"]
+    mime = info.get("mime", "application/octet-stream")
+    try:
+        size = os.path.getsize(path)
+    except OSError:
+        return ("Not found", 404)
+    rng = parse_range(request.headers.get("Range"), size)
+    if rng is None:
+        if request.headers.get("Range"):
+            resp = Response(status=416)
+            resp.headers["Content-Range"] = f"bytes */{size}"
+            return resp
+        return _preview_full_response(path, size, mime)
+    start, end = rng
+    length = end - start + 1
+
+    def gen():
+        with open(path, "rb") as fh:
+            fh.seek(start)
+            remaining = length
+            while remaining > 0:
+                chunk = fh.read(min(_PREVIEW_CHUNK, remaining))
+                if not chunk:
+                    break
+                remaining -= len(chunk)
+                yield chunk
+
+    resp = Response(gen(), status=206, mimetype=mime)
+    resp.headers["Content-Range"] = f"bytes {start}-{end}/{size}"
+    resp.headers["Accept-Ranges"] = "bytes"
+    resp.headers["Content-Length"] = str(length)
+    return resp
+
+
+@routes_bp.route('/preview/cdg/<token>/<part>', methods=['GET'])
+def preview_cdg(token, part):
+    p = current_app.preview.cdg_part_path(token, part)
+    if not p or not os.path.exists(p):
+        return ("Not found", 404)
+    mime = "audio/mpeg" if part == "audio" else "application/octet-stream"
+    return send_file(p, mimetype=mime, conditional=True)
+
+
+@routes_bp.route('/preview/hls/<token>/<path:name>', methods=['GET'])
+def preview_hls(token, name):
+    p = current_app.preview.hls_path(token, name)
+    if not p or not os.path.exists(p):
+        return ("Not found", 404)
+    mime = "application/vnd.apple.mpegurl" if name.endswith(".m3u8") else "video/mp2t"
+    return send_file(p, mimetype=mime, conditional=True)

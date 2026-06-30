@@ -66,6 +66,12 @@ def load_config(config_file=None):
         "sing_estimate_transition_s": 30,
         "sing_estimate_default_song_s": 240,
         "sing_estimate_min_spread_s": 120,
+        # Browser preview playback (audition files in the KJ browser; never the
+        # device A/V output). Cache transcodes once, ever.
+        "preview_cache_dir": "",  # "" -> <download_folder>/.preview-cache
+        "preview_cache_max_bytes": 8 * 1024 * 1024 * 1024,  # 8 GiB LRU cap
+        "preview_transcode_height": 480,
+        "preview_transcode_preset": "veryfast",
     }
     if os.path.exists(config_file):
         try:
