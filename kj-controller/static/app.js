@@ -5479,6 +5479,24 @@ function renderRotSearchDropdown(data) {
         localMediaItems.filter(i => i.youtube_id).map(i => [i.youtube_id, i.file_path])
     );
 
+    // Same-file dedup: a downloaded file can surface BOTH as a `local` row and
+    // as a Karaoke Nerds "✓ Downloaded" row whose youtube_url resolves to the
+    // exact same on-disk path. Drop the redundant local row so the file shows
+    // once — the KN row carries the nicer brand/Community grouping. When no KN
+    // row claims the file (KN miss/timeout) the local row stays, so there is
+    // always at least one row for the file.
+    const knClaimedPaths = new Set();
+    for (const song of knSongs) {
+        for (const track of (song.tracks || [])) {
+            const vid = extractYouTubeId(track.youtube_url || '');
+            const claimed = vid ? downloadedIdToPath.get(vid) : null;
+            if (claimed) knClaimedPaths.add(claimed);
+        }
+    }
+    const dedupedLocal = knClaimedPaths.size
+        ? localResults.filter(m => !knClaimedPaths.has(m.path))
+        : localResults;
+
     let html = '';
 
     if (localResults.length === 0 && knSongs.length === 0 && divebarVersions.length === 0) {
@@ -5493,7 +5511,7 @@ function renderRotSearchDropdown(data) {
     // sort across the WHOLE result set so community always beats commercial
     // regardless of source. Backend annotates each result with priority_rank.
     const rows = [];
-    for (const match of localResults) {
+    for (const match of dedupedLocal) {
         rows.push({
             kind: 'local',
             rank: typeof match.priority_rank === 'number' ? match.priority_rank : 9999,
@@ -5708,36 +5726,59 @@ function rotTagsHtml(fmt, brand) {
         + '</span><span class="rs-tag-brand">' + brandHtml + '</span></span>';
 }
 
+// Shared skeleton for every rotation-search row (local file, Karaoke Nerds
+// track, or divebar mirror). Routing all three through one structure means font
+// size, title colour, badge/pill styling and the fmt/brand/action columns line
+// up identically. The only intentional per-source variation is content meaning:
+// local rows carry a folder subline; KN/divebar rows carry a brand name and an
+// optional Community badge. `actionsHtml` is the preview + status/button block.
+function renderRotRowHtml(o) {
+    const rowClass = 'rs-row rs-clickable'
+        + (o.idx === rotSearchSelectedIdx ? ' selected' : '')
+        + (o.isTop ? ' rs-top' : '')
+        + (o.isBest ? ' rs-best' : '')
+        + (o.community ? ' community' : '');
+    let html = '<div class="' + rowClass + '" data-idx="' + o.idx + '" onclick="selectRotSearchResult(rotSearchResults[' + o.idx + '])">';
+    html += '<div class="rs-main">';
+    // Community status is conveyed by the section header + the green left-accent
+    // on `.rs-row.community`, so no inline Community pill is needed here.
+    html += '<span class="rs-line">' + rotLeadMark(o.isBest, o.isTop);
+    if (o.brandName) html += '<span class="rs-brand-name">' + escHtml(o.brandName) + '</span>';
+    html += '<span class="rs-title">' + escHtml(o.title || '') + '</span></span>';
+    if (o.subline) {
+        html += '<span class="rs-sub" title="' + escHtml(o.sublineTitle || o.subline) + '">'
+            + escHtml(o.subline) + '</span>';
+    }
+    html += '</div>';
+    html += rotTagsHtml(o.fmt || '', o.brand || '');
+    html += '<span class="rs-actions">' + (o.actionsHtml || '') + '</span>';
+    html += '</div>';
+    return html;
+}
+
 function renderRotLocalRow(match, idx, isTop, isBest) {
     const fname = match.filename
         ? match.filename.replace(/\.\w+$/, '')
         : (match.disc_id || '') + ' - ' + (match.artist || '') + ' - ' + (match.title || '');
-    const formatClass = match.format ? getFormatBadgeClass(match.format) : 'other';
-    const rowClass = 'kn-local-match rs-clickable'
-        + (idx === rotSearchSelectedIdx ? ' selected' : '')
-        + (isTop ? ' rs-top' : '')
-        + (isBest ? ' rs-best' : '');
-    let html = '<div class="' + rowClass + '" data-idx="' + idx + '" onclick="selectRotSearchResult(rotSearchResults[' + idx + '])">';
-    html += '<div class="catalog-detail">';
-    html += '<span class="rs-line">' + rotLeadMark(isBest, isTop)
-        + '<span class="rs-title">' + escHtml(fname) + '</span></span>';
+    let subline = '';
     if (match.path) {
-        const folder = match.path
+        subline = match.path
             .replace(/\/[^/]+$/, '')
             .replace(/^\/media\/nomad\//, '')
             .replace(/^\/opt\/nomad\//, '');
-        html += '<div class="catalog-folder" title="' + escHtml(match.path) + '">' + escHtml(folder) + '</div>';
     }
-    html += '</div>';
-    html += rotTagsHtml(match.format || '', match.priority_brand || '');
-    html += '<span class="kn-track-actions">';
+    let actions = '';
     if (match.path) {
-        html += previewButtonHtml({ source: 'local', file_path: match.path, title: fname,
+        actions += previewButtonHtml({ source: 'local', file_path: match.path, title: fname,
             link_idx: idx, link_label: 'Link this version' });
     }
-    html += '<span class="kn-play-btn">Link</span></span>';
-    html += '</div>';
-    return html;
+    actions += '<span class="kn-play-btn">Link</span>';
+    return renderRotRowHtml({
+        idx, isTop, isBest, community: false,
+        title: fname, subline, sublineTitle: match.path || '',
+        fmt: match.format || '', brand: match.priority_brand || '',
+        actionsHtml: actions,
+    });
 }
 
 function renderRotKnRow(song, track, idx, isTop, isBest, downloadedIdToPath) {
@@ -5762,44 +5803,29 @@ function renderRotKnRow(song, track, idx, isTop, isBest, downloadedIdToPath) {
     } else {
         return null;
     }
-    const rowClass = 'kn-track rs-clickable'
-        + (idx === rotSearchSelectedIdx ? ' selected' : '')
-        + (track.is_community ? ' community' : '')
-        + (isTop ? ' rs-top' : '')
-        + (isBest ? ' rs-best' : '');
-    let html = '<div class="' + rowClass + '" data-idx="' + idx + '" onclick="selectRotSearchResult(rotSearchResults[' + idx + '])">';
-    html += '<span class="kn-track-info">';
-    html += rotLeadMark(isBest, isTop);
-    html += '<span class="kn-brand-name">' + escHtml(track.brand_name || '') + '</span>';
-    if (track.is_community) html += '<span class="kn-community-badge">Community</span>';
-    html += '<span class="kn-song-title">' + escHtml(song.title + ' - ' + song.artist) + '</span>';
-    html += '</span>';
-    // File-type badge on every row: downloaded file's real ext, the mirror
-    // file's format, or mp4 for a plain YouTube download. Right-aligned alongside
-    // the brand code so they line up across rows.
+    // File-type badge: the downloaded file's real ext, the mirror file's
+    // format, or mp4 for a plain YouTube download.
     let fmt = '';
     if (downloadedPath) fmt = extToFormat(downloadedPath);
     else if (track.divebar) fmt = track.divebar.format || '';
     else if (track.youtube_url) fmt = 'mp4';
-    html += rotTagsHtml(fmt, track.brand_code || '');
-    html += '<span class="kn-track-actions">';
-    {
-        let pvd = null;
-        if (downloadedPath) {
-            pvd = { source: 'local', file_path: downloadedPath, title: result.song_artist,
-                link_idx: idx, link_label: 'Link this version' };
-        } else if (track.divebar) {
-            pvd = { source: 'divebar', file_id: track.divebar.file_id, format: track.divebar.format,
-                title: result.song_artist, link_idx: idx, link_label: 'Download & Link' };
-        } else if (track.youtube_url) {
-            pvd = { source: 'youtube', youtube_url: track.youtube_url,
-                title: result.song_artist, link_idx: idx, link_label: 'Download & Link' };
-        }
-        if (pvd) html += previewButtonHtml(pvd);
-    }
+    let actions = '';
+    let pvd = null;
     if (downloadedPath) {
-        html += '<span class="kn-downloaded-badge">\u2713 Downloaded</span>';
-        html += '<span class="kn-play-btn">Link</span>';
+        pvd = { source: 'local', file_path: downloadedPath, title: result.song_artist,
+            link_idx: idx, link_label: 'Link this version' };
+    } else if (track.divebar) {
+        pvd = { source: 'divebar', file_id: track.divebar.file_id, format: track.divebar.format,
+            title: result.song_artist, link_idx: idx, link_label: 'Download & Link' };
+    } else if (track.youtube_url) {
+        pvd = { source: 'youtube', youtube_url: track.youtube_url,
+            title: result.song_artist, link_idx: idx, link_label: 'Download & Link' };
+    }
+    if (pvd) actions += previewButtonHtml(pvd);
+    if (downloadedPath) {
+        // Already on disk \u2014 "Link" (vs "DL & Link") already signals that, so no
+        // separate Downloaded badge.
+        actions += '<span class="kn-play-btn">Link</span>';
     } else {
         // Source badge beside the download button so the KJ knows where it
         // comes from before committing to the download.
@@ -5807,14 +5833,19 @@ function renderRotKnRow(song, track, idx, isTop, isBest, downloadedIdToPath) {
             const mirror = (track.divebar.in_gcs === false)
                 ? { label: 'DRIVE', cls: 'dl-source-drive', title: 'Our community mirror (Google Drive \u2014 slower)' }
                 : { label: 'GCS', cls: 'dl-source-gcs', title: 'Our community mirror (fast GCS download)' };
-            html += rotSourceBadge(mirror.label, mirror.cls, mirror.title);
+            actions += rotSourceBadge(mirror.label, mirror.cls, mirror.title);
         } else {
-            html += rotSourceBadge('YouTube', 'dl-source-yt', 'Downloads from YouTube via yt-dlp');
+            actions += rotSourceBadge('YouTube', 'dl-source-yt', 'Downloads from YouTube via yt-dlp');
         }
-        html += '<span class="kn-download-btn">DL & Link</span>';
+        actions += '<span class="kn-download-btn">DL & Link</span>';
     }
-    html += '</span>';
-    html += '</div>';
+    const html = renderRotRowHtml({
+        idx, isTop, isBest, community: !!track.is_community,
+        brandName: track.brand_name || '',
+        title: song.title + ' - ' + song.artist,
+        fmt, brand: track.brand_code || '',
+        actionsHtml: actions,
+    });
     return { html, result };
 }
 
@@ -5832,31 +5863,22 @@ function renderRotDivebarRow(dv, idx, isTop, isBest) {
         format: dv.format,
         song_artist: (dv.title || '') + ' - ' + (dv.artist || ''),
     };
-    const rowClass = 'kn-track rs-clickable'
-        + (idx === rotSearchSelectedIdx ? ' selected' : '')
-        + (isCommunity ? ' community' : '')
-        + (isTop ? ' rs-top' : '')
-        + (isBest ? ' rs-best' : '');
     const mirror = dv.in_gcs
         ? { label: 'GCS', cls: 'dl-source-gcs', title: 'Our community mirror (fast GCS download)' }
         : { label: 'DRIVE', cls: 'dl-source-drive', title: 'Our community mirror (Google Drive — slower)' };
-    let html = '<div class="' + rowClass + '" data-idx="' + idx + '" onclick="selectRotSearchResult(rotSearchResults[' + idx + '])">';
-    html += '<span class="kn-track-info">';
-    html += rotLeadMark(isBest, isTop);
-    html += '<span class="kn-brand-name">' + escHtml(dv.brand_name || '') + '</span>';
-    if (isCommunity) html += '<span class="kn-community-badge">Community</span>';
-    html += '<span class="kn-song-title">' + escHtml((dv.title || '') + ' - ' + (dv.artist || '')) + '</span>';
-    html += '</span>';
-    html += rotTagsHtml(dv.format || '', dv.brand_code || '');
-    html += '<span class="kn-track-actions">';
-    html += previewButtonHtml({ source: 'divebar', file_id: dv.file_id, format: dv.format,
+    let actions = previewButtonHtml({ source: 'divebar', file_id: dv.file_id, format: dv.format,
         title: result.song_artist, link_idx: idx, link_label: 'Download & Link' });
-    // Source badge beside the button (moved here from the left so it's clear
-    // which download source the DL & Link button will hit).
-    html += rotSourceBadge(mirror.label, mirror.cls, mirror.title);
-    html += '<span class="kn-download-btn">DL & Link</span>';
-    html += '</span>';
-    html += '</div>';
+    // Source badge beside the button so it's clear which download source the
+    // DL & Link button will hit.
+    actions += rotSourceBadge(mirror.label, mirror.cls, mirror.title);
+    actions += '<span class="kn-download-btn">DL & Link</span>';
+    const html = renderRotRowHtml({
+        idx, isTop, isBest, community: isCommunity,
+        brandName: dv.brand_name || '',
+        title: (dv.title || '') + ' - ' + (dv.artist || ''),
+        fmt: dv.format || '', brand: dv.brand_code || '',
+        actionsHtml: actions,
+    });
     return { html, result };
 }
 

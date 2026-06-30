@@ -2,6 +2,40 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-06-30 - Search-row dedup + unified renderer + redundant-download cleanup (v0.50.0)
+
+**Why:** Searching the rotation "Link song" box for a song held in multiple forms (e.g.
+*Maxïmo Park – Books from Boxes*) showed three rows that all play the same Nomad video, and one
+row rendered with different fonts/pills/alignment. Root causes: a downloaded file surfaced both
+as a `local` row and as a Karaoke Nerds "✓ Downloaded" row (no `local`↔`karaoke_nerds` dedup),
+and the rotation search rendered KN vs local rows through two divergent templates.
+
+**What (frontend — takes effect on browser refresh after `git pull`; no restart):**
+- **Dedup:** `renderRotSearchDropdown` drops the redundant local row when a downloaded KN row
+  already claims that exact on-disk path (`extractYouTubeId` → `downloadedIdToPath`), so a
+  downloaded file shows once.
+- **Unified rows:** new `renderRotRowHtml` skeleton (`.rs-row`/`.rs-main`/`.rs-title`/`.rs-sub`/
+  `.rs-actions`); `renderRotLocalRow`/`renderRotKnRow`/`renderRotDivebarRow` delegate to it, so
+  every row shares font size, title colour, and a fixed 170px action column (fmt/brand pills +
+  buttons line up). The shared `.kn-track*`/`.kn-local-match` classes (also used by the main KN
+  browse view) were left untouched.
+- **Removed** the inline "Community" and "✓ Downloaded" pills — community shows via the section
+  header + green left-accent; "Link" vs "DL & Link" already signals on-disk vs download.
+
+**What (ops tooling — no deploy):**
+- New `scripts/cleanup_redundant_downloads.py` (dry-run by default; `--execute` deletes verified
+  litter and **quarantines** YT re-downloads of NOMAD masters; `--relink-twins` re-points
+  rotation rows off a referenced twin onto its master first). Per-file safety: litter deleted
+  only with a same-video-id completed playable; quarantine goes to `/opt/nomad/_redundant_quarantine`
+  (a sibling of the download folder, outside `media_folders`, so rescan can't re-index it).
+- **Executed on NomadPC 2026-06-30 (no show running):** 393 litter deleted, 95 twins
+  quarantined (reversible), 14 rotation rows re-linked to masters; YTDownloads 1575 → 1087; 0
+  broken links caused; media index clean. Backups: `rotation.db` / `media_index.json`
+  `.bak-20260630-cleanup`. (Separately discovered 9 pre-existing broken `divebar__` rotation
+  links, unrelated to this cleanup — see archive doc.)
+
+See [archive/2026-06-30-search-dedup-row-unification-cleanup.md](archive/2026-06-30-search-dedup-row-unification-cleanup.md).
+
 ## 2026-06-30 - Feature: "Last sang" time in Singers list (v0.49.0)
 
 **Code (v0.49.0 — frontend takes effect on browser refresh after `git pull`; backend change needs deploy + restart):**
