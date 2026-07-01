@@ -9,7 +9,6 @@ so flaky network can't wedge timer.
 
 import fcntl
 import os
-import re
 import subprocess
 import sys
 
@@ -19,7 +18,6 @@ import requests
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config import load_config  # noqa: E402
 
-_COPIED_RE = re.compile(r"^Copying ", re.MULTILINE)
 LOCK_PATH = "/tmp/nomad-master-sync.lock"
 
 
@@ -28,6 +26,22 @@ def _dest(config):
     if dest:
         return dest
     return os.path.join(config.get("download_folder", ""), "NOMAD-720p")
+
+
+def _snapshot(dest):
+    """Map of filename -> size for files directly in dest. Filesystem-based
+    change detection, independent of gcloud's rsync output format."""
+    snap = {}
+    try:
+        for entry in os.scandir(dest):
+            if entry.is_file():
+                try:
+                    snap[entry.name] = entry.stat().st_size
+                except OSError:
+                    pass
+    except OSError:
+        pass
+    return snap
 
 
 def run_sync(config, *, gcloud_bin="gcloud", requests_lib=requests):
@@ -41,6 +55,8 @@ def run_sync(config, *, gcloud_bin="gcloud", requests_lib=requests):
         os.makedirs(dest, exist_ok=True)
     except OSError as exc:
         return {"changed": False, "copied": 0, "rescanned": False, "error": str(exc)}
+
+    before = _snapshot(dest)
 
     env = dict(os.environ)
     if key:
@@ -57,8 +73,11 @@ def run_sync(config, *, gcloud_bin="gcloud", requests_lib=requests):
         return {"changed": False, "copied": 0, "rescanned": False,
                 "error": (proc.stderr or "gcloud rsync failed").strip()[:500]}
 
-    copied = len(_COPIED_RE.findall((proc.stdout or "") + (proc.stderr or "")))
-    changed = copied > 0
+    after = _snapshot(dest)
+    # Change detection is filesystem-based (new or resized files), NOT parsed from
+    # gcloud stdout/stderr (whose format is not a stable contract).
+    copied = len(set(after) - set(before))
+    changed = after != before
     rescanned = False
     if changed and requests_lib is not None:
         try:

@@ -387,7 +387,8 @@ def start_app():  # pragma: no cover
     flask_app.config['APP_VERSION'] = _get_version()
     flask_app.kj_config = cfg
     flask_app.secret_key = _get_secret_key(cfg)
-    media = MediaIndex(cfg, media_library=MediaLibraryStore(cfg.get('media_db_path')))
+    flask_app.media_library = MediaLibraryStore(cfg.get('media_db_path'))
+    media = MediaIndex(cfg, media_library=flask_app.media_library)
     media.load()
     flask_app.media = media
     from preview import PreviewService
