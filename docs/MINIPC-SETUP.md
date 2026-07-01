@@ -158,6 +158,48 @@ autologin-user-timeout=0
 
 Desktop session is XFCE (`/usr/share/xsessions/xfce.desktop`).
 
+### 1.9 Hide Idle Mouse Cursor (DONE, 2026-07-01)
+
+On boot XFCE parks the X pointer dead-center on `:0`, where it sits on top of the
+QR "scan to sing" wallpaper, video and overlays and looks unprofessional. mpv
+auto-hides its own cursor during fullscreen playback, but the desktop cursor stays
+visible at boot and between songs.
+
+Fix: `unclutter-xfixes` auto-hides the pointer whenever it is idle and reappears the
+instant it moves (e.g. over VNC), so the operator can still work.
+
+```bash
+sudo apt-get install -y unclutter-xfixes
+
+# Autostart at login (runs inside the nomad XFCE session)
+cat > ~/.config/autostart/hide-cursor.desktop << 'EOF'
+[Desktop Entry]
+Type=Application
+Name=Hide Idle Cursor
+Comment=Auto-hide the mouse pointer when idle (kiosk/show cleanliness)
+Exec=unclutter --timeout 1 --jitter 5 --ignore-scrolling --start-hidden
+Hidden=false
+NoDisplay=true
+X-GNOME-Autostart-enabled=true
+OnlyShowIn=XFCE;
+EOF
+```
+
+- `--start-hidden` — cursor is hidden immediately at login, before any movement.
+- `--timeout 1` — re-hide 1s after the pointer stops moving.
+- `--jitter 5` / `--ignore-scrolling` — ignore tiny/scroll movements.
+
+Apply without a reboot (starts it in the live `:0` session):
+```bash
+DISPLAY=:0 setsid unclutter --timeout 1 --jitter 5 --ignore-scrolling --start-hidden --fork
+```
+
+Disable / re-enable:
+```bash
+pkill unclutter                                   # show cursor again now
+rm ~/.config/autostart/hide-cursor.desktop        # stop hiding on future boots
+```
+
 ---
 
 ## Phase 2: Network
