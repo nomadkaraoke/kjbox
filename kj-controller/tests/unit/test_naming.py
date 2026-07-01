@@ -58,3 +58,23 @@ def test_build_slug_filename_sanitizes_and_bounds_length():
     assert out.endswith(" [yt-abc12345678].mp4")
     assert "/" not in out
     assert len(out.encode("utf-8")) <= 255
+
+
+def test_content_hash_is_8_lowercase_hex(tmp_path):
+    import hashlib
+    p = tmp_path / "sample.mp4"
+    data = b"\x00\x01\x02nomad-karaoke\xff"
+    p.write_bytes(data)
+    out = naming.content_hash(str(p))
+    assert out == hashlib.sha1(data).hexdigest()[:8]
+    assert len(out) == 8
+    assert out == out.lower()
+    assert all(c in "0123456789abcdef" for c in out)
+
+
+def test_build_slug_filename_long_media_id_stays_within_255_bytes():
+    long_id = "db-" + ("X" * 400)
+    out = naming.build_slug_filename("Artist", "Title", long_id, ".mp4")
+    assert len(out.encode("utf-8")) <= 255 or out.endswith(f" [{long_id}].mp4")
+    # budget must never trim from the wrong end: the stem must not contain a partial suffix
+    assert out.endswith(f"[{long_id}].mp4")

@@ -92,7 +92,7 @@ def build_slug_filename(artist, title, media_id, ext):
     t = sanitize_filename_part(title or "").strip()
     stem = " - ".join(p for p in (a, t) if p) or "unknown"
     suffix = f" [{media_id}]{ext}"
-    budget = 255 - len(suffix.encode("utf-8"))
+    budget = max(0, 255 - len(suffix.encode("utf-8")))
     stem_b = stem.encode("utf-8")[:budget]
     stem = stem_b.decode("utf-8", "ignore").strip()
     return f"{stem}{suffix}"
