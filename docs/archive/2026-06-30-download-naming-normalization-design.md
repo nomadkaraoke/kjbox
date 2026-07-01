@@ -32,8 +32,11 @@ Two media roots are configured (`config.json`: `media_folders`):
 
 | Root | Count | Contents |
 |------|-------|----------|
-| `/opt/nomad/MP4-720p` | 1305 | karaoke-gen **masters**, clean `NOMAD-#### - Artist - Title.mp4`, `is_download:false` |
+| `/opt/nomad/MP4-720p` | 1305 | karaoke-gen **masters**, clean `NOMAD-#### - Artist - Title.mp4`, `is_download:false`. **Stale**: an old, incomplete copy — GCS holds **1409** (≈104 newer releases missing locally). |
 | `/opt/nomad/YTDownloads` | 1087 | **downloads** (the messy set), `download_folder` |
+
+The masters copy is out of date because nothing keeps it in sync with the catalog — this design
+adds an automated GCS mirror (see *GCS master-catalog auto-sync*).
 
 YTDownloads breakdown (after the 2026-06-30 dedup cleanup, which removed 393 litter files and
 quarantined 95 YT twins to the non-indexed sibling `/opt/nomad/_redundant_quarantine`):
@@ -89,7 +92,10 @@ handles and deterministic rules cannot.
 |---|---|
 | LLM routing | New **batch endpoint in karaoke-gen** (reuses gen's Gemini/match-judge; no new device secret; offline → heuristic + manual). |
 | Identity | Stable `media_id` = **source-prefixed natural key**, in a new SQLite `media_library` table. |
-| On disk | `<source folder>/Artist - Title [media_id].ext`; canonical full values live in the DB. |
+| Root folder | Rename `/opt/nomad/YTDownloads` → **`/opt/nomad/downloads`**; per-source subfolders inside it. |
+| Masters | Move stale `/opt/nomad/MP4-720p` → **`/opt/nomad/downloads/NOMAD-720p`**, kept current by an automated GCS sync. |
+| Master sync | **systemd timer, `gcloud storage rsync`, every 5 min**, auth via a **dedicated read-only SA key**. |
+| On disk | `<source folder>/Artist - Title [media_id].ext`; canonical full values live in the DB. (The `NOMAD-720p` mirror is exempt — it keeps GCS-native `NOMAD-####` names.) |
 | Format | `Artist - Title` everywhere (flip rotation + KN/divebar builders). |
 | Pipeline | deterministic quick-wins → gen LLM (esp. order) → confidence gate → KJ review. |
 | Edit UX | Expand the existing **Available Songs** view (editable Artist/Title + "Needs review" filter); no new screen. |
@@ -144,19 +150,33 @@ DB row) is intact.
 
 ### 2. On-disk scheme
 
-- **Source folders** under the download root: `youtube/`, `community/`, `gen/`, `uploads/`.
-  Masters keep living in `/opt/nomad/MP4-720p` (already canonical — see Migration).
-- **Filename**: `{Artist} - {Title} [{media_id}].{ext}`, e.g.
+The download root is renamed **`/opt/nomad/YTDownloads` → `/opt/nomad/downloads`** (done properly
+for clarity going forward), holding per-source subfolders:
+
+```
+/opt/nomad/downloads/
+  youtube/      # source=youtube   → Artist - Title [yt-<id>].ext
+  community/    # source=community → Artist - Title [db-<brand>-<fileid>].ext
+  gen/          # source=gen       → Artist - Title [gen-<job8>].ext
+  uploads/      # source=upload    → Artist - Title [up-<hash8>].ext
+  NOMAD-720p/   # source=master    → GCS mirror, NATIVE names (see §9), exempt from the slug
+```
+
+- **Managed-download filename**: `{Artist} - {Title} [{media_id}].{ext}`, e.g.
   `youtube/Bella Kay - iloveitiloveit [yt-UM1XiyBmhM].mp4`.
   - Artist/Title are sanitized slugs (extend `sanitize_filename_part`), truncated so the whole
     filename stays within filesystem limits (≤255 bytes); the **full** canonical values are in
     the DB.
   - At-a-glance readable; `[yt-…]` codifies source + stable key; the scanner round-trips the id.
-- **Open item (root naming)**: recommended to keep the physical root `/opt/nomad/YTDownloads`
-  and add per-source **subfolders** inside it (satisfies "separate folders, not one flat dump"
-  with minimal cross-system blast radius). Renaming the root to `/opt/nomad/downloads` is a
-  cosmetic option deferred to review (touches config, systemd refs, playability-run scripts,
-  quarantine sibling-path logic).
+- **`NOMAD-720p/` is the exception**: it is an rsync mirror of the GCS masters (§9) and keeps the
+  GCS-native `NOMAD-#### - Artist - Title.mp4` names (renaming would make rsync re-download the
+  whole catalog). The scanner derives `media_id = nomad-####` from the `NOMAD-####` prefix and
+  stores the parsed canonical artist/title in the DB.
+- **Renaming the root** touches `config.json` (`download_folder`, `media_folders`), and must be
+  audited against other references to the old path: the dedup script's quarantine sibling logic
+  (`_redundant_quarantine`/`_playability_quarantine` resolve as siblings of the download folder —
+  still correct under `/opt/nomad/downloads`), the `playability-run` harness, and `preview-cache`
+  config. `/opt/nomad/FillerMusic` is unrelated (filler, not a karaoke source) and stays.
 
 ### 3. Parsing pipeline
 
@@ -224,12 +244,46 @@ Response: { "results": [ { "id": "...", "artist": "...", "title": "...", "confid
 - For local files, `artist`/`title` now come from `media_library` (canonical), not a query-time
   `parse_karaoke_filename`.
 
+### 9. GCS master-catalog auto-sync (NOMAD-720p mirror)
+
+Keep the on-device master catalog automatically current with the Nomad release catalog in GCS, so
+new releases appear in the library (and become rotation-linkable) with no manual step.
+
+- **Source**: `gs://nomadkaraoke-divebar-files/files/Nomad Karaoke/MP4-720p/` (1409 objects today;
+  1305 present locally → ≈104 to backfill on first run). Names are canonical
+  `NOMAD-#### - Artist - Title.mp4`, Unicode-safe.
+- **Destination**: `/opt/nomad/downloads/NOMAD-720p/` (kept name-identical to GCS).
+- **Mechanism**: a **systemd timer** (`nomad-master-sync.timer`, `OnUnitActiveSec=5min`) running a
+  small script that invokes `gcloud storage rsync` **download-only / additive** (no
+  `--delete-unmatched-destination-objects` — a release pulled from GCS is not deleted locally).
+  On a run that changed files, the script curls the local Flask `/rescan` so new masters index
+  immediately; `media_library` rows for new masters are created on scan (`source=master`,
+  `media_id=nomad-####`).
+- **Auth**: a **dedicated read-only service account** with `roles/storage.objectViewer` on
+  `nomadkaraoke-divebar-files`, key file on the device (mirrors the existing Sheets-SA pattern),
+  referenced by config (`master_sync_credentials_file`). Least-privilege; not tied to a personal
+  account. (The device happens to already have working user gcloud creds, but the appliance should
+  not depend on a person's OAuth.)
+- **Cost/efficiency**: one LIST of ~1.4k objects per run ≈ a Class-A op; ~288 runs/day → cents per
+  month. Transfers only new/changed objects.
+- **First-run reconcile note**: because rsync compares size+mtime, the first post-migration run may
+  re-pull some already-present masters if local mtimes differ; run it once off-show to settle,
+  after which 5-min deltas are tiny. (Optionally seed by moving the existing `MP4-720p` files into
+  `NOMAD-720p` first — see Migration — so only the ≈104 genuinely-new files transfer.)
+- **Independence**: this sync needs none of the LLM parsing pipeline (master names are already
+  clean), so it can ship as an **early, standalone phase** — an immediate library-freshness win.
+
 ## Migration / backfill (req B)
 
 A standalone `kj-controller/scripts/normalize_download_library.py` (mirrors the dedup script's
 ergonomics): **dry-run by default**, `--execute` to apply.
 
-1. Re-scan both roots (post-cleanup); skip `_redundant_quarantine`, `_playability_quarantine`,
+0. **Restructure the roots** (once): rename `/opt/nomad/YTDownloads` → `/opt/nomad/downloads`
+   and move `/opt/nomad/MP4-720p` → `/opt/nomad/downloads/NOMAD-720p`; update `config.json`
+   (`download_folder`, `media_folders`) and audit other references to the old paths (systemd,
+   `playability-run`, `preview-cache`). Seeding `NOMAD-720p` from the existing masters means the
+   first GCS rsync only transfers the ≈104 genuinely-new releases.
+1. Re-scan the roots (post-cleanup); skip `_redundant_quarantine`, `_playability_quarantine`,
    `preview-cache`; ignore `.part`/junk.
 2. For each file: classify source → `media_id`; deterministic parse.
 3. Batch-call gen for low-confidence/ambiguous files.
@@ -242,10 +296,11 @@ ergonomics): **dry-run by default**, `--execute` to apply.
    `relink_references`, NFC/NFD-tolerant); trigger a rescan. A move log + `raw_original_name`
    make it reversible.
 
-**Masters (`MP4-720p`)**: get `media_library` rows (`source=master`, `media_id=nomad-####`,
-artist/title parsed from the already-clean names) but are **not moved or renamed** — they are
-canonical. Andrew is not concerned about preserving legacy past-rotation file paths, and the
-next live show is days away, so the migration can run and settle well before then.
+**Masters (`NOMAD-720p`)**: get `media_library` rows (`source=master`, `media_id=nomad-####`,
+artist/title parsed from the already-clean names). They are **moved** (into `downloads/NOMAD-720p`)
+but **not renamed** — the GCS-native `NOMAD-####` names are kept so the rsync mirror (§9) stays
+efficient. Andrew is not concerned about preserving legacy past-rotation file paths, and the next
+live show is days away, so the migration can run and settle well before then.
 
 ## Offline behavior
 
@@ -274,6 +329,9 @@ next live show is days away, so the migration can run and settle well before the
   `Artist - Title`.
 - **Migration**: dry-run on a fixture tree; idempotency (re-run is a no-op); report round-trips
   through `--execute`.
+- **Master sync**: script builds the correct `gcloud storage rsync` invocation (additive, scoped
+  SA); a changed run triggers `/rescan`; new masters get `source=master` / `media_id=nomad-####`
+  rows; a run with no remote changes is a no-op. (Live rsync verified manually on-device.)
 - Note: kjbox has no pytest CI (only `security.yml`) — tests run locally.
 
 ## Rollout notes
@@ -282,4 +340,13 @@ next live show is days away, so the migration can run and settle well before the
   the gen endpoint isn't deployed yet.
 - kjbox autodeploy is OFF; backend changes need a manual service restart (interrupts playback) —
   deploy off-show. Frontend changes need a version bump (`app.js?v=`) to cache-bust.
-- The migration `--execute` runs once on NomadPC off-show, after DB backups, like the dedup run.
+- The root rename + masters move + migration `--execute` run once on NomadPC off-show, after DB
+  backups, like the dedup run.
+- **Master sync one-time setup** (out-of-band from the app deploy): create the read-only SA +
+  `roles/storage.objectViewer` grant on `nomadkaraoke-divebar-files`, drop the key on the device,
+  install the `nomad-master-sync` systemd service + timer. This is IaC/device-config, likely a
+  small Pulumi/manual step separate from the code PRs.
+- **Suggested phasing** (each independently shippable): (P1) root restructure + `media_library`
+  store + scan integration + **master GCS sync** — immediate library-freshness win, no LLM needed;
+  (P2) parsing pipeline + gen endpoint + download-flow renaming + dedup-skip; (P3) Available Songs
+  edit/review UX + rotation `Artist - Title` flip; (P4) reviewed backlog migration.
