@@ -51,3 +51,22 @@ def test_run_sync_reports_gcloud_failure_without_raising(tmp_path, monkeypatch):
                         lambda cmd, **kw: types.SimpleNamespace(returncode=1, stdout="", stderr="boom"))
     out = sm.run_sync(_cfg(tmp_path), requests_lib=None)
     assert out["error"] and out["changed"] is False
+
+
+def test_run_sync_counts_copies_from_stderr(tmp_path, monkeypatch):
+    import types
+    posted = {}
+    monkeypatch.setattr(sm.subprocess, "run",
+        lambda cmd, **kw: types.SimpleNamespace(returncode=0, stdout="", stderr="Copying gs://bucket/prefix/x.mp4\n"))
+    fake_requests = types.SimpleNamespace(post=lambda url, **kw: posted.setdefault("url", url) or _Resp())
+    out = sm.run_sync(_cfg(tmp_path), requests_lib=fake_requests)
+    assert out["changed"] is True and out["rescanned"] is True and out["copied"] == 1
+    assert posted["url"].endswith("/rescan")
+
+
+def test_run_sync_gcloud_failure_empty_stderr_still_reports_error(tmp_path, monkeypatch):
+    import types
+    monkeypatch.setattr(sm.subprocess, "run",
+        lambda cmd, **kw: types.SimpleNamespace(returncode=1, stdout="", stderr=""))
+    out = sm.run_sync(_cfg(tmp_path), requests_lib=None)
+    assert out["error"] and out["changed"] is False

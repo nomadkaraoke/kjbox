@@ -37,38 +37,36 @@ def run_sync(config, *, gcloud_bin="gcloud", requests_lib=requests):
     src = config.get("master_sync_source", "")
     dest = _dest(config)
     key = config.get("master_sync_credentials_file", "")
-    os.makedirs(dest, exist_ok=True)
+    try:
+        os.makedirs(dest, exist_ok=True)
+    except OSError as exc:
+        return {"changed": False, "copied": 0, "rescanned": False, "error": str(exc)}
 
     env = dict(os.environ)
     if key:
-        # Use SA key THIS invocation only; never mutate global gcloud auth.
+        # Use the SA key for THIS invocation only; never mutate global gcloud auth.
         env["CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE"] = key
 
     cmd = [gcloud_bin, "storage", "rsync", "--recursive", src, dest]
     try:
         proc = subprocess.run(cmd, env=env, capture_output=True, text=True, timeout=1800)
-    except Exception as e:
-        return {"changed": False, "copied": 0, "rescanned": False, "error": str(e)}
+    except Exception as exc:  # noqa: BLE001
+        return {"changed": False, "copied": 0, "rescanned": False, "error": str(exc)}
 
     if proc.returncode != 0:
-        return {"changed": False, "copied": 0, "rescanned": False, "error": proc.stderr}
+        return {"changed": False, "copied": 0, "rescanned": False,
+                "error": (proc.stderr or "gcloud rsync failed").strip()[:500]}
 
-    # Count "Copying" lines in stdout.
-    matches = _COPIED_RE.findall(proc.stdout)
-    copied = len(matches)
+    copied = len(_COPIED_RE.findall((proc.stdout or "") + (proc.stderr or "")))
     changed = copied > 0
-
     rescanned = False
-    if changed:
-        # Poke /rescan so new masters index immediately.
+    if changed and requests_lib is not None:
         try:
             port = config.get("flask_port", 80)
-            url = f"http://localhost:{port}/rescan"
-            requests_lib.post(url, timeout=30)
+            requests_lib.post(f"http://localhost:{port}/rescan", timeout=30)
             rescanned = True
-        except Exception as e:
-            return {"changed": True, "copied": copied, "rescanned": False, "error": f"rescan failed: {e}"}
-
+        except Exception:  # noqa: BLE001
+            rescanned = False  # rescan will happen on the next natural scan anyway
     return {"changed": changed, "copied": copied, "rescanned": rescanned, "error": None}
 
 
