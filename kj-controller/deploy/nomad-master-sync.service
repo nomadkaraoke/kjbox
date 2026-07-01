@@ -1,0 +1,13 @@
+[Unit]
+Description=Nomad master-catalog GCS sync (NOMAD-720p mirror)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=nomad
+Nice=10
+IOSchedulingClass=idle
+# Adjust WorkingDirectory/paths to the deployed location on the device.
+WorkingDirectory=/opt/nomad/kjbox/kj-controller
+ExecStart=/usr/bin/python3 -m scripts.sync_masters
