@@ -170,34 +170,49 @@ instant it moves (e.g. over VNC), so the operator can still work.
 
 ```bash
 sudo apt-get install -y unclutter-xfixes
-
-# Autostart at login (runs inside the nomad XFCE session)
-cat > ~/.config/autostart/hide-cursor.desktop << 'EOF'
-[Desktop Entry]
-Type=Application
-Name=Hide Idle Cursor
-Comment=Auto-hide the mouse pointer when idle (kiosk/show cleanliness)
-Exec=unclutter --timeout 1 --jitter 5 --ignore-scrolling --start-hidden
-Hidden=false
-NoDisplay=true
-X-GNOME-Autostart-enabled=true
-OnlyShowIn=XFCE;
-EOF
 ```
 
-- `--start-hidden` — cursor is hidden immediately at login, before any movement.
+**Do not add a `~/.config/autostart` entry for this.** Installing `unclutter-xfixes`
+also pulls in the **`unclutter-startup`** package, which already provides the
+autostart infrastructure: `/etc/X11/Xsession.d/90unclutter` launches unclutter at
+X-session start (before the XFCE desktop even draws), reading its flags from
+`/etc/default/unclutter`. A hand-rolled autostart `.desktop` on top of this
+double-launches unclutter (two processes every boot).
+
+Just set the flags in `/etc/default/unclutter`:
+```bash
+sudo sed -i 's|^EXTRA_OPTS=.*|EXTRA_OPTS="--timeout 1 --jitter 5 --ignore-scrolling --start-hidden"|' /etc/default/unclutter
+# resulting file should contain:
+#   START_UNCLUTTER="true"
+#   EXTRA_OPTS="--timeout 1 --jitter 5 --ignore-scrolling --start-hidden"
+```
+
+- `--start-hidden` — cursor hidden immediately at X start, before any movement.
 - `--timeout 1` — re-hide 1s after the pointer stops moving.
 - `--jitter 5` / `--ignore-scrolling` — ignore tiny/scroll movements.
 
-Apply without a reboot (starts it in the live `:0` session):
+Takes effect at the next login/reboot. To apply now, in the live `:0` session:
 ```bash
-DISPLAY=:0 setsid unclutter --timeout 1 --jitter 5 --ignore-scrolling --start-hidden --fork
+DISPLAY=:0 setsid /usr/bin/unclutter --timeout 1 --jitter 5 --ignore-scrolling --start-hidden --fork
+```
+
+Verify **exactly one** instance runs (not two):
+```bash
+pgrep -a unclutter
+```
+
+Confirm the cursor is genuinely hidden at the hardware level (Intel i915). Normal
+screenshots can't prove this — `ffmpeg -draw_mouse` composites the cursor from
+XFixes regardless of hide state — so read the GPU cursor plane directly. It shows
+`visible=hidden` / `[FB:0]` when hidden, and `visible=visible` with a real FB when shown:
+```bash
+sudo grep -A1 'cursor A]' /sys/kernel/debug/dri/0000:00:02.0/i915_display_info
 ```
 
 Disable / re-enable:
 ```bash
-pkill unclutter                                   # show cursor again now
-rm ~/.config/autostart/hide-cursor.desktop        # stop hiding on future boots
+pkill unclutter                                    # show cursor again now (until next boot)
+# permanent: set START_UNCLUTTER="false" in /etc/default/unclutter
 ```
 
 ---
