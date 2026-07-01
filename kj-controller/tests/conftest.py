@@ -35,6 +35,7 @@ def mock_config(tmp_media_dir):
             str(tmp_media_dir / "media"),
         ],
         "media_index_path": str(tmp_media_dir / "media_index.json"),
+        "media_db_path": str(tmp_media_dir / "media_library.db"),
         "filler_music_dir": str(tmp_media_dir),
         "log_file": str(tmp_media_dir / "test.log"),
         "karaoke_vlc_port": 8080,
