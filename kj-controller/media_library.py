@@ -11,13 +11,6 @@ import threading
 from text_normalize import normalize as _normalize
 
 
-_COLUMNS = (
-    "media_id", "source", "source_ref", "artist", "title", "artist_norm",
-    "title_norm", "confidence", "parse_method", "needs_review",
-    "raw_original_name", "file_path", "ext", "created_at", "updated_at",
-)
-
-
 class MediaLibraryStore:
     _MEMORY = ":memory:"
 
@@ -29,7 +22,9 @@ class MediaLibraryStore:
         self.init_schema()
 
     def _open_conn(self):
-        conn = sqlite3.connect(self.db_path, timeout=10)
+        conn = sqlite3.connect(
+            self.db_path, timeout=10, check_same_thread=(self.db_path != self._MEMORY)
+        )
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA journal_mode=WAL")
         conn.execute("PRAGMA busy_timeout=10000")
@@ -86,7 +81,7 @@ class MediaLibraryStore:
         title = record.get("title", "") or ""
         row = {
             "media_id": record["media_id"],
-            "source": record.get("source", ""),
+            "source": record.get("source") or "",
             "source_ref": record.get("source_ref"),
             "artist": artist,
             "title": title,
@@ -94,7 +89,7 @@ class MediaLibraryStore:
             "title_norm": _normalize(title),
             "confidence": record.get("confidence"),
             "parse_method": record.get("parse_method"),
-            "needs_review": int(record.get("needs_review", 0)),
+            "needs_review": int(record.get("needs_review") or 0),
             "raw_original_name": record.get("raw_original_name"),
             "file_path": record.get("file_path"),
             "ext": record.get("ext"),
@@ -124,18 +119,22 @@ class MediaLibraryStore:
             conn.commit()
 
     def get(self, media_id):
-        cur = self._get_conn().execute(
-            "SELECT * FROM media_library WHERE media_id=?", (media_id,)
-        )
-        r = cur.fetchone()
-        return dict(r) if r else None
+        conn = self._get_conn()
+        with self._lock():
+            cur = conn.execute(
+                "SELECT * FROM media_library WHERE media_id=?", (media_id,)
+            )
+            r = cur.fetchone()
+            return dict(r) if r else None
 
     def get_by_path(self, file_path):
-        cur = self._get_conn().execute(
-            "SELECT * FROM media_library WHERE file_path=?", (file_path,)
-        )
-        r = cur.fetchone()
-        return dict(r) if r else None
+        conn = self._get_conn()
+        with self._lock():
+            cur = conn.execute(
+                "SELECT * FROM media_library WHERE file_path=?", (file_path,)
+            )
+            r = cur.fetchone()
+            return dict(r) if r else None
 
     def set_metadata(self, media_id, artist, title):
         conn = self._get_conn()
@@ -162,10 +161,12 @@ class MediaLibraryStore:
             clauses.append("needs_review=?")
             params.append(int(needs_review))
         where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
-        cur = self._get_conn().execute(
-            f"SELECT * FROM media_library{where} ORDER BY updated_at DESC", params
-        )
-        return [dict(r) for r in cur.fetchall()]
+        conn = self._get_conn()
+        with self._lock():
+            cur = conn.execute(
+                f"SELECT * FROM media_library{where} ORDER BY updated_at DESC", params
+            )
+            return [dict(r) for r in cur.fetchall()]
 
     def delete(self, media_id):
         conn = self._get_conn()

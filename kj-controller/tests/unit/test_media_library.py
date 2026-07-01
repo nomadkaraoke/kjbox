@@ -55,3 +55,8 @@ def test_list_filters():
     s.upsert({"media_id": "b", "source": "master", "needs_review": 0})
     assert {r["media_id"] for r in s.list_records(source="youtube")} == {"a"}
     assert {r["media_id"] for r in s.list_records(needs_review=1)} == {"a"}
+
+
+def test_set_metadata_returns_false_for_unknown_media_id():
+    s = MediaLibraryStore(":memory:")
+    assert s.set_metadata("does-not-exist", "A", "B") is False
