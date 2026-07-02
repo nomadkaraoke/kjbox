@@ -19,6 +19,13 @@ SOURCE_GEN = "gen"
 SOURCE_MASTER = "master"
 SOURCE_UPLOAD = "upload"
 
+# Sources whose files live under the download tree and are managed by scan();
+# rows of other sources (master mirror, external library) must never be pruned
+# when their file is absent — e.g. a master mid GCS-rsync.
+DOWNLOAD_SOURCES = frozenset(
+    {SOURCE_YOUTUBE, SOURCE_COMMUNITY, SOURCE_GEN, SOURCE_UPLOAD}
+)
+
 _MASTER_RE = re.compile(r"^NOMAD-(\d+)\b", re.IGNORECASE)
 _GEN_RE = re.compile(r"(?:^|[^A-Za-z0-9])GEN-([0-9a-f]{4,})", re.IGNORECASE)
 _YT_RE = re.compile(r"^[A-Za-z0-9_-]{11}__")
