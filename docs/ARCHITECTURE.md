@@ -57,9 +57,9 @@ KJ Controller is a web-based karaoke show management application. A Flask backen
 | `app.py` | ~70 | `create_app()` factory, `start_app()` entry point |
 | `config.py` | ~70 | Constants, `is_pi()`, `load_config()`, `save_config_value()`, render mode constants |
 | `utils.py` | ~40 | `log_message()`, `sanitize_filename_part()`, `parse_youtube_filename()` |
-| `media.py` | ~330 | `MediaIndex` class: scan, validate, download, delete, list. During `scan()` resolves a stable `media_id` per file and upserts a `media_library` row (`_resolve_media_id`: embedded `[media_id]` token → natural key → reuse-by-path → content hash) |
-| `naming.py` | ~180 | Pure helpers: `classify_source()`, `media_id_for()`, `parse_identity()` (deterministic best-effort artist/title), `strip_karaoke_noise()`, `extract_media_id()`, `build_slug_filename()`, `content_hash()`. Source-prefixed `media_id` scheme (`yt-/db-/gen-/nomad-/up-`). No network/LLM |
-| `media_library.py` | ~180 | `MediaLibraryStore` class: SQLite store of canonical media identity keyed by `media_id` (artist/title + `*_norm`, `confidence`, `needs_review`, `file_path`). Per-thread connections mirroring `RotationStore` |
+| `media.py` | ~430 | `MediaIndex` class: scan, validate, download, delete, list. Downloads land in per-source subfolders (`downloads/{youtube,community,gen,upload}/`) as `Artist - Title [media_id].ext` via `_finalize_download_identity()` (deterministic parse → best-effort LLM refine via gen → slug + `media_library` upsert; offline-tolerant). `scan()` resolves a stable `media_id` per file and calls `media_library.upsert_scanned()` — **preserves curated (llm/manual) rows, only refreshing file_path/ext** so a rescan never wipes refinements. `list_items()` joins `media_library` for canonical `Artist - Title` + `needs_review` |
+| `naming.py` | ~230 | Pure helpers: `classify_source()`, `media_id_for()`, `parse_identity()` (deterministic best-effort artist/title), `merge_llm_result()` (confidence-gated fold of an LLM result, preserving deterministic fields), `strip_karaoke_noise()`, `extract_media_id()`, `strip_media_id_token()`, `youtube_id_from_url()`, `build_slug_filename()`, `content_hash()`. Source-prefixed `media_id` scheme (`yt-/db-/gen-/nomad-/up-`). No network/LLM |
+| `media_library.py` | ~230 | `MediaLibraryStore` class: SQLite store of canonical media identity keyed by `media_id` (artist/title + `*_norm`, `confidence`, `needs_review`, `parse_method`, `file_path`). `upsert()`, `upsert_scanned()` (curation-preserving), `set_metadata()` (manual edit), `apply_parse()` (LLM refine), `update_path()` (migration). Per-thread connections mirroring `RotationStore` |
 | `playback.py` | ~290 | `PlaybackCoordinator`: owns filler + one karaoke player, runtime `switch_renderer()`, facade for routes.py |
 | `karaoke_player.py` | ~90 | `KaraokePlayer` Protocol: contract both renderer backends implement |
 | `filler.py` | ~290 | `FillerVLC`: shared filler-music VLC instance, fade, auto-heal on broken aout |
@@ -80,8 +80,10 @@ KJ Controller is a web-based karaoke show management application. A Flask backen
 | `rotation.py` | ~180 | `RotationManager` coordinator: delegates to `RotationStore` (SQLite) + `SheetSync` (optional), writes display cache, download/gen tracking, undo/redo + revision bump |
 | `rotation_store.py` | ~330 | `RotationStore` class: SQLite CRUD for rotation entries, position management, file linking, download/gen tracking, archive, server-side undo/redo history (`rotation_history` table + `rotation_rev` counter, `diff_entries` helper), and the `playability_warning` column + `set_playability_warning()` (tier-2 render-verification flag; setter does not bump `updated_at`) |
 | `rotation_sync.py` | ~230 | `SheetSync` class: background thread pushing SQLite state to Google Sheets (optional backup) |
-| `gen_client.py` | ~100 | `GenClient` HTTP client for gen API: job creation, status polling, download URL retrieval |
-| `gen_poller.py` | ~90 | `GenPoller` background thread: polls gen API for active jobs, auto-downloads completed videos |
+| `gen_client.py` | ~120 | `GenClient` HTTP client for gen API (`X-Admin-Token`): job creation, status polling, download URL retrieval, and `parse_titles(items)` → batch messy-filename→`{artist,title,confidence}` via gen's `POST /api/parse-karaoke-titles` (Vertex Gemini; returns `None` on any failure so callers degrade to deterministic) |
+| `gen_poller.py` | ~90 | `GenPoller` background thread: polls gen API for active jobs, auto-downloads completed videos (as `source=gen` → `downloads/gen/`) |
+| `scripts/refine_titles.py` | ~90 | Batch-refine `needs_review` `media_library` rows via `GenClient.parse_titles` (DB-only, dry-run default, offline-tolerant). Run with `--batch-size 10` — 100-item batches exceed gen's 20s parse timeout |
+| `scripts/normalize_download_library.py` | ~220 | One-off backlog migration: dry-run CSV/MD report → hand-correct → `--from-csv <f> --execute` moves+renames existing downloads into `downloads/<source>/` slug scheme, repoints `media_library` + rotation refs (`relink_references`), backs up DBs first. Masters exempt; collision-guard + move-rollback + CSV-injection-sanitize |
 | `sleep_mode.py` | ~100 | `SleepManager` class: enter/exit low-power sleep mode, stop services, unmount SSD |
 | `push_dispatcher.py` | ~200 | `PushDispatcher` class: VAPID config, subscription scan, ladder decision (`now_singing`/`up_next`/`up_in_2`), dedup via `last_sent_state`, 500ms debounce, `ThreadPoolExecutor` send pool. Pure helpers at module level (`decide_ladder_step`, `next_entry_for_phone`, `render_payload`). |
 | `sing.py` | ~280 | Public `/sing/*` blueprint (landing, search, submit, status, rules, now, manifest, sw, push subscribe/unsubscribe) + token-gate decorator + per-IP rate limiter + host-based route guard + QR-overlay auto-sync helper |
@@ -152,9 +154,10 @@ utils.py → (stdlib only)
 | POST | `/seek` | Seek to position in karaoke video |
 | POST | `/control` | Playback control (pause_resume, restart, stop, fadeout) |
 | POST | `/volume` | Set volume for karaoke or filler |
-| GET | `/media` | List all indexed media files |
+| GET | `/media` | List all indexed media files (joined with `media_library`: canonical `artist`/`title`/`display_name`, `source`, `media_id`, `needs_review`) |
+| POST | `/media/metadata` | Set canonical `{media_id, artist, title}` for a media_library row (Available Songs inline ✎ edit; marks it manual, clears `needs_review`, recomputes `*_norm`; a blank field is preserved, not wiped) |
 | POST | `/delete` | Delete a downloaded media file |
-| POST | `/rescan` | Reload config and rescan media folders |
+| POST | `/rescan` | Reload config and rescan media folders (curation-preserving upsert — refined/edited names survive) |
 | GET | `/filler_music` | List available filler music files |
 | POST | `/filler_music` | Change active filler music track |
 | GET | `/status` | Get player state, current track, timing. Also surfaces the `download_queue` (all queue items, with `source`/`source_detail`) and per-rotation `rotation_downloads` map (`status`/`progress`/`file_path`/`source`/`source_detail`) so the UI can show GCS-vs-Drive-vs-YouTube on download badges in real time. Also carries `simple_mode` so the KJ UI applies the `body.simple-mode` CSS class on every 2s poll. |

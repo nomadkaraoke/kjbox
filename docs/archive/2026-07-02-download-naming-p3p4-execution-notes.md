@@ -1,8 +1,14 @@
 # Download-naming P3 + P4 — execution notes & gotchas (2026-07-02)
 
-Context for the next session. **P1 + P2 are shipped** (P2 merged to main both repos 2026-07-02; see
-`project_kjbox_download_naming_normalization` memory). This doc captures the P3/P4 scope plus the
-**non-obvious gotchas discovered while mapping the code**, so P3 can be executed cleanly.
+> **STATUS: COMPLETE.** All phases (P1–P4 + a critical scan-durability fix) shipped, merged, and
+> deployed to NomadPC on 2026-07-02 (kjbox v0.54.1). The backlog migration was run on-device: the
+> library is fully normalized into per-source slug folders with LLM-refined canonical names
+> (needs_review ~32, fixable via the Available Songs ✎ editor). See the CHANGELOG (v0.52.0–v0.54.1)
+> and the `project_kjbox_download_naming_normalization` memory for the final device state. The notes
+> below are retained as the design/gotcha record.
+
+Context (historical). **P1 + P2 shipped** 2026-07-02. This doc captured the P3/P4 scope plus the
+**non-obvious gotchas discovered while mapping the code**.
 
 Authoritative design: `docs/archive/2026-06-30-download-naming-normalization-design.md` (§7 Available
 Songs UX, §8 rotation linking, Migration section for P4).
