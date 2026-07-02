@@ -3428,6 +3428,43 @@ function closeDbStatusModal() {
     document.getElementById('db-modal').classList.add('hidden');
 }
 
+async function openStatsModal() {
+    document.getElementById('stats-modal').classList.remove('hidden');
+    await loadStats();
+}
+
+function closeStatsModal() {
+    document.getElementById('stats-modal').classList.add('hidden');
+}
+
+async function loadStats() {
+    const since = document.getElementById('statsSince').value;
+    const singer = document.getElementById('statsSinger').value.trim();
+    const qs = (extra) => {
+        const p = new URLSearchParams();
+        if (since) p.set('since', since);
+        Object.entries(extra || {}).forEach(([k, v]) => v && p.set(k, v));
+        return p.toString() ? '?' + p.toString() : '';
+    };
+    const [songsResp, singersResp] = await Promise.all([
+        fetch('/stats/top-songs' + qs({ singer, limit: 10 })),
+        fetch('/stats/singers' + qs({ limit: 50 })),
+    ]);
+    const songs = (await songsResp.json()).songs || [];
+    const singers = (await singersResp.json()).singers || [];
+    document.getElementById('statsTopSongs').innerHTML = songs.map(s =>
+        `<li>${escapeHtml(s.artist || '')}${s.artist ? ' &ndash; ' : ''}${escapeHtml(s.title || s.song_key)} &mdash; &#9654; ${s.plays}</li>`
+    ).join('') || '<li class="muted">No plays recorded yet.</li>';
+    document.getElementById('statsTopSingers').innerHTML = singers.map(s =>
+        `<li>${escapeHtml(s.singer)} &mdash; &#9654; ${s.plays} &middot; ${s.distinct_songs} songs</li>`
+    ).join('') || '<li class="muted">No plays recorded yet.</li>';
+    document.getElementById('statsSingerList').innerHTML = singers.map(s =>
+        `<option value="${escapeHtml(s.singer)}">`).join('');
+}
+
+document.getElementById('statsRefresh')?.addEventListener('click', loadStats);
+document.getElementById('statsSinger')?.addEventListener('change', loadStats);
+
 async function loadDbStatusModal() {
     const data = dbStatusCache || await fetchDbStatus();
     dbStatusCache = data;

@@ -105,3 +105,16 @@ def test_media_note_upsert_and_labels(flask_test_client):
 def test_media_note_requires_media_id(flask_test_client):
     r = flask_test_client.post("/media/note", json={"note": "x"})
     assert r.status_code == 400
+
+
+def test_stats_endpoints(flask_test_client):
+    # Record on the SAME app the client serves, so the endpoint sees it.
+    flask_test_client.application.stats.record_play(
+        "yt-a", entry_id=101, singer="Celeste", artist="ABBA", title="SOS", song_key="abba sos")
+    r = flask_test_client.get("/stats/top-songs?limit=5")
+    assert r.status_code == 200
+    assert r.get_json()["songs"][0]["song_key"] == "abba sos"
+    r2 = flask_test_client.get("/stats/singers")
+    assert any(s["singer"] == "Celeste" for s in r2.get_json()["singers"])
+    r3 = flask_test_client.get("/stats/top-songs?singer=celeste")
+    assert r3.get_json()["songs"][0]["song_key"] == "abba sos"

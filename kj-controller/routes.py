@@ -4758,3 +4758,30 @@ def media_note():
 def media_note_labels():
     stats = getattr(current_app, 'stats', None)
     return jsonify({"labels": stats.distinct_labels() if stats else []})
+
+
+@routes_bp.route('/stats/top-songs', methods=['GET'])
+def stats_top_songs():
+    stats = getattr(current_app, 'stats', None)
+    if not stats:
+        return jsonify({"songs": []})
+    singer = request.args.get('singer') or None
+    since = request.args.get('since') or None
+    try:
+        limit = min(int(request.args.get('limit', 10)), 100)
+    except (TypeError, ValueError):
+        limit = 10
+    return jsonify({"songs": stats.top_songs(singer=singer, since=since, limit=limit)})
+
+
+@routes_bp.route('/stats/singers', methods=['GET'])
+def stats_singers():
+    stats = getattr(current_app, 'stats', None)
+    if not stats:
+        return jsonify({"singers": []})
+    since = request.args.get('since') or None
+    try:
+        limit = min(int(request.args.get('limit', 50)), 200)
+    except (TypeError, ValueError):
+        limit = 50
+    return jsonify({"singers": stats.top_singers(since=since, limit=limit)})
