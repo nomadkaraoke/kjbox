@@ -1,5 +1,27 @@
 /* Nomad KJ Control — Styles */
 
+/* =====================================================================
+ * SECTION-HEADER ACTION BUTTONS — design tokens (single source of truth)
+ * ---------------------------------------------------------------------
+ * Every small action button in a section header's top-right (Rotation,
+ * Overlays, Screen Preview, Available Songs, Search *, Upload/Download…)
+ * is sized from these tokens via the `.header-actions` framework further
+ * down (search "SECTION-HEADER ACTION BUTTONS — framework").
+ *
+ * DO NOT give a header button bespoke font-size / padding / border-radius.
+ * Put it inside `.header-actions` and it is sized automatically. See
+ * docs/DEVELOPMENT.md § "Section header buttons".
+ * ===================================================================== */
+:root {
+    --hdr-btn-font-size: 0.65em;   /* ~10.4px — matches the Screen Preview buttons */
+    --hdr-btn-font-weight: 500;
+    --hdr-btn-pad-y: 3px;
+    --hdr-btn-pad-x: 8px;
+    --hdr-btn-radius: 6px;
+    --hdr-btn-min-h: 26px;         /* touch-target floor (bumped on mobile) */
+    --hdr-btn-gap: 6px;
+}
+
 *, *::before, *::after { box-sizing: border-box; }
 
 body {
@@ -253,8 +275,8 @@ button:disabled:hover {
 .copy-btn:hover { background: #333; color: #fff; box-shadow: none; }
 .delete-btn { background: rgba(239, 68, 68, 0.1); color: #fca5a5; border: 1px solid rgba(239, 68, 68, 0.3); padding: 5px 10px; border-radius: 6px; cursor: pointer; font-size: 0.8em; box-shadow: none; }
 .delete-btn:hover { background: rgba(239, 68, 68, 0.2); color: #f87171; box-shadow: none; }
-.rescan-btn { background: #222; color: #ccc; border: 1px solid #444; font-size: 0.7em; padding: 5px 10px; margin-left: 10px; box-shadow: none; }
-.rescan-btn:hover { background: #333; color: #fff; box-shadow: none; }
+/* .rescan-btn sizing/fill now comes from `.header-actions button` + global button {}.
+ * Only the disabled + toggled-active (pink) accent states remain here. */
 .rescan-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 .rescan-btn.active { background: rgba(255, 90, 180, 0.12); color: #ff7acc; border-color: rgba(255, 90, 180, 0.3); }
 .rescan-btn.active:hover { background: rgba(255, 90, 180, 0.22); box-shadow: none; }
@@ -523,7 +545,53 @@ body {
     padding-bottom: 0.35rem;
     margin-bottom: 0.6rem;
 }
-.header-row h2 { flex-grow: 1; }
+.header-row h2 { flex-grow: 1; min-width: 0; }
+
+/* =====================================================================
+ * SECTION-HEADER ACTION BUTTONS — framework
+ * ---------------------------------------------------------------------
+ * `.header-actions` is the ONE wrapper for a section header's top-right
+ * button group. Any <button> inside it is sized structurally from the
+ * --hdr-btn-* tokens, so a brand-new button needs NO class and cannot
+ * drift (this is what makes the old "Song Stats was bigger" bug
+ * impossible to reintroduce).
+ *
+ * To add a header button:  <button>Label</button>  inside .header-actions
+ * Accents (colour only, never size):
+ *   .is-danger        red   (e.g. New Rotation)
+ *   .rotation-paths-btn-active / .rescan-btn.active / .vnc-size-active  toggled
+ * Intentional exceptions (kept visually distinct on purpose):
+ *   - Simple/Advanced segmented pill (.mode-segmented) — a segmented control
+ *   - undo/redo icon buttons — transparent + muted, but share the token size
+ *
+ * The group WRAPS at every width (not just mobile) so buttons are never
+ * clipped in the 769–1280px two-column squeeze.
+ * ===================================================================== */
+.header-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    align-items: center;
+    gap: var(--hdr-btn-gap);
+    min-width: 0;
+}
+.header-actions button {
+    font-size: var(--hdr-btn-font-size);
+    font-weight: var(--hdr-btn-font-weight);
+    padding: var(--hdr-btn-pad-y) var(--hdr-btn-pad-x);
+    border-radius: var(--hdr-btn-radius);
+    min-height: var(--hdr-btn-min-h);
+    /* neutral fill (#222 / #444 / #ccc) + hover come from the global button {} rule */
+}
+/* Danger accent — colour only, size still from the tokens above. */
+.header-actions button.is-danger {
+    border-color: rgba(239, 68, 68, 0.3);
+    color: #fca5a5;
+}
+.header-actions button.is-danger:hover {
+    background: rgba(239, 68, 68, 0.15);
+    color: #fca5a5;
+}
 
 /* --- Logs (#log-area in System) --- */
 
@@ -571,11 +639,7 @@ body {
 /* --- Overlay Management --- */
 
 .overlay-panel { display: flex; flex-direction: column; }
-.overlay-header-btns { display: flex; gap: 4px; }
-.overlay-header-btn { font-size: 0.65em; padding: 3px 8px; background: #222; border: 1px solid #444; border-radius: 6px; color: #ccc; cursor: pointer; box-shadow: none; }
-.overlay-header-btn:hover { background: #333; color: #fff; box-shadow: none; }
-.overlay-add-btn { font-size: 0.75em; padding: 4px 12px; background: #222; border: 1px solid #444; color: #ccc; box-shadow: none; }
-.overlay-add-btn:hover { background: #333; color: #fff; box-shadow: none; }
+/* Overlay header buttons now use the shared `.header-actions` framework. */
 .overlay-list { overflow-y: auto; flex: 1; min-height: 0; }
 .overlay-list:empty::after { content: 'No overlays configured.'; display: block; color: #555; font-size: 0.85em; padding: 8px 0; }
 
@@ -674,13 +738,8 @@ body {
 
 /* --- VNC Preview --- */
 
-.vnc-size-buttons { display: flex; gap: 4px; }
-.vnc-size-btn {
-    font-size: 0.65em; padding: 3px 8px;
-    background: #222; border: 1px solid #444; color: #ccc;
-    box-shadow: none; border-radius: 5px;
-}
-.vnc-size-btn:hover { background: #333; color: #fff; box-shadow: none; }
+/* .vnc-size-buttons uses the shared `.header-actions` framework; the class is
+ * kept only for JS hooks + the toggled-active (pink) accent below. */
 .vnc-size-btn.vnc-size-active { background: rgba(255, 91, 184, 0.15); color: #ff7acc; border-color: rgba(255, 91, 184, 0.4); }
 
 .vnc-thumbnail {
@@ -709,6 +768,10 @@ body {
     gap: 4px; padding: 0 12px;
 }
 .vnc-max-toolbar.visible { display: flex; }
+/* Fixed fullscreen preview bar — its own context (not a section header), so it keeps
+ * a compact self-contained button size that fits the 36px bar. The .vnc-size-active
+ * pink accent still applies from the rule above. */
+.vnc-max-toolbar button { font-size: 0.65em; font-weight: 500; padding: 3px 8px; border-radius: 5px; min-height: 0; }
 .vnc-thumbnail canvas {
     width: 100% !important;
     height: 100% !important;
@@ -860,8 +923,7 @@ body {
 .kn-search-row { display: flex; gap: 8px; }
 .kn-search-row input { flex: 1; }
 .kn-search-row button { flex-shrink: 0; }
-.kn-prefs-btn { font-size: 0.7em; padding: 4px 10px; background: #222; border: 1px solid #444; color: #ccc; box-shadow: none; }
-.kn-prefs-btn:hover { background: #333; color: #fff; box-shadow: none; }
+/* .kn-prefs-btn uses the shared `.header-actions` framework. */
 .kn-prefs { padding: 8px; background-color: #0f0f0f; border: 1px solid #2a2a2a; border-radius: 8px; }
 .kn-prefs label { font-size: 0.8em; color: #888; margin-bottom: 4px; display: block; }
 .kn-prefs-row { display: flex; gap: 6px; }
@@ -1305,19 +1367,21 @@ body {
         max-width: 400px;
     }
 
-    /* Rotation header buttons: wrap */
-    .rotation-header-btns { flex-wrap: wrap; }
-
     /* Rotation add form: stack on mobile */
     .rotation-add-form { flex-wrap: wrap; }
     .rotation-add-form input { flex-basis: calc(50% - 3px); min-width: 0; }
 
-    /* Header rows with multiple buttons */
+    /* Header rows: let the whole .header-actions group drop below the title,
+     * and give the title the full width so the buttons cleanly stack. */
     .header-row { flex-wrap: wrap; gap: 6px; }
-    .rescan-btn { margin-left: 0; }
+    .header-row h2 { width: 100%; }
 
-    /* Available Songs header: wrap buttons */
-    .available-songs .header-row { gap: 4px; }
+    /* Section-header buttons: comfortable touch targets (bump the shared tokens). */
+    :root {
+        --hdr-btn-min-h: 38px;
+        --hdr-btn-pad-y: 8px;
+        --hdr-btn-pad-x: 12px;
+    }
 
     /* Rotation entry actions: slightly larger touch targets */
     .rotation-btn { font-size: 0.7em; padding: 4px 8px; }
@@ -1331,7 +1395,7 @@ body {
     body { padding: 0.25rem; }
     .container { padding: 0.5rem; border-radius: 8px; }
     button { padding: 10px 12px; font-size: 0.8em; border-color: #444; }
-    .header-row h2 { font-size: 0.95em; width: 100%; }
+    .header-row h2 { font-size: 0.95em; }  /* width:100% is set at ≤768px */
 
     .np-btn { padding: 6px 14px; }
 
@@ -1360,17 +1424,11 @@ body {
     .rotation-actions { gap: 2px; margin-left: 4px; }
     .rotation-btn { font-size: 0.7em; padding: 5px 8px; }
 
-    /* Overlay header buttons */
-    .overlay-header-btns { flex-wrap: wrap; }
-
     /* System power buttons: stack */
     .system-subsection-row { flex-direction: column; }
     .system-subsection-row > button { width: 100%; }
     .system-subsection-row > .autodeploy-toggle,
     .system-subsection-row > .sleep-mode-toggle { width: 100%; justify-content: space-between; }
-
-    /* VNC size buttons: wrap */
-    .vnc-size-buttons { flex-wrap: wrap; }
 
     /* Modals: full-width on small screens */
     .modal-content { width: 95%; padding: 0.75rem; }
@@ -1755,19 +1813,8 @@ body {
 /* --- Rotation Panel --- */
 
 .rotation-panel { }
-.rotation-header-btns {
-    display: flex;
-    gap: 6px;
-}
-.rotation-refresh-btn, .rotation-add-btn, .rotation-new-btn {
-    font-size: 0.75em;
-    padding: 4px 10px;
-    border-radius: 6px;
-    border: 1px solid #444;
-    background: #222;
-    color: #ccc;
-    cursor: pointer;
-}
+/* Rotation header buttons use the shared `.header-actions` framework.
+ * Only the New Rotation red accent remains (it archives the whole night). */
 .rotation-new-btn {
     border-color: rgba(239, 68, 68, 0.3);
     color: #fca5a5;
@@ -1775,10 +1822,6 @@ body {
 .rotation-new-btn:hover {
     background: rgba(239, 68, 68, 0.15);
     color: #fca5a5;
-}
-.rotation-refresh-btn:hover, .rotation-add-btn:hover {
-    background: #333;
-    color: #fff;
 }
 .rotation-add-form {
     display: flex;
@@ -1992,16 +2035,8 @@ body {
     background: rgba(212, 163, 42, 0.08);
 }
 
-.rotation-paths-btn {
-    background: #222;
-    color: #ccc;
-    border: 1px solid #444;
-    padding: 0.25rem 0.5rem;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 0.8rem;
-}
-.rotation-paths-btn:hover { background: #333; color: #fff; }
+/* .rotation-paths-btn sizing/fill comes from the shared framework; only the
+ * toggled-on (blue) active accent remains. */
 .rotation-paths-btn-active {
     background: #2f4a6f;
     border-color: #3b6a8a;
@@ -2448,22 +2483,15 @@ body {
 .rotation-btn-link:hover { border-color: #8892a4; }
 
 /* Restore button */
-.rotation-restore-btn {
-    background: #222;
-    color: #ccc;
-    border: 1px solid #444;
-    cursor: pointer;
-}
-.rotation-restore-btn:hover { background: #333; color: #fff; }
+/* .rotation-restore-btn is fully covered by `.header-actions button` + global button {}. */
 
+/* undo/redo icon buttons: intentional exception — transparent + muted so they
+ * read as utility controls, but size/height come from the shared tokens so the
+ * row stays uniform. */
 .rotation-undo-btn, .rotation-redo-btn {
-    font-size: 0.85em;
     background: transparent;
     color: #8892a4;
-    border: 1px solid #555;
-    border-radius: 4px;
-    padding: 2px 8px;
-    cursor: pointer;
+    border-color: #555;
     line-height: 1;
 }
 .rotation-undo-btn:hover:not(:disabled), .rotation-redo-btn:hover:not(:disabled) {
@@ -2918,36 +2946,12 @@ body {
 /* Public Request Form — pending panel + Requests modal         */
 /* ============================================================ */
 
-.rotation-requests-btn {
-    background: #222;
-    color: #ccc;
-    border: 1px solid #444;
-    cursor: pointer;
-    position: relative;
-}
-.rotation-requests-btn:hover { background: #333; color: #fff; }
+/* .rotation-requests-btn needs position:relative for its pending-count badge;
+ * everything else comes from the shared `.header-actions` framework. */
+.rotation-requests-btn { position: relative; }
 
-/* Unified shape + typography for the Rotation + Overlays header toolbar buttons.
- * These classes were each authored in separate PRs and drifted apart on font-size,
- * padding, border-radius, and colour. This pins the shared properties across the whole
- * toolbar family so they read as one set (Restore and Requests are normalised to the
- * same neutral #222/#444/#ccc as the rest). The only intentional exceptions, kept in
- * their own rules: the New Rotation red accent (it archives the whole night) and the
- * Paths toggled-on blue active state. Placed after the individual rules so it wins by
- * source order (equal specificity). */
-.rotation-restore-btn,
-.rotation-paths-btn,
-.rotation-refresh-btn,
-.rotation-add-btn,
-.rotation-requests-btn,
-.rotation-new-btn,
-.overlay-header-btn,
-.overlay-add-btn {
-    font-size: 0.75em;
-    font-weight: 500;
-    padding: 4px 10px;
-    border-radius: 6px;
-}
+/* (The old per-family "unified" rule that pinned Rotation+Overlays sizing is gone;
+ * `.header-actions button` now governs the whole header-button family.) */
 
 .pending-count-badge {
     display: inline-block;
