@@ -89,8 +89,8 @@ class TestMakeRotationEntry:
             entry = resp.get_json()["entry"]
             assert entry["singer"] == "Phil & Anya"
             assert entry.get("singers_json") == '["Phil", "Anya"]'
-            # song_artist fallback: "{title} - {artist}" when not supplied
-            assert entry["song_artist"] == "Bohemian Rhapsody - Queen"
+            # song_artist fallback: "{artist} - {title}" when not supplied (P3 flip)
+            assert entry["song_artist"] == "Queen - Bohemian Rhapsody"
 
     def test_make_missing_artist_returns_400(self, gen_client):
         resp = gen_client.post('/rotation/make',

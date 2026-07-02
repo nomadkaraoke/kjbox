@@ -373,6 +373,7 @@
                 <div class="header-row">
                     <h2>Available Songs<span id="media-count" class="media-count"></span></h2>
                     <button class="rescan-btn" id="media-filter-btn" onclick="cycleMediaFilter()" title="Cycle format filter: All → MP4 Only → CDG/ZIP Only">All Formats</button>
+                    <button class="rescan-btn" id="media-review-btn" onclick="toggleReviewFilter()" title="Show only songs whose auto-parsed Artist/Title need review">Needs review</button>
                     <button class="rescan-btn" id="rescan-btn" onclick="rescanMedia()" title="Scan the local directories listed in media_folders for downloaded and imported files">Rescan Media</button>
                     <button class="rescan-btn" onclick="rebuildCatalog()" title="Re-index the external USB drive karaoke library from the file list configured in external_file_list, mounted at external_media_mount">Rebuild Catalog</button>
                 </div>

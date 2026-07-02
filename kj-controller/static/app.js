@@ -592,6 +592,7 @@ let localMediaItems = [];
 const MEDIA_FILTERS = ['all', 'mp4', 'cdg'];
 const MEDIA_FILTER_LABELS = { all: 'All Formats', mp4: 'MP4 Only', cdg: 'CDG/ZIP Only' };
 let mediaFilter = localStorage.getItem('kj-media-filter') || 'all';
+let mediaReviewOnly = localStorage.getItem('kj-media-review-only') === 'true';
 // Migrate old boolean setting
 if (mediaFilter === 'true' || localStorage.getItem('kj-mp4-only') === 'true') {
     mediaFilter = 'mp4';
@@ -600,12 +601,31 @@ if (mediaFilter === 'true' || localStorage.getItem('kj-mp4-only') === 'true') {
 }
 
 function applyMediaFilter(items) {
-    if (mediaFilter === 'all') return items;
-    return items.filter(item => {
+    let out = mediaReviewOnly ? items.filter(item => item.needs_review) : items;
+    if (mediaFilter === 'all') return out;
+    return out.filter(item => {
         const ext = item.filename.split('.').pop().toLowerCase();
         const isCdgZip = ext === 'zip' || ext === 'cdg';
         return mediaFilter === 'mp4' ? !isCdgZip : isCdgZip;
     });
+}
+
+function toggleReviewFilter() {
+    mediaReviewOnly = !mediaReviewOnly;
+    localStorage.setItem('kj-media-review-only', mediaReviewOnly ? 'true' : 'false');
+    updateReviewFilterBtn();
+    if (searchActive) {
+        const query = document.getElementById('catalog-search').value.trim();
+        if (query) catalogSearch(query);
+    } else {
+        renderFolderView(applyMediaFilter(localMediaItems));
+    }
+}
+
+function updateReviewFilterBtn() {
+    const btn = document.getElementById('media-review-btn');
+    if (!btn) return;
+    btn.classList.toggle('active', mediaReviewOnly);
 }
 
 function cycleMediaFilter() {
@@ -685,6 +705,67 @@ function expandDownloadsFolder() {
     saveFolderStates(states);
 }
 
+async function editMediaMetadata(item, li) {
+    // Inline Artist/Title editor for an Available Songs row. Saves via
+    // POST /media/metadata (marks the media_library row user-confirmed).
+    li.classList.add('media-editing');
+    li.onclick = null;
+    li.innerHTML = '';
+
+    const form = document.createElement('span');
+    form.className = 'media-edit-form';
+    const aIn = document.createElement('input');
+    aIn.type = 'text'; aIn.value = item.artist || ''; aIn.placeholder = 'Artist';
+    aIn.className = 'media-edit-input';
+    const tIn = document.createElement('input');
+    tIn.type = 'text'; tIn.value = item.title || ''; tIn.placeholder = 'Title';
+    tIn.className = 'media-edit-input';
+    const saveBtn = document.createElement('button');
+    saveBtn.type = 'button'; saveBtn.textContent = 'Save'; saveBtn.className = 'media-edit-save';
+    const cancelBtn = document.createElement('button');
+    cancelBtn.type = 'button'; cancelBtn.textContent = 'Cancel'; cancelBtn.className = 'media-edit-cancel';
+
+    const doSave = async () => {
+        const artist = aIn.value.trim();
+        const title = tIn.value.trim();
+        if (!artist && !title) { log('Enter an artist or title', 'error'); return; }
+        saveBtn.disabled = true;
+        try {
+            const resp = await fetch('/media/metadata', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ media_id: item.media_id, artist, title })
+            });
+            if (!resp.ok) {
+                const d = await resp.json().catch(() => ({}));
+                log('Save failed: ' + (d.error || resp.status), 'error');
+                saveBtn.disabled = false;
+                return;
+            }
+            log('Saved "' + [artist, title].filter(Boolean).join(' - ') + '"', 'success');
+            updateMediaList();
+        } catch (err) {
+            log('Save failed: ' + err, 'error');
+            saveBtn.disabled = false;
+        }
+    };
+    saveBtn.onclick = (e) => { e.stopPropagation(); doSave(); };
+    cancelBtn.onclick = (e) => { e.stopPropagation(); updateMediaList(); };
+    aIn.onclick = tIn.onclick = (e) => e.stopPropagation();
+    aIn.onkeydown = tIn.onkeydown = (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); doSave(); }
+        else if (e.key === 'Escape') { e.preventDefault(); updateMediaList(); }
+    };
+
+    form.appendChild(aIn);
+    form.appendChild(document.createTextNode(' — '));
+    form.appendChild(tIn);
+    form.appendChild(saveBtn);
+    form.appendChild(cancelBtn);
+    li.appendChild(form);
+    aIn.focus();
+}
+
 function createMediaItemLi(item) {
     const li = document.createElement('li');
 
@@ -715,6 +796,14 @@ function createMediaItemLi(item) {
         titleSpan.appendChild(document.createTextNode(' '));
         titleSpan.appendChild(warn);
     }
+    if (item.needs_review && item.media_id) {
+        const rev = document.createElement('span');
+        rev.className = 'media-review-tag';
+        rev.textContent = 'review';
+        rev.title = 'Auto-parsed name — click ✎ to confirm or correct the Artist / Title';
+        titleSpan.appendChild(document.createTextNode(' '));
+        titleSpan.appendChild(rev);
+    }
 
     const rightSide = document.createElement('span');
     if (item.file_path && !item.cdg_no_audio) {
@@ -731,6 +820,19 @@ function createMediaItemLi(item) {
         rightSide.appendChild(previewBtn);
     }
     rightSide.appendChild(createCopyBtn(item.display_name));
+    if (item.media_id) {
+        const editBtn = document.createElement('button');
+        editBtn.type = 'button';
+        editBtn.textContent = '✎';
+        editBtn.className = 'media-edit-btn';
+        editBtn.title = 'Edit Artist / Title';
+        editBtn.onclick = (e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            editMediaMetadata(item, li);
+        };
+        rightSide.appendChild(editBtn);
+    }
     if (item.is_download) {
         const deleteBtn = document.createElement('button');
         deleteBtn.textContent = 'Delete';
@@ -3500,6 +3602,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     updateMediaFilterBtn();
+    updateReviewFilterBtn();
 
     loadYTKaraokeToggle();
     updateDbHealthDot();
@@ -5720,7 +5823,7 @@ function buildRotRow(r, idx, isBest, isStarred, downloadedIdToPath) {
         const html = renderRotLocalRow(match, idx, isStarred, isBest);
         const result = {
             type: 'local', path: match.path, duration: match.duration,
-            song_artist: (match.title || '') + ' - ' + (match.artist || ''),
+            song_artist: (match.artist || '') + ' - ' + (match.title || ''),
         };
         return { html, result };
     }
@@ -5842,7 +5945,7 @@ function renderRotLocalRow(match, idx, isTop, isBest) {
 function renderRotKnRow(song, track, idx, isTop, isBest, downloadedIdToPath) {
     const videoId = extractYouTubeId(track.youtube_url || '');
     const downloadedPath = videoId ? downloadedIdToPath.get(videoId) : null;
-    const result = { song_artist: song.title + ' - ' + song.artist };
+    const result = { song_artist: song.artist + ' - ' + song.title };
     if (downloadedPath) {
         result.type = 'local';
         result.path = downloadedPath;
@@ -5900,7 +6003,7 @@ function renderRotKnRow(song, track, idx, isTop, isBest, downloadedIdToPath) {
     const html = renderRotRowHtml({
         idx, isTop, isBest, community: !!track.is_community,
         brandName: track.brand_name || '',
-        title: song.title + ' - ' + song.artist,
+        title: song.artist + ' - ' + song.title,
         fmt, brand: track.brand_code || '',
         actionsHtml: actions,
     });
@@ -5919,7 +6022,7 @@ function renderRotDivebarRow(dv, idx, isTop, isBest) {
         title: dv.title,
         brand_code: dv.brand_code,
         format: dv.format,
-        song_artist: (dv.title || '') + ' - ' + (dv.artist || ''),
+        song_artist: (dv.artist || '') + ' - ' + (dv.title || ''),
     };
     const mirror = dv.in_gcs
         ? { label: 'GCS', cls: 'dl-source-gcs', title: 'Our community mirror (fast GCS download)' }
@@ -5933,7 +6036,7 @@ function renderRotDivebarRow(dv, idx, isTop, isBest) {
     const html = renderRotRowHtml({
         idx, isTop, isBest, community: isCommunity,
         brandName: dv.brand_name || '',
-        title: (dv.title || '') + ' - ' + (dv.artist || ''),
+        title: (dv.artist || '') + ' - ' + (dv.title || ''),
         fmt: dv.format || '', brand: dv.brand_code || '',
         actionsHtml: actions,
     });

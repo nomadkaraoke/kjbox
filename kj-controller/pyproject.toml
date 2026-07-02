@@ -1,6 +1,6 @@
 [project]
 name = "kj-controller"
-version = "0.52.1"
+version = "0.53.0"
 description = "Web-based karaoke show management with mpv + VLC playback"
 requires-python = ">=3.11"
 
