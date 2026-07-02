@@ -1988,7 +1988,7 @@ body {
     cursor: pointer;
     font-size: 0.8rem;
 }
-.rotation-paths-btn:hover { background: #2a2a2a; }
+.rotation-paths-btn:hover { background: #333; color: #fff; }
 .rotation-paths-btn-active {
     background: #2f4a6f;
     border-color: #3b6a8a;
@@ -2436,14 +2436,12 @@ body {
 
 /* Restore button */
 .rotation-restore-btn {
-    font-size: 0.75em;
-    background: transparent;
-    color: #8892a4;
-    border: 1px solid #555;
-    border-radius: 4px;
-    padding: 2px 8px;
+    background: #222;
+    color: #ccc;
+    border: 1px solid #444;
     cursor: pointer;
 }
+.rotation-restore-btn:hover { background: #333; color: #fff; }
 
 .rotation-undo-btn, .rotation-redo-btn {
     font-size: 0.85em;
@@ -2908,16 +2906,35 @@ body {
 /* ============================================================ */
 
 .rotation-requests-btn {
-    background: #333;
-    color: #eee;
+    background: #222;
+    color: #ccc;
     border: 1px solid #444;
-    padding: 0.3rem 0.6rem;
-    border-radius: 4px;
     cursor: pointer;
-    font-size: 0.85rem;
     position: relative;
 }
-.rotation-requests-btn:hover { background: #444; }
+.rotation-requests-btn:hover { background: #333; color: #fff; }
+
+/* Unified shape + typography for the Rotation + Overlays header toolbar buttons.
+ * These classes were each authored in separate PRs and drifted apart on font-size,
+ * padding, border-radius, and colour. This pins the shared properties across the whole
+ * toolbar family so they read as one set (Restore and Requests are normalised to the
+ * same neutral #222/#444/#ccc as the rest). The only intentional exceptions, kept in
+ * their own rules: the New Rotation red accent (it archives the whole night) and the
+ * Paths toggled-on blue active state. Placed after the individual rules so it wins by
+ * source order (equal specificity). */
+.rotation-restore-btn,
+.rotation-paths-btn,
+.rotation-refresh-btn,
+.rotation-add-btn,
+.rotation-requests-btn,
+.rotation-new-btn,
+.overlay-header-btn,
+.overlay-add-btn {
+    font-size: 0.75em;
+    font-weight: 500;
+    padding: 4px 10px;
+    border-radius: 6px;
+}
 
 .pending-count-badge {
     display: inline-block;

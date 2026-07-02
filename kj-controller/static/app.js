@@ -3300,16 +3300,16 @@ async function updateDbHealthDot() {
     const data = await fetchDbStatus();
     dbStatusCache = data;
     if (!data || !data.configured) {
-        dot.className = 'yt-health-dot red';
+        dot.className = 'yt-health-dot yt-dot-error';
         dot.title = 'Divebar not configured';
     } else if (data.gcs_mirror && data.gcs_mirror.percent >= 95) {
-        dot.className = 'yt-health-dot green';
+        dot.className = 'yt-health-dot yt-dot-ok';
         dot.title = `GCS mirror ${data.gcs_mirror.percent}% synced`;
     } else if (data.gcs_mirror && data.gcs_mirror.percent > 0) {
-        dot.className = 'yt-health-dot yellow';
+        dot.className = 'yt-health-dot yt-dot-warn';
         dot.title = `GCS mirror ${data.gcs_mirror.percent}% synced (${data.gcs_mirror.synced}/${data.catalog.total_files})`;
     } else {
-        dot.className = 'yt-health-dot yellow';
+        dot.className = 'yt-health-dot yt-dot-warn';
         dot.title = 'GCS mirror sync starting...';
     }
 }
