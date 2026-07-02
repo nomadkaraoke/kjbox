@@ -2,6 +2,24 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-07-02 - Download-naming Phase 4: reviewed backlog migration (v0.54.0)
+
+**Why:** P1–P3 canonicalize *new* downloads; the existing backlog still sits at legacy
+flat paths. P4 migrates it into the per-source slug scheme so the whole library is consistent.
+
+**What:** new `scripts/normalize_download_library.py` (device-only, off-show):
+- **Dry-run by default** → `normalize_report.csv` + `.md`: `media_id, source, artist, title,
+  confidence, needs_review, old_path, new_path`. Correct Artist/Title in the CSV and pass it back
+  with `--from-csv <file> --execute` to apply your fixes as the files move.
+- `--execute`: backs up `media_library.db` / `rotation.db` / `media_index.json` first, then moves +
+  renames each download into `downloads/<source>/Artist - Title [media_id].ext`, repoints the
+  `media_library` row (`update_path`) + live `rotation_entries`/`rotation_archive` `file_path`
+  (reusing the cleanup script's NFC/NFD-tolerant `relink_references`), and triggers a rescan.
+- **Masters (`NOMAD-720p`) are exempt** — kept at GCS-native `NOMAD-####` names so the rsync mirror
+  stays cheap. Missing files and already-migrated rows are skipped.
+- New `MediaLibraryStore.update_path(media_id, file_path)`. Tip: run `scripts/refine_titles.py` first
+  to LLM-upgrade `needs_review` names before migrating.
+
 ## 2026-07-02 - Download-naming Phase 3: canonical Artist - Title everywhere (v0.53.0)
 
 **Why:** P1/P2 built the canonical media-identity store + download renaming; P3 surfaces it in
@@ -10,14 +28,10 @@ the UI and flips the rotation display order to a consistent `Artist - Title`.
 **What (frontend — takes effect on browser refresh; backend bits need a restart):**
 - **Rotation `Artist - Title` flip (req C):** rotation-search row builders (KN, local, divebar) now
   write `song_artist` as `Artist - Title` (was `Title - Artist`). Backend consumers flipped to match:
-  `_resolve_sms_target` fallback split and the `song_artist_fallback` in download-and-link. Existing
-  rows' `song_artist` display is verbatim (cosmetic order only); the SMS fallback is rarely hit
-  (structured request fields win).
+  `_resolve_sms_target` fallback split and the `song_artist_fallback` in download-and-link.
 - **Available Songs canonical names + review/edit:** `list_items` now joins `media_library` so rows
   show canonical `Artist - Title` (not the raw filename) + `source`/`needs_review`. New inline ✎ editor
-  (Artist + Title) posts to **`POST /media/metadata`** (marks the row user-confirmed:
-  `parse_method='manual'`, `needs_review=0`, recomputes `*_norm`). A **"Needs review"** filter button
-  shows only auto-parsed rows awaiting confirmation; an amber `review` tag marks them.
+  (Artist + Title) posts to **`POST /media/metadata`**. A **"Needs review"** filter button + amber tag.
 
 ## 2026-07-02 - Divebar status dot fix + unified header toolbar buttons (v0.52.1)
 
