@@ -3720,3 +3720,13 @@ li.media-no-audio {
 }
 .media-edit-save { background: #2d6a4f; color: #fff; border-color: #2d6a4f; }
 .media-edit-cancel { background: rgba(255,255,255,0.06); color: #ccc; }
+
+.rs-stats { display: inline-flex; gap: .3rem; align-items: center; margin: 0 .4rem; }
+.rs-stat { font-size: .8em; white-space: nowrap; }
+.rs-usual { color: #ffcf4d; }
+.rs-plays { color: #7fd1a1; font-variant-numeric: tabular-nums; }
+.rs-prev { color: #9aa4b2; }
+.rs-label { background: #2b3442; border-radius: 4px; padding: 0 .35rem; }
+.rs-note { cursor: help; }
+.rs-note-edit { cursor: pointer; opacity: .6; }
+.rs-note-edit:hover { opacity: 1; }

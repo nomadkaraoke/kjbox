@@ -3437,6 +3437,46 @@ function closeStatsModal() {
     document.getElementById('stats-modal').classList.add('hidden');
 }
 
+let _noteModalMediaId = null;
+
+async function openNoteModal(mediaId) {
+    _noteModalMediaId = mediaId;
+    const cur = rotVersionNotes[mediaId] || { note: '', label: '' };
+    document.getElementById('noteText').value = cur.note || '';
+    document.getElementById('noteLabel').value = cur.label || '';
+    document.getElementById('note-modal').classList.remove('hidden');
+    try {
+        const labels = (await (await fetch('/media/note-labels')).json()).labels || [];
+        document.getElementById('noteLabelList').innerHTML =
+            labels.map(l => '<option value="' + escHtml(l) + '">').join('');
+    } catch (e) { /* non-fatal — label autocomplete is a nice-to-have */ }
+}
+
+function closeNoteModal() {
+    document.getElementById('note-modal').classList.add('hidden');
+    _noteModalMediaId = null;
+}
+
+async function saveNote() {
+    if (!_noteModalMediaId) return;
+    const mediaId = _noteModalMediaId;
+    const note = document.getElementById('noteText').value;
+    const label = document.getElementById('noteLabel').value.trim();
+    try {
+        await fetch('/media/note', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ media_id: mediaId, note, label }),
+        });
+    } catch (e) { /* non-fatal — best-effort save, dropdown refresh below is the real feedback */ }
+    closeNoteModal();
+    // Refresh the dropdown so the new note/label badges show immediately: re-run
+    // the same search the row came from, using the current search box value.
+    const songInput = document.getElementById('rotation-song');
+    const query = songInput ? songInput.value.trim() : '';
+    if (query.length >= 3) doRotationSearch(query);
+}
+
 async function loadStats() {
     const since = document.getElementById('statsSince').value;
     const singer = document.getElementById('statsSinger').value.trim();
@@ -5925,6 +5965,28 @@ function rotTagsHtml(fmt, brand) {
         + '</span><span class="rs-tag-brand">' + brandHtml + '</span></span>';
 }
 
+// Per-render map of media_id -> {note,label}, so the ✎ edit button can pre-fill
+// the note modal without embedding quote-unsafe text in an HTML attribute.
+const rotVersionNotes = {};
+
+function renderStatsBadges(stats, mediaId) {
+    if (mediaId) {
+        rotVersionNotes[mediaId] = { note: (stats && stats.note) || '', label: (stats && stats.label) || '' };
+    }
+    const parts = [];
+    if (stats && stats.is_usual) parts.push('<span class="rs-stat rs-usual" title="The version you usually play">⭐</span>');
+    if (stats && stats.plays) parts.push('<span class="rs-stat rs-plays" title="Times played, ever">▶ ' + stats.plays + '</span>');
+    if (stats && stats.previews) parts.push('<span class="rs-stat rs-prev" title="Times previewed">👁 ' + stats.previews + '</span>');
+    if (stats && stats.label) parts.push('<span class="rs-stat rs-label">' + escHtml(stats.label) + '</span>');
+    if (stats && stats.note) parts.push('<span class="rs-stat rs-note" title="' + escHtml(stats.note) + '">📝</span>');
+    // media_id is always quote-free (yt-/db-/gen-/nomad-/up-), safe to inline in onclick.
+    const editBtn = mediaId
+        ? '<span class="rs-stat rs-note-edit" title="Add / edit note" onclick="event.stopPropagation(); openNoteModal(\'' + mediaId + '\')">✎</span>'
+        : '';
+    if (!parts.length && !editBtn) return '';
+    return '<span class="rs-stats">' + parts.join('') + editBtn + '</span>';
+}
+
 // Shared skeleton for every rotation-search row (local file, Karaoke Nerds
 // track, or divebar mirror). Routing all three through one structure means font
 // size, title colour, badge/pill styling and the fmt/brand/action columns line
@@ -5950,6 +6012,7 @@ function renderRotRowHtml(o) {
     }
     html += '</div>';
     html += rotTagsHtml(o.fmt || '', o.brand || '');
+    html += renderStatsBadges(o.stats, o.media_id);
     html += '<span class="rs-actions">' + (o.actionsHtml || '') + '</span>';
     html += '</div>';
     return html;
@@ -5974,6 +6037,7 @@ function renderRotLocalRow(match, idx, isTop, isBest) {
     actions += '<span class="kn-play-btn">Link</span>';
     return renderRotRowHtml({
         idx, isTop, isBest, community: false,
+        stats: match.stats, media_id: match.media_id,
         title: fname, subline, sublineTitle: match.path || '',
         fmt: match.format || '', brand: match.priority_brand || '',
         actionsHtml: actions,
@@ -6043,6 +6107,7 @@ function renderRotKnRow(song, track, idx, isTop, isBest, downloadedIdToPath) {
         brandName: track.brand_name || '',
         title: song.artist + ' - ' + song.title,
         fmt, brand: track.brand_code || '',
+        stats: track.stats, media_id: track.media_id,
         actionsHtml: actions,
     });
     return { html, result };
@@ -6076,6 +6141,7 @@ function renderRotDivebarRow(dv, idx, isTop, isBest) {
         brandName: dv.brand_name || '',
         title: (dv.artist || '') + ' - ' + (dv.title || ''),
         fmt: dv.format || '', brand: dv.brand_code || '',
+        stats: dv.stats, media_id: dv.media_id,
         actionsHtml: actions,
     });
     return { html, result };

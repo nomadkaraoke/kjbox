@@ -1083,6 +1083,23 @@
         </div>
     </div>
 
+    <!-- Version Note Modal (per media_id note + label, from rotation-search row ✎) -->
+    <div id="note-modal" class="modal-backdrop hidden" onclick="if(event.target===this) closeNoteModal()">
+        <div class="modal-content note-modal-content">
+            <div class="modal-header">
+                <h3>Version Note</h3>
+                <button class="modal-close" onclick="closeNoteModal()">&times;</button>
+            </div>
+            <label>Label <input type="text" id="noteLabel" list="noteLabelList" placeholder="e.g. Best quality"></label>
+            <datalist id="noteLabelList"></datalist>
+            <label>Note <textarea id="noteText" rows="4" placeholder="Notes about this version&hellip;"></textarea></label>
+            <div class="note-modal-actions">
+                <button id="noteCancelBtn" onclick="closeNoteModal()">Cancel</button>
+                <button id="noteSaveBtn" onclick="saveNote()">Save</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Public Singer Requests Modal -->
     <div id="sing-requests-modal" class="modal-backdrop hidden" onclick="if(event.target===this) closeSingRequestsModal()">
         <div class="modal-content sing-requests-modal-content">
