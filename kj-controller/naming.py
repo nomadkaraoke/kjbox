@@ -18,6 +18,7 @@ SOURCE_COMMUNITY = "community"
 SOURCE_GEN = "gen"
 SOURCE_MASTER = "master"
 SOURCE_UPLOAD = "upload"
+SOURCE_LIBRARY = "library"  # external SSD library — files in place, content-hash ids
 
 # Sources whose files live under the download tree and are managed by scan();
 # rows of other sources (master mirror, external library) must never be pruned
@@ -71,6 +72,7 @@ def media_id_for(source, source_ref):
         SOURCE_GEN: "gen",
         SOURCE_MASTER: "nomad",
         SOURCE_UPLOAD: "up",
+        SOURCE_LIBRARY: "lib",
     }[source]
     return f"{prefix}-{source_ref}"
 

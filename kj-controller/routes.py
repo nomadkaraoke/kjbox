@@ -16,6 +16,7 @@ from flask import Blueprint, Response, current_app, jsonify, render_template, re
 
 import divebar
 import karaoke_nerds
+import library_media
 import local_grouping
 import text_normalize
 from text_normalize import normalize as _normalize_text, tokens as _tokens, group_key as _group_key
@@ -86,6 +87,14 @@ def _record_play_stat(validated_path, entry_id):
         if not media_id:
             from naming import extract_media_id
             media_id = extract_media_id(os.path.basename(validated_path))
+        if not media_id and library_media.is_library_path(
+                validated_path, getattr(current_app, 'kj_config', None)):
+            # SSD/library file with no row yet: hash + materialize off-thread —
+            # a cold multi-hundred-MB MP4 must never stall /play (design D3).
+            library_media.run_async(
+                _record_library_play, current_app._get_current_object(),
+                validated_path, entry_id)
+            return
         if not media_id:
             return
         singer = None
@@ -127,6 +136,13 @@ def _record_preview_stat(descriptor):
             media_id = row.get('media_id')
             artist = row.get('artist')
             title = title or row.get('title')
+            if not media_id and library_media.is_library_path(
+                    descriptor.get('file_path'),
+                    getattr(current_app, 'kj_config', None)):
+                library_media.run_async(
+                    _record_library_preview, current_app._get_current_object(),
+                    descriptor.get('file_path'))
+                return
         elif source == 'youtube':
             vid = youtube_id_from_url(descriptor.get('youtube_url'))
             if vid:
@@ -140,6 +156,50 @@ def _record_preview_stat(descriptor):
     except Exception as e:
         try:
             log_message(f"stats: preview record failed: {e}", current_app.kj_config)
+        except Exception:
+            pass
+
+
+def _record_library_play(app, validated_path, entry_id):
+    """Thread target: materialize an SSD file's identity row, then record the play.
+
+    Runs off the request thread (hashing can take seconds cold). The
+    per-rotation-entry dedup index in StatsStore keeps a delayed insert
+    idempotent. Never raises.
+    """
+    try:
+        row = library_media.ensure_library_row_for_app(app, validated_path)
+        if not row:
+            return
+        singer = None
+        rotation = getattr(app, 'rotation', None)
+        if entry_id and rotation:
+            entry = rotation.store.get_entry(entry_id)
+            if entry:
+                singer = entry.get('singer')
+        song_key = _normalize_song_key(row.get('artist'), row.get('title'))
+        app.stats.record_play(row['media_id'], entry_id=entry_id, singer=singer,
+                              artist=row.get('artist'), title=row.get('title'),
+                              song_key=song_key)
+    except Exception as e:
+        try:
+            log_message(f"stats: library play record failed: {e}", app.kj_config)
+        except Exception:
+            pass
+
+
+def _record_library_preview(app, file_path):
+    """Thread target: materialize an SSD file's identity row, then record the preview."""
+    try:
+        row = library_media.ensure_library_row_for_app(app, file_path)
+        if not row:
+            return
+        song_key = _normalize_song_key(row.get('artist'), row.get('title'))
+        app.stats.record_preview(row['media_id'], artist=row.get('artist'),
+                                 title=row.get('title'), song_key=song_key)
+    except Exception as e:
+        try:
+            log_message(f"stats: library preview record failed: {e}", app.kj_config)
         except Exception:
             pass
 
@@ -2754,6 +2814,31 @@ def _add_time_estimates(entries):
         cumulative += entry.get("duration") or default_duration
 
 
+def _add_media_meta(entries):
+    """Attach canonical ``media_meta = {artist, title}`` to linked entries.
+
+    media_library first (covers downloads + touched SSD rows, incl. manual ✎
+    edits), external catalog fallback (untouched SSD files). Display-only and
+    best-effort — a store/catalog error just leaves the key absent.
+    """
+    ml = getattr(current_app, 'media_library', None)
+    catalog = getattr(current_app, 'catalog', None)
+    for e in entries:
+        fp = e.get('file_path')
+        if not fp:
+            continue
+        try:
+            row = ml.get_by_path(fp) if ml else None
+            if not row and catalog is not None:
+                row = catalog.get_by_path(fp)
+            if row and ((row.get('artist') or '').strip()
+                        or (row.get('title') or '').strip()):
+                e['media_meta'] = {'artist': row.get('artist') or '',
+                                   'title': row.get('title') or ''}
+        except Exception:
+            continue
+
+
 def _decorate_rotation_entries(entries, rotation):
     """Attach every frontend-facing computed field to rotation entries.
 
@@ -2774,6 +2859,7 @@ def _decorate_rotation_entries(entries, rotation):
     _add_songs_sung(entries, rotation)
     _add_last_sang(entries, rotation)
     _add_sms_status(entries)
+    _add_media_meta(entries)
 
 
 @routes_bp.route('/rotation', methods=['GET'])
@@ -3107,6 +3193,16 @@ def link_rotation_file():
                 "verdict": gate.verdict,
             }), 422
         rotation.link_file(entry_id, file_path)
+        try:
+            if library_media.is_library_path(
+                    file_path, getattr(current_app, 'kj_config', None)):
+                # Materialize the identity row now so canonical display + the
+                # note editor work before the first play (design D3.3).
+                library_media.run_async(
+                    library_media.ensure_library_row_for_app,
+                    current_app._get_current_object(), file_path)
+        except Exception:
+            pass  # best-effort — the link above already succeeded
         # Tier-1 (gate above) confirmed integrity+decode; tier-2 now render-
         # verifies against the active renderer in the background and flags the
         # entry if the live renderer can't actually render it.
