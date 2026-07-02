@@ -278,6 +278,69 @@ class TestLibraryRow:
 
 
 # ---------------------------------------------------------------------------
+# Library default view — empty until searched; "*" surfaces newest files.
+# ---------------------------------------------------------------------------
+
+class TestLibraryDefaultView:
+    """The Library holds thousands of files, so it stays empty (just a hint)
+    until the KJ searches. Typing "*" surfaces the most-recent files."""
+
+    # localMediaItems / searchActive / mediaReviewOnly are top-level `let`
+    # bindings (not window properties), so assign to the bare names.
+    _SEED = (
+        "(n) => {"
+        "  const items = [];"
+        "  for (let i = 0; i < n; i++) items.push({"
+        "    display_name: 'Song ' + i, media_kind: 'mp4', ext: '.mp4',"
+        "    file_path: '/d/s' + i + '.mp4', media_id: 'm' + i,"
+        "    folder_name: 'Downloads', is_download: true, mtime: 1000 - i });"
+        "  localMediaItems = items; searchActive = false;"
+        "  mediaReviewOnly = false;"
+        "}"
+    )
+
+    def test_empty_by_default_when_search_blank(self, app_page):
+        # A populated library with a blank search box shows NO file rows.
+        app_page.evaluate(self._SEED, 5)
+        app_page.evaluate(
+            "() => { document.getElementById('catalog-search').value = '';"
+            " renderLibraryDefault(); }"
+        )
+        expect(app_page.locator("#media-list li.media-file-row")).to_have_count(0)
+        expect(app_page.locator("#media-list")).to_contain_text("Type to search")
+        # Header count still reflects the whole library.
+        expect(app_page.locator("#media-count")).to_have_text("(5)")
+
+    def test_star_shows_ten_newest(self, app_page):
+        app_page.evaluate(self._SEED, 15)
+        app_page.evaluate(
+            "() => { document.getElementById('catalog-search').value = '*';"
+            " renderNewestLibraryItems(); }"
+        )
+        rows = app_page.locator("#media-list li.media-file-row")
+        expect(rows).to_have_count(10)
+        # Newest-first: Song 0 is present, Song 14 (oldest) is not.
+        expect(app_page.locator("#media-list")).to_contain_text("Song 0")
+        expect(app_page.locator("#media-list")).not_to_contain_text("Song 14")
+        expect(app_page.locator("#search-meta")).to_contain_text("newest")
+
+    def test_star_via_search_input_shows_newest(self, app_page):
+        # Driving it through the real input path (catalogSearch) must also work
+        # and must NOT flip into catalog-search mode.
+        app_page.evaluate(self._SEED, 12)
+        search = app_page.locator("#catalog-search")
+        search.fill("*")
+        app_page.wait_for_timeout(500)  # debounce
+        expect(app_page.locator("#media-list li.media-file-row")).to_have_count(10)
+        assert app_page.evaluate("searchActive") is False
+
+    def test_placeholder_has_no_press_slash_hint(self, app_page):
+        # The confusing "(press /)" hint was removed from the placeholder.
+        placeholder = app_page.locator("#catalog-search").get_attribute("placeholder")
+        assert "press /" not in placeholder.lower(), placeholder
+
+
+# ---------------------------------------------------------------------------
 # Now-playing status + filler indicator
 # ---------------------------------------------------------------------------
 
@@ -771,6 +834,42 @@ class TestDownloadCompletionRefresh:
 
         display_name = page.evaluate("localMediaItems[0].display_name")
         assert display_name == "Bohemian Rhapsody - Queen"
+
+    def test_download_complete_during_search_preserves_query(self, page, live_server):
+        """A background download completing MUST NOT wipe the KJ's in-progress
+        search query — it should refresh results in place, keeping the box."""
+        test_media = [
+            {
+                "file_path": "downloads/Bohemian Rhapsody - Queen.mp4",
+                "display_name": "Bohemian Rhapsody - Queen",
+                "filename": "Bohemian Rhapsody - Queen.mp4",
+                "folder_name": "downloads",
+                "folder": "/tmp/downloads",
+                "is_download": True,
+                "mtime": 9999999999,
+                "size": 50000000,
+            }
+        ]
+        page.goto(live_server)
+        page.wait_for_load_state("networkidle")
+        page.locator("#catalog-search").fill("bohemian")
+        page.wait_for_timeout(500)  # debounce -> searchActive
+        page.route(
+            "**/media",
+            lambda route: route.fulfill(
+                status=200,
+                content_type="application/json",
+                body=json.dumps(test_media),
+            ),
+        )
+        page.evaluate(
+            """async () => {
+                await handleDownloadQueue([{id: 'q1', status: 'completed', title: 'Bohemian Rhapsody - Queen', url: 'http://test', error: null}]);
+            }"""
+        )
+        page.wait_for_timeout(400)  # let the in-place re-search render
+        # The query is preserved (NOT reset to '' or '*').
+        assert page.locator("#catalog-search").input_value() == "bohemian"
 
 
 # ---------------------------------------------------------------------------

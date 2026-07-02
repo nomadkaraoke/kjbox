@@ -160,3 +160,82 @@ class TestPillDeletion:
         pills = page.locator('.singer-pill')
         assert pills.count() == 1
         assert 'XTestB' in pills.first.text_content()
+
+
+# Render one rotation row directly (no server round-trip) so we can exercise the
+# row's click gestures. Timers are cleared so the 10s rotation poll can't wipe
+# the injected row mid-test.
+_ROW_SETUP = """
+() => {
+    for (let i = 1; i < 100000; i++) clearInterval(i);
+    window.rotationData = [{ id: 42, position: 1, singer: 'Jenny',
+        song_artist: 'Kryptonite - 3 Doors Down', status: 'Up Next',
+        songs_sung: 0, file_path: '/d/x.mp4' }];
+    renderRotation(window.rotationData);
+}
+"""
+
+
+class TestRotationClickGestures:
+    """Shift+click edits a rotation row; there is no click-to-delete gesture.
+
+    Gestures are exercised with synthetic click events (dispatched right after a
+    render, with timers cleared) so the assertions are deterministic — a real
+    Playwright click auto-waits and can race the 10s rotation poll re-rendering
+    the injected row.
+    """
+
+    # Dispatch a click on `selector` with the given modifier and report what the
+    # row handler did (delete attempt / edit mode / focused field).
+    _DISPATCH = """
+    ([selector, mods]) => {
+        window.__deleted = [];
+        window.deleteRotationEntry = function () { window.__deleted.push(Array.from(arguments)); };
+        const el = document.querySelector(selector);
+        el.dispatchEvent(new MouseEvent('click', Object.assign({ bubbles: true }, mods)));
+        return {
+            deleted: window.__deleted.length,
+            editing: !!document.querySelector('.rotation-editing'),
+            active: document.activeElement ? document.activeElement.className : '',
+            rows: document.querySelectorAll('#rotation-list .rotation-entry').length,
+        };
+    }
+    """
+
+    def _render(self, page):
+        page.evaluate(_ROW_SETUP)
+        page.locator('#rotation-list .rotation-entry').first.wait_for(state='visible')
+
+    def _click(self, page, selector, mods):
+        return page.evaluate(self._DISPATCH, [selector, mods])
+
+    def test_ctrl_or_cmd_click_does_not_delete(self, app_page):
+        page = app_page
+        self._render(page)
+        # Ctrl/Cmd click on the row body (the position number) where the old
+        # delete gesture used to fire: it must do nothing now.
+        for mod in ({"ctrlKey": True}, {"metaKey": True}):
+            res = self._click(page, '#rotation-list .rotation-num', mod)
+            assert res["deleted"] == 0, res
+            assert res["editing"] is False, res
+            assert res["rows"] == 1, res
+
+    def test_shift_click_row_enters_edit_mode(self, app_page):
+        page = app_page
+        self._render(page)
+        res = self._click(page, '#rotation-list .rotation-num', {"shiftKey": True})
+        assert res["editing"] is True, res
+
+    def test_shift_click_song_focuses_song_field(self, app_page):
+        page = app_page
+        self._render(page)
+        res = self._click(page, '#rotation-list .rotation-song', {"shiftKey": True})
+        assert res["editing"] is True, res
+        assert "rotation-edit-song" in res["active"], res
+
+    def test_shift_click_singer_focuses_singer_field(self, app_page):
+        page = app_page
+        self._render(page)
+        res = self._click(page, '#rotation-list .rotation-name', {"shiftKey": True})
+        assert res["editing"] is True, res
+        assert "rotation-edit-singer" in res["active"], res

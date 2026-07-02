@@ -2,6 +2,37 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-07-02 - Rotation click-gesture cleanup + Library search-first view (v0.61.0)
+
+**Why:** Three KJ-requested polish items. (1) Ctrl/Cmd+click deleted a rotation entry —
+too easy to fire by accident, and rarely needed since inline edit already has a Delete
+button. (2) Shift-clicking a song name opened edit mode but put the cursor in the *singer*
+field. (3) The Library always rendered its full multi-thousand-file list below the search
+box, which is just noise before you've searched; the placeholder's "(press /)" hint was
+also confusing.
+
+**What:**
+- **Removed the Ctrl/Cmd+click delete gesture** on rotation rows (row handler, the
+  modifier-hover indicators in both the per-row listener and the global keydown/keyup, and
+  the dead `.rotation-delete-hover` CSS). Deletion is still available from the **Delete**
+  button in edit mode. Ctrl/Cmd+click now just copies like a normal click.
+- **Shift+click now focuses by target:** shift-clicking the song text lands the cursor in
+  the song field (selected), a singer name in the singer field. The pencil button keeps
+  singer focus. (`enterRotationEditMode` gained a `focusTarget` arg.)
+- **Library is empty until you search.** A blank box shows only a hint (the header count
+  still reflects the whole library). Typing **`*`** surfaces your 10 newest files
+  (`/media` is already sorted newest-first). After a download/upload the box switches to the
+  `*` newest view so the just-added file is visible — without wiping an in-progress search
+  (the completion refresh re-runs the active query in place). The "Needs review" filter
+  still shows its subset on demand. Placeholder now reads `…catalog songs (or * for
+  newest)…` — the `(press /)` hint is gone (the `/` shortcut still works).
+
+**Files:** `static/app.js`, `static/style.css`. Tests: 9 new e2e (4 rotation-gesture, 4
+library, 1 download-during-search regression) in `tests/e2e/`.
+
+**Deploy:** Frontend-only — auto-deploy `git pull`, no service restart, no playback
+interruption. Takes effect on next browser refresh (`app.js?v=0.61.0` cache-bust).
+
 ## 2026-07-02 - Dedicated right-rail Requests section; Screen Preview → col2 (v0.60.0)
 
 **Why:** Singer requests rendered into a panel nested *inside* the Rotation container

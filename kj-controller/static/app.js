@@ -307,12 +307,8 @@ async function uploadFile(input) {
             progress.innerHTML = '<div class="dl-queue-item dl-queue-completed"><span class="dl-queue-icon">✅</span><span class="dl-queue-label">' + (data.filename || file.name) + '</span></div>';
             log('Uploaded: ' + (data.filename || file.name));
             await refreshMediaData();
-            if (searchActive) {
-                const q = document.getElementById('catalog-search').value.trim();
-                if (q) catalogSearch(q); else clearSearch();
-            } else {
-                renderFolderView(applyMediaFilter(localMediaItems));
-            }
+            // Surface the just-uploaded file without wiping an in-progress search.
+            refreshLibraryAfterAdd();
         } else {
             progress.innerHTML = '<div class="dl-queue-item dl-queue-error"><span class="dl-queue-icon">❌</span><span class="dl-queue-label">' + (data.error || 'Upload failed') + '</span></div>';
             // Playability hard-block: also surface prominently so it can't be missed.
@@ -382,8 +378,8 @@ async function handleDownloadQueue(items) {
             log(`Downloaded "${item.title}" successfully!`, 'success');
 
             await refreshMediaData();
-            if (searchActive) clearSearch();
-            else renderFolderView(applyMediaFilter(localMediaItems));
+            // Surface the just-downloaded file without wiping an in-progress search.
+            refreshLibraryAfterAdd();
             expandDownloadsFolder();
 
             // Auto-dismiss after 3s
@@ -454,7 +450,7 @@ async function rescanMedia() {
             const query = document.getElementById('catalog-search').value.trim();
             if (query) catalogSearch(query);
         } else {
-            renderFolderView(applyMediaFilter(localMediaItems));
+            renderLibraryDefault();
         }
     }
 }
@@ -618,7 +614,7 @@ function toggleReviewFilter() {
         const query = document.getElementById('catalog-search').value.trim();
         if (query) catalogSearch(query);
     } else {
-        renderFolderView(applyMediaFilter(localMediaItems));
+        renderLibraryDefault();
     }
 }
 
@@ -637,7 +633,7 @@ function cycleMediaFilter() {
         const query = document.getElementById('catalog-search').value.trim();
         if (query) catalogSearch(query);
     } else {
-        renderFolderView(applyMediaFilter(localMediaItems));
+        renderLibraryDefault();
     }
 }
 
@@ -967,6 +963,99 @@ function renderFolderView(items) {
     });
 }
 
+// How many "newest" files the * shortcut surfaces.
+const NEWEST_LIBRARY_COUNT = 10;
+
+// What the Library shows when the KJ has NOT typed a real search term. The
+// library holds thousands of files, so a permanent full listing is just noise —
+// instead we keep it empty (with a hint) until they search. Typing "*" surfaces
+// the most-recently-added files; the "Needs review" filter still shows its
+// curated subset on its own.
+function renderLibraryDefault() {
+    if (mediaReviewOnly) {
+        renderFolderView(applyMediaFilter(localMediaItems));
+        return;
+    }
+    const query = document.getElementById('catalog-search').value.trim();
+    if (query === '*') {
+        renderNewestLibraryItems();
+        return;
+    }
+    renderLibraryEmptyState();
+}
+
+// Empty Library state: no rows, just a hint. The header count still reflects
+// the whole library so the KJ can see how many files they have.
+function renderLibraryEmptyState() {
+    const mediaList = document.getElementById('media-list');
+    const mediaCount = document.getElementById('media-count');
+    const folderControls = document.getElementById('folder-controls');
+    const searchMeta = document.getElementById('search-meta');
+    mediaList.innerHTML = '';
+    folderControls.classList.add('hidden');
+    if (searchMeta) searchMeta.classList.add('hidden');
+
+    const li = document.createElement('li');
+    li.className = 'library-empty-hint';
+    li.style.cursor = 'default';
+    if (localMediaItems.length === 0) {
+        li.textContent = 'No media files found. Try downloading a song or clicking Rescan.';
+        mediaCount.textContent = '';
+    } else {
+        li.textContent = 'Type to search your library and catalog — or type * to see your newest files.';
+        mediaCount.textContent = `(${localMediaItems.length})`;
+    }
+    mediaList.appendChild(li);
+}
+
+// The "*" view: the most-recently-added library files (already sorted
+// newest-first by the /media backend), as a flat list.
+function renderNewestLibraryItems() {
+    const mediaList = document.getElementById('media-list');
+    const mediaCount = document.getElementById('media-count');
+    const folderControls = document.getElementById('folder-controls');
+    const searchMeta = document.getElementById('search-meta');
+    mediaList.innerHTML = '';
+    folderControls.classList.add('hidden');
+
+    const newest = applyMediaFilter(localMediaItems).slice(0, NEWEST_LIBRARY_COUNT);
+    if (newest.length === 0) {
+        renderLibraryEmptyState();
+        return;
+    }
+    searchMeta.classList.remove('hidden');
+    searchMeta.innerHTML = `Showing your ${newest.length} newest file${newest.length !== 1 ? 's' : ''} <a onclick="clearSearch()">Clear</a>`;
+    mediaCount.textContent = `(${newest.length})`;
+    newest.forEach(item => mediaList.appendChild(createMediaItemLi(item)));
+}
+
+// Surface the freshly-added file(s) after a download/upload without forcing the
+// KJ to type: switch the box to the "*" newest view (self-consistent, and
+// discoverable — the × clears it back to empty).
+function showNewestLibrary() {
+    const search = document.getElementById('catalog-search');
+    search.value = '*';
+    document.getElementById('search-clear').classList.remove('hidden');
+    searchActive = false;
+    renderNewestLibraryItems();
+}
+
+// Refresh the Library after a download/upload adds a file, WITHOUT disturbing an
+// in-progress search. If the KJ is actively searching, re-run their query in
+// place (never wipe what they typed); if the box is empty, surface the new file
+// via the "*" newest view; if they're mid-typing a short (<2 char) query, leave
+// it untouched. Called from the background download poll + the upload handler.
+function refreshLibraryAfterAdd() {
+    const boxVal = document.getElementById('catalog-search').value.trim();
+    if (searchActive) {
+        if (boxVal) catalogSearch(boxVal); else clearSearch();
+    } else if (boxVal === '') {
+        showNewestLibrary();
+    } else {
+        renderLibraryDefault();
+    }
+}
+
 async function refreshMediaData() {
     const response = await fetch('/media');
     localMediaItems = await response.json();
@@ -976,7 +1065,7 @@ async function updateMediaList() {
     if (searchActive) return;
     try {
         await refreshMediaData();
-        renderFolderView(applyMediaFilter(localMediaItems));
+        renderLibraryDefault();
     } catch (error) {
         log('Could not update media list.', 'error');
     }
@@ -1957,8 +2046,20 @@ function renderUnifiedResults(localResults, catalogResults, query) {
 }
 
 async function catalogSearch(query) {
+    // "*" is a local shortcut for "show my newest files" — not a catalog query.
+    if (query === '*') {
+        searchActive = false;
+        document.getElementById('search-clear').classList.remove('hidden');
+        renderNewestLibraryItems();
+        return;
+    }
     if (!query || query.length < 2) {
-        if (searchActive) clearSearch();
+        // Too short to search: fall back to the default (empty) Library view
+        // without wiping what the KJ has typed so far.
+        searchActive = false;
+        document.getElementById('search-meta').classList.add('hidden');
+        document.getElementById('search-clear').classList.toggle('hidden', query.length === 0);
+        renderLibraryDefault();
         return;
     }
     searchActive = true;
@@ -1987,7 +2088,7 @@ function clearSearch() {
     document.getElementById('catalog-search').value = '';
     document.getElementById('search-clear').classList.add('hidden');
     document.getElementById('search-meta').classList.add('hidden');
-    renderFolderView(applyMediaFilter(localMediaItems));
+    renderLibraryDefault();
 }
 
 async function checkCatalogAvailability() {
@@ -1997,13 +2098,9 @@ async function checkCatalogAvailability() {
         const searchInput = document.getElementById('catalog-search');
         let placeholder;
         if (data.available) {
-            placeholder = `Search your library + ${data.total.toLocaleString()} catalog songs...`;
+            placeholder = `Search your library + ${data.total.toLocaleString()} catalog songs (or * for newest)...`;
         } else {
-            placeholder = 'Search your library...';
-        }
-        // Add keyboard shortcut hint on non-touch devices (#8)
-        if (!('ontouchstart' in window)) {
-            placeholder += '  (press /)';
+            placeholder = 'Search your library (or * for newest)...';
         }
         searchInput.placeholder = placeholder;
     } catch (error) {
@@ -4013,25 +4110,25 @@ function renderRotation(entries) {
             row.classList.add('rotation-skipped');
         }
 
-        // Modifier+hover: show edit/delete indicator
+        // Shift+hover: show edit indicator
         row.addEventListener('mouseenter', (e) => {
-            if (e.ctrlKey || e.metaKey) row.classList.add('rotation-delete-hover');
-            else if (e.shiftKey) row.classList.add('rotation-edit-hover');
+            if (e.shiftKey) row.classList.add('rotation-edit-hover');
         });
         row.addEventListener('mouseleave', () => {
-            row.classList.remove('rotation-delete-hover', 'rotation-edit-hover');
+            row.classList.remove('rotation-edit-hover');
         });
 
-        // Row click: Shift=edit, Ctrl/Cmd=delete
+        // Row click: Shift=edit. Shift-clicking the song text lands the cursor
+        // in the song field; shift-clicking a singer name lands it in the
+        // singer field. (Deletion is done from the Delete button in edit mode —
+        // there is deliberately no click-to-delete gesture.)
         row.addEventListener('click', (e) => {
             // Don't intercept clicks on buttons/inputs or during editing
             if (e.target.closest('button, input') || row.classList.contains('rotation-editing')) return;
             if (e.shiftKey) {
                 e.preventDefault();
-                enterRotationEditMode(row, entry);
-            } else if (e.ctrlKey || e.metaKey) {
-                e.preventDefault();
-                deleteRotationEntry(entry.id, entry.singer);
+                const focusTarget = e.target.closest('.rotation-song') ? 'song' : 'singer';
+                enterRotationEditMode(row, entry, focusTarget);
             }
         });
 
@@ -4088,7 +4185,7 @@ function renderRotation(entries) {
         song.className = 'rotation-song rotation-copyable';
         song.textContent = entry.song_artist || '';
         song.title = 'Click to copy \u2022 Shift+click to edit';
-        song.onclick = (e) => { if (!e.shiftKey && !e.ctrlKey && !e.metaKey) copyRotationText(song); };
+        song.onclick = (e) => { if (!e.shiftKey) copyRotationText(song); };
 
         row.appendChild(handle);
         info.appendChild(num);
@@ -4100,7 +4197,7 @@ function renderRotation(entries) {
                 sp.className = 'rotation-singer-pill rotation-copyable';
                 sp.textContent = s;
                 sp.title = 'Click to copy \u2022 Shift+click to edit';
-                sp.onclick = (ev) => { if (!ev.shiftKey && !ev.ctrlKey && !ev.metaKey) copyRotationText(sp); };
+                sp.onclick = (ev) => { if (!ev.shiftKey) copyRotationText(sp); };
                 info.appendChild(sp);
             });
         } else {
@@ -4109,7 +4206,7 @@ function renderRotation(entries) {
             name.className = 'rotation-name rotation-copyable';
             name.textContent = entry.singer;
             name.title = 'Click to copy \u2022 Shift+click to edit';
-            name.onclick = (ev) => { if (!ev.shiftKey && !ev.ctrlKey && !ev.metaKey) copyRotationText(name); };
+            name.onclick = (ev) => { if (!ev.shiftKey) copyRotationText(name); };
             info.appendChild(name);
         }
         const pill = document.createElement('span');
@@ -5112,7 +5209,7 @@ function showMergeDropdown(ev, singer) {
     setTimeout(() => document.addEventListener('click', close), 0);
 }
 
-function enterRotationEditMode(row, entry) {
+function enterRotationEditMode(row, entry, focusTarget) {
     // Don't double-enter edit mode
     if (row.classList.contains('rotation-editing')) return;
     row.classList.add('rotation-editing');
@@ -5221,7 +5318,14 @@ function enterRotationEditMode(row, entry) {
     actions.appendChild(cancelBtn);
     actions.appendChild(delBtn);
 
-    singerInput.focus();
+    // Land the cursor where the KJ clicked: the song field when they
+    // shift-clicked the song text, otherwise the singer field.
+    if (focusTarget === 'song') {
+        songInput.focus();
+        songInput.select();
+    } else {
+        singerInput.focus();
+    }
 
     // Stop all events from bubbling out of edit inputs
     [singerInput, songInput].forEach(input => {
@@ -6527,25 +6631,18 @@ function updateBrowserModeUI(browserMode) {
     }
 }
 
-// Update modifier-hover indicators as keys change
+// Update the Shift-hover edit indicator as keys change
 document.addEventListener('keydown', (e) => {
     // Skip modifier-key highlighting when any rotation row is being edited
     if (document.querySelector('.rotation-editing')) return;
     const hovered = document.querySelector('.rotation-entry:hover');
     if (!hovered) return;
-    if (e.ctrlKey || e.metaKey) {
-        hovered.classList.remove('rotation-edit-hover');
-        hovered.classList.add('rotation-delete-hover');
-    } else if (e.shiftKey) {
-        hovered.classList.remove('rotation-delete-hover');
+    if (e.shiftKey) {
         hovered.classList.add('rotation-edit-hover');
     }
 });
 document.addEventListener('keyup', (e) => {
     if (document.querySelector('.rotation-editing')) return;
-    if (!e.ctrlKey && !e.metaKey) {
-        document.querySelectorAll('.rotation-delete-hover').forEach(el => el.classList.remove('rotation-delete-hover'));
-    }
     if (!e.shiftKey) {
         document.querySelectorAll('.rotation-edit-hover').forEach(el => el.classList.remove('rotation-edit-hover'));
     }
