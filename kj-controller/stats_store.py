@@ -126,6 +126,28 @@ class StatsStore:
             conn.commit()
             return cur.rowcount > 0
 
+    def record_preview(self, media_id, *, artist=None, title=None,
+                       song_key=None, source="live"):
+        if not media_id:
+            return False
+        conn = self._get_conn()
+        with self._lock():
+            if source == "live":
+                dup = conn.execute(
+                    "SELECT 1 FROM preview_events WHERE media_id=? AND source='live' "
+                    "AND previewed_at >= datetime('now','-60 seconds') LIMIT 1",
+                    (media_id,)).fetchone()
+                if dup:
+                    return False
+            cur = conn.execute(
+                """
+                INSERT INTO preview_events (media_id, song_key, previewed_at, source, artist, title)
+                VALUES (?,?, datetime('now'), ?,?,?)
+                """,
+                (media_id, song_key, source, artist, title))
+            conn.commit()
+            return cur.rowcount > 0
+
 
 def _norm_singer(s):
     if s is None:

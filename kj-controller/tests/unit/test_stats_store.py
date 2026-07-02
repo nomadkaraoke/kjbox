@@ -69,3 +69,14 @@ def test_record_play_no_entry_outside_window_counts(store):
     store.record_play("db-OLD", entry_id=None, played_at="2020-01-01 00:00:00")
     assert store.record_play("db-OLD", entry_id=None) is True
     assert _count(store, "play_events") == 2
+
+
+def test_record_preview_inserts_and_windows(store):
+    assert store.record_preview("yt-abc", title="ABBA - SOS", song_key="abba sos") is True
+    assert store.record_preview("yt-abc") is False            # within 60s window
+    assert _count(store, "preview_events") == 1
+
+
+def test_record_preview_empty_noop(store):
+    assert store.record_preview("") is False
+    assert _count(store, "preview_events") == 0
