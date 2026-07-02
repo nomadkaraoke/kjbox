@@ -835,6 +835,42 @@ class TestDownloadCompletionRefresh:
         display_name = page.evaluate("localMediaItems[0].display_name")
         assert display_name == "Bohemian Rhapsody - Queen"
 
+    def test_download_complete_during_search_preserves_query(self, page, live_server):
+        """A background download completing MUST NOT wipe the KJ's in-progress
+        search query — it should refresh results in place, keeping the box."""
+        test_media = [
+            {
+                "file_path": "downloads/Bohemian Rhapsody - Queen.mp4",
+                "display_name": "Bohemian Rhapsody - Queen",
+                "filename": "Bohemian Rhapsody - Queen.mp4",
+                "folder_name": "downloads",
+                "folder": "/tmp/downloads",
+                "is_download": True,
+                "mtime": 9999999999,
+                "size": 50000000,
+            }
+        ]
+        page.goto(live_server)
+        page.wait_for_load_state("networkidle")
+        page.locator("#catalog-search").fill("bohemian")
+        page.wait_for_timeout(500)  # debounce -> searchActive
+        page.route(
+            "**/media",
+            lambda route: route.fulfill(
+                status=200,
+                content_type="application/json",
+                body=json.dumps(test_media),
+            ),
+        )
+        page.evaluate(
+            """async () => {
+                await handleDownloadQueue([{id: 'q1', status: 'completed', title: 'Bohemian Rhapsody - Queen', url: 'http://test', error: null}]);
+            }"""
+        )
+        page.wait_for_timeout(400)  # let the in-place re-search render
+        # The query is preserved (NOT reset to '' or '*').
+        assert page.locator("#catalog-search").input_value() == "bohemian"
+
 
 # ---------------------------------------------------------------------------
 # Section-header action-button framework (regression guard)

@@ -307,13 +307,8 @@ async function uploadFile(input) {
             progress.innerHTML = '<div class="dl-queue-item dl-queue-completed"><span class="dl-queue-icon">✅</span><span class="dl-queue-label">' + (data.filename || file.name) + '</span></div>';
             log('Uploaded: ' + (data.filename || file.name));
             await refreshMediaData();
-            if (searchActive) {
-                const q = document.getElementById('catalog-search').value.trim();
-                if (q) catalogSearch(q); else clearSearch();
-            } else {
-                // Surface the just-uploaded file (newest) rather than an empty list.
-                showNewestLibrary();
-            }
+            // Surface the just-uploaded file without wiping an in-progress search.
+            refreshLibraryAfterAdd();
         } else {
             progress.innerHTML = '<div class="dl-queue-item dl-queue-error"><span class="dl-queue-icon">❌</span><span class="dl-queue-label">' + (data.error || 'Upload failed') + '</span></div>';
             // Playability hard-block: also surface prominently so it can't be missed.
@@ -383,9 +378,8 @@ async function handleDownloadQueue(items) {
             log(`Downloaded "${item.title}" successfully!`, 'success');
 
             await refreshMediaData();
-            if (searchActive) clearSearch();
-            // Surface the just-downloaded file (newest) rather than an empty list.
-            else showNewestLibrary();
+            // Surface the just-downloaded file without wiping an in-progress search.
+            refreshLibraryAfterAdd();
             expandDownloadsFolder();
 
             // Auto-dismiss after 3s
@@ -1044,6 +1038,22 @@ function showNewestLibrary() {
     document.getElementById('search-clear').classList.remove('hidden');
     searchActive = false;
     renderNewestLibraryItems();
+}
+
+// Refresh the Library after a download/upload adds a file, WITHOUT disturbing an
+// in-progress search. If the KJ is actively searching, re-run their query in
+// place (never wipe what they typed); if the box is empty, surface the new file
+// via the "*" newest view; if they're mid-typing a short (<2 char) query, leave
+// it untouched. Called from the background download poll + the upload handler.
+function refreshLibraryAfterAdd() {
+    const boxVal = document.getElementById('catalog-search').value.trim();
+    if (searchActive) {
+        if (boxVal) catalogSearch(boxVal); else clearSearch();
+    } else if (boxVal === '') {
+        showNewestLibrary();
+    } else {
+        renderLibraryDefault();
+    }
 }
 
 async function refreshMediaData() {
