@@ -694,3 +694,84 @@ class TestDownloadCompletionRefresh:
 
         display_name = page.evaluate("localMediaItems[0].display_name")
         assert display_name == "Bohemian Rhapsody - Queen"
+
+
+# ---------------------------------------------------------------------------
+# Section-header action-button framework (regression guard)
+# ---------------------------------------------------------------------------
+
+class TestHeaderButtonConsistency:
+    """All top-right section-header buttons must share one size via the
+    `.header-actions` framework. This guards against the recurring drift where
+    a new/altered header button (classically the classless "Song Stats") ends
+    up a different size. See docs/DEVELOPMENT.md § "Section header buttons"
+    and docs/archive/2026-07-02-header-button-framework-design.md.
+    """
+
+    def test_all_header_buttons_share_one_size(self, app_page):
+        """Every `.header-actions button` resolves to the SAME font-size,
+        weight, padding and radius — regardless of its own class or lack of
+        one. Computed styles resolve even for display:none buttons, so this
+        holds in both Simple and Advanced mode."""
+        styles = app_page.evaluate(
+            """() => {
+                const btns = [...document.querySelectorAll('.header-actions button')];
+                const seen = {};
+                for (const b of btns) {
+                    const c = getComputedStyle(b);
+                    const key = [c.fontSize, c.fontWeight, c.paddingTop,
+                                 c.paddingRight, c.borderTopLeftRadius].join('|');
+                    (seen[key] ||= []).push((b.textContent || '').trim().slice(0, 20));
+                }
+                return { count: btns.length, groups: seen };
+            }"""
+        )
+        assert styles["count"] > 0, "No .header-actions buttons found"
+        distinct = list(styles["groups"].keys())
+        assert len(distinct) == 1, (
+            "Section-header buttons drifted into multiple sizes — every header "
+            "button must be sized by the .header-actions framework, not bespoke "
+            f"per-button CSS. Groups: {styles['groups']}"
+        )
+
+    def test_song_stats_matches_its_siblings(self, app_page):
+        """The exact bug that keeps recurring: Song Stats sized differently
+        from the other Rotation buttons."""
+        sizes = app_page.evaluate(
+            """() => {
+                const pick = s => {
+                    const el = document.querySelector(s);
+                    if (!el) return null;
+                    const c = getComputedStyle(el);
+                    return c.fontSize + '|' + c.paddingTop + '|' + c.fontWeight;
+                };
+                return { stats: pick('.rotation-stats-btn'),
+                         refresh: pick('.rotation-refresh-btn') };
+            }"""
+        )
+        assert sizes["stats"] is not None and sizes["refresh"] is not None
+        assert sizes["stats"] == sizes["refresh"], (
+            f"Song Stats ({sizes['stats']}) must match sibling Rotation buttons "
+            f"({sizes['refresh']})"
+        )
+
+    def test_no_header_button_outside_header_actions(self, app_page):
+        """Structural guard: a <button> placed in a section header must live
+        inside `.header-actions` (the only documented exception is the
+        Simple/Advanced segmented pill in `.mode-segmented`). A bare button in
+        a `.header-row` is exactly how the drift starts."""
+        strays = app_page.evaluate(
+            """() => {
+                const out = [];
+                for (const b of document.querySelectorAll('.header-row button')) {
+                    if (!b.closest('.header-actions') && !b.closest('.mode-segmented')) {
+                        out.push((b.textContent || '').trim().slice(0, 20));
+                    }
+                }
+                return out;
+            }"""
+        )
+        assert strays == [], (
+            "Section-header button(s) outside .header-actions (wrap them so they "
+            f"get consistent sizing): {strays}"
+        )
