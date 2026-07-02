@@ -180,6 +180,40 @@ class StatsStore:
                 ids).fetchone()
         return r["media_id"] if r and r["c"] > 0 else None
 
+    def get_note(self, media_id):
+        conn = self._get_conn()
+        with self._lock():
+            r = conn.execute(
+                "SELECT * FROM version_notes WHERE media_id=?", (media_id,)).fetchone()
+        return dict(r) if r else None
+
+    def upsert_note(self, media_id, note, label, artist=None, title=None):
+        conn = self._get_conn()
+        with self._lock():
+            conn.execute(
+                """
+                INSERT INTO version_notes
+                    (media_id, note, label, artist, title, created_at, updated_at)
+                VALUES (?,?,?,?,?, datetime('now'), datetime('now'))
+                ON CONFLICT(media_id) DO UPDATE SET
+                    note=excluded.note,
+                    label=excluded.label,
+                    artist=COALESCE(version_notes.artist, excluded.artist),
+                    title=COALESCE(version_notes.title, excluded.title),
+                    updated_at=datetime('now')
+                """,
+                (media_id, note, label, artist, title))
+            conn.commit()
+        return self.get_note(media_id)
+
+    def distinct_labels(self):
+        conn = self._get_conn()
+        with self._lock():
+            rows = conn.execute(
+                "SELECT DISTINCT label FROM version_notes "
+                "WHERE label IS NOT NULL AND label <> '' ORDER BY label").fetchall()
+        return [r["label"] for r in rows]
+
 
 def _norm_singer(s):
     if s is None:

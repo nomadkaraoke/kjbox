@@ -117,3 +117,24 @@ def test_usual_media_id_tiebreak_by_recency(store):
 
 def test_usual_media_id_empty_input_none(store):
     assert store.usual_media_id([]) is None
+
+
+def test_upsert_note_creates_then_edits(store):
+    n = store.upsert_note("yt-a", "censored version", "censored",
+                          artist="ABBA", title="SOS")
+    assert n["note"] == "censored version" and n["label"] == "censored"
+    n2 = store.upsert_note("yt-a", "edited", "video-bg")
+    assert n2["note"] == "edited" and n2["label"] == "video-bg"
+    assert n2["artist"] == "ABBA"          # preserved
+    assert _count(store, "version_notes") == 1
+
+
+def test_get_note_missing(store):
+    assert store.get_note("nope") is None
+
+
+def test_distinct_labels(store):
+    store.upsert_note("yt-a", "x", "censored")
+    store.upsert_note("yt-b", "y", "video-bg")
+    store.upsert_note("yt-c", "z", "")     # blank excluded
+    assert store.distinct_labels() == ["censored", "video-bg"]
