@@ -31,7 +31,26 @@ def test_run_sync_triggers_rescan_when_files_copied(tmp_path, monkeypatch):
     fake_requests = types.SimpleNamespace(post=lambda url, **kw: posted.setdefault("url", url) or _Resp())
     out = sm.run_sync(_cfg(tmp_path), requests_lib=fake_requests)
     assert out["changed"] is True and out["rescanned"] is True and out["copied"] == 1
-    assert posted["url"].endswith("/rescan")
+    # Must poke the app's internal bind port (app_bind_port default 5001), NOT the
+    # public flask_port (80) that _cfg sets — posting to the proxy would 301 and miss /rescan.
+    assert posted["url"] == "http://127.0.0.1:5001/rescan"
+
+
+def test_run_sync_rescan_url_override(tmp_path, monkeypatch):
+    posted = {}
+    dest = tmp_path / "NOMAD-720p"
+
+    def fake_run(cmd, **kw):
+        os.makedirs(dest, exist_ok=True)
+        (dest / "x.mp4").write_bytes(b"x")
+        return types.SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(sm.subprocess, "run", fake_run)
+    cfg = _cfg(tmp_path)
+    cfg["master_sync_rescan_url"] = "http://127.0.0.1:9999/rescan"
+    fake_requests = types.SimpleNamespace(post=lambda url, **kw: posted.setdefault("url", url) or _Resp())
+    sm.run_sync(cfg, requests_lib=fake_requests)
+    assert posted["url"] == "http://127.0.0.1:9999/rescan"
 
 
 def test_run_sync_no_change_skips_rescan(tmp_path, monkeypatch):

@@ -80,9 +80,14 @@ def run_sync(config, *, gcloud_bin="gcloud", requests_lib=requests):
     changed = after != before
     rescanned = False
     if changed and requests_lib is not None:
+        # Poke the app's INTERNAL bind port (app_bind_port, default 5001), NOT the
+        # public flask_port — on Caddy-fronted devices flask_port is the proxy (80),
+        # which 301-redirects and never reaches the app's /rescan.
+        rescan_url = config.get("master_sync_rescan_url") or (
+            f"http://127.0.0.1:{config.get('app_bind_port', 5001)}/rescan"
+        )
         try:
-            port = config.get("flask_port", 80)
-            requests_lib.post(f"http://localhost:{port}/rescan", timeout=30)
+            requests_lib.post(rescan_url, timeout=30)
             rescanned = True
         except Exception:  # noqa: BLE001
             rescanned = False  # rescan will happen on the next natural scan anyway
