@@ -2,6 +2,22 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-07-02 - Fix: rescan must not clobber curated media identity (v0.54.1)
+
+**Why:** `MediaIndex.scan()` re-derived deterministic identity from each filename and
+upserted it, **overwriting LLM-refined and manually-edited `media_library` rows on every
+rescan/restart** (resetting `needs_review`, polluting titles with the `[media_id]` token). This
+made refinements non-durable — a critical flaw surfaced by the Phase-4 migration + rescan.
+
+**What:**
+- New `MediaLibraryStore.upsert_scanned(record)`: for a media_id that already exists, only
+  refresh the on-disk fields (`file_path`, `ext`) and **preserve** artist/title/source/
+  needs_review/parse_method. Brand-new media_ids still get the full deterministic row.
+- `scan()` now calls `upsert_scanned` instead of `upsert`.
+- `_resolve_media_id` is token-aware: a canonical `Artist - Title [media_id].ext` slug is parsed
+  with the token stripped (`naming.strip_media_id_token`) and its source taken from the token
+  prefix, so a brand-new tokened file also gets clean identity.
+
 ## 2026-07-02 - Download-naming Phase 4: reviewed backlog migration (v0.54.0)
 
 **Why:** P1–P3 canonicalize *new* downloads; the existing backlog still sits at legacy

@@ -74,6 +74,18 @@ def extract_media_id(filename):
     return m.group(1) if m else None
 
 
+def strip_media_id_token(filename):
+    """Remove a trailing ' [media_id]' slug token, preserving the extension.
+
+    'Artist - Title [yt-abc].mp4' -> 'Artist - Title.mp4'. Lets the deterministic
+    parser read a canonical slug without the id token polluting the title.
+    """
+    base = os.path.basename(filename or "")
+    stem, ext = os.path.splitext(base)
+    stem = re.sub(r"\s*\[[a-z]+-[^\]]+\]$", "", stem).strip()
+    return stem + ext
+
+
 def _hash8(text):
     return hashlib.sha1((text or "").encode("utf-8")).hexdigest()[:8]
 
