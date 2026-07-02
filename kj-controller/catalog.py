@@ -174,10 +174,28 @@ class ExternalCatalog:
 
         Returns:
             Number of entries inserted.
+
+        The whole build runs as ONE transaction (no intermediate commits).
+        The live catalog once sat truncated at exactly 240,000/398,446 rows
+        because an auto-deploy service restart killed the in-app build
+        mid-ingest and per-batch commits made the partial state durable —
+        and invisible (a clean batch multiple looks complete). With a single
+        transaction, a killed process (WAL rollback on next open) or a raised
+        error (explicit rollback below) leaves the PREVIOUS catalog fully
+        intact, and concurrent readers see the old data until the commit.
         """
         conn = self._get_conn()
         self.init_schema()
+        try:
+            total = self._build_all(conn, path, mount_replace, callback)
+            conn.commit()
+        except BaseException:
+            conn.rollback()
+            raise
+        return total
 
+    def _build_all(self, conn, path, mount_replace, callback):
+        """All mutating build steps; the caller owns the transaction."""
         # Drop ALL sync triggers during build. We populate media_fts manually
         # with NORMALIZED text, but the triggers feed RAW text. For an
         # external-content FTS5 table the 'delete' command requires the text it
@@ -263,8 +281,6 @@ class ExternalCatalog:
             "INSERT OR REPLACE INTO catalog_meta(key, value) VALUES('normalizer_version', ?)",
             (str(NORMALIZER_VERSION),),
         )
-        conn.commit()
-
         return total
 
     def _flush_batch(self, conn, batch):
@@ -293,7 +309,8 @@ class ExternalCatalog:
             [(r[0], _normalize_for_search(((r[1] or '') + ' ' + (r[2] or '')).strip()))
              for r in rows]
         )
-        conn.commit()
+        # No commit here — the caller (build_from_file_list) owns the
+        # transaction so an interrupted build never persists a partial state.
 
     def get_by_path(self, path):
         """Row for an exact file path, tolerant of NFC/NFD unicode variants.
@@ -449,39 +466,46 @@ class ExternalCatalog:
         current normalizer, then restamp NORMALIZER_VERSION.
 
         Returns the number of media rows reindexed.
+
+        Runs as ONE transaction (same rationale as build_from_file_list): an
+        interrupted reindex must leave the previous FTS/trigram index intact,
+        not a half-empty one.
         """
         conn = self._get_conn()
-        # media_fts is external-content: "DELETE FROM media_fts" is a silent
-        # no-op, so use the special 'delete-all' command to clear the inverted
-        # index. media_trigram is standalone, so a plain DELETE works there.
-        conn.execute("INSERT INTO media_fts(media_fts) VALUES('delete-all')")
-        conn.execute("DELETE FROM media_trigram")
-        conn.commit()
-        rows = conn.execute(
-            "SELECT id, artist, title, disc_id FROM media"
-        ).fetchall()
-        total = len(rows)
-        for start in range(0, total, batch_size):
-            chunk = rows[start:start + batch_size]
-            conn.executemany(
-                "INSERT INTO media_fts(rowid, artist, title, disc_id) VALUES (?,?,?,?)",
-                [(r[0], _normalize_for_search(r[1] or ''),
-                  _normalize_for_search(r[2] or ''),
-                  _normalize_for_search(r[3] or '')) for r in chunk],
-            )
-            conn.executemany(
-                "INSERT INTO media_trigram(rowid, norm_text) VALUES (?,?)",
-                [(r[0], _normalize_for_search(((r[1] or '') + ' ' + (r[2] or '')).strip()))
-                 for r in chunk],
+        try:
+            # media_fts is external-content: "DELETE FROM media_fts" is a
+            # silent no-op, so use the special 'delete-all' command to clear
+            # the inverted index. media_trigram is standalone, so a plain
+            # DELETE works there.
+            conn.execute("INSERT INTO media_fts(media_fts) VALUES('delete-all')")
+            conn.execute("DELETE FROM media_trigram")
+            rows = conn.execute(
+                "SELECT id, artist, title, disc_id FROM media"
+            ).fetchall()
+            total = len(rows)
+            for start in range(0, total, batch_size):
+                chunk = rows[start:start + batch_size]
+                conn.executemany(
+                    "INSERT INTO media_fts(rowid, artist, title, disc_id) VALUES (?,?,?,?)",
+                    [(r[0], _normalize_for_search(r[1] or ''),
+                      _normalize_for_search(r[2] or ''),
+                      _normalize_for_search(r[3] or '')) for r in chunk],
+                )
+                conn.executemany(
+                    "INSERT INTO media_trigram(rowid, norm_text) VALUES (?,?)",
+                    [(r[0], _normalize_for_search(((r[1] or '') + ' ' + (r[2] or '')).strip()))
+                     for r in chunk],
+                )
+                if callback:
+                    callback(min(start + batch_size, total), total)
+            conn.execute(
+                "INSERT OR REPLACE INTO catalog_meta(key,value) VALUES('normalizer_version', ?)",
+                (str(NORMALIZER_VERSION),),
             )
             conn.commit()
-            if callback:
-                callback(min(start + batch_size, total), total)
-        conn.execute(
-            "INSERT OR REPLACE INTO catalog_meta(key,value) VALUES('normalizer_version', ?)",
-            (str(NORMALIZER_VERSION),),
-        )
-        conn.commit()
+        except BaseException:
+            conn.rollback()
+            raise
         return total
 
     def _trigram_candidates(self, query, limit=200):
