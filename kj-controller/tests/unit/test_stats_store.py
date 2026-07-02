@@ -1,5 +1,5 @@
 import pytest
-from stats_store import StatsStore, _norm_singer
+from stats_store import StatsStore, _norm_singer, _norm_artist
 
 
 @pytest.fixture
@@ -160,3 +160,144 @@ def test_top_singers(store):
     top = store.top_singers(limit=10)
     assert top[0]["singer"] == "Celeste" and top[0]["plays"] == 2
     assert top[0]["distinct_songs"] == 2
+
+
+# ===== Song Stats section: new StatsStore methods =====
+
+def test_norm_artist():
+    assert _norm_artist("  The   BEATLES ") == "the beatles"
+    assert _norm_artist(None) == ""
+
+
+def test_artist_norm_column_exists(store):
+    cols = {r["name"] for r in store._get_conn().execute("PRAGMA table_info(play_events)")}
+    assert "artist_norm" in cols
+
+
+def test_record_play_populates_artist_norm(store):
+    store.record_play("yt-a", entry_id=1, artist="The Beatles", title="Hey Jude",
+                      song_key="the beatles hey jude", singer="Al")
+    row = store._get_conn().execute(
+        "SELECT artist_norm FROM play_events WHERE media_id='yt-a'").fetchone()
+    assert row["artist_norm"] == "the beatles"
+
+
+def test_artist_norm_backfilled_on_reopen(tmp_path):
+    db = str(tmp_path / "m.db")
+    s1 = StatsStore(db)
+    s1.record_play("yt-b", entry_id=2, artist="ABBA", title="SOS", song_key="abba sos")
+    # Simulate a legacy row written before the column existed.
+    conn = s1._get_conn()
+    conn.execute("UPDATE play_events SET artist_norm=NULL WHERE media_id='yt-b'")
+    conn.commit()
+    s2 = StatsStore(db)  # reopen -> backfill runs
+    row = s2._get_conn().execute(
+        "SELECT artist_norm FROM play_events WHERE media_id='yt-b'").fetchone()
+    assert row["artist_norm"] == "abba"
+
+
+def test_overview_counts(store):
+    store.record_play("yt-a", entry_id=1, singer="Al", artist="ABBA", title="SOS", song_key="abba sos")
+    store.record_play("yt-b", entry_id=2, singer="Bo", artist="Queen", title="One", song_key="queen one")
+    store.record_play("yt-a", entry_id=3, singer="Al", artist="ABBA", title="SOS", song_key="abba sos")
+    o = store.overview()
+    assert o["total_plays"] == 3
+    assert o["distinct_songs"] == 2
+    assert o["distinct_singers"] == 2
+    assert o["distinct_artists"] == 2
+    assert o["plays_last_30d"] == 3
+
+
+def test_overview_empty(store):
+    o = store.overview()
+    assert o["total_plays"] == 0 and o["distinct_songs"] == 0
+
+
+def _seed_artist_rows(store):
+    store.record_play("yt-a", entry_id=1, singer="Al", artist="ABBA", title="SOS", song_key="abba sos")
+    store.record_play("yt-a", entry_id=2, singer="Bo", artist="ABBA", title="SOS", song_key="abba sos")
+    store.record_play("yt-c", entry_id=3, singer="Al", artist="ABBA", title="Mamma", song_key="abba mamma")
+    store.record_play("yt-d", entry_id=4, singer="Al", artist="Queen", title="One", song_key="queen one")
+
+
+def test_top_artists(store):
+    _seed_artist_rows(store)
+    rows = store.top_artists()
+    assert rows[0]["artist"] == "ABBA"
+    assert rows[0]["plays"] == 3 and rows[0]["distinct_songs"] == 2
+
+
+def test_artist_songs(store):
+    _seed_artist_rows(store)
+    rows = store.artist_songs("abba")
+    keys = [r["song_key"] for r in rows]
+    assert keys == ["abba sos", "abba mamma"]  # SOS(2) before Mamma(1)
+    assert rows[0]["plays"] == 2 and rows[0]["distinct_singers"] == 2
+
+
+def test_artist_songs_empty_artist(store):
+    assert store.artist_songs("") == []
+
+
+def test_singer_songs(store):
+    store.record_play("yt-a", entry_id=1, singer="Celeste", artist="ABBA", title="SOS", song_key="abba sos")
+    store.record_play("yt-a", entry_id=2, singer="Celeste", artist="ABBA", title="SOS", song_key="abba sos")
+    store.record_play("yt-c", entry_id=3, singer="Celeste", artist="Queen", title="One", song_key="queen one")
+    rows = store.singer_songs("celeste")
+    assert rows[0]["song_key"] == "abba sos" and rows[0]["plays"] == 2
+    assert rows[0]["first_sung"] and rows[0]["last_sung"]
+
+
+def test_singer_song_history(store):
+    store.record_play("yt-a", entry_id=1, singer="Celeste", song_key="abba sos", night_date="2026-06-01")
+    store.record_play("yt-a", entry_id=2, singer="Celeste", song_key="abba sos", night_date="2026-06-08")
+    hist = store.singer_song_history("celeste", "abba sos")
+    assert len(hist) == 2 and hist[0]["night_date"] in ("2026-06-01", "2026-06-08")
+
+
+def test_singer_songs_empty(store):
+    assert store.singer_songs("") == []
+    assert store.singer_song_history("x", "") == []
+
+
+def test_song_history(store):
+    store.record_play("yt-a", entry_id=1, singer="Al", song_key="abba sos", night_date="2026-06-01")
+    store.record_play("yt-b", entry_id=2, singer="Bo", song_key="abba sos", night_date="2026-06-08")
+    hist = store.song_history("abba sos")
+    assert len(hist) == 2
+    assert {h["singer"] for h in hist} == {"Al", "Bo"}
+    assert "media_id" in hist[0]
+
+
+def test_song_history_empty_key(store):
+    assert store.song_history("") == []
+
+
+def test_busiest_nights(store):
+    store.record_play("yt-a", entry_id=1, singer="Al", song_key="k1", night_date="2026-06-01")
+    store.record_play("yt-b", entry_id=2, singer="Bo", song_key="k2", night_date="2026-06-01")
+    store.record_play("yt-c", entry_id=3, singer="Al", song_key="k1", night_date="2026-06-08")
+    rows = store.busiest_nights()
+    assert rows[0]["night_date"] == "2026-06-01" and rows[0]["plays"] == 2
+    assert rows[0]["distinct_singers"] == 2 and rows[0]["distinct_songs"] == 2
+
+
+def test_night_setlist(store):
+    store.record_play("yt-a", entry_id=1, singer="Al", artist="ABBA", title="SOS",
+                      song_key="abba sos", night_date="2026-06-01")
+    rows = store.night_setlist("2026-06-01")
+    assert rows[0]["singer"] == "Al" and rows[0]["song_key"] == "abba sos"
+
+
+def test_night_setlist_empty(store):
+    assert store.night_setlist("") == []
+
+
+def test_most_repeated(store):
+    for eid in (1, 2, 3):
+        store.record_play("yt-a", entry_id=eid, singer="Celeste", artist="Gaga",
+                          title="Bad Romance", song_key="gaga bad romance")
+    store.record_play("yt-b", entry_id=4, singer="Al", song_key="one off")
+    rows = store.most_repeated()
+    assert rows[0]["singer"] == "Celeste" and rows[0]["plays"] == 3
+    assert all(r["plays"] > 1 for r in rows)  # one-offs excluded

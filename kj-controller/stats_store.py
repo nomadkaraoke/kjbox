@@ -89,7 +89,28 @@ class StatsStore:
                 );
                 """
             )
+            cols = {r["name"] for r in conn.execute("PRAGMA table_info(play_events)")}
+            if "artist_norm" not in cols:
+                conn.execute("ALTER TABLE play_events ADD COLUMN artist_norm TEXT")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_play_events_artist "
+                         "ON play_events(artist_norm)")
             conn.commit()
+        # Backfill runs OUTSIDE the lock — self._lock() is non-reentrant, never nest it.
+        self._backfill_artist_norm()
+
+    def _backfill_artist_norm(self):
+        """Populate artist_norm for any rows missing it (post-migration one-time)."""
+        conn = self._get_conn()
+        with self._lock():
+            rows = conn.execute(
+                "SELECT id, artist FROM play_events "
+                "WHERE artist_norm IS NULL AND artist IS NOT NULL AND artist <> ''"
+            ).fetchall()
+            for r in rows:
+                conn.execute("UPDATE play_events SET artist_norm=? WHERE id=?",
+                             (_norm_artist(r["artist"]), r["id"]))
+            if rows:
+                conn.commit()
 
     def record_play(self, media_id, *, entry_id=None, singer=None, artist=None,
                     title=None, song_key=None, played_at=None, night_date=None,
@@ -115,14 +136,15 @@ class StatsStore:
                 """
                 INSERT OR IGNORE INTO play_events
                     (media_id, song_key, singer, singer_norm, played_at, night_date,
-                     entry_id, source, artist, title)
+                     entry_id, source, artist, artist_norm, title)
                 VALUES (?,?,?,?,
                         COALESCE(?, datetime('now')),
                         COALESCE(?, date('now','localtime')),
-                        ?,?,?,?)
+                        ?,?,?,?,?)
                 """,
                 (media_id, song_key, singer, _norm_singer(singer),
-                 played_at, night_date, entry_id, source, artist, title))
+                 played_at, night_date, entry_id, source, artist,
+                 _norm_artist(artist), title))
             conn.commit()
             return cur.rowcount > 0
 
@@ -250,11 +272,169 @@ class StatsStore:
                 params + [limit]).fetchall()
         return [dict(r) for r in rows]
 
+    def overview(self, *, since=None):
+        params = []
+        where = ""
+        if since:
+            where = "WHERE played_at >= ?"
+            params.append(since)
+        conn = self._get_conn()
+        with self._lock():
+            row = conn.execute(
+                f"""SELECT COUNT(*) total_plays,
+                           COUNT(DISTINCT song_key) distinct_songs,
+                           COUNT(DISTINCT NULLIF(singer_norm,'')) distinct_singers,
+                           COUNT(DISTINCT NULLIF(artist_norm,'')) distinct_artists,
+                           MIN(played_at) first_played, MAX(played_at) last_played
+                    FROM play_events {where}""", params).fetchone()
+            last30 = conn.execute(
+                "SELECT COUNT(*) c FROM play_events "
+                "WHERE played_at >= datetime('now','-30 days')").fetchone()["c"]
+        d = dict(row)
+        d["plays_last_30d"] = last30
+        return d
+
+    def top_artists(self, *, since=None, limit=25):
+        clauses = ["artist_norm IS NOT NULL AND artist_norm <> ''"]
+        params = []
+        if since:
+            clauses.append("played_at >= ?")
+            params.append(since)
+        where = " AND ".join(clauses)
+        conn = self._get_conn()
+        with self._lock():
+            rows = conn.execute(
+                f"""SELECT MAX(artist) artist, COUNT(*) plays,
+                           COUNT(DISTINCT song_key) distinct_songs
+                    FROM play_events WHERE {where}
+                    GROUP BY artist_norm ORDER BY plays DESC, MAX(played_at) DESC LIMIT ?""",
+                params + [limit]).fetchall()
+        return [dict(r) for r in rows]
+
+    def artist_songs(self, artist, *, since=None, limit=100):
+        an = _norm_artist(artist)
+        if not an:
+            return []
+        clauses = ["artist_norm=?", "song_key IS NOT NULL AND song_key <> ''"]
+        params = [an]
+        if since:
+            clauses.append("played_at >= ?")
+            params.append(since)
+        where = " AND ".join(clauses)
+        conn = self._get_conn()
+        with self._lock():
+            rows = conn.execute(
+                f"""SELECT song_key, MAX(artist) artist, MAX(title) title,
+                           COUNT(*) plays, COUNT(DISTINCT NULLIF(singer_norm,'')) distinct_singers
+                    FROM play_events WHERE {where}
+                    GROUP BY song_key ORDER BY plays DESC, MAX(played_at) DESC LIMIT ?""",
+                params + [limit]).fetchall()
+        return [dict(r) for r in rows]
+
+    def singer_songs(self, singer, *, since=None, limit=100):
+        sn = _norm_singer(singer)
+        if not sn:
+            return []
+        clauses = ["singer_norm=?", "song_key IS NOT NULL AND song_key <> ''"]
+        params = [sn]
+        if since:
+            clauses.append("played_at >= ?")
+            params.append(since)
+        where = " AND ".join(clauses)
+        conn = self._get_conn()
+        with self._lock():
+            rows = conn.execute(
+                f"""SELECT song_key, MAX(artist) artist, MAX(title) title, COUNT(*) plays,
+                           MIN(played_at) first_sung, MAX(played_at) last_sung
+                    FROM play_events WHERE {where}
+                    GROUP BY song_key ORDER BY plays DESC, MAX(played_at) DESC LIMIT ?""",
+                params + [limit]).fetchall()
+        return [dict(r) for r in rows]
+
+    def singer_song_history(self, singer, song_key, *, limit=200):
+        sn = _norm_singer(singer)
+        if not sn or not song_key:
+            return []
+        conn = self._get_conn()
+        with self._lock():
+            rows = conn.execute(
+                """SELECT played_at, night_date FROM play_events
+                   WHERE singer_norm=? AND song_key=?
+                   ORDER BY played_at DESC LIMIT ?""",
+                (sn, song_key, limit)).fetchall()
+        return [dict(r) for r in rows]
+
+    def song_history(self, song_key, *, since=None, limit=200):
+        if not song_key:
+            return []
+        clauses = ["song_key=?"]
+        params = [song_key]
+        if since:
+            clauses.append("played_at >= ?")
+            params.append(since)
+        where = " AND ".join(clauses)
+        conn = self._get_conn()
+        with self._lock():
+            rows = conn.execute(
+                f"""SELECT singer, played_at, night_date, media_id
+                    FROM play_events WHERE {where}
+                    ORDER BY played_at DESC LIMIT ?""",
+                params + [limit]).fetchall()
+        return [dict(r) for r in rows]
+
+    def busiest_nights(self, *, limit=20):
+        conn = self._get_conn()
+        with self._lock():
+            rows = conn.execute(
+                """SELECT night_date, COUNT(*) plays,
+                          COUNT(DISTINCT NULLIF(singer_norm,'')) distinct_singers,
+                          COUNT(DISTINCT song_key) distinct_songs
+                   FROM play_events WHERE night_date IS NOT NULL AND night_date <> ''
+                   GROUP BY night_date ORDER BY plays DESC, night_date DESC LIMIT ?""",
+                (limit,)).fetchall()
+        return [dict(r) for r in rows]
+
+    def night_setlist(self, night_date, *, limit=200):
+        if not night_date:
+            return []
+        conn = self._get_conn()
+        with self._lock():
+            rows = conn.execute(
+                """SELECT played_at, singer, artist, title, song_key, media_id
+                   FROM play_events WHERE night_date=?
+                   ORDER BY played_at ASC LIMIT ?""",
+                (night_date, limit)).fetchall()
+        return [dict(r) for r in rows]
+
+    def most_repeated(self, *, since=None, limit=10):
+        clauses = ["singer_norm IS NOT NULL AND singer_norm <> ''",
+                   "song_key IS NOT NULL AND song_key <> ''"]
+        params = []
+        if since:
+            clauses.append("played_at >= ?")
+            params.append(since)
+        where = " AND ".join(clauses)
+        conn = self._get_conn()
+        with self._lock():
+            rows = conn.execute(
+                f"""SELECT MAX(singer) singer, song_key, MAX(artist) artist,
+                           MAX(title) title, COUNT(*) plays
+                    FROM play_events WHERE {where}
+                    GROUP BY singer_norm, song_key
+                    HAVING plays > 1
+                    ORDER BY plays DESC, MAX(played_at) DESC LIMIT ?""",
+                params + [limit]).fetchall()
+        return [dict(r) for r in rows]
+
 
 def _norm_singer(s):
     if s is None:
         return ""
     return " ".join(s.split()).lower()
+
+
+# Artist normalization is identical to singer: whitespace-collapse + lowercase.
+_norm_artist = _norm_singer
 
 
 class _NullCtx:

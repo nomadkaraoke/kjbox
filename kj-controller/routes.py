@@ -4944,3 +4944,119 @@ def stats_singers():
     except (TypeError, ValueError):
         limit = 50
     return jsonify({"singers": stats.top_singers(since=since, limit=limit)})
+
+
+@routes_bp.route('/stats/overview', methods=['GET'])
+def stats_overview():
+    stats = getattr(current_app, 'stats', None)
+    if not stats:
+        return jsonify({"overview": {}})
+    since = request.args.get('since') or None
+    return jsonify({"overview": stats.overview(since=since)})
+
+
+@routes_bp.route('/stats/top-artists', methods=['GET'])
+def stats_top_artists():
+    stats = getattr(current_app, 'stats', None)
+    if not stats:
+        return jsonify({"artists": []})
+    since = request.args.get('since') or None
+    try:
+        limit = max(1, min(int(request.args.get('limit', 25)), 100))
+    except (TypeError, ValueError):
+        limit = 25
+    return jsonify({"artists": stats.top_artists(since=since, limit=limit)})
+
+
+@routes_bp.route('/stats/artist-songs', methods=['GET'])
+def stats_artist_songs():
+    stats = getattr(current_app, 'stats', None)
+    if not stats:
+        return jsonify({"songs": []})
+    artist = request.args.get('artist') or ''
+    since = request.args.get('since') or None
+    try:
+        limit = max(1, min(int(request.args.get('limit', 100)), 200))
+    except (TypeError, ValueError):
+        limit = 100
+    return jsonify({"songs": stats.artist_songs(artist, since=since, limit=limit)})
+
+
+@routes_bp.route('/stats/singer-songs', methods=['GET'])
+def stats_singer_songs():
+    stats = getattr(current_app, 'stats', None)
+    if not stats:
+        return jsonify({"songs": []})
+    singer = request.args.get('singer') or ''
+    since = request.args.get('since') or None
+    try:
+        limit = max(1, min(int(request.args.get('limit', 100)), 200))
+    except (TypeError, ValueError):
+        limit = 100
+    return jsonify({"songs": stats.singer_songs(singer, since=since, limit=limit)})
+
+
+@routes_bp.route('/stats/singer-song-history', methods=['GET'])
+def stats_singer_song_history():
+    stats = getattr(current_app, 'stats', None)
+    if not stats:
+        return jsonify({"history": []})
+    singer = request.args.get('singer') or ''
+    song_key = request.args.get('song_key') or ''
+    try:
+        limit = max(1, min(int(request.args.get('limit', 200)), 500))
+    except (TypeError, ValueError):
+        limit = 200
+    return jsonify({"history": stats.singer_song_history(singer, song_key, limit=limit)})
+
+
+@routes_bp.route('/stats/song-history', methods=['GET'])
+def stats_song_history():
+    stats = getattr(current_app, 'stats', None)
+    if not stats:
+        return jsonify({"history": []})
+    song_key = request.args.get('song_key') or ''
+    since = request.args.get('since') or None
+    try:
+        limit = max(1, min(int(request.args.get('limit', 200)), 500))
+    except (TypeError, ValueError):
+        limit = 200
+    return jsonify({"history": stats.song_history(song_key, since=since, limit=limit)})
+
+
+@routes_bp.route('/stats/nights', methods=['GET'])
+def stats_nights():
+    stats = getattr(current_app, 'stats', None)
+    if not stats:
+        return jsonify({"nights": []})
+    try:
+        limit = max(1, min(int(request.args.get('limit', 20)), 100))
+    except (TypeError, ValueError):
+        limit = 20
+    return jsonify({"nights": stats.busiest_nights(limit=limit)})
+
+
+@routes_bp.route('/stats/night-setlist', methods=['GET'])
+def stats_night_setlist():
+    stats = getattr(current_app, 'stats', None)
+    if not stats:
+        return jsonify({"setlist": []})
+    night_date = request.args.get('night_date') or ''
+    try:
+        limit = max(1, min(int(request.args.get('limit', 200)), 500))
+    except (TypeError, ValueError):
+        limit = 200
+    return jsonify({"setlist": stats.night_setlist(night_date, limit=limit)})
+
+
+@routes_bp.route('/stats/most-repeated', methods=['GET'])
+def stats_most_repeated():
+    stats = getattr(current_app, 'stats', None)
+    if not stats:
+        return jsonify({"repeated": []})
+    since = request.args.get('since') or None
+    try:
+        limit = max(1, min(int(request.args.get('limit', 10)), 50))
+    except (TypeError, ValueError):
+        limit = 10
+    return jsonify({"repeated": stats.most_repeated(since=since, limit=limit)})

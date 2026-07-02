@@ -219,3 +219,86 @@ def test_resolve_row_media_id_never_hashes_library_paths(app_ctx, tmp_path, monk
     monkeypatch.setattr(_lm, "content_hash", boom)
     assert routes.resolve_row_media_id({"path": p}, "local", current_app.media_library) is None
     assert current_app.media_library.get_by_path(p) is None
+
+
+# ===== Song Stats section: new /stats/* routes =====
+
+def test_stats_overview_route(flask_test_client):
+    flask_test_client.application.stats.record_play(
+        "yt-a", entry_id=201, singer="Al", artist="ABBA", title="SOS", song_key="abba sos")
+    r = flask_test_client.get("/stats/overview")
+    assert r.status_code == 200
+    assert r.get_json()["overview"]["total_plays"] == 1
+
+
+def test_stats_artist_routes(flask_test_client):
+    s = flask_test_client.application.stats
+    s.record_play("yt-a", entry_id=301, singer="Al", artist="ABBA", title="SOS", song_key="abba sos")
+    r = flask_test_client.get("/stats/top-artists")
+    assert r.get_json()["artists"][0]["artist"] == "ABBA"
+    r2 = flask_test_client.get("/stats/artist-songs?artist=ABBA")
+    assert r2.get_json()["songs"][0]["song_key"] == "abba sos"
+
+
+def test_stats_singer_drilldown_routes(flask_test_client):
+    s = flask_test_client.application.stats
+    s.record_play("yt-a", entry_id=401, singer="Celeste", artist="ABBA", title="SOS",
+                  song_key="abba sos", night_date="2026-06-01")
+    r = flask_test_client.get("/stats/singer-songs?singer=Celeste")
+    assert r.get_json()["songs"][0]["song_key"] == "abba sos"
+    r2 = flask_test_client.get("/stats/singer-song-history?singer=Celeste&song_key=abba sos")
+    assert r2.get_json()["history"][0]["night_date"] == "2026-06-01"
+
+
+def test_stats_song_history_route(flask_test_client):
+    s = flask_test_client.application.stats
+    s.record_play("yt-a", entry_id=501, singer="Al", song_key="abba sos", night_date="2026-06-01")
+    r = flask_test_client.get("/stats/song-history?song_key=abba sos")
+    assert r.get_json()["history"][0]["singer"] == "Al"
+
+
+def test_stats_nights_routes(flask_test_client):
+    s = flask_test_client.application.stats
+    s.record_play("yt-a", entry_id=601, singer="Al", artist="ABBA", title="SOS",
+                  song_key="abba sos", night_date="2026-06-01")
+    r = flask_test_client.get("/stats/nights")
+    assert r.get_json()["nights"][0]["night_date"] == "2026-06-01"
+    r2 = flask_test_client.get("/stats/night-setlist?night_date=2026-06-01")
+    assert r2.get_json()["setlist"][0]["song_key"] == "abba sos"
+
+
+def test_stats_most_repeated_route(flask_test_client):
+    s = flask_test_client.application.stats
+    for eid in (701, 702):
+        s.record_play("yt-a", entry_id=eid, singer="Celeste", artist="Gaga",
+                      title="Bad Romance", song_key="gaga bad romance")
+    r = flask_test_client.get("/stats/most-repeated")
+    assert r.get_json()["repeated"][0]["singer"] == "Celeste"
+
+
+def test_stats_routes_empty_when_no_store(flask_test_client):
+    # When current_app has no stats store, every endpoint returns its empty shape.
+    app = flask_test_client.application
+    saved = app.stats
+    try:
+        app.stats = None
+        assert flask_test_client.get("/stats/overview").get_json() == {"overview": {}}
+        assert flask_test_client.get("/stats/top-artists").get_json() == {"artists": []}
+        assert flask_test_client.get("/stats/artist-songs?artist=x").get_json() == {"songs": []}
+        assert flask_test_client.get("/stats/singer-songs?singer=x").get_json() == {"songs": []}
+        assert flask_test_client.get("/stats/singer-song-history?singer=x&song_key=y").get_json() == {"history": []}
+        assert flask_test_client.get("/stats/song-history?song_key=y").get_json() == {"history": []}
+        assert flask_test_client.get("/stats/nights").get_json() == {"nights": []}
+        assert flask_test_client.get("/stats/night-setlist?night_date=2026-06-01").get_json() == {"setlist": []}
+        assert flask_test_client.get("/stats/most-repeated").get_json() == {"repeated": []}
+    finally:
+        app.stats = saved
+
+
+def test_stats_routes_clamp_bad_limit(flask_test_client):
+    # A non-numeric limit falls back to the default instead of erroring.
+    flask_test_client.application.stats.record_play(
+        "yt-a", entry_id=801, singer="Al", artist="ABBA", title="SOS", song_key="abba sos")
+    r = flask_test_client.get("/stats/top-artists?limit=notanumber")
+    assert r.status_code == 200
+    assert r.get_json()["artists"][0]["artist"] == "ABBA"
