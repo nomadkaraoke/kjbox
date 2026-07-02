@@ -4737,3 +4737,24 @@ def preview_hls(token, name):
         return ("Not found", 404)
     mime = "application/vnd.apple.mpegurl" if name.endswith(".m3u8") else "video/mp2t"
     return send_file(p, mimetype=mime, conditional=True)
+
+
+@routes_bp.route('/media/note', methods=['POST'])
+def media_note():
+    data = request.get_json(silent=True) or {}
+    media_id = (data.get('media_id') or '').strip()
+    if not media_id:
+        return jsonify({"error": "media_id is required"}), 400
+    stats = getattr(current_app, 'stats', None)
+    if not stats:
+        return jsonify({"error": "stats unavailable"}), 503
+    note = stats.upsert_note(
+        media_id, data.get('note') or '', (data.get('label') or '').strip() or None,
+        artist=data.get('artist'), title=data.get('title'))
+    return jsonify({"note": note})
+
+
+@routes_bp.route('/media/note-labels', methods=['GET'])
+def media_note_labels():
+    stats = getattr(current_app, 'stats', None)
+    return jsonify({"labels": stats.distinct_labels() if stats else []})

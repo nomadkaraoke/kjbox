@@ -91,3 +91,17 @@ def test_record_preview_stat_local(app_ctx):
                                         "artist": "A", "title": "T"}})
     routes._record_preview_stat({"source": "local", "file_path": "/opt/nomad/downloads/x.mp4"})
     assert current_app.stats.previews[0][0] == "gen-abcd1234"
+
+
+def test_media_note_upsert_and_labels(flask_test_client):
+    r = flask_test_client.post("/media/note", json={
+        "media_id": "yt-abc", "note": "censored version", "label": "censored"})
+    assert r.status_code == 200
+    assert r.get_json()["note"]["note"] == "censored version"
+    r2 = flask_test_client.get("/media/note-labels")
+    assert "censored" in r2.get_json()["labels"]
+
+
+def test_media_note_requires_media_id(flask_test_client):
+    r = flask_test_client.post("/media/note", json={"note": "x"})
+    assert r.status_code == 400
