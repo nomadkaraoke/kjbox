@@ -14,6 +14,7 @@ from utils import log_message, sanitize_filename_part, parse_youtube_filename
 from naming import (
     parse_identity, extract_media_id, media_id_for, content_hash,
     build_slug_filename, merge_llm_result, strip_media_id_token, SOURCE_UPLOAD,
+    DOWNLOAD_SOURCES,
 )
 
 # media_id prefix -> canonical source, for identity of brand-new tokened files.
@@ -274,8 +275,43 @@ class MediaIndex:
 
         self.index = new_index
         self.save()
+        if self.media_library is not None:
+            try:
+                self._prune_missing_download_rows(new_index)
+            except Exception as exc:  # pruning is best-effort; never fail a scan
+                log_message(f"media_library prune failed: {exc}", self.config)
         log_message(f"Media scan complete: {len(self.index)} files indexed.", self.config)
         return self.index
+
+    def _prune_missing_download_rows(self, new_index):
+        """Delete download-source media_library rows whose file vanished.
+
+        Jurisdiction is deliberately narrow: only sources in DOWNLOAD_SOURCES
+        (never masters — transiently absent mid GCS-rsync — and never external
+        library rows), and only file_paths under a media root that currently
+        exists, so an unmounted drive can't mass-prune its rows.
+        """
+        roots = [os.path.realpath(f) for f in self.config.get('media_folders', [])]
+        roots = [r for r in roots if os.path.isdir(r)]
+        if not roots:
+            return
+        for row in self.media_library.list_records():
+            if row.get("source") not in DOWNLOAD_SOURCES:
+                continue
+            file_path = row.get("file_path")
+            if not file_path:
+                continue
+            real = os.path.realpath(file_path)
+            if real in new_index:
+                continue
+            if not any(real == r or real.startswith(r + os.sep) for r in roots):
+                continue
+            if os.path.exists(real):
+                continue  # exists but unindexed (e.g. non-media ext) — not ours to prune
+            self.media_library.delete(row["media_id"])
+            log_message(
+                f"Pruned media_library row for vanished file: {row['media_id']} "
+                f"({os.path.basename(file_path)})", self.config)
 
     def save(self):
         """Persist index to disk.
@@ -428,9 +464,23 @@ class MediaIndex:
                     log_message(f"Error deleting sidecar {fname}: {e}", self.config)
 
         # Remove from index
+        entry = self.index.get(validated_path)
         if validated_path in self.index:
             del self.index[validated_path]
             self.save()
+
+        # Remove the canonical-identity row too, or the delete strands an
+        # orphaned media_library row with a dead file_path.
+        if self.media_library is not None:
+            try:
+                media_id = (entry or {}).get("media_id")
+                if not media_id:
+                    row = self.media_library.get_by_path(validated_path)
+                    media_id = (row or {}).get("media_id")
+                if media_id:
+                    self.media_library.delete(media_id)
+            except Exception as e:  # cleanup is best-effort; the file is gone
+                log_message(f"media_library delete failed for {validated_path}: {e}", self.config)
 
     def download_video(self, youtube_url):
         """Downloads a YouTube video with descriptive filename, updates media index."""
