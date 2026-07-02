@@ -57,7 +57,9 @@ KJ Controller is a web-based karaoke show management application. A Flask backen
 | `app.py` | ~70 | `create_app()` factory, `start_app()` entry point |
 | `config.py` | ~70 | Constants, `is_pi()`, `load_config()`, `save_config_value()`, render mode constants |
 | `utils.py` | ~40 | `log_message()`, `sanitize_filename_part()`, `parse_youtube_filename()` |
-| `media.py` | ~310 | `MediaIndex` class: scan, validate, download, delete, list |
+| `media.py` | ~330 | `MediaIndex` class: scan, validate, download, delete, list. During `scan()` resolves a stable `media_id` per file and upserts a `media_library` row (`_resolve_media_id`: embedded `[media_id]` token → natural key → reuse-by-path → content hash) |
+| `naming.py` | ~180 | Pure helpers: `classify_source()`, `media_id_for()`, `parse_identity()` (deterministic best-effort artist/title), `strip_karaoke_noise()`, `extract_media_id()`, `build_slug_filename()`, `content_hash()`. Source-prefixed `media_id` scheme (`yt-/db-/gen-/nomad-/up-`). No network/LLM |
+| `media_library.py` | ~180 | `MediaLibraryStore` class: SQLite store of canonical media identity keyed by `media_id` (artist/title + `*_norm`, `confidence`, `needs_review`, `file_path`). Per-thread connections mirroring `RotationStore` |
 | `playback.py` | ~290 | `PlaybackCoordinator`: owns filler + one karaoke player, runtime `switch_renderer()`, facade for routes.py |
 | `karaoke_player.py` | ~90 | `KaraokePlayer` Protocol: contract both renderer backends implement |
 | `filler.py` | ~290 | `FillerVLC`: shared filler-music VLC instance, fade, auto-heal on broken aout |
@@ -102,7 +104,10 @@ karaoke_nerds.py → config.py, utils.py (requests, beautifulsoup4)
 youtube_search.py → media._ytdlp_base_opts, config.py, utils.py (yt_dlp)
 youtube_health.py → (yt_dlp, importlib.metadata, shutil, subprocess)
 overlay.py → (stdlib only: json, os, uuid, tempfile)
-media.py → config.py, utils.py
+media.py → config.py, utils.py, naming.py, media_library.py
+naming.py → utils.py, catalog.py
+media_library.py → text_normalize.py (stdlib: sqlite3, threading)
+scripts/sync_masters.py → config.py (subprocess `gcloud storage rsync`, requests; run by the nomad-master-sync systemd timer)
 vlc.py → config.py, utils.py
 chromium.py → config.py, utils.py
 catalog.py → (stdlib only: sqlite3, os, re)
