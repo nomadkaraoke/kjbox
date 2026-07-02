@@ -49,6 +49,18 @@ def test_interrupted_build_preserves_previous_catalog(tmp_path, monkeypatch):
     assert len(cat.search("Old Artist Old Song")) == 3
     assert not any("NEW01" in r["filename"] for r in cat.search("New Artist"))
 
+    # The sync triggers were DROPped inside the failed build's transaction —
+    # the rollback must restore them, so a direct INSERT still reaches the
+    # FTS index via media_ai.
+    direct = sqlite3.connect(str(tmp_path / "cat.db"))
+    direct.execute(
+        "INSERT INTO media (path, filename, folder, disc_id, artist, title, format) "
+        "VALUES ('/media/x/Discs/T.zip', 'T.zip', '/media/x/Discs', 'T01', "
+        "'Triggercheck', 'Stillwired', 'zip')")
+    direct.commit()
+    direct.close()
+    assert len(cat.search("Triggercheck Stillwired")) == 1
+
 
 def test_failed_build_leaves_connection_usable_for_next_build(tmp_path, monkeypatch):
     cat = _cat(tmp_path)
