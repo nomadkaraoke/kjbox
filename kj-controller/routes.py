@@ -799,8 +799,12 @@ def set_media_metadata():
     store = getattr(current_app, 'media_library', None)
     if store is None:
         return jsonify({"error": "media library not configured"}), 503
-    if not store.set_metadata(media_id, artist, title):
+    existing = store.get(media_id)
+    if existing is None:
         return jsonify({"error": "media_id not found"}), 404
+    # Preserve a field the caller left blank rather than wiping the existing value.
+    store.set_metadata(media_id, artist or existing.get("artist", ""),
+                       title or existing.get("title", ""))
     return jsonify({"success": True, "record": store.get(media_id)})
 
 
@@ -3063,12 +3067,14 @@ def _resolve_sms_target(entry_id):
     # "Artist - Title" (P3 flip).
     song = (req_row["song_title"] or "").strip()
     artist = (req_row["song_artist"] or "").strip()
-    if not song and entry.get("song_artist"):
+    if (not song or not artist) and entry.get("song_artist"):
         parts = entry["song_artist"].split(" - ", 1)
         if len(parts) > 1:
-            artist = parts[0].strip()
-            song = parts[1].strip()
-        else:
+            if not artist:
+                artist = parts[0].strip()
+            if not song:
+                song = parts[1].strip()
+        elif not song:
             # No separator — treat the whole string as the song title.
             song = parts[0].strip()
 

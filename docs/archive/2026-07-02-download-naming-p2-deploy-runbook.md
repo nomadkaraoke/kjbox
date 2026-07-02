@@ -25,7 +25,7 @@ sudo systemctl restart kj-controller
 
 # 4. Confirm the version + gen wiring
 curl -s http://localhost:5001/system/stats | head      # app on app_bind_port 5001 (NOT 80/Caddy)
-# app.js?v=0.52.0 should appear on a hard-refresh of the UI
+# app.js?v=<current version> should appear on a hard-refresh of the UI
 ```
 
 ## Verify P2 behavior on-device
