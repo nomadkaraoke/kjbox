@@ -21,61 +21,63 @@ body::after {
         radial-gradient(ellipse at 50% 50%, rgba(255, 223, 107, 0.02) 0%, transparent 70%);
 }
 
-/* --- Now Playing Bar (#1) --- */
+/* --- Now Playing (inside the Playback Controls section) --- */
 
-.now-playing-bar {
-    position: sticky;
-    top: 0;
-    z-index: 100;
-    background-color: #1a1a1a;
-    border-bottom: 2px solid rgba(255, 91, 184, 0.4);
-    padding: 0.5rem 1rem;
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-    max-width: 1400px;
-    margin: 0 auto 0.75rem auto;
-    border-radius: 0 0 12px 12px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.4);
-}
-.now-playing-bar.hidden { display: none !important; }
-.now-playing-info { flex: 1; min-width: 0; display: flex; align-items: center; gap: 0.5rem; }
-.now-playing-state {
-    font-size: 0.7em; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;
+.np-info { display: flex; flex-direction: column; gap: 0.35rem; }
+.np-info-row { display: flex; align-items: center; gap: 0.5rem; min-width: 0; }
+.np-state {
+    font-size: 0.68em; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;
     padding: 2px 8px; border-radius: 4px; flex-shrink: 0;
 }
-.now-playing-state.state-playing { background-color: rgba(34, 197, 94, 0.2); color: #22c55e; }
-.now-playing-state.state-paused { background-color: rgba(245, 158, 11, 0.2); color: #f59e0b; }
-.now-playing-title {
+.np-state:empty { display: none; }
+.np-state.state-playing { background-color: rgba(34, 197, 94, 0.2); color: #22c55e; }
+.np-state.state-paused { background-color: rgba(245, 158, 11, 0.2); color: #f59e0b; }
+.np-title {
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-    font-size: 0.85em; color: #e5e5e5; font-weight: 500;
+    font-size: 0.95em; color: #e5e5e5; font-weight: 500; min-width: 0;
 }
-.now-playing-time { font-size: 0.8em; color: #888; white-space: nowrap; font-variant-numeric: tabular-nums; }
-.now-playing-controls { display: flex; gap: 6px; flex-shrink: 0; }
+/* Idle state: muted placeholder title, and the detail row is hidden. */
+.np-info:not(.np-info--playing) .np-title { color: #777; font-weight: 400; }
+.np-info:not(.np-info--playing) .np-info-meta { display: none; }
+
+.np-info-meta {
+    display: flex; align-items: center; gap: 0.55rem; flex-wrap: wrap;
+    font-size: 0.8em; color: #888;
+}
+.np-filename {
+    max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    color: #aaa; font-variant-numeric: tabular-nums;
+}
+.np-filetype {
+    font-size: 0.92em; text-transform: uppercase; letter-spacing: 0.4px;
+    color: #d0a9c9; background: rgba(255, 91, 184, 0.1);
+    border: 1px solid rgba(255, 91, 184, 0.28); border-radius: 4px;
+    padding: 1px 6px; flex-shrink: 0;
+}
+.np-filetype:empty { display: none; }
+.np-time-wrap { white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+.np-pitch-group { display: flex; align-items: center; gap: 3px; flex-shrink: 0; }
+.np-pitch-label { color: #888; margin-right: 1px; }
 .np-btn {
-    font-size: 0.7em; padding: 4px 12px;
+    font-size: 0.85em; padding: 2px 8px;
     background: #222; border: 1px solid #444; color: #ccc;
     box-shadow: none; border-radius: 6px;
 }
 .np-btn:hover { background: #333; color: #fff; box-shadow: none; }
-.np-btn-fadeout { color: #fcd34d; border-color: rgba(245, 158, 11, 0.3); }
-.np-btn-fadeout:hover { background: rgba(245, 158, 11, 0.15); color: #fbbf24; }
-.np-btn-stop { color: #fca5a5; border-color: rgba(239, 68, 68, 0.3); }
-.np-btn-stop:hover { background: rgba(239, 68, 68, 0.15); color: #f87171; }
-.now-playing-pitch { display: flex; align-items: center; gap: 2px; flex-shrink: 0; }
 .np-btn-pitch {
-    width: 28px; height: 28px; padding: 0; font-size: 1em; font-weight: bold;
+    width: 26px; height: 26px; padding: 0; font-size: 1em; font-weight: bold;
     display: flex; align-items: center; justify-content: center;
 }
 .np-btn-pitch:disabled { opacity: 0.3; cursor: default; }
 .np-pitch-display {
-    min-width: 28px; text-align: center; font-size: 0.8em; font-weight: bold;
+    min-width: 24px; text-align: center; font-size: 0.85em; font-weight: bold;
     color: #888; cursor: pointer; padding: 2px 4px; font-variant-numeric: tabular-nums;
 }
 .np-pitch-display:hover { color: #fff; }
 .np-pitch-active { color: #60a5fa; }
 
-/* Active-renderer badge in the Now Playing bar */
+/* Active-renderer badge (mpv / VLC) in the now-playing details */
 .np-renderer-badge {
     font-size: 0.7em;
     font-weight: bold;
@@ -1270,9 +1272,7 @@ body {
     h2 { font-size: 1em; }
     #status-bar { font-size: 0.7em; }
 
-    /* Now playing bar */
-    .now-playing-bar { border-radius: 0; margin-bottom: 0.5rem; padding: 0.4rem 0.75rem; gap: 0.5rem; }
-    .now-playing-title { font-size: 0.8em; }
+    /* Now-playing pitch buttons */
     .np-btn { font-size: 0.7em; padding: 6px 12px; }
 
     /* Search rows: stack on mobile */
@@ -1320,10 +1320,6 @@ body {
     button { padding: 10px 12px; font-size: 0.8em; border-color: #444; }
     .header-row h2 { font-size: 0.95em; width: 100%; }
 
-    /* Now playing bar: stack */
-    .now-playing-bar { flex-wrap: wrap; gap: 0.4rem; padding: 0.4rem 0.6rem; }
-    .now-playing-info { flex-basis: 100%; }
-    .now-playing-controls { margin-left: auto; }
     .np-btn { padding: 6px 14px; }
 
     /* Search rows: input full-width, buttons row below */
@@ -3372,17 +3368,28 @@ body.simple-mode .available-songs,
 body.simple-mode .browser-mode-panel,
 body.simple-mode .overlay-panel,
 body.simple-mode #col2,
-body.simple-mode .rotation-add-btn,
 body.simple-mode .rotation-new-btn,
 body.simple-mode .rotation-restore-btn,
 body.simple-mode .rotation-paths-btn,
 body.simple-mode .rotation-undo-btn,
 body.simple-mode .rotation-redo-btn,
-body.simple-mode #rotation-add-form,
 body.simple-mode #np-pitch-group,
+/* Screen Preview connection controls — jargon a stand-in doesn't need.
+ * The device auto-connects with its saved VNC password, so the thumbnail
+ * (and size buttons) still work; only the connect/disconnect/interactive
+ * plumbing is hidden. */
+body.simple-mode #vnc-status,
+body.simple-mode #vnc-password-form,
+body.simple-mode #vnc-controls,
+body.simple-mode #vnc-interactive-controls,
 body.simple-mode .system-subsection:not(#kj-mode-section) {
     display: none !important;
 }
+
+/* Manual "+ Add" and its form stay available in Simple Mode: some older
+ * singers won't scan the QR and walk up to the booth to ask for a song, so
+ * the stand-in still needs to add rotation entries by hand. (.rotation-add-btn
+ * and #rotation-add-form are intentionally NOT in the hide list above.) */
 
 /* Simple-mode layout — a full-width "run the show" command center.
  *
@@ -3443,7 +3450,13 @@ body.simple-mode .system-subsection:not(#kj-mode-section) {
         display: flex;
         gap: 0.5rem;
     }
-    body.simple-mode .playback-controls > div:not(.button-group) {
+    /* Now-playing details span the full width of the bar (like the h2), above
+     * the controls; they are NOT laid out as a label+slider grid row. */
+    body.simple-mode .playback-controls #np-info {
+        grid-column: 1 / -1;
+    }
+    /* Seek + the two volume sliders: label in col 1, slider fills col 2. */
+    body.simple-mode .playback-controls > div:not(.button-group):not(#np-info) {
         display: grid;
         grid-template-columns: auto 1fr;
         gap: 0.6rem;
@@ -3451,21 +3464,44 @@ body.simple-mode .system-subsection:not(#kj-mode-section) {
     }
 }
 
-/* Mode toggle styling — matches the existing autodeploy-toggle / sleep-mode-toggle look */
-.simple-mode-toggle {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.75rem;
+/* Mode segmented control — [ Simple | Advanced ]. The active segment is
+ * filled so it's obvious at a glance which mode the system is in. */
+.mode-segmented {
+    display: inline-flex;
     width: 100%;
+    background: #1a1a1a;
+    border: 1px solid #333;
+    border-radius: 8px;
+    padding: 3px;
+    gap: 3px;
 }
-
-.simple-mode-hint {
-    font-size: 0.85rem;
-    color: var(--muted-text, #888);
-    margin: 0.5rem 0 0 0;
-    line-height: 1.4;
+.mode-seg {
+    flex: 1;
+    padding: 8px 12px;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: #999;
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.12s ease, color 0.12s ease;
+    box-shadow: none;
 }
+.mode-seg:hover { color: #ddd; background: rgba(255, 255, 255, 0.04); }
+/* Active segment — Simple uses the brand pink, Advanced a neutral slate, so the
+ * colour itself signals which mode is live, not just position. */
+.mode-seg-active { color: #fff; box-shadow: none; }
+#mode-seg-simple.mode-seg-active {
+    background: linear-gradient(180deg, #ff5bb8, #e0489f);
+    color: #fff;
+}
+#mode-seg-advanced.mode-seg-active {
+    background: #3a3a44;
+    color: #fff;
+}
+#mode-seg-simple.mode-seg-active:hover { background: linear-gradient(180deg, #ff6ec2, #e0489f); }
+#mode-seg-advanced.mode-seg-active:hover { background: #44444f; }
 
 /* --- Browser preview playback --- */
 .preview-btn {

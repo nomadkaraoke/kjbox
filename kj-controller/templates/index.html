@@ -16,31 +16,28 @@
         <button onclick="fixAudio()">Fix Audio</button>
     </div>
 
-    <div id="now-playing-bar" class="now-playing-bar hidden">
-        <div class="now-playing-info">
-            <span class="now-playing-state" id="np-state">Playing</span>
-            <span class="now-playing-title" id="np-title"></span>
-        </div>
-        <div class="now-playing-time">
-            <span id="np-time">0:00</span> / <span id="np-length">0:00</span>
-        </div>
-        <div class="now-playing-pitch" id="np-pitch-group">
-            <button class="np-btn np-btn-pitch" id="np-pitch-down" onclick="changePitch(-1)" title="Pitch down 1 semitone">-</button>
-            <span class="np-pitch-display" id="np-pitch" onclick="changePitch(0)" title="Reset pitch">0</span>
-            <button class="np-btn np-btn-pitch" id="np-pitch-up" onclick="changePitch(1)" title="Pitch up 1 semitone">+</button>
-        </div>
-        <span class="np-renderer-badge" id="np-renderer-badge" title="Active karaoke renderer &mdash; change in AV Output modal"></span>
-        <div class="now-playing-controls">
-            <button class="np-btn btn-primary" id="np-pause" onclick="controlPlayback('pause_resume')">Pause</button>
-            <button class="np-btn np-btn-fadeout" id="np-fadeout" onclick="fadeOut()">Fade Out</button>
-            <button class="np-btn np-btn-stop" id="np-stop" onclick="controlPlayback('stop')">Stop</button>
-        </div>
-    </div>
-
     <div class="main-layout">
         <div class="column" id="col1">
             <div class="container playback-controls">
                 <h2>Playback Controls</h2>
+                <div id="np-info" class="np-info">
+                    <div class="np-info-row">
+                        <span class="np-state" id="np-state"></span>
+                        <span class="np-title" id="np-title">Nothing playing</span>
+                    </div>
+                    <div class="np-info-meta" id="np-info-meta">
+                        <span class="np-filename" id="np-filename" title="File currently playing"></span>
+                        <span class="np-filetype" id="np-filetype" title="File type"></span>
+                        <span class="np-renderer-badge" id="np-renderer-badge" title="Active karaoke renderer &mdash; change in AV Output modal"></span>
+                        <span class="np-time-wrap"><span id="np-time">0:00</span> / <span id="np-length">0:00</span></span>
+                        <div class="np-pitch-group" id="np-pitch-group">
+                            <span class="np-pitch-label">Pitch</span>
+                            <button class="np-btn np-btn-pitch" id="np-pitch-down" onclick="changePitch(-1)" title="Pitch down 1 semitone">-</button>
+                            <span class="np-pitch-display" id="np-pitch" onclick="changePitch(0)" title="Reset pitch">0</span>
+                            <button class="np-btn np-btn-pitch" id="np-pitch-up" onclick="changePitch(1)" title="Pitch up 1 semitone">+</button>
+                        </div>
+                    </div>
+                </div>
                 <div class="button-group">
                     <button id="btn-pause" class="btn-primary" onclick="controlPlayback('pause_resume')">Pause / Resume</button>
                     <button id="btn-restart" onclick="controlPlayback('restart')" disabled>Restart</button>
@@ -180,18 +177,12 @@
 
                 <div class="system-subsection" id="kj-mode-section">
                     <div class="system-subsection-label">Mode</div>
-                    <div class="system-subsection-row">
-                        <div class="simple-mode-toggle">
-                            <span>Simple Mode (for stand-in KJ)</span>
-                            <label class="overlay-toggle">
-                                <input type="checkbox" id="simple-mode-switch" onchange="toggleSimpleMode(this.checked)">
-                                <span class="slider"></span>
-                            </label>
-                        </div>
+                    <div class="mode-segmented" id="mode-segmented" role="group" aria-label="KJ mode">
+                        <button type="button" class="mode-seg" id="mode-seg-simple"
+                                onclick="setKjMode('simple')" aria-pressed="false">Simple</button>
+                        <button type="button" class="mode-seg mode-seg-active" id="mode-seg-advanced"
+                                onclick="setKjMode('advanced')" aria-pressed="true">Advanced</button>
                     </div>
-                    <p class="simple-mode-hint">
-                        Hides search panels, manual add, and advanced controls. Singers can only request from the local library, Divebar, or Karaoke Nerds.
-                    </p>
                 </div>
 
                 <div class="system-subsection">
