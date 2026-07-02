@@ -4831,7 +4831,7 @@ def stats_top_songs():
     singer = request.args.get('singer') or None
     since = request.args.get('since') or None
     try:
-        limit = min(int(request.args.get('limit', 10)), 100)
+        limit = max(1, min(int(request.args.get('limit', 10)), 100))
     except (TypeError, ValueError):
         limit = 10
     return jsonify({"songs": stats.top_songs(singer=singer, since=since, limit=limit)})
@@ -4844,7 +4844,7 @@ def stats_singers():
         return jsonify({"singers": []})
     since = request.args.get('since') or None
     try:
-        limit = min(int(request.args.get('limit', 50)), 200)
+        limit = max(1, min(int(request.args.get('limit', 50)), 200))
     except (TypeError, ValueError):
         limit = 50
     return jsonify({"singers": stats.top_singers(since=since, limit=limit)})

@@ -3463,12 +3463,19 @@ async function saveNote() {
     const note = document.getElementById('noteText').value;
     const label = document.getElementById('noteLabel').value.trim();
     try {
-        await fetch('/media/note', {
+        const resp = await fetch('/media/note', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ media_id: mediaId, note, label }),
         });
-    } catch (e) { /* non-fatal — best-effort save, dropdown refresh below is the real feedback */ }
+        if (!resp.ok) {
+            const data = await resp.json().catch(() => ({}));
+            throw new Error(data.error || ('HTTP ' + resp.status));
+        }
+    } catch (e) {
+        log('Could not save note: ' + e.message, 'error');
+        return;   // keep modal open so the KJ can retry
+    }
     closeNoteModal();
     // Refresh the dropdown so the new note/label badges show immediately: re-run
     // the same search the row came from, using the current search box value.

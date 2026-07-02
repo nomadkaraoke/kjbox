@@ -75,6 +75,9 @@ def main():
     p.add_argument("--media-db", default=os.path.expanduser("~/kjdata/media_library.db"))
     p.add_argument("--execute", action="store_true")
     args = p.parse_args()
+    for label, path in (("--rotation-db", args.rotation_db), ("--media-db", args.media_db)):
+        if not os.path.exists(path):
+            sys.exit(f"error: {label} path does not exist: {path}")
     res = backfill(args.rotation_db, args.media_db, execute=args.execute)
     mode = "EXECUTED" if args.execute else "DRY-RUN"
     print(f"[{mode}] attributed={res['attributed']} skipped={res['skipped']}")
