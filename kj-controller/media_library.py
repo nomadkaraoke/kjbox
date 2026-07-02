@@ -152,6 +152,26 @@ class MediaLibraryStore:
             conn.commit()
             return cur.rowcount > 0
 
+    def apply_parse(self, media_id, artist, title, confidence, threshold):
+        """Apply an LLM parse result (parse_method='llm'); gate needs_review on
+        the confidence threshold. Returns True if a row was updated."""
+        needs_review = 0 if (confidence is not None and confidence >= threshold) else 1
+        conn = self._get_conn()
+        with self._lock():
+            cur = conn.execute(
+                """
+                UPDATE media_library
+                SET artist=?, title=?, artist_norm=?, title_norm=?,
+                    confidence=?, parse_method='llm', needs_review=?,
+                    updated_at=datetime('now')
+                WHERE media_id=?
+                """,
+                (artist, title, _normalize(artist), _normalize(title),
+                 confidence, needs_review, media_id),
+            )
+            conn.commit()
+            return cur.rowcount > 0
+
     def list_records(self, source=None, needs_review=None):
         clauses, params = [], []
         if source is not None:
