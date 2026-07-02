@@ -161,7 +161,9 @@ Runbook (off-show; service restart interrupts playback):
 2. `sudo mkdir -p /opt/nomad/data && sudo chown nomad:nomad /opt/nomad/data`
 3. `sqlite3 /opt/nomad/kjbox/kj-controller/media_library.db "PRAGMA wal_checkpoint(TRUNCATE);"`
    then copy `media_library.db` → `/opt/nomad/data/media_library.db`
-   (never copy a live WAL DB — service is stopped).
+   (never copy a live WAL DB — service is stopped) and
+   `sudo chown nomad:nomad /opt/nomad/data/media_library.db` (a sudo `cp`
+   leaves it root-owned and the service can't reopen it).
 4. `config.json`: set `media_db_path=/opt/nomad/data/media_library.db`
    (`external_media_mount` already set; `master_sync_source`/`dest` explicit —
    loose end #2 — can ride along, coordinating with the parallel master-sync

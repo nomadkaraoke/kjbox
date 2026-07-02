@@ -3193,12 +3193,16 @@ def link_rotation_file():
                 "verdict": gate.verdict,
             }), 422
         rotation.link_file(entry_id, file_path)
-        if library_media.is_library_path(file_path, current_app.kj_config):
-            # Materialize the identity row now so canonical display + the note
-            # editor work before the first play (design D3.3).
-            library_media.run_async(
-                library_media.ensure_library_row_for_app,
-                current_app._get_current_object(), file_path)
+        try:
+            if library_media.is_library_path(
+                    file_path, getattr(current_app, 'kj_config', None)):
+                # Materialize the identity row now so canonical display + the
+                # note editor work before the first play (design D3.3).
+                library_media.run_async(
+                    library_media.ensure_library_row_for_app,
+                    current_app._get_current_object(), file_path)
+        except Exception:
+            pass  # best-effort — the link above already succeeded
         # Tier-1 (gate above) confirmed integrity+decode; tier-2 now render-
         # verifies against the active renderer in the background and flags the
         # entry if the live renderer can't actually render it.

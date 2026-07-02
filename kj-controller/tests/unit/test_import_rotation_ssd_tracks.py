@@ -93,3 +93,28 @@ def test_execute_imports_idempotently(tmp_path):
     from scripts.backfill_play_stats import _resolve_media_id
     mid, artist, _title = _resolve_media_id(ml, a)
     assert mid == row_a["media_id"] and artist == "ABBA"
+
+
+def test_execute_single_bad_file_does_not_abort_batch(tmp_path, monkeypatch):
+    """One file blowing up mid-import counts as failed; the rest still import."""
+    mount = str(tmp_path / "ssd")
+    bad = f"{mount}/Discs/A - Bad - File.zip"
+    good = f"{mount}/Discs/B - Good - File.zip"
+    _touch(bad)
+    _touch(good)
+    rot = _rotation_db(tmp_path, [bad], [good])
+    cat = _catalog_db(tmp_path, [bad, good])
+    media_db = str(tmp_path / "ml.db")
+
+    import scripts.import_rotation_ssd_tracks as mod
+    real = mod.ensure_library_row
+
+    def flaky(path, catalog, ml):
+        if path == bad:
+            raise RuntimeError("corrupt read")
+        return real(path, catalog, ml)
+
+    monkeypatch.setattr(mod, "ensure_library_row", flaky)
+    counts, _, _ = run(rot, media_db, cat, mount, execute=True)
+    assert counts["failed"] == 1 and counts["imported"] == 1
+    assert MediaLibraryStore(media_db).get_by_path(good) is not None

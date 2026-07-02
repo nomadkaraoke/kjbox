@@ -63,7 +63,12 @@ def run(rotation_db, media_db, catalog_db, mount, execute=False):
         if not execute:
             counts["imported"] += 1  # would import
             continue
-        row = ensure_library_row(path, catalog, ml)
+        try:
+            row = ensure_library_row(path, catalog, ml)
+        except Exception as exc:
+            # One corrupt/unreadable file must not abort the whole batch.
+            print(f"  FAILED ({exc}): {path}")
+            row = None
         if row:
             counts["imported"] += 1
         else:

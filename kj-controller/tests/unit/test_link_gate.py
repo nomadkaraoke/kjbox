@@ -154,3 +154,19 @@ class TestLinkLibraryMaterialization:
                 content_type="application/json",
             )
         run_async.assert_not_called()
+
+    def test_link_materialization_error_does_not_fail_link(self, gate_client, mock_rotation):
+        """A post-link materialization failure must not turn a 200 into a 500."""
+        good_result = types.SimpleNamespace(verdict={"overall_ok": True, "reasons": []})
+        gate_client.application.kj_config["external_media_mount"] = "/media/nomad/Nomad4TBOne"
+        with patch("routes._playability_gate", return_value=good_result), \
+             patch("routes._resolve_or_create_rotation_entry_id", return_value=(1, None)), \
+             patch("routes._enqueue_tier2"), \
+             patch("routes.library_media.run_async", side_effect=RuntimeError("thread pool down")):
+            resp = gate_client.post(
+                "/rotation/link",
+                data=json.dumps({"id": 1,
+                                 "file_path": "/media/nomad/Nomad4TBOne/Discs/a.zip"}),
+                content_type="application/json",
+            )
+        assert resp.status_code == 200
