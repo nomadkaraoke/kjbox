@@ -111,6 +111,47 @@ def _record_play_stat(validated_path, entry_id):
             pass
 
 
+_YT_URL_RE = re.compile(r"(?:v=|youtu\.be/|/embed/|/shorts/)([A-Za-z0-9_-]{11})")
+
+
+def _youtube_id(url):
+    m = _YT_URL_RE.search(url or "")
+    return m.group(1) if m else None
+
+
+def _record_preview_stat(descriptor):
+    """Best-effort: credit one preview for the descriptor's media_id. Never raises."""
+    try:
+        stats = getattr(current_app, 'stats', None)
+        if not stats or not isinstance(descriptor, dict):
+            return
+        ml = getattr(current_app, 'media_library', None)
+        source = descriptor.get('source')
+        title = descriptor.get('title')
+        artist = None
+        media_id = None
+        if source == 'local' and ml:
+            row = ml.get_by_path(descriptor.get('file_path')) or {}
+            media_id = row.get('media_id')
+            artist = row.get('artist')
+            title = title or row.get('title')
+        elif source == 'youtube':
+            vid = _youtube_id(descriptor.get('youtube_url'))
+            if vid:
+                media_id = f"yt-{vid}"
+        # divebar previews: identity is the Phase-2-dependent fuzzy case (spec §10);
+        # skip counting rather than guess. Tighten once P2 lands file_id-based ids.
+        if not media_id:
+            return
+        song_key = _normalize_song_key(artist, title)
+        stats.record_preview(media_id, artist=artist, title=title, song_key=song_key)
+    except Exception as e:
+        try:
+            log_message(f"stats: preview record failed: {e}", current_app.kj_config)
+        except Exception:
+            pass
+
+
 def _group_search_results(local_results, kn_results):
     """Collapse local + KN results into one group per normalized (artist, title).
 
@@ -4613,7 +4654,9 @@ def preview_resolve():
     descriptor = request.get_json(silent=True) or {}
     if not isinstance(descriptor, dict):
         return jsonify({"mode": "unavailable", "reason": "Invalid request"}), 400
-    return jsonify(current_app.preview.resolve(descriptor))
+    result = current_app.preview.resolve(descriptor)
+    _record_preview_stat(descriptor)
+    return jsonify(result)
 
 
 @routes_bp.route('/preview/close', methods=['POST'])

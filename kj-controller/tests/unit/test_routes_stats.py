@@ -59,3 +59,35 @@ def test_record_play_stat_swallows_store_errors(app_ctx):
     current_app.rotation = None
     # Must NOT raise — a stats failure can never break /play on a live rig.
     routes._record_play_stat("/opt/nomad/downloads/x.mp4", None)
+
+
+def test_youtube_id_extraction():
+    assert routes._youtube_id("https://www.youtube.com/watch?v=dQw4w9WgXcQ") == "dQw4w9WgXcQ"
+    assert routes._youtube_id("https://youtu.be/dQw4w9WgXcQ") == "dQw4w9WgXcQ"
+    assert routes._youtube_id("not a url") is None
+
+
+class _FakePreviewStats:
+    def __init__(self):
+        self.previews = []
+    def record_preview(self, media_id, **kw):
+        self.previews.append((media_id, kw)); return True
+
+
+def test_record_preview_stat_youtube(app_ctx):
+    from flask import current_app
+    current_app.stats = _FakePreviewStats()
+    routes._record_preview_stat(
+        {"source": "youtube", "youtube_url": "https://youtu.be/dQw4w9WgXcQ",
+         "title": "Rick Astley - Never Gonna Give You Up"})
+    assert current_app.stats.previews[0][0] == "yt-dQw4w9WgXcQ"
+
+
+def test_record_preview_stat_local(app_ctx):
+    from flask import current_app
+    current_app.stats = _FakePreviewStats()
+    current_app.media_library = _FakeML(
+        {"/opt/nomad/downloads/x.mp4": {"media_id": "gen-abcd1234",
+                                        "artist": "A", "title": "T"}})
+    routes._record_preview_stat({"source": "local", "file_path": "/opt/nomad/downloads/x.mp4"})
+    assert current_app.stats.previews[0][0] == "gen-abcd1234"
