@@ -28,3 +28,37 @@ def test_schema_idempotent_on_file(tmp_path):
 def test_norm_singer():
     assert _norm_singer("  Celeste   B ") == "celeste b"
     assert _norm_singer(None) == ""
+
+
+def _count(store, table):
+    return store._get_conn().execute(f"SELECT COUNT(*) c FROM {table}").fetchone()["c"]
+
+
+def test_record_play_inserts(store):
+    assert store.record_play("yt-abc", entry_id=1, singer="Celeste",
+                             artist="ABBA", title="SOS", song_key="abba sos") == True
+    assert _count(store, "play_events") == 1
+
+
+def test_record_play_dedups_same_entry(store):
+    assert store.record_play("yt-abc", entry_id=7) == True
+    assert store.record_play("yt-abc", entry_id=7) == False  # re-press same entry
+    assert _count(store, "play_events") == 1
+
+
+def test_record_play_distinct_entries_both_count(store):
+    store.record_play("yt-abc", entry_id=7)
+    store.record_play("yt-abc", entry_id=8)  # different entry
+    assert _count(store, "play_events") == 2
+
+
+def test_record_play_no_entry_window_dedups(store):
+    assert store.record_play("db-FBK-x", source='live') == True
+    assert store.record_play("db-FBK-x", source='live') == False  # same media within 120s
+    assert _count(store, "play_events") == 1
+
+
+def test_record_play_empty_media_returns_false(store):
+    assert store.record_play("") == False
+    assert store.record_play(None) == False
+    assert _count(store, "play_events") == 0

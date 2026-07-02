@@ -91,6 +91,51 @@ class StatsStore:
             )
             conn.commit()
 
+    def record_play(self, media_id, *, entry_id=None, singer=None, artist=None,
+                    title=None, song_key=None, played_at=None, night_date=None,
+                    source='live') -> bool:
+        """Insert play event. Return True iff row inserted.
+
+        Dedup: one live play per entry_id (partial UNIQUE index).
+        When entry_id is None and source='live', 120s same-media_id window guard.
+        Empty media_id → no-op returns False.
+        Do NOT nest `with self._lock()` calls.
+        """
+        if not media_id:
+            return False
+        with self._lock():
+            conn = self._get_conn()
+            # Window guard when no entry_id
+            if entry_id is None and source == 'live':
+                # First check if a recent row exists
+                existing = conn.execute("""
+                    SELECT 1 FROM play_events
+                    WHERE media_id = ? AND source = 'live' AND entry_id IS NULL
+                    LIMIT 1
+                """, (media_id,)).fetchone()
+                if existing is not None:
+                    return False
+                # Clean up old records beyond 120s
+                conn.execute("""
+                    DELETE FROM play_events
+                    WHERE media_id = ? AND source = 'live' AND entry_id IS NULL
+                    AND played_at < datetime('now', '-120 seconds')
+                """, (media_id,))
+                conn.commit()
+            cur = conn.execute("""
+                INSERT OR IGNORE INTO play_events
+                (media_id, song_key, singer, singer_norm, played_at, night_date,
+                entry_id, source, artist, title)
+                VALUES (?,?,?,?,
+                COALESCE(?, datetime('now')),
+                COALESCE(?, date('now','localtime')),
+                ?,?,?,?)
+            """,
+            (media_id, song_key, singer, _norm_singer(singer),
+            played_at, night_date, entry_id, source, artist, title))
+            conn.commit()
+            return cur.rowcount > 0
+
 
 def _norm_singer(s):
     if s is None:
