@@ -2465,6 +2465,10 @@ async function setKjMode(mode) {
             body: JSON.stringify(body),
         });
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        // A newer switch fired while this POST was in flight — let its handler
+        // win and skip our side effects (otherwise a quick Simple→Advanced could
+        // still re-enable the overlays after landing back in Advanced).
+        if (reqSeq !== _simpleModeReqSeq) return;
         if (simple) {
             await applyStandinOverlays();
             // Reflect the overlay changes in the Overlays panel if it's on screen.
