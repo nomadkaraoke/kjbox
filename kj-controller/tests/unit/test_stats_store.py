@@ -80,3 +80,29 @@ def test_record_preview_inserts_and_windows(store):
 def test_record_preview_empty_noop(store):
     assert store.record_preview("") is False
     assert _count(store, "preview_events") == 0
+
+
+def test_stats_for_zero_fills_and_counts(store):
+    store.record_play("yt-a", entry_id=1)
+    store.record_play("yt-a", entry_id=2)
+    store.record_preview("yt-a")
+    out = store.stats_for(["yt-a", "yt-missing"])
+    assert out["yt-a"]["plays"] == 2
+    assert out["yt-a"]["previews"] == 1
+    assert out["yt-a"]["last_played"] is not None
+    assert out["yt-missing"] == {"plays": 0, "previews": 0, "last_played": None}
+
+
+def test_stats_for_empty(store):
+    assert store.stats_for([]) == {}
+
+
+def test_usual_media_id_picks_max(store):
+    store.record_play("yt-a", entry_id=1)
+    store.record_play("yt-b", entry_id=2)
+    store.record_play("yt-b", entry_id=3)
+    assert store.usual_media_id(["yt-a", "yt-b"]) == "yt-b"
+
+
+def test_usual_media_id_none_when_all_zero(store):
+    assert store.usual_media_id(["yt-a", "yt-b"]) is None

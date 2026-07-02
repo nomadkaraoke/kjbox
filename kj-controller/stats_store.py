@@ -148,6 +148,38 @@ class StatsStore:
             conn.commit()
             return cur.rowcount > 0
 
+    def stats_for(self, media_ids):
+        ids = list({m for m in media_ids if m})
+        if not ids:
+            return {}
+        ph = ",".join("?" * len(ids))
+        out = {m: {"plays": 0, "previews": 0, "last_played": None} for m in ids}
+        conn = self._get_conn()
+        with self._lock():
+            for r in conn.execute(
+                f"SELECT media_id, COUNT(*) c, MAX(played_at) lp FROM play_events "
+                f"WHERE media_id IN ({ph}) GROUP BY media_id", ids):
+                out[r["media_id"]]["plays"] = r["c"]
+                out[r["media_id"]]["last_played"] = r["lp"]
+            for r in conn.execute(
+                f"SELECT media_id, COUNT(*) c FROM preview_events "
+                f"WHERE media_id IN ({ph}) GROUP BY media_id", ids):
+                out[r["media_id"]]["previews"] = r["c"]
+        return out
+
+    def usual_media_id(self, media_ids):
+        ids = list({m for m in media_ids if m})
+        if not ids:
+            return None
+        ph = ",".join("?" * len(ids))
+        conn = self._get_conn()
+        with self._lock():
+            r = conn.execute(
+                f"SELECT media_id, COUNT(*) c FROM play_events WHERE media_id IN ({ph}) "
+                f"GROUP BY media_id ORDER BY c DESC, MAX(played_at) DESC LIMIT 1",
+                ids).fetchone()
+        return r["media_id"] if r and r["c"] > 0 else None
+
 
 def _norm_singer(s):
     if s is None:
