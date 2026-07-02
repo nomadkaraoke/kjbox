@@ -86,6 +86,51 @@ pytest --cov --cov-report=term-missing
 pytest tests/unit/test_utils.py
 ```
 
+## Frontend UI Conventions
+
+### Section header buttons (`.header-actions`)
+
+Every main panel has a `.header-row` (an `<h2>` on the left, small action buttons
+on the right — Rotation, Overlays, Screen Preview, Available Songs, the Search
+panels, Upload/Download, …). These buttons are **one visual family** and must all
+look identical. They kept drifting apart because each PR added its own class with
+its own `font-size`/`padding`, and a button with *no* class (the "Song Stats" bug)
+fell through to the oversized global `button {}` default.
+
+**The rule — to add or change a section-header button:**
+
+1. Put the button(s) inside the header's `.header-actions` wrapper:
+   ```html
+   <div class="header-row">
+     <h2>My Section</h2>
+     <div class="header-actions">
+       <button onclick="doThing()">Do Thing</button>
+     </div>
+   </div>
+   ```
+2. **Do not** give it a bespoke `font-size`, `padding`, or `border-radius`. Sizing
+   is applied structurally by `.header-actions button` from the `--hdr-btn-*` design
+   tokens at the top of `static/style.css`. A button with **no class at all** is
+   already correct — that is the point, and it's what makes the drift impossible.
+3. Need an accent? Use **colour only**, never size:
+   - `.is-danger` — red (destructive, e.g. New Rotation)
+   - toggled/active states like `.rotation-paths-btn-active`, `.rescan-btn.active`,
+     `.vnc-size-active` set background/border colour only.
+4. Behaviour classes/ids (`.rescan-btn`, `.vnc-size-btn`, `#media-filter-btn`, …)
+   are fine to keep for JS hooks — just don't let them carry sizing.
+
+**Intentional exceptions** (kept visually distinct on purpose — don't "fix" them
+into the neutral family): the Simple/Advanced segmented pill (`.mode-segmented`)
+and the undo/redo icon buttons (transparent + muted, but they still share the token
+size so the row stays uniform).
+
+The group **wraps at every width**, so buttons are never clipped in the
+769–1280px two-column squeeze. To change the whole family's size, edit the
+`--hdr-btn-*` tokens in one place — never per-button rules.
+
+Design rationale + before/after measurements:
+`kj-controller/docs/archive/2026-07-02-header-button-framework-design.md`.
+
 ## Project Structure
 
 ```

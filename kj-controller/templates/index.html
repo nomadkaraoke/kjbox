@@ -72,7 +72,10 @@
             <div class="container rotation-panel">
                 <div class="header-row">
                     <h2>Rotation</h2>
-                    <div class="rotation-header-btns">
+                    <!-- Section-header buttons: keep them inside .header-actions so they
+                         stay uniformly sized and wrap correctly. See docs/DEVELOPMENT.md
+                         § "Section header buttons". Don't add bespoke size CSS. -->
+                    <div class="header-actions rotation-header-btns">
                         <span id="rotation-sync-dot" class="rotation-sync-dot" title="Sync status"></span>
                         <span id="rotation-indicator" class="rotation-indicator hidden"></span>
                         <button id="rotation-undo-btn" class="rotation-undo-btn" onclick="rotationHistory.undo()" title="Nothing to undo" disabled>&#x21A9;</button>
@@ -122,7 +125,7 @@
             <div class="container overlay-panel">
                 <div class="header-row">
                     <h2>Overlays</h2>
-                    <div class="overlay-header-btns">
+                    <div class="header-actions overlay-header-btns">
                         <button class="overlay-header-btn" onclick="showWallpaperModal()" title="Change desktop wallpaper">Wallpaper</button>
                         <button class="overlay-header-btn" onclick="backupOverlays()" title="Download overlay config">Backup</button>
                         <button class="overlay-header-btn" onclick="restoreOverlays()" title="Restore overlay config from file">Restore</button>
@@ -142,7 +145,7 @@
             <div class="container" id="vnc-preview-container">
                 <div class="header-row">
                     <h2>Screen Preview</h2>
-                    <div class="vnc-size-buttons">
+                    <div class="header-actions vnc-size-buttons">
                         <button class="vnc-size-btn vnc-hide-btn" onclick="hideVncPreview()" title="Hide preview and disconnect">Hide</button>
                         <button class="vnc-size-btn" onclick="setVncSize('200px')" title="200px wide">200px</button>
                         <button class="vnc-size-btn vnc-size-active" onclick="setVncSize('400px')" title="400px wide">400px</button>
@@ -279,7 +282,9 @@
             <div class="container kn-search-section">
                 <div class="header-row">
                     <h2>Search Karaoke Nerds</h2>
-                    <button class="kn-prefs-btn" id="kn-prefs-toggle" onclick="toggleKNPrefs()" title="Preferred brands settings">Prefs</button>
+                    <div class="header-actions">
+                        <button class="kn-prefs-btn" id="kn-prefs-toggle" onclick="toggleKNPrefs()" title="Preferred brands settings">Prefs</button>
+                    </div>
                 </div>
                 <div id="kn-prefs-panel" class="kn-prefs hidden">
                     <div class="kn-prefs-section">
@@ -336,7 +341,9 @@
             <div class="container db-search-section">
                 <div class="header-row">
                     <h2>Search Divebar Karaoke <span id="db-health-dot" class="yt-health-dot"></span></h2>
-                    <button class="rescan-btn" onclick="openDbStatusModal()" title="Divebar catalog status, GCS mirror sync progress, and data pipeline health">Status</button>
+                    <div class="header-actions">
+                        <button class="rescan-btn" onclick="openDbStatusModal()" title="Divebar catalog status, GCS mirror sync progress, and data pipeline health">Status</button>
+                    </div>
                 </div>
                 <div class="db-search-row">
                     <input type="text" id="db-query" placeholder="Search community karaoke tracks..." onkeyup="if(event.keyCode === 13) searchDivebar()">
@@ -352,7 +359,9 @@
             <div class="container download-section">
                 <div class="header-row">
                     <h2>Upload / Download <span id="yt-health-dot" class="yt-health-dot"></span></h2>
-                    <button class="rescan-btn" onclick="openYtModal()" title="YouTube download engine settings, cookies, and health">Settings</button>
+                    <div class="header-actions">
+                        <button class="rescan-btn" onclick="openYtModal()" title="YouTube download engine settings, cookies, and health">Settings</button>
+                    </div>
                 </div>
                 <div class="download-row">
                     <input type="url" id="youtube-url" placeholder="Enter YouTube URL" onkeyup="if(event.keyCode === 13) downloadSong()">
@@ -371,10 +380,12 @@
             <div class="container available-songs">
                 <div class="header-row">
                     <h2>Available Songs<span id="media-count" class="media-count"></span></h2>
-                    <button class="rescan-btn" id="media-filter-btn" onclick="cycleMediaFilter()" title="Cycle format filter: All → MP4 Only → CDG/ZIP Only">All Formats</button>
-                    <button class="rescan-btn" id="media-review-btn" onclick="toggleReviewFilter()" title="Show only songs whose auto-parsed Artist/Title need review">Needs review</button>
-                    <button class="rescan-btn" id="rescan-btn" onclick="rescanMedia()" title="Scan the local directories listed in media_folders for downloaded and imported files">Rescan Media</button>
-                    <button class="rescan-btn" onclick="rebuildCatalog()" title="Re-index the external USB drive karaoke library from the file list configured in external_file_list, mounted at external_media_mount">Rebuild Catalog</button>
+                    <div class="header-actions">
+                        <button class="rescan-btn" id="media-filter-btn" onclick="cycleMediaFilter()" title="Cycle format filter: All → MP4 Only → CDG/ZIP Only">All Formats</button>
+                        <button class="rescan-btn" id="media-review-btn" onclick="toggleReviewFilter()" title="Show only songs whose auto-parsed Artist/Title need review">Needs review</button>
+                        <button class="rescan-btn" id="rescan-btn" onclick="rescanMedia()" title="Scan the local directories listed in media_folders for downloaded and imported files">Rescan Media</button>
+                        <button class="rescan-btn" onclick="rebuildCatalog()" title="Re-index the external USB drive karaoke library from the file list configured in external_file_list, mounted at external_media_mount">Rebuild Catalog</button>
+                    </div>
                 </div>
                 <div class="search-box">
                     <input type="text" id="catalog-search" placeholder="Search your library and catalog..." autocomplete="off">
