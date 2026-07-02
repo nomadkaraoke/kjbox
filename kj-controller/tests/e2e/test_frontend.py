@@ -350,7 +350,7 @@ class TestPlaybackControlsUnified:
             headers={"Content-Type": "application/json"},
             method="POST",
         )
-        with urllib.request.urlopen(req) as resp:
+        with urllib.request.urlopen(req, timeout=10) as resp:
             resp.read()
 
     # Desktop width so the >=769px compact grid applies (not the mobile stack).
