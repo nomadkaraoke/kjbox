@@ -987,10 +987,25 @@ function updateNowPlaying(data) {
     const npFiletype = document.getElementById('np-filetype');
     const npTime = document.getElementById('np-time');
     const npLength = document.getElementById('np-length');
+    const npFillerRow = document.getElementById('np-filler-row');
+    const npFillerTrack = document.getElementById('np-filler-track');
     if (!info) return;
 
     const state = data.state || 'stopped';
     const isActive = state === 'playing' || state === 'paused';
+
+    // Filler indicator: the background music that plays between songs. Shown
+    // only in the idle (stopped) state via CSS; hidden during karaoke playback.
+    if (npFillerRow && npFillerTrack) {
+        const track = data.current_filler_track;
+        if (track && track !== 'None') {
+            npFillerTrack.textContent = track;
+            npFillerRow.classList.remove('hidden');
+        } else {
+            npFillerTrack.textContent = '';
+            npFillerRow.classList.add('hidden');
+        }
+    }
 
     // Renderer-aware UI: hide pitch controls on engines that don't support it,
     // show a small badge so the KJ knows which engine is active (mpv / VLC).
@@ -1027,8 +1042,8 @@ function updateNowPlaying(data) {
     } else {
         info.classList.remove('np-info--playing');
         npTitle.textContent = 'Nothing playing';
-        npState.textContent = '';
-        npState.className = 'np-state';
+        npState.textContent = 'Stopped';
+        npState.className = 'np-state state-stopped';
     }
 }
 
@@ -1070,9 +1085,6 @@ async function updateStatus() {
             if (typeof data.simple_mode === 'boolean') {
                 applySimpleMode(data.simple_mode);
             }
-            document.getElementById('player-state').textContent = state;
-            document.getElementById('current-filler').textContent = data.current_filler_track || 'None';
-
             const audioWarning = document.getElementById('audio-warning');
             audioWarning.style.display = data.audio_error ? 'block' : 'none';
 

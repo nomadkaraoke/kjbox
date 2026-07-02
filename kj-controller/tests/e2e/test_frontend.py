@@ -70,17 +70,21 @@ class TestLayoutStructure:
         expect(app_page.locator("#col1")).to_be_visible()
         expect(app_page.locator("#col2")).to_be_visible()
 
-    def test_status_bar(self, app_page):
-        expect(app_page.locator("#status-bar")).to_be_visible()
+    def test_now_playing_block(self, app_page):
+        expect(app_page.locator("#np-info")).to_be_visible()
 
     def test_log_area(self, app_page):
         expect(app_page.locator("#log-area")).to_be_visible()
 
     def test_now_playing_idle_initially(self, app_page):
         """With nothing playing, the now-playing block (inside Playback
-        Controls) shows the idle placeholder and hides the detail row."""
+        Controls) shows the idle placeholder + a STOPPED pill, and hides the
+        detail row. No filler track is configured in the test env, so the
+        filler indicator row is hidden too."""
         expect(app_page.locator("#np-title")).to_have_text("Nothing playing")
+        expect(app_page.locator("#np-state")).to_have_text("Stopped")
         expect(app_page.locator("#np-info-meta")).to_be_hidden()
+        expect(app_page.locator("#np-filler-row")).to_be_hidden()
 
 
 # ---------------------------------------------------------------------------
@@ -197,21 +201,39 @@ class TestAvailableSongs:
 
 
 # ---------------------------------------------------------------------------
-# Status bar
+# Now-playing status + filler indicator
 # ---------------------------------------------------------------------------
 
-class TestStatusBar:
-    """Status bar at the bottom."""
+class TestNowPlayingStatus:
+    """The now-playing block inside Playback Controls surfaces player state as
+    a pill and the filler track (idle state only). The old bottom status bar
+    ("Status: ... | Filler: ...") was removed in favour of this."""
 
-    def test_shows_status_label(self, app_page):
-        expect(app_page.locator("#status-bar")).to_contain_text("Status:")
+    def test_shows_stopped_pill(self, app_page):
+        # The status poll should have run and set the idle STOPPED pill.
+        expect(app_page.locator("#np-state")).to_have_text("Stopped")
 
-    def test_shows_stopped_state(self, app_page):
-        # The status poll should have run and set "stopped"
-        expect(app_page.locator("#player-state")).to_have_text("stopped")
+    def test_filler_indicator_driven(self, app_page):
+        """Drive updateNowPlaying() directly to verify the filler indicator:
+        visible with the track name when stopped, hidden during playback."""
+        # Stop the 2s status poll so it doesn't overwrite our driven state.
+        app_page.evaluate("for (let i = 1; i < 100000; i++) clearInterval(i);")
 
-    def test_shows_filler_info(self, app_page):
-        expect(app_page.locator("#status-bar")).to_contain_text("Filler:")
+        # Stopped + a filler track set -> filler row shows the track name.
+        app_page.evaluate(
+            "updateNowPlaying({state: 'stopped', current_filler_track: 'wii.mp3'})"
+        )
+        expect(app_page.locator("#np-state")).to_have_text("Stopped")
+        expect(app_page.locator("#np-filler-row")).to_be_visible()
+        expect(app_page.locator("#np-filler-track")).to_have_text("wii.mp3")
+
+        # Playing -> filler row hidden even though a track is still configured.
+        app_page.evaluate(
+            "updateNowPlaying({state: 'playing', current_playing: 'Artist - Song', "
+            "current_filler_track: 'wii.mp3'})"
+        )
+        expect(app_page.locator("#np-state")).to_have_text("Playing")
+        expect(app_page.locator("#np-filler-row")).to_be_hidden()
 
     def test_filler_selector_in_system(self, app_page):
         """Filler selector is in the System section."""
@@ -236,8 +258,8 @@ class TestStatusBar:
 # ---------------------------------------------------------------------------
 
 class TestModeTogglePlacement:
-    """The Simple/Advanced toggle and the Status/Filler line now live in the
-    Playback Controls header/body, not the System section."""
+    """The Simple/Advanced toggle and the now-playing status block now live in
+    the Playback Controls header/body, not the System section."""
 
     def test_toggle_in_playback_header(self, app_page):
         """Mode toggle sits in the Playback Controls header-row."""
@@ -249,10 +271,10 @@ class TestModeTogglePlacement:
         """Mode toggle no longer lives in the System section."""
         expect(app_page.locator(".system-controls #mode-segmented")).to_have_count(0)
 
-    def test_status_bar_in_playback_controls(self, app_page):
-        """Status/Filler line moved into Playback Controls, out of System."""
-        expect(app_page.locator(".playback-controls #status-bar")).to_have_count(1)
-        expect(app_page.locator(".system-controls #status-bar")).to_have_count(0)
+    def test_now_playing_in_playback_controls(self, app_page):
+        """Now-playing status block lives in Playback Controls, not System."""
+        expect(app_page.locator(".playback-controls #np-info")).to_have_count(1)
+        expect(app_page.locator(".system-controls #np-info")).to_have_count(0)
 
 
 class TestSimpleModeLayout:

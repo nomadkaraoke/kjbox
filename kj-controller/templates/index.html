@@ -45,6 +45,10 @@
                             <button class="np-btn np-btn-pitch" id="np-pitch-up" onclick="changePitch(1)" title="Pitch up 1 semitone">+</button>
                         </div>
                     </div>
+                    <div class="np-filler-row hidden" id="np-filler-row">
+                        <span class="np-filler-badge">&#9834; Filler</span>
+                        <span class="np-filler-track" id="np-filler-track" title="Filler music playing between songs"></span>
+                    </div>
                 </div>
                 <div class="button-group">
                     <button id="btn-pause" class="btn-primary" onclick="controlPlayback('pause_resume')">Pause / Resume</button>
@@ -63,10 +67,6 @@
                 <div>
                     <label for="filler-volume">Filler Volume: <span id="filler-volume-label" class="range-label">{{ ((config.get('filler_volume', 100) / 256 * 100) | round | int) }}%</span></label>
                     <input type="range" id="filler-volume" class="volume-slider" min="0" max="256" value="{{ config.get('filler_volume', 100) }}" oninput="updateFillerVolume(this.value)">
-                </div>
-                <div id="status-bar">
-                    <strong>Status:</strong> <span id="player-state">Unknown</span> |
-                    <strong>Filler:</strong> <span id="current-filler">wii.mp3</span>
                 </div>
             </div>
             <div class="container rotation-panel">

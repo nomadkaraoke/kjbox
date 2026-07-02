@@ -2,6 +2,28 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-07-02 - Replace status bar with idle now-playing status pill + filler indicator (v0.55.1)
+
+**Why:** The bottom `#status-bar` ("Status: stopped | Filler: wii.mp3") was a redundant,
+differently-styled restatement of information the now-playing block already presents when a
+song is playing. When nothing was playing, the now-playing block just showed a muted
+"Nothing playing" with no status pill and no indication of what filler music the audience
+was actually hearing.
+
+**What (frontend — takes effect on browser refresh after `git pull`; no restart):**
+- **Removed** the `#status-bar` div (and its CSS, responsive override, simple-mode grid
+  rules, and the two JS lines that populated `#player-state` / `#current-filler`).
+- **Idle state now mirrors the playing state:** shows a grey **STOPPED** pill (new
+  `.np-state.state-stopped`) next to "Nothing playing", reusing the same pill styling as the
+  green PLAYING / amber PAUSED pills.
+- **Filler indicator:** a new `#np-filler-row` (pink "♪ FILLER" badge + track name) appears
+  under the title **only in the idle state** when a filler track is configured — this is the
+  music actually audible between songs. It is hidden during karaoke playback (CSS
+  `.np-info--playing .np-filler-row`) and when no track is set (JS toggles `.hidden`). Driven
+  by the existing `current_filler_track` status field — no backend change.
+- Tests: `tests/e2e/test_frontend.py` updated (STOPPED pill, filler indicator drive-test,
+  now-playing-in-Playback-Controls placement); all 59 frontend e2e tests pass.
+
 ## 2026-07-02 - Playback Controls header toolbar + Simple-mode layout tightening (v0.54.2)
 
 **Why:** The Simple/Advanced mode toggle and the Status/Filler line were tucked away

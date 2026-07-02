@@ -32,6 +32,7 @@ body::after {
 .np-state:empty { display: none; }
 .np-state.state-playing { background-color: rgba(34, 197, 94, 0.2); color: #22c55e; }
 .np-state.state-paused { background-color: rgba(245, 158, 11, 0.2); color: #f59e0b; }
+.np-state.state-stopped { background-color: rgba(148, 163, 184, 0.18); color: #94a3b8; }
 .np-title {
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     font-size: 0.95em; color: #e5e5e5; font-weight: 500; min-width: 0;
@@ -56,6 +57,21 @@ body::after {
 }
 .np-filetype:empty { display: none; }
 .np-time-wrap { white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+/* Idle-state filler indicator: the background music playing between songs.
+   The JS toggles .hidden when no track is set; CSS hides it during playback. */
+.np-filler-row { display: flex; align-items: center; gap: 0.45rem; font-size: 0.8em; min-width: 0; }
+.np-info--playing .np-filler-row { display: none; }
+.np-filler-badge {
+    font-size: 0.92em; text-transform: uppercase; letter-spacing: 0.4px; font-weight: 600;
+    color: #d0a9c9; background: rgba(255, 91, 184, 0.1);
+    border: 1px solid rgba(255, 91, 184, 0.28); border-radius: 4px;
+    padding: 1px 6px; flex-shrink: 0;
+}
+.np-filler-track {
+    color: #aaa; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
 
 .np-pitch-group { display: flex; align-items: center; gap: 3px; flex-shrink: 0; }
 .np-pitch-label { color: #888; margin-right: 1px; }
@@ -509,16 +525,8 @@ body {
 }
 .header-row h2 { flex-grow: 1; }
 
-/* --- Status & Logs (#status-bar in Playback Controls, #log-area in System) --- */
+/* --- Logs (#log-area in System) --- */
 
-#status-bar {
-    padding: 0.6rem 0.75rem;
-    background-color: #0f0f0f;
-    border: 1px solid #2a2a2a;
-    border-radius: 8px;
-    font-size: 0.75em;
-}
-#status-bar strong { color: #ff7acc; }
 #log-area {
     padding: 0.6rem 0.75rem;
     background-color: #0f0f0f;
@@ -1276,7 +1284,6 @@ body {
     .button-group button { flex: 1; min-width: 0; padding: 12px 8px; }
     .controls-row { flex-direction: column; gap: 0.5rem; }
     h2 { font-size: 1em; }
-    #status-bar { font-size: 0.7em; }
 
     /* Now-playing pitch buttons */
     .np-btn { font-size: 0.7em; padding: 6px 12px; }
@@ -3477,16 +3484,15 @@ body.simple-mode .system-controls {
         display: flex;
         gap: 0.5rem;
     }
-    /* The header (title + mode toggle), now-playing details, and the moved
-     * Status/Filler line each span the full width of the bar; they are NOT laid
-     * out as a label+slider grid row. The header keeps its own flex layout. */
+    /* The header (title + mode toggle) and now-playing details each span the
+     * full width of the bar; they are NOT laid out as a label+slider grid row.
+     * The header keeps its own flex layout. */
     body.simple-mode .playback-controls .header-row,
-    body.simple-mode .playback-controls #np-info,
-    body.simple-mode .playback-controls #status-bar {
+    body.simple-mode .playback-controls #np-info {
         grid-column: 1 / -1;
     }
     /* Seek + the two volume sliders: label in col 1, slider fills col 2. */
-    body.simple-mode .playback-controls > div:not(.button-group):not(#np-info):not(.header-row):not(#status-bar) {
+    body.simple-mode .playback-controls > div:not(.button-group):not(#np-info):not(.header-row) {
         display: grid;
         grid-template-columns: auto 1fr;
         gap: 0.6rem;
