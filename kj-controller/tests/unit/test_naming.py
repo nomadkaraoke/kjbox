@@ -78,3 +78,12 @@ def test_build_slug_filename_long_media_id_stays_within_255_bytes():
     assert len(out.encode("utf-8")) <= 255 or out.endswith(f" [{long_id}].mp4")
     # budget must never trim from the wrong end: the stem must not contain a partial suffix
     assert out.endswith(f"[{long_id}].mp4")
+
+
+def test_library_source_media_id():
+    # Design D1: SSD/library files get content-derived lib-<sha1[:12]> ids.
+    from naming import media_id_for, SOURCE_LIBRARY, DOWNLOAD_SOURCES
+    assert SOURCE_LIBRARY == "library"
+    assert media_id_for(SOURCE_LIBRARY, "abc123def456") == "lib-abc123def456"
+    # library rows must be outside scan's prune jurisdiction (PR #143 invariant)
+    assert SOURCE_LIBRARY not in DOWNLOAD_SOURCES
