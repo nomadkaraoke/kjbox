@@ -1,5 +1,6 @@
 import os
 import types
+import unicodedata
 
 import scripts.sync_masters as sm
 
@@ -67,7 +68,159 @@ def test_run_sync_disabled_is_noop(tmp_path):
     cfg = _cfg(tmp_path)
     cfg["master_sync_enabled"] = False
     out = sm.run_sync(cfg, requests_lib=None)
-    assert out == {"changed": False, "copied": 0, "rescanned": False, "error": "disabled"}
+    assert out == {"changed": False, "copied": 0, "deleted": 0, "rescanned": False, "error": "disabled"}
+
+
+# --- reconcile deletions (true-mirror; deletes/renames propagate) ---
+
+def _ls_result(names):
+    stdout = "\n".join(f"gs://bucket/prefix/{n}" for n in names)
+    return types.SimpleNamespace(returncode=0, stdout=stdout, stderr="")
+
+
+def _local(dest, names):
+    dest.mkdir(parents=True, exist_ok=True)
+    for n in names:
+        (dest / n).write_bytes(b"x")
+
+
+def test_reconcile_deletes_local_absent_from_source(tmp_path, monkeypatch):
+    dest = tmp_path / "NOMAD-720p"
+    _local(dest, ["keep.mp4", "gone1.mp4", "gone2.mp4"])
+    monkeypatch.setattr(sm.subprocess, "run", lambda cmd, **kw: _ls_result(["keep.mp4"]))
+    n = sm._reconcile_deletions({}, "gs://bucket/prefix/", str(dest), {}, "gcloud")
+    assert n == 2
+    assert (dest / "keep.mp4").exists()
+    assert not (dest / "gone1.mp4").exists()
+    assert not (dest / "gone2.mp4").exists()
+
+
+def test_reconcile_never_deletes_on_empty_listing(tmp_path, monkeypatch):
+    dest = tmp_path / "NOMAD-720p"
+    _local(dest, ["a.mp4", "b.mp4"])
+    monkeypatch.setattr(sm.subprocess, "run",
+                        lambda cmd, **kw: types.SimpleNamespace(returncode=0, stdout="", stderr=""))
+    assert sm._reconcile_deletions({}, "gs://x/", str(dest), {}, "gcloud") == 0
+    assert (dest / "a.mp4").exists() and (dest / "b.mp4").exists()
+
+
+def test_reconcile_never_deletes_on_failed_listing(tmp_path, monkeypatch):
+    dest = tmp_path / "NOMAD-720p"
+    _local(dest, ["a.mp4"])
+    monkeypatch.setattr(sm.subprocess, "run",
+                        lambda cmd, **kw: types.SimpleNamespace(returncode=1, stdout="gs://x/z.mp4", stderr="boom"))
+    assert sm._reconcile_deletions({}, "gs://x/", str(dest), {}, "gcloud") == 0
+    assert (dest / "a.mp4").exists()
+
+
+def test_reconcile_ls_exception_never_deletes(tmp_path, monkeypatch):
+    dest = tmp_path / "NOMAD-720p"
+    _local(dest, ["a.mp4"])
+
+    def boom(cmd, **kw):
+        raise RuntimeError("network")
+
+    monkeypatch.setattr(sm.subprocess, "run", boom)
+    assert sm._reconcile_deletions({}, "gs://x/", str(dest), {}, "gcloud") == 0
+    assert (dest / "a.mp4").exists()
+
+
+def test_reconcile_refuses_over_cap(tmp_path, monkeypatch):
+    dest = tmp_path / "NOMAD-720p"
+    _local(dest, [f"local{i}.mp4" for i in range(5)])
+    # Source has none of the local files -> 5 would be deleted, over the cap of 2.
+    monkeypatch.setattr(sm.subprocess, "run", lambda cmd, **kw: _ls_result(["other.mp4"]))
+    assert sm._reconcile_deletions({"master_sync_max_deletes": 2}, "gs://x/", str(dest), {}, "gcloud") == 0
+    for i in range(5):
+        assert (dest / f"local{i}.mp4").exists()
+
+
+def test_reconcile_dry_run_logs_but_keeps(tmp_path, monkeypatch):
+    dest = tmp_path / "NOMAD-720p"
+    _local(dest, ["gone.mp4"])
+    monkeypatch.setattr(sm.subprocess, "run", lambda cmd, **kw: _ls_result(["keep.mp4"]))
+    assert sm._reconcile_deletions({"master_sync_delete_dry_run": True}, "gs://x/", str(dest), {}, "gcloud") == 0
+    assert (dest / "gone.mp4").exists()
+
+
+def test_reconcile_kill_switch_off_does_not_even_list(tmp_path, monkeypatch):
+    dest = tmp_path / "NOMAD-720p"
+    _local(dest, ["gone.mp4"])
+    called = {"ran": False}
+
+    def fake(cmd, **kw):
+        called["ran"] = True
+        return _ls_result([])
+
+    monkeypatch.setattr(sm.subprocess, "run", fake)
+    assert sm._reconcile_deletions({"master_sync_delete_removed": False}, "gs://x/", str(dest), {}, "gcloud") == 0
+    assert called["ran"] is False
+    assert (dest / "gone.mp4").exists()
+
+
+def test_reconcile_ignores_unicode_normalization_difference(tmp_path, monkeypatch):
+    # Local file stored NFD (decomposed accents); GCS lists the SAME name NFC.
+    # These differ byte-wise but are the same logical master -> must NOT be deleted
+    # (else it churns: delete then rsync re-downloads every run). Real device case:
+    # NOMAD-0990 "Curicó", NOMAD-1027 "Beyoncé", NOMAD-1207 "Việt Nhân", etc.
+    logical = "NOMAD-0990 - Kiltro - Curicó.mp4"
+    nfd_name = unicodedata.normalize("NFD", logical)
+    nfc_name = unicodedata.normalize("NFC", logical)
+    assert nfd_name != nfc_name  # sanity: the two forms really do differ on disk
+    dest = tmp_path / "NOMAD-720p"
+    _local(dest, [nfd_name])
+    monkeypatch.setattr(sm.subprocess, "run", lambda cmd, **kw: _ls_result([nfc_name]))
+    assert sm._reconcile_deletions({}, "gs://x/", str(dest), {}, "gcloud") == 0
+    assert (dest / nfd_name).exists()
+
+
+def test_reconcile_skips_header_and_prefix_lines(tmp_path, monkeypatch):
+    # gcloud listing that includes a colon-terminated header line and a pseudo-dir
+    # line must not pollute source_names; the real object 'a.mp4' stays.
+    dest = tmp_path / "NOMAD-720p"
+    _local(dest, ["a.mp4"])
+    stdout = (
+        "gs://bucket/prefix/:\n"          # header line (colon)
+        "gs://bucket/prefix/sub/\n"       # pseudo-directory (slash)
+        "gs://bucket/prefix/a.mp4\n"      # real object
+    )
+    monkeypatch.setattr(sm.subprocess, "run",
+                        lambda cmd, **kw: types.SimpleNamespace(returncode=0, stdout=stdout, stderr=""))
+    assert sm._reconcile_deletions({}, "gs://bucket/prefix/", str(dest), {}, "gcloud") == 0
+    assert (dest / "a.mp4").exists()
+
+
+def test_reconcile_header_only_listing_holds_empty_guard(tmp_path, monkeypatch):
+    # A listing with ONLY header/prefix lines (no real objects) must parse to an EMPTY
+    # source set and therefore delete nothing — otherwise a ":" entry would make the
+    # set non-empty and wrongly delete every local file.
+    dest = tmp_path / "NOMAD-720p"
+    _local(dest, ["a.mp4", "b.mp4"])
+    monkeypatch.setattr(sm.subprocess, "run",
+                        lambda cmd, **kw: types.SimpleNamespace(returncode=0, stdout="gs://bucket/prefix/:\n", stderr=""))
+    assert sm._reconcile_deletions({}, "gs://bucket/prefix/", str(dest), {}, "gcloud") == 0
+    assert (dest / "a.mp4").exists() and (dest / "b.mp4").exists()
+
+
+def test_run_sync_reconciles_and_rescans_on_delete(tmp_path, monkeypatch):
+    dest = tmp_path / "NOMAD-720p"
+    _local(dest, ["stale.mp4"])  # present locally, absent upstream
+    posted = {}
+
+    def fake(cmd, **kw):
+        if "rsync" in cmd:
+            return types.SimpleNamespace(returncode=0, stdout="", stderr="")  # nothing new to copy
+        if "ls" in cmd:
+            return _ls_result(["keep.mp4"])  # source no longer has stale.mp4
+        return types.SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(sm.subprocess, "run", fake)
+    fake_requests = types.SimpleNamespace(post=lambda url, **kw: posted.setdefault("url", url) or _Resp())
+    out = sm.run_sync(_cfg(tmp_path), requests_lib=fake_requests)
+    assert out["deleted"] == 1
+    assert not (dest / "stale.mp4").exists()
+    assert out["changed"] is True and out["rescanned"] is True
+    assert posted["url"] == "http://127.0.0.1:5001/rescan"
 
 
 def test_run_sync_reports_gcloud_failure_without_raising(tmp_path, monkeypatch):

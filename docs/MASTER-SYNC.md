@@ -43,7 +43,27 @@ service `Environment=PATH=...`.
 4. Enable the timer: `sudo systemctl enable --now nomad-master-sync.timer`
 5. Confirm cadence: `systemctl list-timers nomad-master-sync.timer`.
 
-## Notes
-- rsync is additive (no `--delete-unmatched-destination-objects`): a master removed from GCS is
-  kept locally.
+## Reconcile / deletions (v0.60.0+)
+Each run does an additive `gcloud storage rsync` (copy new/changed), **then a guarded
+reconcile** that deletes local masters no longer present in GCS — so upstream deletes/renames
+(from the gen delete side) land on the box; the latest published cut wins. A change (copy OR
+delete) pokes `/rescan` so the index updates immediately.
+
+**Safety guards (a transient failure must never wipe the mirror):**
+- Never deletes if the source listing FAILS (`gcloud storage ls` non-zero exit).
+- Never deletes on an EMPTY parsed listing.
+- The listing uses the `**` flat form (no per-directory header lines); `:`/`/`-terminated
+  lines are skipped defensively so a header-only listing parses as empty → no deletion.
+- Compares **NFC-normalized** names, so a local file differing from its GCS object only by
+  unicode normalization (NFD-on-disk vs NFC-in-GCS for accented titles) is NOT wrongly deleted.
+- Refuses to delete more than `master_sync_max_deletes` (default **50**) in one run — a partial
+  listing looks like a mass deletion, so it stays additive that run and logs a warning.
+
+**Config knobs (all optional, in `config.json`):**
+- `master_sync_delete_removed` (default `true`) — kill switch for the reconcile step.
+- `master_sync_delete_dry_run` (default `false`) — logs the would-delete set, deletes nothing.
+  Use for a cautious first rollout: set `true`, watch `journalctl -u nomad-master-sync`, confirm
+  the delete set is sane, then remove it.
+- `master_sync_max_deletes` (default `50`).
+
 - First post-move run may re-pull a few masters if local mtimes differ; subsequent runs are tiny.
