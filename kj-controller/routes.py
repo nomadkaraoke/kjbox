@@ -111,14 +111,6 @@ def _record_play_stat(validated_path, entry_id):
             pass
 
 
-_YT_URL_RE = re.compile(r"(?:v=|youtu\.be/|/embed/|/shorts/)([A-Za-z0-9_-]{11})")
-
-
-def _youtube_id(url):
-    m = _YT_URL_RE.search(url or "")
-    return m.group(1) if m else None
-
-
 def _record_preview_stat(descriptor):
     """Best-effort: credit one preview for the descriptor's media_id. Never raises."""
     try:
@@ -136,7 +128,7 @@ def _record_preview_stat(descriptor):
             artist = row.get('artist')
             title = title or row.get('title')
         elif source == 'youtube':
-            vid = _youtube_id(descriptor.get('youtube_url'))
+            vid = youtube_id_from_url(descriptor.get('youtube_url'))
             if vid:
                 media_id = f"yt-{vid}"
         # divebar previews: identity is the Phase-2-dependent fuzzy case (spec §10);
@@ -148,6 +140,76 @@ def _record_preview_stat(descriptor):
     except Exception as e:
         try:
             log_message(f"stats: preview record failed: {e}", current_app.kj_config)
+        except Exception:
+            pass
+
+
+def resolve_row_media_id(row, kind, ml):
+    """Best-effort media_id for a rotation-search row. Never raises. See design §10."""
+    try:
+        if kind == "local":
+            r = (ml.get_by_path(row.get("path")) if ml else None) or {}
+            mid = r.get("media_id")
+            if mid:
+                return mid
+            from naming import extract_media_id
+            return extract_media_id(os.path.basename(row.get("filename") or row.get("path") or ""))
+        if kind == "kn":
+            vid = youtube_id_from_url(row.get("youtube_url"))
+            return media_id_for("youtube", vid) if vid else None
+        if kind == "divebar":
+            fid = row.get("file_id")
+            if not fid:
+                return None
+            brand = row.get("brand") or row.get("brand_code") or "DB"
+            return media_id_for("community", f"{brand}-{fid}")
+    except Exception:
+        return None
+    return None
+
+
+def _enrich_search_stats(result):
+    """Attach `stats` + `media_id` to each local/KN-track/divebar row. Best-effort; never raises."""
+    stats = getattr(current_app, "stats", None)
+    ml = getattr(current_app, "media_library", None)
+    if not stats:
+        return
+    try:
+        pairs = []  # (row, media_id, song_key)
+        for r in result.get("local", []):
+            pairs.append((r, resolve_row_media_id(r, "local", ml),
+                          _normalize_song_key(r.get("artist"), r.get("title"))))
+        for song in result.get("karaoke_nerds", []):
+            sk = _normalize_song_key(song.get("artist"), song.get("title"))
+            for t in song.get("tracks") or []:
+                pairs.append((t, resolve_row_media_id(t, "kn", ml), sk))
+        for r in result.get("divebar", []):
+            pairs.append((r, resolve_row_media_id(r, "divebar", ml),
+                          _normalize_song_key(r.get("artist"), r.get("title"))))
+        ids = [mid for _, mid, _ in pairs if mid]
+        agg = stats.stats_for(ids)
+        by_song = {}
+        for _row, mid, sk in pairs:
+            if mid:
+                by_song.setdefault(sk, []).append(mid)
+        usual = set()
+        for mids in by_song.values():
+            u = stats.usual_media_id(mids)
+            if u:
+                usual.add(u)
+        for row, mid, _sk in pairs:
+            if not mid:
+                continue
+            s = dict(agg.get(mid, {"plays": 0, "previews": 0, "last_played": None}))
+            s["is_usual"] = mid in usual
+            note = stats.get_note(mid)
+            s["note"] = (note or {}).get("note")
+            s["label"] = (note or {}).get("label")
+            row["stats"] = s
+            row["media_id"] = mid
+    except Exception as e:
+        try:
+            log_message(f"stats: search enrichment failed: {e}", current_app.kj_config)
         except Exception:
             pass
 
@@ -3832,6 +3894,7 @@ def rotation_search():
         return jsonify({"error": "Query must be at least 3 characters"}), 400
 
     result = unified_search(query, current_app._get_current_object())
+    _enrich_search_stats(result)
 
     # Back-compat shape: legacy response omitted the timeout flag when False,
     # and placed it at the top level when True. Preserve that.

@@ -62,9 +62,11 @@ def test_record_play_stat_swallows_store_errors(app_ctx):
 
 
 def test_youtube_id_extraction():
-    assert routes._youtube_id("https://www.youtube.com/watch?v=dQw4w9WgXcQ") == "dQw4w9WgXcQ"
-    assert routes._youtube_id("https://youtu.be/dQw4w9WgXcQ") == "dQw4w9WgXcQ"
-    assert routes._youtube_id("not a url") is None
+    # routes._youtube_id was removed (deduped onto the shared naming.youtube_id_from_url,
+    # imported into this module) — exercise it via the routes-module binding.
+    assert routes.youtube_id_from_url("https://www.youtube.com/watch?v=dQw4w9WgXcQ") == "dQw4w9WgXcQ"
+    assert routes.youtube_id_from_url("https://youtu.be/dQw4w9WgXcQ") == "dQw4w9WgXcQ"
+    assert routes.youtube_id_from_url("not a url") is None
 
 
 class _FakePreviewStats:
@@ -118,3 +120,26 @@ def test_stats_endpoints(flask_test_client):
     assert any(s["singer"] == "Celeste" for s in r2.get_json()["singers"])
     r3 = flask_test_client.get("/stats/top-songs?singer=celeste")
     assert r3.get_json()["songs"][0]["song_key"] == "abba sos"
+
+
+def test_resolve_row_media_id(app_ctx):
+    from flask import current_app
+    current_app.media_library = _FakeML({"/opt/nomad/downloads/x.mp4": {"media_id": "gen-abcd1234"}})
+    ml = current_app.media_library
+    assert routes.resolve_row_media_id({"path": "/opt/nomad/downloads/x.mp4"}, "local", ml) == "gen-abcd1234"
+    assert routes.resolve_row_media_id({"youtube_url": "https://youtu.be/dQw4w9WgXcQ"}, "kn", ml) == "yt-dQw4w9WgXcQ"
+    assert routes.resolve_row_media_id({"file_id": "F1", "brand": "FBK"}, "divebar", ml) == "db-FBK-F1"
+
+
+def test_rotation_search_enriches_stats(flask_test_client, monkeypatch):
+    app = flask_test_client.application
+    app.stats.record_play("gen-abcd1234", entry_id=9001, artist="A", title="T", song_key="a t")
+    app.media_library = _FakeML({"/opt/nomad/downloads/x.mp4": {"media_id": "gen-abcd1234"}})
+    monkeypatch.setattr(routes, "unified_search", lambda q, a: {
+        "local": [{"path": "/opt/nomad/downloads/x.mp4", "artist": "A", "title": "T"}],
+        "karaoke_nerds": [], "divebar": [], "karaoke_nerds_timeout": False})
+    r = flask_test_client.get("/rotation/search?q=abc")
+    row = r.get_json()["local"][0]
+    assert row["stats"]["plays"] == 1
+    assert row["stats"]["is_usual"] is True
+    assert row["media_id"] == "gen-abcd1234"
