@@ -2,6 +2,25 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-07-02 - Divebar status dot fix + unified header toolbar buttons (v0.52.1)
+
+**Why:** The "Search Divebar Karaoke" status dot stayed grey even when the catalog
+modal reported "Fully synced". Separately, the Rotation and Overlays header toolbar
+buttons had drifted apart visually (each button class was authored in a different PR).
+
+**What (frontend — takes effect on browser refresh after `git pull`; no restart):**
+- **Status dot fix:** `updateDbHealthDot()` set the dot's class to `green`/`yellow`/`red`,
+  but the CSS only defines `.yt-dot-ok`/`.yt-dot-warn`/`.yt-dot-error`. Those tokens matched
+  no rule, so the dot always fell back to the base `#444` grey — it had never shown a colour
+  since it was added. Fixed the class names to match the CSS (the sibling YouTube health dot
+  was already correct). The dot now goes green at ≥95% GCS-mirror sync.
+- **Toolbar unification:** the Rotation buttons (Restore, Paths, Refresh, +Add, Requests,
+  New Rotation) and Overlays buttons (Wallpaper, Backup, Restore, Scan to Sing, +Add) now share
+  one font-size (0.75em), weight (500), padding (4px 10px), border-radius (6px), and neutral
+  colour (#222 / #444 / #ccc) via a shared rule. Preserved as intentional/functional: the
+  **New Rotation** red accent (it archives the whole night) and the **Paths** toggled-on blue
+  active state.
+
 ## 2026-07-02 - Download-naming Phase 2: LLM parse + download renaming + dedup-skip (v0.52.0)
 
 **Why:** Phase 1 stood up the canonical media-identity store; downloads still landed with messy,
