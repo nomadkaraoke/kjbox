@@ -3448,7 +3448,7 @@ async function openNoteModal(mediaId) {
     try {
         const labels = (await (await fetch('/media/note-labels')).json()).labels || [];
         document.getElementById('noteLabelList').innerHTML =
-            labels.map(l => '<option value="' + escHtml(l) + '">').join('');
+            labels.map(l => '<option value="' + escAttr(l) + '">').join('');
     } catch (e) { /* non-fatal — label autocomplete is a nice-to-have */ }
 }
 
@@ -5978,7 +5978,7 @@ function renderStatsBadges(stats, mediaId) {
     if (stats && stats.plays) parts.push('<span class="rs-stat rs-plays" title="Times played, ever">▶ ' + stats.plays + '</span>');
     if (stats && stats.previews) parts.push('<span class="rs-stat rs-prev" title="Times previewed">👁 ' + stats.previews + '</span>');
     if (stats && stats.label) parts.push('<span class="rs-stat rs-label">' + escHtml(stats.label) + '</span>');
-    if (stats && stats.note) parts.push('<span class="rs-stat rs-note" title="' + escHtml(stats.note) + '">📝</span>');
+    if (stats && stats.note) parts.push('<span class="rs-stat rs-note" title="' + escAttr(stats.note) + '"' + (mediaId ? ' onclick="event.stopPropagation(); openNoteModal(\'' + mediaId + '\')" style="cursor:pointer"' : '') + '>📝</span>');
     // media_id is always quote-free (yt-/db-/gen-/nomad-/up-), safe to inline in onclick.
     const editBtn = mediaId
         ? '<span class="rs-stat rs-note-edit" title="Add / edit note" onclick="event.stopPropagation(); openNoteModal(\'' + mediaId + '\')">✎</span>'
@@ -6294,6 +6294,8 @@ function escHtml(text) {
     div.textContent = text || '';
     return div.innerHTML;
 }
+
+function escAttr(text) { return escHtml(text).replace(/"/g, '&quot;'); }
 
 // Initialize on load
 document.addEventListener('DOMContentLoaded', initRotationSearch);
