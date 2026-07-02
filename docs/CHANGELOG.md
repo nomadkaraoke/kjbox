@@ -2,6 +2,34 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-07-02 - Dedicated right-rail Requests section; Screen Preview → col2 (v0.60.0)
+
+**Why:** Singer requests rendered into a panel nested *inside* the Rotation container
+(above the rotation list). When a request arrived mid-show, the rotation container inflated
+and the rotation list jumped down under the KJ's cursor — a real mis-click hazard, and
+constant in Simple Mode where all requests come through the singer web UI.
+
+**What (frontend — takes effect on browser refresh after `git pull`; no restart):**
+- **New permanent `Requests` section in the right rail** (`#col2`), directly below Screen
+  Preview. Header = `Requests` + a status dot (green `.yt-dot-ok` when the public form is
+  on, grey when off) + a pending-count badge + a **Settings** button (opens the existing
+  request-form modal — QR, kill switch, SMS). The old `Requests` button was removed from the
+  Rotation header, and the inline pending panel was removed from the Rotation container, so
+  **Rotation's height no longer changes when a request arrives** — it can't shift under a click.
+- **Queue is capped + scrollable** (`max-height: 260px; overflow-y: auto`), so a busy night
+  never pushes the sections below it. Newest-at-top-of-queue, approve in order.
+- **Screen Preview moved to the top of `#col2`** in *both* modes. This made the right rail a
+  single structure shared by advanced and simple, which let us **delete the Simple-mode grid
+  special-case** (the `.main-layout { 1fr }` collapse + `#col1` `grid-template-areas` carve-out
+  from v0.51.2/#132). Simple mode is now just the same `2fr 1fr` grid with the advanced-only
+  col2 sections and col1's Overlays/System hidden. Preview still rises to the top-right; the
+  existing `TestSimpleModeLayout` assertions still hold.
+- Mobile (`≤768px`): `.requests-panel` slotted into the explicit section-order right after
+  Rotation; the order list was renumbered.
+- Tests: new `tests/e2e/test_requests_panel.py` (9 e2e) — placement, old-button removal,
+  status dot, **Rotation bounding-box invariance when a request arrives**, queue cap, and the
+  simple-mode rail. Full e2e (105) + integration (639) green.
+
 ## 2026-07-02 - Unify Playback Controls layout across Simple + Advanced modes (v0.56.0)
 
 **Why:** The Playback Controls section rendered differently per mode. Simple mode used a
