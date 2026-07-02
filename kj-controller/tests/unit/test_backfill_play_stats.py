@@ -56,3 +56,17 @@ def test_backfill_idempotent(tmp_path):
     mod.backfill(rot, mldb, execute=True)
     mod.backfill(rot, mldb, execute=True)     # re-run
     assert StatsStore(mldb).stats_for(["yt-x"])["yt-x"]["plays"] == 1
+
+
+def test_backfill_dry_run_writes_nothing(tmp_path):
+    mod = _load()
+    from media_library import MediaLibraryStore
+    from stats_store import StatsStore
+    rot = str(tmp_path / "rotation.db")
+    mldb = str(tmp_path / "media_library.db")
+    _make_archive(rot)
+    MediaLibraryStore(mldb).upsert({"media_id": "yt-x", "source": "youtube",
+        "artist": "ABBA", "title": "SOS", "file_path": "/opt/nomad/downloads/x.mp4"})
+    res = mod.backfill(rot, mldb, execute=False)  # default dry-run
+    assert res["attributed"] == 1                 # reports what WOULD be attributed
+    assert StatsStore(mldb).stats_for(["yt-x"])["yt-x"]["plays"] == 0  # but wrote nothing
