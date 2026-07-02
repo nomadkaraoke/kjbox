@@ -174,6 +174,34 @@ def test_reconcile_ignores_unicode_normalization_difference(tmp_path, monkeypatc
     assert (dest / nfd_name).exists()
 
 
+def test_reconcile_skips_header_and_prefix_lines(tmp_path, monkeypatch):
+    # gcloud listing that includes a colon-terminated header line and a pseudo-dir
+    # line must not pollute source_names; the real object 'a.mp4' stays.
+    dest = tmp_path / "NOMAD-720p"
+    _local(dest, ["a.mp4"])
+    stdout = (
+        "gs://bucket/prefix/:\n"          # header line (colon)
+        "gs://bucket/prefix/sub/\n"       # pseudo-directory (slash)
+        "gs://bucket/prefix/a.mp4\n"      # real object
+    )
+    monkeypatch.setattr(sm.subprocess, "run",
+                        lambda cmd, **kw: types.SimpleNamespace(returncode=0, stdout=stdout, stderr=""))
+    assert sm._reconcile_deletions({}, "gs://bucket/prefix/", str(dest), {}, "gcloud") == 0
+    assert (dest / "a.mp4").exists()
+
+
+def test_reconcile_header_only_listing_holds_empty_guard(tmp_path, monkeypatch):
+    # A listing with ONLY header/prefix lines (no real objects) must parse to an EMPTY
+    # source set and therefore delete nothing — otherwise a ":" entry would make the
+    # set non-empty and wrongly delete every local file.
+    dest = tmp_path / "NOMAD-720p"
+    _local(dest, ["a.mp4", "b.mp4"])
+    monkeypatch.setattr(sm.subprocess, "run",
+                        lambda cmd, **kw: types.SimpleNamespace(returncode=0, stdout="gs://bucket/prefix/:\n", stderr=""))
+    assert sm._reconcile_deletions({}, "gs://bucket/prefix/", str(dest), {}, "gcloud") == 0
+    assert (dest / "a.mp4").exists() and (dest / "b.mp4").exists()
+
+
 def test_run_sync_reconciles_and_rescans_on_delete(tmp_path, monkeypatch):
     dest = tmp_path / "NOMAD-720p"
     _local(dest, ["stale.mp4"])  # present locally, absent upstream

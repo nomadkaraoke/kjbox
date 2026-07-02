@@ -72,9 +72,15 @@ def _reconcile_deletions(config, src, dest, env, gcloud_bin):
     """
     if not config.get("master_sync_delete_removed", True):
         return 0
+    # Flat listing via the `**` wildcard — gcloud's documented form for scripting.
+    # It emits one object URL per line with NO per-directory header lines. `--recursive`
+    # instead prints `gs://.../prefix/:` header lines (and a header for any pseudo-dir
+    # like the truncated "… /" artifacts), whose basename is ":" — that would pollute the
+    # source set and, in a header-only listing, defeat the empty-listing guard below.
+    listing_target = src.rstrip("/") + "/**"
     try:
         proc = subprocess.run(
-            [gcloud_bin, "storage", "ls", "--recursive", src],
+            [gcloud_bin, "storage", "ls", listing_target],
             env=env, capture_output=True, text=True, timeout=600,
         )
     except Exception:  # noqa: BLE001
@@ -84,8 +90,10 @@ def _reconcile_deletions(config, src, dest, env, gcloud_bin):
     source_names = set()
     for line in proc.stdout.splitlines():
         line = line.strip()
-        if not line or line.endswith("/"):
-            continue  # skip blank lines and prefix "directories"
+        # Skip blanks and any prefix/"directory" header lines (defensive: `--recursive`
+        # headers end in ":", pseudo-dirs end in "/") so they can never enter the set.
+        if not line or line.endswith("/") or line.endswith(":"):
+            continue
         source_names.add(unicodedata.normalize("NFC", os.path.basename(line)))
     if not source_names:
         return 0  # empty/unparseable listing -> never delete
