@@ -35,6 +35,16 @@ def _set_config(live_server, **fields):
         r.read()
 
 
+def _clear_rate_limits():
+    """The public /sing/submit endpoint rate-limits to 5/IP/300s. Tests run in
+    the same process as the live server, so we can reset the in-memory sliding
+    window between submit-heavy tests rather than tripping a 429."""
+    import sing
+
+    sing._rate_limit_state.clear()
+    sing._validate_rate_limit_state.clear()
+
+
 class TestRequestsSectionPlacement:
     @pytest.fixture(autouse=True)
     def _reset(self, live_server):
@@ -116,6 +126,7 @@ class TestRotationInvariance:
         )
 
     def test_rotation_unmoved_when_request_arrives_advanced(self, page, live_server, live_token):
+        _clear_rate_limits()
         page.set_viewport_size({"width": 1400, "height": 900})
         page.goto(live_server)
         page.wait_for_load_state("networkidle")
@@ -136,23 +147,35 @@ class TestQueueGrowth:
         yield
         _set_config(live_server, enabled=True)
 
-    def test_many_requests_scroll_not_grow(self, page, live_server, live_token):
-        page.set_viewport_size({"width": 1400, "height": 900})
-        for i in range(6):
+    def test_queue_is_capped_and_scrollable(self, page, live_server, live_token):
+        """The list is height-capped and scrollable, so a growing queue can
+        never push the sections below it — the whole point of the section."""
+        _clear_rate_limits()
+        n = 5  # the /sing/submit per-IP cap; enough to populate the queue
+        for i in range(n):
             _submit(live_server, live_token, name=f"S{i}", title=f"Song {i}")
         page.goto(live_server)
         page.wait_for_load_state("networkidle")
         page.wait_for_function(
-            "document.querySelectorAll('#pending-requests-list .pending-req-row').length >= 6",
+            f"document.querySelectorAll('#pending-requests-list .pending-req-row').length >= {n}",
             timeout=8000,
         )
         metrics = page.evaluate(
             "() => { const l = document.querySelector('#pending-requests-list');"
-            " return {scroll: l.scrollHeight, client: l.clientHeight,"
-            " count: document.querySelector('#pending-requests-count').textContent}; }"
+            " const cs = getComputedStyle(l);"
+            " return {overflowY: cs.overflowY, maxHeight: cs.maxHeight,"
+            " client: l.clientHeight,"
+            " count: document.querySelector('#pending-requests-count').textContent,"
+            " rows: document.querySelectorAll('#pending-requests-list .pending-req-row').length}; }"
         )
-        assert metrics["scroll"] > metrics["client"], "list should scroll, not grow unbounded"
-        assert metrics["count"] == "6"
+        # The session-scoped server may carry pending requests from earlier
+        # tests, so assert "at least our n" rather than an exact total.
+        assert int(metrics["count"]) >= n, metrics
+        assert metrics["rows"] == int(metrics["count"]), metrics  # list renders all pending
+        # Capped + scrollable → cannot grow unbounded and shove siblings down.
+        assert metrics["overflowY"] == "auto", metrics
+        assert metrics["maxHeight"] == "260px", metrics
+        assert metrics["client"] <= 260, metrics
 
 
 class TestSimpleModeRail:
