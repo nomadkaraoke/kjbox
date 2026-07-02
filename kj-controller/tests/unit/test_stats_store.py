@@ -106,3 +106,14 @@ def test_usual_media_id_picks_max(store):
 
 def test_usual_media_id_none_when_all_zero(store):
     assert store.usual_media_id(["yt-a", "yt-b"]) is None
+
+
+def test_usual_media_id_tiebreak_by_recency(store):
+    # Equal play counts -> the id with the most recent play wins.
+    store.record_play("yt-old", entry_id=1, played_at="2020-01-01 00:00:00")
+    store.record_play("yt-new", entry_id=2, played_at="2026-01-01 00:00:00")
+    assert store.usual_media_id(["yt-old", "yt-new"]) == "yt-new"
+
+
+def test_usual_media_id_empty_input_none(store):
+    assert store.usual_media_id([]) is None
