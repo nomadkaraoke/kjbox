@@ -6577,29 +6577,41 @@ const SingRequests = (() => {
             if (!resp.ok) return;
             config = await resp.json();
             applyConfigToModal();
+            updateStatusDot();
             updateBadge(config.pending_count || 0);
         } catch (e) { /* offline is fine */ }
     }
 
     function updateBadge(count) {
-        const badge = document.getElementById('pending-count-badge');
-        if (!badge) return;
-        if (count > 0) {
-            badge.textContent = String(count);
-            badge.classList.remove('hidden');
-        } else {
-            badge.classList.add('hidden');
-        }
+        // Count badge in the Requests section header — hidden when the queue is
+        // empty so a permanent "0" doesn't sit there looking alarming.
+        const el = document.getElementById('pending-requests-count');
+        if (!el) return;
+        el.textContent = String(count || 0);
+        el.classList.toggle('hidden', !count);
+    }
+
+    function updateStatusDot() {
+        // Green when the public request form is accepting requests, grey (base)
+        // when the KJ has switched it off. Uses the shared .yt-health-dot classes
+        // (base grey + .yt-dot-ok green) so it matches the other section dots.
+        const dot = document.getElementById('requests-status-dot');
+        if (!dot) return;
+        dot.classList.toggle('yt-dot-ok', !!config.enabled);
+        dot.title = config.enabled
+            ? 'Public request form: ON'
+            : 'Public request form: OFF';
     }
 
     function renderPanel() {
-        const panel = document.getElementById('pending-requests-panel');
+        // The section is permanent (always visible in the right rail). Render the
+        // pending rows when there are any, else show the empty-state line — the
+        // section itself never appears/disappears, so Rotation never shifts.
         const list = document.getElementById('pending-requests-list');
-        const count = document.getElementById('pending-requests-count');
-        if (!panel || !list) return;
-        if (!pending.length) { panel.classList.add('hidden'); return; }
-        panel.classList.remove('hidden');
-        if (count) count.textContent = String(pending.length);
+        const empty = document.getElementById('pending-requests-empty');
+        if (!list) return;
+        updateBadge(pending.length);
+        if (empty) empty.style.display = pending.length ? 'none' : '';
         list.innerHTML = '';
         for (const req of pending) {
             list.appendChild(renderRow(req));

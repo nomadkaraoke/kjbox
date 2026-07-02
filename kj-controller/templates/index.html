@@ -84,17 +84,9 @@
                         <button id="rotation-paths-btn" class="rotation-paths-btn" onclick="toggleRotationFilePaths()" title="Show/hide file paths under each rotation entry">📁 Paths</button>
                         <button class="rotation-refresh-btn" onclick="fetchRotation()" title="Refresh the rotation list from the server">Refresh</button>
                         <button class="rotation-add-btn" onclick="toggleRotationAddForm()" title="Add a new singer and song to the rotation queue">+ Add</button>
-                        <button class="rotation-requests-btn" onclick="openSingRequestsModal()" title="Manage public request form (QR, token, kill switch)">Requests <span id="pending-count-badge" class="pending-count-badge hidden">0</span></button>
                         <button class="rotation-stats-btn" onclick="openStatsModal()" title="View top songs and top singers leaderboard">Song Stats</button>
                         <button class="rotation-new-btn" onclick="archiveRotation()" title="Archive tonight's rotation and start fresh for a new event">New Rotation</button>
                     </div>
-                </div>
-                <div id="pending-requests-panel" class="pending-requests-panel hidden">
-                    <div class="pending-requests-header">
-                        <strong id="pending-requests-title">Pending Requests</strong>
-                        <span id="pending-requests-count" class="pending-requests-count">0</span>
-                    </div>
-                    <div id="pending-requests-list"></div>
                 </div>
                 <div id="rotation-add-form" class="rotation-add-form hidden">
                     <div id="rotation-link-banner" class="rotation-link-banner hidden">
@@ -135,58 +127,6 @@
                     </div>
                 </div>
                 <div id="overlay-list" class="overlay-list"></div>
-            </div>
-            <div id="vnc-max-toolbar" class="vnc-max-toolbar">
-                <button class="vnc-size-btn" onclick="setVncSize('200px')">200px</button>
-                <button class="vnc-size-btn" onclick="setVncSize('400px')">400px</button>
-                <button class="vnc-size-btn" onclick="setVncSize('fit')">Fit</button>
-                <button class="vnc-size-btn vnc-size-active" onclick="setVncSize('max')">Max</button>
-            </div>
-            <div class="container" id="vnc-preview-container">
-                <div class="header-row">
-                    <h2>Screen Preview</h2>
-                    <div class="header-actions vnc-size-buttons">
-                        <button class="vnc-size-btn vnc-hide-btn" onclick="hideVncPreview()" title="Hide preview and disconnect">Hide</button>
-                        <button class="vnc-size-btn" onclick="setVncSize('200px')" title="200px wide">200px</button>
-                        <button class="vnc-size-btn vnc-size-active" onclick="setVncSize('400px')" title="400px wide">400px</button>
-                        <button class="vnc-size-btn" onclick="setVncSize('fit')" title="Fit column width">Fit</button>
-                        <button class="vnc-size-btn" onclick="setVncSize('max')" title="Fullscreen">Max</button>
-                    </div>
-                </div>
-                <div id="vnc-screen" class="vnc-thumbnail vnc-fixed-400"></div>
-                <div id="vnc-status" class="vnc-status">Disconnected</div>
-                <div id="vnc-password-form" class="vnc-password-form">
-                    <input type="password" id="vnc-password" placeholder="VNC password"
-                           onkeyup="if(event.keyCode === 13) connectVnc()">
-                    <button onclick="connectVnc()">Connect</button>
-                </div>
-                <div id="vnc-controls" class="vnc-controls hidden">
-                    <button class="vnc-btn" onclick="disconnectVnc()">Disconnect</button>
-                    <a class="vnc-forget-link" onclick="forgetVncPassword()">Forget password</a>
-                </div>
-                <div id="vnc-interactive-controls" class="vnc-interactive-controls hidden">
-                    <button class="vnc-btn vnc-interactive-toggle" onclick="toggleInteractive()">Interactive: OFF</button>
-                    <div id="vnc-keyboard-input" class="vnc-keyboard-input hidden">
-                        <input type="text" id="vnc-type-input" placeholder="Type text to send..."
-                               onkeydown="if(event.key === 'Enter') { event.preventDefault(); sendVncText(); }">
-                        <button onclick="sendVncText()">Send</button>
-                        <div class="vnc-special-keys">
-                            <button onclick="sendVncKey('Enter')">Enter</button>
-                            <button onclick="sendVncKey('Escape')">Esc</button>
-                            <button onclick="sendVncKey('Tab')">Tab</button>
-                            <button onclick="sendVncKey('Backspace')">Bksp</button>
-                            <button onclick="sendVncKey('ArrowUp')">&#9650;</button>
-                            <button onclick="sendVncKey('ArrowDown')">&#9660;</button>
-                            <button onclick="sendVncKey('ArrowLeft')">&#9664;</button>
-                            <button onclick="sendVncKey('ArrowRight')">&#9654;</button>
-                        </div>
-                        <div class="vnc-navigate-row">
-                            <input type="url" id="vnc-navigate-url" placeholder="Navigate to URL..."
-                                   onkeydown="if(event.key === 'Enter') { event.preventDefault(); vncNavigate(); }">
-                            <button onclick="vncNavigate()">Go</button>
-                        </div>
-                    </div>
-                </div>
             </div>
             <div class="container system-controls">
                 <h2>System</h2>
@@ -279,6 +219,69 @@
         </div>
 
         <div class="column" id="col2">
+            <div id="vnc-max-toolbar" class="vnc-max-toolbar">
+                <button class="vnc-size-btn" onclick="setVncSize('200px')">200px</button>
+                <button class="vnc-size-btn" onclick="setVncSize('400px')">400px</button>
+                <button class="vnc-size-btn" onclick="setVncSize('fit')">Fit</button>
+                <button class="vnc-size-btn vnc-size-active" onclick="setVncSize('max')">Max</button>
+            </div>
+            <div class="container" id="vnc-preview-container">
+                <div class="header-row">
+                    <h2>Screen Preview</h2>
+                    <div class="header-actions vnc-size-buttons">
+                        <button class="vnc-size-btn vnc-hide-btn" onclick="hideVncPreview()" title="Hide preview and disconnect">Hide</button>
+                        <button class="vnc-size-btn" onclick="setVncSize('200px')" title="200px wide">200px</button>
+                        <button class="vnc-size-btn vnc-size-active" onclick="setVncSize('400px')" title="400px wide">400px</button>
+                        <button class="vnc-size-btn" onclick="setVncSize('fit')" title="Fit column width">Fit</button>
+                        <button class="vnc-size-btn" onclick="setVncSize('max')" title="Fullscreen">Max</button>
+                    </div>
+                </div>
+                <div id="vnc-screen" class="vnc-thumbnail vnc-fixed-400"></div>
+                <div id="vnc-status" class="vnc-status">Disconnected</div>
+                <div id="vnc-password-form" class="vnc-password-form">
+                    <input type="password" id="vnc-password" placeholder="VNC password"
+                           onkeyup="if(event.keyCode === 13) connectVnc()">
+                    <button onclick="connectVnc()">Connect</button>
+                </div>
+                <div id="vnc-controls" class="vnc-controls hidden">
+                    <button class="vnc-btn" onclick="disconnectVnc()">Disconnect</button>
+                    <a class="vnc-forget-link" onclick="forgetVncPassword()">Forget password</a>
+                </div>
+                <div id="vnc-interactive-controls" class="vnc-interactive-controls hidden">
+                    <button class="vnc-btn vnc-interactive-toggle" onclick="toggleInteractive()">Interactive: OFF</button>
+                    <div id="vnc-keyboard-input" class="vnc-keyboard-input hidden">
+                        <input type="text" id="vnc-type-input" placeholder="Type text to send..."
+                               onkeydown="if(event.key === 'Enter') { event.preventDefault(); sendVncText(); }">
+                        <button onclick="sendVncText()">Send</button>
+                        <div class="vnc-special-keys">
+                            <button onclick="sendVncKey('Enter')">Enter</button>
+                            <button onclick="sendVncKey('Escape')">Esc</button>
+                            <button onclick="sendVncKey('Tab')">Tab</button>
+                            <button onclick="sendVncKey('Backspace')">Bksp</button>
+                            <button onclick="sendVncKey('ArrowUp')">&#9650;</button>
+                            <button onclick="sendVncKey('ArrowDown')">&#9660;</button>
+                            <button onclick="sendVncKey('ArrowLeft')">&#9664;</button>
+                            <button onclick="sendVncKey('ArrowRight')">&#9654;</button>
+                        </div>
+                        <div class="vnc-navigate-row">
+                            <input type="url" id="vnc-navigate-url" placeholder="Navigate to URL..."
+                                   onkeydown="if(event.key === 'Enter') { event.preventDefault(); vncNavigate(); }">
+                            <button onclick="vncNavigate()">Go</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="container requests-panel" id="requests-panel">
+                <div class="header-row">
+                    <h2>Requests <span id="requests-status-dot" class="yt-health-dot" title="Public request form status"></span></h2>
+                    <div class="header-actions">
+                        <span id="pending-requests-count" class="pending-requests-count">0</span>
+                        <button onclick="openSingRequestsModal()" title="Request form settings — QR code, kill switch, SMS">Settings</button>
+                    </div>
+                </div>
+                <div id="pending-requests-list" class="pending-requests-list"></div>
+                <div id="pending-requests-empty" class="pending-requests-empty">No pending requests — singers submit via the QR code.</div>
+            </div>
             <div class="container kn-search-section">
                 <div class="header-row">
                     <h2>Search Karaoke Nerds</h2>

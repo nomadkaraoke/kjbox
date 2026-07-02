@@ -1334,15 +1334,16 @@ body {
     .container { width: 100%; }
     .playback-controls  { order: 1; }
     .rotation-panel     { order: 2; }
-    .available-songs    { order: 3; }
-    .kn-search-section  { order: 4; }
-    .db-search-section  { order: 5; }
-    .yt-search-section  { order: 6; }
-    .download-section   { order: 7; }
-    .overlay-panel      { order: 8; }
-    .browser-mode-panel { order: 9; }
-    #vnc-preview-container { order: 10; }
-    .system-controls    { order: 11; }
+    .requests-panel     { order: 3; }
+    .available-songs    { order: 4; }
+    .kn-search-section  { order: 5; }
+    .db-search-section  { order: 6; }
+    .yt-search-section  { order: 7; }
+    .download-section   { order: 8; }
+    .overlay-panel      { order: 9; }
+    .browser-mode-panel { order: 10; }
+    #vnc-preview-container { order: 11; }
+    .system-controls    { order: 12; }
 
     #media-list { max-height: 50vh; }
     .button-group { flex-direction: row; }
@@ -2971,41 +2972,35 @@ body {
 /* (The old per-family "unified" rule that pinned Rotation+Overlays sizing is gone;
  * `.header-actions button` now governs the whole header-button family.) */
 
-.pending-count-badge {
-    display: inline-block;
-    background: #ff4dcf;
-    color: #0a0a0a;
-    border-radius: 10px;
-    padding: 0 0.4rem;
-    margin-left: 0.3rem;
-    font-weight: 600;
-    font-size: 0.75rem;
-    min-width: 1.2em;
-    text-align: center;
-}
-
-.pending-requests-panel {
-    background: rgba(255, 77, 207, 0.08);
-    border: 1px solid rgba(255, 77, 207, 0.3);
-    border-radius: 6px;
-    margin: 0.5rem 0;
-    padding: 0.5rem 0.75rem;
-}
-
-.pending-requests-header {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    margin-bottom: 0.4rem;
-    font-size: 0.9rem;
-}
-
+/* Requests — permanent right-rail section (col2). The count badge lives in the
+ * header next to Settings; JS adds `.hidden` when the queue is empty. */
 .pending-requests-count {
     background: #ff4dcf;
     color: #0a0a0a;
     border-radius: 10px;
     padding: 0 0.5rem;
     font-weight: 600;
+    font-size: 0.75rem;
+    min-width: 1.4em;
+    text-align: center;
+}
+
+/* Capped + scrolling so a busy queue never pushes the sections below it. */
+.pending-requests-list {
+    display: flex;
+    flex-direction: column;
+    max-height: 260px;      /* ~3–4 rows, then scroll */
+    overflow-y: auto;
+}
+.pending-requests-list:empty { display: none; }
+.pending-requests-list::-webkit-scrollbar { width: 6px; }
+.pending-requests-list::-webkit-scrollbar-track { background: transparent; }
+.pending-requests-list::-webkit-scrollbar-thumb { background: #2a2a2a; border-radius: 3px; }
+.pending-requests-list::-webkit-scrollbar-thumb:hover { background: #ff5bb8; }
+.pending-requests-empty {
+    color: #777;
+    font-size: 0.85em;
+    padding: 0.25rem 0;
 }
 
 .pending-req-row {
@@ -3419,7 +3414,6 @@ body.simple-mode .download-section,
 body.simple-mode .available-songs,
 body.simple-mode .browser-mode-panel,
 body.simple-mode .overlay-panel,
-body.simple-mode #col2,
 body.simple-mode .rotation-new-btn,
 body.simple-mode .rotation-restore-btn,
 body.simple-mode .rotation-paths-btn,
@@ -3446,54 +3440,21 @@ body.simple-mode .system-controls {
  * the stand-in still needs to add rotation entries by hand. (.rotation-add-btn
  * and #rotation-add-form are intentionally NOT in the hide list above.) */
 
-/* Simple-mode layout — a full-width "run the show" command center.
+/* Simple-mode layout — advanced and simple now share ONE structure.
  *
- * The advanced layout is a `2fr 1fr` grid on `.main-layout` (#col1 | #col2).
- * Simple mode hides #col2 (above), but the grid's second (1fr) track stays
- * reserved and empty — that leftover track is the dead space on the right.
- * We collapse `.main-layout` to a single column so #col1 gets the full width,
- * then re-organise #col1's own panels into a command center:
+ * Screen Preview (#vnc-preview-container) lives at the top of #col2 in BOTH
+ * modes, with the Requests section directly below it. So simple mode is just
+ * the same `2fr 1fr` grid as advanced — #col1 = Playback + Rotation (hero),
+ * #col2 = Screen Preview + Requests — with the advanced-only col2 sections
+ * (search/download/available-songs) and #col1's Overlays/System hidden above.
  *
- *   ┌───────────────────────────┬──────────────────┐
- *   │  Playback Controls        │                  │
- *   ├───────────────────────────┤  Screen Preview  │
- *   │  Rotation (hero)          │                  │
- *   │                           │                  │
- *   └───────────────────────────┴──────────────────┘
- *
- * Playback shares the left (2fr) column with Rotation so they're the same
- * width, and Screen Preview fills the whole right (1fr) column from the very
- * top — no dead space beside a full-width playback bar. System is hidden
- * entirely (above); the mode toggle it used to host now lives in the Playback
- * Controls header.
- *
- * Scoped to >=769px so the existing mobile stack (#col1 { display: contents })
- * at <=768px is left completely untouched — simple mode just stacks there.
+ * The old simple-mode special-case (collapse .main-layout to 1fr and carve a
+ * preview rail out of #col1) is gone: it only existed because Screen Preview
+ * used to be stuck in #col1 while #col2 was entirely advanced-only sections
+ * that hide in simple mode, leaving dead space. Moving Preview into #col2
+ * removed the reason for it.
  */
 @media (min-width: 769px) {
-    body.simple-mode .main-layout {
-        grid-template-columns: 1fr;
-        max-width: 100%;
-    }
-
-    body.simple-mode #col1 {
-        max-width: none;
-        width: 100%;
-        display: grid;
-        grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
-        grid-template-areas:
-            "playback preview"
-            "rotation preview";
-        align-items: start;
-        gap: 0.75rem;
-    }
-
-    body.simple-mode .rotation-panel      { grid-area: rotation; }
-    body.simple-mode #vnc-preview-container { grid-area: preview; }
-    /* Simple mode only: Playback shares the left (2fr) column with Rotation so
-     * they line up, and Screen Preview fills the right (1fr) column. The
-     * compact internal layout below is shared with advanced mode. */
-    body.simple-mode .playback-controls { grid-area: playback; }
 
     /* Playback controls are a compact horizontal bar in BOTH simple and
      * advanced modes: button group + Seek on the first row, the two volume
