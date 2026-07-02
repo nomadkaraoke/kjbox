@@ -214,6 +214,42 @@ class StatsStore:
                 "WHERE label IS NOT NULL AND label <> '' ORDER BY label").fetchall()
         return [r["label"] for r in rows]
 
+    def top_songs(self, *, singer=None, since=None, limit=10):
+        clauses = ["song_key IS NOT NULL AND song_key <> ''"]
+        params = []
+        if singer:
+            clauses.append("singer_norm=?")
+            params.append(_norm_singer(singer))
+        if since:
+            clauses.append("played_at >= ?")
+            params.append(since)
+        where = " AND ".join(clauses)
+        conn = self._get_conn()
+        with self._lock():
+            rows = conn.execute(
+                f"""SELECT song_key, COUNT(*) plays, MAX(artist) artist, MAX(title) title
+                    FROM play_events WHERE {where}
+                    GROUP BY song_key ORDER BY plays DESC, MAX(played_at) DESC LIMIT ?""",
+                params + [limit]).fetchall()
+        return [dict(r) for r in rows]
+
+    def top_singers(self, *, since=None, limit=10):
+        clauses = ["singer_norm IS NOT NULL AND singer_norm <> ''"]
+        params = []
+        if since:
+            clauses.append("played_at >= ?")
+            params.append(since)
+        where = " AND ".join(clauses)
+        conn = self._get_conn()
+        with self._lock():
+            rows = conn.execute(
+                f"""SELECT MAX(singer) singer, COUNT(*) plays,
+                           COUNT(DISTINCT song_key) distinct_songs
+                    FROM play_events WHERE {where}
+                    GROUP BY singer_norm ORDER BY plays DESC LIMIT ?""",
+                params + [limit]).fetchall()
+        return [dict(r) for r in rows]
+
 
 def _norm_singer(s):
     if s is None:

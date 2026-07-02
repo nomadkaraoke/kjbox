@@ -138,3 +138,25 @@ def test_distinct_labels(store):
     store.upsert_note("yt-b", "y", "video-bg")
     store.upsert_note("yt-c", "z", "")     # blank excluded
     assert store.distinct_labels() == ["censored", "video-bg"]
+
+
+def test_top_songs_overall_and_by_singer(store):
+    store.record_play("yt-a", entry_id=1, singer="Celeste", artist="ABBA",
+                     title="SOS", song_key="abba sos")
+    store.record_play("db-x", entry_id=2, singer="Celeste", artist="ABBA",
+                     title="SOS", song_key="abba sos")   # 2nd version, same song
+    store.record_play("yt-c", entry_id=3, singer="Dan", artist="Queen",
+                     title="Bohemian Rhapsody", song_key="queen bohemian rhapsody")
+    overall = store.top_songs(limit=10)
+    assert overall[0]["song_key"] == "abba sos" and overall[0]["plays"] == 2
+    celeste = store.top_songs(singer="celeste", limit=10)
+    assert len(celeste) == 1 and celeste[0]["song_key"] == "abba sos"
+
+
+def test_top_singers(store):
+    store.record_play("yt-a", entry_id=1, singer="Celeste", song_key="s1")
+    store.record_play("yt-b", entry_id=2, singer="Celeste", song_key="s2")
+    store.record_play("yt-c", entry_id=3, singer="Dan", song_key="s1")
+    top = store.top_singers(limit=10)
+    assert top[0]["singer"] == "Celeste" and top[0]["plays"] == 2
+    assert top[0]["distinct_songs"] == 2
