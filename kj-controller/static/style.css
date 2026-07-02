@@ -1140,12 +1140,6 @@ body {
     background-color: rgba(59, 130, 246, 0.2) !important; color: #60a5fa !important;
 }
 .db-modal-content { max-width: 520px; }
-.stats-modal-content { max-width: 520px; }
-.stats-controls { display: flex; gap: .5rem; align-items: center; margin-bottom: .75rem; flex-wrap: wrap; }
-.stats-controls label { display: flex; align-items: center; gap: .35rem; font-size: 0.85em; color: #999; }
-.stats-list { margin: .25rem 0 1rem; padding-left: 1.5rem; }
-.stats-list li { padding: .15rem 0; }
-.stats-list li.muted { color: #666; list-style: none; margin-left: -1.5rem; }
 .db-progress-bar {
     height: 8px; background: #222; border-radius: 4px; margin: 8px 0; overflow: hidden;
 }

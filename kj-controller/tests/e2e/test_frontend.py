@@ -911,8 +911,10 @@ class TestHeaderButtonConsistency:
         )
 
     def test_song_stats_matches_its_siblings(self, app_page):
-        """The exact bug that keeps recurring: Song Stats sized differently
-        from the other Rotation buttons."""
+        """Song Stats is now a dedicated section (below Library) rather than a
+        Rotation-header button; its section-header Refresh button is a classless
+        `.header-actions button` and must still resolve to the same size as the
+        other section-header buttons via the framework."""
         sizes = app_page.evaluate(
             """() => {
                 const pick = s => {
@@ -921,14 +923,14 @@ class TestHeaderButtonConsistency:
                     const c = getComputedStyle(el);
                     return c.fontSize + '|' + c.paddingTop + '|' + c.fontWeight;
                 };
-                return { stats: pick('.rotation-stats-btn'),
+                return { stats: pick('#song-stats .header-actions button'),
                          refresh: pick('.rotation-refresh-btn') };
             }"""
         )
         assert sizes["stats"] is not None and sizes["refresh"] is not None
         assert sizes["stats"] == sizes["refresh"], (
-            f"Song Stats ({sizes['stats']}) must match sibling Rotation buttons "
-            f"({sizes['refresh']})"
+            f"Song Stats section button ({sizes['stats']}) must match sibling "
+            f"section-header buttons ({sizes['refresh']})"
         )
 
     def test_no_header_button_outside_header_actions(self, app_page):
