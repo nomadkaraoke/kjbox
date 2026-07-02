@@ -4444,7 +4444,13 @@ function renderRotation(entries) {
         if (entry.file_path) {
             const parts = entry.file_path.split('/');
             const basename = parts[parts.length - 1];
-            pathRow.textContent = basename;
+            const mm = entry.media_meta;
+            const canonical = mm && (mm.artist || mm.title)
+                ? [mm.artist, mm.title].filter(Boolean).join(' - ') : null;
+            // Canonical identity first (SSD/commercial files often have opaque
+            // disc filenames); keep the real basename so the KJ can still spot
+            // files that need unlinking + re-linking with a better version.
+            pathRow.textContent = canonical ? `${canonical} · ${basename}` : basename;
             pathRow.title = entry.file_path;
         } else {
             pathRow.classList.add('rotation-file-path-unlinked');

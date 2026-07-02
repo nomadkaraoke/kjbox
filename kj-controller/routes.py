@@ -2814,6 +2814,31 @@ def _add_time_estimates(entries):
         cumulative += entry.get("duration") or default_duration
 
 
+def _add_media_meta(entries):
+    """Attach canonical ``media_meta = {artist, title}`` to linked entries.
+
+    media_library first (covers downloads + touched SSD rows, incl. manual ✎
+    edits), external catalog fallback (untouched SSD files). Display-only and
+    best-effort — a store/catalog error just leaves the key absent.
+    """
+    ml = getattr(current_app, 'media_library', None)
+    catalog = getattr(current_app, 'catalog', None)
+    for e in entries:
+        fp = e.get('file_path')
+        if not fp:
+            continue
+        try:
+            row = ml.get_by_path(fp) if ml else None
+            if not row and catalog is not None:
+                row = catalog.get_by_path(fp)
+            if row and ((row.get('artist') or '').strip()
+                        or (row.get('title') or '').strip()):
+                e['media_meta'] = {'artist': row.get('artist') or '',
+                                   'title': row.get('title') or ''}
+        except Exception:
+            continue
+
+
 def _decorate_rotation_entries(entries, rotation):
     """Attach every frontend-facing computed field to rotation entries.
 
@@ -2834,6 +2859,7 @@ def _decorate_rotation_entries(entries, rotation):
     _add_songs_sung(entries, rotation)
     _add_last_sang(entries, rotation)
     _add_sms_status(entries)
+    _add_media_meta(entries)
 
 
 @routes_bp.route('/rotation', methods=['GET'])
