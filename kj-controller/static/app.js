@@ -2437,27 +2437,10 @@ async function toggleSimpleMode(checked) {
 function applySimpleMode(on) {
     document.body.classList.toggle('simple-mode', !!on);
     // Keep the switch reflecting reality even if /status changed underfoot.
+    // The System → "Simple Mode (for stand-in KJ)" toggle is the visible
+    // indicator that the mode is on, so no separate banner is rendered.
     const sw = document.getElementById('simple-mode-switch');
     if (sw) sw.checked = !!on;
-    // Banner — render or remove based on flag.
-    const rotationPanel = document.querySelector('.rotation-panel');
-    let banner = document.getElementById('simple-mode-banner');
-    if (on && rotationPanel && !banner) {
-        banner = document.createElement('div');
-        banner.id = 'simple-mode-banner';
-        banner.className = 'simple-mode-banner';
-        banner.textContent =
-            'Simple Mode is ON · Approve incoming requests → tap a row to play → mark done → announce next singer.';
-        // Insert before the rotation list (after the header).
-        const list = document.getElementById('rotation-list');
-        if (list) {
-            rotationPanel.insertBefore(banner, list);
-        } else {
-            rotationPanel.appendChild(banner);
-        }
-    } else if (!on && banner) {
-        banner.remove();
-    }
 }
 
 // --- Sleep Mode ---

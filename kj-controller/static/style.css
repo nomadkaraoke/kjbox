@@ -3384,13 +3384,71 @@ body.simple-mode .system-subsection:not(#kj-mode-section) {
     display: none !important;
 }
 
-body.simple-mode .main-layout {
-    justify-content: center;
-}
+/* Simple-mode layout — a full-width "run the show" command center.
+ *
+ * The advanced layout is a `2fr 1fr` grid on `.main-layout` (#col1 | #col2).
+ * Simple mode hides #col2 (above), but the grid's second (1fr) track stays
+ * reserved and empty — that leftover track is the dead space on the right.
+ * We collapse `.main-layout` to a single column so #col1 gets the full width,
+ * then re-organise #col1's own panels into a command center:
+ *
+ *   ┌──────────────────────────────────────────────┐
+ *   │  Playback Controls (full-width top bar)       │
+ *   ├───────────────────────────┬──────────────────┤
+ *   │  Rotation (hero)          │  Screen Preview   │
+ *   │                           ├──────────────────┤
+ *   │                           │  System · Mode    │
+ *   └───────────────────────────┴──────────────────┘
+ *
+ * Scoped to >=769px so the existing mobile stack (#col1 { display: contents })
+ * at <=768px is left completely untouched — simple mode just stacks there.
+ */
+@media (min-width: 769px) {
+    body.simple-mode .main-layout {
+        grid-template-columns: 1fr;
+        max-width: 100%;
+    }
 
-body.simple-mode #col1 {
-    max-width: 720px;
-    width: 100%;
+    body.simple-mode #col1 {
+        max-width: none;
+        width: 100%;
+        display: grid;
+        grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+        grid-template-areas:
+            "playback playback"
+            "rotation preview"
+            "rotation system";
+        align-items: start;
+        gap: 0.75rem;
+    }
+
+    body.simple-mode .rotation-panel      { grid-area: rotation; }
+    body.simple-mode #vnc-preview-container { grid-area: preview; }
+    body.simple-mode .system-controls     { grid-area: system; }
+
+    /* Playback controls become a compact horizontal bar across the top:
+     * button group + seek on the first row, the two volume sliders on the next,
+     * each label paired with a flexible slider. */
+    body.simple-mode .playback-controls {
+        grid-area: playback;
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: 0.5rem 1.5rem;
+        align-items: center;
+    }
+    body.simple-mode .playback-controls h2 {
+        grid-column: 1 / -1;
+    }
+    body.simple-mode .playback-controls .button-group {
+        display: flex;
+        gap: 0.5rem;
+    }
+    body.simple-mode .playback-controls > div:not(.button-group) {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: 0.6rem;
+        align-items: center;
+    }
 }
 
 /* Mode toggle styling — matches the existing autodeploy-toggle / sleep-mode-toggle look */
@@ -3406,18 +3464,6 @@ body.simple-mode #col1 {
     font-size: 0.85rem;
     color: var(--muted-text, #888);
     margin: 0.5rem 0 0 0;
-    line-height: 1.4;
-}
-
-/* The always-on guidance banner above the rotation list */
-.simple-mode-banner {
-    background: rgba(255, 77, 207, 0.12);
-    border: 1px solid rgba(255, 77, 207, 0.4);
-    border-radius: 6px;
-    padding: 0.6rem 0.8rem;
-    margin: 0 0 0.6rem 0;
-    color: #ffb3e6;
-    font-size: 0.9rem;
     line-height: 1.4;
 }
 
