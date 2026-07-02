@@ -424,12 +424,11 @@ async function playMedia(filePath, entryId) {
 }
 
 async function deleteMedia(filePath, displayName) {
-    // Prevent deletion of currently-playing song (#6)
+    // Prevent deletion of currently-playing song (#6). The Delete button itself
+    // arms a two-click confirmation (armButtonConfirm), so there's no separate
+    // confirm() dialog here.
     if (filePath === currentPlayingPath) {
         log('Cannot delete the currently playing song. Stop it first.', 'error');
-        return;
-    }
-    if (!confirm(`Are you sure you want to delete "${displayName}"?`)) {
         return;
     }
     log(`Deleting: ${displayName}`);
@@ -769,25 +768,31 @@ async function editMediaMetadata(item, li) {
 
 function createMediaItemLi(item) {
     const li = document.createElement('li');
+    li.classList.add('media-file-row');
 
     const titleSpan = document.createElement('span');
+    titleSpan.className = 'media-title';
+
+    // Clickable name — click copies the exact display name (like rotation rows).
+    const nameSpan = document.createElement('span');
+    nameSpan.className = 'media-name rotation-copyable';
+    nameSpan.textContent = item.display_name;
+    nameSpan.title = 'Click to copy name';
+    nameSpan.onclick = (e) => { e.stopPropagation(); copyRotationText(nameSpan); };
+    titleSpan.appendChild(nameSpan);
+
     if (item.channel) {
         const channelSpan = document.createElement('span');
         channelSpan.className = 'channel-tag';
-        channelSpan.textContent = `(${item.channel})`;
-        titleSpan.textContent = item.display_name + ' ';
+        channelSpan.textContent = ` (${item.channel})`;
         titleSpan.appendChild(channelSpan);
-    } else {
-        titleSpan.textContent = item.display_name;
     }
 
-    // File-type + extension badge (e.g. "cdg-zip · .zip", "mp4 · .mp4").
+    // Colorised format pill — same palette as the catalog results (task: unify
+    // the "local" pill with the "catalog" pill; no more "mp4 · .mp4").
     if (item.media_kind) {
-        const typeBadge = document.createElement('span');
-        typeBadge.className = 'media-type-badge';
-        typeBadge.textContent = item.ext ? `${item.media_kind} · ${item.ext}` : item.media_kind;
         titleSpan.appendChild(document.createTextNode(' '));
-        titleSpan.appendChild(typeBadge);
+        titleSpan.appendChild(mediaFormatBadge(item));
     }
     if (item.cdg_no_audio) {
         const warn = document.createElement('span');
@@ -806,59 +811,83 @@ function createMediaItemLi(item) {
         titleSpan.appendChild(rev);
     }
 
-    const rightSide = document.createElement('span');
+    // Action buttons — one .media-actions cluster, sized to match the rotation
+    // row (preview + play, then edit, then delete). All the same height.
+    const actions = document.createElement('span');
+    actions.className = 'media-actions';
+
     if (item.file_path && !item.cdg_no_audio) {
+        // Preview (pink) — audition in the browser; never touches the live screen.
         const previewBtn = document.createElement('button');
         previewBtn.type = 'button';
-        previewBtn.className = 'preview-btn';
-        previewBtn.title = 'Preview playback';
-        previewBtn.textContent = '▶';
+        previewBtn.className = 'media-btn-preview';
+        previewBtn.textContent = String.fromCharCode(0x25B6);  // ▶
+        previewBtn.title = 'Preview in the browser (does not affect the live screen)';
         previewBtn.onclick = (e) => {
             e.stopPropagation();
             e.preventDefault();
             openPreview({ source: 'local', file_path: item.file_path, title: item.display_name });
         };
-        rightSide.appendChild(previewBtn);
+        actions.appendChild(previewBtn);
+
+        // Play (green) — plays this file on the main screen.
+        const playBtn = document.createElement('button');
+        playBtn.type = 'button';
+        playBtn.className = 'media-btn-play';
+        playBtn.textContent = String.fromCharCode(0x25B6);  // ▶
+        playBtn.title = 'Play on the main screen';
+        playBtn.onclick = (e) => {
+            e.stopPropagation();
+            document.querySelectorAll('#media-list li').forEach(el => el.classList.remove('playing'));
+            li.classList.add('playing');
+            playMedia(item.file_path);
+        };
+        actions.appendChild(playBtn);
     }
-    rightSide.appendChild(createCopyBtn(item.display_name));
+
     if (item.media_id) {
         const editBtn = document.createElement('button');
         editBtn.type = 'button';
         editBtn.textContent = '✎';
-        editBtn.className = 'media-edit-btn';
+        editBtn.className = 'media-btn-edit';
         editBtn.title = 'Edit Artist / Title';
         editBtn.onclick = (e) => {
             e.stopPropagation();
             e.preventDefault();
             editMediaMetadata(item, li);
         };
-        rightSide.appendChild(editBtn);
+        actions.appendChild(editBtn);
     }
+
     if (item.is_download) {
         const deleteBtn = document.createElement('button');
+        deleteBtn.type = 'button';
         deleteBtn.textContent = 'Delete';
-        deleteBtn.className = 'delete-btn';
+        deleteBtn.className = 'media-btn-delete';
+        deleteBtn.title = 'Delete this downloaded file (click twice to confirm)';
         deleteBtn.onclick = (e) => {
             e.stopPropagation();
-            deleteMedia(item.file_path, item.display_name);
+            if (item.file_path === currentPlayingPath) {
+                log('Cannot delete the currently playing song. Stop it first.', 'error');
+                return;
+            }
+            armButtonConfirm(deleteBtn, {
+                label: 'Delete',
+                armedClass: 'media-btn-armed',
+                onConfirm: () => deleteMedia(item.file_path, item.display_name),
+            });
         };
-        rightSide.appendChild(deleteBtn);
+        actions.appendChild(deleteBtn);
     }
 
     li.appendChild(titleSpan);
-    li.appendChild(rightSide);
+    li.appendChild(actions);
+
     if (item.cdg_no_audio) {
-        // A bare .cdg is silent on the main screen — don't let a click play it.
+        // A bare .cdg is silent on the main screen — mark it. No play/preview
+        // button is offered (above); the row is otherwise inert.
         li.classList.add('media-no-audio');
         li.title = 'Graphics-only .cdg — no audio track. Use the CDG+MP3 zip version instead.';
-        li.onclick = () => log('This is a graphics-only .cdg with no audio track — use the CDG+MP3 zip version instead.', 'error');
-    } else {
-        li.title = 'Click to play';
-        li.onclick = () => {
-            document.querySelectorAll('#media-list li').forEach(el => el.classList.remove('playing'));
-            li.classList.add('playing');
-            playMedia(item.file_path);
-        };
     }
     return li;
 }
@@ -1813,6 +1842,19 @@ function getFormatBadgeClass(format) {
     return 'other';
 }
 
+// Colorised format pill for a library (local) item, using the SAME palette as
+// the catalog results so both sections read consistently. The library carries
+// a friendly `media_kind` (e.g. "cdg-zip", "mp4", "mp3"); normalise the CDG zip
+// label to "cdg+mp3" so it matches the catalog wording (and its yellow badge).
+function mediaFormatBadge(item) {
+    const kind = (item.media_kind || '').toLowerCase();
+    const fmt = kind === 'cdg-zip' ? 'cdg+mp3' : kind;
+    const badge = document.createElement('span');
+    badge.className = 'format-badge ' + getFormatBadgeClass(fmt);
+    badge.textContent = fmt || (item.ext || '').replace('.', '') || 'file';
+    return badge;
+}
+
 // Shared normalizer (mirror of text_normalize.py); see static/text_normalize.js
 const _normalizer = TextNormalize.makeNormalizer(window.KJ_CONFIG);
 
@@ -2502,6 +2544,41 @@ function dangerousAction(btn, action, label, extraWarning) {
             delete btn.dataset.armed;
             btn.textContent = label;
             btn.classList.remove('system-btn-armed');
+        } else {
+            btn.textContent = `Confirm? (${remaining}s)`;
+        }
+    }, 1000);
+}
+
+// Generic two-click confirmation for a destructive button (same UX as the
+// System section's dangerousAction, but decoupled from the /system endpoints).
+// First click arms the button — swaps its label to "Confirm? (Ns)" and adds
+// `armedClass` for the pulse — and a second click within the countdown runs
+// `onConfirm`. Auto-disarms when the countdown elapses.
+function armButtonConfirm(btn, opts) {
+    const label = opts.label != null ? opts.label : btn.textContent;
+    const armedClass = opts.armedClass || 'system-btn-armed';
+    if (btn.dataset.armed) {
+        // Second click — execute.
+        clearInterval(btn._confirmTimer);
+        delete btn.dataset.armed;
+        btn.textContent = label;
+        btn.classList.remove(armedClass);
+        opts.onConfirm();
+        return;
+    }
+    // First click — arm.
+    btn.dataset.armed = 'true';
+    btn.classList.add(armedClass);
+    let remaining = opts.seconds || 3;
+    btn.textContent = `Confirm? (${remaining}s)`;
+    btn._confirmTimer = setInterval(() => {
+        remaining--;
+        if (remaining <= 0) {
+            clearInterval(btn._confirmTimer);
+            delete btn.dataset.armed;
+            btn.textContent = label;
+            btn.classList.remove(armedClass);
         } else {
             btn.textContent = `Confirm? (${remaining}s)`;
         }
@@ -4207,6 +4284,18 @@ function renderRotation(entries) {
         actions.className = 'rotation-actions';
 
         if (entry.file_path) {
+            // Preview (pink) — audition the linked file in the browser without
+            // touching the live player. Sits to the left of the green play btn.
+            const previewBtn = document.createElement('button');
+            previewBtn.className = 'rotation-btn rotation-btn-preview';
+            previewBtn.textContent = String.fromCharCode(0x25B6);  // ▶
+            previewBtn.title = 'Preview this song in the browser (does not affect the live screen)';
+            previewBtn.onclick = (e) => {
+                e.stopPropagation();
+                openPreview({ source: 'local', file_path: entry.file_path, title: entry.song_artist || entry.singer });
+            };
+            actions.appendChild(previewBtn);
+
             const playBtn = document.createElement('button');
             playBtn.className = 'rotation-btn rotation-btn-play';
             playBtn.textContent = '\u25B6';  // ▶

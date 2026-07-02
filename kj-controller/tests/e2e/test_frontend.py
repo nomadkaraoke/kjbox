@@ -1,6 +1,7 @@
 """End-to-end Playwright tests for the KJ Controller frontend."""
 
 import json
+import re
 import urllib.request
 
 import pytest
@@ -171,14 +172,14 @@ class TestPlaybackControls:
 
 
 # ---------------------------------------------------------------------------
-# Available Songs section
+# Library section
 # ---------------------------------------------------------------------------
 
 class TestAvailableSongs:
-    """Available Songs card."""
+    """Library (formerly "Available Songs") card."""
 
     def test_available_songs_heading(self, app_page):
-        expect(app_page.locator("h2", has_text="Available Songs")).to_be_visible()
+        expect(app_page.locator("h2", has_text="Library")).to_be_visible()
 
     def test_rescan_button(self, app_page):
         btn = app_page.locator("#rescan-btn")
@@ -198,6 +199,82 @@ class TestAvailableSongs:
 
     def test_folder_controls_hidden_when_no_folders(self, app_page):
         expect(app_page.locator("#folder-controls")).to_be_hidden()
+
+
+# ---------------------------------------------------------------------------
+# Library row structure — play/preview/edit/delete buttons unified with the
+# rotation row (no Copy button, colorised format pill, click-to-copy name,
+# two-click delete confirm).
+# ---------------------------------------------------------------------------
+
+class TestLibraryRow:
+    """Structure and styling of a rendered Library (local media) row."""
+
+    _ITEM = (
+        "() => {"
+        "  const items = [{ display_name: 'Seal - Soul Medley', media_kind: 'mp4',"
+        "    ext: '.mp4', file_path: '/d/seal.mp4', media_id: 'm1', is_download: true,"
+        "    folder_name: 'Downloads' }];"
+        "  window.localMediaItems = items; window.searchActive = false;"
+        "  renderFolderView(items);"
+        "}"
+    )
+
+    def _row(self, app_page):
+        app_page.evaluate(self._ITEM)
+        return app_page.locator("#media-list li.media-file-row").first
+
+    def test_row_has_preview_play_edit_delete_buttons(self, app_page):
+        row = self._row(app_page)
+        expect(row.locator(".media-btn-preview")).to_be_visible()
+        expect(row.locator(".media-btn-play")).to_be_visible()
+        expect(row.locator(".media-btn-edit")).to_be_visible()
+        expect(row.locator(".media-btn-delete")).to_be_visible()
+
+    def test_row_has_no_copy_button(self, app_page):
+        # Copy button was removed — clicking the name copies instead.
+        row = self._row(app_page)
+        expect(row.locator(".copy-btn")).to_have_count(0)
+
+    def test_name_is_click_to_copy(self, app_page):
+        row = self._row(app_page)
+        name = row.locator(".media-name")
+        expect(name).to_have_text("Seal - Soul Medley")
+        expect(name).to_have_class(re.compile(r"rotation-copyable"))
+
+    def test_format_pill_is_colorised_badge(self, app_page):
+        # The "mp4 · .mp4" media-type-badge is replaced by the catalog-style
+        # colorised .format-badge.
+        row = self._row(app_page)
+        badge = row.locator(".format-badge")
+        expect(badge).to_have_text("mp4")
+        expect(row.locator(".media-type-badge")).to_have_count(0)
+
+    def test_delete_arms_on_first_click(self, app_page):
+        row = self._row(app_page)
+        del_btn = row.locator(".media-btn-delete")
+        del_btn.click()
+        expect(del_btn).to_have_class(re.compile(r"media-btn-armed"))
+        expect(del_btn).to_contain_text("Confirm")
+
+    def test_buttons_match_rotation_font_size(self, app_page):
+        # Drift guard: Library action buttons must render at the same font size
+        # as the rotation row's buttons.
+        self._row(app_page)
+        sizes = app_page.evaluate(
+            "() => {"
+            "  for (let i = 1; i < 100000; i++) clearInterval(i);"
+            "  window.rotationData = [{ id: 1, position: 1, singer: 'X',"
+            "    song_artist: 'A - B', status: 'Up Next', songs_sung: 1,"
+            "    file_path: '/d/x.mp4' }];"
+            "  renderRotation(window.rotationData);"
+            "  const rb = document.querySelector('#rotation-list .rotation-btn-play');"
+            "  const lb = document.querySelector('#media-list li.media-file-row .media-btn-play');"
+            "  const f = el => getComputedStyle(el).fontSize;"
+            "  return { rot: f(rb), lib: f(lb) };"
+            "}"
+        )
+        assert sizes["lib"] == sizes["rot"]
 
 
 # ---------------------------------------------------------------------------

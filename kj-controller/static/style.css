@@ -398,6 +398,9 @@ button:disabled:hover {
 #media-list li:hover::before { opacity: 1; }
 #media-list li.folder-header::before,
 #media-list li.section-header::before { content: none; }
+/* Library rows have explicit play/preview buttons now (not click-to-play), so
+   the hover play-arrow affordance would be redundant. Catalog rows keep it. */
+#media-list li.media-file-row::before { content: none; }
 .folder-items li::before {
     content: '\25B6';
     opacity: 0;
@@ -2472,6 +2475,21 @@ body {
     padding: 2px 6px;
     cursor: pointer;
 }
+/* Preview (browser audition) — same shape/size as the green play button but a
+   hollow pink outline, sitting immediately to its left. The lighter (outlined)
+   treatment reads as the softer action: pink outline = preview, green fill = live. */
+.rotation-btn-preview {
+    background: transparent;
+    color: #ff7acc;
+    border: 1px solid rgba(255, 91, 184, 0.5);
+    border-radius: 4px;
+    padding: 2px 6px;
+    cursor: pointer;
+}
+.rotation-btn-preview:hover {
+    background: rgba(255, 91, 184, 0.15);
+    color: #ff9bd6;
+}
 .rotation-btn-link {
     background: transparent;
     color: #8892a4;
@@ -3703,6 +3721,63 @@ li.media-no-audio {
     line-height: 1;
 }
 .media-edit-btn:hover { color: #cfe0ff; }
+
+/* Library rows are sized to match the rotation entries exactly — same text
+   size and compact padding — so the two lists feel like one system. */
+#media-list li.media-file-row { font-size: 0.85rem; padding: 6px 12px; }
+
+/* --- Library row action buttons (preview / play / edit / delete) ---
+ * ONE structural rule sizes every button in the cluster, so a classless button
+ * is auto-correct. Values mirror `.rotation-btn` EXACTLY (0.65rem == 0.65em at
+ * the 16px root; 2px 6px padding; 1px border) so the buttons render at the same
+ * ~18px height and font size as the rotation row. Sizing uses rem (not em) so
+ * it's independent of the row's own font-size. Variants below set colour only. */
+.media-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    flex-shrink: 0;
+    margin-left: 6px;
+}
+.media-actions button {
+    box-sizing: border-box;
+    padding: 2px 6px;
+    font-size: 0.65rem;
+    line-height: 1.2;
+    border-radius: 5px;
+    border: 1px solid transparent;
+    background: #222;
+    color: #ccc;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    white-space: nowrap;
+    box-shadow: none;
+}
+.media-actions button:hover { background: #333; color: #fff; box-shadow: none; }
+
+/* Variant classes are scoped under .media-actions so they beat the structural
+   `.media-actions button` rule on specificity (otherwise the neutral base wins
+   and the filled colours never show). */
+/* Preview (hollow pink outline) + Play (green filled) — mirror the rotation
+   buttons. Outline = softer preview action; fill = live playback. */
+.media-actions .media-btn-preview { background: transparent; border-color: rgba(255, 91, 184, 0.5); color: #ff7acc; }
+.media-actions .media-btn-preview:hover { background: rgba(255, 91, 184, 0.15); color: #ff9bd6; }
+.media-actions .media-btn-play { background: #2d8a4e; color: #fff; }
+.media-actions .media-btn-play:hover { background: #35a25c; color: #fff; }
+/* Edit — yellow icon with a matching yellow border (mirrors the rotation
+   edit-mode button's yellow accent). */
+.media-actions .media-btn-edit { background: transparent; border-color: rgba(251, 191, 36, 0.45); color: #fbbf24; }
+.media-actions .media-btn-edit:hover { background: rgba(251, 191, 36, 0.12); border-color: rgba(251, 191, 36, 0.7); color: #fcd34d; }
+/* Delete — red outline, same height as the rest; arms on first click. */
+.media-actions .media-btn-delete { background: transparent; border-color: rgba(239, 68, 68, 0.35); color: #fca5a5; }
+.media-actions .media-btn-delete:hover { background: rgba(239, 68, 68, 0.15); color: #f87171; }
+.media-actions .media-btn-delete.media-btn-armed {
+    animation: pulse-danger 0.8s ease-in-out infinite;
+    background: rgba(239, 68, 68, 0.15);
+    color: #f87171;
+}
 #media-review-btn.active {
     background: rgba(255,180,60,0.18);
     border-color: rgba(255,180,60,0.5);
