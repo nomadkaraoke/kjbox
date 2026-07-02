@@ -110,9 +110,16 @@ class MediaIndex:
         (final_path, display_name, media_id).
         """
         threshold = float(self.config.get("parse_confidence_threshold", 0.75) or 0.75)
+        artist0 = (artist_hint or "").strip()
+        title0 = (title_hint or "").strip()
+        if not artist0 and not title0:
+            # No caller-supplied hints (e.g. a bare upload) — best-effort split
+            # from the filename so the on-disk name isn't just "unknown".
+            det = parse_identity(raw_name)
+            artist0, title0 = (det.get("artist") or "").strip(), (det.get("title") or "").strip()
         identity = {
             "source": source, "source_ref": source_ref,
-            "artist": (artist_hint or "").strip(), "title": (title_hint or "").strip(),
+            "artist": artist0, "title": title0,
             "confidence": 0.5, "needs_review": 1, "parse_method": "deterministic",
         }
         if self.gen_client is not None:

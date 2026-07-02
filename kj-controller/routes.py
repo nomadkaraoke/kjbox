@@ -27,6 +27,7 @@ from playback import RendererSwitchRejected
 from sing import get_event_url, sync_event_url_overlays
 from sleep_mode import SleepManager
 from utils import log_message, build_divebar_filename, divebar_ext
+from naming import youtube_id_from_url, media_id_for
 from preview import parse_range
 
 # --- Browser mode state ---
@@ -217,6 +218,13 @@ def handle_download():
     app = current_app._get_current_object()
     cfg = current_app.kj_config
 
+    # Dedup-skip: if we already have this YouTube video on disk, don't re-download.
+    existing = _existing_media_for(app, _prospective_media_id("youtube", youtube_url=url))
+    if existing:
+        log_message(f"Dedup-skip: already have {existing['media_id']}", cfg)
+        return jsonify({"success": True, "deduped": True,
+                        "file_path": existing["file_path"]})
+
     from uuid import uuid4
     with app._download_lock:
         items = app.download_queue['items']
@@ -355,6 +363,32 @@ def _clear_rotation_download_for_item(app, item):
         pass  # Best-effort
 
 
+def _prospective_media_id(source, *, youtube_url=None, file_id=None, brand_code=None):
+    """Cheap pre-download media_id for dedup-skip, or None if not derivable."""
+    if source == "youtube":
+        vid = youtube_id_from_url(youtube_url)
+        return media_id_for("youtube", vid) if vid else None
+    if source == "divebar" and file_id:
+        return media_id_for("community", f"{(brand_code or 'DB')}-{file_id}")
+    return None
+
+
+def _existing_media_for(app, media_id):
+    """Return the media_library row for media_id iff its file exists on disk."""
+    if not media_id:
+        return None
+    store = getattr(app, "media_library", None)
+    if store is None:
+        return None
+    try:
+        row = store.get(media_id)
+    except Exception:
+        return None
+    if row and row.get("file_path") and os.path.exists(row["file_path"]):
+        return row
+    return None
+
+
 def _resolve_divebar_spec(file_id, artist, title, brand_code, fmt, cfg):
     """Resolve a divebar track into a download-queue spec, pairing a loose CDG
     with its sibling audio so a bare, silent .cdg is never queued.
@@ -395,6 +429,9 @@ def _resolve_divebar_spec(file_id, artist, title, brand_code, fmt, cfg):
             "source": "divebar",
             "source_detail": divebar.classify_download_url(url),
             "divebar_file_id": file_id,
+            "brand_code": brand_code,
+            "song_artist": artist,
+            "song_title": title,
         }, None
 
     filename = build_divebar_filename(brand_code, artist, title, ext=ext) \
@@ -406,6 +443,9 @@ def _resolve_divebar_spec(file_id, artist, title, brand_code, fmt, cfg):
         "source": "divebar",
         "source_detail": divebar.classify_download_url(url),
         "divebar_file_id": file_id,
+        "brand_code": brand_code,
+        "song_artist": artist,
+        "song_title": title,
     }, None
 
 
@@ -425,15 +465,27 @@ def _download_worker(app):
 
         try:
             if next_item.get('source') == 'divebar':
+                # Canonical community identity: db-<brand>-<fileid>. song_artist/
+                # song_title carry the real song fields (item['title'] is the zip
+                # filename, not the song title).
+                fid = next_item.get('divebar_file_id')
+                brand = next_item.get('brand_code') or ''
+                ref = f"{brand or 'DB'}-{fid}" if fid else None
+                song_artist = next_item.get('song_artist')
+                song_title = next_item.get('song_title')
                 if next_item.get('pair'):
                     # Loose CDG: fetch the .cdg + its sibling .mp3 and package
                     # them into a single playable cdg+mp3 zip.
                     file_path, title = app.media.download_cdg_pair(
                         next_item['cdg_url'], next_item['mp3_url'],
-                        filename=next_item.get('title'))
+                        filename=next_item.get('title'),
+                        source="community", source_ref=ref,
+                        artist=song_artist, title=song_title)
                 else:
                     file_path, title = app.media.download_from_url(
-                        next_item['url'], filename=next_item.get('title'))
+                        next_item['url'], filename=next_item.get('title'),
+                        source="community", source_ref=ref,
+                        artist=song_artist, title=song_title)
             else:
                 file_path, title = app.media.download_video(next_item['url'])
         except Exception:
@@ -1602,6 +1654,15 @@ def divebar_download():
     fmt = (data.get('format') or '').strip()
 
     cfg = current_app.kj_config
+    app = current_app._get_current_object()
+
+    # Dedup-skip: if we already have this community file on disk, don't re-download.
+    existing = _existing_media_for(app, _prospective_media_id(
+        "divebar", file_id=file_id, brand_code=brand_code))
+    if existing:
+        return jsonify({"success": True, "deduped": True,
+                        "file_path": existing["file_path"]})
+
     # Resolve the download spec — pairing a loose CDG with its sibling audio so a
     # bare, silent .cdg is never queued. divebar_ext keeps CDG/zip files off .mp4.
     spec, err = _resolve_divebar_spec(file_id, artist, title, brand_code, fmt, cfg)
@@ -1610,7 +1671,6 @@ def divebar_download():
         return jsonify({"error": msg}), status
 
     # Reuse the existing download queue with the Drive/GCS URL(s)
-    app = current_app._get_current_object()
     from uuid import uuid4
     with app._download_lock:
         items = app.download_queue['items']
@@ -3708,6 +3768,27 @@ def download_and_link_rotation():
             isinstance(data.get('singer'), str) and data['singer'].strip()):
         return jsonify({"error": "id or singer is required"}), 400
 
+    app = current_app._get_current_object()
+
+    # Dedup-skip: if we already have this exact media on disk, link it directly to
+    # the (new or existing) rotation entry instead of downloading again.
+    if source == "divebar":
+        prospective = _prospective_media_id("divebar", file_id=file_id, brand_code=brand_code)
+    else:
+        prospective = _prospective_media_id("youtube", youtube_url=youtube_url)
+    existing = _existing_media_for(app, prospective)
+    if existing:
+        entry_id, err = _resolve_or_create_rotation_entry_id(data, rotation)
+        if err:
+            return err
+        rotation.set_download_status(entry_id, source, "complete", None)
+        rotation.link_file(entry_id, existing["file_path"])
+        entry = rotation.store.get_entry(entry_id)
+        entries = rotation.get_rotation()
+        _decorate_rotation_entries(entries, rotation)
+        return jsonify({"success": True, "deduped": True,
+                        "entry": entry, "entries": entries})
+
     # Resolve the divebar download spec (single file, or a paired loose-CDG)
     # BEFORE creating a rotation entry, so a failure (no audio sibling / URL error)
     # can never leave an orphan entry behind.
@@ -3721,7 +3802,6 @@ def download_and_link_rotation():
             return jsonify({"error": msg}), status
 
     # Check queue capacity
-    app = current_app._get_current_object()
     with app._download_lock:
         active = [i for i in app.download_queue['items'] if i['status'] in ('queued', 'downloading')]
         if len(active) >= 5:
@@ -4084,6 +4164,14 @@ def approve_sing_request(app, req, skip_download=False):
             brand_code = meta.get("brand_code") or ""
             if not source_ref:
                 raise RuntimeError("source_ref (Divebar file_id) required")
+            # Dedup-skip: link an already-downloaded copy instead of re-fetching.
+            existing = _existing_media_for(app, _prospective_media_id(
+                "divebar", file_id=source_ref, brand_code=brand_code))
+            if existing:
+                entry = rotation.add_entry(singer, song_text, singers=singers_list)
+                rotation.set_download_status(entry["id"], "divebar", "complete", None)
+                rotation.link_file(entry["id"], existing["file_path"])
+                return entry["id"]
             # Resolve the spec (pairing a loose CDG with its audio) before
             # creating the rotation entry, so an unusable version fails cleanly
             # without leaving an orphan entry behind.
@@ -4100,6 +4188,14 @@ def approve_sing_request(app, req, skip_download=False):
             queue_src = "youtube"
             queue_url = source_ref
             title = song_text or (req.get("song_title") or "")
+            # Dedup-skip: link an already-downloaded copy instead of re-fetching.
+            existing = _existing_media_for(app, _prospective_media_id(
+                "youtube", youtube_url=source_ref))
+            if existing:
+                entry = rotation.add_entry(singer, song_text, singers=singers_list)
+                rotation.set_download_status(entry["id"], "youtube", "complete", None)
+                rotation.link_file(entry["id"], existing["file_path"])
+                return entry["id"]
 
         entry = rotation.add_entry(singer, song_text, singers=singers_list)
         if divebar_spec is not None:

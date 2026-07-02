@@ -2,6 +2,29 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-07-02 - Download-naming Phase 2: LLM parse + download renaming + dedup-skip (v0.52.0)
+
+**Why:** Phase 1 stood up the canonical media-identity store; downloads still landed with messy,
+inconsistent names and re-downloaded songs we already had. Phase 2 makes every *new* download
+land with a canonical `Artist - Title [media_id]` name in a per-source folder, and skips
+re-downloading files already on disk.
+
+**What (backend — needs a service restart to take effect):**
+- New karaoke-gen endpoint `POST /api/parse-karaoke-titles` (separate gen PR) turns messy
+  filenames into `{artist, title, confidence}` via Vertex Gemini (fixes artist/title order, e.g.
+  KaraFun-reversed). kjbox calls it via `GenClient.parse_titles`; **degrades gracefully offline**.
+- Downloads (`download_video` / `download_from_url` / `download_cdg_pair`) now stage → gate →
+  `_finalize_download_identity`: deterministic parse → best-effort LLM refine → write
+  `Artist - Title [media_id].ext` into `downloads/{youtube,community,gen,uploads}/` → upsert
+  `media_library`. Fixes the old gen `divebar__` mislabel (gen → `source=gen`).
+- **Dedup-skip:** the four enqueue sites (`/download`, `/divebar/download`,
+  `/rotation/download-and-link`, sing-approve) link an already-downloaded file instead of
+  re-downloading when the prospective `media_id` is already present on disk.
+- **`scripts/refine_titles.py`** batch-refines the existing `needs_review` backlog (DB-only,
+  dry-run by default, offline-tolerant). Does NOT rename files (that is the Phase-4 migration).
+- New config `parse_confidence_threshold` (0.75). Slug embeds `[media_id]` so `scan()` round-trips
+  identity; YouTube dedup catches the existing backlog, community dedup is forward-looking.
+
 ## 2026-06-30 - Search-row dedup + unified renderer + redundant-download cleanup (v0.50.0)
 
 **Why:** Searching the rotation "Link song" box for a song held in multiple forms (e.g.

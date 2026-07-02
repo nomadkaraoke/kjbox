@@ -297,6 +297,9 @@ def create_app(config=None):
         from gen_client import GenClient
         from gen_poller import GenPoller
         flask_app.gen_client = GenClient(gen_api_url, gen_api_token)
+        # Give the media index best-effort LLM access for download-time refine.
+        if getattr(flask_app, "media", None) is not None:
+            flask_app.media.gen_client = flask_app.gen_client
         flask_app.gen_poller = GenPoller(
             flask_app.gen_client, flask_app.rotation,
             flask_app.media, cfg.get('download_folder', ''),
@@ -474,6 +477,9 @@ def start_app():  # pragma: no cover
         from gen_client import GenClient
         from gen_poller import GenPoller
         flask_app.gen_client = GenClient(gen_api_url, gen_api_token)
+        # Give the media index best-effort LLM access for download-time refine.
+        if getattr(flask_app, "media", None) is not None:
+            flask_app.media.gen_client = flask_app.gen_client
         flask_app.gen_poller = GenPoller(
             flask_app.gen_client, flask_app.rotation,
             flask_app.media, cfg.get('download_folder', ''),
