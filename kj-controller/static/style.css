@@ -372,6 +372,8 @@ button:disabled:hover {
 #media-list li:hover { background-color: #252525; }
 #media-list li.playing { background-color: rgba(255, 223, 107, 0.15); color: #ffdf6b; }
 #media-list li.folder-header { background-color: #141414; color: #ff7acc; font-weight: 600; cursor: pointer; user-select: none; font-size: 0.8em; padding: 6px 12px; text-transform: uppercase; letter-spacing: 0.5px; }
+#media-list li.library-empty-hint { color: #777; font-style: italic; justify-content: flex-start; }
+#media-list li.library-empty-hint:hover { background-color: transparent; }
 #media-list li.folder-header:hover { background-color: #1e1e1e; }
 .folder-chevron { display: inline-block; transition: transform 0.15s; margin-right: 0.5rem; font-size: 0.75em; }
 .folder-chevron.expanded { transform: rotate(90deg); }
@@ -2418,17 +2420,6 @@ body {
     color: #fca5a5;
 }
 .rotation-btn-delete:hover { background: rgba(239, 68, 68, 0.15); }
-/* Ctrl+hover delete indicator */
-.rotation-entry.rotation-delete-hover {
-    background: rgba(239, 68, 68, 0.1) !important;
-    border-left: 3px solid #ef4444 !important;
-    cursor: pointer;
-}
-.rotation-entry.rotation-delete-hover .rotation-name,
-.rotation-entry.rotation-delete-hover .rotation-song {
-    text-decoration: line-through;
-    opacity: 0.6;
-}
 /* Shift+hover edit indicator */
 .rotation-entry.rotation-edit-hover {
     background: rgba(139, 92, 246, 0.1) !important;
