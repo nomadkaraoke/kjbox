@@ -1,7 +1,9 @@
 """End-to-end Playwright tests for the KJ Controller frontend."""
 
 import json
+import urllib.request
 
+import pytest
 from playwright.sync_api import expect
 
 
@@ -227,6 +229,86 @@ class TestStatusBar:
         warning = app_page.locator("#audio-warning")
         # display: none via CSS
         expect(warning).not_to_be_visible()
+
+
+# ---------------------------------------------------------------------------
+# Mode toggle placement + Simple-mode layout
+# ---------------------------------------------------------------------------
+
+class TestModeTogglePlacement:
+    """The Simple/Advanced toggle and the Status/Filler line now live in the
+    Playback Controls header/body, not the System section."""
+
+    def test_toggle_in_playback_header(self, app_page):
+        """Mode toggle sits in the Playback Controls header-row."""
+        expect(
+            app_page.locator(".playback-controls .header-row #mode-segmented")
+        ).to_have_count(1)
+
+    def test_toggle_not_in_system(self, app_page):
+        """Mode toggle no longer lives in the System section."""
+        expect(app_page.locator(".system-controls #mode-segmented")).to_have_count(0)
+
+    def test_status_bar_in_playback_controls(self, app_page):
+        """Status/Filler line moved into Playback Controls, out of System."""
+        expect(app_page.locator(".playback-controls #status-bar")).to_have_count(1)
+        expect(app_page.locator(".system-controls #status-bar")).to_have_count(0)
+
+
+class TestSimpleModeLayout:
+    """Simple mode hides System entirely and puts Playback Controls at the same
+    width as Rotation, letting Screen Preview rise to the top-right corner."""
+
+    @pytest.fixture(autouse=True)
+    def _restore_advanced(self, live_server):
+        """live_server is session-scoped, so simple mode set here would leak
+        into later advanced-mode tests. Restore advanced mode after each test."""
+        yield
+        req = urllib.request.Request(
+            f"{live_server}/rotation/requests/config",
+            data=json.dumps({"simple_mode": False}).encode(),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req) as resp:
+            resp.read()
+
+    def _enter_simple(self, page, live_server):
+        # Desktop width so the >=769px simple-mode grid applies (not the mobile
+        # stack). The toggle round-trips through the real backend, so simple
+        # mode sticks across the 2s status poll.
+        page.set_viewport_size({"width": 1400, "height": 900})
+        page.goto(live_server)
+        page.wait_for_load_state("networkidle")
+        page.locator("#mode-seg-simple").click()
+        page.wait_for_function(
+            "document.body.classList.contains('simple-mode')"
+        )
+
+    def test_system_hidden_in_simple(self, page, live_server):
+        self._enter_simple(page, live_server)
+        expect(page.locator(".system-controls")).not_to_be_visible()
+
+    def test_playback_matches_rotation_width(self, page, live_server):
+        self._enter_simple(page, live_server)
+        widths = page.evaluate(
+            "() => {"
+            " const pc = document.querySelector('.playback-controls').getBoundingClientRect();"
+            " const r = document.querySelector('.rotation-panel').getBoundingClientRect();"
+            " return [pc.width, r.width]; }"
+        )
+        assert abs(widths[0] - widths[1]) < 2, f"widths differ: {widths}"
+
+    def test_preview_rises_to_top_right(self, page, live_server):
+        self._enter_simple(page, live_server)
+        pos = page.evaluate(
+            "() => {"
+            " const pc = document.querySelector('.playback-controls').getBoundingClientRect();"
+            " const pv = document.querySelector('#vnc-preview-container').getBoundingClientRect();"
+            " return {sameTop: Math.abs(pc.top - pv.top) < 2, toRight: pv.left >= pc.right - 2}; }"
+        )
+        assert pos["sameTop"], "Screen Preview top should align with Playback Controls top"
+        assert pos["toRight"], "Screen Preview should sit to the right of Playback Controls"
 
 
 # ---------------------------------------------------------------------------
