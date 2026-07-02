@@ -3,6 +3,7 @@
 import os
 import re
 import sqlite3
+import unicodedata
 
 from rapidfuzz import fuzz
 from text_normalize import (
@@ -293,6 +294,33 @@ class ExternalCatalog:
              for r in rows]
         )
         conn.commit()
+
+    def get_by_path(self, path):
+        """Row for an exact file path, tolerant of NFC/NFD unicode variants.
+
+        Rotation rows and the catalog were built from the same file list, but
+        macOS-era lists can carry NFD while runtime paths are NFC (or vice
+        versa) — try the raw path first, then both normal forms.
+        """
+        if not path or not self.is_available():
+            return None
+        conn = self._get_conn()
+        variants = [path]
+        for form in ("NFC", "NFD"):
+            v = unicodedata.normalize(form, path)
+            if v not in variants:
+                variants.append(v)
+        for v in variants:
+            try:
+                row = conn.execute(
+                    "SELECT path, filename, folder, disc_id, artist, title, format "
+                    "FROM media WHERE path = ?", (v,)
+                ).fetchone()
+            except sqlite3.OperationalError:
+                return None
+            if row:
+                return dict(row)
+        return None
 
     def search(self, query, limit=50, offset=0):
         """Full-text search using FTS5 MATCH with LIKE fallback.
