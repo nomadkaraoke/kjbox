@@ -62,3 +62,10 @@ def test_record_play_empty_media_returns_false(store):
     assert store.record_play("") == False
     assert store.record_play(None) == False
     assert _count(store, "play_events") == 0
+
+
+def test_record_play_no_entry_outside_window_counts(store):
+    # A no-entry play older than the 120s window must NOT dedup a fresh one.
+    store.record_play("db-OLD", entry_id=None, played_at="2020-01-01 00:00:00")
+    assert store.record_play("db-OLD", entry_id=None) is True
+    assert _count(store, "play_events") == 2
