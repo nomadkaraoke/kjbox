@@ -1,0 +1,11 @@
+[Unit]
+Description=Run Nomad master-catalog GCS sync every 5 minutes
+
+[Timer]
+OnBootSec=3min
+OnUnitActiveSec=5min
+AccuracySec=30s
+Persistent=true
+
+[Install]
+WantedBy=timers.target

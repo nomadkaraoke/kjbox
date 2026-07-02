@@ -11,6 +11,10 @@ import requests
 
 from config import MEDIA_EXTENSIONS, resolve_preview_cache_dir
 from utils import log_message, sanitize_filename_part, parse_youtube_filename
+from naming import (
+    parse_identity, extract_media_id, media_id_for, content_hash,
+    SOURCE_UPLOAD,
+)
 
 # Rejected downloads are moved here (a subdir of the download folder) instead of
 # being deleted. scan() skips this dir so quarantined files are never re-indexed.
@@ -89,9 +93,30 @@ def _ytdlp_base_opts(config):
 class MediaIndex:
     """Manages the media file index (scan, persist, validate, delete, download)."""
 
-    def __init__(self, config):
+    def __init__(self, config, media_library=None):
         self.config = config
         self.index = {}
+        self.media_library = media_library
+
+    def _resolve_media_id(self, real_path, fname):
+        """Return (media_id, identity_dict) for a file.
+
+        Prefers an embedded [media_id] slug token (post-migration, cheap); else
+        derives from the filename pattern; for keyless uploads reuses an existing
+        media_library row (by path) to avoid re-hashing on every scan.
+        """
+        identity = parse_identity(fname)
+        token = extract_media_id(fname)
+        if token:
+            return token, identity
+        if identity["source_ref"]:
+            return media_id_for(identity["source"], identity["source_ref"]), identity
+        # keyless upload: reuse a prior row's id if we already indexed this path
+        if self.media_library is not None:
+            existing = self.media_library.get_by_path(real_path)
+            if existing:
+                return existing["media_id"], identity
+        return media_id_for(SOURCE_UPLOAD, content_hash(real_path)), identity
 
     def scan(self):
         """Walk all configured media_folders, build index, persist to disk."""
@@ -146,6 +171,26 @@ class MediaIndex:
                         entry["display_name"] = parsed[2]
                     else:
                         entry["display_name"] = os.path.splitext(fname)[0]
+
+                    if self.media_library is not None:
+                        try:
+                            media_id, identity = self._resolve_media_id(real_path, fname)
+                            entry["media_id"] = media_id
+                            self.media_library.upsert({
+                                "media_id": media_id,
+                                "source": identity["source"],
+                                "source_ref": identity["source_ref"],
+                                "artist": identity["artist"],
+                                "title": identity["title"],
+                                "confidence": identity["confidence"],
+                                "parse_method": identity["parse_method"],
+                                "needs_review": identity["needs_review"],
+                                "raw_original_name": fname,
+                                "file_path": real_path,
+                                "ext": ext,
+                            })
+                        except Exception as exc:  # never let indexing crash on one file
+                            log_message(f"media_library upsert failed for {fname}: {exc}", self.config)
 
                     # Preserve duration and upload_date from existing index
                     if real_path in existing:

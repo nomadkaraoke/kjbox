@@ -29,6 +29,7 @@ def live_server(tmp_path_factory, flask_port):
         "download_folder": str(downloads),
         "media_folders": [str(downloads), str(media)],
         "media_index_path": str(tmp / "media_index.json"),
+        "media_db_path": str(tmp / "media_library.db"),
         "filler_music_dir": str(tmp),
         "log_file": str(tmp / "test.log"),
         "karaoke_vlc_port": 8080,

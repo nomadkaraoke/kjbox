@@ -1,0 +1,15 @@
+[Unit]
+Description=Nomad master-catalog GCS sync (NOMAD-720p mirror)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=nomad
+Nice=10
+IOSchedulingClass=idle
+# Adjust WorkingDirectory/paths to the deployed location on the device.
+WorkingDirectory=/opt/nomad/kjbox/kj-controller
+Environment=PATH=/opt/nomad/google-cloud-sdk/bin:/usr/bin:/bin
+# Use the app's venv python so `requests` (imported by sync_masters) is available.
+ExecStart=/opt/nomad/kjbox/kj-controller/venv/bin/python -m scripts.sync_masters
