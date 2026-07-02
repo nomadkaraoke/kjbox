@@ -3403,7 +3403,6 @@ body.simple-mode .rotation-restore-btn,
 body.simple-mode .rotation-paths-btn,
 body.simple-mode .rotation-undo-btn,
 body.simple-mode .rotation-redo-btn,
-body.simple-mode #np-pitch-group,
 /* Screen Preview connection controls — jargon a stand-in doesn't need.
  * The device auto-connects with its saved VNC password, so the thumbnail
  * (and size buttons) still work; only the connect/disconnect/interactive
@@ -3469,30 +3468,34 @@ body.simple-mode .system-controls {
 
     body.simple-mode .rotation-panel      { grid-area: rotation; }
     body.simple-mode #vnc-preview-container { grid-area: preview; }
+    /* Simple mode only: Playback shares the left (2fr) column with Rotation so
+     * they line up, and Screen Preview fills the right (1fr) column. The
+     * compact internal layout below is shared with advanced mode. */
+    body.simple-mode .playback-controls { grid-area: playback; }
 
-    /* Playback controls become a compact horizontal bar across the top:
-     * button group + seek on the first row, the two volume sliders on the next,
-     * each label paired with a flexible slider. */
-    body.simple-mode .playback-controls {
-        grid-area: playback;
+    /* Playback controls are a compact horizontal bar in BOTH simple and
+     * advanced modes: button group + Seek on the first row, the two volume
+     * sliders on the next, each label paired with a flexible slider. Scoped to
+     * >=769px so the mobile stack (default block flow) stays untouched below. */
+    .playback-controls {
         display: grid;
         grid-template-columns: auto 1fr;
         gap: 0.5rem 1.5rem;
         align-items: center;
     }
-    body.simple-mode .playback-controls .button-group {
+    .playback-controls .button-group {
         display: flex;
         gap: 0.5rem;
     }
     /* The header (title + mode toggle) and now-playing details each span the
      * full width of the bar; they are NOT laid out as a label+slider grid row.
      * The header keeps its own flex layout. */
-    body.simple-mode .playback-controls .header-row,
-    body.simple-mode .playback-controls #np-info {
+    .playback-controls .header-row,
+    .playback-controls #np-info {
         grid-column: 1 / -1;
     }
     /* Seek + the two volume sliders: label in col 1, slider fills col 2. */
-    body.simple-mode .playback-controls > div:not(.button-group):not(#np-info):not(.header-row) {
+    .playback-controls > div:not(.button-group):not(#np-info):not(.header-row) {
         display: grid;
         grid-template-columns: auto 1fr;
         gap: 0.6rem;

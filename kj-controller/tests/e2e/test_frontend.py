@@ -333,6 +333,108 @@ class TestSimpleModeLayout:
         assert pos["toRight"], "Screen Preview should sit to the right of Playback Controls"
 
 
+class TestPlaybackControlsUnified:
+    """The Playback Controls section uses the SAME compact internal layout in
+    both simple and advanced modes: button-group + Seek share the first row,
+    the two volume sliders share the next row, and the Pitch control is present
+    in both modes (its runtime visibility is gated only by renderer support)."""
+
+    @pytest.fixture(autouse=True)
+    def _restore_advanced(self, live_server):
+        """live_server is session-scoped; leaving simple mode set would leak
+        into later advanced-mode tests. Restore advanced mode after each test."""
+        yield
+        req = urllib.request.Request(
+            f"{live_server}/rotation/requests/config",
+            data=json.dumps({"simple_mode": False}).encode(),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            resp.read()
+
+    # Desktop width so the >=769px compact grid applies (not the mobile stack).
+    _WIDTH = {"width": 1400, "height": 900}
+
+    _LAYOUT_JS = """() => {
+        const rect = (el) => el.getBoundingClientRect();
+        const bg = rect(document.querySelector('.playback-controls .button-group'));
+        const seek = rect(document.querySelector('#seek-slider').closest('div'));
+        const kar = rect(document.querySelector('#karaoke-volume').closest('div'));
+        const fil = rect(document.querySelector('#filler-volume').closest('div'));
+        return {
+            seekRightOfButtons: seek.left >= bg.right - 2,
+            seekSharesRowWithButtons: Math.abs(seek.top - bg.top) < 30,
+            fillerRightOfKaraoke: fil.left >= kar.right - 2,
+            fillerSharesRowWithKaraoke: Math.abs(fil.top - kar.top) < 6,
+            volumesBelowButtons: kar.top > bg.top + 4,
+        };
+    }"""
+
+    def _pitch_display(self, page):
+        # Pitch lives inside the now-playing meta row, which is CSS-hidden while
+        # idle; force the playing class and clear any renderer-set inline style
+        # so we read the mode stylesheet's own verdict on #np-pitch-group.
+        return page.evaluate(
+            "() => {"
+            " document.querySelector('#np-info').classList.add('np-info--playing');"
+            " const pg = document.querySelector('#np-pitch-group');"
+            " pg.style.display = '';"
+            " return getComputedStyle(pg).display; }"
+        )
+
+    def _enter_simple(self, page, live_server):
+        page.set_viewport_size(self._WIDTH)
+        page.goto(live_server)
+        page.wait_for_load_state("networkidle")
+        page.locator("#mode-seg-simple").click()
+        page.wait_for_function("document.body.classList.contains('simple-mode')")
+
+    def test_advanced_mode_uses_compact_layout(self, page, live_server):
+        page.set_viewport_size(self._WIDTH)
+        page.goto(live_server)
+        page.wait_for_load_state("networkidle")
+        assert not page.evaluate(
+            "document.body.classList.contains('simple-mode')"
+        )
+        layout = page.evaluate(self._LAYOUT_JS)
+        assert layout["seekRightOfButtons"], layout
+        assert layout["seekSharesRowWithButtons"], layout
+        assert layout["fillerRightOfKaraoke"], layout
+        assert layout["fillerSharesRowWithKaraoke"], layout
+        assert layout["volumesBelowButtons"], layout
+
+    def test_simple_mode_uses_compact_layout(self, page, live_server):
+        self._enter_simple(page, live_server)
+        layout = page.evaluate(self._LAYOUT_JS)
+        assert layout["seekRightOfButtons"], layout
+        assert layout["seekSharesRowWithButtons"], layout
+        assert layout["fillerRightOfKaraoke"], layout
+        assert layout["fillerSharesRowWithKaraoke"], layout
+        assert layout["volumesBelowButtons"], layout
+
+    def test_layout_matches_between_modes(self, page, live_server):
+        page.set_viewport_size(self._WIDTH)
+        page.goto(live_server)
+        page.wait_for_load_state("networkidle")
+        advanced = page.evaluate(self._LAYOUT_JS)
+        page.locator("#mode-seg-simple").click()
+        page.wait_for_function("document.body.classList.contains('simple-mode')")
+        simple = page.evaluate(self._LAYOUT_JS)
+        assert advanced == simple, f"advanced={advanced} simple={simple}"
+
+    def test_pitch_control_present_in_advanced_mode(self, page, live_server):
+        page.set_viewport_size(self._WIDTH)
+        page.goto(live_server)
+        page.wait_for_load_state("networkidle")
+        assert self._pitch_display(page) != "none"
+
+    def test_pitch_control_present_in_simple_mode(self, page, live_server):
+        # Regression: simple mode used to force #np-pitch-group { display:none }.
+        self._enter_simple(page, live_server)
+        assert self._pitch_display(page) != "none"
+
+
 # ---------------------------------------------------------------------------
 # Overlay modal
 # ---------------------------------------------------------------------------

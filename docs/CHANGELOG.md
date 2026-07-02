@@ -2,6 +2,28 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-07-02 - Unify Playback Controls layout across Simple + Advanced modes (v0.56.0)
+
+**Why:** The Playback Controls section rendered differently per mode. Simple mode used a
+compact bar (buttons + Seek on one row, the two volume sliders side-by-side on the next),
+which reads well; Advanced mode stacked everything full-width and taller. Advanced also
+showed the Pitch control while Simple hid it. Andrew wanted one consistent, compact section
+in both modes with **all** controls available in each.
+
+**What (frontend — takes effect on browser refresh after `git pull`; no restart):**
+- **Compact layout is now shared by both modes.** The `.playback-controls` grid rules
+  (button-group + Seek on row 1, Karaoke + Filler volumes on row 2, header + now-playing
+  spanning full width) were de-scoped from `body.simple-mode` to plain `.playback-controls`,
+  still inside `@media (min-width: 769px)` so the mobile stack is untouched. The
+  `grid-area: playback` placement (for #col1's simple-mode grid) stays Simple-only.
+- **Pitch shown in both modes.** Removed `body.simple-mode #np-pitch-group { display:none }`.
+  Pitch runtime visibility is now governed solely by the existing renderer-aware JS
+  (`updateNowPlaying`: shown when `renderer.supports_pitch`, i.e. mpv). Updated the stale
+  app.js comment that claimed the CSS hides pitch in simple mode.
+- Tests: new `TestPlaybackControlsUnified` (5 e2e tests) asserts the compact 2-row geometry
+  in both modes, that the two modes match, and that Pitch is not force-hidden in Simple. Full
+  `tests/e2e/test_frontend.py` suite (69 tests) passes.
+
 ## 2026-07-02 - Replace status bar with idle now-playing status pill + filler indicator (v0.55.1)
 
 **Why:** The bottom `#status-bar` ("Status: stopped | Filler: wii.mp3") was a redundant,

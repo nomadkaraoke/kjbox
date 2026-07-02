@@ -978,7 +978,8 @@ function describeFileType(filename) {
 
 // Now-playing details live inside the Playback Controls section (the old fixed
 // top bar was removed). Shows song name + filename + file type + engine + time,
-// and the pitch control (which #np-pitch-group CSS keeps hidden in simple mode).
+// and the pitch control (shown in both simple and advanced modes; its runtime
+// visibility is gated only by whether the active renderer supports pitch).
 function updateNowPlaying(data) {
     const info = document.getElementById('np-info');
     const npState = document.getElementById('np-state');
