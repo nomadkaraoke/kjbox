@@ -13,6 +13,7 @@ from catalog import ExternalCatalog
 from config import CONFIG_FILE, is_pi, load_config
 from media import MediaIndex
 from media_library import MediaLibraryStore
+from stats_store import StatsStore
 from overlay import OverlayManager
 from playback import PlaybackCoordinator
 from rotation import RotationManager
@@ -199,6 +200,7 @@ def create_app(config=None):
     flask_app.kj_config = cfg
     flask_app.secret_key = _get_secret_key(cfg)
     flask_app.media_library = MediaLibraryStore(cfg.get('media_db_path'))
+    flask_app.stats = StatsStore(cfg.get('media_db_path'))
     flask_app.media = MediaIndex(cfg, media_library=flask_app.media_library)
     from preview import PreviewService
     flask_app.preview = PreviewService(cfg, flask_app.media)
@@ -391,6 +393,7 @@ def start_app():  # pragma: no cover
     flask_app.kj_config = cfg
     flask_app.secret_key = _get_secret_key(cfg)
     flask_app.media_library = MediaLibraryStore(cfg.get('media_db_path'))
+    flask_app.stats = StatsStore(cfg.get('media_db_path'))
     media = MediaIndex(cfg, media_library=flask_app.media_library)
     media.load()
     flask_app.media = media
