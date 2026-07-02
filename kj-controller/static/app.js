@@ -3615,15 +3615,6 @@ function closeDbStatusModal() {
     document.getElementById('db-modal').classList.add('hidden');
 }
 
-async function openStatsModal() {
-    document.getElementById('stats-modal').classList.remove('hidden');
-    await loadStats();
-}
-
-function closeStatsModal() {
-    document.getElementById('stats-modal').classList.add('hidden');
-}
-
 let _noteModalMediaId = null;
 
 async function openNoteModal(mediaId) {
@@ -3671,33 +3662,265 @@ async function saveNote() {
     if (query.length >= 3) doRotationSearch(query);
 }
 
-async function loadStats() {
-    const since = document.getElementById('statsSince').value;
-    const singer = document.getElementById('statsSinger').value.trim();
-    const qs = (extra) => {
-        const p = new URLSearchParams();
-        if (since) p.set('since', since);
-        Object.entries(extra || {}).forEach(([k, v]) => v && p.set(k, v));
-        return p.toString() ? '?' + p.toString() : '';
-    };
-    const [songsResp, singersResp] = await Promise.all([
-        fetch('/stats/top-songs' + qs({ singer, limit: 10 })),
-        fetch('/stats/singers' + qs({ limit: 50 })),
-    ]);
-    const songs = (await songsResp.json()).songs || [];
-    const singers = (await singersResp.json()).singers || [];
-    document.getElementById('statsTopSongs').innerHTML = songs.map(s =>
-        `<li>${escapeHtml(s.artist || '')}${s.artist ? ' &ndash; ' : ''}${escapeHtml(s.title || s.song_key)} &mdash; &#9654; ${s.plays}</li>`
-    ).join('') || '<li class="muted">No plays recorded yet.</li>';
-    document.getElementById('statsTopSingers').innerHTML = singers.map(s =>
-        `<li>${escapeHtml(s.singer)} &mdash; &#9654; ${s.plays} &middot; ${s.distinct_songs} songs</li>`
-    ).join('') || '<li class="muted">No plays recorded yet.</li>';
-    document.getElementById('statsSingerList').innerHTML = singers.map(s =>
-        `<option value="${escapeHtml(s.singer)}">`).join('');
+// ===== Song Stats section =====
+const songStats = { view: 'top-songs', since: null, singer: '', cache: {}, loaded: false };
+
+function statsQS(extra) {
+    const p = new URLSearchParams();
+    if (songStats.since) p.set('since', songStats.since);
+    Object.entries(extra || {}).forEach(([k, v]) => { if (v) p.set(k, v); });
+    const s = p.toString();
+    return s ? '?' + s : '';
 }
 
-document.getElementById('statsRefresh')?.addEventListener('click', loadStats);
-document.getElementById('statsSinger')?.addEventListener('change', loadStats);
+async function statsFetch(path) {
+    try {
+        const r = await fetch(path);
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return await r.json();
+    } catch (e) {
+        return null;  // graceful — caller shows empty/error state
+    }
+}
+
+function statsDate10(ts) { return (ts || '').slice(0, 10); }
+
+async function renderStatsOverview() {
+    const data = await statsFetch('/stats/overview' + statsQS());
+    const o = (data && data.overview) || {};
+    const span = (o.first_played && o.last_played)
+        ? statsDate10(o.first_played) + ' – ' + statsDate10(o.last_played) : '—';
+    const cards = [
+        ['Plays', o.total_plays || 0], ['Songs', o.distinct_songs || 0],
+        ['Singers', o.distinct_singers || 0], ['Artists', o.distinct_artists || 0],
+        ['Span', span], ['Last 30d', o.plays_last_30d || 0],
+    ];
+    document.getElementById('statsOverview').innerHTML = cards.map(([label, val]) =>
+        '<div class="stat-card"><div class="stat-card-val">' + escHtml(String(val)) +
+        '</div><div class="stat-card-label">' + escHtml(label) + '</div></div>').join('');
+}
+
+async function switchStatsView(view) {
+    songStats.view = view;
+    document.querySelectorAll('#statsViewSwitch .stats-seg-btn').forEach(b =>
+        b.classList.toggle('stats-seg-active', b.dataset.view === view));
+    document.getElementById('statsBody').innerHTML = '<div class="stats-muted">Loading&hellip;</div>';
+    if (view === 'top-songs') return renderTopSongs();
+    if (view === 'top-singers') return renderTopSingers();
+    if (view === 'top-artists') return renderTopArtists();
+    if (view === 'nights') return renderNights();
+}
+
+async function refreshSongStats() {
+    songStats.cache = {};
+    await renderStatsOverview();
+    await switchStatsView(songStats.view);
+}
+
+// Toggle a .stats-drill sibling right after anchorEl. `ds` is the element's dataset.
+// Drill kinds: song | singer | singersong | artist | night.
+async function toggleDrill(anchorEl, ds) {
+    const next = anchorEl.nextElementSibling;
+    if (next && next.classList.contains('stats-drill')) { next.remove(); return; }
+    const drill = document.createElement('div');
+    drill.className = 'stats-drill';
+    drill.innerHTML = '<div class="stats-muted">Loading&hellip;</div>';
+    anchorEl.after(drill);
+    let items = [], render = null;
+    if (ds.drill === 'song') {
+        const d = await statsFetch('/stats/song-history' + statsQS({ song_key: ds.key, limit: 200 }));
+        items = (d && d.history) || [];
+        render = h => '<div class="stats-subrow"><span>' + escHtml(h.singer || '—') + '</span>' +
+            '<span>' + escHtml(statsDate10(h.played_at || h.night_date)) + '</span></div>';
+    } else if (ds.drill === 'singer') {
+        const d = await statsFetch('/stats/singer-songs?singer=' + encodeURIComponent(ds.singer) +
+            (songStats.since ? '&since=' + encodeURIComponent(songStats.since) : '') + '&limit=100');
+        items = (d && d.songs) || [];
+        render = s => {
+            const label = (s.artist ? escHtml(s.artist) + ' – ' : '') + escHtml(s.title || s.song_key);
+            return '<div class="stats-subrow" data-drill="singersong" data-singer="' + escAttr(ds.singer) +
+                '" data-song-key="' + escAttr(s.song_key) + '"><span>' + label + '</span>' +
+                '<span>▶ ' + s.plays + '</span><span>' + escHtml(statsDate10(s.last_sung)) + '</span></div>';
+        };
+    } else if (ds.drill === 'singersong') {
+        const d = await statsFetch('/stats/singer-song-history?singer=' + encodeURIComponent(ds.singer) +
+            '&song_key=' + encodeURIComponent(ds.songKey));
+        items = (d && d.history) || [];
+        render = h => '<div class="stats-subrow"><span>' +
+            escHtml(statsDate10(h.played_at || h.night_date)) + '</span></div>';
+    } else if (ds.drill === 'artist') {
+        const d = await statsFetch('/stats/artist-songs?artist=' + encodeURIComponent(ds.artist) +
+            (songStats.since ? '&since=' + encodeURIComponent(songStats.since) : '') + '&limit=100');
+        items = (d && d.songs) || [];
+        render = s => '<div class="stats-subrow"><span>' + escHtml(s.title || s.song_key) + '</span>' +
+            '<span>▶ ' + s.plays + '</span><span>' + (s.distinct_singers || 0) + ' singers</span></div>';
+    } else if (ds.drill === 'night') {
+        const d = await statsFetch('/stats/night-setlist?night_date=' + encodeURIComponent(ds.night) + '&limit=200');
+        items = (d && d.setlist) || [];
+        render = x => {
+            const label = (x.artist ? escHtml(x.artist) + ' – ' : '') + escHtml(x.title || x.song_key || '');
+            return '<div class="stats-subrow"><span>' + escHtml(x.singer || '—') + '</span>' +
+                '<span>' + label + '</span></div>';
+        };
+    }
+    drill.innerHTML = (items.length && render) ? items.map(render).join('')
+        : '<div class="stats-muted">No detail.</div>';
+}
+
+async function renderTopSongs() {
+    const key = 'top-songs|' + (songStats.since || '') + '|' + songStats.singer;
+    let songs = songStats.cache[key];
+    if (!songs) {
+        const data = await statsFetch('/stats/top-songs' + statsQS({ singer: songStats.singer, limit: 25 }));
+        songs = (data && data.songs) || [];
+        songStats.cache[key] = songs;
+    }
+    const body = document.getElementById('statsBody');
+    if (!songs.length) { body.innerHTML = '<div class="stats-muted">No plays recorded yet.</div>'; return; }
+    body.innerHTML = songs.map((s, i) => {
+        const label = (s.artist ? escHtml(s.artist) + ' – ' : '') + escHtml(s.title || s.song_key);
+        return '<div class="stats-row" data-drill="song" data-key="' + escAttr(s.song_key) + '">' +
+            '<span class="stats-row-rank">' + (i + 1) + '</span>' +
+            '<span class="stats-row-main">' + label + '</span>' +
+            '<span class="stats-row-count">▶ ' + (s.plays || 0) + '</span></div>';
+    }).join('');
+}
+
+async function renderTopSingers() {
+    const key = 'top-singers|' + (songStats.since || '');
+    let payload = songStats.cache[key];
+    if (!payload) {
+        const [sData, rData] = await Promise.all([
+            statsFetch('/stats/singers' + statsQS({ limit: 50 })),
+            statsFetch('/stats/most-repeated' + statsQS({ limit: 1 })),
+        ]);
+        payload = { singers: (sData && sData.singers) || [], repeated: (rData && rData.repeated) || [] };
+        songStats.cache[key] = payload;
+    }
+    const body = document.getElementById('statsBody');
+    let html = '';
+    if (payload.repeated.length) {
+        const t = payload.repeated[0];
+        const song = (t.artist ? escHtml(t.artist) + ' – ' : '') + escHtml(t.title || t.song_key);
+        html += '<div class="stats-fun">🔁 Most repeated: ' + escHtml(t.singer) +
+                ' × ' + song + ' (' + t.plays + '×)</div>';
+    }
+    if (!payload.singers.length) { body.innerHTML = html + '<div class="stats-muted">No plays recorded yet.</div>'; return; }
+    html += payload.singers.map((s, i) => {
+        const variety = s.plays ? (s.distinct_songs / s.plays) : 0;
+        return '<div class="stats-row" data-drill="singer" data-singer="' + escAttr(s.singer) + '">' +
+            '<span class="stats-row-rank">' + (i + 1) + '</span>' +
+            '<span class="stats-row-main">' + escHtml(s.singer) + '</span>' +
+            '<span class="stats-row-count">▶ ' + s.plays + ' · ' + s.distinct_songs +
+            ' songs · variety ' + variety.toFixed(2) + '</span></div>';
+    }).join('');
+    body.innerHTML = html;
+}
+
+async function renderTopArtists() {
+    const key = 'top-artists|' + (songStats.since || '');
+    let artists = songStats.cache[key];
+    if (!artists) {
+        const data = await statsFetch('/stats/top-artists' + statsQS({ limit: 50 }));
+        artists = (data && data.artists) || [];
+        songStats.cache[key] = artists;
+    }
+    const body = document.getElementById('statsBody');
+    if (!artists.length) { body.innerHTML = '<div class="stats-muted">No plays recorded yet.</div>'; return; }
+    body.innerHTML = artists.map((a, i) =>
+        '<div class="stats-row" data-drill="artist" data-artist="' + escAttr(a.artist) + '">' +
+        '<span class="stats-row-rank">' + (i + 1) + '</span>' +
+        '<span class="stats-row-main">' + escHtml(a.artist) + '</span>' +
+        '<span class="stats-row-count">▶ ' + a.plays + ' · ' + a.distinct_songs + ' songs</span></div>'
+    ).join('');
+}
+
+async function renderNights() {
+    const key = 'nights';  // nights is whole-history by design — ignores the `since` filter
+    let nights = songStats.cache[key];
+    if (!nights) {
+        const data = await statsFetch('/stats/nights?limit=50');
+        nights = (data && data.nights) || [];
+        songStats.cache[key] = nights;
+    }
+    const body = document.getElementById('statsBody');
+    if (!nights.length) { body.innerHTML = '<div class="stats-muted">No plays recorded yet.</div>'; return; }
+    body.innerHTML = nights.map((n, i) =>
+        '<div class="stats-row" data-drill="night" data-night="' + escAttr(n.night_date) + '">' +
+        '<span class="stats-row-rank">' + (i + 1) + '</span>' +
+        '<span class="stats-row-main">' + escHtml(n.night_date) +
+        (i === 0 ? '<span class="stats-badge-busy">🔥 busiest</span>' : '') + '</span>' +
+        '<span class="stats-row-count">▶ ' + n.plays + ' · ' + n.distinct_singers +
+        ' singers · ' + n.distinct_songs + ' songs</span></div>'
+    ).join('');
+}
+
+function applyStatsRange(range) {
+    const since = document.getElementById('statsSince');
+    if (range === 'all') { songStats.since = null; since.classList.add('hidden'); }
+    else if (range === '30d') {
+        const d = new Date(); d.setDate(d.getDate() - 30);
+        songStats.since = d.toISOString().slice(0, 10); since.classList.add('hidden');
+    } else if (range === 'year') {
+        songStats.since = new Date().getFullYear() + '-01-01'; since.classList.add('hidden');
+    } else if (range === 'custom') {
+        since.classList.remove('hidden');
+        songStats.since = since.value || null;
+    }
+    songStats.cache = {};
+    renderStatsOverview();
+    switchStatsView(songStats.view);
+}
+
+async function populateSingerDatalist() {
+    const data = await statsFetch('/stats/singers' + statsQS({ limit: 200 }));
+    const singers = (data && data.singers) || [];
+    document.getElementById('statsSingerList').innerHTML =
+        singers.map(s => '<option value="' + escAttr(s.singer) + '">').join('');
+}
+
+function initSongStats() {
+    const section = document.getElementById('song-stats');
+    if (!section) return;
+    document.getElementById('statsViewSwitch').addEventListener('click', (e) => {
+        const btn = e.target.closest('.stats-seg-btn');
+        if (btn) switchStatsView(btn.dataset.view);
+    });
+    document.getElementById('statsBody').addEventListener('click', (e) => {
+        const sub = e.target.closest('.stats-subrow[data-drill]');
+        if (sub) { toggleDrill(sub, sub.dataset); return; }
+        const row = e.target.closest('.stats-row');
+        if (row) { toggleDrill(row, row.dataset); }
+    });
+    document.getElementById('statsRange').addEventListener('click', (e) => {
+        const btn = e.target.closest('.stats-range-btn');
+        if (!btn) return;
+        document.querySelectorAll('#statsRange .stats-range-btn').forEach(b =>
+            b.classList.toggle('stats-range-active', b === btn));
+        applyStatsRange(btn.dataset.range);
+    });
+    document.getElementById('statsSince').addEventListener('change', () => {
+        songStats.since = document.getElementById('statsSince').value || null;
+        songStats.cache = {}; renderStatsOverview(); switchStatsView(songStats.view);
+    });
+    document.getElementById('statsSingerFilter').addEventListener('change', (e) => {
+        songStats.singer = e.target.value.trim();
+        if (songStats.view === 'top-songs') switchStatsView('top-songs');
+    });
+    // Lazy first load: only fetch when the section scrolls into view.
+    const io = new IntersectionObserver((entries) => {
+        if (entries.some(en => en.isIntersecting) && !songStats.loaded) {
+            songStats.loaded = true;
+            io.disconnect();
+            renderStatsOverview();
+            populateSingerDatalist();
+            switchStatsView(songStats.view);
+        }
+    }, { rootMargin: '200px' });
+    io.observe(section);
+}
+
+document.addEventListener('DOMContentLoaded', initSongStats);
 
 async function loadDbStatusModal() {
     const data = dbStatusCache || await fetchDbStatus();
