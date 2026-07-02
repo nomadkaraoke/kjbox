@@ -13,8 +13,14 @@ from config import MEDIA_EXTENSIONS, resolve_preview_cache_dir
 from utils import log_message, sanitize_filename_part, parse_youtube_filename
 from naming import (
     parse_identity, extract_media_id, media_id_for, content_hash,
-    build_slug_filename, merge_llm_result, SOURCE_UPLOAD,
+    build_slug_filename, merge_llm_result, strip_media_id_token, SOURCE_UPLOAD,
 )
+
+# media_id prefix -> canonical source, for identity of brand-new tokened files.
+_MEDIA_ID_PREFIX_SOURCE = {
+    "yt": "youtube", "db": "community", "gen": "gen",
+    "nomad": "master", "up": "upload",
+}
 
 # Rejected downloads are moved here (a subdir of the download folder) instead of
 # being deleted. scan() skips this dir so quarantined files are never re-indexed.
@@ -164,10 +170,17 @@ class MediaIndex:
         derives from the filename pattern; for keyless uploads reuses an existing
         media_library row (by path) to avoid re-hashing on every scan.
         """
-        identity = parse_identity(fname)
         token = extract_media_id(fname)
         if token:
+            # Canonical slug 'Artist - Title [media_id].ext'. Parse the clean name
+            # (token stripped) and trust the token's source prefix, so a brand-new
+            # tokened file gets sensible identity. Existing rows are preserved by
+            # upsert_scanned regardless.
+            identity = parse_identity(strip_media_id_token(fname))
+            prefix = token.split("-", 1)[0]
+            identity["source"] = _MEDIA_ID_PREFIX_SOURCE.get(prefix, identity["source"])
             return token, identity
+        identity = parse_identity(fname)
         if identity["source_ref"]:
             return media_id_for(identity["source"], identity["source_ref"]), identity
         # keyless upload: reuse a prior row's id if we already indexed this path
@@ -235,7 +248,7 @@ class MediaIndex:
                         try:
                             media_id, identity = self._resolve_media_id(real_path, fname)
                             entry["media_id"] = media_id
-                            self.media_library.upsert({
+                            self.media_library.upsert_scanned({
                                 "media_id": media_id,
                                 "source": identity["source"],
                                 "source_ref": identity["source_ref"],

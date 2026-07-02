@@ -174,6 +174,28 @@ class MediaLibraryStore:
             conn.commit()
             return cur.rowcount > 0
 
+    def upsert_scanned(self, record):
+        """Reconcile a filesystem-scanned file WITHOUT clobbering curated identity.
+
+        The media_library row is the source of truth for a known media_id (set at
+        download time, by LLM refine, by a manual edit, or by the migration). A
+        rescan must only refresh the on-disk fields (file_path, ext) for a row that
+        already exists — never overwrite its artist/title/source/needs_review, or
+        every restart/rescan would wipe refinements. Brand-new media_ids get the
+        full deterministic row.
+        """
+        if self.get(record["media_id"]) is None:
+            self.upsert(record)
+            return
+        conn = self._get_conn()
+        with self._lock():
+            conn.execute(
+                "UPDATE media_library SET file_path=?, ext=?, updated_at=datetime('now') "
+                "WHERE media_id=?",
+                (record.get("file_path"), record.get("ext"), record["media_id"]),
+            )
+            conn.commit()
+
     def update_path(self, media_id, file_path):
         """Repoint a row's on-disk file_path (used by the backlog migration after
         a file is moved/renamed). Returns True if a row was updated."""
