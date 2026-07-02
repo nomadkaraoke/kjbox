@@ -44,3 +44,18 @@ def test_record_play_stat_unresolved_is_noop(app_ctx):
     current_app.rotation = None
     routes._record_play_stat("/opt/nomad/downloads/plain name.mp4", None)
     assert current_app.stats.plays == []
+
+
+def test_record_play_stat_swallows_store_errors(app_ctx):
+    from flask import current_app
+
+    class _BoomStats:
+        def record_play(self, *a, **k):
+            raise RuntimeError("db down")
+
+    current_app.stats = _BoomStats()
+    current_app.media_library = _FakeML(
+        {"/opt/nomad/downloads/x.mp4": {"media_id": "yt-abc", "artist": "A", "title": "T"}})
+    current_app.rotation = None
+    # Must NOT raise — a stats failure can never break /play on a live rig.
+    routes._record_play_stat("/opt/nomad/downloads/x.mp4", None)

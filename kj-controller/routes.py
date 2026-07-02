@@ -95,7 +95,12 @@ def _record_play_stat(validated_path, entry_id):
             if entry:
                 singer = entry.get('singer')
                 if not (artist or title):
-                    artist = entry.get('song_artist')
+                    sa = (entry.get('song_artist') or '').strip()
+                    if ' - ' in sa:
+                        a, t = sa.split(' - ', 1)
+                        artist, title = a.strip(), t.strip()
+                    else:
+                        title = sa or None
         song_key = _normalize_song_key(artist, title)
         stats.record_play(media_id, entry_id=entry_id, singer=singer,
                           artist=artist, title=title, song_key=song_key)
