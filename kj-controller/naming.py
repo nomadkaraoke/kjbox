@@ -78,12 +78,18 @@ def _hash8(text):
 
 
 def content_hash(path):
-    """sha1 of file bytes, first 8 hex chars (stable id for keyless uploads)."""
+    """sha1 of file bytes, first 12 hex chars (stable id for keyless uploads).
+
+    12 hex chars (48 bits) keeps the collision probability negligible even for a
+    large upload library, since this hash is the *primary* media identity for
+    keyless files (`up-<hash>`), unlike the shorter `_hash8` used only as one
+    component of a natural key.
+    """
     h = hashlib.sha1()
     with open(path, "rb") as fh:
         for chunk in iter(lambda: fh.read(1 << 20), b""):
             h.update(chunk)
-    return h.hexdigest()[:8]
+    return h.hexdigest()[:12]
 
 
 def build_slug_filename(artist, title, media_id, ext):

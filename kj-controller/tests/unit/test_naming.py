@@ -60,14 +60,14 @@ def test_build_slug_filename_sanitizes_and_bounds_length():
     assert len(out.encode("utf-8")) <= 255
 
 
-def test_content_hash_is_8_lowercase_hex(tmp_path):
+def test_content_hash_is_12_lowercase_hex(tmp_path):
     import hashlib
     p = tmp_path / "sample.mp4"
     data = b"\x00\x01\x02nomad-karaoke\xff"
     p.write_bytes(data)
     out = naming.content_hash(str(p))
-    assert out == hashlib.sha1(data).hexdigest()[:8]
-    assert len(out) == 8
+    assert out == hashlib.sha1(data).hexdigest()[:12]
+    assert len(out) == 12
     assert out == out.lower()
     assert all(c in "0123456789abcdef" for c in out)
 

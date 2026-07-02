@@ -141,7 +141,7 @@ CREATE INDEX idx_media_norm         ON media_library(artist_norm, title_norm);
 | Community (divebar) | `db-<brand>-<file_id>` (fallback `db-<brand>-<hash8>`) | divebar lookup brand_code + file id |
 | Gen "make" | `gen-<job_id[:8]>` | gen job id |
 | Master | `nomad-<disc#>` (e.g. `nomad-0729`) | `NOMAD-####` disc number |
-| Upload / unknown | `up-<sha1(file)[:8]>` | content hash (identical bytes → dedup) |
+| Upload / unknown | `up-<sha1(file)[:12]>` | content hash (identical bytes → dedup); 12 hex chars since this is the *primary* identity for keyless files |
 
 **File ↔ id binding**: the `media_id` is embedded in the filename as a trailing `[media_id]`
 token. `scan()` recovers it with a regex on the stem; `file_path` in the DB is a secondary
@@ -229,8 +229,9 @@ Response: { "results": [ { "id": "...", "artist": "...", "title": "...", "confid
 
 - **Backend**: `list_items()` joins `media_library` → returns `artist`, `title`, `source`,
   `confidence`, `needs_review`. New `POST /media/metadata { media_id, artist, title }` sets the
-  values, `parse_method='manual'`, `confidence=NULL`, `needs_review=0` (shared by the
-  link-time inline edit).
+  values, **recomputes `artist_norm`/`title_norm`**, `parse_method='manual'`, `confidence=NULL`,
+  `needs_review=0` (shared by the link-time inline edit). (Phase 1's
+  `MediaLibraryStore.set_metadata` already recomputes the `*_norm` fields.)
 - **Frontend**: show canonical `Artist - Title` (not raw filename); editable Artist/Title;
   a **"Needs review"** filter/badge for low-confidence rows. Styling follows the v0.50.0 `.rs-*`
   aesthetic and its deliberate badge reduction — source shown as a subtle tag, review as a
