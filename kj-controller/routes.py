@@ -72,6 +72,148 @@ def _normalize_song_key(artist, title):
     return _group_key(artist, title)
 
 
+def _record_play_stat(validated_path, entry_id):
+    """Best-effort: credit one play for the media_id at validated_path. Never raises."""
+    try:
+        stats = getattr(current_app, 'stats', None)
+        ml = getattr(current_app, 'media_library', None)
+        if not stats:
+            return
+        row = ml.get_by_path(validated_path) if ml else None
+        media_id = (row or {}).get('media_id')
+        artist = (row or {}).get('artist')
+        title = (row or {}).get('title')
+        if not media_id:
+            from naming import extract_media_id
+            media_id = extract_media_id(os.path.basename(validated_path))
+        if not media_id:
+            return
+        singer = None
+        rotation = getattr(current_app, 'rotation', None)
+        if entry_id and rotation:
+            entry = rotation.store.get_entry(entry_id)
+            if entry:
+                singer = entry.get('singer')
+                if not (artist or title):
+                    sa = (entry.get('song_artist') or '').strip()
+                    if ' - ' in sa:
+                        a, t = sa.split(' - ', 1)
+                        artist, title = a.strip(), t.strip()
+                    else:
+                        title = sa or None
+        song_key = _normalize_song_key(artist, title)
+        stats.record_play(media_id, entry_id=entry_id, singer=singer,
+                          artist=artist, title=title, song_key=song_key)
+    except Exception as e:  # never let stats break playback
+        try:
+            log_message(f"stats: play record failed: {e}", current_app.kj_config)
+        except Exception:
+            pass
+
+
+def _record_preview_stat(descriptor):
+    """Best-effort: credit one preview for the descriptor's media_id. Never raises."""
+    try:
+        stats = getattr(current_app, 'stats', None)
+        if not stats or not isinstance(descriptor, dict):
+            return
+        ml = getattr(current_app, 'media_library', None)
+        source = descriptor.get('source')
+        title = descriptor.get('title')
+        artist = None
+        media_id = None
+        if source == 'local' and ml:
+            row = ml.get_by_path(descriptor.get('file_path')) or {}
+            media_id = row.get('media_id')
+            artist = row.get('artist')
+            title = title or row.get('title')
+        elif source == 'youtube':
+            vid = youtube_id_from_url(descriptor.get('youtube_url'))
+            if vid:
+                media_id = f"yt-{vid}"
+        # divebar previews: identity is the Phase-2-dependent fuzzy case (spec §10);
+        # skip counting rather than guess. Tighten once P2 lands file_id-based ids.
+        if not media_id:
+            return
+        song_key = _normalize_song_key(artist, title)
+        stats.record_preview(media_id, artist=artist, title=title, song_key=song_key)
+    except Exception as e:
+        try:
+            log_message(f"stats: preview record failed: {e}", current_app.kj_config)
+        except Exception:
+            pass
+
+
+def resolve_row_media_id(row, kind, ml):
+    """Best-effort media_id for a rotation-search row. Never raises. See design §10."""
+    try:
+        if kind == "local":
+            r = (ml.get_by_path(row.get("path")) if ml else None) or {}
+            mid = r.get("media_id")
+            if mid:
+                return mid
+            from naming import extract_media_id
+            return extract_media_id(os.path.basename(row.get("filename") or row.get("path") or ""))
+        if kind == "kn":
+            vid = youtube_id_from_url(row.get("youtube_url"))
+            return media_id_for("youtube", vid) if vid else None
+        if kind == "divebar":
+            fid = row.get("file_id")
+            if not fid:
+                return None
+            brand = row.get("brand") or row.get("brand_code") or "DB"
+            return media_id_for("community", f"{brand}-{fid}")
+    except Exception:
+        return None
+    return None
+
+
+def _enrich_search_stats(result):
+    """Attach `stats` + `media_id` to each local/KN-track/divebar row. Best-effort; never raises."""
+    stats = getattr(current_app, "stats", None)
+    ml = getattr(current_app, "media_library", None)
+    if not stats:
+        return
+    try:
+        pairs = []  # (row, media_id, song_key)
+        for r in result.get("local", []):
+            pairs.append((r, resolve_row_media_id(r, "local", ml),
+                          _normalize_song_key(r.get("artist"), r.get("title"))))
+        for song in result.get("karaoke_nerds", []):
+            sk = _normalize_song_key(song.get("artist"), song.get("title"))
+            for t in song.get("tracks") or []:
+                pairs.append((t, resolve_row_media_id(t, "kn", ml), sk))
+        for r in result.get("divebar", []):
+            pairs.append((r, resolve_row_media_id(r, "divebar", ml),
+                          _normalize_song_key(r.get("artist"), r.get("title"))))
+        ids = [mid for _, mid, _ in pairs if mid]
+        agg = stats.stats_for(ids)
+        by_song = {}
+        for _row, mid, sk in pairs:
+            if mid:
+                by_song.setdefault(sk, []).append(mid)
+        usual = set()
+        for mids in by_song.values():
+            u = stats.usual_media_id(mids)
+            if u:
+                usual.add(u)
+        for row, mid, _sk in pairs:
+            if not mid:
+                continue
+            s = dict(agg.get(mid, {"plays": 0, "previews": 0, "last_played": None}))
+            s["is_usual"] = mid in usual
+            note = stats.get_note(mid)
+            s["note"] = (note or {}).get("note")
+            s["label"] = (note or {}).get("label")
+            row["stats"] = s
+            row["media_id"] = mid
+    except Exception as e:
+        try:
+            log_message(f"stats: search enrichment failed: {e}", current_app.kj_config)
+        except Exception:
+            pass
+
+
 def _group_search_results(local_results, kn_results):
     """Collapse local + KN results into one group per normalized (artist, title).
 
@@ -650,6 +792,7 @@ def handle_play():
                      kwargs={'display_path': validated,
                              'overlay_manager': current_app.overlay_manager,
                              'audio_file': audio_file}).start()
+    _record_play_stat(validated, request.json.get('entry_id'))
     return jsonify({"success": True, "message": "Playback initiated."})
 
 
@@ -3751,6 +3894,7 @@ def rotation_search():
         return jsonify({"error": "Query must be at least 3 characters"}), 400
 
     result = unified_search(query, current_app._get_current_object())
+    _enrich_search_stats(result)
 
     # Back-compat shape: legacy response omitted the timeout flag when False,
     # and placed it at the top level when True. Preserve that.
@@ -4573,7 +4717,9 @@ def preview_resolve():
     descriptor = request.get_json(silent=True) or {}
     if not isinstance(descriptor, dict):
         return jsonify({"mode": "unavailable", "reason": "Invalid request"}), 400
-    return jsonify(current_app.preview.resolve(descriptor))
+    result = current_app.preview.resolve(descriptor)
+    _record_preview_stat(descriptor)
+    return jsonify(result)
 
 
 @routes_bp.route('/preview/close', methods=['POST'])
@@ -4654,3 +4800,51 @@ def preview_hls(token, name):
         return ("Not found", 404)
     mime = "application/vnd.apple.mpegurl" if name.endswith(".m3u8") else "video/mp2t"
     return send_file(p, mimetype=mime, conditional=True)
+
+
+@routes_bp.route('/media/note', methods=['POST'])
+def media_note():
+    data = request.get_json(silent=True) or {}
+    media_id = (data.get('media_id') or '').strip()
+    if not media_id:
+        return jsonify({"error": "media_id is required"}), 400
+    stats = getattr(current_app, 'stats', None)
+    if not stats:
+        return jsonify({"error": "stats unavailable"}), 503
+    note = stats.upsert_note(
+        media_id, data.get('note') or '', (data.get('label') or '').strip() or None,
+        artist=data.get('artist'), title=data.get('title'))
+    return jsonify({"note": note})
+
+
+@routes_bp.route('/media/note-labels', methods=['GET'])
+def media_note_labels():
+    stats = getattr(current_app, 'stats', None)
+    return jsonify({"labels": stats.distinct_labels() if stats else []})
+
+
+@routes_bp.route('/stats/top-songs', methods=['GET'])
+def stats_top_songs():
+    stats = getattr(current_app, 'stats', None)
+    if not stats:
+        return jsonify({"songs": []})
+    singer = request.args.get('singer') or None
+    since = request.args.get('since') or None
+    try:
+        limit = max(1, min(int(request.args.get('limit', 10)), 100))
+    except (TypeError, ValueError):
+        limit = 10
+    return jsonify({"songs": stats.top_songs(singer=singer, since=since, limit=limit)})
+
+
+@routes_bp.route('/stats/singers', methods=['GET'])
+def stats_singers():
+    stats = getattr(current_app, 'stats', None)
+    if not stats:
+        return jsonify({"singers": []})
+    since = request.args.get('since') or None
+    try:
+        limit = max(1, min(int(request.args.get('limit', 50)), 200))
+    except (TypeError, ValueError):
+        limit = 50
+    return jsonify({"singers": stats.top_singers(since=since, limit=limit)})

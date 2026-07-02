@@ -1065,6 +1065,12 @@ body {
     background-color: rgba(59, 130, 246, 0.2) !important; color: #60a5fa !important;
 }
 .db-modal-content { max-width: 520px; }
+.stats-modal-content { max-width: 520px; }
+.stats-controls { display: flex; gap: .5rem; align-items: center; margin-bottom: .75rem; flex-wrap: wrap; }
+.stats-controls label { display: flex; align-items: center; gap: .35rem; font-size: 0.85em; color: #999; }
+.stats-list { margin: .25rem 0 1rem; padding-left: 1.5rem; }
+.stats-list li { padding: .15rem 0; }
+.stats-list li.muted { color: #666; list-style: none; margin-left: -1.5rem; }
 .db-progress-bar {
     height: 8px; background: #222; border-radius: 4px; margin: 8px 0; overflow: hidden;
 }
@@ -3714,3 +3720,13 @@ li.media-no-audio {
 }
 .media-edit-save { background: #2d6a4f; color: #fff; border-color: #2d6a4f; }
 .media-edit-cancel { background: rgba(255,255,255,0.06); color: #ccc; }
+
+.rs-stats { display: inline-flex; gap: .3rem; align-items: center; margin: 0 .4rem; }
+.rs-stat { font-size: .8em; white-space: nowrap; }
+.rs-usual { color: #ffcf4d; }
+.rs-plays { color: #7fd1a1; font-variant-numeric: tabular-nums; }
+.rs-prev { color: #9aa4b2; }
+.rs-label { background: #2b3442; border-radius: 4px; padding: 0 .35rem; }
+.rs-note { cursor: help; }
+.rs-note-edit { cursor: pointer; opacity: .6; }
+.rs-note-edit:hover { opacity: 1; }

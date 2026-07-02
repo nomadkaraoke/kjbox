@@ -82,6 +82,7 @@
                         <button class="rotation-refresh-btn" onclick="fetchRotation()" title="Refresh the rotation list from the server">Refresh</button>
                         <button class="rotation-add-btn" onclick="toggleRotationAddForm()" title="Add a new singer and song to the rotation queue">+ Add</button>
                         <button class="rotation-requests-btn" onclick="openSingRequestsModal()" title="Manage public request form (QR, token, kill switch)">Requests <span id="pending-count-badge" class="pending-count-badge hidden">0</span></button>
+                        <button class="rotation-stats-btn" onclick="openStatsModal()" title="View top songs and top singers leaderboard">Song Stats</button>
                         <button class="rotation-new-btn" onclick="archiveRotation()" title="Archive tonight's rotation and start fresh for a new event">New Rotation</button>
                     </div>
                 </div>
@@ -1059,6 +1060,43 @@
                 <span class="download-spinner"></span> Loading status&hellip;
             </div>
             <div id="db-modal-body" class="hidden"></div>
+        </div>
+    </div>
+
+    <!-- Song/Singer Stats Modal -->
+    <div id="stats-modal" class="modal-backdrop hidden" onclick="if(event.target===this) closeStatsModal()">
+        <div class="modal-content stats-modal-content">
+            <div class="modal-header">
+                <h3>Song Stats</h3>
+                <button class="modal-close" onclick="closeStatsModal()">&times;</button>
+            </div>
+            <div class="stats-controls">
+                <label>Since <input type="date" id="statsSince"></label>
+                <input type="text" id="statsSinger" list="statsSingerList" placeholder="Filter by singer&hellip;">
+                <datalist id="statsSingerList"></datalist>
+                <button id="statsRefresh">Refresh</button>
+            </div>
+            <h4>Top songs</h4>
+            <ol id="statsTopSongs" class="stats-list"></ol>
+            <h4>Top singers</h4>
+            <ol id="statsTopSingers" class="stats-list"></ol>
+        </div>
+    </div>
+
+    <!-- Version Note Modal (per media_id note + label, from rotation-search row ✎) -->
+    <div id="note-modal" class="modal-backdrop hidden" onclick="if(event.target===this) closeNoteModal()">
+        <div class="modal-content note-modal-content">
+            <div class="modal-header">
+                <h3>Version Note</h3>
+                <button class="modal-close" onclick="closeNoteModal()">&times;</button>
+            </div>
+            <label>Label <input type="text" id="noteLabel" list="noteLabelList" placeholder="e.g. Best quality"></label>
+            <datalist id="noteLabelList"></datalist>
+            <label>Note <textarea id="noteText" rows="4" placeholder="Notes about this version&hellip;"></textarea></label>
+            <div class="note-modal-actions">
+                <button id="noteCancelBtn" onclick="closeNoteModal()">Cancel</button>
+                <button id="noteSaveBtn" onclick="saveNote()">Save</button>
+            </div>
         </div>
     </div>
 
