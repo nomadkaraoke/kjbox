@@ -143,3 +143,79 @@ def test_rotation_search_enriches_stats(flask_test_client, monkeypatch):
     assert row["stats"]["plays"] == 1
     assert row["stats"]["is_usual"] is True
     assert row["media_id"] == "gen-abcd1234"
+
+
+# --- SSD/library lazy materialization (design D3) ---
+import routes as _routes_mod
+
+
+class _FakeCatalogByPath:
+    def __init__(self, rows):
+        self.rows = rows
+    def get_by_path(self, p):
+        return self.rows.get(p)
+
+
+def _library_setup(tmp_path, monkeypatch):
+    """Real store + real file under a fake mount; run_async made synchronous."""
+    import os as _os
+    from flask import current_app
+    from media_library import MediaLibraryStore
+    mount = str(tmp_path / "ssd")
+    p = str(tmp_path / "ssd" / "Discs" / "SC1 - ABBA - SOS.zip")
+    _os.makedirs(_os.path.dirname(p), exist_ok=True)
+    with open(p, "wb") as fh:
+        fh.write(b"zipbytes")
+    current_app.kj_config = {"external_media_mount": mount}
+    current_app.media_library = MediaLibraryStore(":memory:")
+    current_app.catalog = _FakeCatalogByPath(
+        {p: {"artist": "ABBA", "title": "SOS", "disc_id": "SC1"}})
+    monkeypatch.setattr(_routes_mod.library_media, "run_async",
+                        lambda target, *a: target(*a))
+    return p
+
+
+def test_record_play_stat_materializes_library_row(app_ctx, tmp_path, monkeypatch):
+    from flask import current_app
+    p = _library_setup(tmp_path, monkeypatch)
+    current_app.stats = _FakeStats()
+    current_app.rotation = _FakeRotation()
+    routes._record_play_stat(p, 42)
+    mid, kw = current_app.stats.plays[0]
+    assert mid.startswith("lib-")
+    assert kw["entry_id"] == 42 and kw["singer"] == "Celeste"
+    assert kw["artist"] == "ABBA" and kw["title"] == "SOS"
+    row = current_app.media_library.get_by_path(p)
+    assert row and row["source"] == "library"
+
+
+def test_record_play_stat_non_library_unresolved_still_noop(app_ctx, tmp_path, monkeypatch):
+    from flask import current_app
+    _library_setup(tmp_path, monkeypatch)
+    current_app.stats = _FakeStats()
+    current_app.rotation = None
+    routes._record_play_stat("/opt/nomad/downloads/unknown.mp4", None)
+    assert current_app.stats.plays == []
+
+
+def test_record_preview_stat_materializes_library_row(app_ctx, tmp_path, monkeypatch):
+    from flask import current_app
+    p = _library_setup(tmp_path, monkeypatch)
+    current_app.stats = _FakePreviewStats()
+    routes._record_preview_stat({"source": "local", "file_path": p})
+    mid, kw = current_app.stats.previews[0]
+    assert mid.startswith("lib-") and kw["artist"] == "ABBA"
+
+
+def test_resolve_row_media_id_never_hashes_library_paths(app_ctx, tmp_path, monkeypatch):
+    """Search enrichment must stay pure — an untouched SSD row resolves to None."""
+    from flask import current_app
+    p = _library_setup(tmp_path, monkeypatch)
+
+    def boom(_):
+        raise AssertionError("search enrichment must not hash")
+
+    import library_media as _lm
+    monkeypatch.setattr(_lm, "content_hash", boom)
+    assert routes.resolve_row_media_id({"path": p}, "local", current_app.media_library) is None
+    assert current_app.media_library.get_by_path(p) is None

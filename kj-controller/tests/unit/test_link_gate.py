@@ -117,3 +117,40 @@ class TestLinkPlayabilityGate:
                 content_type="application/json",
             )
         enq.assert_not_called()
+
+
+class TestLinkLibraryMaterialization:
+    """Linking an SSD path schedules background identity materialization (D3.3)."""
+
+    def test_link_materializes_library_row_async(self, gate_client, mock_rotation):
+        import routes
+        good_result = types.SimpleNamespace(verdict={"overall_ok": True, "reasons": []})
+        gate_client.application.kj_config["external_media_mount"] = "/media/nomad/Nomad4TBOne"
+        with patch("routes._playability_gate", return_value=good_result), \
+             patch("routes._resolve_or_create_rotation_entry_id", return_value=(1, None)), \
+             patch("routes._enqueue_tier2"), \
+             patch("routes.library_media.run_async") as run_async:
+            resp = gate_client.post(
+                "/rotation/link",
+                data=json.dumps({"id": 1,
+                                 "file_path": "/media/nomad/Nomad4TBOne/Discs/a.zip"}),
+                content_type="application/json",
+            )
+        assert resp.status_code == 200
+        args = run_async.call_args[0]
+        assert args[0] is routes.library_media.ensure_library_row_for_app
+        assert args[2] == "/media/nomad/Nomad4TBOne/Discs/a.zip"
+
+    def test_link_non_library_path_no_materialization(self, gate_client, mock_rotation):
+        good_result = types.SimpleNamespace(verdict={"overall_ok": True, "reasons": []})
+        gate_client.application.kj_config["external_media_mount"] = "/media/nomad/Nomad4TBOne"
+        with patch("routes._playability_gate", return_value=good_result), \
+             patch("routes._resolve_or_create_rotation_entry_id", return_value=(1, None)), \
+             patch("routes._enqueue_tier2"), \
+             patch("routes.library_media.run_async") as run_async:
+            gate_client.post(
+                "/rotation/link",
+                data=json.dumps({"id": 1, "file_path": "/opt/nomad/downloads/a.mp4"}),
+                content_type="application/json",
+            )
+        run_async.assert_not_called()
