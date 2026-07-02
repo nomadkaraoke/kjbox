@@ -78,6 +78,32 @@ class GenClient:
         resp.raise_for_status()
         return resp.json()
 
+    PARSE_TIMEOUT = 60
+
+    def parse_titles(self, items):
+        """Parse a batch of karaoke filenames -> [{id, artist, title, confidence}].
+
+        Returns the results list on success, or None on ANY failure (offline,
+        timeout, missing/undeployed endpoint, bad status) so the caller keeps
+        its deterministic guess. Empty input short-circuits to [].
+        """
+        if not items:
+            return []
+        try:
+            resp = requests.post(
+                f"{self.api_url}/api/parse-karaoke-titles",
+                json={"items": items},
+                headers=self._headers(),
+                timeout=self.PARSE_TIMEOUT,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            results = data.get("results")
+            return results if isinstance(results, list) else None
+        except Exception as e:
+            logger.warning("parse_titles failed (offline?): %s", e)
+            return None
+
     def get_download_url(self, job_id, quality="lossy_720p_mp4"):
         """Get download URL for a completed job.
 

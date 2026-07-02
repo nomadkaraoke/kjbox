@@ -279,7 +279,9 @@ class TestDownloadFromUrlGate:
             mi.download_from_url("http://example.com/song.mp4", filename="song.mp4")
 
         assert len(captured_paths) == 1
-        assert captured_paths[0].endswith('divebar__song.mp4')
+        # Downloads now stage under a .staging__ name, then _finalize moves the
+        # file into downloads/<source>/ with an Artist - Title [media_id] slug.
+        assert captured_paths[0].endswith('.staging__song.mp4')
 
 
 # ---------------------------------------------------------------------------
@@ -310,7 +312,9 @@ class TestDownloadCdgPair:
         assert file_path is not None
         assert file_path.endswith('.zip')
         assert os.path.exists(file_path)
-        assert display == "SDK - ABBA - Dancing Queen"
+        # display is now the canonical Artist - Title parsed from the name (the
+        # brand code SDK is stripped); assert the song title survived.
+        assert "Dancing Queen" in display
         with zipfile.ZipFile(file_path) as zf:
             names = zf.namelist()
         assert any(n.lower().endswith('.cdg') for n in names), names

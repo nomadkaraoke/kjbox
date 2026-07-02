@@ -48,6 +48,8 @@ def load_config(config_file=None):
         "external_file_list": "",
         "external_media_mount": "",
         "media_db_path": os.path.join(APP_DIR, "media_library.db"),
+        # LLM parse confidence gate: >= threshold clears needs_review.
+        "parse_confidence_threshold": 0.75,
         "master_sync_source": "gs://nomadkaraoke-divebar-files/files/Nomad Karaoke/MP4-720p/",
         "master_sync_dest": "",
         "master_sync_credentials_file": "",

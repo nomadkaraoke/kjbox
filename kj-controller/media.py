@@ -13,7 +13,7 @@ from config import MEDIA_EXTENSIONS, resolve_preview_cache_dir
 from utils import log_message, sanitize_filename_part, parse_youtube_filename
 from naming import (
     parse_identity, extract_media_id, media_id_for, content_hash,
-    SOURCE_UPLOAD,
+    build_slug_filename, merge_llm_result, SOURCE_UPLOAD,
 )
 
 # Rejected downloads are moved here (a subdir of the download folder) instead of
@@ -97,6 +97,65 @@ class MediaIndex:
         self.config = config
         self.index = {}
         self.media_library = media_library
+        self.gen_client = None  # attribute-injected by app.py after gen_client built
+
+    def _finalize_download_identity(self, tmp_path, *, source, source_ref,
+                                    artist_hint, title_hint, channel,
+                                    raw_name, ext):
+        """Resolve canonical identity for a freshly-downloaded file, move it to
+        <download_folder>/<source>/<slug>, and upsert media_library.
+
+        Deterministic hints first; then a best-effort LLM refine (offline / any
+        failure -> keep deterministic + needs_review=1). Returns
+        (final_path, display_name, media_id).
+        """
+        threshold = float(self.config.get("parse_confidence_threshold", 0.75) or 0.75)
+        artist0 = (artist_hint or "").strip()
+        title0 = (title_hint or "").strip()
+        if not artist0 and not title0:
+            # No caller-supplied hints (e.g. a bare upload) — best-effort split
+            # from the filename so the on-disk name isn't just "unknown".
+            det = parse_identity(raw_name)
+            artist0, title0 = (det.get("artist") or "").strip(), (det.get("title") or "").strip()
+        identity = {
+            "source": source, "source_ref": source_ref,
+            "artist": artist0, "title": title0,
+            "confidence": 0.5, "needs_review": 1, "parse_method": "deterministic",
+        }
+        if self.gen_client is not None:
+            try:
+                res = self.gen_client.parse_titles([{
+                    "id": "1", "filename": raw_name,
+                    "channel": channel or "", "source": source,
+                }])
+                llm = res[0] if res else None
+                identity = merge_llm_result(identity, llm, threshold)
+            except Exception as exc:
+                log_message(f"LLM refine failed for {raw_name}: {exc}", self.config)
+
+        media_id = media_id_for(source, source_ref)
+        dest_dir = os.path.join(self.config.get("download_folder", ""), source)
+        os.makedirs(dest_dir, exist_ok=True)
+        slug = build_slug_filename(identity["artist"], identity["title"], media_id, ext)
+        dest = os.path.join(dest_dir, slug)
+        os.replace(tmp_path, dest)
+        real_dest = os.path.realpath(dest)
+
+        display = " - ".join(
+            p for p in (identity["artist"], identity["title"]) if p) or slug
+        if self.media_library is not None:
+            try:
+                self.media_library.upsert({
+                    "media_id": media_id, "source": source, "source_ref": source_ref,
+                    "artist": identity["artist"], "title": identity["title"],
+                    "confidence": identity["confidence"],
+                    "parse_method": identity["parse_method"],
+                    "needs_review": identity["needs_review"],
+                    "raw_original_name": raw_name, "file_path": real_dest, "ext": ext,
+                })
+            except Exception as exc:
+                log_message(f"media_library upsert failed for {slug}: {exc}", self.config)
+        return real_dest, display, media_id
 
     def _resolve_media_id(self, real_path, fname):
         """Return (media_id, identity_dict) for a file.
@@ -385,8 +444,6 @@ class MediaIndex:
                 log_message(f"ERROR: Downloaded file not found for {basename}", self.config)
                 return None, None
 
-            real_path = os.path.realpath(file_path)
-
             gate = _gate_playable(file_path, self.config)
             if not gate.verdict.get("overall_ok"):
                 reason = "; ".join(gate.verdict.get("reasons") or ["not playable"])
@@ -399,20 +456,46 @@ class MediaIndex:
                     log_message(f"Quarantined to {qpath}", self.config)
                 return None, None
 
-            # Add to media index
-            stat = os.stat(real_path)
+            # Canonicalise identity: move into downloads/youtube/ with an
+            # `Artist - Title [yt-<id>]` slug + media_id, LLM-refined best-effort.
+            ext_actual = os.path.splitext(file_path)[1] or ".mp4"
+            det = parse_identity(os.path.basename(file_path))
+            old_stem = os.path.splitext(os.path.basename(file_path))[0]
+            real_dest, display, media_id = self._finalize_download_identity(
+                file_path, source="youtube", source_ref=youtube_id,
+                artist_hint=det["artist"], title_hint=det["title"],
+                channel=safe_channel, raw_name=os.path.basename(file_path),
+                ext=ext_actual)
+            # Move same-stem sidecars (thumbnail, .info.json) next to the video.
+            new_stem = os.path.splitext(real_dest)[0]
+            dest_dir = os.path.dirname(real_dest)
+            try:
+                for sib in os.listdir(download_folder):
+                    if sib.startswith(old_stem + "."):
+                        sib_ext = sib[len(old_stem):]
+                        try:
+                            os.replace(os.path.join(download_folder, sib),
+                                       os.path.join(dest_dir, os.path.basename(new_stem) + sib_ext))
+                        except OSError:
+                            pass
+            except OSError:
+                pass
+
+            # Add to media index (keyed on the final path)
+            stat = os.stat(real_dest)
             entry = {
-                "path": real_path,
-                "filename": os.path.basename(real_path),
-                "folder": os.path.realpath(download_folder),
+                "path": real_dest,
+                "filename": os.path.basename(real_dest),
+                "folder": dest_dir,
                 "size": stat.st_size,
                 "mtime": stat.st_mtime,
                 "is_download": True,
                 "youtube_id": youtube_id,
                 "channel": safe_channel,
                 "title": safe_title,
-                "display_name": safe_title,
+                "display_name": display or safe_title,
                 "original_url": youtube_url,
+                "media_id": media_id,
             }
             if duration is not None:
                 entry["duration"] = duration
@@ -420,11 +503,11 @@ class MediaIndex:
                 entry["upload_date"] = upload_date
 
             entry["playability"] = gate.verdict
-            self.index[real_path] = entry
+            self.index[real_dest] = entry
             self.save()
 
-            log_message(f"Successfully downloaded '{title}' as {os.path.basename(real_path)}", self.config)
-            return real_path, title
+            log_message(f"Successfully downloaded '{title}' as {os.path.basename(real_dest)}", self.config)
+            return real_dest, title
         except Exception as e:
             log_message(f"Error downloading video: {e}", self.config)
             return None, None
@@ -435,25 +518,31 @@ class MediaIndex:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             ydl.extract_info(url, download=True)
 
-    def download_from_url(self, url, filename=None):
-        """Downloads a file from a direct HTTP URL (e.g. Google Drive), updates media index."""
+    def download_from_url(self, url, filename=None, *, source="community",
+                          source_ref=None, artist=None, title=None, channel=None):
+        """Download a file from a direct HTTP URL (Drive/GCS/gen), canonicalise it
+        into ``<download_folder>/<source>/`` with an ``Artist - Title [media_id]``
+        slug, and index it.
+
+        ``source`` selects the subfolder + media_id scheme; ``source_ref`` is the
+        stable natural key (divebar ``brand-fileid``, gen ``job8``). When no
+        ``source_ref`` is derivable the file is treated as an ``upload`` keyed by
+        its content hash.
+        """
         download_folder = self.config.get('download_folder', os.path.expanduser("~/kjdata/videos"))
         os.makedirs(download_folder, exist_ok=True)
 
         try:
             if filename:
-                # Filename known upfront — compute file_path before downloading so
-                # _http_download receives the final destination (enables test mocking).
                 safe_name = sanitize_filename_part(os.path.splitext(filename)[0])
                 ext = os.path.splitext(filename)[1] or '.mp4'
-                final_name = f"divebar__{safe_name}{ext}"
-                file_path = os.path.join(download_folder, final_name)
-                # _http_download writes the body to file_path and returns the response.
-                self._http_download(url, file_path)
-                display_name = os.path.splitext(filename)[0]
+                display_hint = os.path.splitext(filename)[0]
+                raw_name = os.path.basename(filename)
+                # Stage in the download root (same filesystem as the source subdir
+                # so _finalize's os.replace is atomic, not a cross-device error).
+                staging = os.path.join(download_folder, f".staging__{safe_name}{ext}")
+                self._http_download(url, staging)
             else:
-                # Filename unknown — fetch response first (body not consumed) to read
-                # Content-Disposition, then stream body once file_path is known.
                 resp = self._http_download(url, None)
                 cd = resp.headers.get('Content-Disposition', '')
                 if 'filename=' in cd:
@@ -462,54 +551,63 @@ class MediaIndex:
                     filename = url.split('/')[-1].split('?')[0] or 'download'
                 safe_name = sanitize_filename_part(os.path.splitext(filename)[0])
                 ext = os.path.splitext(filename)[1] or '.mp4'
-                final_name = f"divebar__{safe_name}{ext}"
-                file_path = os.path.join(download_folder, final_name)
-                display_name = os.path.splitext(filename)[0]
-                with open(file_path, 'wb') as f:
+                display_hint = os.path.splitext(filename)[0]
+                raw_name = os.path.basename(filename)
+                staging = os.path.join(download_folder, f".staging__{safe_name}{ext}")
+                with open(staging, 'wb') as f:
                     for chunk in resp.iter_content(chunk_size=8192):
                         f.write(chunk)
 
-            gate = _gate_playable(file_path, self.config)
+            gate = _gate_playable(staging, self.config)
             if not gate.verdict.get("overall_ok"):
                 reason = "; ".join(gate.verdict.get("reasons") or ["not playable"])
-                log_message(f"Download rejected (not playable): {os.path.basename(file_path)} — {reason}", self.config)
-                # Quarantine (never delete) — an automated verdict can be wrong,
-                # so move the file + yt-dlp sidecars aside for review instead of
-                # irreversibly removing them. scan() skips the quarantine dir.
-                qpath = _quarantine_download(file_path, reason, self.config)
+                log_message(f"Download rejected (not playable): {os.path.basename(staging)} — {reason}", self.config)
+                # Quarantine (never delete) — an automated verdict can be wrong.
+                qpath = _quarantine_download(staging, reason, self.config)
                 if qpath:
                     log_message(f"Quarantined to {qpath}", self.config)
                 return None, None
 
-            real_path = os.path.realpath(file_path)
-            stat = os.stat(real_path)
+            # No natural key -> treat as a content-addressed upload.
+            if not source_ref:
+                source = SOURCE_UPLOAD
+                source_ref = content_hash(staging)
 
+            real_dest, display, media_id = self._finalize_download_identity(
+                staging, source=source, source_ref=source_ref,
+                artist_hint=artist, title_hint=title, channel=channel,
+                raw_name=raw_name, ext=ext)
+
+            stat = os.stat(real_dest)
             entry = {
-                "path": real_path,
-                "filename": os.path.basename(real_path),
-                "folder": os.path.realpath(download_folder),
+                "path": real_dest,
+                "filename": os.path.basename(real_dest),
+                "folder": os.path.dirname(real_dest),
                 "size": stat.st_size,
                 "mtime": stat.st_mtime,
                 "is_download": True,
-                "display_name": display_name,
+                "display_name": display or display_hint,
                 "original_url": url,
-                "source": "divebar",
+                "source": source,
+                "media_id": media_id,
+                "playability": gate.verdict,
             }
-
-            entry["playability"] = gate.verdict
-            self.index[real_path] = entry
+            self.index[real_dest] = entry
             self.save()
 
-            log_message(f"Successfully downloaded '{display_name}' from Divebar", self.config)
-            return real_path, display_name
+            log_message(f"Successfully downloaded '{display or display_hint}' ({source})", self.config)
+            return real_dest, display or display_hint
 
         except Exception as e:
             log_message(f"Error downloading from URL: {e}", self.config)
             return None, None
 
-    def download_cdg_pair(self, cdg_url, mp3_url, filename):
+    def download_cdg_pair(self, cdg_url, mp3_url, filename, *, source="community",
+                          source_ref=None, artist=None, title=None):
         """Download a loose CDG + its sibling audio and package them into a single
-        cdg+mp3 ``.zip`` — the playable form the rest of the pipeline expects.
+        cdg+mp3 ``.zip`` — the playable form the rest of the pipeline expects —
+        then canonicalise it into ``<download_folder>/<source>/`` with a slug +
+        media_id.
 
         Some brands (e.g. Sandell Karaoke) store a CDG's graphics and its audio as
         two separate Drive files rather than one zip, so the divebar index exposes
@@ -524,9 +622,11 @@ class MediaIndex:
         os.makedirs(download_folder, exist_ok=True)
 
         base = sanitize_filename_part(os.path.splitext(filename)[0]) if filename else "cdg-download"
-        display_name = os.path.splitext(filename)[0] if filename else base
-        final_name = f"divebar__{base}.zip"
-        file_path = os.path.join(download_folder, final_name)
+        display_hint = os.path.splitext(filename)[0] if filename else base
+        raw_name = os.path.basename(filename) if filename else base + ".zip"
+        # Stage the zip in the download root (same filesystem as the source subdir
+        # so _finalize's os.replace is atomic, not a cross-device error).
+        staging = os.path.join(download_folder, f".staging__{base}.zip")
 
         # Stage the two members in a system temp dir (NOT the download folder, so a
         # concurrent scan() can never index the loose cdg/mp3 before they're zipped).
@@ -540,44 +640,54 @@ class MediaIndex:
 
             # Store (not deflate): .cdg/.mp3 are already compact, and the zip play
             # path only needs to read the members back out.
-            with zipfile.ZipFile(file_path, 'w', zipfile.ZIP_STORED) as zf:
+            with zipfile.ZipFile(staging, 'w', zipfile.ZIP_STORED) as zf:
                 zf.write(cdg_tmp, arcname=os.path.basename(cdg_tmp))
                 zf.write(mp3_tmp, arcname=os.path.basename(mp3_tmp))
 
-            gate = _gate_playable(file_path, self.config)
+            gate = _gate_playable(staging, self.config)
             if not gate.verdict.get("overall_ok"):
                 reason = "; ".join(gate.verdict.get("reasons") or ["not playable"])
-                log_message(f"Download rejected (not playable): {os.path.basename(file_path)} — {reason}", self.config)
-                qpath = _quarantine_download(file_path, reason, self.config)
+                log_message(f"Download rejected (not playable): {os.path.basename(staging)} — {reason}", self.config)
+                qpath = _quarantine_download(staging, reason, self.config)
                 if qpath:
                     log_message(f"Quarantined to {qpath}", self.config)
                 return None, None
 
-            real_path = os.path.realpath(file_path)
-            stat = os.stat(real_path)
+            # No natural key -> treat as a content-addressed upload.
+            if not source_ref:
+                source = SOURCE_UPLOAD
+                source_ref = content_hash(staging)
+
+            real_dest, display, media_id = self._finalize_download_identity(
+                staging, source=source, source_ref=source_ref,
+                artist_hint=artist, title_hint=title, channel=None,
+                raw_name=raw_name, ext=".zip")
+
+            stat = os.stat(real_dest)
             entry = {
-                "path": real_path,
-                "filename": os.path.basename(real_path),
-                "folder": os.path.realpath(download_folder),
+                "path": real_dest,
+                "filename": os.path.basename(real_dest),
+                "folder": os.path.dirname(real_dest),
                 "size": stat.st_size,
                 "mtime": stat.st_mtime,
                 "is_download": True,
-                "display_name": display_name,
+                "display_name": display or display_hint,
                 "original_url": cdg_url,
-                "source": "divebar",
+                "source": source,
+                "media_id": media_id,
                 "playability": gate.verdict,
             }
-            self.index[real_path] = entry
+            self.index[real_dest] = entry
             self.save()
-            log_message(f"Successfully downloaded '{display_name}' (cdg+mp3 zip) from Divebar", self.config)
-            return real_path, display_name
+            log_message(f"Successfully downloaded '{display or display_hint}' (cdg+mp3 zip, {source})", self.config)
+            return real_dest, display or display_hint
 
         except Exception as e:
             log_message(f"Error downloading CDG pair from URL: {e}", self.config)
-            # Remove any partial/failed zip so it can't be picked up later.
+            # Remove any partial/failed staging zip so it can't be picked up later.
             try:
-                if os.path.exists(file_path):
-                    os.remove(file_path)
+                if os.path.exists(staging):
+                    os.remove(staging)
             except OSError:
                 pass
             return None, None

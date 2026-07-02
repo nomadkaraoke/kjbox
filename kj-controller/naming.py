@@ -8,6 +8,7 @@ low-confidence results; this module never calls the network.
 import hashlib
 import os
 import re
+from urllib.parse import urlparse, parse_qs
 
 from utils import parse_youtube_filename, sanitize_filename_part
 from catalog import parse_karaoke_filename
@@ -164,3 +165,60 @@ def parse_identity(filename, channel=None):
         "artist": artist, "title": title,
         "confidence": 0.3, "needs_review": 1, "parse_method": "deterministic",
     }
+
+
+_YT_ID_RE = re.compile(r"[A-Za-z0-9_-]{11}")
+
+
+def youtube_id_from_url(url):
+    """Extract an 11-char YouTube video id from a watch/youtu.be/shorts/embed URL."""
+    if not url:
+        return None
+    try:
+        u = urlparse(url)
+    except (ValueError, TypeError):
+        return None
+    host = (u.hostname or "").lower()
+    if host.endswith("youtu.be"):
+        cand = u.path.lstrip("/").split("/")[0]
+        return cand if _YT_ID_RE.fullmatch(cand) else None
+    if "youtube" in host:
+        qs = parse_qs(u.query or "")
+        if qs.get("v") and _YT_ID_RE.fullmatch(qs["v"][0]):
+            return qs["v"][0]
+        for seg in ("shorts", "embed"):
+            marker = f"/{seg}/"
+            if marker in u.path:
+                cand = u.path.split(marker, 1)[1].split("/")[0]
+                return cand if _YT_ID_RE.fullmatch(cand) else None
+    return None
+
+
+def merge_llm_result(deterministic, llm, threshold):
+    """Fold an LLM parse result into a deterministic identity behind a gate.
+
+    llm falsy or empty (no artist and no title) -> return deterministic as-is.
+    Otherwise take the LLM's artist/title/confidence, mark parse_method='llm',
+    and set needs_review from the confidence gate. Identity fields (source,
+    source_ref) always come from the deterministic pass.
+    """
+    if not llm:
+        return deterministic
+    artist = (llm.get("artist") or "").strip()
+    title = (llm.get("title") or "").strip()
+    if not artist and not title:
+        return deterministic
+    conf = llm.get("confidence")
+    try:
+        conf = float(conf)
+    except (TypeError, ValueError):
+        conf = 0.0
+    out = dict(deterministic)
+    # Preserve the deterministic value for any field the LLM left blank (a
+    # partial result must not wipe a good deterministic artist/title).
+    out["artist"] = artist or deterministic.get("artist", "")
+    out["title"] = title or deterministic.get("title", "")
+    out["confidence"] = conf
+    out["parse_method"] = "llm"
+    out["needs_review"] = 0 if conf >= threshold else 1
+    return out

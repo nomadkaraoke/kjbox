@@ -485,5 +485,6 @@ class TestDownloadAndLinkCdgPairing:
         routes._download_worker(dl_app)
 
         dl_app.media.download_cdg_pair.assert_called_once_with(
-            'http://gcs/cdg', 'http://gcs/mp3', filename='SDK - ABBA - Dancing Queen.zip')
+            'http://gcs/cdg', 'http://gcs/mp3', filename='SDK - ABBA - Dancing Queen.zip',
+            source='community', source_ref=None, artist=None, title=None)
         dl_app.media.download_from_url.assert_not_called()

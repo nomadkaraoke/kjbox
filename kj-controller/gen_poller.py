@@ -64,7 +64,9 @@ class GenPoller:
             name_parts = [p for p in [f"GEN-{job_id[:8]}", artist, title] if p]
             filename = " - ".join(name_parts) + ".mp4"
 
-            file_path, _ = self.media.download_from_url(download_url, filename=filename)
+            file_path, _ = self.media.download_from_url(
+                download_url, filename=filename,
+                source="gen", source_ref=job_id[:8], artist=artist, title=title)
             if file_path:
                 self.rotation.complete_gen_job(job_id, file_path)
                 logger.info("Gen job %s: downloaded and linked %s", job_id, file_path)
