@@ -19,7 +19,15 @@
     <div class="main-layout">
         <div class="column" id="col1">
             <div class="container playback-controls">
-                <h2>Playback Controls</h2>
+                <div class="header-row">
+                    <h2>Playback Controls</h2>
+                    <div class="mode-segmented mode-segmented-compact" id="mode-segmented" role="group" aria-label="KJ mode">
+                        <button type="button" class="mode-seg" id="mode-seg-simple"
+                                onclick="setKjMode('simple')" aria-pressed="false">Simple</button>
+                        <button type="button" class="mode-seg mode-seg-active" id="mode-seg-advanced"
+                                onclick="setKjMode('advanced')" aria-pressed="true">Advanced</button>
+                    </div>
+                </div>
                 <div id="np-info" class="np-info">
                     <div class="np-info-row">
                         <span class="np-state" id="np-state"></span>
@@ -55,6 +63,10 @@
                 <div>
                     <label for="filler-volume">Filler Volume: <span id="filler-volume-label" class="range-label">{{ ((config.get('filler_volume', 100) / 256 * 100) | round | int) }}%</span></label>
                     <input type="range" id="filler-volume" class="volume-slider" min="0" max="256" value="{{ config.get('filler_volume', 100) }}" oninput="updateFillerVolume(this.value)">
+                </div>
+                <div id="status-bar">
+                    <strong>Status:</strong> <span id="player-state">Unknown</span> |
+                    <strong>Filler:</strong> <span id="current-filler">wii.mp3</span>
                 </div>
             </div>
             <div class="container rotation-panel">
@@ -175,16 +187,6 @@
             <div class="container system-controls">
                 <h2>System</h2>
 
-                <div class="system-subsection" id="kj-mode-section">
-                    <div class="system-subsection-label">Mode</div>
-                    <div class="mode-segmented" id="mode-segmented" role="group" aria-label="KJ mode">
-                        <button type="button" class="mode-seg" id="mode-seg-simple"
-                                onclick="setKjMode('simple')" aria-pressed="false">Simple</button>
-                        <button type="button" class="mode-seg mode-seg-active" id="mode-seg-advanced"
-                                onclick="setKjMode('advanced')" aria-pressed="true">Advanced</button>
-                    </div>
-                </div>
-
                 <div class="system-subsection">
                     <div class="system-subsection-label">Media & Output</div>
                     <div class="controls-row">
@@ -267,10 +269,6 @@
                 <div id="system-overlay" class="system-overlay hidden">
                     <span class="download-spinner"></span>
                     <span id="system-overlay-msg"></span>
-                </div>
-                <div id="status-bar">
-                    <strong>Status:</strong> <span id="player-state">Unknown</span> |
-                    <strong>Filler:</strong> <span id="current-filler">wii.mp3</span>
                 </div>
                 <div id="log-area"></div>
             </div>
