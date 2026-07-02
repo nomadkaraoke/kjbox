@@ -59,7 +59,7 @@ def _seed_request_and_link(app, *, phone="843-259-4507", singer="Celeste",
     )
     # Link to a rotation entry directly (skip the approve route's KN/divebar
     # plumbing — we just need the linked_entry_id for the SMS resolver).
-    entry = app.rotation.add_entry(singer, f"{song_title} - {song_artist}")
+    entry = app.rotation.add_entry(singer, f"{song_artist} - {song_title}")
     app.sing_store.mark_approved(req["id"], linked_entry_id=entry["id"])
     return req["id"], entry["id"]
 

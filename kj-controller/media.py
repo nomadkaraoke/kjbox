@@ -336,6 +336,19 @@ class MediaIndex:
         """Return media index as a list of dicts with display info, sorted by mtime desc."""
         from utils import media_type_label
         from playability import sibling_cdg_audio
+
+        # Batch-load the canonical media_library once (one query, then in-memory
+        # lookups) so Available Songs shows canonical Artist/Title + review state.
+        lib_by_id, lib_by_path = {}, {}
+        if self.media_library is not None:
+            try:
+                for r in self.media_library.list_records():
+                    lib_by_id[r["media_id"]] = r
+                    if r.get("file_path"):
+                        lib_by_path[r["file_path"]] = r
+            except Exception as exc:
+                log_message(f"media_library load for list_items failed: {exc}", self.config)
+
         items = []
         for path, entry in self.index.items():
             folder = entry.get('folder', '')
@@ -362,6 +375,22 @@ class MediaIndex:
                 item["youtube_id"] = entry["youtube_id"]
             if "duration" in entry:
                 item["duration"] = entry["duration"]
+
+            # Join canonical media_library identity (by media_id token, else path).
+            mid = entry.get("media_id")
+            row = lib_by_id.get(mid) if mid else None
+            if row is None:
+                row = lib_by_path.get(entry["path"])
+            if row:
+                item["media_id"] = row["media_id"]
+                item["artist"] = row.get("artist", "") or ""
+                item["title"] = row.get("title", "") or ""
+                item["source"] = row.get("source", "") or ""
+                item["confidence"] = row.get("confidence")
+                item["needs_review"] = int(row.get("needs_review", 0) or 0)
+                canon = " - ".join(p for p in (item["artist"], item["title"]) if p)
+                if canon:
+                    item["display_name"] = canon
             items.append(item)
 
         items.sort(key=lambda x: x['mtime'], reverse=True)

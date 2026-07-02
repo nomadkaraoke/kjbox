@@ -781,6 +781,33 @@ def list_media():
     return jsonify(current_app.media.list_items())
 
 
+@routes_bp.route('/media/metadata', methods=['POST'])
+def set_media_metadata():
+    """Set canonical Artist/Title for a media_library row (Available Songs edit).
+
+    Marks the row user-confirmed (parse_method='manual', confidence cleared,
+    needs_review=0) and recomputes the *_norm fields for search/dedup.
+    """
+    data = request.get_json(force=True) or {}
+    media_id = (data.get('media_id') or '').strip()
+    artist = (data.get('artist') or '').strip()
+    title = (data.get('title') or '').strip()
+    if not media_id:
+        return jsonify({"error": "media_id is required"}), 400
+    if not artist and not title:
+        return jsonify({"error": "artist or title is required"}), 400
+    store = getattr(current_app, 'media_library', None)
+    if store is None:
+        return jsonify({"error": "media library not configured"}), 503
+    existing = store.get(media_id)
+    if existing is None:
+        return jsonify({"error": "media_id not found"}), 404
+    # Preserve a field the caller left blank rather than wiping the existing value.
+    store.set_metadata(media_id, artist or existing.get("artist", ""),
+                       title or existing.get("title", ""))
+    return jsonify({"success": True, "record": store.get(media_id)})
+
+
 @routes_bp.route('/delete', methods=['POST'])
 def delete_media():
     """Deletes a media file (only from download folder)."""
@@ -3035,16 +3062,21 @@ def _resolve_sms_target(entry_id):
     # Split "Andrew B." → "Andrew" for the {first_name} variable.
     first_name = (req_row["singer_name"] or "").split()[0] if req_row["singer_name"] else ""
 
-    # Prefer the sing_request's structured song/title since the rotation
-    # entry's song_artist is "Song - Artist" formatted. Fall back to the
-    # rotation entry if the request didn't carry structured fields.
+    # Prefer the sing_request's structured song/title. Fall back to the rotation
+    # entry if the request didn't carry structured fields. Rotation song_artist is
+    # "Artist - Title" (P3 flip).
     song = (req_row["song_title"] or "").strip()
     artist = (req_row["song_artist"] or "").strip()
-    if not song and entry.get("song_artist"):
-        # Rotation entries are typically "Title - Artist".
+    if (not song or not artist) and entry.get("song_artist"):
         parts = entry["song_artist"].split(" - ", 1)
-        song = parts[0].strip()
-        artist = parts[1].strip() if len(parts) > 1 else ""
+        if len(parts) > 1:
+            if not artist:
+                artist = parts[0].strip()
+            if not song:
+                song = parts[1].strip()
+        elif not song:
+            # No separator — treat the whole string as the song title.
+            song = parts[0].strip()
 
     return {
         "entry": entry,
@@ -3879,7 +3911,7 @@ def make_rotation_entry():
 
     # Get or create rotation entry
     entry_id, err = _resolve_or_create_rotation_entry_id(
-        data, rotation, song_artist_fallback=f"{title} - {artist}"
+        data, rotation, song_artist_fallback=f"{artist} - {title}"
     )
     if err:
         return err

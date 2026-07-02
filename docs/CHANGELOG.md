@@ -2,6 +2,23 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-07-02 - Download-naming Phase 3: canonical Artist - Title everywhere (v0.53.0)
+
+**Why:** P1/P2 built the canonical media-identity store + download renaming; P3 surfaces it in
+the UI and flips the rotation display order to a consistent `Artist - Title`.
+
+**What (frontend — takes effect on browser refresh; backend bits need a restart):**
+- **Rotation `Artist - Title` flip (req C):** rotation-search row builders (KN, local, divebar) now
+  write `song_artist` as `Artist - Title` (was `Title - Artist`). Backend consumers flipped to match:
+  `_resolve_sms_target` fallback split and the `song_artist_fallback` in download-and-link. Existing
+  rows' `song_artist` display is verbatim (cosmetic order only); the SMS fallback is rarely hit
+  (structured request fields win).
+- **Available Songs canonical names + review/edit:** `list_items` now joins `media_library` so rows
+  show canonical `Artist - Title` (not the raw filename) + `source`/`needs_review`. New inline ✎ editor
+  (Artist + Title) posts to **`POST /media/metadata`** (marks the row user-confirmed:
+  `parse_method='manual'`, `needs_review=0`, recomputes `*_norm`). A **"Needs review"** filter button
+  shows only auto-parsed rows awaiting confirmation; an amber `review` tag marks them.
+
 ## 2026-07-02 - Divebar status dot fix + unified header toolbar buttons (v0.52.1)
 
 **Why:** The "Search Divebar Karaoke" status dot stayed grey even when the catalog
