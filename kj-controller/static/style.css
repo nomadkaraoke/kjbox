@@ -822,6 +822,7 @@ body {
     gap: 6px;
     margin-top: 6px;
     align-items: center;
+    flex-wrap: wrap;
 }
 .vnc-btn {
     font-size: 0.7em;

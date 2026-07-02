@@ -226,7 +226,7 @@
             </div>
             <div class="container" id="vnc-preview-container">
                 <div class="header-row">
-                    <h2>Screen Preview</h2>
+                    <h2>Screen Preview<span id="vnc-status-dot" class="yt-health-dot" title="Screen preview status"></span></h2>
                     <div class="header-actions vnc-size-buttons">
                         <button class="vnc-size-btn vnc-hide-btn" onclick="hideVncPreview()" title="Hide preview and disconnect">Hide</button>
                         <button class="vnc-size-btn" onclick="setVncSize('200px')" title="200px wide">200px</button>
@@ -244,10 +244,10 @@
                 </div>
                 <div id="vnc-controls" class="vnc-controls hidden">
                     <button class="vnc-btn" onclick="disconnectVnc()">Disconnect</button>
+                    <button class="vnc-btn vnc-interactive-toggle" onclick="toggleInteractive()">Interactive: OFF</button>
                     <a class="vnc-forget-link" onclick="forgetVncPassword()">Forget password</a>
                 </div>
                 <div id="vnc-interactive-controls" class="vnc-interactive-controls hidden">
-                    <button class="vnc-btn vnc-interactive-toggle" onclick="toggleInteractive()">Interactive: OFF</button>
                     <div id="vnc-keyboard-input" class="vnc-keyboard-input hidden">
                         <input type="text" id="vnc-type-input" placeholder="Type text to send..."
                                onkeydown="if(event.key === 'Enter') { event.preventDefault(); sendVncText(); }">
@@ -876,6 +876,7 @@
         let interactiveMode = false;
 
         const statusEl = document.getElementById('vnc-status');
+        const statusDot = document.getElementById('vnc-status-dot');
         const passwordForm = document.getElementById('vnc-password-form');
         const passwordInput = document.getElementById('vnc-password');
         const controlsEl = document.getElementById('vnc-controls');
@@ -883,6 +884,18 @@
         function setStatus(text, cls) {
             statusEl.textContent = text;
             statusEl.className = 'vnc-status' + (cls ? ' ' + cls : '');
+            // Header status dot mirrors connection state (same .yt-health-dot
+            // pattern other sections use): green connected, red error, amber
+            // connecting, grey otherwise. When connected the dot stands in for
+            // the "Connected" text, so hide the now-redundant text line.
+            if (statusDot) {
+                const dot = cls === 'connected' ? ' yt-dot-ok'
+                    : cls === 'error' ? ' yt-dot-error'
+                    : text.indexOf('Connecting') === 0 ? ' yt-dot-warn' : '';
+                statusDot.className = 'yt-health-dot' + dot;
+                statusDot.title = 'Screen preview: ' + text;
+            }
+            statusEl.classList.toggle('hidden', cls === 'connected');
         }
 
         function showPasswordForm() {
