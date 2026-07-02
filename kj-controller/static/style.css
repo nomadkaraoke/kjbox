@@ -3770,3 +3770,41 @@ li.media-no-audio {
 .rs-note { cursor: help; }
 .rs-note-edit { cursor: pointer; opacity: .6; }
 .rs-note-edit:hover { opacity: 1; }
+
+/* ===== Song Stats section ===== */
+.stats-overview { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 12px; }
+.stat-card {
+    background: #222; border: 1px solid #444; border-radius: 6px;
+    padding: 6px 12px; min-width: 68px; text-align: center; flex: 0 0 auto;
+}
+.stat-card-val { font-size: 1.25em; font-weight: 600; color: #fff; }
+.stat-card-label { font-size: 0.72em; color: #aaa; text-transform: uppercase; letter-spacing: 0.03em; }
+.stats-filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 8px; }
+.stats-filters input[type="text"], .stats-filters input[type="date"] {
+    background: #1a1a1a; border: 1px solid #444; color: #ddd; border-radius: 4px; padding: 4px 8px;
+}
+.stats-range { display: inline-flex; border: 1px solid #444; border-radius: 6px; overflow: hidden; }
+.stats-range-btn, .stats-seg-btn {
+    background: transparent; color: #bbb; border: 0; padding: 4px 12px; cursor: pointer;
+    font-size: 0.8em; font-weight: 500;
+}
+.stats-range-btn + .stats-range-btn { border-left: 1px solid #444; }
+.stats-range-btn:hover, .stats-seg-btn:hover { color: #ddd; background: rgba(255, 255, 255, 0.04); }
+.stats-range-active, .stats-seg-active { color: #fff; background: #3a3a3a; }
+.stats-seg { display: inline-flex; border: 1px solid #444; border-radius: 6px; overflow: hidden; margin-bottom: 8px; }
+.stats-seg-btn + .stats-seg-btn { border-left: 1px solid #444; }
+.stats-body { max-height: 40vh; overflow-y: auto; }
+.stats-row {
+    display: flex; align-items: center; gap: 8px; padding: 6px 8px;
+    border-bottom: 1px solid #2a2a2a; cursor: pointer;
+}
+.stats-row:hover { background: rgba(255, 255, 255, 0.03); }
+.stats-row-rank { color: #888; min-width: 1.6em; text-align: right; }
+.stats-row-main { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stats-row-count { color: #ccc; flex: 0 0 auto; font-size: 0.85em; }
+.stats-drill { padding: 4px 8px 8px 2.4em; background: #191919; border-bottom: 1px solid #2a2a2a; }
+.stats-drill .stats-subrow { display: flex; gap: 8px; padding: 3px 0; color: #bbb; font-size: 0.85em; cursor: pointer; }
+.stats-drill .stats-subrow:hover { color: #ddd; }
+.stats-fun { color: #f5a; font-size: 0.85em; padding: 4px 8px; }
+.stats-badge-busy { color: #f80; font-size: 0.8em; margin-left: 6px; }
+.stats-muted { color: #777; padding: 8px; }

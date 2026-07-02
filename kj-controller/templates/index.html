@@ -84,7 +84,6 @@
                         <button id="rotation-paths-btn" class="rotation-paths-btn" onclick="toggleRotationFilePaths()" title="Show/hide file paths under each rotation entry">📁 Paths</button>
                         <button class="rotation-refresh-btn" onclick="fetchRotation()" title="Refresh the rotation list from the server">Refresh</button>
                         <button class="rotation-add-btn" onclick="toggleRotationAddForm()" title="Add a new singer and song to the rotation queue">+ Add</button>
-                        <button class="rotation-stats-btn" onclick="openStatsModal()" title="View top songs and top singers leaderboard">Song Stats</button>
                         <button class="rotation-new-btn" onclick="archiveRotation()" title="Archive tonight's rotation and start fresh for a new event">New Rotation</button>
                     </div>
                 </div>
@@ -402,6 +401,34 @@
                 <ul id="media-list">
                     <li>Loading media...</li>
                 </ul>
+            </div>
+            <div class="container song-stats" id="song-stats">
+                <div class="header-row">
+                    <h2>Song Stats</h2>
+                    <div class="header-actions">
+                        <button onclick="refreshSongStats()" title="Reload stats">Refresh</button>
+                    </div>
+                </div>
+                <div id="statsOverview" class="stats-overview"></div>
+                <div class="stats-filters">
+                    <div class="stats-range" id="statsRange" role="group" aria-label="Date range">
+                        <button class="stats-range-btn stats-range-active" data-range="all">All time</button>
+                        <button class="stats-range-btn" data-range="year">This year</button>
+                        <button class="stats-range-btn" data-range="30d">Last 30 days</button>
+                        <button class="stats-range-btn" data-range="custom">Custom</button>
+                    </div>
+                    <input type="date" id="statsSince" class="hidden" title="Custom start date">
+                    <input type="text" id="statsSingerFilter" list="statsSingerList"
+                           placeholder="Filter Top Songs by singer&hellip;" autocomplete="off">
+                    <datalist id="statsSingerList"></datalist>
+                </div>
+                <div class="stats-seg" id="statsViewSwitch" role="group" aria-label="Stats view">
+                    <button class="stats-seg-btn stats-seg-active" data-view="top-songs">Top Songs</button>
+                    <button class="stats-seg-btn" data-view="top-singers">Top Singers</button>
+                    <button class="stats-seg-btn" data-view="top-artists">Top Artists</button>
+                    <button class="stats-seg-btn" data-view="nights">Nights</button>
+                </div>
+                <div id="statsBody" class="stats-body"></div>
             </div>
             <div class="container browser-mode-panel">
                 <div class="header-row">
@@ -1074,26 +1101,6 @@
                 <span class="download-spinner"></span> Loading status&hellip;
             </div>
             <div id="db-modal-body" class="hidden"></div>
-        </div>
-    </div>
-
-    <!-- Song/Singer Stats Modal -->
-    <div id="stats-modal" class="modal-backdrop hidden" onclick="if(event.target===this) closeStatsModal()">
-        <div class="modal-content stats-modal-content">
-            <div class="modal-header">
-                <h3>Song Stats</h3>
-                <button class="modal-close" onclick="closeStatsModal()">&times;</button>
-            </div>
-            <div class="stats-controls">
-                <label>Since <input type="date" id="statsSince"></label>
-                <input type="text" id="statsSinger" list="statsSingerList" placeholder="Filter by singer&hellip;">
-                <datalist id="statsSingerList"></datalist>
-                <button id="statsRefresh">Refresh</button>
-            </div>
-            <h4>Top songs</h4>
-            <ol id="statsTopSongs" class="stats-list"></ol>
-            <h4>Top singers</h4>
-            <ol id="statsTopSingers" class="stats-list"></ol>
         </div>
     </div>
 
