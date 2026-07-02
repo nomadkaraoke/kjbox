@@ -77,3 +77,4 @@ temp/
 # Network configuration with credentials (keep sanitized version in git)
 # The version in git has credentials redacted
 # NETWORK-CONFIG-BACKUP.md is tracked but sanitized
+screenshots/
