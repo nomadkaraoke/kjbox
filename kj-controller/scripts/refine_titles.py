@@ -52,8 +52,9 @@ def main():
     args = ap.parse_args()
 
     cfg = load_config()
+    cfg_threshold = cfg.get("parse_confidence_threshold")
     threshold = args.threshold if args.threshold is not None else float(
-        cfg.get("parse_confidence_threshold", 0.75) or 0.75)
+        cfg_threshold if cfg_threshold is not None else 0.75)
     store = MediaLibraryStore(cfg.get("media_db_path"))
     gen_client = None
     url, tok = cfg.get("gen_api_url", ""), cfg.get("gen_api_token", "")

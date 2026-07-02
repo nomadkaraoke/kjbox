@@ -155,6 +155,8 @@ class MediaLibraryStore:
     def apply_parse(self, media_id, artist, title, confidence, threshold):
         """Apply an LLM parse result (parse_method='llm'); gate needs_review on
         the confidence threshold. Returns True if a row was updated."""
+        artist = artist or ""
+        title = title or ""
         needs_review = 0 if (confidence is not None and confidence >= threshold) else 1
         conn = self._get_conn()
         with self._lock():

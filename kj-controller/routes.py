@@ -3781,8 +3781,10 @@ def download_and_link_rotation():
         entry_id, err = _resolve_or_create_rotation_entry_id(data, rotation)
         if err:
             return err
-        rotation.set_download_status(entry_id, source, "complete", None)
+        # Link the file first; only mark complete once it's actually attached,
+        # so a link failure can't leave an entry "complete" with no playable file.
         rotation.link_file(entry_id, existing["file_path"])
+        rotation.set_download_status(entry_id, source, "complete", None)
         entry = rotation.store.get_entry(entry_id)
         entries = rotation.get_rotation()
         _decorate_rotation_entries(entries, rotation)
@@ -4169,8 +4171,8 @@ def approve_sing_request(app, req, skip_download=False):
                 "divebar", file_id=source_ref, brand_code=brand_code))
             if existing:
                 entry = rotation.add_entry(singer, song_text, singers=singers_list)
-                rotation.set_download_status(entry["id"], "divebar", "complete", None)
                 rotation.link_file(entry["id"], existing["file_path"])
+                rotation.set_download_status(entry["id"], "divebar", "complete", None)
                 return entry["id"]
             # Resolve the spec (pairing a loose CDG with its audio) before
             # creating the rotation entry, so an unusable version fails cleanly
@@ -4193,8 +4195,8 @@ def approve_sing_request(app, req, skip_download=False):
                 "youtube", youtube_url=source_ref))
             if existing:
                 entry = rotation.add_entry(singer, song_text, singers=singers_list)
-                rotation.set_download_status(entry["id"], "youtube", "complete", None)
                 rotation.link_file(entry["id"], existing["file_path"])
+                rotation.set_download_status(entry["id"], "youtube", "complete", None)
                 return entry["id"]
 
         entry = rotation.add_entry(singer, song_text, singers=singers_list)

@@ -214,8 +214,10 @@ def merge_llm_result(deterministic, llm, threshold):
     except (TypeError, ValueError):
         conf = 0.0
     out = dict(deterministic)
-    out["artist"] = artist
-    out["title"] = title
+    # Preserve the deterministic value for any field the LLM left blank (a
+    # partial result must not wipe a good deterministic artist/title).
+    out["artist"] = artist or deterministic.get("artist", "")
+    out["title"] = title or deterministic.get("title", "")
     out["confidence"] = conf
     out["parse_method"] = "llm"
     out["needs_review"] = 0 if conf >= threshold else 1

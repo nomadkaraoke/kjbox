@@ -33,6 +33,19 @@ def test_merge_low_confidence_keeps_review_but_takes_values():
     assert out["parse_method"] == "llm"
 
 
+def test_merge_partial_llm_preserves_deterministic_field():
+    # LLM returns only a title -> keep the deterministic artist, don't blank it.
+    out = naming.merge_llm_result(
+        _det(), {"artist": "", "title": "I Love It", "confidence": 0.9}, 0.75)
+    assert out["artist"] == "Bella Kay"  # preserved
+    assert out["title"] == "I Love It"   # taken from LLM
+    # LLM returns only an artist -> keep the deterministic title.
+    out2 = naming.merge_llm_result(
+        _det(), {"artist": "Icona Pop", "title": "", "confidence": 0.9}, 0.75)
+    assert out2["artist"] == "Icona Pop"
+    assert out2["title"] == "iloveit"
+
+
 def test_youtube_id_from_url():
     assert naming.youtube_id_from_url("https://www.youtube.com/watch?v=dQw4w9WgXcQ") == "dQw4w9WgXcQ"
     assert naming.youtube_id_from_url("https://youtu.be/dQw4w9WgXcQ?t=3") == "dQw4w9WgXcQ"
