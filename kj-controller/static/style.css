@@ -509,7 +509,7 @@ body {
 }
 .header-row h2 { flex-grow: 1; }
 
-/* --- Status & Logs (inside System section) --- */
+/* --- Status & Logs (#status-bar in Playback Controls, #log-area in System) --- */
 
 #status-bar {
     padding: 0.6rem 0.75rem;

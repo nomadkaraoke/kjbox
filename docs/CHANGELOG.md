@@ -2,6 +2,30 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-07-02 - Playback Controls header toolbar + Simple-mode layout tightening (v0.54.2)
+
+**Why:** The Simple/Advanced mode toggle and the Status/Filler line were tucked away
+in the System section, while the Playback Controls header had empty space in its
+top-right corner (unlike every other section, which carries its controls there).
+Separately, Simple mode kept Playback Controls full-width across the top, which left
+dead space to the right of it and pushed Screen Preview down.
+
+**What (frontend — takes effect on browser refresh after `git pull`; no restart):**
+- **Mode toggle relocated:** the Simple/Advanced segmented toggle now lives in a new
+  `.header-row` at the top-right of Playback Controls, styled compact
+  (`.mode-segmented-compact`: 0.65em, #222/#444/#ccc) to match the other section
+  header buttons (e.g. Screen Preview's Hide/200px/Fit). Its IDs and `onclick`
+  handlers are unchanged, so `setKjMode()`/`applySimpleMode()` still drive it.
+- **Status/Filler moved:** the `#status-bar` ("Status: … | Filler: …") moved out of
+  System and into Playback Controls (below the sliders).
+- **Simple mode hides System entirely:** the whole `.system-controls` section is now
+  hidden in Simple mode (its only stand-in-relevant control, the mode toggle, moved
+  to the always-visible Playback Controls header).
+- **Simple-mode grid tightened:** the `#col1` grid areas changed from
+  `"playback playback" / "rotation preview" / "rotation system"` to
+  `"playback preview" / "rotation preview"`, so Playback Controls is now the same
+  width as Rotation and Screen Preview rises to the top-right corner — no dead space.
+
 ## 2026-07-02 - Fix: rescan must not clobber curated media identity (v0.54.1)
 
 **Why:** `MediaIndex.scan()` re-derived deterministic identity from each filename and
