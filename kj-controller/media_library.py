@@ -174,6 +174,19 @@ class MediaLibraryStore:
             conn.commit()
             return cur.rowcount > 0
 
+    def update_path(self, media_id, file_path):
+        """Repoint a row's on-disk file_path (used by the backlog migration after
+        a file is moved/renamed). Returns True if a row was updated."""
+        conn = self._get_conn()
+        with self._lock():
+            cur = conn.execute(
+                "UPDATE media_library SET file_path=?, updated_at=datetime('now') "
+                "WHERE media_id=?",
+                (file_path, media_id),
+            )
+            conn.commit()
+            return cur.rowcount > 0
+
     def list_records(self, source=None, needs_review=None):
         clauses, params = [], []
         if source is not None:
