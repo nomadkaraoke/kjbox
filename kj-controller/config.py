@@ -52,6 +52,9 @@ def load_config(config_file=None):
         "master_sync_dest": "",
         "master_sync_credentials_file": "",
         "master_sync_enabled": False,
+        # "" -> derived as http://127.0.0.1:<app_bind_port>/rescan (the app's internal
+        # port); NOT flask_port (the public proxy, e.g. Caddy on 80).
+        "master_sync_rescan_url": "",
         "websockify_port": 6080,
         "vnc_target": "localhost:5900",
         "websockify_enabled": True,
