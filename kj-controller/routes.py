@@ -72,6 +72,40 @@ def _normalize_song_key(artist, title):
     return _group_key(artist, title)
 
 
+def _record_play_stat(validated_path, entry_id):
+    """Best-effort: credit one play for the media_id at validated_path. Never raises."""
+    try:
+        stats = getattr(current_app, 'stats', None)
+        ml = getattr(current_app, 'media_library', None)
+        if not stats:
+            return
+        row = ml.get_by_path(validated_path) if ml else None
+        media_id = (row or {}).get('media_id')
+        artist = (row or {}).get('artist')
+        title = (row or {}).get('title')
+        if not media_id:
+            from naming import extract_media_id
+            media_id = extract_media_id(os.path.basename(validated_path))
+        if not media_id:
+            return
+        singer = None
+        rotation = getattr(current_app, 'rotation', None)
+        if entry_id and rotation:
+            entry = rotation.store.get_entry(entry_id)
+            if entry:
+                singer = entry.get('singer')
+                if not (artist or title):
+                    artist = entry.get('song_artist')
+        song_key = _normalize_song_key(artist, title)
+        stats.record_play(media_id, entry_id=entry_id, singer=singer,
+                          artist=artist, title=title, song_key=song_key)
+    except Exception as e:  # never let stats break playback
+        try:
+            log_message(f"stats: play record failed: {e}", current_app.kj_config)
+        except Exception:
+            pass
+
+
 def _group_search_results(local_results, kn_results):
     """Collapse local + KN results into one group per normalized (artist, title).
 
@@ -650,6 +684,7 @@ def handle_play():
                      kwargs={'display_path': validated,
                              'overlay_manager': current_app.overlay_manager,
                              'audio_file': audio_file}).start()
+    _record_play_stat(validated, request.json.get('entry_id'))
     return jsonify({"success": True, "message": "Playback initiated."})
 
 

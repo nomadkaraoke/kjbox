@@ -412,14 +412,15 @@ async function ackQueueItem(id) {
 
 let currentPlayingPath = null;
 
-async function playMedia(filePath) {
+async function playMedia(filePath, entryId) {
     if (!filePath) {
         log('Cannot play: file path is missing.', 'error');
         return;
     }
     const filename = filePath.split('/').pop();
     log(`Playing: ${filename}`);
-    await apiCall('/play', { file_path: filePath });
+    await apiCall('/play', entryId != null ? { file_path: filePath, entry_id: entryId }
+                                            : { file_path: filePath });
 }
 
 async function deleteMedia(filePath, displayName) {
@@ -5156,7 +5157,7 @@ function showRotationIndicator(state) {
 }
 
 async function playAndAdvanceRotation(entry, idx, entries) {
-    playMedia(entry.file_path);
+    playMedia(entry.file_path, entry.id);
     advanceRotationStatus(entry, idx, entries);
 }
 
