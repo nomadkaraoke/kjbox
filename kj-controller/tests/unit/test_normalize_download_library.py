@@ -107,6 +107,43 @@ def test_apply_honors_corrections(tmp_path):
     assert row["file_path"].endswith("youtube/Sublime - Santeria [yt-abc].mp4")
 
 
+def test_apply_skips_when_target_exists(tmp_path):
+    dl = str(tmp_path / "downloads")
+    old = os.path.join(dl, "raw.mp4")
+    _touch(old)
+    store = _store_with(tmp_path, [
+        {"media_id": "yt-abc", "source": "youtube", "artist": "Bella Kay",
+         "title": "iloveit", "ext": ".mp4", "file_path": old}])
+    plan = nm.plan_migration(store, dl)
+    # Pre-create the canonical target -> collision, must be skipped not clobbered.
+    _touch(plan[0]["new_path"])
+    result = nm.apply_migration(store, plan, str(tmp_path / "rotation.db"))
+    assert result["moved"] == 0
+    assert result["errors"] and "already exists" in result["errors"][0]
+    assert os.path.exists(old)  # original left intact
+
+
+def test_load_corrections_requires_columns(tmp_path):
+    bad = tmp_path / "bad.csv"
+    bad.write_text("media_id,notes\nyt-a,hello\n")
+    import pytest
+    with pytest.raises(SystemExit):
+        nm.load_corrections(str(bad))
+
+
+def test_csv_cells_sanitized_against_formula_injection(tmp_path):
+    dl = str(tmp_path / "downloads")
+    old = os.path.join(dl, "raw.mp4")
+    _touch(old)
+    store = _store_with(tmp_path, [
+        {"media_id": "yt-abc", "source": "youtube", "artist": "=cmd()",
+         "title": "iloveit", "ext": ".mp4", "file_path": old}])
+    plan = nm.plan_migration(store, dl)
+    csv_path, _ = nm.write_report(str(tmp_path / "rep"), plan)
+    text = open(csv_path).read()
+    assert "'=cmd()" in text  # leading = neutralized
+
+
 def test_update_path_media_library():
     s = MediaLibraryStore(":memory:")
     s.upsert({"media_id": "yt-a", "source": "youtube", "file_path": "/old.mp4"})

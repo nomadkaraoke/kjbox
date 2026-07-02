@@ -69,6 +69,14 @@ def plan_migration(store, download_folder, corrections=None):
     return plan
 
 
+def _safe_csv_cell(value):
+    """Neutralize spreadsheet formula injection — the report is opened in Excel/
+    Sheets for review. Prefix a leading =,+,-,@,tab,CR with a quote."""
+    if not isinstance(value, str):
+        return value
+    return f"'{value}" if value[:1] in ("=", "+", "-", "@", "\t", "\r") else value
+
+
 def write_report(report_dir, plan):
     os.makedirs(report_dir, exist_ok=True)
     csv_path = os.path.join(report_dir, "normalize_report.csv")
@@ -79,7 +87,7 @@ def write_report(report_dir, plan):
         w = csv.DictWriter(fh, fieldnames=cols)
         w.writeheader()
         for p in plan:
-            w.writerow({k: p.get(k, "") for k in cols})
+            w.writerow({k: _safe_csv_cell(p.get(k, "")) for k in cols})
     with open(md_path, "w", encoding="utf-8") as fh:
         fh.write(f"# Download-library normalization — {len(plan)} files to move\n\n")
         fh.write("Correct the `artist`/`title` columns in the CSV and re-run with "
@@ -96,7 +104,12 @@ def load_corrections(csv_path):
     """Read a (possibly hand-corrected) report CSV → {media_id: (artist, title)}."""
     out = {}
     with open(csv_path, encoding="utf-8") as fh:
-        for row in csv.DictReader(fh):
+        reader = csv.DictReader(fh)
+        missing = {"media_id", "artist", "title"} - set(reader.fieldnames or [])
+        if missing:
+            raise SystemExit(
+                f"Correction CSV missing required columns: {sorted(missing)}")
+        for row in reader:
             mid = (row.get("media_id") or "").strip()
             if mid:
                 out[mid] = ((row.get("artist") or "").strip(),
@@ -123,14 +136,32 @@ def apply_migration(store, plan, rotation_db, corrections=None):
         old_path, new_path = p["old_path"], p["new_path"]
         try:
             os.makedirs(os.path.dirname(new_path), exist_ok=True)
+        except OSError as exc:
+            errors.append(f"{p['media_id']}: {exc}")
+            continue
+        if os.path.exists(new_path):
+            # Never clobber an existing canonical file (e.g. a prior partial run).
+            errors.append(f"{p['media_id']}: target already exists, skipped: {new_path}")
+            continue
+        try:
             os.replace(old_path, new_path)
         except OSError as exc:
             errors.append(f"{p['media_id']}: {exc}")
             continue
         real_new = os.path.realpath(new_path)
-        if p["media_id"] in corrections:
-            store.set_metadata(p["media_id"], p["artist"], p["title"])
-        store.update_path(p["media_id"], real_new)
+        try:
+            if p["media_id"] in corrections:
+                store.set_metadata(p["media_id"], p["artist"], p["title"])
+            store.update_path(p["media_id"], real_new)
+        except Exception as exc:
+            # DB update failed after the move — roll the file back so disk and DB
+            # stay consistent, and record it instead of leaving a silent mismatch.
+            try:
+                os.replace(new_path, old_path)
+            except OSError:
+                pass
+            errors.append(f"{p['media_id']}: DB update failed, rolled back move: {exc}")
+            continue
         remap[old_path] = real_new
         moved += 1
     relinked = relink_references(rotation_db, remap) if remap else 0
