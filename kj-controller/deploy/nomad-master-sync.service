@@ -11,4 +11,5 @@ IOSchedulingClass=idle
 # Adjust WorkingDirectory/paths to the deployed location on the device.
 WorkingDirectory=/opt/nomad/kjbox/kj-controller
 Environment=PATH=/opt/nomad/google-cloud-sdk/bin:/usr/bin:/bin
-ExecStart=/usr/bin/python3 -m scripts.sync_masters
+# Use the app's venv python so `requests` (imported by sync_masters) is available.
+ExecStart=/opt/nomad/kjbox/kj-controller/venv/bin/python -m scripts.sync_masters
