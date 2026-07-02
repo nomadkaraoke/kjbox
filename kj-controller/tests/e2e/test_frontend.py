@@ -74,9 +74,11 @@ class TestLayoutStructure:
     def test_log_area(self, app_page):
         expect(app_page.locator("#log-area")).to_be_visible()
 
-    def test_now_playing_bar_hidden_initially(self, app_page):
-        """Now-playing bar should be hidden when nothing is playing."""
-        expect(app_page.locator("#now-playing-bar")).to_be_hidden()
+    def test_now_playing_idle_initially(self, app_page):
+        """With nothing playing, the now-playing block (inside Playback
+        Controls) shows the idle placeholder and hides the detail row."""
+        expect(app_page.locator("#np-title")).to_have_text("Nothing playing")
+        expect(app_page.locator("#np-info-meta")).to_be_hidden()
 
 
 # ---------------------------------------------------------------------------

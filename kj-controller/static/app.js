@@ -503,7 +503,7 @@ let _fadingOut = false;
 async function fadeOut() {
     if (_fadingOut) return;
     _fadingOut = true;
-    const btns = [document.getElementById('btn-fadeout'), document.getElementById('np-fadeout')];
+    const btns = [document.getElementById('btn-fadeout')];
     btns.forEach(b => { if (b) { b.textContent = 'Fading...'; b.disabled = true; } });
     log('Fading out karaoke...');
     await apiCall('/control', { action: 'fadeout' });
@@ -859,20 +859,38 @@ function formatTime(seconds) {
     return `${min}:${sec}`;
 }
 
+// Turn a filename into a friendly file-type label for the now-playing block.
+// e.g. "SDK - ABBA - Dancing Queen.zip" -> "cdg+mp3 (zip)", "foo.mp4" -> "mp4".
+function describeFileType(filename) {
+    if (!filename || filename.indexOf('.') === -1) return '';
+    const ext = filename.split('.').pop().toLowerCase();
+    const LABELS = {
+        zip: 'cdg+mp3 (zip)',
+        cdg: 'cdg',
+        mp4: 'mp4', mkv: 'mkv', webm: 'webm', avi: 'avi', mov: 'mov', m4v: 'm4v',
+        mp3: 'mp3', m4a: 'm4a', flac: 'flac', wav: 'wav', ogg: 'ogg',
+    };
+    return LABELS[ext] || ext;
+}
+
+// Now-playing details live inside the Playback Controls section (the old fixed
+// top bar was removed). Shows song name + filename + file type + engine + time,
+// and the pitch control (which #np-pitch-group CSS keeps hidden in simple mode).
 function updateNowPlaying(data) {
-    const bar = document.getElementById('now-playing-bar');
+    const info = document.getElementById('np-info');
     const npState = document.getElementById('np-state');
     const npTitle = document.getElementById('np-title');
+    const npFilename = document.getElementById('np-filename');
+    const npFiletype = document.getElementById('np-filetype');
     const npTime = document.getElementById('np-time');
     const npLength = document.getElementById('np-length');
-    const npPause = document.getElementById('np-pause');
+    if (!info) return;
 
     const state = data.state || 'stopped';
     const isActive = state === 'playing' || state === 'paused';
 
     // Renderer-aware UI: hide pitch controls on engines that don't support it,
-    // show a small badge so the KJ knows which engine is active without
-    // opening the modal.
+    // show a small badge so the KJ knows which engine is active (mpv / VLC).
     const renderer = data.renderer || null;
     if (renderer) {
         const pitchGroup = document.getElementById('np-pitch-group');
@@ -887,20 +905,27 @@ function updateNowPlaying(data) {
     }
 
     if (isActive && data.current_playing) {
-        bar.classList.remove('hidden');
+        info.classList.add('np-info--playing');
         npTitle.textContent = data.current_playing;
+        npState.textContent = state === 'playing' ? 'Playing' : 'Paused';
+        npState.className = 'np-state ' + (state === 'playing' ? 'state-playing' : 'state-paused');
+
+        const path = data.current_playing_path || '';
+        const fname = path ? path.split('/').pop() : '';
+        npFilename.textContent = fname;
+        npFiletype.textContent = describeFileType(fname);
+
         npTime.textContent = formatTime(data.time);
         npLength.textContent = formatTime(data.length);
-
-        npState.textContent = state === 'playing' ? 'Playing' : 'Paused';
-        npState.className = 'now-playing-state ' + (state === 'playing' ? 'state-playing' : 'state-paused');
-        npPause.textContent = state === 'playing' ? 'Pause' : 'Resume';
 
         if (data.pitch_semitones !== undefined) {
             updatePitchDisplay(data.pitch_semitones);
         }
     } else {
-        bar.classList.add('hidden');
+        info.classList.remove('np-info--playing');
+        npTitle.textContent = 'Nothing playing';
+        npState.textContent = '';
+        npState.className = 'np-state';
     }
 }
 
@@ -2408,39 +2433,89 @@ async function toggleAutoDeploy(active) {
     }
 }
 
-// --- Simple KJ Mode ---
+// --- KJ Mode (Simple / Advanced) ---
+
+// Overlays a stand-in show should have running, matched by name
+// (case-insensitive) against whatever exists on this device.
+const STANDIN_OVERLAY_NAMES = ['scan to sing', 'rotation ticker', 'rotation list'];
 
 // Sequence counter so out-of-order POST responses can't override the latest
-// user intent (rare, but possible if the user spam-toggles).
+// user intent (rare, but possible if the KJ spam-switches).
 let _simpleModeReqSeq = 0;
 
-async function toggleSimpleMode(checked) {
+// Switch between Simple (stand-in) and Advanced mode.
+//
+// Switching TO simple applies a one-time "stand-in setup" so the system is
+// ready for a novice: public requests ON, "make it" requests OFF, and the
+// Scan-to-Sing / Rotation-ticker / Rotation-list overlays enabled. Switching
+// back to Advanced only clears simple mode — it deliberately does NOT revert
+// those settings (the advanced KJ manages them by hand).
+async function setKjMode(mode) {
+    const simple = mode === 'simple';
     const reqSeq = ++_simpleModeReqSeq;
+    // Optimistic UI first so the toggle feels instant; /status reconciles in <=2s.
+    applySimpleMode(simple);
     try {
+        const body = simple
+            ? { simple_mode: true, enabled: true, accept_make_requests: false }
+            : { simple_mode: false };
         const resp = await fetch('/rotation/requests/config', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ simple_mode: !!checked }),
+            body: JSON.stringify(body),
         });
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-        // Apply optimistically; /status poll will reconcile in <=2s anyway.
-        // Skip if a newer toggle has fired since — its response will win.
-        if (reqSeq === _simpleModeReqSeq) applySimpleMode(!!checked);
+        // A newer switch fired while this POST was in flight — let its handler
+        // win and skip our side effects (otherwise a quick Simple→Advanced could
+        // still re-enable the overlays after landing back in Advanced).
+        if (reqSeq !== _simpleModeReqSeq) return;
+        if (simple) {
+            await applyStandinOverlays();
+            // Reflect the overlay changes in the Overlays panel if it's on screen.
+            if (typeof loadOverlays === 'function') loadOverlays();
+        }
     } catch (e) {
         if (reqSeq !== _simpleModeReqSeq) return;
-        console.error('toggleSimpleMode failed:', e);
-        alert('Could not change Simple Mode. Please try again.');
-        // The next /status poll will revert the checkbox to actual server state.
+        console.error('setKjMode failed:', e);
+        alert('Could not change mode. Please try again.');
+        // The next /status poll reconciles the toggle to real server state.
     }
 }
 
+// Enable the standard stand-in overlays by name — idempotent: only PUTs the
+// ones that exist and aren't already on. Never throws; missing overlays are
+// simply skipped (e.g. a device without a "Rotation ticker" overlay).
+async function applyStandinOverlays() {
+    try {
+        const resp = await fetch('/overlays');
+        if (!resp.ok) return;
+        const overlays = await resp.json();
+        const targets = (Array.isArray(overlays) ? overlays : []).filter(o =>
+            STANDIN_OVERLAY_NAMES.includes((o.name || '').trim().toLowerCase()) && !o.enabled);
+        await Promise.all(targets.map(o =>
+            fetch(`/overlays/${o.id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ enabled: true }),
+            }).catch(() => {})));
+    } catch (e) {
+        console.warn('applyStandinOverlays failed:', e);
+    }
+}
+
+// Reflect the current mode in the body class and the Simple/Advanced segmented
+// control. Called on switch and on every /status poll, so it must be cheap and
+// idempotent.
 function applySimpleMode(on) {
     document.body.classList.toggle('simple-mode', !!on);
-    // Keep the switch reflecting reality even if /status changed underfoot.
-    // The System → "Simple Mode (for stand-in KJ)" toggle is the visible
-    // indicator that the mode is on, so no separate banner is rendered.
-    const sw = document.getElementById('simple-mode-switch');
-    if (sw) sw.checked = !!on;
+    const segSimple = document.getElementById('mode-seg-simple');
+    const segAdvanced = document.getElementById('mode-seg-advanced');
+    if (segSimple && segAdvanced) {
+        segSimple.classList.toggle('mode-seg-active', !!on);
+        segAdvanced.classList.toggle('mode-seg-active', !on);
+        segSimple.setAttribute('aria-pressed', on ? 'true' : 'false');
+        segAdvanced.setAttribute('aria-pressed', on ? 'false' : 'true');
+    }
 }
 
 // --- Sleep Mode ---
