@@ -14,6 +14,17 @@ from __future__ import annotations
 from typing import Protocol, runtime_checkable
 
 
+def fade_steps(duration_s: float) -> int:
+    """Number of volume ramp steps for a fadeout of the given length.
+
+    Scales with duration (~8 steps/sec) so a long fade (e.g. 20s) ramps smoothly
+    instead of dropping in a few coarse jumps, clamped to [20, 200] so the ramp is
+    never too coarse and a fat-fingered duration can't flood the player with volume
+    commands (VLC HTTP / mpv IPC). Both renderers use this so fades behave equally.
+    """
+    return max(20, min(int(round(duration_s * 8)), 200))
+
+
 @runtime_checkable
 class KaraokePlayer(Protocol):
     """Minimum surface every karaoke backend must provide."""

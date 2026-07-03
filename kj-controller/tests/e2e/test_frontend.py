@@ -394,6 +394,85 @@ class TestNowPlayingStatus:
 
 
 # ---------------------------------------------------------------------------
+# Fade Out controls — preset durations + reliable availability
+# ---------------------------------------------------------------------------
+
+class TestFadeControls:
+    """Fade Out offers preset durations (3/6/10/20s) + a custom length, and the
+    controls gate on whether a song is LOADED (current_playing_path) rather than the
+    live player state. The live state flickers to 'stopped' on the VLC renderer, which
+    used to grey out Fade Out mid-song. See
+    docs/archive/2026-07-02-fade-out-durations-plan.md.
+    """
+
+    def _stop_poll(self, page):
+        # Stop the 2s status poll so it doesn't overwrite our driven state.
+        page.evaluate("for (let i = 1; i < 100000; i++) clearInterval(i);")
+
+    def test_presets_present(self, app_page):
+        expect(app_page.locator(".fade-preset")).to_have_count(4)
+        expect(app_page.locator('.fade-preset[data-seconds="3"]')).to_have_text("3s")
+        expect(app_page.locator('.fade-preset[data-seconds="20"]')).to_have_text("20s")
+
+    def test_fade_enabled_when_loaded_even_if_state_stopped(self, app_page):
+        """Core fix: a transient 'stopped' must NOT disable Fade Out while a song is
+        loaded — the exact 'only sometimes clickable' symptom on the VLC renderer."""
+        self._stop_poll(app_page)
+        app_page.evaluate(
+            "currentPlayingPath = '/songs/x.mp4'; updatePlaybackButtons('stopped');"
+        )
+        for secs in (3, 6, 10, 20):
+            expect(app_page.locator(f'.fade-preset[data-seconds="{secs}"]')).to_be_enabled()
+        expect(app_page.locator("#fade-custom-go")).to_be_enabled()
+        expect(app_page.locator("#btn-restart")).to_be_enabled()
+        expect(app_page.locator("#btn-stop")).to_be_enabled()
+
+    def test_fade_disabled_when_no_song_loaded(self, app_page):
+        self._stop_poll(app_page)
+        app_page.evaluate(
+            "currentPlayingPath = null; updatePlaybackButtons('stopped');"
+        )
+        expect(app_page.locator('.fade-preset[data-seconds="10"]')).to_be_disabled()
+        expect(app_page.locator("#fade-custom-go")).to_be_disabled()
+        expect(app_page.locator("#btn-stop")).to_be_disabled()
+
+    def test_preset_posts_chosen_duration(self, app_page):
+        self._stop_poll(app_page)
+        captured = app_page.evaluate(
+            """
+            (() => {
+                window.__call = null;
+                apiCall = (url, body) => { window.__call = {url, body}; return Promise.resolve({}); };
+                currentPlayingPath = '/songs/x.mp4';
+                updatePlaybackButtons('playing');
+                fadeOut(20);
+                return window.__call;
+            })()
+            """
+        )
+        assert captured["url"] == "/control"
+        assert captured["body"]["action"] == "fadeout"
+        assert captured["body"]["duration_s"] == 20
+
+    def test_custom_field_posts_clamped_duration(self, app_page):
+        self._stop_poll(app_page)
+        captured = app_page.evaluate(
+            """
+            (() => {
+                window.__call = null;
+                apiCall = (url, body) => { window.__call = {url, body}; return Promise.resolve({}); };
+                currentPlayingPath = '/songs/x.mp4';
+                document.getElementById('fade-custom-seconds').value = '99';
+                fadeOutCustom();
+                return window.__call;
+            })()
+            """
+        )
+        # Client clamps to the backend's 60s ceiling before posting.
+        assert captured["body"]["duration_s"] == 60
+
+
+# ---------------------------------------------------------------------------
 # Mode toggle placement + Simple-mode layout
 # ---------------------------------------------------------------------------
 

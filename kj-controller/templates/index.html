@@ -53,8 +53,20 @@
                 <div class="button-group">
                     <button id="btn-pause" class="btn-primary" onclick="controlPlayback('pause_resume')">Pause / Resume</button>
                     <button id="btn-restart" onclick="controlPlayback('restart')" disabled>Restart</button>
-                    <button id="btn-fadeout" class="system-btn-warn" onclick="fadeOut()" disabled>Fade Out</button>
                     <button id="btn-stop" class="system-btn-danger" onclick="controlPlayback('stop')" disabled>Stop</button>
+                </div>
+                <div class="fade-controls" id="fade-controls">
+                    <span class="fade-label">Fade out:</span>
+                    <div class="fade-presets" id="fade-presets">
+                        <button type="button" class="fade-preset system-btn-warn" data-seconds="3" onclick="fadeOut(3, this)" disabled>3s</button>
+                        <button type="button" class="fade-preset system-btn-warn" data-seconds="6" onclick="fadeOut(6, this)" disabled>6s</button>
+                        <button type="button" class="fade-preset system-btn-warn" data-seconds="10" onclick="fadeOut(10, this)" disabled>10s</button>
+                        <button type="button" class="fade-preset system-btn-warn" data-seconds="20" onclick="fadeOut(20, this)" disabled>20s</button>
+                    </div>
+                    <div class="fade-custom">
+                        <input type="number" id="fade-custom-seconds" class="fade-custom-input" min="1" max="60" step="1" placeholder="s" title="Custom fade length in seconds (1–60)">
+                        <button type="button" id="fade-custom-go" class="system-btn-warn" onclick="fadeOutCustom()" disabled>Fade</button>
+                    </div>
                 </div>
                 <div>
                     <label for="seek-slider">Seek: <span id="seek-value">0:00</span></label>

@@ -21,6 +21,7 @@ import time
 
 from config import APP_DIR, is_pi
 from filler import FillerVLC
+from karaoke_player import fade_steps
 from utils import log_message
 
 STATE_FILE = '/tmp/kj-mpv-state.json'
@@ -356,7 +357,7 @@ class MpvKaraokePlayer:
     def fadeout(self, duration_s=3.0):
         """Fade mpv volume to 0 over duration_s, stop, restore configured volume."""
         saved_volume = self.karaoke_volume
-        steps = 20
+        steps = fade_steps(duration_s)
         delay = duration_s / steps
         mpv_start = self._vlc_to_mpv_volume(saved_volume)
 

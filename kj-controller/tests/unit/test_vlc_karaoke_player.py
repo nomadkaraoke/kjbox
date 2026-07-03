@@ -103,6 +103,68 @@ def test_get_status_returns_state_time_length(player, mocker):
     assert player.get_status() == {"state": "playing", "time": 42, "length": 240}
 
 
+# --- get_status: transient-'stopped' guard (mirrors monitor(), keeps UI steady) ---
+
+def test_get_status_transient_stopped_is_playing_when_loaded(player, mocker):
+    """VLC reports 'stopped' for a few seconds after play; while a song is loaded and
+    within the post-play guard window, get_status smooths it to 'playing' so the fade
+    button / now-playing pill don't flicker."""
+    import time as _t
+    player.active = True
+    player.current_path = '/songs/song.mp4'
+    player.last_play_time = _t.time()
+    mocker.patch.object(player, '_send', return_value={
+        "state": "stopped", "time": 0, "length": 0,
+    })
+    assert player.get_status()["state"] == "playing"
+
+
+def test_get_status_transient_stopped_after_seek_is_playing(player, mocker):
+    import time as _t
+    player.active = True
+    player.current_path = '/songs/song.mp4'
+    player.last_seek_time = _t.time()
+    mocker.patch.object(player, '_send', return_value={
+        "state": "stopped", "time": 30, "length": 240,
+    })
+    assert player.get_status()["state"] == "playing"
+
+
+def test_get_status_stopped_past_guard_window_passes_through(player, mocker):
+    """A genuine 'stopped' well after play/seek is honored (song really ended)."""
+    player.active = True
+    player.current_path = '/songs/song.mp4'
+    player.last_play_time = 0
+    player.last_seek_time = 0
+    mocker.patch.object(player, '_send', return_value={
+        "state": "stopped", "time": 5, "length": 240,
+    })
+    assert player.get_status()["state"] == "stopped"
+
+
+def test_get_status_blip_is_playing_when_loaded(player, mocker):
+    """A None from _send (HTTP timeout) mustn't flap the UI to 'stopped' mid-song."""
+    player.active = True
+    player.current_path = '/songs/song.mp4'
+    mocker.patch.object(player, '_send', return_value=None)
+    assert player.get_status() == {"state": "playing", "time": 0, "length": 0}
+
+
+def test_get_status_blip_when_idle_is_stopped(player, mocker):
+    """No song loaded + blip → genuinely stopped (original behavior preserved)."""
+    mocker.patch.object(player, '_send', return_value=None)
+    assert player.get_status() == {"state": "stopped", "time": 0, "length": 0}
+
+
+def test_get_status_paused_passes_through(player, mocker):
+    player.active = True
+    player.current_path = '/songs/song.mp4'
+    mocker.patch.object(player, '_send', return_value={
+        "state": "paused", "time": 10, "length": 240,
+    })
+    assert player.get_status()["state"] == "paused"
+
+
 # --- ensure_released ---
 
 def test_ensure_released_success_first_try(player, mocker):

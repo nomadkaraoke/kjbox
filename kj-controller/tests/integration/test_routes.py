@@ -1148,8 +1148,7 @@ def test_control_fadeout(flask_test_client):
 
 
 def test_control_fadeout_delegates_to_coordinator(flask_test_client, flask_app, mocker):
-    """POST /control fadeout delegates to coordinator.fadeout (polymorphic
-    across renderers; implementation tested in player-specific suites)."""
+    """POST /control fadeout with no duration defaults to 3s (back-compat)."""
     flask_app.vlc.enabled = True
     flask_app.vlc.karaoke_active = True
 
@@ -1157,6 +1156,43 @@ def test_control_fadeout_delegates_to_coordinator(flask_test_client, flask_app, 
 
     response = flask_test_client.post('/control',
         data=json.dumps({"action": "fadeout"}),
+        content_type='application/json')
+    assert response.status_code == 200
+    fadeout_mock.assert_called_once_with(duration_s=3.0)
+
+
+def test_control_fadeout_forwards_explicit_duration(flask_test_client, flask_app, mocker):
+    """The KJ-chosen fade length is forwarded to the coordinator."""
+    fadeout_mock = mocker.patch.object(flask_app.vlc, 'fadeout')
+    response = flask_test_client.post('/control',
+        data=json.dumps({"action": "fadeout", "duration_s": 10}),
+        content_type='application/json')
+    assert response.status_code == 200
+    fadeout_mock.assert_called_once_with(duration_s=10.0)
+
+
+def test_control_fadeout_clamps_out_of_range_duration(flask_test_client, flask_app, mocker):
+    """A too-long duration is clamped to the 60s ceiling."""
+    fadeout_mock = mocker.patch.object(flask_app.vlc, 'fadeout')
+    flask_test_client.post('/control',
+        data=json.dumps({"action": "fadeout", "duration_s": 9999}),
+        content_type='application/json')
+    fadeout_mock.assert_called_once_with(duration_s=60.0)
+
+
+def test_control_fadeout_clamps_tiny_duration(flask_test_client, flask_app, mocker):
+    fadeout_mock = mocker.patch.object(flask_app.vlc, 'fadeout')
+    flask_test_client.post('/control',
+        data=json.dumps({"action": "fadeout", "duration_s": 0}),
+        content_type='application/json')
+    fadeout_mock.assert_called_once_with(duration_s=0.5)
+
+
+def test_control_fadeout_bad_duration_falls_back_to_default(flask_test_client, flask_app, mocker):
+    """Garbage duration → default 3s rather than a 500."""
+    fadeout_mock = mocker.patch.object(flask_app.vlc, 'fadeout')
+    response = flask_test_client.post('/control',
+        data=json.dumps({"action": "fadeout", "duration_s": "not-a-number"}),
         content_type='application/json')
     assert response.status_code == 200
     fadeout_mock.assert_called_once_with(duration_s=3.0)

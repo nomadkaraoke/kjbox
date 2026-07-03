@@ -4,6 +4,38 @@ Dated entries, newest first. Each entry notes any required deploy steps.
 
 ---
 
+## 2026-07-02 - Reliable Fade Out on both engines + selectable durations (v0.64.0)
+
+**Why:** The Fade Out button was "only sometimes clickable." It was enabled only when
+`/status.state` was exactly `playing`/`paused`, but that live state flickers to
+`stopped`: on the VLC renderer, VLC's HTTP status reports `stopped` transiently for ~5s
+after each play/seek (the end-of-song monitor guards this, but `get_status()` — read by
+the button — did not), and a status HTTP blip (`_send` timeout → `None`) also reads as
+`stopped`. mpv is steadier but not immune. Separately, the fade length was hardcoded to
+3s; the KJ wants to choose it per song.
+
+**What:**
+- **Availability (renderer-agnostic):** Fade / Restart / Stop now gate on whether a song
+  is *loaded* (`current_playing_path`, a stable signal set on play and cleared only by a
+  real stop/fadeout or the guarded monitor) instead of the flaky live state.
+- **VLC state steadied at the source:** `VlcKaraokePlayer.get_status()` now mirrors the
+  monitor's 5s post-play/seek guard and treats an HTTP blip while a song is loaded as
+  last-known `playing`, so its reported state matches mpv's reliability (also stops the
+  now-playing pill flickering "Stopped").
+- **Selectable durations:** preset buttons 3 / 6 / 10 / 20s + a custom 1–60s field.
+  `POST /control` accepts an optional `duration_s` (default 3.0, clamped `[0.5, 60]`),
+  forwarded through the polymorphic `coordinator.fadeout` to both engines. A shared
+  `fade_steps()` (`karaoke_player.py`) scales the volume ramp with duration so long fades
+  are smooth on both renderers. The frontend's post-fade reset now scales with the chosen
+  length (was a fixed 3.5s) so buttons don't re-enable mid-fade.
+
+**Deploy:** Backend change (`routes.py`, `vlc.py`, `mpv_manager.py`, `karaoke_player.py`)
+→ requires `sudo systemctl restart kj-controller` (interrupts active playback). Ship
+**off-show**. (The frontend gating half alone is a no-restart change, but this ships as
+one unit.)
+
+---
+
 ## 2026-06-30 - Pair a loose CDG with its sibling MP3 at download (v0.48.0)
 
 **Why:** v0.46.0 (#124) *blocks* a silent bare `.cdg`, but for brands that store a
