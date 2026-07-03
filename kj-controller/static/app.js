@@ -3719,6 +3719,10 @@ async function refreshSongStats() {
     const section = document.getElementById('song-stats');
     if (section && section.classList.contains('collapsed')) setSongStatsCollapsed(false);
     await renderStatsOverview();
+    // Also seed the singer-filter datalist. Refresh sets loaded=true, so
+    // maybeLoadSongStats() would otherwise short-circuit and never populate it
+    // when the KJ refreshes a section that was still collapsed.
+    populateSingerDatalist();
     await switchStatsView(songStats.view);
 }
 

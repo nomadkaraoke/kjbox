@@ -1011,6 +1011,25 @@ class TestSongStatsCollapse:
         expect(section).not_to_have_class(re.compile(r"\bcollapsed\b"))
         expect(app_page.locator("#statsOverview")).to_be_visible()
 
+    def test_refresh_while_collapsed_seeds_singer_datalist(self, app_page):
+        """Regression: Refresh sets loaded=true, so it must itself populate the
+        singer-filter datalist — otherwise the later lazy-load short-circuits and
+        #statsSingerList is never seeded when the KJ refreshes while collapsed."""
+        app_page.evaluate(
+            "() => { window.__popCalls = 0;"
+            " const o = window.populateSingerDatalist;"
+            " window.populateSingerDatalist = function () {"
+            "   window.__popCalls++; return o.apply(this, arguments); }; }"
+        )
+        expect(app_page.locator("#song-stats")).to_have_class(
+            re.compile(r"\bcollapsed\b")
+        )
+        app_page.locator("#song-stats .header-actions button").click()
+        expect(app_page.locator("#statsOverview")).to_be_visible()
+        assert app_page.evaluate("() => window.__popCalls") >= 1, (
+            "Refresh on a collapsed section must seed the singer datalist"
+        )
+
     def test_expanded_state_persists_across_reload(self, app_page, live_server):
         """The KJ's expand choice is remembered per browser via localStorage."""
         app_page.locator("#song-stats .song-stats-header h2").click()
