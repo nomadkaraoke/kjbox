@@ -68,17 +68,25 @@
                         <button type="button" id="fade-custom-go" class="system-btn-warn" onclick="fadeOutCustom()" disabled>Fade</button>
                     </div>
                 </div>
-                <div>
-                    <label for="seek-slider">Seek: <span id="seek-value">0:00</span></label>
-                    <input type="range" id="seek-slider" class="volume-slider" min="0" max="1" value="0" step="0.001" onchange="seekVideo(this.value)" oninput="updateSeekLabel(this.value)">
-                </div>
-                <div>
-                    <label for="karaoke-volume">Karaoke Volume: <span id="karaoke-volume-label" class="range-label">{{ ((config.get('karaoke_volume', 200) / 256 * 100) | round | int) }}%</span></label>
-                    <input type="range" id="karaoke-volume" class="volume-slider" min="0" max="256" value="{{ config.get('karaoke_volume', 200) }}" oninput="updateKaraokeVolume(this.value)">
-                </div>
-                <div>
-                    <label for="filler-volume">Filler Volume: <span id="filler-volume-label" class="range-label">{{ ((config.get('filler_volume', 100) / 256 * 100) | round | int) }}%</span></label>
-                    <input type="range" id="filler-volume" class="volume-slider" min="0" max="256" value="{{ config.get('filler_volume', 100) }}" oninput="updateFillerVolume(this.value)">
+                <!-- Sliders: the two volume controls stack in a fixed-width left
+                     column (equal width); Seek is the long bar filling the right
+                     column. Wrapped in .pc-sliders so this 2-col arrangement is
+                     isolated from the button/fade rows above (see style.css). -->
+                <div class="pc-sliders">
+                    <div class="pc-volumes">
+                        <div class="pc-slider-row">
+                            <label for="karaoke-volume">Karaoke Volume: <span id="karaoke-volume-label" class="range-label">{{ ((config.get('karaoke_volume', 200) / 256 * 100) | round | int) }}%</span></label>
+                            <input type="range" id="karaoke-volume" class="volume-slider" min="0" max="256" value="{{ config.get('karaoke_volume', 200) }}" oninput="updateKaraokeVolume(this.value)">
+                        </div>
+                        <div class="pc-slider-row">
+                            <label for="filler-volume">Filler Volume: <span id="filler-volume-label" class="range-label">{{ ((config.get('filler_volume', 100) / 256 * 100) | round | int) }}%</span></label>
+                            <input type="range" id="filler-volume" class="volume-slider" min="0" max="256" value="{{ config.get('filler_volume', 100) }}" oninput="updateFillerVolume(this.value)">
+                        </div>
+                    </div>
+                    <div class="pc-slider-row pc-seek">
+                        <label for="seek-slider">Seek: <span id="seek-value">0:00</span></label>
+                        <input type="range" id="seek-slider" class="volume-slider" min="0" max="1" value="0" step="0.001" onchange="seekVideo(this.value)" oninput="updateSeekLabel(this.value)">
+                    </div>
                 </div>
             </div>
             <div class="container rotation-panel">
