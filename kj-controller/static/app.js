@@ -506,17 +506,19 @@ function fadeButtons() {
 // (mpv or VLC) honours the duration identically. Disabling is driven by
 // current_playing_path clearing once the song stops (see updatePlaybackButtons); the
 // _fadingOut flag just gives immediate feedback and blocks double-triggers.
-async function fadeOut(seconds) {
+async function fadeOut(seconds, sourceEl) {
     seconds = Number(seconds);
     if (!Number.isFinite(seconds) || seconds <= 0) return;
     if (_fadingOut) return;
     _fadingOut = true;
     fadeButtons().forEach(b => { b.disabled = true; });
 
-    // Show "Fading…" on whichever control was used (a matching preset, else the custom
-    // Fade button), and restore its label afterwards.
-    let feedbackEl = document.querySelector('.fade-preset[data-seconds="' + seconds + '"]');
-    if (!feedbackEl) feedbackEl = document.getElementById('fade-custom-go');
+    // Show "Fading…" on the control that actually triggered the fade (passed in as
+    // sourceEl) so a custom value equal to a preset doesn't highlight the wrong button.
+    // Fall back to a matching preset, else the custom Fade button. Restore afterwards.
+    let feedbackEl = sourceEl
+        || document.querySelector('.fade-preset[data-seconds="' + seconds + '"]')
+        || document.getElementById('fade-custom-go');
     const savedLabel = feedbackEl ? feedbackEl.textContent : null;
     if (feedbackEl) feedbackEl.textContent = 'Fading…';
 
@@ -539,7 +541,7 @@ function fadeOutCustom() {
     let secs = parseInt(input.value, 10);
     if (!Number.isFinite(secs)) return;
     secs = Math.max(1, Math.min(secs, 60));
-    fadeOut(secs);
+    fadeOut(secs, document.getElementById('fade-custom-go'));
 }
 
 // --- Volume & Seek (#2 volume labels) ---
