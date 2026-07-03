@@ -135,6 +135,59 @@ class TestUnifiedSearch:
             assert result["disc_id"] == "SC1234"
             assert result["format"] == "mp4"
 
+    def test_downloaded_media_strips_media_id_token(self, search_client, search_app):
+        """Canonical-slug download filenames must not leak the [media_id] token
+        into the parsed title (regression: 'Vienna [yt-I8wu3lLbB0k]')."""
+        search_app.media.index = {
+            "/downloads/youtube/Billy Joel - Vienna [yt-I8wu3lLbB0k].mp4": {
+                "filename": "Billy Joel - Vienna [yt-I8wu3lLbB0k].mp4",
+                "display_name": "Billy Joel - Vienna [yt-I8wu3lLbB0k]",
+                "duration": 210,
+            }
+        }
+        with patch.object(search_app.catalog, 'is_available', return_value=True), \
+             patch.object(search_app.catalog, 'search', return_value=[]), \
+             patch('routes.karaoke_nerds.search', return_value=[]):
+            resp = search_client.get('/rotation/search?q=billy joel vienna')
+            data = resp.get_json()
+            assert len(data["local"]) == 1
+            result = data["local"][0]
+            assert result["artist"] == "Billy Joel"
+            assert result["title"] == "Vienna"
+            assert "[yt-" not in result["title"]
+
+    def test_downloaded_media_prefers_media_library_identity(self, search_client, search_app):
+        """When a clean media_library row exists for the path, its (LLM-refined)
+        artist/title is used verbatim rather than re-parsing the filename."""
+        path = "/downloads/youtube/Billy Joel - Vienna [yt-I8wu3lLbB0k].mp4"
+        search_app.media_library.upsert({
+            "media_id": "yt-I8wu3lLbB0k",
+            "source": "youtube",
+            "source_ref": "I8wu3lLbB0k",
+            "artist": "Billy Joel",
+            "title": "Vienna (Piano Version)",
+            "parse_method": "llm",
+            "needs_review": 0,
+            "file_path": path,
+            "ext": ".mp4",
+        })
+        search_app.media.index = {
+            path: {
+                "filename": "Billy Joel - Vienna [yt-I8wu3lLbB0k].mp4",
+                "display_name": "Billy Joel - Vienna [yt-I8wu3lLbB0k]",
+                "duration": 210,
+            }
+        }
+        with patch.object(search_app.catalog, 'is_available', return_value=True), \
+             patch.object(search_app.catalog, 'search', return_value=[]), \
+             patch('routes.karaoke_nerds.search', return_value=[]):
+            resp = search_client.get('/rotation/search?q=billy joel vienna')
+            data = resp.get_json()
+            assert len(data["local"]) == 1
+            result = data["local"][0]
+            assert result["artist"] == "Billy Joel"
+            assert result["title"] == "Vienna (Piano Version)"
+
     def test_rotation_search_all_terms_must_match(self, search_client, search_app):
         """'queen bohemian' only matches files containing BOTH terms."""
         search_app.media.index = {

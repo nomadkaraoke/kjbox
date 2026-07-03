@@ -3891,14 +3891,32 @@ def unified_search(query, app, *, grouped=False):
         searchable = _normalize_text(entry.get("display_name") or entry.get("filename", ""))
         if query_terms_clean and all(term in searchable for term in query_terms_clean):
             from catalog import parse_karaoke_filename
-            disc_id, artist, title = parse_karaoke_filename(entry.get("filename", ""))
+            from naming import strip_media_id_token
+            fname = entry.get("filename", "") or ""
+            # Prefer the clean, curated media_library identity when present:
+            # canonical-slug download filenames carry a trailing ` [media_id]`
+            # token that a raw filename parse would leak into the title
+            # (e.g. "Vienna [yt-I8wu3lLbB0k]"). The scan already resolved the
+            # real artist/title into media_library, so use that; otherwise fall
+            # back to a deterministic parse of the token-stripped filename.
+            ml_row = (app.media_library.get_by_path(path)
+                      if getattr(app, "media_library", None) else None)
+            if ml_row and ((ml_row.get("artist") or "").strip()
+                           or (ml_row.get("title") or "").strip()):
+                disc_id = None
+                artist = ml_row.get("artist") or ""
+                title = ml_row.get("title") or ""
+            else:
+                disc_id, artist, title = parse_karaoke_filename(
+                    strip_media_id_token(fname))
             local_results.append({
                 "path": path,
                 "filename": entry.get("filename"),
                 "artist": artist,
-                "title": title or entry.get("display_name", ""),
+                "title": title or strip_media_id_token(
+                    os.path.splitext(fname)[0]),
                 "disc_id": disc_id,
-                "format": os.path.splitext(entry.get("filename", ""))[1].lstrip('.'),
+                "format": os.path.splitext(fname)[1].lstrip('.'),
                 "duration": entry.get("duration"),
             })
 

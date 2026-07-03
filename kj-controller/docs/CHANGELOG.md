@@ -4,6 +4,40 @@ Dated entries, newest first. Each entry notes any required deploy steps.
 
 ---
 
+## 2026-07-02 - Fix: source-id token leaking into rotation song names (v0.64.1)
+
+**Why:** During a live show, some rotation entries displayed the raw media-id slug
+token in the song name, e.g. `Vienna [yt-I8wu3lLbB0k] - Billy Joel` and
+`Sabrina Carpenter - Go Go Juice [yt-q0rHs_xFuSk]`. Root cause: the P1–P4
+download-naming rename (v0.54.1) renamed downloaded files to the canonical slug
+`Artist - Title [media_id].ext`, but `unified_search()` still derived a search
+result's artist/title by calling `parse_karaoke_filename()` on the raw on-disk
+filename. That parser splits on ` - ` and never strips the trailing `[media_id]`
+token, so the token stuck to the **title**. The polluted title then flowed into
+both the singer-facing pick (`_format_song_text` → `Title - Artist`) and the
+KJ-side add/link (`Artist - Title`), which is why the same bug appeared in two
+orderings. Pre-rename YouTube files (`VIDEOID__…`) never hit this, and SSD-library
+results (pre-parsed via external catalog) were unaffected. Note the `media_library`
+rows themselves were always clean — this was purely a display-build defect.
+
+**What:**
+- `unified_search()` downloaded-media branch now prefers the clean, curated
+  `media_library` identity (looked up by path) for a file's artist/title. The scan
+  already resolves the real artist/title into `media_library`, so search reuses it.
+- When no `media_library` row exists, it falls back to
+  `parse_karaoke_filename(naming.strip_media_id_token(filename))` so the token is
+  stripped before the deterministic parse. The `display_name` fallback is likewise
+  token-stripped.
+- Fixes the source that feeds both the singer `/sing/search` and KJ
+  `/rotation/search` result sets, so no polluted names reach either consumer.
+
+**Deploy:** Backend change (`routes.py`) — requires a `kj-controller` restart to take
+effect. Safe to deploy between singers / after the show. Existing polluted rotation
+rows (`song_artist` free-text) are display-only and can be corrected in-app or left to
+age out; this fix prevents new ones.
+
+---
+
 ## 2026-07-02 - Reliable Fade Out on both engines + selectable durations (v0.64.0)
 
 **Why:** The Fade Out button was "only sometimes clickable." It was enabled only when
