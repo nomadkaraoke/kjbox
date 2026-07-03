@@ -2217,12 +2217,16 @@ body {
     border-color: rgba(255, 77, 207, 0.4);
     color: #ff4dcf;
     font-size: 0.8rem;
+    /* Fixed at the MINIMUM width that fits the widest state ("✓ 13:07") so every
+       row's SMS button is identical width (columns stay aligned) with no wasted
+       padding. tabular-nums keeps every time the same width regardless of digits;
+       nowrap keeps it on one line. */
+    min-width: 3.8rem;
+    text-align: center;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
 }
 .rotation-btn-sms:hover { background: rgba(255, 77, 207, 0.12); }
-.rotation-btn-sms-resent {
-    border-color: rgba(255, 77, 207, 0.25);
-    color: #d6a3c5;
-}
 /* No phone on file — muted pink→grey so it still reads as the SMS button.
    Sizing/opacity/cursor come from the shared .rotation-btn:disabled rule. */
 .rotation-btn-sms-disabled,
@@ -2231,20 +2235,20 @@ body {
     color: #555;
     background: #1c1c1c;
 }
-.rotation-sms-marker {
-    margin-left: 0.25rem;
-    color: #888;
-    font-size: 0.72rem;
-    font-style: italic;
-    align-self: center;
+/* Once sent, the button becomes the delivery-status pill, coloured by state. */
+.rotation-btn-sms-delivered,
+.rotation-btn-sms-delivered:hover {
+    border-color: rgba(74, 222, 128, 0.55);
+    color: #4ade80;
+    background: rgba(74, 222, 128, 0.10);
 }
-/* Delivery-state markers. Failed/delivered read as solid (non-italic) status
-   labels; pending stays muted italic since it's an in-flight "sent" note. */
-.rotation-sms-marker-pending { color: #d1a054; font-style: italic; }
-.rotation-sms-marker-delivered { color: #4ade80; font-style: normal; font-weight: 600; }
-.rotation-sms-marker-failed { color: #f87171; font-style: normal; font-weight: 600; }
-/* Failed send → the button becomes a loud red Retry so a bounce can't be
-   missed (overrides the muted -resent styling via later source order). */
+.rotation-btn-sms-pending,
+.rotation-btn-sms-pending:hover {
+    border-color: rgba(209, 160, 84, 0.55);
+    color: #d1a054;
+    background: rgba(209, 160, 84, 0.10);
+}
+/* Failed send → loud red so a bounce can't be missed. */
 .rotation-btn-sms-failed,
 .rotation-btn-sms-failed:hover {
     border-color: rgba(248, 113, 113, 0.7);
@@ -2266,6 +2270,41 @@ body {
         border-color: rgba(255, 77, 207, 0.95);
         box-shadow: 0 0 6px 1px rgba(255, 77, 207, 0.45);
     }
+}
+/* SMS details modal — reuses .modal-backdrop / .modal-content / .modal-header. */
+.sms-details-loading { padding: 1rem; color: #888; }
+.sms-details-status { font-weight: 600; margin: 0.4rem 0 0.2rem; }
+.sms-details-status-delivered { color: #4ade80; }
+.sms-details-status-pending { color: #d1a054; }
+.sms-details-status-failed { color: #f87171; }
+.sms-details-to { color: #aaa; font-size: 0.85rem; margin-bottom: 0.75rem; }
+.sms-details-label {
+    color: #ff7acc; font-size: 0.72rem; text-transform: uppercase;
+    letter-spacing: 0.04em; margin-bottom: 0.25rem;
+}
+.sms-details-body {
+    background: #141414; border: 1px solid #333; border-radius: 6px;
+    padding: 0.6rem 0.75rem; color: #e5e5e5; white-space: pre-wrap;
+    line-height: 1.4; font-size: 0.9rem;
+}
+.sms-details-error {
+    margin-top: 0.6rem; padding: 0.5rem 0.6rem; border-radius: 6px;
+    background: rgba(248, 113, 113, 0.1); border: 1px solid rgba(248, 113, 113, 0.4);
+    color: #f8a0a0; font-size: 0.85rem;
+}
+.sms-details-tech { margin-top: 0.9rem; }
+.sms-details-tech summary {
+    cursor: pointer; color: #9a9a9a; font-size: 0.82rem; user-select: none;
+}
+.sms-details-tech summary:hover { color: #ccc; }
+.sms-details-tech-row {
+    display: grid; grid-template-columns: 10rem 1fr; gap: 0.5rem;
+    padding: 0.3rem 0; border-bottom: 1px solid #232323; font-size: 0.8rem;
+}
+.sms-details-tech-key { color: #888; }
+.sms-details-tech-val { color: #ddd; word-break: break-all; }
+.sms-details-actions {
+    display: flex; gap: 0.5rem; justify-content: flex-end; margin-top: 1rem;
 }
 .sms-preview-panel {
     margin: 0.25rem 0 0.5rem;
