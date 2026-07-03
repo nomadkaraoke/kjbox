@@ -621,3 +621,57 @@ class TestTelnyxWebhook:
             "event_type": "call.hangup", "payload": {},
         }})
         assert resp.status_code == 200
+
+
+class TestSmsDetail:
+    """POST /rotation/sms/detail returns the last send's full detail so the KJ
+    can open a modal with the exact message body + delivery info."""
+
+    def test_detail_returns_last_send(self, sms_client, sms_app):
+        _, entry_id = _seed_request_and_link(sms_app)
+        sms_app.sms_store.record_send(
+            rotation_entry_id=entry_id, sing_request_id=None,
+            phone_e164="+18432594507", body="Hi Celeste! You're up next.",
+            status="sent", telnyx_message_id="mid-42",
+        )
+        sms_app.sms_store.update_status_by_telnyx_id("mid-42", "delivered")
+        resp = sms_client.post("/rotation/sms/detail",
+                               json={"entry_id": entry_id})
+        assert resp.status_code == 200
+        d = resp.get_json()
+        assert d["body"] == "Hi Celeste! You're up next."
+        assert d["status"] == "delivered"
+        assert d["telnyx_message_id"] == "mid-42"
+        assert d["phone_e164"] == "+18432594507"
+        assert d["sent_at"]
+
+    def test_detail_404_when_no_send(self, sms_client, sms_app):
+        _, entry_id = _seed_request_and_link(sms_app)
+        resp = sms_client.post("/rotation/sms/detail",
+                               json={"entry_id": entry_id})
+        assert resp.status_code == 404
+
+    def test_detail_requires_entry_id(self, sms_client):
+        resp = sms_client.post("/rotation/sms/detail", json={})
+        assert resp.status_code == 400
+
+    def test_detail_400_on_non_integer_entry_id(self, sms_client):
+        resp = sms_client.post("/rotation/sms/detail",
+                               json={"entry_id": "abc"})
+        assert resp.status_code == 400
+
+    def test_detail_returns_newest_send(self, sms_client, sms_app):
+        _, entry_id = _seed_request_and_link(sms_app)
+        sms_app.sms_store.record_send(
+            rotation_entry_id=entry_id, sing_request_id=None,
+            phone_e164="+18432594507", body="first attempt",
+            status="sent", telnyx_message_id="mid-old")
+        sms_app.sms_store.record_send(
+            rotation_entry_id=entry_id, sing_request_id=None,
+            phone_e164="+18432594507", body="second attempt",
+            status="sent", telnyx_message_id="mid-new")
+        resp = sms_client.post("/rotation/sms/detail",
+                               json={"entry_id": entry_id})
+        assert resp.status_code == 200
+        assert resp.get_json()["telnyx_message_id"] == "mid-new"
+        assert resp.get_json()["body"] == "second attempt"

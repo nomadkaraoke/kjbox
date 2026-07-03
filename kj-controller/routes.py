@@ -3403,6 +3403,40 @@ def sms_preview():
     })
 
 
+@routes_bp.route('/rotation/sms/detail', methods=['POST'])
+def sms_detail():
+    """Return the last SMS send's full detail for a row so the KJ can open a
+    modal with the exact message body + delivery info (status, error, Telnyx id).
+
+    Read-only: keyed on rotation_entry_id, which is globally unique (sqlite
+    sequence is never reset — see the cross-night id-reuse fix), so the newest
+    log row for an id belongs to this entry and no other. 404 when nothing has
+    been sent for the row yet.
+    """
+    data = request.get_json(force=True, silent=True) or {}
+    raw_id = data.get('entry_id')
+    if raw_id is None:
+        return jsonify({"error": "entry_id is required"}), 400
+    try:
+        entry_id = int(raw_id)
+    except (TypeError, ValueError):
+        return jsonify({"error": "entry_id must be an integer"}), 400
+
+    latest = current_app.sms_store.get_latest_for_entry(entry_id)
+    if not latest:
+        return jsonify({"error": "no SMS has been sent for this row"}), 404
+
+    return jsonify({
+        "body": latest.get("body"),
+        "phone_e164": latest.get("phone_e164"),
+        "sent_at": latest.get("sent_at"),
+        "status": latest.get("status"),
+        "error": latest.get("error"),
+        "telnyx_message_id": latest.get("telnyx_message_id"),
+        "kj_user_agent": latest.get("kj_user_agent"),
+    })
+
+
 @routes_bp.route('/rotation/sms/send', methods=['POST'])
 def sms_send():
     """Send the SMS body the KJ approved in the preview panel.

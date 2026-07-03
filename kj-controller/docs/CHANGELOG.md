@@ -4,6 +4,37 @@ Dated entries, newest first. Each entry notes any required deploy steps.
 
 ---
 
+## 2026-07-03 - SMS status pill in-button + details modal (v0.67.0)
+
+**Why:** The delivery marker added in v0.65.0 sat *after* the SMS button as a
+separate span ("✓ delivered 2:16 AM"), which widened sent rows and knocked the
+action-button columns out of alignment.
+
+**What:** The status now lives *inside* the SMS button so it stays a fixed,
+minimal width and every row's buttons line up:
+- Not sent → `✉ SMS` (pulses if the singer is up-next). Sent → `✓ 13:07`
+  (delivered, green) / `✗ 13:07` (failed, red) / `• 13:07` (pending, amber),
+  24-hour time. Fixed `min-width` sized to the widest state with `tabular-nums`
+  so times never jitter; the separate marker span is gone.
+- Clicking a **sent** button opens a details modal: recipient, the **exact
+  message body**, send time, delivery status, an up-front failure reason when it
+  bounced, and an expandable **Technical info** section (Telnyx message ID, raw
+  status, error, ISO timestamp, sending device). A **Resend** button hands off to
+  the normal compose/send panel. A not-yet-sent button still opens compose
+  directly.
+- New backend endpoint `POST /rotation/sms/detail` returns the last send's full
+  detail for a row (keyed on the globally-unique rotation_entry_id).
+
+**Deploy:** frontend + the new `routes.py` endpoint. The compact button/modal are
+frontend — visible on next browser load once `static/…?v=` busts (version read at
+startup → new query param after a restart, or a hard refresh). The details modal
+needs the `/rotation/sms/detail` endpoint, which requires the next service
+**restart** to exist; until then the button still renders and clicking a sent one
+shows a graceful "could not load" until the restart. `kj-autodeploy.service` is
+inactive → manual `git pull` on the device; do the restart **between shows**.
+
+---
+
 ## 2026-07-03 - Split singer count/wait into two happiness-coloured pills (v0.66.2)
 
 **Why:** The rotation row packed two facts into one pill (`×4 · 33m`, or a bare

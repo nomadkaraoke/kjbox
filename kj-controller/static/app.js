@@ -4416,8 +4416,11 @@ function renderRotation(entries) {
     const list = document.getElementById('rotation-list');
     if (!list) return;
 
-    // Don't re-render while a row is being edited — would destroy the edit inputs
-    if (document.querySelector('.rotation-editing')) return;
+    // Don't re-render while a row is being edited — would destroy the edit inputs.
+    // Also hold while the SMS details modal is open: it closes over its row's DOM
+    // node for the Resend handoff, and a background poll rebuilding the list would
+    // detach that node (Resend would then throw and silently do nothing).
+    if (document.querySelector('.rotation-editing, .sms-details-modal')) return;
 
     if (!entries.length) {
         list.innerHTML = '<div class="rotation-empty">No singers in queue</div>';
@@ -4927,49 +4930,44 @@ function renderRotation(entries) {
             const smsNudge = smsAvailable && !sms.last_sent_at
                 && statusLower.includes('next');
             const smsBtn = document.createElement('button');
+            // Once sent, the button IS the status pill (icon + 24h time) so it
+            // stays the same width as ✉ SMS and the action columns stay aligned
+            // across rows — the old separate marker span pushed sent rows wider.
             smsBtn.className = 'rotation-btn rotation-btn-sms'
-                + (sent ? ' rotation-btn-sms-resent' : '')
-                + (smsState === 'failed' ? ' rotation-btn-sms-failed' : '')
+                + (sent ? ' rotation-btn-sms-' + smsState : '')
                 + (smsNudge ? ' rotation-btn-sms-nudge' : '')
                 + (smsAvailable ? '' : ' rotation-btn-sms-disabled');
-            // On failure the button becomes a prominent Retry; otherwise the
-            // compact ✉ SMS label (fresh send or re-send).
-            smsBtn.innerHTML = smsState === 'failed' ? '✉ Retry' : '✉ SMS';
+            if (sent) {
+                // Narrow glyphs so the fixed-width button stays minimal: ✓/✗ for
+                // delivered/failed, a small bullet for the transient pending state
+                // (was ⋯, which was the widest and drove the button wider).
+                const icon = smsState === 'delivered' ? '✓'
+                    : smsState === 'failed' ? '✗' : '•';
+                smsBtn.textContent = icon + ' ' + format24h(sms.last_sent_at);
+            } else {
+                smsBtn.textContent = '✉ SMS';
+            }
             if (smsAvailable) {
-                if (smsState === 'failed') {
-                    smsBtn.title = 'Last SMS failed to deliver — click to retry'
-                        + (sms.last_error ? ' (' + sms.last_error + ')' : '');
+                if (sent) {
+                    const label = smsState === 'delivered' ? 'Delivered'
+                        : smsState === 'failed' ? 'Delivery failed' : 'Sent (awaiting receipt)';
+                    smsBtn.title = label + ' — click for message + delivery details';
+                    smsBtn.onclick = (e) => {
+                        e.stopPropagation();
+                        openSmsDetails(row, entry);
+                    };
                 } else {
-                    smsBtn.title = sent
-                        ? 'Re-send the "you’re up" SMS to this singer'
-                        : 'Send the "you’re up" SMS to this singer';
+                    smsBtn.title = 'Send the "you’re up" SMS to this singer';
+                    smsBtn.onclick = (e) => {
+                        e.stopPropagation();
+                        openSmsPreview(row, entry);
+                    };
                 }
-                smsBtn.onclick = (e) => {
-                    e.stopPropagation();
-                    openSmsPreview(row, entry);
-                };
             } else {
                 smsBtn.disabled = true;
                 smsBtn.title = 'No phone number on file for this singer';
             }
             actions.appendChild(smsBtn);
-            if (sent) {
-                const marker = document.createElement('span');
-                marker.className = 'rotation-sms-marker rotation-sms-marker-' + smsState;
-                const ts = formatSmsTimestamp(sms.last_sent_at);
-                if (smsState === 'failed') {
-                    marker.textContent = '✗ failed ' + ts;
-                    marker.title = 'Delivery failed'
-                        + (sms.last_error ? ': ' + sms.last_error : ' (sent ' + sms.last_sent_at + ')');
-                } else if (smsState === 'delivered') {
-                    marker.textContent = '✓ delivered ' + ts;
-                    marker.title = 'Delivered to the singer (sent ' + sms.last_sent_at + ')';
-                } else {
-                    marker.textContent = '⋯ sent ' + ts;
-                    marker.title = 'Sent at ' + sms.last_sent_at + ' — awaiting delivery confirmation';
-                }
-                actions.appendChild(marker);
-            }
         }
 
         row.appendChild(info);
@@ -5859,8 +5857,153 @@ function formatSmsTimestamp(serverTs) {
     return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 }
 
+function format24h(serverTs) {
+    // Server returns "YYYY-MM-DD HH:MM:SS" in localtime. Format as 24-hour
+    // "HH:MM" (leading zeros kept) — compact enough to live inside the SMS
+    // button without widening it.
+    if (!serverTs) return '';
+    const m = String(serverTs).match(/(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})/);
+    return m ? m[4] + ':' + m[5] : serverTs;
+}
+
 function closeAnySmsPanel() {
     document.querySelectorAll('.sms-preview-panel').forEach(p => p.remove());
+}
+
+function closeSmsDetails() {
+    document.querySelectorAll('.sms-details-modal').forEach(m => m.remove());
+    document.removeEventListener('keydown', _smsDetailsEsc);
+}
+
+function _smsDetailsEsc(e) {
+    if (e.key === 'Escape') closeSmsDetails();
+}
+
+// Details modal for a row whose SMS has already been sent: exact message body,
+// send time, delivery status, and an expandable technical-info section. A
+// Resend button hands off to the normal compose/send panel.
+async function openSmsDetails(row, entry) {
+    closeSmsDetails();
+    const modal = document.createElement('div');
+    modal.className = 'modal-backdrop sms-details-modal';
+    modal.onclick = (e) => { if (e.target === modal) closeSmsDetails(); };
+    modal.innerHTML = '<div class="modal-content"><div class="sms-details-loading">'
+        + 'Loading details…</div></div>';
+    document.body.appendChild(modal);
+    document.addEventListener('keydown', _smsDetailsEsc);
+
+    let d;
+    try {
+        const resp = await fetch('/rotation/sms/detail', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ entry_id: entry.id }),
+        });
+        d = await resp.json();
+        if (!resp.ok) throw new Error(d && d.error ? d.error : 'HTTP ' + resp.status);
+    } catch (err) {
+        modal.querySelector('.modal-content').innerHTML =
+            '<div class="sms-preview-error"></div>';
+        modal.querySelector('.sms-preview-error').textContent =
+            'Could not load SMS details: ' + err.message;
+        return;
+    }
+
+    const state = smsDeliveryState(d.status);
+    const icon = state === 'delivered' ? '✓' : state === 'failed' ? '✗' : '⋯';
+    const statusLabel = state === 'delivered' ? 'Delivered'
+        : state === 'failed' ? 'Delivery failed' : 'Sent — awaiting delivery receipt';
+
+    const content = document.createElement('div');
+    content.className = 'modal-content';
+
+    // Header
+    const header = document.createElement('div');
+    header.className = 'modal-header';
+    const h3 = document.createElement('h3');
+    h3.textContent = 'SMS to ' + (entry.singer || d.phone_e164 || 'singer');
+    const close = document.createElement('button');
+    close.className = 'modal-close';
+    close.innerHTML = '&times;';
+    close.onclick = closeSmsDetails;
+    header.appendChild(h3);
+    header.appendChild(close);
+    content.appendChild(header);
+
+    // Status + recipient line
+    const status = document.createElement('div');
+    status.className = 'sms-details-status sms-details-status-' + state;
+    status.textContent = icon + ' ' + statusLabel
+        + (d.sent_at ? ' · sent ' + format24h(d.sent_at) : '');
+    content.appendChild(status);
+
+    const to = document.createElement('div');
+    to.className = 'sms-details-to';
+    to.textContent = 'To: ' + (d.phone_e164 || '—');
+    content.appendChild(to);
+
+    // The exact message body
+    const bodyLabel = document.createElement('div');
+    bodyLabel.className = 'sms-details-label';
+    bodyLabel.textContent = 'Message sent';
+    content.appendChild(bodyLabel);
+    const body = document.createElement('div');
+    body.className = 'sms-details-body';
+    body.textContent = d.body || '(no body recorded)';
+    content.appendChild(body);
+
+    // If it failed, surface the reason up front (not buried in tech info).
+    if (state === 'failed' && d.error) {
+        const errBox = document.createElement('div');
+        errBox.className = 'sms-details-error';
+        errBox.textContent = 'Failure reason: ' + d.error;
+        content.appendChild(errBox);
+    }
+
+    // Expandable technical info
+    const tech = document.createElement('details');
+    tech.className = 'sms-details-tech';
+    const summary = document.createElement('summary');
+    summary.textContent = 'Technical info';
+    tech.appendChild(summary);
+    const rows = [
+        ['Telnyx message ID', d.telnyx_message_id || '—'],
+        ['Raw status', d.status || '—'],
+        ['Error', d.error || 'none'],
+        ['Sent at', d.sent_at || '—'],
+        ['Sent from device', d.kj_user_agent || '—'],
+    ];
+    rows.forEach(([k, v]) => {
+        const r = document.createElement('div');
+        r.className = 'sms-details-tech-row';
+        const kEl = document.createElement('span');
+        kEl.className = 'sms-details-tech-key';
+        kEl.textContent = k;
+        const vEl = document.createElement('span');
+        vEl.className = 'sms-details-tech-val';
+        vEl.textContent = v;
+        r.appendChild(kEl);
+        r.appendChild(vEl);
+        tech.appendChild(r);
+    });
+    content.appendChild(tech);
+
+    // Actions
+    const actions = document.createElement('div');
+    actions.className = 'sms-details-actions';
+    const resend = document.createElement('button');
+    resend.className = 'sms-preview-send-btn';
+    resend.textContent = state === 'failed' ? '✉ Retry send' : '✉ Resend';
+    resend.onclick = () => { closeSmsDetails(); openSmsPreview(row, entry); };
+    const closeBtn = document.createElement('button');
+    closeBtn.className = 'sms-preview-cancel-btn';
+    closeBtn.textContent = 'Close';
+    closeBtn.onclick = closeSmsDetails;
+    actions.appendChild(resend);
+    actions.appendChild(closeBtn);
+    content.appendChild(actions);
+
+    modal.replaceChildren(content);
 }
 
 async function openSmsPreview(row, entry) {
