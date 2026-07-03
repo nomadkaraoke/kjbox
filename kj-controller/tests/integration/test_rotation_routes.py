@@ -23,6 +23,7 @@ def mock_rotation():
     rotation.get_sync_status.return_value = {"last_sync": None, "is_online": False, "next_sync_in": None}
     rotation.store.get_songs_sung_counts.return_value = {}
     rotation.store.get_last_sang_times.return_value = {}
+    rotation.store.get_first_entered_times.return_value = {}
     rotation.get_singer_stats.return_value = []
     # Server-side undo/redo surface (GET /rotation includes these).
     rotation.store.get_rev.return_value = 0
@@ -123,6 +124,33 @@ class TestGetRotation:
         assert alice['last_sang_minutes'] == 22
         assert bob['last_sang_minutes'] == 0
         assert carol['last_sang_minutes'] is None
+
+    def test_entries_have_wait_minutes(self, rotation_client):
+        resp = rotation_client.get('/rotation')
+        entries = resp.get_json()['entries']
+        assert all('wait_minutes' in e for e in entries)
+        # No timing data mocked → all None (frontend shows ∞ / red).
+        assert all(e['wait_minutes'] is None for e in entries)
+
+    def test_wait_minutes_uses_last_sang_when_sung(self, rotation_client, mock_rotation):
+        mock_rotation.store.get_last_sang_times.return_value = {"alice": 22}
+        resp = rotation_client.get('/rotation')
+        entries = resp.get_json()['entries']
+        alice = next(e for e in entries if e['singer'] == 'Alice')
+        assert alice['wait_minutes'] == 22
+
+    def test_wait_minutes_falls_back_to_first_entered_for_new_singer(self, rotation_client, mock_rotation):
+        # Bob hasn't sung (absent from last_sang) but entered 40m ago.
+        mock_rotation.store.get_last_sang_times.return_value = {"alice": 5}
+        mock_rotation.store.get_first_entered_times.return_value = {"alice": 60, "bob": 40}
+        resp = rotation_client.get('/rotation')
+        entries = resp.get_json()['entries']
+        alice = next(e for e in entries if e['singer'] == 'Alice')
+        bob = next(e for e in entries if e['singer'] == 'Bob')
+        # Alice sang 5m ago → use last_sang, NOT her 60m first-entered.
+        assert alice['wait_minutes'] == 5
+        # Bob never sang → waiting since he first entered (40m).
+        assert bob['wait_minutes'] == 40
 
     def test_error_returns_500(self, rotation_client, mock_rotation):
         mock_rotation.get_rotation.side_effect = Exception("DB error")

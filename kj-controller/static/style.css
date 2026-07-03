@@ -2691,7 +2691,9 @@ body {
 .prep-review { background: #f59e0b33; color: #f59e0b; }
 .prep-rendering { background: #7c3aed33; color: #7c3aed; }
 
-.rotation-songs-pill {
+/* The two compact singer pills on each rotation row: sing count (×N) and wait
+   time. Both share this base; colour is applied by a semantic tier class. */
+.rotation-pill {
     font-size: 9px;
     padding: 2px 6px;
     border-radius: 8px;
@@ -2700,18 +2702,11 @@ body {
     letter-spacing: 0.3px;
     white-space: nowrap;
 }
-.pill-new  { background: #2d8a4e33; color: #2d8a4e; }
-.pill-once { background: #f59e0b33; color: #f59e0b; }
-.pill-few  { background: #d4720a33; color: #d4720a; }
-.pill-many { background: #e74c3c33; color: #e74c3c; }
-
-/* "Last sang" elapsed time — rendered inside the count pill after a "·"
-   separator (e.g. ×4 · 1h15m). Dimmer + lighter than the count so the two
-   read as primary (how many) and secondary (how recently). */
-.rotation-songs-pill .rotation-lastsang {
-    font-weight: 400;
-    opacity: 0.72;
-}
+/* Semantic happiness tiers — green = good, red = bad, consistently across both
+   pills (see singCountClass/waitClass in app.js). */
+.pill-good { background: #2d8a4e33; color: #2d8a4e; }
+.pill-warn { background: #f59e0b33; color: #f59e0b; }
+.pill-bad  { background: #e74c3c33; color: #e74c3c; }
 
 /* Singer pill input (add form) */
 .singer-input-container {
