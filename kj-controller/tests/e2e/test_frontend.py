@@ -414,6 +414,22 @@ class TestFadeControls:
         expect(app_page.locator('.fade-preset[data-seconds="3"]')).to_have_text("3s")
         expect(app_page.locator('.fade-preset[data-seconds="20"]')).to_have_text("20s")
 
+    def test_fade_controls_stay_one_flex_row(self, app_page):
+        """Regression: .fade-controls is a plain <div> and must be excluded from the
+        Playback Controls' Seek/Volume grid rule — otherwise it's forced into a 2-col
+        label+slider grid that drops the custom field to a second line. At the desktop
+        breakpoint (default e2e viewport is 1280px, >=769px) it must stay a flex row."""
+        display = app_page.evaluate(
+            "getComputedStyle(document.querySelector('.fade-controls')).display")
+        assert display == "flex", f"expected flex, got {display!r} (grid rule leaked in)"
+        # Presets and the custom group sit on the same visual line (heights differ
+        # slightly; assert their vertical offset is small, i.e. not wrapped).
+        offset = app_page.evaluate(
+            "(() => { const p = document.querySelector('.fade-presets').getBoundingClientRect();"
+            " const c = document.querySelector('.fade-custom').getBoundingClientRect();"
+            " return Math.abs(c.top - p.top); })()")
+        assert offset < 20, f"fade custom group wrapped to a second line (offset {offset}px)"
+
     def test_fade_enabled_when_loaded_even_if_state_stopped(self, app_page):
         """Core fix: a transient 'stopped' must NOT disable Fade Out while a song is
         loaded — the exact 'only sometimes clickable' symptom on the VLC renderer."""

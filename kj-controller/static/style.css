@@ -292,12 +292,16 @@ button:disabled:hover {
 
 /* Fade Out controls — preset durations + custom length (Playback Controls).
  * Presets reuse .system-btn-warn for the amber Fade Out accent. */
-.fade-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+/* One compact row: label + presets + custom, all inline. NOTE: .fade-controls must be
+ * excluded from the ".playback-controls > div:not(...)" Seek/Volume grid rule below,
+ * or it gets forced into a 2-col label+slider grid that drops the custom group to a
+ * second line. */
+.fade-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; }
 .fade-label { font-size: 0.8em; color: #999; }
 .fade-presets { display: flex; gap: 6px; }
-.fade-preset { min-width: 46px; font-size: 0.8em; padding: 7px 10px; }
-.fade-custom { display: flex; align-items: center; gap: 4px; margin-left: auto; }
-.fade-custom-input { width: 54px; background: #1a1a1a; color: #eee; border: 1px solid #444; border-radius: 6px; padding: 6px 8px; font-size: 0.8em; }
+.fade-preset { min-width: 42px; font-size: 0.8em; padding: 6px 10px; }
+.fade-custom { display: flex; align-items: center; gap: 4px; }
+.fade-custom-input { width: 46px; background: #1a1a1a; color: #eee; border: 1px solid #444; border-radius: 6px; padding: 6px 6px; font-size: 0.8em; }
 .fade-custom-input:focus { outline: none; border-color: rgba(245, 158, 11, 0.5); }
 .fade-controls button:disabled { opacity: 0.35; cursor: not-allowed; }
 
@@ -3477,7 +3481,7 @@ body.simple-mode .system-controls {
         grid-column: 1 / -1;
     }
     /* Seek + the two volume sliders: label in col 1, slider fills col 2. */
-    .playback-controls > div:not(.button-group):not(#np-info):not(.header-row) {
+    .playback-controls > div:not(.button-group):not(#np-info):not(.header-row):not(.fade-controls) {
         display: grid;
         grid-template-columns: auto 1fr;
         gap: 0.6rem;
