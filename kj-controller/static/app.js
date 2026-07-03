@@ -496,18 +496,50 @@ function updatePitchDisplay(semitones) {
 }
 
 let _fadingOut = false;
-async function fadeOut() {
+let _fadeResetTimer = null;
+
+function fadeButtons() {
+    return Array.from(document.querySelectorAll('.fade-preset, #fade-custom-go'));
+}
+
+// Fade the karaoke out over `seconds`, then let the coordinator stop it. The engine
+// (mpv or VLC) honours the duration identically. Disabling is driven by
+// current_playing_path clearing once the song stops (see updatePlaybackButtons); the
+// _fadingOut flag just gives immediate feedback and blocks double-triggers.
+async function fadeOut(seconds) {
+    seconds = Number(seconds);
+    if (!Number.isFinite(seconds) || seconds <= 0) return;
     if (_fadingOut) return;
     _fadingOut = true;
-    const btns = [document.getElementById('btn-fadeout')];
-    btns.forEach(b => { if (b) { b.textContent = 'Fading...'; b.disabled = true; } });
-    log('Fading out karaoke...');
-    await apiCall('/control', { action: 'fadeout' });
-    // Wait for the 3s fade to finish before resetting UI
-    setTimeout(() => {
+    fadeButtons().forEach(b => { b.disabled = true; });
+
+    // Show "Fading…" on whichever control was used (a matching preset, else the custom
+    // Fade button), and restore its label afterwards.
+    let feedbackEl = document.querySelector('.fade-preset[data-seconds="' + seconds + '"]');
+    if (!feedbackEl) feedbackEl = document.getElementById('fade-custom-go');
+    const savedLabel = feedbackEl ? feedbackEl.textContent : null;
+    if (feedbackEl) feedbackEl.textContent = 'Fading…';
+
+    log('Fading out karaoke over ' + seconds + 's...');
+    await apiCall('/control', { action: 'fadeout', duration_s: seconds });
+
+    // Clear the flag AFTER the fade completes — scaled to the chosen length, not a
+    // fixed 3.5s — so the buttons don't re-enable mid-fade on a long (10s/20s) fade.
+    if (_fadeResetTimer) clearTimeout(_fadeResetTimer);
+    _fadeResetTimer = setTimeout(() => {
         _fadingOut = false;
-        btns.forEach(b => { if (b) b.textContent = 'Fade Out'; });
-    }, 3500);
+        if (feedbackEl && savedLabel !== null) feedbackEl.textContent = savedLabel;
+    }, seconds * 1000 + 800);
+}
+
+// Custom fade length from the number field, clamped to the backend's 1–60s range.
+function fadeOutCustom() {
+    const input = document.getElementById('fade-custom-seconds');
+    if (!input) return;
+    let secs = parseInt(input.value, 10);
+    if (!Number.isFinite(secs)) return;
+    secs = Math.max(1, Math.min(secs, 60));
+    fadeOut(secs);
 }
 
 // --- Volume & Seek (#2 volume labels) ---
@@ -1170,27 +1202,28 @@ function updatePlaybackButtons(state) {
     const btnPause = document.getElementById('btn-pause');
     const btnRestart = document.getElementById('btn-restart');
     const btnStop = document.getElementById('btn-stop');
-    const btnFadeout = document.getElementById('btn-fadeout');
+    const fadeBtns = fadeButtons();
 
-    if (state === 'playing') {
-        btnPause.textContent = 'Pause';
-        btnPause.disabled = false;
-        btnRestart.disabled = false;
-        btnStop.disabled = false;
-        if (!_fadingOut) btnFadeout.disabled = false;
-    } else if (state === 'paused') {
+    // Pause label follows the live state, but stays enabled so the KJ can always try.
+    if (state === 'paused') {
         btnPause.textContent = 'Resume';
-        btnPause.disabled = false;
-        btnRestart.disabled = false;
-        btnStop.disabled = false;
-        if (!_fadingOut) btnFadeout.disabled = false;
+    } else if (state === 'playing') {
+        btnPause.textContent = 'Pause';
     } else {
         btnPause.textContent = 'Pause / Resume';
-        btnPause.disabled = false; // Keep enabled so user can always try
-        btnRestart.disabled = true;
-        btnStop.disabled = true;
-        btnFadeout.disabled = true;
     }
+    btnPause.disabled = false;
+
+    // Restart / Stop / Fade act on the currently loaded song. Gate them on whether a
+    // song is actually loaded (current_playing_path) rather than the live player state.
+    // That state flickers to 'stopped' transiently on the VLC renderer (and briefly on
+    // mpv under IPC contention), which used to grey out Fade Out mid-song. The loaded
+    // signal is renderer-agnostic and stable, so these controls stay reliably clickable.
+    const songLoaded = !!currentPlayingPath;
+    btnRestart.disabled = !songLoaded;
+    btnStop.disabled = !songLoaded;
+    const fadeEnabled = songLoaded && !_fadingOut;
+    fadeBtns.forEach(b => { b.disabled = !fadeEnabled; });
 }
 
 async function updateStatus() {

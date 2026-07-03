@@ -4,9 +4,69 @@ the same contract for read-only behaviours."""
 import pytest
 
 from filler import FillerVLC
-from karaoke_player import KaraokePlayer
+from karaoke_player import KaraokePlayer, fade_steps
 from mpv_manager import MpvKaraokePlayer
 from vlc import VlcKaraokePlayer
+
+
+class _SyncThread:
+    """Runs the thread target inline so fadeout ramps complete synchronously."""
+
+    def __init__(self, target, daemon=False, **kwargs):
+        self.target = target
+
+    def start(self):
+        self.target()
+
+
+def _count_fade_volume_writes(player, mocker, duration_s):
+    """Run a fadeout and count how many volume-set primitives each engine issues."""
+    import mpv_manager as _m
+    import vlc as _v
+
+    calls = []
+    if hasattr(player, '_set_property'):  # mpv
+        mocker.patch.object(player, '_send_ipc')
+        mocker.patch.object(
+            player, '_set_property',
+            side_effect=lambda name, val: calls.append(1) if name == 'volume' else None)
+    if hasattr(player, '_send'):  # vlc
+        mocker.patch.object(
+            player, '_send',
+            side_effect=lambda cmd='', *a, **k: calls.append(1)
+            if str(cmd).startswith('volume&val=') else None)
+    mocker.patch.object(player, 'stop')
+    mocker.patch.object(_m.time, 'sleep')
+    mocker.patch.object(_v.time, 'sleep')
+    mocker.patch.object(_m.threading, 'Thread', _SyncThread)
+    mocker.patch.object(_v.threading, 'Thread', _SyncThread)
+
+    player.fadeout(duration_s=duration_s)
+    return len(calls)
+
+
+# --- fade_steps helper (shared by both engines) ---
+
+def test_fade_steps_scales_with_duration():
+    assert fade_steps(3) < fade_steps(10) < fade_steps(20)
+
+
+def test_fade_steps_floor_and_cap():
+    assert fade_steps(0.5) == 20        # short fades never coarser than 20 steps
+    assert fade_steps(1000) == 200      # runaway durations capped at 200 steps
+
+
+# --- Both engines ramp equally, scaled to the requested duration ---
+
+def test_fadeout_long_fade_ramps_more(player, mocker):
+    count = _count_fade_volume_writes(player, mocker, 20)
+    assert count >= fade_steps(20)      # at least the scaled step count on both engines
+
+
+def test_fadeout_short_fade_uses_min_steps(player, mocker):
+    count = _count_fade_volume_writes(player, mocker, 3)
+    # 3s → fade_steps(3) ramp writes; allow the loop's inclusive end + one restore send
+    assert fade_steps(3) <= count <= fade_steps(3) + 3
 
 
 @pytest.fixture(params=[MpvKaraokePlayer, VlcKaraokePlayer], ids=['mpv', 'vlc'])

@@ -17,6 +17,7 @@ import requests
 
 from config import APP_DIR, is_pi
 from filler import FillerVLC
+from karaoke_player import fade_steps
 from utils import log_message
 
 STATE_FILE = '/tmp/kj-vlc-state.json'
@@ -323,7 +324,7 @@ class VlcKaraokePlayer:
     def fadeout(self, duration_s=3.0):
         """Fade karaoke volume to 0 over duration_s, stop, restore volume."""
         saved_volume = self.karaoke_volume
-        steps = 20
+        steps = fade_steps(duration_s)
         delay = duration_s / steps
 
         def _do():
@@ -341,10 +342,33 @@ class VlcKaraokePlayer:
 
     def get_status(self):
         status = self._send("")
+        # `active` + a current_path are set on play and cleared only by a real
+        # stop/fadeout or the guarded monitor — never by VLC's transient 'stopped'
+        # reports — so together they form a stable "a song is loaded" signal.
+        song_loaded = self.active and self.current_path is not None
+
         if not status:
+            # HTTP blip (timeout/error). Don't flap the reported state to 'stopped'
+            # mid-song — that would flicker the now-playing pill and grey out the
+            # playback buttons. The monitor also ignores blips (see monitor()); mirror
+            # that here by reporting the last-known playing state while a song is loaded.
+            if song_loaded:
+                return {"state": "playing", "time": 0, "length": 0}
             return {"state": "stopped", "time": 0, "length": 0}
+
+        raw_state = status.get('state', 'stopped')
+        # VLC's HTTP interface reports 'stopped' transiently for a few seconds after a
+        # play or seek. The end-of-song monitor guards against this so it doesn't falsely
+        # fire on_karaoke_end; mirror that guard here so consumers of get_status (button
+        # gating, now-playing pill) see mpv-equivalent, non-flickering state.
+        if raw_state == 'stopped' and song_loaded:
+            now = time.time()
+            within_guard = (now - self.last_play_time < 5) or (now - self.last_seek_time < 5)
+            if within_guard:
+                raw_state = 'playing'
+
         return {
-            "state": status.get('state', 'stopped'),
+            "state": raw_state,
             "time": int(status.get('time', 0) or 0),
             "length": int(status.get('length', 0) or 0),
         }

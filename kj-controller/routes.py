@@ -901,7 +901,16 @@ def handle_control():
     elif action == 'fadeout':
         # Coordinator drives the fade on the active player, restores volume,
         # clears overlay, and fades filler back in. Works for both renderers.
-        vlc.fadeout(duration_s=3.0)
+        # The KJ picks the fade length per use (3s / 10s / 20s / custom); default 3s
+        # for back-compat, clamped to a sane range so a bad value can't stall the
+        # fade thread for minutes or fire instantly.
+        raw_duration = request.json.get('duration_s', 3.0)
+        try:
+            fade_duration = float(raw_duration)
+        except (TypeError, ValueError):
+            fade_duration = 3.0
+        fade_duration = max(0.5, min(fade_duration, 60.0))
+        vlc.fadeout(duration_s=fade_duration)
 
     return jsonify({"success": True, "message": f"Action '{action}' executed."})
 
