@@ -2238,7 +2238,35 @@ body {
     font-style: italic;
     align-self: center;
 }
-.rotation-sms-marker-failed { color: #f87171; font-style: normal; }
+/* Delivery-state markers. Failed/delivered read as solid (non-italic) status
+   labels; pending stays muted italic since it's an in-flight "sent" note. */
+.rotation-sms-marker-pending { color: #d1a054; font-style: italic; }
+.rotation-sms-marker-delivered { color: #4ade80; font-style: normal; font-weight: 600; }
+.rotation-sms-marker-failed { color: #f87171; font-style: normal; font-weight: 600; }
+/* Failed send → the button becomes a loud red Retry so a bounce can't be
+   missed (overrides the muted -resent styling via later source order). */
+.rotation-btn-sms-failed,
+.rotation-btn-sms-failed:hover {
+    border-color: rgba(248, 113, 113, 0.7);
+    color: #f87171;
+    background: rgba(248, 113, 113, 0.12);
+}
+/* Nudge: up-next singer has a phone but no SMS sent yet. Subtle brand-pink
+   glow pulse to prompt the KJ. Respects prefers-reduced-motion. */
+@keyframes smsNudgePulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(255, 77, 207, 0); border-color: rgba(255, 77, 207, 0.45); }
+    50% { box-shadow: 0 0 7px 1px rgba(255, 77, 207, 0.55); border-color: rgba(255, 77, 207, 0.95); }
+}
+.rotation-btn-sms-nudge {
+    animation: smsNudgePulse 1.8s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+    .rotation-btn-sms-nudge {
+        animation: none;
+        border-color: rgba(255, 77, 207, 0.95);
+        box-shadow: 0 0 6px 1px rgba(255, 77, 207, 0.45);
+    }
+}
 .sms-preview-panel {
     margin: 0.25rem 0 0.5rem;
     padding: 0.75rem;

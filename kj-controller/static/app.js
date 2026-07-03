@@ -4901,15 +4901,37 @@ function renderRotation(entries) {
         if (sms.configured) {
             const smsAvailable = !!sms.available;
             const sent = smsAvailable && !!sms.last_sent_at;
+            // Delivery state derived from the last log row. Send-time records
+            // 'sent'/'failed'; the Telnyx delivery receipt later overwrites with
+            // 'delivered'/'delivery_failed'. We must treat the DLR failure
+            // states as failures too — the old code only matched 'failed', so a
+            // carrier hard-reject (delivery_failed) rendered as a plain "sent"
+            // marker and the bounce was invisible.
+            const smsState = smsDeliveryState(sent ? sms.last_status : null);
+            // Nudge: the up-next singer has a phone but no SMS has gone out yet.
+            // Pulse the button so the KJ remembers to give them the heads-up.
+            // Only for the not-yet-sent case — a failed send already shouts via
+            // the red Retry styling, and a delivered/pending one needs no prompt.
+            const smsNudge = smsAvailable && !sms.last_sent_at
+                && statusLower.includes('next');
             const smsBtn = document.createElement('button');
             smsBtn.className = 'rotation-btn rotation-btn-sms'
                 + (sent ? ' rotation-btn-sms-resent' : '')
+                + (smsState === 'failed' ? ' rotation-btn-sms-failed' : '')
+                + (smsNudge ? ' rotation-btn-sms-nudge' : '')
                 + (smsAvailable ? '' : ' rotation-btn-sms-disabled');
-            smsBtn.innerHTML = '✉ SMS';
+            // On failure the button becomes a prominent Retry; otherwise the
+            // compact ✉ SMS label (fresh send or re-send).
+            smsBtn.innerHTML = smsState === 'failed' ? '✉ Retry' : '✉ SMS';
             if (smsAvailable) {
-                smsBtn.title = sent
-                    ? 'Re-send the "you’re up" SMS to this singer'
-                    : 'Send the "you’re up" SMS to this singer';
+                if (smsState === 'failed') {
+                    smsBtn.title = 'Last SMS failed to deliver — click to retry'
+                        + (sms.last_error ? ' (' + sms.last_error + ')' : '');
+                } else {
+                    smsBtn.title = sent
+                        ? 'Re-send the "you’re up" SMS to this singer'
+                        : 'Send the "you’re up" SMS to this singer';
+                }
                 smsBtn.onclick = (e) => {
                     e.stopPropagation();
                     openSmsPreview(row, entry);
@@ -4921,11 +4943,19 @@ function renderRotation(entries) {
             actions.appendChild(smsBtn);
             if (sent) {
                 const marker = document.createElement('span');
-                marker.className = 'rotation-sms-marker';
-                marker.textContent = 'sent ' + formatSmsTimestamp(sms.last_sent_at);
-                marker.title = 'Last sent at ' + sms.last_sent_at +
-                    (sms.last_status === 'failed' ? ' (failed)' : '');
-                if (sms.last_status === 'failed') marker.classList.add('rotation-sms-marker-failed');
+                marker.className = 'rotation-sms-marker rotation-sms-marker-' + smsState;
+                const ts = formatSmsTimestamp(sms.last_sent_at);
+                if (smsState === 'failed') {
+                    marker.textContent = '✗ failed ' + ts;
+                    marker.title = 'Delivery failed'
+                        + (sms.last_error ? ': ' + sms.last_error : ' (sent ' + sms.last_sent_at + ')');
+                } else if (smsState === 'delivered') {
+                    marker.textContent = '✓ delivered ' + ts;
+                    marker.title = 'Delivered to the singer (sent ' + sms.last_sent_at + ')';
+                } else {
+                    marker.textContent = '⋯ sent ' + ts;
+                    marker.title = 'Sent at ' + sms.last_sent_at + ' — awaiting delivery confirmation';
+                }
                 actions.appendChild(marker);
             }
         }
@@ -5793,6 +5823,21 @@ async function advanceRotationStatus(entry, idx, entries) {
 // ---------------------------------------------------------------------------
 // SMS preview + send (manual "you’re up" texts from the rotation row)
 // ---------------------------------------------------------------------------
+
+// Collapse a raw sms_log status into one of three UI states.
+//   'delivered' — carrier confirmed delivery (green ✓)
+//   'failed'    — send-time error OR delivery-receipt failure (red ✗ + Retry)
+//   'pending'   — accepted by Telnyx, awaiting the DLR (amber ⋯). Default for
+//                 'sent'/'queued'/'sending' and any unrecognised non-null status.
+// Failure set must include the DLR statuses ('delivery_failed'), not just the
+// send-time 'failed' — that omission is why bounces were silent.
+function smsDeliveryState(status) {
+    if (status === 'delivered') return 'delivered';
+    if (status === 'failed' || status === 'delivery_failed' || status === 'sending_failed') {
+        return 'failed';
+    }
+    return 'pending';
+}
 
 function formatSmsTimestamp(serverTs) {
     // Server returns "YYYY-MM-DD HH:MM:SS" in localtime. Format as H:MM AM/PM.
