@@ -4,6 +4,40 @@ Dated entries, newest first. Each entry notes any required deploy steps.
 
 ---
 
+## 2026-07-03 - SMS delivery status on rotation rows + up-next nudge (v0.65.0)
+
+**Why:** A live-show SMS outage (the sending number was never linked to the
+approved 10DLC campaign → every send hard-rejected with carrier error `40010`)
+went unnoticed for ~2 weeks because the rotation row showed an optimistic
+"sent 11:39 PM" marker whenever an SMS was *accepted* by Telnyx (HTTP-2xx =
+queued). The real outcome arrives later via the Telnyx delivery-receipt (DLR)
+webhook, which writes `delivered` / `delivery_failed` to `sms_log.status` — but
+the frontend only styled the send-time `failed` string, never the DLR
+`delivery_failed`, so carrier rejections rendered as a plain neutral "sent".
+
+**What:**
+- `routes.py` (`_add_sms_status`): add `last_error` to each row's `sms` block so
+  the failure tooltip can explain *why* (e.g. `40010 Not 10DLC registered`,
+  opted-out, carrier reject). Docstring updated for the DLR statuses.
+- `static/app.js`: `smsDeliveryState()` collapses the raw status into
+  delivered / failed / pending (the failure set now includes the DLR statuses).
+  Marker renders ✓ delivered (green) / ✗ failed (red) / ⋯ sent (amber); the SMS
+  button becomes a red **Retry** on failure.
+- Up-next nudge: when the up-next singer has a phone but no SMS has been sent
+  yet, the SMS button pulses (subtle brand-pink glow; respects
+  `prefers-reduced-motion`).
+- Tests: `/rotation` surfaces `last_status` + `last_error` for delivered and
+  `delivery_failed` DLRs.
+
+**Deploy:** frontend + a tiny additive `routes.py` field. The ✓/✗/⋯ colours are
+frontend — they appear on the next browser load once `app.js?v=` busts (version
+read at startup → new query param after a restart, or a hard refresh). The
+`last_error` tooltip text needs the next service **restart** to take effect.
+`kj-autodeploy.service` is currently inactive → deploy is a manual `git pull` on
+the device; **do the restart between shows, never mid-song.**
+
+---
+
 ## 2026-07-03 - Version renumber: 0.64.2 (avoid collision with concurrent #154)
 
 **Why:** PR #155 (the source-id token fix below) and PR #154 (fade-out controls on

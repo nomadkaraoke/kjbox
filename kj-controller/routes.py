@@ -2727,7 +2727,10 @@ def _add_sms_status(entries, app=None):
             "configured": bool,       # SMS feature is globally configured at all
             "available": bool,        # SMS is globally configured AND row has a phone
             "last_sent_at": str|null, # timestamp of most recent send
-            "last_status": "sent"|"failed"|null,
+            "last_status": str|null,  # "sent"/"failed" at send time, then the
+                                      # Telnyx DLR overwrites with "delivered"/
+                                      # "delivery_failed" once the receipt lands
+            "last_error": str|null,   # failure reason from the last send/DLR
         }
 
     The frontend shows the SMS button on every row when ``configured`` is
@@ -2805,6 +2808,10 @@ def _add_sms_status(entries, app=None):
             "available": bool(phone.strip()),
             "last_sent_at": latest["sent_at"] if latest else None,
             "last_status": latest["status"] if latest else None,
+            # Surfaced so the row's ✗ marker tooltip can explain WHY a send
+            # bounced (e.g. "40010 Not 10DLC registered", opted-out, carrier
+            # reject). Only meaningful for failure states; None otherwise.
+            "last_error": latest["error"] if latest else None,
         }
 
 

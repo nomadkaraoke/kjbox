@@ -230,6 +230,47 @@ class TestRotationSmsBlock:
         assert celeste["sms"]["last_status"] == "sent"
         assert celeste["sms"]["last_sent_at"]
 
+    def test_dlr_failure_surfaces_status_and_error(self, sms_client, sms_app):
+        """After a delivery receipt marks a send failed, the row's sms block
+        must report last_status='delivery_failed' AND last_error so the KJ sees
+        WHY it bounced.
+
+        Regression (2026-07-02): a carrier hard-reject (40010 "not 10DLC
+        registered") arrives via the DLR webhook as status 'delivery_failed',
+        but the frontend only recognised the send-time 'failed' string and the
+        error text never left the backend — so the row rendered a plain neutral
+        "sent" marker and the failure was invisible for ~2 weeks.
+        """
+        _, entry_id = _seed_request_and_link(sms_app)
+        sms_app.sms_store.record_send(
+            rotation_entry_id=entry_id, sing_request_id=None,
+            phone_e164="+18432594507", body="hi", status="sent",
+            telnyx_message_id="m1",
+        )
+        sms_app.sms_store.update_status_by_telnyx_id(
+            "m1", "delivery_failed",
+            error="40010; Not 10DLC registered; The sending number is not "
+                  "10DLC-registered but is required to be by the carrier.",
+        )
+        resp = sms_client.get("/rotation")
+        row = [e for e in resp.get_json()["entries"] if e["id"] == entry_id][0]
+        assert row["sms"]["last_status"] == "delivery_failed"
+        assert "40010" in (row["sms"]["last_error"] or "")
+
+    def test_delivered_status_surfaces_with_no_error(self, sms_client, sms_app):
+        """A successful DLR reports last_status='delivered' and last_error=None."""
+        _, entry_id = _seed_request_and_link(sms_app)
+        sms_app.sms_store.record_send(
+            rotation_entry_id=entry_id, sing_request_id=None,
+            phone_e164="+18432594507", body="hi", status="sent",
+            telnyx_message_id="m2",
+        )
+        sms_app.sms_store.update_status_by_telnyx_id("m2", "delivered", error=None)
+        resp = sms_client.get("/rotation")
+        row = [e for e in resp.get_json()["entries"] if e["id"] == entry_id][0]
+        assert row["sms"]["last_status"] == "delivered"
+        assert row["sms"]["last_error"] is None
+
 
 class TestMutationResponsesIncludeSmsBlock:
     """Every rotation endpoint that returns ``entries`` must attach the ``sms``
