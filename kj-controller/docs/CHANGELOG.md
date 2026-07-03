@@ -4,7 +4,17 @@ Dated entries, newest first. Each entry notes any required deploy steps.
 
 ---
 
-## 2026-07-02 - Fix: source-id token leaking into rotation song names (v0.64.1)
+## 2026-07-03 - Version renumber: 0.64.2 (avoid collision with concurrent #154)
+
+**Why:** PR #155 (the source-id token fix below) and PR #154 (fade-out controls on
+one compact line — CSS only, no changelog entry) both merged as `v0.64.1` from
+concurrent branches. Renumber HEAD to `0.64.2` so the deployed version is unique and
+strictly later. No code change — version string only. The `v0.64.1` label now refers
+to the #154 CSS tweak; the token fix ships as `0.64.2`.
+
+---
+
+## 2026-07-03 - Fix: source-id token leaking into rotation song names (v0.64.2, was v0.64.1)
 
 **Why:** During a live show, some rotation entries displayed the raw media-id slug
 token in the song name, e.g. `Vienna [yt-I8wu3lLbB0k] - Billy Joel` and
