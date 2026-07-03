@@ -302,7 +302,7 @@ button:disabled:hover {
 .fade-preset { min-width: 42px; font-size: 0.8em; padding: 6px 10px; }
 .fade-custom { display: flex; align-items: center; gap: 4px; }
 .fade-custom-input { width: 46px; background: #1a1a1a; color: #eee; border: 1px solid #444; border-radius: 6px; padding: 6px 6px; font-size: 0.8em; }
-.fade-custom-input:focus { outline: none; border-color: rgba(245, 158, 11, 0.5); }
+.fade-custom-input:focus { outline: none; border-color: #f59e0b; box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.4); }
 .fade-controls button:disabled { opacity: 0.35; cursor: not-allowed; }
 
 /* Armed dangerous action buttons (#4) */
