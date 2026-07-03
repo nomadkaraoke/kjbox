@@ -2610,17 +2610,26 @@ def _add_songs_sung(entries, rotation):
         entry["songs_sung"] = counts.get(entry["singer"].lower(), 0)
 
 
-def _add_last_sang(entries, rotation):
-    """Add last_sang_minutes field to each entry.
+def _add_wait_pills(entries, rotation):
+    """Add the two fields the rotation UI renders as the singer "happiness"
+    pills (alongside ``songs_sung``, added separately):
 
-    The value is whole minutes since the singer most recently finished a song
-    tonight, or ``None`` if they have not sung yet. For multi-singer entries we
-    surface the LONGEST wait across the group (max minutes) so the figure tracks
-    the most under-served member — consistent with ``songs_sung`` showing the
-    least-sung member's count.
+    - ``last_sang_minutes``: whole minutes since the singer most recently
+      finished a song tonight, or ``None`` if they have not sung yet. Kept for
+      tooltip wording ("last sang X ago").
+    - ``wait_minutes``: how long the singer has been waiting for their next
+      turn — minutes since they last sang, or, for a singer who has NOT sung,
+      minutes since their first song was entered into the rotation. ``None``
+      only when no timestamp exists at all (rendered as ∞ / red). Drives the
+      wait pill's value and colour.
+
+    For multi-singer entries we surface the LONGEST wait across the group (max
+    minutes) so both figures track the most under-served member — consistent
+    with ``songs_sung`` showing the least-sung member's count.
     """
     import json as _json
-    times = rotation.store.get_last_sang_times()
+    last_sang = rotation.store.get_last_sang_times()
+    first_entered = rotation.store.get_first_entered_times()
     for entry in entries:
         singers_json = entry.get("singers_json")
         names = None
@@ -2633,15 +2642,25 @@ def _add_last_sang(entries, rotation):
                 names = parsed
         if names is None:
             names = [entry["singer"]]
-        mins = [times[n.strip().lower()] for n in names if n.strip().lower() in times]
-        entry["last_sang_minutes"] = max(mins) if mins else None
+        keys = [n.strip().lower() for n in names]
+        sang = [last_sang[k] for k in keys if k in last_sang]
+        entry["last_sang_minutes"] = max(sang) if sang else None
+        # Per singer: minutes since they last sang, else since they first
+        # entered. Group wait = the longest (most under-served member).
+        waits = []
+        for k in keys:
+            if k in last_sang:
+                waits.append(last_sang[k])
+            elif k in first_entered:
+                waits.append(first_entered[k])
+        entry["wait_minutes"] = max(waits) if waits else None
 
 
 def _add_last_sang_to_singer_stats(singer_stats, rotation):
     """Add last_sang_minutes field to each singer stat entry.
 
-    Mirrors _add_last_sang() for rotation entries but operates on the
-    consolidated per-singer dicts returned by get_singer_stats().
+    Mirrors the last_sang half of _add_wait_pills() for rotation entries but
+    operates on the consolidated per-singer dicts returned by get_singer_stats().
     """
     times = rotation.store.get_last_sang_times()
     for singer in singer_stats:
@@ -2873,7 +2892,7 @@ def _decorate_rotation_entries(entries, rotation):
     """
     _add_time_estimates(entries)
     _add_songs_sung(entries, rotation)
-    _add_last_sang(entries, rotation)
+    _add_wait_pills(entries, rotation)
     _add_sms_status(entries)
     _add_media_meta(entries)
 

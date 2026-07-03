@@ -554,6 +554,66 @@ class TestGetLastSangTimes:
         assert store.get_last_sang_times()["alice"] <= 1
 
 
+class TestGetFirstEnteredTimes:
+    """Minutes since a singer FIRST entered the rotation tonight — used to show
+    a "waiting" duration for singers who haven't sung yet."""
+
+    def _backdate_created(self, store, entry_id, minutes):
+        """Force an entry's created_at to ``minutes`` ago (device localtime)."""
+        conn = store._get_conn()
+        conn.execute(
+            "UPDATE rotation_entries "
+            "SET created_at = datetime('now', 'localtime', ?) WHERE id = ?",
+            ("-{} minutes".format(minutes), entry_id),
+        )
+        conn.commit()
+
+    def test_empty(self, store):
+        assert store.get_first_entered_times() == {}
+
+    def test_fresh_entry_is_near_zero(self, store):
+        store.add_entry("Alice")
+        times = store.get_first_entered_times()
+        assert "alice" in times
+        assert 0 <= times["alice"] <= 1
+
+    def test_reports_minutes_since_created(self, store):
+        e1 = store.add_entry("Alice")
+        self._backdate_created(store, e1["id"], 33)
+        assert store.get_first_entered_times()["alice"] == 33
+
+    def test_uses_earliest_entry(self, store):
+        # Two songs added: one 90m ago, one 10m ago — report the EARLIEST
+        # (they've been waiting since the first one).
+        e1 = store.add_entry("Alice")
+        e2 = store.add_entry("Alice")
+        self._backdate_created(store, e1["id"], 90)
+        self._backdate_created(store, e2["id"], 10)
+        assert store.get_first_entered_times()["alice"] == 90
+
+    def test_includes_non_done_and_done(self, store):
+        # Unlike last_sang, this covers waiting AND already-sung singers.
+        e1 = store.add_entry("Alice")
+        store.update_status(e1["id"], "Done")
+        self._backdate_created(store, e1["id"], 25)
+        assert store.get_first_entered_times()["alice"] == 25
+
+    def test_credits_each_singer_in_group(self, store):
+        e1 = store.add_entry(None, singers=["Alice", "Bob"])
+        self._backdate_created(store, e1["id"], 15)
+        times = store.get_first_entered_times()
+        assert times["alice"] == 15
+        assert times["bob"] == 15
+
+    def test_case_insensitive(self, store):
+        e1 = store.add_entry("Alice")
+        self._backdate_created(store, e1["id"], 40)
+        e2 = store.add_entry("alice")
+        self._backdate_created(store, e2["id"], 5)
+        # Earliest across both spellings.
+        assert store.get_first_entered_times()["alice"] == 40
+
+
 class TestFileLink:
     def test_link_file(self, store):
         e = store.add_entry("Alice")

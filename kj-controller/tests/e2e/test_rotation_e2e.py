@@ -239,3 +239,84 @@ class TestRotationClickGestures:
         res = self._click(page, '#rotation-list .rotation-name', {"shiftKey": True})
         assert res["editing"] is True, res
         assert "rotation-edit-singer" in res["active"], res
+
+
+# Render rotation rows across all "singer happiness" tiers and read back the two
+# pills (sing count + wait time) each row produced, so the colour thresholds and
+# the new-singer wait-time behaviour stay locked in.
+_PILL_PROBE = """
+(entries) => {
+    for (let i = 1; i < 100000; i++) clearInterval(i);
+    window.rotationData = entries;
+    renderRotation(entries);
+    const tier = el => (Array.from(el.classList).find(c => c.startsWith('pill-')) || '');
+    return Array.from(document.querySelectorAll('#rotation-list .rotation-entry')).map(row => {
+        const pills = row.querySelectorAll('.rotation-pill');
+        return {
+            n: pills.length,
+            count_text: pills[0] ? pills[0].textContent : null,
+            count_tier: pills[0] ? tier(pills[0]) : null,
+            wait_text: pills[1] ? pills[1].textContent : null,
+            wait_tier: pills[1] ? tier(pills[1]) : null,
+            // Guard: the retired combined-pill markup must be gone.
+            legacy: row.querySelectorAll('.rotation-songs-pill, .pill-new, .rotation-lastsang').length,
+        };
+    });
+}
+"""
+
+
+class TestSingerHappinessPills:
+    """The rotation row shows two compact pills — sing count and wait time —
+    each coloured green=good / red=bad from the singer's perspective."""
+
+    def _probe(self, page, entries):
+        for i, e in enumerate(entries):
+            e.setdefault("id", i + 1)
+            e.setdefault("position", i + 1)
+            e.setdefault("song_artist", "Song - Artist")
+            e.setdefault("status", "Up Next")
+            e.setdefault("file_path", "/d/x.mp4")
+        return page.evaluate(_PILL_PROBE, entries)
+
+    def test_count_pill_colour_tiers(self, app_page):
+        rows = self._probe(app_page, [
+            {"singer": "Zero", "songs_sung": 0, "wait_minutes": 5},
+            {"singer": "One", "songs_sung": 1, "wait_minutes": 5},
+            {"singer": "Four", "songs_sung": 4, "wait_minutes": 5},
+            {"singer": "Five", "songs_sung": 5, "wait_minutes": 5},
+        ])
+        # <2 red, 2–4 yellow, >=5 green — count always shown, including ×0.
+        assert [r["count_text"] for r in rows] == ["×0", "×1", "×4", "×5"]
+        assert [r["count_tier"] for r in rows] == [
+            "pill-bad", "pill-bad", "pill-warn", "pill-good"]
+
+    def test_wait_pill_colour_tiers(self, app_page):
+        rows = self._probe(app_page, [
+            {"singer": "Fresh", "songs_sung": 3, "wait_minutes": 20},
+            {"singer": "Waiting", "songs_sung": 3, "wait_minutes": 45},
+            {"singer": "Overdue", "songs_sung": 3, "wait_minutes": 46},
+        ])
+        # <=20 green, 21–45 yellow, >45 red.
+        assert [r["wait_text"] for r in rows] == ["20m", "45m", "46m"]
+        assert [r["wait_tier"] for r in rows] == [
+            "pill-good", "pill-warn", "pill-bad"]
+
+    def test_new_singer_shows_wait_time(self, app_page):
+        # The core ask: a brand-new singer (0 sung) still gets a wait pill,
+        # measured from when their first song entered the rotation.
+        rows = self._probe(app_page, [
+            {"singer": "Newbie", "songs_sung": 0, "wait_minutes": 33},
+        ])
+        assert rows[0]["n"] == 2
+        assert rows[0]["count_text"] == "×0"
+        assert rows[0]["wait_text"] == "33m"
+        assert rows[0]["wait_tier"] == "pill-warn"
+        assert rows[0]["legacy"] == 0  # no old "NEW" / combined pill
+
+    def test_unknown_wait_is_infinity_red(self, app_page):
+        rows = self._probe(app_page, [
+            {"singer": "Unknown", "songs_sung": 0, "wait_minutes": None},
+        ])
+        assert rows[0]["wait_text"] == "∞"
+        assert rows[0]["wait_tier"] == "pill-bad"

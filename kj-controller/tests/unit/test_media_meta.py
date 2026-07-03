@@ -62,7 +62,7 @@ def test_decorate_rotation_entries_includes_media_meta(app_ctx, monkeypatch):
     from flask import current_app
     current_app.media_library = _ML({"/a.mp4": {"artist": "A", "title": "T"}})
     current_app.catalog = _Cat({})
-    for name in ("_add_time_estimates", "_add_songs_sung", "_add_last_sang", "_add_sms_status"):
+    for name in ("_add_time_estimates", "_add_songs_sung", "_add_wait_pills", "_add_sms_status"):
         monkeypatch.setattr(routes, name, lambda *a, **k: None)
     entries = [{"id": 1, "file_path": "/a.mp4"}]
     routes._decorate_rotation_entries(entries, rotation=None)

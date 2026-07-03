@@ -522,6 +522,48 @@ class RotationStore:
                     result[key] = mins
         return result
 
+    def get_first_entered_times(self):
+        """Return a dict mapping singer name → minutes since they FIRST entered
+        the rotation tonight (their earliest ``created_at`` across all their
+        entries, whether or not they've sung).
+
+        Used to show a "waiting" duration for singers who have not sung yet —
+        they've been waiting since their first song was added — and as the
+        wait-time fallback in general. The value is whole minutes elapsed from
+        now, floored at 0. Case-insensitive matching on singer name (lowered
+        keys), mirroring ``get_last_sang_times``; each singer in a group entry
+        is credited separately. Only entries in the current rotation (not the
+        archive) are considered.
+        """
+        conn = self._get_conn()
+        rows = conn.execute(
+            "SELECT singer, singers_json, "
+            "       CAST((julianday('now', 'localtime') "
+            "             - julianday(created_at)) * 1440 AS INTEGER) AS mins_ago "
+            "FROM rotation_entries"
+        ).fetchall()
+        result = {}
+        for row in rows:
+            mins = row["mins_ago"]
+            if mins is None:
+                continue
+            if mins < 0:
+                mins = 0
+            if row["singers_json"] is not None:
+                try:
+                    names = json.loads(row["singers_json"])
+                except (ValueError, TypeError):
+                    names = [row["singer"]]
+            else:
+                names = [row["singer"]]
+            for name in names:
+                key = name.lower()
+                # Keep the LARGEST elapsed time = the singer's EARLIEST entry,
+                # i.e. when they first joined the rotation tonight.
+                if key not in result or mins > result[key]:
+                    result[key] = mins
+        return result
+
     def get_singer_stats(self):
         """Return per-singer aggregate stats from all entries (including done/left).
 

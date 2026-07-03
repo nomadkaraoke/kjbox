@@ -4383,6 +4383,23 @@ function formatMinsAgo(mins) {
     return rem ? (h + 'h' + rem + 'm') : (h + 'h');
 }
 
+// Colour tier for the sing-count pill. More songs sung = happier singer, so
+// green = good: <2 sung = red (barely/never sung), 2–4 = yellow, ≥5 = green.
+function singCountClass(sung) {
+    if (sung < 2) return 'pill-bad';
+    if (sung < 5) return 'pill-warn';
+    return 'pill-good';
+}
+
+// Colour tier for the wait-time pill. Longer since they last sang (or since a
+// new singer joined) = less happy: ≤20m = green, 21–45m = yellow, >45m or
+// unknown (∞) = red.
+function waitClass(mins) {
+    if (mins == null || mins > 45) return 'pill-bad';
+    if (mins > 20) return 'pill-warn';
+    return 'pill-good';
+}
+
 // Verbose form for tooltips, e.g. "22 minutes", "1 hour 5 minutes".
 function formatMinsAgoLong(mins) {
     const m = Math.max(0, Math.round(mins));
@@ -4521,36 +4538,31 @@ function renderRotation(entries) {
             name.onclick = (ev) => { if (!ev.shiftKey) copyRotationText(name); };
             info.appendChild(name);
         }
-        const pill = document.createElement('span');
-        pill.className = 'rotation-songs-pill';
+        // Two compact "singer happiness" pills. Colours consistently mean
+        // green = good / red = bad from the SINGER's perspective (how content
+        // they're likely feeling) \u2014 NOT KJ prioritisation. Pill 1 = how many
+        // songs they've sung; pill 2 = how long they've been waiting.
         const sung = entry.songs_sung || 0;
-        if (sung === 0) {
-            pill.classList.add('pill-new');
-            pill.textContent = 'NEW';
-            pill.title = 'Hasn\u2019t sung yet tonight \u2014 prioritise this singer';
+        const countPill = document.createElement('span');
+        countPill.className = 'rotation-pill ' + singCountClass(sung);
+        countPill.textContent = '\u00d7' + sung;
+        countPill.title = (sung === 0 ? 'Hasn\u2019t sung yet tonight'
+            : (sung === 1 ? '1 song' : sung + ' songs') + ' sung tonight');
+        info.appendChild(countPill);
+
+        const waitPill = document.createElement('span');
+        const wait = entry.wait_minutes;
+        waitPill.className = 'rotation-pill ' + waitClass(wait);
+        if (wait == null) {
+            waitPill.textContent = '\u221e';   // no timing info yet
+            waitPill.title = 'No timing info yet';
         } else {
-            if (sung === 1) {
-                pill.classList.add('pill-once');
-            } else if (sung <= 4) {
-                pill.classList.add('pill-few');
-            } else {
-                pill.classList.add('pill-many');
-            }
-            pill.textContent = '\u00d7' + sung;
-            pill.title = (sung === 1 ? '1 song' : sung + ' songs') + ' sung tonight';
-            // "Last sang" elapsed time, rendered inside the same pill after a
-            // "\u00b7" separator (e.g. \u00d74 \u00b7 1h15m) so the KJ can weigh
-            // recency \u2014 not just how many \u2014 when keeping things fair.
-            if (entry.last_sang_minutes != null) {
-                const ago = document.createElement('span');
-                ago.className = 'rotation-lastsang';
-                ago.textContent = ' \u00b7 ' + formatMinsAgo(entry.last_sang_minutes);
-                pill.appendChild(ago);
-                pill.title += ' \u2022 last sang ' +
-                    formatMinsAgoLong(entry.last_sang_minutes) + ' ago';
-            }
+            waitPill.textContent = formatMinsAgo(wait);
+            waitPill.title = (sung > 0
+                ? 'Last sang ' + formatMinsAgoLong(wait) + ' ago'
+                : 'Waiting ' + formatMinsAgoLong(wait) + ' \u2014 hasn\u2019t sung yet');
         }
-        info.appendChild(pill);
+        info.appendChild(waitPill);
         if (entry.paid) {
             const heart = document.createElement('span');
             heart.className = 'rotation-paid-heart';
@@ -5128,10 +5140,9 @@ function buildSingerRow(singer) {
     const sung = document.createElement('span');
     sung.className = 'singer-stats-label';
     const sungCount = singer.entries_sung;
-    let pillClass = 'pill-new';
-    if (sungCount === 1) pillClass = 'pill-once';
-    else if (sungCount >= 2 && sungCount <= 4) pillClass = 'pill-few';
-    else if (sungCount >= 5) pillClass = 'pill-many';
+    // Same happiness convention as the rotation-row count pill (green = happier
+    // singer who's sung more) so a given count reads identically everywhere.
+    const pillClass = singCountClass(sungCount);
     sung.innerHTML = '<span class="singer-label-key">Sung:</span> <span class="singer-sung-pill ' + pillClass + '">' + sungCount + '</span>';
     info.appendChild(sung);
 

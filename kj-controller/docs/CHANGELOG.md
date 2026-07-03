@@ -4,6 +4,45 @@ Dated entries, newest first. Each entry notes any required deploy steps.
 
 ---
 
+## 2026-07-03 - Split singer count/wait into two happiness-coloured pills (v0.66.2)
+
+**Why:** The rotation row packed two facts into one pill (`×4 · 33m`, or a bare
+`NEW` badge) whose colour meant "KJ, prioritise this singer" — 0-sung was green,
+5+ was red. That's backwards from how a KJ actually reads the room: the colour
+you want at a glance is *how happy is this singer likely feeling*. And new
+singers showed only `NEW` with no wait time, even though they've been waiting
+since their first song was entered — exactly the person you don't want to lose
+track of.
+
+**What:**
+- Two separate compact pills per row: (1) **sing count** `×N`, always shown
+  including `×0` (the `NEW` badge is retired); (2) **wait time**.
+- Colours now consistently mean **green = happy / red = unhappy** from the
+  singer's perspective:
+  - Count: `<2` red · `2–4` yellow · `≥5` green.
+  - Wait: `≤20m` green · `21–45m` yellow · `>45m` or unknown (`∞`) red.
+- **New singers now get a wait pill too**, measured from when their first song
+  entered the rotation — `rotation_store.get_first_entered_times()` (earliest
+  `created_at` per singer). `routes._add_last_sang` → `_add_wait_pills` sets
+  `last_sang_minutes` (tooltip wording) plus `wait_minutes`
+  (= last-sang, else first-entered; group entries surface the longest wait).
+- The Song Stats section's Sung pill uses the same convention so a given count
+  reads identically everywhere.
+- Tests: store unit (`TestGetFirstEnteredTimes`), route integration
+  (`wait_minutes`), and an e2e tier regression (`TestSingerHappinessPills`)
+  that renders every colour band in a real browser.
+
+**Deploy:** touches `routes.py` + `rotation_store.py`, so a service **restart**
+is required for the new `wait_minutes` field. `kj-autodeploy.service` is
+currently inactive → deploy is a manual `git pull` on the device; **do the
+restart between shows, never mid-song.** Until restart the frontend degrades
+(old combined pill served from the old `app.js`).
+
+**Note:** this flips the established rotation-row colour meaning (green used to
+say "give this singer a turn"). Intentional, per the happiness framing above.
+
+---
+
 ## 2026-07-03 - Fix false "audio device issue" banner in mpv mode (v0.66.1)
 
 **Deploy:** backend change → requires `systemctl restart kj-controller` to take

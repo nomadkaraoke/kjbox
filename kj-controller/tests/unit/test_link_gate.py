@@ -26,6 +26,7 @@ def mock_rotation():
     ]
     rotation.store.get_songs_sung_counts.return_value = {}
     rotation.store.get_last_sang_times.return_value = {}
+    rotation.store.get_first_entered_times.return_value = {}
     rotation.store.get_rev.return_value = 0
     rotation.history_status.return_value = {
         "undo": 0, "redo": 0, "undo_label": None, "redo_label": None,
