@@ -3712,9 +3712,44 @@ async function switchStatsView(view) {
 }
 
 async function refreshSongStats() {
+    songStats.loaded = true;
     songStats.cache = {};
+    // Refresh implies "show me the numbers": reveal if the section is collapsed
+    // so the click isn't a silent no-op.
+    const section = document.getElementById('song-stats');
+    if (section && section.classList.contains('collapsed')) setSongStatsCollapsed(false);
     await renderStatsOverview();
+    // Also seed the singer-filter datalist. Refresh sets loaded=true, so
+    // maybeLoadSongStats() would otherwise short-circuit and never populate it
+    // when the KJ refreshes a section that was still collapsed.
+    populateSingerDatalist();
     await switchStatsView(songStats.view);
+}
+
+// Lazy first load — fetch the stats only once, the first time the section is
+// actually shown (expanded + scrolled into view, or via the Refresh button).
+function maybeLoadSongStats() {
+    if (songStats.loaded) return;
+    songStats.loaded = true;
+    renderStatsOverview();
+    populateSingerDatalist();
+    switchStatsView(songStats.view);
+}
+
+function setSongStatsCollapsed(collapsed) {
+    const section = document.getElementById('song-stats');
+    if (!section) return;
+    section.classList.toggle('collapsed', collapsed);
+    const header = section.querySelector('.song-stats-header');
+    if (header) header.setAttribute('aria-expanded', String(!collapsed));
+    try { localStorage.setItem('kjbox.songStatsCollapsed', collapsed ? '1' : '0'); } catch (e) { /* private mode */ }
+    if (!collapsed) maybeLoadSongStats();
+}
+
+function toggleSongStats() {
+    const section = document.getElementById('song-stats');
+    if (!section) return;
+    setSongStatsCollapsed(!section.classList.contains('collapsed'));
 }
 
 // Toggle a .stats-drill sibling right after anchorEl. `ds` is the element's dataset.
@@ -3882,6 +3917,27 @@ async function populateSingerDatalist() {
 function initSongStats() {
     const section = document.getElementById('song-stats');
     if (!section) return;
+
+    // Collapsed by default in advanced mode; remember the KJ's last choice for
+    // this browser so an expanded panel stays expanded across refreshes.
+    let collapsed = true;
+    try { collapsed = localStorage.getItem('kjbox.songStatsCollapsed') !== '0'; } catch (e) { /* private mode */ }
+    setSongStatsCollapsed(collapsed);
+
+    const header = section.querySelector('.song-stats-header');
+    if (header) {
+        header.addEventListener('click', (e) => {
+            if (e.target.closest('.header-actions')) return;  // let Refresh do its own thing
+            toggleSongStats();
+        });
+        header.addEventListener('keydown', (e) => {
+            if (e.key !== 'Enter' && e.key !== ' ') return;
+            if (e.target.closest('.header-actions')) return;
+            e.preventDefault();
+            toggleSongStats();
+        });
+    }
+
     document.getElementById('statsViewSwitch').addEventListener('click', (e) => {
         const btn = e.target.closest('.stats-seg-btn');
         if (btn) switchStatsView(btn.dataset.view);
@@ -3907,14 +3963,12 @@ function initSongStats() {
         songStats.singer = e.target.value.trim();
         if (songStats.view === 'top-songs') switchStatsView('top-songs');
     });
-    // Lazy first load: only fetch when the section scrolls into view.
+    // Lazy first load: only fetch when the section is expanded AND in view.
+    // Collapsed-by-default means we don't spend a fetch until the KJ opens it.
     const io = new IntersectionObserver((entries) => {
-        if (entries.some(en => en.isIntersecting) && !songStats.loaded) {
-            songStats.loaded = true;
-            io.disconnect();
-            renderStatsOverview();
-            populateSingerDatalist();
-            switchStatsView(songStats.view);
+        if (entries.some(en => en.isIntersecting) && !section.classList.contains('collapsed')) {
+            maybeLoadSongStats();
+            if (songStats.loaded) io.disconnect();
         }
     }, { rootMargin: '200px' });
     io.observe(section);
