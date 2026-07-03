@@ -349,3 +349,128 @@ def test_try_reconnect_finds_playing(mock_config, mocker):
     assert p.try_reconnect() is True
     assert p.active is True
     assert p.current_path == '/s.mp4'
+
+
+# --- _send_ipc: reply matching skips interleaved async events ---
+
+import json as _json  # noqa: E402 — local alias to build fake mpv IPC frames
+
+
+class _FakeMpvSocket:
+    """Minimal AF_UNIX socket stand-in that speaks mpv's JSON IPC.
+
+    mpv broadcasts async event lines on every client connection, interleaved
+    with command replies. This fake emits the given event lines FIRST (in one
+    recv chunk), then the matching command reply in a SEPARATE later chunk —
+    reproducing the ordering that made the old "read until first newline"
+    logic return an event instead of the reply.
+    """
+
+    def __init__(self, event_lines, data):
+        self._event_lines = list(event_lines)
+        self._data = data
+        self._chunks = []
+
+    def settimeout(self, _):
+        pass
+
+    def connect(self, _):
+        pass
+
+    def sendall(self, payload):
+        sent = _json.loads(payload.decode().strip())
+        # mpv echoes the request_id in the reply (defaults to 0 if none sent).
+        reply = {"request_id": sent.get("request_id", 0),
+                 "error": "success", "data": self._data}
+        events_blob = "".join(line + "\n" for line in self._event_lines).encode()
+        reply_blob = (_json.dumps(reply) + "\n").encode()
+        # Two separate recv chunks: the events arrive before the reply.
+        self._chunks = [events_blob, reply_blob]
+
+    def recv(self, _):
+        return self._chunks.pop(0) if self._chunks else b""
+
+    def close(self):
+        pass
+
+
+def test_send_ipc_returns_matching_reply_after_async_events(player, mocker):
+    events = [
+        _json.dumps({"event": "property-change", "name": "time-pos"}),
+        _json.dumps({"event": "playback-restart"}),
+    ]
+    mocker.patch('mpv_manager.socket.socket',
+                 return_value=_FakeMpvSocket(events, data=42))
+    resp = player._send_ipc(["get_property", "time-pos"])
+    assert resp is not None
+    assert resp.get("error") == "success"
+    assert resp.get("data") == 42
+
+
+def test_get_property_survives_async_event_burst(player, mocker):
+    # Regression: an event line arriving before the reply used to make
+    # _get_property() return None, which the progress check misread as a
+    # stalled/silent player and raised the "audio device issue" banner.
+    events = [_json.dumps({"event": "playback-restart"})]
+    mocker.patch('mpv_manager.socket.socket',
+                 return_value=_FakeMpvSocket(events, data=12.5))
+    assert player._get_property("time-pos") == 12.5
+
+
+def test_send_ipc_returns_none_on_timeout(player, mocker):
+    import socket as _socket
+
+    class _TimeoutSocket:
+        def settimeout(self, _):
+            pass
+
+        def connect(self, _):
+            pass
+
+        def sendall(self, _):
+            pass
+
+        def recv(self, _):
+            raise _socket.timeout()
+
+        def close(self):
+            pass
+
+    mocker.patch('mpv_manager.socket.socket', return_value=_TimeoutSocket())
+    assert player._send_ipc(["get_property", "time-pos"]) is None
+
+
+# --- _verify_playback_progress: poll, don't single-sample ---
+
+def test_verify_playback_progress_tolerates_slow_start(player, mocker):
+    # A cold 4K file can sit at time-pos 0 for a couple of seconds before it
+    # advances; that must NOT be reported as an audio device issue.
+    player.active = True
+    player.audio_error = False
+    mocker.patch.object(player, '_get_property', side_effect=[0, 0, 0.4])
+    mocker.patch('mpv_manager.time.sleep')
+    player._verify_playback_progress()
+    assert player.audio_error is False
+
+
+def test_verify_playback_progress_flags_persistent_stall(player, mocker):
+    # If time-pos never advances across the whole window, it's a real stall.
+    player.active = True
+    player.audio_error = False  # start from a clean state → assert the transition
+    mocker.patch.object(player, '_get_property', return_value=0)
+    mocker.patch('mpv_manager.time.sleep')
+    clock = [1000.0]
+    mocker.patch('mpv_manager.time.time',
+                 side_effect=lambda: clock.__setitem__(0, clock[0] + 1) or clock[0])
+    player._verify_playback_progress()
+    assert player.audio_error is True
+
+
+def test_verify_playback_progress_noop_when_inactive(player, mocker):
+    # Song was stopped/replaced before the check ran — don't touch audio_error.
+    player.active = False
+    player.audio_error = False
+    mocker.patch.object(player, '_get_property', return_value=0)
+    mocker.patch('mpv_manager.time.sleep')
+    player._verify_playback_progress()
+    assert player.audio_error is False

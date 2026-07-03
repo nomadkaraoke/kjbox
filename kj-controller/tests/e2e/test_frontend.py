@@ -569,10 +569,11 @@ class TestSimpleModeLayout:
 
 
 class TestPlaybackControlsUnified:
-    """The Playback Controls section uses the SAME compact internal layout in
-    both simple and advanced modes: button-group + Seek share the first row,
-    the two volume sliders share the next row, and the Pitch control is present
-    in both modes (its runtime visibility is gated only by renderer support)."""
+    """The Playback Controls sliders use the SAME split layout in both simple and
+    advanced modes: the two volume sliders (Karaoke, Filler) stack in a
+    fixed-width left column at equal width, and Seek is the long bar filling the
+    right column. (Replaces the earlier buttons+seek / volumes-side-by-side
+    arrangement, which #154's .fade-controls had broken by displacing Seek.)"""
 
     @pytest.fixture(autouse=True)
     def _restore_advanced(self, live_server):
@@ -593,16 +594,17 @@ class TestPlaybackControlsUnified:
 
     _LAYOUT_JS = """() => {
         const rect = (el) => el.getBoundingClientRect();
-        const bg = rect(document.querySelector('.playback-controls .button-group'));
-        const seek = rect(document.querySelector('#seek-slider').closest('div'));
-        const kar = rect(document.querySelector('#karaoke-volume').closest('div'));
-        const fil = rect(document.querySelector('#filler-volume').closest('div'));
+        const kar = rect(document.querySelector('#karaoke-volume').closest('.pc-slider-row'));
+        const fil = rect(document.querySelector('#filler-volume').closest('.pc-slider-row'));
+        const seek = rect(document.querySelector('#seek-slider').closest('.pc-slider-row'));
         return {
-            seekRightOfButtons: seek.left >= bg.right - 2,
-            seekSharesRowWithButtons: Math.abs(seek.top - bg.top) < 30,
-            fillerRightOfKaraoke: fil.left >= kar.right - 2,
-            fillerSharesRowWithKaraoke: Math.abs(fil.top - kar.top) < 6,
-            volumesBelowButtons: kar.top > bg.top + 4,
+            // Two volumes stack in the left column at equal width.
+            volumesSameWidth: Math.abs(kar.width - fil.width) < 2,
+            fillerBelowKaraoke: fil.top > kar.top + 4 && Math.abs(fil.left - kar.left) < 2,
+            // Seek is the long bar in the right column, sharing the volumes' band.
+            seekRightOfVolumes: seek.left >= kar.right - 2,
+            seekLongerThanVolumes: seek.width > kar.width + 20,
+            seekAlignsWithVolumeBand: seek.top < fil.bottom && seek.bottom > kar.top,
         };
     }"""
 
@@ -625,28 +627,25 @@ class TestPlaybackControlsUnified:
         page.locator("#mode-seg-simple").click()
         page.wait_for_function("document.body.classList.contains('simple-mode')")
 
-    def test_advanced_mode_uses_compact_layout(self, page, live_server):
+    def _assert_split_layout(self, layout):
+        assert layout["volumesSameWidth"], layout
+        assert layout["fillerBelowKaraoke"], layout
+        assert layout["seekRightOfVolumes"], layout
+        assert layout["seekLongerThanVolumes"], layout
+        assert layout["seekAlignsWithVolumeBand"], layout
+
+    def test_advanced_mode_volumes_left_seek_right(self, page, live_server):
         page.set_viewport_size(self._WIDTH)
         page.goto(live_server)
         page.wait_for_load_state("networkidle")
         assert not page.evaluate(
             "document.body.classList.contains('simple-mode')"
         )
-        layout = page.evaluate(self._LAYOUT_JS)
-        assert layout["seekRightOfButtons"], layout
-        assert layout["seekSharesRowWithButtons"], layout
-        assert layout["fillerRightOfKaraoke"], layout
-        assert layout["fillerSharesRowWithKaraoke"], layout
-        assert layout["volumesBelowButtons"], layout
+        self._assert_split_layout(page.evaluate(self._LAYOUT_JS))
 
-    def test_simple_mode_uses_compact_layout(self, page, live_server):
+    def test_simple_mode_volumes_left_seek_right(self, page, live_server):
         self._enter_simple(page, live_server)
-        layout = page.evaluate(self._LAYOUT_JS)
-        assert layout["seekRightOfButtons"], layout
-        assert layout["seekSharesRowWithButtons"], layout
-        assert layout["fillerRightOfKaraoke"], layout
-        assert layout["fillerSharesRowWithKaraoke"], layout
-        assert layout["volumesBelowButtons"], layout
+        self._assert_split_layout(page.evaluate(self._LAYOUT_JS))
 
     def test_layout_matches_between_modes(self, page, live_server):
         page.set_viewport_size(self._WIDTH)

@@ -4,7 +4,7 @@ Dated entries, newest first. Each entry notes any required deploy steps.
 
 ---
 
-## 2026-07-03 - Split singer count/wait into two happiness-coloured pills (v0.66.0)
+## 2026-07-03 - Split singer count/wait into two happiness-coloured pills (v0.66.2)
 
 **Why:** The rotation row packed two facts into one pill (`×4 · 33m`, or a bare
 `NEW` badge) whose colour meant "KJ, prioritise this singer" — 0-sung was green,
@@ -40,6 +40,71 @@ restart between shows, never mid-song.** Until restart the frontend degrades
 
 **Note:** this flips the established rotation-row colour meaning (green used to
 say "give this singer a turn"). Intentional, per the happiness framing above.
+
+---
+
+## 2026-07-03 - Fix false "audio device issue" banner in mpv mode (v0.66.1)
+
+**Deploy:** backend change → requires `systemctl restart kj-controller` to take
+effect (interrupts active playback — restart between songs).
+
+**Why:** During a live show the mpv backend raised the red *"Audio device issue
+detected"* banner on song after song while audio was actually playing fine — the
+journal showed zero ALSA errors, flagged songs played to completion, and the same
+files played instantly under VLC. The KJ had to fall back to the VLC backend
+mid-show. Two bugs conspired, neither an actual audio fault:
+
+1. **`_send_ipc` could return `None` spuriously.** mpv broadcasts async event lines
+   (playback-restart, property changes, …) on *every* client connection, interleaved
+   with command replies. The old code read only until the *first* newline, so an
+   event arriving before the reply was returned instead — and
+   `_get_property("time-pos")` then saw `None`. Worst right as a video starts (peak
+   event chatter), i.e. exactly when the progress check runs.
+2. **The progress check took a single 3-second sample.** A cold 4K file (freshly
+   downloaded YouTube mp4) can sit at `time-pos == 0` for a few seconds while it
+   starts, so one sample misread a slow start as a stalled/silent player and set the
+   banner. Clicking **Fix** restarted mpv — interrupting playback that was actually
+   fine — and the fresh instance could false-positive again, producing the on-stage
+   loop.
+
+**What:**
+- **`_send_ipc` tags each command with a unique `request_id` and reads whole lines
+  until the reply with that id arrives**, skipping async events (bounded by the 5s
+  socket timeout).
+- **`_verify_playback_progress` (extracted from the nested `verify()`) polls instead
+  of single-sampling**: succeeds the instant `time-pos` advances, flags only if still
+  stuck after `PLAYBACK_VERIFY_TIMEOUT` (10s). Genuine stalls are still caught.
+- Banner wording softened to *"Playback may not be progressing…"* — accurate for what
+  the check measures.
+
+**Files:** `mpv_manager.py`, `templates/index.html`, `pyproject.toml`. Tests: 6 new
+unit tests in `tests/unit/test_mpv_karaoke_player.py`.
+
+## 2026-07-03 - Playback Controls: volumes stacked left, Seek long on the right (v0.66.0)
+
+**Why:** The Playback Controls sliders had drifted into a confusing layout: Seek
+sat in the left column with Karaoke Volume beside it and Filler Volume below.
+Root cause — #154's `.fade-controls` auto-placed into column 2 of the
+`.playback-controls` `auto 1fr` grid (next to the button group), displacing Seek
+into the sliders' first cell. `TestPlaybackControlsUnified` had been red on `main`
+because of this (no pytest CI to catch it).
+
+**What:** Wrapped the three sliders in `.pc-sliders` — a dedicated 2-column grid
+isolated from the button/fade rows above:
+- **Left column** (`.pc-volumes`): Karaoke Volume over Filler Volume, stacked at
+  equal width.
+- **Right column**: Seek, the long bar, vertically centred against the volume
+  stack.
+- Each `.pc-slider-row` keeps the label-in-col-1 / slider-in-col-2 pairing.
+- Scoped to ≥769px; below that everything stacks full-width as before.
+- `TestPlaybackControlsUnified` rewritten to assert the new split layout (passes
+  in both simple and advanced modes).
+
+**Deploy:** frontend-only (HTML + CSS). Appears on next browser load once
+`static/…?v=` busts (version read at startup → new query param after a restart,
+or a hard refresh). `kj-autodeploy.service` is inactive → manual `git pull` on
+the device; no restart strictly required for CSS/HTML, but the `?v=` bump only
+updates after a restart (else hard-refresh the KJ browser).
 
 ---
 
