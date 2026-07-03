@@ -456,6 +456,7 @@ def test_verify_playback_progress_tolerates_slow_start(player, mocker):
 def test_verify_playback_progress_flags_persistent_stall(player, mocker):
     # If time-pos never advances across the whole window, it's a real stall.
     player.active = True
+    player.audio_error = False  # start from a clean state → assert the transition
     mocker.patch.object(player, '_get_property', return_value=0)
     mocker.patch('mpv_manager.time.sleep')
     clock = [1000.0]
