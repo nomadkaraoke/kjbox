@@ -29,6 +29,14 @@ MPV_SOCKET_PATH = '/tmp/mpv-karaoke.sock'
 PITCH_MIN = -6
 PITCH_MAX = 6
 
+# Playback-progress verification. A cold 4K file (or slow decode init) can
+# leave time-pos at 0 for a few seconds even though audio is fine, so a single
+# 3s sample produced false "audio device issue" alarms mid-show. Poll instead:
+# succeed the instant time-pos advances, and only flag a problem if it is STILL
+# stuck after the full window.
+PLAYBACK_VERIFY_TIMEOUT = 10.0   # seconds to wait for time-pos to advance
+PLAYBACK_VERIFY_INTERVAL = 0.5   # poll cadence
+
 
 class MpvKaraokePlayer:
     """Karaoke backend that uses mpv + rubberband via IPC."""
@@ -55,6 +63,7 @@ class MpvKaraokePlayer:
         self._pitch_semitones = 0
         self.ipc_socket_path = MPV_SOCKET_PATH
         self._ipc_lock = threading.Lock()
+        self._ipc_request_id = 0
         self._monitor_stop = threading.Event()
 
     # Protocol surface
@@ -69,32 +78,53 @@ class MpvKaraokePlayer:
     # ── IPC ────────────────────────────────────────────────────────────
 
     def _send_ipc(self, command):
-        """Send a JSON command to mpv's IPC socket. Returns parsed response or None."""
+        """Send a JSON command to mpv's IPC socket and return the parsed reply.
+
+        mpv broadcasts asynchronous event lines (playback-restart, property
+        changes, end-file, …) on every client connection, interleaved with
+        command replies. We tag each command with a unique request_id and keep
+        reading whole lines until the reply carrying THAT id arrives, skipping
+        events. The old "read until the first newline" logic could return an
+        event by mistake, which surfaced as a spurious None — and the progress
+        check misread that as a stalled/silent player. Bounded by the 5s socket
+        timeout; returns None on any socket error or timeout.
+        """
         with self._ipc_lock:
+            self._ipc_request_id += 1
+            req_id = self._ipc_request_id
+            s = None
             try:
                 s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
                 s.settimeout(5)
                 s.connect(self.ipc_socket_path)
-                msg = json.dumps({"command": command}) + "\n"
+                msg = json.dumps({"command": command, "request_id": req_id}) + "\n"
                 s.sendall(msg.encode())
                 buf = b""
-                while b"\n" not in buf:
-                    chunk = s.recv(4096)
-                    if not chunk:
-                        break
-                    buf += chunk
-                s.close()
-                if buf:
-                    for line in buf.split(b"\n"):
+                while True:
+                    while b"\n" in buf:
+                        line, buf = buf.split(b"\n", 1)
                         if not line.strip():
                             continue
-                        parsed = json.loads(line)
-                        if "request_id" in parsed:
+                        try:
+                            parsed = json.loads(line)
+                        except json.JSONDecodeError:
+                            continue  # skip a malformed line, keep reading
+                        if parsed.get("request_id") == req_id:
                             return parsed
-                    return json.loads(buf.split(b"\n")[0])
+                        # else: async event or stale reply — ignore, read on
+                    chunk = s.recv(4096)
+                    if not chunk:
+                        return None  # socket closed before our reply arrived
+                    buf += chunk
+            except OSError:
+                # socket.timeout is an OSError subclass — treat as no reply
                 return None
-            except (OSError, json.JSONDecodeError, ConnectionRefusedError):
-                return None
+            finally:
+                if s is not None:
+                    try:
+                        s.close()
+                    except OSError:
+                        pass
 
     def _get_property(self, name):
         resp = self._send_ipc(["get_property", name])
@@ -317,18 +347,35 @@ class MpvKaraokePlayer:
             self._save_state()
             log_message(f"Playback started for {os.path.basename(file_path)}.", self.config)
 
-        def verify():
-            time.sleep(3)
+        threading.Thread(target=self._verify_playback_progress, daemon=True).start()
+
+    def _verify_playback_progress(self):
+        """Confirm playback is actually advancing after a play().
+
+        Polls time-pos rather than taking a single 3s sample: a cold 4K file or
+        a slow decode init can leave time-pos at 0 for a few seconds even though
+        audio is fine, and the one-shot check turned that into false "audio
+        device issue" banners mid-show. Succeeds the moment time-pos advances;
+        only flags a problem if it is STILL stuck after the full window. Runs in
+        a daemon thread; exits quietly if the song was stopped/replaced.
+        """
+        deadline = time.time() + PLAYBACK_VERIFY_TIMEOUT
+        while time.time() < deadline:
+            time.sleep(PLAYBACK_VERIFY_INTERVAL)
             if not self.active:
                 return
             time_pos = self._get_property("time-pos")
             if time_pos is not None and time_pos > 0:
                 self.audio_error = False
-            else:
-                log_message("WARNING: mpv not progressing — possible audio device issue", self.config)
-                self.audio_error = True
-
-        threading.Thread(target=verify, daemon=True).start()
+                return
+        if not self.active:
+            return
+        log_message(
+            f"WARNING: mpv not progressing after {PLAYBACK_VERIFY_TIMEOUT:.0f}s "
+            "— possible playback/audio issue",
+            self.config,
+        )
+        self.audio_error = True
 
     def stop(self):
         self._send_ipc(["stop"])
