@@ -402,9 +402,10 @@
                     <li>Loading media...</li>
                 </ul>
             </div>
-            <div class="container song-stats" id="song-stats">
-                <div class="header-row">
-                    <h2>Song Stats</h2>
+            <div class="container song-stats collapsed" id="song-stats">
+                <div class="header-row song-stats-header" role="button" tabindex="0"
+                     aria-expanded="false" title="Show/hide song stats">
+                    <h2><span class="stats-caret" aria-hidden="true">&#9656;</span>Song Stats</h2>
                     <div class="header-actions">
                         <button onclick="refreshSongStats()" title="Reload stats">Refresh</button>
                     </div>

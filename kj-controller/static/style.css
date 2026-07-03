@@ -3399,6 +3399,8 @@ body.simple-mode .db-search-section,
 body.simple-mode .download-section,
 body.simple-mode .available-songs,
 body.simple-mode .browser-mode-panel,
+/* Song Stats is an advanced-KJ analytics surface — hide it for the stand-in. */
+body.simple-mode .song-stats,
 body.simple-mode .overlay-panel,
 body.simple-mode .rotation-new-btn,
 body.simple-mode .rotation-restore-btn,
@@ -3767,6 +3769,22 @@ li.media-no-audio {
 .rs-note-edit:hover { opacity: 1; }
 
 /* ===== Song Stats section ===== */
+/* Collapsible: collapsed by default in advanced mode (hidden entirely in
+ * simple mode above). When collapsed only the .header-row shows, so the
+ * footprint matches the collapsed Screen Preview section — the whole
+ * header-row is the click target, and the caret rotates when open. */
+.song-stats-header { cursor: pointer; }
+.song-stats-header:hover h2 { color: #ff8fd0; }
+.stats-caret {
+    display: inline-block;
+    margin-right: 6px;
+    color: #ff5bb8;
+    font-size: 0.8em;
+    transition: transform 0.15s ease;
+}
+.song-stats:not(.collapsed) .stats-caret { transform: rotate(90deg); }
+.song-stats.collapsed > :not(.header-row) { display: none; }
+
 .stats-overview { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 12px; }
 .stat-card {
     background: #222; border: 1px solid #444; border-radius: 6px;

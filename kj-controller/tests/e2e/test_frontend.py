@@ -953,3 +953,95 @@ class TestHeaderButtonConsistency:
             "Section-header button(s) outside .header-actions (wrap them so they "
             f"get consistent sizing): {strays}"
         )
+
+
+class TestSongStatsCollapse:
+    """Song Stats is a collapsible section: hidden entirely in simple mode,
+    collapsed by default in advanced mode with only its header-row showing
+    (matching the collapsed Screen Preview footprint), and expandable by
+    clicking the header."""
+
+    def test_collapsed_by_default_in_advanced(self, app_page):
+        """On load (advanced mode) the section carries `.collapsed` and its
+        body is hidden, while the header + Refresh button stay visible."""
+        section = app_page.locator("#song-stats")
+        expect(section).to_have_class(re.compile(r"\bcollapsed\b"))
+        # Header row is always visible; the body content is not.
+        expect(app_page.locator("#song-stats .song-stats-header")).to_be_visible()
+        expect(app_page.locator("#song-stats .header-actions button")).to_be_visible()
+        expect(app_page.locator("#statsOverview")).not_to_be_visible()
+        expect(app_page.locator("#statsViewSwitch")).not_to_be_visible()
+        expect(app_page.locator("#statsBody")).not_to_be_visible()
+
+    def test_collapsed_footprint_is_just_the_header(self, app_page):
+        """Collapsed, the section is only as tall as its header-row plus the
+        container padding — i.e. no body area is reserved. This is what makes
+        it match the collapsed Screen Preview section's footprint."""
+        gap = app_page.evaluate(
+            "() => {"
+            " const s = document.querySelector('#song-stats').getBoundingClientRect();"
+            " const h = document.querySelector('#song-stats .header-row').getBoundingClientRect();"
+            " return s.height - h.height; }"
+        )
+        # Only the container's vertical padding (~2 * 0.85rem ≈ 27px) beyond the
+        # header — nothing like the 40vh stats body.
+        assert 0 <= gap < 48, f"Collapsed section reserves body space: extra={gap}px"
+
+    def test_header_click_toggles_expand_collapse(self, app_page):
+        """Clicking the header (not the Refresh button) expands the section and
+        loads its content; clicking again collapses it back."""
+        section = app_page.locator("#song-stats")
+        # Click the title area — safely outside .header-actions.
+        app_page.locator("#song-stats .song-stats-header h2").click()
+        expect(section).not_to_have_class(re.compile(r"\bcollapsed\b"))
+        expect(app_page.locator("#statsOverview")).to_be_visible()
+        # Lazy-load fired: overview cards render (empty DB => zero-value cards).
+        expect(app_page.locator("#statsOverview .stat-card").first).to_be_visible()
+
+        app_page.locator("#song-stats .song-stats-header h2").click()
+        expect(section).to_have_class(re.compile(r"\bcollapsed\b"))
+        expect(app_page.locator("#statsOverview")).not_to_be_visible()
+
+    def test_refresh_button_reveals_when_collapsed(self, app_page):
+        """Refresh on a collapsed section expands it (so the click isn't a
+        silent no-op) rather than toggling collapse."""
+        section = app_page.locator("#song-stats")
+        expect(section).to_have_class(re.compile(r"\bcollapsed\b"))
+        app_page.locator("#song-stats .header-actions button").click()
+        expect(section).not_to_have_class(re.compile(r"\bcollapsed\b"))
+        expect(app_page.locator("#statsOverview")).to_be_visible()
+
+    def test_expanded_state_persists_across_reload(self, app_page, live_server):
+        """The KJ's expand choice is remembered per browser via localStorage."""
+        app_page.locator("#song-stats .song-stats-header h2").click()
+        expect(app_page.locator("#song-stats")).not_to_have_class(
+            re.compile(r"\bcollapsed\b")
+        )
+        app_page.reload()
+        app_page.wait_for_load_state("networkidle")
+        expect(app_page.locator("#song-stats")).not_to_have_class(
+            re.compile(r"\bcollapsed\b")
+        )
+
+    def test_hidden_in_simple_mode(self, page, live_server):
+        """Simple mode (stand-in KJ) hides the whole Song Stats section."""
+        try:
+            page.set_viewport_size({"width": 1400, "height": 900})
+            page.goto(live_server)
+            page.wait_for_load_state("networkidle")
+            page.locator("#mode-seg-simple").click()
+            page.wait_for_function(
+                "document.body.classList.contains('simple-mode')"
+            )
+            expect(page.locator("#song-stats")).not_to_be_visible()
+        finally:
+            # live_server is session-scoped — restore advanced mode so we don't
+            # leak simple mode into later tests.
+            req = urllib.request.Request(
+                f"{live_server}/rotation/requests/config",
+                data=json.dumps({"simple_mode": False}).encode(),
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with urllib.request.urlopen(req) as resp:
+                resp.read()
