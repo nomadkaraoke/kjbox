@@ -4,6 +4,34 @@ Dated entries, newest first. Each entry notes any required deploy steps.
 
 ---
 
+## 2026-07-03 - Playback Controls: volumes stacked left, Seek long on the right (v0.66.0)
+
+**Why:** The Playback Controls sliders had drifted into a confusing layout: Seek
+sat in the left column with Karaoke Volume beside it and Filler Volume below.
+Root cause — #154's `.fade-controls` auto-placed into column 2 of the
+`.playback-controls` `auto 1fr` grid (next to the button group), displacing Seek
+into the sliders' first cell. `TestPlaybackControlsUnified` had been red on `main`
+because of this (no pytest CI to catch it).
+
+**What:** Wrapped the three sliders in `.pc-sliders` — a dedicated 2-column grid
+isolated from the button/fade rows above:
+- **Left column** (`.pc-volumes`): Karaoke Volume over Filler Volume, stacked at
+  equal width.
+- **Right column**: Seek, the long bar, vertically centred against the volume
+  stack.
+- Each `.pc-slider-row` keeps the label-in-col-1 / slider-in-col-2 pairing.
+- Scoped to ≥769px; below that everything stacks full-width as before.
+- `TestPlaybackControlsUnified` rewritten to assert the new split layout (passes
+  in both simple and advanced modes).
+
+**Deploy:** frontend-only (HTML + CSS). Appears on next browser load once
+`static/…?v=` busts (version read at startup → new query param after a restart,
+or a hard refresh). `kj-autodeploy.service` is inactive → manual `git pull` on
+the device; no restart strictly required for CSS/HTML, but the `?v=` bump only
+updates after a restart (else hard-refresh the KJ browser).
+
+---
+
 ## 2026-07-03 - SMS delivery status on rotation rows + up-next nudge (v0.65.0)
 
 **Why:** A live-show SMS outage (the sending number was never linked to the
