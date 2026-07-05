@@ -412,6 +412,18 @@ def test_handle_engine_died_does_not_restart_when_escalated(mock_config, mocker)
     assert restart.call_count == 2
 
 
+def test_safe_restart_skips_when_already_in_flight(mock_config, mocker):
+    # Two concurrent crash callbacks must not run overlapping restart_instances.
+    c = PlaybackCoordinator(mock_config, enabled=False)
+    restart = mocker.patch.object(c, 'restart_instances')
+    c._restart_lock.acquire()      # simulate a restart already in progress
+    c._safe_restart()              # should skip
+    restart.assert_not_called()
+    c._restart_lock.release()
+    c._safe_restart()              # now free → runs
+    restart.assert_called_once()
+
+
 def test_player_alert_reflects_latest_unacked_and_ack_clears(mock_config):
     c = PlaybackCoordinator(mock_config, enabled=False)
     c._record_crash({'engine': 'mpv', 'song': '/a.mp4'})

@@ -542,3 +542,63 @@ def test_notify_if_dead_survives_missing_callback(player):
     # on_engine_died defaults to None — detection must not raise.
     player.process = _FakeProc(-11)
     assert player._notify_if_dead() is True
+
+
+# Reconnected mpv (no Popen handle — e.g. after a service restart while mpv
+# survived): fall back to socket liveness, debounced against transient blips.
+
+def test_notify_if_dead_reconnected_fires_when_socket_dead(player, mocker):
+    fired = []
+    player.on_engine_died = lambda info: fired.append(info)
+    player.process = None
+    mocker.patch.object(player, '_mpv_is_running', return_value=False)
+    assert player._notify_if_dead() is False   # 1st failure — debounce
+    assert player._notify_if_dead() is True    # 2nd consecutive — confirmed dead
+    assert len(fired) == 1
+    assert fired[0]['engine'] == 'mpv'
+
+
+def test_notify_if_dead_reconnected_noop_when_socket_alive(player, mocker):
+    fired = []
+    player.on_engine_died = lambda info: fired.append(info)
+    player.process = None
+    mocker.patch.object(player, '_mpv_is_running', return_value=True)
+    assert player._notify_if_dead() is False
+    assert player._notify_if_dead() is False
+    assert fired == []
+
+
+def test_notify_if_dead_reconnected_debounces_transient_blip(player, mocker):
+    fired = []
+    player.on_engine_died = lambda info: fired.append(info)
+    player.process = None
+    mocker.patch.object(player, '_mpv_is_running', side_effect=[False, True, False])
+    assert player._notify_if_dead() is False   # fail (count 1)
+    assert player._notify_if_dead() is False   # alive → reset
+    assert player._notify_if_dead() is False   # fail again (count 1, not 2)
+    assert fired == []
+
+
+def test_notify_if_dead_surfaces_song_when_died_mid_playback(player):
+    captured = []
+    player.on_engine_died = captured.append
+    player.process = _FakeProc(-11)
+    player.active = True
+    player.current_path = '/songs/x.mp4'
+    player._last_file_path = '/songs/x.mp4'
+    assert player._notify_if_dead() is True
+    assert captured[0]['song'] == '/songs/x.mp4'
+    assert captured[0]['file_path'] == '/songs/x.mp4'
+    assert player.active is False   # dead engine marked not-playing
+
+
+def test_notify_if_dead_omits_song_on_idle_crash(player):
+    captured = []
+    player.on_engine_died = captured.append
+    player.process = _FakeProc(-11)
+    player.active = False           # crashed while idle — stale last song
+    player.current_path = '/old.mp4'
+    player._last_file_path = '/old.mp4'
+    assert player._notify_if_dead() is True
+    assert captured[0]['song'] is None
+    assert captured[0]['file_path'] is None

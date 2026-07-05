@@ -65,6 +65,7 @@ class MpvKaraokePlayer:
         # and notify the operator. Reset on each launch().
         self.on_engine_died = None
         self._death_notified = False
+        self._socket_dead_count = 0   # debounce for reconnected-mpv liveness checks
         self._last_file_path = None  # actual path of the last play() — for crash Retry
         self._pitch_semitones = 0
         self.ipc_socket_path = MPV_SOCKET_PATH
@@ -227,6 +228,7 @@ class MpvKaraokePlayer:
             )
             self.process = process
             self._death_notified = False  # re-arm crash detection for this process
+            self._socket_dead_count = 0
             log_message(f"mpv karaoke launched with PID {process.pid}.", self.config)
             for _ in range(20):
                 time.sleep(0.25)
@@ -479,10 +481,30 @@ class MpvKaraokePlayer:
         if self._monitor_stop.is_set() or self._death_notified:
             return False
         proc = self.process
-        if proc is None or proc.poll() is None:
-            return False
+        if proc is not None:
+            if proc.poll() is None:
+                self._socket_dead_count = 0
+                return False
+            code = proc.returncode            # spawned process exited → dead
+        else:
+            # Reconnected (no Popen handle, e.g. mpv survived a service
+            # restart): use socket liveness, debounced so a transient IPC blip
+            # during a restart isn't mistaken for a crash.
+            if self._mpv_is_running():
+                self._socket_dead_count = 0
+                return False
+            self._socket_dead_count += 1
+            if self._socket_dead_count < 2:
+                return False
+            code = None
         self._death_notified = True
-        code = proc.returncode
+        # The engine is gone — it isn't playing anything. Clear playing-state so
+        # /status doesn't report a stale song during recovery, and only offer a
+        # Retry song if it actually died mid-playback (not an idle crash).
+        was_active = self.active
+        self.active = False
+        song = self.current_path if was_active else None
+        file_path = self._last_file_path if was_active else None
         log_message(
             f"mpv engine died unexpectedly (exit {code}) — signalling recovery.",
             self.config,
@@ -491,7 +513,7 @@ class MpvKaraokePlayer:
         if cb:
             try:
                 cb({'engine': self.name, 'returncode': code,
-                    'song': self.current_path, 'file_path': self._last_file_path})
+                    'song': song, 'file_path': file_path})
             except Exception as e:
                 log_message(f"on_engine_died callback error: {e}", self.config)
         return True
