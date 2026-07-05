@@ -474,3 +474,71 @@ def test_verify_playback_progress_noop_when_inactive(player, mocker):
     mocker.patch('mpv_manager.time.sleep')
     player._verify_playback_progress()
     assert player.audio_error is False
+
+
+# --- Engine death detection (crash → auto-recovery) ---
+
+class _FakeProc:
+    """Stand-in for a Popen handle. poll() returns None while alive, or the
+    exit code once the process has exited (negative = killed by that signal)."""
+    def __init__(self, code):
+        self._code = code
+
+    def poll(self):
+        return self._code
+
+    @property
+    def returncode(self):
+        return self._code
+
+
+def test_notify_if_dead_fires_callback_on_crash(player):
+    fired = []
+    player.on_engine_died = lambda info: fired.append(info)
+    player.process = _FakeProc(-11)   # SIGSEGV
+    assert player._notify_if_dead() is True
+    assert len(fired) == 1
+    assert fired[0]['engine'] == 'mpv'
+    assert fired[0]['returncode'] == -11
+
+
+def test_notify_if_dead_noop_when_alive(player):
+    fired = []
+    player.on_engine_died = lambda info: fired.append(info)
+    player.process = _FakeProc(None)  # still running
+    assert player._notify_if_dead() is False
+    assert fired == []
+
+
+def test_notify_if_dead_noop_during_intentional_shutdown(player):
+    # A shutdown/restart sets _monitor_stop; the exited process is expected,
+    # not a crash — must NOT fire recovery.
+    fired = []
+    player.on_engine_died = lambda info: fired.append(info)
+    player.process = _FakeProc(-15)
+    player._monitor_stop.set()
+    assert player._notify_if_dead() is False
+    assert fired == []
+
+
+def test_notify_if_dead_fires_only_once(player):
+    fired = []
+    player.on_engine_died = lambda info: fired.append(info)
+    player.process = _FakeProc(-11)
+    assert player._notify_if_dead() is True
+    assert player._notify_if_dead() is False   # already notified this death
+    assert len(fired) == 1
+
+
+def test_notify_if_dead_noop_when_no_process(player):
+    fired = []
+    player.on_engine_died = lambda info: fired.append(info)
+    player.process = None
+    assert player._notify_if_dead() is False
+    assert fired == []
+
+
+def test_notify_if_dead_survives_missing_callback(player):
+    # on_engine_died defaults to None — detection must not raise.
+    player.process = _FakeProc(-11)
+    assert player._notify_if_dead() is True

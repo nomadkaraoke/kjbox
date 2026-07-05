@@ -14,6 +14,7 @@ from __future__ import annotations
 import os
 import threading
 import time
+from collections import deque
 
 from config import (
     DEFAULT_RENDER_MODE,
@@ -37,6 +38,13 @@ class RendererSwitchRejected(Exception):
         self.status_code = status_code
 
 
+# Restart-loop guard: if the SAME song crashes the engine this many times
+# within the window, stop auto-restarting and escalate to the operator (the
+# file is likely un-playable on this engine — retry or switch engines).
+CRASH_GUARD_WINDOW = 60.0   # seconds
+CRASH_GUARD_MAX = 3
+
+
 class PlaybackCoordinator:
     """Coordinates filler + one karaoke player; handles runtime renderer swaps."""
 
@@ -58,6 +66,12 @@ class PlaybackCoordinator:
             self.render_mode = DEFAULT_RENDER_MODE
 
         self.audio_backend = audio_backend
+        # Engine-crash health tracking (see _handle_engine_died / restart guard).
+        self._health_lock = threading.Lock()
+        self._health_events = deque(maxlen=30)
+        self._crash_history = deque(maxlen=30)  # (ts, song) for the restart guard
+        self._event_seq = 0
+        self._last_acked_id = 0
         self.filler = FillerVLC(config, enabled=enabled, audio_backend=audio_backend)
         self.player: KaraokePlayer = self._build_player(self.render_mode)
         self._monitor_thread = None
@@ -66,13 +80,92 @@ class PlaybackCoordinator:
 
     def _build_player(self, mode: str) -> KaraokePlayer:
         if mode == RENDER_MODE_MPV:
-            return MpvKaraokePlayer(
+            player: KaraokePlayer = MpvKaraokePlayer(
                 self.config, self.filler, enabled=self.enabled,
                 audio_backend=self.audio_backend,
             )
-        if mode == RENDER_MODE_VLC:
-            return VlcKaraokePlayer(self.config, self.filler, enabled=self.enabled)
-        raise ValueError(f"Unknown render mode: {mode}")
+        elif mode == RENDER_MODE_VLC:
+            player = VlcKaraokePlayer(self.config, self.filler, enabled=self.enabled)
+        else:
+            raise ValueError(f"Unknown render mode: {mode}")
+        # Route every engine's crash callback to the coordinator so a dead
+        # player (mpv or vlc) is auto-restarted + surfaced to the operator.
+        player.on_engine_died = self._handle_engine_died
+        return player
+
+    # ── Engine crash detection → recovery + operator notification ──────
+    def _handle_engine_died(self, info):
+        """Fired by a player when its process crashes. Records the event, then
+        either auto-restarts (on a separate thread — restart_instances blocks
+        several seconds) or, if the same song keeps crashing, escalates to the
+        operator instead of thrashing."""
+        escalate = self._record_crash(info)
+        if escalate:
+            return
+        threading.Thread(
+            target=self._safe_restart, name='engine-recovery', daemon=True,
+        ).start()
+
+    def _record_crash(self, info) -> bool:
+        """Record a crash event and decide restart-vs-escalate. Returns True to
+        escalate (>= CRASH_GUARD_MAX crashes of the same song within the
+        window), False to auto-restart."""
+        info = info or {}
+        song = info.get('song')
+        engine = info.get('engine', self.render_mode)
+        now = time.time()
+        with self._health_lock:
+            self._crash_history.append((now, song))
+            recent_same = sum(
+                1 for (t, s) in self._crash_history
+                if s == song and now - t <= CRASH_GUARD_WINDOW
+            )
+            escalate = recent_same >= CRASH_GUARD_MAX
+            self._event_seq += 1
+            self._health_events.append({
+                'id': self._event_seq,
+                'ts': now,
+                'engine': engine,
+                'song': song,
+                'file_path': info.get('file_path'),
+                'outcome': 'escalated' if escalate else 'restarting',
+            })
+        log_message(
+            f"Video player ({engine}) crashed on '{song}' — "
+            + ("escalated: repeated crashes on the same song, operator action "
+               "needed" if escalate else "auto-restarting"),
+            self.config,
+        )
+        return escalate
+
+    def _safe_restart(self):
+        try:
+            self.restart_instances()
+        except Exception as e:
+            log_message(f"Auto-restart after engine crash failed: {e}", self.config)
+
+    @property
+    def player_alert(self):
+        """Latest un-acknowledged crash event (drives the KJ banner), or None."""
+        with self._health_lock:
+            for ev in reversed(self._health_events):
+                if ev['id'] > self._last_acked_id:
+                    return dict(ev)
+            return None
+
+    @property
+    def player_health_events(self):
+        """Recent crash events (bounded), oldest first — for history/logging."""
+        with self._health_lock:
+            return [dict(ev) for ev in self._health_events]
+
+    def ack_player_alerts(self, up_to_id):
+        """Operator dismissed the banner: acknowledge all events up to this id."""
+        with self._health_lock:
+            try:
+                self._last_acked_id = max(self._last_acked_id, int(up_to_id))
+            except (TypeError, ValueError):
+                pass
 
     # ── Public renderer API ────────────────────────────────────────────
 

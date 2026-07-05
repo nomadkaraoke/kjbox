@@ -1192,6 +1192,8 @@ def get_status():
         "rotation_downloads": rotation_downloads,
         "pitch_semitones": vlc.pitch_semitones,
         "renderer": vlc.describe_renderer(),
+        "player_alert": vlc.player_alert,
+        "player_health_events": vlc.player_health_events,
     }
     try:
         response_payload["simple_mode"] = current_app.sing_store.is_simple_mode()
@@ -1209,6 +1211,15 @@ def fix_audio():
     vlc.audio_error = False
     vlc.restart_instances()
     return jsonify({"success": True, "message": "Playback instances restarted."})
+
+
+@routes_bp.route('/player-crash/ack', methods=['POST'])
+def player_crash_ack():
+    """Operator dismissed the video-player crash banner — acknowledge events up
+    to the given id so /status stops surfacing them."""
+    data = request.get_json(silent=True) or {}
+    current_app.vlc.ack_player_alerts(data.get('id', 0))
+    return jsonify({"success": True})
 
 
 @routes_bp.route('/audio_device', methods=['GET'])

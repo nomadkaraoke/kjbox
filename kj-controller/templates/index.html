@@ -16,6 +16,13 @@
         <button onclick="fixAudio()">Fix Audio</button>
     </div>
 
+    <div id="player-crash-banner">
+        <span id="player-crash-msg"></span>
+        <button id="player-crash-retry" onclick="retryCrashedSong()">Retry song</button>
+        <button onclick="openAvModal()">Switch engine</button>
+        <button onclick="dismissPlayerCrash()">Dismiss</button>
+    </div>
+
     <div class="main-layout">
         <div class="column" id="col1">
             <div class="container playback-controls">
