@@ -69,6 +69,7 @@ class PlaybackCoordinator:
         self.audio_backend = audio_backend
         # Engine-crash health tracking (see _handle_engine_died / restart guard).
         self._health_lock = threading.Lock()
+        self._restart_lock = threading.Lock()  # serialise auto-restarts (no overlap)
         self._health_events = deque(maxlen=30)
         self._crash_history = deque(maxlen=30)  # (ts, song) for the restart guard
         self._event_seq = 0
@@ -109,8 +110,8 @@ class PlaybackCoordinator:
 
     def _record_crash(self, info) -> bool:
         """Record a crash event and decide restart-vs-escalate. Returns True to
-        escalate (>= CRASH_GUARD_MAX crashes of the same song within the
-        window), False to auto-restart."""
+        escalate (>= CRASH_GUARD_MAX engine crashes within the window, regardless
+        of song), False to auto-restart."""
         info = info or {}
         song = info.get('song')
         engine = info.get('engine', self.render_mode)
@@ -137,10 +138,18 @@ class PlaybackCoordinator:
         return escalate
 
     def _safe_restart(self):
+        # Serialise auto-restarts: if one is already in flight, skip this one so
+        # concurrent crash callbacks can't run overlapping restart_instances()
+        # against the shared player/filler state.
+        if not self._restart_lock.acquire(blocking=False):
+            log_message("Auto-restart already in progress — skipping duplicate.", self.config)
+            return
         try:
             self.restart_instances()
         except Exception as e:
             log_message(f"Auto-restart after engine crash failed: {e}", self.config)
+        finally:
+            self._restart_lock.release()
 
     @property
     def player_alert(self):

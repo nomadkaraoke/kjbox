@@ -472,20 +472,23 @@ function updatePlayerCrashBanner(alert) {
     if (!alert) { banner.style.display = 'none'; return; }
 
     const engine = (alert.engine || 'video').toUpperCase();
-    const song = alert.song || 'the current song';
     const escalated = alert.outcome === 'escalated';
+    // The restart guard counts crashes across all songs, so escalated text must
+    // not imply the same song; `song` may also be null on an idle-time crash.
+    const on = alert.song ? ` on "${alert.song}"` : '';
+    const mostRecent = alert.song ? ` (most recently on "${alert.song}")` : '';
 
     // Log each distinct crash once, so the System log keeps a history.
     if (alert.id > _lastLoggedCrashId) {
         _lastLoggedCrashId = alert.id;
         log(escalated
-            ? `${engine} player keeps crashing on "${song}" — NOT auto-restarted. Try the other engine.`
-            : `${engine} player crashed on "${song}" — auto-restarted.`, 'error');
+            ? `${engine} player keeps crashing${mostRecent} — NOT auto-restarted. Switch engine.`
+            : `${engine} player crashed${on} — auto-restarted.`, 'error');
     }
 
     document.getElementById('player-crash-msg').textContent = escalated
-        ? `${engine} player keeps crashing on "${song}". It was not restarted — try the song again, or switch engine.`
-        : `${engine} player crashed on "${song}" and was auto-restarted. Retry the song, or switch engine if it keeps happening.`;
+        ? `The ${engine} player keeps crashing${mostRecent} and was not restarted — switch to the other engine.`
+        : `${engine} player crashed${on} and was auto-restarted. Retry the song, or switch engine if it keeps happening.`;
 
     // Retry only makes sense when we know the file AND it hasn't escalated
     // (retrying the same song on the same engine after repeated crashes is

@@ -430,6 +430,13 @@ class VlcKaraokePlayer:
                 return False
             code = None
         self._death_notified = True
+        # The engine is gone — it isn't playing anything. Clear playing-state so
+        # /status doesn't report a stale song during recovery, and only offer a
+        # Retry song if it actually died mid-playback (not an idle crash).
+        was_active = self.active
+        self.active = False
+        song = self.current_path if was_active else None
+        file_path = self._last_file_path if was_active else None
         log_message(
             f"VLC engine died unexpectedly (exit {code}) — signalling recovery.",
             self.config,
@@ -438,7 +445,7 @@ class VlcKaraokePlayer:
         if cb:
             try:
                 cb({'engine': self.name, 'returncode': code,
-                    'song': self.current_path, 'file_path': self._last_file_path})
+                    'song': song, 'file_path': file_path})
             except Exception as e:
                 log_message(f"on_engine_died callback error: {e}", self.config)
         return True

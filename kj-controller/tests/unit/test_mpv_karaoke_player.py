@@ -577,3 +577,28 @@ def test_notify_if_dead_reconnected_debounces_transient_blip(player, mocker):
     assert player._notify_if_dead() is False   # alive → reset
     assert player._notify_if_dead() is False   # fail again (count 1, not 2)
     assert fired == []
+
+
+def test_notify_if_dead_surfaces_song_when_died_mid_playback(player):
+    captured = []
+    player.on_engine_died = captured.append
+    player.process = _FakeProc(-11)
+    player.active = True
+    player.current_path = '/songs/x.mp4'
+    player._last_file_path = '/songs/x.mp4'
+    assert player._notify_if_dead() is True
+    assert captured[0]['song'] == '/songs/x.mp4'
+    assert captured[0]['file_path'] == '/songs/x.mp4'
+    assert player.active is False   # dead engine marked not-playing
+
+
+def test_notify_if_dead_omits_song_on_idle_crash(player):
+    captured = []
+    player.on_engine_died = captured.append
+    player.process = _FakeProc(-11)
+    player.active = False           # crashed while idle — stale last song
+    player.current_path = '/old.mp4'
+    player._last_file_path = '/old.mp4'
+    assert player._notify_if_dead() is True
+    assert captured[0]['song'] is None
+    assert captured[0]['file_path'] is None
