@@ -289,3 +289,60 @@ def test_shutdown_kills_orphan_when_no_process(player, mocker):
     kill = mocker.patch.object(VlcKaraokePlayer, '_kill_port')
     player.shutdown()
     kill.assert_called_once()
+
+
+# --- Engine death detection (crash → auto-recovery) ---
+
+class _FakeProc:
+    """Popen stand-in: poll() is None while alive, else the exit code."""
+    def __init__(self, code):
+        self._code = code
+
+    def poll(self):
+        return self._code
+
+    @property
+    def returncode(self):
+        return self._code
+
+
+def test_notify_if_dead_fires_callback_on_crash(player):
+    fired = []
+    player.on_engine_died = lambda info: fired.append(info)
+    player.process = _FakeProc(-11)
+    assert player._notify_if_dead() is True
+    assert len(fired) == 1
+    assert fired[0]['engine'] == 'vlc'
+    assert fired[0]['returncode'] == -11
+
+
+def test_notify_if_dead_noop_when_alive(player):
+    fired = []
+    player.on_engine_died = lambda info: fired.append(info)
+    player.process = _FakeProc(None)
+    assert player._notify_if_dead() is False
+    assert fired == []
+
+
+def test_notify_if_dead_noop_during_intentional_shutdown(player):
+    fired = []
+    player.on_engine_died = lambda info: fired.append(info)
+    player.process = _FakeProc(-15)
+    player._monitor_stop.set()
+    assert player._notify_if_dead() is False
+    assert fired == []
+
+
+def test_notify_if_dead_fires_only_once(player):
+    fired = []
+    player.on_engine_died = lambda info: fired.append(info)
+    player.process = _FakeProc(-11)
+    assert player._notify_if_dead() is True
+    assert player._notify_if_dead() is False
+    assert len(fired) == 1
+
+
+def test_notify_if_dead_noop_when_no_process(player):
+    player.on_engine_died = lambda info: None
+    player.process = None
+    assert player._notify_if_dead() is False

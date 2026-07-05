@@ -44,6 +44,12 @@ class VlcKaraokePlayer:
         self.audio_device = config.get('default_audio_device', 'hdmiout')
         self._play_lock = threading.Lock()
         self.on_karaoke_end = None
+        # Fired once (with {engine, returncode, song}) when the VLC process is
+        # found to have exited unexpectedly, so the coordinator can auto-restart
+        # and notify the operator. Mirrors MpvKaraokePlayer. Reset on launch().
+        self.on_engine_died = None
+        self._death_notified = False
+        self._last_file_path = None  # actual path of the last play() — for crash Retry
         self._monitor_stop = threading.Event()
 
     # Protocol conformance: VLC has no real-time pitch shifting
@@ -166,6 +172,7 @@ class VlcKaraokePlayer:
                 full_command, stdout=vlc_log, stderr=vlc_log, start_new_session=True,
             )
             self.process = process
+            self._death_notified = False  # re-arm crash detection for this process
             log_message(f"Karaoke VLC launched with PID {process.pid}.", self.config)
             time.sleep(2)
         except FileNotFoundError:
@@ -259,6 +266,7 @@ class VlcKaraokePlayer:
 
         with self._play_lock:
             self.last_play_time = time.time()
+            self._last_file_path = file_path  # remembered for crash-Retry
             self.audio_error = False
 
             if display_path is not None:
@@ -388,11 +396,45 @@ class VlcKaraokePlayer:
 
     # ── Monitor ────────────────────────────────────────────────────────
 
+    def _notify_if_dead(self):
+        """Detect an unexpected VLC exit (crash) and fire on_engine_died once.
+
+        Uses the Popen exit code as the unambiguous signal: `poll()` is None
+        while alive, an int once the process has exited. A death during an
+        intentional shutdown/restart (`_monitor_stop` set) is expected and
+        ignored, so this only fires for genuine crashes — not a normal song-end
+        (a live HTTP 'stopped' response) or a transient HTTP blip.
+
+        Returns True if a fresh death was detected (the caller should stop
+        monitoring — recovery will start a new player + monitor).
+        """
+        if self._monitor_stop.is_set() or self._death_notified:
+            return False
+        proc = self.process
+        if proc is None or proc.poll() is None:
+            return False
+        self._death_notified = True
+        code = proc.returncode
+        log_message(
+            f"VLC engine died unexpectedly (exit {code}) — signalling recovery.",
+            self.config,
+        )
+        cb = self.on_engine_died
+        if cb:
+            try:
+                cb({'engine': self.name, 'returncode': code,
+                    'song': self.current_path, 'file_path': self._last_file_path})
+            except Exception as e:
+                log_message(f"on_engine_died callback error: {e}", self.config)
+        return True
+
     def monitor(self):
         """Poll karaoke VLC every 2s; fire on_karaoke_end when it stops."""
         while not self._monitor_stop.is_set():
             time.sleep(2)
             if self._monitor_stop.is_set():
+                return
+            if self._notify_if_dead():
                 return
             if not self.active:
                 continue

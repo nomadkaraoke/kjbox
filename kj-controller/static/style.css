@@ -656,6 +656,34 @@ body {
 }
 #audio-warning button:hover { background: white; box-shadow: none; }
 
+/* Video-player crash banner — amber, distinct from the red audio-error one.
+   Ack-driven: stays up until the operator acts (Retry / Switch engine / Dismiss). */
+#player-crash-banner {
+    display: none;
+    background: linear-gradient(135deg, #f59e0b, #d97706);
+    color: white;
+    padding: 0.75rem 1rem;
+    border-radius: 8px;
+    margin-bottom: 0.5rem;
+    text-align: center;
+    font-weight: 500;
+    max-width: 1400px;
+    margin-left: auto;
+    margin-right: auto;
+}
+#player-crash-banner button {
+    background: rgba(255,255,255,0.9);
+    color: #b45309;
+    border: none;
+    padding: 0.3rem 1rem;
+    border-radius: 6px;
+    margin-left: 0.75rem;
+    cursor: pointer;
+    font-weight: 600;
+    box-shadow: none;
+}
+#player-crash-banner button:hover { background: white; box-shadow: none; }
+
 /* --- Overlay Management --- */
 
 .overlay-panel { display: flex; flex-direction: column; }

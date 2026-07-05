@@ -60,6 +60,12 @@ class MpvKaraokePlayer:
         self.audio_backend = audio_backend
         self._play_lock = threading.Lock()
         self.on_karaoke_end = None
+        # Fired once (with {engine, returncode, song}) when the mpv process is
+        # found to have exited unexpectedly, so the coordinator can auto-restart
+        # and notify the operator. Reset on each launch().
+        self.on_engine_died = None
+        self._death_notified = False
+        self._last_file_path = None  # actual path of the last play() — for crash Retry
         self._pitch_semitones = 0
         self.ipc_socket_path = MPV_SOCKET_PATH
         self._ipc_lock = threading.Lock()
@@ -220,6 +226,7 @@ class MpvKaraokePlayer:
                 command, stdout=mpv_log, stderr=mpv_log, start_new_session=True,
             )
             self.process = process
+            self._death_notified = False  # re-arm crash detection for this process
             log_message(f"mpv karaoke launched with PID {process.pid}.", self.config)
             for _ in range(20):
                 time.sleep(0.25)
@@ -302,6 +309,7 @@ class MpvKaraokePlayer:
 
         with self._play_lock:
             self.last_play_time = time.time()
+            self._last_file_path = file_path  # remembered for crash-Retry
             self.audio_error = False
             self._pitch_semitones = 0  # reset for each new song
 
@@ -455,6 +463,39 @@ class MpvKaraokePlayer:
 
     # ── Monitor ────────────────────────────────────────────────────────
 
+    def _notify_if_dead(self):
+        """Detect an unexpected mpv exit (crash) and fire on_engine_died once.
+
+        Uses the Popen exit code as the unambiguous signal: `poll()` is None
+        while alive, an int once the process has exited (negative = killed by
+        that signal, e.g. -11 SIGSEGV). A death during an intentional
+        shutdown/restart (`_monitor_stop` set) is expected and ignored, so this
+        only fires for genuine crashes — not normal song-end (an event on a
+        live socket) or a transient IPC blip (process still alive).
+
+        Returns True if a fresh death was detected (the caller should stop
+        monitoring — recovery will start a new player + monitor).
+        """
+        if self._monitor_stop.is_set() or self._death_notified:
+            return False
+        proc = self.process
+        if proc is None or proc.poll() is None:
+            return False
+        self._death_notified = True
+        code = proc.returncode
+        log_message(
+            f"mpv engine died unexpectedly (exit {code}) — signalling recovery.",
+            self.config,
+        )
+        cb = self.on_engine_died
+        if cb:
+            try:
+                cb({'engine': self.name, 'returncode': code,
+                    'song': self.current_path, 'file_path': self._last_file_path})
+            except Exception as e:
+                log_message(f"on_engine_died callback error: {e}", self.config)
+        return True
+
     def monitor(self):
         """Listen for mpv IPC events; fire on_karaoke_end on EOF.
 
@@ -475,6 +516,10 @@ class MpvKaraokePlayer:
 
     def _monitor_via_events(self):
         while not self._monitor_stop.is_set():
+            # A dead mpv process surfaces here as a missing/refused socket or a
+            # recv EOF; confirm via the exit code and hand off to recovery.
+            if self._notify_if_dead():
+                return
             if not os.path.exists(self.ipc_socket_path):
                 time.sleep(2)
                 continue
@@ -514,6 +559,8 @@ class MpvKaraokePlayer:
 
     def _monitor_via_polling(self):
         while not self._monitor_stop.is_set():
+            if self._notify_if_dead():
+                return
             time.sleep(2)
             if not self.active:
                 continue

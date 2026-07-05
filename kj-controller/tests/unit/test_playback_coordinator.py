@@ -333,3 +333,89 @@ def test_processes_exposes_karaoke_and_filler(mock_config):
     c.player.process = 'karaoke-proc'
     c.filler.process = 'filler-proc'
     assert c.processes == {'karaoke': 'karaoke-proc', 'filler': 'filler-proc'}
+
+
+# --- Engine crash recovery ---
+
+class _SyncThread:
+    """threading.Thread stand-in that runs target synchronously on start()."""
+    def __init__(self, target=None, name=None, daemon=None):
+        self._target = target
+
+    def start(self):
+        if self._target:
+            self._target()
+
+
+def test_build_player_wires_on_engine_died(mock_config):
+    c = PlaybackCoordinator(mock_config, enabled=False)
+    # Every built player routes its death callback to the coordinator handler.
+    assert c.player.on_engine_died == c._handle_engine_died
+
+
+def test_record_crash_first_time_restarts(mock_config):
+    c = PlaybackCoordinator(mock_config, enabled=False)
+    escalate = c._record_crash({'engine': 'mpv', 'song': '/songs/a.mp4'})
+    assert escalate is False
+    events = c.player_health_events
+    assert len(events) == 1
+    assert events[0]['engine'] == 'mpv'
+    assert events[0]['song'] == '/songs/a.mp4'
+    assert events[0]['outcome'] == 'restarting'
+
+
+def test_record_crash_escalates_after_three_same_song(mock_config):
+    c = PlaybackCoordinator(mock_config, enabled=False)
+    info = {'engine': 'mpv', 'song': '/songs/av1.mp4'}
+    assert c._record_crash(info) is False   # 1st
+    assert c._record_crash(info) is False   # 2nd
+    assert c._record_crash(info) is True    # 3rd → escalate
+    assert c.player_health_events[-1]['outcome'] == 'escalated'
+
+
+def test_record_crash_escalates_globally_across_different_songs(mock_config):
+    # The guard counts crashes globally (not per-song) so a hot restart loop or
+    # a run of un-playable files is caught, not just the same song repeating.
+    c = PlaybackCoordinator(mock_config, enabled=False)
+    assert c._record_crash({'engine': 'mpv', 'song': '/a.mp4'}) is False
+    assert c._record_crash({'engine': 'mpv', 'song': '/b.mp4'}) is False
+    assert c._record_crash({'engine': 'mpv', 'song': '/c.mp4'}) is True
+
+
+def test_record_crash_window_expiry_resets_count(mock_config, mocker):
+    c = PlaybackCoordinator(mock_config, enabled=False)
+    info = {'engine': 'mpv', 'song': '/av1.mp4'}
+    clock = [1000.0]
+    mocker.patch('playback.time.time', side_effect=lambda: clock[0])
+    assert c._record_crash(info) is False   # t=1000
+    assert c._record_crash(info) is False   # t=1000
+    clock[0] = 1100.0                        # >60s later → earlier crashes expire
+    assert c._record_crash(info) is False   # only 1 in-window → no escalation
+
+
+def test_handle_engine_died_triggers_restart_when_under_guard(mock_config, mocker):
+    c = PlaybackCoordinator(mock_config, enabled=False)
+    restart = mocker.patch.object(c, 'restart_instances')
+    mocker.patch('playback.threading.Thread', _SyncThread)
+    c._handle_engine_died({'engine': 'mpv', 'song': '/a.mp4'})
+    restart.assert_called_once()
+
+
+def test_handle_engine_died_does_not_restart_when_escalated(mock_config, mocker):
+    c = PlaybackCoordinator(mock_config, enabled=False)
+    restart = mocker.patch.object(c, 'restart_instances')
+    mocker.patch('playback.threading.Thread', _SyncThread)
+    info = {'engine': 'mpv', 'song': '/av1.mp4'}
+    c._handle_engine_died(info)
+    c._handle_engine_died(info)
+    c._handle_engine_died(info)   # 3rd escalates → no restart this time
+    assert restart.call_count == 2
+
+
+def test_player_alert_reflects_latest_unacked_and_ack_clears(mock_config):
+    c = PlaybackCoordinator(mock_config, enabled=False)
+    c._record_crash({'engine': 'mpv', 'song': '/a.mp4'})
+    alert = c.player_alert
+    assert alert is not None and alert['song'] == '/a.mp4'
+    c.ack_player_alerts(alert['id'])
+    assert c.player_alert is None

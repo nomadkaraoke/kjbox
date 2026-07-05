@@ -463,6 +463,65 @@ async function fixAudio() {
     }
 }
 
+// --- Video-player crash banner (driven by /status.player_alert) -----------
+let _lastLoggedCrashId = 0;
+
+function updatePlayerCrashBanner(alert) {
+    const banner = document.getElementById('player-crash-banner');
+    if (!banner) return;
+    if (!alert) { banner.style.display = 'none'; return; }
+
+    const engine = (alert.engine || 'video').toUpperCase();
+    const song = alert.song || 'the current song';
+    const escalated = alert.outcome === 'escalated';
+
+    // Log each distinct crash once, so the System log keeps a history.
+    if (alert.id > _lastLoggedCrashId) {
+        _lastLoggedCrashId = alert.id;
+        log(escalated
+            ? `${engine} player keeps crashing on "${song}" — NOT auto-restarted. Try the other engine.`
+            : `${engine} player crashed on "${song}" — auto-restarted.`, 'error');
+    }
+
+    document.getElementById('player-crash-msg').textContent = escalated
+        ? `${engine} player keeps crashing on "${song}". It was not restarted — try the song again, or switch engine.`
+        : `${engine} player crashed on "${song}" and was auto-restarted. Retry the song, or switch engine if it keeps happening.`;
+
+    // Retry only makes sense when we know the file AND it hasn't escalated
+    // (retrying the same song on the same engine after repeated crashes is
+    // futile — the operator should switch engine instead).
+    const retryBtn = document.getElementById('player-crash-retry');
+    retryBtn.style.display = (alert.file_path && !escalated) ? '' : 'none';
+    banner.dataset.alertId = alert.id;
+    banner.dataset.filePath = alert.file_path || '';
+    banner.style.display = 'block';
+}
+
+async function ackPlayerCrash() {
+    const banner = document.getElementById('player-crash-banner');
+    const id = parseInt(banner.dataset.alertId || '0', 10);
+    banner.style.display = 'none';
+    await apiCall('/player-crash/ack', { id });
+}
+
+function dismissPlayerCrash() {
+    ackPlayerCrash();
+}
+
+async function retryCrashedSong() {
+    const banner = document.getElementById('player-crash-banner');
+    const filePath = banner.dataset.filePath;
+    if (!filePath) { await ackPlayerCrash(); return; }
+    log('Retrying crashed song...');
+    const res = await apiCall('/play', { file_path: filePath });
+    if (res && res.success) {
+        await ackPlayerCrash();          // dismiss only once the retry actually started
+    } else {
+        // Keep the banner up so the operator can switch engine / dismiss.
+        log('Retry failed — song not restarted. Try switching engine.', 'error');
+    }
+}
+
 async function controlPlayback(action) {
     log(`Sending control: ${action}`);
     await apiCall('/control', { action });
@@ -1241,6 +1300,8 @@ async function updateStatus() {
             }
             const audioWarning = document.getElementById('audio-warning');
             audioWarning.style.display = data.audio_error ? 'block' : 'none';
+
+            updatePlayerCrashBanner(data.player_alert);
 
             if (data.current_filler_track) {
                 const fillerSelect = document.getElementById('filler-selector');

@@ -4,6 +4,33 @@ Dated entries, newest first. Each entry notes any required deploy steps.
 
 ---
 
+## 2026-07-05 - Video-player crash detection, auto-recovery & operator notification (v0.68.0)
+
+**Deploy:** backend change → requires `systemctl restart kj-controller` to take
+effect. Frontend (banner/CSS) applies on browser refresh.
+
+**Why:** An AV1 video reliably SIGSEGVs the mpv engine (in libavcodec 6.1.1). Until
+now mpv just became a zombie and *every* subsequent song failed to load until the KJ
+manually hit Fix — the real cause of the 2026-07-02 on-stage failure. ~25% of recent
+downloads are AV1. (Fixing AV1 at the source — upgrading mpv/ffmpeg/dav1d — is separate
+Track B device work; see `docs/archive/2026-07-05-mpv-av1-crash-findings.md`.)
+
+**What (engine-agnostic — mpv *and* vlc):**
+- **Detection:** each engine fires a new `on_engine_died` callback, once, only when
+  `process.poll()` confirms the process actually exited **and** it isn't an intentional
+  shutdown — so a normal song-end or a transient IPC/HTTP blip never trips it. Runs at the
+  top of the monitor loop, so a death-while-idle is caught too.
+- **Auto-recovery:** the coordinator restarts the dead engine (reusing
+  `restart_instances()`), on a thread, with a **restart-loop guard**: ≥3 crashes of the
+  *same* song within 60s stops auto-restarting and escalates instead of thrashing.
+- **Operator notification:** `/status` gains `player_alert` + `player_health_events`;
+  `POST /player-crash/ack` dismisses. The KJ UI shows an amber, acknowledge-driven banner
+  (distinct from the red audio-error one) with **Retry song / Switch engine / Dismiss**,
+  plus one System-log line per crash for history.
+
+**Files:** `mpv_manager.py`, `vlc.py`, `playback.py`, `routes.py`, `templates/index.html`,
+`static/app.js`, `static/style.css`, `pyproject.toml`. 24 new unit tests.
+
 ## 2026-07-03 - SMS status pill in-button + details modal (v0.67.0)
 
 **Why:** The delivery marker added in v0.65.0 sat *after* the SMS button as a
