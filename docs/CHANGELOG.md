@@ -2,6 +2,34 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-07-05 - Overlay click-through fix — VNC/desktop clicks were being swallowed (v0.67.1)
+
+**Why:** In the Screen Preview's interactive mode, clicking had no effect on anything on
+the device desktop (e.g. a Dropbox "unsupported desktop environment" dialog the KJ needed
+to dismiss). Investigation proved the VNC path itself was fine end-to-end — the browser
+emits the click, websockify + x11vnc inject it into X at the correct coordinates (confirmed
+via `RawButtonPress` on `:0`). The blocker was the fullscreen `kjbox-overlay` window: its
+X **input shape was the full 1920×1080 rectangle** instead of the intended empty
+(click-through) region, so it intercepted every pointer click before it reached the desktop
+window underneath. Proof: raising a window above the overlay let the exact same click work.
+
+**Root cause:** `overlay_engine.py` applied the click-through input shape
+(`input_shape_combine_region(cairo.Region())`) **only in `_on_realize`**. GTK resets the
+input shape to the full window on the `size-allocate` that fires right after realize (and on
+any later resize, e.g. an HDMI mode change), silently clobbering it — so the overlay ended up
+catching all clicks. Nobody noticed because the KJ normally drives everything from the web
+UI; this dialog was the first time anyone needed to click the actual desktop via VNC.
+
+**What:**
+- Re-apply the empty input shape on `realize` **+ `map-event` + `size-allocate`** (renamed
+    `_on_realize` → `_apply_click_through`), so the post-realize allocate can no longer
+    clobber click-through. Overlay clicks now pass through to VLC/desktop as intended.
+- Added regression tests (`test_apply_click_through_*`) asserting the handler applies an
+    empty input region and is a safe no-op before the window is realized.
+
+**Deploy note:** takes effect only after the **overlay service is restarted**
+(`overlay-display.service`) — autodeploy restarts `kj-controller`, not the overlay.
+
 ## 2026-07-02 - Rotation click-gesture cleanup + Library search-first view (v0.61.0)
 
 **Why:** Three KJ-requested polish items. (1) Ctrl/Cmd+click deleted a rotation entry —

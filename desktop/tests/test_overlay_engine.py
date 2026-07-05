@@ -2,6 +2,7 @@ import json
 import os
 import sys
 import time
+import types
 
 import pytest
 
@@ -59,3 +60,40 @@ def test_render_to_png_writes_file(tmp_path):
     assert out.exists() and out.stat().st_size > 0
     surf = cairo.ImageSurface.create_from_png(str(out))
     assert surf.get_width() == eng.SCREEN_WIDTH
+
+
+def test_apply_click_through_sets_empty_input_shape():
+    """The overlay must stay click-through: an EMPTY input shape lets every
+    pointer event pass to VLC/desktop windows underneath (and, via VNC, lets the
+    KJ click desktop dialogs). Regression for the overlay swallowing all clicks
+    because GTK's post-realize size-allocate had reset the shape to full-window.
+    """
+    recorded = []
+
+    class _GdkWin:
+        def input_shape_combine_region(self, region, off_x, off_y):
+            recorded.append((region, off_x, off_y))
+
+    class _Win:
+        def get_window(self):
+            return _GdkWin()
+
+    fake = types.SimpleNamespace(win=_Win())
+    result = eng.OverlayApp._apply_click_through(fake)
+
+    assert result is False  # event handlers must not swallow the signal
+    assert len(recorded) == 1
+    region, off_x, off_y = recorded[0]
+    assert region.is_empty()          # empty region == fully click-through
+    assert (off_x, off_y) == (0, 0)
+
+
+def test_apply_click_through_before_window_realized_is_noop():
+    """Called before the GdkWindow exists (get_window() -> None) it must be a
+    safe no-op rather than raising."""
+    class _Win:
+        def get_window(self):
+            return None
+
+    fake = types.SimpleNamespace(win=_Win())
+    assert eng.OverlayApp._apply_click_through(fake) is False
