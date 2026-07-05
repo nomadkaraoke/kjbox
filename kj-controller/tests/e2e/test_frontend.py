@@ -1165,9 +1165,10 @@ class TestSongStatsCollapse:
 # ---------------------------------------------------------------------------
 
 class TestVncMaxMode:
-    """Max mode docks the interactive controls into the fixed top toolbar (they
-    render below the preview otherwise, hidden behind the fullscreen canvas) and
-    restores them when leaving."""
+    """Max mode docks the controls into two fixed toolbars — connection buttons
+    into the top bar, interactive keyboard/URL controls into the bottom bar
+    (they render below the preview otherwise, hidden behind the fullscreen
+    canvas) — and restores them to the container when leaving."""
 
     @staticmethod
     def _parent_id(page, selector):
@@ -1175,17 +1176,20 @@ class TestVncMaxMode:
             f"document.querySelector('{selector}').parentElement.id"
         )
 
-    def test_max_mode_docks_controls_into_toolbar(self, app_page):
+    def test_max_mode_docks_controls_into_toolbars(self, app_page):
         app_page.evaluate("window.setVncSize('max')")
         try:
+            # connection controls -> top toolbar; interactive -> bottom toolbar
             assert self._parent_id(app_page, "#vnc-controls") == "vnc-max-toolbar"
             assert (
                 self._parent_id(app_page, "#vnc-interactive-controls")
-                == "vnc-max-toolbar"
+                == "vnc-max-toolbar-bottom"
             )
-            expect(app_page.locator("#vnc-max-toolbar")).to_have_class(
-                re.compile(r"\bvnc-max-toolbar-full\b")
-            )
+            for tb in ("#vnc-max-toolbar", "#vnc-max-toolbar-bottom"):
+                expect(app_page.locator(tb)).to_have_class(
+                    re.compile(r"\bvnc-max-toolbar-full\b")
+                )
+                expect(app_page.locator(tb)).to_be_visible()
         finally:
             app_page.evaluate("window.setVncSize('400px')")
 
@@ -1199,9 +1203,11 @@ class TestVncMaxMode:
             self._parent_id(app_page, "#vnc-interactive-controls")
             == "vnc-preview-container"
         )
-        expect(app_page.locator("#vnc-max-toolbar")).not_to_have_class(
-            re.compile(r"\bvnc-max-toolbar-full\b")
-        )
+        for tb in ("#vnc-max-toolbar", "#vnc-max-toolbar-bottom"):
+            expect(app_page.locator(tb)).not_to_have_class(
+                re.compile(r"\bvnc-max-toolbar-full\b")
+            )
+            expect(app_page.locator(tb)).not_to_be_visible()
 
     def test_canvas_not_force_stretched(self, page, live_server):
         """Regression: the canvas must not be forced to width/height:100% — that
