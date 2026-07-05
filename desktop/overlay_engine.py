@@ -148,14 +148,23 @@ class OverlayApp:
         self.win.resize(w, h)
 
         self.win.connect("draw", self._on_draw)
-        self.win.connect("realize", self._on_realize)
+        # Click-through must be (re)applied after realize AND after every
+        # map/size-allocate. GTK resets the input shape to the full window on
+        # the size-allocate that follows realize (and on any later resize, e.g.
+        # an HDMI mode change), silently clobbering a realize-only application —
+        # the overlay then swallows every click on the screen, so nothing behind
+        # it (VLC, desktop dialogs) is reachable, including via VNC.
+        self.win.connect("realize", self._apply_click_through)
+        self.win.connect("map-event", self._apply_click_through)
+        self.win.connect("size-allocate", self._apply_click_through)
         self.win.connect("destroy", lambda *_: self.Gtk.main_quit())
 
-    def _on_realize(self, *_):
-        # Click-through: empty input shape means all clicks pass to VLC/desktop.
+    def _apply_click_through(self, *_):
+        # Empty input shape => all pointer events pass through to VLC/desktop.
         gdk_win = self.win.get_window()
         if gdk_win is not None:
             gdk_win.input_shape_combine_region(cairo.Region(), 0, 0)
+        return False
 
     def _compositor_ok(self):
         return bool(self.win.get_screen().is_composited())
