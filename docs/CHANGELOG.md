@@ -2,6 +2,26 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-07-05 - Screen Preview Max mode: fix click coordinates + dock controls into toolbar (v0.67.2)
+
+**Why:** Two issues with the Screen Preview's fullscreen "Max" mode: (1) interactive
+clicks landed in the wrong place, and (2) the interactive controls (Disconnect, Interactive
+toggle, text+Send, keyboard keys, URL+Go) were unreachable — they render below the preview,
+which the fullscreen canvas covers.
+
+**What:**
+- **Click coordinates.** `.vnc-thumbnail canvas` forced `width/height:100% !important`, which
+    stretched the canvas to the (non-16:9) Max viewport. noVNC's `scaleViewport` computes an
+    aspect-preserving scale, so the stretch desynced click mapping — a center click landed at
+    framebuffer x≈1093 instead of 960 (~133px off). Replaced with `max-width/height:100%`, so
+    noVNC sizes and centers the canvas itself; clicks now map correctly (center → 959,540) in
+    every size. Cost: a negligible ~4px letterbox border in the small fixed previews.
+- **Controls in Max mode.** `setVncSize('max')` now moves `#vnc-controls` and
+    `#vnc-interactive-controls` into the fixed top toolbar (and back when leaving Max/hiding).
+    A `display:contents` rule on the nested wrappers flattens every leaf control into the
+    toolbar's single wrapping row; a `ResizeObserver` keeps the fullscreen canvas's top offset
+    synced to the toolbar height as controls dock/undock or the keyboard row shows/hides.
+
 ## 2026-07-05 - Overlay click-through fix — VNC/desktop clicks were being swallowed (v0.67.1)
 
 **Why:** In the Screen Preview's interactive mode, clicking had no effect on anything on

@@ -2573,6 +2573,9 @@ function hideVncPreview() {
     localStorage.setItem('kj-vnc-hidden', '1');
     // Disconnect without forgetting password
     if (window.disconnectVnc) window.disconnectVnc();
+    // Bring the interactive controls back out of the Max toolbar before hiding
+    restoreVncControls();
+    document.getElementById('vnc-screen').style.top = '';
     // Collapse everything
     container.querySelectorAll('#vnc-screen, #vnc-status, .vnc-password-form, #vnc-controls, #vnc-interactive-controls').forEach(
         el => el.classList.add('hidden')
@@ -2598,6 +2601,39 @@ function showVncPreview() {
     if (hasPw && window.connectVnc) window.connectVnc(localStorage.getItem('kj-vnc-password'));
 }
 
+// In Max (fullscreen) mode the below-preview interactive controls are covered by
+// the fullscreen canvas, so dock them into the fixed top toolbar instead. Moving
+// (rather than duplicating) keeps element IDs unique and event handlers intact.
+function moveVncControlsToToolbar() {
+    const toolbar = document.getElementById('vnc-max-toolbar');
+    toolbar.appendChild(document.getElementById('vnc-controls'));
+    toolbar.appendChild(document.getElementById('vnc-interactive-controls'));
+    toolbar.classList.add('vnc-max-toolbar-full');
+}
+
+function restoreVncControls() {
+    const container = document.getElementById('vnc-preview-container');
+    const toolbar = document.getElementById('vnc-max-toolbar');
+    const controls = document.getElementById('vnc-controls');
+    const interactive = document.getElementById('vnc-interactive-controls');
+    // container order (controls before interactive) matches the original markup
+    if (controls.parentElement === toolbar) container.appendChild(controls);
+    if (interactive.parentElement === toolbar) container.appendChild(interactive);
+    toolbar.classList.remove('vnc-max-toolbar-full');
+}
+
+// Keep the fullscreen canvas top offset in sync with the toolbar height, which
+// grows/shrinks as controls dock/undock or the interactive keyboard shows/hides.
+const _vncMaxToolbar = document.getElementById('vnc-max-toolbar');
+if (_vncMaxToolbar && 'ResizeObserver' in window) {
+    new ResizeObserver(() => {
+        const el = document.getElementById('vnc-screen');
+        if (el && el.classList.contains('vnc-max')) {
+            el.style.top = _vncMaxToolbar.offsetHeight + 'px';
+        }
+    }).observe(_vncMaxToolbar);
+}
+
 function setVncSize(size) {
     // Un-hide if hidden
     const container = document.getElementById('vnc-preview-container');
@@ -2611,8 +2647,13 @@ function setVncSize(size) {
     if (size === 'max') {
         el.classList.add('vnc-max');
         maxToolbar.classList.add('visible');
+        moveVncControlsToToolbar();
+        // Initial offset; the ResizeObserver keeps it in sync afterwards.
+        el.style.top = maxToolbar.offsetHeight + 'px';
     } else {
+        restoreVncControls();
         maxToolbar.classList.remove('visible');
+        el.style.top = '';
         if (size === '200px') {
             el.classList.add('vnc-fixed');
         } else if (size === '400px') {
