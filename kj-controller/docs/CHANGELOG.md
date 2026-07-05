@@ -4,6 +4,20 @@ Dated entries, newest first. Each entry notes any required deploy steps.
 
 ---
 
+## 2026-07-05 - Crash detection also works after a reconnect (v0.68.1)
+
+**Deploy:** backend change → requires `systemctl restart kj-controller`.
+
+**Why:** v0.68.0 detected engine death via the Popen exit code (`process.poll()`),
+but when kj-controller restarts while mpv/VLC *survives* (they're spawned with
+`start_new_session`), the coordinator **reconnects** to the existing process and has
+no Popen handle — so `process.poll()` couldn't see a later crash. Verified live: after
+a deploy, an AV1 crash was **not** auto-recovered. **What:** when there's no Popen
+handle (reconnected), `_notify_if_dead` falls back to a **debounced liveness probe**
+(mpv IPC `idle-active` / VLC HTTP status; 2 consecutive failures required, so a
+transient blip during a restart isn't mistaken for a crash). The spawned path is
+unchanged. +5 unit tests.
+
 ## 2026-07-05 - Video-player crash detection, auto-recovery & operator notification (v0.68.0)
 
 **Deploy:** backend change → requires `systemctl restart kj-controller` to take

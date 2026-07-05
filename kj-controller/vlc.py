@@ -49,6 +49,7 @@ class VlcKaraokePlayer:
         # and notify the operator. Mirrors MpvKaraokePlayer. Reset on launch().
         self.on_engine_died = None
         self._death_notified = False
+        self._socket_dead_count = 0   # debounce for reconnected-VLC liveness checks
         self._last_file_path = None  # actual path of the last play() — for crash Retry
         self._monitor_stop = threading.Event()
 
@@ -173,6 +174,7 @@ class VlcKaraokePlayer:
             )
             self.process = process
             self._death_notified = False  # re-arm crash detection for this process
+            self._socket_dead_count = 0
             log_message(f"Karaoke VLC launched with PID {process.pid}.", self.config)
             time.sleep(2)
         except FileNotFoundError:
@@ -411,10 +413,23 @@ class VlcKaraokePlayer:
         if self._monitor_stop.is_set() or self._death_notified:
             return False
         proc = self.process
-        if proc is None or proc.poll() is None:
-            return False
+        if proc is not None:
+            if proc.poll() is None:
+                self._socket_dead_count = 0
+                return False
+            code = proc.returncode            # spawned process exited → dead
+        else:
+            # Reconnected (no Popen handle, e.g. VLC survived a service
+            # restart): use the HTTP probe, debounced so a transient HTTP blip
+            # during a restart isn't mistaken for a crash.
+            if self._probe() is not None:
+                self._socket_dead_count = 0
+                return False
+            self._socket_dead_count += 1
+            if self._socket_dead_count < 2:
+                return False
+            code = None
         self._death_notified = True
-        code = proc.returncode
         log_message(
             f"VLC engine died unexpectedly (exit {code}) — signalling recovery.",
             self.config,

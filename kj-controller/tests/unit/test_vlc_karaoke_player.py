@@ -342,7 +342,23 @@ def test_notify_if_dead_fires_only_once(player):
     assert len(fired) == 1
 
 
-def test_notify_if_dead_noop_when_no_process(player):
-    player.on_engine_died = lambda info: None
+def test_notify_if_dead_reconnected_fires_when_probe_dead(player, mocker):
+    # Reconnected VLC (no Popen handle): death via HTTP probe, debounced.
+    fired = []
+    player.on_engine_died = lambda info: fired.append(info)
     player.process = None
+    mocker.patch.object(player, '_probe', return_value=None)
+    assert player._notify_if_dead() is False   # 1st failure — debounce
+    assert player._notify_if_dead() is True     # 2nd consecutive — dead
+    assert len(fired) == 1
+    assert fired[0]['engine'] == 'vlc'
+
+
+def test_notify_if_dead_reconnected_noop_when_probe_alive(player, mocker):
+    fired = []
+    player.on_engine_died = lambda info: fired.append(info)
+    player.process = None
+    mocker.patch.object(player, '_probe', return_value={'state': 'stopped'})
     assert player._notify_if_dead() is False
+    assert player._notify_if_dead() is False
+    assert fired == []

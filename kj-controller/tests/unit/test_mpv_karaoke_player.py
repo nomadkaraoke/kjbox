@@ -542,3 +542,38 @@ def test_notify_if_dead_survives_missing_callback(player):
     # on_engine_died defaults to None — detection must not raise.
     player.process = _FakeProc(-11)
     assert player._notify_if_dead() is True
+
+
+# Reconnected mpv (no Popen handle — e.g. after a service restart while mpv
+# survived): fall back to socket liveness, debounced against transient blips.
+
+def test_notify_if_dead_reconnected_fires_when_socket_dead(player, mocker):
+    fired = []
+    player.on_engine_died = lambda info: fired.append(info)
+    player.process = None
+    mocker.patch.object(player, '_mpv_is_running', return_value=False)
+    assert player._notify_if_dead() is False   # 1st failure — debounce
+    assert player._notify_if_dead() is True    # 2nd consecutive — confirmed dead
+    assert len(fired) == 1
+    assert fired[0]['engine'] == 'mpv'
+
+
+def test_notify_if_dead_reconnected_noop_when_socket_alive(player, mocker):
+    fired = []
+    player.on_engine_died = lambda info: fired.append(info)
+    player.process = None
+    mocker.patch.object(player, '_mpv_is_running', return_value=True)
+    assert player._notify_if_dead() is False
+    assert player._notify_if_dead() is False
+    assert fired == []
+
+
+def test_notify_if_dead_reconnected_debounces_transient_blip(player, mocker):
+    fired = []
+    player.on_engine_died = lambda info: fired.append(info)
+    player.process = None
+    mocker.patch.object(player, '_mpv_is_running', side_effect=[False, True, False])
+    assert player._notify_if_dead() is False   # fail (count 1)
+    assert player._notify_if_dead() is False   # alive → reset
+    assert player._notify_if_dead() is False   # fail again (count 1, not 2)
+    assert fired == []
