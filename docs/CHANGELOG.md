@@ -2,6 +2,23 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-07-05 - Max mode: bottom toolbar so the cursor can reach the screen's bottom edge (v0.67.3)
+
+**Why:** In fullscreen Max mode the canvas filled to the very bottom of the browser
+window, so framebuffer y=1080 sat at the window's edge — you couldn't comfortably hover
+the bottom of the remote desktop to trigger its auto-hide menu bar (a primary reason for
+using Max). Also removed a stale hard-coded URL prefilled in the Browser Mode box.
+
+**What:**
+- **Second (bottom) toolbar.** Max mode now has two fixed 36px toolbars: the top holds the
+    size + connection buttons (Disconnect / Interactive / Forget), the bottom holds the
+    interactive keyboard/URL controls. The canvas is inset between them (`top`/`bottom` set in
+    JS to each bar's height via the `ResizeObserver`), so its bottom edge sits 36px above the
+    window edge — hovering it now reaches framebuffer y≈1078 (bottom of the desktop).
+- `.vnc-max-toolbar-full` padding set to `0` so the bars stay a compact 36px.
+- **Browser Mode box** no longer prefills `browser_mode_url` from config (a stale
+    `youtube.com/watch?v=…` was sticking around) — it starts empty with its placeholder.
+
 ## 2026-07-05 - Screen Preview Max mode: fix click coordinates + dock controls into toolbar (v0.67.2)
 
 **Why:** Two issues with the Screen Preview's fullscreen "Max" mode: (1) interactive

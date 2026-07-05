@@ -774,10 +774,10 @@ body {
 .vnc-thumbnail.vnc-fixed-400 { width: 400px; max-width: 100%; }
 .vnc-thumbnail.vnc-fit { width: 100%; }
 .vnc-thumbnail.vnc-max {
-    /* Fill the viewport below the toolbar. `top` is set inline in JS to the
-     * toolbar's actual height, since the toolbar grows when the interactive
-     * controls are docked into it in Max mode. */
-    position: fixed; top: 36px; left: 0; right: 0; bottom: 0; z-index: 9999;
+    /* Fill the viewport between the top and bottom toolbars. `top`/`bottom` are
+     * set inline in JS to each toolbar's actual height (they can grow when the
+     * interactive controls wrap). Defaults match the resting 36px bars. */
+    position: fixed; top: 36px; left: 0; right: 0; bottom: 36px; z-index: 9999;
     aspect-ratio: auto; border-radius: 0; border: none;
 }
 .vnc-max-toolbar {
@@ -790,14 +790,19 @@ body {
     gap: 4px; padding: 0 12px;
 }
 .vnc-max-toolbar.visible { display: flex; }
-/* Max mode docks the full interactive control set (Disconnect / Interactive /
- * text+Send / keyboard keys / URL+Go) into the toolbar, since the below-preview
- * copies are hidden behind the fullscreen canvas. Wrap onto multiple rows and
- * let it grow; JS syncs the canvas top offset to the resulting height. */
+/* Second toolbar docked to the bottom edge (holds the interactive controls). */
+.vnc-max-toolbar-bottom {
+    top: auto; bottom: 0;
+    border-bottom: none; border-top: 1px solid #333;
+}
+/* Max mode docks the control set into the toolbars, since the below-preview
+ * copies are hidden behind the fullscreen canvas. Flatten to a single centered
+ * row, no vertical padding (keep the bars a compact 36px); JS syncs the canvas
+ * insets to the resulting heights. */
 .vnc-max-toolbar.vnc-max-toolbar-full {
     flex-wrap: wrap;
     gap: 6px 8px;
-    padding: 6px 12px;
+    padding: 0;
     align-content: center;
 }
 /* Flatten the nested control wrappers with display:contents so every leaf
