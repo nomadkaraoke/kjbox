@@ -1158,3 +1158,59 @@ class TestSongStatsCollapse:
             )
             with urllib.request.urlopen(req) as resp:
                 resp.read()
+
+
+# ---------------------------------------------------------------------------
+# VNC Screen Preview — Max (fullscreen) mode
+# ---------------------------------------------------------------------------
+
+class TestVncMaxMode:
+    """Max mode docks the interactive controls into the fixed top toolbar (they
+    render below the preview otherwise, hidden behind the fullscreen canvas) and
+    restores them when leaving."""
+
+    @staticmethod
+    def _parent_id(page, selector):
+        return page.evaluate(
+            f"document.querySelector('{selector}').parentElement.id"
+        )
+
+    def test_max_mode_docks_controls_into_toolbar(self, app_page):
+        app_page.evaluate("window.setVncSize('max')")
+        try:
+            assert self._parent_id(app_page, "#vnc-controls") == "vnc-max-toolbar"
+            assert (
+                self._parent_id(app_page, "#vnc-interactive-controls")
+                == "vnc-max-toolbar"
+            )
+            expect(app_page.locator("#vnc-max-toolbar")).to_have_class(
+                re.compile(r"\bvnc-max-toolbar-full\b")
+            )
+        finally:
+            app_page.evaluate("window.setVncSize('400px')")
+
+    def test_leaving_max_restores_controls(self, app_page):
+        app_page.evaluate("window.setVncSize('max')")
+        app_page.evaluate("window.setVncSize('400px')")
+        assert (
+            self._parent_id(app_page, "#vnc-controls") == "vnc-preview-container"
+        )
+        assert (
+            self._parent_id(app_page, "#vnc-interactive-controls")
+            == "vnc-preview-container"
+        )
+        expect(app_page.locator("#vnc-max-toolbar")).not_to_have_class(
+            re.compile(r"\bvnc-max-toolbar-full\b")
+        )
+
+    def test_canvas_not_force_stretched(self, page, live_server):
+        """Regression: the canvas must not be forced to width/height:100% — that
+        stretch broke click coordinate mapping in Max mode. It should cap with
+        max-width/max-height so noVNC's aspect-preserving sizing wins."""
+        css = page.request.get(f"{live_server}/static/style.css").text()
+        match = re.search(r"\.vnc-thumbnail canvas\s*\{([^}]*)\}", css)
+        assert match, ".vnc-thumbnail canvas rule not found"
+        block = match.group(1)
+        assert "max-width" in block and "max-height" in block
+        assert "width: 100% !important" not in block
+        assert "height: 100% !important" not in block

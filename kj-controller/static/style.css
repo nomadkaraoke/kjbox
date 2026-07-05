@@ -774,27 +774,55 @@ body {
 .vnc-thumbnail.vnc-fixed-400 { width: 400px; max-width: 100%; }
 .vnc-thumbnail.vnc-fit { width: 100%; }
 .vnc-thumbnail.vnc-max {
+    /* Fill the viewport below the toolbar. `top` is set inline in JS to the
+     * toolbar's actual height, since the toolbar grows when the interactive
+     * controls are docked into it in Max mode. */
     position: fixed; top: 36px; left: 0; right: 0; bottom: 0; z-index: 9999;
-    width: 100vw; height: calc(100vh - 36px);
     aspect-ratio: auto; border-radius: 0; border: none;
 }
 .vnc-max-toolbar {
     display: none;
     position: fixed; top: 0; left: 0; right: 0; z-index: 10000;
-    height: 36px;
+    min-height: 36px;
     background: rgba(17, 17, 17, 0.95);
     border-bottom: 1px solid #333;
     align-items: center; justify-content: center;
     gap: 4px; padding: 0 12px;
 }
 .vnc-max-toolbar.visible { display: flex; }
+/* Max mode docks the full interactive control set (Disconnect / Interactive /
+ * text+Send / keyboard keys / URL+Go) into the toolbar, since the below-preview
+ * copies are hidden behind the fullscreen canvas. Wrap onto multiple rows and
+ * let it grow; JS syncs the canvas top offset to the resulting height. */
+.vnc-max-toolbar.vnc-max-toolbar-full {
+    flex-wrap: wrap;
+    gap: 6px 8px;
+    padding: 6px 12px;
+    align-content: center;
+}
+/* Flatten the nested control wrappers with display:contents so every leaf
+ * control (buttons, text inputs, keyboard keys, URL bar) flows as a direct item
+ * of the toolbar's wrap row, instead of docking as one tall nested block.
+ * `.hidden { display:none !important }` still hides the keyboard/URL row when
+ * interactive mode is off (it out-specifies these via !important). */
+.vnc-max-toolbar-full #vnc-controls,
+.vnc-max-toolbar-full #vnc-interactive-controls,
+.vnc-max-toolbar-full #vnc-keyboard-input,
+.vnc-max-toolbar-full .vnc-special-keys,
+.vnc-max-toolbar-full .vnc-navigate-row { display: contents; }
+.vnc-max-toolbar-full #vnc-type-input,
+.vnc-max-toolbar-full #vnc-navigate-url { flex: 0 1 180px; min-width: 140px; }
 /* Fixed fullscreen preview bar — its own context (not a section header), so it keeps
  * a compact self-contained button size that fits the 36px bar. The .vnc-size-active
  * pink accent still applies from the rule above. */
 .vnc-max-toolbar button { font-size: 0.65em; font-weight: 500; padding: 3px 8px; border-radius: 5px; min-height: 0; }
 .vnc-thumbnail canvas {
-    width: 100% !important;
-    height: 100% !important;
+    /* Let noVNC size the canvas — scaleViewport preserves aspect ratio and centers
+     * it. Forcing 100%x100% stretched it to the container in Max mode (a non-16:9
+     * viewport), which broke click coordinate mapping. max-* only guards against
+     * the canvas overflowing its box before noVNC applies its own sizing. */
+    max-width: 100%;
+    max-height: 100%;
 }
 .vnc-status {
     font-size: 0.75em;
