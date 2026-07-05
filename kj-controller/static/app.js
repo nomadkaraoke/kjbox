@@ -487,8 +487,11 @@ function updatePlayerCrashBanner(alert) {
         ? `${engine} player keeps crashing on "${song}". It was not restarted — try the song again, or switch engine.`
         : `${engine} player crashed on "${song}" and was auto-restarted. Retry the song, or switch engine if it keeps happening.`;
 
+    // Retry only makes sense when we know the file AND it hasn't escalated
+    // (retrying the same song on the same engine after repeated crashes is
+    // futile — the operator should switch engine instead).
     const retryBtn = document.getElementById('player-crash-retry');
-    retryBtn.style.display = alert.file_path ? '' : 'none';
+    retryBtn.style.display = (alert.file_path && !escalated) ? '' : 'none';
     banner.dataset.alertId = alert.id;
     banner.dataset.filePath = alert.file_path || '';
     banner.style.display = 'block';
@@ -508,11 +511,15 @@ function dismissPlayerCrash() {
 async function retryCrashedSong() {
     const banner = document.getElementById('player-crash-banner');
     const filePath = banner.dataset.filePath;
-    if (filePath) {
-        log('Retrying crashed song...');
-        await apiCall('/play', { file_path: filePath });
+    if (!filePath) { await ackPlayerCrash(); return; }
+    log('Retrying crashed song...');
+    const res = await apiCall('/play', { file_path: filePath });
+    if (res && res.success) {
+        await ackPlayerCrash();          // dismiss only once the retry actually started
+    } else {
+        // Keep the banner up so the operator can switch engine / dismiss.
+        log('Retry failed — song not restarted. Try switching engine.', 'error');
     }
-    await ackPlayerCrash();
 }
 
 async function controlPlayback(action) {

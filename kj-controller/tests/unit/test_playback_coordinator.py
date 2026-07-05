@@ -373,11 +373,13 @@ def test_record_crash_escalates_after_three_same_song(mock_config):
     assert c.player_health_events[-1]['outcome'] == 'escalated'
 
 
-def test_record_crash_different_songs_do_not_escalate(mock_config):
+def test_record_crash_escalates_globally_across_different_songs(mock_config):
+    # The guard counts crashes globally (not per-song) so a hot restart loop or
+    # a run of un-playable files is caught, not just the same song repeating.
     c = PlaybackCoordinator(mock_config, enabled=False)
     assert c._record_crash({'engine': 'mpv', 'song': '/a.mp4'}) is False
     assert c._record_crash({'engine': 'mpv', 'song': '/b.mp4'}) is False
-    assert c._record_crash({'engine': 'mpv', 'song': '/c.mp4'}) is False
+    assert c._record_crash({'engine': 'mpv', 'song': '/c.mp4'}) is True
 
 
 def test_record_crash_window_expiry_resets_count(mock_config, mocker):

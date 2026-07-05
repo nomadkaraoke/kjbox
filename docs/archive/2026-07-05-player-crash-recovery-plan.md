@@ -177,7 +177,15 @@ points confirmed by codebase exploration:
 - **Track B packaging → Self-contained mpv** (default). A static/bundled mpv (own ffmpeg+dav1d)
   used only by kj-controller; leaves system ffmpeg (yt-dlp etc.) untouched; rollback = swap the
   binary. Smallest blast radius on the production device.
-- **Restart-guard threshold → ≥3 crashes within 60s of the *same* song → stop + escalate** (default).
+- **Restart-guard threshold → ≥3 engine crashes within 60s → stop + escalate** (default).
+  *Implementation note (2026-07-05, per CodeRabbit):* the guard counts crashes **globally**,
+  not per-song, so it also catches a hot restart loop or a run of un-playable files; the song is
+  kept only for the notification. Each health event carries a monotonic `id`, and
+  `/player-crash/ack` acknowledges up to that id (not deque position). The UI hides **Retry** on
+  an escalated alert (retrying the same engine is futile → switch engine). **Open behaviour
+  question for review:** on escalation the engine is currently left un-restarted (dead) to avoid
+  a hot loop — an alternative is to always restart to a clean *idle* state (never leave it dead)
+  and treat escalation as message-only. Flagged for the user.
 - **Retry offered only for crashes, not normal `audio_error`** — banners stay separate (different
   failure classes).
 

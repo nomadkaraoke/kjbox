@@ -38,9 +38,10 @@ class RendererSwitchRejected(Exception):
         self.status_code = status_code
 
 
-# Restart-loop guard: if the SAME song crashes the engine this many times
-# within the window, stop auto-restarting and escalate to the operator (the
-# file is likely un-playable on this engine — retry or switch engines).
+# Restart-loop guard: if the engine crashes this many times within the window
+# — regardless of which song, so it also catches a hot restart loop or a run of
+# un-playable files — stop auto-restarting and escalate to the operator (switch
+# engines / intervene) instead of thrashing. The song is used only for context.
 CRASH_GUARD_WINDOW = 60.0   # seconds
 CRASH_GUARD_MAX = 3
 
@@ -115,12 +116,9 @@ class PlaybackCoordinator:
         engine = info.get('engine', self.render_mode)
         now = time.time()
         with self._health_lock:
-            self._crash_history.append((now, song))
-            recent_same = sum(
-                1 for (t, s) in self._crash_history
-                if s == song and now - t <= CRASH_GUARD_WINDOW
-            )
-            escalate = recent_same >= CRASH_GUARD_MAX
+            self._crash_history.append(now)
+            recent = sum(1 for t in self._crash_history if now - t <= CRASH_GUARD_WINDOW)
+            escalate = recent >= CRASH_GUARD_MAX
             self._event_seq += 1
             self._health_events.append({
                 'id': self._event_seq,
