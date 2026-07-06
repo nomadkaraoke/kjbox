@@ -47,6 +47,37 @@ New module `mediainfo.py` + endpoint `POST /media/info`:
 - Backend: pytest for `mediainfo` parser + route.
 - Frontend: JS syntax pre-commit hook; extend e2e/DOM guard tests if present for row structure.
 
+## Added scope: /upload organizing bug (found during this session)
+
+**Symptom:** one loose file in `/opt/nomad/downloads/` root:
+`Drop Nineteens - Angel (Final Karaoke Lossy 4k).mp4` — no `[up-<id>]` token, not in `upload/`.
+
+**Root cause:** the browser `POST /upload` route (`handle_upload`) saved files directly to
+the download-folder root with a sanitized name and just called `media.scan()` — it never
+routed through `_finalize_download_identity` like every other ingestion path (youtube /
+community / generic-download). `scan()` then assigned a content-hash upload media_id
+(`up-0b58c1be0330`, source=upload) but left the file loose with no token in the name. The
+68 correctly-organized `upload/`-source files came from the generic URL-download path
+("no natural key → treat as content-addressed upload"), not the browser upload route.
+
+**Fix:** added `MediaIndex.import_upload(staging, raw_name, ext)` which content-addresses
+the file and runs `_finalize_download_identity(source=upload)` → moves to
+`upload/<Artist - Title [up-<hash>]>` + upserts the media_library row. `handle_upload` now
+saves to a hidden `.part` staging file, runs the playability gate, then calls `import_upload`.
+Content-addressed → idempotent (same bytes = same id, no timestamp-suffix duplicates).
+
+**Still loose on-device:** the one existing `Drop Nineteens …` file. The fix is
+forward-looking; relocating that single file is a one-off device op (needs permission —
+live prod device). Offered to the user.
+
+## Outcomes
+- All items implemented; version 0.70.0 → **0.72.0** (merged origin/main which had gone to 0.71.0/#169).
+- Tests: full unit + integration + e2e green (1 pre-existing flaky rotation e2e test,
+  `test_multi_singer_submit_shows_pills_in_rotation`, passes in isolation — unrelated).
+- New backend tests: `test_mediainfo.py` (8), `test_media_info_route.py` (4); rewrote
+  `test_upload.py` + `test_upload_gate.py` for organized behavior; new e2e
+  `TestCatalogRowUnified`, `TestTechDetailsModal`, updated `TestFadeControls`.
+
 ## Notes / gotchas
 - App runs on `127.0.0.1:5001` on device. No pytest CI on repo (security.yml only) — run tests locally.
 - `.playback-controls` is an `auto 1fr` grid; `.fade-controls` is one grid item (col 2), so removing its child `.fade-custom` is safe.

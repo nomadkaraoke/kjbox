@@ -4,6 +4,37 @@ Dated entries, newest first. Each entry notes any required deploy steps.
 
 ---
 
+## 2026-07-06 - Fade cleanup, tech-details modal, catalog row unify, upload organizing (v0.72.0)
+
+**Deploy:** backend change (new `/media/info` route + `MediaIndex.import_upload`) →
+requires `systemctl restart kj-controller`. Frontend changes take effect on browser refresh.
+
+**Playback + Library UX:**
+- Removed the custom-duration fade entry box + big **Fade** button from Playback Controls —
+  the presets (3/6/10/20s) are enough.
+- Click a **format pill** (the now-playing `MP4` pill, or a Library/Catalog row's pill) to
+  open a **technical-details modal**: container, video codec + resolution + fps, audio codec
+  + sample rate + channels, overall bitrate, duration, file size. Backed by a new
+  `POST /media/info` ffprobe probe (`mediainfo.py`), path-validated for both internal media
+  folders and the external catalog mount.
+- **Catalog (4TB SSD) results now render identically to internal-storage rows** — same
+  clickable name (copies), format pill, Preview + Play buttons — via the shared
+  `createMediaItemLi` renderer. No Edit/Delete for catalog rows (they have no
+  media_id/is_download). Deleted the bespoke inline catalog rendering. A folder/path line is
+  now shown under every row (internal + catalog).
+
+**Upload flow fix (loose-file bug):**
+- Browser `POST /upload` was saving files **loose in the download-folder root** with a
+  sanitized name and no `[up-<id>]` token — unlike every other ingestion path. It now routes
+  through the identity pipeline (`MediaIndex.import_upload` → `_finalize_download_identity`),
+  landing the file in `downloads/upload/<Artist - Title [up-<hash>]>` with a media_library
+  row. Content-addressed → idempotent (identical bytes resolve to the same identity instead
+  of piling up timestamped duplicates).
+- **Cleanup note:** one pre-existing loose file
+  (`downloads/Drop Nineteens - Angel (Final Karaoke Lossy 4k).mp4`) predates the fix and is
+  still loose; relocating it is a one-off (its media_library row already has id
+  `up-0b58c1be0330`).
+
 ## 2026-07-06 - Recognise NOMAD masters; stop suggesting YouTube for them (v0.71.0)
 
 **Deploy:** backend change → requires `systemctl restart kj-controller`.
