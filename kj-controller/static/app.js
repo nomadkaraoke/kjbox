@@ -4526,11 +4526,14 @@ function perfRender(data) {
         else if (now.health === 'red') dot.classList.add('yt-dot-error');
     }
     const gpuBusy = now.gpu ? now.gpu.busy_pct : null;
-    const dropsPerS = now.drops_delta ? now.drops_delta.vo : null;
+    // Only surface a drop rate when the drops are meaningful (a CDG source over-
+    // drives a 60Hz display, so its vo-drops are benign decimation, not skips).
+    const meaningful = now.drops_meaningful !== false;
+    const dropsPerS = (now.drops_delta && meaningful) ? now.drops_delta.vo : null;
     const summaryParts = [];
     if (gpuBusy !== null && gpuBusy !== undefined) summaryParts.push('GPU ' + perfFmt(gpuBusy, 0) + '%');
     if (now.render_fps !== null && now.render_fps !== undefined) summaryParts.push(perfFmt(now.render_fps, 1) + 'fps');
-    if (dropsPerS !== null && dropsPerS !== undefined) summaryParts.push(perfFmt(dropsPerS, 0) + ' drops/s');
+    if (dropsPerS) summaryParts.push(perfFmt(dropsPerS, 0) + ' drops/s');
     if (now.temp_c !== null && now.temp_c !== undefined) summaryParts.push(perfFmt(now.temp_c, 0) + '°C');
     const summaryEl = document.getElementById('perf-summary');
     if (summaryEl) summaryEl.textContent = summaryParts.length ? summaryParts.join(' · ') : 'idle';
@@ -4553,10 +4556,14 @@ function perfRender(data) {
 
     const rf = document.getElementById('perf-render-fps');
     if (rf) {
+        // Compare against the DISPLAY-capped target, not the raw container fps
+        // (a CDG track declares ~300 container fps but can only show ~60).
+        const target = (typeof now.fps_target === 'number') ? now.fps_target : null;
         const cfps = (now.video && now.video.container_fps) ? now.video.container_fps : null;
-        rf.textContent = perfFmt(now.render_fps, 1) + ' / ' + perfFmt(cfps, 1) + ' fps';
-        // Amber when render falls meaningfully below container fps under playback.
-        const low = (typeof now.render_fps === 'number' && typeof cfps === 'number' && cfps > 0 && now.render_fps < cfps - 1);
+        let txt = perfFmt(now.render_fps, 1) + ' / ' + perfFmt(target, 0) + ' fps';
+        if (cfps && target && cfps > target + 1) txt += ' (' + perfFmt(cfps, 0) + ' container)';
+        rf.textContent = txt;
+        const low = (typeof now.render_fps === 'number' && typeof target === 'number' && target > 0 && now.render_fps < 0.92 * target);
         rf.classList.toggle('perf-v-warn', !!(now.playing && low));
     }
 
@@ -4570,8 +4577,13 @@ function perfRender(data) {
             'del ' + perfFmt(d.delayed, 0)
         ];
         if (d.vlc_lost !== null && d.vlc_lost !== undefined) parts.push('lost ' + perfFmt(d.vlc_lost, 0));
-        dropsEl.textContent = parts.join(' · ');
-        dropsEl.classList.toggle('perf-v-warn', typeof dd.vo === 'number' && dd.vo > 0);
+        let txt = parts.join(' · ');
+        if (now.playing && now.drops_meaningful === false) txt += '  (benign — source over-drives display)';
+        dropsEl.textContent = txt;
+        // Warn only on REAL drops: meaningful vo-drops, or any decoder drop.
+        const realDrop = (now.drops_meaningful !== false && typeof dd.vo === 'number' && dd.vo > 0)
+                       || (typeof dd.decoder === 'number' && dd.decoder > 0);
+        dropsEl.classList.toggle('perf-v-warn', !!realDrop);
     }
 
     const gpuEl = document.getElementById('perf-gpu');
@@ -4688,6 +4700,12 @@ async function fetchPerfStream() {
         if (!resp.ok) return;
         const data = await resp.json();
         perfRender(data);
+        // While recording, tick the elapsed client-side each poll and refresh the
+        // list (sample count) every ~5s.
+        if (perfRecActive) {
+            perfUpdateRecStatus();
+            if ((++perfRecPollTick % 5) === 0) perfRefreshRecordings();
+        }
     } catch (e) {
         // Swallow quietly — match fetchSystemStats.
     } finally {
@@ -4739,6 +4757,117 @@ function perfSetAutoPause(on) {
     if (!on) perfVncAutoPaused = false;
 }
 
+// --- Perf recording: persist a labeled session to disk for before/after analysis ---
+let perfRecActive = false;
+let perfRecStartMs = null;
+let perfRecLabel = null;
+let perfRecPollTick = 0;
+
+async function perfToggleRecord() {
+    try {
+        if (perfRecActive) {
+            await fetch('/perf/record/stop', { method: 'POST' });
+        } else {
+            const el = document.getElementById('perf-rec-label');
+            const label = (el && el.value) ? el.value : 'session';
+            await fetch('/perf/record/start', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ label })
+            });
+        }
+    } catch (e) { /* ignore */ }
+    perfRefreshRecordings();
+}
+
+async function perfRefreshRecordings() {
+    try {
+        const resp = await fetch('/perf/record/list');
+        if (!resp.ok) return;
+        const data = await resp.json();
+        const st = data.status || {};
+        perfRecActive = !!st.recording;
+        perfRecStartMs = (perfRecActive && st.started) ? st.started * 1000 : null;
+        perfRecLabel = st.label || null;
+        const btn = document.getElementById('perf-rec-btn');
+        if (btn) {
+            btn.innerHTML = perfRecActive ? '&#9632; Stop' : '&#9679; Record';
+            btn.classList.toggle('perf-rec-on', perfRecActive);
+        }
+        perfUpdateRecStatus(st.sample_count);
+        perfRenderRecordings(data.recordings || []);
+    } catch (e) { /* ignore */ }
+}
+
+function perfUpdateRecStatus(count) {
+    const s = document.getElementById('perf-rec-status');
+    if (!s) return;
+    if (perfRecActive) {
+        const secs = perfRecStartMs ? Math.round((Date.now() - perfRecStartMs) / 1000) : 0;
+        s.textContent = '● recording "' + (perfRecLabel || '') + '" — ' + secs + 's'
+            + (typeof count === 'number' ? ' · ' + count + ' samples' : '');
+        s.classList.add('perf-rec-live');
+    } else {
+        s.textContent = '';
+        s.classList.remove('perf-rec-live');
+    }
+}
+
+function perfRenderRecordings(list) {
+    const el = document.getElementById('perf-rec-list');
+    if (!el) return;
+    if (!list.length) { el.innerHTML = '<div class="perf-tgl-note">no recordings yet</div>'; return; }
+    el.innerHTML = '';
+    list.slice(0, 12).forEach(function (r) {
+        const row = document.createElement('div');
+        row.className = 'perf-rec-item';
+        const kb = r.size ? Math.max(1, Math.round(r.size / 1024)) : 0;
+        const name = document.createElement('span');
+        name.className = 'perf-rec-name';
+        name.textContent = r.label + (r.active ? ' ●' : '');
+        const meta = document.createElement('span');
+        meta.className = 'perf-tgl-note';
+        meta.textContent = kb + ' KB';
+        const sum = document.createElement('button');
+        sum.className = 'perf-rec-mini';
+        sum.textContent = 'summary';
+        sum.onclick = function () { perfShowSummary(r.id, row); };
+        const dl = document.createElement('a');
+        dl.className = 'perf-rec-mini';
+        dl.textContent = 'download';
+        dl.href = '/perf/record/' + encodeURIComponent(r.id) + '/download';
+        row.appendChild(name); row.appendChild(meta); row.appendChild(sum); row.appendChild(dl);
+        el.appendChild(row);
+    });
+}
+
+async function perfShowSummary(id, row) {
+    const existing = row.nextElementSibling;
+    if (existing && existing.classList.contains('perf-rec-summary')) { existing.remove(); return; }
+    try {
+        const resp = await fetch('/perf/record/' + encodeURIComponent(id) + '/summary');
+        if (!resp.ok) return;
+        const s = await resp.json();
+        const drops = s.drops || {};
+        const fps = s.render_fps || {};
+        const gpu = s.gpu_busy || {};
+        const benignVo = (drops.vo_total || 0) - (drops.vo_real || 0);
+        const box = document.createElement('div');
+        box.className = 'perf-rec-summary';
+        box.innerHTML =
+            '<div>' + (s.duration_s || 0) + 's · ' + (s.samples || 0) + ' samples · '
+            + ((s.engines || []).join('/') || '—')
+            + (s.hwdec && s.hwdec.length ? ' · hwdec ' + s.hwdec.join('/') : '') + '</div>'
+            + '<div>render fps: min ' + perfFmt(fps.min, 1) + ' / avg ' + perfFmt(fps.avg, 1)
+            + ' · on-target ' + perfFmt(s.fps_ok_pct, 0) + '%</div>'
+            + '<div>real drops: ' + (drops.vo_real || 0) + ' (' + perfFmt(s.drops_real_per_min, 1)
+            + '/min) · decoder ' + (drops.decoder || 0) + ' · benign ' + benignVo + '</div>'
+            + '<div>GPU avg ' + perfFmt(gpu.avg, 0) + '% / max ' + perfFmt(gpu.max, 0)
+            + '% · temp max ' + perfFmt(s.temp_max, 0) + '°C</div>'
+            + '<div>health: ' + (s.health ? (s.health.green + 'g / ' + s.health.amber + 'a / ' + s.health.red + 'r') : '—') + '</div>';
+        row.after(box);
+    } catch (e) { /* ignore */ }
+}
+
 function perfStartPolling() {
     if (perfInterval) return;
     perfPrevPlaying = null; // re-seed so re-opening doesn't fire a stale transition
@@ -4758,7 +4887,7 @@ function perfSetOpen(open) {
     if (caret) caret.innerHTML = open ? '&#9660;' : '&#9654;'; // ▼ / ▶
     if (header) header.setAttribute('aria-expanded', open ? 'true' : 'false');
     localStorage.setItem('kj-perf-open', open ? '1' : '0');
-    if (open) perfStartPolling(); else perfStopPolling();
+    if (open) { perfStartPolling(); perfRefreshRecordings(); } else perfStopPolling();
 }
 
 function togglePerfPanel() {
@@ -4772,6 +4901,36 @@ function togglePerfPanel() {
     const cb = document.getElementById('perf-autopause');
     if (cb) cb.checked = localStorage.getItem('kj-vnc-autopause') !== '0'; // default ON
     perfSetOpen(localStorage.getItem('kj-perf-open') === '1');
+})();
+
+// --- Overlays panel collapse (hide/show the overlays list) ---
+function toggleOverlaysPanel() {
+    const list = document.getElementById('overlay-list');
+    const btn = document.getElementById('overlays-collapse-btn');
+    if (!list) return;
+    const hidden = list.classList.toggle('hidden');
+    if (btn) btn.textContent = hidden ? 'Show' : 'Hide';
+    localStorage.setItem('kj-overlays-hidden', hidden ? '1' : '0');
+}
+
+(function initOverlaysCollapse() {
+    const list = document.getElementById('overlay-list');
+    const btn = document.getElementById('overlays-collapse-btn');
+    if (list && localStorage.getItem('kj-overlays-hidden') === '1') {
+        list.classList.add('hidden');
+        if (btn) btn.textContent = 'Show';
+    }
+})();
+
+// Move the Performance section to the top of the System column so playback /
+// GPU / CPU info sits high on screen (reparent it just under the System <h2>).
+(function movePerfToTop() {
+    const perf = document.getElementById('perf-section');
+    const sys = perf ? perf.closest('.system-controls') : null;
+    if (!perf || !sys) return;
+    const h2 = sys.querySelector('h2');
+    if (h2 && h2.nextSibling) sys.insertBefore(perf, h2.nextSibling);
+    else sys.insertBefore(perf, sys.firstChild);
 })();
 
 // --- Rotation (SQLite primary) ---

@@ -259,3 +259,57 @@ def test_sampler_never_raises_on_all_sources_absent(tmp_path, monkeypatch):
 def test_apply_toggle_unknown_control():
     ok, state, msg = ps.apply_toggle("bogus", True)
     assert ok is False and "unknown control" in msg
+
+
+# --- CDG-aware fps target / drop meaningfulness / health ---
+
+def test_effective_target_fps_caps_at_display():
+    assert ps.effective_target_fps({"video": {"container_fps": 300, "display_fps": 60}}) == 60
+    assert ps.effective_target_fps({"video": {"container_fps": 30, "display_fps": 60}}) == 30
+    assert ps.effective_target_fps({"video": {"container_fps": None, "display_fps": 50}}) == 50
+    assert ps.effective_target_fps({"video": {}}) == ps.DISPLAY_FPS_DEFAULT
+
+
+def test_drops_meaningful_false_for_cdg():
+    # 300fps CDG on a 60Hz display: vo-drops are just decimation, not visible.
+    assert ps.drops_are_meaningful({"video": {"container_fps": 300, "display_fps": 60}}) is False
+    # 30fps h264 <= display: a dropped frame IS visible.
+    assert ps.drops_are_meaningful({"video": {"container_fps": 30, "display_fps": 60}}) is True
+    # unknown container (VLC) -> treat as meaningful.
+    assert ps.drops_are_meaningful({"video": {}}) is True
+
+
+def _cdg(vo_delta, render_fps=58.0):
+    return {"playing": True, "render_fps": render_fps, "fps_target": 60,
+            "video": {"container_fps": 300, "display_fps": 60},
+            "drops_delta": {"vo": vo_delta, "decoder": 0, "vlc_lost": 0},
+            "temp_c": 60, "gpu": {"busy_pct": 40, "act_mhz": 500, "max_mhz": 1200}}
+
+
+def _h264(vo_delta, render_fps=30.0):
+    return {"playing": True, "render_fps": render_fps, "fps_target": 30,
+            "video": {"container_fps": 30, "display_fps": 60},
+            "drops_delta": {"vo": vo_delta, "decoder": 0, "vlc_lost": 0},
+            "temp_c": 60, "gpu": {"busy_pct": 40, "act_mhz": 1200, "max_mhz": 1200}}
+
+
+def test_health_cdg_benign_drops_not_red():
+    # Sustained vo-drops on a CDG track must NOT read as red (they're invisible).
+    assert ps.compute_health([_cdg(9) for _ in range(5)]) == "green"
+
+
+def test_health_h264_meaningful_drops_are_red():
+    # The same drop rate on a 30fps h264 source IS a visible problem.
+    assert ps.compute_health([_h264(2) for _ in range(5)]) == "red"
+
+
+def test_health_red_on_fps_shortfall():
+    # render fps collapsing below 75% of target = red regardless of drop bookkeeping.
+    tail = [_h264(0, render_fps=18.0) for _ in range(5)]
+    assert ps.compute_health(tail) == "red"
+
+
+def test_health_decoder_drops_always_red():
+    s = _cdg(0)
+    s["drops_delta"]["decoder"] = 1   # a real decode failure, even on CDG
+    assert ps.compute_health([_cdg(0), _cdg(0), s]) == "red"

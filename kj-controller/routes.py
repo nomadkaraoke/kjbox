@@ -2628,6 +2628,72 @@ def perf_toggle(control):
     return jsonify({"success": ok, "on": state, "message": msg}), (200 if ok else 500)
 
 
+def _perf_recorder_or_501():
+    sampler = getattr(current_app, 'perf_sampler', None)
+    if sampler is None:
+        return None, (jsonify({"error": "perf monitor unavailable"}), 501)
+    return sampler.recorder, None
+
+
+@routes_bp.route('/perf/record/start', methods=['POST'])
+def perf_record_start():
+    """Begin a labeled recording session (each 1 Hz sample appended to disk)."""
+    rec, err = _perf_recorder_or_501()
+    if err:
+        return err
+    label = (request.get_json(silent=True) or {}).get('label', 'session')
+    return jsonify(rec.start(label))
+
+
+@routes_bp.route('/perf/record/stop', methods=['POST'])
+def perf_record_stop():
+    """Stop the active recording session."""
+    rec, err = _perf_recorder_or_501()
+    if err:
+        return err
+    return jsonify(rec.stop())
+
+
+@routes_bp.route('/perf/record/list', methods=['GET'])
+def perf_record_list():
+    """Current recording status + the list of saved sessions."""
+    rec, err = _perf_recorder_or_501()
+    if err:
+        return err
+    return jsonify({"status": rec.status(), "recordings": rec.list()})
+
+
+@routes_bp.route('/perf/record/<session_id>/summary', methods=['GET'])
+def perf_record_summary(session_id):
+    """Aggregate stats over a saved session (fps vs target, real vs benign drops…)."""
+    rec, err = _perf_recorder_or_501()
+    if err:
+        return err
+    summ = rec.summary(session_id)
+    if summ is None:
+        return jsonify({"error": "not found"}), 404
+    return jsonify(summ)
+
+
+@routes_bp.route('/perf/record/<session_id>/download', methods=['GET'])
+def perf_record_download(session_id):
+    """Download a session as newline-delimited JSON."""
+    rec, err = _perf_recorder_or_501()
+    if err:
+        return err
+    path = rec.path_for(session_id)
+    if not path:
+        return jsonify({"error": "not found"}), 404
+    try:
+        with open(path) as f:
+            data = f.read()
+    except OSError:
+        return jsonify({"error": "read failed"}), 500
+    from flask import Response
+    return Response(data, mimetype='application/x-ndjson',
+                    headers={'Content-Disposition': f'attachment; filename="{session_id}.jsonl"'})
+
+
 # --- Rotation ---
 
 

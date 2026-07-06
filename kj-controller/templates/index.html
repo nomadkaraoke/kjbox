@@ -144,6 +144,7 @@
                 <div class="header-row">
                     <h2>Overlays</h2>
                     <div class="header-actions overlay-header-btns">
+                        <button class="overlay-header-btn" id="overlays-collapse-btn" onclick="toggleOverlaysPanel()" title="Show or hide the overlays list">Hide</button>
                         <button class="overlay-header-btn" onclick="showWallpaperModal()" title="Change desktop wallpaper">Wallpaper</button>
                         <button class="overlay-header-btn" onclick="backupOverlays()" title="Download overlay config">Backup</button>
                         <button class="overlay-header-btn" onclick="restoreOverlays()" title="Restore overlay config from file">Restore</button>
@@ -301,6 +302,17 @@
                                 <input type="checkbox" id="perf-autopause" onchange="perfSetAutoPause(this.checked)">
                                 <span>Auto-pause VNC during playback</span>
                             </label>
+                        </div>
+
+                        <!-- Recording: persist a labeled session to disk for before/after analysis -->
+                        <div class="perf-recording">
+                            <div class="perf-subhead">Recording <span class="perf-tgl-note">— capture a session to disk for before/after comparison</span></div>
+                            <div class="perf-record-row">
+                                <input type="text" id="perf-rec-label" class="perf-rec-label" placeholder="label (e.g. cdg-baseline)" maxlength="48">
+                                <button class="system-btn perf-rec-btn" id="perf-rec-btn" onclick="perfToggleRecord()">&#9679; Record</button>
+                                <span id="perf-rec-status" class="perf-tgl-note"></span>
+                            </div>
+                            <div id="perf-rec-list" class="perf-rec-list"></div>
                         </div>
                     </div>
                 </div>

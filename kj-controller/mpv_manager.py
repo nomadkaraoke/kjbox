@@ -448,8 +448,8 @@ class MpvKaraokePlayer:
 
     # Properties the perf monitor reads each tick (fetched in ONE round-trip).
     _PERF_PROPS = (
-        "estimated-vf-fps", "container-fps", "frame-drop-count",
-        "decoder-frame-drop-count", "vo-delayed-frame-count",
+        "estimated-vf-fps", "container-fps", "estimated-display-fps",
+        "frame-drop-count", "decoder-frame-drop-count", "vo-delayed-frame-count",
         "hwdec-current", "video-codec", "width", "height",
     )
 
@@ -525,6 +525,7 @@ class MpvKaraokePlayer:
             "playing": True,
             "render_fps": p.get("estimated-vf-fps"),
             "container_fps": p.get("container-fps"),
+            "display_fps": p.get("estimated-display-fps"),
             "hwdec": p.get("hwdec-current"),
             "codec": p.get("video-codec"),
             "width": p.get("width"),
