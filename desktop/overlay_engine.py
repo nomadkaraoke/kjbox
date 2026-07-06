@@ -20,6 +20,7 @@ import argparse
 import json
 import os
 import sys
+import tempfile
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -31,6 +32,11 @@ from overlay_painters import PAINTERS, make_painter
 
 FPS = 30
 CONFIG_POLL_INTERVAL = 1.0  # seconds between overlays.json mtime checks
+# Self-reported perf for the KJ Controller monitor. The engine is a separate
+# process, so it publishes its real frame rate + per-frame raster cost to a small
+# file the Flask app's PerfSampler reads (see kj-controller/perf_sampler.py).
+PERF_FILE = "/tmp/kj-overlay-perf.json"
+PERF_WRITE_INTERVAL = 1.0
 
 
 def _log(msg):
@@ -202,6 +208,7 @@ class OverlayApp:
         now = time.monotonic()
         dt = now - self._last_frame
         self._last_frame = now
+        self._perf_frames += 1  # actual callback rate; < FPS ⇒ engine is starved
         needs = False
         for o in visible_overlays(self.playing, self._overlays):
             p = self.painters.get(o["id"])
@@ -212,6 +219,7 @@ class OverlayApp:
         return True
 
     def _on_draw(self, _widget, cr):
+        _t0 = time.perf_counter()
         # Clear to fully transparent.
         cr.set_operator(cairo.OPERATOR_SOURCE)
         cr.set_source_rgba(0, 0, 0, 0)
@@ -228,6 +236,10 @@ class OverlayApp:
             except Exception as e:
                 cr.restore()
                 _log(f"painter {o.get('id')} draw failed: {e}")
+        raster_ms = (time.perf_counter() - _t0) * 1000.0
+        # EMA so the reported cost is stable rather than per-frame noisy.
+        self._perf_raster_ms = raster_ms if self._perf_raster_ms is None \
+            else (0.7 * self._perf_raster_ms + 0.3 * raster_ms)
         return False
 
     def run(self):
@@ -247,11 +259,54 @@ class OverlayApp:
         return True
 
     def _start(self):
+        # Perf self-reporting state (see PERF_FILE).
+        self._perf_frames = 0
+        self._perf_raster_ms = None
+        self._perf_last = time.monotonic()
         self._poll_config()
         self.win.show_all()
         self.GLib.timeout_add(int(CONFIG_POLL_INTERVAL * 1000), self._poll_config)
         self.GLib.timeout_add(int(1000 / FPS), self._on_frame)
+        self.GLib.timeout_add(int(PERF_WRITE_INTERVAL * 1000), self._write_perf)
         _log(f"started; config={self.config_path}")
+
+    def _write_perf(self):
+        """Publish real overlay FPS + raster cost to PERF_FILE once per second.
+
+        `fps` is the actual _on_frame callback rate — it sits at ~FPS when the
+        engine keeps up and drops when the process is starved. Best-effort; a
+        failed write is silently skipped and retried next tick.
+        """
+        now = time.monotonic()
+        elapsed = now - self._perf_last
+        fps = round(self._perf_frames / elapsed, 1) if elapsed > 0 else 0.0
+        self._perf_frames = 0
+        self._perf_last = now
+        payload = {
+            "fps": fps,
+            "raster_ms": round(self._perf_raster_ms, 2)
+            if self._perf_raster_ms is not None else None,
+            "ts": time.time(),
+        }
+        # Atomic write via a randomly-named temp file in the target dir (avoids a
+        # predictable /tmp path that could be symlink-attacked). Mirrors
+        # overlay.py's _save().
+        try:
+            fd, tmp = tempfile.mkstemp(
+                dir=os.path.dirname(PERF_FILE) or ".",
+                prefix=".kj-overlay-perf-", suffix=".json")
+            try:
+                with os.fdopen(fd, "w") as f:
+                    json.dump(payload, f)
+                os.replace(tmp, PERF_FILE)
+            except OSError:
+                try:
+                    os.unlink(tmp)
+                except OSError:
+                    pass
+        except OSError:
+            pass
+        return True  # keep the GLib timeout alive
 
 
 def main():

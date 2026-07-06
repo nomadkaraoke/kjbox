@@ -236,6 +236,75 @@
                     </div>
                 </div>
 
+                <div class="system-subsection" id="perf-section">
+                    <div class="system-subsection-label perf-header" id="perf-toggle" onclick="togglePerfPanel()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();togglePerfPanel();}" role="button" tabindex="0" aria-expanded="false" title="Live playback / GPU / CPU performance monitor">
+                        <span class="perf-caret" id="perf-caret">&#9654;</span>
+                        <span>Performance</span>
+                        <span id="perf-health-dot" class="yt-health-dot" title="Performance health"></span>
+                        <span id="perf-summary" class="perf-summary"></span>
+                    </div>
+                    <div id="perf-body" class="perf-body hidden">
+                        <!-- Sparklines (last ~5 min from samples[]) -->
+                        <div class="perf-sparks">
+                            <div class="perf-spark">
+                                <div class="perf-spark-head"><span class="perf-spark-label">VO drops/s</span><span class="perf-spark-val" id="perf-spark-drops-val">—</span></div>
+                                <canvas id="perf-spark-drops" class="perf-spark-canvas" width="240" height="24"></canvas>
+                            </div>
+                            <div class="perf-spark">
+                                <div class="perf-spark-head"><span class="perf-spark-label">GPU busy</span><span class="perf-spark-val" id="perf-spark-gpu-val">—</span></div>
+                                <canvas id="perf-spark-gpu" class="perf-spark-canvas" width="240" height="24"></canvas>
+                            </div>
+                            <div class="perf-spark">
+                                <div class="perf-spark-head"><span class="perf-spark-label">CPU total</span><span class="perf-spark-val" id="perf-spark-cpu-val">—</span></div>
+                                <canvas id="perf-spark-cpu" class="perf-spark-canvas" width="240" height="24"></canvas>
+                            </div>
+                        </div>
+
+                        <!-- Current readouts from now{} -->
+                        <div class="perf-readouts">
+                            <div class="perf-row"><span class="perf-k">Engine</span><span class="perf-v" id="perf-engine">—</span></div>
+                            <div class="perf-row"><span class="perf-k">Render FPS</span><span class="perf-v" id="perf-render-fps">—</span></div>
+                            <div class="perf-row"><span class="perf-k">Dropped</span><span class="perf-v" id="perf-drops">—</span></div>
+                            <div class="perf-row"><span class="perf-k">GPU</span><span class="perf-v" id="perf-gpu">—</span></div>
+                            <div class="perf-row"><span class="perf-k">Overlay</span><span class="perf-v" id="perf-overlay">—</span></div>
+                            <div class="perf-row"><span class="perf-k">VNC</span><span class="perf-v" id="perf-vnc">—</span></div>
+                            <div class="perf-row"><span class="perf-k">Temp</span><span class="perf-v" id="perf-temp">—</span></div>
+                            <div class="perf-row"><span class="perf-k">/status latency</span><span class="perf-v" id="perf-latency">—</span></div>
+                        </div>
+
+                        <!-- Per-process CPU rows (built in JS) -->
+                        <div class="perf-cpu-block">
+                            <div class="perf-subhead">CPU by process</div>
+                            <div id="perf-cpu-list" class="perf-cpu-list"></div>
+                        </div>
+
+                        <!-- A/B toggles reflecting now/controls state -->
+                        <div class="perf-toggles">
+                            <div class="perf-subhead">Experiments &amp; toggles</div>
+                            <div class="perf-toggle-row">
+                                <button class="system-btn perf-tgl-btn" id="perf-toggle-overlay" onclick="perfToggle('overlay', this)">Overlay: —</button>
+                                <span class="perf-tgl-note">display overlay engine</span>
+                            </div>
+                            <div class="perf-toggle-row">
+                                <button class="system-btn perf-tgl-btn" id="perf-toggle-compositor" onclick="perfToggle('compositor', this)">Compositor: —</button>
+                                <span class="perf-tgl-note perf-tgl-warn">experimental — screen flickers</span>
+                            </div>
+                            <div class="perf-toggle-row">
+                                <button class="system-btn perf-tgl-btn" id="perf-toggle-gpuclock" onclick="perfToggle('gpu-clock', this)">GPU max-clock: —</button>
+                                <span class="perf-tgl-note perf-tgl-warn">experimental</span>
+                            </div>
+                            <div class="perf-toggle-row">
+                                <button class="system-btn perf-tgl-btn" id="perf-toggle-vnc" onclick="perfToggleVnc(this)">VNC preview: —</button>
+                                <span class="perf-tgl-note">client-side connect/disconnect</span>
+                            </div>
+                            <label class="overlay-toggle-label perf-autopause-label" title="Automatically disconnect the VNC preview while video is playing to free CPU/GPU, then reconnect when playback stops.">
+                                <input type="checkbox" id="perf-autopause" onchange="perfSetAutoPause(this.checked)">
+                                <span>Auto-pause VNC during playback</span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
                 <div id="system-overlay" class="system-overlay hidden">
                     <span class="download-spinner"></span>
                     <span id="system-overlay-msg"></span>

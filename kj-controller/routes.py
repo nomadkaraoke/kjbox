@@ -2595,6 +2595,39 @@ def system_stats():
         return jsonify({"error": str(e)}), 500
 
 
+# --- Performance monitor ---
+
+_PERF_CONTROLS = ('overlay', 'compositor', 'gpu-clock')
+
+
+@routes_bp.route('/perf/stream', methods=['GET'])
+def perf_stream():
+    """Return the perf ring buffer (latest sample + ~5 min history).
+
+    Polled ~1 Hz by the Performance panel, and only while it is open.
+    """
+    sampler = getattr(current_app, 'perf_sampler', None)
+    if sampler is None:
+        return jsonify({"error": "perf monitor unavailable"}), 501
+    return jsonify(sampler.snapshot())
+
+
+@routes_bp.route('/perf/toggle/<control>', methods=['POST'])
+def perf_toggle(control):
+    """A/B control: start/stop overlay, toggle compositor, pin/unpin GPU clock."""
+    if control not in _PERF_CONTROLS:
+        return jsonify({"error": f"unknown control: {control}"}), 400
+    sampler = getattr(current_app, 'perf_sampler', None)
+    if sampler is None:
+        return jsonify({"error": "perf monitor unavailable"}), 501
+    raw_on = (request.get_json(silent=True) or {}).get('on', True)
+    # Accept a real JSON bool; tolerate string/number payloads from curl without
+    # treating the string "false"/"0" as truthy.
+    on = raw_on if isinstance(raw_on, bool) else str(raw_on).strip().lower() not in ('false', '0', '', 'none')
+    ok, state, msg = sampler.toggle(control, on)
+    return jsonify({"success": ok, "on": state, "message": msg}), (200 if ok else 500)
+
+
 # --- Rotation ---
 
 

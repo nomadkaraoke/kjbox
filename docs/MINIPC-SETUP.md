@@ -771,6 +771,41 @@ When TLS certs are present, Flask auto-switches from port 80 to **port 443** (HT
 - **Android:** Copy `$(mkcert -CAROOT)/rootCA.pem` to the phone, install via Settings → Security → Install CA certificate
 - **Via tunnel:** Not needed — `kjbox.nomadkaraoke.com` uses Cloudflare's own trusted cert
 
+### 5.7 Performance Monitor Artifacts
+
+The KJ Controller Performance panel (added v0.69.0) reads playback/GPU/CPU/VNC metrics
+read-only, but its A/B controls change live state and need two one-time device grants.
+
+**Sudoers** — lets the Flask process (running as `nomad`) start/stop the overlay engine and
+run the GPU-clock helper without a password:
+```bash
+sudo tee /etc/sudoers.d/kj-perf >/dev/null <<'EOF'
+nomad ALL=(root) NOPASSWD: /usr/bin/systemctl start overlay-display, /usr/bin/systemctl stop overlay-display
+nomad ALL=(root) NOPASSWD: /opt/nomad/kjbox/kj-controller/set-gpu-clock.sh
+EOF
+sudo chmod 440 /etc/sudoers.d/kj-perf
+sudo visudo -c   # verify no syntax errors
+```
+
+**GPU-clock helper** — ships in the repo at `kj-controller/set-gpu-clock.sh`; make sure it's
+executable after a deploy:
+```bash
+chmod +x /opt/nomad/kjbox/kj-controller/set-gpu-clock.sh
+```
+
+**Notes:**
+- The **compositor** toggle (`xfconf-query … use_compositing`) runs as `nomad` with `DISPLAY=:0` —
+  no sudo needed. It briefly flickers the screen.
+- The **GPU max-clock** pin raises `rps_min_freq_mhz` to the hardware ceiling to test whether
+  sustained-load drops are caused by the iGPU declining to boost (observed: act stuck at 1000 MHz
+  while max is 1200 MHz). It is **experimental**.
+- Both the compositor and GPU-clock toggles are **not persisted across reboot** — an experiment
+  must not silently become permanent config.
+- The overlay engine self-reports its FPS to `/tmp/kj-overlay-perf.json` (written by
+  `desktop/overlay_engine.py`); the sampler reads it. No setup needed.
+- With none of the above applied, the panel still works read-only; only the state-changing
+  buttons return an error.
+
 ---
 
 ## Phase 6: USB External Drive

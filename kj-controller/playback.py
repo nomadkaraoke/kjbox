@@ -185,6 +185,18 @@ class PlaybackCoordinator:
             'available_modes': list(RENDER_MODES),
         }
 
+    def get_perf(self):
+        """Engine-agnostic perf snapshot for the monitor: {engine, **player perf}.
+
+        `engine` is the active renderer name while a song plays, else None (idle).
+        Never raises — a misbehaving player yields an idle-shaped dict.
+        """
+        try:
+            p = self.player.get_perf()
+        except Exception:
+            p = {"playing": False}
+        return {"engine": self.render_mode if p.get("playing") else None, **p}
+
     def switch_renderer(self, mode: str) -> dict:
         """Swap renderers while filler keeps playing. Rejects if karaoke is
         currently active (user must stop first)."""

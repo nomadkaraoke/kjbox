@@ -446,6 +446,96 @@ class MpvKaraokePlayer:
             "length": int(duration or 0),
         }
 
+    # Properties the perf monitor reads each tick (fetched in ONE round-trip).
+    _PERF_PROPS = (
+        "estimated-vf-fps", "container-fps", "frame-drop-count",
+        "decoder-frame-drop-count", "vo-delayed-frame-count",
+        "hwdec-current", "video-codec", "width", "height",
+    )
+
+    def _get_properties(self, names):
+        """Fetch several properties over a SINGLE socket round-trip.
+
+        Returns {name: value_or_None}. This is the cheap path for the 1 Hz perf
+        sampler: one connect + one lock acquisition for the whole set, instead of
+        N separate `_get_property` calls each taking `_ipc_lock`. Never raises.
+        """
+        out = {n: None for n in names}
+        # Reserve a contiguous block of request ids UNDER the lock, then do all
+        # socket I/O OUTSIDE it. Holding _ipc_lock across the recv loop (up to the
+        # 3s timeout) would block real-time playback commands — seek/pause/volume/
+        # pitch — that share the same lock, defeating the point of the monitor.
+        # Each call opens its own mpv client socket, so replies never interleave
+        # across callers; only the shared _ipc_request_id needs protection.
+        with self._ipc_lock:
+            base = self._ipc_request_id
+            self._ipc_request_id += len(names)
+        id_to_name = {base + 1 + i: n for i, n in enumerate(names)}
+        s = None
+        try:
+            s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            s.settimeout(3)
+            s.connect(self.ipc_socket_path)
+            for rid, n in id_to_name.items():
+                s.sendall((json.dumps(
+                    {"command": ["get_property", n], "request_id": rid}) + "\n").encode())
+            pending = set(id_to_name)
+            buf = b""
+            deadline = time.time() + 3
+            while pending and time.time() < deadline:
+                try:
+                    chunk = s.recv(65536)
+                except OSError:
+                    break
+                if not chunk:
+                    break
+                buf += chunk
+                while b"\n" in buf:
+                    line, buf = buf.split(b"\n", 1)
+                    if not line.strip():
+                        continue
+                    try:
+                        msg = json.loads(line)
+                    except ValueError:
+                        continue
+                    rid = msg.get("request_id")
+                    if rid in id_to_name:
+                        if msg.get("error") == "success":
+                            out[id_to_name[rid]] = msg.get("data")
+                        pending.discard(rid)
+        except OSError:
+            pass
+        finally:
+            if s is not None:
+                try:
+                    s.close()
+                except OSError:
+                    pass
+        return out
+
+    def get_perf(self):
+        """Perf snapshot for the monitor. Idle-shaped dict when nothing plays.
+
+        Never raises — a dead socket just yields None fields.
+        """
+        if not self.active:
+            return {"playing": False}
+        p = self._get_properties(self._PERF_PROPS)
+        return {
+            "playing": True,
+            "render_fps": p.get("estimated-vf-fps"),
+            "container_fps": p.get("container-fps"),
+            "hwdec": p.get("hwdec-current"),
+            "codec": p.get("video-codec"),
+            "width": p.get("width"),
+            "height": p.get("height"),
+            "vo_drops": p.get("frame-drop-count"),
+            "decoder_drops": p.get("decoder-frame-drop-count"),
+            "delayed": p.get("vo-delayed-frame-count"),
+            "vlc_displayed": None,
+            "vlc_lost": None,
+        }
+
     def ensure_released(self) -> bool:
         """Force mpv to fully idle and release the ALSA device.
 

@@ -1521,6 +1521,9 @@ body {
     /* Sys stats: stack at very narrow widths */
     .sys-stats { flex-wrap: wrap; gap: 8px; }
     .sys-stat { min-width: calc(33% - 6px); }
+
+    /* Perf sparklines: stack at very narrow widths */
+    .perf-sparks { flex-direction: column; gap: 8px; }
 }
 
 /* ============================================================
@@ -1817,6 +1820,147 @@ body {
 .sys-stat-spark-bar:hover { opacity: 1; }
 .sys-stat-spark-bar:last-child { opacity: 0.9; }
 .sys-stat-spark .spark-mem { background: #ff5bb8; }
+
+/* --- Performance Monitor panel --- */
+.perf-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    user-select: none;
+    /* override the muted subsection-label look: this row is interactive */
+    color: #aaa;
+    margin-bottom: 0;
+}
+.perf-header:hover { color: #ddd; }
+.perf-caret {
+    font-size: 0.65em;
+    color: #666;
+    width: 10px;
+    display: inline-block;
+}
+.perf-summary {
+    margin-left: auto;
+    min-width: 0;              /* allow the flex item to shrink so ellipsis applies */
+    font-size: 0.9em;
+    color: #888;
+    text-transform: none;
+    letter-spacing: 0;
+    font-weight: 400;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.perf-header:focus-visible {
+    outline: 2px solid var(--accent, #4a9eff);
+    outline-offset: 2px;
+    border-radius: 4px;
+}
+.perf-body {
+    margin-top: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+.perf-sparks {
+    display: flex;
+    gap: 10px;
+}
+.perf-spark { flex: 1; min-width: 0; }
+.perf-spark-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 2px;
+}
+.perf-spark-label {
+    font-size: 0.6em;
+    color: #666;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+}
+.perf-spark-val {
+    font-size: 0.62em;
+    color: #aaa;
+    font-variant-numeric: tabular-nums;
+}
+.perf-spark-canvas {
+    width: 100%;
+    height: 24px;
+    display: block;
+    background: #1a1a1a;
+    border-radius: 2px;
+}
+.perf-readouts {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+.perf-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 10px;
+    font-size: 0.72em;
+    line-height: 1.5;
+}
+.perf-k { color: #666; font-weight: 600; white-space: nowrap; }
+.perf-v {
+    color: #bbb;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+.perf-v.perf-v-warn { color: #f59e0b; }
+.perf-subhead {
+    font-size: 0.62em;
+    color: #666;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-weight: 600;
+    margin-bottom: 4px;
+}
+.perf-cpu-list { display: flex; flex-direction: column; gap: 3px; }
+.perf-cpu-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.7em;
+}
+.perf-cpu-name { color: #999; width: 56px; flex-shrink: 0; }
+.perf-cpu-bar {
+    flex: 1;
+    height: 4px;
+    background: #1a1a1a;
+    border-radius: 2px;
+    overflow: hidden;
+}
+.perf-cpu-fill {
+    display: block;
+    height: 100%;
+    background: #22c55e;
+    border-radius: 2px;
+    transition: width 0.3s ease;
+}
+.perf-cpu-pct {
+    color: #aaa;
+    width: 34px;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+.perf-cpu-empty { color: #555; }
+.perf-toggles { display: flex; flex-direction: column; gap: 6px; }
+.perf-toggle-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.perf-tgl-btn { font-size: 0.72em; padding: 5px 10px; min-width: 130px; text-align: left; }
+.perf-tgl-btn.perf-tgl-on {
+    color: #22c55e;
+    border-color: rgba(34, 197, 94, 0.4);
+}
+.perf-tgl-btn.perf-tgl-on:hover { background: rgba(34, 197, 94, 0.12); }
+.perf-tgl-note { font-size: 0.66em; color: #666; }
+.perf-tgl-note.perf-tgl-warn { color: #f59e0b; }
+.perf-autopause-label { margin-top: 4px; font-size: 0.72em; }
 
 /* Health summary bar at top of modal */
 .av-health-bar {

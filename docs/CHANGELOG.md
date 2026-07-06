@@ -2,6 +2,46 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-07-06 - Performance monitor + live playback-smoothness investigation (v0.69.0)
+
+**Why:** Suspected subtle video/CDG frame-skipping that was hard to confirm ("could just be
+poorly-made tracks"). Ran a live A/B measurement matrix on NomadPC and built an in-UI monitor so
+smoothness can be watched during real shows.
+
+**Investigation findings** (heavy 15 Mbps 4K H.264 30fps, live device — full detail in
+[superpowers/specs/2026-07-06-perf-monitoring-design.md](superpowers/specs/2026-07-06-perf-monitoring-design.md)):
+- mpv (`hwdec=vaapi`) plays single-video content with margin — **0 dropped frames** with overlay,
+  compositor, VNC each on individually. The GPU is the bottleneck (pegged ~97–99%).
+- Frames drop **only under stacked load**: ticker over video **+** VNC preview open **+** multi-tab
+  polling → **~2 dropped frames / 18s**. No single villain; the loads are additive. VNC is the
+  biggest single lever (x11vnc 0→17% of a core; Xorg +14%) and the one that tips it over.
+- Under sustained load the iGPU sat at **1000 MHz, never boosting to its 1200 MHz ceiling** — a
+  power/thermal cap and a likely direct cause of the GPU-bound drops.
+- VLC (legacy path) **never drops but software-decodes at ~206% CPU** (≈2 cores) — robust to GPU
+  pressure but 3× the heat/power; not a free win.
+- Content is not the cause (library is ~all 30fps; even 15 Mbps 4K decodes fine on hwdec).
+
+**What shipped:** a lightweight Performance panel in the KJ UI (`perf_sampler.py` 1 Hz sampler →
+`GET /perf/stream`, polled only when the panel is open) surfacing engine dropped-frames/FPS, GPU
+busy% + act-vs-max freq, per-process CPU, overlay self-reported FPS, VNC-connected, temperature and
+`/status` latency; A/B toggles (overlay / compositor / GPU-clock / VNC) + VNC auto-pause during
+playback; and a fix for the `pgrep`-per-`/status`-poll churn.
+
+**Device-side artifacts to apply on NomadPC (one-time):**
+```bash
+# 1) let the perf monitor start/stop the overlay engine + pin the GPU clock (NOPASSWD)
+sudo tee /etc/sudoers.d/kj-perf >/dev/null <<'EOF'
+nomad ALL=(root) NOPASSWD: /usr/bin/systemctl start overlay-display, /usr/bin/systemctl stop overlay-display
+nomad ALL=(root) NOPASSWD: /opt/nomad/kjbox/kj-controller/set-gpu-clock.sh
+EOF
+sudo chmod 440 /etc/sudoers.d/kj-perf && sudo visudo -c
+# 2) the GPU-clock helper ships in the repo; ensure it is executable
+chmod +x /opt/nomad/kjbox/kj-controller/set-gpu-clock.sh
+```
+Both the compositor and GPU-clock toggles are **not persisted across reboot** by design (an
+experiment must not silently become permanent config). See
+[MINIPC-SETUP.md](MINIPC-SETUP.md#57-performance-monitor-artifacts) for details.
+
 ## 2026-07-05 - AV1 karaoke videos crashed mpv → switched NomadPC to the non-free Intel media driver
 
 **Why:** ~25% of recent YouTube downloads are AV1-encoded, and every AV1 file reliably
