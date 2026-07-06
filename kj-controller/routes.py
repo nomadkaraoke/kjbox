@@ -480,31 +480,48 @@ def handle_upload():
     download_folder = cfg.get('download_folder', os.path.expanduser('~/kjdata/videos'))
     os.makedirs(download_folder, exist_ok=True)
 
-    # Save to a hidden staging file first (a '.part' so scan() never indexes it),
-    # then route it through the SAME identity pipeline as downloads: playability
-    # gate, then move+rename into <download_folder>/upload/<slug [up-<hash>]> with
-    # a media_library row. Previously uploads were saved loose in the download
-    # root with no token, unlike every other ingestion path.
-    fd, staging = tempfile.mkstemp(prefix='.upload_staging_', suffix='.part',
+    # Save to a hidden staging file first, then route it through the SAME identity
+    # pipeline as downloads: playability gate, then move+rename into
+    # <download_folder>/upload/<slug [up-<hash>]> with a media_library row.
+    # Previously uploads were saved loose in the download root with no token,
+    # unlike every other ingestion path.
+    #
+    # The staging file KEEPS THE REAL EXTENSION (mirroring the generic-download
+    # `.staging__` pattern): the playability gate classifies by extension
+    # (playability.classify_kind), so a mismatched suffix like `.part` would
+    # misclassify every non-video upload and falsely reject valid audio / CDG-zip
+    # files. The leading dot keeps it out of the way; scan() rebuilds the whole
+    # index on the next pass anyway, and import_upload triggers exactly that.
+    fd, staging = tempfile.mkstemp(prefix='.upload_staging_', suffix=ext,
                                    dir=download_folder)
     os.close(fd)
     file.save(staging)
     log_message(f"Uploaded file: {file.filename} ({os.path.getsize(staging)} bytes)", cfg)
 
-    gate = _playability_gate(staging)
-    if not gate.verdict.get("overall_ok"):
+    try:
+        gate = _playability_gate(staging)
+        if not gate.verdict.get("overall_ok"):
+            try:
+                os.remove(staging)
+            except OSError:
+                pass
+            reasons = "; ".join(gate.verdict.get("reasons") or ["file is not playable"])
+            return jsonify({
+                "error": f"Upload rejected — not playable: {reasons}",
+                "verdict": gate.verdict,
+            }), 422
+
+        # Organize into upload/ with a content-addressed identity + index.
+        result = current_app.media.import_upload(staging, raw_name=file.filename, ext=ext)
+    except Exception as e:
+        # Never leave a hidden staging file behind on an unexpected failure.
         try:
-            os.remove(staging)
+            if os.path.exists(staging):
+                os.remove(staging)
         except OSError:
             pass
-        reasons = "; ".join(gate.verdict.get("reasons") or ["file is not playable"])
-        return jsonify({
-            "error": f"Upload rejected — not playable: {reasons}",
-            "verdict": gate.verdict,
-        }), 422
-
-    # Organize into upload/ with a content-addressed identity + index.
-    result = current_app.media.import_upload(staging, raw_name=file.filename, ext=ext)
+        log_message(f"Upload failed for {file.filename}: {e}", cfg)
+        return jsonify({"error": f"Upload failed: {e}"}), 500
 
     return jsonify({
         "success": True,
