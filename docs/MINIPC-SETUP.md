@@ -803,6 +803,10 @@ chmod +x /opt/nomad/kjbox/kj-controller/set-gpu-clock.sh
   must not silently become permanent config.
 - The overlay engine self-reports its FPS to `/tmp/kj-overlay-perf.json` (written by
   `desktop/overlay_engine.py`); the sampler reads it. No setup needed.
+- **Recordings** (v0.70.0): the Record button writes one JSONL session per capture to
+  `perf_recordings_dir` (config.json; default `~/kjdata/perf_recordings` → `/home/nomad/kjdata/perf_recordings`
+  on NomadPC). Each line is one 1 Hz sample; sessions are listed/summarised/downloaded from the panel.
+  These persist across reboot — prune the dir if it grows.
 - With none of the above applied, the panel still works read-only; only the state-changing
   buttons return an error.
 

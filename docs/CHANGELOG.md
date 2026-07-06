@@ -2,6 +2,36 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-07-06 - Perf recording + CDG-aware health + panel reorg (v0.70.0)
+
+**Why:** First live use of the v0.69.0 monitor (previous entry) surfaced two things:
+(1) there was no way to *record* the metrics for well-informed before/after decisions — you had
+to eyeball the 5-minute in-memory ring; (2) CDG tracks lit up RED with "9 drops/s" that were
+actually **benign**.
+
+**CDG-aware health (the RED was mostly a false alarm).** A CDG track declares a ~300 fps container
+(the CD subcode packet rate) but the display is 60 Hz, so mpv *must* drop the surplus — frames that
+were never visible. The health logic now:
+- compares render fps against the **display-capped target** (`min(container, ~display)`), not the raw
+  container rate;
+- only counts vo-drops as "real" when the source isn't over-driving the display (a 30 fps h264 drop
+  is real; a 300 fps CDG drop is decimation);
+- always treats **decoder** drops (real decode failures) and fps falling short of target as problems.
+The panel now shows render fps vs the real target, labels benign drops, and stops crying wolf on CDG.
+CDG is also software-rendered (`hwdec: no`) — a genuine lead on subtle CDG-specific pacing, now
+measurable.
+
+**Recording.** A Record button (with a label) persists every 1 Hz sample to
+`<perf_recordings_dir>/<timestamp>-<label>.jsonl` (default `~/kjdata/perf_recordings`, override with
+`perf_recordings_dir` in config.json). Past sessions are listed with a computed **summary**
+(duration, render fps min/avg vs target, real-vs-benign drops, GPU/CPU/temp aggregates, health
+distribution) and are downloadable. `perf_recorder.py` + `GET/POST /perf/record/*`. This is the
+mechanism for Phase-2 (compositing fix) before/after validation and CDG-vs-h264 comparison.
+
+**Panel reorg.** The Overlays list is now collapsible (Hide/Show in its header, state remembered),
+and the Performance section is moved to the top of the System column so playback/GPU/CPU info sits
+high on screen.
+
 ## 2026-07-06 - Performance monitor + live playback-smoothness investigation (v0.69.0)
 
 **Why:** Suspected subtle video/CDG frame-skipping that was hard to confirm ("could just be

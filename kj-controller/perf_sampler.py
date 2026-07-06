@@ -225,19 +225,76 @@ def gpu_busy_pct(rc6_delta_ms, wall_s):
     return round(max(0.0, min(100.0, busy)), 1)
 
 
+DISPLAY_FPS_DEFAULT = 60.0
+
+
+def effective_target_fps(sample):
+    """The fps mpv can actually SHOW: min(container, display refresh).
+
+    A source can't display faster than the panel. For a CDG track the container
+    declares ~300 fps (the CD subcode packet rate) while the display is 60 Hz, so
+    the real target is 60, not 300.
+    """
+    v = sample.get("video") or {}
+    container = v.get("container_fps")
+    display = v.get("display_fps") or DISPLAY_FPS_DEFAULT
+    if container and container > 0:
+        return min(container, display)
+    return display  # unknown container (e.g. VLC) → assume display-rate target
+
+
+def drops_are_meaningful(sample):
+    """Whether vo-drops indicate *visible* skipping.
+
+    They don't when the source over-drives the display: a 300 fps CDG on a 60 Hz
+    screen must drop ~240 fps of frames that were never visible. Only when the
+    container rate is at/below the display rate does a dropped frame mean a
+    viewer-visible skip. Unknown container (VLC) → treat as meaningful.
+    """
+    v = sample.get("video") or {}
+    container = v.get("container_fps")
+    display = v.get("display_fps") or DISPLAY_FPS_DEFAULT
+    if not container or container <= 0:
+        return True
+    return container <= display * 1.1
+
+
+def _fps_short(sample, factor):
+    """True when a playing sample's render fps is below factor*target."""
+    if not sample.get("playing"):
+        return False
+    target = effective_target_fps(sample)
+    rf = sample.get("render_fps")
+    return bool(target and isinstance(rf, (int, float)) and rf < factor * target)
+
+
 def compute_health(samples):
-    """Derive green/amber/red from the recent tail of samples."""
+    """Derive green/amber/red from the recent tail of samples.
+
+    Signals that mean a *viewer-visible* problem: decoder drops (a frame that
+    failed to decode — always real), meaningful vo-drops (source not over-driving
+    the display), render fps falling short of the display-capped target, GPU
+    pegged-but-not-boosting, and temperature. Benign high-fps decimation (CDG) is
+    deliberately NOT counted.
+    """
     tail = list(samples)[-5:]
     if not tail:
         return "green"
     now = tail[-1]
     temp = now.get("temp_c")
-    drop_samples = sum(
-        1 for s in tail
-        if (s.get("drops_delta") or {}).get("vo") or (s.get("drops_delta") or {}).get("vlc_lost")
-    )
-    if (temp is not None and temp >= 95) or drop_samples >= 3:
+    if temp is not None and temp >= 95:
         return "red"
+
+    dec_drops = sum(1 for s in tail if (s.get("drops_delta") or {}).get("decoder"))
+    vo_drops = sum(
+        1 for s in tail
+        if drops_are_meaningful(s) and (
+            (s.get("drops_delta") or {}).get("vo") or (s.get("drops_delta") or {}).get("vlc_lost"))
+    )
+    bad_short = sum(1 for s in tail if _fps_short(s, 0.75))
+    if dec_drops >= 1 or vo_drops >= 3 or bad_short >= 3:
+        return "red"
+
     gpu = now.get("gpu") or {}
     starved = (
         now.get("playing")
@@ -245,7 +302,8 @@ def compute_health(samples):
         and gpu.get("act_mhz") is not None and gpu.get("max_mhz") is not None
         and gpu["act_mhz"] < gpu["max_mhz"]
     )
-    if (temp is not None and temp >= 85) or drop_samples >= 1 or starved:
+    mild_short = any(_fps_short(s, 0.92) for s in tail)
+    if (temp is not None and temp >= 85) or vo_drops >= 1 or starved or mild_short:
         return "amber"
     return "green"
 
@@ -288,9 +346,13 @@ class PerfSampler:
     """1 Hz sampler + ring buffer. Attach to the app; call start() at runtime."""
 
     def __init__(self, coordinator, cfg=None, interval=SAMPLE_INTERVAL_S):
+        from perf_recorder import PerfRecorder
         self._coord = coordinator
         self._cfg = cfg or {}
         self._interval = interval
+        rec_dir = self._cfg.get('perf_recordings_dir') or \
+            os.path.expanduser('~/kjdata/perf_recordings')
+        self.recorder = PerfRecorder(rec_dir)
         self._ring = deque(maxlen=RING_SIZE)
         self._lock = threading.Lock()
         self._stop = threading.Event()
@@ -309,6 +371,13 @@ class PerfSampler:
 
     def stop(self):
         self._stop.set()
+        # Wait for the sampler thread to actually exit (unless we're calling from
+        # within it) so stop() is synchronous and a restart can't race the old
+        # daemon thread.
+        if (self._thread is not None and self._thread.is_alive()
+                and threading.current_thread() is not self._thread):
+            self._thread.join(timeout=max(1.0, self._interval + 0.5))
+        self._thread = None
 
     def _run(self):
         try:
@@ -320,6 +389,7 @@ class PerfSampler:
                 s = self._build_sample()
                 with self._lock:
                     self._ring.append(s)
+                self.recorder.record(s)  # no-op unless a session is active
             except Exception:
                 pass  # a sampler must never die on a bad tick
             self._stop.wait(self._interval)
@@ -398,6 +468,7 @@ class PerfSampler:
             "video": {
                 "codec": eng.get("codec"), "w": eng.get("width"), "h": eng.get("height"),
                 "container_fps": eng.get("container_fps"), "hwdec": eng.get("hwdec"),
+                "display_fps": eng.get("display_fps"),
             },
             "render_fps": render_fps,
             "drops": drops,
@@ -410,6 +481,8 @@ class PerfSampler:
             "temp_c": temp,
             "status_latency_ms": self._last_status_latency_ms,
         }
+        sample["fps_target"] = effective_target_fps(sample)
+        sample["drops_meaningful"] = drops_are_meaningful(sample)
         sample["health"] = compute_health(list(self._ring) + [sample])
 
         # stash raw values needed for next tick's deltas

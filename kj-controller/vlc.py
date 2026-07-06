@@ -398,6 +398,7 @@ class VlcKaraokePlayer:
             "playing": True,
             "render_fps": None,          # derived by the sampler from displayed delta
             "container_fps": None,
+            "display_fps": None,
             "hwdec": None,               # legacy path software-decodes
             "codec": None,
             "width": None,
