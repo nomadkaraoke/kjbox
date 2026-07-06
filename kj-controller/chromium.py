@@ -76,14 +76,25 @@ class ChromiumManager:
         self.config = config
         self.process = None
         self.current_url = None
+        # Orphan-check cache: `is_running()` -> `has_orphan()` runs a pgrep, and
+        # it was invoked on every 2s /status poll (per client) even though browser
+        # mode is normally inactive — an avoidable fork/exec on the playback CPU
+        # budget. Cache the result briefly and invalidate on state changes.
+        self._orphan_cache_ts = 0.0
+        self._orphan_cache_val = False
         # Kill any orphan Chromium left from a previous server instance
         # and reset PipeWire so VLC can use HDMI via ALSA
         if self.has_orphan():
             self._kill_orphans()
             self._reset_pipewire()
 
-    def has_orphan(self):
-        """Check if any Chromium process is running with our data dir (not managed by us)."""
+    _ORPHAN_TTL = 3.0
+
+    def _invalidate_orphan_cache(self):
+        """Force the next has_orphan() to re-check (after a launch/kill)."""
+        self._orphan_cache_ts = 0.0
+
+    def _check_orphan_uncached(self):
         try:
             result = subprocess.run(
                 ['pgrep', '-f', '--', f'--user-data-dir={CHROMIUM_DATA_DIR}'],
@@ -92,6 +103,21 @@ class ChromiumManager:
             return result.returncode == 0
         except (FileNotFoundError, subprocess.TimeoutExpired):
             return False
+
+    def has_orphan(self):
+        """Check for an unmanaged Chromium with our data dir (3s-cached).
+
+        The cache is invalidated on launch/kill so state transitions are seen
+        immediately; between those, repeated polls reuse the last result instead
+        of spawning a pgrep each time.
+        """
+        now = time.time()
+        if now - self._orphan_cache_ts < self._ORPHAN_TTL:
+            return self._orphan_cache_val
+        val = self._check_orphan_uncached()
+        self._orphan_cache_ts = now
+        self._orphan_cache_val = val
+        return val
 
     def _find_binary(self):
         """Find the first available Chromium binary on the system."""
@@ -209,6 +235,7 @@ class ChromiumManager:
                 start_new_session=True,
             )
             self.current_url = url
+            self._invalidate_orphan_cache()
             log_message(
                 f"Chromium launched (PID {self.process.pid}) at {url}",
                 self.config,
@@ -472,6 +499,8 @@ class ChromiumManager:
             log_message("WARNING: pkill timed out killing orphan Chromium instances.", self.config)
         except FileNotFoundError:
             pass
+        finally:
+            self._invalidate_orphan_cache()
 
     def get_status(self):
         """Return current status as a dict for the /status endpoint."""

@@ -383,6 +383,32 @@ class VlcKaraokePlayer:
             "length": int(status.get('length', 0) or 0),
         }
 
+    def get_perf(self):
+        """Perf snapshot for the monitor (idle-shaped dict when not playing).
+
+        VLC exposes cumulative displayed/lost picture counts via its HTTP status
+        interface; the sampler derives displayed-fps and a per-second lost-frame
+        rate from the deltas. Never raises.
+        """
+        if not self.active:
+            return {"playing": False}
+        raw = self._send("") or {}
+        st = raw.get("stats", {}) or {}
+        return {
+            "playing": True,
+            "render_fps": None,          # derived by the sampler from displayed delta
+            "container_fps": None,
+            "hwdec": None,               # legacy path software-decodes
+            "codec": None,
+            "width": None,
+            "height": None,
+            "vo_drops": None,
+            "decoder_drops": None,
+            "delayed": None,
+            "vlc_displayed": st.get("displayedpictures"),
+            "vlc_lost": st.get("lostpictures"),
+        }
+
     def ensure_released(self):
         """Stop karaoke VLC and verify it returns to state='stopped'."""
         self._send("pl_stop")

@@ -7,7 +7,7 @@ import sys
 import threading
 import time
 
-from flask import Flask
+from flask import Flask, g, request
 
 from catalog import ExternalCatalog
 from config import CONFIG_FILE, is_pi, load_config
@@ -186,6 +186,41 @@ def _make_on_karaoke_end(overlay_mgr, coordinator):
     return _on_end
 
 
+def _install_perf_monitor(flask_app, cfg, start):
+    """Attach the PerfSampler and wire the /status latency timing hook.
+
+    `start` gates the background thread: True on real devices, False under tests
+    (the /perf/stream endpoint still works — snapshot() samples on demand). Any
+    failure here is swallowed so the monitor can never block app startup.
+    """
+    try:
+        from perf_sampler import PerfSampler
+        sampler = PerfSampler(flask_app.vlc, cfg)
+        flask_app.perf_sampler = sampler
+        if start:
+            sampler.start()
+
+        @flask_app.before_request
+        def _perf_mark_start():
+            g._perf_t0 = time.perf_counter()
+
+        @flask_app.after_request
+        def _perf_record_status_latency(resp):
+            try:
+                if request.path == '/status':
+                    ms = (time.perf_counter() - getattr(g, '_perf_t0', time.perf_counter())) * 1000
+                    flask_app.perf_sampler.record_status_latency(round(ms, 1))
+            except Exception:
+                pass
+            return resp
+    except Exception as e:  # pragma: no cover - defensive
+        flask_app.perf_sampler = None
+        try:
+            log_message(f"PerfSampler init failed (non-fatal): {e}", cfg)
+        except Exception:
+            pass
+
+
 def create_app(config=None):
     """Create and configure the Flask application."""
     flask_app = Flask(__name__)
@@ -310,6 +345,10 @@ def create_app(config=None):
     else:
         flask_app.gen_client = None
         flask_app.gen_poller = None
+
+    # Start the background sampler only on a real device (config is None); tests
+    # pass a config and get the sampler object without a live thread.
+    _install_perf_monitor(flask_app, cfg, start=(config is None))
 
     flask_app.register_blueprint(routes_bp)
     flask_app.register_blueprint(sing_bp)
@@ -493,6 +532,8 @@ def start_app():  # pragma: no cover
     else:
         flask_app.gen_client = None
         flask_app.gen_poller = None
+
+    _install_perf_monitor(flask_app, cfg, start=True)
 
     flask_app.register_blueprint(routes_bp)
     flask_app.register_blueprint(sing_bp)

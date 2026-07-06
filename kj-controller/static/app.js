@@ -4434,6 +4434,339 @@ function renderSparkline(id, data, cls) {
 fetchSystemStats();
 setInterval(fetchSystemStats, 5000);
 
+// --- Performance Monitor ---
+// Collapsible panel near System Stats. Polls GET /perf/stream (~1s) ONLY while
+// expanded; the interval is cleared on collapse so a closed panel does zero work.
+// Mirrors fetchSystemStats: quiet fetch, direct DOM writes, no framework.
+
+let perfInterval = null;          // setInterval handle while expanded (null = closed)
+let perfPrevPlaying = null;       // last observed now.playing, for edge detection
+let perfVncAutoPaused = false;    // true when WE disconnected VNC for auto-pause
+
+// Per-process CPU rows we surface, in display order. Keys match now.cpu.*.
+const PERF_CPU_KEYS = ['mpv', 'vlc', 'Xorg', 'xfwm4', 'overlay_engine', 'x11vnc', 'flask_app', 'sampler'];
+const PERF_CPU_LABELS = {
+    mpv: 'mpv', vlc: 'vlc', Xorg: 'Xorg', xfwm4: 'xfwm4',
+    overlay_engine: 'overlay', x11vnc: 'x11vnc', flask_app: 'flask', sampler: 'sampler'
+};
+
+function perfFmt(n, digits) {
+    if (n === null || n === undefined || (typeof n === 'number' && isNaN(n))) return '—';
+    return (typeof n === 'number') ? n.toFixed(digits === undefined ? 0 : digits) : String(n);
+}
+
+// Draw a tiny sparkline into a <canvas>. values: number[] (oldest first).
+// opts: { color, max } — max fixes the y-scale (e.g. 100 for %); omit to autoscale.
+function perfDrawSparkline(canvas, values, opts) {
+    if (!canvas || !canvas.getContext) return;
+    opts = opts || {};
+    const ctx = canvas.getContext('2d');
+    const w = canvas.width, h = canvas.height;
+    ctx.clearRect(0, 0, w, h);
+    const nums = (values || []).filter(v => typeof v === 'number' && !isNaN(v));
+    if (nums.length < 2) return;
+    let max = opts.max;
+    if (max === undefined) { max = Math.max.apply(null, nums); }
+    if (!max || max <= 0) max = 1;
+    const n = values.length;
+    const stepX = n > 1 ? w / (n - 1) : w;
+    const pad = 2;                       // keep the line off the top/bottom edge
+    const usable = h - pad * 2;
+    const yOf = v => {
+        const clamped = Math.max(0, Math.min(max, (typeof v === 'number' && !isNaN(v)) ? v : 0));
+        return h - pad - (clamped / max) * usable;
+    };
+    // Filled area under the curve for legibility at tiny sizes.
+    ctx.beginPath();
+    ctx.moveTo(0, h);
+    for (let i = 0; i < n; i++) ctx.lineTo(i * stepX, yOf(values[i]));
+    ctx.lineTo((n - 1) * stepX, h);
+    ctx.closePath();
+    ctx.fillStyle = opts.fill || 'rgba(139,92,246,0.18)';
+    ctx.fill();
+    // Line on top.
+    ctx.beginPath();
+    for (let i = 0; i < n; i++) {
+        const x = i * stepX, y = yOf(values[i]);
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = opts.color || '#8b5cf6';
+    ctx.stroke();
+}
+
+// Sum the tracked per-process CPU values in a sample (guards missing cpu{}).
+function perfTotalCpu(sample) {
+    if (!sample || !sample.cpu) return null;
+    let total = 0, seen = false;
+    for (const k of PERF_CPU_KEYS) {
+        const v = sample.cpu[k];
+        if (typeof v === 'number' && !isNaN(v)) { total += v; seen = true; }
+    }
+    return seen ? total : null;
+}
+
+function perfSetToggleBtn(btn, label, on) {
+    if (!btn) return;
+    btn.textContent = label + ': ' + (on ? 'ON' : 'OFF');
+    btn.classList.toggle('perf-tgl-on', !!on);
+}
+
+function perfRender(data) {
+    const now = (data && data.now) || {};
+    const samples = (data && data.samples) || [];
+    const controls = (data && data.controls) || {};
+
+    // --- Health dot + one-line summary ---
+    const dot = document.getElementById('perf-health-dot');
+    if (dot) {
+        dot.className = 'yt-health-dot';
+        if (now.health === 'green') dot.classList.add('yt-dot-ok');
+        else if (now.health === 'amber') dot.classList.add('yt-dot-warn');
+        else if (now.health === 'red') dot.classList.add('yt-dot-error');
+    }
+    const gpuBusy = now.gpu ? now.gpu.busy_pct : null;
+    const dropsPerS = now.drops_delta ? now.drops_delta.vo : null;
+    const summaryParts = [];
+    if (gpuBusy !== null && gpuBusy !== undefined) summaryParts.push('GPU ' + perfFmt(gpuBusy, 0) + '%');
+    if (now.render_fps !== null && now.render_fps !== undefined) summaryParts.push(perfFmt(now.render_fps, 1) + 'fps');
+    if (dropsPerS !== null && dropsPerS !== undefined) summaryParts.push(perfFmt(dropsPerS, 0) + ' drops/s');
+    if (now.temp_c !== null && now.temp_c !== undefined) summaryParts.push(perfFmt(now.temp_c, 0) + '°C');
+    const summaryEl = document.getElementById('perf-summary');
+    if (summaryEl) summaryEl.textContent = summaryParts.length ? summaryParts.join(' · ') : 'idle';
+
+    // --- Current readouts ---
+    const engineEl = document.getElementById('perf-engine');
+    if (engineEl) {
+        if (!now.engine) {
+            engineEl.textContent = 'idle';
+        } else {
+            const hw = (now.video && now.video.hwdec) ? now.video.hwdec : 'sw';
+            let txt = now.engine + ' · ' + hw;
+            if (now.video && now.video.codec) {
+                txt += ' · ' + now.video.codec;
+                if (now.video.w && now.video.h) txt += ' ' + now.video.w + '×' + now.video.h;
+            }
+            engineEl.textContent = txt;
+        }
+    }
+
+    const rf = document.getElementById('perf-render-fps');
+    if (rf) {
+        const cfps = (now.video && now.video.container_fps) ? now.video.container_fps : null;
+        rf.textContent = perfFmt(now.render_fps, 1) + ' / ' + perfFmt(cfps, 1) + ' fps';
+        // Amber when render falls meaningfully below container fps under playback.
+        const low = (typeof now.render_fps === 'number' && typeof cfps === 'number' && cfps > 0 && now.render_fps < cfps - 1);
+        rf.classList.toggle('perf-v-warn', !!(now.playing && low));
+    }
+
+    const dropsEl = document.getElementById('perf-drops');
+    if (dropsEl) {
+        const d = now.drops || {};
+        const dd = now.drops_delta || {};
+        const parts = [
+            'vo ' + perfFmt(d.vo, 0) + ' (+' + perfFmt(dd.vo, 0) + '/s)',
+            'dec ' + perfFmt(d.decoder, 0),
+            'del ' + perfFmt(d.delayed, 0)
+        ];
+        if (d.vlc_lost !== null && d.vlc_lost !== undefined) parts.push('lost ' + perfFmt(d.vlc_lost, 0));
+        dropsEl.textContent = parts.join(' · ');
+        dropsEl.classList.toggle('perf-v-warn', typeof dd.vo === 'number' && dd.vo > 0);
+    }
+
+    const gpuEl = document.getElementById('perf-gpu');
+    if (gpuEl) {
+        const g = now.gpu || {};
+        let txt = perfFmt(g.busy_pct, 0) + '% · ' + perfFmt(g.act_mhz, 0) + '/' + perfFmt(g.max_mhz, 0) + ' MHz';
+        if (g.pinned) txt += ' · pinned';
+        gpuEl.textContent = txt;
+        // Highlight when clocks are throttled (act<max) while the GPU is busy.
+        const throttled = (typeof g.act_mhz === 'number' && typeof g.max_mhz === 'number' &&
+                           g.act_mhz < g.max_mhz && typeof g.busy_pct === 'number' && g.busy_pct >= 80);
+        gpuEl.classList.toggle('perf-v-warn', !!throttled);
+    }
+
+    const ovEl = document.getElementById('perf-overlay');
+    if (ovEl) {
+        if (now.overlay) {
+            ovEl.textContent = perfFmt(now.overlay.fps, 1) + ' fps · ' + perfFmt(now.overlay.raster_ms, 1) + ' ms' +
+                (now.overlay.active ? '' : ' · inactive');
+        } else {
+            ovEl.textContent = 'off';
+        }
+    }
+
+    const vncEl = document.getElementById('perf-vnc');
+    if (vncEl) vncEl.textContent = now.vnc_connected ? 'connected' : 'not connected';
+
+    const tempEl = document.getElementById('perf-temp');
+    if (tempEl) tempEl.textContent = (now.temp_c === null || now.temp_c === undefined) ? '—' : perfFmt(now.temp_c, 0) + '°C';
+
+    const latEl = document.getElementById('perf-latency');
+    if (latEl) latEl.textContent = (now.status_latency_ms === null || now.status_latency_ms === undefined) ? '—' : perfFmt(now.status_latency_ms, 0) + ' ms';
+
+    // --- Per-process CPU rows ---
+    const cpuList = document.getElementById('perf-cpu-list');
+    if (cpuList) {
+        const cpu = now.cpu || {};
+        const rows = [];
+        for (const k of PERF_CPU_KEYS) {
+            const v = cpu[k];
+            if (v === null || v === undefined) continue;
+            const pct = (typeof v === 'number') ? v : 0;
+            const barW = Math.max(0, Math.min(100, pct));
+            rows.push(
+                '<div class="perf-cpu-row">' +
+                    '<span class="perf-cpu-name">' + (PERF_CPU_LABELS[k] || k) + '</span>' +
+                    '<span class="perf-cpu-bar"><span class="perf-cpu-fill" style="width:' + barW + '%"></span></span>' +
+                    '<span class="perf-cpu-pct">' + perfFmt(pct, 0) + '%</span>' +
+                '</div>'
+            );
+        }
+        cpuList.innerHTML = rows.join('') || '<div class="perf-cpu-row perf-cpu-empty">no data</div>';
+    }
+
+    // --- Sparklines (last ~5 min) ---
+    perfDrawSparkline(document.getElementById('perf-spark-drops'),
+        samples.map(s => (s.drops_delta && typeof s.drops_delta.vo === 'number') ? s.drops_delta.vo : 0),
+        { color: '#ef4444', fill: 'rgba(239,68,68,0.18)' });
+    perfDrawSparkline(document.getElementById('perf-spark-gpu'),
+        samples.map(s => (s.gpu && typeof s.gpu.busy_pct === 'number') ? s.gpu.busy_pct : 0),
+        { color: '#8b5cf6', fill: 'rgba(139,92,246,0.18)', max: 100 });
+    perfDrawSparkline(document.getElementById('perf-spark-cpu'),
+        samples.map(s => { const t = perfTotalCpu(s); return t === null ? 0 : t; }),
+        { color: '#22c55e', fill: 'rgba(34,197,94,0.18)' });
+    const sdVal = document.getElementById('perf-spark-drops-val');
+    if (sdVal) sdVal.textContent = (dropsPerS === null || dropsPerS === undefined) ? '—' : perfFmt(dropsPerS, 0) + '/s';
+    const sgVal = document.getElementById('perf-spark-gpu-val');
+    if (sgVal) sgVal.textContent = (gpuBusy === null || gpuBusy === undefined) ? '—' : perfFmt(gpuBusy, 0) + '%';
+    const scVal = document.getElementById('perf-spark-cpu-val');
+    const tot = perfTotalCpu(now);
+    if (scVal) scVal.textContent = (tot === null) ? '—' : perfFmt(tot, 0) + '%';
+
+    // --- Toggle button states (reflect controls{}/now) ---
+    perfSetToggleBtn(document.getElementById('perf-toggle-overlay'), 'Overlay',
+        controls.overlay !== undefined ? controls.overlay : (now.overlay && now.overlay.active));
+    perfSetToggleBtn(document.getElementById('perf-toggle-compositor'), 'Compositor', controls.compositor);
+    perfSetToggleBtn(document.getElementById('perf-toggle-gpuclock'), 'GPU max-clock',
+        controls.gpu_pinned !== undefined ? controls.gpu_pinned : (now.gpu && now.gpu.pinned));
+    perfSetToggleBtn(document.getElementById('perf-toggle-vnc'), 'VNC preview', now.vnc_connected);
+
+    // --- VNC auto-pause on playback transitions ---
+    perfMaybeAutoPauseVnc(now);
+}
+
+// Act only on playing edges so we don't fight the user every poll.
+function perfMaybeAutoPauseVnc(now) {
+    const playing = !!now.playing;
+    const enabled = localStorage.getItem('kj-vnc-autopause') !== '0'; // default ON
+    if (perfPrevPlaying === null) { perfPrevPlaying = playing; return; } // seed, no action on first sample
+    if (enabled && playing && !perfPrevPlaying) {
+        // Playback started: pause the preview if it's up. Remember we did it.
+        if (now.vnc_connected && window.disconnectVnc) {
+            window.disconnectVnc();
+            perfVncAutoPaused = true;
+        }
+    } else if (enabled && !playing && perfPrevPlaying) {
+        // Playback stopped: restore only if WE paused it and the user hasn't
+        // manually hidden the preview (respect their explicit Hide).
+        if (perfVncAutoPaused && localStorage.getItem('kj-vnc-hidden') !== '1' && window.connectVnc) {
+            const pw = localStorage.getItem('kj-vnc-password');
+            if (pw) window.connectVnc(pw);
+        }
+        perfVncAutoPaused = false;
+    }
+    perfPrevPlaying = playing;
+}
+
+async function fetchPerfStream() {
+    try {
+        const resp = await fetch('/perf/stream');
+        if (!resp.ok) return;
+        const data = await resp.json();
+        perfRender(data);
+    } catch (e) {
+        // Swallow quietly — match fetchSystemStats.
+    }
+}
+
+async function perfToggle(control, btn) {
+    // control ∈ overlay | compositor | gpu-clock
+    const currentlyOn = btn && btn.classList.contains('perf-tgl-on');
+    const want = !currentlyOn;
+    if (btn) btn.disabled = true;
+    try {
+        const resp = await fetch('/perf/toggle/' + control, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ on: want })
+        });
+        if (resp.ok) {
+            const d = await resp.json();
+            const label = btn ? btn.textContent.split(':')[0] : control;
+            perfSetToggleBtn(btn, label, d.on);
+        }
+    } catch (e) {
+        // Ignore; next poll will re-reflect real state.
+    } finally {
+        if (btn) btn.disabled = false;
+        fetchPerfStream(); // refresh readouts promptly
+    }
+}
+
+// VNC toggle has no backend — reuse the existing client-side connect/disconnect.
+function perfToggleVnc(btn) {
+    const on = btn && btn.classList.contains('perf-tgl-on');
+    if (on) {
+        if (window.disconnectVnc) window.disconnectVnc();
+    } else {
+        const pw = localStorage.getItem('kj-vnc-password');
+        if (pw && window.connectVnc) window.connectVnc(pw);
+        else if (typeof showVncPreview === 'function') showVncPreview();
+    }
+    // A manual VNC action is intentional; drop the auto-pause bookkeeping.
+    perfVncAutoPaused = false;
+    setTimeout(fetchPerfStream, 300);
+}
+
+function perfSetAutoPause(on) {
+    localStorage.setItem('kj-vnc-autopause', on ? '1' : '0');
+    if (!on) perfVncAutoPaused = false;
+}
+
+function perfStartPolling() {
+    if (perfInterval) return;
+    perfPrevPlaying = null; // re-seed so re-opening doesn't fire a stale transition
+    fetchPerfStream();
+    perfInterval = setInterval(fetchPerfStream, 1000);
+}
+
+function perfStopPolling() {
+    if (perfInterval) { clearInterval(perfInterval); perfInterval = null; }
+}
+
+function perfSetOpen(open) {
+    const body = document.getElementById('perf-body');
+    const caret = document.getElementById('perf-caret');
+    if (body) body.classList.toggle('hidden', !open);
+    if (caret) caret.innerHTML = open ? '&#9660;' : '&#9654;'; // ▼ / ▶
+    localStorage.setItem('kj-perf-open', open ? '1' : '0');
+    if (open) perfStartPolling(); else perfStopPolling();
+}
+
+function togglePerfPanel() {
+    const body = document.getElementById('perf-body');
+    const isOpen = body && !body.classList.contains('hidden');
+    perfSetOpen(!isOpen);
+}
+
+// Init: restore checkbox + open/closed state (collapsed by default).
+(function initPerfPanel() {
+    const cb = document.getElementById('perf-autopause');
+    if (cb) cb.checked = localStorage.getItem('kj-vnc-autopause') !== '0'; // default ON
+    perfSetOpen(localStorage.getItem('kj-perf-open') === '1');
+})();
+
 // --- Rotation (SQLite primary) ---
 
 let rotationData = [];

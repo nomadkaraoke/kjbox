@@ -309,19 +309,39 @@ def test_launch_resets_pipewire_on_popen_failure(mgr, mocker):
 def test_has_orphan_true_when_pgrep_finds_match(mgr, mocker):
     """has_orphan() returns True when pgrep finds Chromium with our data dir."""
     mocker.patch('chromium.subprocess.run', return_value=MagicMock(returncode=0))
+    mgr._invalidate_orphan_cache()  # bypass the cache warmed by __init__
     assert mgr.has_orphan() is True
 
 
 def test_has_orphan_false_when_no_match(mgr, mocker):
     """has_orphan() returns False when pgrep finds no matching processes."""
     mocker.patch('chromium.subprocess.run', return_value=MagicMock(returncode=1))
+    mgr._invalidate_orphan_cache()
     assert mgr.has_orphan() is False
 
 
 def test_has_orphan_false_on_pgrep_missing(mgr, mocker):
     """has_orphan() returns False when pgrep is not installed."""
     mocker.patch('chromium.subprocess.run', side_effect=FileNotFoundError)
+    mgr._invalidate_orphan_cache()
     assert mgr.has_orphan() is False
+
+
+def test_has_orphan_caches_within_ttl(mgr, mocker):
+    """has_orphan() reuses its result within the TTL, then re-checks after
+    invalidation — avoids a pgrep fork/exec on every /status poll."""
+    run = mocker.patch('chromium.subprocess.run', return_value=MagicMock(returncode=0))
+    mgr._invalidate_orphan_cache()
+    assert mgr.has_orphan() is True
+    calls_after_first = run.call_count
+    # Second call within TTL must not spawn pgrep again.
+    assert mgr.has_orphan() is True
+    assert run.call_count == calls_after_first
+    # After invalidation it re-checks (and sees the new mocked result).
+    run.return_value = MagicMock(returncode=1)
+    mgr._invalidate_orphan_cache()
+    assert mgr.has_orphan() is False
+    assert run.call_count == calls_after_first + 1
 
 
 def test_is_running_detects_orphan_without_managed_process(mgr, mocker):
