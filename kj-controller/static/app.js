@@ -898,8 +898,13 @@ function createMediaItemLi(item) {
 
     // Folder/path line (shown for all rows). Full path in the tooltip; a
     // trimmed version on screen so common mount prefixes don't dominate.
-    const folderPath = item.folder || (item.file_path
-        ? item.file_path.slice(0, item.file_path.lastIndexOf('/')) : '');
+    // Prefer the file's ACTUAL containing directory (dirname of file_path):
+    // for local library items item.folder is the media-root (e.g.
+    // /opt/nomad/downloads), so youtube/ and NOMAD-720p/ copies would otherwise
+    // look identical. dirname distinguishes them.
+    const folderPath = (item.file_path && item.file_path.lastIndexOf('/') > 0)
+        ? item.file_path.slice(0, item.file_path.lastIndexOf('/'))
+        : (item.folder || '');
     if (folderPath) {
         const folderEl = document.createElement('div');
         folderEl.className = 'media-folder';
@@ -1207,10 +1212,12 @@ function openMediaInfoModal(filePath, displayName) {
     if (!filePath) { log('No file to inspect.', 'error'); return; }
     const modal = document.getElementById('mediainfo-modal');
     const nameEl = document.getElementById('mediainfo-name');
+    const pathEl = document.getElementById('mediainfo-path');
     const loading = document.getElementById('mediainfo-loading');
     const body = document.getElementById('mediainfo-body');
     if (!modal) return;
     nameEl.textContent = displayName || filePath.split('/').pop();
+    if (pathEl) pathEl.textContent = filePath;  // full path so you can tell copies apart
     loading.classList.remove('hidden');
     body.classList.add('hidden');
     body.innerHTML = '';
@@ -1248,23 +1255,20 @@ function renderMediaInfoHtml(info) {
     const rows = [];
     const add = (label, value) => { if (value) rows.push([label, value]); };
 
-    add('Container', (info.container || '').toUpperCase());
+    add('Container', info.container);
+    if (info.note) add('Type', info.note);
     if (info.video) {
         const v = info.video;
         const res = (v.width && v.height) ? `${v.width}×${v.height}` : null;
         const fps = v.fps ? `${Math.round(v.fps * 100) / 100} fps` : null;
         add('Video', [(v.codec || '').toUpperCase(), res, fps, v.profile].filter(Boolean).join(' · '));
         add('Pixel format', v.pix_fmt);
-    } else {
-        add('Video', 'none');
     }
     if (info.audio) {
         const a = info.audio;
         const sr = a.sample_rate ? `${a.sample_rate / 1000} kHz` : null;
         const ch = a.channel_layout || (a.channels ? `${a.channels}ch` : null);
         add('Audio', [(a.codec || '').toUpperCase(), sr, ch, formatBitrate(a.bit_rate)].filter(Boolean).join(' · '));
-    } else {
-        add('Audio', 'none');
     }
     add('Overall bitrate', formatBitrate(info.bit_rate));
     add('Duration', (info.duration != null) ? formatTime(info.duration) : null);

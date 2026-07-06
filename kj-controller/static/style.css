@@ -1218,9 +1218,15 @@ body {
 /* Technical-details modal (click a format pill). Compact spec sheet. */
 .mediainfo-modal-content { max-width: 460px; }
 .mediainfo-name {
-    color: #ddd; font-size: 0.9em; margin: 0 0 10px; word-break: break-word;
+    color: #ddd; font-size: 0.9em; margin: 0 0 4px; word-break: break-word;
     font-variant-numeric: tabular-nums;
 }
+.mediainfo-path {
+    color: #7a7a7a; font-size: 0.72em; margin: 0 0 10px; word-break: break-all;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    user-select: all;
+}
+.mediainfo-path:empty { display: none; }
 .mediainfo-list {
     display: grid; grid-template-columns: auto 1fr; gap: 6px 14px;
     margin: 0; font-size: 0.9em;
