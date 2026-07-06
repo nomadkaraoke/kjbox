@@ -522,3 +522,157 @@ class TestSearchAnnotations:
             resp = search_client.get('/rotation/search?q=kryptonite')
             track = resp.get_json()["karaoke_nerds"][0]["tracks"][0]
             assert track["priority_stated"] is False
+
+
+_MASTER_PATH = (
+    "/opt/nomad/downloads/NOMAD-720p/"
+    "NOMAD-1272 - Maximo Park - By the Monument.mp4"
+)
+
+
+def _upsert_master(app):
+    """Seed a NOMAD master mirror row + media-index entry for the test song."""
+    app.media_library.upsert({
+        "media_id": "nomad-1272",
+        "source": "master",
+        "source_ref": "1272",
+        "artist": "Maximo Park",
+        "title": "By the Monument",
+        "parse_method": "master",
+        "needs_review": 0,
+        "file_path": _MASTER_PATH,
+        "ext": ".mp4",
+    })
+    app.media.index = {
+        _MASTER_PATH: {
+            "filename": "NOMAD-1272 - Maximo Park - By the Monument.mp4",
+            "display_name": "NOMAD-1272 - Maximo Park - By the Monument",
+            "duration": 200,
+        }
+    }
+
+
+class TestSuppressMasteredKnTracks:
+    """Unit tests for the pure _suppress_mastered_kn_tracks helper."""
+
+    def test_drops_nomad_track_when_master_present(self):
+        from routes import _suppress_mastered_kn_tracks
+        local = [{"filename": "NOMAD-1272 - Maximo Park - By the Monument.mp4",
+                  "artist": "Maximo Park", "title": "By the Monument"}]
+        kn = [{"artist": "Maximo Park", "title": "By the Monument", "tracks": [
+            {"brand_code": "NOMAD", "brand_name": "Nomad Karaoke",
+             "is_community": True, "youtube_url": "https://yt/x"},
+            {"brand_code": "KCD-102989", "brand_name": "Karaoke Cloud",
+             "youtube_url": "https://yt/y"},
+        ]}]
+        _suppress_mastered_kn_tracks(local, kn)
+        brands = [t.get("brand_code") for t in kn[0]["tracks"]]
+        assert "NOMAD" not in brands            # redundant YouTube row gone
+        assert brands == ["KCD-102989"]          # commercial alternative kept
+
+    def test_matches_across_case_and_diacritics(self):
+        from routes import _suppress_mastered_kn_tracks
+        local = [{"filename": "NOMAD-0729 - Maximo Park - Books from Boxes.mp4",
+                  "artist": "Maximo Park", "title": "Books from Boxes"}]
+        kn = [{"artist": "Maxïmo Park", "title": "Books From Boxes", "tracks": [
+            {"brand_code": "NOMAD", "brand_name": "Nomad Karaoke",
+             "is_community": True, "youtube_url": "https://yt/x"},
+        ]}]
+        _suppress_mastered_kn_tracks(local, kn)
+        assert kn[0]["tracks"] == []
+
+    def test_noop_when_no_local_master(self):
+        from routes import _suppress_mastered_kn_tracks
+        # A commercial disc file (not a master) must not suppress anything.
+        local = [{"filename": "SC1234 - Maximo Park - By the Monument.mp4",
+                  "artist": "Maximo Park", "title": "By the Monument"}]
+        kn = [{"artist": "Maximo Park", "title": "By the Monument", "tracks": [
+            {"brand_code": "NOMAD", "brand_name": "Nomad Karaoke",
+             "is_community": True, "youtube_url": "https://yt/x"},
+        ]}]
+        _suppress_mastered_kn_tracks(local, kn)
+        assert len(kn[0]["tracks"]) == 1
+
+    def test_noop_for_different_song(self):
+        from routes import _suppress_mastered_kn_tracks
+        local = [{"filename": "NOMAD-1272 - Maximo Park - By the Monument.mp4",
+                  "artist": "Maximo Park", "title": "By the Monument"}]
+        kn = [{"artist": "Queen", "title": "Bohemian Rhapsody", "tracks": [
+            {"brand_code": "NOMAD", "brand_name": "Nomad Karaoke",
+             "is_community": True, "youtube_url": "https://yt/x"},
+        ]}]
+        _suppress_mastered_kn_tracks(local, kn)
+        assert len(kn[0]["tracks"]) == 1
+
+
+class TestNomadMasterRecognition:
+    def test_master_recognized_as_nomad_community(self, search_client, search_app):
+        """A NOMAD master mirror file is the official NOMAD (community) release,
+        not 'From YouTube — unverified'."""
+        _upsert_master(search_app)
+        with patch.object(search_app.catalog, 'is_available', return_value=True), \
+             patch.object(search_app.catalog, 'search', return_value=[]), \
+             patch('routes.karaoke_nerds.search', return_value=[]):
+            resp = search_client.get('/rotation/search?q=maximo park monument')
+            result = resp.get_json()["local"][0]
+            assert result["priority_class"] == "community"
+            assert result["priority_brand"] == "NOMAD"
+            # clean media_library identity preserved
+            assert result["artist"] == "Maximo Park"
+            assert result["title"] == "By the Monument"
+            # never dumped into the YouTube-unverified group
+            assert (result.get("group") or {}).get("key") != "yt:unverified"
+
+    def test_non_master_curated_row_not_falsely_branded(self, search_client, search_app):
+        """The disc_id is preserved only for masters. A curated (non-master) row
+        whose hyphenated title would parse to a brand-colliding disc_id (e.g.
+        'SF …') must stay unknown, not be mis-branded commercial."""
+        path = "/downloads/youtube/SF Pro - Song - Live [yt-abc123def].mp4"
+        search_app.media_library.upsert({
+            "media_id": "yt-abc123def",
+            "source": "youtube",
+            "source_ref": "abc123def",
+            "artist": "SF Pro",
+            "title": "Song - Live",
+            "parse_method": "llm",
+            "needs_review": 0,
+            "file_path": path,
+            "ext": ".mp4",
+        })
+        search_app.media.index = {
+            path: {
+                "filename": "SF Pro - Song - Live [yt-abc123def].mp4",
+                "display_name": "SF Pro - Song - Live [yt-abc123def]",
+                "duration": 200,
+            }
+        }
+        with patch.object(search_app.catalog, 'is_available', return_value=True), \
+             patch.object(search_app.catalog, 'search', return_value=[]), \
+             patch('routes.karaoke_nerds.search', return_value=[]):
+            resp = search_client.get('/rotation/search?q=sf pro song live')
+            result = resp.get_json()["local"][0]
+            assert result["disc_id"] is None
+            assert result["priority_class"] != "commercial"
+
+    def test_master_suppresses_kn_youtube_row(self, search_client, search_app):
+        """With the master on disk, KN's redundant NOMAD YouTube row is dropped
+        while other-brand alternatives remain selectable."""
+        _upsert_master(search_app)
+        with patch.object(search_app.catalog, 'is_available', return_value=True), \
+             patch.object(search_app.catalog, 'search', return_value=[]), \
+             patch('routes.karaoke_nerds.search', return_value=[
+                 {"artist": "Maximo Park", "title": "By the Monument", "tracks": [
+                     {"brand_code": "NOMAD", "brand_name": "Nomad Karaoke",
+                      "is_community": True, "youtube_url": "https://yt/x"},
+                     {"brand_code": "KCD-102989", "brand_name": "Karaoke Cloud",
+                      "youtube_url": "https://yt/y"},
+                 ]}
+             ]), \
+             patch('routes.divebar.search', return_value=[]):
+            resp = search_client.get('/rotation/search?q=maximo park monument')
+            data = resp.get_json()
+            assert data["local"][0]["priority_class"] == "community"
+            kn_tracks = data["karaoke_nerds"][0]["tracks"]
+            brands = [t.get("brand_code") for t in kn_tracks]
+            assert "NOMAD" not in brands
+            assert brands == ["KCD-102989"]

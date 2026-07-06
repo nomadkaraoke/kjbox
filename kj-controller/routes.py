@@ -28,7 +28,7 @@ from playback import RendererSwitchRejected
 from sing import get_event_url, sync_event_url_overlays
 from sleep_mode import SleepManager
 from utils import log_message, build_divebar_filename, divebar_ext
-from naming import youtube_id_from_url, media_id_for
+from naming import youtube_id_from_url, media_id_for, classify_source, SOURCE_MASTER
 from preview import parse_range
 
 # --- Browser mode state ---
@@ -4026,6 +4026,44 @@ def _surface_divebar_versions(local_results, kn_results, db_results, cfg):
     return rows
 
 
+def _suppress_mastered_kn_tracks(local_results, kn_results):
+    """Drop KaraokeNerds NOMAD tracks we already hold in the local master mirror.
+
+    For any song present in the deliberate NOMAD-720p mirror (``source=master``,
+    always the NOMAD community brand), a KN row offering the same NOMAD release
+    as a *YouTube download* is redundant and misleading — the local master plays
+    instantly. Remove those KN tracks in place so only the Play-from-mirror row
+    remains. Other brands on the same song (commercial / other community) are
+    left untouched: they are genuine alternatives the KJ may still want.
+
+    Matching is on the normalized (artist, title) key, which folds case and
+    diacritics so the mirror's DB identity matches KN's display strings.
+    Mutates ``kn_results`` in place; safe to call before both the grouped
+    (singer) and flat (KJ) branches so both search surfaces are covered.
+    """
+    mastered = {
+        _normalize_song_key(r.get("artist"), r.get("title"))
+        for r in local_results or []
+        if classify_source(r.get("filename") or "") == SOURCE_MASTER
+    }
+    if not mastered:
+        return
+    for song in kn_results or []:
+        if _normalize_song_key(
+                song.get("artist"), song.get("title")) not in mastered:
+            continue
+        kept = []
+        for track in song.get("tracks") or []:
+            canonical, _cls = version_priority.resolve_brand(
+                brand_code=track.get("brand_code"),
+                brand_name=track.get("brand_name"),
+                is_community=track.get("is_community"))
+            if canonical == "NOMAD":
+                continue  # we already have this exact release on disk
+            kept.append(track)
+        song["tracks"] = kept
+
+
 def unified_search(query, app, *, grouped=False):
     """Unified search helper: local catalog + Karaoke Nerds + Divebar cross-reference.
 
@@ -4069,16 +4107,25 @@ def unified_search(query, app, *, grouped=False):
             # (e.g. "Vienna [yt-I8wu3lLbB0k]"). The scan already resolved the
             # real artist/title into media_library, so use that; otherwise fall
             # back to a deterministic parse of the token-stripped filename.
+            parsed_disc_id, parsed_artist, parsed_title = parse_karaoke_filename(
+                strip_media_id_token(fname))
             ml_row = (app.media_library.get_by_path(path)
                       if getattr(app, "media_library", None) else None)
             if ml_row and ((ml_row.get("artist") or "").strip()
                            or (ml_row.get("title") or "").strip()):
-                disc_id = None
+                # Keep the parsed disc_id ONLY for master-mirror files: their
+                # GCS-native "NOMAD-####" name is exactly what marks them as the
+                # official NOMAD community release, and resolve_brand needs that
+                # prefix (dropping it mis-classifies masters as "From YouTube —
+                # unverified"). For other curated rows the parsed disc_id can be
+                # a false positive from a hyphenated title, so keep it out.
+                disc_id = (parsed_disc_id
+                           if ml_row.get("source") == SOURCE_MASTER else None)
                 artist = ml_row.get("artist") or ""
                 title = ml_row.get("title") or ""
             else:
-                disc_id, artist, title = parse_karaoke_filename(
-                    strip_media_id_token(fname))
+                disc_id, artist, title = (
+                    parsed_disc_id, parsed_artist, parsed_title)
             local_results.append({
                 "path": path,
                 "filename": entry.get("filename"),
@@ -4126,6 +4173,14 @@ def unified_search(query, app, *, grouped=False):
             local_results, kn_results, db_results, cfg)
     except Exception:
         divebar_rows = []  # best-effort; never break search
+
+    # For any song we already hold in the NOMAD master mirror, drop KN's
+    # redundant NOMAD YouTube-download rows so we never suggest re-downloading
+    # a release we play locally (see _suppress_mastered_kn_tracks).
+    try:
+        _suppress_mastered_kn_tracks(local_results, kn_results)
+    except Exception:
+        pass  # best-effort; never break search
 
     if grouped:
         # Defensive filter (Phase B §4): a KN track with neither a YouTube URL
