@@ -561,7 +561,7 @@ let _fadingOut = false;
 let _fadeResetTimer = null;
 
 function fadeButtons() {
-    return Array.from(document.querySelectorAll('.fade-preset, #fade-custom-go'));
+    return Array.from(document.querySelectorAll('.fade-preset'));
 }
 
 // Fade the karaoke out over `seconds`, then let the coordinator stop it. The engine
@@ -576,11 +576,9 @@ async function fadeOut(seconds, sourceEl) {
     fadeButtons().forEach(b => { b.disabled = true; });
 
     // Show "Fading…" on the control that actually triggered the fade (passed in as
-    // sourceEl) so a custom value equal to a preset doesn't highlight the wrong button.
-    // Fall back to a matching preset, else the custom Fade button. Restore afterwards.
+    // sourceEl), falling back to the matching preset button. Restore afterwards.
     let feedbackEl = sourceEl
-        || document.querySelector('.fade-preset[data-seconds="' + seconds + '"]')
-        || document.getElementById('fade-custom-go');
+        || document.querySelector('.fade-preset[data-seconds="' + seconds + '"]');
     const savedLabel = feedbackEl ? feedbackEl.textContent : null;
     if (feedbackEl) feedbackEl.textContent = 'Fading…';
 
@@ -594,16 +592,6 @@ async function fadeOut(seconds, sourceEl) {
         _fadingOut = false;
         if (feedbackEl && savedLabel !== null) feedbackEl.textContent = savedLabel;
     }, seconds * 1000 + 800);
-}
-
-// Custom fade length from the number field, clamped to the backend's 1–60s range.
-function fadeOutCustom() {
-    const input = document.getElementById('fade-custom-seconds');
-    if (!input) return;
-    let secs = parseInt(input.value, 10);
-    if (!Number.isFinite(secs)) return;
-    secs = Math.max(1, Math.min(secs, 60));
-    fadeOut(secs, document.getElementById('fade-custom-go'));
 }
 
 // --- Volume & Seek (#2 volume labels) ---
@@ -862,8 +850,12 @@ function createMediaItemLi(item) {
     const li = document.createElement('li');
     li.classList.add('media-file-row');
 
+    // .media-title is a column: a title row (name + tags) plus an optional
+    // folder/path line shown for every source (internal + external catalog).
     const titleSpan = document.createElement('span');
     titleSpan.className = 'media-title';
+    const titleRow = document.createElement('span');
+    titleRow.className = 'media-title-row';
 
     // Clickable name — click copies the exact display name (like rotation rows).
     const nameSpan = document.createElement('span');
@@ -871,36 +863,49 @@ function createMediaItemLi(item) {
     nameSpan.textContent = item.display_name;
     nameSpan.title = 'Click to copy name';
     nameSpan.onclick = (e) => { e.stopPropagation(); copyRotationText(nameSpan); };
-    titleSpan.appendChild(nameSpan);
+    titleRow.appendChild(nameSpan);
 
     if (item.channel) {
         const channelSpan = document.createElement('span');
         channelSpan.className = 'channel-tag';
         channelSpan.textContent = ` (${item.channel})`;
-        titleSpan.appendChild(channelSpan);
+        titleRow.appendChild(channelSpan);
     }
 
     // Colorised format pill — same palette as the catalog results (task: unify
     // the "local" pill with the "catalog" pill; no more "mp4 · .mp4").
     if (item.media_kind) {
-        titleSpan.appendChild(document.createTextNode(' '));
-        titleSpan.appendChild(mediaFormatBadge(item));
+        titleRow.appendChild(document.createTextNode(' '));
+        titleRow.appendChild(mediaFormatBadge(item));
     }
     if (item.cdg_no_audio) {
         const warn = document.createElement('span');
         warn.className = 'media-no-audio-tag';
         warn.textContent = 'no audio';
         warn.title = 'Graphics-only .cdg — no audio track';
-        titleSpan.appendChild(document.createTextNode(' '));
-        titleSpan.appendChild(warn);
+        titleRow.appendChild(document.createTextNode(' '));
+        titleRow.appendChild(warn);
     }
     if (item.needs_review && item.media_id) {
         const rev = document.createElement('span');
         rev.className = 'media-review-tag';
         rev.textContent = 'review';
         rev.title = 'Auto-parsed name — click ✎ to confirm or correct the Artist / Title';
-        titleSpan.appendChild(document.createTextNode(' '));
-        titleSpan.appendChild(rev);
+        titleRow.appendChild(document.createTextNode(' '));
+        titleRow.appendChild(rev);
+    }
+    titleSpan.appendChild(titleRow);
+
+    // Folder/path line (shown for all rows). Full path in the tooltip; a
+    // trimmed version on screen so common mount prefixes don't dominate.
+    const folderPath = item.folder || (item.file_path
+        ? item.file_path.slice(0, item.file_path.lastIndexOf('/')) : '');
+    if (folderPath) {
+        const folderEl = document.createElement('div');
+        folderEl.className = 'media-folder';
+        folderEl.textContent = prettyFolder(folderPath);
+        folderEl.title = folderPath;
+        titleSpan.appendChild(folderEl);
     }
 
     // Action buttons — one .media-actions cluster, sized to match the rotation
@@ -1176,6 +1181,99 @@ function formatTime(seconds) {
     return `${min}:${sec}`;
 }
 
+// --- Technical details modal (opened by clicking a format pill) -----------
+// Shared by the now-playing pill and Library/Catalog rows. Lazily fetches
+// ffprobe details from /media/info on open; a monotonically-increasing request
+// id guards against a slow response landing after a newer click (or a close).
+
+function formatBytes(bytes) {
+    if (!bytes || bytes < 0) return null;
+    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+    let i = 0, n = bytes;
+    while (n >= 1024 && i < units.length - 1) { n /= 1024; i++; }
+    return (i === 0 ? String(n) : n.toFixed(n < 10 ? 2 : 1)) + ' ' + units[i];
+}
+
+function formatBitrate(bps) {
+    if (!bps || bps < 0) return null;
+    if (bps >= 1e6) return (bps / 1e6).toFixed(1) + ' Mbps';
+    if (bps >= 1e3) return Math.round(bps / 1e3) + ' kbps';
+    return bps + ' bps';
+}
+
+let _mediaInfoReqId = 0;
+
+function openMediaInfoModal(filePath, displayName) {
+    if (!filePath) { log('No file to inspect.', 'error'); return; }
+    const modal = document.getElementById('mediainfo-modal');
+    const nameEl = document.getElementById('mediainfo-name');
+    const loading = document.getElementById('mediainfo-loading');
+    const body = document.getElementById('mediainfo-body');
+    if (!modal) return;
+    nameEl.textContent = displayName || filePath.split('/').pop();
+    loading.classList.remove('hidden');
+    body.classList.add('hidden');
+    body.innerHTML = '';
+    modal.classList.remove('hidden');
+
+    const reqId = ++_mediaInfoReqId;
+    const done = (info) => {
+        if (reqId !== _mediaInfoReqId) return;  // superseded by a newer open/close
+        loading.classList.add('hidden');
+        body.classList.remove('hidden');
+        body.innerHTML = renderMediaInfoHtml(info);
+    };
+    // Direct fetch (not apiCall) so the endpoint's own {ok:false,error} message
+    // is shown inside the modal rather than swallowed into a fleeting toast.
+    fetch('/media/info', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ file_path: filePath }),
+    }).then(r => r.json().catch(() => ({ ok: false, error: 'Bad response' })))
+      .then(done)
+      .catch(() => done({ ok: false, error: 'Network error' }));
+}
+
+function closeMediaInfoModal() {
+    _mediaInfoReqId++;  // invalidate any in-flight request
+    const modal = document.getElementById('mediainfo-modal');
+    if (modal) modal.classList.add('hidden');
+}
+
+function renderMediaInfoHtml(info) {
+    if (!info || info.ok === false) {
+        const msg = (info && info.error) ? info.error : 'Could not read technical details.';
+        return `<p class="mediainfo-error">${escapeHtml(msg)}</p>`;
+    }
+    const rows = [];
+    const add = (label, value) => { if (value) rows.push([label, value]); };
+
+    add('Container', (info.container || '').toUpperCase());
+    if (info.video) {
+        const v = info.video;
+        const res = (v.width && v.height) ? `${v.width}×${v.height}` : null;
+        const fps = v.fps ? `${Math.round(v.fps * 100) / 100} fps` : null;
+        add('Video', [(v.codec || '').toUpperCase(), res, fps, v.profile].filter(Boolean).join(' · '));
+        add('Pixel format', v.pix_fmt);
+    } else {
+        add('Video', 'none');
+    }
+    if (info.audio) {
+        const a = info.audio;
+        const sr = a.sample_rate ? `${a.sample_rate / 1000} kHz` : null;
+        const ch = a.channel_layout || (a.channels ? `${a.channels}ch` : null);
+        add('Audio', [(a.codec || '').toUpperCase(), sr, ch, formatBitrate(a.bit_rate)].filter(Boolean).join(' · '));
+    } else {
+        add('Audio', 'none');
+    }
+    add('Overall bitrate', formatBitrate(info.bit_rate));
+    add('Duration', (info.duration != null) ? formatTime(info.duration) : null);
+    add('File size', formatBytes(info.size_bytes));
+
+    return '<dl class="mediainfo-list">' + rows.map(([l, v]) =>
+        `<dt>${escapeHtml(l)}</dt><dd>${escapeHtml(String(v))}</dd>`).join('') + '</dl>';
+}
+
 // Turn a filename into a friendly file-type label for the now-playing block.
 // e.g. "SDK - ABBA - Dancing Queen.zip" -> "cdg+mp3 (zip)", "foo.mp4" -> "mp4".
 function describeFileType(filename) {
@@ -1247,6 +1345,17 @@ function updateNowPlaying(data) {
         const fname = path ? path.split('/').pop() : '';
         npFilename.textContent = fname;
         npFiletype.textContent = describeFileType(fname);
+        // The format pill is clickable to reveal technical details for the file
+        // currently on screen. Only wire it when we actually know the path.
+        if (path) {
+            npFiletype.classList.add('np-filetype-clickable');
+            npFiletype.title = 'Click for technical details';
+            npFiletype.onclick = () => openMediaInfoModal(path, data.current_playing);
+        } else {
+            npFiletype.classList.remove('np-filetype-clickable');
+            npFiletype.title = 'File type';
+            npFiletype.onclick = null;
+        }
 
         npTime.textContent = formatTime(data.time);
         npLength.textContent = formatTime(data.length);
@@ -1259,6 +1368,8 @@ function updateNowPlaying(data) {
         npTitle.textContent = 'Nothing playing';
         npState.textContent = 'Stopped';
         npState.className = 'np-state state-stopped';
+        npFiletype.classList.remove('np-filetype-clickable');
+        npFiletype.onclick = null;
     }
 }
 
@@ -2037,12 +2148,32 @@ function getFormatBadgeClass(format) {
 // the catalog results so both sections read consistently. The library carries
 // a friendly `media_kind` (e.g. "cdg-zip", "mp4", "mp3"); normalise the CDG zip
 // label to "cdg+mp3" so it matches the catalog wording (and its yellow badge).
+// Trim common mount prefixes off a folder path for on-screen display (the full
+// path stays in the row's tooltip). Shared by internal and catalog rows.
+function prettyFolder(path) {
+    if (!path) return '';
+    return path
+        .replace(/^\/mnt\/[^/]+\//, '')
+        .replace(/^\/media\/[^/]+\//, '')
+        .replace(/^\/Volumes\/[^/]+\//, '');
+}
+
 function mediaFormatBadge(item) {
     const kind = (item.media_kind || '').toLowerCase();
     const fmt = kind === 'cdg-zip' ? 'cdg+mp3' : kind;
     const badge = document.createElement('span');
     badge.className = 'format-badge ' + getFormatBadgeClass(fmt);
     badge.textContent = fmt || (item.ext || '').replace('.', '') || 'file';
+    // Click the pill for technical details (container/codec/resolution/audio).
+    const fp = item.file_path || item.path;
+    if (fp) {
+        badge.classList.add('format-badge-clickable');
+        badge.title = 'Click for technical details';
+        badge.onclick = (e) => {
+            e.stopPropagation();
+            openMediaInfoModal(fp, item.display_name);
+        };
+    }
     return badge;
 }
 
@@ -2109,42 +2240,33 @@ function renderUnifiedResults(localResults, catalogResults, query) {
             sectionHeader.textContent = `Catalog (${catalogResults.length})`;
             mediaList.appendChild(sectionHeader);
         }
+        // Catalog (external SSD) rows go through the SAME renderer as internal
+        // rows — same clickable name, format pill (→ tech details), Preview and
+        // Play. Edit/Delete fall away automatically (createMediaItemLi gates them
+        // on media_id / is_download, which catalog entries lack). Map the catalog
+        // shape onto the shared item shape.
         catalogResults.forEach(item => {
-            const li = document.createElement('li');
-            li.title = 'Click to play from external drive';
-            const detail = document.createElement('div');
-            detail.className = 'catalog-detail';
-
-            const titleRow = document.createElement('span');
-            const nameText = item.filename.replace(/\.\w+$/, '');
-            titleRow.textContent = nameText + ' ';
-            const badge = document.createElement('span');
-            badge.className = `format-badge ${getFormatBadgeClass(item.format)}`;
-            badge.textContent = item.format;
-            titleRow.appendChild(badge);
-            detail.appendChild(titleRow);
-
-            if (item.folder) {
-                const folderSpan = document.createElement('div');
-                folderSpan.className = 'catalog-folder';
-                let folderDisplay = item.folder;
-                folderDisplay = folderDisplay.replace(/^\/mnt\/[^/]+\//, '');
-                folderDisplay = folderDisplay.replace(/^\/Volumes\/[^/]+\//, '');
-                folderSpan.textContent = folderDisplay;
-                folderSpan.title = item.folder;
-                detail.appendChild(folderSpan);
-            }
-
-            li.appendChild(detail);
-            li.appendChild(createCopyBtn(nameText));
-            li.onclick = () => {
-                document.querySelectorAll('#media-list li').forEach(el => el.classList.remove('playing'));
-                li.classList.add('playing');
-                playMedia(item.path);
-            };
-            mediaList.appendChild(li);
+            mediaList.appendChild(createMediaItemLi(catalogItemToMediaItem(item)));
         });
     }
+}
+
+// Normalize an external-catalog search result into the shared media-item shape
+// consumed by createMediaItemLi. Catalog entries carry (path, filename, folder,
+// format) — no media_id/is_download, so the shared renderer omits Edit/Delete.
+function catalogItemToMediaItem(item) {
+    const fmt = (item.format || '').toLowerCase();
+    const ext = item.filename && item.filename.includes('.')
+        ? '.' + item.filename.split('.').pop().toLowerCase() : '';
+    return {
+        display_name: (item.filename || '').replace(/\.\w+$/, ''),
+        file_path: item.path,
+        folder: item.folder,
+        // mediaFormatBadge maps 'cdg-zip' -> the yellow "cdg+mp3" pill; other
+        // formats (mp4, mp3, …) pass through unchanged.
+        media_kind: fmt === 'cdg+mp3' ? 'cdg-zip' : fmt,
+        ext: ext,
+    };
 }
 
 async function catalogSearch(query) {

@@ -300,9 +300,6 @@ button:disabled:hover {
 .fade-label { font-size: 0.8em; color: #999; }
 .fade-presets { display: flex; gap: 6px; }
 .fade-preset { min-width: 42px; font-size: 0.8em; padding: 6px 10px; }
-.fade-custom { display: flex; align-items: center; gap: 4px; }
-.fade-custom-input { width: 46px; background: #1a1a1a; color: #eee; border: 1px solid #444; border-radius: 6px; padding: 6px 6px; font-size: 0.8em; }
-.fade-custom-input:focus { outline: none; border-color: #f59e0b; box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.4); }
 .fade-controls button:disabled { opacity: 0.35; cursor: not-allowed; }
 
 /* Armed dangerous action buttons (#4) */
@@ -1217,6 +1214,27 @@ body {
     background-color: rgba(59, 130, 246, 0.2) !important; color: #60a5fa !important;
 }
 .db-modal-content { max-width: 520px; }
+
+/* Technical-details modal (click a format pill). Compact spec sheet. */
+.mediainfo-modal-content { max-width: 460px; }
+.mediainfo-name {
+    color: #ddd; font-size: 0.9em; margin: 0 0 10px; word-break: break-word;
+    font-variant-numeric: tabular-nums;
+}
+.mediainfo-list {
+    display: grid; grid-template-columns: auto 1fr; gap: 6px 14px;
+    margin: 0; font-size: 0.9em;
+}
+.mediainfo-list dt { color: #888; white-space: nowrap; }
+.mediainfo-list dd { margin: 0; color: #e5e5e5; word-break: break-word; }
+.mediainfo-error { color: #fca5a5; font-size: 0.9em; margin: 4px 0; }
+/* A format pill that reveals technical details on click. */
+.format-badge-clickable, .np-filetype-clickable { cursor: pointer; }
+.format-badge-clickable:hover { filter: brightness(1.15); }
+.np-filetype-clickable:hover {
+    color: #ff9bd6; border-color: rgba(255, 91, 184, 0.6);
+    background: rgba(255, 91, 184, 0.18);
+}
 .db-progress-bar {
     height: 8px; background: #222; border-radius: 4px; margin: 8px 0; overflow: hidden;
 }
@@ -4044,6 +4062,15 @@ li.media-no-audio {
 /* Library rows are sized to match the rotation entries exactly — same text
    size and compact padding — so the two lists feel like one system. */
 #media-list li.media-file-row { font-size: 0.85rem; padding: 6px 12px; }
+
+/* .media-title stacks a title row (name + tags) above an optional folder/path
+   line. The title span already gets flex:1 from `#media-list li > span:first-of-type`. */
+.media-title { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.media-title-row { display: flex; align-items: center; flex-wrap: wrap; gap: 2px 4px; min-width: 0; }
+.media-folder {
+    font-size: 0.75em; color: #666; overflow: hidden; text-overflow: ellipsis;
+    white-space: nowrap; max-width: 100%;
+}
 
 /* --- Library row action buttons (preview / play / edit / delete) ---
  * ONE structural rule sizes every button in the cluster, so a classless button

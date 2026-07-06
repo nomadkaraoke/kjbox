@@ -278,6 +278,103 @@ class TestLibraryRow:
 
 
 # ---------------------------------------------------------------------------
+# Catalog (external SSD) rows now render through the SAME renderer as internal
+# rows — unified buttons/handlers, no bespoke click-to-play <li>.
+# ---------------------------------------------------------------------------
+
+
+class TestCatalogRowUnified:
+    """A catalog search result renders with the shared Library row: clickable
+    name (copies), format pill (→ tech details), Preview + Play. No Edit/Delete
+    (catalog entries have no media_id/is_download) and no standalone Copy button."""
+
+    _RENDER = (
+        "() => {"
+        "  const cat = [{ filename: 'KCD-1 - Maximo Park - Books From Boxes.zip',"
+        "    format: 'cdg+mp3', path: '/media/nomad/SSD/disc/KCD-1.zip',"
+        "    folder: '/media/nomad/SSD/disc' }];"
+        "  renderUnifiedResults([], cat, 'maximo');"
+        "}"
+    )
+
+    def _row(self, app_page):
+        app_page.evaluate(self._RENDER)
+        return app_page.locator("#media-list li.media-file-row").first
+
+    def test_catalog_row_uses_shared_renderer(self, app_page):
+        row = self._row(app_page)
+        expect(row.locator(".media-btn-preview")).to_be_visible()
+        expect(row.locator(".media-btn-play")).to_be_visible()
+
+    def test_catalog_row_has_no_edit_or_delete(self, app_page):
+        row = self._row(app_page)
+        expect(row.locator(".media-btn-edit")).to_have_count(0)
+        expect(row.locator(".media-btn-delete")).to_have_count(0)
+
+    def test_catalog_row_name_is_click_to_copy_not_button(self, app_page):
+        row = self._row(app_page)
+        expect(row.locator(".copy-btn")).to_have_count(0)
+        expect(row.locator(".media-name")).to_have_class(re.compile(r"rotation-copyable"))
+
+    def test_catalog_row_shows_trimmed_folder_with_full_tooltip(self, app_page):
+        row = self._row(app_page)
+        folder = row.locator(".media-folder")
+        expect(folder).to_have_text("SSD/disc")  # /media/<mount>/ prefix trimmed
+        expect(folder).to_have_attribute("title", "/media/nomad/SSD/disc")
+
+    def test_catalog_format_pill_is_clickable_cdg_mp3(self, app_page):
+        row = self._row(app_page)
+        badge = row.locator(".format-badge")
+        expect(badge).to_have_text("cdg+mp3")
+        expect(badge).to_have_class(re.compile(r"format-badge-clickable"))
+
+
+# ---------------------------------------------------------------------------
+# Technical-details modal — click a format pill (now-playing or Library/Catalog).
+# ---------------------------------------------------------------------------
+
+
+class TestTechDetailsModal:
+    """Clicking a format pill opens the tech-details modal and renders the
+    ffprobe spec sheet fetched from /media/info."""
+
+    _STUB_FETCH = """
+      () => {
+        for (let i = 1; i < 100000; i++) clearInterval(i);
+        window.fetch = () => Promise.resolve({ json: () => Promise.resolve({
+          ok: true, container: 'mov,mp4', duration: 218,
+          video: { codec: 'h264', width: 1280, height: 720, fps: 29.97 },
+          audio: { codec: 'aac', sample_rate: 48000, channels: 2, channel_layout: 'stereo' },
+          bit_rate: 4200000, size_bytes: 12345678 }) });
+      }
+    """
+
+    def test_clicking_library_pill_opens_modal_with_details(self, app_page):
+        app_page.evaluate(self._STUB_FETCH)
+        app_page.evaluate(
+            "() => {"
+            "  const items = [{ display_name: 'X', media_kind: 'mp4', ext: '.mp4',"
+            "    file_path: '/d/x.mp4', is_download: true }];"
+            "  window.localMediaItems = items; window.searchActive = false;"
+            "  renderFolderView(items);"
+            "}"
+        )
+        app_page.locator("#media-list li.media-file-row .format-badge").first.click()
+        modal = app_page.locator("#mediainfo-modal")
+        expect(modal).to_be_visible()
+        expect(modal.locator(".mediainfo-list")).to_be_visible()
+        expect(modal.locator("dd", has_text="H264")).to_be_visible()
+
+    def test_now_playing_pill_clickable_only_when_playing(self, app_page):
+        app_page.evaluate(
+            "() => { for (let i=1;i<100000;i++) clearInterval(i);"
+            "  updateNowPlaying({ state: 'playing', current_playing: 'Song',"
+            "    current_playing_path: '/d/x.mp4', time: 3, length: 218 }); }"
+        )
+        expect(app_page.locator("#np-filetype")).to_have_class(re.compile(r"np-filetype-clickable"))
+
+
+# ---------------------------------------------------------------------------
 # Library default view — empty until searched; "*" surfaces newest files.
 # ---------------------------------------------------------------------------
 
@@ -398,10 +495,10 @@ class TestNowPlayingStatus:
 # ---------------------------------------------------------------------------
 
 class TestFadeControls:
-    """Fade Out offers preset durations (3/6/10/20s) + a custom length, and the
-    controls gate on whether a song is LOADED (current_playing_path) rather than the
-    live player state. The live state flickers to 'stopped' on the VLC renderer, which
-    used to grey out Fade Out mid-song. See
+    """Fade Out offers preset durations (3/6/10/20s only — the custom-length field
+    was removed), and the controls gate on whether a song is LOADED
+    (current_playing_path) rather than the live player state. The live state flickers
+    to 'stopped' on the VLC renderer, which used to grey out Fade Out mid-song. See
     docs/archive/2026-07-02-fade-out-durations-plan.md.
     """
 
@@ -414,21 +511,25 @@ class TestFadeControls:
         expect(app_page.locator('.fade-preset[data-seconds="3"]')).to_have_text("3s")
         expect(app_page.locator('.fade-preset[data-seconds="20"]')).to_have_text("20s")
 
+    def test_no_custom_fade_field(self, app_page):
+        """The custom-duration entry box + big Fade button were removed — presets only."""
+        expect(app_page.locator("#fade-custom-seconds")).to_have_count(0)
+        expect(app_page.locator("#fade-custom-go")).to_have_count(0)
+
     def test_fade_controls_stay_one_flex_row(self, app_page):
         """Regression: .fade-controls is a plain <div> and must be excluded from the
         Playback Controls' Seek/Volume grid rule — otherwise it's forced into a 2-col
-        label+slider grid that drops the custom field to a second line. At the desktop
-        breakpoint (default e2e viewport is 1280px, >=769px) it must stay a flex row."""
+        label+slider grid. At the desktop breakpoint (default e2e viewport is 1280px,
+        >=769px) it must stay a flex row with the label + presets on one line."""
         display = app_page.evaluate(
             "getComputedStyle(document.querySelector('.fade-controls')).display")
         assert display == "flex", f"expected flex, got {display!r} (grid rule leaked in)"
-        # Presets and the custom group sit on the same visual line (heights differ
-        # slightly; assert their vertical offset is small, i.e. not wrapped).
+        # Label and presets sit on the same visual line (not wrapped).
         offset = app_page.evaluate(
-            "(() => { const p = document.querySelector('.fade-presets').getBoundingClientRect();"
-            " const c = document.querySelector('.fade-custom').getBoundingClientRect();"
-            " return Math.abs(c.top - p.top); })()")
-        assert offset < 20, f"fade custom group wrapped to a second line (offset {offset}px)"
+            "(() => { const l = document.querySelector('.fade-label').getBoundingClientRect();"
+            " const p = document.querySelector('.fade-presets').getBoundingClientRect();"
+            " return Math.abs(p.top - l.top); })()")
+        assert offset < 20, f"fade presets wrapped to a second line (offset {offset}px)"
 
     def test_fade_enabled_when_loaded_even_if_state_stopped(self, app_page):
         """Core fix: a transient 'stopped' must NOT disable Fade Out while a song is
@@ -439,7 +540,6 @@ class TestFadeControls:
         )
         for secs in (3, 6, 10, 20):
             expect(app_page.locator(f'.fade-preset[data-seconds="{secs}"]')).to_be_enabled()
-        expect(app_page.locator("#fade-custom-go")).to_be_enabled()
         expect(app_page.locator("#btn-restart")).to_be_enabled()
         expect(app_page.locator("#btn-stop")).to_be_enabled()
 
@@ -449,7 +549,6 @@ class TestFadeControls:
             "currentPlayingPath = null; updatePlaybackButtons('stopped');"
         )
         expect(app_page.locator('.fade-preset[data-seconds="10"]')).to_be_disabled()
-        expect(app_page.locator("#fade-custom-go")).to_be_disabled()
         expect(app_page.locator("#btn-stop")).to_be_disabled()
 
     def test_preset_posts_chosen_duration(self, app_page):
@@ -469,23 +568,6 @@ class TestFadeControls:
         assert captured["url"] == "/control"
         assert captured["body"]["action"] == "fadeout"
         assert captured["body"]["duration_s"] == 20
-
-    def test_custom_field_posts_clamped_duration(self, app_page):
-        self._stop_poll(app_page)
-        captured = app_page.evaluate(
-            """
-            (() => {
-                window.__call = null;
-                apiCall = (url, body) => { window.__call = {url, body}; return Promise.resolve({}); };
-                currentPlayingPath = '/songs/x.mp4';
-                document.getElementById('fade-custom-seconds').value = '99';
-                fadeOutCustom();
-                return window.__call;
-            })()
-            """
-        )
-        # Client clamps to the backend's 60s ceiling before posting.
-        assert captured["body"]["duration_s"] == 60
 
 
 # ---------------------------------------------------------------------------
