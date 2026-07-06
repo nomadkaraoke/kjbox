@@ -2,6 +2,51 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-07-05 - AV1 karaoke videos crashed mpv → switched NomadPC to the non-free Intel media driver
+
+**Why:** ~25% of recent YouTube downloads are AV1-encoded, and every AV1 file reliably
+SIGSEGV'd the mpv karaoke engine within ~4s (deterministic; 5+ coredumps, fault in
+`libavcodec.so.60` reached from `avcodec_send_packet`). This was the real cause of the
+2026-07-02 on-stage failure — once mpv died, every subsequent song failed until a manual Fix.
+VLC played the same files fine.
+
+**Root cause (corrected):** NomadPC ran the stock `intel-media-va-driver` — the DFSG **free**
+repack (`24.1.0+dfsg1`), which has Intel's AV1 decode kernels stripped/degraded. It
+*advertises* `VAProfileAV1Profile0` in `vainfo` but returns "internal decoding error 23" on
+real decode, and ffmpeg 6.1.1 mishandles that into a null-pointer deref → segfault. mpv
+defaults to `hwdec=vaapi` (`/etc/mpv/mpv.conf`), so the engine always used hardware decode and
+always hit the broken path. It was **not** an mpv/ffmpeg version bug — Ubuntu noble ships no
+newer ffmpeg/mpv/dav1d anyway, and the same crash is reported upstream on ffmpeg 7.0.
+
+**What:** Replaced the free driver with Intel's full upstream **non-free** driver — no reboot,
+one-package swap:
+```bash
+sudo apt-get install -y intel-media-va-driver-non-free   # 24.1.0+ds1-1; removes the free pkg
+LIBVA_DRIVER_NAME=iHD vainfo | grep -i av1                # VAProfileAV1Profile0 : VAEntrypointVLD
+# VA drivers load per mpv process → relaunch the engine (no reboot):
+curl -s -X POST http://127.0.0.1:5001/fix_audio -H 'Content-Type: application/json' -d '{}'
+```
+Verified: all 4 known AV1 files (My Hero, Olivia Rodrigo – Drop Dead, Afroman – Because I Got
+High, Justin Bieber – Baby) now **hardware**-decode (`hwdec-current=vaapi`, 0 new coredumps);
+H.264 control (ABBA) unaffected; rubberband pitch + HDMI audio intact; CPU ~half of software
+decode. Device left on stock `/etc/mpv/mpv.conf` (`hwdec=vaapi`); the only delta from stock is
+this driver package.
+
+**Rollback:** `sudo apt-get install intel-media-va-driver` (restores the free driver;
+`va-driver-all` is satisfied by either).
+
+**Interim mitigation (NOT deployed):** forcing software decode with `--hwdec=no` (or a user
+`~/.config/mpv/mpv.conf` `hwdec=no`) also stops the crash, but costs ~85% of one CPU core per
+song vs hardware decode — retained only as a documented fallback.
+
+**Backstop:** Track A auto-recovery (v0.68.0 #165 / v0.68.1 #166) still auto-restarts the engine
+and shows the KJ an amber banner if any future file crashes it.
+
+**Deferred (needs physical access):** a full system/kernel upgrade (372 pending noble updates,
+kernel 6.8.0-100→134, mesa 24→25) is good hygiene but a *remote* reboot risks lockout (no
+physical console access) — do it when someone can reach the box. It would not have fixed this
+crash anyway (noble has no newer ffmpeg/mpv/dav1d).
+
 ## 2026-07-05 - Max mode: bottom toolbar so the cursor can reach the screen's bottom edge (v0.67.3)
 
 **Why:** In fullscreen Max mode the canvas filled to the very bottom of the browser

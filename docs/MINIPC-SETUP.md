@@ -459,6 +459,31 @@ The code changes are already committed to the repo:
 - **`vlc.py`**: `self.enabled` checks `config.get('enable_vlc', False)` alongside `is_pi()`
 - **`app.py`**: Platform setup restructured — Pi-specific setup (xhost, dietpi user) is separate from shared device setup (websockify). Websockify starts on any device with `enable_vlc: true`.
 
+### 3.7 Intel Media Driver — non-free (hardware video decode) — REQUIRED
+
+mpv defaults to `hwdec=vaapi` (from `/etc/mpv/mpv.conf`), so the karaoke engine
+hardware-decodes video on the Intel iGPU (Alder Lake-N / N97). The stock Ubuntu/Mint
+`intel-media-va-driver` is the DFSG **free** repack, which has **broken AV1 decode** — AV1
+files (~25% of YouTube downloads) crash mpv with a SIGSEGV in `libavcodec`. Install Intel's
+full upstream **non-free** driver:
+
+```bash
+sudo apt-get install -y intel-media-va-driver-non-free
+# Verify AV1 decode is offered:
+LIBVA_DRIVER_NAME=iHD vainfo | grep -i av1     # expect: VAProfileAV1Profile0 : VAEntrypointVLD
+```
+
+No reboot needed — VA-API drivers load per mpv process, so just relaunch the engine
+(`POST /fix_audio`, or `sudo systemctl restart kj-controller`). Confirm hardware decode by
+playing an AV1 file and checking mpv's `hwdec-current` reads `vaapi` (not a fallback to
+software `libdav1d`).
+
+**Rollback:** `sudo apt-get install intel-media-va-driver` restores the free driver (both
+satisfy `va-driver-all`).
+
+Full diagnosis: [CHANGELOG.md](CHANGELOG.md) § 2026-07-05 and
+[archive/2026-07-05-mpv-av1-crash-findings.md](archive/2026-07-05-mpv-av1-crash-findings.md).
+
 ---
 
 ## Phase 4: Systemd Services

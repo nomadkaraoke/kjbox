@@ -177,6 +177,34 @@ ssh nomadpi 'chmod +x /opt/nomad/kjbox/kj-controller/auto-deploy.sh && systemctl
 **kj-controller not auto-starting at boot (no journal entries):**
 Check `WantedBy=` in the service file. Services with `After=graphical.target` should use `WantedBy=graphical.target` (not `multi-user.target`), otherwise systemd may not start them correctly.
 
+## Karaoke Video Crashes on AV1 Files (NomadPC)
+
+**Symptoms:**
+- A specific karaoke video (often a recent YouTube download) kills the mpv engine within a few
+  seconds of starting; afterwards *every* song fails to load until Fix / a service restart.
+- `ssh nomadpc 'coredumpctl list | grep -i mpv'` shows a fresh SIGSEGV.
+- `ssh nomadpc 'sudo dmesg -T | grep mpv'` shows `segfault ... in libavcodec.so.60`.
+
+**Cause:** The file is AV1-encoded and NomadPC is running the DFSG **free**
+`intel-media-va-driver`, which has broken AV1 hardware decode — it returns "internal decoding
+error 23", which ffmpeg turns into a segfault. (mpv defaults to `hwdec=vaapi`.) See
+[CHANGELOG.md](CHANGELOG.md) § 2026-07-05.
+
+**Fix — install the non-free Intel driver (no reboot):**
+```bash
+ssh nomadpc 'sudo apt-get install -y intel-media-va-driver-non-free'
+# relaunch the karaoke engine:
+ssh nomadpc "curl -s -X POST http://127.0.0.1:5001/fix_audio -H 'Content-Type: application/json' -d '{}'"
+# verify: play an AV1 file; mpv's hwdec-current should read "vaapi"
+```
+
+**Interim workaround** (if you can't install the driver): force software decode —
+`ssh nomadpc 'echo hwdec=no > ~/.config/mpv/mpv.conf'` then relaunch. Stops the crash but costs
+~1 CPU core per song. Rollback: delete that file.
+
+Track A auto-recovery (v0.68.0+) auto-restarts the engine and shows the KJ an amber banner if a
+file still crashes it, so a crash is a ~2s blip rather than a dead show.
+
 ## Docker Containers Not Running
 
 ```bash

@@ -2,8 +2,16 @@
 
 **Created:** 2026-07-05
 **Branch:** feat/sess-20260705-1704-player-crash-recovery
-**Status:** Draft — awaiting approval
+**Status:** DONE — Track A shipped (v0.68.0 #165 / v0.68.1 #166); Track B resolved (see below)
 **Background:** [2026-07-05-mpv-av1-crash-findings.md](2026-07-05-mpv-av1-crash-findings.md)
+
+> **Track B outcome (2026-07-05):** The root cause was **not** the mpv/ffmpeg/dav1d versions —
+> it was the DFSG **free** `intel-media-va-driver` having broken AV1 decode. Fix = swap to
+> `intel-media-va-driver-non-free` (one package, no reboot); AV1 now **hardware**-decodes with
+> no crash. The self-contained mpv build and the full-system/kernel upgrade in the steps below
+> proved **unnecessary** for the crash (the upgrade is deferred as hygiene, pending physical
+> access to the box). See the RESOLUTION section of the findings doc, CHANGELOG 2026-07-05, and
+> MINIPC-SETUP § 3.7.
 
 ## Overview
 

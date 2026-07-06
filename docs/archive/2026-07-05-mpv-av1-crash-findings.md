@@ -184,3 +184,32 @@ is `mpv-karaoke.log` (currently useless because of `--really-quiet`).
 - `kj-controller/playback.py` — `PlaybackCoordinator` (owns active player + filler).
 - `kj-controller/routes.py` — `/play`, `/status` (`audio_error`), `/fix_audio`, `/renderer`.
 - Recovery today: `POST /fix_audio` → `restart_instances()`.
+
+## RESOLUTION (2026-07-05, Track B) — it was the *free* Intel media driver
+
+The upgrade-track hypotheses above (native-vs-libdav1d decoder routing, mpv/ffmpeg version,
+`--hwdec` auto-probing) were **wrong**. On-device diagnosis found:
+
+1. **mpv was NOT defaulting to `hwdec=no`.** `/etc/mpv/mpv.conf` (shipped by the Mint mpv
+   package) contains `hwdec=vaapi`, so the karaoke engine always hardware-decoded via VA-API.
+   The "standalone `--vo=null` doesn't crash" result was just VA-API failing to initialise
+   without a GPU vo and silently falling back to software libdav1d.
+2. **The real culprit is the driver.** NomadPC ran `intel-media-va-driver` **`24.1.0+dfsg1`**
+   (the DFSG/**free** repack), which has Intel's AV1 decode kernels stripped/degraded. It
+   advertises `VAProfileAV1Profile0` in `vainfo` but returns "internal decoding error 23" on
+   real decode; ffmpeg 6.1.1 mishandles that error into the null-ptr deref (`addr 0x19`)
+   segfault seen in the coredumps. Confirmed by upstream reports (mpv#14941,
+   intel/media-driver#1852: "AV1 fails with free driver, works with non-free"; the same crash
+   is reported on ffmpeg 7.0, so a version bump would not have fixed it).
+
+**Fix (deployed):** `sudo apt-get install intel-media-va-driver-non-free` (Intel's full
+upstream `24.1.0+ds1-1`). No reboot; relaunch mpv to load the new driver. All 4 known AV1 files
+then hardware-decode cleanly (`hwdec-current=vaapi`, 0 new coredumps), H.264 unaffected,
+rubberband + HDMI audio intact, CPU ~half of software decode. Rollback:
+`sudo apt-get install intel-media-va-driver`.
+
+**Interim mitigation** (proven on-device, kept as documented fallback only): `hwdec=no` forces
+software libdav1d and also stops the crash, at ~85% of one CPU core per song.
+
+See [CHANGELOG.md](../CHANGELOG.md) § 2026-07-05 and
+[MINIPC-SETUP.md](../MINIPC-SETUP.md) § 3.7.
