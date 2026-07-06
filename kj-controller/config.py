@@ -68,6 +68,9 @@ def load_config(config_file=None):
         "gen_api_token": "",
         "gen_poll_interval": 60,
         "render_mode": DEFAULT_RENDER_MODE,
+        # Pin the iGPU to its max clock while a song plays (unpin when idle) to give
+        # 4K decode+composite headroom. No-op on devices without the sudo helper.
+        "auto_pin_gpu_during_playback": True,
         "sing_public_url_base": "https://sing.nomadkaraoke.com",
         "sing_public_host": "sing.nomadkaraoke.com",
         "sing_local_url_base": "",

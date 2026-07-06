@@ -350,6 +350,14 @@ class PerfSampler:
         self._coord = coordinator
         self._cfg = cfg or {}
         self._interval = interval
+        # Auto-pin the iGPU to its max clock while a song plays. Drops on 4K track
+        # the GPU frequency stalling below its 1200MHz ceiling; pinning gives it
+        # headroom. Best-effort + engine-agnostic; unpins when idle.
+        self._auto_pin = self._cfg.get('auto_pin_gpu_during_playback', True)
+        # Seeded False so an app that starts up mid-song (playing=True) pins on the
+        # first tick instead of swallowing it as initialization.
+        self._pin_prev_playing = False
+        self._we_pinned = False
         rec_dir = self._cfg.get('perf_recordings_dir') or \
             os.path.expanduser('~/kjdata/perf_recordings')
         self.recorder = PerfRecorder(rec_dir)
@@ -378,6 +386,13 @@ class PerfSampler:
                 and threading.current_thread() is not self._thread):
             self._thread.join(timeout=max(1.0, self._interval + 0.5))
         self._thread = None
+        # Leave the GPU in its default (unpinned) state if we pinned it.
+        if self._we_pinned:
+            try:
+                apply_toggle('gpu-clock', False)
+            except Exception:
+                pass
+            self._we_pinned = False
 
     def _run(self):
         try:
@@ -390,9 +405,25 @@ class PerfSampler:
                 with self._lock:
                     self._ring.append(s)
                 self.recorder.record(s)  # no-op unless a session is active
+                self._maybe_autopin(bool(s.get("playing")))
             except Exception:
                 pass  # a sampler must never die on a bad tick
             self._stop.wait(self._interval)
+
+    def _maybe_autopin(self, playing):
+        """Pin the iGPU to max on the play edge, unpin on the stop edge.
+
+        No-op unless enabled; on a device without the sudo helper/entry the
+        underlying toggle simply fails and we leave _we_pinned False.
+        """
+        if not self._auto_pin:
+            return
+        if playing == self._pin_prev_playing:
+            return
+        self._pin_prev_playing = playing
+        ok, _, _ = apply_toggle('gpu-clock', playing)
+        if ok:
+            self._we_pinned = playing
 
     # -- external hooks --
     def record_status_latency(self, ms):
