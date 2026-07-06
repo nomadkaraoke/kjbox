@@ -11,11 +11,18 @@ decode/integrity verdict. Here we just want a human-readable spec sheet
 """
 import json
 import os
+import shutil
 import subprocess
+import tempfile
+import zipfile
 
 # ffprobe is fast for a metadata-only probe, but a pathological file (or a slow
 # external drive spinning up) shouldn't hang the request thread.
 _FFPROBE_TIMEOUT_S = 20
+
+# Audio members we recognize inside a CDG+MP3 karaoke zip (mirrors
+# playability.CDG_AUDIO_EXTS).
+_ZIP_AUDIO_EXTS = {".mp3", ".m4a", ".wav", ".flac", ".ogg", ".opus", ".aac", ".mp2"}
 
 
 def _to_int(value):
@@ -100,13 +107,105 @@ def parse_media_info(data, *, size_bytes=None):
     }
 
 
-def probe_media_info(path):
-    """Run ffprobe on ``path`` and return the normalized spec-sheet dict.
+def _size_bytes(path):
+    try:
+        return os.path.getsize(path)
+    except OSError:
+        return None
 
-    On any failure (ffprobe missing, timeout, unreadable file, bad JSON) returns
-    ``{"ok": False, "error": <message>}`` so the caller can surface a clean
-    message rather than a 500.
+
+def _probe_cdg_zip(path):
+    """Describe a CDG+MP3 karaoke ``.zip`` — ffprobe can't read a zip directly.
+
+    Reports it as a CDG graphics + audio bundle: peeks the archive for the .cdg
+    and audio members, extracts just the audio member to a temp file and ffprobes
+    *that* for the audio codec/duration, and reports the zip's own size.
     """
+    size = _size_bytes(path)
+    try:
+        with zipfile.ZipFile(path) as zf:
+            names = zf.namelist()
+            has_cdg = any(n.lower().endswith(".cdg") for n in names)
+            audio_member = next(
+                (n for n in names
+                 if os.path.splitext(n)[1].lower() in _ZIP_AUDIO_EXTS), None)
+            audio_probe = _probe_zip_member(zf, audio_member) if audio_member else None
+    except (zipfile.BadZipFile, OSError) as exc:
+        return {"ok": False, "error": f"could not read zip: {exc}"}
+
+    audio_ext = os.path.splitext(audio_member)[1].lstrip(".").upper() if audio_member else None
+    if has_cdg and audio_ext:
+        container = f"CDG + {audio_ext} (zip)"
+    elif has_cdg:
+        container = "CDG (zip)"
+    else:
+        container = "ZIP archive"
+
+    return {
+        "ok": True,
+        "container": container,
+        "format_long": "CDG graphics + audio karaoke bundle" if has_cdg else "ZIP archive",
+        "note": "CDG graphics track (no video codec)" if has_cdg else None,
+        "duration": (audio_probe or {}).get("duration"),
+        "size_bytes": size,
+        "bit_rate": None,
+        "video": None,
+        "audio": (audio_probe or {}).get("audio"),
+    }
+
+
+def _probe_zip_member(zf, member):
+    """Extract a single zip member to a temp file and ffprobe it. Returns the
+    normalized probe dict, or None on any failure (best-effort)."""
+    ext = os.path.splitext(member)[1].lower()
+    tmp = None
+    try:
+        fd, tmp = tempfile.mkstemp(suffix=ext, prefix="kj-mediainfo-")
+        with os.fdopen(fd, "wb") as dst, zf.open(member) as src:
+            shutil.copyfileobj(src, dst)
+        return _probe_with_ffprobe(tmp)
+    except (KeyError, OSError, zipfile.BadZipFile):
+        return None
+    finally:
+        if tmp:
+            try:
+                os.remove(tmp)
+            except OSError:
+                pass
+
+
+def _probe_bare_cdg(path):
+    """A standalone ``.cdg`` is graphics-only — ffprobe can't read it and it has
+    no audio track. Report that plainly instead of an ffprobe error."""
+    return {
+        "ok": True,
+        "container": "CDG (graphics only)",
+        "format_long": "CD+Graphics — no audio track",
+        "note": "Graphics-only .cdg — needs a matching audio file to play",
+        "duration": None,
+        "size_bytes": _size_bytes(path),
+        "bit_rate": None,
+        "video": None,
+        "audio": None,
+    }
+
+
+def probe_media_info(path):
+    """Return a normalized spec-sheet dict for ``path``.
+
+    Dispatches on file type: CDG+MP3 zips and bare .cdg files are described
+    directly (ffprobe can't read them); everything else goes through ffprobe.
+    On any failure returns ``{"ok": False, "error": <message>}``.
+    """
+    ext = os.path.splitext(path)[1].lower()
+    if ext == ".zip":
+        return _probe_cdg_zip(path)
+    if ext == ".cdg":
+        return _probe_bare_cdg(path)
+    return _probe_with_ffprobe(path)
+
+
+def _probe_with_ffprobe(path):
     try:
         proc = subprocess.run(
             ["ffprobe", "-v", "quiet", "-print_format", "json",

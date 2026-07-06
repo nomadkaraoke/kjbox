@@ -373,6 +373,42 @@ class TestTechDetailsModal:
         )
         expect(app_page.locator("#np-filetype")).to_have_class(re.compile(r"np-filetype-clickable"))
 
+    def test_modal_shows_full_file_path(self, app_page):
+        app_page.evaluate(self._STUB_FETCH)
+        app_page.evaluate(
+            "() => openMediaInfoModal('/opt/nomad/downloads/youtube/Drop Nineteens - Angel [yt-x].mp4', 'Drop Nineteens - Angel')"
+        )
+        path = app_page.locator("#mediainfo-path")
+        expect(path).to_be_visible()
+        expect(path).to_have_text("/opt/nomad/downloads/youtube/Drop Nineteens - Angel [yt-x].mp4")
+
+
+class TestRowFolderPath:
+    """The folder line uses each file's ACTUAL containing directory, so two copies
+    of the same song in different subdirs (youtube/ vs NOMAD-720p/) are told apart
+    — even though the backend reports item.folder as the shared media-root."""
+
+    def _render_two_copies(self, app_page):
+        app_page.evaluate(
+            "() => renderUnifiedResults(["
+            "  { display_name: 'Drop Nineteens - Angel', media_kind: 'mp4',"
+            "    file_path: '/opt/nomad/downloads/youtube/Drop Nineteens - Angel [yt-x].mp4',"
+            "    folder: '/opt/nomad/downloads', is_download: true },"
+            "  { display_name: 'Drop Nineteens - Angel', media_kind: 'mp4',"
+            "    file_path: '/opt/nomad/downloads/NOMAD-720p/NOMAD-1505 - Drop Nineteens - Angel.mp4',"
+            "    folder: '/opt/nomad/downloads' },"
+            "], [], 'nineteens')"
+        )
+
+    def test_distinct_subdirs_render_distinct_folder_lines(self, app_page):
+        self._render_two_copies(app_page)
+        folders = app_page.locator("#media-list li.media-file-row .media-folder")
+        expect(folders).to_have_count(2)
+        texts = folders.all_inner_texts()
+        assert texts[0] != texts[1], f"both rows show the same folder: {texts}"
+        assert any("youtube" in t for t in texts)
+        assert any("NOMAD-720p" in t for t in texts)
+
 
 # ---------------------------------------------------------------------------
 # Library default view — empty until searched; "*" surfaces newest files.

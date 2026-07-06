@@ -3,6 +3,8 @@
 The parser is separated from the subprocess call so it can be exercised against
 canned ffprobe payloads without touching the filesystem or ffprobe.
 """
+import zipfile
+
 import mediainfo
 
 
@@ -107,6 +109,39 @@ def test_empty_payload_is_not_ok():
     assert info["ok"] is False
     assert info["video"] is None
     assert info["audio"] is None
+
+
+def test_cdg_mp3_zip_is_described_not_ffprobe_failed(tmp_path):
+    """A CDG+MP3 zip must be described (ffprobe can't read a zip) rather than
+    surfacing a raw 'ffprobe failed'."""
+    z = tmp_path / "song.zip"
+    with zipfile.ZipFile(z, "w") as zf:
+        zf.writestr("song.cdg", b"CDG\x00graphics")
+        zf.writestr("song.mp3", b"ID3 fake audio")
+    info = mediainfo.probe_media_info(str(z))
+    assert info["ok"] is True
+    assert "CDG" in info["container"] and "MP3" in info["container"]
+    assert info["video"] is None
+    assert info["note"]
+    assert info["size_bytes"] > 0
+
+
+def test_bare_cdg_is_described(tmp_path):
+    c = tmp_path / "x.cdg"
+    c.write_bytes(b"CDG graphics only")
+    info = mediainfo.probe_media_info(str(c))
+    assert info["ok"] is True
+    assert "CDG" in info["container"]
+    assert info["audio"] is None
+    assert info["note"]
+
+
+def test_unreadable_zip_returns_clean_error(tmp_path):
+    z = tmp_path / "bad.zip"
+    z.write_bytes(b"this is not a zip archive")
+    info = mediainfo.probe_media_info(str(z))
+    assert info["ok"] is False
+    assert "zip" in info["error"].lower()
 
 
 def test_bad_numeric_fields_do_not_crash():

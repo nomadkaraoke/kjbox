@@ -4,6 +4,23 @@ Dated entries, newest first. Each entry notes any required deploy steps.
 
 ---
 
+## 2026-07-06 - Tech-details modal follow-ups: real folder path, full filepath, CDG zips (v0.72.1)
+
+**Deploy:** backend change (`mediainfo.py` CDG/zip handling) → requires
+`systemctl restart kj-controller`. Frontend changes take effect on browser refresh.
+
+Follow-ups to v0.72.0 from device testing:
+- **Folder line now shows each file's actual containing directory** (dirname of the
+  file path) instead of the media-root. Two copies of the same song in different
+  subdirs (e.g. `youtube/` vs `NOMAD-720p/`) were both showing `/opt/nomad/downloads`;
+  now they're distinguishable.
+- **Technical-details modal shows the full file path** under the title, so you can tell
+  which copy of a song you're inspecting.
+- **CDG+MP3 zips and bare `.cdg` files are now described** instead of showing
+  "ffprobe failed": a zip is reported as `CDG + MP3 (zip)` with the extracted audio
+  track's codec/duration; a bare `.cdg` as graphics-only. The modal only shows Video/
+  Audio rows that actually exist (no more "Video: none").
+
 ## 2026-07-06 - Fade cleanup, tech-details modal, catalog row unify, upload organizing (v0.72.0)
 
 **Deploy:** backend change (new `/media/info` route + `MediaIndex.import_upload`) →
