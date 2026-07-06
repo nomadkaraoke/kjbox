@@ -107,7 +107,10 @@ class TestUploadGateReject:
             )
 
         assert len(deleted_paths) == 1
-        assert deleted_paths[0].endswith('song.mp4')
+        # The rejected upload's hidden staging file is removed. It keeps the real
+        # extension (so the gate can classify it), so the deleted path ends '.mp4'.
+        assert deleted_paths[0].endswith('.mp4')
+        assert os.path.basename(deleted_paths[0]).startswith('.upload_staging_')
 
     def test_media_scan_not_called(self, upload_app, upload_client):
         """On rejection, the media index must NOT be updated."""
@@ -142,12 +145,20 @@ class TestUploadGateReject:
 
 
 class TestUploadGatePass:
-    """Gate allows good files: 200, scan called, filename returned."""
+    """Gate allows good files: 200, organized via import_upload, filename returned."""
+
+    _ORGANIZED = {
+        "path": "/x/upload/Song [up-abc123].mp4",
+        "filename": "Song [up-abc123].mp4",
+        "display_name": "Song",
+        "media_id": "up-abc123",
+    }
 
     def test_returns_200(self, upload_app, upload_client):
         good_verdict = {'overall_ok': True, 'reasons': []}
         mock_result = MagicMock()
         mock_result.verdict = good_verdict
+        upload_app.media.import_upload.return_value = self._ORGANIZED
 
         with patch('routes._playability_gate', return_value=mock_result):
             resp = upload_client.post(
@@ -162,6 +173,7 @@ class TestUploadGatePass:
         good_verdict = {'overall_ok': True, 'reasons': []}
         mock_result = MagicMock()
         mock_result.verdict = good_verdict
+        upload_app.media.import_upload.return_value = self._ORGANIZED
 
         with patch('routes._playability_gate', return_value=mock_result):
             resp = upload_client.post(
@@ -172,13 +184,16 @@ class TestUploadGatePass:
 
         data = resp.get_json()
         assert data['success'] is True
-        assert 'filename' in data
+        assert data['filename'] == 'Song [up-abc123].mp4'
+        assert data['media_id'] == 'up-abc123'
 
-    def test_media_scan_called(self, upload_app, upload_client):
-        """On success, media.scan() must be called to update the index."""
+    def test_import_upload_called(self, upload_app, upload_client):
+        """On success, the file is organized through media.import_upload (which
+        finalizes identity + re-indexes) rather than left loose + a bare scan()."""
         good_verdict = {'overall_ok': True, 'reasons': []}
         mock_result = MagicMock()
         mock_result.verdict = good_verdict
+        upload_app.media.import_upload.return_value = self._ORGANIZED
 
         with patch('routes._playability_gate', return_value=mock_result):
             upload_client.post(
@@ -187,4 +202,28 @@ class TestUploadGatePass:
                 content_type='multipart/form-data',
             )
 
-        upload_app.media.scan.assert_called_once()
+        upload_app.media.import_upload.assert_called_once()
+
+    def test_gate_receives_staging_with_real_extension(self, upload_app, upload_client):
+        """Regression: the staging file handed to the gate must keep the upload's
+        REAL extension. playability.classify_kind sniffs the extension, so a
+        mismatched suffix (e.g. .part) would classify a .mp3/.zip as video and
+        falsely reject it. Here we upload a .mp3 and assert the gate saw '.mp3'."""
+        captured = {}
+        good = MagicMock()
+        good.verdict = {'overall_ok': True, 'reasons': []}
+        upload_app.media.import_upload.return_value = self._ORGANIZED
+
+        def spy_gate(path):
+            captured['path'] = path
+            return good
+
+        with patch('routes._playability_gate', side_effect=spy_gate):
+            resp = upload_client.post(
+                '/upload',
+                data=_multipart(filename='tune.mp3'),
+                content_type='multipart/form-data',
+            )
+
+        assert resp.status_code == 200
+        assert captured['path'].endswith('.mp3'), captured['path']

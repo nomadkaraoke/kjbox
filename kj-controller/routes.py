@@ -8,6 +8,7 @@ import random
 import re
 import struct
 import subprocess
+import tempfile
 import threading
 import time
 import unicodedata
@@ -17,6 +18,7 @@ from flask import Blueprint, Response, current_app, jsonify, render_template, re
 import divebar
 import karaoke_nerds
 import library_media
+import mediainfo
 import local_grouping
 import text_normalize
 from text_normalize import normalize as _normalize_text, tokens as _tokens, group_key as _group_key
@@ -478,37 +480,55 @@ def handle_upload():
     download_folder = cfg.get('download_folder', os.path.expanduser('~/kjdata/videos'))
     os.makedirs(download_folder, exist_ok=True)
 
-    # Sanitize filename
-    safe_name = re.sub(r'[^\w\s\-\.\(\)]', '', file.filename).strip()
-    if not safe_name:
-        safe_name = 'uploaded_file' + ext
-    dest = os.path.join(download_folder, safe_name)
+    # Save to a hidden staging file first, then route it through the SAME identity
+    # pipeline as downloads: playability gate, then move+rename into
+    # <download_folder>/upload/<slug [up-<hash>]> with a media_library row.
+    # Previously uploads were saved loose in the download root with no token,
+    # unlike every other ingestion path.
+    #
+    # The staging file KEEPS THE REAL EXTENSION (mirroring the generic-download
+    # `.staging__` pattern): the playability gate classifies by extension
+    # (playability.classify_kind), so a mismatched suffix like `.part` would
+    # misclassify every non-video upload and falsely reject valid audio / CDG-zip
+    # files. The leading dot keeps it out of the way; scan() rebuilds the whole
+    # index on the next pass anyway, and import_upload triggers exactly that.
+    fd, staging = tempfile.mkstemp(prefix='.upload_staging_', suffix=ext,
+                                   dir=download_folder)
+    os.close(fd)
+    file.save(staging)
+    log_message(f"Uploaded file: {file.filename} ({os.path.getsize(staging)} bytes)", cfg)
 
-    # Avoid overwriting
-    if os.path.exists(dest):
-        base, extension = os.path.splitext(safe_name)
-        dest = os.path.join(download_folder, f"{base}_{int(time.time())}{extension}")
-        safe_name = os.path.basename(dest)
+    try:
+        gate = _playability_gate(staging)
+        if not gate.verdict.get("overall_ok"):
+            try:
+                os.remove(staging)
+            except OSError:
+                pass
+            reasons = "; ".join(gate.verdict.get("reasons") or ["file is not playable"])
+            return jsonify({
+                "error": f"Upload rejected — not playable: {reasons}",
+                "verdict": gate.verdict,
+            }), 422
 
-    file.save(dest)
-    log_message(f"Uploaded file: {safe_name} ({os.path.getsize(dest)} bytes)", cfg)
-
-    gate = _playability_gate(dest)
-    if not gate.verdict.get("overall_ok"):
+        # Organize into upload/ with a content-addressed identity + index.
+        result = current_app.media.import_upload(staging, raw_name=file.filename, ext=ext)
+    except Exception as e:
+        # Never leave a hidden staging file behind on an unexpected failure.
         try:
-            os.remove(dest)
+            if os.path.exists(staging):
+                os.remove(staging)
         except OSError:
             pass
-        reasons = "; ".join(gate.verdict.get("reasons") or ["file is not playable"])
-        return jsonify({
-            "error": f"Upload rejected — not playable: {reasons}",
-            "verdict": gate.verdict,
-        }), 422
+        log_message(f"Upload failed for {file.filename}: {e}", cfg)
+        return jsonify({"error": f"Upload failed: {e}"}), 500
 
-    # Add to media index
-    current_app.media.scan()
-
-    return jsonify({"success": True, "filename": safe_name, "path": dest})
+    return jsonify({
+        "success": True,
+        "filename": result["filename"],
+        "path": result["path"],
+        "media_id": result["media_id"],
+    })
 
 
 _QUEUE_TO_ROTATION_STATUS = {
@@ -1018,6 +1038,48 @@ def set_media_metadata():
     store.set_metadata(media_id, artist or existing.get("artist", ""),
                        title or existing.get("title", ""))
     return jsonify({"success": True, "record": store.get(media_id)})
+
+
+def _resolve_media_path(file_path):
+    """Resolve a client-supplied path to a real, allowed on-disk path or None.
+
+    Mirrors preview._resolve_local_path: a path is allowed if it validates
+    against a configured media_folders root, OR it sits inside the external
+    media mount (the 4TB catalog SSD). This lets /media/info probe both internal
+    downloads and external catalog files with the same guard.
+    """
+    if not file_path:
+        return None
+    media = current_app.media
+    real = media.validate_path(file_path)
+    if not real:
+        mount = (getattr(media, "config", None) or {}).get("external_media_mount")
+        if mount:
+            cand = os.path.realpath(file_path)
+            real_mount = os.path.realpath(mount)
+            if (cand == real_mount or cand.startswith(real_mount + os.sep)) and os.path.exists(cand):
+                real = cand
+    return real
+
+
+@routes_bp.route('/media/info', methods=['POST'])
+def media_info():
+    """Technical details (container/codec/resolution/audio) for one media file.
+
+    Powers the "click the format pill → technical details" modal. Accepts a
+    file path, validates it against allowed roots (internal + external catalog),
+    then runs a fast ffprobe metadata probe.
+    """
+    data = request.get_json(silent=True) or {}
+    file_path = (data.get('file_path') or '').strip()
+    if not file_path:
+        return jsonify({"ok": False, "error": "file_path is required"}), 400
+    real = _resolve_media_path(file_path)
+    if not real:
+        return jsonify({"ok": False, "error": "File not found or outside allowed folders"}), 404
+    info = mediainfo.probe_media_info(real)
+    info["filename"] = os.path.basename(real)
+    return jsonify(info)
 
 
 @routes_bp.route('/delete', methods=['POST'])

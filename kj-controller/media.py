@@ -164,6 +164,31 @@ class MediaIndex:
                 log_message(f"media_library upsert failed for {slug}: {exc}", self.config)
         return real_dest, display, media_id
 
+    def import_upload(self, staging_path, *, raw_name, ext,
+                      artist_hint=None, title_hint=None):
+        """Ingest a user-uploaded file (already saved to ``staging_path`` and
+        already playability-checked by the caller) through the SAME identity
+        pipeline as downloads.
+
+        Without this, browser uploads were left loose in the download-folder root
+        with no ``[up-<hash>]`` token, unlike every other ingestion path. Here we
+        content-address the file, move it to ``<download_folder>/upload/<slug>``,
+        upsert its media_library row, and re-index. Returns
+        ``{path, filename, display_name, media_id}``.
+        """
+        source_ref = content_hash(staging_path)
+        real_dest, display, media_id = self._finalize_download_identity(
+            staging_path, source=SOURCE_UPLOAD, source_ref=source_ref,
+            artist_hint=artist_hint, title_hint=title_hint, channel=None,
+            raw_name=raw_name, ext=ext)
+        self.scan()
+        return {
+            "path": real_dest,
+            "filename": os.path.basename(real_dest),
+            "display_name": display,
+            "media_id": media_id,
+        }
+
     def _resolve_media_id(self, real_path, fname):
         """Return (media_id, identity_dict) for a file.
 
