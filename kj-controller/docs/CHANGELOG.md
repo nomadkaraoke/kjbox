@@ -4,6 +4,37 @@ Dated entries, newest first. Each entry notes any required deploy steps.
 
 ---
 
+## 2026-07-06 - Recognise NOMAD masters; stop suggesting YouTube for them (v0.71.0)
+
+**Deploy:** backend change → requires `systemctl restart kj-controller`.
+
+**Why:** a song we already hold in the deliberate NOMAD master mirror
+(`downloads/NOMAD-720p/`, e.g. `NOMAD-1272 - Maximo Park - By the Monument.mp4`)
+was shown in rotation search under **"From YouTube — unverified"**, and
+KaraokeNerds independently offered a **YouTube "DL & Link"** download for the
+exact release we play locally. Root cause: `unified_search` discarded the
+master's `disc_id` when it took the clean media_library artist/title, so brand
+resolution never saw the `NOMAD-####` prefix → `priority_class="unknown"` →
+routed to the YouTube-unverified bucket. And nothing cross-referenced KN NOMAD
+tracks against the local masters.
+
+**What:**
+- **Recognise the master** — `unified_search` now preserves the parsed
+  `disc_id` for master-source rows, so `resolve_brand` sees `NOMAD-####` →
+  `('NOMAD', 'community')`. The master leads as **Best — NOMAD (community)**
+  with a **Play/Link** button (local file, no download). Gated on
+  `source == master` so non-master curated rows can't gain a false brand from a
+  hyphenated title.
+- **Suppress the redundant KN row** — new `_suppress_mastered_kn_tracks` drops a
+  KN track whose canonical brand is NOMAD when a local master already covers the
+  same (normalized artist, title). Other brands on the same song (commercial /
+  other community) are left as genuine alternatives. Runs before both the KJ
+  (flat) and singer (grouped) branches, so both search surfaces are fixed.
+
+Scope: NOMAD masters only. +8 tests (helper unit tests + route integration).
+
+---
+
 ## 2026-07-05 - Crash detection also works after a reconnect (v0.68.1)
 
 **Deploy:** backend change → requires `systemctl restart kj-controller`.
