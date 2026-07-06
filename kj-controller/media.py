@@ -465,6 +465,20 @@ class MediaIndex:
                 canon = " - ".join(p for p in (item["artist"], item["title"]) if p)
                 if canon:
                     item["display_name"] = canon
+
+            # Surface the YouTube video id from the canonical media_id (yt-<vid>).
+            # Since the v0.54.1 slug rename, downloads are named
+            # "Artist - Title [yt-<vid>].ext", which the legacy __-format parser
+            # above can no longer read — so youtube_id would otherwise be null on
+            # every current download. The frontend keys its Karaoke-Nerds -> local
+            # dedup/match on youtube_id, so without this a downloaded song never
+            # matches its KN row: it surfaces redundantly under "From YouTube —
+            # unverified" and the KJ is offered a pointless re-download. The legacy
+            # parse (when present) already set youtube_id and agrees, so it wins.
+            if "youtube_id" not in item:
+                mid = item.get("media_id") or entry.get("media_id") or ""
+                if mid.startswith("yt-") and len(mid) == 14:  # "yt-" + 11-char id
+                    item["youtube_id"] = mid[3:]
             items.append(item)
 
         items.sort(key=lambda x: x['mtime'], reverse=True)

@@ -4,6 +4,34 @@ Dated entries, newest first. Each entry notes any required deploy steps.
 
 ---
 
+## 2026-07-06 - Match downloaded YouTube songs to their Karaoke Nerds row again (v0.72.2)
+
+**Deploy:** backend change (`media.py` `list_items`) → requires
+`systemctl restart kj-controller`. No frontend edit — both search surfaces read the
+repaired field from `/media`, so they fix on the next browser refresh after restart.
+
+**Bug:** In rotation-entry linking (and the standalone Karaoke Nerds panel), an
+already-downloaded YouTube song no longer matched its Karaoke Nerds row. It surfaced
+a redundant **"From YouTube — unverified"** row for the local file *and* offered a
+pointless **"DL & Link"** re-download on the matching community row (e.g. Bastille –
+Pompeii `yt-3QhmiCHjRHE`, downloaded, still offered as a fresh YouTube download).
+
+**Root cause:** The frontend keys its Karaoke-Nerds→local dedup/match on each media
+item's `youtube_id`. `list_items()` only set `youtube_id` from the **legacy**
+`{11id}__{channel}__{title}` filename parser. Since the v0.54.1 canonical-slug rename,
+downloads are named `Artist - Title [yt-<vid>].ext` and carry their id in the
+canonical `media_id` (`yt-<vid>`) — the legacy parser no longer matches, so
+`youtube_id` was **null on every current download** (verified on-device: 1003 `yt-`
+downloads, 0 with `youtube_id`). The dedup map was therefore empty for all of them.
+This is the community-download twin of the NOMAD-master case fixed in v0.71.0 (#169).
+
+**Fix:** `list_items()` now derives `youtube_id` from the canonical `media_id` (the
+11-char id after the `yt-` prefix) whenever the legacy parse didn't already set it.
+One source-of-truth change repairs both the KJ linking modal and the standalone KN
+panel. Verified against live `/media`: all 1003 downloads gain the correct id, zero
+edge cases. 3 new unit tests (canonical-slug derivation, legacy-parse precedence,
+non-YouTube ids untouched); full suite green.
+
 ## 2026-07-06 - Tech-details modal follow-ups: real folder path, full filepath, CDG zips (v0.72.1)
 
 **Deploy:** backend change (`mediainfo.py` CDG/zip handling) → requires

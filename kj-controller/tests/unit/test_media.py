@@ -332,6 +332,75 @@ def test_list_items_with_youtube_metadata(mock_config, tmp_media_dir):
     assert item["duration"] == 212
 
 
+def test_list_items_youtube_id_from_canonical_slug(tmp_path):
+    """A canonical-slug download 'Artist - Title [yt-VID].ext' surfaces
+    youtube_id=VID in list_items, even though the legacy __-format parser can't
+    read it. The video id lives in the canonical media_id (yt-VID) since the
+    v0.54.1 slug rename; the frontend keys its KN->local dedup on youtube_id, so
+    without this the on-disk download never matches its Karaoke Nerds row and the
+    KJ is offered a redundant re-download.
+    """
+    from media_library import MediaLibraryStore
+
+    dl = str(tmp_path / "downloads")
+    slug = os.path.join(dl, "youtube", "Bastille - Pompeii [yt-3QhmiCHjRHE].mp4")
+    os.makedirs(os.path.dirname(slug), exist_ok=True)
+    with open(slug, "wb") as f:
+        f.write(b"\x00" * 16)
+
+    store = MediaLibraryStore(":memory:")
+    mi = MediaIndex({"media_folders": [dl], "download_folder": dl,
+                     "media_index_path": str(tmp_path / "i.json")},
+                    media_library=store)
+    mi.scan()
+
+    item = mi.list_items()[0]
+    assert item["media_id"] == "yt-3QhmiCHjRHE"
+    assert item["youtube_id"] == "3QhmiCHjRHE"
+
+
+def test_list_items_youtube_id_prefers_legacy_parse(tmp_path):
+    """When the legacy __-format parse already set youtube_id, the media_id
+    derivation must not override it (parse wins; both agree anyway)."""
+    from media_library import MediaLibraryStore
+
+    dl = str(tmp_path / "downloads")
+    legacy = os.path.join(dl, "youtube", "dQw4w9WgXcQ__RickAstley__Never Gonna.mp4")
+    os.makedirs(os.path.dirname(legacy), exist_ok=True)
+    with open(legacy, "wb") as f:
+        f.write(b"\x00" * 16)
+
+    store = MediaLibraryStore(":memory:")
+    mi = MediaIndex({"media_folders": [dl], "download_folder": dl,
+                     "media_index_path": str(tmp_path / "i.json")},
+                    media_library=store)
+    mi.scan()
+
+    item = mi.list_items()[0]
+    assert item["youtube_id"] == "dQw4w9WgXcQ"
+
+
+def test_list_items_no_youtube_id_for_non_youtube(tmp_path):
+    """Non-YouTube canonical media_ids (up-/nomad-/db-) must not gain a
+    youtube_id — only yt- ids carry a real video id."""
+    from media_library import MediaLibraryStore
+
+    dl = str(tmp_path / "downloads")
+    up = os.path.join(dl, "upload", "Some Artist - Some Song [up-deadbeef00].mp4")
+    os.makedirs(os.path.dirname(up), exist_ok=True)
+    with open(up, "wb") as f:
+        f.write(b"\x00" * 16)
+
+    store = MediaLibraryStore(":memory:")
+    mi = MediaIndex({"media_folders": [dl], "download_folder": dl,
+                     "media_index_path": str(tmp_path / "i.json")},
+                    media_library=store)
+    mi.scan()
+
+    item = mi.list_items()[0]
+    assert "youtube_id" not in item
+
+
 def test_save_handles_write_error(mock_config, tmp_media_dir):
     """save() logs error when write fails."""
     mi = MediaIndex(mock_config)
