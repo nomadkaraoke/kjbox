@@ -2,6 +2,23 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-07-06 - Auto-pin GPU to max clock during playback (v0.73.0)
+
+**Why:** Live 4K recordings (see the recording tool, v0.70.0) showed dropped frames on 4K video
+track the **iGPU frequency stalling below its 1200 MHz ceiling** (dropping samples averaged ~1015 MHz
+vs ~1115 when clean) — not temperature (a cool 64–69 °C throughout). 4K VP9 decode + compositing sits
+right at this iGPU's capacity, so when the governor doesn't boost fully, it tips into drops.
+
+**What:** The PerfSampler now pins the iGPU's minimum clock to its hardware max while a song is playing
+(via the existing `set-gpu-clock.sh` helper) and unpins when playback stops. It's driven off the
+sampler's existing 1 Hz playback-state signal — no change to the playback hot path, engine-agnostic
+(mpv or VLC), and best-effort (a device without the sudo helper/entry simply no-ops). Toggle with
+`auto_pin_gpu_during_playback` in config.json (default **true**).
+
+This is a complementary headroom margin; a follow-up will also move the scrolling ticker off the video
+into a reserved strip (shrinking the video) to remove the overlay's over-video compositing cost for
+both engines.
+
 ## 2026-07-06 - Perf recording + CDG-aware health + panel reorg (v0.70.0)
 
 **Why:** First live use of the v0.69.0 monitor (previous entry) surfaced two things:

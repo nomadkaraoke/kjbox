@@ -261,6 +261,56 @@ def test_apply_toggle_unknown_control():
     assert ok is False and "unknown control" in msg
 
 
+# --- GPU auto-pin during playback ---
+
+def _pin_recorder(monkeypatch):
+    calls = []
+    def fake(control, on):
+        calls.append((control, on))
+        return (True, on, "ok")
+    monkeypatch.setattr(ps, "apply_toggle", fake)
+    return calls
+
+
+def test_autopin_pins_on_play_edge_and_unpins_on_stop(monkeypatch):
+    calls = _pin_recorder(monkeypatch)
+    s = ps.PerfSampler(_FakeCoord([{"playing": False}]))
+    s._auto_pin = True
+    s._maybe_autopin(False)   # seed, no action
+    s._maybe_autopin(True)    # play starts -> pin
+    s._maybe_autopin(True)    # still playing -> no-op
+    s._maybe_autopin(False)   # stops -> unpin
+    assert calls == [("gpu-clock", True), ("gpu-clock", False)]
+
+
+def test_autopin_pins_when_starting_mid_song(monkeypatch):
+    # App (re)starts while a song is already playing -> first True must pin.
+    calls = _pin_recorder(monkeypatch)
+    s = ps.PerfSampler(_FakeCoord([{"playing": True}]))
+    s._auto_pin = True
+    s._maybe_autopin(True)
+    assert calls == [("gpu-clock", True)]
+
+
+def test_autopin_respects_disable_flag(monkeypatch):
+    calls = _pin_recorder(monkeypatch)
+    s = ps.PerfSampler(_FakeCoord([{"playing": False}]))
+    s._auto_pin = False
+    s._maybe_autopin(False); s._maybe_autopin(True); s._maybe_autopin(False)
+    assert calls == []
+
+
+def test_stop_unpins_if_we_pinned(monkeypatch):
+    calls = _pin_recorder(monkeypatch)
+    s = ps.PerfSampler(_FakeCoord([{"playing": False}]))
+    s._auto_pin = True
+    s._maybe_autopin(False); s._maybe_autopin(True)   # pinned
+    assert s._we_pinned is True
+    s.stop()   # thread never started; stop() should still unpin
+    assert ("gpu-clock", False) in calls
+    assert s._we_pinned is False
+
+
 # --- CDG-aware fps target / drop meaningfulness / health ---
 
 def test_effective_target_fps_caps_at_display():
