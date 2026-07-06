@@ -4,6 +4,20 @@ Dated entries, newest first. Each entry notes any required deploy steps.
 
 ---
 
+## 2026-07-06 - Stop keeping yt-dlp thumbnail litter next to downloads (v0.72.3)
+
+**Deploy:** backend change (`media.py`) → requires `systemctl restart kj-controller`.
+
+- YouTube downloads no longer fetch or keep a `.webp` thumbnail. `download_video`
+  had `writethumbnail: True` and the post-download step moved the thumbnail next
+  to the mp4 — but nothing in the app uses it, so every download left a stray
+  image beside the video.
+- The download tidy step (`relocate_download_sidecars`) now **deletes** image
+  sidecars (`.webp/.jpg/.jpeg/.png/.gif`) and only moves non-image sidecars
+  (e.g. `.info.json`) next to the final video — defense-in-depth in case a
+  thumbnail is ever written anyway.
+- Existing stray `.webp` files under `downloads/youtube/` were removed on-device.
+
 ## 2026-07-06 - Match downloaded YouTube songs to their Karaoke Nerds row again (v0.72.2)
 
 **Deploy:** backend change (`media.py` `list_items`) → requires
