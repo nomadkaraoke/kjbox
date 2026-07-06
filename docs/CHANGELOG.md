@@ -45,7 +45,8 @@ and shows the KJ an amber banner if any future file crashes it.
 **Deferred (needs physical access):** a full system/kernel upgrade (372 pending noble updates,
 kernel 6.8.0-100→134, mesa 24→25) is good hygiene but a *remote* reboot risks lockout (no
 physical console access) — do it when someone can reach the box. It would not have fixed this
-crash anyway (noble has no newer ffmpeg/mpv/dav1d).
+crash anyway (noble has no newer ffmpeg/mpv/dav1d). Step-by-step plan (pre-flight, rollback,
+verification): [archive/2026-07-05-nomadpc-full-system-upgrade-plan.md](archive/2026-07-05-nomadpc-full-system-upgrade-plan.md).
 
 ## 2026-07-05 - Max mode: bottom toolbar so the cursor can reach the screen's bottom edge (v0.67.3)
 
