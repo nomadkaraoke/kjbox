@@ -97,6 +97,38 @@ def _ytdlp_base_opts(config):
     return opts
 
 
+# yt-dlp thumbnail/image sidecars — the app never uses them, so they're just
+# litter next to every downloaded video. Deleted, not kept, after a download.
+_THUMBNAIL_SIDECAR_EXTS = {".webp", ".jpg", ".jpeg", ".png", ".gif"}
+
+
+def relocate_download_sidecars(download_folder, old_stem, dest_dir, new_stem_base):
+    """Tidy a finished download's same-stem sidecars.
+
+    Image thumbnails (yt-dlp writes a ``.webp`` for YouTube) are DELETED — nothing
+    in the app uses them, and keeping them left a stray image beside every mp4.
+    Any other sidecar (e.g. a ``.info.json``) is moved next to the final video so
+    it travels with it. Best-effort: never raises.
+    """
+    try:
+        entries = os.listdir(download_folder)
+    except OSError:
+        return
+    prefix = old_stem + "."
+    for sib in entries:
+        if not sib.startswith(prefix):
+            continue
+        src = os.path.join(download_folder, sib)
+        try:
+            if os.path.splitext(sib)[1].lower() in _THUMBNAIL_SIDECAR_EXTS:
+                os.remove(src)
+            else:
+                sib_ext = sib[len(old_stem):]  # full suffix, e.g. ".info.json"
+                os.replace(src, os.path.join(dest_dir, new_stem_base + sib_ext))
+        except OSError:
+            pass
+
+
 class MediaIndex:
     """Manages the media file index (scan, persist, validate, delete, download)."""
 
@@ -555,7 +587,6 @@ class MediaIndex:
             'outtmpl': output_template,
             'merge_output_format': 'mp4',
             'force_overwrites': True,
-            'writethumbnail': True,
         })
         if ydl_opts.get('cookiefile'):
             log_message(f"Using YouTube cookies file: {ydl_opts['cookiefile']}", self.config)
@@ -597,20 +628,13 @@ class MediaIndex:
                 artist_hint=det["artist"], title_hint=det["title"],
                 channel=safe_channel, raw_name=os.path.basename(file_path),
                 ext=ext_actual)
-            # Move same-stem sidecars (thumbnail, .info.json) next to the video.
+            # Tidy same-stem sidecars: move a .info.json next to the video, but
+            # delete image thumbnails (yt-dlp's .webp) — the app never uses them
+            # and they'd otherwise litter downloads/youtube/ beside every mp4.
             new_stem = os.path.splitext(real_dest)[0]
             dest_dir = os.path.dirname(real_dest)
-            try:
-                for sib in os.listdir(download_folder):
-                    if sib.startswith(old_stem + "."):
-                        sib_ext = sib[len(old_stem):]
-                        try:
-                            os.replace(os.path.join(download_folder, sib),
-                                       os.path.join(dest_dir, os.path.basename(new_stem) + sib_ext))
-                        except OSError:
-                            pass
-            except OSError:
-                pass
+            relocate_download_sidecars(
+                download_folder, old_stem, dest_dir, os.path.basename(new_stem))
 
             # Add to media index (keyed on the final path)
             stat = os.stat(real_dest)
