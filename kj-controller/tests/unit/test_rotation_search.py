@@ -579,7 +579,18 @@ class TestSuppressMasteredKnTracks:
              "is_community": True, "youtube_url": "https://yt/x"},
         ]}]
         _suppress_mastered_kn_tracks(local, kn)
-        assert kn[0]["tracks"] == []
+        assert kn == []  # sole NOMAD track pruned -> whole song dropped
+
+    def test_prunes_song_when_all_tracks_suppressed(self):
+        from routes import _suppress_mastered_kn_tracks
+        local = [{"filename": "NOMAD-1272 - Maximo Park - By the Monument.mp4",
+                  "artist": "Maximo Park", "title": "By the Monument"}]
+        kn = [{"artist": "Maximo Park", "title": "By the Monument", "tracks": [
+            {"brand_code": "NOMAD", "brand_name": "Nomad Karaoke",
+             "is_community": True, "youtube_url": "https://yt/x"},
+        ]}]
+        _suppress_mastered_kn_tracks(local, kn)
+        assert kn == []  # empty song must not linger in the flat response
 
     def test_noop_when_no_local_master(self):
         from routes import _suppress_mastered_kn_tracks
@@ -676,3 +687,21 @@ class TestNomadMasterRecognition:
             brands = [t.get("brand_code") for t in kn_tracks]
             assert "NOMAD" not in brands
             assert brands == ["KCD-102989"]
+
+    def test_master_suppression_drops_kn_song_left_empty(self, search_client, search_app):
+        """A KN song whose only track was the redundant NOMAD one is removed
+        from the flat response, not returned as an empty-tracks entry."""
+        _upsert_master(search_app)
+        with patch.object(search_app.catalog, 'is_available', return_value=True), \
+             patch.object(search_app.catalog, 'search', return_value=[]), \
+             patch('routes.karaoke_nerds.search', return_value=[
+                 {"artist": "Maximo Park", "title": "By the Monument", "tracks": [
+                     {"brand_code": "NOMAD", "brand_name": "Nomad Karaoke",
+                      "is_community": True, "youtube_url": "https://yt/x"},
+                 ]}
+             ]), \
+             patch('routes.divebar.search', return_value=[]):
+            resp = search_client.get('/rotation/search?q=maximo park monument')
+            data = resp.get_json()
+            assert data["karaoke_nerds"] == []
+            assert data["local"][0]["priority_class"] == "community"

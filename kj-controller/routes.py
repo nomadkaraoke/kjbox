@@ -4048,9 +4048,11 @@ def _suppress_mastered_kn_tracks(local_results, kn_results):
     }
     if not mastered:
         return
+    kept_songs = []
     for song in kn_results or []:
         if _normalize_song_key(
                 song.get("artist"), song.get("title")) not in mastered:
+            kept_songs.append(song)
             continue
         kept = []
         for track in song.get("tracks") or []:
@@ -4061,7 +4063,14 @@ def _suppress_mastered_kn_tracks(local_results, kn_results):
             if canonical == "NOMAD":
                 continue  # we already have this exact release on disk
             kept.append(track)
-        song["tracks"] = kept
+        # Drop a song whose only versions were the redundant NOMAD track(s):
+        # the flat response returns kn_results verbatim, so an empty-tracks
+        # entry would otherwise linger (the local master already covers it).
+        if kept:
+            song["tracks"] = kept
+            kept_songs.append(song)
+    if kn_results is not None:
+        kn_results[:] = kept_songs
 
 
 def unified_search(query, app, *, grouped=False):
