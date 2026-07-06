@@ -184,7 +184,9 @@ class PerfRecorder:
                 self._fh.write(json.dumps(sample) + "\n")
                 self._fh.flush()
                 self._count += 1
-            except OSError:
+            except (OSError, TypeError, ValueError):
+                # write failure OR a non-serializable sample — drop it silently;
+                # this runs on the sampler thread and must never raise.
                 pass
 
     def stop(self):

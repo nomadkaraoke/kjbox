@@ -1296,6 +1296,9 @@ async function updateStatus() {
         const data = await response.json();
         if (response.ok) {
             const state = data.state || 'stopped';
+            // VNC auto-pause: driven from this always-on 2s poll so it works even
+            // when the perf panel is collapsed (the default).
+            perfMaybeAutoPauseVnc(state === 'playing');
             // Simple KJ Mode — apply body class first so subsequent renders
             // see the right CSS state. /status carries the authoritative flag.
             if (typeof data.simple_mode === 'boolean') {
@@ -4664,18 +4667,18 @@ function perfRender(data) {
         controls.gpu_pinned !== undefined ? controls.gpu_pinned : (now.gpu && now.gpu.pinned));
     perfSetToggleBtn(document.getElementById('perf-toggle-vnc'), 'VNC preview', now.vnc_connected);
 
-    // --- VNC auto-pause on playback transitions ---
-    perfMaybeAutoPauseVnc(now);
 }
 
-// Act only on playing edges so we don't fight the user every poll.
-function perfMaybeAutoPauseVnc(now) {
-    const playing = !!now.playing;
+// VNC auto-pause runs off the ALWAYS-ON /status poll (see updateStatus), not the
+// perf panel — otherwise it would only work while the panel is open (it's
+// collapsed by default). Acts only on playing edges so we don't fight the user.
+function perfMaybeAutoPauseVnc(playing) {
+    playing = !!playing;
     const enabled = localStorage.getItem('kj-vnc-autopause') !== '0'; // default ON
     if (perfPrevPlaying === null) { perfPrevPlaying = playing; return; } // seed, no action on first sample
     if (enabled && playing && !perfPrevPlaying) {
-        // Playback started: pause the preview if it's up. Remember we did it.
-        if (now.vnc_connected && window.disconnectVnc) {
+        // Playback started: pause the preview if the user has it showing.
+        if (localStorage.getItem('kj-vnc-hidden') !== '1' && window.disconnectVnc) {
             window.disconnectVnc();
             perfVncAutoPaused = true;
         }

@@ -14,7 +14,11 @@
 # permanent config.
 set -euo pipefail
 
-GT=$(ls -d /sys/class/drm/card*/gt/gt0 2>/dev/null | head -1)
+# nullglob so a non-matching glob expands to nothing instead of the literal
+# pattern, and doesn't trip `set -e` via a failing `ls` pipeline.
+shopt -s nullglob
+gts=(/sys/class/drm/card*/gt/gt0)
+GT="${gts[0]:-}"
 if [ -z "$GT" ]; then
     echo "no i915 GT sysfs found" >&2
     exit 1

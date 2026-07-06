@@ -371,6 +371,13 @@ class PerfSampler:
 
     def stop(self):
         self._stop.set()
+        # Wait for the sampler thread to actually exit (unless we're calling from
+        # within it) so stop() is synchronous and a restart can't race the old
+        # daemon thread.
+        if (self._thread is not None and self._thread.is_alive()
+                and threading.current_thread() is not self._thread):
+            self._thread.join(timeout=max(1.0, self._interval + 0.5))
+        self._thread = None
 
     def _run(self):
         try:

@@ -43,6 +43,15 @@ def test_record_is_noop_when_not_recording(tmp_path):
     assert rec.list() == []
 
 
+def test_record_never_raises_on_unserializable_sample(tmp_path):
+    rec = pr.PerfRecorder(str(tmp_path))
+    rec.start("x")
+    rec.record({"bad": object()})   # not JSON-serializable — must be dropped, not raised
+    rec.record({"t": 1.0, "ok": True})
+    end = rec.stop()
+    assert end["sample_count"] == 1   # only the good one landed
+
+
 def test_list_reports_sessions(tmp_path):
     rec = pr.PerfRecorder(str(tmp_path))
     rec.start("alpha")
