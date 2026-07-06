@@ -1841,6 +1841,7 @@ body {
 }
 .perf-summary {
     margin-left: auto;
+    min-width: 0;              /* allow the flex item to shrink so ellipsis applies */
     font-size: 0.9em;
     color: #888;
     text-transform: none;
@@ -1850,6 +1851,11 @@ body {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+}
+.perf-header:focus-visible {
+    outline: 2px solid var(--accent, #4a9eff);
+    outline-offset: 2px;
+    border-radius: 4px;
 }
 .perf-body {
     margin-top: 8px;

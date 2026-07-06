@@ -2620,7 +2620,10 @@ def perf_toggle(control):
     sampler = getattr(current_app, 'perf_sampler', None)
     if sampler is None:
         return jsonify({"error": "perf monitor unavailable"}), 501
-    on = bool((request.get_json(silent=True) or {}).get('on', True))
+    raw_on = (request.get_json(silent=True) or {}).get('on', True)
+    # Accept a real JSON bool; tolerate string/number payloads from curl without
+    # treating the string "false"/"0" as truthy.
+    on = raw_on if isinstance(raw_on, bool) else str(raw_on).strip().lower() not in ('false', '0', '', 'none')
     ok, state, msg = sampler.toggle(control, on)
     return jsonify({"success": ok, "on": state, "message": msg}), (200 if ok else 500)
 

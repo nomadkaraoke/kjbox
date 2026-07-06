@@ -237,7 +237,7 @@
                 </div>
 
                 <div class="system-subsection" id="perf-section">
-                    <div class="system-subsection-label perf-header" id="perf-toggle" onclick="togglePerfPanel()" role="button" tabindex="0" title="Live playback / GPU / CPU performance monitor">
+                    <div class="system-subsection-label perf-header" id="perf-toggle" onclick="togglePerfPanel()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();togglePerfPanel();}" role="button" tabindex="0" aria-expanded="false" title="Live playback / GPU / CPU performance monitor">
                         <span class="perf-caret" id="perf-caret">&#9654;</span>
                         <span>Performance</span>
                         <span id="perf-health-dot" class="yt-health-dot" title="Performance health"></span>

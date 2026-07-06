@@ -461,51 +461,56 @@ class MpvKaraokePlayer:
         N separate `_get_property` calls each taking `_ipc_lock`. Never raises.
         """
         out = {n: None for n in names}
+        # Reserve a contiguous block of request ids UNDER the lock, then do all
+        # socket I/O OUTSIDE it. Holding _ipc_lock across the recv loop (up to the
+        # 3s timeout) would block real-time playback commands — seek/pause/volume/
+        # pitch — that share the same lock, defeating the point of the monitor.
+        # Each call opens its own mpv client socket, so replies never interleave
+        # across callers; only the shared _ipc_request_id needs protection.
         with self._ipc_lock:
-            s = None
-            try:
-                s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-                s.settimeout(3)
-                s.connect(self.ipc_socket_path)
-                id_to_name = {}
-                for n in names:
-                    self._ipc_request_id += 1
-                    rid = self._ipc_request_id
-                    id_to_name[rid] = n
-                    s.sendall((json.dumps(
-                        {"command": ["get_property", n], "request_id": rid}) + "\n").encode())
-                pending = set(id_to_name)
-                buf = b""
-                deadline = time.time() + 3
-                while pending and time.time() < deadline:
+            base = self._ipc_request_id
+            self._ipc_request_id += len(names)
+        id_to_name = {base + 1 + i: n for i, n in enumerate(names)}
+        s = None
+        try:
+            s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            s.settimeout(3)
+            s.connect(self.ipc_socket_path)
+            for rid, n in id_to_name.items():
+                s.sendall((json.dumps(
+                    {"command": ["get_property", n], "request_id": rid}) + "\n").encode())
+            pending = set(id_to_name)
+            buf = b""
+            deadline = time.time() + 3
+            while pending and time.time() < deadline:
+                try:
+                    chunk = s.recv(65536)
+                except OSError:
+                    break
+                if not chunk:
+                    break
+                buf += chunk
+                while b"\n" in buf:
+                    line, buf = buf.split(b"\n", 1)
+                    if not line.strip():
+                        continue
                     try:
-                        chunk = s.recv(65536)
-                    except OSError:
-                        break
-                    if not chunk:
-                        break
-                    buf += chunk
-                    while b"\n" in buf:
-                        line, buf = buf.split(b"\n", 1)
-                        if not line.strip():
-                            continue
-                        try:
-                            msg = json.loads(line)
-                        except ValueError:
-                            continue
-                        rid = msg.get("request_id")
-                        if rid in id_to_name:
-                            if msg.get("error") == "success":
-                                out[id_to_name[rid]] = msg.get("data")
-                            pending.discard(rid)
-            except OSError:
-                pass
-            finally:
-                if s is not None:
-                    try:
-                        s.close()
-                    except OSError:
-                        pass
+                        msg = json.loads(line)
+                    except ValueError:
+                        continue
+                    rid = msg.get("request_id")
+                    if rid in id_to_name:
+                        if msg.get("error") == "success":
+                            out[id_to_name[rid]] = msg.get("data")
+                        pending.discard(rid)
+        except OSError:
+            pass
+        finally:
+            if s is not None:
+                try:
+                    s.close()
+                except OSError:
+                    pass
         return out
 
     def get_perf(self):

@@ -20,6 +20,7 @@ import argparse
 import json
 import os
 import sys
+import tempfile
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -281,16 +282,28 @@ class OverlayApp:
         fps = round(self._perf_frames / elapsed, 1) if elapsed > 0 else 0.0
         self._perf_frames = 0
         self._perf_last = now
+        payload = {
+            "fps": fps,
+            "raster_ms": round(self._perf_raster_ms, 2)
+            if self._perf_raster_ms is not None else None,
+            "ts": time.time(),
+        }
+        # Atomic write via a randomly-named temp file in the target dir (avoids a
+        # predictable /tmp path that could be symlink-attacked). Mirrors
+        # overlay.py's _save().
         try:
-            tmp = PERF_FILE + ".tmp"
-            with open(tmp, "w") as f:
-                json.dump({
-                    "fps": fps,
-                    "raster_ms": round(self._perf_raster_ms, 2)
-                    if self._perf_raster_ms is not None else None,
-                    "ts": time.time(),
-                }, f)
-            os.replace(tmp, PERF_FILE)
+            fd, tmp = tempfile.mkstemp(
+                dir=os.path.dirname(PERF_FILE) or ".",
+                prefix=".kj-overlay-perf-", suffix=".json")
+            try:
+                with os.fdopen(fd, "w") as f:
+                    json.dump(payload, f)
+                os.replace(tmp, PERF_FILE)
+            except OSError:
+                try:
+                    os.unlink(tmp)
+                except OSError:
+                    pass
         except OSError:
             pass
         return True  # keep the GLib timeout alive

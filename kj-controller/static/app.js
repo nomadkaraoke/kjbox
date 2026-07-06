@@ -4679,7 +4679,10 @@ function perfMaybeAutoPauseVnc(now) {
     perfPrevPlaying = playing;
 }
 
+let perfFetchInFlight = false;
 async function fetchPerfStream() {
+    if (perfFetchInFlight) return;   // don't queue overlapping polls if /perf/stream slows
+    perfFetchInFlight = true;
     try {
         const resp = await fetch('/perf/stream');
         if (!resp.ok) return;
@@ -4687,6 +4690,8 @@ async function fetchPerfStream() {
         perfRender(data);
     } catch (e) {
         // Swallow quietly — match fetchSystemStats.
+    } finally {
+        perfFetchInFlight = false;
     }
 }
 
@@ -4748,8 +4753,10 @@ function perfStopPolling() {
 function perfSetOpen(open) {
     const body = document.getElementById('perf-body');
     const caret = document.getElementById('perf-caret');
+    const header = document.getElementById('perf-toggle');
     if (body) body.classList.toggle('hidden', !open);
     if (caret) caret.innerHTML = open ? '&#9660;' : '&#9654;'; // ▼ / ▶
+    if (header) header.setAttribute('aria-expanded', open ? 'true' : 'false');
     localStorage.setItem('kj-perf-open', open ? '1' : '0');
     if (open) perfStartPolling(); else perfStopPolling();
 }

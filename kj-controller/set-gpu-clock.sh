@@ -20,17 +20,18 @@ if [ -z "$GT" ]; then
     exit 1
 fi
 
-read_or() { cat "$1" 2>/dev/null || echo "$2"; }
-MAX_HW=$(read_or "$GT/rps_max_freq_mhz" "")
-FLOOR=$(read_or "$GT/rps_RPn_freq_mhz" "300")
+MAX_HW=$(cat "$GT/rps_max_freq_mhz" 2>/dev/null || echo "")
+FLOOR=$(cat "$GT/rps_RPn_freq_mhz" 2>/dev/null || echo "")
 
 case "${1:-}" in
     pin)
-        [ -n "$MAX_HW" ] || { echo "cannot read max freq" >&2; exit 1; }
+        [ -n "$MAX_HW" ] || { echo "cannot read max freq (rps_max_freq_mhz)" >&2; exit 1; }
         echo "$MAX_HW" > "$GT/rps_min_freq_mhz"
         echo "pinned: rps_min_freq_mhz -> ${MAX_HW} MHz"
         ;;
     unpin)
+        # Don't guess the floor — restoring the wrong frequency is worse than failing.
+        [ -n "$FLOOR" ] || { echo "cannot read hardware floor (rps_RPn_freq_mhz)" >&2; exit 1; }
         echo "$FLOOR" > "$GT/rps_min_freq_mhz"
         echo "unpinned: rps_min_freq_mhz -> ${FLOOR} MHz"
         ;;
