@@ -805,6 +805,12 @@ async function editMediaMetadata(item, li) {
     const cancelBtn = document.createElement('button');
     cancelBtn.type = 'button'; cancelBtn.textContent = 'Cancel'; cancelBtn.className = 'media-edit-cancel';
 
+    // Restore this single row in place from the (possibly updated) item. This
+    // works in every view — folder listing *and* search results — whereas
+    // updateMediaList() early-returns while a search is active, which is why
+    // Cancel/Save used to appear to "do nothing" in the search view.
+    const restore = () => { li.replaceWith(createMediaItemLi(item)); };
+
     const doSave = async () => {
         const artist = aIn.value.trim();
         const title = tIn.value.trim();
@@ -823,18 +829,23 @@ async function editMediaMetadata(item, li) {
                 return;
             }
             log('Saved "' + [artist, title].filter(Boolean).join(' - ') + '"', 'success');
-            updateMediaList();
+            // Reflect the edit locally so the restored row shows it immediately.
+            item.artist = artist;
+            item.title = title;
+            item.display_name = [artist, title].filter(Boolean).join(' - ');
+            item.needs_review = false;
+            restore();
         } catch (err) {
             log('Save failed: ' + err, 'error');
             saveBtn.disabled = false;
         }
     };
     saveBtn.onclick = (e) => { e.stopPropagation(); doSave(); };
-    cancelBtn.onclick = (e) => { e.stopPropagation(); updateMediaList(); };
+    cancelBtn.onclick = (e) => { e.stopPropagation(); restore(); };
     aIn.onclick = tIn.onclick = (e) => e.stopPropagation();
     aIn.onkeydown = tIn.onkeydown = (e) => {
         if (e.key === 'Enter') { e.preventDefault(); doSave(); }
-        else if (e.key === 'Escape') { e.preventDefault(); updateMediaList(); }
+        else if (e.key === 'Escape') { e.preventDefault(); restore(); }
     };
 
     form.appendChild(aIn);
@@ -872,12 +883,8 @@ function createMediaItemLi(item) {
         titleRow.appendChild(channelSpan);
     }
 
-    // Colorised format pill — same palette as the catalog results (task: unify
-    // the "local" pill with the "catalog" pill; no more "mp4 · .mp4").
-    if (item.media_kind) {
-        titleRow.appendChild(document.createTextNode(' '));
-        titleRow.appendChild(mediaFormatBadge(item));
-    }
+    // (The colorised format pill used to sit here in the title row; it now lives
+    // in the .media-actions cluster on the right, grouped with the buttons.)
     if (item.cdg_no_audio) {
         const warn = document.createElement('span');
         warn.className = 'media-no-audio-tag';
@@ -913,10 +920,15 @@ function createMediaItemLi(item) {
         titleSpan.appendChild(folderEl);
     }
 
-    // Action buttons — one .media-actions cluster, sized to match the rotation
-    // row (preview + play, then edit, then delete). All the same height.
+    // Action buttons — one .media-actions cluster, all the same height. Order,
+    // left → right: format pill, preview (pink), edit, delete, PLAY (green).
+    // Play is deliberately the right-most, well away from the pink preview, so a
+    // stray click can't fire live playback during another singer's slot.
     const actions = document.createElement('span');
     actions.className = 'media-actions';
+
+    // Format pill (moved out of the title row) — click for technical details.
+    if (item.media_kind) actions.appendChild(mediaFormatBadge(item));
 
     if (item.file_path && !item.cdg_no_audio) {
         // Preview (pink) — audition in the browser; never touches the live screen.
@@ -931,20 +943,6 @@ function createMediaItemLi(item) {
             openPreview({ source: 'local', file_path: item.file_path, title: item.display_name });
         };
         actions.appendChild(previewBtn);
-
-        // Play (green) — plays this file on the main screen.
-        const playBtn = document.createElement('button');
-        playBtn.type = 'button';
-        playBtn.className = 'media-btn-play';
-        playBtn.textContent = String.fromCharCode(0x25B6);  // ▶
-        playBtn.title = 'Play on the main screen';
-        playBtn.onclick = (e) => {
-            e.stopPropagation();
-            document.querySelectorAll('#media-list li').forEach(el => el.classList.remove('playing'));
-            li.classList.add('playing');
-            playMedia(item.file_path);
-        };
-        actions.appendChild(playBtn);
     }
 
     if (item.media_id) {
@@ -962,11 +960,12 @@ function createMediaItemLi(item) {
     }
 
     if (item.is_download) {
+        // Trash icon that stays small until clicked, then arms ("Confirm?").
         const deleteBtn = document.createElement('button');
         deleteBtn.type = 'button';
-        deleteBtn.textContent = 'Delete';
-        deleteBtn.className = 'media-btn-delete';
-        deleteBtn.title = 'Delete this downloaded file (click twice to confirm)';
+        deleteBtn.textContent = '🗑';
+        deleteBtn.className = 'media-btn-delete media-btn-icon';
+        deleteBtn.title = 'Delete this downloaded file (click, then confirm)';
         deleteBtn.onclick = (e) => {
             e.stopPropagation();
             if (item.file_path === currentPlayingPath) {
@@ -974,12 +973,28 @@ function createMediaItemLi(item) {
                 return;
             }
             armButtonConfirm(deleteBtn, {
-                label: 'Delete',
+                label: '🗑',
                 armedClass: 'media-btn-armed',
                 onConfirm: () => deleteMedia(item.file_path, item.display_name),
             });
         };
         actions.appendChild(deleteBtn);
+    }
+
+    if (item.file_path && !item.cdg_no_audio) {
+        // Play (green, labelled) — plays on the main screen. Right-most on purpose.
+        const playBtn = document.createElement('button');
+        playBtn.type = 'button';
+        playBtn.className = 'media-btn-play';
+        playBtn.textContent = String.fromCharCode(0x25B6) + ' Play';  // ▶ Play
+        playBtn.title = 'Play on the main screen';
+        playBtn.onclick = (e) => {
+            e.stopPropagation();
+            document.querySelectorAll('#media-list li').forEach(el => el.classList.remove('playing'));
+            li.classList.add('playing');
+            playMedia(item.file_path);
+        };
+        actions.appendChild(playBtn);
     }
 
     li.appendChild(titleSpan);
@@ -2148,6 +2163,15 @@ function getFormatBadgeClass(format) {
     return 'other';
 }
 
+// Display label for a format pill: short + capitalised so pills sit in a tidy
+// fixed-width column ('cdg+mp3' -> 'CDG', 'mp4' -> 'MP4', else the ext upper-cased).
+// Keep passing the raw lowercase format to getFormatBadgeClass for the colour.
+function formatPillLabel(format) {
+    if (!format) return '';
+    if (format === 'cdg+mp3') return 'CDG';
+    return format.toUpperCase();
+}
+
 // Colorised format pill for a library (local) item, using the SAME palette as
 // the catalog results so both sections read consistently. The library carries
 // a friendly `media_kind` (e.g. "cdg-zip", "mp4", "mp3"); normalise the CDG zip
@@ -2159,7 +2183,9 @@ function prettyFolder(path) {
     return path
         .replace(/^\/mnt\/[^/]+\//, '')
         .replace(/^\/media\/[^/]+\//, '')
-        .replace(/^\/Volumes\/[^/]+\//, '');
+        .replace(/^\/Volumes\/[^/]+\//, '')
+        // Drop the long SSD master-library prefix — it's noise on every row.
+        .replace(/(^|\/)Nomad4TBOne\/HyperMule\/Master Karaoke Folder\//, '$1');
 }
 
 function mediaFormatBadge(item) {
@@ -2167,7 +2193,7 @@ function mediaFormatBadge(item) {
     const fmt = kind === 'cdg-zip' ? 'cdg+mp3' : kind;
     const badge = document.createElement('span');
     badge.className = 'format-badge ' + getFormatBadgeClass(fmt);
-    badge.textContent = fmt || (item.ext || '').replace('.', '') || 'file';
+    badge.textContent = formatPillLabel(fmt) || (item.ext || '').replace('.', '').toUpperCase() || 'FILE';
     // Click the pill for technical details (container/codec/resolution/audio).
     const fp = item.file_path || item.path;
     if (fp) {
@@ -3445,7 +3471,7 @@ async function loadKNCatalogMatches(songId) {
         if (match.format) {
             const badge = document.createElement('span');
             badge.className = `format-badge ${getFormatBadgeClass(match.format)}`;
-            badge.textContent = match.format;
+            badge.textContent = formatPillLabel(match.format);
             titleRow.appendChild(badge);
         }
         detail.appendChild(titleRow);
@@ -7112,19 +7138,22 @@ function initRotationSearch() {
             return;
         }
 
-        if (e.key === 'ArrowDown') {
+        // Keyboard never links a search result — attaching a version is only ever
+        // an explicit click on a row's Link / Download button. (Arrow-key row
+        // navigation was removed along with Enter-to-link.)
+        if (e.key === 'Enter') {
             e.preventDefault();
-            rotMoveSelection(1);
-        } else if (e.key === 'ArrowUp') {
-            e.preventDefault();
-            rotMoveSelection(-1);
-        } else if (e.key === 'Enter' && rotSearchSelectedIdx >= 0) {
-            e.preventDefault();
-            selectRotSearchResult(rotSearchResults[rotSearchSelectedIdx]);
-        } else if (e.key === 'Enter') {
-            // Enter with no selection = add without linking
-            hideRotSearchDropdown();
-            addRotationEntry();
+            if (form && form.dataset.linkTargetId) {
+                // Link mode: Enter just re-runs the search now (skip the debounce);
+                // it must never attach a version.
+                clearTimeout(rotSearchTimer);
+                const q = songInput.value.trim();
+                if (q.length >= 2) doRotationSearch(q);
+            } else {
+                // Add mode: Enter adds the singer with the typed song, unlinked.
+                hideRotSearchDropdown();
+                addRotationEntry();
+            }
         } else if (e.key === 'Escape') {
             hideRotSearchDropdown();
             if (form && form.dataset.linkTargetId) exitLinkMode();
@@ -7224,7 +7253,7 @@ function renderRotSearchDropdown(data) {
 
     if (localResults.length === 0 && knSongs.length === 0 && divebarVersions.length === 0) {
         html = '<div class="search-header">No results found</div>';
-        html += '<div class="rotation-search-hint">\u2191\u2193 navigate \u00B7 Enter select \u00B7 Tab skip \u00B7 Esc close</div>';
+        html += '<div class="rotation-search-hint">Click <b>Link</b> / <b>Download</b> to attach \u00B7 Esc to close</div>';
         dropdown.innerHTML = html;
         dropdown.classList.remove('hidden');
         return;
@@ -7341,16 +7370,15 @@ function renderRotSearchDropdown(data) {
         '</div>' +
     '</div>';
 
-    html += '<div class="rotation-search-hint">\u2191\u2193 navigate \u00B7 Enter select \u00B7 Tab skip \u00B7 Esc close</div>';
+    html += '<div class="rotation-search-hint">Click <b>Link</b> / <b>Download</b> to attach \u00B7 Esc to close</div>';
 
     dropdown.innerHTML = html;
     dropdown.classList.remove('hidden');
 
-    // Default-select the top row so Enter picks the best version.
-    if (rotSearchResults.length > 0) {
-        rotSearchSelectedIdx = 0;
-        highlightRotSearchResult();
-    }
+    // No row is pre-selected: linking happens only via an explicit click on a
+    // row's Link / Download button, so nothing should look armed for Enter. The
+    // best option is still flagged visually by its gold "Best" pill.
+    rotSearchSelectedIdx = -1;
 }
 
 // Assign a row to a display group. Community/Commercial come straight from the
@@ -7422,9 +7450,58 @@ function extToFormat(pathOrName) {
     return ext || '';
 }
 
-// Build a source badge (GCS / DRIVE / YouTube) shown beside a download button.
-function rotSourceBadge(label, cls, title) {
-    return '<span class="dl-source-badge ' + cls + '" title="' + escHtml(title) + '">' + escHtml(label) + '</span>';
+// Tiny inline brand icons for the Download button — inlined (no network fetch) so
+// they render on an offline device, sized ~13px to sit inside the button like a
+// favicon. These replace the old separate GCS/DRIVE/YouTube source pill: the icon
+// + the button's outline colour now convey the download source.
+const RS_ICON_YT = '<svg class="rs-dl-ico" viewBox="0 0 24 24" width="13" height="13" aria-hidden="true">'
+    + '<path fill="#ff0000" d="M23.5 6.5a3 3 0 0 0-2.11-2.12C19.5 4 12 4 12 4s-7.5 0-9.39.38A3 3 0 0 0 .5 6.5 31.5 31.5 0 0 0 0 12a31.5 31.5 0 0 0 .5 5.5 3 3 0 0 0 2.11 2.12C4.5 20 12 20 12 20s7.5 0 9.39-.38A3 3 0 0 0 23.5 17.5 31.5 31.5 0 0 0 24 12a31.5 31.5 0 0 0-.5-5.5z"/>'
+    + '<path fill="#fff" d="M9.6 15.6V8.4l6.3 3.6z"/></svg>';
+// Google Drive tri-colour triangle — represents "our community mirror" (GCS or Drive).
+const RS_ICON_DRIVE = '<svg class="rs-dl-ico" viewBox="0 0 87.3 78" width="13" height="13" aria-hidden="true">'
+    + '<path fill="#0066da" d="M6.6 66.85 10.45 73.5c.8 1.4 1.95 2.5 3.3 3.3L27.5 53H0c0 1.55.4 3.1 1.2 4.5z"/>'
+    + '<path fill="#00ac47" d="M43.65 25 29.9 1.2c-1.35.8-2.5 1.9-3.3 3.3L1.2 48.5c-.8 1.4-1.2 2.95-1.2 4.5h27.5z"/>'
+    + '<path fill="#ea4335" d="M73.55 76.8c1.35-.8 2.5-1.9 3.3-3.3l1.6-2.75 7.65-13.25c.8-1.4 1.2-2.95 1.2-4.5H59.8l5.85 11.5z"/>'
+    + '<path fill="#00832d" d="M43.65 25 57.4 1.2C56.05.4 54.5 0 52.9 0H34.4c-1.6 0-3.15.45-4.5 1.2z"/>'
+    + '<path fill="#2684fc" d="M59.8 53H27.5L13.75 76.8c1.35.8 2.9 1.2 4.5 1.2h50.8c1.6 0 3.15-.45 4.5-1.2z"/>'
+    + '<path fill="#ffba00" d="M73.4 26.5 60.75 4.5c-.8-1.4-1.95-2.5-3.3-3.3L43.65 25 59.8 53h27.45c0-1.55-.4-3.1-1.2-4.5z"/></svg>';
+// Chain/link glyph for the green "Link" button — inherits the button's colour
+// (currentColor) so it reads as part of the button, mirroring the Download icon.
+const RS_ICON_LINK = '<svg class="rs-dl-ico" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
+    + '<path d="M10 13a5 5 0 0 0 7.07 0l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.72"/>'
+    + '<path d="M14 11a5 5 0 0 0-7.07 0l-3 3a5 5 0 0 0 7.07 7.07l1.72-1.72"/></svg>';
+
+// Download-&-link button, colour-coded by source: YouTube (red outline + YT icon)
+// vs our community mirror (green outline + Drive icon, matching the "Link" button).
+// `source` is 'mirror' (GCS/Drive) or 'youtube'.
+function rotDownloadBtn(source, idx) {
+    const isMirror = source === 'mirror';
+    const ico = isMirror ? RS_ICON_DRIVE : RS_ICON_YT;
+    const cls = isMirror ? 'kn-download-btn dl-mirror' : 'kn-download-btn dl-youtube';
+    const title = isMirror
+        ? 'Download from our community mirror & link'
+        : 'Download from YouTube & link';
+    return '<span class="' + cls + '" title="' + title + '"'
+        + ' onclick="event.stopPropagation();selectRotSearchResult(rotSearchResults[' + idx + '])">'
+        + ico + '<span class="rs-dl-txt">Download</span></span>';
+}
+
+// The green "Link" button for a version already on disk — carries the same
+// select-and-act onclick as the Download button (the row itself is inert now).
+function rotLinkBtn(idx) {
+    return '<span class="kn-play-btn"'
+        + ' onclick="event.stopPropagation();selectRotSearchResult(rotSearchResults[' + idx + '])">'
+        + RS_ICON_LINK + '<span class="rs-dl-txt">Link</span></span>';
+}
+
+// Open the technical-details modal for a search row that has a local file (on
+// disk or already downloaded). Looks the path up by index so we never escape it
+// through an inline onclick attribute.
+function openRotTechDetails(idx) {
+    const r = rotSearchResults[idx];
+    if (!r) return;
+    const fp = r.path || r.file_path;
+    if (fp) openMediaInfoModal(fp, r.song_artist || '');
 }
 
 // Leading Best pill / trusted-brand star, with tooltips. `isTop` here means the
@@ -7433,20 +7510,6 @@ function rotLeadMark(isBest, isTop) {
     if (isBest) return '<span class="rs-best-pill" title="Best available version for this song">Best</span> ';
     if (isTop) return '<span class="rs-top-star" title="Reliably high-quality brand (KJ-trusted)">⭐</span> ';
     return '';
-}
-
-// Right-aligned tags column. Fixed-width slots keep the format pills in one
-// column and the brand codes in another, lined up across every row regardless
-// of source or group.
-function rotTagsHtml(fmt, brand) {
-    const fmtHtml = fmt
-        ? '<span class="format-badge ' + getFormatBadgeClass(fmt) + '">' + escHtml(fmt) + '</span>'
-        : '';
-    const brandHtml = brand
-        ? '<span class="rs-brand-pill">' + escHtml(brand) + '</span>'
-        : '';
-    return '<span class="rs-tags"><span class="rs-tag-fmt">' + fmtHtml
-        + '</span><span class="rs-tag-brand">' + brandHtml + '</span></span>';
 }
 
 // Per-render map of media_id -> {note,label}, so the ✎ edit button can pre-fill
@@ -7478,26 +7541,50 @@ function renderStatsBadges(stats, mediaId) {
 // local rows carry a folder subline; KN/divebar rows carry a brand name and an
 // optional Community badge. `actionsHtml` is the preview + status/button block.
 function renderRotRowHtml(o) {
-    const rowClass = 'rs-row rs-clickable'
-        + (o.idx === rotSearchSelectedIdx ? ' selected' : '')
+    // No row-level click handler: the row is a plain, text-selectable block, so
+    // selecting the title text can't accidentally trigger a link. Only the
+    // Link / Download button links; the title copies; the format pill opens the
+    // technical-details modal (when the row has a local file).
+    const rowClass = 'rs-row'
         + (o.isTop ? ' rs-top' : '')
         + (o.isBest ? ' rs-best' : '')
         + (o.community ? ' community' : '');
-    let html = '<div class="' + rowClass + '" data-idx="' + o.idx + '" onclick="selectRotSearchResult(rotSearchResults[' + o.idx + '])">';
+    let html = '<div class="' + rowClass + '" data-idx="' + o.idx + '">';
     html += '<div class="rs-main">';
     // Community status is conveyed by the section header + the green left-accent
     // on `.rs-row.community`, so no inline Community pill is needed here.
     html += '<span class="rs-line">' + rotLeadMark(o.isBest, o.isTop);
     if (o.brandName) html += '<span class="rs-brand-name">' + escHtml(o.brandName) + '</span>';
-    html += '<span class="rs-title">' + escHtml(o.title || '') + '</span></span>';
+    html += '<span class="rs-title rotation-copyable" title="Click to copy"'
+        + ' onclick="event.stopPropagation();copyRotationText(this)">' + escHtml(o.title || '') + '</span></span>';
     if (o.subline) {
         html += '<span class="rs-sub" title="' + escHtml(o.sublineTitle || o.subline) + '">'
             + escHtml(o.subline) + '</span>';
     }
     html += '</div>';
-    html += rotTagsHtml(o.fmt || '', o.brand || '');
-    html += renderStatsBadges(o.stats, o.media_id);
-    html += '<span class="rs-actions">' + (o.actionsHtml || '') + '</span>';
+    // Sometimes-shown, variable-width column (stats + brand code). Sits to the
+    // LEFT of the always-shown fixed cluster and is right-aligned against it, so
+    // its presence/width never shifts the fixed columns. Brand sits on the right
+    // (nearest the format pill) so the two tags read as a pair.
+    const brandPill = o.brand
+        ? '<span class="rs-brand-pill">' + escHtml(o.brand) + '</span>' : '';
+    html += '<span class="rs-extras">' + renderStatsBadges(o.stats, o.media_id) + brandPill + '</span>';
+    // Always-shown, fixed-width cluster pinned to the right edge: format pill,
+    // preview button, action button. Fixed child widths keep each of these at the
+    // same x on every row regardless of source/group.
+    // Format pill: clickable → technical-details modal when the row has a local
+    // file to probe (on-disk / already-downloaded rows); inert otherwise.
+    let fmtPill = '';
+    if (o.fmt) {
+        const clickable = o.filePath
+            ? ' format-badge-clickable" title="Click for technical details"'
+                + ' onclick="event.stopPropagation();openRotTechDetails(' + o.idx + ')'
+            : '';
+        fmtPill = '<span class="format-badge ' + getFormatBadgeClass(o.fmt) + clickable + '">'
+            + escHtml(formatPillLabel(o.fmt)) + '</span>';
+    }
+    html += '<span class="rs-fixed"><span class="rs-fmt">' + fmtPill + '</span>'
+        + (o.actionsHtml || '') + '</span>';
     html += '</div>';
     return html;
 }
@@ -7511,19 +7598,21 @@ function renderRotLocalRow(match, idx, isTop, isBest) {
         subline = match.path
             .replace(/\/[^/]+$/, '')
             .replace(/^\/media\/nomad\//, '')
-            .replace(/^\/opt\/nomad\//, '');
+            .replace(/^\/opt\/nomad\//, '')
+            .replace(/(^|\/)Nomad4TBOne\/HyperMule\/Master Karaoke Folder\//, '$1');
     }
     let actions = '';
     if (match.path) {
         actions += previewButtonHtml({ source: 'local', file_path: match.path, title: fname,
             link_idx: idx, link_label: 'Link this version' });
     }
-    actions += '<span class="kn-play-btn">Link</span>';
+    actions += rotLinkBtn(idx);
     return renderRotRowHtml({
         idx, isTop, isBest, community: false,
         stats: match.stats, media_id: match.media_id,
         title: fname, subline, sublineTitle: match.path || '',
         fmt: match.format || '', brand: match.priority_brand || '',
+        filePath: match.path || '',
         actionsHtml: actions,
     });
 }
@@ -7570,21 +7659,12 @@ function renderRotKnRow(song, track, idx, isTop, isBest, downloadedIdToPath) {
     }
     if (pvd) actions += previewButtonHtml(pvd);
     if (downloadedPath) {
-        // Already on disk \u2014 "Link" (vs "DL & Link") already signals that, so no
-        // separate Downloaded badge.
-        actions += '<span class="kn-play-btn">Link</span>';
+        // Already on disk \u2014 "Link" (green) vs "Download" already signals that.
+        actions += rotLinkBtn(idx);
     } else {
-        // Source badge beside the download button so the KJ knows where it
-        // comes from before committing to the download.
-        if (track.divebar) {
-            const mirror = (track.divebar.in_gcs === false)
-                ? { label: 'DRIVE', cls: 'dl-source-drive', title: 'Our community mirror (Google Drive \u2014 slower)' }
-                : { label: 'GCS', cls: 'dl-source-gcs', title: 'Our community mirror (fast GCS download)' };
-            actions += rotSourceBadge(mirror.label, mirror.cls, mirror.title);
-        } else {
-            actions += rotSourceBadge('YouTube', 'dl-source-yt', 'Downloads from YouTube via yt-dlp');
-        }
-        actions += '<span class="kn-download-btn">DL & Link</span>';
+        // Source is conveyed by the Download button's icon + outline colour
+        // (mirror = Drive icon/green, YouTube = YT icon/red) \u2014 no separate pill.
+        actions += rotDownloadBtn(track.divebar ? 'mirror' : 'youtube', idx);
     }
     const html = renderRotRowHtml({
         idx, isTop, isBest, community: !!track.is_community,
@@ -7592,6 +7672,7 @@ function renderRotKnRow(song, track, idx, isTop, isBest, downloadedIdToPath) {
         title: song.artist + ' - ' + song.title,
         fmt, brand: track.brand_code || '',
         stats: track.stats, media_id: track.media_id,
+        filePath: downloadedPath || '',
         actionsHtml: actions,
     });
     return { html, result };
@@ -7611,15 +7692,10 @@ function renderRotDivebarRow(dv, idx, isTop, isBest) {
         format: dv.format,
         song_artist: (dv.artist || '') + ' - ' + (dv.title || ''),
     };
-    const mirror = dv.in_gcs
-        ? { label: 'GCS', cls: 'dl-source-gcs', title: 'Our community mirror (fast GCS download)' }
-        : { label: 'DRIVE', cls: 'dl-source-drive', title: 'Our community mirror (Google Drive — slower)' };
     let actions = previewButtonHtml({ source: 'divebar', file_id: dv.file_id, format: dv.format,
         title: result.song_artist, link_idx: idx, link_label: 'Download & Link' });
-    // Source badge beside the button so it's clear which download source the
-    // DL & Link button will hit.
-    actions += rotSourceBadge(mirror.label, mirror.cls, mirror.title);
-    actions += '<span class="kn-download-btn">DL & Link</span>';
+    // Community mirror (GCS or Drive) — Drive icon + green outline on the button.
+    actions += rotDownloadBtn('mirror', idx);
     const html = renderRotRowHtml({
         idx, isTop, isBest, community: isCommunity,
         brandName: dv.brand_name || '',
@@ -7629,37 +7705,6 @@ function renderRotDivebarRow(dv, idx, isTop, isBest) {
         actionsHtml: actions,
     });
     return { html, result };
-}
-
-function highlightRotSearchResult() {
-    document.querySelectorAll('[data-idx]').forEach(el => {
-        const idx = parseInt(el.dataset.idx, 10);
-        el.classList.toggle('selected', idx === rotSearchSelectedIdx);
-    });
-}
-
-// Result indices that are currently navigable — i.e. not hidden inside a
-// collapsed "more commercial versions" container. DOM-driven so it stays
-// correct as the KJ expands/collapses without any extra bookkeeping.
-function rotVisibleIndices() {
-    return Array.from(document.querySelectorAll('#rotation-search-dropdown [data-idx]'))
-        .filter(el => !el.closest('.rs-collapse.hidden'))
-        .map(el => parseInt(el.dataset.idx, 10))
-        .filter(n => !Number.isNaN(n))
-        .sort((a, b) => a - b);
-}
-
-// Move the highlight by `dir` (+1 down / -1 up) across only the visible rows,
-// so Enter can never select a row hidden inside a collapsed section.
-function rotMoveSelection(dir) {
-    const vis = rotVisibleIndices();
-    if (vis.length === 0) return;
-    const pos = vis.indexOf(rotSearchSelectedIdx);
-    let newPos;
-    if (dir > 0) newPos = pos < 0 ? 0 : Math.min(pos + 1, vis.length - 1);
-    else newPos = pos < 0 ? -1 : pos - 1; // ArrowUp past the first row deselects
-    rotSearchSelectedIdx = newPos < 0 ? -1 : vis[newPos];
-    highlightRotSearchResult();
 }
 
 async function selectRotSearchResult(result) {

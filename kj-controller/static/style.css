@@ -436,7 +436,10 @@ button:disabled:hover {
 .search-meta { font-size: 0.8em; color: #666; margin-bottom: 4px; }
 .search-meta a { color: #ff7acc; cursor: pointer; text-decoration: none; }
 .search-meta a:hover { text-decoration: underline; }
-.format-badge { font-size: 0.7em; padding: 2px 6px; border-radius: 4px; margin-left: 6px; font-weight: 600; }
+.format-badge { font-size: 0.7em; padding: 2px 6px; border-radius: 4px; margin-left: 6px; font-weight: 600;
+    display: inline-block; text-align: center; min-width: 34px; box-sizing: border-box; }
+/* The format pill now lives inside the Library action cluster — no stray margin. */
+.media-actions .format-badge { margin: 0; }
 .format-badge.zip { background-color: #ffdf6b; color: #0f0f0f; }
 .format-badge.mp4 { background-color: #ff5bb8; color: white; }
 .format-badge.other { background-color: #333; color: #888; }
@@ -781,6 +784,31 @@ body {
 }
 .modal-close:hover { color: #e5e5e5; box-shadow: none; }
 
+/* --- Version Note modal --- stack Label/Note vertically with full-width, themed
+   inputs (the default browser textarea rendered white and overlapped its label). */
+.note-modal-content label {
+    display: block; margin-bottom: 0.85rem;
+    color: #bbb; font-size: 0.85em; font-weight: 500;
+}
+.note-modal-content input,
+.note-modal-content textarea {
+    display: block; width: 100%; box-sizing: border-box; margin-top: 5px;
+    background: #101010; border: 1px solid #3a3a3a; border-radius: 6px;
+    padding: 8px 10px; color: #eee; font-size: 0.95em; font-family: inherit;
+}
+.note-modal-content textarea { resize: vertical; min-height: 90px; line-height: 1.4; }
+.note-modal-content input:focus,
+.note-modal-content textarea:focus { outline: none; border-color: rgba(255, 91, 184, 0.6); }
+.note-modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 0.25rem; }
+.note-modal-actions button {
+    padding: 7px 16px; border-radius: 6px; border: 1px solid transparent;
+    cursor: pointer; font-size: 0.9em;
+}
+#noteSaveBtn { background: #2d6a4f; color: #fff; }
+#noteSaveBtn:hover { background: #35a25c; box-shadow: none; }
+#noteCancelBtn { background: rgba(255, 255, 255, 0.06); color: #ccc; border-color: #3a3a3a; }
+#noteCancelBtn:hover { background: rgba(255, 255, 255, 0.12); color: #fff; box-shadow: none; }
+
 /* --- VNC Preview --- */
 
 /* .vnc-size-buttons uses the shared `.header-actions` framework; the class is
@@ -1099,50 +1127,29 @@ body {
 }
 .kn-play-btn:hover { background-color: rgba(34, 197, 94, 0.25); color: #4ade80; box-shadow: none; }
 
-/* --- Rotation search rows: consistent right-aligned tag + action columns so
-   format pills and brand codes line up regardless of source/group. --- */
-.rs-line { display: flex; align-items: center; gap: 4px; min-width: 0; }
-.rs-line .rs-best-pill, .rs-line .rs-top-star { flex-shrink: 0; margin-right: 0; }
-.rs-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
-.rs-tags { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
-.rs-tag-fmt { width: 78px; display: flex; justify-content: flex-end; }
-.rs-tag-brand { width: 50px; display: flex; justify-content: flex-end; }
-.rs-tag-fmt .format-badge, .rs-tag-brand .rs-brand-pill { margin: 0; }
-/* Fixed action-column width keeps the tag columns to its left aligned across
-   rows even when some rows carry a source/Downloaded badge and others don't. */
-.rotation-search-dropdown .kn-track-actions { min-width: 160px; justify-content: flex-end; margin-left: 0; }
-/* Normalize inter-column spacing so the format/brand tag columns land at the
-   same x on every row type. Local rows (.kn-local-match) carried gap:8px while
-   KN/divebar rows (.kn-track) relied on the actions' margin-left:6px — leaving
-   the tag columns 8px out of sync. One gap for all, margin dropped above. */
-.rotation-search-dropdown .kn-track,
-.rotation-search-dropdown .kn-local-match { gap: 8px; }
-/* Uniform action buttons (Link / DL & Link) regardless of row type or the
-   font-size of their container row — anchored to rem, not em. */
-.rotation-search-dropdown .kn-play-btn,
-.rotation-search-dropdown .kn-download-btn {
-    font-size: 0.72rem; padding: 4px 12px; min-width: 64px;
-    text-align: center; line-height: 1.4; border-radius: 4px; box-sizing: border-box;
-    margin-left: 0;
-}
-
-/* --- Unified rotation-search row skeleton (renderRotRowHtml) ---
+/* --- Rotation-search row skeleton (renderRotRowHtml) ---
    Every row — local file, Karaoke Nerds track, or divebar mirror — renders
-   through one structure so font size, title colour, badge/pill styling and the
-   fmt/brand/action columns are identical. Source-appropriate content still
-   differs (local: folder subline; KN/divebar: brand name + optional Community
-   badge) but is sized and aligned the same. Replaces the divergent .kn-track vs
-   .kn-local-match templates that used to render these rows. */
+   through one structure. Layout is three zones, left → right:
+     .rs-main   (flex:1)          title/subline; absorbs all slack
+     .rs-extras (auto, sometimes) stats + brand code; right-aligned, variable
+     .rs-fixed  (auto, always)    format · preview · action; fixed child widths
+   Because .rs-fixed is last with fixed-width children, it's pinned to the right
+   edge at the same x on every row; because .rs-extras sits inside the slack that
+   .rs-main gives up, its presence/width never shifts the fixed columns. */
 .rs-row {
-    display: flex; align-items: center; justify-content: space-between;
-    gap: 8px; padding: 6px 12px 6px 28px;
+    display: flex; align-items: center;
+    gap: 8px; padding: 5px 12px 5px 14px;
     border-bottom: 1px solid #222; border-left: 3px solid transparent;
     font-size: 0.8em; transition: background-color 0.15s;
+    cursor: default;  /* row is inert — only the Link/Download button acts */
 }
 .rs-row:hover { background-color: #1a1a1a; }
 .rs-row.community { border-left-color: #22c55e; background-color: rgba(34, 197, 94, 0.06); }
 .rs-row.community:hover { background-color: rgba(34, 197, 94, 0.1); }
-.rs-main { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; overflow: hidden; }
+.rs-line { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.rs-line .rs-best-pill, .rs-line .rs-top-star { flex-shrink: 0; margin-right: 0; }
+.rs-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.rs-main { display: flex; flex-direction: column; gap: 2px; flex: 1 1 auto; min-width: 0; overflow: hidden; }
 .rs-main .rs-title { color: #dcdcdc; font-weight: 500; }
 .rs-sub {
     font-size: 0.85em; color: rgba(34, 197, 94, 0.5);
@@ -1152,10 +1159,73 @@ body {
     color: #e5e5e5; white-space: nowrap; overflow: hidden;
     text-overflow: ellipsis; flex-shrink: 1; min-width: 0; max-width: 45%;
 }
-.rs-actions {
-    display: flex; align-items: center; gap: 6px;
-    flex: 0 0 170px; justify-content: flex-end;
+.rs-extras { display: flex; align-items: center; gap: 3px; flex: 0 0 auto; justify-content: flex-end; }
+.rs-extras:empty { display: none; }
+.rs-fixed { display: flex; align-items: center; gap: 3px; flex: 0 0 auto; justify-content: flex-end; }
+.rs-fmt { flex: 0 0 40px; display: flex; }
+.rotation-search-dropdown .rs-fmt .format-badge { width: 100%; justify-content: center; padding: 0 4px; }
+
+/* --- Consistent chip + button language for the search dropdown ---
+   One height and radius for everything, mirroring the rotation-row look:
+   pills = bg-tint, no border (.rotation-badge); buttons = 1px outline, colour
+   coded by role (.rotation-btn). --- */
+/* Pills: format, brand, best, and the stat indicators. */
+.rotation-search-dropdown .format-badge,
+.rotation-search-dropdown .rs-brand-pill,
+.rotation-search-dropdown .rs-best-pill,
+.rotation-search-dropdown .rs-stat {
+    display: inline-flex; align-items: center; box-sizing: border-box;
+    height: 22px; padding: 0 6px; border-radius: 5px;
+    font-size: 0.7em; font-weight: 600; line-height: 1; margin: 0; white-space: nowrap;
 }
+.rotation-search-dropdown .rs-brand-pill { background: rgba(255, 255, 255, 0.08); color: #ccc; font-weight: 500; }
+.rotation-search-dropdown .rs-best-pill { background: #ffd700; color: #000; }
+/* Stats: subtle bg-tint chips, keeping each indicator's accent text colour. */
+.rs-extras .rs-stats { display: inline-flex; align-items: center; gap: 3px; margin: 0; }
+.rotation-search-dropdown .rs-stat { background: rgba(255, 255, 255, 0.06); font-weight: 500; }
+.rotation-search-dropdown .rs-usual { color: #ffcf4d; }
+.rotation-search-dropdown .rs-plays { color: #7fd1a1; font-variant-numeric: tabular-nums; }
+.rotation-search-dropdown .rs-prev { color: #9aa4b2; }
+.rotation-search-dropdown .rs-label { color: #cdd6e4; }
+.rotation-search-dropdown .rs-note { cursor: help; }
+/* ✎ note-edit is an action → bordered yellow icon button (edit == yellow, as in
+   the rotation rows), matching the action buttons below. */
+.rotation-search-dropdown .rs-note-edit {
+    background: transparent; border: 1px solid rgba(251, 191, 36, 0.5); color: #fbbf24;
+    opacity: 1; cursor: pointer;
+}
+.rotation-search-dropdown .rs-note-edit:hover { color: #fcd34d; border-color: rgba(251, 191, 36, 0.8); background: rgba(251, 191, 36, 0.12); }
+
+/* Buttons: preview ▶, Link, Download. Same height/radius/border; only the accent
+   colour differs by role (preview=pink, Link/mirror=green, YouTube=red). */
+.rotation-search-dropdown .preview-btn,
+.rotation-search-dropdown .kn-play-btn,
+.rotation-search-dropdown .kn-download-btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+    box-sizing: border-box; height: 22px; padding: 0 8px; margin: 0;
+    font-size: 0.72rem; font-weight: 500; line-height: 1;
+    border: 1px solid transparent; border-radius: 5px; background: transparent;
+    cursor: pointer; white-space: nowrap;
+}
+.rotation-search-dropdown .preview-btn {
+    border-color: rgba(255, 91, 184, 0.4); color: #ff7acc;
+}
+.rotation-search-dropdown .preview-btn:hover { background: rgba(255, 91, 184, 0.15); color: #ff9bd6; }
+.rotation-search-dropdown .preview-btn .pv-ico { font-size: 0.72rem; line-height: 1; }
+.rotation-search-dropdown .kn-play-btn,
+.rotation-search-dropdown .kn-download-btn.dl-mirror {
+    flex: 0 0 88px; width: 88px;
+    border-color: rgba(34, 197, 94, 0.4); color: #86efac; background: rgba(34, 197, 94, 0.08);
+}
+.rotation-search-dropdown .kn-play-btn:hover,
+.rotation-search-dropdown .kn-download-btn.dl-mirror:hover { background: rgba(34, 197, 94, 0.18); color: #4ade80; }
+.rotation-search-dropdown .kn-download-btn.dl-youtube {
+    flex: 0 0 88px; width: 88px;
+    border-color: rgba(196, 48, 43, 0.55); color: #f0857f; background: rgba(196, 48, 43, 0.08);
+}
+.rotation-search-dropdown .kn-download-btn.dl-youtube:hover { background: rgba(196, 48, 43, 0.2); color: #ff9d97; }
+.rs-dl-ico { flex-shrink: 0; display: block; }
+.rs-dl-txt { line-height: 1; }
 
 /* --- YouTube Search --- */
 
@@ -4108,6 +4178,9 @@ li.media-no-audio {
     box-shadow: none;
 }
 .media-actions button:hover { background: #333; color: #fff; box-shadow: none; }
+/* Icon-only buttons (e.g. the 🗑 delete before it's armed) — nudge the glyph up
+   to match the weight of the ✎ / ▶ text glyphs. */
+.media-actions .media-btn-icon { font-size: 0.8rem; }
 
 /* Variant classes are scoped under .media-actions so they beat the structural
    `.media-actions button` rule on specificity (otherwise the neutral base wins

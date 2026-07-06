@@ -35,7 +35,7 @@
     var enc = encodeURIComponent(JSON.stringify(descriptor || {})).replace(/'/g, '%27');
     return '<button type="button" class="preview-btn" title="Preview playback" ' +
       'onclick="event.stopPropagation();event.preventDefault();openPreviewEnc(\'' +
-      enc + '\')">▶</button>';
+      enc + '\')"><span class="pv-ico">▶</span><span class="pv-txt">Preview</span></button>';
   }
 
   function openPreviewEnc(enc) {
