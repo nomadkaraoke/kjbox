@@ -41,12 +41,19 @@ from dataclasses import dataclass, asdict
 import numpy as np
 
 ANALYSIS_SR = 8000          # mono resample rate for correlation (ms-accurate, fast)
-DEFAULT_INTRO = 5.0
-DEFAULT_TAIL = 5.0
-SILENCE_DB = -45.0          # first-intro-seconds considered "silent" below this RMS dBFS
-OFFSET_TOL = 0.35           # s: measured offset vs. expected intro agreement
-DURATION_TOL = 0.75         # s: |video_dur - (orig_dur + intro + tail)|
-PEAK_MIN = 0.30             # normalised correlation peak floor for "sharp"
+DEFAULT_INTRO = 5.0         # nominal title-card length; used only for the silence probe window
+SILENCE_DB = -60.0          # intro RMS below this dBFS counts as silent (real intros ~ -91 dB)
+PEAK_MIN = 0.30             # normalised correlation peak floor for a trustworthy offset
+OFFSET_SANE = (2.0, 15.0)   # s: plausible title-card lead-in range
+SILENCE_LATE_TOL = 1.0      # s: correlation offset shouldn't land >this beyond the audio onset
+#
+# Sync model (validated against real releases 2026-07-07): every NOMAD video is
+# [silent title card ~5s] + [instrumental time-aligned to the original] + [outro].
+# The intro offset is ~5s but NOT exactly uniform (quiet song intros push the
+# silence boundary out), and the OUTRO length is era-dependent (early era ~0s,
+# web-platform era ~5s). So we do NOT assume 5s or check total duration; we
+# measure the true offset by cross-correlation and corroborate with the audio
+# onset (silencedetect). Padding uses the measured correlation offset.
 _BRAND_RE = re.compile(r"(NOMAD-\d+)", re.IGNORECASE)
 
 
@@ -149,19 +156,35 @@ class SyncResult:
     brand_code: str
     video: str
     audio: str
-    offset_s: float
-    peak: float
+    offset_s: float          # measured correlation lag = the pad to apply
+    peak: float              # normalised correlation peak (offset confidence)
+    onset_s: float           # audio onset from silencedetect (corroboration; -1 = none)
     intro_silent: bool
     intro_db: float
     video_dur: float
     audio_dur: float
-    expected_video_dur: float
     verdict: str
     reasons: str
 
 
+def audio_onset(video: str, search_s: float = 20.0) -> float:
+    """Seconds of leading silence in the video (where the instrumental starts),
+    via silencedetect. Corroborates the correlation offset. Returns -1 if no
+    leading silence region is found. NB: silencedetect logs at INFO level, so we
+    must NOT pass -v error."""
+    out = subprocess.run(
+        ["ffmpeg", "-nostats", "-i", video, "-t", f"{search_s:.0f}",
+         "-af", f"silencedetect=noise={SILENCE_DB:.0f}dB:d=0.5", "-f", "null", "-"],
+        capture_output=True, text=True).stderr
+    starts = re.findall(r"silence_start:\s*([-\d.]+)", out)
+    ends = re.findall(r"silence_end:\s*([-\d.]+)", out)
+    if ends and starts and float(starts[0]) < 0.3:
+        return float(ends[0])
+    return -1.0
+
+
 def verify_pair(video: str, audio: str, intro: float = DEFAULT_INTRO,
-                tail: float = DEFAULT_TAIL, search_s: float = 20.0) -> SyncResult:
+                search_s: float = 20.0) -> SyncResult:
     brand_m = _BRAND_RE.search(os.path.basename(video)) or _BRAND_RE.search(os.path.basename(audio))
     brand = brand_m.group(1).upper() if brand_m else "?"
 
@@ -177,24 +200,26 @@ def verify_pair(video: str, audio: str, intro: float = DEFAULT_INTRO,
     intro_samples = decode_mono(video, dur=intro)
     intro_db = rms_db(intro_samples)
     intro_silent = intro_db < SILENCE_DB
-
-    expected = a_dur + intro + tail
+    onset = audio_onset(video, search_s)
 
     reasons = []
     if peak < PEAK_MIN:
         reasons.append(f"weak correlation peak {peak:.2f}<{PEAK_MIN}")
-    if abs(offset - intro) > OFFSET_TOL:
-        reasons.append(f"offset {offset:.2f}s != intro {intro:.0f}s")
     if not intro_silent:
         reasons.append(f"intro not silent ({intro_db:.0f}dB)")
-    if abs(v_dur - expected) > DURATION_TOL:
-        reasons.append(f"duration {v_dur:.2f}s != expected {expected:.2f}s")
+    if not (OFFSET_SANE[0] <= offset <= OFFSET_SANE[1]):
+        reasons.append(f"offset {offset:.2f}s outside {OFFSET_SANE[0]}-{OFFSET_SANE[1]}s")
+    # Corroboration: the correlation offset should not land meaningfully AFTER the
+    # audio onset (a quiet song intro can push onset later than offset — that's
+    # fine; the reverse means the two methods disagree).
+    if onset >= 0 and offset > onset + SILENCE_LATE_TOL:
+        reasons.append(f"offset {offset:.2f}s later than audio onset {onset:.2f}s")
 
     verdict = "confirmed" if not reasons else "needs-review"
     return SyncResult(brand, os.path.basename(video), os.path.basename(audio),
-                      round(offset, 3), round(peak, 3), intro_silent,
-                      round(intro_db, 1), round(v_dur, 3), round(a_dur, 3),
-                      round(expected, 3), verdict, "; ".join(reasons))
+                      round(offset, 3), round(peak, 3), round(onset, 3),
+                      intro_silent, round(intro_db, 1), round(v_dur, 3),
+                      round(a_dur, 3), verdict, "; ".join(reasons))
 
 
 def emit_padded(audio: str, out_path: str, offset_s: float, target_dur: float) -> None:
@@ -226,8 +251,8 @@ def main(argv=None) -> int:
     ap.add_argument("--audio-dir", required=True)
     ap.add_argument("--video-dir", required=True)
     ap.add_argument("--out-dir", default=None, help="where padded audio is written (with --emit)")
-    ap.add_argument("--intro", type=float, default=DEFAULT_INTRO)
-    ap.add_argument("--tail", type=float, default=DEFAULT_TAIL)
+    ap.add_argument("--intro", type=float, default=DEFAULT_INTRO,
+                    help="title-card length for the silence probe window (offset is measured, not assumed)")
     ap.add_argument("--emit", action="store_true", help="write padded audio for confirmed tracks")
     ap.add_argument("--only", default=None, help="restrict to one brand code, e.g. NOMAD-0900")
     ap.add_argument("--report", default="sync_report.csv")
@@ -249,13 +274,13 @@ def main(argv=None) -> int:
     errored = False
     for b in brands:
         try:
-            r = verify_pair(video_idx[b], audio_idx[b], args.intro, args.tail)
+            r = verify_pair(video_idx[b], audio_idx[b], args.intro)
         except (subprocess.CalledProcessError, OSError, ValueError) as e:
             errored = True
             print(f"{b}: ERROR {e}", file=sys.stderr)
             results.append(SyncResult(b, os.path.basename(video_idx[b]),
-                                      os.path.basename(audio_idx[b]), 0.0, 0.0,
-                                      False, 0.0, 0.0, 0.0, 0.0, "error", str(e)))
+                                      os.path.basename(audio_idx[b]), 0.0, 0.0, -1.0,
+                                      False, 0.0, 0.0, 0.0, "error", str(e)))
             continue
         results.append(r)
         print(f"{b}: {r.verdict:12s} offset={r.offset_s:.2f}s peak={r.peak:.2f} {r.reasons}")
