@@ -2,6 +2,19 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-07-07 - Top ticker fills the reserved strip (v0.74.1)
+
+**Why:** After v0.74.0 shipped, a ~21 px wallpaper band showed between the bottom of the ticker
+bar (natural height ≈ font + 2·padding ≈ 59 px) and the top of the lowered video (at the 80 px
+margin) — a visible gap.
+
+**What:** The top ticker now **fills the reserved strip**. kj-controller writes
+`video_top_margin_px` into `overlays.json` (`OverlayManager.set_video_top_margin`, at startup),
+the overlay engine injects it into each ticker's config as `_strip_h`, and a `position:'top'`
+ticker sizes its bar to the strip height (text vertically centred) instead of its natural height.
+This makes `video_top_margin_px` the **single source of truth** for both the video geometry and
+the ticker height, so they can't drift. Bottom tickers and non-strip setups are unchanged.
+
 ## 2026-07-07 - Ticker off video into reserved top strip + per-overlay damage (v0.74.0)
 
 **Why:** Andrew's controlled A/B (same 4K file, same temp) showed the full-screen animated overlay

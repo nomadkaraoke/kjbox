@@ -164,9 +164,16 @@ class VlcKaraokePlayer:
             cmds = [wrapper + c for c in cmds]
         for c in cmds:
             try:
-                subprocess.run(c, capture_output=True, timeout=5, check=False)
+                r = subprocess.run(c, capture_output=True, timeout=5, check=False)
             except (OSError, subprocess.SubprocessError) as e:
                 log_message(f"wmctrl reposition failed ({' '.join(c[-4:])}): {e}", self.config)
+                return
+            if r.returncode != 0:
+                # Non-zero usually means the window title didn't match (e.g. VLC
+                # not mapped yet). Don't claim success.
+                log_message(
+                    f"wmctrl reposition non-zero exit ({' '.join(c[-4:])}): "
+                    f"{r.stderr.decode(errors='replace').strip()}", self.config)
                 return
         log_message(
             f"Positioned karaoke VLC below {margin_px}px top strip.", self.config)

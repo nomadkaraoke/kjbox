@@ -241,6 +241,9 @@ def create_app(config=None):
     flask_app.preview = PreviewService(cfg, flask_app.media)
     overlay_path = cfg.get('overlays_path') if config else None
     flask_app.overlay_manager = OverlayManager(config_path=overlay_path)
+    # Share the reserved-strip height with the overlay engine (via overlays.json)
+    # so a top ticker fills the strip instead of leaving a wallpaper band.
+    flask_app.overlay_manager.set_video_top_margin(cfg.get('video_top_margin_px', 0))
     flask_app.vlc = PlaybackCoordinator(
         cfg,
         enabled=False if config else None,
@@ -371,6 +374,9 @@ def start_app():  # pragma: no cover
 
     # Create shared overlay manager
     overlay_mgr = OverlayManager()
+    # Share the reserved-strip height with the overlay engine (via overlays.json)
+    # so a top ticker fills the strip instead of leaving a wallpaper band.
+    overlay_mgr.set_video_top_margin(cfg.get('video_top_margin_px', 0))
 
     # PlaybackCoordinator owns filler + one karaoke player; swappable at runtime.
     vlc = PlaybackCoordinator(cfg, overlay_manager=overlay_mgr)

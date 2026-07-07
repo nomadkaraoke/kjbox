@@ -258,3 +258,28 @@ class TestOverlayDefaults:
         o2 = manager.create_overlay({'type': 'ticker', 'config': {}})
         assert o1['id'] != o2['id']
         assert len(o1['id']) == 8
+
+
+class TestVideoTopMargin:
+    """The reserved-strip height shared with the overlay engine."""
+
+    def test_persists_top_level_key(self, manager, overlays_path):
+        manager.set_video_top_margin(80)
+        assert json.load(open(overlays_path))['video_top_margin_px'] == 80
+
+    def test_idempotent_no_rewrite_when_unchanged(self, manager, overlays_path):
+        manager.set_video_top_margin(80)
+        mtime = os.stat(overlays_path).st_mtime_ns
+        manager.set_video_top_margin(80)  # same value => no write
+        assert os.stat(overlays_path).st_mtime_ns == mtime
+
+    def test_new_value_persisted(self, manager, overlays_path):
+        manager.set_video_top_margin(80)
+        manager.set_video_top_margin(0)
+        assert json.load(open(overlays_path))['video_top_margin_px'] == 0
+
+    def test_survives_overlay_crud(self, manager, overlays_path):
+        # A later overlay write must not drop the margin key.
+        manager.set_video_top_margin(80)
+        manager.create_overlay({'type': 'ticker', 'config': {'text': 'x'}})
+        assert json.load(open(overlays_path))['video_top_margin_px'] == 80

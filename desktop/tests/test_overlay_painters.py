@@ -122,6 +122,33 @@ def test_ticker_resets_after_scrolling_off():
     assert p._scroll_x >= 1920 - 1
 
 
+# ---- reserved-strip fill ----
+def test_ticker_top_fills_reserved_strip():
+    # A strip taller than the natural bar => the top ticker fills it (no wallpaper
+    # gap to the video below), text centred, damage rect == the strip.
+    p = op.TickerPainter("k", {"text": "hi", "position": "top",
+                               "font_size": 35, "padding": 12, "_strip_h": 80}, True)
+    assert p._h == 80
+    assert p._y == 0
+    assert p.bbox() == (0, 0, 1920, 80)
+    assert 0 < p._text_y < 80  # text sits inside the bar
+
+
+def test_ticker_top_natural_height_without_strip():
+    p = op.TickerPainter("k", {"text": "hi", "position": "top",
+                               "font_size": 35, "padding": 12}, True)
+    assert p._h == 35 + 2 * 12       # natural, unchanged when no strip
+    assert p._text_y == p._y + 12
+
+
+def test_ticker_bottom_ignores_strip():
+    # _strip_h only lifts a TOP ticker; a bottom ticker keeps its natural height.
+    p = op.TickerPainter("k", {"text": "hi", "position": "bottom",
+                               "font_size": 28, "padding": 10, "_strip_h": 80}, True)
+    assert p._h == 28 + 2 * 10
+    assert p._y == 1080 - p._h
+
+
 # ---- bbox (partial-redraw damage regions) ----
 def test_ticker_bbox_full_width_at_top():
     # A top-strip ticker damages the full-width strip (0,0,W,bar_h) — never the

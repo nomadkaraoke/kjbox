@@ -210,10 +210,23 @@ class TickerPainter(BasePainter):
         self._text = self._resolve_text()
         self._text_w = text_width(self._text, self._size)
         self._w = SCREEN_WIDTH
-        self._h = int(self._size + self._pad * 2)
         position = cfg.get("position", "bottom")
+        natural_h = int(self._size + self._pad * 2)
+        # A top ticker fills the reserved video strip (video_top_margin_px, passed
+        # by the engine as `_strip_h`) so no wallpaper band shows between it and
+        # the video below. Falls back to natural height with no strip (bottom
+        # ticker, or `_strip_h` unset / smaller than the text bar).
+        strip_h = int(cfg.get("_strip_h", 0) or 0)
+        self._fills_strip = position == "top" and strip_h > natural_h
+        self._h = strip_h if self._fills_strip else natural_h
         self._x = 0
         self._y = 0 if position == "top" else SCREEN_HEIGHT - self._h
+        if self._fills_strip:
+            # Centre the text vertically in the taller strip-filling bar.
+            ascent, descent, _ = font_height(self._size)
+            self._text_y = int(self._y + (self._h - (ascent + descent)) / 2)
+        else:
+            self._text_y = self._y + self._pad
         if not hasattr(self, "_scroll_x"):
             self._scroll_x = SCREEN_WIDTH
 
@@ -253,7 +266,7 @@ class TickerPainter(BasePainter):
         cr.rectangle(self._x, self._y, self._w, self._h)
         set_hex(cr, cfg.get("bg_color", "#000000"), cfg.get("bg_opacity", 0.85))
         cr.fill()
-        draw_text(cr, int(self._scroll_x), self._y + self._pad, self._text,
+        draw_text(cr, int(self._scroll_x), self._text_y, self._text,
                   self._size, cfg.get("text_color", "#ffffff"))
 
 
