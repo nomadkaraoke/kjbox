@@ -6,7 +6,7 @@ def rows():
     for i in range(1, 449):
         meth = "name-match" if i <= 200 else "leftover-only"
         r.append({"brand_code": f"NOMAD-{i:04d}", "method": meth})
-    for i in range(458, 900):
+    for i in range(858, 1200):
         r.append({"brand_code": f"NOMAD-{i:04d}", "method": "original"})
     for i in range(475, 758):
         r.append({"brand_code": f"NOMAD-{i:04d}", "method": "local"})

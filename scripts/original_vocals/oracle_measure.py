@@ -33,10 +33,13 @@ def _measure_file_mean_db(audio_path: str) -> float | None:
     Returns:
         Mean volume in dBFS, or None on failure.
     """
-    r = subprocess.run(
-        ['ffmpeg', '-hide_banner', '-i', audio_path, '-filter:a', 'volumedetect', '-f', 'null', '/dev/null'],
-        capture_output=True, text=True
-    )
+    try:
+        r = subprocess.run(
+            ['ffmpeg', '-hide_banner', '-i', audio_path, '-filter:a', 'volumedetect', '-f', 'null', '/dev/null'],
+            capture_output=True, text=True, timeout=120
+        )
+    except subprocess.TimeoutExpired:
+        return None
     if r.returncode != 0:
         return None
     return parse_mean_volume(r.stderr)
@@ -60,11 +63,14 @@ def separate_and_measure(audio_path: str, workdir: str, sep_bin: str, model: str
         env.setdefault("AUDIO_SEPARATOR_MODEL_DIR",
                        "/Volumes/AndrewMacSD/python-audio-separator-models-repo")
 
-        r = subprocess.run(
-            [sep_bin, audio_path, "--model_filename", model,
-             "--output_dir", out, "--output_format", "flac"],
-            capture_output=True, text=True, env=env
-        )
+        try:
+            r = subprocess.run(
+                [sep_bin, audio_path, "--model_filename", model,
+                 "--output_dir", out, "--output_format", "flac"],
+                capture_output=True, text=True, env=env, timeout=300
+            )
+        except subprocess.TimeoutExpired:
+            return None
 
         if r.returncode != 0:
             return None

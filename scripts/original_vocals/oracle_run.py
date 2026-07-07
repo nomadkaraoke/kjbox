@@ -82,7 +82,12 @@ def process_brand(brand: str) -> dict | None:
     measured = []
     for i, cand in enumerate(candidates, 1):
         print(f"    [{i}/{len(candidates)}] {cand.name}...", end="", flush=True)
-        subprocess.run([MATERIALIZE, cand.path], capture_output=True)
+        try:
+            mres = subprocess.run([MATERIALIZE, cand.path], capture_output=True, timeout=300)
+            if mres.returncode != 0:
+                print(f"  WARN materialize failed for {cand.name} (candidate may read as empty)", file=sys.stderr)
+        except (subprocess.TimeoutExpired, FileNotFoundError) as e:
+            print(f"  WARN materialize error for {cand.name}: {e}", file=sys.stderr)
         mean_db = separate_and_measure(cand.path, WORKDIR, SEP_BIN, MODEL)
         if mean_db is not None:
             measured.append(Candidate(

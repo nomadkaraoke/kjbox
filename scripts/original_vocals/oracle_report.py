@@ -41,16 +41,28 @@ def sort_for_review(rows: list[dict]) -> list[dict]:
     return sorted(rows, key=_rank)
 
 
-def _waveform_png(src: str, dst: str) -> None:
-    """Generate waveform PNG using ffmpeg showwavespic."""
-    subprocess.run(
-        [
-            "ffmpeg", "-y", "-v", "error", "-i", src,
-            "-filter_complex", "showwavespic=s=640x120",
-            "-frames:v", "1", dst
-        ],
-        capture_output=True
-    )
+def _waveform_png(src: str, dst: str) -> bool:
+    """Generate waveform PNG using ffmpeg showwavespic.
+
+    Returns:
+        True if PNG was generated successfully, False otherwise.
+    """
+    try:
+        r = subprocess.run(
+            [
+                "ffmpeg", "-y", "-v", "error", "-i", src,
+                "-filter_complex", "showwavespic=s=640x120",
+                "-frames:v", "1", dst
+            ],
+            capture_output=True, timeout=60
+        )
+    except subprocess.TimeoutExpired:
+        print(f"  WARN waveform timed out for {src}")
+        return False
+    if r.returncode != 0:
+        print(f"  WARN waveform failed for {src}")
+        return False
+    return True
 
 
 def main(argv=None) -> int:
@@ -82,12 +94,11 @@ def main(argv=None) -> int:
 
     for r in flagged:
         png = os.path.join(REVIEW_DIR, f"{r['brand']}.png")
-        img_html = ""
+        made = False
         if r["winner_rel"]:
-            _waveform_png(os.path.join(TRACKS_ORG, r["winner_rel"]), png)
-            img_html = f"<img src='{r['brand']}.png' style='max-width:640px;max-height:120px'>"
-        else:
-            img_html = "<i>(no candidate — no waveform)</i>"
+            made = _waveform_png(os.path.join(TRACKS_ORG, r["winner_rel"]), png)
+        img_html = (f"<img src='{r['brand']}.png' style='max-width:640px;max-height:120px'>"
+                    if made else "<i>(no waveform)</i>")
         cards.append(
             f"<div style='margin:8px;font-family:sans-serif'>"
             f"<b>{r['brand']}</b> [{r['verdict']}/{r['confidence']}] "
