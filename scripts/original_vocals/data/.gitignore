@@ -2,3 +2,5 @@
 manifest.json
 # raw rclone listing (large; regenerate via rclone lsf -R)
 tracks_listing.txt
+# Oracle results CSV (runtime data, human-edited; never commit)
+oracle_results.csv
