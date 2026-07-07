@@ -71,8 +71,11 @@ For each folder, collect audio files (`flac/wav/mp3/m4a/opus/aac/ogg/wma/webm`),
   `demucs`), `(filtered)`, `acapella`, stems, `(click)`, `(guide track)`.
 - **Score** survivors by era marker — `(Original)`/`flacfetch`/`(uploaded)` (100),
   `(Youtube …)`/`(Local)`/streaming-source (90) — plus filename==`Artist - Title`
-  (80, quote-normalised, track-number-stripped). Format rank (flac>wav>mp3>webm)
-  and size are tiebreaks only.
+  (80, quote-normalised, track-number-stripped). Format rank and size are
+  tiebreaks only — the full deterministic order is
+  flac > wav > m4a = opus = aac > wma = mp3 > ogg > webm (webm last, being a
+  video container that merely carries the audio); ties within a rank break by
+  larger file size.
 - **Tier:** HIGH (any strong marker), MED (one leftover after exclusions), LOW
   (several leftovers → best guess), NO_SOURCE (only karaoke/instrumental present →
   original never existed), GAP (no usable audio).

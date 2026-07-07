@@ -39,6 +39,22 @@ def test_best_lag_recovers_known_offset():
     assert peak > 0.95
 
 
+def test_best_lag_realistic_scale_is_fast_and_correct():
+    # ~25s reference @ 8kHz with a 40k-sample embed; a naive O(max_lag*N) loop
+    # would be far too slow here — the FFT path returns near-instantly.
+    import time
+    rng = np.random.default_rng(4)
+    base = rng.standard_normal(40000).astype(np.float32)
+    lag_true = 30000
+    reference = np.concatenate([np.zeros(lag_true, np.float32), base,
+                                np.zeros(120000, np.float32)])
+    t0 = time.time()
+    lag, peak = V.best_lag(reference, base, max_lag=160000)
+    assert time.time() - t0 < 5.0
+    assert abs(lag - lag_true) <= 2
+    assert peak > 0.95
+
+
 def test_best_lag_zero_offset_identical():
     rng = np.random.default_rng(2)
     x = rng.standard_normal(4000).astype(np.float32)

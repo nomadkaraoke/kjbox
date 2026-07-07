@@ -13,18 +13,24 @@ list ──▶ classify ──▶ review ──▶ fetch ──▶ verify ──
         (phase 1)               (phase 1) (phase 2)
 ```
 
+All commands below are run from this directory:
+
+```bash
+cd scripts/original_vocals
+```
+
 ### 1. list (metadata only, no downloads)
 
 ```bash
 rclone lsf -R --files-only --format "sp" --separator "||" \
   "andrewdropboxfull:/Andrew Beveridge/MediaUnsynced/Karaoke/Tracks-Organized/" \
-  > tracks_listing.txt
+  > data/tracks_listing.txt
 ```
 
 ### 2. classify → manifest + fetch plan
 
 ```bash
-python3 classify.py tracks_listing.txt --out-dir data/
+python3 classify.py data/tracks_listing.txt --out-dir data/
 ```
 
 Writes `data/manifest.csv`, `data/manifest.json`, `data/fetch_plan.tsv`. Each
@@ -49,8 +55,9 @@ Phase-2 correlation independently rejects wrong picks, so this is a light pass.
 ### 4. fetch → device staging folder
 
 ```bash
-# on the KJ device (bytes never touch the Mac):
-bash fetch_runner.sh fetch_plan.tsv /opt/nomad/downloads/NOMAD-audio 8
+# copy the plan + runner to the device, then run there (bytes never touch the Mac):
+scp data/fetch_plan.tsv fetch_runner.sh nomadpctunnel:/tmp/
+ssh nomadpctunnel 'bash /tmp/fetch_runner.sh /tmp/fetch_plan.tsv /opt/nomad/downloads/NOMAD-audio 8'
 ```
 
 Idempotent + resumable: skips files already present, downloads to `.part` and

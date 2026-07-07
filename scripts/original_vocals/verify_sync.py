@@ -70,32 +70,45 @@ def best_lag(reference: np.ndarray, signal: np.ndarray, max_lag: int) -> tuple[i
     `signal` starts `lag` samples *after* `reference` (i.e. reference is padded /
     delayed relative to signal — the title-card lead-in).
 
-    normalised_peak is in [0, 1]: the peak correlation divided by the geometric
-    mean of the two energies over the overlap, so it reflects waveform similarity
-    independent of amplitude.
+    normalised_peak is in [0, 1]: the correlation at each lag divided by the
+    geometric mean of the two energies over the overlap window, so it reflects
+    waveform similarity independent of amplitude.
+
+    Implementation: the correlation numerators for all lags come from one FFT
+    (O(N log N)); per-lag overlap energies come from prefix sums (O(1) each). This
+    keeps the full-catalog run tractable — a naive per-lag dot-product loop is
+    O(max_lag * N) and would take ~minutes per track over a 20 s search window.
     """
     ref = reference.astype(np.float64)
     sig = signal.astype(np.float64)
+    n_ref, n_sig = ref.size, sig.size
+    if n_ref == 0 or n_sig == 0:
+        return 0, 0.0
     ref -= ref.mean()
     sig -= sig.mean()
-    n = min(ref.size, sig.size)
-    if n == 0:
-        return 0, 0.0
-    max_lag = int(max(0, min(max_lag, n - 1)))
+    max_lag = int(max(0, min(max_lag, n_ref - 1)))
+    min_overlap = ANALYSIS_SR // 4           # need >~0.25s overlap to be meaningful
+
+    # corr[lag] = sum_t ref[t+lag] * sig[t], for lag in [0, n_ref-1], via FFT.
+    n_fft = 1 << (int(n_ref + n_sig - 1)).bit_length()
+    corr = np.fft.irfft(np.fft.rfft(ref, n_fft) * np.conj(np.fft.rfft(sig, n_fft)), n_fft)
+
+    # prefix sums of squared energy for O(1) per-lag overlap normalisation
+    ref_e = np.concatenate(([0.0], np.cumsum(ref * ref)))
+    sig_e = np.concatenate(([0.0], np.cumsum(sig * sig)))
+
     best_l, best_score = 0, -1.0
-    sig_energy_full = float(np.dot(sig, sig)) or 1e-12
     for lag in range(0, max_lag + 1):
-        m = min(ref.size - lag, sig.size)
-        if m <= ANALYSIS_SR // 4:            # need >~0.25s overlap to be meaningful
+        m = min(n_ref - lag, n_sig)
+        if m <= min_overlap:
             break
-        r = ref[lag:lag + m]
-        s = sig[:m]
-        num = float(np.dot(r, s))
-        den = np.sqrt((float(np.dot(r, r)) or 1e-12) * (float(np.dot(s, s)) or 1e-12))
-        score = num / den
+        e_ref = ref_e[lag + m] - ref_e[lag]
+        e_sig = sig_e[m]
+        den = np.sqrt((e_ref or 1e-12) * (e_sig or 1e-12))
+        score = corr[lag] / den
         if score > best_score:
             best_score, best_l = score, lag
-    return best_l, max(0.0, best_score)
+    return best_l, max(0.0, float(best_score))
 
 
 # ---------------------------------------------------------------------------
@@ -220,6 +233,9 @@ def main(argv=None) -> int:
     ap.add_argument("--report", default="sync_report.csv")
     args = ap.parse_args(argv)
 
+    if args.emit and not args.out_dir:
+        ap.error("--emit requires --out-dir")
+
     audio_idx = _index_by_brand(glob.glob(os.path.join(args.audio_dir, "*")))
     video_idx = _index_by_brand(glob.glob(os.path.join(args.video_dir, "*")))
     brands = sorted(set(audio_idx) & set(video_idx), key=lambda b: int(_BRAND_RE.search(b).group(0).split("-")[1]))
@@ -230,17 +246,26 @@ def main(argv=None) -> int:
         os.makedirs(args.out_dir, exist_ok=True)
 
     results = []
+    errored = False
     for b in brands:
         try:
             r = verify_pair(video_idx[b], audio_idx[b], args.intro, args.tail)
-        except subprocess.CalledProcessError as e:
+        except (subprocess.CalledProcessError, OSError, ValueError) as e:
+            errored = True
             print(f"{b}: ERROR {e}", file=sys.stderr)
+            results.append(SyncResult(b, os.path.basename(video_idx[b]),
+                                      os.path.basename(audio_idx[b]), 0.0, 0.0,
+                                      False, 0.0, 0.0, 0.0, 0.0, "error", str(e)))
             continue
         results.append(r)
         print(f"{b}: {r.verdict:12s} offset={r.offset_s:.2f}s peak={r.peak:.2f} {r.reasons}")
         if args.emit and args.out_dir and r.verdict == "confirmed":
-            out = os.path.join(args.out_dir, os.path.basename(audio_idx[b]).rsplit(".", 1)[0] + ".flac")
-            emit_padded(audio_idx[b], out, r.offset_s, r.video_dur)
+            try:
+                out = os.path.join(args.out_dir, os.path.basename(audio_idx[b]).rsplit(".", 1)[0] + ".flac")
+                emit_padded(audio_idx[b], out, r.offset_s, r.video_dur)
+            except (subprocess.CalledProcessError, OSError) as e:
+                errored = True
+                print(f"{b}: EMIT ERROR {e}", file=sys.stderr)
 
     with open(args.report, "w", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=list(asdict(results[0]).keys()) if results else ["brand_code"])
@@ -249,7 +274,7 @@ def main(argv=None) -> int:
             w.writerow(asdict(r))
     confirmed = sum(1 for r in results if r.verdict == "confirmed")
     print(f"\n{confirmed}/{len(results)} confirmed. Report: {args.report}")
-    return 0
+    return 1 if errored else 0
 
 
 if __name__ == "__main__":
