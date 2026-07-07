@@ -16,6 +16,12 @@ by (a) reserving a top strip for the scrolling ticker and shrinking the video be
 
 ## Key design decision — NO cross-process margin value
 
+> **Superseded (v0.74.1):** this was the pre-implementation stance. It shipped as v0.74.0 but
+> left a visible wallpaper gap between the natural-height ticker and the video. v0.74.1 now
+> *does* share the strip height cross-process (persisted in `overlays.json`, not runtime IPC) so
+> the top ticker fills the strip. See the v0.74.1 CHANGELOG entry and ARCHITECTURE.md. The
+> per-overlay damage below is unchanged and remains margin-agnostic.
+
 The perf-critical engine change (per-overlay damage) is **margin-agnostic**. The ticker sits at
 `position:'top'` (existing config) with a bar height (~font+2·padding ≈ 48px) that fits inside the
 80px reserved strip. Because the video window is lowered to `y=margin` (=80), the ticker's damage

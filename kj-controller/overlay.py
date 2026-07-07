@@ -185,6 +185,19 @@ class OverlayManager:
             self._data['karaoke_playing'] = playing
             self._save()
 
+    def set_video_top_margin(self, px):
+        """Persist the reserved-strip height into overlays.json.
+
+        The overlay engine (a separate process) reads overlays.json and uses this
+        to size a top ticker so it fills the strip — no wallpaper band between the
+        ticker and the video below it. This makes kj-controller's
+        `video_top_margin_px` the single source of truth for both the video
+        geometry and the ticker height. Idempotent: writes only on change."""
+        px = int(px or 0)
+        if self._data.get('video_top_margin_px') != px:
+            self._data['video_top_margin_px'] = px
+            self._save()
+
     @property
     def karaoke_playing(self):
         return self._data.get('karaoke_playing', False)

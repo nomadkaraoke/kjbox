@@ -44,7 +44,14 @@ def _log(msg):
 
 
 def load_config(path):
-    """Return (karaoke_playing, [overlay dicts with defaults applied])."""
+    """Return (karaoke_playing, [overlay dicts with defaults applied]).
+
+    Injects the reserved-strip height (top-level `video_top_margin_px`, written by
+    kj-controller) into each top ticker's config as `_strip_h`, so the ticker
+    fills the strip and no wallpaper band shows between it and the video below.
+    One source of truth: kj-controller's `video_top_margin_px` drives both the
+    video geometry and the ticker height.
+    """
     try:
         with open(path) as f:
             data = json.load(f)
@@ -52,8 +59,11 @@ def load_config(path):
         _log(f"config load error: {e}")
         return False, []
     overlays = data.get("overlays", [])
+    strip_h = int(data.get("video_top_margin_px", 0) or 0)
     for o in overlays:
         apply_defaults(o)
+        if o.get("type") == "ticker":
+            o["config"]["_strip_h"] = strip_h
     return bool(data.get("karaoke_playing", False)), overlays
 
 

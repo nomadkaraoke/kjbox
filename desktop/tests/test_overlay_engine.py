@@ -30,6 +30,30 @@ def test_load_config_bad_file_returns_empty(tmp_path):
     assert eng.load_config(str(tmp_path / "nope.json")) == (False, [])
 
 
+def test_load_config_injects_strip_height_into_tickers(tmp_path):
+    path = _cfg(tmp_path, [
+        {"id": "t", "type": "ticker", "enabled": True,
+         "config": {"position": "top", "text": "x"}},
+        {"id": "q", "type": "qr_code", "enabled": True, "config": {"url": "https://x"}},
+    ])
+    # top-level video_top_margin_px is written by kj-controller
+    import json as _json
+    d = _json.loads(open(path).read()); d["video_top_margin_px"] = 80
+    open(path, "w").write(_json.dumps(d))
+    _, overlays = eng.load_config(path)
+    tick = next(o for o in overlays if o["type"] == "ticker")
+    qr = next(o for o in overlays if o["type"] == "qr_code")
+    assert tick["config"]["_strip_h"] == 80     # ticker learns the strip height
+    assert "_strip_h" not in qr["config"]        # only tickers need it
+
+
+def test_load_config_strip_height_defaults_zero(tmp_path):
+    path = _cfg(tmp_path, [{"id": "t", "type": "ticker", "enabled": True,
+                            "config": {"position": "top", "text": "x"}}])
+    _, overlays = eng.load_config(path)
+    assert overlays[0]["config"]["_strip_h"] == 0  # no strip configured
+
+
 def test_visible_overlays_hides_desktop_only_when_playing():
     overlays = [
         {"id": "a", "type": "ticker", "enabled": True, "show_over_video": True},

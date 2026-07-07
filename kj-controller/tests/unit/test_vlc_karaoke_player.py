@@ -415,12 +415,26 @@ def test_launch_windowed_repositions_when_strip_enabled(mock_config, mocker):
 def test_reposition_window_runs_wmctrl_geometry(mock_config, mocker):
     filler = FillerVLC(mock_config, enabled=False)
     p = VlcKaraokePlayer(mock_config, filler, enabled=True)
-    run = mocker.patch('vlc.subprocess.run')
+    run = mocker.patch('vlc.subprocess.run',
+                       return_value=mocker.Mock(returncode=0, stderr=b''))
     p._reposition_window(80, 1920, 1080)
     cmds = [c.args[0] for c in run.call_args_list]
     # Remove any fullscreen state, then place the window below the 80px strip.
     assert any('remove,fullscreen' in c for c in cmds)
     assert any('0,0,80,1920,1000' in c for c in cmds)
+
+
+def test_reposition_window_stops_on_wmctrl_nonzero_exit(mock_config, mocker):
+    # A window-title miss (wmctrl exit 1) must not log the success line.
+    filler = FillerVLC(mock_config, enabled=False)
+    p = VlcKaraokePlayer(mock_config, filler, enabled=True)
+    mocker.patch('vlc.subprocess.run',
+                 return_value=mocker.Mock(returncode=1, stderr=b'Cannot find window'))
+    logs = mocker.patch('vlc.log_message')
+    p._reposition_window(80, 1920, 1080)
+    msgs = ' '.join(str(c.args[0]) for c in logs.call_args_list)
+    assert 'non-zero exit' in msgs
+    assert 'Positioned karaoke VLC' not in msgs
 
 
 def test_reposition_window_swallows_wmctrl_errors(mock_config, mocker):
