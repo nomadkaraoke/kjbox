@@ -71,6 +71,25 @@ def load_config(config_file=None):
         # Pin the iGPU to its max clock while a song plays (unpin when idle) to give
         # 4K decode+composite headroom. No-op on devices without the sudo helper.
         "auto_pin_gpu_during_playback": True,
+        # Reserve a top strip (px) for the scrolling ticker and render the karaoke
+        # video BELOW it, so the animated ticker no longer composites over the
+        # changing 4K frame (the measured 4K frame-drop lever — see
+        # docs/archive/2026-07-07-perf-layout-fix-plan.md). 0 => old fullscreen
+        # behaviour (clean rollback). Keep >= the ticker bar height so the ticker's
+        # damage region never overlaps the (lowered) video window.
+        "video_top_margin_px": 80,
+        # Physical display size. The OREI splitter fixes NomadPC at 1080p (see
+        # docs/HDMI.md); override for other rigs. Used to size the lowered video.
+        "screen_width": 1920,
+        "screen_height": 1080,
+        # Apply the reserved top strip to the (legacy) VLC karaoke engine too.
+        # OFF by default: VLC's own geometry flags are unreliable, so windowed
+        # mode relies on repositioning the window with wmctrl after launch, which
+        # must be validated on the device first (a second "VLC media player"
+        # filler window makes `wmctrl -r` matching ambiguous). Until validated,
+        # VLC stays fullscreen (documented fallback) while mpv — the default and
+        # only viable 4K engine — always honours the margin.
+        "video_strip_vlc": False,
         "sing_public_url_base": "https://sing.nomadkaraoke.com",
         "sing_public_host": "sing.nomadkaraoke.com",
         "sing_local_url_base": "",

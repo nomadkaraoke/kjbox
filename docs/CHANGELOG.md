@@ -2,6 +2,32 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-07-07 - Ticker off video into reserved top strip + per-overlay damage (v0.74.0)
+
+**Why:** Andrew's controlled A/B (same 4K file, same temp) showed the full-screen animated overlay
+was the real 4K frame-drop lever: `4K + overlays + VNC` = mpv 122 % CPU / 168 drops vs
+`4K + VNC, no overlays` = mpv 74 % / 3 drops. The overlay engine redrew the **whole** transparent
+window every ticker frame, so the compositor re-blended the entire screen (video included) 30×/s.
+
+**What (two complementary changes, both engine-flexible):**
+1. **Per-overlay damage.** `overlay_engine._on_frame` now invalidates only each animated overlay's
+   own bounding box (`queue_draw_area(*painter.bbox())`) instead of the whole window. Only the region
+   that actually changed is recomposited.
+2. **Reserved top strip.** The karaoke video renders **below** a reserved strip
+   (`video_top_margin_px`, default **80**; `0` restores the old fullscreen behaviour — clean
+   rollback). `mpv_manager` launches mpv borderless at `--geometry=1920x1000+0+80` (was `--fs`).
+   With the ticker in the strip and the video lowered beneath it, the ticker's damage rect never
+   overlaps the video window, so the compositor stops re-blending video pixels for the ticker.
+
+Coordination is a **convention, not a shared value**: kj-controller sizes the video; the overlay
+engine positions the ticker at `position:'top'` (bar height ≤ strip). VLC honours the strip only
+when `video_strip_vlc` is enabled (needs `wmctrl` repositioning — **validate on device first**;
+default off = VLC stays fullscreen). mpv — the default and only viable 4K engine — always honours it.
+
+**Config:** `video_top_margin_px` (80), `screen_width`/`screen_height` (1920×1080),
+`video_strip_vlc` (false). **Still to do:** on-device before/after measurement with the perf
+recorder (`/perf/record/*`) per engine, then deploy. Complements the v0.73.0 GPU auto-pin.
+
 ## 2026-07-06 - Auto-pin GPU to max clock during playback (v0.73.0)
 
 **Why:** Live 4K recordings (see the recording tool, v0.70.0) showed dropped frames on 4K video

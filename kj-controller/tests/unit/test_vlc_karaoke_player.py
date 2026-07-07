@@ -362,3 +362,71 @@ def test_notify_if_dead_reconnected_noop_when_probe_alive(player, mocker):
     assert player._notify_if_dead() is False
     assert player._notify_if_dead() is False
     assert fired == []
+
+
+# --- Reserved-strip video geometry (gated behind video_strip_vlc) ---
+
+def test_video_window_args_fullscreen_by_default():
+    # margin>0 but VLC strip disabled -> fullscreen (documented fallback).
+    assert VlcKaraokePlayer._video_window_args(80, strip_vlc=False) == ['--fullscreen']
+
+
+def test_video_window_args_fullscreen_when_no_margin():
+    assert VlcKaraokePlayer._video_window_args(0, strip_vlc=True) == ['--fullscreen']
+
+
+def test_video_window_args_windowed_when_enabled_and_margin():
+    assert VlcKaraokePlayer._video_window_args(80, strip_vlc=True) == []
+
+
+def _patch_vlc_launch(mocker):
+    mocker.patch('builtins.open', mocker.mock_open())
+    mock_popen = mocker.patch('subprocess.Popen')
+    mock_popen.return_value.pid = 4321
+    mock_popen.return_value.poll.return_value = None
+    mocker.patch('vlc.time.sleep')
+    return mock_popen
+
+
+def test_launch_fullscreen_by_default(mock_config, mocker):
+    filler = FillerVLC(mock_config, enabled=False)
+    p = VlcKaraokePlayer(mock_config, filler, enabled=True)
+    mock_popen = _patch_vlc_launch(mocker)
+    reposition = mocker.patch.object(p, '_reposition_window')
+    p.launch()
+    args = mock_popen.call_args[0][0]
+    assert '--fullscreen' in args
+    reposition.assert_not_called()
+
+
+def test_launch_windowed_repositions_when_strip_enabled(mock_config, mocker):
+    mock_config['video_top_margin_px'] = 80
+    mock_config['video_strip_vlc'] = True
+    filler = FillerVLC(mock_config, enabled=False)
+    p = VlcKaraokePlayer(mock_config, filler, enabled=True)
+    mock_popen = _patch_vlc_launch(mocker)
+    reposition = mocker.patch.object(p, '_reposition_window')
+    p.launch()
+    args = mock_popen.call_args[0][0]
+    assert '--fullscreen' not in args
+    reposition.assert_called_once_with(80, 1920, 1080)
+
+
+def test_reposition_window_runs_wmctrl_geometry(mock_config, mocker):
+    filler = FillerVLC(mock_config, enabled=False)
+    p = VlcKaraokePlayer(mock_config, filler, enabled=True)
+    run = mocker.patch('vlc.subprocess.run')
+    p._reposition_window(80, 1920, 1080)
+    cmds = [c.args[0] for c in run.call_args_list]
+    # Remove any fullscreen state, then place the window below the 80px strip.
+    assert any('remove,fullscreen' in c for c in cmds)
+    assert any('0,0,80,1920,1000' in c for c in cmds)
+
+
+def test_reposition_window_swallows_wmctrl_errors(mock_config, mocker):
+    # wmctrl absent / failing must never crash launch — VLC just stays put.
+    filler = FillerVLC(mock_config, enabled=False)
+    p = VlcKaraokePlayer(mock_config, filler, enabled=True)
+    mocker.patch('vlc.subprocess.run', side_effect=FileNotFoundError)
+    mocker.patch('vlc.log_message')
+    p._reposition_window(80, 1920, 1080)  # must not raise

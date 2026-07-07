@@ -204,18 +204,32 @@ class OverlayApp:
             self.win.queue_draw()
         return True  # keep the timeout
 
+    def _collect_dirty(self, dt):
+        """Advance animations; return the damage rects of painters that changed.
+
+        Returns a list of ``(x, y, w, h)`` — one per currently-visible painter
+        whose ``tick()`` asked for a redraw. Empty when nothing animates (the
+        frame callback then invalidates nothing). This is the crux of the 4K
+        frame-drop fix: instead of invalidating the whole transparent window
+        (which forced the compositor to re-blend the entire screen — including
+        the video region — every ticker frame), each animated overlay damages
+        only its own bounding box. A top-strip ticker's rect never overlaps the
+        lowered video window, so the video keeps its cheap page-flip path.
+        """
+        dirty = []
+        for o in visible_overlays(self.playing, self._overlays):
+            p = self.painters.get(o["id"])
+            if p and p.tick(dt):
+                dirty.append(p.bbox())
+        return dirty
+
     def _on_frame(self):
         now = time.monotonic()
         dt = now - self._last_frame
         self._last_frame = now
         self._perf_frames += 1  # actual callback rate; < FPS ⇒ engine is starved
-        needs = False
-        for o in visible_overlays(self.playing, self._overlays):
-            p = self.painters.get(o["id"])
-            if p and p.tick(dt):
-                needs = True
-        if needs:
-            self.win.queue_draw()
+        for x, y, w, h in self._collect_dirty(dt):
+            self.win.queue_draw_area(int(x), int(y), int(w), int(h))
         return True
 
     def _on_draw(self, _widget, cr):

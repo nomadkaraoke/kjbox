@@ -153,6 +153,25 @@ class MpvKaraokePlayer:
         """Convert VLC volume (0-512, 256=100%) to mpv volume (0-200, 100=100%)."""
         return (vlc_vol / 256) * 100
 
+    # ── Video window geometry ──────────────────────────────────────────
+
+    @staticmethod
+    def _video_window_args(margin_px, screen_w, screen_h):
+        """mpv args placing the karaoke video BELOW a reserved top strip.
+
+        ``margin_px > 0`` reserves a top strip of that height for the scrolling
+        ticker and renders the video in a borderless window filling the area
+        beneath it, so the ticker no longer composites over the changing 4K
+        frame (the measured 4K frame-drop lever). ``margin_px <= 0`` keeps the
+        old fullscreen behaviour — a clean rollback path. Validated on device:
+        ``mpv --no-border --geometry=1920x1000+0+80`` keeps hwdec=vaapi with 0
+        drops (see docs/archive/2026-07-07-perf-layout-fix-plan.md).
+        """
+        if margin_px and margin_px > 0:
+            video_h = max(1, screen_h - margin_px)
+            return ['--no-border', f'--geometry={screen_w}x{video_h}+0+{margin_px}']
+        return ['--fs']
+
     # ── State persistence ──────────────────────────────────────────────
 
     def _save_state(self):
@@ -186,11 +205,18 @@ class MpvKaraokePlayer:
         except FileNotFoundError:
             pass
 
+        # Fullscreen, or a borderless window below the reserved ticker strip.
+        video_args = self._video_window_args(
+            int(self.config.get('video_top_margin_px', 0) or 0),
+            int(self.config.get('screen_width', 1920) or 1920),
+            int(self.config.get('screen_height', 1080) or 1080),
+        )
+
         if self.audio_backend == 'pipewire':
             log_message("Launching mpv karaoke with PulseAudio/PipeWire audio...", self.config)
             command = [
                 'mpv', '--idle',
-                '--fs',
+                *video_args,
                 '--ao=pulse',
                 '--af=@rb:rubberband',
                 f'--input-ipc-server={self.ipc_socket_path}',
@@ -206,7 +232,7 @@ class MpvKaraokePlayer:
             )
             command = [
                 'mpv', '--idle',
-                '--fs',
+                *video_args,
                 '--ao=alsa',
                 f'--audio-device=alsa/{self.audio_device}',
                 '--af=@rb:rubberband',
