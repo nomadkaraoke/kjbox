@@ -70,5 +70,5 @@ def test_tie_uses_format_and_size():
     # Both within 1.5 dB tie epsilon; flac (rank 6) beats mp3 (rank 3)
     assert r.winner.name == "b.flac"
     assert r.verdict == "confirmed"
-    assert r.confidence == "high"
+    assert r.confidence == "low"  # near-tie: format decides WHICH file, but human still verifies
     assert round(r.margin_db, 1) == 0.3  # actual margin is 0.3 dB but treated as tie/tiebreak

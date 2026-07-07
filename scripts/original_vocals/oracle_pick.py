@@ -86,13 +86,11 @@ def pick_winner(
         margin = None
     else:
         margin = abs(winner_db - runnerup_db)
-        # Confidence: high if definitive tiebreak (within tie-epsilon) or margin >= margin_db.
-        if margin <= _TIE_EPS_DB:
-            confidence = "high"  # Definitive tiebreak (format/size).
-        elif margin >= margin_db:
-            confidence = "high"
-        else:
-            confidence = "low"  # Close margin: needs human check.
+        # High confidence only when the winner clearly beats the runner-up.
+        # A near-tie (small margin) is the MOST ambiguous case (possibly two real
+        # originals, e.g. studio vs live) -> low, so a human verifies. _TIE_EPS_DB
+        # affects only the sort tiebreak (which file wins), never confidence.
+        confidence = "high" if margin >= margin_db else "low"
 
     return PickResult(
         winner=winner,
