@@ -89,7 +89,7 @@ vocals).
 For each candidate: materialize it from the Dropbox clone (NSFileCoordinator
 coordinated read — `materialize.swift` from the local_clone tooling), then separate
 with **`2_HP-UVR.pth`** (~25–30 s/track in the `nomadkaraoke` conda env), and
-measure the **vocals stem's mean RMS** via ffmpeg `astats` (`Overall.RMS_level`) —
+measure the **vocals stem's mean volume** via ffmpeg `volumedetect` (`mean_volume`) —
 **mean, not peak**. Per folder, choose the candidate with the highest vocal energy.
 Record: winner path, winner dB, runner-up dB, and the **margin**.
 

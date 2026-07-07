@@ -5,18 +5,15 @@ import csv
 import os
 import subprocess
 
-
-RESULTS = "data/oracle_results.csv"
-REVIEW_CSV = "data/review_picks.csv"
-REVIEW_DIR = "data/review"
+HERE = os.path.dirname(os.path.abspath(__file__))
+RESULTS = os.path.join(HERE, "data", "oracle_results.csv")
+REVIEW_CSV = os.path.join(HERE, "data", "review_picks.csv")
+REVIEW_DIR = os.path.join(HERE, "data", "review")
 TRACKS_ORG = "/Users/andrew/AB Dropbox/Andrew Beveridge/MediaUnsynced/Karaoke/Tracks-Organized"
 
 
 def _rank(key):
     """Return (order, margin) tuple for sorting: uncertain first, by margin ascending."""
-    # Map verdict and confidence to sort order (lower = first)
-    order_map = {"no_source": 0, "low": 1, "none": 2, "high": 3}
-
     verdict = key.get("verdict", "")
     confidence = key.get("confidence", "none")
 

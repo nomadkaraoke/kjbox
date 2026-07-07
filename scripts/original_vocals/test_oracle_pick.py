@@ -72,3 +72,11 @@ def test_tie_uses_format_and_size():
     assert r.verdict == "confirmed"
     assert r.confidence == "low"  # near-tie: format decides WHICH file, but human still verifies
     assert round(r.margin_db, 1) == 0.3  # actual margin is 0.3 dB but treated as tie/tiebreak
+
+
+def test_straddling_floor_within_one_bucket_is_confirmed():
+    """a.flac -40.3 and b.mp3 -39.8 bucket together; loudest (-39.8) >= floor (-40) => confirmed"""
+    r = pick_winner([c("a.flac", "flac", -40.3), c("b.mp3", "mp3", -39.8)])
+    assert r.verdict == "confirmed"
+    assert r.winner.name == "a.flac"     # flac wins the loudness-tie by format rank
+    assert r.confidence == "low"          # 0.5 dB margin

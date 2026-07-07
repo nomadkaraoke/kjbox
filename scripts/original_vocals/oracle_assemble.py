@@ -67,8 +67,15 @@ def main(argv=None) -> int:
             continue
         print(("DRY " if args.dry_run else "COPY ") + f"{os.path.basename(dst)}")
         if not args.dry_run:
-            subprocess.run([MATERIALIZE, src], capture_output=True)
+            m = subprocess.run([MATERIALIZE, src], capture_output=True)
+            if m.returncode != 0:
+                print(f"  WARN materialize failed, skipping {os.path.basename(dst)}")
+                continue
             shutil.copy2(src, dst)
+            if os.path.getsize(dst) != os.path.getsize(src):
+                os.remove(dst)
+                print(f"  WARN size mismatch, removed {os.path.basename(dst)}")
+                continue
             copied += 1
     print(f"assemble: {copied} copied, {skipped} already present, {len(plan)} eligible")
     return 0

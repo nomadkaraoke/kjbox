@@ -6,7 +6,7 @@
 
 **Architecture:** A local (Mac) pipeline of small pure-logic Python modules + a driver. For each in-scope folder we enumerate candidate audio files, materialize each from the Dropbox clone, run a cheap `2_HP-UVR.pth` separation, measure the vocals stem's mean volume, and pick the candidate with real vocals. Filenames are a tiebreak only. Early era (NOMAD-0001–0448) gets the full oracle; marker eras get a stratified audit. A human verifies ≥20 low-confidence picks, then an assembler copies winners into `Tracks-Audio/Original/`.
 
-**Tech Stack:** Python 3.13 (conda env `nomadkaraoke`), pytest 9.0.2, `audio-separator` 0.44.1 (VR model `2_HP-UVR.pth`), ffmpeg 8 (`volumedetect`), a Swift `materialize` helper for Dropbox online-only files, `soundscope` for review waveforms.
+**Tech Stack:** Python 3.13 (conda env `nomadkaraoke`), pytest 9.0.2, `audio-separator` 0.44.1 (VR model `2_HP-UVR.pth`), ffmpeg 8 (`volumedetect`), a Swift `materialize` helper for Dropbox online-only files, `ffmpeg showwavespic` for review waveforms.
 
 ## Global Constraints
 

@@ -12,6 +12,7 @@ def test_folder_for_brand_globs_tracks_organized(tmp_path):
     (root / "NOMAD-0100 - Idlewild - Little Discourage").mkdir(parents=True)
     assert os.path.basename(folder_for_brand(str(root), "NOMAD-0100")) == \
         "NOMAD-0100 - Idlewild - Little Discourage"
+    assert folder_for_brand(str(root), "NOMAD-9999") is None
 
 
 def test_load_done_brands_reads_csv_column(tmp_path):

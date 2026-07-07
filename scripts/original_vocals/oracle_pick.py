@@ -6,9 +6,8 @@ vocals; an instrumental separates near-silence. Filename is only a tiebreak
 (format rank via classify.FMT_RANK, then size).
 
 verdict: "confirmed" if at least one candidate >= floor_db; "no_source" if all below floor.
-confidence: "high" if clear winner (margin >= margin_db) or definitive tiebreak;
-            "low" if single candidate, runner-up within margin, or no_source;
-            "none" if no_source.
+confidence: "none" if no_source; "low" if single candidate, runner-up within margin_db, or margin < margin_db;
+            "high" only when margin >= margin_db.
 """
 from __future__ import annotations
 
@@ -41,7 +40,8 @@ class PickResult:
 
 
 def _sort_key(c: Candidate):
-    """Sort key: (db normalized to tie-epsilon bucket, format rank, size)."""
+    """Sort key: (db normalized to tie-epsilon bucket, format rank, size).
+    Used with reverse=True, so larger values sort first (descending on all fields)."""
     db = c.mean_db if c.mean_db is not None else -999.0
     # Normalize db to tie-epsilon bucket so candidates within _TIE_EPS_DB are grouped.
     db_bucket = round(db / _TIE_EPS_DB) * _TIE_EPS_DB
@@ -61,19 +61,17 @@ def pick_winner(
     Returns:
         PickResult with winner, confidence, and verdict.
     """
+    # no_source iff NO candidate is at/above the floor. Use the LOUDEST value, not
+    # the format-sorted winner (which can be slightly quieter within a tie-bucket).
+    loudest_db = max((c.mean_db for c in cands if c.mean_db is not None), default=None)
+    if loudest_db is None or loudest_db < floor_db:
+        return PickResult(None, None, None, None, "none", "no_source")
+
     # Sort all candidates by (db bucket, format rank, size).
     # Descending on db and format rank, ascending on size.
     sorted_cands = sorted(cands, key=_sort_key, reverse=True)
-
-    if not sorted_cands:
-        return PickResult(None, None, None, None, "none", "no_source")
-
     winner = sorted_cands[0]
     runner_up = sorted_cands[1] if len(sorted_cands) > 1 else None
-
-    # verdict: confirmed if winner >= floor_db, else no_source.
-    if winner.mean_db is None or winner.mean_db < floor_db:
-        return PickResult(None, None, None, None, "none", "no_source")
 
     # Verdict is confirmed.
     winner_db = winner.mean_db
