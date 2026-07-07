@@ -277,6 +277,10 @@ class OverlayApp:
         self._perf_frames = 0
         self._perf_raster_ms = None
         self._perf_last = time.monotonic()
+        # Reset here (not just in __init__) so the first frame's dt measures time
+        # since startup finished, not since construction — otherwise the compositor
+        # wait inflates the first dt and the ticker jumps on frame 1.
+        self._last_frame = time.monotonic()
         self._poll_config()
         self.win.show_all()
         self.GLib.timeout_add(int(CONFIG_POLL_INTERVAL * 1000), self._poll_config)
