@@ -1,0 +1,7 @@
+# compiled swift helpers (build with swiftc)
+materialize
+evict
+domains
+# generated plan + logs
+local_fetch.tsv
+*.log

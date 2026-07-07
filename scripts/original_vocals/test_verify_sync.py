@@ -90,10 +90,11 @@ def test_verify_pair_recovers_5s_intro(tmp_path):
     # video audio = 5s silence, then the noise, then 5s silence tail
     _ff(["-i", noise, "-af", "adelay=5000:all=1,apad=pad_dur=5", video])
 
-    r = V.verify_pair(video, original, intro=5.0, tail=5.0)
+    r = V.verify_pair(video, original, intro=5.0)
     assert abs(r.offset_s - 5.0) < 0.1, r
     assert r.peak > 0.8
     assert r.intro_silent
+    assert abs(r.onset_s - 5.0) < 0.2, r          # silencedetect corroborates the offset
     assert r.verdict == "confirmed", r.reasons
 
 
@@ -117,5 +118,5 @@ def test_wrong_recording_flagged_needs_review(tmp_path):
     _ff(["-i", str(tmp_path / "content.wav"), "-af", "adelay=5000:all=1,apad=pad_dur=5", video])
     _ff(["-f", "lavfi", "-i", "anoisesrc=color=white:seed=99:duration=20",
          "-ar", "8000", "-ac", "1", wrong])
-    r = V.verify_pair(video, wrong, intro=5.0, tail=5.0)
+    r = V.verify_pair(video, wrong, intro=5.0)
     assert r.verdict == "needs-review"
