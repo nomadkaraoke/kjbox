@@ -34,7 +34,7 @@ def _measure_file_mean_db(audio_path: str) -> float | None:
         Mean volume in dBFS, or None on failure.
     """
     r = subprocess.run(
-        ['ffmpeg', '-i', audio_path, '-filter:a', 'volumedetect', '-f', 'null', '/dev/null'],
+        ['ffmpeg', '-hide_banner', '-i', audio_path, '-filter:a', 'volumedetect', '-f', 'null', '/dev/null'],
         capture_output=True, text=True
     )
     if r.returncode != 0:
@@ -55,29 +55,29 @@ def separate_and_measure(audio_path: str, workdir: str, sep_bin: str, model: str
         Mean volume (dBFS) of vocals stem, or None on failure.
     """
     out = tempfile.mkdtemp(dir=workdir, prefix='ov_')
+    try:
+        env = dict(os.environ)
+        env.setdefault("AUDIO_SEPARATOR_MODEL_DIR",
+                       "/Volumes/AndrewMacSD/python-audio-separator-models-repo")
 
-    env = dict(os.environ)
-    env.setdefault("AUDIO_SEPARATOR_MODEL_DIR",
-                   "/Volumes/AndrewMacSD/python-audio-separator-models-repo")
+        r = subprocess.run(
+            [sep_bin, audio_path, "--model_filename", model,
+             "--output_dir", out, "--output_format", "flac"],
+            capture_output=True, text=True, env=env
+        )
 
-    r = subprocess.run(
-        [sep_bin, audio_path, "--model_filename", model,
-         "--output_dir", out, "--output_format", "flac"],
-        capture_output=True, text=True, env=env
-    )
+        if r.returncode != 0:
+            return None
 
-    if r.returncode != 0:
-        return None
+        voc = None
+        for f in glob.glob(os.path.join(out, "*.flac")):
+            if "(vocals)" in os.path.basename(f).lower():
+                voc = f
+                break
 
-    voc = None
-    for f in glob.glob(os.path.join(out, "*.flac")):
-        if "(vocals)" in os.path.basename(f).lower():
-            voc = f
-            break
+        if not voc:
+            return None
 
-    if not voc:
-        return None
-
-    db = _measure_file_mean_db(voc)
-    shutil.rmtree(out, ignore_errors=True)
-    return db
+        return _measure_file_mean_db(voc)
+    finally:
+        shutil.rmtree(out, ignore_errors=True)
