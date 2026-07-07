@@ -21,18 +21,11 @@ def test_filter_drops_existing_stems_and_renders_keeps_originals():
 
 
 def test_enumerate_reads_folder_recursively(tmp_path):
-    # Create nested structure with audio and non-audio files
-    (tmp_path / "subdir").mkdir()
-
-    # Create test files
-    (tmp_path / "original.mp3").write_text("dummy")
-    (tmp_path / "song_(Vocals)_UVR.flac").write_text("dummy")  # excluded
-    (tmp_path / "track.karaoke.webm").write_text("dummy")  # excluded
-    (tmp_path / "readme.txt").write_text("dummy")  # non-audio
-    (tmp_path / "subdir" / "nested.wav").write_text("dummy")
-
-    results = enumerate_candidates(str(tmp_path))
-    names = {f.name for f in results}
-
-    # Should only keep non-excluded audio files
-    assert names == {"original.mp3", "nested.wav"}
+    d = tmp_path / "NOMAD-0100 - Idlewild - Little Discourage"
+    (d / "sub").mkdir(parents=True)
+    (d / "01 Little Discourage.flac").write_bytes(b"x" * 10)
+    (d / "sub" / "Idlewild - Little Discourage.mp3").write_bytes(b"y" * 20)
+    (d / "cover.jpg").write_bytes(b"z")            # non-audio ignored
+    (d / "song_(Vocals)_2_HP-UVR.flac").write_bytes(b"v")  # stem dropped
+    got = {os.path.basename(c.path) for c in enumerate_candidates(str(d))}
+    assert got == {"01 Little Discourage.flac", "Idlewild - Little Discourage.mp3"}

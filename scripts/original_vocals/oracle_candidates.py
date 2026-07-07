@@ -19,6 +19,7 @@ def filter_candidates(files: list[AudioFile]) -> list[AudioFile]:
 
 
 def enumerate_candidates(folder: str) -> list[AudioFile]:
+    folder = os.path.abspath(folder)
     out: list[AudioFile] = []
     for root, _dirs, names in os.walk(folder):
         for name in names:
