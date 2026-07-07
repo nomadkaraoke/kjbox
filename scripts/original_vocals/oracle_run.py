@@ -60,16 +60,16 @@ def _brands_for_zone(zone: str) -> list[str]:
     elif zone == "audit":
         return audit_sample(rows)
     elif zone == "all":
-        return sorted(set(r["brand_code"] for r in rows))
+        return sorted({r["brand_code"] for r in rows}, key=_brand_num)
     else:
-        raise ValueError(f"unknown zone: {zone}")
+        raise SystemExit(f"unknown zone {zone!r}")
 
 
 def process_brand(brand: str) -> dict | None:
     """Process one brand: enumerate, measure, pick, return result row or None on error."""
     folder = folder_for_brand(TRACKS_ORG, brand)
     if not folder:
-        print(f"  {brand}: no folder found")
+        print(f"  {brand}: NO FOLDER", file=sys.stderr)
         return None
 
     # Enumerate candidates in the folder
@@ -82,6 +82,7 @@ def process_brand(brand: str) -> dict | None:
     measured = []
     for i, cand in enumerate(candidates, 1):
         print(f"    [{i}/{len(candidates)}] {cand.name}...", end="", flush=True)
+        subprocess.run([MATERIALIZE, cand.path], capture_output=True)
         mean_db = separate_and_measure(cand.path, WORKDIR, SEP_BIN, MODEL)
         if mean_db is not None:
             measured.append(Candidate(
@@ -125,9 +126,9 @@ def process_brand(brand: str) -> dict | None:
         "winner_name": result.winner.name,
         "winner_ext": result.winner.ext,
         "winner_rel": winner_rel,
-        "winner_db": result.winner_db,
-        "runnerup_db": result.runnerup_db if result.runnerup_db is not None else "",
-        "margin_db": result.margin_db if result.margin_db is not None else "",
+        "winner_db": f"{result.winner_db:.1f}" if result.winner_db is not None else "",
+        "runnerup_db": f"{result.runnerup_db:.1f}" if result.runnerup_db is not None else "",
+        "margin_db": f"{result.margin_db:.1f}" if result.margin_db is not None else "",
         "n_candidates": len(measured),
         "approved": "",
     }
