@@ -1,0 +1,4 @@
+# generated diagnostics + review outputs
+vocals_diagnostics.csv
+weak_vocals_review.csv
+*.log
