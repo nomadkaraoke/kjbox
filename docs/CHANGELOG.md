@@ -25,8 +25,16 @@ when `video_strip_vlc` is enabled (needs `wmctrl` repositioning — **validate o
 default off = VLC stays fullscreen). mpv — the default and only viable 4K engine — always honours it.
 
 **Config:** `video_top_margin_px` (80), `screen_width`/`screen_height` (1920×1080),
-`video_strip_vlc` (false). **Still to do:** on-device before/after measurement with the perf
-recorder (`/perf/record/*`) per engine, then deploy. Complements the v0.73.0 GPU auto-pin.
+`video_strip_vlc` (false). Complements the v0.73.0 GPU auto-pin.
+
+**Measured on NomadPC (2026-07-07, 78 s / 71 samples, 4K VP9 + rotation ticker enabled,
+windowed strip):** mpv **70.7 % CPU**, **7 real drops** (5.4/min), render fps 25.0 (100 %
+fps-ok), hwdec vaapi, GPU busy 91 % avg, 65 °C. That's the "no-overlays" baseline **with the
+ticker on** — vs the documented over-video baseline of **122 % CPU / 168 drops**. mpv
+`osd-dimensions` confirmed the video renders at 1920×1000 below the 80 px strip; a screenshot
+confirmed the ticker sits in the strip, not over the video. Recording:
+`/home/nomad/kjdata/perf_recordings/20260707-005115-after-strip-4k-ticker`. VLC strip path
+(`video_strip_vlc`) still needs on-device `wmctrl` validation before enabling.
 
 ## 2026-07-06 - Auto-pin GPU to max clock during playback (v0.73.0)
 
