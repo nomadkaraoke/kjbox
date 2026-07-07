@@ -9,7 +9,7 @@ import subprocess
 RESULTS = "data/oracle_results.csv"
 REVIEW_CSV = "data/review_picks.csv"
 REVIEW_DIR = "data/review"
-TRACKS_ORG = "data/tracks_original"
+TRACKS_ORG = "/Users/andrew/AB Dropbox/Andrew Beveridge/MediaUnsynced/Karaoke/Tracks-Organized"
 
 
 def _rank(key):
@@ -66,6 +66,10 @@ def main(argv=None) -> int:
     with open(args.results, newline="") as f:
         rows = sort_for_review(list(csv.DictReader(f)))
 
+    if not rows:
+        print("no rows in results CSV; nothing to review")
+        return 0
+
     # Write sorted CSV
     with open(REVIEW_CSV, "w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=rows[0].keys())
@@ -81,13 +85,17 @@ def main(argv=None) -> int:
 
     for r in flagged:
         png = os.path.join(REVIEW_DIR, f"{r['brand']}.png")
+        img_html = ""
         if r["winner_rel"]:
             _waveform_png(os.path.join(TRACKS_ORG, r["winner_rel"]), png)
+            img_html = f"<img src='{r['brand']}.png' style='max-width:640px;max-height:120px'>"
+        else:
+            img_html = "<i>(no candidate — no waveform)</i>"
         cards.append(
             f"<div style='margin:8px;font-family:sans-serif'>"
             f"<b>{r['brand']}</b> [{r['verdict']}/{r['confidence']}] "
             f"win={r['winner_db']}dB runnerup={r['runnerup_db']}dB margin={r['margin_db']}<br>"
-            f"<img src='{r['brand']}.png' style='max-width:640px;max-height:120px'></div>"
+            f"{img_html}</div>"
         )
 
     # Write index.html
