@@ -122,6 +122,31 @@ def test_ticker_resets_after_scrolling_off():
     assert p._scroll_x >= 1920 - 1
 
 
+# ---- bbox (partial-redraw damage regions) ----
+def test_ticker_bbox_full_width_at_top():
+    # A top-strip ticker damages the full-width strip (0,0,W,bar_h) — never the
+    # video window lowered beneath it.
+    p = op.TickerPainter("k", {"text": "hi", "position": "top",
+                               "font_size": 28, "padding": 10}, True)
+    x, y, w, h = p.bbox()
+    assert (x, y, w) == (0, 0, 1920)
+    assert h == p._h and h > 0
+
+
+def test_qr_bbox_matches_card():
+    p = op.QRCodePainter("q", {"url": "https://x", "size": 110, "padding": 10,
+                               "position": "top-right"}, True)
+    assert p.bbox() == (p._x, p._y, p._w, p._h)
+
+
+def test_countdown_bbox_matches_card():
+    p = op.CountdownPainter("c", {"target_time": "", "position": "top-center",
+                                  "font_size": 40, "padding": 15}, False)
+    x, y, w, h = p.bbox()
+    assert (x, y, w, h) == (p._x, p._y, p._w, p._h)
+    assert w > 0 and h > 0
+
+
 def test_countdown_formats_remaining():
     p = op.CountdownPainter("c", {
         "target_time": "", "label": "Last call", "expired_text": "TIME!",

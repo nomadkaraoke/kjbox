@@ -299,6 +299,59 @@ def test_launch_pipewire_command(mock_config, mocker):
     assert '--ao=alsa' not in args
 
 
+# --- Reserved-strip video geometry (4K frame-drop lever) ---
+
+def test_video_window_args_fullscreen_when_no_margin():
+    # margin 0 => old fullscreen behaviour (clean rollback path).
+    assert MpvKaraokePlayer._video_window_args(0, 1920, 1080) == ['--fs']
+
+
+def test_video_window_args_windowed_with_margin():
+    # margin>0 => borderless window BELOW a reserved top strip.
+    assert MpvKaraokePlayer._video_window_args(80, 1920, 1080) == \
+        ['--no-border', '--geometry=1920x1000+0+80']
+
+
+def test_video_window_args_negative_margin_is_fullscreen():
+    assert MpvKaraokePlayer._video_window_args(-5, 1920, 1080) == ['--fs']
+
+
+def _patch_launch(mocker):
+    mocker.patch('os.unlink', side_effect=FileNotFoundError)
+    mocker.patch('builtins.open', mocker.mock_open())
+    mock_popen = mocker.patch('subprocess.Popen')
+    mock_popen.return_value.pid = 12345
+    mocker.patch('os.path.exists', return_value=False)
+    mocker.patch('mpv_manager.time.sleep')
+    return mock_popen
+
+
+def test_launch_windowed_when_margin_configured(mock_config, mocker):
+    mock_config['video_top_margin_px'] = 80
+    mock_config['screen_width'] = 1920
+    mock_config['screen_height'] = 1080
+    filler = FillerVLC(mock_config, enabled=False)
+    p = MpvKaraokePlayer(mock_config, filler, enabled=True, audio_backend='alsa')
+    mock_popen = _patch_launch(mocker)
+    p.launch()
+    args = mock_popen.call_args[0][0]
+    assert '--no-border' in args
+    assert '--geometry=1920x1000+0+80' in args
+    assert '--fs' not in args
+
+
+def test_launch_fullscreen_when_margin_zero(mock_config, mocker):
+    mock_config['video_top_margin_px'] = 0
+    filler = FillerVLC(mock_config, enabled=False)
+    p = MpvKaraokePlayer(mock_config, filler, enabled=True, audio_backend='pipewire')
+    mock_popen = _patch_launch(mocker)
+    p.launch()
+    args = mock_popen.call_args[0][0]
+    assert '--fs' in args
+    assert '--no-border' not in args
+    assert not any(str(a).startswith('--geometry=') for a in args)
+
+
 # --- shutdown ---
 
 def test_shutdown_sends_quit_and_terminates(player, mocker):

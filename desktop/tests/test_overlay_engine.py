@@ -62,6 +62,50 @@ def test_render_to_png_writes_file(tmp_path):
     assert surf.get_width() == eng.SCREEN_WIDTH
 
 
+import overlay_painters as op  # noqa: E402
+
+
+def test_collect_dirty_returns_only_animating_painter_bboxes():
+    """Per-overlay damage: only painters whose tick() requests a redraw
+    contribute a rect, and each rect is that painter's own bbox — so the
+    compositor never re-blends the whole screen (video region) for the ticker."""
+    ticker = op.TickerPainter("k", {"text": "hi", "position": "top",
+                                    "font_size": 28, "padding": 10}, True)
+    qr = op.QRCodePainter("q", {"url": "https://x", "size": 100,
+                                "position": "top-right"}, True)
+    overlays = [
+        {"id": "k", "type": "ticker", "enabled": True, "show_over_video": True},
+        {"id": "q", "type": "qr_code", "enabled": True, "show_over_video": True},
+    ]
+    fake = types.SimpleNamespace(playing=True, _overlays=overlays,
+                                 painters={"k": ticker, "q": qr})
+    dirty = eng.OverlayApp._collect_dirty(fake, 0.1)
+    # ticker animates (tick True); the static QR does not (BasePainter.tick False)
+    assert dirty == [ticker.bbox()]
+    assert qr.bbox() not in dirty
+
+
+def test_collect_dirty_empty_when_nothing_animates():
+    qr = op.QRCodePainter("q", {"url": "https://x", "size": 100,
+                                "position": "top-right"}, True)
+    overlays = [{"id": "q", "type": "qr_code", "enabled": True, "show_over_video": True}]
+    fake = types.SimpleNamespace(playing=True, _overlays=overlays, painters={"q": qr})
+    assert eng.OverlayApp._collect_dirty(fake, 0.1) == []
+
+
+def test_collect_dirty_skips_desktop_only_overlay_during_video():
+    """A desktop-only overlay (show_over_video False) is hidden during playback,
+    so it contributes no damage — nothing repaints over the video for it."""
+    rot = op.RotationListPainter("r", {}, False)
+    overlays = [{"id": "r", "type": "rotation_list", "enabled": True,
+                 "show_over_video": False}]
+    fake = types.SimpleNamespace(playing=True, _overlays=overlays, painters={"r": rot})
+    assert eng.OverlayApp._collect_dirty(fake, 0.1) == []
+    # ...but between songs (not playing) it IS visible and damages its region.
+    fake.playing = False
+    assert eng.OverlayApp._collect_dirty(fake, 0.1) == [rot.bbox()]
+
+
 def test_apply_click_through_sets_empty_input_shape():
     """The overlay must stay click-through: an EMPTY input shape lets every
     pointer event pass to VLC/desktop windows underneath (and, via VNC, lets the

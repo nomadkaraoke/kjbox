@@ -141,6 +141,19 @@ class BasePainter:
         self.show_over_video = show_over_video
         self.layout()
 
+    def bbox(self):
+        """Return the painter's damage rectangle ``(x, y, w, h)``.
+
+        The overlay engine invalidates only this region when the painter
+        animates, so the compositor recomposites just the overlay's own area
+        instead of the whole screen (and, for a top-strip ticker, never the
+        video window beneath it). A painter whose visible content can move must
+        return a rectangle that bounds every position it draws — the ticker's
+        text moves horizontally but its full-width bar bounds it, so the bar is
+        the bbox.
+        """
+        return (self._x, self._y, self._w, self._h)
+
     def cleanup(self):
         pass
 

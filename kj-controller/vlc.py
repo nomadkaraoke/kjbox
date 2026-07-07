@@ -126,6 +126,51 @@ class VlcKaraokePlayer:
             log_message(f"Unexpected error calling karaoke VLC: {e}", self.config)
             return None
 
+    # ── Video window geometry ──────────────────────────────────────────
+
+    @staticmethod
+    def _video_window_args(margin_px, strip_vlc):
+        """Launch flags controlling the karaoke video window.
+
+        Returns ``[]`` (windowed — positioned afterwards by ``wmctrl``) only when
+        a top strip is reserved (``margin_px > 0``) AND the VLC strip is enabled
+        (``video_strip_vlc``). Otherwise ``['--fullscreen']`` — the safe default,
+        since VLC's own geometry flags are unreliable and window repositioning
+        needs on-device validation.
+        """
+        if margin_px and margin_px > 0 and strip_vlc:
+            return []
+        return ['--fullscreen']
+
+    def _reposition_window(self, margin_px, screen_w, screen_h):
+        """Best-effort: move the karaoke VLC window below the reserved strip.
+
+        VLC's geometry CLI flags are unreliable, so we reposition the mapped
+        window with ``wmctrl`` after it appears. FIDDLY / device-validated: the
+        filler VLC is a second "VLC media player" window, so ``wmctrl -r``
+        matching is ambiguous — gate this behind ``video_strip_vlc`` and confirm
+        on the device before trusting it. Never raises; logs and leaves VLC
+        fullscreen on any failure.
+        """
+        title = 'VLC media player'
+        video_h = max(1, screen_h - margin_px)
+        cmds = [
+            ['wmctrl', '-r', title, '-b', 'remove,fullscreen'],
+            ['wmctrl', '-r', title, '-e', f'0,0,{margin_px},{screen_w},{video_h}'],
+        ]
+        if is_pi():
+            wrapper = ['sudo', '-u', 'dietpi', 'env', 'DISPLAY=:0',
+                       'XDG_RUNTIME_DIR=/run/user/1000']
+            cmds = [wrapper + c for c in cmds]
+        for c in cmds:
+            try:
+                subprocess.run(c, capture_output=True, timeout=5, check=False)
+            except (OSError, subprocess.SubprocessError) as e:
+                log_message(f"wmctrl reposition failed ({' '.join(c[-4:])}): {e}", self.config)
+                return
+        log_message(
+            f"Positioned karaoke VLC below {margin_px}px top strip.", self.config)
+
     # ── Lifecycle ──────────────────────────────────────────────────────
 
     def launch(self):
@@ -141,6 +186,9 @@ class VlcKaraokePlayer:
             f"Launching karaoke VLC on port {self._port} with audio device '{self.audio_device}'...",
             self.config,
         )
+        margin_px = int(self.config.get('video_top_margin_px', 0) or 0)
+        video_args = self._video_window_args(
+            margin_px, bool(self.config.get('video_strip_vlc', False)))
         command = [
             'cvlc',
             '--extraintf', 'http',
@@ -150,7 +198,7 @@ class VlcKaraokePlayer:
             '--no-video-title-show',
             '--aout', 'alsa',
             '--alsa-audio-device', self.audio_device,
-            '--fullscreen',
+            *video_args,
         ]
 
         if is_pi():
@@ -177,6 +225,14 @@ class VlcKaraokePlayer:
             self._socket_dead_count = 0
             log_message(f"Karaoke VLC launched with PID {process.pid}.", self.config)
             time.sleep(2)
+            # Windowed (video_args empty) => reposition below the reserved strip
+            # now the VLC window has had time to map.
+            if not video_args:
+                self._reposition_window(
+                    margin_px,
+                    int(self.config.get('screen_width', 1920) or 1920),
+                    int(self.config.get('screen_height', 1080) or 1080),
+                )
         except FileNotFoundError:
             log_message("VLC not found — karaoke instance not launched.", self.config)
             if vlc_log:
