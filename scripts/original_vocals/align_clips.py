@@ -1,5 +1,5 @@
 """Render pre-rendered A/V review clips (guide mixed into video at candidate offsets)
-+ a decisions template. Run ON the device (ffmpeg). Pure selection/命名/cmd are unit-tested."""
++ a decisions template. Run ON the device (ffmpeg). Pure selection/naming/cmd are unit-tested."""
 import argparse, csv, hashlib, os, subprocess, sys
 from align_core import read_offsets, variant_offsets, clip_cut
 
@@ -60,13 +60,19 @@ def main(argv=None):
     for b in review:
         r = rows.get(b)
         if not r or b not in vidx or b not in gidx:
+            print(f"WARN {b}: skipped (missing offsets row or video/guide file)", file=sys.stderr)
             continue
         cands = variant_offsets(r.offset_s, steps) if (r.verdict == "needs-review" or a.fine) else [r.offset_s]
         ok = 0
         for cand in cands:
             vstart, gstart, dur = clip_cut(r.offset_s, r.onset_s, cand)
             out = os.path.join(a.out_dir, clip_name(b, _title_from(vidx[b]), cand))
-            rc = subprocess.run(ffmpeg_clip_cmd(vidx[b], gidx[b], vstart, gstart, dur, out)).returncode
+            try:
+                rc = subprocess.run(ffmpeg_clip_cmd(vidx[b], gidx[b], vstart, gstart, dur, out),
+                                    timeout=180).returncode
+            except subprocess.TimeoutExpired:
+                rc = -1
+                print(f"WARN {b}: clip render timed out (offset {cand:.3f}s)", file=sys.stderr)
             if rc == 0:
                 ok += 1
             else:

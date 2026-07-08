@@ -590,10 +590,12 @@ git commit -m "feat(align): align_apply merges decisions + emits aligned guides 
 
 **Interfaces:** Consumes all of Tasks 1–4. No new code (integration/validation only).
 
-- [ ] **Step 1: Install numpy on device**
+- [ ] **Step 1: numpy on device (already in the kj-controller venv — no install)**
 
-Run: `ssh nomadpctunnel 'pip3 install --user numpy 2>&1 | tail -2; python3 -c "import numpy; print(numpy.__version__)"'`
-Expected: prints a numpy version.
+The device `/usr/bin/python3` has **no pip/numpy**; the kj-controller venv already ships numpy, so run the align tools with that interpreter (verified 2026-07-08):
+
+Run: `ssh nomadpctunnel '/opt/nomad/kjbox/kj-controller/venv/bin/python -c "import numpy; print(numpy.__version__)"'`
+Expected: prints a numpy version (2.4.2 as of 2026-07-08).
 
 - [ ] **Step 2: scp the align tools + verify_sync to device**
 

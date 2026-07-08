@@ -9,7 +9,7 @@ FFMPEG = "ffmpeg"
 def merge_decisions(rows, decisions):
     finer = []
     for d in decisions:
-        b = d["brand"]; val = d.get("decision", "").strip()
+        b = (d.get("brand") or "").strip(); val = (d.get("decision") or "").strip()
         if not val or b not in rows:
             continue
         kind, off = parse_decision(val)
