@@ -1,6 +1,6 @@
 """Render pre-rendered A/V review clips (guide mixed into video at candidate offsets)
 + a decisions template. Run ON the device (ffmpeg). Pure selection/命名/cmd are unit-tested."""
-import argparse, csv, hashlib, os, subprocess
+import argparse, csv, hashlib, os, subprocess, sys
 from align_core import read_offsets, variant_offsets, clip_cut
 
 FFMPEG = "ffmpeg"
@@ -62,14 +62,18 @@ def main(argv=None):
         if not r or b not in vidx or b not in gidx:
             continue
         cands = variant_offsets(r.offset_s, steps) if (r.verdict == "needs-review" or a.fine) else [r.offset_s]
+        ok = 0
         for cand in cands:
             vstart, gstart, dur = clip_cut(r.offset_s, r.onset_s, cand)
             out = os.path.join(a.out_dir, clip_name(b, _title_from(vidx[b]), cand))
-            subprocess.run(ffmpeg_clip_cmd(vidx[b], gidx[b], vstart, gstart, dur, out),
-                           check=False)
+            rc = subprocess.run(ffmpeg_clip_cmd(vidx[b], gidx[b], vstart, gstart, dur, out)).returncode
+            if rc == 0:
+                ok += 1
+            else:
+                print(f"WARN {b}: clip render failed (offset {cand:.3f}s, ffmpeg rc={rc})", file=sys.stderr)
         dec_rows.append({"brand": b, "verdict": r.verdict, "measured_offset_s": r.offset_s,
                          "decision": ""})
-        print(f"{b}: {len(cands)} clip(s)")
+        print(f"{b}: {ok}/{len(cands)} clip(s)")
     with open(os.path.join(a.out_dir, "align_decisions.csv"), "w", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=["brand", "verdict", "measured_offset_s", "decision"])
         w.writeheader(); w.writerows(dec_rows)

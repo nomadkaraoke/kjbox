@@ -36,6 +36,8 @@ def test_parse_decision():
     assert parse_decision("exclude") == ("exclude", None)
     assert parse_decision("needs-finer") == ("needs-finer", None)
     assert parse_decision("offset_ms=4870") == ("offset", 4.870)
+    assert parse_decision("offset_ms=abc") == ("invalid", None)
+    assert parse_decision("exlude") == ("invalid", None)
 
 def test_apply_decision_offset_sets_human_source():
     r = OffsetRow("NOMAD-0300",5.0,0.9,"confirmed",200,190,10.0,"measured","active")

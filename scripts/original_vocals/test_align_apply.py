@@ -17,3 +17,4 @@ def test_emit_cmd_pads_and_trims_to_video():
     cmd=emit_cmd("g.flac","out.flac",4.98,200.0)
     s=" ".join(cmd)
     assert "adelay=4980:all=1" in s and "atrim=0:200.000" in s and s.endswith("out.flac")
+    assert "-f flac" in s   # forces flac muxer for the ".part" temp output

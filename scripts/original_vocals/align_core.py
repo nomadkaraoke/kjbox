@@ -65,10 +65,13 @@ class OffsetRow:
 def parse_decision(value):
     v = (value or "").strip()
     if v.startswith("offset_ms="):
-        return "offset", round(int(v.split("=", 1)[1]) / 1000.0, 3)
+        try:
+            return "offset", round(int(v.split("=", 1)[1]) / 1000.0, 3)
+        except ValueError:
+            return "invalid", None
     if v in ("confirm", "exclude", "needs-finer"):
         return v, None
-    return v, None
+    return "invalid", None
 
 
 def apply_decision(row, kind, off_s):

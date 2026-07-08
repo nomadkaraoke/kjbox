@@ -1,6 +1,6 @@
 """Merge human decisions into align_offsets.csv, then emit aligned guides to the
 padded dir (active) and remove guides for excluded tracks. Run ON the device (ffmpeg)."""
-import argparse, csv, glob, os, subprocess
+import argparse, csv, glob, os, subprocess, sys
 from align_core import read_offsets, write_offsets, parse_decision, apply_decision, emit_af
 
 FFMPEG = "ffmpeg"
@@ -15,6 +15,9 @@ def merge_decisions(rows, decisions):
         kind, off = parse_decision(val)
         if kind == "needs-finer":
             finer.append(b); continue
+        if kind == "invalid":
+            print(f"WARN {b}: unrecognized decision {val!r} — skipped", file=sys.stderr)
+            continue
         rows[b] = apply_decision(rows[b], kind, off)
     return rows, finer
 
@@ -31,9 +34,9 @@ def _index(d):
     import re
     idx = {}
     for p in glob.glob(os.path.join(d, "*")):
-        m = re.match(r"(NOMAD-\d{4})", os.path.basename(p))
+        m = re.match(r"(NOMAD-\d+)", os.path.basename(p), re.IGNORECASE)
         if m:
-            idx.setdefault(m.group(1), p)
+            idx.setdefault(m.group(1).upper(), p)
     return idx
 
 
@@ -53,12 +56,16 @@ def main(argv=None):
             print("needs-finer:", " ".join(finer))
     raw = _index(a.raw_dir); pad = _index(a.padded_dir)
     os.makedirs(a.padded_dir, exist_ok=True)
-    emitted = excluded = 0
+    emitted = excluded = failed = 0
     for b, r in rows.items():
         if r.status == "excluded":
             for idx in (raw, pad):
-                if b in idx:
-                    os.remove(idx[b]); 
+                p = idx.get(b)
+                if p:
+                    try:
+                        os.remove(p)
+                    except OSError as e:
+                        print(f"WARN {b}: could not remove {p}: {e}", file=sys.stderr)
             excluded += 1
             print("EXCLUDE", b)
             continue
@@ -66,10 +73,21 @@ def main(argv=None):
             continue
         base = os.path.splitext(os.path.basename(raw[b]))[0]
         out = os.path.join(a.padded_dir, base + ".flac")
-        subprocess.run(emit_cmd(raw[b], out + ".part", r.offset_s, r.video_dur), check=True)
-        os.replace(out + ".part", out)
-        emitted += 1
-    print(f"emitted {emitted} aligned guides; excluded {excluded}. (Remove excluded from Mac copies too.)")
+        tmp = out + ".part"
+        try:
+            subprocess.run(emit_cmd(raw[b], tmp, r.offset_s, r.video_dur), check=True)
+            os.replace(tmp, out)
+            emitted += 1
+        except (subprocess.CalledProcessError, OSError) as e:
+            failed += 1
+            print(f"ERROR {b}: emit failed: {e}", file=sys.stderr)
+            if os.path.exists(tmp):
+                try:
+                    os.remove(tmp)
+                except OSError:
+                    pass
+    print(f"emitted {emitted} aligned guides; excluded {excluded}; failed {failed}. "
+          f"(Remove excluded from Mac copies too.)")
 
 
 if __name__ == "__main__":
