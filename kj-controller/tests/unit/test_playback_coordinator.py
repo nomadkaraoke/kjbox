@@ -269,7 +269,8 @@ def test_play_video_stops_filler_first(mock_config, mocker, tmp_path):
     c.play_video(str(f))
     fade_out.assert_called_once()
     ensure.assert_called_once()
-    play.assert_called_once_with(str(f), display_path=None, overlay_manager=None, audio_file=None)
+    play.assert_called_once_with(str(f), display_path=None, overlay_manager=None,
+                                 audio_file=None, vocals_file=None)
 
 
 def test_play_video_threads_audio_file_to_player(mock_config, mocker, tmp_path):
@@ -285,7 +286,8 @@ def test_play_video_threads_audio_file_to_player(mock_config, mocker, tmp_path):
 
     c.play_video(str(cdg), display_path=str(cdg), audio_file=str(mp3))
     play.assert_called_once_with(
-        str(cdg), display_path=str(cdg), overlay_manager=None, audio_file=str(mp3)
+        str(cdg), display_path=str(cdg), overlay_manager=None, audio_file=str(mp3),
+        vocals_file=None
     )
 
 

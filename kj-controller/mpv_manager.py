@@ -68,6 +68,12 @@ class MpvKaraokePlayer:
         self._socket_dead_count = 0   # debounce for reconnected-mpv liveness checks
         self._last_file_path = None  # actual path of the last play() — for crash Retry
         self._pitch_semitones = 0
+        # Original-vocals guide: an isolated-vocals track mixed UNDER the karaoke
+        # audio via --lavfi-complex amix, so the existing @rb rubberband (in --af)
+        # pitches the combined output. Default 0 = OFF. See docs/AUDIO.md.
+        self._vocals_file = None      # resolved guide path for the current song
+        self._vocals_volume = 0       # vlc scale 0-256 (0 = off); guide gain = /256
+        self._lavfi_active = False    # is a lavfi-complex mix currently set in mpv
         self.ipc_socket_path = MPV_SOCKET_PATH
         self._ipc_lock = threading.Lock()
         self._ipc_request_id = 0
@@ -81,6 +87,15 @@ class MpvKaraokePlayer:
     @property
     def pitch_semitones(self) -> int:
         return self._pitch_semitones
+
+    @property
+    def vocals_volume(self) -> int:
+        return self._vocals_volume
+
+    @property
+    def has_vocals_track(self) -> bool:
+        """True when an original-vocals guide is mixed into the current song."""
+        return self._vocals_file is not None
 
     # ── IPC ────────────────────────────────────────────────────────────
 
@@ -326,7 +341,8 @@ class MpvKaraokePlayer:
 
     # ── Playback control ───────────────────────────────────────────────
 
-    def play(self, file_path, display_path=None, overlay_manager=None, audio_file=None):
+    def play(self, file_path, display_path=None, overlay_manager=None, audio_file=None,
+             vocals_file=None):
         if not os.path.exists(file_path):
             log_message(f"ERROR: File not found: {file_path}", self.config)
             return
@@ -340,11 +356,23 @@ class MpvKaraokePlayer:
             self._last_file_path = file_path  # remembered for crash-Retry
             self.audio_error = False
             self._pitch_semitones = 0  # reset for each new song
+            self._vocals_volume = 0    # guide starts OFF each song; KJ raises it live
+            self._vocals_file = None
 
             if display_path is not None:
                 self.current_path = display_path
             if overlay_manager is not None:
                 overlay_manager.set_karaoke_playing(True)
+
+            # If the previous song had an original-vocals mix, clear it BEFORE
+            # loading the next file. Clearing while the old graph's aid2 still
+            # exists keeps the @rb audio filter healthy; clearing AFTER loadfile
+            # (aid2 gone) breaks af-command rb -> pitch (verified on mpv 0.37).
+            # Only touched when a guide was active, so normal->normal playback is
+            # unchanged.
+            if self._lavfi_active:
+                self._send_ipc(["set_property", "lavfi-complex", ""])
+                self._lavfi_active = False
 
             resp = self._send_ipc(["loadfile", file_path, "replace"])
             if resp is None or resp.get("error") != "success":
@@ -374,6 +402,22 @@ class MpvKaraokePlayer:
                         overlay_manager.set_karaoke_playing(False)
                     self.current_path = None
                     return
+            elif vocals_file and os.path.exists(vocals_file):
+                # Original-vocals guide (NOMAD masters): attach the isolated-vocals
+                # track WITHOUT selecting it (the video's own audio stays aid1, the
+                # guide becomes aid2), then mix them via lavfi-complex. The @rb
+                # rubberband in --af pitches the combined [ao] output, so pitch
+                # control is unchanged. Best-effort: a failed attach falls back to
+                # normal playback (guide simply absent), never aborts the song.
+                gresp = self._send_ipc(["audio-add", vocals_file, "auto"])
+                if gresp is not None and gresp.get("error") == "success":
+                    self._vocals_file = vocals_file
+                    self._apply_vocals_mix()
+                else:
+                    log_message(
+                        f"WARNING: could not attach vocals guide "
+                        f"{os.path.basename(vocals_file)} — normal playback",
+                        self.config)
 
             time.sleep(0.5)
             mpv_vol = self._vlc_to_mpv_volume(self.karaoke_volume)
@@ -418,7 +462,30 @@ class MpvKaraokePlayer:
         self.active = False
         self.current_path = None
         self.audio_error = False
+        self._vocals_file = None
+        self._vocals_volume = 0
         self._save_state()
+
+    def set_vocals_volume(self, vlc_level):
+        """Set the original-vocals guide level (vlc scale 0-256; 0 = off).
+        Rebuilds the lavfi-complex mix live when a guide is active; otherwise
+        just remembers the level for the next guide song."""
+        self._vocals_volume = max(0, min(256, int(vlc_level)))
+        if self.active and self._vocals_file:
+            self._apply_vocals_mix()
+
+    def _apply_vocals_mix(self):
+        """(Re)build the lavfi-complex graph mixing the guide (aid2) under the
+        karaoke audio (aid1). Guide gain 0..1 from _vocals_volume/256. Rubberband
+        is NOT in the graph — the global @rb filter in --af pitches the mixed
+        [ao] output, so pitch stays shared and its control path is unchanged."""
+        if not self._vocals_file:
+            return
+        gain = max(0.0, min(1.0, self._vocals_volume / 256.0))
+        graph = (f"[aid2]volume={gain:.4f}[gv];"
+                 f"[aid1][gv]amix=inputs=2:normalize=0[ao]")
+        self._set_property("lavfi-complex", graph)
+        self._lavfi_active = True
 
     def seek(self, seconds):
         self.last_seek_time = time.time()

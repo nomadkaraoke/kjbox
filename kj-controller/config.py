@@ -104,6 +104,12 @@ def load_config(config_file=None):
         "preview_cache_max_bytes": 8 * 1024 * 1024 * 1024,  # 8 GiB LRU cap
         "preview_transcode_height": 480,
         "preview_transcode_preset": "veryfast",
+        # Original-vocals guide: directory of 5s-padded isolated-vocals files,
+        # mixed UNDER a NOMAD master at the "Original Vocals" slider level (default
+        # 0/off). Resolved by brand code (NOMAD-####). "" -> derived at play time as
+        # the "NOMAD-vocals-padded" sibling of the playing master's directory
+        # (on the device: /opt/nomad/downloads/NOMAD-vocals-padded). mpv only.
+        "vocals_guide_dir": "",
     }
     if os.path.exists(config_file):
         try:

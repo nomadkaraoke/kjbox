@@ -790,6 +790,33 @@ def ack_download():
     return jsonify({"success": True})
 
 
+def _resolve_vocals_guide(playing_path, cfg):
+    """Resolve the original-vocals guide file for a NOMAD master, by brand code.
+
+    Returns the padded-vocals path, or None when the file isn't a NOMAD master,
+    no guide directory exists, or no guide is present for that brand. The guide
+    directory is ``cfg['vocals_guide_dir']`` if set, else the 'NOMAD-vocals-padded'
+    sibling of the playing master's directory (device: /opt/nomad/downloads/…).
+    Matched by brand prefix (NOMAD-####) so guide/​master filename normalization
+    differences don't matter."""
+    try:
+        import glob as _glob
+        import naming as _naming
+        base = os.path.basename(playing_path or "")
+        m = _naming._MASTER_RE.match(base)
+        if not m:
+            return None
+        guide_dir = cfg.get('vocals_guide_dir') or os.path.join(
+            os.path.dirname(os.path.dirname(playing_path)), 'NOMAD-vocals-padded')
+        if not guide_dir or not os.path.isdir(guide_dir):
+            return None
+        brand = f"NOMAD-{m.group(1)}"
+        matches = sorted(_glob.glob(os.path.join(guide_dir, _glob.escape(brand) + " - *")))
+        return matches[0] if matches else None
+    except Exception:
+        return None
+
+
 @routes_bp.route('/play', methods=['POST'])
 def handle_play():
     """Plays a media file by path (supports local media, external media, and ZIP files)."""
@@ -867,11 +894,19 @@ def handle_play():
         _browser_mode = False
         log_message("Browser mode auto-disabled for VLC playback.", cfg)
 
+    # Original-vocals guide: for a NOMAD master on mpv, resolve the isolated-vocals
+    # file so it can be mixed UNDER the karaoke audio at the "Original Vocals"
+    # slider level. Best-effort + mpv-only; CDG songs (audio_file set) get no guide.
+    vocals_file = None
+    if audio_file is None and getattr(vlc, 'render_mode', None) == RENDER_MODE_MPV:
+        vocals_file = _resolve_vocals_guide(validated, cfg)
+
     log_message(f"Received play request for {os.path.basename(validated)}.", cfg)
     threading.Thread(target=vlc.play_video, args=(actual_play_path,),
                      kwargs={'display_path': validated,
                              'overlay_manager': current_app.overlay_manager,
-                             'audio_file': audio_file}).start()
+                             'audio_file': audio_file,
+                             'vocals_file': vocals_file}).start()
     _record_play_stat(validated, request.json.get('entry_id'))
     return jsonify({"success": True, "message": "Playback initiated."})
 
@@ -957,6 +992,10 @@ def handle_volume():
         password = cfg.get('filler_vlc_password', 'filler')
         vlc.filler_volume = level
         vlc.send_command(port, password, f"volume&val={level}")
+    elif target == 'vocals':
+        # Original-vocals guide level (mpv only; no-op on VLC). Not persisted —
+        # the guide resets to OFF for each new song (see MpvKaraokePlayer.play).
+        vlc.set_vocals_volume_live(level)
     else:
         return jsonify({"error": "Invalid target"}), 400
     _debounced_save_volumes(vlc)
@@ -1253,6 +1292,14 @@ def get_status():
         "browser_mode": browser_status,
         "rotation_downloads": rotation_downloads,
         "pitch_semitones": vlc.pitch_semitones,
+        # Original-vocals guide: current guide level + whether the currently
+        # playing master has a resolvable guide (computed statelessly from the
+        # playing path, so it's correct during filler/stopped too). mpv only.
+        "original_vocals_volume": getattr(vlc, 'vocals_volume', 0),
+        "has_vocals_track": (
+            getattr(vlc, 'render_mode', None) == RENDER_MODE_MPV
+            and _resolve_vocals_guide(cpp, current_app.kj_config) is not None
+        ),
         "renderer": vlc.describe_renderer(),
         "player_alert": vlc.player_alert,
         "player_health_events": vlc.player_health_events,
