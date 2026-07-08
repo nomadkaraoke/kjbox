@@ -617,6 +617,11 @@ function updateFillerVolume(value) {
     debouncedSetVolume('filler', value);
 }
 
+function updateVocalsVolume(value) {
+    document.getElementById('vocals-volume-label').textContent = volumePercent(value);
+    debouncedSetVolume('vocals', value);
+}
+
 async function setVolume(target, level) {
     await apiCall('/volume', { target, level: parseInt(level) });
 }
@@ -1478,6 +1483,20 @@ async function updateStatus() {
                 if (document.activeElement !== fSlider) {
                     fSlider.value = data.filler_volume;
                     document.getElementById('filler-volume-label').textContent = volumePercent(data.filler_volume);
+                }
+            }
+            // Original-vocals guide: show the slider only when the current master
+            // has a resolvable guide (backend already gates on mpv), and sync its
+            // level without fighting an active drag.
+            const vRow = document.getElementById('vocals-volume-row');
+            if (vRow) {
+                vRow.style.display = data.has_vocals_track ? '' : 'none';
+                if (data.original_vocals_volume !== undefined) {
+                    const vSlider = document.getElementById('vocals-volume');
+                    if (vSlider && document.activeElement !== vSlider) {
+                        vSlider.value = data.original_vocals_volume;
+                        document.getElementById('vocals-volume-label').textContent = volumePercent(data.original_vocals_volume);
+                    }
                 }
             }
 

@@ -85,6 +85,13 @@
                             <label for="filler-volume">Filler Volume: <span id="filler-volume-label" class="range-label">{{ ((config.get('filler_volume', 100) / 256 * 100) | round | int) }}%</span></label>
                             <input type="range" id="filler-volume" class="volume-slider" min="0" max="256" value="{{ config.get('filler_volume', 100) }}" oninput="updateFillerVolume(this.value)">
                         </div>
+                        <!-- Original-vocals guide: hidden until /status reports has_vocals_track
+                             (mpv + a resolvable guide for the current master). Default 0 = OFF;
+                             KJ raises it (~30%) as a sing-along guide. Resets per song. -->
+                        <div class="pc-slider-row" id="vocals-volume-row" style="display:none;">
+                            <label for="vocals-volume">Original Vocals: <span id="vocals-volume-label" class="range-label">{{ ((config.get('original_vocals_volume', 0) / 256 * 100) | round | int) }}%</span></label>
+                            <input type="range" id="vocals-volume" class="volume-slider" min="0" max="256" value="{{ config.get('original_vocals_volume', 0) }}" oninput="updateVocalsVolume(this.value)">
+                        </div>
                     </div>
                     <div class="pc-slider-row pc-seek">
                         <label for="seek-slider">Seek: <span id="seek-value">0:00</span></label>

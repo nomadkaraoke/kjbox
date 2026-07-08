@@ -405,11 +405,14 @@ class PlaybackCoordinator:
         self.player.on_karaoke_end = fn
 
     # -- Karaoke playback --
-    def play_video(self, file_path, display_path=None, overlay_manager=None, audio_file=None):
+    def play_video(self, file_path, display_path=None, overlay_manager=None, audio_file=None,
+                   vocals_file=None):
         """Stop filler, then play on the current renderer.
 
         ``audio_file`` is forwarded to the player (external audio track for CDG
-        zips on mpv); see ``KaraokePlayer.play``."""
+        zips on mpv); see ``KaraokePlayer.play``. ``vocals_file`` is an optional
+        original-vocals guide mixed UNDER the karaoke audio (mpv only); it is
+        passed through only to a player that supports it, so VLC mode is safe."""
         if not self.enabled:
             log_message(f"Playback disabled — cannot play {os.path.basename(file_path)}", self.config)
             return
@@ -423,8 +426,25 @@ class PlaybackCoordinator:
             time.sleep(0.3)
             self.filler.ensure_stopped()
 
-        self.player.play(file_path, display_path=display_path, overlay_manager=overlay,
-                         audio_file=audio_file)
+        play_kwargs = dict(display_path=display_path, overlay_manager=overlay,
+                           audio_file=audio_file)
+        if hasattr(self.player, 'set_vocals_volume'):   # mpv only
+            play_kwargs['vocals_file'] = vocals_file
+        self.player.play(file_path, **play_kwargs)
+
+    def set_vocals_volume_live(self, vlc_level):
+        """Set the original-vocals guide level live (mpv only; no-op on VLC)."""
+        fn = getattr(self.player, 'set_vocals_volume', None)
+        if fn:
+            fn(vlc_level)
+
+    @property
+    def vocals_volume(self):
+        return getattr(self.player, 'vocals_volume', 0)
+
+    @property
+    def has_vocals_track(self):
+        return bool(getattr(self.player, 'has_vocals_track', False))
 
     def stop_karaoke(self):
         self.player.stop()
