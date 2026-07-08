@@ -637,3 +637,12 @@ git add -A && git commit -m "chore(align): device validation run log"
 - Spec coverage: A→Task2/verify_sync; B→verify_sync verdict surfaced in Task2; C→Task3 (clips, comb, spot-check, decisions, exclude outcome); D→Task4 (offset store, emit, exclude); scope/ordering→Task5 + full-run sequence. ✓
 - No placeholders; every code step has full code. ✓
 - Type consistency: `OffsetRow` fields + `parse_decision`/`apply_decision`/`emit_af` signatures identical across Tasks 1/2/4. ✓
+
+
+## Device validation run log (Task 5 — 2026-07-08, device idle, non-disruptive)
+Ran with the kj-controller venv python (`/opt/nomad/kjbox/kj-controller/venv/bin/python`, numpy 2.4.2 — no install needed; `/usr/bin/python3` has no pip/numpy). Tools scp'd to `/tmp`, cleaned up after.
+- **measure** `NOMAD-0900` → `confirmed`, offset **5.063s**, peak 0.95, onset 5.35s, video 273.088s / audio 262.613s. (Measured ≠ old flat 5.0s pad.)
+- **clips** → valid `.mp4`, video+audio streams, **15.000s** (before 3 + after 12); decisions template written.
+- **emit** (confirmed) → valid `.flac`, duration **273.088005s** == video_dur ✓. `-f flac` + `.part`→`os.replace` flow worked on device ffmpeg.
+- **gate** (synthetic needs-review + measured row) → `SKIP`, emitted 0 / skipped 1, output dir empty ✓ (unverified offset never ships).
+Device left idle (state=stopped), /tmp pristine.
