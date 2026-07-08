@@ -48,6 +48,11 @@ def test_apply_decision_exclude():
     r = OffsetRow("NOMAD-0300",5.0,0.1,"needs-review",200,190,10.0,"measured","active")
     assert apply_decision(r, "exclude", None).status == "excluded"
 
+def test_apply_decision_confirm_sets_verdict_confirmed():
+    r = OffsetRow("NOMAD-0300",5.0,0.1,"needs-review",200,190,10.0,"measured","active")
+    r2 = apply_decision(r, "confirm", None)
+    assert r2.verdict == "confirmed" and r2.status == "active"
+
 def test_offsets_roundtrip(tmp_path):
     rows={"NOMAD-0300":OffsetRow("NOMAD-0300",5.0,0.9,"confirmed",200,190,10.0,"measured","active")}
     p=tmp_path/"o.csv"; write_offsets(str(p), rows)

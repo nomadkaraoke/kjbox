@@ -84,6 +84,7 @@ def apply_decision(row, kind, off_s):
         d["status"] = "active"
     elif kind == "confirm":
         d["status"] = "active"
+        d["verdict"] = "confirmed"   # human agrees with the measured offset -> emit-eligible
     return OffsetRow(**d)
 
 

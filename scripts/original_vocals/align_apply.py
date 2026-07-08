@@ -30,6 +30,13 @@ def emit_cmd(guide, out, offset_s, video_dur):
             "-af", emit_af(offset_s, video_dur), "-c:a", "flac", "-f", "flac", out]
 
 
+def should_emit(row):
+    """A non-excluded track emits its aligned guide only if it is auto-confirmed
+    or human-decided. An un-reviewed needs-review track (still source='measured')
+    is skipped so an unverified offset never ships to the live device."""
+    return row.verdict == "confirmed" or row.source == "human"
+
+
 def _index(d):
     import re
     idx = {}
@@ -56,7 +63,7 @@ def main(argv=None):
             print("needs-finer:", " ".join(finer))
     raw = _index(a.raw_dir); pad = _index(a.padded_dir)
     os.makedirs(a.padded_dir, exist_ok=True)
-    emitted = excluded = failed = 0
+    emitted = excluded = skipped = failed = 0
     for b, r in rows.items():
         if r.status == "excluded":
             for idx in (raw, pad):
@@ -70,6 +77,11 @@ def main(argv=None):
             print("EXCLUDE", b)
             continue
         if b not in raw:
+            continue
+        if not should_emit(r):
+            skipped += 1
+            print(f"SKIP {b}: unreviewed {r.verdict} (unverified offset) — not emitted",
+                  file=sys.stderr)
             continue
         base = os.path.splitext(os.path.basename(raw[b]))[0]
         out = os.path.join(a.padded_dir, base + ".flac")
@@ -86,7 +98,8 @@ def main(argv=None):
                     os.remove(tmp)
                 except OSError:
                     pass
-    print(f"emitted {emitted} aligned guides; excluded {excluded}; failed {failed}. "
+    print(f"emitted {emitted} aligned guides; excluded {excluded}; "
+          f"skipped {skipped} (unreviewed); failed {failed}. "
           f"(Remove excluded from Mac copies too.)")
 
 

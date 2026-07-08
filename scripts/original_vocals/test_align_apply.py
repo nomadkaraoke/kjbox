@@ -1,5 +1,5 @@
 from align_core import OffsetRow
-from align_apply import merge_decisions, emit_cmd
+from align_apply import merge_decisions, emit_cmd, should_emit
 
 def _row(b,verdict="needs-review"): return OffsetRow(b,5.0,0.1,verdict,200,190,10.0,"measured","active")
 
@@ -18,3 +18,9 @@ def test_emit_cmd_pads_and_trims_to_video():
     s=" ".join(cmd)
     assert "adelay=4980:all=1" in s and "atrim=0:200.000" in s and s.endswith("out.flac")
     assert "-f flac" in s   # forces flac muxer for the ".part" temp output
+
+def test_should_emit_gates_unreviewed_needs_review():
+    assert should_emit(_row("A", "confirmed"))                    # auto-confirmed -> emit
+    assert not should_emit(_row("B", "needs-review"))             # measured needs-review -> skip
+    human = OffsetRow("C",4.8,0.1,"needs-review",200,190,10.0,"human","active")
+    assert should_emit(human)                                     # human-set offset -> emit
