@@ -744,3 +744,26 @@ class TestAdditionalSingers:
         updated = store.update_request(req["id"], singer_name="Alicia")
         assert updated["singer_name"] == "Alicia"
         assert updated["additional_singers"] == self._partners()
+
+
+# ---------------------------------------------------------------------------
+# edit_token + cancel (2026-07-09 self-service)
+# ---------------------------------------------------------------------------
+
+class TestEditTokenAndCancel:
+    def test_create_request_mints_unique_edit_token(self, store):
+        a = store.create_request(singer_name="Alice", phone="", source_type="local", source_ref="/a.mp4")
+        b = store.create_request(singer_name="Bob", phone="", source_type="local", source_ref="/b.mp4")
+        assert a["edit_token"] and isinstance(a["edit_token"], str)
+        assert len(a["edit_token"]) >= 16
+        assert a["edit_token"] != b["edit_token"]
+        # Round-trips through get_request unchanged.
+        assert store.get_request(a["id"])["edit_token"] == a["edit_token"]
+
+    def test_mark_cancelled_sets_status(self, store):
+        r = store.create_request(singer_name="Alice", phone="", source_type="local", source_ref="/a.mp4")
+        out = store.mark_cancelled(r["id"])
+        assert out["status"] == "cancelled"
+        assert out["reviewed_at"]
+        with pytest.raises(ValueError):
+            store.mark_cancelled(999999)

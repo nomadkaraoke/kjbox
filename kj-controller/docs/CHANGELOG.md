@@ -4,6 +4,14 @@ Dated entries, newest first. Each entry notes any required deploy steps.
 
 ---
 
+## 2026-07-09 - Singer self-service: cancel your own song (v0.78.0)
+
+**Deploy:** backend change (`sing.py`, `sing_store.py`) → **requires `systemctl restart kj-controller`** (interrupts playback — deploy in a maintenance window). Also frontend (`sing.js`, `app.js`, CSS). Additive DB migration (`sing_requests.edit_token`) — safe on existing DBs.
+
+- Singers can cancel their own request from their phone ("your songs tonight" screen). A per-request secret (`edit_token`, minted at submit and stored on the device) proves ownership, so a singer can only cancel their own songs.
+- A not-yet-approved request cancels instantly. A request already in the rotation is **soft-cancelled**: it stays visible to the KJ marked "Cancelled by singer" (struck-through + CANCELLED badge) with a **Dismiss** button to remove it, or set it back to **Waiting** to restore.
+- Edit-song and reorder-your-own are coming in a follow-up; cancel ships first.
+
 ## 2026-07-08 - Singer UI: reliable song search + hardened confirm (v0.76.0)
 
 **Deploy:** frontend-only (`static-sing/sing.js`, `static-sing/sing.css`) → auto-deploy pulls on the next browser refresh; **no service restart** and no playback interruption.

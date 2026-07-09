@@ -49,11 +49,14 @@ function _readMyRequestStore() {
   } catch { return null; }
 }
 
-function rememberRequestId(token, id) {
+function rememberRequestId(token, id, editToken) {
   if (!token || !id) return;
   let store = _readMyRequestStore();
-  if (!store || store.token !== token) store = { token, ids: [] };
+  if (!store || store.token !== token) store = { token, ids: [], tokens: {} };
+  if (!store.tokens) store.tokens = {};
   if (!store.ids.includes(id)) store.ids.push(id);
+  // Per-request ownership secret proving this device may cancel/edit it.
+  if (editToken) store.tokens[String(id)] = editToken;
   try { localStorage.setItem(MY_REQUESTS_KEY, JSON.stringify(store)); }
   catch { /* private browsing — best-effort */ }
 }
@@ -62,6 +65,12 @@ function readMyRequestIds(token) {
   const store = _readMyRequestStore();
   if (!store || store.token !== token) return [];
   return store.ids.slice();
+}
+
+function readEditToken(token, id) {
+  const store = _readMyRequestStore();
+  if (!store || store.token !== token || !store.tokens) return "";
+  return store.tokens[String(id)] || "";
 }
 
 const PHONE_RE = /^\+?[0-9 \-()]{7,20}$/;
@@ -1118,9 +1127,10 @@ function renderConfirm() {
 
       const data = await submit(payload);
       state.request = data.request;
-      // Remember this request id on this device (per token) so the done
-      // screen's "your songs tonight" list survives reloads.
-      rememberRequestId(TOKEN, data.request.id);
+      // Remember this request id + its edit_token on this device (per token) so
+      // the done screen's "your songs tonight" list survives reloads and can
+      // offer self-service cancel.
+      rememberRequestId(TOKEN, data.request.id, data.request.edit_token);
       state.step = "done";
       render();
     } catch (e) {
@@ -1268,6 +1278,31 @@ function _renderSongCard(item) {
     const names = partners.map((p) => p.name).join(", ");
     card.appendChild(el("div", { class: "song-card-partners" },
       `with ${names}`));
+  }
+  // Self-service cancel — only for a request this device owns (has the
+  // edit_token for) and that is still cancellable (pending or in the queue).
+  const editToken = readEditToken(TOKEN, req.id);
+  const cancellable = editToken && (req.status === "pending" || req.status === "approved");
+  if (cancellable) {
+    card.appendChild(el("button", {
+      class: "btn ghost song-card-cancel",
+      "data-testid": "cancel-song",
+      onclick: async (e) => {
+        e.stopPropagation();
+        if (!confirm(`Cancel "${song}"? The KJ will see it's cancelled.`)) return;
+        e.target.disabled = true;
+        try {
+          const resp = await fetch(`${BASE}/requests/${req.id}/cancel`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "same-origin",
+            body: JSON.stringify({ t: TOKEN, edit_token: editToken }),
+          });
+          if (!resp.ok) { e.target.disabled = false; alert("Couldn't cancel — please see the KJ."); return; }
+        } catch { e.target.disabled = false; alert("Couldn't cancel — check your connection."); return; }
+        if (typeof window.__sing_render === "function") window.__sing_render();
+      },
+    }, "Cancel this song"));
   }
   return card;
 }

@@ -5239,6 +5239,8 @@ function renderRotation(entries) {
             row.classList.add('rotation-onhold');
         } else if (statusLower === 'skipped') {
             row.classList.add('rotation-skipped');
+        } else if (statusLower === 'cancelled') {
+            row.classList.add('rotation-cancelled');
         }
 
         // Shift+hover: show edit indicator
@@ -5432,6 +5434,10 @@ function renderRotation(entries) {
             badge.textContent = 'SKIP';
             badge.classList.add('badge-skipped');
             badge.title = 'Skipped this round';
+        } else if (statusLower === 'cancelled') {
+            badge.textContent = 'CANCELLED';
+            badge.classList.add('badge-cancelled');
+            badge.title = 'Cancelled by the singer — Dismiss to remove, or set Waiting to restore';
         }
         if (badge.textContent) info.appendChild(badge);
 
@@ -5691,6 +5697,20 @@ function renderRotation(entries) {
             setTimeout(() => document.addEventListener('click', close), 0);
         };
         actions.appendChild(moreBtn);
+
+        // Dismiss button — only on singer-cancelled rows (quick remove; the
+        // KJ can still Restore via the "…" menu → Waiting).
+        if (statusLower === 'cancelled') {
+            const dismissBtn = document.createElement('button');
+            dismissBtn.className = 'rotation-btn rotation-btn-dismiss';
+            dismissBtn.textContent = 'Dismiss';
+            dismissBtn.title = 'Remove this cancelled singer from the rotation';
+            dismissBtn.onclick = (e) => {
+                e.stopPropagation();
+                deleteRotationEntry(entry.id, entry.singer);
+            };
+            actions.appendChild(dismissBtn);
+        }
 
         // Edit pencil button
         const editBtn = document.createElement('button');

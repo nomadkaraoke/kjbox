@@ -8,6 +8,7 @@ Design doc: docs/archive/2026-04-18-public-request-form-design.md
 
 import json
 import re
+import secrets
 import threading
 import time
 from collections import defaultdict, deque
@@ -606,7 +607,10 @@ def submit():
 
     return jsonify(
         {
-            "request": _public_request_view(req),
+            # edit_token is returned ONCE here so the submitting device can store
+            # it for self-service (cancel/edit). It is intentionally absent from
+            # _public_request_view (used by /my-requests and /status).
+            "request": {**_public_request_view(req), "edit_token": req.get("edit_token")},
             "auto_approved": auto_approved,
         }
     )
@@ -846,6 +850,66 @@ def my_requests():
     return jsonify({"now_playing": now_playing_dict, "requests": out})
 
 
+@sing_bp.route("/requests/<int:req_id>/cancel", methods=["POST"])
+def cancel_request(req_id):
+    """Singer cancels their own request (proven by the per-request edit_token).
+
+    Pending → marked cancelled (nothing downstream). Approved → the linked
+    rotation entry is set to 'Cancelled' (visible to the KJ, excluded from the
+    active queue selection) and the request is marked cancelled. The KJ can
+    dismiss (delete) or restore (→ Waiting) from the rotation row.
+    """
+    store = getattr(current_app, "sing_store", None)
+    if store is None:
+        return jsonify({"error": "not_configured"}), 503
+
+    cfg = current_app.kj_config
+    limit = _safe_int(cfg.get("sing_rate_limit_per_ip"), 5)
+    window = _safe_int(cfg.get("sing_rate_limit_window_s"), 300)
+    if _rate_limit_exceeded(_client_ip(request), limit, window):
+        return jsonify({"error": "rate_limited"}), 429
+
+    token = _extract_token()
+    if not token or not _is_token_valid(store, token):
+        return jsonify({"error": "not_open"}), 403
+
+    req = store.get_request(req_id)
+    # Night-scope + event-token match (mirror status()): a prior-night or
+    # foreign request must be indistinguishable from a missing one.
+    if req is None or req.get("token") != token or not _belongs_to_current_night(store, req):
+        return jsonify({"error": "not_found"}), 404
+
+    data = request.get_json(silent=True) or {}
+    provided = data.get("edit_token") or ""
+    stored = req.get("edit_token") or ""
+    # Constant-time compare; empty stored token (legacy rows) can never match.
+    if not stored or not secrets.compare_digest(str(provided), str(stored)):
+        return jsonify({"error": "forbidden"}), 403
+
+    if req["status"] in ("cancelled", "rejected"):
+        return jsonify({"error": f"already {req['status']}"}), 409
+
+    # If it reached the rotation, soft-cancel the linked entry (visible to KJ).
+    # A sing_request stays 'approved' even after its entry is sung, so guard
+    # against cancelling a finished song: flipping a Done/Left entry to
+    # 'Cancelled' would resurrect it in the queue and corrupt sung-counts.
+    if req["status"] == "approved" and req.get("linked_entry_id"):
+        rotation = getattr(current_app, "rotation", None)
+        if rotation is not None:
+            entry = rotation.store.get_entry(req["linked_entry_id"])
+            entry_status = ((entry or {}).get("status") or "").lower()
+            if entry_status in ("done", "left"):
+                # Already performed / gone — nothing to cancel.
+                return jsonify({"error": "already_sung"}), 409
+            try:
+                rotation.update_status(req["linked_entry_id"], "Cancelled")
+            except Exception:
+                current_app.logger.exception("cancel: failed to soft-cancel entry")
+
+    store.mark_cancelled(req_id)
+    return jsonify({"success": True, "request": _public_request_view(store.get_request(req_id))})
+
+
 # --- Response shaping ----------------------------------------------------
 
 def _build_now_playing(rotation):
@@ -861,7 +925,9 @@ def _build_now_playing(rotation):
     entries = rotation.get_rotation()
     active = [
         e for e in entries
-        if (e.get("status") or "").lower() not in ("done", "left")
+        # 'cancelled' stays visible to the KJ but must not appear in the
+        # singer-facing now/next/queue counts.
+        if (e.get("status") or "").lower() not in ("done", "left", "cancelled")
     ]
     now = next(
         (e for e in active if (e.get("status") or "").lower() == "now singing"),
@@ -905,7 +971,7 @@ def _public_queue_view(entries):
     """First-name-only view of the rotation for the expandable 'show upcoming' list."""
     out = []
     for entry in entries:
-        if entry.get("status", "").lower() in {"done", "left"}:
+        if entry.get("status", "").lower() in {"done", "left", "cancelled"}:
             continue
         singer = entry.get("singer") or ""
         first_name = singer.split()[0] if singer else ""

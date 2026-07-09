@@ -320,3 +320,27 @@ class TestSingerHappinessPills:
         ])
         assert rows[0]["wait_text"] == "∞"
         assert rows[0]["wait_tier"] == "pill-bad"
+
+
+class TestCancelledEntry:
+    def test_cancelled_entry_renders_distinctly_with_dismiss(self, rotation_page):
+        page = rotation_page
+        page.locator('#rotation-singer').fill('CancelMe')
+        page.locator('#rotation-singer').press('Enter')
+        page.locator('#rotation-song').fill('Some Song')
+        page.locator('#rotation-add-btn-submit').click()
+        page.locator('.rotation-name', has_text='CancelMe').first.wait_for(state='visible')
+        # Soft-cancel via the API (exactly as the singer cancel endpoint does),
+        # then force a rotation refresh.
+        page.evaluate("""async () => {
+            const r = await fetch('/rotation').then(x => x.json());
+            const e = r.entries.find(e => (e.singer || '').includes('CancelMe'));
+            await fetch('/rotation/status', {
+                method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({id: e.id, status: 'Cancelled'})});
+            await fetchRotation();
+        }""")
+        cancelled = page.locator('.rotation-entry.rotation-cancelled')
+        cancelled.first.wait_for(state='visible')
+        assert cancelled.locator('.badge-cancelled').count() > 0
+        assert cancelled.locator('.rotation-btn-dismiss').count() > 0

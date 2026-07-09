@@ -302,3 +302,49 @@ class TestVersionList:
         page.locator('[data-testid="online-collapse-toggle"]').click()
         expect(page.locator(
             '.sing-version-section[data-section="online"] .sing-version-card')).to_have_count(3)
+
+
+class TestSelfServiceCancel:
+    def test_cancel_button_shows_and_sends_edit_token(self, page, live_server, live_token):
+        _login(page, live_server, live_token)
+        # Seed a stored request id + its edit_token, then land on the done screen.
+        page.evaluate("""(t) => {
+            localStorage.setItem('sing_my_request_ids',
+              JSON.stringify({token: t, ids: [4242], tokens: {'4242': 'secret-xyz'}}));
+        }""", live_token)
+        page.route("**/sing/my-requests*", lambda route: route.fulfill(
+            status=200, content_type="application/json", body=json.dumps({
+                "now_playing": {"now_singing": None, "up_next": None, "queued_count": 0},
+                "requests": [{"request": {"id": 4242, "singer_name": "Alice",
+                    "song_artist": "Queen", "song_title": "Bo Rhap",
+                    "source_type": "local", "status": "pending",
+                    "created_at": "now", "linked_entry_id": None,
+                    "additional_singers": None}}]})))
+        page.route("**/sing/requests/4242/cancel", lambda route: route.fulfill(
+            status=200, content_type="application/json",
+            body=json.dumps({"success": True, "request": {"id": 4242, "status": "cancelled"}})))
+        page.on("dialog", lambda d: d.accept())
+        page.evaluate("window.__sing_state.step = 'done'; window.__sing_render();")
+        expect(page.locator('[data-testid="cancel-song"]')).to_be_visible()
+        with page.expect_request("**/sing/requests/4242/cancel") as req_info:
+            page.locator('[data-testid="cancel-song"]').click()
+        assert "secret-xyz" in (req_info.value.post_data or "")
+
+    def test_no_cancel_button_without_edit_token(self, page, live_server, live_token):
+        _login(page, live_server, live_token)
+        # Stored id but NO edit_token for it (e.g. a different device / legacy).
+        page.evaluate("""(t) => {
+            localStorage.setItem('sing_my_request_ids',
+              JSON.stringify({token: t, ids: [4242], tokens: {}}));
+        }""", live_token)
+        page.route("**/sing/my-requests*", lambda route: route.fulfill(
+            status=200, content_type="application/json", body=json.dumps({
+                "now_playing": {"now_singing": None, "up_next": None, "queued_count": 0},
+                "requests": [{"request": {"id": 4242, "singer_name": "Alice",
+                    "song_artist": "Queen", "song_title": "Bo Rhap",
+                    "source_type": "local", "status": "pending",
+                    "created_at": "now", "linked_entry_id": None,
+                    "additional_singers": None}}]})))
+        page.evaluate("window.__sing_state.step = 'done'; window.__sing_render();")
+        expect(page.locator(".song-card-title")).to_be_visible()
+        expect(page.locator('[data-testid="cancel-song"]')).to_have_count(0)
