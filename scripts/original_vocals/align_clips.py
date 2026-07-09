@@ -1,7 +1,10 @@
-"""Render pre-rendered A/V review clips (guide mixed into video at candidate offsets)
-+ a decisions template. Run ON the device (ffmpeg). Pure selection/naming/cmd are unit-tested."""
+"""Render review clips: the first `--dur` seconds of each master video from t=0,
+with the original-vocal guide mixed in delayed by the candidate offset (adelay).
+This mirrors the emit (silence[offset]+guide) exactly, so the clip's alignment IS
+the emitted alignment — shown from the title card onward, which is easy to reason
+about. Run ON the device (ffmpeg). Pure selection/naming/cmd are unit-tested."""
 import argparse, csv, hashlib, os, subprocess, sys
-from align_core import read_offsets, variant_offsets, clip_cut
+from align_core import read_offsets, variant_offsets
 
 FFMPEG = "ffmpeg"
 
@@ -23,14 +26,19 @@ def clip_name(brand, artist_title, candidate_s):
     return f"{brand} - {safe}__off={candidate_s:.3f}s.mp4"
 
 
-def ffmpeg_clip_cmd(video, guide, video_start, guide_start, dur, out, gain=0.65):
+def ffmpeg_clip_cmd(video, guide, offset_s, dur, out, gain=0.65):
+    """First `dur`s of the video from t=0 with the guide mixed in, delayed by
+    offset_s (adelay). Mirrors emit_padded (silence[offset]+guide). Video is
+    stream-copied (fast); only the mixed audio is re-encoded."""
+    delay_ms = int(round(offset_s * 1000))
     return [FFMPEG, "-y", "-v", "error",
-            "-ss", f"{video_start:.3f}", "-t", f"{dur:.3f}", "-i", video,
-            "-ss", f"{guide_start:.3f}", "-t", f"{dur:.3f}", "-i", guide,
+            "-t", f"{dur:.3f}", "-i", video,
+            "-i", guide,
             "-filter_complex",
-            f"[1:a]volume={gain}[g];[0:a][g]amix=inputs=2:normalize=0[a]",
-            "-map", "0:v", "-map", "[a]", "-shortest",
-            "-c:v", "libx264", "-preset", "veryfast", "-c:a", "aac", out]
+            f"[1:a]adelay={delay_ms}:all=1,volume={gain}[g];"
+            f"[0:a][g]amix=inputs=2:normalize=0:duration=first[a]",
+            "-map", "0:v", "-map", "[a]", "-t", f"{dur:.3f}",
+            "-c:v", "copy", "-c:a", "aac", out]
 
 
 def _title_from(name):
@@ -44,8 +52,9 @@ def main(argv=None):
     ap.add_argument("--video-dir", required=True)
     ap.add_argument("--guide-dir", required=True)
     ap.add_argument("--out-dir", required=True)
-    ap.add_argument("--fine", action="store_true", help="fine comb [0,±25,±50]ms (for needs-finer round)")
-    ap.add_argument("--only", nargs="*", help="restrict to these brands (fine round)")
+    ap.add_argument("--dur", type=float, default=60.0, help="clip length from t=0 (default 60s)")
+    ap.add_argument("--fine", action="store_true", help="fine comb [0,±25,±50]ms (needs-finer round)")
+    ap.add_argument("--only", nargs="*", help="restrict to these brands (variant round)")
     a = ap.parse_args(argv)
     import glob
     import verify_sync as vs
@@ -53,6 +62,9 @@ def main(argv=None):
     vidx = vs._index_by_brand(glob.glob(os.path.join(a.video_dir, "*")))
     gidx = vs._index_by_brand(glob.glob(os.path.join(a.guide_dir, "*")))
     os.makedirs(a.out_dir, exist_ok=True)
+    # Default first pass: one clip per reviewed track at the measured offset.
+    # A variant comb is only rendered for an explicit follow-up round (--only / --fine).
+    do_variants = bool(a.only or a.fine)
     steps = (0, -25, 25, -50, 50) if a.fine else (0, -100, 100, -200, 200)
     flagged, spot = select_review(rows)
     review = (a.only if a.only else flagged + spot)
@@ -62,13 +74,12 @@ def main(argv=None):
         if not r or b not in vidx or b not in gidx:
             print(f"WARN {b}: skipped (missing offsets row or video/guide file)", file=sys.stderr)
             continue
-        cands = variant_offsets(r.offset_s, steps) if (r.verdict == "needs-review" or a.fine) else [r.offset_s]
+        cands = variant_offsets(r.offset_s, steps) if do_variants else [r.offset_s]
         ok = 0
         for cand in cands:
-            vstart, gstart, dur = clip_cut(r.offset_s, r.onset_s, cand)
             out = os.path.join(a.out_dir, clip_name(b, _title_from(vidx[b]), cand))
             try:
-                rc = subprocess.run(ffmpeg_clip_cmd(vidx[b], gidx[b], vstart, gstart, dur, out),
+                rc = subprocess.run(ffmpeg_clip_cmd(vidx[b], gidx[b], cand, a.dur, out),
                                     timeout=180).returncode
             except subprocess.TimeoutExpired:
                 rc = -1
