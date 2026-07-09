@@ -689,3 +689,8 @@ input:focus {
 .sing-online-toggle { display: block; width: 100%; text-align: left; background: none;
   border: 1px dashed rgba(255,255,255,0.25); color: inherit; opacity: 0.75;
   border-radius: 8px; padding: 8px 10px; margin-top: 6px; cursor: pointer; }
+
+
+/* Self-service cancel on the done screen */
+.song-card-cancel { margin-top: 8px; font-size: 0.85rem; opacity: 0.85; }
+.song-card[data-status="cancelled"] .song-card-title { text-decoration: line-through; opacity: 0.6; }
