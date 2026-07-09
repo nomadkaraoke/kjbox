@@ -117,6 +117,7 @@ When making **system/device changes** (not just code), update docs:
 |---|---|
 | HDMI / display / video output | `docs/HDMI.md` |
 | Audio / ALSA / VLC audio | `docs/AUDIO.md` |
+| Original-vocals guide / guide dataset | `docs/ORIGINAL-VOCALS.md` |
 | Troubleshooting / common tasks | `docs/TROUBLESHOOTING.md` |
 | Hardware, network, display, services | `docs/archive/NOMADPI-DETAILS.md` |
 | Mini PC setup or config | `docs/MINIPC-SETUP.md` |
