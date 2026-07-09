@@ -523,6 +523,16 @@ function renderSearch() {
   const expandedSongs = new Set();
   let ccExplainerDismissed = _ccExplainerSeen();
 
+  // Anti-mis-tap: a freshly-(re)rendered results list is inert for a moment, so
+  // a tap aimed at the previous layout can't activate a row that just appeared
+  // (the search backend is slow, so rows can arrive right as a finger lands).
+  // The window is overridable via window.__SING_ARM_MS for deterministic tests
+  // (mirrors the existing window.__sing_* test bridge).
+  const armMs = () =>
+    (typeof window.__SING_ARM_MS === "number" ? window.__SING_ARM_MS : 300);
+  let armAt = 0;
+  const armed = () => Date.now() >= armAt;
+
   let debounceTimer = null;
   // Generation guard (ported from the KJ link search, app.js rotSearchGen):
   // bumped at the start of each fetch so a slower earlier query cannot clobber
@@ -761,7 +771,7 @@ function renderSearch() {
       ),
       el("button", {
         class: "sing-version-pick",
-        onclick: (e) => { e.stopPropagation(); pickSpecificVersion(group, version); },
+        onclick: (e) => { e.stopPropagation(); if (!armed()) return; pickSpecificVersion(group, version); },
       }, "Pick this version →"),
     );
     return card;
@@ -920,6 +930,7 @@ function renderSearch() {
 
   function renderResults() {
     const container = el("div", { class: "results" });
+    armAt = Date.now() + armMs();   // freshly-built rows are inert briefly (anti-mis-tap)
     if (loading) container.appendChild(el("p", { class: "hint" }, "Searching…"));
     if (err) container.appendChild(el("p", { class: "error" }, err));
 
@@ -952,7 +963,7 @@ function renderSearch() {
       if (isSingle || !state.simpleMode) {
         children.push(el("button", {
           class: "btn-primary-cta",
-          onclick: (e) => { e.stopPropagation(); onCtaClick(); },
+          onclick: (e) => { e.stopPropagation(); if (!armed()) return; onCtaClick(); },
         }, ctaLabel));
       }
 
@@ -969,7 +980,7 @@ function renderSearch() {
           children.push(el("button", {
             class: "sing-versions-toggle",
             "aria-expanded": isExpanded ? "true" : "false",
-            onclick: (e) => { e.stopPropagation(); toggleExpanded(group.key); },
+            onclick: (e) => { e.stopPropagation(); if (!armed()) return; toggleExpanded(group.key); },
           }, toggleLabel));
           if (isExpanded) children.push(renderVersionsExpander(group));
         }

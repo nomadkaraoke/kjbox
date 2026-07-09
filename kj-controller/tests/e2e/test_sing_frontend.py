@@ -209,3 +209,25 @@ class TestSearchRace:
         self._goto_search(page, live_server, live_token)
         page.locator('input[type="search"]').fill("bohemian")
         expect(page.locator(".results .hint")).to_have_text("Searching…", timeout=400)
+
+    def test_pick_is_inert_briefly_after_render(self, page, live_server, live_token):
+        """A freshly rendered pick button is inert (anti-mis-tap), then arms."""
+        body = {"songs": [{"key": "q:1", "artist": "Queen", "title": "Bo Rhap",
+                           "version_count": 1,
+                           "versions": [{"source": "local",
+                                         "local": {"path": "/x", "artist": "Queen",
+                                                   "title": "Bo Rhap"}}]}]}
+        page.route("**/sing/search*", lambda r: r.fulfill(
+            status=200, content_type="application/json", body=json.dumps(body)))
+        # A huge cooldown makes the "inert" window deterministic (no wall-clock race).
+        page.add_init_script("window.__SING_ARM_MS = 100000;")
+        self._goto_search(page, live_server, live_token)
+        page.locator('input[type="search"]').fill("queen")
+        expect(page.locator(".btn-primary-cta")).to_be_visible()
+        page.locator(".btn-primary-cta").click()   # within the cooldown → ignored
+        assert page.evaluate("window.__sing_state.step") == "search"
+        # Arm immediately and re-render; the auto-search re-populates and the tap works.
+        page.evaluate("window.__SING_ARM_MS = 0; window.__sing_render();")
+        expect(page.locator(".btn-primary-cta")).to_be_visible()
+        page.locator(".btn-primary-cta").click()
+        assert page.evaluate("window.__sing_state.step") == "confirm"
