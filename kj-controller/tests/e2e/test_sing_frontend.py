@@ -255,3 +255,41 @@ class TestConfirmHardening:
         expect(page.locator(".confirm-searched")).to_contain_text("bohemian")
         expect(page.locator(".submit-btn")).to_have_text("Yes — send to the KJ")
         expect(page.get_by_role("button", name="← Pick a different song")).to_be_visible()
+
+
+class TestVersionList:
+    def _multi(self, page, live_server, live_token):
+        # No tap cooldown so version interactions are immediate in this test.
+        page.add_init_script("window.__SING_ARM_MS = 0;")
+        _login(page, live_server, live_token)
+        # 1 community + 3 commercial-online versions; best-first order preserved.
+        body = {"songs": [{
+            "key": "q:multi", "artist": "Queen", "title": "Bo Rhap",
+            "version_count": 4, "in_library": False,
+            "versions": [
+                {"source": "kn", "priority_stated": True,
+                 "kn": {"brand_name": "SongService", "is_community": True}},
+                {"source": "kn", "priority_stated": False, "kn": {"brand_name": "BrandA"}},
+                {"source": "kn", "priority_stated": False, "kn": {"brand_name": "BrandB"}},
+                {"source": "kn", "priority_stated": False, "kn": {"brand_name": "BrandC"}},
+            ]}]}
+        page.route("**/sing/search*", lambda r: r.fulfill(
+            status=200, content_type="application/json", body=json.dumps(body)))
+        page.evaluate("window.__sing_state.step = 'search'; window.__sing_render();")
+        page.locator('input[type="search"]').fill("bo rhap")
+        expect(page.locator(".result-row")).to_be_visible()
+        page.locator(".sing-versions-toggle").click()
+
+    def test_best_marker_on_first_version(self, page, live_server, live_token):
+        self._multi(page, live_server, live_token)
+        expect(page.locator(".sing-version-best").first).to_be_visible()
+
+    def test_noisy_commercial_collapsed_when_good_option_present(self, page, live_server, live_token):
+        self._multi(page, live_server, live_token)
+        # The 3 commercial-online versions are hidden behind a toggle by default.
+        expect(page.locator('[data-testid="online-collapse-toggle"]')).to_be_visible()
+        expect(page.locator(
+            '.sing-version-section[data-section="online"] .sing-version-card')).to_have_count(0)
+        page.locator('[data-testid="online-collapse-toggle"]').click()
+        expect(page.locator(
+            '.sing-version-section[data-section="online"] .sing-version-card')).to_have_count(3)

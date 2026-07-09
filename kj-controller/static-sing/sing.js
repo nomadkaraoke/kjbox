@@ -718,7 +718,7 @@ function renderSearch() {
     update();
   }
 
-  function renderVersionRow(group, version) {
+  function renderVersionRow(group, version, isBest) {
     let icon, primary, secondary = "", pathBlock = null;
     if (version.source === "local") {
       const local = version.local || {};
@@ -765,7 +765,15 @@ function renderSearch() {
     const card = el("div", { class: "sing-version-card" },
       el("div", { class: "sing-version-icon" }, icon),
       el("div", { class: "sing-version-main" },
-        el("div", { class: "sing-version-primary" }, primary),
+        el("div", { class: "sing-version-primary" },
+          isBest
+            ? el("span", { class: "sing-version-best", title: "Best available version" }, "Best")
+            : (version.priority_stated
+                ? el("span", { class: "sing-version-star", title: "Reliably high-quality brand" }, "⭐")
+                : null),
+          (isBest || version.priority_stated) ? " " : null,
+          primary,
+        ),
         secondary ? el("div", { class: "sing-version-secondary" }, secondary) : null,
         pathBlock,
       ),
@@ -805,13 +813,35 @@ function renderSearch() {
     const byKey = { library: [], divebar: [], online: [], community: [] };
     for (const v of (group.versions || [])) byKey[_versionSection(v)].push(v);
 
+    // The overall best version is versions[0] (backend sorts best-first).
+    const bestVersion = (group.versions || [])[0] || null;
+    // Collapse the noisy commercial "online" downloads behind a toggle when a
+    // good option (library/divebar/community) is already shown — fewer, clearer
+    // tap targets, steered toward good versions.
+    const hasGoodOption = ["library", "divebar", "community"].some((k) => byKey[k].length);
+
     for (const { key, label } of sections) {
       const versions = byKey[key];
       if (!versions.length) continue;
       const section = el("div", { class: "sing-version-section", "data-section": key },
         el("h4", {}, label),
       );
-      for (const v of versions) section.appendChild(renderVersionRow(group, v));
+      const collapseKey = `${group.key}::online`;
+      const collapseThis = key === "online" && hasGoodOption && !expandedSongs.has(collapseKey);
+      if (collapseThis) {
+        section.appendChild(el("button", {
+          class: "sing-online-toggle",
+          "data-testid": "online-collapse-toggle",
+          onclick: (e) => {
+            e.stopPropagation();
+            if (!armed()) return;
+            expandedSongs.add(collapseKey);
+            update();
+          },
+        }, `▸ ${versions.length} more online version${versions.length === 1 ? "" : "s"} (download needed)`));
+      } else {
+        for (const v of versions) section.appendChild(renderVersionRow(group, v, v === bestVersion));
+      }
       wrapper.appendChild(section);
     }
     return wrapper;
