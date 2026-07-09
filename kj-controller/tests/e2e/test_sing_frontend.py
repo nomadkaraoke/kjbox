@@ -375,10 +375,12 @@ class TestChangeReorderControls:
         reqs = [
             {"request": {"id": 11, "singer_name": "A", "song_artist": "Q", "song_title": "One",
                 "source_type": "local", "status": "approved", "created_at": "now",
-                "linked_entry_id": 101, "additional_singers": None}},
+                "linked_entry_id": 101, "additional_singers": None},
+             "estimate": {"position": 3}},
             {"request": {"id": 12, "singer_name": "A", "song_artist": "Q", "song_title": "Two",
                 "source_type": "local", "status": "approved", "created_at": "now",
-                "linked_entry_id": 102, "additional_singers": None}},
+                "linked_entry_id": 102, "additional_singers": None},
+             "estimate": {"position": 5}},
         ]
         self._seed_done(page, live_server, live_token, reqs,
                         {"token": live_token, "ids": [11, 12], "tokens": {"11": "tok11", "12": "tok12"}})

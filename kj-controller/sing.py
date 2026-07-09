@@ -939,6 +939,18 @@ def change_request(req_id):
         return jsonify({"error": "forbidden"}), 403
     if req["status"] not in ("pending", "approved"):
         return jsonify({"error": f"cannot change a {req['status']} request"}), 409
+    # Only real song requests can be changed — never a meta-request (reorder).
+    if req["source_type"] == "reorder":
+        return jsonify({"error": "not a song request"}), 400
+    # A sing_request stays 'approved' even after its entry is sung. Refuse to
+    # change a finished/gone song (mirrors the cancel-after-sung guard): the
+    # supersede takeover would delete the Done entry and corrupt sung-counts.
+    if req["status"] == "approved" and req.get("linked_entry_id"):
+        rotation = getattr(current_app, "rotation", None)
+        if rotation is not None:
+            entry = rotation.store.get_entry(req["linked_entry_id"])
+            if entry and (entry.get("status") or "").lower() in ("done", "left"):
+                return jsonify({"error": "already_sung"}), 409
 
     # Validate the new song's source (subset of submit()'s rules).
     source_type = (data.get("source_type") or "").strip()
@@ -960,10 +972,12 @@ def change_request(req_id):
             return jsonify({"error": err}), 400
 
     if req["status"] == "pending":
-        updated = store.update_request(
-            req_id, song_artist=song_artist, song_title=song_title,
-            source_type=source_type, source_ref=source_ref, source_meta=source_meta,
-        )
+        # update_request keeps existing values when a field is None, which would
+        # preserve a stale source_ref when changing TO a null-ref source (e.g.
+        # kj_pick). Set song fields via update_request, then overwrite the
+        # source_* fields verbatim (incl. None) via update_request_source.
+        store.update_request(req_id, song_artist=song_artist, song_title=song_title)
+        updated = store.update_request_source(req_id, source_type, source_ref, source_meta)
         # edit_token echoed back (owner already holds it) so the device keeps
         # the same self-service capability after the change.
         return jsonify({"success": True, "request": {
@@ -1006,6 +1020,7 @@ def reorder_requests():
 
     ordered_entry_ids = []
     first_req = None
+    seen_ids = set()
     for it in items:
         if not isinstance(it, dict):
             return jsonify({"error": "each item must be an object"}), 400
@@ -1013,6 +1028,9 @@ def reorder_requests():
             rid = int(it.get("id"))
         except (TypeError, ValueError):
             return jsonify({"error": "each item needs an integer id"}), 400
+        if rid in seen_ids:
+            return jsonify({"error": "duplicate id"}), 400
+        seen_ids.add(rid)
         req = store.get_request(rid)
         if req is None or req.get("token") != token or not _belongs_to_current_night(store, req):
             return jsonify({"error": "not_found"}), 404

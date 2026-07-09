@@ -717,6 +717,17 @@ class TestChangeSong:
         assert sing_app.sing_store.get_request(new["id"])["supersedes_request_id"] == r["id"]
         assert sing_app.sing_store.get_request(r["id"])["status"] == "approved"
 
+    def test_change_after_sung_is_409(self, client, sing_app, token):
+        sing_app.sing_store.set_auto_approve(True)
+        r = client.post(f"/sing/submit?t={token}", json=self._body()).get_json()["request"]
+        entry_id = sing_app.sing_store.get_request(r["id"])["linked_entry_id"]
+        sing_app.rotation.update_status(entry_id, "Done")   # singer already performed
+        resp = client.post(f"/sing/requests/{r['id']}/change?t={token}", json={
+            "edit_token": r["edit_token"], "source_type": "local", "source_ref": "/new.mp4",
+            "song_artist": "ABBA", "song_title": "SOS"})
+        assert resp.status_code == 409
+        assert sing_app.rotation.store.get_entry(entry_id)["status"] == "Done"
+
 
 class TestReorder:
     def _approved(self, client, sing_app, token, title):

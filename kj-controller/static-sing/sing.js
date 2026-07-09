@@ -201,6 +201,13 @@ function render() {
     clearInterval(state._statusPollTimer);
     state._statusPollTimer = null;
   }
+  // "Change song" mode is only valid across the search→confirm flow it starts.
+  // Clearing it on any other screen prevents an abandoned change from
+  // misrouting a later brand-new request to the /change endpoint.
+  if (state.changeRequestId && state.step !== "search" && state.step !== "confirm") {
+    state.changeRequestId = null;
+    state.changeEditToken = null;
+  }
   root.innerHTML = "";
   const view = {
     landing: renderLanding,
@@ -1359,25 +1366,37 @@ function _renderSongCard(item, reorderCtx) {
   // nudge their own songs' order (the KJ approves the reorder).
   if (reorderCtx && reorderCtx.order.length >= 2 && reorderCtx.order.includes(req.id)) {
     const idx = reorderCtx.order.indexOf(req.id);
+    const upBtn = el("button", { class: "btn ghost", "data-testid": "reorder-up" }, "▲ Up");
+    const downBtn = el("button", { class: "btn ghost", "data-testid": "reorder-down" }, "▼ Down");
+    const setEnabled = (on) => {
+      upBtn.disabled = !on || idx === 0;
+      downBtn.disabled = !on || idx === reorderCtx.order.length - 1;
+    };
+    let busy = false;   // in-flight guard: no overlapping reorder requests
     const move = (delta) => async (e) => {
       e.stopPropagation();
+      if (busy) return;
       const j = idx + delta;
       if (j < 0 || j >= reorderCtx.order.length) return;
       const order = reorderCtx.order.slice();
       [order[idx], order[j]] = [order[j], order[idx]];
       const items = order.map((id) => ({ id, edit_token: reorderCtx.tokens[id] }));
+      busy = true;
+      setEnabled(false);
       try {
         await reorderSongs(items);
         alert("Reorder requested — the KJ will confirm it.");
-      } catch { alert("Couldn't reorder — please see the KJ."); return; }
-      if (typeof window.__sing_render === "function") window.__sing_render();
+        if (typeof window.__sing_render === "function") window.__sing_render();
+      } catch {
+        alert("Couldn't reorder — please see the KJ.");
+        busy = false;
+        setEnabled(true);   // re-arm so the singer can retry
+      }
     };
-    card.appendChild(el("div", { class: "song-card-reorder" },
-      el("button", { class: "btn ghost", "data-testid": "reorder-up",
-        disabled: idx === 0 ? "" : null, onclick: move(-1) }, "▲ Up"),
-      el("button", { class: "btn ghost", "data-testid": "reorder-down",
-        disabled: idx === reorderCtx.order.length - 1 ? "" : null, onclick: move(1) }, "▼ Down"),
-    ));
+    upBtn.onclick = move(-1);
+    downBtn.onclick = move(1);
+    setEnabled(true);
+    card.appendChild(el("div", { class: "song-card-reorder" }, upBtn, downBtn));
   }
   return card;
 }
@@ -1465,7 +1484,13 @@ async function pollMyRequests(card) {
           for (const item of data.requests) {
             const r = item.request;
             const tok = readEditToken(TOKEN, r.id);
-            if (r.status === "approved" && tok) { order.push(r.id); tokens[r.id] = tok; }
+            // Only still-queued songs (those with a live estimate) are
+            // reorderable — a sung song stays status 'approved' but has no
+            // estimate, so it's excluded.
+            if (r.status === "approved" && tok && item.estimate) {
+              order.push(r.id);
+              tokens[r.id] = tok;
+            }
           }
           const reorderCtx = { order, tokens };
           for (const item of data.requests) slot.appendChild(_renderSongCard(item, reorderCtx));
