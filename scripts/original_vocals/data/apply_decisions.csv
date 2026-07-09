@@ -1,0 +1,12 @@
+brand,verdict,measured_offset_s,decision
+NOMAD-0167,needs-review,8.72,confirm
+NOMAD-0580,needs-review,16.349,confirm
+NOMAD-1048,needs-review,3.149,confirm
+NOMAD-0666,needs-review,4.974,exclude
+NOMAD-0668,needs-review,14.278,exclude
+NOMAD-0834,needs-review,5.068,exclude
+NOMAD-0923,needs-review,5.063,exclude
+NOMAD-0976,needs-review,5.215,exclude
+NOMAD-1001,needs-review,7.771,exclude
+NOMAD-1095,needs-review,14.644,exclude
+NOMAD-1102,needs-review,19.897,exclude

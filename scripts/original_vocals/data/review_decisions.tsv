@@ -1,0 +1,107 @@
+brand	action	value	note
+NOMAD-0120	set_winner	01 - In Medias Res.mp3	pick was vocals-only; 01- is the mixed original (user)
+NOMAD-0437	approve_pick	5exJ2-ra7hU-Rock-on-Rockall.wav	confirmed mixed full song (user)
+NOMAD-0231	approve_pick	Die Draugänger - Cordula Grün_Short.wav	confirmed mixed (user)
+NOMAD-0231	set_winner_rel	NOMAD-0231 - Die Draufgänger - Cordula Grün (Short Version)/die-draufganger-cordula-grun-youtube-Xw-g6X8qob0/Xw-g6X8qob0-Die-Draufganger-CORDULA-GRUN-Josh-Cover-offizielles-Video.wav	CORRECTION: _Short.wav is instrumental+backing-vocals; this youtube file is the full mix (user)
+NOMAD-0227	approve_pick	8zWPROdFK4Q-Help-Yourself.wav	confirmed mixed full song (user)
+NOMAD-0448	approve_pick	The Time - Cool.wav	confirmed mixed full song (user)
+NOMAD-0332	approve_pick	xL1MecA2zUg-Je-serai-la.wav	confirmed mixed full song (user)
+NOMAD-0036	confirm_no_source		both files instrumental, no full mix (user)
+NOMAD-0036	source_via_flacfetch	The Hush Sound / We Intertwined	downloaded by user into fix-orig-audio-gaps
+NOMAD-0038	confirm_no_source_sourcing	The Hush Sound / Where We Went Wrong	no full mix in folder; sourcing original via flacfetch
+NOMAD-0078	confirm_no_source_sourcing	Mew / 156	no full mix in folder; sourcing original via flacfetch
+NOMAD-0201	confirm_no_source_sourcing	Calum Scott / Dancing On My Own (Short Version)	no full mix in folder; sourcing original via flacfetch
+NOMAD-0202	confirm_no_source_sourcing	Ed Sheeran / Shivers (Short Version)	no full mix in folder; sourcing original via flacfetch
+NOMAD-0203	confirm_no_source_sourcing	Eminem / Without Me (Short Version)	no full mix in folder; sourcing original via flacfetch
+NOMAD-0208	confirm_no_source_sourcing	Lady Gaga / Born This Way (Short Version)	no full mix in folder; sourcing original via flacfetch
+NOMAD-0209	confirm_no_source_sourcing	Miley Cyrus / Jolene (Short Version)	no full mix in folder; sourcing original via flacfetch
+NOMAD-0210	confirm_no_source_sourcing	Miley Cyrus / Wrecking Ball (Short Version)	no full mix in folder; sourcing original via flacfetch
+NOMAD-0211	confirm_no_source_sourcing	Robbie Williams / Angels (Short Version)	no full mix in folder; sourcing original via flacfetch
+NOMAD-0213	confirm_no_source_sourcing	Shania Twain / Man! I Feel Like A Woman (Short Version)	no full mix in folder; sourcing original via flacfetch
+NOMAD-0214	confirm_no_source_sourcing	Shirley Bassey / Big Spender (Short Version)	no full mix in folder; sourcing original via flacfetch
+NOMAD-0216	confirm_no_source_sourcing	The Pussycat Dolls / Sway (Short Version)	no full mix in folder; sourcing original via flacfetch
+NOMAD-0217	confirm_no_source_sourcing	Twenty One Pilots / Stressed Out (Short Version)	no full mix in folder; sourcing original via flacfetch
+NOMAD-0218	confirm_no_source_sourcing	Wheatus / Teenage Dirtbag (Short Version)	no full mix in folder; sourcing original via flacfetch
+NOMAD-0234	confirm_no_source_sourcing	Jürgen Drews / Ein Bett im Kornfeld (Short Version)	no full mix in folder; sourcing original via flacfetch
+NOMAD-0241	confirm_no_source_sourcing	Loosey LaDuca / Let Loose	no full mix in folder; sourcing original via flacfetch
+NOMAD-0201	exclude_no_guide		CORRECTION: short-version made by someone else; no original to source; leave excluded (user)
+NOMAD-0202	exclude_no_guide		CORRECTION: short-version made by someone else; no original to source; leave excluded (user)
+NOMAD-0203	exclude_no_guide		CORRECTION: short-version made by someone else; no original to source; leave excluded (user)
+NOMAD-0208	exclude_no_guide		CORRECTION: short-version made by someone else; no original to source; leave excluded (user)
+NOMAD-0209	exclude_no_guide		CORRECTION: short-version made by someone else; no original to source; leave excluded (user)
+NOMAD-0210	exclude_no_guide		CORRECTION: short-version made by someone else; no original to source; leave excluded (user)
+NOMAD-0211	exclude_no_guide		CORRECTION: short-version made by someone else; no original to source; leave excluded (user)
+NOMAD-0213	exclude_no_guide		CORRECTION: short-version made by someone else; no original to source; leave excluded (user)
+NOMAD-0214	exclude_no_guide		CORRECTION: short-version made by someone else; no original to source; leave excluded (user)
+NOMAD-0216	exclude_no_guide		CORRECTION: short-version made by someone else; no original to source; leave excluded (user)
+NOMAD-0217	exclude_no_guide		CORRECTION: short-version made by someone else; no original to source; leave excluded (user)
+NOMAD-0218	exclude_no_guide		CORRECTION: short-version made by someone else; no original to source; leave excluded (user)
+NOMAD-0234	exclude_no_guide		CORRECTION: short-version made by someone else; no original to source; leave excluded (user)
+NOMAD-0241	source_via_flacfetch_PENDING	Loosey LaDuca / Let Loose	--auto picked lossy/parody; needs manual pick; not yet downloaded
+NOMAD-0241	source_via_flacfetch	Loosey LaDuca - Let Loose (2023, WEB, YouTube) [gEEUHmEecnE].webm	user fetched manually; supersedes PENDING
+NOMAD-0804	set_winner_rel	NOMAD-0804 - Sarah McLachlan - Possession (Piano Version)/Sarah McLachlan - Possession (Piano Version) (Original).flac	FALSE no_source: (Piano Version) title collided with '(piano' stem-exclusion; has real (Original).flac (user-verified)
+NOMAD-0875	set_winner_rel	NOMAD-0875 - Silverstein - Forget Your Heart (Piano Version)/Silverstein - Forget Your Heart (Piano Version) (Original).flac	FALSE no_source: (Piano Version) title collided with '(piano' stem-exclusion; has real (Original).flac (user-verified)
+NOMAD-0271	source_from_album	Frightened Rabbit - Sing The Greys FLAC [V0]/02 - Music Now.mp3	FR no_source filled from home-server album (user)
+NOMAD-0272	source_from_album	Frightened Rabbit - Pedestrian Verse (2013) [CD-MP3-320]/11 - Housing (out).mp3	FR no_source filled from home-server album (user)
+NOMAD-0273	source_from_album	Frightened Rabbit - The Midnight Organ Fight [2008] [AUS Edition] [320]/01. The Modern Leper.mp3	FR no_source filled from home-server album (user)
+NOMAD-0274	source_from_album	Frightened Rabbit - Painting Of A Panic Attack (Deluxe) (2016) - WEB 320/15 - A Lick Of Paint.mp3	FR no_source filled from home-server album (user)
+NOMAD-0275	source_from_album	Frightened Rabbit - Sing The Greys FLAC [V0]/01 - The Greys.mp3	FR no_source filled from home-server album (user)
+NOMAD-0276	source_from_album	Frightened Rabbit - The Midnight Organ Fight [2008] [AUS Edition] [320]/08. Head Rolls Off.mp3	FR no_source filled from home-server album (user)
+NOMAD-0277	source_from_album	Frightened Rabbit - Pedestrian Verse (2013) [CD-MP3-320]/02 - Backyard Skulls.mp3	FR no_source filled from home-server album (user)
+NOMAD-0278	source_from_album	Frightened Rabbit - Painting Of A Panic Attack (Deluxe) (2016) - WEB 320/13 - The Wreck.mp3	FR no_source filled from home-server album (user)
+NOMAD-0279	source_from_album	Frightened Rabbit - The Midnight Organ Fight [2008] [AUS Edition] [320]/09. My Backwards Walk.mp3	FR no_source filled from home-server album (user)
+NOMAD-0280	source_from_album	Frightened Rabbit - Sing The Greys FLAC [V0]/05 - Be Less Rude.mp3	FR no_source filled from home-server album (user)
+NOMAD-0281	source_from_album	Frightened Rabbit - Painting Of A Panic Attack (Deluxe) (2016) - WEB 320/12 - Die Like A Rich Boy.mp3	FR no_source filled from home-server album (user)
+NOMAD-0282	source_from_album	Frightened Rabbit - Pedestrian Verse (2013) [CD-MP3-320]/09 - State Hospital.mp3	FR no_source filled from home-server album (user)
+NOMAD-0283	source_from_album	Frightened Rabbit - The Winter of Mixed Drinks (2010) {FATCD84} [V0]/05 - Skip the Youth.mp3	FR no_source filled from home-server album (user)
+NOMAD-0284	source_from_album	Frightened Rabbit - The Winter of Mixed Drinks (2010) {FATCD84} [V0]/11 - Yes, I Would.mp3	FR no_source filled from home-server album (user)
+NOMAD-0285	source_from_album	Frightened Rabbit - The Midnight Organ Fight [2008] [AUS Edition] [320]/13. Floating in the Forth.mp3	FR no_source filled from home-server album (user)
+NOMAD-0286	source_from_album	Frightened Rabbit - Pedestrian Verse (2013) [CD-MP3-320]/10 - Nitrous Gas.mp3	FR no_source filled from home-server album (user)
+NOMAD-0287	source_from_album	Frightened Rabbit - Painting Of A Panic Attack (Deluxe) (2016) - WEB 320/08 - Break.mp3	FR no_source filled from home-server album (user)
+NOMAD-0288	source_from_album	Frightened Rabbit - The Winter of Mixed Drinks (2010) {FATCD84} [V0]/01 - Things.mp3	FR no_source filled from home-server album (user)
+NOMAD-0289	source_from_album	Frightened Rabbit - The Winter of Mixed Drinks (2010) {FATCD84} [V0]/06 - Nothing Like You.mp3	FR no_source filled from home-server album (user)
+NOMAD-0290	source_from_album	Frightened Rabbit - The Midnight Organ Fight [2008] [AUS Edition] [320]/03. Good Arms vs. Bad Arms.mp3	FR no_source filled from home-server album (user)
+NOMAD-0291	source_from_album	Frightened Rabbit - The Winter of Mixed Drinks (2010) {FATCD84} [V0]/08 - Foot Shooter.mp3	FR no_source filled from home-server album (user)
+NOMAD-0292	source_from_album	Frightened Rabbit - The Midnight Organ Fight [2008] [AUS Edition] [320]/06. The Twist.mp3	FR no_source filled from home-server album (user)
+NOMAD-0293	source_from_album	Frightened Rabbit - The Winter of Mixed Drinks (2010) {FATCD84} [V0]/03 - The Loneliness and the Scream.mp3	FR no_source filled from home-server album (user)
+NOMAD-0294	source_from_album	Frightened Rabbit - The Winter of Mixed Drinks (2010) {FATCD84} [V0]/02 - Swim Until You Can't See Land.mp3	FR no_source filled from home-server album (user)
+NOMAD-0295	source_from_album	Frightened Rabbit - Painting Of A Panic Attack (Deluxe) (2016) - WEB 320/07 - An Otherwise Disappointing Life.mp3	FR no_source filled from home-server album (user)
+NOMAD-0296	source_from_album	Frightened Rabbit - Pedestrian Verse (2013) [CD-MP3-320]/03 - Holy.mp3	FR no_source filled from home-server album (user)
+NOMAD-0297	source_from_album	Frightened Rabbit - Sing The Greys FLAC [V0]/08 - Behave!.mp3	FR no_source filled from home-server album (user)
+NOMAD-0298	source_from_album	Frightened Rabbit - The Midnight Organ Fight [2008] [AUS Edition] [320]/05. Old Old Fashioned.mp3	FR no_source filled from home-server album (user)
+NOMAD-0299	source_from_album	Frightened Rabbit - Sing The Greys FLAC [V0]/04 - Yawns.mp3	FR no_source filled from home-server album (user)
+NOMAD-0300	source_from_album	Frightened Rabbit - The Midnight Organ Fight [2008] [AUS Edition] [320]/02. I Feel Better.mp3	FR no_source filled from home-server album (user)
+NOMAD-0301	source_from_album	Frightened Rabbit - Painting Of A Panic Attack (Deluxe) (2016) - WEB 320/04 - Woke Up Hurting.mp3	FR no_source filled from home-server album (user)
+NOMAD-0302	source_from_album	Frightened Rabbit - Pedestrian Verse (2013) [CD-MP3-320]/08 - Dead Now.mp3	FR no_source filled from home-server album (user)
+NOMAD-0303	source_from_album	Frightened Rabbit - The Midnight Organ Fight [2008] [AUS Edition] [320]/12. Poke.mp3	FR no_source filled from home-server album (user)
+NOMAD-0305	source_from_album	Frightened Rabbit - Painting Of A Panic Attack (Deluxe) (2016) - WEB 320/05 - Little Drum.mp3	FR no_source filled from home-server album (user)
+NOMAD-0306	source_from_album	Frightened Rabbit - The Midnight Organ Fight [2008] [AUS Edition] [320]/04. Fast Blood.mp3	FR no_source filled from home-server album (user)
+NOMAD-0307	source_from_album	Frightened Rabbit - Sing The Greys FLAC [V0]/09 - Square 9.mp3	FR no_source filled from home-server album (user)
+NOMAD-0308	source_from_album	Frightened Rabbit - Painting Of A Panic Attack (Deluxe) (2016) - WEB 320/03 - I Wish I Was Sober.mp3	FR no_source filled from home-server album (user)
+NOMAD-0309	source_from_album	Frightened Rabbit - Pedestrian Verse (2013) [CD-MP3-320]/12 - The Oil Slick.mp3	FR no_source filled from home-server album (user)
+NOMAD-0310	source_from_album	Frightened Rabbit - Painting Of A Panic Attack (Deluxe) (2016) - WEB 320/06 - Still Want To Be Here.mp3	FR no_source filled from home-server album (user)
+NOMAD-0311	source_from_album	Frightened Rabbit - Painting Of A Panic Attack (Deluxe) (2016) - WEB 320/09 - Blood Under The Bridge.mp3	FR no_source filled from home-server album (user)
+NOMAD-0312	source_from_album	Frightened Rabbit - Painting Of A Panic Attack (Deluxe) (2016) - WEB 320/01 - Death Dream.mp3	FR no_source filled from home-server album (user)
+NOMAD-0313	source_from_album	Frightened Rabbit - Painting Of A Panic Attack (Deluxe) (2016) - WEB 320/14 - Wait 'Til The Morning.mp3	FR no_source filled from home-server album (user)
+NOMAD-0314	source_from_album	Frightened Rabbit - The Winter of Mixed Drinks (2010) {FATCD84} [V0]/09 - Not Miserable.mp3	FR no_source filled from home-server album (user)
+NOMAD-0316	source_from_album	Frightened Rabbit - Pedestrian Verse (2013) [CD-MP3-320]/01 - Acts of Man.mp3	FR no_source filled from home-server album (user)
+NOMAD-0317	source_from_album	Frightened Rabbit - The Winter of Mixed Drinks (2010) {FATCD84} [V0]/10 - Living in Colour.mp3	FR no_source filled from home-server album (user)
+NOMAD-0318	source_from_album	Frightened Rabbit - Pedestrian Verse (2013) [CD-MP3-320]/07 - Housing (in).mp3	FR no_source filled from home-server album (user)
+NOMAD-0319	source_from_album	Frightened Rabbit - The Winter of Mixed Drinks (2010) {FATCD84} [V0]/04 - The Wrestle.mp3	FR no_source filled from home-server album (user)
+NOMAD-0320	source_from_album	Frightened Rabbit - Sing The Greys FLAC [V0]/07 - Go-Go Girls.mp3	FR no_source filled from home-server album (user)
+NOMAD-0321	source_from_album	Frightened Rabbit - Pedestrian Verse (2013) [CD-MP3-320]/06 - December's Traditions.mp3	FR no_source filled from home-server album (user)
+NOMAD-0322	source_from_album	Frightened Rabbit - Painting Of A Panic Attack (Deluxe) (2016) - WEB 320/11 - Lump Street.mp3	FR no_source filled from home-server album (user)
+NOMAD-0323	source_from_album	Frightened Rabbit - The Midnight Organ Fight [2008] [AUS Edition] [320]/10. Keep Yourself Warm.mp3	FR no_source filled from home-server album (user)
+NOMAD-0324	source_from_album	Frightened Rabbit - Pedestrian Verse (2013) [CD-MP3-320]/04 - The Woodpile.mp3	FR no_source filled from home-server album (user)
+NOMAD-0325	source_from_album	Frightened Rabbit - Painting Of A Panic Attack (Deluxe) (2016) - WEB 320/02 - Get Out.mp3	FR no_source filled from home-server album (user)
+NOMAD-0304	source_from_album	Frightened Rabbit - Painting Of A Panic Attack (Deluxe) (2016) - WEB 320/10 - 400 Bones.mp3	FR; matcher missed (number-title "400" stripped as track#) — user pointed to it
+NOMAD-0315	source_from_album	Frightened Rabbit - Snake (Album, 2006, CD, 16bit, OPS) [t1225685].flac	FR B-side; not on 5 albums; user supplied standalone FLAC
+NOMAD-0199	exclude_no_guide		Short Version made by someone else; no original to source (user rule)
+NOMAD-0200	exclude_no_guide		Short Version made by someone else; no original to source (user rule)
+NOMAD-0205	exclude_no_guide		Short Version made by someone else; no original to source (user rule)
+NOMAD-0036	source_via_flacfetch	The Hush Sound - We Intertwined (Album, 2006, CD, 16bit, RED) [t950354].flac	resolved exact gap file (assembler)
+NOMAD-0038	source_via_flacfetch	The Hush Sound - Where We Went Wrong (Album, 2006, CD, 16bit, RED) [t950354].flac	resolved exact gap file (assembler)
+NOMAD-0078	source_via_flacfetch	Mew - 156 (Album, 2003, CD, 16bit, RED) [t1095485].flac	resolved exact gap file (assembler)
+NOMAD-0241	source_via_flacfetch	Loosey LaDuca - Let Loose (2023, WEB, YouTube) [gEEUHmEecnE].webm	resolved exact gap file (assembler)
+NOMAD-0240	source_via_flacfetch	Dylan Emmet - Lose This (2020, WEB, YouTube) [yorv8Cc_9Gs].webm	resolved exact gap file (assembler)
+NOMAD-0240	source_via_flacfetch	Dylan Emmet - Lose This (2020, WEB, YouTube) [yorv8Cc_9Gs].wav	correct ext .wav (user-supplied)
