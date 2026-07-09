@@ -767,3 +767,12 @@ class TestEditTokenAndCancel:
         assert out["reviewed_at"]
         with pytest.raises(ValueError):
             store.mark_cancelled(999999)
+
+
+class TestSupersedes:
+    def test_supersedes_request_id_persists(self, store):
+        orig = store.create_request(singer_name="Al", phone="", source_type="local", source_ref="/a.mp4")
+        new = store.create_request(singer_name="Al", phone="", source_type="local", source_ref="/b.mp4",
+                                   supersedes_request_id=orig["id"])
+        assert new["supersedes_request_id"] == orig["id"]
+        assert store.get_request(orig["id"])["supersedes_request_id"] is None

@@ -166,6 +166,15 @@ class SingStore:
         except sqlite3.OperationalError as e:
             if "duplicate column name" not in str(e).lower():
                 raise
+        # Additive migration — `supersedes_request_id` (2026-07-09) links an
+        # edit's new pending request to the approved original it replaces.
+        try:
+            conn.execute(
+                "ALTER TABLE sing_requests ADD COLUMN supersedes_request_id INTEGER DEFAULT NULL"
+            )
+        except sqlite3.OperationalError as e:
+            if "duplicate column name" not in str(e).lower():
+                raise
         conn.commit()
 
     # ------------------------------------------------------------------
@@ -364,6 +373,7 @@ class SingStore:
         notes="",
         token=None,
         additional_singers=None,
+        supersedes_request_id=None,
     ):
         """Insert a new pending request and return the created row as a dict."""
         if not singer_name:
@@ -387,8 +397,8 @@ class SingStore:
             INSERT INTO sing_requests
                 (token, singer_name, phone, song_artist, song_title,
                  source_type, source_ref, source_meta, notes,
-                 additional_singers, edit_token)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 additional_singers, edit_token, supersedes_request_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 request_token,
@@ -402,6 +412,7 @@ class SingStore:
                 notes.strip(),
                 partners_json,
                 edit_token,
+                supersedes_request_id,
             ),
         )
         conn.commit()
