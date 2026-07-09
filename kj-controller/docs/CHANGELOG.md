@@ -4,7 +4,7 @@ Dated entries, newest first. Each entry notes any required deploy steps.
 
 ---
 
-## 2026-07-09 - Singer self-service: cancel your own song (v0.77.0)
+## 2026-07-09 - Singer self-service: cancel your own song (v0.78.0)
 
 **Deploy:** backend change (`sing.py`, `sing_store.py`) → **requires `systemctl restart kj-controller`** (interrupts playback — deploy in a maintenance window). Also frontend (`sing.js`, `app.js`, CSS). Additive DB migration (`sing_requests.edit_token`) — safe on existing DBs.
 
