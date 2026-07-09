@@ -670,3 +670,22 @@ input:focus {
   width: 100%;
   margin: 12px 0;
 }
+
+
+/* Hardened confirm screen (mis-tap safety) */
+.sing-confirm .confirm-song { margin: 12px 0 8px; }
+.sing-confirm .confirm-title { font-size: 1.5rem; font-weight: 700; line-height: 1.2; }
+.sing-confirm .confirm-artist { font-size: 1.05rem; opacity: 0.9; margin-top: 2px; }
+.sing-confirm .confirm-source { font-size: 0.85rem; opacity: 0.7; margin-top: 6px; }
+.sing-confirm .confirm-searched { font-size: 0.8rem; opacity: 0.6; margin: 4px 0 12px; }
+.sing-confirm .confirm-actions { gap: 10px; }
+.sing-confirm .confirm-actions .submit-btn { flex: 1; }
+
+
+/* Version-list Best/trusted markers + commercial collapse (mis-tap surface) */
+.sing-version-best { display: inline-block; font-size: 0.7rem; font-weight: 700;
+  background: #ffce54; color: #1a1a1a; border-radius: 4px; padding: 1px 6px; }
+.sing-version-star { font-size: 0.85rem; }
+.sing-online-toggle { display: block; width: 100%; text-align: left; background: none;
+  border: 1px dashed rgba(255,255,255,0.25); color: inherit; opacity: 0.75;
+  border-radius: 8px; padding: 8px 10px; margin-top: 6px; cursor: pointer; }

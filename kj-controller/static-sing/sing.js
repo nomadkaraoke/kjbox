@@ -523,14 +523,37 @@ function renderSearch() {
   const expandedSongs = new Set();
   let ccExplainerDismissed = _ccExplainerSeen();
 
+  // Anti-mis-tap: a freshly-(re)rendered results list is inert for a moment, so
+  // a tap aimed at the previous layout can't activate a row that just appeared
+  // (the search backend is slow, so rows can arrive right as a finger lands).
+  // The window is overridable via window.__SING_ARM_MS for deterministic tests
+  // (mirrors the existing window.__sing_* test bridge).
+  const armMs = () =>
+    (typeof window.__SING_ARM_MS === "number" ? window.__SING_ARM_MS : 300);
+  let armAt = 0;
+  const armed = () => Date.now() >= armAt;
+
   let debounceTimer = null;
+  // Generation guard (ported from the KJ link search, app.js rotSearchGen):
+  // bumped at the start of each fetch so a slower earlier query cannot clobber
+  // a newer one, and so only the latest search may clear loading / set err.
+  let searchGen = 0;
   const doSearch = (q) => {
     clearTimeout(debounceTimer);
+    // 700ms (was 300) to match the KJ side — the shared backend live-scrapes,
+    // so a longer debounce just trims wasted scrapes. Correctness comes from
+    // the generation guard below, not from the delay.
     debounceTimer = setTimeout(async () => {
-      if (q.trim().length < 3) { results = { songs: [] }; update(); return; }
+      const myGen = ++searchGen;
+      if (q.trim().length < 3) {
+        results = { songs: [] };
+        if (myGen === searchGen) { loading = false; err = ""; update(); }
+        return;
+      }
       loading = true; err = ""; update();
       try {
         const data = await search(q.trim());
+        if (myGen !== searchGen) return;   // superseded — discard stale response
         results = data;
         // Phase C — mirror the server's current flag so a mid-session KJ
         // toggle takes effect on the next search without a page reload.
@@ -541,11 +564,12 @@ function renderSearch() {
           state.simpleMode = data.simple_mode;
         }
       } catch (e) {
+        if (myGen !== searchGen) return;   // stale failure — don't clobber a live search
         err = "Search failed. Try again.";
       } finally {
-        loading = false; update();
+        if (myGen === searchGen) { loading = false; update(); }  // latest-owner rule
       }
-    }, 300);
+    }, 700);
   };
 
   // Single-version short-circuit — when a group has exactly one version, we
@@ -694,7 +718,7 @@ function renderSearch() {
     update();
   }
 
-  function renderVersionRow(group, version) {
+  function renderVersionRow(group, version, isBest) {
     let icon, primary, secondary = "", pathBlock = null;
     if (version.source === "local") {
       const local = version.local || {};
@@ -741,13 +765,21 @@ function renderSearch() {
     const card = el("div", { class: "sing-version-card" },
       el("div", { class: "sing-version-icon" }, icon),
       el("div", { class: "sing-version-main" },
-        el("div", { class: "sing-version-primary" }, primary),
+        el("div", { class: "sing-version-primary" },
+          isBest
+            ? el("span", { class: "sing-version-best", title: "Best available version" }, "Best")
+            : (version.priority_stated
+                ? el("span", { class: "sing-version-star", title: "Reliably high-quality brand" }, "⭐")
+                : null),
+          (isBest || version.priority_stated) ? " " : null,
+          primary,
+        ),
         secondary ? el("div", { class: "sing-version-secondary" }, secondary) : null,
         pathBlock,
       ),
       el("button", {
         class: "sing-version-pick",
-        onclick: (e) => { e.stopPropagation(); pickSpecificVersion(group, version); },
+        onclick: (e) => { e.stopPropagation(); if (!armed()) return; pickSpecificVersion(group, version); },
       }, "Pick this version →"),
     );
     return card;
@@ -781,13 +813,38 @@ function renderSearch() {
     const byKey = { library: [], divebar: [], online: [], community: [] };
     for (const v of (group.versions || [])) byKey[_versionSection(v)].push(v);
 
+    // The overall best version is versions[0] (backend sorts best-first).
+    const bestVersion = (group.versions || [])[0] || null;
+    // Collapse the noisy commercial "online" downloads behind a toggle when a
+    // good option (library/divebar/community) is already shown — fewer, clearer
+    // tap targets, steered toward good versions.
+    const hasGoodOption = ["library", "divebar", "community"].some((k) => byKey[k].length);
+    // Never collapse the section that holds the best version (defensive: keeps the
+    // "Best" marker visible even if the backend ever ranks an online version first).
+    const bestInOnline = bestVersion && _versionSection(bestVersion) === "online";
+
     for (const { key, label } of sections) {
       const versions = byKey[key];
       if (!versions.length) continue;
       const section = el("div", { class: "sing-version-section", "data-section": key },
         el("h4", {}, label),
       );
-      for (const v of versions) section.appendChild(renderVersionRow(group, v));
+      const collapseKey = `${group.key}::online`;
+      const collapseThis = key === "online" && hasGoodOption && !bestInOnline && !expandedSongs.has(collapseKey);
+      if (collapseThis) {
+        section.appendChild(el("button", {
+          class: "sing-online-toggle",
+          "data-testid": "online-collapse-toggle",
+          onclick: (e) => {
+            e.stopPropagation();
+            if (!armed()) return;
+            expandedSongs.add(collapseKey);
+            update();
+          },
+        }, `▸ ${versions.length} more online version${versions.length === 1 ? "" : "s"} (download needed)`));
+      } else {
+        for (const v of versions) section.appendChild(renderVersionRow(group, v, v === bestVersion));
+      }
       wrapper.appendChild(section);
     }
     return wrapper;
@@ -906,6 +963,7 @@ function renderSearch() {
 
   function renderResults() {
     const container = el("div", { class: "results" });
+    armAt = Date.now() + armMs();   // freshly-built rows are inert briefly (anti-mis-tap)
     if (loading) container.appendChild(el("p", { class: "hint" }, "Searching…"));
     if (err) container.appendChild(el("p", { class: "error" }, err));
 
@@ -938,7 +996,7 @@ function renderSearch() {
       if (isSingle || !state.simpleMode) {
         children.push(el("button", {
           class: "btn-primary-cta",
-          onclick: (e) => { e.stopPropagation(); onCtaClick(); },
+          onclick: (e) => { e.stopPropagation(); if (!armed()) return; onCtaClick(); },
         }, ctaLabel));
       }
 
@@ -955,7 +1013,7 @@ function renderSearch() {
           children.push(el("button", {
             class: "sing-versions-toggle",
             "aria-expanded": isExpanded ? "true" : "false",
-            onclick: (e) => { e.stopPropagation(); toggleExpanded(group.key); },
+            onclick: (e) => { e.stopPropagation(); if (!armed()) return; toggleExpanded(group.key); },
           }, toggleLabel));
           if (isExpanded) children.push(renderVersionsExpander(group));
         }
@@ -978,7 +1036,15 @@ function renderSearch() {
       type: "search",
       placeholder: "Type artist or song title…",
       autocomplete: "off",
-      oninput: (e) => { state.query = e.target.value; doSearch(e.target.value); },
+      oninput: (e) => {
+        state.query = e.target.value;
+        // Immediate feedback: show the searching hint the moment a real query
+        // is typed, before the 700ms debounce elapses (matches the KJ side).
+        if (e.target.value.trim().length >= 3 && !loading) {
+          err = ""; loading = true; update();   // clear any stale error from a prior failed search
+        }
+        doSearch(e.target.value);
+      },
       value: state.query,
     }),
     renderResults(),
@@ -1031,7 +1097,7 @@ function renderConfirm() {
           submitting = false;
           if (submitBtn) {
             submitBtn.disabled = false;
-            submitBtn.textContent = "Send to KJ";
+            submitBtn.textContent = "Yes — send to the KJ";
           }
           const errEl = root.querySelector(".error");
           if (errEl) errEl.textContent = err;
@@ -1066,7 +1132,7 @@ function renderConfirm() {
       submitting = false;
       if (submitBtn) {
         submitBtn.disabled = false;
-        submitBtn.textContent = "Send to KJ";
+        submitBtn.textContent = "Yes — send to the KJ";
       }
       const errEl = root.querySelector(".error");
       if (errEl) errEl.textContent = err;
@@ -1121,19 +1187,34 @@ function renderConfirm() {
     return wrap;
   }
 
-  return el("main", { class: "sing-card" },
-    el("h2", {}, "Looking good?"),
-    el("div", { class: "pick-summary" },
-      el("div", { class: "pick-label" }, state.selected?.label || ""),
+  const sel = state.selected || {};
+  const _confirmSourceLine = (s) => {
+    switch (s && s.source_type) {
+      case "local": return "In our library";
+      case "divebar": return "Community karaoke (in our library)";
+      case "kn": return "Online karaoke (download needed)";
+      case "youtube": return "From a YouTube link";
+      case "make": return "The KJ will make this for you";
+      case "kj_pick": return "The KJ will pick the best version";
+      default: return "";
+    }
+  };
+  return el("main", { class: "sing-card sing-confirm" },
+    el("h2", {}, "Is this the right song?"),
+    el("div", { class: "confirm-song", "data-testid": "confirm-song" },
+      el("div", { class: "confirm-title" }, sel.song_title || sel.label || ""),
+      sel.song_artist ? el("div", { class: "confirm-artist" }, sel.song_artist) : null,
+      el("div", { class: "confirm-source" }, _confirmSourceLine(sel)),
     ),
+    state.query ? el("p", { class: "confirm-searched hint" }, `You searched: "${state.query}"`) : null,
     el("p", { class: "hint" },
       state.phone
         ? `Your details: ${state.name} · ${state.phone}`
         : `Your details: ${state.name}`),
     renderPartnersSection(),
-    el("div", { class: "row" },
-      el("button", { class: "btn ghost", onclick: back("search") }, "Change"),
-      el("button", { class: "btn primary submit-btn", onclick: send }, "Send to KJ"),
+    el("div", { class: "row confirm-actions" },
+      el("button", { class: "btn ghost", onclick: back("search") }, "← Pick a different song"),
+      el("button", { class: "btn primary submit-btn", onclick: send }, "Yes — send to the KJ"),
     ),
     el("p", { class: "error" }, err),
   );
