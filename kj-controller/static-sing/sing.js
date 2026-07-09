@@ -547,7 +547,7 @@ function renderSearch() {
       const myGen = ++searchGen;
       if (q.trim().length < 3) {
         results = { songs: [] };
-        if (myGen === searchGen) { loading = false; update(); }
+        if (myGen === searchGen) { loading = false; err = ""; update(); }
         return;
       }
       loading = true; err = ""; update();

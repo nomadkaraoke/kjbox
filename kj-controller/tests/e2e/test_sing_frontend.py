@@ -161,6 +161,7 @@ class TestSearchRace:
     # on how Playwright serialises route handlers.
     _FETCH_SHIM = r"""
         window.__searchScript = {};
+        window.__searchEvents = { started: [], resolved: [] };
         const _origFetch = window.fetch;
         window.fetch = (url, opts) => {
           const m = /\/sing\/search\?q=([^&]*)/.exec(String(url));
@@ -168,10 +169,12 @@ class TestSearchRace:
             const q = decodeURIComponent(m[1]).trim();
             const s = window.__searchScript[q];
             if (s) {
-              return new Promise((resolve) => setTimeout(() => resolve(
-                new Response(JSON.stringify(s.body),
-                  {status: 200, headers: {'Content-Type': 'application/json'}})
-              ), s.delay));
+              window.__searchEvents.started.push(q);
+              return new Promise((resolve) => setTimeout(() => {
+                window.__searchEvents.resolved.push(q);
+                resolve(new Response(JSON.stringify(s.body),
+                  {status: 200, headers: {'Content-Type': 'application/json'}}));
+              }, s.delay));
             }
           }
           return _origFetch(url, opts);
@@ -194,10 +197,14 @@ class TestSearchRace:
         }""")
         inp = page.locator('input[type="search"]')
         inp.fill("aaa")
-        page.wait_for_timeout(800)   # let the 700ms debounce fire so 'aaa' is in flight (resolves +1500ms)
-        inp.fill("aaab")             # newer query; 'aaa' is already fetching (not cancelled)
+        # Wait until the 'aaa' request has actually started (debounce fired) before
+        # superseding it — otherwise the debounce would simply cancel it and the
+        # out-of-order race would never be exercised (a false pass).
+        page.wait_for_function("() => window.__searchEvents.started.includes('aaa')")
+        inp.fill("aaab")             # supersede while 'aaa' is genuinely in flight
         expect(page.locator(".r-title")).to_have_text("FAST FRESH")   # fresh lands first
-        page.wait_for_timeout(1400)  # let the slow, stale 'aaa' resolve last
+        # Wait until the slow, stale 'aaa' response has actually resolved (landed last).
+        page.wait_for_function("() => window.__searchEvents.resolved.includes('aaa')")
         expect(page.locator(".r-title")).to_have_text("FAST FRESH")   # guard must discard the stale one
         expect(page.locator(".results")).not_to_contain_text("SLOW STALE")
 
@@ -282,7 +289,9 @@ class TestVersionList:
 
     def test_best_marker_on_first_version(self, page, live_server, live_token):
         self._multi(page, live_server, live_token)
-        expect(page.locator(".sing-version-best").first).to_be_visible()
+        first_version = page.locator(".sing-version-card").nth(0)
+        expect(first_version.locator(".sing-version-best")).to_be_visible()
+        expect(page.locator(".sing-version-best")).to_have_count(1)
 
     def test_noisy_commercial_collapsed_when_good_option_present(self, page, live_server, live_token):
         self._multi(page, live_server, live_token)
