@@ -2,6 +2,26 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-07-08 - Original Vocals guide: per-track alignment + review-clip fix (v0.75.x)
+
+**Feature (v0.75.0, #181):** during a NOMAD master, an "Original Vocals" slider (default
+0 % / off) mixes the original singer's isolated vocals under the karaoke as a sing-along
+guide (mpv `--lavfi-complex` amix; shared rubberband pitch). It **auto-enables** whenever a
+guide for that brand exists in `NOMAD-vocals-padded/` — no config. See
+[ORIGINAL-VOCALS.md](ORIGINAL-VOCALS.md) for the full operational model.
+
+**Per-track alignment (#182):** replaced the fixed-5 s guide padding with a measured,
+human-verified per-track offset (cross-correlate `NOMAD-audio` ↔ `NOMAD-720p`, apply to the
+guide). Applied to the device: re-emitted the **72** tracks whose real intro differs from 5 s
+(longer title-card-plus-intro cases) at their measured offset; **excluded 8** unalignable
+tracks (parody / live / pitched / unique). Padded guides: 1467 → **1459**.
+
+**Review-clip fix (#183):** the review clips (a QA tool, *not* the emitted guides) were
+misaligned for ~32 % of tracks by a `clip_cut` clamping bug when a vocal entered within 3 s of
+the song start — which made a correct pipeline look broken. Review clips are now the **first
+60 s of the video from t=0** with the guide `adelay`'d by the offset (mirrors the emit
+exactly); the buggy onset-windowing was removed. **The emitted guides were never affected.**
+
 ## 2026-07-07 - Top ticker fills the reserved strip (v0.74.1)
 
 **Why:** After v0.74.0 shipped, a ~21 px wallpaper band showed between the bottom of the ticker

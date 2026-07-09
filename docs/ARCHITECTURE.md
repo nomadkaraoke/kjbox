@@ -250,6 +250,9 @@ mpv is controlled via a JSON IPC socket (`/tmp/mpv-karaoke.sock`). Commands are 
 ### Real-Time Pitch Shifting
 Pitch is shifted in semitone increments (-6 to +6) using the formula `pitch_scale = 2^(semitones/12)`. The rubberband library provides formant preservation, so shifted vocals sound natural rather than chipmunk/demonic. Pitch resets to 0 when a new song starts. The `af-command` approach is glitch-free — no audible pop or dropout when changing pitch during playback.
 
+### Original Vocals Guide
+When a NOMAD master with a matching guide in `NOMAD-vocals-padded/` plays, an "Original Vocals" slider mixes the original singer's isolated vocals under the karaoke via mpv `--lavfi-complex` amix (shared rubberband pitch). Auto-enables by brand match — no config. Full operational model, guide dataset, and the alignment pipeline: [ORIGINAL-VOCALS.md](ORIGINAL-VOCALS.md).
+
 ### VLC Filler HTTP API
 The filler VLC instance is controlled via its built-in HTTP interface (`--extraintf http`), not via python-vlc bindings. This avoids native library dependencies and works cleanly with the `sudo -u dietpi` process isolation on the Pi.
 
