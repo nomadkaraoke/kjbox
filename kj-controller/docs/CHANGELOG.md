@@ -4,6 +4,23 @@ Dated entries, newest first. Each entry notes any required deploy steps.
 
 ---
 
+## 2026-07-08 - Singer UI: reliable song search + hardened confirm (v0.76.0)
+
+**Deploy:** frontend-only (`static-sing/sing.js`, `static-sing/sing.css`) → auto-deploy pulls on the next browser refresh; **no service restart** and no playback interruption.
+
+- Fixes the likely cause of "this isn't the song I picked": the singer search
+  now discards a slow earlier query's response so it can't overwrite a newer
+  one (ports the KJ link-search generation guard + latest-owner rule; debounce
+  raised 300 → 700ms to match the shared live-scraping backend).
+- The "Searching…" hint shows the instant you type, before the debounce fires.
+- Freshly-rendered result/version buttons are briefly inert (~300ms) so a tap
+  aimed at the previous layout can't select a row that just appeared.
+- Confirm screen redesigned for mis-tap safety: song title/artist dominant, an
+  explicit source line, a "you searched" breadcrumb, and clear "Yes — send to
+  the KJ" / "← Pick a different song" actions.
+- Version list marks the Best version and KJ-trusted brands, and collapses
+  noisy commercial downloads behind a toggle when a good option is available.
+
 ## 2026-07-06 - Stop keeping yt-dlp thumbnail litter next to downloads (v0.72.3)
 
 **Deploy:** backend change (`media.py`) → requires `systemctl restart kj-controller`.
