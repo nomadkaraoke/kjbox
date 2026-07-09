@@ -881,3 +881,19 @@ class TestSupersedeApproval:
         assert rot.store.get_entry(e_orig["id"]) is None
         assert rot.store.get_entry(new_entry_id)["position"] == old_pos
         assert admin_app.sing_store.get_request(orig["id"])["status"] == "cancelled"
+
+
+class TestReorderApproval:
+    def test_approving_reorder_applies_move(self, admin_client, admin_app):
+        rot = admin_app.rotation
+        a = rot.add_entry("Alice", "Song A")
+        rot.add_entry("Bob", "Filler")
+        b = rot.add_entry("Alice", "Song B")
+        rr = admin_app.sing_store.create_request(
+            singer_name="Alice", phone="", source_type="reorder", source_ref=None,
+            source_meta={"ordered_entry_ids": [b["id"], a["id"]]})
+        resp = admin_client.post(f"/rotation/requests/{rr['id']}/approve")
+        assert resp.status_code == 200
+        pos = {e["id"]: e["position"] for e in rot.get_rotation()}
+        assert pos[b["id"]] < pos[a["id"]]   # B now ahead of A
+        assert admin_app.sing_store.get_request(rr["id"])["status"] == "approved"

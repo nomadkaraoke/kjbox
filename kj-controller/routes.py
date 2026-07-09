@@ -5095,6 +5095,32 @@ def approve_sing_request_route(req_id):
     if req["status"] != "pending":
         return jsonify({"error": f"Request is already {req['status']}"}), 409
 
+    # Reorder request: not a song — apply the singer's requested order to their
+    # own entries within the slots they currently occupy, then mark approved.
+    if req["source_type"] == "reorder":
+        rotation = current_app.rotation
+        meta = req.get("source_meta")
+        if isinstance(meta, str):
+            try:
+                meta = json.loads(meta)
+            except (TypeError, ValueError):
+                meta = {}
+        ordered = (meta or {}).get("ordered_entry_ids") or []
+        # Target slots = the current positions of these entries, ascending.
+        target_positions = sorted(
+            e["position"]
+            for e in (rotation.store.get_entry(eid) for eid in ordered)
+            if e is not None
+        )
+        # Fill ascending target slots in the requested order.
+        for eid in ordered:
+            if not target_positions:
+                break
+            if rotation.store.get_entry(eid) is not None:
+                rotation.move_entry(eid, target_positions.pop(0))
+        store.mark_approved(req_id, linked_entry_id=None)
+        return jsonify({"success": True, "request": store.get_request(req_id), "entry_id": None})
+
     body = request.get_json(silent=True) or {}
     skip_download = bool(body.get("skip_download"))
 
