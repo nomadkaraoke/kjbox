@@ -57,6 +57,28 @@ Run on the device with the **kj-controller venv python**
 Excluded as of 2026-07-08: 8 tracks (parody / live / pitched / unique recordings that
 can't correlate to the original) — they simply get no guide.
 
+## Automatic guide distribution (write-path, v0.77.0)
+
+Newly rendered NOMAD tracks now get their guide **automatically** — no re-run of the
+`scripts/original_vocals/` pipeline. The loop:
+
+1. **karaoke-gen** (at finalize) has the isolated `mixed_vocals` stem + the job's exact
+   intro duration, so it emits `silence[intro] + vocals` (capped to the master) and pushes
+   it to `gs://nomadkaraoke-divebar-files/files/Nomad Karaoke/vocals-padded/{brand} - …flac`
+   — the same alignment this pipeline produces, but computed for free (no correlation).
+2. **This device** — the 5-minute master-sync timer (`scripts/sync_masters.py`) now pulls
+   that prefix into `NOMAD-vocals-padded/` alongside the masters, so the guide is present
+   before/with the master. Playback then works exactly as above.
+
+**Additive-only:** the vocals sync **never reconcile-deletes**, so the existing ~1,459
+retro-fit guides (absent from the initially near-empty GCS prefix) are preserved. Known
+limitation: a *recycled* brand's stale guide isn't auto-removed (future: backfill existing
+guides to GCS, then enable reconcile). No `/rescan` poke — guides are glob-resolved at play
+time, never indexed.
+
+**Activation (device config):** set `"vocals_sync_enabled": true` (default False). Optional
+overrides: `vocals_sync_source`, `vocals_sync_dest`, `vocals_sync_delete_removed`.
+
 ## Gotchas
 
 - **Clear `--lavfi-complex` BEFORE `loadfile`**, not after — otherwise `af-command rb`
@@ -64,9 +86,10 @@ can't correlate to the original) — they simply get no guide.
 - **Stop with `POST /control {"action":"stop"}`** — a raw mpv `stop` is auto-replayed by
   crash-recovery (can blast a song at full volume).
 - Emitting flac to a `<name>.part` temp file needs explicit `-f flac` (ffmpeg otherwise
-  guesses the container from `.part` and fails).
-- **No karaoke-gen write-path yet** — newly rendered NOMAD tracks won't get a guide until
-  the pipeline above is re-run over them.
+  guesses the container from `.part` and fails). The karaoke-gen write-path uses the same
+  `-f flac` trick.
+- The write-path handles **new** renders only; a historical gap still needs the
+  `scripts/original_vocals/` pipeline (or a future GCS backfill).
 
 ## Design / history
 

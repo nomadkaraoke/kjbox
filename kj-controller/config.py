@@ -57,6 +57,16 @@ def load_config(config_file=None):
         # "" -> derived as http://127.0.0.1:<app_bind_port>/rescan (the app's internal
         # port); NOT flask_port (the public proxy, e.g. Caddy on 80).
         "master_sync_rescan_url": "",
+        # Original-vocals guide sync: karaoke-gen pushes a padded guide (silence[intro] +
+        # vocals) per new NOMAD master to this sibling prefix; the master-sync timer pulls
+        # it into NOMAD-vocals-padded/ (where _resolve_vocals_guide looks) to feed the
+        # "Original Vocals" slider. ADDITIVE-ONLY (delete_removed False) so the device's
+        # existing retro-fit guides — absent from the initially near-empty GCS prefix —
+        # are never reconcile-deleted. "" dest -> {download_folder}/NOMAD-vocals-padded.
+        "vocals_sync_enabled": False,
+        "vocals_sync_source": "gs://nomadkaraoke-divebar-files/files/Nomad Karaoke/vocals-padded/",
+        "vocals_sync_dest": "",
+        "vocals_sync_delete_removed": False,
         "websockify_port": 6080,
         "vnc_target": "localhost:5900",
         "websockify_enabled": True,

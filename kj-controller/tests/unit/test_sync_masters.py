@@ -235,3 +235,99 @@ def test_run_sync_gcloud_failure_empty_stderr_still_reports_error(tmp_path, monk
                         lambda cmd, **kw: types.SimpleNamespace(returncode=1, stdout="", stderr=""))
     out = sm.run_sync(_cfg(tmp_path), requests_lib=None)
     assert out["error"] and out["changed"] is False
+
+
+# --- original-vocals guide sync (additive-only, isolated from the master sync) ---
+
+def test_vocals_config_view_is_additive_only_and_targets_padded_dir():
+    cfg = {
+        "download_folder": "/dl",
+        "vocals_sync_enabled": True,
+        "vocals_sync_source": "gs://b/vocals-padded/",
+        "master_sync_credentials_file": "/sa.json",
+    }
+    view = sm._vocals_config_view(cfg)
+    assert view["master_sync_enabled"] is True
+    assert view["master_sync_source"] == "gs://b/vocals-padded/"
+    # Dest is the NOMAD-vocals-padded sibling where _resolve_vocals_guide looks.
+    assert view["master_sync_dest"] == "/dl/NOMAD-vocals-padded"
+    # ADDITIVE-ONLY: never reconcile-delete the device's existing retro-fit guides.
+    assert view["master_sync_delete_removed"] is False
+    # Reuses the master sync's SA key.
+    assert view["master_sync_credentials_file"] == "/sa.json"
+
+
+def test_vocals_config_view_explicit_dest_override():
+    assert sm._vocals_config_view({"vocals_sync_dest": "/custom/vp"})["master_sync_dest"] == "/custom/vp"
+
+
+def test_vocals_config_view_defaults_disabled():
+    assert sm._vocals_config_view({})["master_sync_enabled"] is False
+
+
+def test_vocals_run_sync_is_additive_only_end_to_end(tmp_path, monkeypatch):
+    # A pre-existing device guide absent from the (near-empty) GCS source must NOT be
+    # deleted — the whole point of additive-only for the 1,459 retro-fit guides.
+    padded = tmp_path / "NOMAD-vocals-padded"
+    _local(padded, ["NOMAD-0001 - A - B.flac"])
+    view = sm._vocals_config_view({
+        "download_folder": str(tmp_path),
+        "vocals_sync_enabled": True,
+        "vocals_sync_source": "gs://bucket/vocals-padded/",
+    })
+    monkeypatch.setattr(sm.subprocess, "run",
+                        lambda cmd, **kw: types.SimpleNamespace(returncode=0, stdout="", stderr=""))
+    out = sm.run_sync(view, requests_lib=None)
+    assert out["deleted"] == 0
+    assert (padded / "NOMAD-0001 - A - B.flac").exists()
+
+
+def test_main_runs_both_master_then_vocals_sync(monkeypatch):
+    calls = []
+
+    def fake_run_sync(config, **kw):
+        calls.append((
+            config.get("master_sync_source"),
+            config.get("master_sync_dest"),
+            config.get("master_sync_delete_removed"),
+            kw.get("requests_lib", "default"),
+        ))
+        return {"error": None}
+
+    monkeypatch.setattr(sm, "load_config", lambda: {
+        "master_sync_source": "gs://b/MP4-720p/", "master_sync_dest": "/dl/NOMAD-720p",
+        "master_sync_enabled": True, "download_folder": "/dl",
+        "vocals_sync_enabled": True, "vocals_sync_source": "gs://b/vocals-padded/",
+    })
+    monkeypatch.setattr(sm, "run_sync", fake_run_sync)
+
+    assert sm.main() == 0
+    assert len(calls) == 2
+    # Master first (default rescan poke), then the vocals guide sync.
+    assert calls[0][0] == "gs://b/MP4-720p/"
+    assert calls[1][0] == "gs://b/vocals-padded/"
+    assert calls[1][1] == "/dl/NOMAD-vocals-padded"
+    assert calls[1][2] is False   # additive-only
+    assert calls[1][3] is None    # requests_lib=None -> no /rescan poke for guides
+
+
+def test_main_vocals_sync_error_does_not_fail_master(monkeypatch):
+    def fake_run_sync(config, **kw):
+        if config.get("master_sync_source", "").endswith("vocals-padded/"):
+            raise RuntimeError("vocals boom")
+        return {"error": None}  # master OK
+
+    monkeypatch.setattr(sm, "load_config", lambda: {
+        "master_sync_source": "gs://b/MP4-720p/", "master_sync_enabled": True,
+        "download_folder": "/dl", "vocals_sync_enabled": True,
+        "vocals_sync_source": "gs://b/vocals-padded/",
+    })
+    monkeypatch.setattr(sm, "run_sync", fake_run_sync)
+    # Master succeeded -> rc 0 despite the vocals sync raising.
+    assert sm.main() == 0
+
+
+def test_main_master_error_still_sets_nonzero_rc(monkeypatch):
+    monkeypatch.setattr(sm, "load_config", lambda: {"master_sync_enabled": True, "download_folder": "/dl"})
+    monkeypatch.setattr(sm, "run_sync", lambda config, **kw: {"error": "boom"})
+    assert sm.main() == 1
