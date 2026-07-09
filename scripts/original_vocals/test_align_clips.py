@@ -20,7 +20,12 @@ def test_select_review_deterministic():
 def test_clip_name_encodes_offset():
     assert clip_name("NOMAD-0300","Frightened Rabbit - Square 9",4.98).endswith("__off=4.980s.mp4")
 
-def test_ffmpeg_clip_cmd_uses_two_seeked_inputs_and_amix():
-    cmd = ffmpeg_clip_cmd("v.mp4","g.flac",12.0,7.0,15.0,"out.mp4")
+def test_ffmpeg_clip_cmd_from_start_delays_guide_and_amix():
+    # first `dur`s from t=0, guide mixed in delayed by the offset (mirrors emit)
+    cmd = ffmpeg_clip_cmd("v.mp4","g.flac",4.98,60.0,"out.mp4")
     s=" ".join(cmd)
-    assert "-ss 12.000" in s and "-ss 7.000" in s and "amix=inputs=2" in s and s.endswith("out.mp4")
+    assert "adelay=4980:all=1" in s      # guide delayed by the candidate offset
+    assert "amix=inputs=2" in s
+    assert "-t 60.000" in s              # first 60s
+    assert "-ss" not in s                # no seeking — always from the very start
+    assert s.endswith("out.mp4")

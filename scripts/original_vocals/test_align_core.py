@@ -1,5 +1,5 @@
 import numpy as np
-from align_core import (first_vocal_onset, variant_offsets, clip_cut, emit_af,
+from align_core import (first_vocal_onset, variant_offsets, emit_af,
                         OffsetRow, parse_decision, apply_decision, read_offsets, write_offsets)
 
 def test_first_vocal_onset_after_silence():
@@ -15,17 +15,6 @@ def test_variant_offsets_default():
 
 def test_variant_offsets_clamps_negative():
     assert all(o >= 0 for o in variant_offsets(0.05))
-
-def test_clip_cut_correct_candidate_matches_measured():
-    vstart, gstart, dur = clip_cut(measured_s=5.0, onset_s=10.0, candidate_s=5.0)
-    assert abs(vstart - 12.0) < 1e-6      # 5 + 10 - 3
-    assert abs(gstart - 7.0) < 1e-6       # onset - before  (candidate==measured)
-    assert abs(dur - 15.0) < 1e-6
-
-def test_clip_cut_wrong_candidate_shifts_guide():
-    # candidate 0.1s later than measured -> guide cut 0.1s earlier so it plays late in-clip
-    _, gstart, _ = clip_cut(measured_s=5.0, onset_s=10.0, candidate_s=5.1)
-    assert abs(gstart - 6.9) < 1e-6
 
 def test_emit_af_shape():
     af = emit_af(4.98, 200.0)

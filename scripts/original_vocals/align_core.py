@@ -34,16 +34,6 @@ def variant_offsets(measured_s, steps_ms=(0, -100, 100, -200, 200)):
     return out
 
 
-def clip_cut(measured_s, onset_s, candidate_s, before=3.0, after=12.0):
-    """Video window is fixed on the first-vocal moment (using measured offset);
-    the guide cut point shifts by (measured - candidate) so a wrong candidate
-    plays audibly off. Returns (video_start, guide_start, dur)."""
-    dur = before + after
-    video_start = max(0.0, measured_s + onset_s - before)
-    guide_start = max(0.0, (video_start - measured_s) + (measured_s - candidate_s))
-    return round(video_start, 3), round(guide_start, 3), round(dur, 3)
-
-
 def emit_af(offset_s, target_dur):
     delay_ms = int(round(offset_s * 1000))
     return (f"adelay={delay_ms}:all=1,apad,atrim=0:{target_dur:.3f},asetpts=N/SR/TB")
