@@ -157,6 +157,15 @@ class SingStore:
             # Column already exists on this DB; safe to ignore.
             if "duplicate column name" not in str(e).lower():
                 raise
+        # Additive migration — `edit_token` (2026-07-09) is a per-request secret
+        # proving device ownership for singer self-service (cancel/edit).
+        try:
+            conn.execute(
+                "ALTER TABLE sing_requests ADD COLUMN edit_token TEXT DEFAULT NULL"
+            )
+        except sqlite3.OperationalError as e:
+            if "duplicate column name" not in str(e).lower():
+                raise
         conn.commit()
 
     # ------------------------------------------------------------------
@@ -371,14 +380,15 @@ class SingStore:
         partners_json = (
             json.dumps(additional_singers) if additional_singers is not None else None
         )
+        edit_token = secrets.token_urlsafe(16)
         conn = self._get_conn()
         cur = conn.execute(
             """
             INSERT INTO sing_requests
                 (token, singer_name, phone, song_artist, song_title,
                  source_type, source_ref, source_meta, notes,
-                 additional_singers)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 additional_singers, edit_token)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 request_token,
@@ -391,6 +401,7 @@ class SingStore:
                 meta_json,
                 notes.strip(),
                 partners_json,
+                edit_token,
             ),
         )
         conn.commit()
@@ -556,6 +567,23 @@ class SingStore:
              WHERE id = ?
             """,
             (reason, request_id),
+        )
+        conn.commit()
+        return self.get_request(request_id)
+
+    def mark_cancelled(self, request_id):
+        """Set status=cancelled, reviewed_at=now. Raises ValueError if not found."""
+        if self.get_request(request_id) is None:
+            raise ValueError(f"Request {request_id} not found")
+        conn = self._get_conn()
+        conn.execute(
+            """
+            UPDATE sing_requests
+               SET status = 'cancelled',
+                   reviewed_at = datetime('now', 'localtime')
+             WHERE id = ?
+            """,
+            (request_id,),
         )
         conn.commit()
         return self.get_request(request_id)
