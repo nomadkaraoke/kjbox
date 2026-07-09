@@ -964,9 +964,13 @@ def change_request(req_id):
             req_id, song_artist=song_artist, song_title=song_title,
             source_type=source_type, source_ref=source_ref, source_meta=source_meta,
         )
-        return jsonify({"success": True, "request": _public_request_view(updated)})
+        # edit_token echoed back (owner already holds it) so the device keeps
+        # the same self-service capability after the change.
+        return jsonify({"success": True, "request": {
+            **_public_request_view(updated), "edit_token": updated.get("edit_token")}})
 
-    # Approved → create a superseding pending request the KJ approves.
+    # Approved → create a superseding pending request the KJ approves. Return
+    # its fresh edit_token so the device can manage the new pending request too.
     new_req = store.create_request(
         singer_name=req["singer_name"], phone=req.get("phone") or "",
         song_artist=song_artist, song_title=song_title,
@@ -974,7 +978,8 @@ def change_request(req_id):
         token=req["token"], additional_singers=req.get("additional_singers"),
         supersedes_request_id=req_id,
     )
-    return jsonify({"success": True, "request": _public_request_view(new_req)})
+    return jsonify({"success": True, "request": {
+        **_public_request_view(new_req), "edit_token": new_req.get("edit_token")}})
 
 
 @sing_bp.route("/requests/reorder", methods=["POST"])
