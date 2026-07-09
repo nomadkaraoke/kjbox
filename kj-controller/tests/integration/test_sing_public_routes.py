@@ -623,3 +623,47 @@ class TestMyRequests:
         item = resp.get_json()["requests"][0]
         assert "estimate" in item
         assert item["estimate"]["position"] >= 1
+
+
+class TestSelfServiceCancel:
+    def _body(self, **o):
+        b = {"singer_name": "Alice", "phone": "", "song_artist": "Queen",
+             "song_title": "Bo Rhap", "source_type": "local", "source_ref": "/x.mp4"}
+        b.update(o)
+        return b
+
+    def test_submit_returns_edit_token_but_status_does_not(self, client, token):
+        r = client.post(f"/sing/submit?t={token}", json=self._body()).get_json()["request"]
+        assert r["edit_token"]
+        st = client.get(f"/sing/status/{r['id']}?t={token}").get_json()["request"]
+        assert "edit_token" not in st
+
+    def test_cancel_pending_requires_matching_edit_token(self, client, sing_app, token):
+        r = client.post(f"/sing/submit?t={token}", json=self._body()).get_json()["request"]
+        bad = client.post(f"/sing/requests/{r['id']}/cancel?t={token}", json={"edit_token": "nope"})
+        assert bad.status_code == 403
+        assert sing_app.sing_store.get_request(r["id"])["status"] == "pending"
+        ok = client.post(f"/sing/requests/{r['id']}/cancel?t={token}", json={"edit_token": r["edit_token"]})
+        assert ok.status_code == 200
+        assert ok.get_json()["request"]["status"] == "cancelled"
+
+    def test_cancel_idempotent_409(self, client, token):
+        r = client.post(f"/sing/submit?t={token}", json=self._body()).get_json()["request"]
+        client.post(f"/sing/requests/{r['id']}/cancel?t={token}", json={"edit_token": r["edit_token"]})
+        again = client.post(f"/sing/requests/{r['id']}/cancel?t={token}", json={"edit_token": r["edit_token"]})
+        assert again.status_code == 409
+
+    def test_cancel_unknown_id_404(self, client, token):
+        resp = client.post(f"/sing/requests/999999/cancel?t={token}", json={"edit_token": "x"})
+        assert resp.status_code == 404
+
+    def test_cancel_approved_soft_cancels_rotation_entry(self, client, sing_app, token):
+        sing_app.sing_store.set_auto_approve(True)
+        r = client.post(f"/sing/submit?t={token}", json=self._body()).get_json()["request"]
+        assert r["status"] == "approved"
+        entry_id = sing_app.sing_store.get_request(r["id"])["linked_entry_id"]
+        assert entry_id
+        ok = client.post(f"/sing/requests/{r['id']}/cancel?t={token}", json={"edit_token": r["edit_token"]})
+        assert ok.status_code == 200
+        entry = sing_app.rotation.store.get_entry(entry_id)
+        assert entry["status"] == "Cancelled"
