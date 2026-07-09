@@ -8067,7 +8067,27 @@ const SingRequests = (() => {
     function renderRow(req) {
         const row = document.createElement('div');
         row.className = 'pending-req-row';
-        const song = [req.song_title, req.song_artist].filter(Boolean).join(' — ');
+        // Reorder request — not a song; minimal row with Approve/Reject only.
+        if (req.source_type === 'reorder') {
+            row.className = 'pending-req-row pr-reorder';
+            row.innerHTML = `
+              <div class="pr-main"><strong>↕ Reorder</strong>
+                <span class="pr-song">${escapeHtml(req.singer_name)}'s songs</span></div>
+              <div class="pr-actions">
+                <button class="btn-approve" data-id="${req.id}">Approve</button>
+                <button class="btn-reject" data-id="${req.id}">Reject</button>
+              </div>`;
+            row.querySelector('.btn-approve').addEventListener('click', () => approve(req.id));
+            row.querySelector('.btn-reject').addEventListener('click', () => reject(req.id));
+            return row;
+        }
+        // Change request (singer edited an approved song) — tag it; it still
+        // carries a real new song, so the normal approve/download path applies.
+        if (req.supersedes_request_id) {
+            row.classList.add('pr-change');
+        }
+        const song = (req.supersedes_request_id ? '✎ ' : '')
+            + [req.song_title, req.song_artist].filter(Boolean).join(' — ');
         const isKjPick = req.source_type === 'kj_pick';
         const isYoutube = req.source_type === 'youtube';
         let approveButton;

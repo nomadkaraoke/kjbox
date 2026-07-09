@@ -344,3 +344,38 @@ class TestCancelledEntry:
         cancelled.first.wait_for(state='visible')
         assert cancelled.locator('.badge-cancelled').count() > 0
         assert cancelled.locator('.rotation-btn-dismiss').count() > 0
+
+
+class TestChangeReorderPanel:
+    def test_panel_renders_change_and_reorder(self, app_page):
+        page = app_page
+        # Seed approved songs, then create a reorder + a change (both pending)
+        # through the singer endpoints, then reload so the panel fetches them.
+        page.evaluate("""async () => {
+            const cfg = await fetch('/rotation/requests/config').then(r => r.json());
+            const t = cfg.token;
+            await fetch('/rotation/requests/config', {method:'POST',
+              headers:{'Content-Type':'application/json'},
+              body: JSON.stringify({auto_approve: true})});
+            async function submit(title) {
+              const r = await fetch('/sing/submit?t=' + t, {method:'POST',
+                headers:{'Content-Type':'application/json'},
+                body: JSON.stringify({singer_name:'Alice', phone:'', song_artist:'Q',
+                  song_title:title, source_type:'local', source_ref:'/'+title+'.mp4'})});
+              return (await r.json()).request;
+            }
+            const a = await submit('AA'); const b = await submit('BB'); const c = await submit('CC');
+            await fetch('/sing/requests/reorder?t=' + t, {method:'POST',
+              headers:{'Content-Type':'application/json'},
+              body: JSON.stringify({items:[{id:b.id, edit_token:b.edit_token},
+                                           {id:a.id, edit_token:a.edit_token}]})});
+            await fetch('/sing/requests/' + c.id + '/change?t=' + t, {method:'POST',
+              headers:{'Content-Type':'application/json'},
+              body: JSON.stringify({edit_token:c.edit_token, source_type:'local',
+                source_ref:'/new.mp4', song_artist:'ABBA', song_title:'SOS'})});
+        }""")
+        page.reload()
+        page.locator('#pending-requests-list').wait_for(state='visible')
+        page.locator('.pending-req-row.pr-reorder').first.wait_for(state='visible')
+        assert page.locator('.pending-req-row.pr-reorder').count() >= 1
+        assert page.locator('.pending-req-row.pr-change').count() >= 1
