@@ -524,13 +524,26 @@ function renderSearch() {
   let ccExplainerDismissed = _ccExplainerSeen();
 
   let debounceTimer = null;
+  // Generation guard (ported from the KJ link search, app.js rotSearchGen):
+  // bumped at the start of each fetch so a slower earlier query cannot clobber
+  // a newer one, and so only the latest search may clear loading / set err.
+  let searchGen = 0;
   const doSearch = (q) => {
     clearTimeout(debounceTimer);
+    // 700ms (was 300) to match the KJ side — the shared backend live-scrapes,
+    // so a longer debounce just trims wasted scrapes. Correctness comes from
+    // the generation guard below, not from the delay.
     debounceTimer = setTimeout(async () => {
-      if (q.trim().length < 3) { results = { songs: [] }; update(); return; }
+      const myGen = ++searchGen;
+      if (q.trim().length < 3) {
+        results = { songs: [] };
+        if (myGen === searchGen) { loading = false; update(); }
+        return;
+      }
       loading = true; err = ""; update();
       try {
         const data = await search(q.trim());
+        if (myGen !== searchGen) return;   // superseded — discard stale response
         results = data;
         // Phase C — mirror the server's current flag so a mid-session KJ
         // toggle takes effect on the next search without a page reload.
@@ -541,11 +554,12 @@ function renderSearch() {
           state.simpleMode = data.simple_mode;
         }
       } catch (e) {
+        if (myGen !== searchGen) return;   // stale failure — don't clobber a live search
         err = "Search failed. Try again.";
       } finally {
-        loading = false; update();
+        if (myGen === searchGen) { loading = false; update(); }  // latest-owner rule
       }
-    }, 300);
+    }, 700);
   };
 
   // Single-version short-circuit — when a group has exactly one version, we
@@ -978,7 +992,15 @@ function renderSearch() {
       type: "search",
       placeholder: "Type artist or song title…",
       autocomplete: "off",
-      oninput: (e) => { state.query = e.target.value; doSearch(e.target.value); },
+      oninput: (e) => {
+        state.query = e.target.value;
+        // Immediate feedback: show the searching hint the moment a real query
+        // is typed, before the 700ms debounce elapses (matches the KJ side).
+        if (e.target.value.trim().length >= 3 && !loading) {
+          loading = true; update();
+        }
+        doSearch(e.target.value);
+      },
       value: state.query,
     }),
     renderResults(),

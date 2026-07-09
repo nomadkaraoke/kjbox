@@ -148,3 +148,64 @@ class TestDoneMultiSong:
         page.locator('[data-testid="request-another"]').click()
         expect(page.locator('input[type="search"]')).to_be_visible()
         expect(page.locator("text=Hi Alice")).to_be_visible()
+
+
+class TestSearchRace:
+    def _goto_search(self, page, live_server, live_token, name="Alice"):
+        _login(page, live_server, live_token, name=name)
+        page.evaluate("window.__sing_state.step = 'search'; window.__sing_render();")
+
+    # Deterministic in-browser fetch shim: control BOTH the body and the
+    # resolution delay per query, so we can force an out-of-order
+    # (stale-after-fresh) response without depending on real network timing or
+    # on how Playwright serialises route handlers.
+    _FETCH_SHIM = r"""
+        window.__searchScript = {};
+        const _origFetch = window.fetch;
+        window.fetch = (url, opts) => {
+          const m = /\/sing\/search\?q=([^&]*)/.exec(String(url));
+          if (m) {
+            const q = decodeURIComponent(m[1]).trim();
+            const s = window.__searchScript[q];
+            if (s) {
+              return new Promise((resolve) => setTimeout(() => resolve(
+                new Response(JSON.stringify(s.body),
+                  {status: 200, headers: {'Content-Type': 'application/json'}})
+              ), s.delay));
+            }
+          }
+          return _origFetch(url, opts);
+        };
+    """
+
+    def test_stale_response_does_not_clobber_newer(self, page, live_server, live_token):
+        """An earlier, slower query's response must not overwrite a newer one."""
+        page.add_init_script(self._FETCH_SHIM)
+        self._goto_search(page, live_server, live_token)
+        page.evaluate("""() => {
+          window.__searchScript = {
+            'aaa':  {delay: 1500, body: {songs: [{key: 'q:1', artist: 'Queen', title: 'SLOW STALE',
+                       version_count: 1, versions: [{source: 'local',
+                       local: {path: '/x', artist: 'Queen', title: 'SLOW STALE'}}]}]}},
+            'aaab': {delay: 0,    body: {songs: [{key: 'a:1', artist: 'ABBA', title: 'FAST FRESH',
+                       version_count: 1, versions: [{source: 'local',
+                       local: {path: '/y', artist: 'ABBA', title: 'FAST FRESH'}}]}]}},
+          };
+        }""")
+        inp = page.locator('input[type="search"]')
+        inp.fill("aaa")
+        page.wait_for_timeout(800)   # let the 700ms debounce fire so 'aaa' is in flight (resolves +1500ms)
+        inp.fill("aaab")             # newer query; 'aaa' is already fetching (not cancelled)
+        expect(page.locator(".r-title")).to_have_text("FAST FRESH")   # fresh lands first
+        page.wait_for_timeout(1400)  # let the slow, stale 'aaa' resolve last
+        expect(page.locator(".r-title")).to_have_text("FAST FRESH")   # guard must discard the stale one
+        expect(page.locator(".results")).not_to_contain_text("SLOW STALE")
+
+    def test_typing_shows_searching_immediately(self, page, live_server, live_token):
+        """The 'Searching…' hint appears on keystroke, before the 700ms debounce fires."""
+        # The immediate hint comes from the oninput handler, before any fetch.
+        page.route("**/sing/search*", lambda r: r.fulfill(
+            status=200, content_type="application/json", body=json.dumps({"songs": []})))
+        self._goto_search(page, live_server, live_token)
+        page.locator('input[type="search"]').fill("bohemian")
+        expect(page.locator(".results .hint")).to_have_text("Searching…", timeout=400)
