@@ -184,6 +184,29 @@ def run_sync(config, *, gcloud_bin="gcloud", requests_lib=requests):
     return {"changed": changed, "copied": copied, "deleted": deleted, "rescanned": rescanned, "error": None}
 
 
+def _vocals_config_view(config):
+    """A config view that points ``run_sync`` at the original-vocals guide prefix/dir.
+
+    Reuses the master sync's SA key + safety machinery, but overrides source/dest and
+    defaults to ADDITIVE-ONLY (``delete_removed`` defaults False): the device already holds
+    the retro-fit guides, which are absent from the initially near-empty GCS prefix, so a
+    reconcile would try to delete them. The ``vocals_sync_delete_removed`` key is a
+    deliberate escape hatch — flip it True only AFTER the existing guides are backfilled to
+    the GCS prefix, so reconcile-deletes are safe. Dest defaults to the
+    ``NOMAD-vocals-padded`` sibling of the masters, exactly where ``_resolve_vocals_guide``
+    looks. Run with ``requests_lib=None`` so it skips the /rescan poke — guides are
+    glob-resolved at play time, never indexed.
+    """
+    view = dict(config)
+    view["master_sync_enabled"] = config.get("vocals_sync_enabled", False)
+    view["master_sync_source"] = config.get("vocals_sync_source", "")
+    view["master_sync_dest"] = config.get("vocals_sync_dest") or os.path.join(
+        config.get("download_folder", ""), "NOMAD-vocals-padded"
+    )
+    view["master_sync_delete_removed"] = config.get("vocals_sync_delete_removed", False)
+    return view
+
+
 def main():
     lock = open(LOCK_PATH, "w")
     try:
@@ -191,9 +214,21 @@ def main():
     except OSError:
         print("another sync running; skipping")
         return 0
-    result = run_sync(load_config())
+    config = load_config()
+    result = run_sync(config)
     print(result)
-    return 0 if not result.get("error") or result["error"] == "disabled" else 1
+    rc = 0 if not result.get("error") or result["error"] == "disabled" else 1
+
+    # Original-vocals guide sync, isolated from the master sync above: it runs additive-only
+    # and its outcome NEVER changes this timer's exit status (a guide-sync hiccup must not
+    # look like a master-mirror failure). No /rescan poke (requests_lib=None).
+    try:
+        vocals_result = run_sync(_vocals_config_view(config), requests_lib=None)
+        print({"vocals_sync": vocals_result})
+    except Exception as exc:  # noqa: BLE001 - never let the guide sync affect the master run
+        print({"vocals_sync": {"error": str(exc)}})
+
+    return rc
 
 
 if __name__ == "__main__":

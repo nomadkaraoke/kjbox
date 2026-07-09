@@ -2,6 +2,30 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-07-09 - Original Vocals guide: auto-sync from GCS (write-path, v0.77.0)
+
+**Feature (v0.77.0):** the 5-minute master-sync timer now pulls a **second** GCS prefix —
+`gs://nomadkaraoke-divebar-files/files/Nomad Karaoke/vocals-padded/` — into
+`NOMAD-vocals-padded/`, so guides emitted by karaoke-gen at render time (silence[intro] +
+mixed_vocals, already aligned) land on the device automatically. New NOMAD tracks now get
+their "Original Vocals" guide with **no** re-run of the retro-fit pipeline.
+
+- `scripts/sync_masters.py`: `main()` runs `run_sync` twice — masters (unchanged) then the
+  vocals prefix via `_vocals_config_view`. The shared `run_sync` is untouched; a vocals-sync
+  error is isolated and never fails the master run.
+- **Additive-only** (`vocals_sync_delete_removed=False`): the device's existing 1,459
+  retro-fit guides — absent from the initially near-empty GCS prefix — are never
+  reconcile-deleted. No `/rescan` poke (guides are glob-resolved at play time, not indexed).
+- Config: `vocals_sync_enabled` (default **False** — flip to True on the device to activate),
+  `vocals_sync_source`, `vocals_sync_dest` (""→`{download_folder}/NOMAD-vocals-padded`),
+  `vocals_sync_delete_removed`.
+- **Known limitation:** a recycled brand's stale guide isn't auto-removed under additive-only
+  sync (future: backfill existing guides to GCS, then enable reconcile). See
+  [ORIGINAL-VOCALS.md](ORIGINAL-VOCALS.md).
+
+**Activation:** set `"vocals_sync_enabled": true` in the device config; the karaoke-gen
+write-path (nomadkaraoke/karaoke-gen#875) must be deployed first so the GCS prefix populates.
+
 ## 2026-07-08 - Original Vocals guide: per-track alignment + review-clip fix (v0.75.x)
 
 **Feature (v0.75.0, #181):** during a NOMAD master, an "Original Vocals" slider (default
