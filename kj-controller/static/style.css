@@ -4297,3 +4297,11 @@ li.media-no-audio {
 .stats-fun { color: #f5a; font-size: 0.85em; padding: 4px 8px; }
 .stats-badge-busy { color: #f80; font-size: 0.8em; margin-left: 6px; }
 .stats-muted { color: #777; padding: 8px; }
+
+
+/* Singer-cancelled rotation entries (soft cancel) */
+.rotation-entry.rotation-cancelled { opacity: 0.6; }
+.rotation-entry.rotation-cancelled .rotation-name,
+.rotation-entry.rotation-cancelled .rotation-song { text-decoration: line-through; }
+.rotation-badge.badge-cancelled { background: #7a2e0b; color: #ffd6a2; }
+.rotation-btn.rotation-btn-dismiss { border-color: #7a2e0b; color: #ffd6a2; }
