@@ -716,3 +716,35 @@ class TestChangeSong:
         assert new["status"] == "pending" and new["id"] != r["id"]
         assert sing_app.sing_store.get_request(new["id"])["supersedes_request_id"] == r["id"]
         assert sing_app.sing_store.get_request(r["id"])["status"] == "approved"
+
+
+class TestReorder:
+    def _approved(self, client, sing_app, token, title):
+        sing_app.sing_store.set_auto_approve(True)
+        return client.post(f"/sing/submit?t={token}", json={
+            "singer_name": "Alice", "phone": "", "song_artist": "Q", "song_title": title,
+            "source_type": "local", "source_ref": f"/{title}.mp4"}).get_json()["request"]
+
+    def test_reorder_creates_pending_reorder_request(self, client, sing_app, token):
+        a = self._approved(client, sing_app, token, "A")
+        b = self._approved(client, sing_app, token, "B")
+        resp = client.post(f"/sing/requests/reorder?t={token}", json={"items": [
+            {"id": b["id"], "edit_token": b["edit_token"]},
+            {"id": a["id"], "edit_token": a["edit_token"]}]})
+        assert resp.status_code == 200
+        rr = resp.get_json()["request"]
+        assert rr["source_type"] == "reorder" and rr["status"] == "pending"
+
+    def test_reorder_rejects_unowned_item(self, client, sing_app, token):
+        a = self._approved(client, sing_app, token, "A")
+        b = self._approved(client, sing_app, token, "B")
+        resp = client.post(f"/sing/requests/reorder?t={token}", json={"items": [
+            {"id": b["id"], "edit_token": "WRONG"},
+            {"id": a["id"], "edit_token": a["edit_token"]}]})
+        assert resp.status_code == 403
+
+    def test_reorder_needs_two(self, client, sing_app, token):
+        a = self._approved(client, sing_app, token, "A")
+        resp = client.post(f"/sing/requests/reorder?t={token}",
+                           json={"items": [{"id": a["id"], "edit_token": a["edit_token"]}]})
+        assert resp.status_code == 400

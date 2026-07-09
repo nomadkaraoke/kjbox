@@ -977,6 +977,58 @@ def change_request(req_id):
     return jsonify({"success": True, "request": _public_request_view(new_req)})
 
 
+@sing_bp.route("/requests/reorder", methods=["POST"])
+def reorder_requests():
+    """Singer reorders their OWN approved songs. Creates a pending 'reorder'
+    request (KJ approves → move_entry). Every item must be owned (edit_token)."""
+    store = getattr(current_app, "sing_store", None)
+    if store is None:
+        return jsonify({"error": "not_configured"}), 503
+    cfg = current_app.kj_config
+    if _rate_limit_exceeded(
+        _client_ip(request),
+        _safe_int(cfg.get("sing_rate_limit_per_ip"), 5),
+        _safe_int(cfg.get("sing_rate_limit_window_s"), 300),
+    ):
+        return jsonify({"error": "rate_limited"}), 429
+    token = _extract_token()
+    if not token or not _is_token_valid(store, token):
+        return jsonify({"error": "not_open"}), 403
+    data = request.get_json(silent=True) or {}
+    items = data.get("items")
+    if not isinstance(items, list) or len(items) < 2:
+        return jsonify({"error": "at least two items required"}), 400
+
+    ordered_entry_ids = []
+    first_req = None
+    for it in items:
+        if not isinstance(it, dict):
+            return jsonify({"error": "each item must be an object"}), 400
+        try:
+            rid = int(it.get("id"))
+        except (TypeError, ValueError):
+            return jsonify({"error": "each item needs an integer id"}), 400
+        req = store.get_request(rid)
+        if req is None or req.get("token") != token or not _belongs_to_current_night(store, req):
+            return jsonify({"error": "not_found"}), 404
+        stored = req.get("edit_token") or ""
+        if not stored or not secrets.compare_digest(str(it.get("edit_token") or ""), str(stored)):
+            return jsonify({"error": "forbidden"}), 403
+        if req["status"] != "approved" or not req.get("linked_entry_id"):
+            return jsonify({"error": "each item must be an approved queued song"}), 409
+        ordered_entry_ids.append(req["linked_entry_id"])
+        if first_req is None:
+            first_req = req
+
+    rr = store.create_request(
+        singer_name=first_req["singer_name"], phone="",
+        source_type="reorder", source_ref=None,
+        source_meta={"ordered_entry_ids": ordered_entry_ids},
+        token=token,
+    )
+    return jsonify({"success": True, "request": _public_request_view(rr)})
+
+
 # --- Response shaping ----------------------------------------------------
 
 def _build_now_playing(rotation):
