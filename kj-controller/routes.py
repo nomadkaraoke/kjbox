@@ -5122,6 +5122,22 @@ def approve_sing_request_route(req_id):
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500
     store.mark_approved(req_id, linked_entry_id=entry_id)
+
+    # Supersede: this request replaces an approved one (singer edited the song).
+    # Take over the original entry's slot and remove the original.
+    sup_id = req.get("supersedes_request_id")
+    if sup_id:
+        rotation = current_app.rotation
+        orig = store.get_request(sup_id)
+        old_entry_id = (orig or {}).get("linked_entry_id")
+        old_entry = rotation.store.get_entry(old_entry_id) if old_entry_id else None
+        if old_entry:
+            old_pos = old_entry["position"]
+            rotation.delete_entry(old_entry_id)      # recompacts positions
+            rotation.move_entry(entry_id, old_pos)   # new song takes the old slot
+        if orig:
+            store.mark_cancelled(sup_id)             # original replaced
+
     # Fire push notification for approval (non-critical — never block on failure)
     dispatcher = getattr(current_app.rotation, "push_dispatcher", None)
     if dispatcher is not None:
