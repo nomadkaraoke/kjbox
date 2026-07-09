@@ -861,3 +861,39 @@ class TestListRequestsExposesPartners:
             r.get("additional_singers") == [{"name": "Sarah", "phone": "+61 400 111 222"}]
             for r in rows
         )
+
+
+class TestSupersedeApproval:
+    def test_approving_supersede_takes_over_slot(self, admin_client, admin_app):
+        rot = admin_app.rotation
+        orig = _make_pending(admin_app, source_type="local", source_ref="/orig.mp4")
+        e_orig = rot.add_entry("Alice", "Orig - Queen", file_path="/orig.mp4")
+        admin_app.sing_store.mark_approved(orig["id"], linked_entry_id=e_orig["id"])
+        rot.add_entry("Bob", "Filler")
+        old_pos = rot.store.get_entry(e_orig["id"])["position"]
+        sup = admin_app.sing_store.create_request(
+            singer_name="Alice", phone="", song_artist="ABBA", song_title="SOS",
+            source_type="local", source_ref="/new.mp4",
+            supersedes_request_id=orig["id"])
+        resp = admin_client.post(f"/rotation/requests/{sup['id']}/approve")
+        assert resp.status_code == 200
+        new_entry_id = resp.get_json()["entry_id"]
+        assert rot.store.get_entry(e_orig["id"]) is None
+        assert rot.store.get_entry(new_entry_id)["position"] == old_pos
+        assert admin_app.sing_store.get_request(orig["id"])["status"] == "cancelled"
+
+
+class TestReorderApproval:
+    def test_approving_reorder_applies_move(self, admin_client, admin_app):
+        rot = admin_app.rotation
+        a = rot.add_entry("Alice", "Song A")
+        rot.add_entry("Bob", "Filler")
+        b = rot.add_entry("Alice", "Song B")
+        rr = admin_app.sing_store.create_request(
+            singer_name="Alice", phone="", source_type="reorder", source_ref=None,
+            source_meta={"ordered_entry_ids": [b["id"], a["id"]]})
+        resp = admin_client.post(f"/rotation/requests/{rr['id']}/approve")
+        assert resp.status_code == 200
+        pos = {e["id"]: e["position"] for e in rot.get_rotation()}
+        assert pos[b["id"]] < pos[a["id"]]   # B now ahead of A
+        assert admin_app.sing_store.get_request(rr["id"])["status"] == "approved"

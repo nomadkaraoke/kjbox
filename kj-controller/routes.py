@@ -5095,6 +5095,37 @@ def approve_sing_request_route(req_id):
     if req["status"] != "pending":
         return jsonify({"error": f"Request is already {req['status']}"}), 409
 
+    # Reorder request: not a song — apply the singer's requested order to their
+    # own entries within the slots they currently occupy, then mark approved.
+    if req["source_type"] == "reorder":
+        rotation = current_app.rotation
+        meta = req.get("source_meta")
+        if isinstance(meta, str):
+            try:
+                meta = json.loads(meta)
+            except (TypeError, ValueError):
+                meta = {}
+        ordered = (meta or {}).get("ordered_entry_ids") or []
+        try:
+            # Target slots = the current positions of these entries, ascending.
+            target_positions = sorted(
+                e["position"]
+                for e in (rotation.store.get_entry(eid) for eid in ordered)
+                if e is not None
+            )
+            # Fill ascending target slots in the requested order.
+            for eid in ordered:
+                if not target_positions:
+                    break
+                if rotation.store.get_entry(eid) is not None:
+                    rotation.move_entry(eid, target_positions.pop(0))
+            store.mark_approved(req_id, linked_entry_id=None)
+        except Exception as exc:
+            return jsonify({"error": str(exc)}), 500
+        # No push-notify: a reorder is a meta-request, not a song decision, so
+        # the singer-facing "your song was approved" notification doesn't apply.
+        return jsonify({"success": True, "request": store.get_request(req_id), "entry_id": None})
+
     body = request.get_json(silent=True) or {}
     skip_download = bool(body.get("skip_download"))
 
@@ -5122,6 +5153,37 @@ def approve_sing_request_route(req_id):
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500
     store.mark_approved(req_id, linked_entry_id=entry_id)
+
+    # Supersede: this request replaces an approved one (singer edited the song).
+    # Take over the original entry's slot and remove the original.
+    sup_id = req.get("supersedes_request_id")
+    if sup_id:
+        # Best-effort: the new entry is already added + approved, so a failure
+        # here must not 500 the (successful) approval — log and move on rather
+        # than leave the request half-processed.
+        try:
+            rotation = current_app.rotation
+            orig = store.get_request(sup_id)
+            old_entry_id = (orig or {}).get("linked_entry_id")
+            old_entry = rotation.store.get_entry(old_entry_id) if old_entry_id else None
+            # Only take over a still-active slot. If the original was sung
+            # (Done/Left) or is playing (Now Singing), leave it alone and just
+            # append the new song — never delete a finished record (corrupts
+            # sung-counts) or yank a playing song. change_request already blocks
+            # Done/Left; this guards the race where the original finished after
+            # the change request was made.
+            if old_entry and (old_entry.get("status") or "").lower() not in ("done", "left", "now singing"):
+                old_pos = old_entry["position"]
+                rotation.delete_entry(old_entry_id)      # recompacts positions
+                rotation.move_entry(entry_id, old_pos)   # new song takes the old slot
+            if orig:
+                store.mark_cancelled(sup_id)             # original replaced
+        except Exception:
+            current_app.logger.exception(
+                "supersede takeover failed for request %s (supersedes %s)",
+                req_id, sup_id,
+            )
+
     # Fire push notification for approval (non-critical — never block on failure)
     dispatcher = getattr(current_app.rotation, "push_dispatcher", None)
     if dispatcher is not None:

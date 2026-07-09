@@ -87,6 +87,10 @@ const state = {
   // {name, phone}. Capped at MAX_PARTNERS in the render.
   additional: [],
   request: null,    // after submit
+  // "Change song" mode: when set, the search→confirm flow re-submits to the
+  // change endpoint for this owned request instead of creating a new one.
+  changeRequestId: null,
+  changeEditToken: null,
   rotationCache: null,   // {fetchedAt: number, payload: object} — survives back-from-search
   // Phase C — updated on every /sing/search response so a KJ flipping the
   // toggle mid-session takes effect on the next keystroke-triggered search.
@@ -157,6 +161,20 @@ async function submit(payload) {
   });
 }
 
+async function changeSong(id, editToken, payload) {
+  return fetchJson(`${BASE}/requests/${id}/change`, {
+    method: "POST",
+    body: JSON.stringify({ edit_token: editToken, ...payload }),
+  });
+}
+
+async function reorderSongs(items) {
+  return fetchJson(`${BASE}/requests/reorder`, {
+    method: "POST",
+    body: JSON.stringify({ items }),
+  });
+}
+
 // --- Render helpers --------------------------------------------------------
 
 function el(tag, attrs = {}, ...children) {
@@ -182,6 +200,13 @@ function render() {
   if (state._statusPollTimer && state.step !== "done") {
     clearInterval(state._statusPollTimer);
     state._statusPollTimer = null;
+  }
+  // "Change song" mode is only valid across the search→confirm flow it starts.
+  // Clearing it on any other screen prevents an abandoned change from
+  // misrouting a later brand-new request to the /change endpoint.
+  if (state.changeRequestId && state.step !== "search" && state.step !== "confirm") {
+    state.changeRequestId = null;
+    state.changeEditToken = null;
   }
   root.innerHTML = "";
   const view = {
@@ -1090,6 +1115,25 @@ function renderConfirm() {
       submitBtn.textContent = "Sending…";
     }
     try {
+      // "Change song" mode — re-submit the picked song to the change endpoint
+      // for the owned request (song-only; partners are left as they were).
+      if (state.changeRequestId) {
+        const resp = await changeSong(state.changeRequestId, state.changeEditToken, {
+          song_artist: state.selected.song_artist || "",
+          song_title: state.selected.song_title || "",
+          source_type: state.selected.source_type,
+          source_ref: state.selected.source_ref,
+          source_meta: state.selected.source_meta || null,
+        });
+        rememberRequestId(TOKEN, resp.request.id, resp.request.edit_token);
+        state.request = resp.request;
+        state.changeRequestId = null;
+        state.changeEditToken = null;
+        state.step = "done";
+        render();
+        return;
+      }
+
       // Normalise partners — drop rows where the name is blank.
       const cleaned = state.additional
         .map((p) => ({
@@ -1266,7 +1310,7 @@ function _statusLine(item) {
   return "Added to the queue.";
 }
 
-function _renderSongCard(item) {
+function _renderSongCard(item, reorderCtx) {
   const req = item.request;
   const song = (req.song_title || "") + (req.song_artist ? ` — ${req.song_artist}` : "");
   const partners = req.additional_singers || [];
@@ -1303,6 +1347,56 @@ function _renderSongCard(item) {
         if (typeof window.__sing_render === "function") window.__sing_render();
       },
     }, "Cancel this song"));
+    // Change the song of this request (re-enters search in change mode).
+    card.appendChild(el("button", {
+      class: "btn ghost song-card-change",
+      "data-testid": "change-song",
+      onclick: (e) => {
+        e.stopPropagation();
+        state.changeRequestId = req.id;
+        state.changeEditToken = editToken;
+        state.selected = null;
+        state.query = "";
+        state.step = "search";
+        render();
+      },
+    }, "Change song"));
+  }
+  // Reorder — when this device owns 2+ queued (approved) songs, let the singer
+  // nudge their own songs' order (the KJ approves the reorder).
+  if (reorderCtx && reorderCtx.order.length >= 2 && reorderCtx.order.includes(req.id)) {
+    const idx = reorderCtx.order.indexOf(req.id);
+    const upBtn = el("button", { class: "btn ghost", "data-testid": "reorder-up" }, "▲ Up");
+    const downBtn = el("button", { class: "btn ghost", "data-testid": "reorder-down" }, "▼ Down");
+    const setEnabled = (on) => {
+      upBtn.disabled = !on || idx === 0;
+      downBtn.disabled = !on || idx === reorderCtx.order.length - 1;
+    };
+    let busy = false;   // in-flight guard: no overlapping reorder requests
+    const move = (delta) => async (e) => {
+      e.stopPropagation();
+      if (busy) return;
+      const j = idx + delta;
+      if (j < 0 || j >= reorderCtx.order.length) return;
+      const order = reorderCtx.order.slice();
+      [order[idx], order[j]] = [order[j], order[idx]];
+      const items = order.map((id) => ({ id, edit_token: reorderCtx.tokens[id] }));
+      busy = true;
+      setEnabled(false);
+      try {
+        await reorderSongs(items);
+        alert("Reorder requested — the KJ will confirm it.");
+        if (typeof window.__sing_render === "function") window.__sing_render();
+      } catch {
+        alert("Couldn't reorder — please see the KJ.");
+        busy = false;
+        setEnabled(true);   // re-arm so the singer can retry
+      }
+    };
+    upBtn.onclick = move(-1);
+    downBtn.onclick = move(1);
+    setEnabled(true);
+    card.appendChild(el("div", { class: "song-card-reorder" }, upBtn, downBtn));
   }
   return card;
 }
@@ -1383,7 +1477,23 @@ async function pollMyRequests(card) {
           slot.appendChild(el("p", { class: "hint" },
             "No songs yet — tap 'Request another song' below."));
         } else {
-          for (const item of data.requests) slot.appendChild(_renderSongCard(item));
+          // Build reorder context: this device's own queued (approved) songs,
+          // in display order, that we hold an edit_token for.
+          const order = [];
+          const tokens = {};
+          for (const item of data.requests) {
+            const r = item.request;
+            const tok = readEditToken(TOKEN, r.id);
+            // Only still-queued songs (those with a live estimate) are
+            // reorderable — a sung song stays status 'approved' but has no
+            // estimate, so it's excluded.
+            if (r.status === "approved" && tok && item.estimate) {
+              order.push(r.id);
+              tokens[r.id] = tok;
+            }
+          }
+          const reorderCtx = { order, tokens };
+          for (const item of data.requests) slot.appendChild(_renderSongCard(item, reorderCtx));
         }
       }
     } catch {

@@ -4,6 +4,14 @@ Dated entries, newest first. Each entry notes any required deploy steps.
 
 ---
 
+## 2026-07-09 - Singer self-service: change song + reorder your own (v0.79.0)
+
+**Deploy:** backend change (`sing.py`, `sing_store.py`, `routes.py`) → **requires `systemctl restart kj-controller`** (interrupts playback — maintenance window). Also frontend (`sing.js`, `app.js`, CSS). Additive DB migration (`sing_requests.supersedes_request_id`) — safe on existing DBs. Builds on the v0.78.0 `edit_token` ownership.
+
+- Singers can **change the song** of their own request from the "your songs tonight" screen. A not-yet-approved request updates in place (stays pending). A request already in the rotation creates a *change* the KJ approves — on approval the new song takes over the original's queue slot (and downloads if needed) and the original is removed.
+- Singers with 2+ queued songs can **reorder their own songs** (Up/Down). This becomes a *reorder* the KJ approves; it only moves that singer's songs within the slots they already occupy — it never jumps other singers.
+- Both route through the existing KJ requests panel: a change shows as "✎ Change …", a reorder as "↕ Reorder — <singer>'s songs", each with the normal Approve/Reject.
+
 ## 2026-07-09 - Singer self-service: cancel your own song (v0.78.0)
 
 **Deploy:** backend change (`sing.py`, `sing_store.py`) → **requires `systemctl restart kj-controller`** (interrupts playback — deploy in a maintenance window). Also frontend (`sing.js`, `app.js`, CSS). Additive DB migration (`sing_requests.edit_token`) — safe on existing DBs.

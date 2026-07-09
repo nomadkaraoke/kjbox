@@ -910,6 +910,148 @@ def cancel_request(req_id):
     return jsonify({"success": True, "request": _public_request_view(store.get_request(req_id))})
 
 
+@sing_bp.route("/requests/<int:req_id>/change", methods=["POST"])
+def change_request(req_id):
+    """Singer changes the SONG of their own request (edit_token-gated).
+
+    Pending original → updated in place (stays pending). Approved original →
+    a new pending request is created carrying supersedes_request_id so the KJ
+    can approve the swap (see approve_sing_request_route)."""
+    store = getattr(current_app, "sing_store", None)
+    if store is None:
+        return jsonify({"error": "not_configured"}), 503
+    cfg = current_app.kj_config
+    if _rate_limit_exceeded(
+        _client_ip(request),
+        _safe_int(cfg.get("sing_rate_limit_per_ip"), 5),
+        _safe_int(cfg.get("sing_rate_limit_window_s"), 300),
+    ):
+        return jsonify({"error": "rate_limited"}), 429
+    token = _extract_token()
+    if not token or not _is_token_valid(store, token):
+        return jsonify({"error": "not_open"}), 403
+    req = store.get_request(req_id)
+    if req is None or req.get("token") != token or not _belongs_to_current_night(store, req):
+        return jsonify({"error": "not_found"}), 404
+    data = request.get_json(silent=True) or {}
+    stored = req.get("edit_token") or ""
+    if not stored or not secrets.compare_digest(str(data.get("edit_token") or ""), str(stored)):
+        return jsonify({"error": "forbidden"}), 403
+    if req["status"] not in ("pending", "approved"):
+        return jsonify({"error": f"cannot change a {req['status']} request"}), 409
+    # Only real song requests can be changed — never a meta-request (reorder).
+    if req["source_type"] == "reorder":
+        return jsonify({"error": "not a song request"}), 400
+    # A sing_request stays 'approved' even after its entry is sung. Refuse to
+    # change a finished/gone song (mirrors the cancel-after-sung guard): the
+    # supersede takeover would delete the Done entry and corrupt sung-counts.
+    if req["status"] == "approved" and req.get("linked_entry_id"):
+        rotation = getattr(current_app, "rotation", None)
+        if rotation is not None:
+            entry = rotation.store.get_entry(req["linked_entry_id"])
+            if entry and (entry.get("status") or "").lower() in ("done", "left"):
+                return jsonify({"error": "already_sung"}), 409
+
+    # Validate the new song's source (subset of submit()'s rules).
+    source_type = (data.get("source_type") or "").strip()
+    source_ref = data.get("source_ref") or None
+    source_meta = data.get("source_meta") or None
+    song_artist = (data.get("song_artist") or "").strip()
+    song_title = (data.get("song_title") or "").strip()
+    if source_type not in _ALLOWED_SOURCES:
+        return jsonify({"error": f"source_type must be one of {sorted(_ALLOWED_SOURCES)}"}), 400
+    if store.is_simple_mode() and source_type not in _SIMPLE_MODE_SOURCES:
+        return jsonify({"error": "simple_mode_disabled_source"}), 400
+    if source_type in {"local", "divebar", "kn", "youtube"} and not source_ref:
+        return jsonify({"error": "source_ref is required for this source_type"}), 400
+    if source_type == "make" and not store.is_accepting_make_requests():
+        return jsonify({"error": "make_requests_disabled"}), 400
+    if source_type == "kj_pick":
+        err = _validate_kj_pick_payload(data)
+        if err:
+            return jsonify({"error": err}), 400
+
+    if req["status"] == "pending":
+        # update_request keeps existing values when a field is None, which would
+        # preserve a stale source_ref when changing TO a null-ref source (e.g.
+        # kj_pick). Set song fields via update_request, then overwrite the
+        # source_* fields verbatim (incl. None) via update_request_source.
+        store.update_request(req_id, song_artist=song_artist, song_title=song_title)
+        updated = store.update_request_source(req_id, source_type, source_ref, source_meta)
+        # edit_token echoed back (owner already holds it) so the device keeps
+        # the same self-service capability after the change.
+        return jsonify({"success": True, "request": {
+            **_public_request_view(updated), "edit_token": updated.get("edit_token")}})
+
+    # Approved → create a superseding pending request the KJ approves. Return
+    # its fresh edit_token so the device can manage the new pending request too.
+    new_req = store.create_request(
+        singer_name=req["singer_name"], phone=req.get("phone") or "",
+        song_artist=song_artist, song_title=song_title,
+        source_type=source_type, source_ref=source_ref, source_meta=source_meta,
+        token=req["token"], additional_singers=req.get("additional_singers"),
+        supersedes_request_id=req_id,
+    )
+    return jsonify({"success": True, "request": {
+        **_public_request_view(new_req), "edit_token": new_req.get("edit_token")}})
+
+
+@sing_bp.route("/requests/reorder", methods=["POST"])
+def reorder_requests():
+    """Singer reorders their OWN approved songs. Creates a pending 'reorder'
+    request (KJ approves → move_entry). Every item must be owned (edit_token)."""
+    store = getattr(current_app, "sing_store", None)
+    if store is None:
+        return jsonify({"error": "not_configured"}), 503
+    cfg = current_app.kj_config
+    if _rate_limit_exceeded(
+        _client_ip(request),
+        _safe_int(cfg.get("sing_rate_limit_per_ip"), 5),
+        _safe_int(cfg.get("sing_rate_limit_window_s"), 300),
+    ):
+        return jsonify({"error": "rate_limited"}), 429
+    token = _extract_token()
+    if not token or not _is_token_valid(store, token):
+        return jsonify({"error": "not_open"}), 403
+    data = request.get_json(silent=True) or {}
+    items = data.get("items")
+    if not isinstance(items, list) or len(items) < 2:
+        return jsonify({"error": "at least two items required"}), 400
+
+    ordered_entry_ids = []
+    first_req = None
+    seen_ids = set()
+    for it in items:
+        if not isinstance(it, dict):
+            return jsonify({"error": "each item must be an object"}), 400
+        try:
+            rid = int(it.get("id"))
+        except (TypeError, ValueError):
+            return jsonify({"error": "each item needs an integer id"}), 400
+        if rid in seen_ids:
+            return jsonify({"error": "duplicate id"}), 400
+        seen_ids.add(rid)
+        req = store.get_request(rid)
+        if req is None or req.get("token") != token or not _belongs_to_current_night(store, req):
+            return jsonify({"error": "not_found"}), 404
+        stored = req.get("edit_token") or ""
+        if not stored or not secrets.compare_digest(str(it.get("edit_token") or ""), str(stored)):
+            return jsonify({"error": "forbidden"}), 403
+        if req["status"] != "approved" or not req.get("linked_entry_id"):
+            return jsonify({"error": "each item must be an approved queued song"}), 409
+        ordered_entry_ids.append(req["linked_entry_id"])
+        if first_req is None:
+            first_req = req
+
+    rr = store.create_request(
+        singer_name=first_req["singer_name"], phone="",
+        source_type="reorder", source_ref=None,
+        source_meta={"ordered_entry_ids": ordered_entry_ids},
+        token=token,
+    )
+    return jsonify({"success": True, "request": _public_request_view(rr)})
+
+
 # --- Response shaping ----------------------------------------------------
 
 def _build_now_playing(rotation):

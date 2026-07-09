@@ -679,3 +679,83 @@ class TestSelfServiceCancel:
         assert resp.status_code == 409
         # Entry must NOT be resurrected to Cancelled (would corrupt sung-counts).
         assert sing_app.rotation.store.get_entry(entry_id)["status"] == "Done"
+
+
+class TestChangeSong:
+    def _body(self, **o):
+        b = {"singer_name": "Alice", "phone": "", "song_artist": "Queen",
+             "song_title": "Bo Rhap", "source_type": "local", "source_ref": "/x.mp4"}
+        b.update(o); return b
+
+    def test_change_pending_updates_in_place(self, client, sing_app, token):
+        r = client.post(f"/sing/submit?t={token}", json=self._body()).get_json()["request"]
+        resp = client.post(f"/sing/requests/{r['id']}/change?t={token}", json={
+            "edit_token": r["edit_token"], "source_type": "local", "source_ref": "/new.mp4",
+            "song_artist": "ABBA", "song_title": "SOS"})
+        assert resp.status_code == 200
+        got = sing_app.sing_store.get_request(r["id"])
+        assert got["status"] == "pending" and got["song_title"] == "SOS"
+        assert got["supersedes_request_id"] is None
+
+    def test_change_requires_edit_token(self, client, token):
+        r = client.post(f"/sing/submit?t={token}", json=self._body()).get_json()["request"]
+        bad = client.post(f"/sing/requests/{r['id']}/change?t={token}", json={
+            "edit_token": "nope", "source_type": "local", "source_ref": "/n.mp4",
+            "song_artist": "X", "song_title": "Y"})
+        assert bad.status_code == 403
+
+    def test_change_approved_creates_supersede(self, client, sing_app, token):
+        sing_app.sing_store.set_auto_approve(True)
+        r = client.post(f"/sing/submit?t={token}", json=self._body()).get_json()["request"]
+        assert r["status"] == "approved"
+        resp = client.post(f"/sing/requests/{r['id']}/change?t={token}", json={
+            "edit_token": r["edit_token"], "source_type": "local", "source_ref": "/new.mp4",
+            "song_artist": "ABBA", "song_title": "SOS"})
+        assert resp.status_code == 200
+        new = resp.get_json()["request"]
+        assert new["status"] == "pending" and new["id"] != r["id"]
+        assert sing_app.sing_store.get_request(new["id"])["supersedes_request_id"] == r["id"]
+        assert sing_app.sing_store.get_request(r["id"])["status"] == "approved"
+
+    def test_change_after_sung_is_409(self, client, sing_app, token):
+        sing_app.sing_store.set_auto_approve(True)
+        r = client.post(f"/sing/submit?t={token}", json=self._body()).get_json()["request"]
+        entry_id = sing_app.sing_store.get_request(r["id"])["linked_entry_id"]
+        sing_app.rotation.update_status(entry_id, "Done")   # singer already performed
+        resp = client.post(f"/sing/requests/{r['id']}/change?t={token}", json={
+            "edit_token": r["edit_token"], "source_type": "local", "source_ref": "/new.mp4",
+            "song_artist": "ABBA", "song_title": "SOS"})
+        assert resp.status_code == 409
+        assert sing_app.rotation.store.get_entry(entry_id)["status"] == "Done"
+
+
+class TestReorder:
+    def _approved(self, client, sing_app, token, title):
+        sing_app.sing_store.set_auto_approve(True)
+        return client.post(f"/sing/submit?t={token}", json={
+            "singer_name": "Alice", "phone": "", "song_artist": "Q", "song_title": title,
+            "source_type": "local", "source_ref": f"/{title}.mp4"}).get_json()["request"]
+
+    def test_reorder_creates_pending_reorder_request(self, client, sing_app, token):
+        a = self._approved(client, sing_app, token, "A")
+        b = self._approved(client, sing_app, token, "B")
+        resp = client.post(f"/sing/requests/reorder?t={token}", json={"items": [
+            {"id": b["id"], "edit_token": b["edit_token"]},
+            {"id": a["id"], "edit_token": a["edit_token"]}]})
+        assert resp.status_code == 200
+        rr = resp.get_json()["request"]
+        assert rr["source_type"] == "reorder" and rr["status"] == "pending"
+
+    def test_reorder_rejects_unowned_item(self, client, sing_app, token):
+        a = self._approved(client, sing_app, token, "A")
+        b = self._approved(client, sing_app, token, "B")
+        resp = client.post(f"/sing/requests/reorder?t={token}", json={"items": [
+            {"id": b["id"], "edit_token": "WRONG"},
+            {"id": a["id"], "edit_token": a["edit_token"]}]})
+        assert resp.status_code == 403
+
+    def test_reorder_needs_two(self, client, sing_app, token):
+        a = self._approved(client, sing_app, token, "A")
+        resp = client.post(f"/sing/requests/reorder?t={token}",
+                           json={"items": [{"id": a["id"], "edit_token": a["edit_token"]}]})
+        assert resp.status_code == 400

@@ -694,3 +694,10 @@ input:focus {
 /* Self-service cancel on the done screen */
 .song-card-cancel { margin-top: 8px; font-size: 0.85rem; opacity: 0.85; }
 .song-card[data-status="cancelled"] .song-card-title { text-decoration: line-through; opacity: 0.6; }
+
+
+/* Self-service change + reorder on the done screen */
+.song-card-change { margin-top: 6px; font-size: 0.85rem; opacity: 0.85; }
+.song-card-reorder { display: flex; gap: 8px; margin-top: 8px; }
+.song-card-reorder button { flex: 1; font-size: 0.85rem; }
+.song-card-reorder button[disabled] { opacity: 0.4; }

@@ -348,3 +348,50 @@ class TestSelfServiceCancel:
         page.evaluate("window.__sing_state.step = 'done'; window.__sing_render();")
         expect(page.locator(".song-card-title")).to_be_visible()
         expect(page.locator('[data-testid="cancel-song"]')).to_have_count(0)
+
+
+class TestChangeReorderControls:
+    def _seed_done(self, page, live_server, live_token, requests, ls_store):
+        _login(page, live_server, live_token)
+        page.evaluate("(s) => localStorage.setItem('sing_my_request_ids', JSON.stringify(s))", ls_store)
+        page.route("**/sing/my-requests*", lambda route: route.fulfill(
+            status=200, content_type="application/json", body=json.dumps({
+                "now_playing": {"now_singing": None, "up_next": None, "queued_count": 0},
+                "requests": requests})))
+        page.evaluate("window.__sing_state.step = 'done'; window.__sing_render();")
+
+    def test_change_button_enters_change_mode(self, page, live_server, live_token):
+        req = {"request": {"id": 11, "singer_name": "A", "song_artist": "Q", "song_title": "BR",
+                "source_type": "local", "status": "pending", "created_at": "now",
+                "linked_entry_id": None, "additional_singers": None}}
+        self._seed_done(page, live_server, live_token, [req],
+                        {"token": live_token, "ids": [11], "tokens": {"11": "tok11"}})
+        expect(page.locator('[data-testid="change-song"]')).to_be_visible()
+        page.locator('[data-testid="change-song"]').click()
+        assert page.evaluate("window.__sing_state.step") == "search"
+        assert page.evaluate("window.__sing_state.changeRequestId") == 11
+
+    def test_reorder_down_sends_both_tokens(self, page, live_server, live_token):
+        reqs = [
+            {"request": {"id": 11, "singer_name": "A", "song_artist": "Q", "song_title": "One",
+                "source_type": "local", "status": "approved", "created_at": "now",
+                "linked_entry_id": 101, "additional_singers": None},
+             "estimate": {"position": 3}},
+            {"request": {"id": 12, "singer_name": "A", "song_artist": "Q", "song_title": "Two",
+                "source_type": "local", "status": "approved", "created_at": "now",
+                "linked_entry_id": 102, "additional_singers": None},
+             "estimate": {"position": 5}},
+        ]
+        self._seed_done(page, live_server, live_token, reqs,
+                        {"token": live_token, "ids": [11, 12], "tokens": {"11": "tok11", "12": "tok12"}})
+        page.route("**/sing/requests/reorder*", lambda route: route.fulfill(
+            status=200, content_type="application/json",
+            body=json.dumps({"success": True, "request": {"id": 99, "status": "pending",
+                                                          "source_type": "reorder"}})))
+        page.on("dialog", lambda d: d.accept())
+        first_down = page.locator('[data-testid="reorder-down"]').first
+        expect(first_down).to_be_visible()
+        with page.expect_request("**/sing/requests/reorder*") as req_info:
+            first_down.click()
+        body = req_info.value.post_data or ""
+        assert "tok11" in body and "tok12" in body
