@@ -819,6 +819,9 @@ function renderSearch() {
     // good option (library/divebar/community) is already shown — fewer, clearer
     // tap targets, steered toward good versions.
     const hasGoodOption = ["library", "divebar", "community"].some((k) => byKey[k].length);
+    // Never collapse the section that holds the best version (defensive: keeps the
+    // "Best" marker visible even if the backend ever ranks an online version first).
+    const bestInOnline = bestVersion && _versionSection(bestVersion) === "online";
 
     for (const { key, label } of sections) {
       const versions = byKey[key];
@@ -827,7 +830,7 @@ function renderSearch() {
         el("h4", {}, label),
       );
       const collapseKey = `${group.key}::online`;
-      const collapseThis = key === "online" && hasGoodOption && !expandedSongs.has(collapseKey);
+      const collapseThis = key === "online" && hasGoodOption && !bestInOnline && !expandedSongs.has(collapseKey);
       if (collapseThis) {
         section.appendChild(el("button", {
           class: "sing-online-toggle",
@@ -1038,7 +1041,7 @@ function renderSearch() {
         // Immediate feedback: show the searching hint the moment a real query
         // is typed, before the 700ms debounce elapses (matches the KJ side).
         if (e.target.value.trim().length >= 3 && !loading) {
-          loading = true; update();
+          err = ""; loading = true; update();   // clear any stale error from a prior failed search
         }
         doSearch(e.target.value);
       },
