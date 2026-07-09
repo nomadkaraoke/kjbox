@@ -451,3 +451,16 @@ class TestDisplayCacheIncludesPaid:
             data = json.load(f)
         assert "paid" in data["queue"][0]
         assert data["queue"][0]["paid"] is False
+
+
+class TestCancelledVisibility:
+    """Singer soft-cancel: a 'Cancelled' entry stays visible so the KJ can
+    dismiss/restore it (unlike Done/Left which drop out of the active queue)."""
+
+    def test_cancelled_entry_stays_visible_and_distinct(self, mgr):
+        a = mgr.add_entry("Alice", "Song A")
+        b = mgr.add_entry("Bob", "Song B")
+        mgr.update_status(a["id"], "Cancelled")
+        statuses = {e["id"]: e["status"] for e in mgr.get_rotation()}
+        assert statuses.get(a["id"]) == "Cancelled"   # visible, not hidden
+        assert statuses.get(b["id"]) == "Waiting"      # untouched
