@@ -231,3 +231,27 @@ class TestSearchRace:
         expect(page.locator(".btn-primary-cta")).to_be_visible()
         page.locator(".btn-primary-cta").click()
         assert page.evaluate("window.__sing_state.step") == "confirm"
+
+
+class TestConfirmHardening:
+    def _confirm(self, page, live_server, live_token):
+        _login(page, live_server, live_token)
+        page.evaluate("""
+            window.__sing_state.query = 'bohemian';
+            window.__sing_state.selected = {
+                source_type: 'local', source_ref: '/x.mp4',
+                song_artist: 'Queen', song_title: 'Bohemian Rhapsody',
+                label: 'Bohemian Rhapsody — Queen (in library)',
+            };
+            window.__sing_state.step = 'confirm';
+            window.__sing_render();
+        """)
+
+    def test_confirm_shows_song_source_and_breadcrumb(self, page, live_server, live_token):
+        self._confirm(page, live_server, live_token)
+        expect(page.locator(".confirm-title")).to_have_text("Bohemian Rhapsody")
+        expect(page.locator(".confirm-artist")).to_have_text("Queen")
+        expect(page.locator(".confirm-source")).to_have_text("In our library")
+        expect(page.locator(".confirm-searched")).to_contain_text("bohemian")
+        expect(page.locator(".submit-btn")).to_have_text("Yes — send to the KJ")
+        expect(page.get_by_role("button", name="← Pick a different song")).to_be_visible()

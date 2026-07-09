@@ -1064,7 +1064,7 @@ function renderConfirm() {
           submitting = false;
           if (submitBtn) {
             submitBtn.disabled = false;
-            submitBtn.textContent = "Send to KJ";
+            submitBtn.textContent = "Yes — send to the KJ";
           }
           const errEl = root.querySelector(".error");
           if (errEl) errEl.textContent = err;
@@ -1099,7 +1099,7 @@ function renderConfirm() {
       submitting = false;
       if (submitBtn) {
         submitBtn.disabled = false;
-        submitBtn.textContent = "Send to KJ";
+        submitBtn.textContent = "Yes — send to the KJ";
       }
       const errEl = root.querySelector(".error");
       if (errEl) errEl.textContent = err;
@@ -1154,19 +1154,34 @@ function renderConfirm() {
     return wrap;
   }
 
-  return el("main", { class: "sing-card" },
-    el("h2", {}, "Looking good?"),
-    el("div", { class: "pick-summary" },
-      el("div", { class: "pick-label" }, state.selected?.label || ""),
+  const sel = state.selected || {};
+  const _confirmSourceLine = (s) => {
+    switch (s && s.source_type) {
+      case "local": return "In our library";
+      case "divebar": return "Community karaoke (in our library)";
+      case "kn": return "Online karaoke (download needed)";
+      case "youtube": return "From a YouTube link";
+      case "make": return "The KJ will make this for you";
+      case "kj_pick": return "The KJ will pick the best version";
+      default: return "";
+    }
+  };
+  return el("main", { class: "sing-card sing-confirm" },
+    el("h2", {}, "Is this the right song?"),
+    el("div", { class: "confirm-song", "data-testid": "confirm-song" },
+      el("div", { class: "confirm-title" }, sel.song_title || sel.label || ""),
+      sel.song_artist ? el("div", { class: "confirm-artist" }, sel.song_artist) : null,
+      el("div", { class: "confirm-source" }, _confirmSourceLine(sel)),
     ),
+    state.query ? el("p", { class: "confirm-searched hint" }, `You searched: "${state.query}"`) : null,
     el("p", { class: "hint" },
       state.phone
         ? `Your details: ${state.name} · ${state.phone}`
         : `Your details: ${state.name}`),
     renderPartnersSection(),
-    el("div", { class: "row" },
-      el("button", { class: "btn ghost", onclick: back("search") }, "Change"),
-      el("button", { class: "btn primary submit-btn", onclick: send }, "Send to KJ"),
+    el("div", { class: "row confirm-actions" },
+      el("button", { class: "btn ghost", onclick: back("search") }, "← Pick a different song"),
+      el("button", { class: "btn primary submit-btn", onclick: send }, "Yes — send to the KJ"),
     ),
     el("p", { class: "error" }, err),
   );

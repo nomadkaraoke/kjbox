@@ -670,3 +670,13 @@ input:focus {
   width: 100%;
   margin: 12px 0;
 }
+
+
+/* Hardened confirm screen (mis-tap safety) */
+.sing-confirm .confirm-song { margin: 12px 0 8px; }
+.sing-confirm .confirm-title { font-size: 1.5rem; font-weight: 700; line-height: 1.2; }
+.sing-confirm .confirm-artist { font-size: 1.05rem; opacity: 0.9; margin-top: 2px; }
+.sing-confirm .confirm-source { font-size: 0.85rem; opacity: 0.7; margin-top: 6px; }
+.sing-confirm .confirm-searched { font-size: 0.8rem; opacity: 0.6; margin: 4px 0 12px; }
+.sing-confirm .confirm-actions { gap: 10px; }
+.sing-confirm .confirm-actions .submit-btn { flex: 1; }
