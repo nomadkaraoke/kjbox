@@ -910,6 +910,73 @@ def cancel_request(req_id):
     return jsonify({"success": True, "request": _public_request_view(store.get_request(req_id))})
 
 
+@sing_bp.route("/requests/<int:req_id>/change", methods=["POST"])
+def change_request(req_id):
+    """Singer changes the SONG of their own request (edit_token-gated).
+
+    Pending original → updated in place (stays pending). Approved original →
+    a new pending request is created carrying supersedes_request_id so the KJ
+    can approve the swap (see approve_sing_request_route)."""
+    store = getattr(current_app, "sing_store", None)
+    if store is None:
+        return jsonify({"error": "not_configured"}), 503
+    cfg = current_app.kj_config
+    if _rate_limit_exceeded(
+        _client_ip(request),
+        _safe_int(cfg.get("sing_rate_limit_per_ip"), 5),
+        _safe_int(cfg.get("sing_rate_limit_window_s"), 300),
+    ):
+        return jsonify({"error": "rate_limited"}), 429
+    token = _extract_token()
+    if not token or not _is_token_valid(store, token):
+        return jsonify({"error": "not_open"}), 403
+    req = store.get_request(req_id)
+    if req is None or req.get("token") != token or not _belongs_to_current_night(store, req):
+        return jsonify({"error": "not_found"}), 404
+    data = request.get_json(silent=True) or {}
+    stored = req.get("edit_token") or ""
+    if not stored or not secrets.compare_digest(str(data.get("edit_token") or ""), str(stored)):
+        return jsonify({"error": "forbidden"}), 403
+    if req["status"] not in ("pending", "approved"):
+        return jsonify({"error": f"cannot change a {req['status']} request"}), 409
+
+    # Validate the new song's source (subset of submit()'s rules).
+    source_type = (data.get("source_type") or "").strip()
+    source_ref = data.get("source_ref") or None
+    source_meta = data.get("source_meta") or None
+    song_artist = (data.get("song_artist") or "").strip()
+    song_title = (data.get("song_title") or "").strip()
+    if source_type not in _ALLOWED_SOURCES:
+        return jsonify({"error": f"source_type must be one of {sorted(_ALLOWED_SOURCES)}"}), 400
+    if store.is_simple_mode() and source_type not in _SIMPLE_MODE_SOURCES:
+        return jsonify({"error": "simple_mode_disabled_source"}), 400
+    if source_type in {"local", "divebar", "kn", "youtube"} and not source_ref:
+        return jsonify({"error": "source_ref is required for this source_type"}), 400
+    if source_type == "make" and not store.is_accepting_make_requests():
+        return jsonify({"error": "make_requests_disabled"}), 400
+    if source_type == "kj_pick":
+        err = _validate_kj_pick_payload(data)
+        if err:
+            return jsonify({"error": err}), 400
+
+    if req["status"] == "pending":
+        updated = store.update_request(
+            req_id, song_artist=song_artist, song_title=song_title,
+            source_type=source_type, source_ref=source_ref, source_meta=source_meta,
+        )
+        return jsonify({"success": True, "request": _public_request_view(updated)})
+
+    # Approved → create a superseding pending request the KJ approves.
+    new_req = store.create_request(
+        singer_name=req["singer_name"], phone=req.get("phone") or "",
+        song_artist=song_artist, song_title=song_title,
+        source_type=source_type, source_ref=source_ref, source_meta=source_meta,
+        token=req["token"], additional_singers=req.get("additional_singers"),
+        supersedes_request_id=req_id,
+    )
+    return jsonify({"success": True, "request": _public_request_view(new_req)})
+
+
 # --- Response shaping ----------------------------------------------------
 
 def _build_now_playing(rotation):
