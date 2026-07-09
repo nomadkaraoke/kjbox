@@ -4944,7 +4944,13 @@ def list_sing_requests():
         return err
     status = request.args.get('status') or None
     limit = request.args.get('limit', type=int)
-    requests = store.list_requests(status=status, limit=limit)
+    # Project out edit_token — it's a per-request cancel secret for the
+    # singer's device only. The admin host is unauthenticated on the LAN
+    # (http://nomadpc.local), so it must never appear in this list.
+    requests = [
+        {k: v for k, v in r.items() if k != "edit_token"}
+        for r in store.list_requests(status=status, limit=limit)
+    ]
     return jsonify({
         "requests": requests,
         "counts": store.count_by_status(),

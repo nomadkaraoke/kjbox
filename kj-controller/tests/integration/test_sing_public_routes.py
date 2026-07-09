@@ -667,3 +667,15 @@ class TestSelfServiceCancel:
         assert ok.status_code == 200
         entry = sing_app.rotation.store.get_entry(entry_id)
         assert entry["status"] == "Cancelled"
+
+    def test_cancel_after_sung_is_409_and_leaves_entry_done(self, client, sing_app, token):
+        sing_app.sing_store.set_auto_approve(True)
+        r = client.post(f"/sing/submit?t={token}", json=self._body()).get_json()["request"]
+        entry_id = sing_app.sing_store.get_request(r["id"])["linked_entry_id"]
+        # Singer has performed — entry is Done.
+        sing_app.rotation.update_status(entry_id, "Done")
+        resp = client.post(f"/sing/requests/{r['id']}/cancel?t={token}",
+                           json={"edit_token": r["edit_token"]})
+        assert resp.status_code == 409
+        # Entry must NOT be resurrected to Cancelled (would corrupt sung-counts).
+        assert sing_app.rotation.store.get_entry(entry_id)["status"] == "Done"

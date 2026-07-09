@@ -890,9 +890,17 @@ def cancel_request(req_id):
         return jsonify({"error": f"already {req['status']}"}), 409
 
     # If it reached the rotation, soft-cancel the linked entry (visible to KJ).
+    # A sing_request stays 'approved' even after its entry is sung, so guard
+    # against cancelling a finished song: flipping a Done/Left entry to
+    # 'Cancelled' would resurrect it in the queue and corrupt sung-counts.
     if req["status"] == "approved" and req.get("linked_entry_id"):
         rotation = getattr(current_app, "rotation", None)
         if rotation is not None:
+            entry = rotation.store.get_entry(req["linked_entry_id"])
+            entry_status = ((entry or {}).get("status") or "").lower()
+            if entry_status in ("done", "left"):
+                # Already performed / gone — nothing to cancel.
+                return jsonify({"error": "already_sung"}), 409
             try:
                 rotation.update_status(req["linked_entry_id"], "Cancelled")
             except Exception:
@@ -917,7 +925,9 @@ def _build_now_playing(rotation):
     entries = rotation.get_rotation()
     active = [
         e for e in entries
-        if (e.get("status") or "").lower() not in ("done", "left")
+        # 'cancelled' stays visible to the KJ but must not appear in the
+        # singer-facing now/next/queue counts.
+        if (e.get("status") or "").lower() not in ("done", "left", "cancelled")
     ]
     now = next(
         (e for e in active if (e.get("status") or "").lower() == "now singing"),
@@ -961,7 +971,7 @@ def _public_queue_view(entries):
     """First-name-only view of the rotation for the expandable 'show upcoming' list."""
     out = []
     for entry in entries:
-        if entry.get("status", "").lower() in {"done", "left"}:
+        if entry.get("status", "").lower() in {"done", "left", "cancelled"}:
             continue
         singer = entry.get("singer") or ""
         first_name = singer.split()[0] if singer else ""

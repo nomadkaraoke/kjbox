@@ -70,6 +70,14 @@ class TestList:
         assert req["source_type"] == "youtube"
         assert req["source_ref"] == "https://youtu.be/dQw4w9WgXcQ"
 
+    def test_edit_token_not_leaked_to_admin_list(self, admin_client, admin_app):
+        # edit_token is the singer device's per-request cancel secret. The
+        # admin host is unauthenticated on the LAN, so it must be projected out.
+        _make_pending(admin_app)
+        resp = admin_client.get("/rotation/requests?status=pending")
+        assert resp.status_code == 200
+        assert "edit_token" not in resp.get_json()["requests"][0]
+
 
 class TestConfig:
     def test_get_config_shape(self, admin_client):
