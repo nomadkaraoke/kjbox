@@ -113,6 +113,16 @@ Filler music is always a single shared VLC on :8081 — it keeps playing while t
 
 Render mode persists to `config.json` (`render_mode: mpv`) and survives service restarts. See `docs/ARCHITECTURE.md § PlaybackCoordinator + KaraokePlayer Protocol` for the code-side architecture.
 
+**mpv reconnect resets the audio graph (v0.80.0).** The mpv process outlives kj-controller
+restarts, and its `--af=@rb:rubberband` / `lavfi-complex` audio state cannot be reliably
+reset in place on mpv 0.37 (clearing `lavfi-complex` while nothing is loaded orphans `@rb` →
+silent playback, unrecoverable via IPC). So on reconnect the app only **keeps a mpv that is
+actively playing** (never interrupts a live song); an **idle** mpv is killed and relaunched
+fresh, giving every new session a clean graph. This is what prevented a normal song from
+playing after a restart when a prior **Original Vocals guide** song had left a stale
+`[aid2]…amix…[ao]` mix set (the next single-track `loadfile` aborted to idle). See
+`docs/CHANGELOG.md` 2026-07-09.
+
 Use the toggle as an escape hatch if a specific file (or environmental quirk) misbehaves on one engine.
 
 **CDG+MP3 (`.zip`) playback differs between the engines** — both render it, but they must be fed differently, and kjbox does this automatically in `/play`:

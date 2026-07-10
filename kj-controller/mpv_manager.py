@@ -284,6 +284,20 @@ class MpvKaraokePlayer:
                 mpv_log.close()
 
     def try_reconnect(self) -> bool:
+        """Reattach to an mpv that survived a kj-controller restart.
+
+        Only a *playing* instance is preserved (never cut a singer off mid-song).
+        An *idle* instance is torn down so the coordinator launches a fresh one:
+        a long-lived mpv can carry audio-graph state (a leftover `lavfi-complex`
+        guide mix, an @rb rubberband filter) that this new Python object has no
+        record of. A stale `lavfi-complex` referencing an absent `[aid2]` makes
+        the next normal `loadfile` abort to idle ("not progressing"), and mpv
+        0.37's af/lavfi state cannot be reset in place via IPC once torn down
+        (clearing lavfi while no audio track is loaded orphans @rb → silent
+        playback; verified on device). Respawning an idle instance costs nothing
+        (nothing is playing) and starts every session from a clean graph — the
+        same known-good state as a cold boot.
+        """
         if not self.enabled:
             return False
         if not os.path.exists(self.ipc_socket_path):
@@ -297,10 +311,48 @@ class MpvKaraokePlayer:
             self.active = True
             self.current_path = saved.get('current_playing_path')
             self.last_play_time = time.time()
+            # Reconcile in-memory graph state with mpv's ACTUAL state. A fresh
+            # object defaults _lavfi_active=False, but the surviving mpv may be
+            # mid-guide-song with a lavfi-complex mix set. Without this, when the
+            # guide song ends the next song's play() would skip clearing the
+            # stale [aid2] graph and fail to load.
+            self._lavfi_active = bool(self._get_property("lavfi-complex"))
             log_message("Reconnected to existing mpv karaoke (playing).", self.config)
-        else:
-            log_message("Reconnected to existing mpv karaoke (idle).", self.config)
-        return True
+            return True
+        log_message(
+            "Found idle mpv karaoke on reconnect — respawning fresh for a clean "
+            "audio graph (avoids stale lavfi-complex/@rb state).",
+            self.config,
+        )
+        self._teardown_reconnected_idle()
+        return False
+
+    def _teardown_reconnected_idle(self):
+        """Kill a reconnected (no Popen handle) idle mpv so launch() can replace
+        it. Unlike shutdown(), does NOT set the monitor-stop event — no monitor
+        runs yet at reconnect time, and launch() + _start_monitor() bring one up
+        on the fresh process."""
+        self._send_ipc(["quit"])
+        time.sleep(0.5)
+        # Fallback: if mpv ignored the IPC quit, SIGTERM it by its unique socket
+        # arg so we never end up with two mpv instances contending for the audio
+        # device / IPC socket path. Best-effort; matches only this mpv.
+        try:
+            subprocess.run(
+                # `--` ends pkill's option parsing so the pattern (which starts
+                # with "--") isn't mistaken for flags.
+                ["pkill", "-TERM", "-f", "--",
+                 f"--input-ipc-server={self.ipc_socket_path}"],
+                check=False,
+            )
+        except Exception as e:
+            log_message(f"pkill fallback during idle mpv teardown failed: {e}", self.config)
+        time.sleep(0.3)
+        try:
+            os.unlink(self.ipc_socket_path)
+        except FileNotFoundError:
+            pass
+        self.process = None
 
     def shutdown(self):
         """Terminate mpv. Used during renderer swap."""

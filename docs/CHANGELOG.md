@@ -2,6 +2,36 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-07-09 - Fix: mpv playback aborts to idle after restart (stale lavfi-complex, v0.80.0)
+
+**Bug:** After a kj-controller service restart, a normal song could refuse to play — UI
+showed "Playback may not be progressing", `time 0:00`, `audio_error: true`. Confirmed on
+NomadPC with `NOMAD-1508 - Atomic Kitten - Eternal Flame.mp4` (file itself was healthy and
+played fine in a fresh mpv).
+
+**Root cause:** the long-lived karaoke mpv process survives service restarts via
+`try_reconnect()`, but the fresh `MpvKaraokePlayer` object reset `_lavfi_active=False`,
+desyncing from mpv's real state. mpv still carried a leftover `lavfi-complex`
+(`[aid2]…amix…[ao]`) from an earlier **Original Vocals guide** song. A normal song has only
+`aid1`; the stale graph references a non-existent `[aid2]`, so `loadfile replace` builds an
+invalid graph → `playback-abort=true` → mpv drops to idle while the app still thinks it's
+playing. Clearing the graph in place is not a fix: on mpv 0.37, clearing `lavfi-complex`
+while no audio track is loaded orphans the `@rb` rubberband filter (audio never selects,
+pitch breaks) and cannot be recovered via IPC — verified on device.
+
+**Fix (v0.80.0):** `MpvKaraokePlayer.try_reconnect()` now only preserves an **actively
+playing** instance (so a mid-song deploy never cuts a singer off); an **idle** instance is
+torn down (`_teardown_reconnected_idle()`: IPC quit → `pkill` fallback on the unique socket
+arg → unlink socket) and reported "not found", so the coordinator launches a fresh mpv with
+a pristine `--af=@rb:rubberband` and no `lavfi-complex` — the same clean state as a cold
+boot. For the playing case, `_lavfi_active` is reconciled from mpv's actual `lavfi-complex`
+so the next song still clears a guide mix correctly.
+
+- `kj-controller/mpv_manager.py`: `try_reconnect()` respawn-on-idle + reconcile; new
+  `_teardown_reconnected_idle()`.
+- Tests: `tests/unit/test_mpv_karaoke_player.py` — idle→respawn, playing→reconcile.
+- Deployed to NomadPC and verified end-to-end after a full device reboot.
+
 ## 2026-07-09 - Original Vocals guide: auto-sync from GCS (write-path, v0.77.0)
 
 **Feature (v0.77.0):** the 5-minute master-sync timer now pulls a **second** GCS prefix —

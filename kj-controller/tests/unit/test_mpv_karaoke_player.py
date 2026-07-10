@@ -384,24 +384,60 @@ def test_try_reconnect_no_socket(mock_config, mocker):
     assert p.try_reconnect() is False
 
 
-def test_try_reconnect_finds_idle(mock_config, mocker):
+def test_try_reconnect_idle_respawns(mock_config, mocker):
+    # A long-lived idle mpv can carry stale lavfi-complex/@rb state that breaks
+    # the next loadfile, and that state can't be reset in place. So an idle
+    # reconnect is torn down and reported "not found" — the coordinator then
+    # launches a fresh, clean instance (cold-boot-equivalent).
     filler = FillerVLC(mock_config, enabled=True)
     p = MpvKaraokePlayer(mock_config, filler, enabled=True)
     mocker.patch('os.path.exists', return_value=True)
     mocker.patch.object(p, '_get_property', return_value=True)  # idle
-    assert p.try_reconnect() is True
+    send = mocker.patch.object(p, '_send_ipc', return_value={'error': 'success'})
+    run = mocker.patch('mpv_manager.subprocess.run')
+    unlink = mocker.patch('os.unlink')
+    mocker.patch('mpv_manager.time.sleep')
+    assert p.try_reconnect() is False          # -> coordinator launches fresh
     assert p.active is False
+    assert p.process is None
+    send.assert_any_call(['quit'])             # stale instance told to quit
+    assert run.called                          # pkill fallback attempted
+    assert unlink.called                       # stale socket removed
 
 
 def test_try_reconnect_finds_playing(mock_config, mocker):
     filler = FillerVLC(mock_config, enabled=True)
     p = MpvKaraokePlayer(mock_config, filler, enabled=True)
     mocker.patch('os.path.exists', return_value=True)
-    mocker.patch.object(p, '_get_property', return_value=False)  # not idle
+    # idle-active -> False (playing); lavfi-complex -> '' (normal song)
+    mocker.patch.object(
+        p, '_get_property',
+        side_effect=lambda prop: {'idle-active': False, 'lavfi-complex': ''}.get(prop),
+    )
     mocker.patch.object(p, '_load_state', return_value={'current_playing_path': '/s.mp4'})
     assert p.try_reconnect() is True
     assert p.active is True
     assert p.current_path == '/s.mp4'
+    assert p._lavfi_active is False
+
+
+def test_try_reconnect_playing_reconciles_lavfi_active(mock_config, mocker):
+    # Restart WHILE a guide song plays: mpv still has a lavfi-complex mix. The
+    # fresh object must relearn _lavfi_active=True so the NEXT song's play()
+    # clears the graph (while the guide's aid2 is still loaded — the safe path).
+    filler = FillerVLC(mock_config, enabled=True)
+    p = MpvKaraokePlayer(mock_config, filler, enabled=True)
+    assert p._lavfi_active is False
+    mocker.patch('os.path.exists', return_value=True)
+    graph = '[aid2]volume=0.0000[gv];[aid1][gv]amix=inputs=2:normalize=0[ao]'
+    mocker.patch.object(
+        p, '_get_property',
+        side_effect=lambda prop: {'idle-active': False, 'lavfi-complex': graph}.get(prop),
+    )
+    mocker.patch.object(p, '_load_state', return_value={'current_playing_path': '/guide.mp4'})
+    assert p.try_reconnect() is True
+    assert p.active is True
+    assert p._lavfi_active is True
 
 
 # --- _send_ipc: reply matching skips interleaved async events ---
