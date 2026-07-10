@@ -526,16 +526,54 @@ class MpvKaraokePlayer:
         if self.active and self._vocals_file:
             self._apply_vocals_mix()
 
+    def _resolve_mix_track_ids(self):
+        """Resolve (instrumental_aid, guide_aid) from mpv's live track-list.
+
+        The instrumental is the master's own EMBEDDED audio (external=False);
+        the guide is the EXTERNAL track we attached via audio-add. mpv does NOT
+        guarantee embedded audio gets a lower ``id`` than an external track —
+        on a "replace" loadfile the prior song's external track can retain aid1
+        and the new embedded audio becomes aid2. Hardcoding [aid1]=instrumental
+        / [aid2]=guide therefore muted the WRONG track (only vocals audible),
+        so we read the actual IDs each time we build the graph. Either may be
+        None if a track isn't present yet. See docs/AUDIO.md."""
+        tl = self._get_property("track-list") or []
+        instrumental_aid = guide_aid = None
+        for t in tl:
+            if t.get("type") != "audio":
+                continue
+            if t.get("external"):
+                if guide_aid is None:
+                    guide_aid = t.get("id")
+            elif instrumental_aid is None:
+                instrumental_aid = t.get("id")
+        return instrumental_aid, guide_aid
+
     def _apply_vocals_mix(self):
-        """(Re)build the lavfi-complex graph mixing the guide (aid2) under the
-        karaoke audio (aid1). Guide gain 0..1 from _vocals_volume/256. Rubberband
-        is NOT in the graph — the global @rb filter in --af pitches the mixed
-        [ao] output, so pitch stays shared and its control path is unchanged."""
+        """(Re)build the lavfi-complex graph mixing the guide under the karaoke
+        (instrumental) audio. Track IDs are resolved live (NOT assumed aid1/aid2
+        — mpv's numbering is non-deterministic across replaces). Guide gain
+        0..1 from _vocals_volume/256. Rubberband is NOT in the graph — the
+        global @rb filter in --af pitches the mixed [ao] output, so pitch stays
+        shared and its control path is unchanged."""
         if not self._vocals_file:
             return
+        instrumental_aid, guide_aid = self._resolve_mix_track_ids()
+        if instrumental_aid is None or guide_aid is None:
+            # Can't safely build the mix without both tracks. Clear any stale
+            # graph so the instrumental is never left muted, and fall back to
+            # normal playback (guide simply absent) rather than risk silence.
+            log_message(
+                f"WARNING: vocals-mix skipped — could not resolve both tracks "
+                f"(instrumental={instrumental_aid}, guide={guide_aid}); "
+                f"normal playback", self.config)
+            if self._lavfi_active:
+                self._set_property("lavfi-complex", "")
+                self._lavfi_active = False
+            return
         gain = max(0.0, min(1.0, self._vocals_volume / 256.0))
-        graph = (f"[aid2]volume={gain:.4f}[gv];"
-                 f"[aid1][gv]amix=inputs=2:normalize=0[ao]")
+        graph = (f"[aid{guide_aid}]volume={gain:.4f}[gv];"
+                 f"[aid{instrumental_aid}][gv]amix=inputs=2:normalize=0[ao]")
         self._set_property("lavfi-complex", graph)
         self._lavfi_active = True
 

@@ -133,6 +133,40 @@ def test_scan_skips_preview_cache_dir(mock_config, tmp_media_dir):
     assert "audio.mp3" not in names
 
 
+def test_scan_skips_non_library_stem_dirs(mock_config, tmp_media_dir):
+    """Original-audio and vocals-guide stem folders share a master's brand
+    identity, so indexing them produces duplicate library rows for one song.
+    Only the playable master (NOMAD-720p) should be indexed."""
+    media_dir = tmp_media_dir / "media"
+    (media_dir / "NOMAD-720p").mkdir()
+    (media_dir / "NOMAD-720p" / "NOMAD-1211 - Keane - Nothing In My Way.mp4").write_text("master")
+    for stem in ("NOMAD-audio", "NOMAD-vocals", "NOMAD-vocals-padded"):
+        (media_dir / stem).mkdir()
+        (media_dir / stem / "NOMAD-1211 - Keane - Nothing In My Way.flac").write_text("stem")
+
+    mi = MediaIndex(mock_config)
+    mi.scan()
+    names = [entry["filename"] for entry in mi.index.values()]
+    assert "NOMAD-1211 - Keane - Nothing In My Way.mp4" in names
+    assert not any(n.endswith(".flac") for n in names)
+
+
+def test_scan_non_library_dirnames_configurable(mock_config, tmp_media_dir):
+    """The excluded set is overridable via config['non_library_dirnames']."""
+    media_dir = tmp_media_dir / "media"
+    (media_dir / "keepers").mkdir()
+    (media_dir / "keepers" / "song.mp4").write_text("ok")
+    (media_dir / "junk").mkdir()
+    (media_dir / "junk" / "hidden.mp4").write_text("no")
+    mock_config["non_library_dirnames"] = ["junk"]
+
+    mi = MediaIndex(mock_config)
+    mi.scan()
+    names = [entry["filename"] for entry in mi.index.values()]
+    assert "song.mp4" in names
+    assert "hidden.mp4" not in names
+
+
 def test_quarantine_download_moves_not_deletes(tmp_path):
     """A rejected download (and its yt-dlp sidecars) is moved aside, never
     deleted — an automated verdict can be wrong."""

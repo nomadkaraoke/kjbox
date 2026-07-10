@@ -44,7 +44,21 @@ def test_set_vocals_volume_inactive_no_ipc(player, mocker):
     sp.assert_not_called()
 
 
+def _track_list(*, guide_id, instrumental_id):
+    """Build a mpv track-list with an external guide + embedded instrumental."""
+    return [
+        {"type": "audio", "id": guide_id, "external": True,
+         "codec": "flac", "title": "NOMAD-0001 - A - B.flac"},
+        {"type": "audio", "id": instrumental_id, "external": False,
+         "codec": "aac", "title": None},
+        {"type": "video", "id": 1, "external": False},
+    ]
+
+
 def test_apply_vocals_mix_builds_graph(player, mocker):
+    # Normal ordering: embedded instrumental=aid1, external guide=aid2.
+    mocker.patch.object(player, "_get_property",
+                        return_value=_track_list(guide_id=2, instrumental_id=1))
     sp = mocker.patch.object(player, "_set_property")
     player.active = True
     player._vocals_file = "/x/NOMAD-0001 - A - B.flac"
@@ -56,13 +70,48 @@ def test_apply_vocals_mix_builds_graph(player, mocker):
     assert player._lavfi_active is True
 
 
+def test_apply_vocals_mix_inverted_ids(player, mocker):
+    """Regression: mpv assigned the EXTERNAL guide aid1 and the embedded
+    instrumental aid2 (observed live on a replace loadfile). The graph must
+    scale the GUIDE (aid1) and pass the INSTRUMENTAL (aid2) at full — the old
+    hardcoded [aid2]=guide/[aid1]=instrumental muted the instrumental, so only
+    vocals were audible."""
+    mocker.patch.object(player, "_get_property",
+                        return_value=_track_list(guide_id=1, instrumental_id=2))
+    sp = mocker.patch.object(player, "_set_property")
+    player.active = True
+    player._vocals_file = "/x/NOMAD-0001 - A - B.flac"
+    player.set_vocals_volume(128)  # 0.5 gain on the GUIDE
+    prop, graph = sp.call_args[0]
+    assert prop == "lavfi-complex"
+    # Guide (aid1) is the scaled input; instrumental (aid2) passes at full.
+    assert graph == "[aid1]volume=0.5000[gv];[aid2][gv]amix=inputs=2:normalize=0[ao]"
+
+
 def test_apply_vocals_mix_zero_gain_off(player, mocker):
+    mocker.patch.object(player, "_get_property",
+                        return_value=_track_list(guide_id=2, instrumental_id=1))
     sp = mocker.patch.object(player, "_set_property")
     player.active = True
     player._vocals_file = "/x/NOMAD-0001 - A - B.flac"
     player.set_vocals_volume(0)
     _, graph = sp.call_args[0]
     assert "volume=0.0000" in graph
+
+
+def test_apply_vocals_mix_missing_track_clears(player, mocker):
+    """Only one audio track present (guide attach lost) → never leave the
+    instrumental muted. Clear any stale graph and fall back to normal audio."""
+    mocker.patch.object(
+        player, "_get_property",
+        return_value=[{"type": "audio", "id": 1, "external": False, "codec": "aac"}])
+    sp = mocker.patch.object(player, "_set_property")
+    player.active = True
+    player._lavfi_active = True
+    player._vocals_file = "/x/NOMAD-0001 - A - B.flac"
+    player._apply_vocals_mix()
+    sp.assert_called_once_with("lavfi-complex", "")
+    assert player._lavfi_active is False
 
 
 def test_apply_vocals_mix_noop_without_guide(player, mocker):

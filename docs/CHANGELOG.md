@@ -2,6 +2,43 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-07-09 - Fix: Original Vocals guide muted the instrumental + hide stem folders (v0.81.0)
+
+**Bug 1 — only vocals audible on NOMAD masters (live-show blocker).** Pressing Play on a
+NOMAD track played *only* the original vocals guide; the karaoke instrumental was silent.
+
+Root cause: the guide mix hardcoded the lavfi-complex track IDs — `[aid2]` = guide (scaled),
+`[aid1]` = instrumental (full). But mpv's `id` numbering for embedded vs. external audio is
+**not deterministic**: on a `replace` loadfile the previously-attached external guide can
+retain `aid1` while the master's own embedded audio becomes `aid2`. Observed live on
+`NOMAD-1211 - Keane - Nothing In My Way.mp4`: `aid1` = external FLAC guide, `aid2` = embedded
+aac instrumental. The hardcoded graph therefore set the **instrumental** to `volume=0`
+(muted) and passed the **guide** at full → only vocals. Raising the "Original Vocals" slider
+actually un-muted a sliver of the instrumental (why a little backing leaked in).
+
+Fix: `_apply_vocals_mix()` now resolves the real track IDs from mpv's live `track-list`
+each time it builds the graph — instrumental = the embedded (`external:false`) audio track,
+guide = the external one — instead of assuming `aid1`/`aid2`. If both tracks can't be
+resolved (e.g. guide attach lost), any stale graph is cleared so the instrumental is never
+left muted (falls back to normal playback). `mpv_manager.py`.
+
+**Bug 2 — stem folders duplicated songs in the library/search.** The original-audio and
+isolated/padded vocals-guide folders (`NOMAD-audio`, `NOMAD-vocals`, `NOMAD-vocals-padded`)
+were being indexed, so each NOMAD master appeared up to 4× (one row per stem, all sharing
+the master's brand identity). These stems feed the Original Vocals mix — they are not
+playable karaoke content.
+
+Fix: `scan()` skips these dirnames (same mechanism as the quarantine/preview-cache skip), so
+only the playable master (`NOMAD-720p`) is indexed. Overridable via
+`config['non_library_dirnames']`. Because the FLAC stems and the MP4 master share a
+`media_id`, existing DB identity rows are intentionally **not** pruned by path (would orphan
+the master); the library list is `index`-driven, so a **Rescan Media** clears the duplicates.
+`media.py`, `config.py`.
+
+**Deploy note:** backend change — takes effect after the kj-controller restart. The mpv fix
+applies on the next Play (runtime logic, no renderer bounce). To drop the duplicate library
+rows, click **Rescan Media** once after deploy.
+
 ## 2026-07-09 - Fix: mpv playback aborts to idle after restart (stale lavfi-complex, v0.80.0)
 
 **Bug:** After a kj-controller service restart, a normal song could refuse to play — UI

@@ -120,6 +120,11 @@ def load_config(config_file=None):
         # the "NOMAD-vocals-padded" sibling of the playing master's directory
         # (on the device: /opt/nomad/downloads/NOMAD-vocals-padded). mpv only.
         "vocals_guide_dir": "",
+        # Folder names kept OUT of the library/search index: original-audio and
+        # isolated/padded vocals-guide stems that share a master's brand identity
+        # and would otherwise show as duplicate rows for the same song. Only the
+        # playable master (NOMAD-720p) should appear. See media.py.
+        "non_library_dirnames": ["NOMAD-audio", "NOMAD-vocals", "NOMAD-vocals-padded"],
     }
     if os.path.exists(config_file):
         try:

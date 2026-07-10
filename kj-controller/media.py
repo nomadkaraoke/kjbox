@@ -27,6 +27,15 @@ _MEDIA_ID_PREFIX_SOURCE = {
 # being deleted. scan() skips this dir so quarantined files are never re-indexed.
 QUARANTINE_DIRNAME = "_playability_quarantine"
 
+# Derivative/source folders that sit beside the playable karaoke masters
+# (NOMAD-720p) but hold only the ORIGINAL audio + isolated/padded vocals guides
+# that feed the "Original Vocals" mix. They share each master's brand identity
+# (NOMAD-####), so if indexed they surface as duplicate library/search rows for
+# the same song (one per stem) — confusing to search and to song-linking. scan()
+# skips these dirnames so only the real master (NOMAD-720p) appears. Overridable
+# via config['non_library_dirnames']. See docs/ORIGINAL-VOCALS.md.
+DEFAULT_NON_LIBRARY_DIRNAMES = ("NOMAD-audio", "NOMAD-vocals", "NOMAD-vocals-padded")
+
 
 def _gate_playable(path, config):
     """Fast inline playability check (integrity + sampled decode, no render).
@@ -257,6 +266,8 @@ class MediaIndex:
         # its transcode/CDG artifacts get indexed as phantom "graphics"/"audio"
         # download rows.
         preview_cache_dir = os.path.realpath(resolve_preview_cache_dir(self.config))
+        non_library_dirnames = set(
+            self.config.get('non_library_dirnames', DEFAULT_NON_LIBRARY_DIRNAMES))
         existing = self._load_file()
 
         for folder in self.config.get('media_folders', []):
@@ -265,10 +276,13 @@ class MediaIndex:
                 log_message(f"Media folder not found, skipping: {folder}", self.config)
                 continue
             for dirpath, dirnames, filenames in os.walk(folder):
-                # Never index quarantined (rejected) downloads or preview-cache artifacts.
+                # Never index quarantined (rejected) downloads, preview-cache
+                # artifacts, or the original-audio/vocals-guide source folders
+                # (they duplicate each master's identity — see NON_LIBRARY note).
                 dirnames[:] = [
                     d for d in dirnames
                     if d != QUARANTINE_DIRNAME
+                    and d not in non_library_dirnames
                     and os.path.realpath(os.path.join(dirpath, d)) != preview_cache_dir
                 ]
                 for fname in filenames:
