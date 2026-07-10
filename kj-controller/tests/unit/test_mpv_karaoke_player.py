@@ -437,6 +437,7 @@ def test_try_reconnect_playing_reconciles_lavfi_active(mock_config, mocker):
     mocker.patch.object(p, '_load_state', return_value={'current_playing_path': '/guide.mp4'})
     assert p.try_reconnect() is True
     assert p.active is True
+    assert p.current_path == '/guide.mp4'
     assert p._lavfi_active is True
 
 

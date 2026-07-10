@@ -2,7 +2,7 @@
 
 **Created:** 2026-07-09
 **Branch:** feat/sess-20260709-1948-fix-mpv-lavfi-desync
-**Status:** Draft
+**Status:** Implemented & shipped (v0.80.0). This is a historical planning snapshot; see `docs/CHANGELOG.md` 2026-07-09 for the shipped record.
 
 ## Overview
 
