@@ -3114,6 +3114,18 @@ body {
     letter-spacing: 0.3px;
     white-space: nowrap;
 }
+/* Warning flag shown left of the count pill for singers who haven't sung yet
+   tonight (0×). Gently pulses so never-sung singers jump out of the list. */
+.rotation-notsung-warn {
+    margin-left: 5px;
+    font-size: 12px;
+    line-height: 1;
+    animation: notsung-pulse 1.8s ease-in-out infinite;
+}
+@keyframes notsung-pulse {
+    0%, 100% { opacity: 1; }
+    50%      { opacity: 0.35; }
+}
 /* Semantic happiness tiers — green = good, red = bad, consistently across both
    pills (see singCountClass/waitClass in app.js). */
 .pill-good { background: #2d8a4e33; color: #2d8a4e; }

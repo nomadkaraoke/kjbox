@@ -5347,6 +5347,16 @@ function renderRotation(entries) {
         // they're likely feeling) \u2014 NOT KJ prioritisation. Pill 1 = how many
         // songs they've sung; pill 2 = how long they've been waiting.
         const sung = entry.songs_sung || 0;
+        // Extra-loud flag when someone hasn't sung at all yet tonight (0\u00d7):
+        // a warning icon to the left of the count pill so the KJ can spot
+        // never-sung singers at a glance.
+        if (sung === 0) {
+            const notYet = document.createElement('span');
+            notYet.className = 'rotation-notsung-warn';
+            notYet.textContent = '\u26a0\ufe0f';
+            notYet.title = 'Hasn\u2019t sung yet tonight';
+            info.appendChild(notYet);
+        }
         const countPill = document.createElement('span');
         countPill.className = 'rotation-pill ' + singCountClass(sung);
         countPill.textContent = '\u00d7' + sung;
