@@ -6771,15 +6771,36 @@ async function openSmsDetails(row, entry) {
     to.textContent = 'To: ' + (d.phone_e164 || '—');
     content.appendChild(to);
 
-    // The exact message body
+    // The message body — editable, prefilled with what was actually sent, so
+    // the KJ can tweak the text before resending a fresh message.
     const bodyLabel = document.createElement('div');
     bodyLabel.className = 'sms-details-label';
-    bodyLabel.textContent = 'Message sent';
+    bodyLabel.textContent = 'Message — edit before resending';
     content.appendChild(bodyLabel);
-    const body = document.createElement('div');
-    body.className = 'sms-details-body';
-    body.textContent = d.body || '(no body recorded)';
+    const body = document.createElement('textarea');
+    body.className = 'sms-preview-body';
+    body.value = d.body || '';
     content.appendChild(body);
+
+    // Char / segment counter (mirrors the compose panel).
+    const meta = document.createElement('div');
+    meta.className = 'sms-preview-meta';
+    const lenSpan = document.createElement('span');
+    const segSpan = document.createElement('span');
+    const updateMeta = () => {
+        const len = body.value.length;
+        const segs = len === 0 ? 0 : (len <= 160 ? 1 : Math.ceil(len / 153));
+        lenSpan.textContent = len + ' chars';
+        segSpan.textContent = segs + ' segment' + (segs === 1 ? '' : 's');
+        lenSpan.className = 'sms-meta-len' +
+            (len > 1600 ? ' sms-meta-over' : len > 160 ? ' sms-meta-multi' : '');
+    };
+    meta.appendChild(lenSpan);
+    meta.appendChild(document.createTextNode(' · '));
+    meta.appendChild(segSpan);
+    content.appendChild(meta);
+    body.addEventListener('input', updateMeta);
+    updateMeta();
 
     // If it failed, surface the reason up front (not buried in tech info).
     if (state === 'failed' && d.error) {
@@ -6820,17 +6841,68 @@ async function openSmsDetails(row, entry) {
     // Actions
     const actions = document.createElement('div');
     actions.className = 'sms-details-actions';
-    const resend = document.createElement('button');
-    resend.className = 'sms-preview-send-btn';
-    resend.textContent = state === 'failed' ? '✉ Retry send' : '✉ Resend';
-    resend.onclick = () => { closeSmsDetails(); openSmsPreview(row, entry); };
+    const errEl = document.createElement('div');
+    errEl.className = 'sms-details-error';
+    errEl.style.display = 'none';
     const closeBtn = document.createElement('button');
     closeBtn.className = 'sms-preview-cancel-btn';
     closeBtn.textContent = 'Close';
     closeBtn.onclick = closeSmsDetails;
+    const resend = document.createElement('button');
+    resend.className = 'sms-preview-send-btn';
+    const resendLabel = state === 'failed' ? '✉ Retry send' : '✉ Resend';
+    resend.textContent = resendLabel;
+    // Send the (possibly edited) body directly as a fresh message.
+    const doResend = async () => {
+        const text = body.value.trim();
+        if (!text) {
+            errEl.textContent = 'Message is empty.';
+            errEl.style.display = '';
+            return;
+        }
+        errEl.style.display = 'none';
+        resend.disabled = true;
+        closeBtn.disabled = true;
+        resend.textContent = 'Sending…';
+        try {
+            const resp = await fetch('/rotation/sms/send', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ entry_id: entry.id, body: body.value }),
+            });
+            const data = await resp.json().catch(() => ({}));
+            if (!resp.ok || !data.success) {
+                errEl.textContent = data.error || ('Send failed (HTTP ' + resp.status + ')');
+                errEl.style.display = '';
+                resend.disabled = false;
+                closeBtn.disabled = false;
+                resend.textContent = resendLabel;
+                return;
+            }
+            closeSmsDetails();
+            showRotationIndicator('success');
+            fetchRotation();
+        } catch (e) {
+            errEl.textContent = 'Send failed: ' + e.message;
+            errEl.style.display = '';
+            resend.disabled = false;
+            closeBtn.disabled = false;
+            resend.textContent = resendLabel;
+        }
+    };
+    resend.onclick = doResend;
+    content.appendChild(errEl);
     actions.appendChild(resend);
     actions.appendChild(closeBtn);
     content.appendChild(actions);
+
+    // Cmd/Ctrl+Enter in the message field resends.
+    body.addEventListener('keydown', (e) => {
+        if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+            e.preventDefault();
+            if (!resend.disabled) doResend();
+        }
+    });
 
     modal.replaceChildren(content);
 }
