@@ -3433,11 +3433,13 @@ body {
     text-align: center;
 }
 
-/* Capped + scrolling so a busy queue never pushes the sections below it. */
+/* Height is controlled by applyRequestsHeightCap() in app.js: it shows up to
+ * 3 FULL request cards (no clipping) then scrolls the rest. The max-height here
+ * is only a pre-JS fallback for the first paint. */
 .pending-requests-list {
     display: flex;
     flex-direction: column;
-    max-height: 260px;      /* ~3–4 rows, then scroll */
+    max-height: 260px;
     overflow-y: auto;
 }
 .pending-requests-list:empty { display: none; }

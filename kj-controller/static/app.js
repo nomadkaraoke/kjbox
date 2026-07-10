@@ -8131,6 +8131,37 @@ const SingRequests = (() => {
             : 'Public request form: OFF';
     }
 
+    // Number of full requests to show before the list starts scrolling.
+    const REQUESTS_VISIBLE = 3;
+
+    // Cards vary a lot in height (a KJ_PICK version picker is far taller than a
+    // plain row), so a fixed px cap either clips a tall card or wastes space.
+    // Size the list to the first N full cards instead: no cap at all when there
+    // are ≤N requests (show every one in full), otherwise cap to the measured
+    // height of the first N cards and scroll the rest.
+    function applyRequestsHeightCap() {
+        const list = document.getElementById('pending-requests-list');
+        if (!list) return;
+        const rows = Array.from(list.children);
+        if (rows.length <= REQUESTS_VISIBLE) {
+            list.style.maxHeight = 'none';
+            list.style.overflowY = 'visible';
+            return;
+        }
+        const top = rows[0].getBoundingClientRect().top;
+        const bottom = rows[REQUESTS_VISIBLE - 1].getBoundingClientRect().bottom;
+        const cap = Math.round(bottom - top);
+        if (cap > 0) {
+            list.style.maxHeight = cap + 'px';
+            list.style.overflowY = 'auto';
+        } else {
+            // Not laid out yet (section hidden) — fall back to a safe px cap so
+            // the list can never collapse to zero height.
+            list.style.maxHeight = '400px';
+            list.style.overflowY = 'auto';
+        }
+    }
+
     function renderPanel() {
         // The section is permanent (always visible in the right rail). Render the
         // pending rows when there are any, else show the empty-state line — the
@@ -8143,6 +8174,17 @@ const SingRequests = (() => {
         list.innerHTML = '';
         for (const req of pending) {
             list.appendChild(renderRow(req));
+        }
+        applyRequestsHeightCap();
+        // YouTube thumbnails load async and change card height — recompute the
+        // cap once each image lands so the first N cards stay fully visible.
+        list.querySelectorAll('img').forEach((img) => {
+            if (!img.complete) img.addEventListener('load', applyRequestsHeightCap, { once: true });
+        });
+        // Recompute on resize (wrapping changes card heights). Bind once.
+        if (!applyRequestsHeightCap._bound) {
+            window.addEventListener('resize', applyRequestsHeightCap);
+            applyRequestsHeightCap._bound = true;
         }
     }
 
