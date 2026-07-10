@@ -623,6 +623,10 @@ class RotationStore:
                     "status": e["status"],
                     "position": e["position"],
                     "created_at": e["created_at"],
+                    # done_at is the dedicated "actually sung / marked done"
+                    # timestamp; the Songs modal shows it for done entries.
+                    "done_at": e.get("done_at"),
+                    "updated_at": e.get("updated_at"),
                 }
                 for e in entries
             ]

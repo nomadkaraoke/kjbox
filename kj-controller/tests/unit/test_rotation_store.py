@@ -1160,12 +1160,19 @@ class TestGetSingerStats:
         assert "entries" in alice
         assert len(alice["entries"]) == 2
         fields = set(alice["entries"][0].keys())
-        assert fields == {"id", "song_artist", "status", "position", "created_at"}
+        assert fields == {
+            "id", "song_artist", "status", "position",
+            "created_at", "done_at", "updated_at",
+        }
         # Ordered by created_at (earliest first, same as stat ordering)
         assert alice["entries"][0]["song_artist"] == "Song A"
         assert alice["entries"][0]["status"] == "Done"
+        # The done entry carries its actual sung/marked-done timestamp; the
+        # still-queued one does not.
+        assert alice["entries"][0]["done_at"] is not None
         assert alice["entries"][1]["song_artist"] == "Song B"
         assert alice["entries"][1]["status"] == "Waiting"
+        assert alice["entries"][1]["done_at"] is None
 
     def test_entries_projection_excludes_heavy_fields(self, store):
         e1 = store.add_entry("Alice", song_artist="Song A", file_path="/some/path.mp3")
