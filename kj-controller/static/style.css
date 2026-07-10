@@ -3310,6 +3310,58 @@ body {
     font-style: italic;
 }
 
+/* Per-singer "Songs" modal (replaces the old inline panel the poll used to
+   wipe). Shares the split-modal look. */
+.singer-songs-modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+.singer-songs-modal {
+    background: var(--bg-elevated, #1e1e22);
+    color: var(--text, #ddd);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 6px;
+    padding: 1.2rem;
+    min-width: 420px;
+    max-width: 90vw;
+    max-height: 85vh;
+    overflow: auto;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
+}
+.singer-songs-modal-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 0.2rem;
+}
+.singer-songs-modal-head h3 { margin: 0; font-size: 1.1rem; }
+.singer-songs-modal-close {
+    background: none;
+    border: none;
+    color: var(--text-dim, #999);
+    font-size: 1.6rem;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0 0.2rem;
+}
+.singer-songs-modal-close:hover { color: #ff5bb8; }
+.singer-songs-modal-summary {
+    color: var(--text-dim, #999);
+    font-size: 0.8rem;
+    margin-bottom: 0.6rem;
+}
+/* In the modal the time column can hold "Sung 1h 12m ago" — let it size to
+   content instead of the cramped 80px used by the old inline panel. */
+.singer-songs-modal .singer-songs-time { width: auto; white-space: nowrap; padding-left: 1rem; }
+.singer-songs-modal .singer-songs-time-queued { font-style: italic; opacity: 0.85; }
+.singer-songs-modal .singer-songs-table { font-size: 0.9rem; }
+
 .singer-split-modal-backdrop {
     position: fixed;
     inset: 0;

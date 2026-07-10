@@ -5900,6 +5900,15 @@ function renderSingerStats(stats) {
     renderSingerSection(list, 'active', 'Active', sections.active, false);
     renderSingerSection(list, 'done', 'Done', sections.done, true);
     renderSingerSection(list, 'gone', 'Gone', sections.gone, true);
+
+    // Keep an open Songs modal live: refresh it from the freshly-polled stats so
+    // it never goes stale and never disappears. Close it only if the singer has
+    // vanished from the stats entirely.
+    if (openSingerSongsName) {
+        const s = singerStatsData.find(x => x.name === openSingerSongsName);
+        if (s) renderSingerSongsModalBody(s);
+        else closeSingerSongsModal();
+    }
 }
 
 function renderSingerSection(container, key, label, singers, collapsedByDefault) {
@@ -6022,7 +6031,7 @@ function buildSingerActions(actions, singer, row) {
     songsBtn.className = 'singer-stats-btn';
     songsBtn.textContent = 'Songs';
     songsBtn.title = 'Show all songs this singer has queued or sung tonight';
-    songsBtn.onclick = () => toggleSingerSongs(row, singer);
+    songsBtn.onclick = () => openSingerSongsModal(singer);
     actions.appendChild(songsBtn);
 
     if (singer.status === 'left') {
@@ -6077,65 +6086,157 @@ function buildSingerActions(actions, singer, row) {
     actions.appendChild(leftBtn);
 }
 
-function toggleSingerSongs(row, singer) {
-    // Toggle: if already open, close it
-    const existing = row.nextElementSibling;
-    if (existing && existing.classList.contains('singer-songs-panel')
-        && existing.dataset.singer === singer.name) {
-        existing.remove();
+// Name of the singer whose Songs modal is currently open (null = none). Used
+// so the rotation poll can refresh the modal in place instead of the old inline
+// panel, which the poll's re-render used to wipe out from under the KJ.
+let openSingerSongsName = null;
+
+// "Xm ago" / "Xh Ym ago" from a naive-local "YYYY-MM-DD HH:MM:SS" timestamp.
+function relAgoFromTs(ts) {
+    if (!ts) return null;
+    const d = new Date(String(ts).replace(' ', 'T'));
+    if (isNaN(d.getTime())) return null;
+    const mins = Math.max(0, Math.round((Date.now() - d.getTime()) / 60000));
+    return mins < 60 ? mins + 'm ago' : Math.floor(mins / 60) + 'h ' + (mins % 60) + 'm ago';
+}
+// Local clock time (e.g. "11:42 PM") from the same timestamp, for tooltips.
+function clockFromTs(ts) {
+    if (!ts) return '';
+    const d = new Date(String(ts).replace(' ', 'T'));
+    if (isNaN(d.getTime())) return '';
+    return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+}
+
+function singerSongsEscHandler(e) {
+    if (e.key === 'Escape') closeSingerSongsModal();
+}
+function closeSingerSongsModal() {
+    openSingerSongsName = null;
+    document.querySelectorAll('.singer-songs-modal-backdrop').forEach(d => d.remove());
+    document.removeEventListener('keydown', singerSongsEscHandler);
+}
+
+// Open (or toggle closed) the per-singer Songs modal. A modal — not an inline
+// panel — so the 2s/10s rotation poll can't detach it; the poll refreshes its
+// contents in place via renderSingerSongsModalBody().
+function openSingerSongsModal(singer) {
+    if (openSingerSongsName === singer.name
+        && document.querySelector('.singer-songs-modal-backdrop')) {
+        closeSingerSongsModal();
         return;
     }
-    // Close any other open panel
-    document.querySelectorAll('.singer-songs-panel').forEach(p => p.remove());
+    document.querySelectorAll('.singer-songs-modal-backdrop').forEach(d => d.remove());
 
-    const panel = document.createElement('div');
-    panel.className = 'singer-songs-panel';
-    panel.dataset.singer = singer.name;
+    const backdrop = document.createElement('div');
+    backdrop.className = 'singer-songs-modal-backdrop';
+    backdrop.onclick = (ev) => { if (ev.target === backdrop) closeSingerSongsModal(); };
 
+    const modal = document.createElement('div');
+    modal.className = 'singer-songs-modal';
+
+    const head = document.createElement('div');
+    head.className = 'singer-songs-modal-head';
+    const h = document.createElement('h3');
+    h.textContent = singer.name + '’s songs';
+    const close = document.createElement('button');
+    close.className = 'singer-songs-modal-close';
+    close.innerHTML = '&times;';
+    close.title = 'Close';
+    close.onclick = closeSingerSongsModal;
+    head.appendChild(h);
+    head.appendChild(close);
+    modal.appendChild(head);
+
+    const body = document.createElement('div');
+    body.className = 'singer-songs-modal-body';
+    modal.appendChild(body);
+
+    backdrop.appendChild(modal);
+    document.body.appendChild(backdrop);
+
+    openSingerSongsName = singer.name;
+    document.addEventListener('keydown', singerSongsEscHandler);
+    renderSingerSongsModalBody(singer);
+}
+
+// Fill the open modal's body from a singer stat dict. Safe to call repeatedly
+// (on open and on every poll) — it rebuilds the table each time.
+function renderSingerSongsModalBody(singer) {
+    const body = document.querySelector('.singer-songs-modal-body');
+    if (!body) return;
     const entries = singer.entries || [];
+
+    body.innerHTML = '';
+    const summary = document.createElement('div');
+    summary.className = 'singer-songs-modal-summary';
+    const sung = entries.filter(e => (e.status || '').toLowerCase().includes('done')).length;
+    const queued = entries.length - sung
+        - entries.filter(e => (e.status || '').toLowerCase().includes('left')).length;
+    summary.textContent = sung + ' sung · ' + Math.max(0, queued) + ' queued';
+    body.appendChild(summary);
+
     if (entries.length === 0) {
-        panel.innerHTML = '<div class="singer-songs-empty">No songs recorded for this singer.</div>';
-    } else {
-        const table = document.createElement('table');
-        table.className = 'singer-songs-table';
-        const tbody = document.createElement('tbody');
-        for (const entry of entries) {
-            const tr = document.createElement('tr');
-
-            const songCell = document.createElement('td');
-            songCell.className = 'singer-songs-song';
-            songCell.textContent = entry.song_artist || '(no song)';
-            tr.appendChild(songCell);
-
-            const statusCell = document.createElement('td');
-            statusCell.className = 'singer-songs-status';
-            const statusLower = (entry.status || '').toLowerCase();
-            const pillClass = statusLower.includes('done') ? 'status-done'
-                : statusLower.includes('left') ? 'status-left'
-                : statusLower.includes('hold') ? 'status-brb'
-                : statusLower.includes('now') ? 'status-singing'
-                : statusLower.includes('next') ? 'status-next'
-                : 'status-waiting';
-            statusCell.innerHTML = '<span class="singer-songs-status-pill ' + pillClass + '">'
-                + (entry.status || 'Waiting') + '</span>';
-            tr.appendChild(statusCell);
-
-            const timeCell = document.createElement('td');
-            timeCell.className = 'singer-songs-time';
-            if (entry.created_at) {
-                const added = new Date(entry.created_at.replace(' ', 'T'));
-                const mins = Math.round((Date.now() - added.getTime()) / 60000);
-                timeCell.textContent = mins < 60 ? mins + 'm ago' : Math.floor(mins / 60) + 'h ' + (mins % 60) + 'm ago';
-            }
-            tr.appendChild(timeCell);
-
-            tbody.appendChild(tr);
-        }
-        table.appendChild(tbody);
-        panel.appendChild(table);
+        const empty = document.createElement('div');
+        empty.className = 'singer-songs-empty';
+        empty.textContent = 'No songs recorded for this singer.';
+        body.appendChild(empty);
+        return;
     }
 
-    row.parentNode.insertBefore(panel, row.nextSibling);
+    const table = document.createElement('table');
+    table.className = 'singer-songs-table';
+    const tbody = document.createElement('tbody');
+    for (const entry of entries) {
+        const tr = document.createElement('tr');
+
+        const songCell = document.createElement('td');
+        songCell.className = 'singer-songs-song';
+        songCell.textContent = entry.song_artist || '(no song)';
+        tr.appendChild(songCell);
+
+        const statusCell = document.createElement('td');
+        statusCell.className = 'singer-songs-status';
+        const statusLower = (entry.status || '').toLowerCase();
+        const pillClass = statusLower.includes('done') ? 'status-done'
+            : statusLower.includes('left') ? 'status-left'
+            : statusLower.includes('hold') ? 'status-brb'
+            : statusLower.includes('now') ? 'status-singing'
+            : statusLower.includes('next') ? 'status-next'
+            : 'status-waiting';
+        const pill = document.createElement('span');
+        pill.className = 'singer-songs-status-pill ' + pillClass;
+        pill.textContent = entry.status || 'Waiting';
+        statusCell.appendChild(pill);
+        tr.appendChild(statusCell);
+
+        const timeCell = document.createElement('td');
+        timeCell.className = 'singer-songs-time';
+        if (statusLower.includes('done')) {
+            // The actual sung / marked-done time. done_at is the dedicated
+            // timestamp; fall back to updated_at/created_at for entries marked
+            // done before done_at reached this device.
+            const ts = entry.done_at || entry.updated_at || entry.created_at;
+            const ago = relAgoFromTs(ts);
+            if (ago) {
+                timeCell.textContent = 'Sung ' + ago;
+                timeCell.title = 'Sung at ' + clockFromTs(ts);
+            }
+        } else {
+            // Not sung yet — show when it was added to the queue, clearly
+            // labelled so it isn't mistaken for a sung time.
+            const ago = relAgoFromTs(entry.created_at);
+            if (ago) {
+                timeCell.textContent = 'Added ' + ago;
+                timeCell.classList.add('singer-songs-time-queued');
+                timeCell.title = 'Added at ' + clockFromTs(entry.created_at);
+            }
+        }
+        tr.appendChild(timeCell);
+
+        tbody.appendChild(tr);
+    }
+    table.appendChild(tbody);
+    body.appendChild(table);
 }
 function openSplitModal(singer) {
     document.querySelectorAll('.singer-split-modal-backdrop').forEach(d => d.remove());
