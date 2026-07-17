@@ -216,6 +216,11 @@ def test_play_aborts_when_audio_add_fails(player, mocker, tmp_path):
     mp3.write_text("")
     player.enabled = True
     overlay = mocker.Mock()
+    import itertools
+    mocker.patch("mpv_manager.time.sleep")  # don't burn the retry backoff for real
+    # Advance the clock each call so the bounded retry deadline trips quickly
+    # instead of busy-looping for the full real 3s.
+    mocker.patch("mpv_manager.time.time", side_effect=itertools.count().__next__)
 
     def fake_ipc(cmd):
         if cmd and cmd[0] == "audio-add":
@@ -227,6 +232,41 @@ def test_play_aborts_when_audio_add_fails(player, mocker, tmp_path):
     assert player.audio_error is True
     overlay.set_karaoke_playing.assert_any_call(False)
     assert player.current_path is None
+
+
+def test_audio_add_retries_until_file_loaded(player, mocker):
+    # A `loadfile replace` on a still-playing song leaves mpv mid-reinit; the
+    # first few `audio-add` calls come back "error running command" until the
+    # new file settles. The retry must ride that out rather than abort (the
+    # "Try Another" hot-swap bug that killed playback completely).
+    mocker.patch("mpv_manager.time.sleep")  # no real backoff in the test
+    attempts = []
+
+    def fake_ipc(cmd):
+        attempts.append(cmd)
+        # Fail the first two audio-adds, succeed on the third.
+        n = sum(1 for c in attempts if c and c[0] == "audio-add")
+        if cmd and cmd[0] == "audio-add" and n < 3:
+            return {"error": "running command"}
+        return {"error": "success"}
+
+    mocker.patch.object(player, '_send_ipc', side_effect=fake_ipc)
+    resp = player._audio_add("/tmp/song.mp3", "select")
+    assert resp["error"] == "success"
+    assert sum(1 for c in attempts if c and c[0] == "audio-add") == 3
+
+
+def test_audio_add_gives_up_after_timeout(player, mocker):
+    # A genuinely unattachable file must still return the failure (bounded retry),
+    # so play() can abort instead of starting a silent song.
+    mocker.patch("mpv_manager.time.sleep")
+    # Advance the clock deterministically so the deadline is hit after a few tries.
+    mocker.patch("mpv_manager.time.time", side_effect=[0.0, 0.1, 0.2, 0.3, 0.4, 0.5])
+    send = mocker.patch.object(player, '_send_ipc',
+                               return_value={"error": "running command"})
+    resp = player._audio_add("/tmp/missing.mp3", "select", timeout=0.3)
+    assert resp["error"] == "running command"
+    assert send.call_count >= 2  # retried before giving up
 
 
 def test_play_with_audio_file_attaches_external_audio(player, mocker, tmp_path):
