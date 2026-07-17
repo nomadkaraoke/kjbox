@@ -4,7 +4,7 @@ Dated entries, newest first. Each entry notes any required deploy steps.
 
 ---
 
-## 2026-07-17 - Disable all mpv audio processing (pitch + vocals guide) by default (v0.86.0)
+## 2026-07-17 - Disable all mpv audio processing (pitch + vocals guide) by default (v0.87.0)
 
 **Deploy:** backend change (`mpv_manager.py`, `routes.py`, `config.py`) → **requires `systemctl restart kj-controller`** (interrupts playback — deploy between songs). No DB migration. Frontend hides the affected controls automatically on the next status/renderer poll (no cache-bust needed beyond the version bump).
 

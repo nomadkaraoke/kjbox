@@ -181,6 +181,30 @@ class MpvKaraokePlayer:
         resp = self._send_ipc(["set_property", name, value])
         return resp is not None and resp.get("error") == "success"
 
+    def _audio_add(self, audio_file, mode, timeout=3.0):
+        """Attach an external audio track, retrying while the file is still loading.
+
+        A `loadfile ... replace` returns success as soon as the entry is queued,
+        NOT when the new file has been demuxed. When we replace a still-actively-
+        playing song (e.g. the "Try Another" hot-swap), mpv is mid core-reinit and
+        rejects an immediately-following `audio-add` with `error running command`.
+        A fresh play from idle (mpv not decoding anything) settles instantly, so
+        this only bit the swap path. Poll-retry until the load settles and the add
+        takes, bounded by `timeout`. Returns the final IPC reply (or None).
+        """
+        deadline = time.time() + timeout
+        resp = None
+        while True:
+            resp = self._send_ipc(["audio-add", audio_file, mode])
+            if resp is not None and resp.get("error") == "success":
+                return resp
+            # `error running command` == file not loaded yet; anything else
+            # (missing file, bad path) won't fix itself, but a short retry is
+            # cheap and still bounded, so treat all failures the same.
+            if time.time() >= deadline:
+                return resp
+            time.sleep(0.1)
+
     def _mpv_is_running(self):
         return self._get_property("idle-active") is not None
 
@@ -524,7 +548,7 @@ class MpvKaraokePlayer:
             # between mpv 0.37 and 0.38+, whereas `audio-add` is stable across
             # versions and needs no value escaping (path is a discrete IPC arg).
             if audio_file:
-                aresp = self._send_ipc(["audio-add", audio_file, "select"])
+                aresp = self._audio_add(audio_file, "select")
                 if aresp is None or aresp.get("error") != "success":
                     # A CDG .cdg has no audio of its own, so without the mp3 this
                     # would play silent video. Abort rather than start a song the
@@ -550,7 +574,7 @@ class MpvKaraokePlayer:
                 # Gated on _audio_processing so that when audio processing is
                 # disabled the guide is NEVER attached — mpv plays only the raw
                 # selected track (see __init__ / audio_processing_enabled).
-                gresp = self._send_ipc(["audio-add", vocals_file, "auto"])
+                gresp = self._audio_add(vocals_file, "auto")
                 if gresp is not None and gresp.get("error") == "success":
                     self._vocals_file = vocals_file
                     self._apply_vocals_mix()
