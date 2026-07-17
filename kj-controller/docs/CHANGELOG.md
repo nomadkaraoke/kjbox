@@ -4,7 +4,9 @@ Dated entries, newest first. Each entry notes any required deploy steps.
 
 ---
 
-## 2026-07-16 - Auto-text the next singer (v0.84.0)
+## 2026-07-16 - Auto-text the next singer (v0.85.0)
+
+_(Version note: this feature merged (#193) sharing 0.84.0 with the rotation-ticker release (#192, bumped to 0.84.0 by the #194 dedup). Re-versioned to 0.85.0 so each release has a unique `APP_VERSION` and the frontend cache-busts correctly.)_
 
 **Deploy:** backend change (`routes.py`, `sing_store.py`) → **requires `systemctl restart kj-controller`** (interrupts playback — deploy in a maintenance window). Also frontend (`app.js`, `index.html`). No DB migration (reuses the `rotation_meta` key/value table).
 
