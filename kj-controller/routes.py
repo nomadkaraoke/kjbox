@@ -3828,10 +3828,15 @@ def sms_auto_send():
         return jsonify({"sent": False, "skipped": "not_up_next"}), 200
     if playing_entry_id is not None and slot1.get("id") != playing_entry_id:
         return jsonify({"sent": False, "skipped": "slot1_changed"}), 200
+    # "Still playing slot 1" is proven by the CURRENTLY-LOADED file being slot
+    # 1's. current_playing_path is the renderer-agnostic, stable signal (cleared
+    # only when playback actually stops). We deliberately do NOT also gate on the
+    # live 'playing'/'paused' state string: VLC/mpv flicker it transiently to
+    # 'stopped' under IPC contention, which would silently suppress a legitimate
+    # send (the same reason Fade Out gates on current_playing_path, not state).
     vlc = getattr(current_app, "vlc", None)
     cpp = getattr(vlc, "current_playing_path", None) if vlc is not None else None
-    state = vlc.get_karaoke_status().get("state") if vlc is not None else None
-    if not slot1.get("file_path") or cpp != slot1["file_path"] or state != "playing":
+    if not slot1.get("file_path") or cpp != slot1["file_path"]:
         return jsonify({"sent": False, "skipped": "not_playing"}), 200
 
     # Never text the same entry twice — a manual send during the 20s window, or

@@ -407,9 +407,6 @@ async function ackQueueItem(id) {
 // --- Playback ---
 
 let currentPlayingPath = null;
-// Latest player state from the 2s /status poll ('playing' | 'paused' | 'stopped').
-// Read by the auto-text-next-singer timer to confirm the song is still playing.
-let currentPlayerState = 'stopped';
 
 async function playMedia(filePath, entryId) {
     if (!filePath) {
@@ -1597,7 +1594,6 @@ async function updateStatus() {
 
             // Track current playing path for delete protection (#6)
             currentPlayingPath = data.current_playing_path || null;
-            currentPlayerState = state;
 
             totalVideoLength = data.length || 0;
             const seekSlider = document.getElementById('seek-slider');
@@ -6917,10 +6913,12 @@ function armAutoTextNextSinger(playedEntryId, playedPath) {
 
 async function maybeAutoTextNextSinger(playedEntryId, playedPath) {
     // Still-playing guard: the slot-1 song the KJ started must still be the one
-    // loaded and actively playing (not stopped/paused). currentPlayingPath is
-    // cleared by the /status poll the moment playback stops, so an early stop
-    // (no-show singer) makes this fail and we send nothing.
-    if (currentPlayingPath !== playedPath || currentPlayerState !== 'playing') return;
+    // loaded on screen. currentPlayingPath is the stable signal — it's cleared
+    // by the /status poll the moment playback stops, so an early stop (no-show
+    // singer) makes this fail and we send nothing. We deliberately don't also
+    // gate on the live 'playing' state, which flickers transiently to 'stopped'
+    // on VLC/mpv and would suppress a valid send (backend applies the same rule).
+    if (currentPlayingPath !== playedPath) return;
 
     // Resolve the up-next singer at FIRE time (slot 2 = second rotation row),
     // not from the snapshot when the timer was armed — if the KJ reordered, the
