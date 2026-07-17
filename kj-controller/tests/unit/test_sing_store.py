@@ -227,6 +227,15 @@ class TestTokenHelpers:
         store.set_auto_approve(False)
         assert store.is_auto_approve() is False
 
+    def test_auto_sms_next_default_false(self, store):
+        assert store.is_auto_sms_next() is False
+
+    def test_auto_sms_next_round_trip(self, store):
+        store.set_auto_sms_next(True)
+        assert store.is_auto_sms_next() is True
+        store.set_auto_sms_next(False)
+        assert store.is_auto_sms_next() is False
+
     def test_concurrent_writes_from_many_threads(self, tmp_path):
         """Regression: 2026-05-01 outage. SingStore shared one sqlite3
         connection across Flask + background threads; an implicit BEGIN

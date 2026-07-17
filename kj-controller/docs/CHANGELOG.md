@@ -4,6 +4,15 @@ Dated entries, newest first. Each entry notes any required deploy steps.
 
 ---
 
+## 2026-07-16 - Auto-text the next singer (v0.84.0)
+
+**Deploy:** backend change (`routes.py`, `sing_store.py`) → **requires `systemctl restart kj-controller`** (interrupts playback — deploy in a maintenance window). Also frontend (`app.js`, `index.html`). No DB migration (reuses the `rotation_meta` key/value table).
+
+- New opt-in toggle in the **Requests settings** modal: **"Auto-text the next singer"** (default off). Automates the KJ's manual habit of texting the up-next singer once the current song is safely underway.
+- Behaviour: when the KJ presses **play on the top rotation entry (slot 1)**, a 20s timer is armed. If that same song is **still playing** when the timer fires, the "you're up next" SMS is auto-sent to the **slot-2** singer — but only if they have a mobile number on file and haven't already been texted for that entry. If the KJ stops the slot-1 song early (e.g. a no-show singer), nothing is sent, so no misleading text goes out.
+- New route `POST /rotation/sms/auto-send` resolves the up-next singer, renders the default SMS template server-side, and re-validates the slot relationship + active playback server-side (target must be current slot 2, the played entry must still be slot 1 and its file still loaded/on screen) plus every eligibility guard (enabled, has-phone, not-already-sent, not-opted-out) as defence-in-depth. Manual `POST /rotation/sms/send` and the new auto-send now share a `_perform_sms_send` helper.
+- New config field `auto_sms_next` on `GET/POST /rotation/requests/config`.
+
 ## 2026-07-16 - Auto-approve covers everything + "Try Another" version swap (v0.83.0)
 
 **Deploy:** backend change (`sing.py`, `routes.py`) → **requires `systemctl restart kj-controller`** (interrupts playback — deploy between songs). Also frontend (`app.js`, `style.css`, `templates/index.html`) which takes effect on browser refresh.

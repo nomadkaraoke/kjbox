@@ -3656,6 +3656,81 @@ def sms_detail():
     })
 
 
+def _perform_sms_send(entry_id, target, body, user_agent):
+    """Send ``body`` to the resolved ``target``, log the attempt, and return a
+    ``(response_dict, status_code)`` pair.
+
+    Shared by the manual /rotation/sms/send route and the automatic
+    /rotation/sms/auto-send route so both honour opt-outs, log every attempt to
+    sms_log, and surface Telnyx failures identically.
+    """
+    import sms as sms_mod
+
+    sms_cfg = current_app.sms_config
+    sms_store = current_app.sms_store
+
+    # Respect opt-outs recorded from inbound STOP webhooks. Telnyx would reject
+    # the send carrier-side anyway, but blocking here keeps us honest and gives
+    # the KJ a clear reason instead of a cryptic Telnyx error.
+    if sms_store.is_opted_out(target["phone_e164"]):
+        log_row = sms_store.record_send(
+            rotation_entry_id=entry_id,
+            sing_request_id=target["sing_request"]["id"],
+            phone_e164=target["phone_e164"],
+            body=body,
+            status="failed",
+            telnyx_message_id=None,
+            error="recipient opted out (replied STOP)",
+            kj_user_agent=user_agent,
+        )
+        return {
+            "success": False,
+            "error": "Recipient has opted out (replied STOP); not sent.",
+            "sms_log_id": log_row["id"],
+        }, 403
+
+    try:
+        message_id = sms_mod.send(
+            api_key=sms_cfg["api_key"],
+            from_number=sms_cfg["from_number"],
+            to_e164=target["phone_e164"],
+            body=body,
+        )
+    except sms_mod.TelnyxError as exc:
+        log_row = sms_store.record_send(
+            rotation_entry_id=entry_id,
+            sing_request_id=target["sing_request"]["id"],
+            phone_e164=target["phone_e164"],
+            body=body,
+            status="failed",
+            telnyx_message_id=None,
+            error=str(exc),
+            kj_user_agent=user_agent,
+        )
+        return {
+            "success": False,
+            "error": str(exc),
+            "sms_log_id": log_row["id"],
+        }, 502
+
+    log_row = sms_store.record_send(
+        rotation_entry_id=entry_id,
+        sing_request_id=target["sing_request"]["id"],
+        phone_e164=target["phone_e164"],
+        body=body,
+        status="sent",
+        telnyx_message_id=message_id,
+        error=None,
+        kj_user_agent=user_agent,
+    )
+    return {
+        "success": True,
+        "sms_log_id": log_row["id"],
+        "sent_at": log_row["sent_at"],
+        "telnyx_message_id": message_id,
+    }, 200
+
+
 @routes_bp.route('/rotation/sms/send', methods=['POST'])
 def sms_send():
     """Send the SMS body the KJ approved in the preview panel.
@@ -3687,70 +3762,112 @@ def sms_send():
     if err:
         return err
 
-    sms_cfg = current_app.sms_config
-    sms_store = current_app.sms_store
     user_agent = request.headers.get("User-Agent", "")[:500]
+    result, status = _perform_sms_send(entry_id, target, body, user_agent)
+    return jsonify(result), status
 
-    # Respect opt-outs recorded from inbound STOP webhooks. Telnyx would reject
-    # the send carrier-side anyway, but blocking here keeps us honest and gives
-    # the KJ a clear reason instead of a cryptic Telnyx error.
-    if sms_store.is_opted_out(target["phone_e164"]):
-        log_row = sms_store.record_send(
-            rotation_entry_id=entry_id,
-            sing_request_id=target["sing_request"]["id"],
-            phone_e164=target["phone_e164"],
-            body=body,
-            status="failed",
-            telnyx_message_id=None,
-            error="recipient opted out (replied STOP)",
-            kj_user_agent=user_agent,
-        )
-        return jsonify({
-            "success": False,
-            "error": "Recipient has opted out (replied STOP); not sent.",
-            "sms_log_id": log_row["id"],
-        }), 403
 
+@routes_bp.route('/rotation/sms/auto-send', methods=['POST'])
+def sms_auto_send():
+    """Automatically text the up-next singer the default "you're up" SMS.
+
+    Fired by the frontend ~20s after the KJ starts the top-of-rotation song,
+    and only while that song is still playing. Every "don't send a misleading
+    text" guard is re-enforced HERE too — never trusting the client's framing —
+    so a stale or crafted request can never text the wrong person:
+
+      * auto-send must be enabled in the Requests settings,
+      * ``entry_id`` must currently be the up-next singer (rotation slot 2),
+      * ``playing_entry_id`` must currently be slot 1 AND that song must be the
+        one actively playing (guards "the queue shifted / playback stopped"),
+      * the target must have a phone on file (resolved for the current night),
+      * we must not have already texted (or attempted) this entry,
+      * the recipient must not have opted out (handled in _perform_sms_send).
+
+    Eligibility failures return HTTP 200 with ``{"sent": false, "skipped":
+    <reason>}`` — they're expected outcomes of an automatic trigger, not
+    errors. A genuine Telnyx failure still surfaces as 502 so it stays visible.
+    """
+    import sms as sms_mod
+
+    store, err = _require_sing_store()
+    if err:
+        return err
+
+    if not store.is_auto_sms_next():
+        return jsonify({"sent": False, "skipped": "auto_sms_disabled"}), 200
+
+    data = request.get_json(force=True, silent=True) or {}
+    raw_id = data.get('entry_id')
+    if raw_id is None:
+        return jsonify({"error": "entry_id is required"}), 400
     try:
-        message_id = sms_mod.send(
-            api_key=sms_cfg["api_key"],
-            from_number=sms_cfg["from_number"],
-            to_e164=target["phone_e164"],
-            body=body,
-        )
-    except sms_mod.TelnyxError as exc:
-        log_row = sms_store.record_send(
-            rotation_entry_id=entry_id,
-            sing_request_id=target["sing_request"]["id"],
-            phone_e164=target["phone_e164"],
-            body=body,
-            status="failed",
-            telnyx_message_id=None,
-            error=str(exc),
-            kj_user_agent=user_agent,
-        )
-        return jsonify({
-            "success": False,
-            "error": str(exc),
-            "sms_log_id": log_row["id"],
-        }), 502
+        entry_id = int(raw_id)
+    except (TypeError, ValueError):
+        return jsonify({"error": "entry_id must be an integer"}), 400
 
-    log_row = sms_store.record_send(
-        rotation_entry_id=entry_id,
-        sing_request_id=target["sing_request"]["id"],
-        phone_e164=target["phone_e164"],
-        body=body,
-        status="sent",
-        telnyx_message_id=message_id,
-        error=None,
-        kj_user_agent=user_agent,
+    raw_playing = data.get('playing_entry_id')
+    playing_entry_id = None
+    if raw_playing is not None:
+        try:
+            playing_entry_id = int(raw_playing)
+        except (TypeError, ValueError):
+            return jsonify({"error": "playing_entry_id must be an integer"}), 400
+
+    # Server-side re-validation of the slot relationship (rotation entry IDs are
+    # globally unique — file paths are NOT, so a same-file requeue can't fool
+    # this). The target must be the CURRENT up-next singer, and slot 1 must be
+    # the entry the KJ started AND still be the song actively on screen. If the
+    # queue shifted or playback stopped since the timer was armed, skip.
+    rotation = current_app.rotation
+    entries = rotation.get_rotation() if rotation is not None else []
+    if len(entries) < 2:
+        return jsonify({"sent": False, "skipped": "queue_too_short"}), 200
+    slot1, slot2 = entries[0], entries[1]
+    if slot2.get("id") != entry_id:
+        return jsonify({"sent": False, "skipped": "not_up_next"}), 200
+    if playing_entry_id is not None and slot1.get("id") != playing_entry_id:
+        return jsonify({"sent": False, "skipped": "slot1_changed"}), 200
+    # "Still playing slot 1" is proven by the CURRENTLY-LOADED file being slot
+    # 1's. current_playing_path is the renderer-agnostic, stable signal (cleared
+    # only when playback actually stops). We deliberately do NOT also gate on the
+    # live 'playing'/'paused' state string: VLC/mpv flicker it transiently to
+    # 'stopped' under IPC contention, which would silently suppress a legitimate
+    # send (the same reason Fade Out gates on current_playing_path, not state).
+    vlc = getattr(current_app, "vlc", None)
+    cpp = getattr(vlc, "current_playing_path", None) if vlc is not None else None
+    if not slot1.get("file_path") or cpp != slot1["file_path"]:
+        return jsonify({"sent": False, "skipped": "not_playing"}), 200
+
+    # Never text the same entry twice — a manual send during the 20s window, or
+    # a re-armed timer, must not double-notify. Any prior attempt (success OR
+    # failure) blocks the auto-send; the KJ can still resend manually.
+    if current_app.sms_store.get_latest_for_entry(entry_id):
+        return jsonify({"sent": False, "skipped": "already_sent"}), 200
+
+    target, resolve_err = _resolve_sms_target(entry_id)
+    if resolve_err:
+        response, status = resolve_err
+        if status == 503:
+            # SMS not configured — surface it so setup problems stay visible.
+            return response, status
+        # No phone on file / unknown entry — nothing to auto-send.
+        return jsonify({"sent": False, "skipped": "no_target"}), 200
+
+    template = current_app.sing_store.get_sms_template() or sms_mod.DEFAULT_TEMPLATE
+    body = sms_mod.render_template(
+        template,
+        {
+            "first_name": target["first_name"],
+            "song": target["song"],
+            "artist": target["artist"],
+        },
     )
-    return jsonify({
-        "success": True,
-        "sms_log_id": log_row["id"],
-        "sent_at": log_row["sent_at"],
-        "telnyx_message_id": message_id,
-    })
+
+    user_agent = request.headers.get("User-Agent", "")[:500]
+    result, send_status = _perform_sms_send(entry_id, target, body, user_agent)
+    result["sent"] = bool(result.get("success"))
+    return jsonify(result), send_status
 
 
 @routes_bp.route('/rotation/set-paid', methods=['POST'])
@@ -5134,6 +5251,7 @@ def get_sing_config():
         "enabled": store.is_enabled(),
         "auto_approve": store.is_auto_approve(),
         "accept_make_requests": store.is_accepting_make_requests(),
+        "auto_sms_next": store.is_auto_sms_next(),
         "simple_mode": store.is_simple_mode(),
         "public_url": get_event_url(cfg, token, scope="public"),
         "local_url": get_event_url(cfg, token, scope="local"),
@@ -5196,6 +5314,14 @@ def update_sing_config():
     if "accept_make_requests" in data:
         store.set_accepting_make_requests(bool(data["accept_make_requests"]))
         changed["accept_make_requests"] = bool(data["accept_make_requests"])
+
+    if "auto_sms_next" in data:
+        # Require a real JSON boolean — bool("false") is True, so a sloppy
+        # client must not be able to silently switch on automatic texting.
+        if not isinstance(data["auto_sms_next"], bool):
+            return jsonify({"error": "auto_sms_next must be a boolean"}), 400
+        store.set_auto_sms_next(data["auto_sms_next"])
+        changed["auto_sms_next"] = data["auto_sms_next"]
 
     if "simple_mode" in data:
         store.set_simple_mode(bool(data["simple_mode"]))

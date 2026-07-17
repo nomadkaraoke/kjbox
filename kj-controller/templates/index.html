@@ -1293,6 +1293,10 @@
                     <p class="sing-hint">When off, singers won&rsquo;t see the option to ask you to make a custom karaoke track. Pending requests are not affected.</p>
                 </div>
                 <div class="sing-requests-row">
+                    <label><input type="checkbox" id="sing-auto-sms-next-toggle" onchange="toggleSingAutoSmsNext(this.checked)"> <strong>Auto-text the next singer</strong></label>
+                    <p class="sing-hint">After you press play on the top rotation entry, if it&rsquo;s still playing 20 seconds later, automatically send the &ldquo;you&rsquo;re up next&rdquo; SMS to the singer in slot 2 (only if they have a mobile number and haven&rsquo;t been texted yet). Requires SMS to be configured.</p>
+                </div>
+                <div class="sing-requests-row">
                     <div class="sing-url-block">
                         <div><strong>Tunnel URL</strong> (internet):</div>
                         <div class="sing-url-line">

@@ -536,6 +536,190 @@ class TestSend:
 
 
 # ---------------------------------------------------------------------------
+# /rotation/sms/auto-send — automatic "you're up next" text to slot 2
+# ---------------------------------------------------------------------------
+
+SLOT1_PATH = "/karaoke/FBK126-10 - Portishead - Sour Times.zip"
+
+
+def _seed_slot1_playing_and_slot2(app, *, phone="843-259-4507", singer="Celeste",
+                                   song_title="Plump", song_artist="Hole"):
+    """Build the "normal" state the auto-send route validates: a 2-entry
+    rotation with slot 1 actively playing and slot 2 an SMS-linked request.
+
+    Returns ``(slot1_id, slot2_entry_id, slot2_req_id)``. slot 1 is added first
+    so it takes position 1; the linked request lands in position 2.
+    """
+    slot1 = app.rotation.add_entry(
+        "Alanna", "Portishead - Sour Times", file_path=SLOT1_PATH,
+    )
+    req_id, slot2_id = _seed_request_and_link(
+        app, phone=phone, singer=singer, song_title=song_title, song_artist=song_artist,
+    )
+    # Mark slot 1 as the file that's actually on screen and playing.
+    app.vlc.current_playing_path = SLOT1_PATH
+    app.vlc.get_karaoke_status = lambda: {"state": "playing"}
+    return slot1["id"], slot2_id, req_id
+
+
+class TestAutoSend:
+    @patch("sms.requests.post")
+    def test_happy_path_renders_default_template(self, mock_post, sms_client, sms_app):
+        mock_post.return_value = MagicMock(
+            status_code=200, json=lambda: {"data": {"id": "msg_auto"}},
+        )
+        sms_app.sing_store.set_auto_sms_next(True)
+        slot1_id, slot2_id, _ = _seed_slot1_playing_and_slot2(
+            sms_app, singer="Celeste", song_title="Plump", song_artist="Hole",
+        )
+        resp = sms_client.post("/rotation/sms/auto-send", json={
+            "entry_id": slot2_id, "playing_entry_id": slot1_id,
+        })
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["sent"] is True
+        assert data["telnyx_message_id"] == "msg_auto"
+        # Server rendered the default template (no client-supplied body) and
+        # addressed the singer by first name.
+        sent = mock_post.call_args.kwargs["json"]
+        assert sent["to"] == "+18432594507"
+        assert "Celeste" in sent["text"]
+        log = sms_app.sms_store.get_latest_for_entry(slot2_id)
+        assert log["status"] == "sent"
+
+    def test_skips_when_disabled(self, sms_client, sms_app):
+        # auto_sms_next defaults off — the route must not send.
+        slot1_id, slot2_id, _ = _seed_slot1_playing_and_slot2(sms_app)
+        resp = sms_client.post("/rotation/sms/auto-send", json={
+            "entry_id": slot2_id, "playing_entry_id": slot1_id,
+        })
+        assert resp.status_code == 200
+        assert resp.get_json() == {"sent": False, "skipped": "auto_sms_disabled"}
+        assert sms_app.sms_store.get_latest_for_entry(slot2_id) is None
+
+    @patch("sms.requests.post")
+    def test_skips_when_already_sent(self, mock_post, sms_client, sms_app):
+        """A prior send (e.g. the KJ texted manually during the 20s window)
+        blocks the auto-send so the singer is never double-notified."""
+        sms_app.sing_store.set_auto_sms_next(True)
+        slot1_id, slot2_id, req_id = _seed_slot1_playing_and_slot2(sms_app)
+        sms_app.sms_store.record_send(
+            rotation_entry_id=slot2_id, sing_request_id=req_id,
+            phone_e164="+18432594507", body="already went", status="sent",
+            telnyx_message_id="m_prior",
+        )
+        resp = sms_client.post("/rotation/sms/auto-send", json={
+            "entry_id": slot2_id, "playing_entry_id": slot1_id,
+        })
+        assert resp.status_code == 200
+        assert resp.get_json() == {"sent": False, "skipped": "already_sent"}
+        mock_post.assert_not_called()
+
+    def test_skips_when_no_phone(self, sms_client, sms_app):
+        """An up-next entry with no linked request/phone (e.g. a hand-added row)
+        is a no-op, not an error."""
+        sms_app.sing_store.set_auto_sms_next(True)
+        slot1 = sms_app.rotation.add_entry(
+            "Alanna", "Portishead - Sour Times", file_path=SLOT1_PATH,
+        )
+        slot2 = sms_app.rotation.add_entry("Manual Singer", "Artist - Song")
+        sms_app.vlc.current_playing_path = SLOT1_PATH
+        sms_app.vlc.get_karaoke_status = lambda: {"state": "playing"}
+        resp = sms_client.post("/rotation/sms/auto-send", json={
+            "entry_id": slot2["id"], "playing_entry_id": slot1["id"],
+        })
+        assert resp.status_code == 200
+        assert resp.get_json() == {"sent": False, "skipped": "no_target"}
+
+    @patch("sms.requests.post")
+    def test_opted_out_not_sent(self, mock_post, sms_client, sms_app):
+        sms_app.sing_store.set_auto_sms_next(True)
+        slot1_id, slot2_id, _ = _seed_slot1_playing_and_slot2(
+            sms_app, phone="843-259-4507",
+        )
+        sms_app.sms_store.record_opt_out("+18432594507", keyword="STOP")
+        resp = sms_client.post("/rotation/sms/auto-send", json={
+            "entry_id": slot2_id, "playing_entry_id": slot1_id,
+        })
+        assert resp.status_code == 403
+        data = resp.get_json()
+        assert data["sent"] is False
+        mock_post.assert_not_called()
+
+    def test_unconfigured_returns_503(self, unconfigured_app):
+        unconfigured_app.sing_store.set_auto_sms_next(True)
+        slot1_id, slot2_id, _ = _seed_slot1_playing_and_slot2(unconfigured_app)
+        with unconfigured_app.test_client() as c:
+            resp = c.post("/rotation/sms/auto-send", json={
+                "entry_id": slot2_id, "playing_entry_id": slot1_id,
+            })
+            assert resp.status_code == 503
+
+    def test_missing_entry_id_400(self, sms_client, sms_app):
+        sms_app.sing_store.set_auto_sms_next(True)
+        resp = sms_client.post("/rotation/sms/auto-send", json={})
+        assert resp.status_code == 400
+
+    # --- server-side slot / playback validation (defence-in-depth) ---------
+
+    @patch("sms.requests.post")
+    def test_skips_when_target_not_up_next(self, mock_post, sms_client, sms_app):
+        """entry_id must be the CURRENT slot 2. A stale id pointing at a
+        further-down singer is refused, not texted."""
+        sms_app.sing_store.set_auto_sms_next(True)
+        slot1_id, slot2_id, _ = _seed_slot1_playing_and_slot2(sms_app)
+        slot3 = sms_app.rotation.add_entry("Third", "A - B")
+        resp = sms_client.post("/rotation/sms/auto-send", json={
+            "entry_id": slot3["id"], "playing_entry_id": slot1_id,
+        })
+        assert resp.status_code == 200
+        assert resp.get_json() == {"sent": False, "skipped": "not_up_next"}
+        mock_post.assert_not_called()
+
+    @patch("sms.requests.post")
+    def test_skips_when_slot1_changed(self, mock_post, sms_client, sms_app):
+        """If the entry the KJ played is no longer slot 1, skip."""
+        sms_app.sing_store.set_auto_sms_next(True)
+        slot1_id, slot2_id, _ = _seed_slot1_playing_and_slot2(sms_app)
+        resp = sms_client.post("/rotation/sms/auto-send", json={
+            "entry_id": slot2_id, "playing_entry_id": slot1_id + 999,
+        })
+        assert resp.status_code == 200
+        assert resp.get_json() == {"sent": False, "skipped": "slot1_changed"}
+        mock_post.assert_not_called()
+
+    @patch("sms.requests.post")
+    def test_skips_when_not_playing(self, mock_post, sms_client, sms_app):
+        """If nothing is playing (or a different song is), skip — the KJ
+        stopped slot 1 early, so the up-next text would be misleading."""
+        sms_app.sing_store.set_auto_sms_next(True)
+        slot1_id, slot2_id, _ = _seed_slot1_playing_and_slot2(sms_app)
+        # KJ stopped playback: no current file, state stopped.
+        sms_app.vlc.current_playing_path = None
+        sms_app.vlc.get_karaoke_status = lambda: {"state": "stopped"}
+        resp = sms_client.post("/rotation/sms/auto-send", json={
+            "entry_id": slot2_id, "playing_entry_id": slot1_id,
+        })
+        assert resp.status_code == 200
+        assert resp.get_json() == {"sent": False, "skipped": "not_playing"}
+        mock_post.assert_not_called()
+
+    def test_skips_when_queue_too_short(self, sms_client, sms_app):
+        """A single-entry rotation has no slot 2 to text."""
+        sms_app.sing_store.set_auto_sms_next(True)
+        slot1 = sms_app.rotation.add_entry(
+            "Solo", "Portishead - Sour Times", file_path=SLOT1_PATH,
+        )
+        sms_app.vlc.current_playing_path = SLOT1_PATH
+        sms_app.vlc.get_karaoke_status = lambda: {"state": "playing"}
+        resp = sms_client.post("/rotation/sms/auto-send", json={
+            "entry_id": 12345, "playing_entry_id": slot1["id"],
+        })
+        assert resp.status_code == 200
+        assert resp.get_json() == {"sent": False, "skipped": "queue_too_short"}
+
+
+# ---------------------------------------------------------------------------
 # Telnyx inbound webhook — /sing/telnyx/webhook
 # ---------------------------------------------------------------------------
 
