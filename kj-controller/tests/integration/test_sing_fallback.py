@@ -133,6 +133,26 @@ def test_build_candidates_extracts_and_dedups_youtube(flask_app):
     assert urls.count("https://youtu.be/DEAD") == 1    # deduped against current
 
 
+def test_build_candidates_dedups_across_url_forms(flask_app):
+    """The same video in youtu.be vs watch?v= form must not both become candidates."""
+    app = flask_app
+    versions = [
+        # Same video id as the current pick, different URL form → must dedup out.
+        {"source": "kn", "kn": {"youtube_url": "https://youtu.be/DEADvideo11"}},
+        {"source": "kn", "kn": {"youtube_url": "https://www.youtube.com/watch?v=GOODvideo22"}},
+    ]
+    req = {"id": 1, "source_meta": {"versions": versions}}
+
+    cands = routes._build_sing_fallback_candidates(
+        req, "https://www.youtube.com/watch?v=DEADvideo11", None, app.kj_config)
+    urls = [c["url"] for c in cands]
+
+    assert urls[0] == "https://www.youtube.com/watch?v=DEADvideo11"  # current first
+    # The youtu.be form of the same video is deduped away; only the good alt remains.
+    assert not any("DEADvideo11" in u for u in urls[1:])
+    assert "https://www.youtube.com/watch?v=GOODvideo22" in urls
+
+
 def test_preserve_versions_meta_keeps_snapshot():
     """Binding a kj_pick version must not drop the versions snapshot."""
     versions = [{"source": "kn", "kn": {"youtube_url": "https://youtu.be/A"}}]

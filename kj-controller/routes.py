@@ -5071,12 +5071,18 @@ def _build_sing_fallback_candidates(req, current_url, current_meta, cfg):
     versions only; cross-source (local/divebar) fallback is a documented
     follow-up (see the design doc). Always returns at least the current attempt.
     """
+    # Dedup on the canonical video id, not the raw URL: youtu.be/X and
+    # youtube.com/watch?v=X are the same (dead) video and must not each burn a
+    # candidate slot. Fall back to the raw URL when no id is derivable.
+    def _key(url):
+        return youtube_id_from_url(url) or url
+
     candidates = [{
         "url": current_url,
         "source_type": "youtube",
         "source_meta": current_meta,
     }]
-    seen = {current_url}
+    seen = {_key(current_url)}
     meta_raw = req.get("source_meta")
     try:
         meta = meta_raw if isinstance(meta_raw, dict) else json.loads(meta_raw or "{}")
@@ -5088,12 +5094,12 @@ def _build_sing_fallback_candidates(req, current_url, current_meta, cfg):
             src_type, src_ref, src_meta = _pick_version_from_kj_pick(req, idx)
         except ValueError:
             continue  # malformed version snapshot entry — skip it
-        if src_type != "youtube" or not src_ref or src_ref in seen:
+        if src_type != "youtube" or not src_ref or _key(src_ref) in seen:
             continue
         candidates.append({
             "url": src_ref, "source_type": "youtube", "source_meta": src_meta,
         })
-        seen.add(src_ref)
+        seen.add(_key(src_ref))
     return candidates
 
 

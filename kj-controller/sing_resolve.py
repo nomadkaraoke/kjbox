@@ -48,7 +48,6 @@ _UNAVAILABLE_PATTERNS = (
     "join this channel",
     "confirm your age",
     "video does not exist",
-    "does not exist",
 )
 
 # Substrings that mean "try again" — the request never reached a verdict about
