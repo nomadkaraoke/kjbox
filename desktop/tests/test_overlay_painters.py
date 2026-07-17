@@ -115,11 +115,40 @@ def test_ticker_rotation_source_empty_when_offline(tmp_path):
     assert p._text == "Up next: Scan the QR!"
 
 
-def test_ticker_resets_after_scrolling_off():
+def test_ticker_wraps_by_one_unit_seamlessly():
+    # Once a full unit (text + loop separator) has scrolled off the left, the
+    # offset shifts forward by exactly one unit width — never snapping to the
+    # screen edge — so the next cycle stays glued behind the previous one.
     p = op.TickerPainter("k", {"text": "X", "speed": 100, "position": "top"}, True)
-    p._scroll_x = -p._text_w - 5
-    p.tick(0.01)
-    assert p._scroll_x >= 1920 - 1
+    p._scroll_x = -p._unit_w - 3
+    p.tick(0.0)  # no travel; isolate the wrap
+    assert -p._unit_w < p._scroll_x <= 0
+    # It must NOT jump back out to the right edge (that is the old gap behaviour).
+    assert p._scroll_x < 1920
+
+
+def test_ticker_appends_loop_separator_to_scroll_unit():
+    p = op.TickerPainter("k", {"text": "Up next: Alice", "position": "top"}, True)
+    assert p._unit_text == "Up next: Alice" + p._loop_sep
+    assert p._unit_w > p._text_w  # separator adds width
+
+
+def test_ticker_draw_tiles_units_across_full_width():
+    # With a short unit and the offset fully wrapped, more than one copy is drawn
+    # so there is no blank region — verified by counting draw_text calls.
+    p = op.TickerPainter("k", {"text": "Hi", "position": "top"}, True)
+    p._scroll_x = 0.0
+    surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, 1920, 1080)
+    cr = cairo.Context(surface)
+    calls = []
+    orig = op.draw_text
+    op.draw_text = lambda *a, **k: calls.append(a) or orig(*a, **k)
+    try:
+        p.draw(cr)
+    finally:
+        op.draw_text = orig
+    # unit is far narrower than the 1920px screen, so it must tile many times.
+    assert len(calls) > 1
 
 
 # ---- reserved-strip fill ----
