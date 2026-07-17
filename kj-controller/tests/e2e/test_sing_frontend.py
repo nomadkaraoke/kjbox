@@ -395,3 +395,139 @@ class TestChangeReorderControls:
             first_down.click()
         body = req_info.value.post_data or ""
         assert "tok11" in body and "tok12" in body
+
+
+class TestMySongsPersistence:
+    """Boot smart-restore + persistent 'My songs' bar (survives page reload)."""
+
+    _NP = {"now_singing": None, "up_next": None, "queued_count": 0}
+
+    def _seed_ls(self, page, live_server, live_token, store):
+        """Navigate once (to get an origin), seed identity + stored ids."""
+        page.goto(f"{live_server}/sing/?t={live_token}")
+        page.evaluate("localStorage.setItem('sing_name', 'Alice')")
+        page.evaluate("localStorage.setItem('sing_phone', '')")
+        page.evaluate("(s) => localStorage.setItem('sing_my_request_ids', JSON.stringify(s))", store)
+
+    def _route_my_requests(self, page, requests):
+        page.route("**/sing/my-requests*", lambda route: route.fulfill(
+            status=200, content_type="application/json",
+            body=json.dumps({"now_playing": self._NP, "requests": requests})))
+
+    def _pending_song(self, rid=4242, title="Bo Rhap"):
+        return {"request": {"id": rid, "singer_name": "Alice", "song_artist": "Queen",
+                            "song_title": title, "source_type": "local", "status": "pending",
+                            "created_at": "now", "linked_entry_id": None,
+                            "additional_singers": None}}
+
+    def test_reload_restores_to_your_songs(self, page, live_server, live_token):
+        # A returning device with a live song for tonight lands straight on the
+        # "Your songs tonight" list — not the bare "Request a song" screen.
+        self._seed_ls(page, live_server, live_token,
+                      {"token": live_token, "ids": [4242], "tokens": {"4242": "secret-xyz"}})
+        self._route_my_requests(page, [self._pending_song()])
+        page.reload()
+        expect(page.locator(".song-card-title")).to_be_visible()
+        expect(page.locator("text=Bo Rhap")).to_be_visible()
+        # Bar is redundant on the done screen (which IS the list), so it hides.
+        expect(page.locator('[data-testid="mysongs-bar"]')).to_be_hidden()
+
+    def test_bar_visible_off_done_and_reopens_list(self, page, live_server, live_token):
+        self._seed_ls(page, live_server, live_token,
+                      {"token": live_token, "ids": [4242], "tokens": {"4242": "secret-xyz"}})
+        self._route_my_requests(page, [self._pending_song()])
+        page.reload()
+        expect(page.locator(".song-card-title")).to_be_visible()   # restored to done
+        # Leave the done screen — the persistent bar should appear.
+        page.locator('[data-testid="request-another"]').click()
+        bar = page.locator('[data-testid="mysongs-bar"]')
+        expect(bar).to_be_visible()
+        expect(bar).to_contain_text("My song (1)")
+        # Tapping the bar returns to the list.
+        bar.click()
+        expect(page.locator(".song-card-title")).to_be_visible()
+
+    def test_bar_shows_status_at_a_glance(self, page, live_server, live_token):
+        # A queued song with a position surfaces its wait on the bar.
+        self._seed_ls(page, live_server, live_token,
+                      {"token": live_token, "ids": [11], "tokens": {"11": "t11"}})
+        song = {"request": {"id": 11, "singer_name": "Alice", "song_artist": "Q",
+                            "song_title": "One", "source_type": "local", "status": "approved",
+                            "created_at": "now", "linked_entry_id": 101, "additional_singers": None},
+                "estimate": {"position": 4, "range_low_s": 600, "range_high_s": 900,
+                             "now_singing": False}}
+        self._route_my_requests(page, [song])
+        page.reload()
+        expect(page.locator(".song-card-title")).to_be_visible()
+        page.locator('[data-testid="request-another"]').click()
+        expect(page.locator('[data-testid="mysongs-bar"]')).to_contain_text("#4")
+
+    def test_stale_night_prunes_and_stays_on_landing(self, page, live_server, live_token):
+        # localStorage still holds last night's ids, but the server night-scopes
+        # them out (empty). The singer stays on landing and the dead ids are
+        # pruned so the bar never shows a phantom count.
+        self._seed_ls(page, live_server, live_token,
+                      {"token": live_token, "ids": [9999], "tokens": {"9999": "old"}})
+        self._route_my_requests(page, [])
+        with page.expect_request("**/sing/my-requests*") as req_info:
+            page.reload()
+        # The boot probe must actually carry the stored id (contract check).
+        assert "ids=9999" in req_info.value.url
+        expect(page.locator("h1:has-text('Request a song')")).to_be_visible()   # landing
+        expect(page.locator(".song-card-title")).to_have_count(0)
+        expect(page.locator('[data-testid="mysongs-bar"]')).to_be_hidden()
+        # Stored ids were pruned to empty.
+        remaining = page.evaluate(
+            "() => JSON.parse(localStorage.getItem('sing_my_request_ids')).ids")
+        assert remaining == []
+
+    def test_cancelled_only_stays_on_landing(self, page, live_server, live_token):
+        # A device whose only song was cancelled isn't yanked off landing (the
+        # bar filters cancelled out too), even though the id still resolves.
+        self._seed_ls(page, live_server, live_token,
+                      {"token": live_token, "ids": [7], "tokens": {"7": "t7"}})
+        cancelled = {"request": {"id": 7, "singer_name": "Alice", "song_artist": "Q",
+                                "song_title": "Gone", "source_type": "local",
+                                "status": "cancelled", "created_at": "now",
+                                "linked_entry_id": None, "additional_singers": None}}
+        self._route_my_requests(page, [cancelled])
+        with page.expect_request("**/sing/my-requests*"):
+            page.reload()
+        expect(page.locator("h1:has-text('Request a song')")).to_be_visible()
+        expect(page.locator('[data-testid="mysongs-bar"]')).to_be_hidden()
+
+    def test_prune_preserves_ids_added_mid_flight(self, page, live_server, live_token):
+        # A song submitted while a /my-requests fetch was in flight (its id added
+        # to the store after the query snapshot) must NOT be pruned when the
+        # response — which never knew about it — comes back. Prune drops only
+        # ids that were queried AND not returned.
+        self._seed_ls(page, live_server, live_token,
+                      {"token": live_token, "ids": [111, 222], "tokens": {"111": "t1", "222": "t2"}})
+        result = page.evaluate(
+            """(t) => {
+                // Queried only [111]; server returned [111]. Id 222 was added
+                // mid-flight and was NOT in the queried snapshot.
+                window.__sing_pruneRequestIds(t, [111], [111]);
+                return window.__sing_readMyRequestIds(t);
+            }""", live_token)
+        assert 222 in result and 111 in result
+
+    def test_prune_drops_queried_but_unreturned(self, page, live_server, live_token):
+        # The prior-night case: an id we asked about that the server night-scoped
+        # out is dropped.
+        self._seed_ls(page, live_server, live_token,
+                      {"token": live_token, "ids": [111, 999], "tokens": {"111": "t1", "999": "old"}})
+        result = page.evaluate(
+            """(t) => {
+                window.__sing_pruneRequestIds(t, [111, 999], [111]);
+                return window.__sing_readMyRequestIds(t);
+            }""", live_token)
+        assert result == [111]
+
+    def test_no_bar_and_no_restore_without_songs(self, page, live_server, live_token):
+        # A fresh device (no stored ids) sees the normal landing, no bar.
+        page.goto(f"{live_server}/sing/?t={live_token}")
+        page.evaluate("localStorage.setItem('sing_name', 'Alice')")
+        page.reload()
+        expect(page.locator("text=Request a song")).to_be_visible()
+        expect(page.locator('[data-testid="mysongs-bar"]')).to_be_hidden()

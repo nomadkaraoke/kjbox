@@ -467,6 +467,47 @@ input:focus {
 .np-singer { font-weight: 500; color: var(--nk-text); }
 .np-song { color: var(--nk-text-dim); }
 
+/* --- Persistent "My songs" bar --------------------------------------------- */
+/* Always-visible shortcut back to the singer's own songs (survives reload).
+   Sticky under the offline banner so it's reachable from any screen. */
+.mysongs-bar {
+  position: sticky;
+  top: 0;
+  z-index: 9;
+  max-width: 480px;
+  margin: 0.75rem auto 0;
+  padding: 0 1rem;
+}
+.offline-banner:not([hidden]) + .mysongs-bar { top: 2.4rem; }
+.mysongs-pill {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.7rem 0.9rem;
+  border-radius: 10px;
+  border: 1px solid var(--nk-accent);
+  background: linear-gradient(135deg, rgba(255,77,207,0.16), rgba(111,0,255,0.14));
+  color: var(--nk-text);
+  font-size: 0.95rem;
+  font-family: inherit;
+  cursor: pointer;
+  text-align: left;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+}
+.mysongs-pill:active { transform: scale(0.99); }
+.mysongs-icon { font-size: 1.1rem; }
+.mysongs-label { font-weight: 600; white-space: nowrap; }
+.mysongs-status {
+  color: var(--nk-accent-hover);
+  font-weight: 500;
+  margin-left: auto;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.mysongs-chevron { color: var(--nk-text-dim); font-size: 1.2rem; line-height: 1; }
+
 /* --- Offline banner --------------------------------------------------------- */
 .offline-banner {
   position: sticky;
