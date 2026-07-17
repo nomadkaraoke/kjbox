@@ -202,3 +202,59 @@ class TestPlayWithZip:
             data=json.dumps({"file_path": "/tmp/not-allowed/song.mp4"}),
             content_type='application/json')
         assert response.status_code == 400
+
+
+class TestPlaybackAlternates:
+    """GET /playback/alternates — the "Try Another" version picker. Returns
+    other LOCAL versions of the currently-playing song, current file excluded."""
+
+    def _seed_two_versions(self, flask_app):
+        # Two local files for the same song, discovered via the media index scan
+        # (no external catalog needed — catalog stays unbuilt / unavailable).
+        flask_app.media.index = {
+            "/media/livin-a.mp4": {
+                "filename": "Livin On A Prayer - Bon Jovi [A].mp4",
+                "display_name": "Livin On A Prayer - Bon Jovi", "duration": 200},
+            "/media/livin-b.cdg": {
+                "filename": "Livin On A Prayer - Bon Jovi [B].cdg",
+                "display_name": "Livin On A Prayer - Bon Jovi", "duration": 200},
+        }
+        entry = flask_app.rotation.add_entry(
+            "Alice", "Livin On A Prayer - Bon Jovi", file_path="/media/livin-a.mp4")
+        return entry
+
+    def test_lists_other_versions_excluding_current(self, flask_test_client, flask_app):
+        entry = self._seed_two_versions(flask_app)
+        flask_app.vlc.current_playing_path = "/media/livin-a.mp4"
+
+        resp = flask_test_client.get('/playback/alternates')
+        assert resp.status_code == 200
+        d = resp.get_json()
+        assert d["playing"] is True
+        assert d["entry_id"] == entry["id"]
+        assert d["current_path"] == "/media/livin-a.mp4"
+        paths = [a["path"] for a in d["alternates"]]
+        assert "/media/livin-b.cdg" in paths        # the other version surfaced
+        assert "/media/livin-a.mp4" not in paths     # current version filtered out
+
+    def test_nothing_playing_returns_empty(self, flask_test_client, flask_app):
+        flask_app.vlc.current_playing_path = None
+        resp = flask_test_client.get('/playback/alternates')
+        assert resp.status_code == 200
+        d = resp.get_json()
+        assert d["playing"] is False
+        assert d["alternates"] == []
+
+    def test_resolves_current_entry_by_now_singing_status(self, flask_test_client, flask_app):
+        # When the player path doesn't match any entry's file_path (e.g. a ZIP
+        # was unpacked to a temp file), fall back to the "Now Singing" entry.
+        self._seed_two_versions(flask_app)
+        entry = flask_app.rotation.add_entry(
+            "Bob", "Livin On A Prayer - Bon Jovi", file_path="/media/livin-b.cdg")
+        flask_app.rotation.update_status(entry["id"], "Now Singing")
+        flask_app.vlc.current_playing_path = "/tmp/unpacked/livin.cdg"
+
+        resp = flask_test_client.get('/playback/alternates')
+        d = resp.get_json()
+        assert d["playing"] is True
+        assert d["entry_id"] == entry["id"]

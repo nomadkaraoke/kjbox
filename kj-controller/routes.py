@@ -4182,7 +4182,7 @@ def _suppress_mastered_kn_tracks(local_results, kn_results):
         kn_results[:] = kept_songs
 
 
-def unified_search(query, app, *, grouped=False):
+def unified_search(query, app, *, grouped=False, local_only=False):
     """Unified search helper: local catalog + Karaoke Nerds + Divebar cross-reference.
 
     Shared by /rotation/search (KJ-side) and /sing/search (singer-side) so
@@ -4193,6 +4193,11 @@ def unified_search(query, app, *, grouped=False):
     ``{"songs": [...group dicts...], "karaoke_nerds_timeout": bool}`` — see
     ``_group_search_results``. The admin-side flow keeps ``grouped=False`` so
     existing callers aren't disrupted.
+
+    When ``local_only=True`` the slow Karaoke Nerds scrape and Divebar mirror
+    lookup are skipped entirely and only the local library (catalog + scanned
+    media) is returned, annotated + rankable. This powers the live "Try
+    Another" swap where the KJ needs instant results, not an 8s web scrape.
     """
     cfg = app.kj_config
     local_results = []
@@ -4254,6 +4259,19 @@ def unified_search(query, app, *, grouped=False):
                 "format": os.path.splitext(fname)[1].lstrip('.'),
                 "duration": entry.get("duration"),
             })
+
+    if local_only:
+        # Live "Try Another" fast path — annotate + rank the local library only,
+        # mirroring the flat search shape so the picker sorts best-first without
+        # paying for the Karaoke Nerds scrape or Divebar mirror lookup.
+        version_priority.annotate_versions(
+            local_results, cfg, shape="rotation_search_local")
+        return {
+            "local": local_results,
+            "karaoke_nerds": [],
+            "divebar": [],
+            "karaoke_nerds_timeout": False,
+        }
 
     kn_results = []
     kn_timeout = False
@@ -4369,6 +4387,65 @@ def rotation_search():
     if result["karaoke_nerds_timeout"]:
         response["karaoke_nerds_timeout"] = True
     return jsonify(response)
+
+
+@routes_bp.route('/playback/alternates', methods=['GET'])
+def playback_alternates():
+    """Alternate LOCAL versions of the song currently playing.
+
+    Backs the Playback Controls "Try Another" button: when a singer says the
+    version that just started is a bad one, the KJ needs to swap to a different
+    local version *instantly*. This searches the local library only (no slow
+    Karaoke Nerds scrape) for the currently-playing song and returns the other
+    versions we hold, best-first. The current file is filtered out.
+
+    The current rotation entry is resolved from the player's file path, falling
+    back to the entry marked "Now Singing".
+    """
+    vlc = current_app.vlc
+    rotation = getattr(current_app, 'rotation', None)
+    cpp = getattr(vlc, 'current_playing_path', None)
+    if not cpp or rotation is None:
+        return jsonify({"playing": False, "alternates": []})
+
+    entries = rotation.get_rotation()
+
+    def _now_singing(e):
+        return (e.get("status") or "").lower() == "now singing"
+
+    # Resolve the entry the KJ is asking about. Prefer the entry that is BOTH
+    # playing this file AND marked Now Singing (disambiguates the rare case where
+    # two singers queued the identical file); then any entry with this file; then
+    # whatever is Now Singing (covers a temp/unpacked path that matches no row).
+    current = (
+        next((e for e in entries
+              if e.get("file_path") == cpp and _now_singing(e)), None)
+        or next((e for e in entries if e.get("file_path") == cpp), None)
+        or next((e for e in entries if _now_singing(e)), None)
+    )
+    if current is None:
+        return jsonify({"playing": False, "alternates": []})
+
+    query = (current.get("song_artist") or "").strip()
+    entry_id = current.get("id")
+    if len(query) < 3:
+        # Too short to search meaningfully (catalog FTS needs 3+ chars).
+        return jsonify({
+            "playing": True, "entry_id": entry_id, "song": query,
+            "current_path": cpp, "alternates": [],
+        })
+
+    result = unified_search(
+        query, current_app._get_current_object(), local_only=True)
+    alternates = [r for r in result["local"] if r.get("path") != cpp]
+    alternates.sort(key=lambda v: v.get("priority_rank", 9999))
+    return jsonify({
+        "playing": True,
+        "entry_id": entry_id,
+        "song": query,
+        "current_path": cpp,
+        "alternates": alternates,
+    })
 
 
 @routes_bp.route('/rotation/download-and-link', methods=['POST'])
@@ -4747,6 +4824,90 @@ def _pick_version_from_kj_pick(req, index):
     raise ValueError(f"unknown version source: {src!r}")
 
 
+def _ranked_version_indices(versions, cfg):
+    """Return version indices ordered best-first by priority_rank.
+
+    Mirrors the admin picker's ranking (static/app.js): annotate every version
+    with priority_rank, then order by lowest rank. Re-annotating here (rather
+    than trusting the stored order) keeps auto-pick consistent with the admin
+    UI even for legacy snapshots written before priority_rank existed. Ties
+    keep their original (search-time) order via Python's stable sort.
+    """
+    if not versions:
+        return []
+    try:
+        version_priority.annotate_versions(versions, cfg, shape="kj_pick")
+    except Exception:  # pragma: no cover - defensive; fall back to stored order
+        pass
+
+    def rank_of(i):
+        r = versions[i].get("priority_rank")
+        return r if isinstance(r, (int, float)) else 9999
+
+    return sorted(range(len(versions)), key=rank_of)
+
+
+def resolve_kj_pick_best(app, req, cfg):
+    """Auto-bind a ``kj_pick`` request to a playable version.
+
+    Walks the snapshot best-first (same order the admin picker marks ⭐ BEST)
+    and binds the FIRST version that resolves to a concrete source_type/ref,
+    rewriting the request row via ``update_request_source``. Even a snapshot
+    with no "good" (branded) versions still auto-binds — a guest KJ should
+    never be stuck approving; any playable option beats a pending request.
+    Raises ``ValueError`` only when NOTHING in the snapshot can be resolved.
+    """
+    store = app.sing_store
+    meta_raw = req.get("source_meta")
+    try:
+        meta = meta_raw if isinstance(meta_raw, dict) else json.loads(meta_raw or "{}")
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"source_meta is not valid JSON: {exc}") from exc
+    versions = meta.get("versions") or []
+    ranked = _ranked_version_indices(versions, cfg)
+    if not ranked:
+        raise ValueError("kj_pick snapshot has no versions to auto-pick")
+    last_err = None
+    for idx in ranked:
+        try:
+            src_type, src_ref, src_meta = _pick_version_from_kj_pick(req, idx)
+        except ValueError as exc:
+            last_err = exc   # malformed version — try the next-best one
+            continue
+        return store.update_request_source(req["id"], src_type, src_ref, src_meta)
+    raise ValueError(f"no resolvable version in kj_pick snapshot: {last_err}")
+
+
+def apply_reorder_request(app, req):
+    """Apply a pending ``reorder`` meta-request to the rotation.
+
+    Moves the singer's own entries into their requested order within the slots
+    they currently occupy. Shared by the admin approval route and the public
+    auto-approve path. Raises on failure so callers decide whether to keep the
+    request pending.
+    """
+    rotation = app.rotation
+    meta = req.get("source_meta")
+    if isinstance(meta, str):
+        try:
+            meta = json.loads(meta)
+        except (TypeError, ValueError):
+            meta = {}
+    ordered = (meta or {}).get("ordered_entry_ids") or []
+    # Target slots = the current positions of these entries, ascending.
+    target_positions = sorted(
+        e["position"]
+        for e in (rotation.store.get_entry(eid) for eid in ordered)
+        if e is not None
+    )
+    # Fill ascending target slots in the requested order.
+    for eid in ordered:
+        if not target_positions:
+            break
+        if rotation.store.get_entry(eid) is not None:
+            rotation.move_entry(eid, target_positions.pop(0))
+
+
 def approve_sing_request(app, req, skip_download=False):
     """Dispatch approval of a sing request; create/link a rotation entry.
 
@@ -5098,27 +5259,8 @@ def approve_sing_request_route(req_id):
     # Reorder request: not a song — apply the singer's requested order to their
     # own entries within the slots they currently occupy, then mark approved.
     if req["source_type"] == "reorder":
-        rotation = current_app.rotation
-        meta = req.get("source_meta")
-        if isinstance(meta, str):
-            try:
-                meta = json.loads(meta)
-            except (TypeError, ValueError):
-                meta = {}
-        ordered = (meta or {}).get("ordered_entry_ids") or []
         try:
-            # Target slots = the current positions of these entries, ascending.
-            target_positions = sorted(
-                e["position"]
-                for e in (rotation.store.get_entry(eid) for eid in ordered)
-                if e is not None
-            )
-            # Fill ascending target slots in the requested order.
-            for eid in ordered:
-                if not target_positions:
-                    break
-                if rotation.store.get_entry(eid) is not None:
-                    rotation.move_entry(eid, target_positions.pop(0))
+            apply_reorder_request(current_app._get_current_object(), req)
             store.mark_approved(req_id, linked_entry_id=None)
         except Exception as exc:
             return jsonify({"error": str(exc)}), 500

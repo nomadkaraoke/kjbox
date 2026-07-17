@@ -739,12 +739,31 @@ class TestReorder:
     def test_reorder_creates_pending_reorder_request(self, client, sing_app, token):
         a = self._approved(client, sing_app, token, "A")
         b = self._approved(client, sing_app, token, "B")
+        # With auto-approve off, a reorder lands in the KJ's review queue.
+        sing_app.sing_store.set_auto_approve(False)
         resp = client.post(f"/sing/requests/reorder?t={token}", json={"items": [
             {"id": b["id"], "edit_token": b["edit_token"]},
             {"id": a["id"], "edit_token": a["edit_token"]}]})
         assert resp.status_code == 200
         rr = resp.get_json()["request"]
         assert rr["source_type"] == "reorder" and rr["status"] == "pending"
+        assert resp.get_json()["auto_approved"] is False
+
+    def test_reorder_auto_approve_applies_order(self, client, sing_app, token):
+        # auto_approve stays on from _approved — the reorder should apply
+        # immediately without a trip through the KJ's review queue.
+        a = self._approved(client, sing_app, token, "A")
+        b = self._approved(client, sing_app, token, "B")
+        resp = client.post(f"/sing/requests/reorder?t={token}", json={"items": [
+            {"id": b["id"], "edit_token": b["edit_token"]},
+            {"id": a["id"], "edit_token": a["edit_token"]}]})
+        assert resp.status_code == 200
+        body = resp.get_json()
+        assert body["auto_approved"] is True
+        assert body["request"]["status"] == "approved"
+        # B now precedes A in the rotation (they swapped their two slots).
+        order = [e["song_artist"] for e in sing_app.rotation.get_rotation()]
+        assert order.index("B - Q") < order.index("A - Q")
 
     def test_reorder_rejects_unowned_item(self, client, sing_app, token):
         a = self._approved(client, sing_app, token, "A")

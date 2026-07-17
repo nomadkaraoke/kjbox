@@ -4,6 +4,15 @@ Dated entries, newest first. Each entry notes any required deploy steps.
 
 ---
 
+## 2026-07-16 - Auto-approve covers everything + "Try Another" version swap (v0.83.0)
+
+**Deploy:** backend change (`sing.py`, `routes.py`) → **requires `systemctl restart kj-controller`** (interrupts playback — deploy between songs). Also frontend (`app.js`, `style.css`, `templates/index.html`) which takes effect on browser refresh.
+
+- **Auto-approve now actually approves everything a guest KJ would want.** Previously it silently skipped multi-version (`kj_pick`) requests and never touched reorders, so an away-KJ still had to hand-approve most of the queue.
+  - **Multi-version requests:** auto-approve now binds the request to a playable version automatically — walking the candidate snapshot best-first (the same order the admin picker marks ⭐ BEST) and taking the first that resolves. Even a song with no "good"/branded version still auto-binds to *something* playable; it only stays pending if literally nothing in the snapshot resolves.
+  - **Reorders:** a singer's self-service reorder now applies immediately under auto-approve (it only shuffles that singer's own songs within slots they already hold, so there's nothing to vet).
+- **New "Try Another" button** in Playback Controls (next to Pause/Restart/Stop). When a singer says the version that just started is a bad one, the KJ taps it to swap to a different **local** version of the same song instantly. Alternates come from a fast local-only search (`GET /playback/alternates`, new `local_only` path on `unified_search` — no ~8s Karaoke Nerds scrape); picking one relinks the rotation entry (playability-gated) then hot-swaps playback (mpv `loadfile replace`). Online-only versions still go through the 🔗 Link button.
+
 ## 2026-07-16 - Singer UI: your songs survive a refresh (v0.82.0)
 
 **Deploy:** frontend-only (`static-sing/sing.js`, `static-sing/sing.css`, `templates/sing.html`) → auto-deploy pulls on the next browser refresh; **no service restart** and no playback interruption.
