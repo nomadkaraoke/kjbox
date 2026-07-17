@@ -39,6 +39,13 @@ def test_load_config_includes_vnc_defaults(tmp_path):
     assert 'tls_key' in config
 
 
+def test_config_audio_processing_default(tmp_path):
+    """mpv audio processing (pitch + vocals guide mix) is OFF by default so the
+    device plays only the raw selected audio track."""
+    config = load_config(config_file=str(tmp_path / 'nonexistent.json'))
+    assert config['audio_processing_enabled'] is False
+
+
 def test_load_config_merges_user_config(tmp_path):
     config_file = tmp_path / 'config.json'
     config_file.write_text(json.dumps({"flask_port": 9999, "custom_key": "value"}))

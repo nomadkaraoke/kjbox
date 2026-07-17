@@ -67,6 +67,13 @@ def load_config(config_file=None):
         "vocals_sync_source": "gs://nomadkaraoke-divebar-files/files/Nomad Karaoke/vocals-padded/",
         "vocals_sync_dest": "",
         "vocals_sync_delete_removed": False,
+        # Master switch for ALL mpv audio processing: rubberband pitch shift AND
+        # the original-vocals guide mix. Default False = mpv plays ONLY the raw
+        # selected audio track (launched without the rubberband filter, guide never
+        # attached, no lavfi-complex), and both UIs (pitch controls, Original Vocals
+        # slider) hide. Set True to re-enable both. Disabled for now while the
+        # guide mix is being reworked (wrong-track + out-of-sync playback issues).
+        "audio_processing_enabled": False,
         "websockify_port": 6080,
         "vnc_target": "localhost:5900",
         "websockify_enabled": True,

@@ -62,6 +62,10 @@ def mock_config(tmp_media_dir):
         "sing_estimate_transition_s": 30,
         "sing_estimate_default_song_s": 240,
         "sing_estimate_min_spread_s": 120,
+        # Feature tests exercise pitch shift + the original-vocals guide mix, so
+        # enable audio processing here (production default is False — see
+        # test_config_audio_processing_default). Disabled-path tests override it.
+        "audio_processing_enabled": True,
     }
 
 

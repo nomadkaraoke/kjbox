@@ -75,6 +75,17 @@ class MpvKaraokePlayer:
         self._vocals_file = None      # resolved guide path for the current song
         self._vocals_volume = 0       # vlc scale 0-256 (0 = off); guide gain = /256
         self._lavfi_active = False    # is a lavfi-complex mix currently set in mpv
+        # Master switch for ALL mpv audio processing (rubberband pitch shift AND
+        # the original-vocals guide mix). When False (the default) mpv is launched
+        # WITHOUT the rubberband filter and the guide is never attached, so the
+        # ONLY thing that plays is the raw selected audio track — no mixing or
+        # pitch is even possible. Both features share this flag because they both
+        # manipulate the mpv audio graph; re-enable by setting
+        # `audio_processing_enabled: true` in config.json. supports_pitch (read by
+        # describe_renderer → frontend) tracks the flag so the pitch UI hides when
+        # off; the vocals slider hides via has_vocals_track (see routes).
+        self._audio_processing = bool(config.get('audio_processing_enabled', False))
+        self.supports_pitch = self._audio_processing
         # CDG+MP3: mpv's `duration` is the .cdg GRAPHICS stream, which can end
         # before the attached .mp3 audio, making time-pos overshoot the reported
         # total. Remember the external audio path and its probed length so
@@ -269,13 +280,18 @@ class MpvKaraokePlayer:
             int(self.config.get('screen_height', 1080) or 1080),
         )
 
+        # The rubberband filter is only added when audio processing is enabled.
+        # With it absent, mpv's audio graph is a straight passthrough of the
+        # selected track — no pitch shift or guide mix is possible at all.
+        af_args = ['--af=@rb:rubberband'] if self._audio_processing else []
+
         if self.audio_backend == 'pipewire':
             log_message("Launching mpv karaoke with PulseAudio/PipeWire audio...", self.config)
             command = [
                 'mpv', '--idle',
                 *video_args,
                 '--ao=pulse',
-                '--af=@rb:rubberband',
+                *af_args,
                 f'--input-ipc-server={self.ipc_socket_path}',
                 '--really-quiet',
                 '--keep-open=no',
@@ -292,7 +308,7 @@ class MpvKaraokePlayer:
                 *video_args,
                 '--ao=alsa',
                 f'--audio-device=alsa/{self.audio_device}',
-                '--af=@rb:rubberband',
+                *af_args,
                 f'--input-ipc-server={self.ipc_socket_path}',
                 '--really-quiet',
                 '--keep-open=no',
@@ -459,7 +475,12 @@ class MpvKaraokePlayer:
     # ── Pitch control ──────────────────────────────────────────────────
 
     def set_pitch(self, semitones):
-        """Set pitch in semitones. Real-time; no interruption during playback."""
+        """Set pitch in semitones. Real-time; no interruption during playback.
+
+        No-op when audio processing is disabled: the rubberband filter isn't in
+        mpv's graph, so there is nothing to command and pitch stays at 0."""
+        if not self._audio_processing:
+            return
         semitones = max(PITCH_MIN, min(PITCH_MAX, int(semitones)))
         self._pitch_semitones = semitones
         if self.active:
@@ -468,6 +489,8 @@ class MpvKaraokePlayer:
 
     def _apply_pitch(self):
         """Re-apply current pitch_semitones to the rubberband filter."""
+        if not self._audio_processing:
+            return
         pitch_scale = 2 ** (self._pitch_semitones / 12)
         self._send_ipc(["af-command", "rb", "set-pitch", str(pitch_scale)])
 
@@ -541,13 +564,16 @@ class MpvKaraokePlayer:
                 # Attach succeeded — safe to record the audio path and probe its
                 # real length so get_status prefers it over mpv's graphics duration.
                 self._begin_audio_probe(audio_file)
-            elif vocals_file and os.path.exists(vocals_file):
+            elif self._audio_processing and vocals_file and os.path.exists(vocals_file):
                 # Original-vocals guide (NOMAD masters): attach the isolated-vocals
                 # track WITHOUT selecting it (the video's own audio stays aid1, the
                 # guide becomes aid2), then mix them via lavfi-complex. The @rb
                 # rubberband in --af pitches the combined [ao] output, so pitch
                 # control is unchanged. Best-effort: a failed attach falls back to
                 # normal playback (guide simply absent), never aborts the song.
+                # Gated on _audio_processing so that when audio processing is
+                # disabled the guide is NEVER attached — mpv plays only the raw
+                # selected track (see __init__ / audio_processing_enabled).
                 gresp = self._audio_add(vocals_file, "auto")
                 if gresp is not None and gresp.get("error") == "success":
                     self._vocals_file = vocals_file
@@ -643,7 +669,12 @@ class MpvKaraokePlayer:
     def set_vocals_volume(self, vlc_level):
         """Set the original-vocals guide level (vlc scale 0-256; 0 = off).
         Rebuilds the lavfi-complex mix live when a guide is active; otherwise
-        just remembers the level for the next guide song."""
+        just remembers the level for the next guide song.
+
+        No-op when audio processing is disabled — no guide is ever attached, so
+        the level stays 0 and no filter graph is built."""
+        if not self._audio_processing:
+            return
         self._vocals_volume = max(0, min(256, int(vlc_level)))
         if self.active and self._vocals_file:
             self._apply_vocals_mix()
@@ -678,7 +709,7 @@ class MpvKaraokePlayer:
         0..1 from _vocals_volume/256. Rubberband is NOT in the graph — the
         global @rb filter in --af pitches the mixed [ao] output, so pitch stays
         shared and its control path is unchanged."""
-        if not self._vocals_file:
+        if not self._audio_processing or not self._vocals_file:
             return
         instrumental_aid, guide_aid = self._resolve_mix_track_ids()
         if instrumental_aid is None or guide_aid is None:
