@@ -365,6 +365,12 @@ class TestChangeReorderPanel:
               return (await r.json()).request;
             }
             const a = await submit('AA'); const b = await submit('BB'); const c = await submit('CC');
+            // Auto-approve now applies reorders immediately, so turn it OFF to
+            // leave the reorder (and change) in the KJ's pending queue — which
+            // is what this panel renders.
+            await fetch('/rotation/requests/config', {method:'POST',
+              headers:{'Content-Type':'application/json'},
+              body: JSON.stringify({auto_approve: false})});
             await fetch('/sing/requests/reorder?t=' + t, {method:'POST',
               headers:{'Content-Type':'application/json'},
               body: JSON.stringify({items:[{id:b.id, edit_token:b.edit_token},

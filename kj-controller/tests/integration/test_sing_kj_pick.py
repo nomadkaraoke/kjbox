@@ -9,8 +9,9 @@ lock down:
     versions into ``source_meta``.
   * ``/sing/submit`` rejects kj_pick bodies that are missing the required
     song_artist / song_title (we still need a display label in the admin UI).
-  * Auto-approve is skipped for kj_pick — binding a version must go through
-    the KJ, otherwise the rotation entry would have no file attached.
+  * Auto-approve binds a kj_pick to its highest-priority version (the same one
+    the admin picker marks ⭐ BEST) so the rotation entry gets a real file
+    instead of being deferred to the KJ.
 """
 
 import json
@@ -111,6 +112,73 @@ class TestSubmitKjPick:
         body = _kj_pick_body(source_meta={"versions": []})
         resp = client.post(f"/sing/submit?t={token}", json=body)
         assert resp.status_code == 400
+
+
+class TestKjPickAutoApprove:
+    """With auto-approve on, a kj_pick binds to its best version automatically."""
+
+    def _snapshot(self):
+        # A real candidate snapshot (source/local/kn shape). The local version
+        # sits at index 1 on purpose: auto-pick must RANK (local beats a bare
+        # YouTube link) rather than blindly grabbing index 0.
+        return {
+            "versions": [
+                {"source": "kn", "kn": {"youtube_url": "https://yt/only"}},
+                {"source": "local", "local": {
+                    "path": "/media/queen-bo-rhap.mp4",
+                    "artist": "Queen", "title": "Bohemian Rhapsody"}},
+            ]
+        }
+
+    def test_auto_approve_binds_best_version_and_queues_entry(
+        self, client, sing_app, token
+    ):
+        sing_app.sing_store.set_auto_approve(True)
+        body = _kj_pick_body(source_meta=self._snapshot())
+        resp = client.post(f"/sing/submit?t={token}", json=body)
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["auto_approved"] is True
+        assert data["request"]["status"] == "approved"
+        # The local version (index 1) won the ranking, so the row was rewritten
+        # to a concrete local source pointing at that file — no download, no
+        # deferral to the KJ.
+        stored = sing_app.sing_store.get_request(data["request"]["id"])
+        assert stored["source_type"] == "local"
+        assert stored["source_ref"] == "/media/queen-bo-rhap.mp4"
+        entries = sing_app.rotation.get_rotation()
+        assert any(e["singer"] == "Andrew" for e in entries)
+
+    def test_auto_approve_falls_through_malformed_best_version(
+        self, client, sing_app, token
+    ):
+        # A guest KJ must never be stuck approving: when the best-ranked version
+        # can't be resolved (here a local entry with no path), auto-pick walks
+        # to the next playable option rather than leaving the request pending.
+        sing_app.sing_store.set_auto_approve(True)
+        snapshot = {"versions": [
+            {"source": "local", "local": {}},                       # best rank, but no path
+            {"source": "local", "local": {"path": "/media/fallback.mp4"}},
+        ]}
+        resp = client.post(
+            f"/sing/submit?t={token}", json=_kj_pick_body(source_meta=snapshot))
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["auto_approved"] is True
+        stored = sing_app.sing_store.get_request(data["request"]["id"])
+        assert stored["source_type"] == "local"
+        assert stored["source_ref"] == "/media/fallback.mp4"
+
+    def test_pending_when_auto_approve_off(self, client, sing_app, token):
+        # Default (auto-approve off) still defers to the KJ's review queue.
+        body = _kj_pick_body(source_meta=self._snapshot())
+        resp = client.post(f"/sing/submit?t={token}", json=body)
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["auto_approved"] is False
+        assert data["request"]["status"] == "pending"
+        assert sing_app.sing_store.get_request(
+            data["request"]["id"])["source_type"] == "kj_pick"
 
     def test_rejects_too_many_versions(self, client, token):
         versions = [{"kind": "local", "path": f"/v{i}.mp4"} for i in range(51)]

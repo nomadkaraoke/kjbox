@@ -530,6 +530,145 @@ async function controlPlayback(action) {
     await apiCall('/control', { action });
 }
 
+// --- Try Another (swap to a different local version mid-song) --------------
+// When a singer says the version that just started is a bad one, the KJ opens
+// this picker to swap in a different LOCAL version of the same song instantly.
+// Alternates come from a fast local-only search (no Karaoke Nerds scrape).
+
+function _tryAnotherEsc(e) { if (e.key === 'Escape') _closeTryAnother(); }
+
+function _closeTryAnother() {
+    document.removeEventListener('keydown', _tryAnotherEsc);
+    document.querySelectorAll('.try-another-modal').forEach(m => m.remove());
+}
+
+async function tryAnother() {
+    _closeTryAnother();
+    const modal = document.createElement('div');
+    modal.className = 'modal-backdrop try-another-modal';
+    modal.onclick = (e) => { if (e.target === modal) _closeTryAnother(); };
+    modal.innerHTML = '<div class="modal-content"><div class="ta-loading">'
+        + 'Finding other versions…</div></div>';
+    document.body.appendChild(modal);
+    document.addEventListener('keydown', _tryAnotherEsc);
+
+    let d;
+    try {
+        const resp = await fetch('/playback/alternates');
+        d = await resp.json();
+        if (!resp.ok) throw new Error(d && d.error ? d.error : 'HTTP ' + resp.status);
+    } catch (err) {
+        const c = modal.querySelector('.modal-content');
+        if (c) { c.innerHTML = '<div class="ta-error"></div>';
+                 c.querySelector('.ta-error').textContent =
+                     'Could not load other versions: ' + err.message; }
+        return;
+    }
+    // Guard against a close/re-open racing the fetch.
+    if (!document.body.contains(modal)) return;
+    modal.querySelector('.modal-content').replaceWith(_renderTryAnother(d));
+}
+
+function _renderTryAnother(d) {
+    const content = document.createElement('div');
+    content.className = 'modal-content';
+
+    const header = document.createElement('div');
+    header.className = 'modal-header';
+    const h3 = document.createElement('h3');
+    h3.textContent = d.song ? ('Try another: ' + d.song) : 'Try another version';
+    const close = document.createElement('button');
+    close.className = 'modal-close';
+    close.innerHTML = '&times;';
+    close.onclick = _closeTryAnother;
+    header.appendChild(h3);
+    header.appendChild(close);
+    content.appendChild(header);
+
+    if (!d.playing) {
+        const p = document.createElement('p');
+        p.className = 'ta-empty';
+        p.textContent = 'Nothing is playing right now.';
+        content.appendChild(p);
+        return content;
+    }
+
+    const alts = d.alternates || [];
+    if (!alts.length) {
+        const p = document.createElement('p');
+        p.className = 'ta-empty';
+        p.textContent = 'No other local versions of this song were found. Use the '
+            + '🔗 Link button on the rotation entry to search online versions.';
+        content.appendChild(p);
+        return content;
+    }
+
+    const hint = document.createElement('p');
+    hint.className = 'ta-hint';
+    hint.textContent = 'Tap a version to swap it in instantly — best match first.';
+    content.appendChild(hint);
+
+    const list = document.createElement('div');
+    list.className = 'ta-list';
+    alts.forEach((v, i) => list.appendChild(_renderTaRow(v, d.entry_id, i === 0)));
+    content.appendChild(list);
+    return content;
+}
+
+function _renderTaRow(v, entryId, isBest) {
+    const row = document.createElement('div');
+    row.className = 'ta-row';
+    const title = (v.title || '').trim();
+    const artist = (v.artist || '').trim();
+    const basename = (v.filename || v.path || '').split('/').pop();
+    const label = (title && artist) ? `${title} — ${artist}`
+        : (title || artist || basename);
+
+    const info = document.createElement('div');
+    info.className = 'ta-row-info';
+    const nameEl = document.createElement('div');
+    nameEl.className = 'ta-row-name';
+    nameEl.textContent = label;
+    if (isBest) {
+        const star = document.createElement('span');
+        star.className = 'ta-best';
+        star.textContent = '⭐ ';
+        nameEl.prepend(star);
+    }
+    const meta = document.createElement('div');
+    meta.className = 'ta-row-meta';
+    meta.textContent = [(v.format || '').toUpperCase(), basename]
+        .filter(Boolean).join(' · ');
+    info.appendChild(nameEl);
+    info.appendChild(meta);
+
+    const btn = document.createElement('button');
+    btn.className = 'btn-primary ta-play';
+    btn.textContent = 'Play this →';
+    btn.onclick = () => swapToVersion(entryId, v.path, btn);
+
+    row.appendChild(info);
+    row.appendChild(btn);
+    return row;
+}
+
+async function swapToVersion(entryId, filePath, btn) {
+    if (!filePath) return;
+    if (btn) { btn.disabled = true; btn.textContent = 'Swapping…'; }
+    // Relink the rotation entry FIRST (runs the playability gate + makes Restart
+    // reuse the new version), then hot-swap live playback. If the gate rejects
+    // the file, apiCall surfaces a toast and returns null — keep the current
+    // song playing rather than swap to something broken.
+    const linked = await apiCall('/rotation/link', { id: entryId, file_path: filePath });
+    if (!linked) {
+        if (btn) { btn.disabled = false; btn.textContent = 'Play this →'; }
+        return;
+    }
+    log(`Swapping to another version: ${filePath.split('/').pop()}`, 'success');
+    await playMedia(filePath, entryId);
+    _closeTryAnother();
+}
+
 // --- Pitch Control ---
 
 let _currentPitch = 0;
@@ -1421,6 +1560,8 @@ function updatePlaybackButtons(state) {
     const songLoaded = !!currentPlayingPath;
     btnRestart.disabled = !songLoaded;
     btnStop.disabled = !songLoaded;
+    const btnTryAnother = document.getElementById('btn-try-another');
+    if (btnTryAnother) btnTryAnother.disabled = !songLoaded;
     const fadeEnabled = songLoaded && !_fadingOut;
     fadeBtns.forEach(b => { b.disabled = !fadeEnabled; });
 }

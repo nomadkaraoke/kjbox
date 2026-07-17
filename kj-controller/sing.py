@@ -591,15 +591,23 @@ def submit():
     )
 
     auto_approved = False
-    # Auto-approve skips kj_pick — the whole point is to defer version binding
-    # to the KJ, so bypassing review would leave the rotation entry without a
-    # file attached.
-    if store.is_auto_approve() and source_type != "kj_pick":
+    # Auto-approve also handles kj_pick: rather than deferring to the KJ, bind
+    # the request to its highest-priority version (the same one the admin picker
+    # marks ⭐ BEST) so a rotation entry with a real file is created. Any failure
+    # to resolve a version keeps the request pending for manual review.
+    if store.is_auto_approve():
         try:
-            from routes import approve_sing_request
+            from routes import approve_sing_request, resolve_kj_pick_best
 
-            entry_id = approve_sing_request(current_app._get_current_object(), req)
-            store.mark_approved(req["id"], linked_entry_id=entry_id)
+            to_approve = req
+            if source_type == "kj_pick":
+                to_approve = resolve_kj_pick_best(
+                    current_app._get_current_object(), req, cfg
+                )
+            entry_id = approve_sing_request(
+                current_app._get_current_object(), to_approve
+            )
+            store.mark_approved(to_approve["id"], linked_entry_id=entry_id)
             req = store.get_request(req["id"])
             auto_approved = True
         except Exception:
@@ -1049,7 +1057,27 @@ def reorder_requests():
         source_meta={"ordered_entry_ids": ordered_entry_ids},
         token=token,
     )
-    return jsonify({"success": True, "request": _public_request_view(rr)})
+
+    # Auto-approve applies the singer's reorder immediately — it only shuffles
+    # their OWN entries within slots they already hold, so there's nothing for
+    # the KJ to vet. Any failure keeps the reorder pending for manual review.
+    auto_approved = False
+    if store.is_auto_approve():
+        try:
+            from routes import apply_reorder_request
+
+            apply_reorder_request(current_app._get_current_object(), rr)
+            store.mark_approved(rr["id"], linked_entry_id=None)
+            rr = store.get_request(rr["id"])
+            auto_approved = True
+        except Exception:
+            current_app.logger.exception("Auto-approve reorder failed; keeping pending")
+
+    return jsonify({
+        "success": True,
+        "request": _public_request_view(rr),
+        "auto_approved": auto_approved,
+    })
 
 
 # --- Response shaping ----------------------------------------------------

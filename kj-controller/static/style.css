@@ -809,6 +809,38 @@ body {
 #noteCancelBtn { background: rgba(255, 255, 255, 0.06); color: #ccc; border-color: #3a3a3a; }
 #noteCancelBtn:hover { background: rgba(255, 255, 255, 0.12); color: #fff; box-shadow: none; }
 
+/* --- Try Another modal --- reuses .modal-backdrop / .modal-content / .modal-header.
+   A live picker of alternate LOCAL versions of the currently-playing song. */
+.try-another-modal .ta-loading,
+.try-another-modal .ta-error,
+.try-another-modal .ta-empty {
+    padding: 0.75rem 0.25rem; color: #bbb; font-size: 0.9em; line-height: 1.5;
+}
+.try-another-modal .ta-error { color: #ff9c9c; }
+.try-another-modal .ta-hint {
+    margin: 0 0 0.6rem; color: #888; font-size: 0.8em;
+}
+.try-another-modal .ta-list { display: flex; flex-direction: column; gap: 6px; }
+.try-another-modal .ta-row {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    background: #101010; border: 1px solid #2a2a2a; border-radius: 8px;
+    padding: 8px 10px;
+}
+.try-another-modal .ta-row-info { min-width: 0; }
+.try-another-modal .ta-row-name {
+    color: #eee; font-size: 0.9em; font-weight: 500;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.try-another-modal .ta-best { color: #ffd75e; }
+.try-another-modal .ta-row-meta {
+    color: #777; font-size: 0.75em; margin-top: 2px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.try-another-modal .ta-play {
+    flex: 0 0 auto; padding: 7px 12px; font-size: 0.85em; border-radius: 6px;
+    white-space: nowrap;
+}
+
 /* --- VNC Preview --- */
 
 /* .vnc-size-buttons uses the shared `.header-actions` framework; the class is
