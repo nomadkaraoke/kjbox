@@ -520,6 +520,9 @@ def test_download_video_success(mock_config, tmp_media_dir, mocker):
     assert file_path in mi.index
     assert mi.index[file_path]["youtube_id"] == "abc12345678"
     assert mi.index[file_path]["duration"] == 180
+    # A successful download must clear any prior failure reason so the fallback
+    # worker never mistakes a stale error for the current attempt's outcome.
+    assert mi._last_error is None
 
 
 def test_download_video_extract_error(mock_config, tmp_media_dir, mocker):
@@ -539,6 +542,27 @@ def test_download_video_extract_error(mock_config, tmp_media_dir, mocker):
     file_path, title = mi.download_video("https://youtube.com/watch?v=bad")
     assert file_path is None
     assert title is None
+
+
+def test_download_video_records_last_error_for_fallback(mock_config, tmp_media_dir, mocker):
+    """On extract failure, _last_error carries the reason the fallback worker classifies."""
+    mi = MediaIndex(mock_config)
+
+    mock_ydl_instance = mocker.MagicMock()
+    mock_ydl_instance.extract_info.side_effect = Exception(
+        "Private video. Sign in if you've been granted access to this video."
+    )
+    mock_ydl_class = mocker.MagicMock()
+    mock_ydl_class.return_value.__enter__ = mocker.MagicMock(return_value=mock_ydl_instance)
+    mock_ydl_class.return_value.__exit__ = mocker.MagicMock(return_value=False)
+
+    mock_yt_dlp = mocker.MagicMock()
+    mock_yt_dlp.YoutubeDL = mock_ydl_class
+    mocker.patch.dict('sys.modules', {'yt_dlp': mock_yt_dlp})
+
+    file_path, _ = mi.download_video("https://youtube.com/watch?v=bad")
+    assert file_path is None
+    assert "Private video" in (mi._last_error or "")
 
 
 def test_download_video_file_not_found(mock_config, tmp_media_dir, mocker):

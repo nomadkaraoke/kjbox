@@ -205,6 +205,26 @@ ssh nomadpc "curl -s -X POST http://127.0.0.1:5001/fix_audio -H 'Content-Type: a
 Track A auto-recovery (v0.68.0+) auto-restarts the engine and shows the KJ an amber banner if a
 file still crashes it, so a crash is a ~2s blip rather than a dead show.
 
+## Singer Submission Shows "Unavailable" or Auto-Swapped Version
+
+A singer submitted a song through the `/sing` UI and it either quietly played a **different
+version** than expected, or shows a **red ❌ download-failed** with the singer told "we couldn't
+find a playable version."
+
+- **This is expected auto-fallback behaviour (2026-07-09+).** The version the singer/KJ picked was
+  an unavailable YouTube video (private, deleted, region-blocked). Rather than dead-ending, the
+  download worker automatically tries the next-best candidate version of the same song and rebinds
+  the request to whichever one downloads.
+- **Auto-swap (no action needed):** the entry ends up linked to a working version and `/my-requests`
+  shows it. If the swapped version is a poor match, use the rotation 🔗 link / "Try Another" button
+  to pick a different one manually — same as before.
+- **Terminal ❌ (KJ action):** every candidate was unavailable (or there were no alternates — e.g. a
+  single-version song, or a raw pasted URL). Link a working file manually via the rotation entry.
+- **Everything shows unavailable / nothing downloads:** that's a different problem — check YouTube
+  health (cookies, yt-dlp version) and whether the `bgutil` PO-token helper at `127.0.0.1:4416` is
+  reachable. Persistent transient errors (timeouts/429) exhaust the bounded retries and then surface
+  as terminal ❌. `journalctl -u kj-controller` shows `Sing fallback:` lines tracing each decision.
+
 ## Docker Containers Not Running
 
 ```bash

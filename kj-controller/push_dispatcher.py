@@ -70,6 +70,9 @@ _PAYLOADS = {
     "up_in_2":     ("You're up in 2! 🎤",    "{song} — head back to the venue."),
     "up_next":     ("You're up NEXT 🎤",     "{song} — stand by the mic."),
     "now_singing": ("🎤 You're singing now",  "{song} — you're up!"),
+    # Auto-fallback outcomes for singer submissions.
+    "resolved_alt":  ("You're all set 🎶",     "We queued an alternate version of {song}."),
+    "unavailable":   ("The KJ needs a word",   "We couldn't find a playable video for {song} — your KJ has been notified."),
 }
 
 
@@ -151,7 +154,9 @@ class PushDispatcher:
         subs = self.store.find_subs_by_phone(token, phone)
         if not subs:
             return
-        step = "approved" if decision == "approved" else "rejected"
+        # approve/reject plus the auto-fallback outcomes carry their own copy;
+        # anything unrecognised falls back to the neutral "rejected" template.
+        step = decision if decision in _PAYLOADS else "rejected"
         song = f"{request_dict.get('song_title') or ''} — {request_dict.get('song_artist') or ''}".strip(" —")
         fake_entry = {"id": request_id, "song_artist": song or None}
         payload = render_payload(step, fake_entry, request_id=request_id)

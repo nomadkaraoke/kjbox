@@ -90,6 +90,7 @@ KJ Controller is a web-based karaoke show management application. A Flask backen
 | `sing_store.py` | ~260 | `SingStore` class: SQLite CRUD for `sing_requests` + `sing_push_subscriptions` + event-token helpers (regenerate / enable / auto-approve) on `rotation_meta` |
 | `routes.py` | ~1000 | Flask Blueprint with all route handlers (includes `/rotation/requests/*` admin endpoints for the public request form). Hosts the playability gates: tier-1 inline `_playability_gate` (link/upload/download hard-block) + tier-2 async render verification (`_enqueue_tier2` → single-worker queue → `_run_tier2_check` against the active renderer, stamps `playability_warning`) |
 | `wait_estimate.py` | ~80 | Pure function `compute_estimate(entries, target_id, cfg)` producing `{position, expected_s, range_low_s, range_high_s, spread_source, close_to_front, now_singing}`. Uses tonight's sung-entry variance for the range; falls back to a configurable minimum spread. |
+| `sing_resolve.py` | ~120 | Pure decision logic for singer-submission download fallback: `classify_error` (unavailable → advance to next candidate vs transient → retry same) and `next_candidate_index` (bounded by `MAX_CANDIDATES`). No yt-dlp/network/Flask deps → exhaustively unit-tested. |
 
 ### Dependency Flow
 
@@ -420,6 +421,15 @@ Additional `static-sing/` assets added in sub-project #4:
 - Offline events (no internet): singer's page surfaces an honest banner via `navigator.onLine` + consecutive-poll-failure detection. Push itself can't work without internet (FCM/APNS round-trip); the held-tab polling flow remains the fallback.
 - iOS Safari requires Add-to-Home-Screen (installed PWA) before push works. The confirmation page detects iOS non-standalone and renders an instructional card explaining the install flow.
 - Housekeeping: on event-token regeneration, `cleanup_stale_push_subscriptions` deletes subs on other tokens older than 7 days. Keeps the table bounded.
+
+### Singer submission download fallback
+
+When an approved singer submission's YouTube download fails, the download worker auto-heals instead of surfacing a dead ❌ the KJ must fix by hand (motivated by the 2026-07-09 live incident where a picked "Say My Name" version was a *private video*).
+
+- **The download attempt is the probe.** `media.download_video` swallows yt-dlp errors and returns `(None, None)`, so it now records the reason on `media._last_error`. On failure the single-threaded `_download_worker` reads it and calls `sing_resolve.classify_error`.
+- **Advance vs retry.** `unavailable` (private/removed/blocked) → advance to the next ranked candidate version; `transient` (timeout/429/`bgutil`/network, and any *unknown* error) → retry the same candidate up to `MAX_TRANSIENT_RETRIES`, then advance. Bounded by `MAX_CANDIDATES` (3). Because the worker is sequential, retries re-queue (back of line) rather than sleep-blocking.
+- **Candidate list.** `approve_sing_request` attaches a ranked YouTube candidate list to the queue item, built from the `versions[]` snapshot via the existing `_pick_version_from_kj_pick` translator + `_ranked_version_indices`. Since binding a `kj_pick` version rewrites `source_meta`, `_preserve_versions_meta` re-attaches the snapshot at both binding sites so the list survives. v1 falls back across YouTube-type candidates only (cross-source local/Divebar is a documented follow-up).
+- **Outcome.** On a successful fallback the request source is rebound (`update_request_source`) so `/my-requests` reflects the version that landed, and the singer gets a `resolved_alt` push. When every candidate is exhausted the entry surfaces the normal terminal ❌ for the KJ plus an `unavailable` push. Non-sing downloads (KJ manual, Divebar) are untouched.
 
 ## VNC Screen Preview
 

@@ -146,6 +146,10 @@ class MediaIndex:
         self.index = {}
         self.media_library = media_library
         self.gen_client = None  # attribute-injected by app.py after gen_client built
+        # Last download_video failure reason, for the sing-request fallback path
+        # (download_video swallows yt-dlp errors and returns None; the single
+        # download worker reads this to classify unavailable-vs-transient).
+        self._last_error = None
 
     def _finalize_download_identity(self, tmp_path, *, source, source_ref,
                                     artist_hint, title_hint, channel,
@@ -571,6 +575,8 @@ class MediaIndex:
         """Downloads a YouTube video with descriptive filename, updates media index."""
         import yt_dlp
 
+        self._last_error = None  # reset; set on each failure path for the fallback worker
+
         download_folder = self.config.get('download_folder', os.path.expanduser("~/kjdata/videos"))
         os.makedirs(download_folder, exist_ok=True)
 
@@ -587,6 +593,7 @@ class MediaIndex:
                 upload_date = info.get('upload_date')
         except Exception as e:
             log_message(f"Error extracting video info: {e}", self.config)
+            self._last_error = str(e)
             return None, None
 
         # Phase 2: Build descriptive filename and download
@@ -618,6 +625,7 @@ class MediaIndex:
 
             if not file_path:
                 log_message(f"ERROR: Downloaded file not found for {basename}", self.config)
+                self._last_error = "downloaded file not found"
                 return None, None
 
             gate = _gate_playable(file_path, self.config)
@@ -630,6 +638,7 @@ class MediaIndex:
                 qpath = _quarantine_download(file_path, reason, self.config)
                 if qpath:
                     log_message(f"Quarantined to {qpath}", self.config)
+                self._last_error = f"not playable: {reason}"
                 return None, None
 
             # Canonicalise identity: move into downloads/youtube/ with an
@@ -679,6 +688,7 @@ class MediaIndex:
             return real_dest, title
         except Exception as e:
             log_message(f"Error downloading video: {e}", self.config)
+            self._last_error = str(e)
             return None, None
 
     def _run_ytdlp_download(self, ydl_opts, url):
