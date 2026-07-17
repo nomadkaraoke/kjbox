@@ -4,6 +4,14 @@ Dated entries, newest first. Each entry notes any required deploy steps.
 
 ---
 
+## 2026-07-16 - CDG progress readout no longer overshoots its total (v0.85.1)
+
+**Deploy:** backend change (`mpv_manager.py`) → **requires `systemctl restart kj-controller`** (interrupts playback — deploy between songs). No DB or frontend change.
+
+- Fixed the playback readout showing elapsed time *past* the total for CDG+MP3 songs (e.g. "3:53 / 3:21" on Portishead — Sour Times). For a CDG zip, mpv plays the `.cdg` graphics as the main file and attaches the `.mp3` as an external audio track. mpv's `duration` reflects the **graphics** stream, which often ends before the audio (a lyric-free outro), so `time-pos` (which follows the audio clock) overshot the reported total. The song always played correctly to the end — this was purely a display artifact.
+- `get_status` now reports the **audio** length for CDG songs: on play, the attached `.mp3`'s duration is probed off the hot path (ffprobe via `probe_media_info`, in a daemon thread) and cached, then preferred over mpv's graphics `duration` when longer. Normal single-file playback is unchanged (no external audio → mpv's `duration` is used as before). Falls back to mpv's value if the probe fails or hasn't resolved yet.
+- Hardened against edge cases: audio state is committed only after the track attaches, a `_song_gen` generation counter + `_audio_state_lock` reject a stale probe from a prior song, state is cleared on every termination path (stop/shutdown/EOF), and rehydrated + re-probed on reconnect after a controller restart mid-song.
+
 ## 2026-07-16 - Auto-text the next singer (v0.85.0)
 
 _(Version note: this feature merged (#193) sharing 0.84.0 with the rotation-ticker release (#192, bumped to 0.84.0 by the #194 dedup). Re-versioned to 0.85.0 so each release has a unique `APP_VERSION` and the frontend cache-busts correctly.)_
@@ -31,7 +39,6 @@ _(Version note: this feature merged (#193) sharing 0.84.0 with the rotation-tick
 - A singer who refreshes their phone no longer loses sight of their submitted songs. The request ids + edit tokens were already persisted in `localStorage`; the app just never restored to them on reload. Now, on boot, if the device has songs for tonight, the singer lands straight on their **"Your songs tonight"** list (with the existing cancel / change / reorder controls).
 - Added an always-visible **"🎤 My songs (N)" bar** on every other screen (landing, search, confirm) showing status at a glance (🎤 You're up! / 🎤 You're next / `#4 · ~10–15 min` / Waiting for KJ…). One tap opens the list. Hidden on the done screen (which is the list) and when the device owns no songs.
 - **Stale-night pruning:** the event token is reused across nights and `localStorage` isn't cleared, so `/my-requests` night-scopes old ids out server-side; the client now prunes any id the server no longer returns so the count never shows phantom songs from a previous night. A fresh night cleanly shows the normal landing screen.
-
 ## 2026-07-09 - Singer self-service: change song + reorder your own (v0.79.0)
 
 **Deploy:** backend change (`sing.py`, `sing_store.py`, `routes.py`) → **requires `systemctl restart kj-controller`** (interrupts playback — maintenance window). Also frontend (`sing.js`, `app.js`, CSS). Additive DB migration (`sing_requests.supersedes_request_id`) — safe on existing DBs. Builds on the v0.78.0 `edit_token` ownership.

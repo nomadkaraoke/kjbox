@@ -22,6 +22,7 @@ import time
 from config import APP_DIR, is_pi
 from filler import FillerVLC
 from karaoke_player import fade_steps
+from mediainfo import probe_media_info
 from utils import log_message
 
 STATE_FILE = '/tmp/kj-mpv-state.json'
@@ -74,6 +75,17 @@ class MpvKaraokePlayer:
         self._vocals_file = None      # resolved guide path for the current song
         self._vocals_volume = 0       # vlc scale 0-256 (0 = off); guide gain = /256
         self._lavfi_active = False    # is a lavfi-complex mix currently set in mpv
+        # CDG+MP3: mpv's `duration` is the .cdg GRAPHICS stream, which can end
+        # before the attached .mp3 audio, making time-pos overshoot the reported
+        # total. Remember the external audio path and its probed length so
+        # get_status can report the (longer) audible duration instead. The probe
+        # runs on a daemon thread; `_song_gen` (bumped on every playback
+        # transition, under `_audio_state_lock`) lets a late probe from a prior
+        # song detect it is stale and skip writing.
+        self._audio_file = None       # external .mp3 attached for a CDG zip
+        self._audio_duration = None   # probed audio length in seconds
+        self._song_gen = 0            # monotonic playback-transition counter
+        self._audio_state_lock = threading.Lock()
         self.ipc_socket_path = MPV_SOCKET_PATH
         self._ipc_lock = threading.Lock()
         self._ipc_request_id = 0
@@ -190,7 +202,13 @@ class MpvKaraokePlayer:
     # ── State persistence ──────────────────────────────────────────────
 
     def _save_state(self):
-        state = {'current_playing_path': self.current_path}
+        state = {
+            'current_playing_path': self.current_path,
+            # Persisted so try_reconnect() can rehydrate the CDG audio-length
+            # cache after a controller restart mid-song (else status would fall
+            # back to mpv's shorter graphics duration and overshoot again).
+            'audio_file': self._audio_file,
+        }
         try:
             with open(STATE_FILE, 'w') as f:
                 json.dump(state, f)
@@ -317,6 +335,14 @@ class MpvKaraokePlayer:
             # guide song ends the next song's play() would skip clearing the
             # stale [aid2] graph and fail to load.
             self._lavfi_active = bool(self._get_property("lavfi-complex"))
+            # Rehydrate the CDG audio-length cache. The surviving mpv keeps
+            # playing the .cdg graphics + external .mp3, but this fresh object
+            # lost the audio path, so get_status would fall back to the shorter
+            # graphics `duration` and overshoot. Re-probe in the background if a
+            # CDG audio track was active at save time.
+            saved_audio = saved.get('audio_file')
+            if saved_audio:
+                self._begin_audio_probe(saved_audio)
             log_message("Reconnected to existing mpv karaoke (playing).", self.config)
             return True
         log_message(
@@ -354,6 +380,35 @@ class MpvKaraokePlayer:
             pass
         self.process = None
 
+    def _reset_audio_length_state(self):
+        """Clear the CDG audio-length cache and advance the song generation.
+
+        Called on every playback transition (new song, natural end, stop,
+        shutdown). Advancing `_song_gen` lets a late-arriving probe from a prior
+        song see its captured generation no longer matches and skip writing.
+        """
+        with self._audio_state_lock:
+            self._audio_file = None
+            self._audio_duration = None
+            self._song_gen += 1
+
+    def _begin_audio_probe(self, audio_file):
+        """Record an attached CDG .mp3 and probe its true length off the hot path.
+
+        Advances the song generation, commits `_audio_file` (so get_status
+        prefers the audio length over mpv's graphics `duration`), and spawns the
+        background probe under the captured generation. Best-effort — a slow or
+        failed probe just leaves the cache unset and get_status falls back.
+        """
+        with self._audio_state_lock:
+            self._audio_file = audio_file
+            self._audio_duration = None
+            self._song_gen += 1
+            gen = self._song_gen
+        threading.Thread(
+            target=self._probe_audio_duration_async, args=(audio_file, gen),
+            daemon=True).start()
+
     def shutdown(self):
         """Terminate mpv. Used during renderer swap."""
         self._monitor_stop.set()
@@ -371,6 +426,7 @@ class MpvKaraokePlayer:
         self.active = False
         self.current_path = None
         self._pitch_semitones = 0
+        self._reset_audio_length_state()
         try:
             os.unlink(self.ipc_socket_path)
         except FileNotFoundError:
@@ -410,6 +466,10 @@ class MpvKaraokePlayer:
             self._pitch_semitones = 0  # reset for each new song
             self._vocals_volume = 0    # guide starts OFF each song; KJ raises it live
             self._vocals_file = None
+            # Clear any prior song's CDG audio-length cache up front. `_audio_file`
+            # is only committed AFTER the external track actually attaches (below),
+            # so an aborted loadfile/audio-add never leaves stale audio state.
+            self._reset_audio_length_state()
 
             if display_path is not None:
                 self.current_path = display_path
@@ -454,6 +514,9 @@ class MpvKaraokePlayer:
                         overlay_manager.set_karaoke_playing(False)
                     self.current_path = None
                     return
+                # Attach succeeded — safe to record the audio path and probe its
+                # real length so get_status prefers it over mpv's graphics duration.
+                self._begin_audio_probe(audio_file)
             elif vocals_file and os.path.exists(vocals_file):
                 # Original-vocals guide (NOMAD masters): attach the isolated-vocals
                 # track WITHOUT selecting it (the video's own audio stays aid1, the
@@ -480,6 +543,30 @@ class MpvKaraokePlayer:
             log_message(f"Playback started for {os.path.basename(file_path)}.", self.config)
 
         threading.Thread(target=self._verify_playback_progress, daemon=True).start()
+
+    def _probe_audio_duration_async(self, audio_file, gen):
+        """Probe the attached .mp3's real length and cache it for get_status.
+
+        For a CDG zip mpv's `duration` is the .cdg graphics stream, which often
+        ends before the audio (a lyric-free outro), so time-pos overshoots the
+        reported total. ffprobe gives the true audible length. Runs in a daemon
+        thread; a slow/failed probe simply leaves the cache unset. The result is
+        applied only if `gen` still matches the current song generation, so a
+        probe that finishes after the song was replaced/stopped is discarded.
+        """
+        try:
+            info = probe_media_info(audio_file)
+            dur = info.get("duration") if info else None
+        except Exception as exc:  # ffprobe missing/hung/garbled — never fatal
+            log_message(f"WARNING: could not probe audio length for "
+                        f"{os.path.basename(audio_file)}: {exc}", self.config)
+            return
+        if not dur or dur <= 0:
+            return
+        # Atomic compare-and-store: reject a stale probe from a prior song.
+        with self._audio_state_lock:
+            if self._song_gen == gen:
+                self._audio_duration = int(dur)
 
     def _verify_playback_progress(self):
         """Confirm playback is actually advancing after a play().
@@ -510,13 +597,24 @@ class MpvKaraokePlayer:
         self.audio_error = True
 
     def stop(self):
-        self._send_ipc(["stop"])
-        self.active = False
-        self.current_path = None
-        self.audio_error = False
-        self._vocals_file = None
-        self._vocals_volume = 0
-        self._save_state()
+        # Serialize against play() (which holds _play_lock across its whole
+        # loadfile→audio-add→commit sequence). Without this, a stop() that lands
+        # mid-startup of the NEXT song (double-click skip, client retry, or a
+        # stop racing auto-advance) could blank the audio-length state that
+        # play() just committed for a genuinely-active song — silently
+        # reintroducing the CDG overshoot for that song. stop() is never called
+        # while _play_lock is already held (fadeout's stop() runs on its own
+        # thread), so this cannot deadlock. Lock order matches play():
+        # _play_lock → _audio_state_lock (inside _reset_audio_length_state).
+        with self._play_lock:
+            self._send_ipc(["stop"])
+            self.active = False
+            self.current_path = None
+            self.audio_error = False
+            self._vocals_file = None
+            self._vocals_volume = 0
+            self._reset_audio_length_state()
+            self._save_state()
 
     def set_vocals_volume(self, vlc_level):
         """Set the original-vocals guide level (vlc scale 0-256; 0 = off).
@@ -623,10 +721,18 @@ class MpvKaraokePlayer:
         if paused is None and time_pos is None:
             return {"state": "stopped", "time": 0, "length": 0}
 
+        length = int(duration or 0)
+        # CDG+MP3: mpv's `duration` is the .cdg graphics stream, which can be
+        # shorter than the attached .mp3 audio (making time-pos overshoot the
+        # total). Prefer the probed audio length so the readout never exceeds
+        # its own duration. Falls back to mpv's value until the probe resolves.
+        if self._audio_file and self._audio_duration and self._audio_duration > length:
+            length = self._audio_duration
+
         return {
             "state": "paused" if paused else "playing",
             "time": int(time_pos or 0),
-            "length": int(duration or 0),
+            "length": length,
         }
 
     # Properties the perf monitor reads each tick (fetched in ONE round-trip).
@@ -877,6 +983,7 @@ class MpvKaraokePlayer:
         self.active = False
         self.current_path = None
         self._pitch_semitones = 0
+        self._reset_audio_length_state()
         self._save_state()
         # Ensure ALSA is released BEFORE filler reclaims it (mpv race fix)
         self.ensure_released()

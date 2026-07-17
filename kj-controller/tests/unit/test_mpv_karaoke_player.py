@@ -150,10 +150,18 @@ def test_stop_clears_state(player, mocker):
     send = mocker.patch.object(player, '_send_ipc')
     player.active = True
     player.current_path = '/some/song.mp4'
+    player._audio_file = '/some/song.mp3'
+    player._audio_duration = 252
+    gen_before = player._song_gen
     player.stop()
     send.assert_called_with(["stop"])
     assert player.active is False
     assert player.current_path is None
+    # CDG audio-length cache is cleared and the generation advances so any
+    # in-flight probe is discarded.
+    assert player._audio_file is None
+    assert player._audio_duration is None
+    assert player._song_gen == gen_before + 1
 
 
 # --- play ---
@@ -249,10 +257,16 @@ def test_handle_karaoke_ended_calls_ensure_released_before_callback(player, mock
     call_order = []
     ensure_released.side_effect = lambda: call_order.append('ensure_released')
     player.on_karaoke_end = lambda: call_order.append('callback')
+    player._audio_file = '/some/song.mp3'
+    player._audio_duration = 201
     player._handle_karaoke_ended()
     # ensure_released must run BEFORE on_karaoke_end, else filler reclaims ALSA
     # while mpv is still draining
     assert call_order == ['ensure_released', 'callback']
+    # natural EOF clears the CDG audio-length cache so _save_state does not
+    # persist a stale audio path
+    assert player._audio_file is None
+    assert player._audio_duration is None
 
 
 def test_handle_karaoke_ended_noop_when_inactive(player, mocker):
@@ -359,6 +373,8 @@ def test_shutdown_sends_quit_and_terminates(player, mocker):
     mock_proc = mocker.Mock()
     mock_proc.poll.return_value = None  # running
     player.process = mock_proc
+    player._audio_file = '/some/song.mp3'
+    player._audio_duration = 201
     mocker.patch('mpv_manager.time.sleep')
     mocker.patch('os.unlink', side_effect=FileNotFoundError)
     player.shutdown()
@@ -367,6 +383,8 @@ def test_shutdown_sends_quit_and_terminates(player, mocker):
     assert player.process is None
     assert player.active is False
     assert player._monitor_stop.is_set()
+    assert player._audio_file is None
+    assert player._audio_duration is None
 
 
 # --- try_reconnect ---
@@ -692,3 +710,114 @@ def test_notify_if_dead_omits_song_on_idle_crash(player):
     assert player._notify_if_dead() is True
     assert captured[0]['song'] is None
     assert captured[0]['file_path'] is None
+
+
+# --- get_status length: CDG+MP3 audio-vs-graphics mismatch ---
+# For a CDG zip, mpv's `duration` is the .cdg GRAPHICS stream, which can end
+# before the attached .mp3 AUDIO. time-pos follows the audio clock, so it can
+# overshoot mpv's duration ("3:53 / 3:21"). get_status reports the longer audio
+# length so the readout doesn't exceed its own total.
+
+def _status_props(pause, time_pos, duration):
+    vals = {'pause': pause, 'time-pos': time_pos, 'duration': duration}
+    return lambda name: vals[name]
+
+
+def test_get_status_cdg_prefers_audio_length_over_graphics(player, mocker):
+    player.active = True
+    player._audio_file = '/songs/sour-times.mp3'
+    player._audio_duration = 252   # probed mp3 length (4:12)
+    mocker.patch.object(player, '_get_property',
+                        side_effect=_status_props(False, 233, 201))  # cdg = 3:21
+    st = player.get_status()
+    assert st['length'] == 252     # audio, NOT the shorter graphics stream
+    assert st['time'] == 233
+    assert st['state'] == 'playing'
+
+
+def test_get_status_normal_file_uses_mpv_duration(player, mocker):
+    player.active = True
+    player._audio_file = None       # single-file playback — mpv duration is right
+    mocker.patch.object(player, '_get_property',
+                        side_effect=_status_props(False, 10, 180))
+    st = player.get_status()
+    assert st['length'] == 180
+
+
+def test_get_status_audio_duration_not_yet_probed_falls_back(player, mocker):
+    player.active = True
+    player._audio_file = '/songs/sour-times.mp3'
+    player._audio_duration = None   # probe still in flight
+    mocker.patch.object(player, '_get_property',
+                        side_effect=_status_props(False, 5, 201))
+    st = player.get_status()
+    assert st['length'] == 201      # graceful fallback, no crash
+
+
+def test_get_status_never_shrinks_length_below_mpv_duration(player, mocker):
+    # Defensive: if the graphics somehow outlast the audio, keep the larger.
+    player.active = True
+    player._audio_file = '/songs/x.mp3'
+    player._audio_duration = 100
+    mocker.patch.object(player, '_get_property',
+                        side_effect=_status_props(False, 50, 180))
+    st = player.get_status()
+    assert st['length'] == 180
+
+
+def test_probe_audio_duration_sets_cache(player, mocker):
+    gen = player._song_gen
+    mocker.patch('mpv_manager.probe_media_info', return_value={'duration': 252.24})
+    player._probe_audio_duration_async('/songs/x.mp3', gen)
+    assert player._audio_duration == 252
+
+
+def test_probe_audio_duration_ignores_stale_generation(player, mocker):
+    # A slow probe from a previous song (older generation) must not clobber the
+    # current song's cache after a playback transition bumped _song_gen.
+    stale_gen = player._song_gen
+    player._song_gen += 1                       # a new song started meanwhile
+    player._audio_duration = None
+    mocker.patch('mpv_manager.probe_media_info', return_value={'duration': 999})
+    player._probe_audio_duration_async('/songs/old.mp3', stale_gen)
+    assert player._audio_duration is None
+
+
+def test_probe_audio_duration_survives_probe_failure(player, mocker):
+    gen = player._song_gen
+    player._audio_duration = None
+    mocker.patch('mpv_manager.probe_media_info', side_effect=RuntimeError('boom'))
+    player._probe_audio_duration_async('/songs/x.mp3', gen)  # must not raise
+    assert player._audio_duration is None
+
+
+def test_probe_audio_duration_ignores_nonpositive(player, mocker):
+    gen = player._song_gen
+    player._audio_duration = None
+    mocker.patch('mpv_manager.probe_media_info', return_value={'duration': 0})
+    player._probe_audio_duration_async('/songs/x.mp3', gen)
+    assert player._audio_duration is None
+
+
+def test_begin_audio_probe_commits_path_and_bumps_generation(player, mocker):
+    started = mocker.patch.object(player, '_probe_audio_duration_async')
+    thread = mocker.patch('mpv_manager.threading.Thread')
+    before = player._song_gen
+    player._begin_audio_probe('/songs/x.mp3')
+    assert player._audio_file == '/songs/x.mp3'
+    assert player._audio_duration is None
+    assert player._song_gen == before + 1
+    # probe spawned with the freshly-captured generation
+    thread.assert_called_once()
+    assert thread.call_args.kwargs['args'] == ('/songs/x.mp3', before + 1)
+    assert started is not None  # patched target exists
+
+
+def test_reset_audio_length_state_clears_and_bumps(player):
+    player._audio_file = '/songs/x.mp3'
+    player._audio_duration = 252
+    before = player._song_gen
+    player._reset_audio_length_state()
+    assert player._audio_file is None
+    assert player._audio_duration is None
+    assert player._song_gen == before + 1
