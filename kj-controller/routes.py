@@ -3773,10 +3773,13 @@ def sms_auto_send():
 
     Fired by the frontend ~20s after the KJ starts the top-of-rotation song,
     and only while that song is still playing. Every "don't send a misleading
-    text" guard is enforced here too, so a stale or racey client can never text
-    the wrong person:
+    text" guard is re-enforced HERE too — never trusting the client's framing —
+    so a stale or crafted request can never text the wrong person:
 
       * auto-send must be enabled in the Requests settings,
+      * ``entry_id`` must currently be the up-next singer (rotation slot 2),
+      * ``playing_entry_id`` must currently be slot 1 AND that song must be the
+        one actively playing (guards "the queue shifted / playback stopped"),
       * the target must have a phone on file (resolved for the current night),
       * we must not have already texted (or attempted) this entry,
       * the recipient must not have opted out (handled in _perform_sms_send).
@@ -3802,6 +3805,34 @@ def sms_auto_send():
         entry_id = int(raw_id)
     except (TypeError, ValueError):
         return jsonify({"error": "entry_id must be an integer"}), 400
+
+    raw_playing = data.get('playing_entry_id')
+    playing_entry_id = None
+    if raw_playing is not None:
+        try:
+            playing_entry_id = int(raw_playing)
+        except (TypeError, ValueError):
+            return jsonify({"error": "playing_entry_id must be an integer"}), 400
+
+    # Server-side re-validation of the slot relationship (rotation entry IDs are
+    # globally unique — file paths are NOT, so a same-file requeue can't fool
+    # this). The target must be the CURRENT up-next singer, and slot 1 must be
+    # the entry the KJ started AND still be the song actively on screen. If the
+    # queue shifted or playback stopped since the timer was armed, skip.
+    rotation = current_app.rotation
+    entries = rotation.get_rotation() if rotation is not None else []
+    if len(entries) < 2:
+        return jsonify({"sent": False, "skipped": "queue_too_short"}), 200
+    slot1, slot2 = entries[0], entries[1]
+    if slot2.get("id") != entry_id:
+        return jsonify({"sent": False, "skipped": "not_up_next"}), 200
+    if playing_entry_id is not None and slot1.get("id") != playing_entry_id:
+        return jsonify({"sent": False, "skipped": "slot1_changed"}), 200
+    vlc = getattr(current_app, "vlc", None)
+    cpp = getattr(vlc, "current_playing_path", None) if vlc is not None else None
+    state = vlc.get_karaoke_status().get("state") if vlc is not None else None
+    if not slot1.get("file_path") or cpp != slot1["file_path"] or state != "playing":
+        return jsonify({"sent": False, "skipped": "not_playing"}), 200
 
     # Never text the same entry twice — a manual send during the 20s window, or
     # a re-armed timer, must not double-notify. Any prior attempt (success OR
@@ -5280,8 +5311,12 @@ def update_sing_config():
         changed["accept_make_requests"] = bool(data["accept_make_requests"])
 
     if "auto_sms_next" in data:
-        store.set_auto_sms_next(bool(data["auto_sms_next"]))
-        changed["auto_sms_next"] = bool(data["auto_sms_next"])
+        # Require a real JSON boolean — bool("false") is True, so a sloppy
+        # client must not be able to silently switch on automatic texting.
+        if not isinstance(data["auto_sms_next"], bool):
+            return jsonify({"error": "auto_sms_next must be a boolean"}), 400
+        store.set_auto_sms_next(data["auto_sms_next"])
+        changed["auto_sms_next"] = data["auto_sms_next"]
 
     if "simple_mode" in data:
         store.set_simple_mode(bool(data["simple_mode"]))

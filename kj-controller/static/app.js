@@ -6886,7 +6886,7 @@ async function playAndAdvanceRotation(entry, idx, entries) {
     // Auto-text the next singer: only when the KJ pressed play on the TOP
     // rotation entry (slot 1). Any earlier armed timer is cancelled first so a
     // fresh play never leaves a stale one running.
-    if (idx === 0) armAutoTextNextSinger(entry.file_path);
+    if (idx === 0) armAutoTextNextSinger(entry.id, entry.file_path);
     else cancelAutoTextNextSinger();
 }
 
@@ -6904,18 +6904,18 @@ function cancelAutoTextNextSinger() {
     if (_autoTextTimer) { clearTimeout(_autoTextTimer); _autoTextTimer = null; }
 }
 
-function armAutoTextNextSinger(playedPath) {
+function armAutoTextNextSinger(playedEntryId, playedPath) {
     cancelAutoTextNextSinger();
-    if (!playedPath) return;
+    if (playedEntryId == null || !playedPath) return;
     if (typeof SingRequests === 'undefined' ||
         !SingRequests.autoSmsNextEnabled || !SingRequests.autoSmsNextEnabled()) return;
     _autoTextTimer = setTimeout(() => {
         _autoTextTimer = null;
-        maybeAutoTextNextSinger(playedPath);
+        maybeAutoTextNextSinger(playedEntryId, playedPath);
     }, AUTO_TEXT_NEXT_DELAY_MS);
 }
 
-async function maybeAutoTextNextSinger(playedPath) {
+async function maybeAutoTextNextSinger(playedEntryId, playedPath) {
     // Still-playing guard: the slot-1 song the KJ started must still be the one
     // loaded and actively playing (not stopped/paused). currentPlayingPath is
     // cleared by the /status poll the moment playback stops, so an early stop
@@ -6927,11 +6927,12 @@ async function maybeAutoTextNextSinger(playedPath) {
     // person now in slot 2 is the one genuinely up next. rotationData excludes
     // done/left entries and is ordered by position, so [0]=slot 1, [1]=slot 2.
     if (!Array.isArray(rotationData)) return;
-    // Only proceed if slot 1 is STILL the song we started — guards the rare case
-    // where the queue shifted (e.g. slot 1 marked done) so we never text the
-    // wrong person as "up next".
+    // Only proceed if slot 1 is STILL the exact entry we started. Match on the
+    // rotation entry ID (globally unique) — file_path is NOT unique (two singers
+    // can queue the same karaoke file), so a same-file requeue could otherwise
+    // slip past this guard and text the wrong "up next" singer.
     const cur = rotationData[0];
-    if (!cur || cur.file_path !== playedPath) return;
+    if (!cur || cur.id !== playedEntryId || cur.file_path !== playedPath) return;
     const next = rotationData[1];
     if (!next) return;
     const sms = next.sms || {};
@@ -6943,7 +6944,7 @@ async function maybeAutoTextNextSinger(playedPath) {
         const resp = await fetch('/rotation/sms/auto-send', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ entry_id: next.id }),
+            body: JSON.stringify({ entry_id: next.id, playing_entry_id: cur.id }),
         });
         const data = await resp.json().catch(() => ({}));
         if (resp.ok && data.sent) {
