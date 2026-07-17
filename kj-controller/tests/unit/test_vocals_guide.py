@@ -15,6 +15,84 @@ def player(mock_config):
     return MpvKaraokePlayer(mock_config, filler, enabled=False)
 
 
+@pytest.fixture
+def disabled_player(mock_config):
+    """A player with audio processing turned OFF (the production default)."""
+    cfg = dict(mock_config)
+    cfg["audio_processing_enabled"] = False
+    filler = FillerVLC(cfg, enabled=False)
+    return MpvKaraokePlayer(cfg, filler, enabled=False)
+
+
+# --- audio processing disabled: nothing but the raw selected track plays ---
+
+def test_disabled_reports_no_pitch(disabled_player):
+    """supports_pitch=False when disabled → frontend hides the pitch controls."""
+    assert disabled_player.supports_pitch is False
+
+
+def test_disabled_launch_omits_rubberband(disabled_player, mocker):
+    """mpv is launched WITHOUT the rubberband filter, so no audio processing
+    is even possible."""
+    disabled_player.enabled = True
+    captured = {}
+
+    def fake_popen(command, *a, **k):
+        captured["command"] = command
+        raise RuntimeError("stop after capturing args")
+
+    mocker.patch("mpv_manager.subprocess.Popen", side_effect=fake_popen)
+    mocker.patch("mpv_manager.open", mocker.mock_open())
+    try:
+        disabled_player.launch()
+    except RuntimeError:
+        pass
+    assert not any("rubberband" in str(arg) for arg in captured["command"])
+
+
+def test_enabled_launch_includes_rubberband(player, mocker):
+    player.enabled = True
+    captured = {}
+
+    def fake_popen(command, *a, **k):
+        captured["command"] = command
+        raise RuntimeError("stop after capturing args")
+
+    mocker.patch("mpv_manager.subprocess.Popen", side_effect=fake_popen)
+    mocker.patch("mpv_manager.open", mocker.mock_open())
+    try:
+        player.launch()
+    except RuntimeError:
+        pass
+    assert "--af=@rb:rubberband" in captured["command"]
+
+
+def test_disabled_set_pitch_noop(disabled_player, mocker):
+    ipc = mocker.patch.object(disabled_player, "_send_ipc")
+    disabled_player.active = True
+    disabled_player.set_pitch(4)
+    assert disabled_player.pitch_semitones == 0
+    ipc.assert_not_called()
+
+
+def test_disabled_set_vocals_volume_noop(disabled_player, mocker):
+    """Even with a guide path set + active, the graph is never built when off."""
+    sp = mocker.patch.object(disabled_player, "_set_property")
+    disabled_player.active = True
+    disabled_player._vocals_file = "/x/NOMAD-0001 - A - B.flac"
+    disabled_player.set_vocals_volume(128)
+    assert disabled_player.vocals_volume == 0
+    sp.assert_not_called()
+
+
+def test_disabled_apply_vocals_mix_noop(disabled_player, mocker):
+    sp = mocker.patch.object(disabled_player, "_set_property")
+    disabled_player.active = True
+    disabled_player._vocals_file = "/x/NOMAD-0001 - A - B.flac"
+    disabled_player._apply_vocals_mix()
+    sp.assert_not_called()
+
+
 # --- vocals state ---
 
 def test_initial_vocals_state(player):

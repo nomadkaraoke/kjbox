@@ -897,8 +897,11 @@ def handle_play():
     # Original-vocals guide: for a NOMAD master on mpv, resolve the isolated-vocals
     # file so it can be mixed UNDER the karaoke audio at the "Original Vocals"
     # slider level. Best-effort + mpv-only; CDG songs (audio_file set) get no guide.
+    # Gated on supports_pitch: when audio processing is disabled the engine reports
+    # supports_pitch=False, so no guide is resolved and only the raw track plays.
     vocals_file = None
-    if audio_file is None and getattr(vlc, 'render_mode', None) == RENDER_MODE_MPV:
+    if (audio_file is None and getattr(vlc, 'render_mode', None) == RENDER_MODE_MPV
+            and getattr(vlc, 'supports_pitch', False)):
         vocals_file = _resolve_vocals_guide(validated, cfg)
 
     log_message(f"Received play request for {os.path.basename(validated)}.", cfg)
@@ -1296,8 +1299,11 @@ def get_status():
         # playing master has a resolvable guide (computed statelessly from the
         # playing path, so it's correct during filler/stopped too). mpv only.
         "original_vocals_volume": getattr(vlc, 'vocals_volume', 0),
+        # False when audio processing is disabled (supports_pitch=False) so the
+        # frontend hides the Original Vocals slider — nothing to mix.
         "has_vocals_track": (
             getattr(vlc, 'render_mode', None) == RENDER_MODE_MPV
+            and getattr(vlc, 'supports_pitch', False)
             and _resolve_vocals_guide(cpp, current_app.kj_config) is not None
         ),
         "renderer": vlc.describe_renderer(),

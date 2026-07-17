@@ -5,6 +5,19 @@ playback, at an adjustable **"Original Vocals"** slider (default 0 % / off; the 
 raises it ~30 %) as a sing-along guide. Pitch shifts both streams together. Shipped
 in kj-controller **v0.75.0** (#181); per-track alignment applied 2026-07-08 (#182/#183).
 
+> ⚠️ **DISABLED by default since v0.86.0 (2026-07-17).** The guide mix (and the
+> rubberband pitch shift) are gated behind config `audio_processing_enabled`
+> (**default `false`**). While off, mpv plays only the raw selected audio track and
+> the "Original Vocals" slider + pitch controls are hidden. This was done because the
+> live playback path had two bugs — the guide sometimes played *instead of* the
+> instrumental, and it desynced when the slider was raised — both from a race in
+> `MpvKaraokePlayer.play()` where `_apply_vocals_mix()` runs before the master's
+> embedded audio track is demuxed (`instrumental=None`). **The guide files are
+> correctly aligned (~1 ms)** — it's a playback bug, not a data problem. Re-enable
+> with `"audio_processing_enabled": true` **after fixing the race** (build the mix
+> only once both tracks resolve, so the guide is engaged from t≈0). Everything below
+> describes the feature as designed, for when it's re-enabled.
+
 ## How it enables — automatic, no config
 
 When you play a file, `routes._resolve_vocals_guide` decides whether a guide is available:
