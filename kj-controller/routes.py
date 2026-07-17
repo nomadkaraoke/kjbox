@@ -23,6 +23,7 @@ import local_grouping
 import text_normalize
 from text_normalize import normalize as _normalize_text, tokens as _tokens, group_key as _group_key
 import version_priority
+import sing_resolve
 import youtube_health
 import youtube_search
 from config import APP_DIR, RENDER_MODE_MPV, RENDER_MODES, load_config, save_config_value
@@ -713,6 +714,14 @@ def _download_worker(app):
         except Exception:
             file_path, title = None, None
 
+        # Sing-request fallback: a failed download for a singer's pick should
+        # auto-advance to the next candidate version (or retry on a transient
+        # blip) rather than dead-ending at a red ❌ the KJ must fix by hand.
+        if (not file_path and next_item.get('request_id')
+                and next_item.get('candidates')):
+            if _attempt_sing_fallback(app, next_item):
+                continue  # re-queued (retry or next candidate); worker re-picks it
+
         with app._download_lock:
             if file_path:
                 next_item.update(status='completed', title=title,
@@ -735,8 +744,14 @@ def _download_worker(app):
                         )
                 except Exception:
                     pass  # Best-effort; entry can be linked manually
+            # Fell back to an alternate version → tell the singer which one landed.
+            if next_item.get('request_id') and next_item.get('candidate_index'):
+                _notify_sing_outcome(app, next_item, 'resolved_alt')
         else:
             _sync_rotation_download(app, next_item)  # status='error' → entry 'failed'
+            # Exhausted every candidate → let the singer know the KJ was flagged.
+            if next_item.get('request_id'):
+                _notify_sing_outcome(app, next_item, 'unavailable')
 
 
 @routes_bp.route('/download/cancel', methods=['POST'])
@@ -5025,6 +5040,109 @@ def apply_reorder_request(app, req):
             rotation.move_entry(eid, target_positions.pop(0))
 
 
+def _build_sing_fallback_candidates(req, current_url, current_meta, cfg):
+    """Ranked YouTube fallback candidates for a sing request — current attempt first.
+
+    Reads the ``versions`` snapshot the client rides along in ``source_meta``,
+    ranks it best-first (the same order the admin picker uses), and keeps the
+    distinct downloadable YouTube URLs. v1 falls back across YouTube-type
+    versions only; cross-source (local/divebar) fallback is a documented
+    follow-up (see the design doc). Always returns at least the current attempt.
+    """
+    candidates = [{
+        "url": current_url,
+        "source_type": "youtube",
+        "source_meta": current_meta,
+    }]
+    seen = {current_url}
+    meta_raw = req.get("source_meta")
+    try:
+        meta = meta_raw if isinstance(meta_raw, dict) else json.loads(meta_raw or "{}")
+    except (TypeError, ValueError):
+        return candidates
+    versions = meta.get("versions") or []
+    for idx in _ranked_version_indices(versions, cfg):
+        try:
+            src_type, src_ref, src_meta = _pick_version_from_kj_pick(req, idx)
+        except ValueError:
+            continue  # malformed version snapshot entry — skip it
+        if src_type != "youtube" or not src_ref or src_ref in seen:
+            continue
+        candidates.append({
+            "url": src_ref, "source_type": "youtube", "source_meta": src_meta,
+        })
+        seen.add(src_ref)
+    return candidates
+
+
+def _attempt_sing_fallback(app, item):
+    """On a failed sing-request download, retry (transient) or advance (unavailable).
+
+    Returns ``True`` when the item was re-queued — either the same candidate
+    (transient blip, bounded retries) or the next candidate (definitively
+    unavailable) — so the worker should ``continue``. Returns ``False`` when
+    resolution is exhausted and the entry should surface as a terminal ❌ for
+    the KJ. See ``sing_resolve`` for the classification/cap logic.
+    """
+    reason = getattr(app.media, "_last_error", None) or ""
+    kind = sing_resolve.classify_error(reason)
+    candidates = item.get("candidates") or []
+    idx = item.get("candidate_index", 0)
+
+    # Transient blip → retry the SAME candidate a bounded number of times. The
+    # worker is single-threaded, so we re-queue (back of line) rather than sleep.
+    if kind == sing_resolve.TRANSIENT:
+        attempts = item.get("transient_attempts", 0)
+        if attempts < sing_resolve.MAX_TRANSIENT_RETRIES:
+            with app._download_lock:
+                item["transient_attempts"] = attempts + 1
+                item["status"] = "queued"
+            log_message(
+                f"Sing fallback: transient error on candidate {idx}, retry "
+                f"{attempts + 1}/{sing_resolve.MAX_TRANSIENT_RETRIES} — {reason}",
+                app.kj_config)
+            return True
+        # retries exhausted → fall through and advance to the next candidate
+
+    tried = list(range(idx + 1))
+    nxt = sing_resolve.next_candidate_index(len(candidates), tried)
+    if nxt is None:
+        log_message(
+            f"Sing fallback: no playable candidate left for request "
+            f"{item.get('request_id')} — {reason}", app.kj_config)
+        return False
+    cand = candidates[nxt]
+    with app._download_lock:
+        item["url"] = cand["url"]
+        item["candidate_index"] = nxt
+        item["transient_attempts"] = 0
+        item["status"] = "queued"
+        item["error"] = None
+    try:
+        app.sing_store.update_request_source(
+            item["request_id"], cand.get("source_type", "youtube"),
+            cand["url"], cand.get("source_meta"))
+    except Exception:
+        app.logger.exception("Sing fallback: update_request_source failed")
+    log_message(
+        f"Sing fallback: candidate {idx} unavailable, advancing to candidate "
+        f"{nxt} for request {item.get('request_id')} — {reason}", app.kj_config)
+    return True
+
+
+def _notify_sing_outcome(app, item, decision):
+    """Best-effort Web Push to the singer about a terminal fallback outcome."""
+    dispatcher = getattr(app, "push_dispatcher", None)
+    if dispatcher is None:
+        return
+    try:
+        req = app.sing_store.get_request(item["request_id"])
+        if req:
+            dispatcher.notify_request_decision(item["request_id"], decision, req)
+    except Exception:
+        app.logger.exception("Sing fallback: notify failed")
+
+
 def approve_sing_request(app, req, skip_download=False):
     """Dispatch approval of a sing request; create/link a rotation entry.
 
@@ -5138,6 +5256,14 @@ def approve_sing_request(app, req, skip_download=False):
                 "status": "queued",
                 "error": None,
                 "rotation_entry_id": entry["id"],
+                # Auto-fallback: if this YouTube download turns out to be an
+                # unavailable video, the worker advances through these ranked
+                # candidates instead of dead-ending at ❌.
+                "request_id": req["id"],
+                "candidates": _build_sing_fallback_candidates(
+                    req, queue_url, None, app.kj_config),
+                "candidate_index": 0,
+                "transient_attempts": 0,
             }
         rotation.set_download_status(
             entry["id"], queue_src, "queued", download_id
