@@ -4,7 +4,7 @@ Dated entries, newest first. Each entry notes any required deploy steps.
 
 ---
 
-## 2026-07-09 - Auto-fallback for failed singer-submission downloads
+## 2026-07-17 - Auto-fallback for failed singer-submission downloads (v0.89.0)
 
 **Deploy:** backend change (`routes.py`, `media.py`, `push_dispatcher.py`, new `sing_resolve.py`) → **requires `systemctl restart kj-controller`** (interrupts playback — deploy between songs). No DB migration; new queue-item fields are in-memory only and ignored on rollback.
 
@@ -12,6 +12,15 @@ Dated entries, newest first. Each entry notes any required deploy steps.
 - **No false rejections.** Transient failures (timeouts, HTTP 429, the `bgutil` PO-token helper being down, network blips — and any unrecognised error) retry the *same* candidate a bounded number of times before advancing, so a flaky network never discards a good video. Classification lives in a pure, exhaustively unit-tested `sing_resolve` module.
 - On a successful fallback the request is rebound to the version that actually downloaded (so `/my-requests` shows the right one) and the singer gets a "we queued an alternate version" push.
 - Mechanics: `media.download_video` records its failure reason on `media._last_error`; the single-threaded `_download_worker` classifies it and walks a ranked candidate list attached to the queue item (bounded to 3 candidates). The `versions[]` snapshot is preserved through `kj_pick` binding so multi-version songs — the common case — have alternates to try. YouTube-type fallback only in v1; cross-source (local/Divebar) fallback is a follow-up.
+
+## 2026-07-17 - Disable all mpv audio processing (pitch + vocals guide) by default (v0.87.0)
+
+**Deploy:** backend change (`mpv_manager.py`, `routes.py`, `config.py`) → **requires `systemctl restart kj-controller`** (interrupts playback — deploy between songs). No DB migration. Frontend hides the affected controls automatically on the next status/renderer poll (no cache-bust needed beyond the version bump).
+
+- Added a single master switch, config `audio_processing_enabled` (**default `false`**), that gates **all** mpv audio-graph manipulation: the rubberband **pitch shift** *and* the **original-vocals guide mix**. When off, mpv is launched **without** the `--af=@rb:rubberband` filter and the guide is never attached, so the only thing that can play is the **raw selected audio track** — no mixing or pitch is even possible.
+- Why: the original-vocals guide feature had two live playback bugs — (1) the guide occasionally played *instead of* the instrumental, and (2) when the "Original Vocals" slider was raised the guide was out of sync. Both trace to a race in `play()`: `_apply_vocals_mix()` runs before the master's embedded audio track is demuxed (`instrumental=None` in the logs), so the mix is skipped, `audio-add … auto` leaves the guide as the only selected track, and a later slider-raise engages the idle guide mid-song (desynced). The **guide data itself is correctly aligned** (verified to ~1 ms by cross-correlation) — this is purely a playback-path bug. Disabling the feature for now removes the risk while it's reworked.
+- Frontend: no code change — the pitch controls hide when `renderer.supports_pitch` is false and the Original Vocals slider hides when `has_vocals_track` is false; both now track the flag (`supports_pitch` mirrors it; `has_vocals_track` requires it).
+- **Re-enable** by setting `"audio_processing_enabled": true` in `config.json` and restarting kj-controller. The pitch/mix code is retained (and unit-tested for both on and off states) so it comes straight back — but the race above should be fixed before relying on the guide mix in a live show.
 
 ## 2026-07-16 - CDG progress readout no longer overshoots its total (v0.85.1)
 

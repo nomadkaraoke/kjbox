@@ -2,6 +2,29 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-07-17 - Fix: VLC video no longer covered by the rotation ticker (v0.87.2)
+
+The VLC karaoke renderer now honours the reserved top ticker strip
+(`video_top_margin_px`, default 80) just like mpv — previously VLC launched
+fullscreen and the ticker composited over the top of its video, while mpv
+rendered below the strip. VLC ignores its own geometry CLI flags and maps its
+video window only when a song starts, so `VlcKaraokePlayer._position_window`
+now places the window **per-play** with `wmctrl` (matched by the `VLC media
+player` window title). Because xfwm4 offsets wmctrl moves by a fixed
+frame-extent amount *and* VLC nudges its own window while a 4K file loads, it
+drives a short closed loop (request → settle → measure → adjust by the observed
+error) until the window lands within 2px of target. Validated end-to-end on
+NomadPC: VLC video settles at `1920×1000+0+80`, matching mpv. (v0.87.1 shipped
+the per-play placement but a single-shot correction mis-landed on the live 4K
+window at `y=160`; v0.87.2 replaced it with the convergence loop.)
+
+Investigation context (no code change): confirmed **VLC 3.0.20 hardware-decodes
+nothing via VAAPI** on NomadPC — its decoder module declines every codec, so
+VLC always software-decodes. Fine at 1080p (~40% of one core), but 4K VP9 pegs a
+core and drops ~⅓ of frames (the source of the glitching that prompted this
+work). mpv hardware-decodes 4K VP9/AV1 fine and stays the default renderer; VLC
+remains a first-class fallback for everything at 1080p.
+
 ## 2026-07-09 - Fix: Original Vocals guide muted the instrumental + hide stem folders (v0.81.0)
 
 **Bug 1 — only vocals audible on NOMAD masters (live-show blocker).** Pressing Play on a

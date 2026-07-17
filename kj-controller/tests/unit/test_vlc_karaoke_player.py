@@ -1,5 +1,7 @@
 """Tests for VlcKaraokePlayer: dual-VLC karaoke backend."""
 
+import threading
+
 import pytest
 
 from filler import FillerVLC
@@ -364,19 +366,15 @@ def test_notify_if_dead_reconnected_noop_when_probe_alive(player, mocker):
     assert fired == []
 
 
-# --- Reserved-strip video geometry (gated behind video_strip_vlc) ---
+# --- Reserved-strip video geometry (gated on video_top_margin_px) ---
 
-def test_video_window_args_fullscreen_by_default():
-    # margin>0 but VLC strip disabled -> fullscreen (documented fallback).
-    assert VlcKaraokePlayer._video_window_args(80, strip_vlc=False) == ['--fullscreen']
+def test_video_window_args_windowed_when_margin():
+    # margin>0 -> windowed (no --fullscreen) so it can be placed below the strip.
+    assert VlcKaraokePlayer._video_window_args(80) == []
 
 
 def test_video_window_args_fullscreen_when_no_margin():
-    assert VlcKaraokePlayer._video_window_args(0, strip_vlc=True) == ['--fullscreen']
-
-
-def test_video_window_args_windowed_when_enabled_and_margin():
-    assert VlcKaraokePlayer._video_window_args(80, strip_vlc=True) == []
+    assert VlcKaraokePlayer._video_window_args(0) == ['--fullscreen']
 
 
 def _patch_vlc_launch(mocker):
@@ -389,58 +387,156 @@ def _patch_vlc_launch(mocker):
 
 
 def test_launch_fullscreen_by_default(mock_config, mocker):
+    # No reserved strip -> fullscreen launch, no positioning.
+    mock_config['video_top_margin_px'] = 0
     filler = FillerVLC(mock_config, enabled=False)
     p = VlcKaraokePlayer(mock_config, filler, enabled=True)
     mock_popen = _patch_vlc_launch(mocker)
-    reposition = mocker.patch.object(p, '_reposition_window')
+    position = mocker.patch.object(p, '_position_window')
     p.launch()
     args = mock_popen.call_args[0][0]
     assert '--fullscreen' in args
-    reposition.assert_not_called()
+    position.assert_not_called()
 
 
-def test_launch_windowed_repositions_when_strip_enabled(mock_config, mocker):
+def test_launch_windowed_when_margin(mock_config, mocker):
+    # A reserved strip -> windowed launch; placement is deferred to play() since
+    # VLC has no video window until a song is playing.
     mock_config['video_top_margin_px'] = 80
-    mock_config['video_strip_vlc'] = True
     filler = FillerVLC(mock_config, enabled=False)
     p = VlcKaraokePlayer(mock_config, filler, enabled=True)
     mock_popen = _patch_vlc_launch(mocker)
-    reposition = mocker.patch.object(p, '_reposition_window')
+    position = mocker.patch.object(p, '_position_window')
     p.launch()
     args = mock_popen.call_args[0][0]
     assert '--fullscreen' not in args
-    reposition.assert_called_once_with(80, 1920, 1080)
+    position.assert_not_called()
 
 
-def test_reposition_window_runs_wmctrl_geometry(mock_config, mocker):
+def test_play_positions_window_when_margin(mock_config, mocker, tmp_path):
+    mock_config['video_top_margin_px'] = 80
     filler = FillerVLC(mock_config, enabled=False)
     p = VlcKaraokePlayer(mock_config, filler, enabled=True)
-    run = mocker.patch('vlc.subprocess.run',
-                       return_value=mocker.Mock(returncode=0, stderr=b''))
-    p._reposition_window(80, 1920, 1080)
-    cmds = [c.args[0] for c in run.call_args_list]
-    # Remove any fullscreen state, then place the window below the 80px strip.
-    assert any('remove,fullscreen' in c for c in cmds)
-    assert any('0,0,80,1920,1000' in c for c in cmds)
+    f = tmp_path / "song.mp4"
+    f.write_text("")
+    mocker.patch.object(p, '_send')
+    mocker.patch('vlc.time.sleep')
+    started = threading.Event()
+
+    def fake_position(margin, w, h):
+        assert (margin, w, h) == (80, 1920, 1080)
+        started.set()
+
+    mocker.patch.object(p, '_position_window', side_effect=fake_position)
+    p.play(str(f))
+    assert started.wait(2), "play() should launch the positioning thread"
 
 
-def test_reposition_window_stops_on_wmctrl_nonzero_exit(mock_config, mocker):
-    # A window-title miss (wmctrl exit 1) must not log the success line.
+def test_play_skips_positioning_without_margin(mock_config, mocker, tmp_path):
     filler = FillerVLC(mock_config, enabled=False)
     p = VlcKaraokePlayer(mock_config, filler, enabled=True)
-    mocker.patch('vlc.subprocess.run',
-                 return_value=mocker.Mock(returncode=1, stderr=b'Cannot find window'))
+    f = tmp_path / "song.mp4"
+    f.write_text("")
+    mocker.patch.object(p, '_send')
+    mocker.patch('vlc.time.sleep')
+    position = mocker.patch.object(p, '_position_window')
+    p.play(str(f))
+    position.assert_not_called()
+
+
+def test_position_window_self_corrects_wm_offset(mock_config, mocker):
+    filler = FillerVLC(mock_config, enabled=False)
+    p = VlcKaraokePlayer(mock_config, filler, enabled=True)
+    # Poll finds the window; the first move to (0,80) lands offset at (4,152)
+    # (xfwm4's fixed frame-extent skew); the corrected request then lands on
+    # target so the loop stops.
+    mocker.patch.object(p, '_find_window',
+                        side_effect=[('0xwin', 0, 0),      # poll: found
+                                     ('0xwin', 4, 152),    # after req (0,80)
+                                     ('0xwin', 0, 80)])    # after req (-4,8): done
+    wmctrl = mocker.patch.object(p, '_wmctrl',
+                                 return_value=mocker.Mock(returncode=0))
+    mocker.patch('vlc.subprocess.run')  # xprop decoration removal
+    mocker.patch('vlc.time.sleep')
     logs = mocker.patch('vlc.log_message')
-    p._reposition_window(80, 1920, 1080)
+    p._position_window(80, 1920, 1080)
+    moves = [c.args[0] for c in wmctrl.call_args_list]
+    # First request is the raw target; the next adjusts by the observed error
+    # (req += target - actual) so the window lands exactly at (0, 80).
+    assert ['-i', '-r', '0xwin', '-e', '0,0,80,1920,1000'] in moves
+    assert ['-i', '-r', '0xwin', '-e', '0,-4,8,1920,1000'] in moves
+    msgs = ' '.join(str(c.args[0]) for c in logs.call_args_list)
+    assert 'Positioned karaoke VLC' in msgs
+
+
+def test_position_window_soft_warns_when_never_settles(mock_config, mocker):
+    # If the window never reaches target (keeps drifting), the loop gives up
+    # after its max iterations with a soft warning — never claims success.
+    filler = FillerVLC(mock_config, enabled=False)
+    p = VlcKaraokePlayer(mock_config, filler, enabled=True)
+    mocker.patch.object(p, '_find_window', return_value=('0xwin', 500, 500))
+    mocker.patch.object(p, '_wmctrl', return_value=mocker.Mock(returncode=0))
+    mocker.patch('vlc.subprocess.run')
+    mocker.patch('vlc.time.sleep')
+    logs = mocker.patch('vlc.log_message')
+    p._position_window(80, 1920, 1080)
+    msgs = ' '.join(str(c.args[0]) for c in logs.call_args_list)
+    assert 'did not settle' in msgs
+    assert 'Positioned karaoke VLC' not in msgs
+
+
+def test_position_window_bails_on_wmctrl_nonzero_exit(mock_config, mocker):
+    # wmctrl runs but fails (e.g. the window vanished when the song ended) — the
+    # placement must stop and NOT log the success line.
+    filler = FillerVLC(mock_config, enabled=False)
+    p = VlcKaraokePlayer(mock_config, filler, enabled=True)
+    mocker.patch.object(p, '_find_window', return_value=('0xwin', 0, 0))
+    mocker.patch.object(p, '_wmctrl',
+                        return_value=mocker.Mock(returncode=1, stderr=b'no such window'))
+    mocker.patch('vlc.subprocess.run')  # xprop
+    mocker.patch('vlc.time.sleep')
+    logs = mocker.patch('vlc.log_message')
+    p._position_window(80, 1920, 1080)
     msgs = ' '.join(str(c.args[0]) for c in logs.call_args_list)
     assert 'non-zero exit' in msgs
     assert 'Positioned karaoke VLC' not in msgs
 
 
-def test_reposition_window_swallows_wmctrl_errors(mock_config, mocker):
-    # wmctrl absent / failing must never crash launch — VLC just stays put.
+def test_position_window_bails_when_no_window(mock_config, mocker):
     filler = FillerVLC(mock_config, enabled=False)
     p = VlcKaraokePlayer(mock_config, filler, enabled=True)
-    mocker.patch('vlc.subprocess.run', side_effect=FileNotFoundError)
-    mocker.patch('vlc.log_message')
-    p._reposition_window(80, 1920, 1080)  # must not raise
+    mocker.patch.object(p, '_find_window', return_value=None)
+    wmctrl = mocker.patch.object(p, '_wmctrl')
+    logs = mocker.patch('vlc.log_message')
+    mocker.patch('vlc.time.sleep')
+    p._position_window(80, 1920, 1080)
+    wmctrl.assert_not_called()
+    msgs = ' '.join(str(c.args[0]) for c in logs.call_args_list)
+    assert 'window not found' in msgs
+
+
+def test_position_window_noop_without_margin(mock_config, mocker):
+    filler = FillerVLC(mock_config, enabled=False)
+    p = VlcKaraokePlayer(mock_config, filler, enabled=True)
+    find = mocker.patch.object(p, '_find_window')
+    p._position_window(0, 1920, 1080)
+    find.assert_not_called()
+
+
+def test_find_window_parses_wmctrl_lg(mock_config, mocker):
+    filler = FillerVLC(mock_config, enabled=False)
+    p = VlcKaraokePlayer(mock_config, filler, enabled=True)
+    out = ("0x04e00003 -1 0    0    1920 1080 nomadpc kjbox-overlay\n"
+           "0x05400002  0 4    72   1280 720  nomadpc VLC media player\n")
+    mocker.patch('vlc.subprocess.run',
+                 return_value=mocker.Mock(returncode=0, stdout=out))
+    assert p._find_window() == ('0x05400002', 4, 72)
+
+
+def test_find_window_none_on_title_miss(mock_config, mocker):
+    filler = FillerVLC(mock_config, enabled=False)
+    p = VlcKaraokePlayer(mock_config, filler, enabled=True)
+    mocker.patch('vlc.subprocess.run',
+                 return_value=mocker.Mock(returncode=0,
+                                          stdout="0x1 0 0 0 1 1 host mpv\n"))
+    assert p._find_window() is None

@@ -742,3 +742,18 @@ input:focus {
 .song-card-reorder { display: flex; gap: 8px; margin-top: 8px; }
 .song-card-reorder button { flex: 1; font-size: 0.85rem; }
 .song-card-reorder button[disabled] { opacity: 0.4; }
+
+
+/* "Already sung tonight" — collapsed history so the active list stays clean */
+.sung-section[hidden] { display: none; }
+.sung-details > summary {
+  padding: 8px 0;
+  color: var(--nk-text-dim);
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+.sung-details .song-card-done {
+  border-left-color: #4a4a4a;
+  opacity: 0.7;
+}
+.sung-details .song-card-done .song-card-status { color: #7ecb7e; }
