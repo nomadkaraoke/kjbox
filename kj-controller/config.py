@@ -99,14 +99,10 @@ def load_config(config_file=None):
         # docs/HDMI.md); override for other rigs. Used to size the lowered video.
         "screen_width": 1920,
         "screen_height": 1080,
-        # Apply the reserved top strip to the (legacy) VLC karaoke engine too.
-        # OFF by default: VLC's own geometry flags are unreliable, so windowed
-        # mode relies on repositioning the window with wmctrl after launch, which
-        # must be validated on the device first (a second "VLC media player"
-        # filler window makes `wmctrl -r` matching ambiguous). Until validated,
-        # VLC stays fullscreen (documented fallback) while mpv — the default and
-        # only viable 4K engine — always honours the margin.
-        "video_strip_vlc": False,
+        # NB: both renderers honour video_top_margin_px. mpv places its window at
+        # launch (--no-border --geometry); VLC ignores its geometry flags and maps
+        # the window only when a song plays, so it's positioned per-play with
+        # wmctrl (see VlcKaraokePlayer._position_window).
         "sing_public_url_base": "https://sing.nomadkaraoke.com",
         "sing_public_host": "sing.nomadkaraoke.com",
         "sing_local_url_base": "",
