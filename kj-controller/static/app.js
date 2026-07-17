@@ -2765,6 +2765,7 @@ function showOverlayForm(overlay) {
     document.getElementById('overlay-count').value = cfg.count != null ? cfg.count : 5;
     document.getElementById('overlay-separator').value = cfg.separator != null ? cfg.separator : '   ';
     document.getElementById('overlay-empty-text').value = cfg.empty_text != null ? cfg.empty_text : 'Sign up at the booth!';
+    document.getElementById('overlay-loop-separator').value = cfg.loop_separator != null ? cfg.loop_separator : '   ♪   ';
 
     onOverlayTypeChange();
     onOverlayPositionChange();
@@ -2797,6 +2798,7 @@ function buildOverlayConfig() {
         const source = document.getElementById('overlay-source').value;
         config.source = source;
         config.speed = parseFloat(document.getElementById('overlay-speed').value);
+        config.loop_separator = document.getElementById('overlay-loop-separator').value;
         if (source === 'rotation') {
             config.prefix = document.getElementById('overlay-prefix').value;
             config.count = parseInt(document.getElementById('overlay-count').value, 10) || 5;

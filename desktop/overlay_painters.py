@@ -207,8 +207,12 @@ class TickerPainter(BasePainter):
         self._source = cfg.get("source", "static")
         self._cache_path = cfg.get("cache_path", rs.CACHE_FILE)
         self._compose_at = 0.0
+        # A glyph shown between the end of one cycle and the start of the next so
+        # the marquee loops seamlessly (no blank screen-width gap after the last
+        # singer). Whitespace-padded so it breathes on both sides.
+        self._loop_sep = cfg.get("loop_separator", "   ♪   ")
         self._text = self._resolve_text()
-        self._text_w = text_width(self._text, self._size)
+        self._rebuild_scroll_unit()
         self._w = SCREEN_WIDTH
         position = cfg.get("position", "bottom")
         natural_h = int(self._size + self._pad * 2)
@@ -243,6 +247,13 @@ class TickerPainter(BasePainter):
             empty_text=cfg.get("empty_text", ""),
         )
 
+    def _rebuild_scroll_unit(self):
+        """(Re)compute the repeating scroll unit — the visible text plus a trailing
+        loop separator — so successive cycles run back-to-back with no gap."""
+        self._text_w = text_width(self._text, self._size)
+        self._unit_text = self._text + self._loop_sep
+        self._unit_w = text_width(self._unit_text, self._size)
+
     def _maybe_recompose(self):
         import time as _t
         now = _t.time()
@@ -251,14 +262,19 @@ class TickerPainter(BasePainter):
             new = self._resolve_text()
             if new != self._text:
                 self._text = new
-                self._text_w = text_width(self._text, self._size)
+                self._rebuild_scroll_unit()
 
     def tick(self, dt):
         self._maybe_recompose()
         speed = self.config.get("speed", 2)
         self._scroll_x -= speed * 100 * dt   # speed=1 => 100px/s
-        if self._scroll_x < -self._text_w:
-            self._scroll_x = SCREEN_WIDTH
+        # Seamless wrap: once a whole unit has scrolled past the left edge, shift
+        # forward by exactly one unit width instead of snapping to the screen edge.
+        # This keeps the next cycle's head glued behind the previous cycle's tail
+        # (separated only by the loop separator), so text is always on screen.
+        if self._unit_w > 0:
+            while self._scroll_x <= -self._unit_w:
+                self._scroll_x += self._unit_w
         return True
 
     def draw(self, cr):
@@ -266,8 +282,16 @@ class TickerPainter(BasePainter):
         cr.rectangle(self._x, self._y, self._w, self._h)
         set_hex(cr, cfg.get("bg_color", "#000000"), cfg.get("bg_opacity", 0.85))
         cr.fill()
-        draw_text(cr, int(self._scroll_x), self._text_y, self._text,
-                  self._size, cfg.get("text_color", "#ffffff"))
+        color = cfg.get("text_color", "#ffffff")
+        if self._unit_w <= 0:
+            draw_text(cr, int(self._scroll_x), self._text_y, self._text, self._size, color)
+            return
+        # Tile the repeating unit rightward from the current scroll offset until we
+        # run off the right edge, so the loop reads continuously across the wrap.
+        x = self._scroll_x
+        while x <= SCREEN_WIDTH:
+            draw_text(cr, int(x), self._text_y, self._unit_text, self._size, color)
+            x += self._unit_w
 
 
 class CountdownPainter(BasePainter):
