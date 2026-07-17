@@ -150,10 +150,18 @@ def test_stop_clears_state(player, mocker):
     send = mocker.patch.object(player, '_send_ipc')
     player.active = True
     player.current_path = '/some/song.mp4'
+    player._audio_file = '/some/song.mp3'
+    player._audio_duration = 252
+    gen_before = player._song_gen
     player.stop()
     send.assert_called_with(["stop"])
     assert player.active is False
     assert player.current_path is None
+    # CDG audio-length cache is cleared and the generation advances so any
+    # in-flight probe is discarded.
+    assert player._audio_file is None
+    assert player._audio_duration is None
+    assert player._song_gen == gen_before + 1
 
 
 # --- play ---
@@ -249,10 +257,16 @@ def test_handle_karaoke_ended_calls_ensure_released_before_callback(player, mock
     call_order = []
     ensure_released.side_effect = lambda: call_order.append('ensure_released')
     player.on_karaoke_end = lambda: call_order.append('callback')
+    player._audio_file = '/some/song.mp3'
+    player._audio_duration = 201
     player._handle_karaoke_ended()
     # ensure_released must run BEFORE on_karaoke_end, else filler reclaims ALSA
     # while mpv is still draining
     assert call_order == ['ensure_released', 'callback']
+    # natural EOF clears the CDG audio-length cache so _save_state does not
+    # persist a stale audio path
+    assert player._audio_file is None
+    assert player._audio_duration is None
 
 
 def test_handle_karaoke_ended_noop_when_inactive(player, mocker):
@@ -359,6 +373,8 @@ def test_shutdown_sends_quit_and_terminates(player, mocker):
     mock_proc = mocker.Mock()
     mock_proc.poll.return_value = None  # running
     player.process = mock_proc
+    player._audio_file = '/some/song.mp3'
+    player._audio_duration = 201
     mocker.patch('mpv_manager.time.sleep')
     mocker.patch('os.unlink', side_effect=FileNotFoundError)
     player.shutdown()
@@ -367,6 +383,8 @@ def test_shutdown_sends_quit_and_terminates(player, mocker):
     assert player.process is None
     assert player.active is False
     assert player._monitor_stop.is_set()
+    assert player._audio_file is None
+    assert player._audio_duration is None
 
 
 # --- try_reconnect ---

@@ -597,14 +597,24 @@ class MpvKaraokePlayer:
         self.audio_error = True
 
     def stop(self):
-        self._send_ipc(["stop"])
-        self.active = False
-        self.current_path = None
-        self.audio_error = False
-        self._vocals_file = None
-        self._vocals_volume = 0
-        self._reset_audio_length_state()
-        self._save_state()
+        # Serialize against play() (which holds _play_lock across its whole
+        # loadfile→audio-add→commit sequence). Without this, a stop() that lands
+        # mid-startup of the NEXT song (double-click skip, client retry, or a
+        # stop racing auto-advance) could blank the audio-length state that
+        # play() just committed for a genuinely-active song — silently
+        # reintroducing the CDG overshoot for that song. stop() is never called
+        # while _play_lock is already held (fadeout's stop() runs on its own
+        # thread), so this cannot deadlock. Lock order matches play():
+        # _play_lock → _audio_state_lock (inside _reset_audio_length_state).
+        with self._play_lock:
+            self._send_ipc(["stop"])
+            self.active = False
+            self.current_path = None
+            self.audio_error = False
+            self._vocals_file = None
+            self._vocals_volume = 0
+            self._reset_audio_length_state()
+            self._save_state()
 
     def set_vocals_volume(self, vlc_level):
         """Set the original-vocals guide level (vlc scale 0-256; 0 = off).
