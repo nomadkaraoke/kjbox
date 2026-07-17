@@ -2,8 +2,30 @@
 
 **Created:** 2026-07-09
 **Branch:** feat/sess-20260717-0153-singer-submission-validation
-**Status:** Draft
+**Status:** Implemented (pending review/merge)
 **Design spec:** [2026-07-09-singer-submission-validation-design.md](./2026-07-09-singer-submission-validation-design.md)
+
+## As-Built Deviations
+
+Discovered during implementation (all reflected in the code + tests):
+
+- **D1 — failure reason via `media._last_error`, not a caught exception.** `download_video`
+  swallows yt-dlp errors and returns `(None, None)`; it now records the reason on
+  `media._last_error`, which the single (serialized) download worker reads. No second network probe.
+- **D2 — transient exhaustion advances, not terminates.** Transient retries per candidate then fall
+  through to the next candidate; only an exhausted candidate list is terminal. Unknown errors
+  default to transient.
+- **D3 — no new sing-request status.** Terminal = the existing rotation `failed` download_status +
+  an `unavailable` push; success rebinds via the existing `update_request_source`.
+- **D4 — pivot from the planned client change.** Direct `youtube`/`kn` picks are only ever
+  single-version (no alternates), so attaching `versions[]` client-side adds nothing. The real fix
+  is `_preserve_versions_meta`: keep the `versions[]` snapshot through `kj_pick` binding (both the
+  admin approve route and `resolve_kj_pick_best`) so multi-version songs — the incident case — have
+  candidates. `sing.js` was **not** changed.
+- **D5 — v1 scope: YouTube-type fallback only.** Cross-source (local/Divebar) fallback is a
+  documented follow-up.
+- Open questions resolved: push uses the existing `notify_request_decision` (+ two new copy steps);
+  no `unavailable` status enum needed; caps kept at 3 candidates / 2 transient retries.
 
 ## Overview
 

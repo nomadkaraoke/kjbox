@@ -4,6 +4,15 @@ Dated entries, newest first. Each entry notes any required deploy steps.
 
 ---
 
+## 2026-07-09 - Auto-fallback for failed singer-submission downloads
+
+**Deploy:** backend change (`routes.py`, `media.py`, `push_dispatcher.py`, new `sing_resolve.py`) → **requires `systemctl restart kj-controller`** (interrupts playback — deploy between songs). No DB migration; new queue-item fields are in-memory only and ignored on rollback.
+
+- When an approved singer submission's YouTube download fails because the video is **unavailable** (private/deleted/blocked — the 2026-07-09 "Say My Name" private-video incident), the download worker now automatically advances to the next-best candidate version of the same song instead of dead-ending at a red ❌ the KJ had to fix by hand. Only a request with **no** playable candidate left surfaces the terminal failure (and now pushes the singer an honest "we couldn't find a playable version — your KJ has been notified").
+- **No false rejections.** Transient failures (timeouts, HTTP 429, the `bgutil` PO-token helper being down, network blips — and any unrecognised error) retry the *same* candidate a bounded number of times before advancing, so a flaky network never discards a good video. Classification lives in a pure, exhaustively unit-tested `sing_resolve` module.
+- On a successful fallback the request is rebound to the version that actually downloaded (so `/my-requests` shows the right one) and the singer gets a "we queued an alternate version" push.
+- Mechanics: `media.download_video` records its failure reason on `media._last_error`; the single-threaded `_download_worker` classifies it and walks a ranked candidate list attached to the queue item (bounded to 3 candidates). The `versions[]` snapshot is preserved through `kj_pick` binding so multi-version songs — the common case — have alternates to try. YouTube-type fallback only in v1; cross-source (local/Divebar) fallback is a follow-up.
+
 ## 2026-07-16 - CDG progress readout no longer overshoots its total (v0.85.1)
 
 **Deploy:** backend change (`mpv_manager.py`) → **requires `systemctl restart kj-controller`** (interrupts playback — deploy between songs). No DB or frontend change.
