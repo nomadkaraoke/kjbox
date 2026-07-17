@@ -785,3 +785,19 @@ class TestSupersedes:
                                    supersedes_request_id=orig["id"])
         assert new["supersedes_request_id"] == orig["id"]
         assert store.get_request(orig["id"])["supersedes_request_id"] is None
+
+
+class TestAutoReorder:
+    def test_default_off(self, store):
+        assert store.is_auto_reorder() is False
+
+    def test_toggle_persists_across_instances(self, tmp_path):
+        # Use a file-backed DB so a second instance proves the value is persisted,
+        # not just held in memory on the original instance.
+        db = str(tmp_path / "sing.db")
+        s1 = SingStore(db)
+        s1.set_auto_reorder(True)
+        assert SingStore(db).is_auto_reorder() is True
+        s1.set_auto_reorder(False)
+        assert SingStore(db).is_auto_reorder() is False
+        s1.close()

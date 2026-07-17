@@ -457,6 +457,43 @@ class RotationStore:
         )
         conn.commit()
 
+    def reorder_by_ids(self, ordered_ids):
+        """Reassign positions so the given entries take the new order in ``ordered_ids``.
+
+        The entries keep the exact set of position slots they currently occupy (just
+        shuffled among themselves), so any rows NOT in ``ordered_ids`` — e.g. Done
+        entries interleaved in the position sequence — stay exactly where they are.
+        Used by Auto Order to apply a computed reordering of the visible queue in one
+        atomic write. Unknown ids are ignored.
+
+        Returns True if any position actually changed.
+        """
+        conn = self._get_conn()
+        rows = conn.execute(
+            "SELECT id, position FROM rotation_entries"
+        ).fetchall()
+        pos_by_id = {r["id"]: r["position"] for r in rows}
+        ids = [i for i in ordered_ids if i in pos_by_id]
+        if not ids:
+            return False
+        slots = sorted(pos_by_id[i] for i in ids)
+        changed = False
+        try:
+            for new_pos, eid in zip(slots, ids):
+                if pos_by_id[eid] != new_pos:
+                    conn.execute(
+                        "UPDATE rotation_entries "
+                        "SET position = ?, updated_at = datetime('now', 'localtime') "
+                        "WHERE id = ?",
+                        (new_pos, eid),
+                    )
+                    changed = True
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        return changed
+
     def get_songs_sung_counts(self):
         """Return a dict mapping singer name → count of 'done' entries tonight.
 

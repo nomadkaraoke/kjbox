@@ -4,6 +4,15 @@ Dated entries, newest first. Each entry notes any required deploy steps.
 
 ---
 
+## 2026-07-17 - Auto Order — fair automatic rotation reordering (v0.90.0)
+
+**Deploy:** backend (`routes.py`, `rotation.py`, `rotation_store.py`, `sing_store.py`, `sing.py`, new `auto_order.py`) → **requires `systemctl restart kj-controller`** (interrupts playback — deploy between songs). Also frontend (`app.js`, `index.html`). No DB migration (reuses the `rotation_meta` key/value table).
+
+- New **"Reorder"** button in the Rotation header and a new opt-in **"Auto Order the rotation"** toggle in the Requests settings modal (default off). Reorders the queue to imitate how Andrew does it by hand — new singers move up, fewer-sung singers ahead of heavy repeat singers, never the same singer twice in a row (spread out bursts), and long waits avoided — so a stand-in KJ never has to reorder manually.
+- **Hard rules:** rows 1-3 are never moved; rows 4-5 are frozen too unless that same singer already sits in rows 1-3 (then the duplicate is bumped out of the top five); each singer's own songs keep their submission order.
+- The pure algorithm lives in `auto_order.py` (scored greedy weave; fairness + wait use *projected* values that account for a singer's earlier queued songs and real linked-file durations, and *reset* each time a singer sings). Validated against 20 real archived nights across 3 review rounds (14/14 scenarios approved). Full design + rationale + tuning guide: `docs/archive/2026-07-16-auto-order-rotation-plan.md`.
+- New route `POST /rotation/auto-order` (on-demand). When the toggle is on, `maybe_auto_reorder` re-runs Auto Order after every new entry (request approval / auto-approve / KJ manual add) — best-effort, never blocks the add. New config field `auto_reorder` on `GET/POST /rotation/requests/config`. Applying is a single undo step (`RotationStore.reorder_by_ids` preserves interleaved Done rows' slots) and a no-op when the queue is already in order.
+
 ## 2026-07-17 - Auto-fallback for failed singer-submission downloads (v0.89.0)
 
 **Deploy:** backend change (`routes.py`, `media.py`, `push_dispatcher.py`, new `sing_resolve.py`) → **requires `systemctl restart kj-controller`** (interrupts playback — deploy between songs). No DB migration; new queue-item fields are in-memory only and ignored on rollback.

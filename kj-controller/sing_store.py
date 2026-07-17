@@ -20,6 +20,9 @@ ACCEPT_MAKE_REQUESTS_KEY = "sing_accept_make_requests"
 # starts the top-of-rotation song (see the frontend arming logic + the
 # /rotation/sms/auto-send route). Default OFF — opt-in per event.
 AUTO_SMS_NEXT_KEY = "sms_auto_next_singer"
+# When on, the rotation is automatically re-run through Auto Order every time a new
+# entry is added (e.g. a singer request is approved). Default OFF — opt-in per event.
+AUTO_REORDER_KEY = "rotation_auto_reorder"
 SIMPLE_MODE_KEY = "kj_simple_mode"
 SMS_TEMPLATE_KEY = "sms_template"
 SMS_DEFAULT_REGION_KEY = "sms_default_region"
@@ -325,6 +328,19 @@ class SingStore:
 
     def set_auto_sms_next(self, enabled):
         self._set_meta(AUTO_SMS_NEXT_KEY, "1" if enabled else "0")
+
+    def is_auto_reorder(self):
+        """Return True if Auto Order should re-run automatically on new entries.
+
+        Default OFF. When on, every time a new rotation entry is added (a singer
+        request approved, or a KJ manual add), the rotation is re-run through
+        ``compute_auto_order`` so a stand-in KJ never has to reorder by hand. The
+        on-demand "Auto Order" header button works regardless of this flag.
+        """
+        return self._get_meta(AUTO_REORDER_KEY, "0") == "1"
+
+    def set_auto_reorder(self, enabled):
+        self._set_meta(AUTO_REORDER_KEY, "1" if enabled else "0")
 
     def is_simple_mode(self):
         """Return True if the KJ controller is in stand-in / simple-operator mode.

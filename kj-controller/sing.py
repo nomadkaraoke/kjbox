@@ -610,6 +610,9 @@ def submit():
             store.mark_approved(to_approve["id"], linked_entry_id=entry_id)
             req = store.get_request(req["id"])
             auto_approved = True
+            # Auto-reorder if the KJ enabled it (best-effort; never fail the submit).
+            from routes import maybe_auto_reorder
+            maybe_auto_reorder(current_app._get_current_object())
         except Exception:
             current_app.logger.exception("Auto-approve failed; keeping pending")
 
