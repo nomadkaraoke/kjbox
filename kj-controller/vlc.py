@@ -128,55 +128,143 @@ class VlcKaraokePlayer:
 
     # ── Video window geometry ──────────────────────────────────────────
 
+    # WM title of the karaoke VLC video window. Unambiguous on this device: the
+    # filler VLC is audio-only (no window) and the mpv/overlay windows use other
+    # titles. VLC leaves _NET_WM_PID unset (0), so the title is the only reliable
+    # key for locating the window.
+    KARAOKE_WINDOW_TITLE = 'VLC media player'
+
     @staticmethod
-    def _video_window_args(margin_px, strip_vlc):
+    def _video_window_args(margin_px):
         """Launch flags controlling the karaoke video window.
 
-        Returns ``[]`` (windowed — positioned afterwards by ``wmctrl``) only when
-        a top strip is reserved (``margin_px > 0``) AND the VLC strip is enabled
-        (``video_strip_vlc``). Otherwise ``['--fullscreen']`` — the safe default,
-        since VLC's own geometry flags are unreliable and window repositioning
-        needs on-device validation.
+        ``margin_px > 0`` launches VLC windowed (no ``--fullscreen``) so the
+        video window can be moved below the reserved ticker strip once it maps
+        (see ``_position_window``). VLC ignores its own geometry CLI flags and
+        only creates the window when playback starts, so placement happens
+        per-play, not at launch. ``margin_px <= 0`` keeps the fullscreen default
+        — a clean rollback that mirrors the mpv renderer's ``margin_px`` gate.
         """
-        if margin_px and margin_px > 0 and strip_vlc:
+        if margin_px and margin_px > 0:
             return []
         return ['--fullscreen']
 
-    def _reposition_window(self, margin_px, screen_w, screen_h):
-        """Best-effort: move the karaoke VLC window below the reserved strip.
-
-        VLC's geometry CLI flags are unreliable, so we reposition the mapped
-        window with ``wmctrl`` after it appears. FIDDLY / device-validated: the
-        filler VLC is a second "VLC media player" window, so ``wmctrl -r``
-        matching is ambiguous — gate this behind ``video_strip_vlc`` and confirm
-        on the device before trusting it. Never raises; logs and leaves VLC
-        fullscreen on any failure.
-        """
-        title = 'VLC media player'
-        video_h = max(1, screen_h - margin_px)
-        cmds = [
-            ['wmctrl', '-r', title, '-b', 'remove,fullscreen'],
-            ['wmctrl', '-r', title, '-e', f'0,0,{margin_px},{screen_w},{video_h}'],
-        ]
+    def _wmctrl_prefix(self):
+        """Command prefix so X tools reach display :0 (dietpi-wrapped on the Pi)."""
         if is_pi():
-            wrapper = ['sudo', '-u', 'dietpi', 'env', 'DISPLAY=:0',
-                       'XDG_RUNTIME_DIR=/run/user/1000']
-            cmds = [wrapper + c for c in cmds]
-        for c in cmds:
-            try:
-                r = subprocess.run(c, capture_output=True, timeout=5, check=False)
-            except (OSError, subprocess.SubprocessError) as e:
-                log_message(f"wmctrl reposition failed ({' '.join(c[-4:])}): {e}", self.config)
-                return
-            if r.returncode != 0:
-                # Non-zero usually means the window title didn't match (e.g. VLC
-                # not mapped yet). Don't claim success.
-                log_message(
-                    f"wmctrl reposition non-zero exit ({' '.join(c[-4:])}): "
-                    f"{r.stderr.decode(errors='replace').strip()}", self.config)
-                return
+            return ['sudo', '-u', 'dietpi', 'env', 'DISPLAY=:0',
+                    'XDG_RUNTIME_DIR=/run/user/1000']
+        return []
+
+    def _find_window(self):
+        """Return ``(winid, x, y)`` for the karaoke VLC video window, or None.
+
+        Matched by WM title (:pyattr:`KARAOKE_WINDOW_TITLE`) via ``wmctrl -lG``.
+        Never raises — returns None on any wmctrl error or a title miss.
+        """
+        try:
+            r = subprocess.run(
+                self._wmctrl_prefix() + ['wmctrl', '-lG'],
+                capture_output=True, text=True, timeout=5, check=False)
+        except (OSError, subprocess.SubprocessError):
+            return None
+        if r.returncode != 0:
+            return None
+        for line in r.stdout.splitlines():
+            if self.KARAOKE_WINDOW_TITLE in line:
+                # Columns: winid desktop x y w h host title...
+                parts = line.split(None, 7)
+                try:
+                    return parts[0], int(parts[2]), int(parts[3])
+                except (IndexError, ValueError):
+                    return None
+        return None
+
+    def _wmctrl(self, args):
+        """Run ``wmctrl <args>`` (dietpi-wrapped on the Pi). Returns the
+        CompletedProcess, or None if wmctrl couldn't be run at all."""
+        try:
+            return subprocess.run(
+                self._wmctrl_prefix() + ['wmctrl'] + args,
+                capture_output=True, timeout=5, check=False)
+        except (OSError, subprocess.SubprocessError) as e:
+            log_message(f"wmctrl {' '.join(args[:2])} failed: {e}", self.config)
+            return None
+
+    def _wmctrl_ok(self, args):
+        """Run ``wmctrl <args>`` and report success. Returns False (logged) when
+        wmctrl can't run OR exits non-zero — e.g. the window vanished (song
+        ended) between locating it and moving it — so callers don't press on and
+        falsely claim the video was placed."""
+        r = self._wmctrl(args)
+        if r is None:
+            return False
+        if r.returncode != 0:
+            log_message(
+                f"wmctrl {' '.join(args[:2])} non-zero exit: "
+                f"{(r.stderr or b'').decode(errors='replace').strip()}",
+                self.config)
+            return False
+        return True
+
+    def _position_window(self, margin_px, screen_w, screen_h):
+        """Move the karaoke VLC video window below the reserved top ticker strip.
+
+        Mirrors the mpv renderer's ``{w}x{h-margin}+0+{margin}`` placement. VLC
+        maps its video window only once playback starts and ignores its geometry
+        CLI flags, so we poll for the window and place it with ``wmctrl``. xfwm4
+        offsets ``wmctrl`` moves by a fixed (frame-extent) amount, so we move
+        once, measure the residual error, then re-request ``2*target - actual``
+        to land exactly on target. Best-effort — never raises; logs and leaves
+        the video where it is on any failure.
+        """
+        if not (margin_px and margin_px > 0):
+            return
+        video_h = max(1, screen_h - margin_px)
+
+        found = None
+        for _ in range(20):  # VLC maps the window shortly after playback starts
+            found = self._find_window()
+            if found:
+                break
+            time.sleep(0.25)
+        if not found:
+            log_message(
+                "Karaoke VLC window not found — video left at default position.",
+                self.config)
+            return
+        winid = found[0]
+
+        # Strip window decorations (best-effort) so no titlebar insets the video.
+        try:
+            subprocess.run(
+                self._wmctrl_prefix() + [
+                    'xprop', '-id', winid, '-f', '_MOTIF_WM_HINTS', '32c',
+                    '-set', '_MOTIF_WM_HINTS', '2, 0, 0, 0, 0'],
+                capture_output=True, timeout=5, check=False)
+        except (OSError, subprocess.SubprocessError):
+            pass
+
+        if not self._wmctrl_ok(
+                ['-i', '-r', winid, '-b',
+                 'remove,maximized_vert,maximized_horz']):
+            return
+        if not self._wmctrl_ok(
+                ['-i', '-r', winid, '-e',
+                 f'0,0,{margin_px},{screen_w},{video_h}']):
+            return
+        time.sleep(0.4)
+        cur = self._find_window()
+        if cur:
+            _, ax, ay = cur
+            # Correct the fixed WM offset: request 2*target - actual so the
+            # window lands exactly at (0, margin_px). target_x is 0. Best-effort
+            # refinement — the primary placement above already succeeded.
+            self._wmctrl_ok(
+                ['-i', '-r', winid, '-e',
+                 f'0,{-ax},{2 * margin_px - ay},{screen_w},{video_h}'])
         log_message(
-            f"Positioned karaoke VLC below {margin_px}px top strip.", self.config)
+            f"Positioned karaoke VLC below {margin_px}px ticker strip.", self.config)
 
     # ── Lifecycle ──────────────────────────────────────────────────────
 
@@ -194,8 +282,7 @@ class VlcKaraokePlayer:
             self.config,
         )
         margin_px = int(self.config.get('video_top_margin_px', 0) or 0)
-        video_args = self._video_window_args(
-            margin_px, bool(self.config.get('video_strip_vlc', False)))
+        video_args = self._video_window_args(margin_px)
         command = [
             'cvlc',
             '--extraintf', 'http',
@@ -231,15 +318,9 @@ class VlcKaraokePlayer:
             self._death_notified = False  # re-arm crash detection for this process
             self._socket_dead_count = 0
             log_message(f"Karaoke VLC launched with PID {process.pid}.", self.config)
-            time.sleep(2)
-            # Windowed (video_args empty) => reposition below the reserved strip
-            # now the VLC window has had time to map.
-            if not video_args:
-                self._reposition_window(
-                    margin_px,
-                    int(self.config.get('screen_width', 1920) or 1920),
-                    int(self.config.get('screen_height', 1080) or 1080),
-                )
+            # NB: no window exists yet — VLC creates its video window only once a
+            # song plays, so placement below the ticker strip happens per-play in
+            # play() (see _position_window), not here.
         except FileNotFoundError:
             log_message("VLC not found — karaoke instance not launched.", self.config)
             if vlc_log:
@@ -350,6 +431,19 @@ class VlcKaraokePlayer:
             self.active = True
             self._save_state()
             log_message(f"Playback started for {os.path.basename(file_path)}.", self.config)
+
+            # Place the video window below the ticker strip (mirrors the mpv
+            # renderer). VLC maps its window only once playback starts, so do it
+            # now, off-thread (it polls for the window + settles wmctrl).
+            margin_px = int(self.config.get('video_top_margin_px', 0) or 0)
+            if margin_px > 0:
+                threading.Thread(
+                    target=self._position_window,
+                    args=(margin_px,
+                          int(self.config.get('screen_width', 1920) or 1920),
+                          int(self.config.get('screen_height', 1080) or 1080)),
+                    daemon=True,
+                ).start()
 
         def verify():
             time.sleep(3)
