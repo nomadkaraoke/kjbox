@@ -4,6 +4,14 @@ Dated entries, newest first. Each entry notes any required deploy steps.
 
 ---
 
+## 2026-07-16 - Singer UI: your songs survive a refresh (v0.82.0)
+
+**Deploy:** frontend-only (`static-sing/sing.js`, `static-sing/sing.css`, `templates/sing.html`) → auto-deploy pulls on the next browser refresh; **no service restart** and no playback interruption.
+
+- A singer who refreshes their phone no longer loses sight of their submitted songs. The request ids + edit tokens were already persisted in `localStorage`; the app just never restored to them on reload. Now, on boot, if the device has songs for tonight, the singer lands straight on their **"Your songs tonight"** list (with the existing cancel / change / reorder controls).
+- Added an always-visible **"🎤 My songs (N)" bar** on every other screen (landing, search, confirm) showing status at a glance (🎤 You're up! / 🎤 You're next / `#4 · ~10–15 min` / Waiting for KJ…). One tap opens the list. Hidden on the done screen (which is the list) and when the device owns no songs.
+- **Stale-night pruning:** the event token is reused across nights and `localStorage` isn't cleared, so `/my-requests` night-scopes old ids out server-side; the client now prunes any id the server no longer returns so the count never shows phantom songs from a previous night. A fresh night cleanly shows the normal landing screen.
+
 ## 2026-07-09 - Singer self-service: change song + reorder your own (v0.79.0)
 
 **Deploy:** backend change (`sing.py`, `sing_store.py`, `routes.py`) → **requires `systemctl restart kj-controller`** (interrupts playback — maintenance window). Also frontend (`sing.js`, `app.js`, CSS). Additive DB migration (`sing_requests.supersedes_request_id`) — safe on existing DBs. Builds on the v0.78.0 `edit_token` ownership.

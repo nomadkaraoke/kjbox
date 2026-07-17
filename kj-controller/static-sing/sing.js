@@ -73,6 +73,30 @@ function readEditToken(token, id) {
   return store.tokens[String(id)] || "";
 }
 
+// Drop stored ids that are no longer "tonight's" for this token. The event
+// token is reused across nights and localStorage isn't cleared, so last
+// night's ids linger; /my-requests night-scopes them out server-side, and we
+// prune anything the server no longer returns so the "My songs" count/bar
+// doesn't show phantom songs. `keepIds` is the set the server still recognises
+// (as numbers or strings). Only ever called after a successful 200 — never on
+// a thrown fetch — so a transient outage can't wipe a valid list.
+function pruneRequestIds(token, keepIds) {
+  const store = _readMyRequestStore();
+  if (!store || store.token !== token) return;
+  const keep = new Set((keepIds || []).map((x) => String(x)));
+  const nextIds = store.ids.filter((id) => keep.has(String(id)));
+  if (nextIds.length === store.ids.length) return;   // nothing to prune
+  const nextTokens = {};
+  for (const id of nextIds) {
+    const t = store.tokens && store.tokens[String(id)];
+    if (t) nextTokens[String(id)] = t;
+  }
+  store.ids = nextIds;
+  store.tokens = nextTokens;
+  try { localStorage.setItem(MY_REQUESTS_KEY, JSON.stringify(store)); }
+  catch { /* private browsing — best-effort */ }
+}
+
 const PHONE_RE = /^\+?[0-9 \-()]{7,20}$/;
 
 const state = {
@@ -98,6 +122,12 @@ const state = {
   // Simple KJ Mode — restricts source allowlist and trims UI; mirrors
   // server's kj_simple_mode flag, kept in sync via /sing/search response.
   simpleMode: INITIAL_SIMPLE_MODE,
+  // Persistent "My songs" view-model. Populated from /sing/my-requests so the
+  // always-visible bar (and boot smart-restore) can show this device's songs
+  // for tonight without being on the done screen. `loaded` flips true after
+  // the first successful probe so the bar doesn't flash before we know.
+  mySongs: { items: [], nowPlaying: null, loaded: false },
+  _barPollTimer: null,
 };
 
 const MAX_PARTNERS = 3;
@@ -217,6 +247,9 @@ function render() {
     done: renderDone,
   }[state.step] || renderLanding;
   root.appendChild(view());
+  // The persistent "My songs" bar lives outside #sing-root so it survives the
+  // innerHTML reset above; refresh its visibility/content for the new step.
+  updateMySongsBar();
 }
 
 function back(to) {
@@ -1468,6 +1501,13 @@ async function pollMyRequests(card) {
     try {
       const data = await fetchMyRequests(ids);
       onPollSuccess();
+      // Keep the persistent bar's view-model fresh so navigating back to the
+      // landing/search screens shows an up-to-date count and status.
+      state.mySongs = {
+        items: data.requests || [],
+        nowPlaying: data.now_playing || null,
+        loaded: true,
+      };
       const npNode = card.querySelector(".now-playing");
       if (npNode) updateNowPlaying(npNode, data.now_playing);
       const slot = card.querySelector(".songs-list");
@@ -1503,6 +1543,116 @@ async function pollMyRequests(card) {
 
   tick();
   state._statusPollTimer = setInterval(tick, 15000);
+}
+
+// --- Persistent "My songs" bar --------------------------------------------
+
+// Fetch this device's songs for tonight, prune stale (prior-night) ids, and
+// refresh the bar. Returns the number of live songs (0 on empty / failure).
+// Used by boot smart-restore and the bar's own poll.
+async function refreshMySongs() {
+  const ids = readMyRequestIds(TOKEN);
+  if (!ids.length) {
+    state.mySongs = { items: [], nowPlaying: null, loaded: true };
+    updateMySongsBar();
+    return 0;
+  }
+  try {
+    const data = await fetchMyRequests(ids.slice(-MY_REQUESTS_MAX));
+    const items = data.requests || [];
+    // Prune any stored id the server no longer recognises (prior-night rows,
+    // cancelled-and-cleared, etc.) so the count never lies. Cancelled songs
+    // still come back (status cancelled), so they survive the prune.
+    pruneRequestIds(TOKEN, items.map((it) => it.request.id));
+    state.mySongs = { items, nowPlaying: data.now_playing || null, loaded: true };
+    updateMySongsBar();
+    // Return the LIVE count (excludes cancelled/rejected) so boot smart-restore
+    // and the bar agree — a device whose only song was cancelled isn't yanked
+    // off the landing screen, though the done list still shows it if opened.
+    return _liveSongs(items).length;
+  } catch {
+    // Network/5xx — leave any prior view-model intact and don't prune.
+    state.mySongs.loaded = true;
+    updateMySongsBar();
+    return _liveSongs(state.mySongs.items).length;
+  }
+}
+
+function _liveSongs(items) {
+  return (items || []).filter(
+    (it) => it.request && !["cancelled", "rejected"].includes(it.request.status),
+  );
+}
+
+// One-line status summary across all the singer's songs — surfaces the most
+// advanced one so the bar answers "am I up soon?" at a glance. Mirrors the
+// per-card _statusLine estimate fields.
+function _mySongsPillSummary(items) {
+  const live = _liveSongs(items);
+  if (!live.length) return "";
+  if (live.some((it) => it.estimate && it.estimate.now_singing)) return "🎤 You're up!";
+  const withPos = live
+    .filter((it) => it.estimate && typeof it.estimate.position === "number")
+    .sort((a, b) => a.estimate.position - b.estimate.position);
+  if (withPos.length) {
+    const est = withPos[0].estimate;
+    if (est.position === 1) return "🎤 You're next";
+    if (est.position === 2) return "🎤 Almost up — 1 to go";
+    const low = Math.round(est.range_low_s / 60);
+    const high = Math.round(est.range_high_s / 60);
+    return `#${est.position} · ~${low}–${high} min`;
+  }
+  if (live.some((it) => it.request.status === "pending")) return "Waiting for KJ…";
+  return "In the queue";
+}
+
+function _barPollActive() {
+  return state.step !== "done" && _liveSongs(state.mySongs.items).length > 0;
+}
+
+function stopBarPoll() {
+  if (state._barPollTimer) {
+    clearInterval(state._barPollTimer);
+    state._barPollTimer = null;
+  }
+}
+
+function startBarPoll() {
+  if (state._barPollTimer) return;
+  state._barPollTimer = setInterval(() => {
+    if (!_barPollActive()) { stopBarPoll(); return; }
+    refreshMySongs();
+  }, 20000);
+}
+
+// Show/hide/populate the persistent bar. Hidden on the done screen (which IS
+// the list) and whenever this device owns no live songs tonight.
+function updateMySongsBar() {
+  const bar = document.getElementById("sing-mysongs-bar");
+  if (!bar) return;
+  const live = _liveSongs(state.mySongs.items);
+  if (state.step === "done" || live.length === 0) {
+    bar.setAttribute("hidden", "");
+    bar.innerHTML = "";
+    stopBarPoll();
+    return;
+  }
+  const count = live.length;
+  const summary = _mySongsPillSummary(state.mySongs.items);
+  bar.innerHTML = "";
+  bar.appendChild(el("button", {
+    class: "mysongs-pill",
+    "data-testid": "mysongs-bar",
+    onclick: () => { state.step = "done"; render(); },
+  },
+    el("span", { class: "mysongs-icon" }, "🎤"),
+    el("span", { class: "mysongs-label" },
+      `My song${count === 1 ? "" : "s"} (${count})`),
+    summary ? el("span", { class: "mysongs-status" }, summary) : null,
+    el("span", { class: "mysongs-chevron" }, "›"),
+  ));
+  bar.removeAttribute("hidden");
+  startBarPoll();
 }
 
 // --- Service worker registration ------------------------------------------
@@ -1810,4 +1960,18 @@ if (codeEntryEl) {
   // SW + push only make sense in the main SPA path (requires a valid token).
   registerServiceWorker().then((reg) => { swRegistration = reg; });
   render();
+  // Smart restore — if this device already submitted songs for tonight, bring
+  // the singer back to their "Your songs tonight" list on reload (the ids +
+  // edit tokens live in localStorage). Probe async so a fresh night (server
+  // returns none after night-scoping) leaves them on the landing screen rather
+  // than an empty list. The landing-step guard avoids yanking a singer who
+  // tapped into search/identity while the probe was in flight.
+  if (state.step !== "done" && readMyRequestIds(TOKEN).length) {
+    refreshMySongs().then((n) => {
+      if (n > 0 && state.step === "landing") {
+        state.step = "done";
+        render();
+      }
+    });
+  }
 }
