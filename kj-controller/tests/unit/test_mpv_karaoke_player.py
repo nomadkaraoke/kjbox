@@ -692,3 +692,80 @@ def test_notify_if_dead_omits_song_on_idle_crash(player):
     assert player._notify_if_dead() is True
     assert captured[0]['song'] is None
     assert captured[0]['file_path'] is None
+
+
+# --- get_status length: CDG+MP3 audio-vs-graphics mismatch ---
+# For a CDG zip, mpv's `duration` is the .cdg GRAPHICS stream, which can end
+# before the attached .mp3 AUDIO. time-pos follows the audio clock, so it can
+# overshoot mpv's duration ("3:53 / 3:21"). get_status reports the longer audio
+# length so the readout doesn't exceed its own total.
+
+def _status_props(pause, time_pos, duration):
+    vals = {'pause': pause, 'time-pos': time_pos, 'duration': duration}
+    return lambda name: vals[name]
+
+
+def test_get_status_cdg_prefers_audio_length_over_graphics(player, mocker):
+    player.active = True
+    player._audio_file = '/songs/sour-times.mp3'
+    player._audio_duration = 252   # probed mp3 length (4:12)
+    mocker.patch.object(player, '_get_property',
+                        side_effect=_status_props(False, 233, 201))  # cdg = 3:21
+    st = player.get_status()
+    assert st['length'] == 252     # audio, NOT the shorter graphics stream
+    assert st['time'] == 233
+    assert st['state'] == 'playing'
+
+
+def test_get_status_normal_file_uses_mpv_duration(player, mocker):
+    player.active = True
+    player._audio_file = None       # single-file playback — mpv duration is right
+    mocker.patch.object(player, '_get_property',
+                        side_effect=_status_props(False, 10, 180))
+    st = player.get_status()
+    assert st['length'] == 180
+
+
+def test_get_status_audio_duration_not_yet_probed_falls_back(player, mocker):
+    player.active = True
+    player._audio_file = '/songs/sour-times.mp3'
+    player._audio_duration = None   # probe still in flight
+    mocker.patch.object(player, '_get_property',
+                        side_effect=_status_props(False, 5, 201))
+    st = player.get_status()
+    assert st['length'] == 201      # graceful fallback, no crash
+
+
+def test_get_status_never_shrinks_length_below_mpv_duration(player, mocker):
+    # Defensive: if the graphics somehow outlast the audio, keep the larger.
+    player.active = True
+    player._audio_file = '/songs/x.mp3'
+    player._audio_duration = 100
+    mocker.patch.object(player, '_get_property',
+                        side_effect=_status_props(False, 50, 180))
+    st = player.get_status()
+    assert st['length'] == 180
+
+
+def test_probe_audio_duration_sets_cache(player, mocker):
+    player._audio_file = '/songs/x.mp3'
+    mocker.patch('mpv_manager.probe_media_info', return_value={'duration': 252.24})
+    player._probe_audio_duration_async('/songs/x.mp3')
+    assert player._audio_duration == 252
+
+
+def test_probe_audio_duration_ignores_stale_song(player, mocker):
+    # A slow probe from a previous song must not clobber the current song's cache.
+    player._audio_file = '/songs/new.mp3'
+    player._audio_duration = None
+    mocker.patch('mpv_manager.probe_media_info', return_value={'duration': 999})
+    player._probe_audio_duration_async('/songs/old.mp3')
+    assert player._audio_duration is None
+
+
+def test_probe_audio_duration_survives_probe_failure(player, mocker):
+    player._audio_file = '/songs/x.mp3'
+    player._audio_duration = None
+    mocker.patch('mpv_manager.probe_media_info', side_effect=RuntimeError('boom'))
+    player._probe_audio_duration_async('/songs/x.mp3')  # must not raise
+    assert player._audio_duration is None

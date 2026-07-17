@@ -22,6 +22,7 @@ import time
 from config import APP_DIR, is_pi
 from filler import FillerVLC
 from karaoke_player import fade_steps
+from mediainfo import probe_media_info
 from utils import log_message
 
 STATE_FILE = '/tmp/kj-mpv-state.json'
@@ -74,6 +75,12 @@ class MpvKaraokePlayer:
         self._vocals_file = None      # resolved guide path for the current song
         self._vocals_volume = 0       # vlc scale 0-256 (0 = off); guide gain = /256
         self._lavfi_active = False    # is a lavfi-complex mix currently set in mpv
+        # CDG+MP3: mpv's `duration` is the .cdg GRAPHICS stream, which can end
+        # before the attached .mp3 audio, making time-pos overshoot the reported
+        # total. Remember the external audio path and its probed length so
+        # get_status can report the (longer) audible duration instead.
+        self._audio_file = None       # external .mp3 attached for a CDG zip
+        self._audio_duration = None   # probed audio length in seconds (lazy)
         self.ipc_socket_path = MPV_SOCKET_PATH
         self._ipc_lock = threading.Lock()
         self._ipc_request_id = 0
@@ -410,6 +417,11 @@ class MpvKaraokePlayer:
             self._pitch_semitones = 0  # reset for each new song
             self._vocals_volume = 0    # guide starts OFF each song; KJ raises it live
             self._vocals_file = None
+            # A CDG song attaches its .mp3 as an external audio track; a normal
+            # single file does not. Remember it (or clear it) so get_status knows
+            # whether to prefer the audio length over mpv's graphics `duration`.
+            self._audio_file = audio_file
+            self._audio_duration = None
 
             if display_path is not None:
                 self.current_path = display_path
@@ -480,6 +492,33 @@ class MpvKaraokePlayer:
             log_message(f"Playback started for {os.path.basename(file_path)}.", self.config)
 
         threading.Thread(target=self._verify_playback_progress, daemon=True).start()
+        # Probe the external audio length off the hot path so get_status can
+        # report it (see _probe_audio_duration_async). Best-effort: if it never
+        # resolves, get_status just falls back to mpv's `duration`.
+        if audio_file:
+            threading.Thread(
+                target=self._probe_audio_duration_async, args=(audio_file,),
+                daemon=True).start()
+
+    def _probe_audio_duration_async(self, audio_file):
+        """Probe the attached .mp3's real length and cache it for get_status.
+
+        For a CDG zip mpv's `duration` is the .cdg graphics stream, which often
+        ends before the audio (a lyric-free outro), so time-pos overshoots the
+        reported total. ffprobe gives the true audible length. Runs in a daemon
+        thread; a slow/failed probe simply leaves the cache unset. Guards against
+        a stale probe from a previous song clobbering the current one.
+        """
+        try:
+            info = probe_media_info(audio_file)
+            dur = info.get("duration") if info else None
+        except Exception as exc:  # ffprobe missing/hung/garbled — never fatal
+            log_message(f"WARNING: could not probe audio length for "
+                        f"{os.path.basename(audio_file)}: {exc}", self.config)
+            return
+        # Only apply if this is still the song we probed for.
+        if dur and dur > 0 and self._audio_file == audio_file:
+            self._audio_duration = int(dur)
 
     def _verify_playback_progress(self):
         """Confirm playback is actually advancing after a play().
@@ -516,6 +555,8 @@ class MpvKaraokePlayer:
         self.audio_error = False
         self._vocals_file = None
         self._vocals_volume = 0
+        self._audio_file = None
+        self._audio_duration = None
         self._save_state()
 
     def set_vocals_volume(self, vlc_level):
@@ -623,10 +664,18 @@ class MpvKaraokePlayer:
         if paused is None and time_pos is None:
             return {"state": "stopped", "time": 0, "length": 0}
 
+        length = int(duration or 0)
+        # CDG+MP3: mpv's `duration` is the .cdg graphics stream, which can be
+        # shorter than the attached .mp3 audio (making time-pos overshoot the
+        # total). Prefer the probed audio length so the readout never exceeds
+        # its own duration. Falls back to mpv's value until the probe resolves.
+        if self._audio_file and self._audio_duration and self._audio_duration > length:
+            length = self._audio_duration
+
         return {
             "state": "paused" if paused else "playing",
             "time": int(time_pos or 0),
-            "length": int(duration or 0),
+            "length": length,
         }
 
     # Properties the perf monitor reads each tick (fetched in ONE round-trip).
