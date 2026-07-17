@@ -1337,6 +1337,7 @@ async function fetchMyRequests(ids) {
 
 function _statusLine(item) {
   const req = item.request;
+  if (item.performed) return "✓ You sang this — nice one!";
   if (req.status === "rejected") {
     return "The KJ needs to talk to you — see them at the desk.";
   }
@@ -1358,7 +1359,10 @@ function _renderSongCard(item, reorderCtx) {
   const req = item.request;
   const song = (req.song_title || "") + (req.song_artist ? ` — ${req.song_artist}` : "");
   const partners = req.additional_singers || [];
-  const card = el("div", { class: "song-card", "data-status": req.status },
+  const card = el("div", {
+    class: item.performed ? "song-card song-card-done" : "song-card",
+    "data-status": req.status,
+  },
     el("div", { class: "song-card-title" }, song || "(song)"),
     el("div", { class: "song-card-status" }, _statusLine(item)),
   );
@@ -1367,6 +1371,9 @@ function _renderSongCard(item, reorderCtx) {
     card.appendChild(el("div", { class: "song-card-partners" },
       `with ${names}`));
   }
+  // A performed song is read-only — no cancel/change/reorder (the backend would
+  // reject them 409 anyway, and there's nothing to change once it's been sung).
+  if (item.performed) return card;
   // Self-service cancel — only for a request this device owns (has the
   // edit_token for) and that is still cancellable (pending or in the queue).
   const editToken = readEditToken(TOKEN, req.id);
@@ -1450,6 +1457,9 @@ function renderDone() {
     renderNowPlaying(),
     el("h2", {}, "Your songs tonight"),
     el("div", { class: "songs-list" }, "Loading your songs…"),
+    // Populated by pollMyRequests once we know which songs are already sung;
+    // stays hidden until there's at least one, so the active list stays clean.
+    el("div", { class: "sung-section", hidden: "" }),
     el("button", {
       class: "btn primary request-another",
       "data-testid": "request-another",
@@ -1522,31 +1532,40 @@ async function pollMyRequests(card) {
       const npNode = card.querySelector(".now-playing");
       if (npNode) updateNowPlaying(npNode, data.now_playing);
       const slot = card.querySelector(".songs-list");
+      const sungSection = card.querySelector(".sung-section");
+      // Split sung songs out of the active list and sort what's left into the
+      // order it'll actually be sung, so a reordered queue reads correctly.
+      const { active, performed } = _splitAndSortSongs(data.requests);
       if (slot) {
         slot.innerHTML = "";
-        if (!data.requests.length) {
+        if (!active.length && !performed.length) {
           slot.appendChild(el("p", { class: "hint" },
             "No songs yet — tap 'Request another song' below."));
+        } else if (!active.length) {
+          slot.appendChild(el("p", { class: "hint" },
+            "All your songs are done — tap 'Request another song' below for more."));
         } else {
           // Build reorder context: this device's own queued (approved) songs,
-          // in display order, that we hold an edit_token for.
+          // in display order, that we hold an edit_token for. Sung songs are
+          // already excluded (they're in `performed`, not `active`), and a
+          // real queue position is required so a not-yet-estimated song can't
+          // sneak in.
           const order = [];
           const tokens = {};
-          for (const item of data.requests) {
+          for (const item of active) {
             const r = item.request;
             const tok = readEditToken(TOKEN, r.id);
-            // Only still-queued songs (those with a live estimate) are
-            // reorderable — a sung song stays status 'approved' but has no
-            // estimate, so it's excluded.
-            if (r.status === "approved" && tok && item.estimate) {
+            if (r.status === "approved" && tok
+                && item.estimate && typeof item.estimate.position === "number") {
               order.push(r.id);
               tokens[r.id] = tok;
             }
           }
           const reorderCtx = { order, tokens };
-          for (const item of data.requests) slot.appendChild(_renderSongCard(item, reorderCtx));
+          for (const item of active) slot.appendChild(_renderSongCard(item, reorderCtx));
         }
       }
+      if (sungSection) _renderSungSection(sungSection, performed);
     } catch {
       onPollFailure();
     }
@@ -1593,9 +1612,60 @@ async function refreshMySongs() {
 }
 
 function _liveSongs(items) {
+  // "Live" = still part of tonight for this singer: not cancelled/rejected and
+  // not already performed. Sung songs stay in the /my-requests feed (so the
+  // done screen can list them under "Already sung") but must not inflate the
+  // bar count or keep a finished singer pinned to the done screen on reload.
   return (items || []).filter(
-    (it) => it.request && !["cancelled", "rejected"].includes(it.request.status),
+    (it) => it.request
+      && !it.performed
+      && !["cancelled", "rejected"].includes(it.request.status),
   );
+}
+
+// Split the singer's songs into the active list (still coming up / awaiting the
+// KJ) and the ones already performed, and sort the active list into the order
+// they'll actually be sung — now singing first, then by queue position, then
+// songs still waiting on the KJ. Without this the list renders in submission
+// order, which looks wrong after a reorder.
+function _splitAndSortSongs(items) {
+  const all = items || [];
+  const performed = all.filter((it) => it.performed);
+  const active = all.filter((it) => !it.performed);
+  active.sort((a, b) => _activeSortKey(a) - _activeSortKey(b));
+  return { active, performed };
+}
+
+function _activeSortKey(item) {
+  const req = item.request || {};
+  const est = item.estimate;
+  if (est && est.now_singing) return -1;            // on the mic right now
+  if (est && typeof est.position === "number") return est.position;  // 1,2,3…
+  if (req.status === "pending") return 1e6;         // awaiting KJ approval
+  if (req.status === "rejected") return 2e6;        // needs a chat with the KJ
+  return 1.5e6;                                      // approved but no estimate
+}
+
+// Render (or hide) the collapsed "Already sung tonight" section so performed
+// songs stay visible as history without cluttering the active list. Rebuilt on
+// every poll, so preserve the singer's open/closed choice across refreshes.
+function _renderSungSection(container, performed) {
+  const details = container.querySelector("details");
+  const wasOpen = details ? details.open : false;
+  container.innerHTML = "";
+  if (!performed || !performed.length) {
+    container.setAttribute("hidden", "");
+    return;
+  }
+  container.removeAttribute("hidden");
+  const next = el("details", { class: "sung-details", "data-testid": "sung-section" },
+    el("summary", {},
+      `✓ Already sung tonight (${performed.length})`),
+    el("div", { class: "sung-list" },
+      performed.map((item) => _renderSongCard(item))),
+  );
+  if (wasOpen) next.open = true;
+  container.appendChild(next);
 }
 
 // One-line status summary across all the singer's songs — surfaces the most

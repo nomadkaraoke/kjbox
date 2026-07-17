@@ -397,6 +397,80 @@ class TestChangeReorderControls:
         assert "tok11" in body and "tok12" in body
 
 
+class TestDoneScreenOrderingAndSung:
+    """The 'Your songs tonight' list orders by queue position and files sung
+    songs under a collapsed 'Already sung' section instead of letting them pile
+    up in the active list."""
+
+    def _song(self, rid, title, status="approved", linked=None, estimate=None,
+              performed=False):
+        item = {"request": {"id": rid, "singer_name": "Alice", "song_artist": "Q",
+                "song_title": title, "source_type": "local", "status": status,
+                "created_at": "now", "linked_entry_id": linked,
+                "additional_singers": None}, "performed": performed}
+        if estimate is not None:
+            item["estimate"] = estimate
+        return item
+
+    def _seed(self, page, live_server, live_token, requests, ls_store):
+        _login(page, live_server, live_token)
+        page.evaluate("(s) => localStorage.setItem('sing_my_request_ids', JSON.stringify(s))", ls_store)
+        page.route("**/sing/my-requests*", lambda route: route.fulfill(
+            status=200, content_type="application/json", body=json.dumps({
+                "now_playing": {"now_singing": None, "up_next": None, "queued_count": 0},
+                "requests": requests})))
+        page.evaluate("window.__sing_state.step = 'done'; window.__sing_render();")
+
+    def test_active_songs_render_in_queue_order(self, page, live_server, live_token):
+        # Submission order is [Late, NowUp, Soon] but queue order is
+        # NowUp (singing) → Soon (#2) → Late (#5).
+        reqs = [
+            self._song(11, "Late", linked=101, estimate={"position": 5, "now_singing": False}),
+            self._song(12, "NowUp", linked=102, estimate={"position": 1, "now_singing": True}),
+            self._song(13, "Soon", linked=103, estimate={"position": 2, "now_singing": False}),
+        ]
+        self._seed(page, live_server, live_token, reqs,
+                   {"token": live_token, "ids": [11, 12, 13], "tokens": {}})
+        titles = page.locator(".songs-list .song-card-title")
+        expect(titles).to_have_count(3)
+        assert titles.all_inner_texts() == ["NowUp — Q", "Soon — Q", "Late — Q"]
+
+    def test_sung_songs_move_to_collapsed_section(self, page, live_server, live_token):
+        reqs = [
+            self._song(11, "Coming", linked=101, estimate={"position": 2, "now_singing": False}),
+            self._song(12, "Sung", linked=102, performed=True),
+        ]
+        self._seed(page, live_server, live_token, reqs,
+                   {"token": live_token, "ids": [11, 12], "tokens": {}})
+        # Active list holds only the still-queued song.
+        active = page.locator(".songs-list .song-card-title")
+        expect(active).to_have_count(1)
+        assert active.all_inner_texts() == ["Coming — Q"]
+        # Sung song lives in the collapsed section, which reports the count.
+        sung = page.locator('[data-testid="sung-section"]')
+        expect(sung).to_be_visible()
+        expect(sung).to_contain_text("Already sung tonight (1)")
+        expect(sung.locator(".song-card-title")).to_have_text("Sung — Q")
+
+    def test_sung_song_has_no_edit_controls(self, page, live_server, live_token):
+        # Even though this device owns the edit_token, a performed song is
+        # read-only (cancel/change would 409, reorder is meaningless).
+        reqs = [self._song(12, "Sung", linked=102, performed=True)]
+        self._seed(page, live_server, live_token, reqs,
+                   {"token": live_token, "ids": [12], "tokens": {"12": "tok12"}})
+        expect(page.locator('[data-testid="sung-section"]')).to_be_visible()
+        expect(page.locator('[data-testid="cancel-song"]')).to_have_count(0)
+        expect(page.locator('[data-testid="change-song"]')).to_have_count(0)
+
+    def test_no_sung_section_when_nothing_performed(self, page, live_server, live_token):
+        reqs = [self._song(11, "Coming", linked=101,
+                           estimate={"position": 2, "now_singing": False})]
+        self._seed(page, live_server, live_token, reqs,
+                   {"token": live_token, "ids": [11], "tokens": {}})
+        expect(page.locator(".songs-list .song-card-title")).to_have_count(1)
+        expect(page.locator('[data-testid="sung-section"]')).to_have_count(0)
+
+
 class TestMySongsPersistence:
     """Boot smart-restore + persistent 'My songs' bar (survives page reload)."""
 

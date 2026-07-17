@@ -623,6 +623,21 @@ class TestMyRequests:
         item = resp.get_json()["requests"][0]
         assert "estimate" in item
         assert item["estimate"]["position"] >= 1
+        assert item["performed"] is False
+
+    def test_performed_flag_set_when_entry_done(self, client, sing_app, token):
+        # A sing_request stays 'approved' after being sung, so the done screen
+        # relies on `performed` (derived from the linked entry status) to move
+        # it out of the active list. No live estimate once performed.
+        r1 = self._create(sing_app)
+        from routes import approve_sing_request
+        entry_id = approve_sing_request(sing_app, sing_app.sing_store.get_request(r1["id"]))
+        sing_app.sing_store.mark_approved(r1["id"], linked_entry_id=entry_id)
+        sing_app.rotation.update_status(entry_id, "Done")   # singer already performed
+        resp = client.get(f"/sing/my-requests?ids={r1['id']}&t={token}")
+        item = resp.get_json()["requests"][0]
+        assert item["performed"] is True
+        assert "estimate" not in item
 
 
 class TestSelfServiceCancel:

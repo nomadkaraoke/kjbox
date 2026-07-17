@@ -837,6 +837,13 @@ def my_requests():
     if rotation_mgr is not None:
         entries, _active, now_playing_dict = _build_now_playing(rotation_mgr)
 
+    # A sing_request stays 'approved' even after its rotation entry has been
+    # sung, so the done screen needs to know which songs are already performed
+    # (Done/Left) to move them out of the active list. `entries` is the ACTIVE
+    # queue only (get_rotation drops done/left), so a linked id that isn't in
+    # it is either performed or gone — resolve those with a targeted lookup.
+    active_ids = {e["id"] for e in entries}
+
     out = []
     for rid in ids:
         req = store.get_request(rid)
@@ -848,11 +855,22 @@ def my_requests():
         if not _belongs_to_current_night(store, req):
             continue
         item = {"request": _public_request_view(req)}
-        if req.get("linked_entry_id") and entries:
-            estimate = compute_estimate(
-                entries, req["linked_entry_id"], current_app.kj_config,
-            )
-            item["estimate"] = estimate
+        linked = req.get("linked_entry_id")
+        performed = False
+        if linked:
+            if linked in active_ids:
+                item["estimate"] = compute_estimate(
+                    entries, linked, current_app.kj_config,
+                )
+            elif rotation_mgr is not None:
+                # Not in the active queue — check whether it was sung (Done) or
+                # the singer left, so the done screen files it under "Already
+                # sung tonight" rather than showing a stale "in the queue".
+                entry = rotation_mgr.store.get_entry(linked)
+                status = ((entry or {}).get("status") or "").lower()
+                if status in ("done", "left"):
+                    performed = True
+        item["performed"] = performed
         out.append(item)
 
     return jsonify({"now_playing": now_playing_dict, "requests": out})
