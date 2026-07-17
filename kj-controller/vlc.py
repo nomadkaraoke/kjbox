@@ -249,22 +249,41 @@ class VlcKaraokePlayer:
                 ['-i', '-r', winid, '-b',
                  'remove,maximized_vert,maximized_horz']):
             return
-        if not self._wmctrl_ok(
-                ['-i', '-r', winid, '-e',
-                 f'0,0,{margin_px},{screen_w},{video_h}']):
-            return
-        time.sleep(0.4)
-        cur = self._find_window()
-        if cur:
+
+        # Converge on (0, margin_px). Two things move the window off a single
+        # request: xfwm4 offsets wmctrl moves by a fixed frame-extent amount, and
+        # VLC nudges/resizes its own window while a (4K) file loads. So we drive a
+        # closed loop — request, settle, measure, and adjust the *next* request by
+        # the observed error (req += target - actual) — until the window lands on
+        # target within a 2px tolerance (covers the WM border). A stale read one
+        # round is simply corrected the next.
+        req_x, req_y = 0, margin_px
+        placed = False
+        last = None
+        for _ in range(6):
+            if not self._wmctrl_ok(
+                    ['-i', '-r', winid, '-e',
+                     f'0,{req_x},{req_y},{screen_w},{video_h}']):
+                return
+            time.sleep(0.5)
+            cur = self._find_window()
+            if not cur:
+                break
             _, ax, ay = cur
-            # Correct the fixed WM offset: request 2*target - actual so the
-            # window lands exactly at (0, margin_px). target_x is 0. Best-effort
-            # refinement — the primary placement above already succeeded.
-            self._wmctrl_ok(
-                ['-i', '-r', winid, '-e',
-                 f'0,{-ax},{2 * margin_px - ay},{screen_w},{video_h}'])
-        log_message(
-            f"Positioned karaoke VLC below {margin_px}px ticker strip.", self.config)
+            last = (ax, ay)
+            if abs(ax) <= 2 and abs(ay - margin_px) <= 2:
+                placed = True
+                break
+            req_x += -ax
+            req_y += margin_px - ay
+        if placed:
+            log_message(
+                f"Positioned karaoke VLC below {margin_px}px ticker strip.",
+                self.config)
+        else:
+            log_message(
+                f"Karaoke VLC placement did not settle (last={last}) — video may "
+                f"be slightly off the {margin_px}px strip.", self.config)
 
     # ── Lifecycle ──────────────────────────────────────────────────────
 

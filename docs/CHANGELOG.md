@@ -2,7 +2,7 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
-## 2026-07-17 - Fix: VLC video no longer covered by the rotation ticker (v0.87.1)
+## 2026-07-17 - Fix: VLC video no longer covered by the rotation ticker (v0.87.2)
 
 The VLC karaoke renderer now honours the reserved top ticker strip
 (`video_top_margin_px`, default 80) just like mpv — previously VLC launched
@@ -10,9 +10,13 @@ fullscreen and the ticker composited over the top of its video, while mpv
 rendered below the strip. VLC ignores its own geometry CLI flags and maps its
 video window only when a song starts, so `VlcKaraokePlayer._position_window`
 now places the window **per-play** with `wmctrl` (matched by the `VLC media
-player` window title), correcting xfwm4's fixed frame-extent offset by
-re-requesting `2×target − actual`. Placement validated on NomadPC by
-screenshot: VLC video sits at `1920×1000+0+80`, matching mpv.
+player` window title). Because xfwm4 offsets wmctrl moves by a fixed
+frame-extent amount *and* VLC nudges its own window while a 4K file loads, it
+drives a short closed loop (request → settle → measure → adjust by the observed
+error) until the window lands within 2px of target. Validated end-to-end on
+NomadPC: VLC video settles at `1920×1000+0+80`, matching mpv. (v0.87.1 shipped
+the per-play placement but a single-shot correction mis-landed on the live 4K
+window at `y=160`; v0.87.2 replaced it with the convergence loop.)
 
 Investigation context (no code change): confirmed **VLC 3.0.20 hardware-decodes
 nothing via VAAPI** on NomadPC — its decoder module declines every codec, so
