@@ -7,9 +7,11 @@ that keep singers from mismanaged expectations: advance on unavailable, retry
 on transient, and terminal ❌ only when nothing is playable.
 """
 
+import time
+
 import routes
 import sing_resolve
-from routes import _download_worker
+from routes import _download_worker, approve_sing_request
 
 
 def _make_request(app, source_ref, versions=None):
@@ -129,3 +131,60 @@ def test_build_candidates_extracts_and_dedups_youtube(flask_app):
     assert "https://youtu.be/A" in urls                # other YT candidate included
     assert "/media/song.mp4" not in urls               # local skipped (YT-only in v1)
     assert urls.count("https://youtu.be/DEAD") == 1    # deduped against current
+
+
+def test_preserve_versions_meta_keeps_snapshot():
+    """Binding a kj_pick version must not drop the versions snapshot."""
+    versions = [{"source": "kn", "kn": {"youtube_url": "https://youtu.be/A"}}]
+    req = {"source_meta": {"versions": versions}}
+
+    merged = routes._preserve_versions_meta(req, {"brand_code": "KV"})
+    assert merged["brand_code"] == "KV"
+    assert merged["versions"] == versions
+
+    # No snapshot present → source_meta returned unchanged (including None).
+    assert routes._preserve_versions_meta({"source_meta": {}}, {"x": 1}) == {"x": 1}
+    assert routes._preserve_versions_meta({"source_meta": None}, None) is None
+
+
+def test_incident_reproduction_approve_then_autofallback(flask_app, mocker):
+    """End-to-end: a multi-version approval whose best pick is private auto-heals.
+
+    Mirrors the 2026-07-09 live incident — first YouTube version is a private
+    video, a KaraFun alternate exists — and asserts the singer ends up linked to
+    the working version with no manual KJ intervention.
+    """
+    app = flask_app
+    versions = [
+        {"source": "kn", "kn": {"youtube_url": "https://youtu.be/DEAD", "brand_code": "KV"}},
+        {"source": "kn", "kn": {"youtube_url": "https://youtu.be/GOOD", "brand_code": "KV"}},
+    ]
+    req = app.sing_store.create_request(
+        singer_name="Lulu", phone="", song_artist="Beetlejuice",
+        song_title="Say My Name", source_type="youtube",
+        source_ref="https://youtu.be/DEAD", source_meta={"versions": versions},
+    )
+
+    def fake_dl(url):
+        if "DEAD" in url:
+            app.media._last_error = "ERROR: [youtube] x: Private video"
+            return (None, None)
+        app.media._last_error = None
+        return ("/videos/good.mp4", "Good KV")
+
+    mocker.patch.object(app.media, "download_video", side_effect=fake_dl)
+
+    approve_sing_request(app, req)  # enqueues + auto-starts the worker thread
+
+    items = []
+    for _ in range(200):
+        with app._download_lock:
+            items = [i for i in app.download_queue["items"] if i.get("request_id") == req["id"]]
+            if items and items[0]["status"] in ("completed", "error"):
+                break
+        time.sleep(0.02)
+
+    assert items and items[0]["status"] == "completed"
+    assert items[0]["url"] == "https://youtu.be/GOOD"
+    updated = app.sing_store.get_request(req["id"])
+    assert updated["source_ref"] == "https://youtu.be/GOOD"

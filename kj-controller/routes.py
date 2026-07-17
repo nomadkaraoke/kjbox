@@ -4956,6 +4956,27 @@ def _pick_version_from_kj_pick(req, index):
     raise ValueError(f"unknown version source: {src!r}")
 
 
+def _preserve_versions_meta(req, src_meta):
+    """Merge the kj_pick ``versions`` snapshot into a freshly-bound source_meta.
+
+    Binding a kj_pick request rewrites ``source_meta`` to the picked version's
+    meta, which would drop the ``versions[]`` snapshot the download worker needs
+    to auto-fall-back if that version turns out to be an unavailable video.
+    Re-attach it (no-op when the request carried no snapshot).
+    """
+    meta_raw = req.get("source_meta")
+    try:
+        meta = meta_raw if isinstance(meta_raw, dict) else json.loads(meta_raw or "{}")
+    except (TypeError, ValueError):
+        return src_meta
+    versions = meta.get("versions")
+    if not versions:
+        return src_meta
+    merged = dict(src_meta or {})
+    merged["versions"] = versions
+    return merged
+
+
 def _ranked_version_indices(versions, cfg):
     """Return version indices ordered best-first by priority_rank.
 
@@ -5006,6 +5027,7 @@ def resolve_kj_pick_best(app, req, cfg):
         except ValueError as exc:
             last_err = exc   # malformed version — try the next-best one
             continue
+        src_meta = _preserve_versions_meta(req, src_meta)
         return store.update_request_source(req["id"], src_type, src_ref, src_meta)
     raise ValueError(f"no resolvable version in kj_pick snapshot: {last_err}")
 
@@ -5538,6 +5560,7 @@ def approve_sing_request_route(req_id):
             )
         except ValueError as exc:
             return jsonify({"error": str(exc)}), 400
+        src_meta = _preserve_versions_meta(req, src_meta)
         req = store.update_request_source(req_id, src_type, src_ref, src_meta)
 
     try:
