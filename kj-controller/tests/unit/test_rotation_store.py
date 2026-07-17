@@ -1575,3 +1575,44 @@ class TestPlayabilityWarning:
         conn.commit()
         store.set_playability_warning(entry["id"], "mpv: no video frame rendered")
         assert store.get_entry(entry["id"])["updated_at"] == "2000-01-01 00:00:00"
+
+
+# ---------------------------------------------------------------------------
+# reorder_by_ids — the Auto Order apply mechanism
+# ---------------------------------------------------------------------------
+
+class TestReorderByIds:
+    def test_reorders_and_returns_changed(self, store):
+        a = store.add_entry("A")["id"]
+        b = store.add_entry("B")["id"]
+        c = store.add_entry("C")["id"]
+        changed = store.reorder_by_ids([c, a, b])
+        assert changed is True
+        assert [e["id"] for e in store.get_entries()] == [c, a, b]
+
+    def test_preserves_slots_so_done_rows_stay_put(self, store):
+        # Positions 1,2,3,4. Mark B (pos 2) done — it is interleaved but invisible.
+        a = store.add_entry("A")["id"]
+        b = store.add_entry("B")["id"]
+        c = store.add_entry("C")["id"]
+        d = store.add_entry("D")["id"]
+        store.update_status(b, "Done")
+        # Visible queue is A,C,D at positions 1,3,4. Reorder to D,A,C.
+        assert store.reorder_by_ids([d, a, c]) is True
+        # Visible order changed; the Done row B keeps its original position 2.
+        assert [e["id"] for e in store.get_entries()] == [d, a, c]
+        assert store.get_entry(b)["position"] == 2
+        # The visible entries occupy exactly the slots they had before (1,3,4).
+        assert sorted(store.get_entry(i)["position"] for i in (d, a, c)) == [1, 3, 4]
+
+    def test_noop_when_already_in_order_returns_false(self, store):
+        a = store.add_entry("A")["id"]
+        b = store.add_entry("B")["id"]
+        assert store.reorder_by_ids([a, b]) is False
+
+    def test_unknown_ids_are_ignored(self, store):
+        a = store.add_entry("A")["id"]
+        b = store.add_entry("B")["id"]
+        # 999 doesn't exist; b,a still swap.
+        assert store.reorder_by_ids([999, b, a]) is True
+        assert [e["id"] for e in store.get_entries()] == [b, a]

@@ -3290,6 +3290,8 @@ def add_rotation_entry():
         if url_fallback:
             rotation.set_url_fallback(entry["id"], url_fallback)
             entry = rotation.store.get_entry(entry["id"])
+        # Auto-reorder if enabled (best-effort; never fail the add).
+        maybe_auto_reorder(current_app._get_current_object())
         entries = rotation.get_rotation()
         _decorate_rotation_entries(entries, rotation)
         return jsonify({"success": True, "entry": entry, "entries": entries})
@@ -3321,6 +3323,78 @@ def move_rotation_entry():
         entries = rotation.get_rotation()
         _decorate_rotation_entries(entries, rotation)
         return jsonify({"success": True, "entries": entries})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+def run_auto_order(app, label="Auto Order"):
+    """Re-run the visible rotation through Auto Order and apply it.
+
+    Pure algorithm in ``auto_order.py``; this glue decorates the current queue
+    (so it carries songs_sung / wait_minutes / duration), builds the entry views,
+    computes the new order, and applies it as one undoable step. Returns the
+    ``AutoOrderResult`` (or ``None`` if rotation isn't configured). Applying is a
+    no-op — and skipped — when the queue is already in order.
+
+    Shared by the on-demand ``/rotation/auto-order`` button and the automatic
+    on-new-entry trigger. Best-effort for the auto path: the caller wraps it so a
+    reorder failure never blocks the underlying add/approve.
+    """
+    from auto_order import build_entry_views, compute_auto_order
+
+    rotation = getattr(app, 'rotation', None)
+    if rotation is None:
+        return None
+    entries = rotation.get_rotation()
+    _decorate_rotation_entries(entries, rotation)
+    views = build_entry_views(entries)
+    result = compute_auto_order(views)
+    rotation.reorder_by_ids(result.ordered_ids, label=label)
+    return result
+
+
+def maybe_auto_reorder(app):
+    """If the KJ has enabled auto-reorder, re-run Auto Order after a new entry.
+
+    Best-effort: never let a reordering error break the request approval / add
+    that triggered it. Called from the new-entry paths (sing-request approval and
+    the KJ manual add route).
+    """
+    store = getattr(app, 'sing_store', None)
+    if store is None:
+        return
+    try:
+        if not store.is_auto_reorder():
+            return
+        run_auto_order(app, label="Auto Order (new entry)")
+    except Exception:
+        app.logger.exception("auto-reorder after new entry failed")
+
+
+@routes_bp.route('/rotation/auto-order', methods=['POST'])
+def auto_order_rotation():
+    """On-demand Auto Order: reorder the visible queue for fairness + spacing.
+
+    Triggered by the rotation-header "Auto Order" button. Applies immediately
+    (one undoable step) and returns the decorated entries so the UI re-renders.
+    """
+    if not hasattr(current_app, 'rotation') or current_app.rotation is None:
+        return jsonify({"error": "Rotation not configured"}), 503
+    try:
+        result = run_auto_order(current_app._get_current_object())
+        rotation = current_app.rotation
+        entries = rotation.get_rotation()
+        _decorate_rotation_entries(entries, rotation)
+        singer_stats = rotation.get_singer_stats()
+        _add_last_sang_to_singer_stats(singer_stats, rotation)
+        return jsonify({
+            "success": True,
+            "changed": bool(result and result.changed),
+            "entries": entries,
+            "singer_stats": singer_stats,
+            "rev": rotation.store.get_rev(),
+            "history": rotation.history_status(),
+        })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -5412,6 +5486,7 @@ def get_sing_config():
         "auto_approve": store.is_auto_approve(),
         "accept_make_requests": store.is_accepting_make_requests(),
         "auto_sms_next": store.is_auto_sms_next(),
+        "auto_reorder": store.is_auto_reorder(),
         "simple_mode": store.is_simple_mode(),
         "public_url": get_event_url(cfg, token, scope="public"),
         "local_url": get_event_url(cfg, token, scope="local"),
@@ -5482,6 +5557,14 @@ def update_sing_config():
             return jsonify({"error": "auto_sms_next must be a boolean"}), 400
         store.set_auto_sms_next(data["auto_sms_next"])
         changed["auto_sms_next"] = data["auto_sms_next"]
+
+    if "auto_reorder" in data:
+        # Require a real JSON boolean (bool("false") is True) so a sloppy client
+        # can't silently switch on automatic reordering of a live rotation.
+        if not isinstance(data["auto_reorder"], bool):
+            return jsonify({"error": "auto_reorder must be a boolean"}), 400
+        store.set_auto_reorder(data["auto_reorder"])
+        changed["auto_reorder"] = data["auto_reorder"]
 
     if "simple_mode" in data:
         store.set_simple_mode(bool(data["simple_mode"]))
@@ -5620,6 +5703,8 @@ def approve_sing_request_route(req_id):
             dispatcher.notify_request_decision(req_id, "approved", req)
         except Exception:
             current_app.logger.exception("approve push notify failed")
+    # Auto-reorder if enabled (best-effort — must not fail the approval).
+    maybe_auto_reorder(current_app._get_current_object())
     return jsonify({
         "success": True,
         "request": store.get_request(req_id),

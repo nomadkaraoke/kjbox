@@ -464,3 +464,29 @@ class TestCancelledVisibility:
         statuses = {e["id"]: e["status"] for e in mgr.get_rotation()}
         assert statuses.get(a["id"]) == "Cancelled"   # visible, not hidden
         assert statuses.get(b["id"]) == "Waiting"      # untouched
+
+
+# ---------------------------------------------------------------------------
+# reorder_by_ids (Auto Order apply) — undoable, no-op aware
+# ---------------------------------------------------------------------------
+
+class TestReorderByIds:
+    def test_applies_and_is_a_single_undo_step(self, mgr):
+        a = mgr.add_entry("A")["id"]
+        b = mgr.add_entry("B")["id"]
+        c = mgr.add_entry("C")["id"]
+        before_undo = mgr.history_status()["undo"]
+        assert mgr.reorder_by_ids([c, b, a], label="Auto Order") is True
+        assert [e["id"] for e in mgr.get_rotation()] == [c, b, a]
+        # Exactly one new undo checkpoint was pushed.
+        assert mgr.history_status()["undo"] == before_undo + 1
+        # And one undo restores the original order.
+        mgr.undo()
+        assert [e["id"] for e in mgr.get_rotation()] == [a, b, c]
+
+    def test_noop_does_not_touch_undo_history(self, mgr):
+        a = mgr.add_entry("A")["id"]
+        b = mgr.add_entry("B")["id"]
+        before = mgr.history_status()["undo"]
+        assert mgr.reorder_by_ids([a, b]) is False
+        assert mgr.history_status()["undo"] == before

@@ -7387,6 +7387,33 @@ async function updateRotationStatus(entryId, status) {
     }
 }
 
+async function autoOrderRotation() {
+    showRotationIndicator('spin');
+    try {
+        const response = await fetch('/rotation/auto-order', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({}),
+        });
+        const data = await response.json();
+        if (!response.ok || data.success === false) {
+            showRotationIndicator('error');
+            log('Auto Order failed: ' + (data.error || 'unknown error'), 'error');
+            return;
+        }
+        if (data.entries) {
+            rotationData = data.entries;
+            renderRotation(rotationData);
+            if (data.singer_stats) renderSingerStats(data.singer_stats);
+        }
+        if (data.history) rotationHistory.updateButtons(data.history);
+        showRotationIndicator('success');
+        log(data.changed ? 'Auto Order applied.' : 'Auto Order: already in order.', 'success');
+    } catch (e) {
+        showRotationIndicator('error');
+    }
+}
+
 async function moveRotationEntry(entryId, newPosition) {    showRotationIndicator('spin');
     try {
         const response = await fetch('/rotation/move', {
@@ -8875,6 +8902,8 @@ const SingRequests = (() => {
         // field is missing (older backend) we still show enabled.
         if (mEl) mEl.checked = config.accept_make_requests !== false;
         if (sEl) sEl.checked = !!config.auto_sms_next;
+        const rEl = document.getElementById('sing-auto-reorder-toggle');
+        if (rEl) rEl.checked = !!config.auto_reorder;
         if (pub) pub.textContent = config.public_url || '—';
         if (loc) loc.textContent = config.local_url || '—';
         if (tok) tok.textContent = config.token || '—';
@@ -8905,11 +8934,18 @@ const SingRequests = (() => {
     }
 
     async function postConfig(body) {
-        const resp = await fetch('/rotation/requests/config', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body),
-        });
+        let resp;
+        try {
+            resp = await fetch('/rotation/requests/config', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+            });
+        } catch (e) {
+            // Network failure — report as a failed update so callers roll back the UI.
+            alert('Config update failed');
+            return false;
+        }
         if (!resp.ok) { alert('Config update failed'); return false; }
         return true;
     }
@@ -8947,6 +8983,15 @@ const SingRequests = (() => {
         const ok = await postConfig({ auto_sms_next: checked });
         if (!ok) {
             const el = document.getElementById('sing-auto-sms-next-toggle');
+            if (el) el.checked = !checked;
+        }
+        await fetchConfig();
+    }
+
+    async function toggleAutoReorder(checked) {
+        const ok = await postConfig({ auto_reorder: checked });
+        if (!ok) {
+            const el = document.getElementById('sing-auto-reorder-toggle');
             if (el) el.checked = !checked;
         }
         await fetchConfig();
@@ -9036,7 +9081,7 @@ const SingRequests = (() => {
         if (await postConfig({ sms_template: null })) await fetchConfig();
     }
 
-    return { start, openModal, closeModal, toggleEnabled, toggleAutoApprove, toggleAcceptMake, toggleAutoSmsNext, autoSmsNextEnabled, regenerate, setCustom, saveSmsTemplate, resetSmsTemplate, copyUrl };
+    return { start, openModal, closeModal, toggleEnabled, toggleAutoApprove, toggleAcceptMake, toggleAutoSmsNext, toggleAutoReorder, autoSmsNextEnabled, regenerate, setCustom, saveSmsTemplate, resetSmsTemplate, copyUrl };
 })();
 
 function openSingRequestsModal()   { SingRequests.openModal(); }
@@ -9045,6 +9090,7 @@ function toggleSingEnabled(c)      { SingRequests.toggleEnabled(c); }
 function toggleSingAutoApprove(c)  { SingRequests.toggleAutoApprove(c); }
 function toggleSingAcceptMake(c)   { SingRequests.toggleAcceptMake(c); }
 function toggleSingAutoSmsNext(c)  { SingRequests.toggleAutoSmsNext(c); }
+function toggleSingAutoReorder(c)  { SingRequests.toggleAutoReorder(c); }
 function regenerateSingToken()     { SingRequests.regenerate(); }
 function setCustomSingToken()      { SingRequests.setCustom(); }
 function saveSingSmsTemplate()     { SingRequests.saveSmsTemplate(); }

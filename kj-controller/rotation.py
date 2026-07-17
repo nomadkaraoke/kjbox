@@ -135,6 +135,27 @@ class RotationManager:
         self.store.move_entry(entry_id, new_position)
         self._after_mutation()
 
+    def reorder_by_ids(self, ordered_ids, label="Auto Order"):
+        """Apply a computed reordering of the visible queue as one undoable step.
+
+        ``ordered_ids`` is the new order for the entries it names; they keep the set
+        of position slots they currently occupy (Done rows stay put). Checkpoints
+        once so a single Undo reverts the whole reorder. Returns True if anything
+        changed (no checkpoint/rev-bump when it's already in order — avoids polluting
+        the undo stack when Auto Order is a no-op).
+        """
+        # Peek without mutating: only checkpoint if the order actually changes, so a
+        # no-op Auto Order doesn't pollute the undo stack.
+        current = [e["id"] for e in self.store.get_entries()]
+        target = [i for i in ordered_ids if i in set(current)]
+        if target == current:
+            return False
+        self._before_mutation(label)
+        changed = self.store.reorder_by_ids(ordered_ids)
+        if changed:
+            self._after_mutation()
+        return changed
+
     def link_file(self, entry_id, file_path):
         """Link a file to entry_id, auto-looking up duration from self.media."""
         duration = None

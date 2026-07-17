@@ -114,6 +114,7 @@
                         <button class="rotation-restore-btn" onclick="restoreFromSheet()" title="Restore rotation from Google Sheet backup (emergency recovery)">Restore</button>
                         <button id="rotation-paths-btn" class="rotation-paths-btn" onclick="toggleRotationFilePaths()" title="Show/hide file paths under each rotation entry">📁 Paths</button>
                         <button class="rotation-refresh-btn" onclick="fetchRotation()" title="Refresh the rotation list from the server">Refresh</button>
+                        <button class="rotation-autoorder-btn" onclick="autoOrderRotation()" title="Reorder the queue for fairness — new singers up, no one twice in a row, avoid long waits. Never touches rows 1-3.">Reorder</button>
                         <button class="rotation-add-btn" onclick="toggleRotationAddForm()" title="Add a new singer and song to the rotation queue">+ Add</button>
                         <button class="rotation-new-btn" onclick="archiveRotation()" title="Archive tonight's rotation and start fresh for a new event">New Rotation</button>
                     </div>
@@ -1287,6 +1288,10 @@
                 <div class="sing-requests-row">
                     <label><input type="checkbox" id="sing-auto-approve-toggle" onchange="toggleSingAutoApprove(this.checked)"> <strong>Auto-approve requests</strong></label>
                     <p class="sing-hint">Skip the review queue — new requests go straight to the bottom of rotation.</p>
+                </div>
+                <div class="sing-requests-row">
+                    <label><input type="checkbox" id="sing-auto-reorder-toggle" onchange="toggleSingAutoReorder(this.checked)"> <strong>Auto Order the rotation</strong></label>
+                    <p class="sing-hint">Whenever a new entry is added, automatically re-run Auto Order to keep the rotation fair — new singers move up, nobody sings twice in a row, and long waits are avoided. Rows 1&ndash;3 are never touched. You can also reorder any time with the &ldquo;Auto Order&rdquo; button in the Rotation header.</p>
                 </div>
                 <div class="sing-requests-row">
                     <label><input type="checkbox" id="sing-accept-make-toggle" onchange="toggleSingAcceptMake(this.checked)"> <strong>Accept &ldquo;make it&rdquo; requests tonight</strong></label>
