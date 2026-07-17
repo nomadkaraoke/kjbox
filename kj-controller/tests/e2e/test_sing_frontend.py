@@ -469,9 +469,11 @@ class TestMySongsPersistence:
         self._seed_ls(page, live_server, live_token,
                       {"token": live_token, "ids": [9999], "tokens": {"9999": "old"}})
         self._route_my_requests(page, [])
-        with page.expect_request("**/sing/my-requests*"):
+        with page.expect_request("**/sing/my-requests*") as req_info:
             page.reload()
-        expect(page.locator("text=Request a song")).to_be_visible()   # landing
+        # The boot probe must actually carry the stored id (contract check).
+        assert "ids=9999" in req_info.value.url
+        expect(page.locator("h1:has-text('Request a song')")).to_be_visible()   # landing
         expect(page.locator(".song-card-title")).to_have_count(0)
         expect(page.locator('[data-testid="mysongs-bar"]')).to_be_hidden()
         # Stored ids were pruned to empty.
@@ -493,6 +495,34 @@ class TestMySongsPersistence:
             page.reload()
         expect(page.locator("h1:has-text('Request a song')")).to_be_visible()
         expect(page.locator('[data-testid="mysongs-bar"]')).to_be_hidden()
+
+    def test_prune_preserves_ids_added_mid_flight(self, page, live_server, live_token):
+        # A song submitted while a /my-requests fetch was in flight (its id added
+        # to the store after the query snapshot) must NOT be pruned when the
+        # response — which never knew about it — comes back. Prune drops only
+        # ids that were queried AND not returned.
+        self._seed_ls(page, live_server, live_token,
+                      {"token": live_token, "ids": [111, 222], "tokens": {"111": "t1", "222": "t2"}})
+        result = page.evaluate(
+            """(t) => {
+                // Queried only [111]; server returned [111]. Id 222 was added
+                // mid-flight and was NOT in the queried snapshot.
+                window.__sing_pruneRequestIds(t, [111], [111]);
+                return window.__sing_readMyRequestIds(t);
+            }""", live_token)
+        assert 222 in result and 111 in result
+
+    def test_prune_drops_queried_but_unreturned(self, page, live_server, live_token):
+        # The prior-night case: an id we asked about that the server night-scoped
+        # out is dropped.
+        self._seed_ls(page, live_server, live_token,
+                      {"token": live_token, "ids": [111, 999], "tokens": {"111": "t1", "999": "old"}})
+        result = page.evaluate(
+            """(t) => {
+                window.__sing_pruneRequestIds(t, [111, 999], [111]);
+                return window.__sing_readMyRequestIds(t);
+            }""", live_token)
+        assert result == [111]
 
     def test_no_bar_and_no_restore_without_songs(self, page, live_server, live_token):
         # A fresh device (no stored ids) sees the normal landing, no bar.

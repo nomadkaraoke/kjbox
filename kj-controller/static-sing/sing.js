@@ -77,14 +77,25 @@ function readEditToken(token, id) {
 // token is reused across nights and localStorage isn't cleared, so last
 // night's ids linger; /my-requests night-scopes them out server-side, and we
 // prune anything the server no longer returns so the "My songs" count/bar
-// doesn't show phantom songs. `keepIds` is the set the server still recognises
-// (as numbers or strings). Only ever called after a successful 200 — never on
-// a thrown fetch — so a transient outage can't wipe a valid list.
-function pruneRequestIds(token, keepIds) {
+// doesn't show phantom songs.
+//
+// We prune ONLY within `queriedIds` (the snapshot we actually asked the server
+// about) minus `returnedIds` (what came back). Ids the singer added to the
+// store while the fetch was in flight — e.g. a song submitted between the
+// request and its response — were never queried, so they're preserved (and
+// their edit tokens with them) rather than mistaken for prior-night rows.
+// Only ever called after a successful 200 — never on a thrown fetch — so a
+// transient outage can't wipe a valid list.
+function pruneRequestIds(token, queriedIds, returnedIds) {
   const store = _readMyRequestStore();
   if (!store || store.token !== token) return;
-  const keep = new Set((keepIds || []).map((x) => String(x)));
-  const nextIds = store.ids.filter((id) => keep.has(String(id)));
+  const queried = new Set((queriedIds || []).map((x) => String(x)));
+  const returned = new Set((returnedIds || []).map((x) => String(x)));
+  // Drop id iff we asked about it and the server did not return it.
+  const nextIds = store.ids.filter((id) => {
+    const s = String(id);
+    return !(queried.has(s) && !returned.has(s));
+  });
   if (nextIds.length === store.ids.length) return;   // nothing to prune
   const nextTokens = {};
   for (const id of nextIds) {
@@ -1548,33 +1559,36 @@ async function pollMyRequests(card) {
 // --- Persistent "My songs" bar --------------------------------------------
 
 // Fetch this device's songs for tonight, prune stale (prior-night) ids, and
-// refresh the bar. Returns the number of live songs (0 on empty / failure).
-// Used by boot smart-restore and the bar's own poll.
+// refresh the bar. Returns { ok, live }: `ok` is false only on a transient
+// network/5xx failure (so boot restore can retry), `live` is the count of
+// non-cancelled/rejected songs. Used by boot smart-restore and the bar poll.
 async function refreshMySongs() {
   const ids = readMyRequestIds(TOKEN);
   if (!ids.length) {
     state.mySongs = { items: [], nowPlaying: null, loaded: true };
     updateMySongsBar();
-    return 0;
+    return { ok: true, live: 0 };
   }
+  const queried = ids.slice(-MY_REQUESTS_MAX);
   try {
-    const data = await fetchMyRequests(ids.slice(-MY_REQUESTS_MAX));
+    const data = await fetchMyRequests(queried);
     const items = data.requests || [];
-    // Prune any stored id the server no longer recognises (prior-night rows,
-    // cancelled-and-cleared, etc.) so the count never lies. Cancelled songs
+    // Prune stored ids the server no longer recognises (prior-night rows,
+    // cleared, etc.) so the count never lies — but only within the snapshot we
+    // queried, so a song submitted mid-flight isn't clobbered. Cancelled songs
     // still come back (status cancelled), so they survive the prune.
-    pruneRequestIds(TOKEN, items.map((it) => it.request.id));
+    pruneRequestIds(TOKEN, queried, items.map((it) => it.request.id));
     state.mySongs = { items, nowPlaying: data.now_playing || null, loaded: true };
     updateMySongsBar();
-    // Return the LIVE count (excludes cancelled/rejected) so boot smart-restore
-    // and the bar agree — a device whose only song was cancelled isn't yanked
-    // off the landing screen, though the done list still shows it if opened.
-    return _liveSongs(items).length;
+    // LIVE count (excludes cancelled/rejected) so boot smart-restore and the
+    // bar agree — a device whose only song was cancelled isn't yanked off the
+    // landing screen, though the done list still shows it if opened.
+    return { ok: true, live: _liveSongs(items).length };
   } catch {
     // Network/5xx — leave any prior view-model intact and don't prune.
     state.mySongs.loaded = true;
     updateMySongsBar();
-    return _liveSongs(state.mySongs.items).length;
+    return { ok: false, live: _liveSongs(state.mySongs.items).length };
   }
 }
 
@@ -1935,10 +1949,14 @@ function initCodeEntry() {
 }
 
 // Test bridge — only used by Playwright e2e tests. Cheap to leave in
-// production: two globals on the window object, no behaviour change.
+// production: a few globals on the window object, no behaviour change.
 if (typeof window !== 'undefined') {
   window.__sing_state = state;
   window.__sing_render = render;
+  // Exposed so tests can assert the mid-flight-safe prune semantics directly
+  // (drop only ids that were queried AND not returned).
+  window.__sing_pruneRequestIds = pruneRequestIds;
+  window.__sing_readMyRequestIds = readMyRequestIds;
 }
 
 // --- Bootstrap ------------------------------------------------------------
@@ -1964,14 +1982,22 @@ if (codeEntryEl) {
   // the singer back to their "Your songs tonight" list on reload (the ids +
   // edit tokens live in localStorage). Probe async so a fresh night (server
   // returns none after night-scoping) leaves them on the landing screen rather
-  // than an empty list. The landing-step guard avoids yanking a singer who
-  // tapped into search/identity while the probe was in flight.
-  if (state.step !== "done" && readMyRequestIds(TOKEN).length) {
-    refreshMySongs().then((n) => {
-      if (n > 0 && state.step === "landing") {
-        state.step = "done";
-        render();
-      }
-    });
-  }
+  // than an empty list. A transient boot-time fetch failure would otherwise
+  // strand a singer-with-songs on the landing screen, so retry a few times
+  // with backoff — but stop the moment they navigate off landing (the step
+  // guard) so we never yank someone mid-search into their list.
+  if (state.step !== "done") bootRestore(0);
+}
+
+function bootRestore(attempt) {
+  if (state.step !== "landing" || !readMyRequestIds(TOKEN).length) return;
+  refreshMySongs().then((res) => {
+    if (res.ok) {
+      if (res.live > 0 && state.step === "landing") { state.step = "done"; render(); }
+      return;   // definitive answer (songs restored, or a genuinely empty night)
+    }
+    if (attempt < 3 && state.step === "landing") {
+      setTimeout(() => bootRestore(attempt + 1), 2000 * (attempt + 1));
+    }
+  });
 }
