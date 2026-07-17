@@ -407,6 +407,9 @@ async function ackQueueItem(id) {
 // --- Playback ---
 
 let currentPlayingPath = null;
+// Latest player state from the 2s /status poll ('playing' | 'paused' | 'stopped').
+// Read by the auto-text-next-singer timer to confirm the song is still playing.
+let currentPlayerState = 'stopped';
 
 async function playMedia(filePath, entryId) {
     if (!filePath) {
@@ -1594,6 +1597,7 @@ async function updateStatus() {
 
             // Track current playing path for delete protection (#6)
             currentPlayingPath = data.current_playing_path || null;
+            currentPlayerState = state;
 
             totalVideoLength = data.length || 0;
             const seekSlider = document.getElementById('seek-slider');
@@ -6879,6 +6883,81 @@ function showRotationIndicator(state) {
 async function playAndAdvanceRotation(entry, idx, entries) {
     playMedia(entry.file_path, entry.id);
     advanceRotationStatus(entry, idx, entries);
+    // Auto-text the next singer: only when the KJ pressed play on the TOP
+    // rotation entry (slot 1). Any earlier armed timer is cancelled first so a
+    // fresh play never leaves a stale one running.
+    if (idx === 0) armAutoTextNextSinger(entry.file_path);
+    else cancelAutoTextNextSinger();
+}
+
+// --- Auto-text-next-singer (opt-in via Requests settings) -------------------
+//
+// Mirrors what the KJ does by hand: press play on slot 1, wait to be sure the
+// singer actually showed up, then text the slot-2 singer "you're up next". We
+// arm a 20s timer on the slot-1 play; if the song is STILL playing when it
+// fires we auto-send. If the KJ stopped it early (singer was a no-show) the
+// still-playing guard fails and nothing is sent — no misleading text.
+const AUTO_TEXT_NEXT_DELAY_MS = 20000;
+let _autoTextTimer = null;
+
+function cancelAutoTextNextSinger() {
+    if (_autoTextTimer) { clearTimeout(_autoTextTimer); _autoTextTimer = null; }
+}
+
+function armAutoTextNextSinger(playedPath) {
+    cancelAutoTextNextSinger();
+    if (!playedPath) return;
+    if (typeof SingRequests === 'undefined' ||
+        !SingRequests.autoSmsNextEnabled || !SingRequests.autoSmsNextEnabled()) return;
+    _autoTextTimer = setTimeout(() => {
+        _autoTextTimer = null;
+        maybeAutoTextNextSinger(playedPath);
+    }, AUTO_TEXT_NEXT_DELAY_MS);
+}
+
+async function maybeAutoTextNextSinger(playedPath) {
+    // Still-playing guard: the slot-1 song the KJ started must still be the one
+    // loaded and actively playing (not stopped/paused). currentPlayingPath is
+    // cleared by the /status poll the moment playback stops, so an early stop
+    // (no-show singer) makes this fail and we send nothing.
+    if (currentPlayingPath !== playedPath || currentPlayerState !== 'playing') return;
+
+    // Resolve the up-next singer at FIRE time (slot 2 = second rotation row),
+    // not from the snapshot when the timer was armed — if the KJ reordered, the
+    // person now in slot 2 is the one genuinely up next. rotationData excludes
+    // done/left entries and is ordered by position, so [0]=slot 1, [1]=slot 2.
+    if (!Array.isArray(rotationData)) return;
+    // Only proceed if slot 1 is STILL the song we started — guards the rare case
+    // where the queue shifted (e.g. slot 1 marked done) so we never text the
+    // wrong person as "up next".
+    const cur = rotationData[0];
+    if (!cur || cur.file_path !== playedPath) return;
+    const next = rotationData[1];
+    if (!next) return;
+    const sms = next.sms || {};
+    // Only when SMS is configured, the singer has a phone on file, and no text
+    // has gone out for this entry yet. The backend re-checks all of this too.
+    if (!sms.configured || !sms.available || sms.last_sent_at) return;
+
+    try {
+        const resp = await fetch('/rotation/sms/auto-send', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ entry_id: next.id }),
+        });
+        const data = await resp.json().catch(() => ({}));
+        if (resp.ok && data.sent) {
+            log('Auto-texted next singer: ' + (next.singer || '') + ' (you’re up next)', 'success');
+            fetchRotation();
+        } else if (!resp.ok) {
+            // A real failure (e.g. Telnyx error / opt-out) — note it quietly.
+            log('Auto-text to next singer not sent: ' + (data.error || ('HTTP ' + resp.status)), 'error');
+        }
+        // resp.ok but data.sent false (skipped: already_sent / no_target /
+        // disabled) is an expected non-event — stay silent.
+    } catch (e) {
+        log('Auto-text to next singer failed: ' + e.message, 'error');
+    }
 }
 
 async function advanceRotationStatus(entry, idx, entries) {
@@ -8330,7 +8409,7 @@ document.addEventListener('keyup', (e) => {
 const SingRequests = (() => {
     let pollTimer = null;
     let pending = [];
-    let config = { token: '', enabled: true, auto_approve: false, public_url: '', local_url: '', pending_count: 0 };
+    let config = { token: '', enabled: true, auto_approve: false, auto_sms_next: false, public_url: '', local_url: '', pending_count: 0 };
 
     async function fetchPending() {
         try {
@@ -8785,6 +8864,7 @@ const SingRequests = (() => {
         const eEl = document.getElementById('sing-enabled-toggle');
         const aEl = document.getElementById('sing-auto-approve-toggle');
         const mEl = document.getElementById('sing-accept-make-toggle');
+        const sEl = document.getElementById('sing-auto-sms-next-toggle');
         const pub = document.getElementById('sing-public-url');
         const loc = document.getElementById('sing-local-url');
         const qp = document.getElementById('sing-qr-public');
@@ -8795,6 +8875,7 @@ const SingRequests = (() => {
         // Phase C — defaults to true since the backend defaults are "1"; if the
         // field is missing (older backend) we still show enabled.
         if (mEl) mEl.checked = config.accept_make_requests !== false;
+        if (sEl) sEl.checked = !!config.auto_sms_next;
         if (pub) pub.textContent = config.public_url || '—';
         if (loc) loc.textContent = config.local_url || '—';
         if (tok) tok.textContent = config.token || '—';
@@ -8862,6 +8943,18 @@ const SingRequests = (() => {
         }
         await fetchConfig();
     }
+
+    async function toggleAutoSmsNext(checked) {
+        const ok = await postConfig({ auto_sms_next: checked });
+        if (!ok) {
+            const el = document.getElementById('sing-auto-sms-next-toggle');
+            if (el) el.checked = !checked;
+        }
+        await fetchConfig();
+    }
+
+    // Exposed for the play-and-advance auto-SMS timer (lives outside this IIFE).
+    function autoSmsNextEnabled() { return !!config.auto_sms_next; }
 
     async function regenerate() {
         if (!confirm('Regenerate the event token? The current QR code stops working.')) return;
@@ -8944,7 +9037,7 @@ const SingRequests = (() => {
         if (await postConfig({ sms_template: null })) await fetchConfig();
     }
 
-    return { start, openModal, closeModal, toggleEnabled, toggleAutoApprove, toggleAcceptMake, regenerate, setCustom, saveSmsTemplate, resetSmsTemplate, copyUrl };
+    return { start, openModal, closeModal, toggleEnabled, toggleAutoApprove, toggleAcceptMake, toggleAutoSmsNext, autoSmsNextEnabled, regenerate, setCustom, saveSmsTemplate, resetSmsTemplate, copyUrl };
 })();
 
 function openSingRequestsModal()   { SingRequests.openModal(); }
@@ -8952,6 +9045,7 @@ function closeSingRequestsModal()  { SingRequests.closeModal(); }
 function toggleSingEnabled(c)      { SingRequests.toggleEnabled(c); }
 function toggleSingAutoApprove(c)  { SingRequests.toggleAutoApprove(c); }
 function toggleSingAcceptMake(c)   { SingRequests.toggleAcceptMake(c); }
+function toggleSingAutoSmsNext(c)  { SingRequests.toggleAutoSmsNext(c); }
 function regenerateSingToken()     { SingRequests.regenerate(); }
 function setCustomSingToken()      { SingRequests.setCustom(); }
 function saveSingSmsTemplate()     { SingRequests.saveSmsTemplate(); }

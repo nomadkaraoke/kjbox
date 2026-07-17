@@ -149,6 +149,33 @@ class TestConfig:
         data = resp.get_json()
         assert data["accept_make_requests"] is True  # default on
 
+    def test_get_config_exposes_auto_sms_next(self, admin_client):
+        resp = admin_client.get("/rotation/requests/config")
+        data = resp.get_json()
+        assert "auto_sms_next" in data
+        assert data["auto_sms_next"] is False  # default off (opt-in)
+
+    def test_toggle_auto_sms_next_on(self, admin_client, admin_app):
+        resp = admin_client.post(
+            "/rotation/requests/config", json={"auto_sms_next": True}
+        )
+        assert resp.status_code == 200
+        assert resp.get_json()["changed"]["auto_sms_next"] is True
+        assert admin_app.sing_store.is_auto_sms_next() is True
+        # Reflects in the GET response too.
+        resp2 = admin_client.get("/rotation/requests/config")
+        assert resp2.get_json()["auto_sms_next"] is True
+
+    def test_toggle_auto_sms_next_isolated_from_other_flags(
+        self, admin_client, admin_app,
+    ):
+        """Toggling auto_sms_next must not reset auto_approve."""
+        admin_app.sing_store.set_auto_approve(True)
+        admin_client.post(
+            "/rotation/requests/config", json={"auto_sms_next": True}
+        )
+        assert admin_app.sing_store.is_auto_approve() is True
+
     def test_get_config_exposes_simple_mode(self, admin_client):
         """The admin config endpoint surfaces the simple_mode flag (default off)."""
         resp = admin_client.get("/rotation/requests/config")

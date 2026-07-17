@@ -3656,6 +3656,81 @@ def sms_detail():
     })
 
 
+def _perform_sms_send(entry_id, target, body, user_agent):
+    """Send ``body`` to the resolved ``target``, log the attempt, and return a
+    ``(response_dict, status_code)`` pair.
+
+    Shared by the manual /rotation/sms/send route and the automatic
+    /rotation/sms/auto-send route so both honour opt-outs, log every attempt to
+    sms_log, and surface Telnyx failures identically.
+    """
+    import sms as sms_mod
+
+    sms_cfg = current_app.sms_config
+    sms_store = current_app.sms_store
+
+    # Respect opt-outs recorded from inbound STOP webhooks. Telnyx would reject
+    # the send carrier-side anyway, but blocking here keeps us honest and gives
+    # the KJ a clear reason instead of a cryptic Telnyx error.
+    if sms_store.is_opted_out(target["phone_e164"]):
+        log_row = sms_store.record_send(
+            rotation_entry_id=entry_id,
+            sing_request_id=target["sing_request"]["id"],
+            phone_e164=target["phone_e164"],
+            body=body,
+            status="failed",
+            telnyx_message_id=None,
+            error="recipient opted out (replied STOP)",
+            kj_user_agent=user_agent,
+        )
+        return {
+            "success": False,
+            "error": "Recipient has opted out (replied STOP); not sent.",
+            "sms_log_id": log_row["id"],
+        }, 403
+
+    try:
+        message_id = sms_mod.send(
+            api_key=sms_cfg["api_key"],
+            from_number=sms_cfg["from_number"],
+            to_e164=target["phone_e164"],
+            body=body,
+        )
+    except sms_mod.TelnyxError as exc:
+        log_row = sms_store.record_send(
+            rotation_entry_id=entry_id,
+            sing_request_id=target["sing_request"]["id"],
+            phone_e164=target["phone_e164"],
+            body=body,
+            status="failed",
+            telnyx_message_id=None,
+            error=str(exc),
+            kj_user_agent=user_agent,
+        )
+        return {
+            "success": False,
+            "error": str(exc),
+            "sms_log_id": log_row["id"],
+        }, 502
+
+    log_row = sms_store.record_send(
+        rotation_entry_id=entry_id,
+        sing_request_id=target["sing_request"]["id"],
+        phone_e164=target["phone_e164"],
+        body=body,
+        status="sent",
+        telnyx_message_id=message_id,
+        error=None,
+        kj_user_agent=user_agent,
+    )
+    return {
+        "success": True,
+        "sms_log_id": log_row["id"],
+        "sent_at": log_row["sent_at"],
+        "telnyx_message_id": message_id,
+    }, 200
+
+
 @routes_bp.route('/rotation/sms/send', methods=['POST'])
 def sms_send():
     """Send the SMS body the KJ approved in the preview panel.
@@ -3687,70 +3762,76 @@ def sms_send():
     if err:
         return err
 
-    sms_cfg = current_app.sms_config
-    sms_store = current_app.sms_store
     user_agent = request.headers.get("User-Agent", "")[:500]
+    result, status = _perform_sms_send(entry_id, target, body, user_agent)
+    return jsonify(result), status
 
-    # Respect opt-outs recorded from inbound STOP webhooks. Telnyx would reject
-    # the send carrier-side anyway, but blocking here keeps us honest and gives
-    # the KJ a clear reason instead of a cryptic Telnyx error.
-    if sms_store.is_opted_out(target["phone_e164"]):
-        log_row = sms_store.record_send(
-            rotation_entry_id=entry_id,
-            sing_request_id=target["sing_request"]["id"],
-            phone_e164=target["phone_e164"],
-            body=body,
-            status="failed",
-            telnyx_message_id=None,
-            error="recipient opted out (replied STOP)",
-            kj_user_agent=user_agent,
-        )
-        return jsonify({
-            "success": False,
-            "error": "Recipient has opted out (replied STOP); not sent.",
-            "sms_log_id": log_row["id"],
-        }), 403
 
+@routes_bp.route('/rotation/sms/auto-send', methods=['POST'])
+def sms_auto_send():
+    """Automatically text the up-next singer the default "you're up" SMS.
+
+    Fired by the frontend ~20s after the KJ starts the top-of-rotation song,
+    and only while that song is still playing. Every "don't send a misleading
+    text" guard is enforced here too, so a stale or racey client can never text
+    the wrong person:
+
+      * auto-send must be enabled in the Requests settings,
+      * the target must have a phone on file (resolved for the current night),
+      * we must not have already texted (or attempted) this entry,
+      * the recipient must not have opted out (handled in _perform_sms_send).
+
+    Eligibility failures return HTTP 200 with ``{"sent": false, "skipped":
+    <reason>}`` — they're expected outcomes of an automatic trigger, not
+    errors. A genuine Telnyx failure still surfaces as 502 so it stays visible.
+    """
+    import sms as sms_mod
+
+    store, err = _require_sing_store()
+    if err:
+        return err
+
+    if not store.is_auto_sms_next():
+        return jsonify({"sent": False, "skipped": "auto_sms_disabled"}), 200
+
+    data = request.get_json(force=True, silent=True) or {}
+    raw_id = data.get('entry_id')
+    if raw_id is None:
+        return jsonify({"error": "entry_id is required"}), 400
     try:
-        message_id = sms_mod.send(
-            api_key=sms_cfg["api_key"],
-            from_number=sms_cfg["from_number"],
-            to_e164=target["phone_e164"],
-            body=body,
-        )
-    except sms_mod.TelnyxError as exc:
-        log_row = sms_store.record_send(
-            rotation_entry_id=entry_id,
-            sing_request_id=target["sing_request"]["id"],
-            phone_e164=target["phone_e164"],
-            body=body,
-            status="failed",
-            telnyx_message_id=None,
-            error=str(exc),
-            kj_user_agent=user_agent,
-        )
-        return jsonify({
-            "success": False,
-            "error": str(exc),
-            "sms_log_id": log_row["id"],
-        }), 502
+        entry_id = int(raw_id)
+    except (TypeError, ValueError):
+        return jsonify({"error": "entry_id must be an integer"}), 400
 
-    log_row = sms_store.record_send(
-        rotation_entry_id=entry_id,
-        sing_request_id=target["sing_request"]["id"],
-        phone_e164=target["phone_e164"],
-        body=body,
-        status="sent",
-        telnyx_message_id=message_id,
-        error=None,
-        kj_user_agent=user_agent,
+    # Never text the same entry twice — a manual send during the 20s window, or
+    # a re-armed timer, must not double-notify. Any prior attempt (success OR
+    # failure) blocks the auto-send; the KJ can still resend manually.
+    if current_app.sms_store.get_latest_for_entry(entry_id):
+        return jsonify({"sent": False, "skipped": "already_sent"}), 200
+
+    target, resolve_err = _resolve_sms_target(entry_id)
+    if resolve_err:
+        response, status = resolve_err
+        if status == 503:
+            # SMS not configured — surface it so setup problems stay visible.
+            return response, status
+        # No phone on file / unknown entry — nothing to auto-send.
+        return jsonify({"sent": False, "skipped": "no_target"}), 200
+
+    template = current_app.sing_store.get_sms_template() or sms_mod.DEFAULT_TEMPLATE
+    body = sms_mod.render_template(
+        template,
+        {
+            "first_name": target["first_name"],
+            "song": target["song"],
+            "artist": target["artist"],
+        },
     )
-    return jsonify({
-        "success": True,
-        "sms_log_id": log_row["id"],
-        "sent_at": log_row["sent_at"],
-        "telnyx_message_id": message_id,
-    })
+
+    user_agent = request.headers.get("User-Agent", "")[:500]
+    result, send_status = _perform_sms_send(entry_id, target, body, user_agent)
+    result["sent"] = bool(result.get("success"))
+    return jsonify(result), send_status
 
 
 @routes_bp.route('/rotation/set-paid', methods=['POST'])
@@ -5134,6 +5215,7 @@ def get_sing_config():
         "enabled": store.is_enabled(),
         "auto_approve": store.is_auto_approve(),
         "accept_make_requests": store.is_accepting_make_requests(),
+        "auto_sms_next": store.is_auto_sms_next(),
         "simple_mode": store.is_simple_mode(),
         "public_url": get_event_url(cfg, token, scope="public"),
         "local_url": get_event_url(cfg, token, scope="local"),
@@ -5196,6 +5278,10 @@ def update_sing_config():
     if "accept_make_requests" in data:
         store.set_accepting_make_requests(bool(data["accept_make_requests"]))
         changed["accept_make_requests"] = bool(data["accept_make_requests"])
+
+    if "auto_sms_next" in data:
+        store.set_auto_sms_next(bool(data["auto_sms_next"]))
+        changed["auto_sms_next"] = bool(data["auto_sms_next"])
 
     if "simple_mode" in data:
         store.set_simple_mode(bool(data["simple_mode"]))

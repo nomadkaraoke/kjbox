@@ -536,6 +536,90 @@ class TestSend:
 
 
 # ---------------------------------------------------------------------------
+# /rotation/sms/auto-send — automatic "you're up next" text to slot 2
+# ---------------------------------------------------------------------------
+
+class TestAutoSend:
+    @patch("sms.requests.post")
+    def test_happy_path_renders_default_template(self, mock_post, sms_client, sms_app):
+        mock_post.return_value = MagicMock(
+            status_code=200, json=lambda: {"data": {"id": "msg_auto"}},
+        )
+        sms_app.sing_store.set_auto_sms_next(True)
+        _, entry_id = _seed_request_and_link(
+            sms_app, singer="Celeste", song_title="Plump", song_artist="Hole",
+        )
+        resp = sms_client.post("/rotation/sms/auto-send", json={"entry_id": entry_id})
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["sent"] is True
+        assert data["telnyx_message_id"] == "msg_auto"
+        # Server rendered the default template (no client-supplied body) and
+        # addressed the singer by first name.
+        sent = mock_post.call_args.kwargs["json"]
+        assert sent["to"] == "+18432594507"
+        assert "Celeste" in sent["text"]
+        log = sms_app.sms_store.get_latest_for_entry(entry_id)
+        assert log["status"] == "sent"
+
+    def test_skips_when_disabled(self, sms_client, sms_app):
+        # auto_sms_next defaults off — the route must not send.
+        _, entry_id = _seed_request_and_link(sms_app)
+        resp = sms_client.post("/rotation/sms/auto-send", json={"entry_id": entry_id})
+        assert resp.status_code == 200
+        assert resp.get_json() == {"sent": False, "skipped": "auto_sms_disabled"}
+        assert sms_app.sms_store.get_latest_for_entry(entry_id) is None
+
+    @patch("sms.requests.post")
+    def test_skips_when_already_sent(self, mock_post, sms_client, sms_app):
+        """A prior send (e.g. the KJ texted manually during the 20s window)
+        blocks the auto-send so the singer is never double-notified."""
+        sms_app.sing_store.set_auto_sms_next(True)
+        req_id, entry_id = _seed_request_and_link(sms_app)
+        sms_app.sms_store.record_send(
+            rotation_entry_id=entry_id, sing_request_id=req_id,
+            phone_e164="+18432594507", body="already went", status="sent",
+            telnyx_message_id="m_prior",
+        )
+        resp = sms_client.post("/rotation/sms/auto-send", json={"entry_id": entry_id})
+        assert resp.status_code == 200
+        assert resp.get_json() == {"sent": False, "skipped": "already_sent"}
+        mock_post.assert_not_called()
+
+    def test_skips_when_no_phone(self, sms_client, sms_app):
+        """An entry with no linked request/phone (e.g. a hand-added row) is a
+        no-op, not an error."""
+        sms_app.sing_store.set_auto_sms_next(True)
+        entry = sms_app.rotation.add_entry("Manual Singer", "Artist - Song")
+        resp = sms_client.post("/rotation/sms/auto-send", json={"entry_id": entry["id"]})
+        assert resp.status_code == 200
+        assert resp.get_json() == {"sent": False, "skipped": "no_target"}
+
+    @patch("sms.requests.post")
+    def test_opted_out_not_sent(self, mock_post, sms_client, sms_app):
+        sms_app.sing_store.set_auto_sms_next(True)
+        _, entry_id = _seed_request_and_link(sms_app, phone="843-259-4507")
+        sms_app.sms_store.record_opt_out("+18432594507", keyword="STOP")
+        resp = sms_client.post("/rotation/sms/auto-send", json={"entry_id": entry_id})
+        assert resp.status_code == 403
+        data = resp.get_json()
+        assert data["sent"] is False
+        mock_post.assert_not_called()
+
+    def test_unconfigured_returns_503(self, unconfigured_app):
+        unconfigured_app.sing_store.set_auto_sms_next(True)
+        _, entry_id = _seed_request_and_link(unconfigured_app)
+        with unconfigured_app.test_client() as c:
+            resp = c.post("/rotation/sms/auto-send", json={"entry_id": entry_id})
+            assert resp.status_code == 503
+
+    def test_missing_entry_id_400(self, sms_client, sms_app):
+        sms_app.sing_store.set_auto_sms_next(True)
+        resp = sms_client.post("/rotation/sms/auto-send", json={})
+        assert resp.status_code == 400
+
+
+# ---------------------------------------------------------------------------
 # Telnyx inbound webhook — /sing/telnyx/webhook
 # ---------------------------------------------------------------------------
 

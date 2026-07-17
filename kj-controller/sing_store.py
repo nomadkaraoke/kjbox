@@ -16,6 +16,10 @@ TOKEN_KEY = "request_token"
 ENABLED_KEY = "request_token_enabled"
 AUTO_APPROVE_KEY = "request_auto_approve"
 ACCEPT_MAKE_REQUESTS_KEY = "sing_accept_make_requests"
+# When on, the KJ controller auto-texts the up-next singer 20s after the KJ
+# starts the top-of-rotation song (see the frontend arming logic + the
+# /rotation/sms/auto-send route). Default OFF — opt-in per event.
+AUTO_SMS_NEXT_KEY = "sms_auto_next_singer"
 SIMPLE_MODE_KEY = "kj_simple_mode"
 SMS_TEMPLATE_KEY = "sms_template"
 SMS_DEFAULT_REGION_KEY = "sms_default_region"
@@ -308,6 +312,19 @@ class SingStore:
 
     def set_accepting_make_requests(self, enabled):
         self._set_meta(ACCEPT_MAKE_REQUESTS_KEY, "1" if enabled else "0")
+
+    def is_auto_sms_next(self):
+        """Return True if the KJ has enabled auto-texting the next singer.
+
+        Default OFF. When on, the frontend arms a 20s timer whenever the KJ
+        starts the top-of-rotation song and — if that song is still playing —
+        auto-sends the "you're up next" SMS to the up-next singer (position 2).
+        See /rotation/sms/auto-send for the server-side eligibility guards.
+        """
+        return self._get_meta(AUTO_SMS_NEXT_KEY, "0") == "1"
+
+    def set_auto_sms_next(self, enabled):
+        self._set_meta(AUTO_SMS_NEXT_KEY, "1" if enabled else "0")
 
     def is_simple_mode(self):
         """Return True if the KJ controller is in stand-in / simple-operator mode.
