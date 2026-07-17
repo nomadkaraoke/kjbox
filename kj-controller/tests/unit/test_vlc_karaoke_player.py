@@ -447,20 +447,42 @@ def test_play_skips_positioning_without_margin(mock_config, mocker, tmp_path):
 def test_position_window_self_corrects_wm_offset(mock_config, mocker):
     filler = FillerVLC(mock_config, enabled=False)
     p = VlcKaraokePlayer(mock_config, filler, enabled=True)
-    # Window found immediately; after the first move it lands offset at (4, 152)
-    # (xfwm4's fixed frame-extent skew).
+    # Poll finds the window; the first move to (0,80) lands offset at (4,152)
+    # (xfwm4's fixed frame-extent skew); the corrected request then lands on
+    # target so the loop stops.
     mocker.patch.object(p, '_find_window',
-                        side_effect=[('0xwin', 0, 0), ('0xwin', 4, 152)])
+                        side_effect=[('0xwin', 0, 0),      # poll: found
+                                     ('0xwin', 4, 152),    # after req (0,80)
+                                     ('0xwin', 0, 80)])    # after req (-4,8): done
     wmctrl = mocker.patch.object(p, '_wmctrl',
                                  return_value=mocker.Mock(returncode=0))
     mocker.patch('vlc.subprocess.run')  # xprop decoration removal
     mocker.patch('vlc.time.sleep')
+    logs = mocker.patch('vlc.log_message')
     p._position_window(80, 1920, 1080)
     moves = [c.args[0] for c in wmctrl.call_args_list]
-    # First move requests the raw target; the correction requests 2*target-actual
-    # so the window lands exactly at (0, 80).
+    # First request is the raw target; the next adjusts by the observed error
+    # (req += target - actual) so the window lands exactly at (0, 80).
     assert ['-i', '-r', '0xwin', '-e', '0,0,80,1920,1000'] in moves
     assert ['-i', '-r', '0xwin', '-e', '0,-4,8,1920,1000'] in moves
+    msgs = ' '.join(str(c.args[0]) for c in logs.call_args_list)
+    assert 'Positioned karaoke VLC' in msgs
+
+
+def test_position_window_soft_warns_when_never_settles(mock_config, mocker):
+    # If the window never reaches target (keeps drifting), the loop gives up
+    # after its max iterations with a soft warning — never claims success.
+    filler = FillerVLC(mock_config, enabled=False)
+    p = VlcKaraokePlayer(mock_config, filler, enabled=True)
+    mocker.patch.object(p, '_find_window', return_value=('0xwin', 500, 500))
+    mocker.patch.object(p, '_wmctrl', return_value=mocker.Mock(returncode=0))
+    mocker.patch('vlc.subprocess.run')
+    mocker.patch('vlc.time.sleep')
+    logs = mocker.patch('vlc.log_message')
+    p._position_window(80, 1920, 1080)
+    msgs = ' '.join(str(c.args[0]) for c in logs.call_args_list)
+    assert 'did not settle' in msgs
+    assert 'Positioned karaoke VLC' not in msgs
 
 
 def test_position_window_bails_on_wmctrl_nonzero_exit(mock_config, mocker):
