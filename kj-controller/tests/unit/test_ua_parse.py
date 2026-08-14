@@ -54,6 +54,15 @@ class TestParse:
         assert p["os"] == "Windows 10/11"
         assert p["is_mobile"] is False
 
+    def test_edge_for_android(self):
+        # EdgA/ (Edge on Android) also contains Chrome/ — Edge must win.
+        ua = ("Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 "
+              "(KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36 EdgA/120.0.0.0")
+        p = parse_user_agent(ua)
+        assert p["browser"] == "Edge"
+        assert p["device"] == "Pixel 7"
+        assert p["is_mobile"] is True
+
     def test_mac_firefox_keeps_full_version(self):
         p = parse_user_agent(MAC_FIREFOX)
         assert p["browser"] == "Firefox"

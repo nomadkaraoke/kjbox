@@ -45,6 +45,7 @@ def _browser(ua):
     for token, label in (
         ("Edg/", "Edge"),
         ("EdgiOS/", "Edge"),
+        ("EdgA/", "Edge"),
         ("SamsungBrowser/", "Samsung Internet"),
         ("OPR/", "Opera"),
         ("OPiOS/", "Opera"),

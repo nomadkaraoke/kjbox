@@ -206,11 +206,20 @@ class TestMergeModalE2E:
         assert page.locator('.merge-search').count() == 1
 
         # Pick MergeB as the partner → confirm step spells out keep/remove.
+        # Both are KJ-added (no device), so the default keeper is the picked
+        # partner, MergeB.
         page.locator('.merge-option', has_text='MergeB').first.click()
         page.locator('.merge-confirm').wait_for(state='visible', timeout=5000)
-        assert page.locator('.merge-keep').count() == 1
-        assert page.locator('.merge-btn-confirm').count() == 1
+        assert 'MergeB' in page.locator('.merge-keep .merge-side-name').inner_text()
 
-        # Swap flips the keeper; Confirm performs the merge and closes the modal.
+        # Swap flips the keeper to MergeA (removing MergeB instead).
+        page.locator('.merge-btn-swap').click()
+        assert 'MergeA' in page.locator('.merge-keep .merge-side-name').inner_text()
+
+        # Confirm performs the merge. Assert the real outcome — MergeB is absorbed
+        # into MergeA, so only MergeA's name remains in the singer list.
         page.locator('.merge-btn-confirm').click()
         page.locator('.merge-modal').wait_for(state='hidden', timeout=5000)
+        page.locator('.singer-stats-name', has_text='MergeB').first.wait_for(
+            state='detached', timeout=10000)
+        assert page.locator('.singer-stats-name', has_text='MergeA').count() > 0
