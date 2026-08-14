@@ -6824,8 +6824,18 @@ function renderMergeModal() {
     const keep = singerByName(keepName);
     const remove = singerByName(removeName);
 
-    const combinedSung = (keep.entries_sung || 0) + (remove.entries_sung || 0);
-    const combinedQueued = (keep.entries_waiting || 0) + (remove.entries_waiting || 0);
+    // Post-merge totals from the UNION of both singers' entries deduped by id —
+    // matches what the backend produces (merge reassigns entries; an entry both
+    // singers were credited on, e.g. a shared duet, collapses to one). A naive
+    // A+B sum would over-count that overlap case.
+    const mergedById = {};
+    for (const e of (remove.entries || [])) mergedById[e.id] = e;
+    for (const e of (keep.entries || [])) mergedById[e.id] = e;
+    const mergedEntries = Object.values(mergedById);
+    const isDone = (e) => (e.status || '').toLowerCase().includes('done');
+    const isLeft = (e) => (e.status || '').toLowerCase().includes('left');
+    const combinedSung = mergedEntries.filter(isDone).length;
+    const combinedQueued = mergedEntries.filter(e => !isDone(e) && !isLeft(e)).length;
 
     const keepDev = !!(keep.session && keep.session.has_device);
     const removeDev = !!(remove.session && remove.session.has_device);
