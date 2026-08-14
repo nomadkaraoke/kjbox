@@ -56,8 +56,10 @@ def _browser(ua):
     ):
         if token in ua:
             return label
-    # Safari last: only a real Safari has "Version/… Safari" without the above.
-    if "Safari/" in ua:
+    # Safari last: a real Safari emits the "Version/… Safari/" sequence. Requiring
+    # Version/ avoids tagging embedded WebKit clients (which expose a bare Safari
+    # compatibility token but no Version/) as Safari.
+    if "Safari/" in ua and "Version/" in ua:
         return "Safari"
     return ""
 

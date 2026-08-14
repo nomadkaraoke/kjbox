@@ -86,6 +86,13 @@ class TestParse:
         p = parse_user_agent("not a real user agent !!! 123")
         assert p["raw"] == "not a real user agent !!! 123"
 
+    def test_embedded_webkit_not_tagged_safari(self):
+        # An in-app WebView exposes a bare Safari/ token but no Version/ — must
+        # NOT be classified as Safari.
+        ua = ("Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) "
+              "AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 Safari/604.1")
+        assert parse_user_agent(ua)["browser"] == ""
+
 
 class TestSummarize:
     def test_summary_dedupes_and_orders(self):
