@@ -182,6 +182,18 @@ class SingStore:
         except sqlite3.OperationalError as e:
             if "duplicate column name" not in str(e).lower():
                 raise
+        # Additive migration — `user_agent` (2026-08-13) records the submitting
+        # device's User-Agent so the KJ can tell a real singer-UI session apart
+        # from a duet-partner label or a KJ-hand-added entry, and eyeball the
+        # phone/browser. Mirrors sing_push_subscriptions.user_agent. Existing
+        # rows get NULL (unknown device).
+        try:
+            conn.execute(
+                "ALTER TABLE sing_requests ADD COLUMN user_agent TEXT DEFAULT NULL"
+            )
+        except sqlite3.OperationalError as e:
+            if "duplicate column name" not in str(e).lower():
+                raise
         conn.commit()
 
     # ------------------------------------------------------------------
@@ -407,6 +419,7 @@ class SingStore:
         token=None,
         additional_singers=None,
         supersedes_request_id=None,
+        user_agent=None,
     ):
         """Insert a new pending request and return the created row as a dict."""
         if not singer_name:
@@ -430,8 +443,9 @@ class SingStore:
             INSERT INTO sing_requests
                 (token, singer_name, phone, song_artist, song_title,
                  source_type, source_ref, source_meta, notes,
-                 additional_singers, edit_token, supersedes_request_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 additional_singers, edit_token, supersedes_request_id,
+                 user_agent)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 request_token,
@@ -446,6 +460,7 @@ class SingStore:
                 partners_json,
                 edit_token,
                 supersedes_request_id,
+                (user_agent or None),
             ),
         )
         conn.commit()
@@ -475,6 +490,38 @@ class SingStore:
             f"SELECT * FROM sing_requests {where} "
             f"ORDER BY id DESC {limit_clause}",
             params,
+        ).fetchall()
+        return [self._row_to_dict(r) for r in rows]
+
+    def get_requests_for_entries(self, entry_ids, night_started=None):
+        """Return linked sing_requests for the given rotation-entry ids.
+
+        Used to attribute rotation entries to the device session that submitted
+        them (singer session provenance). Night-scoped like the SMS phone lookup
+        (``_add_sms_status``): a New Rotation recycles rotation_entry ids, so a
+        recycled id could otherwise phantom-match a prior night's request. Fails
+        CLOSED (returns []) when ``night_started`` is None — callers pass the
+        current ``night_started_at`` which ``ensure_night_started`` guarantees.
+
+        Returns a list of dicts (newest first) with the columns needed for
+        classification: id, linked_entry_id, singer_name, phone, user_agent,
+        created_at, source_type, additional_singers (deserialised).
+        """
+        ids = [int(e) for e in (entry_ids or []) if e is not None]
+        if not ids or not night_started:
+            return []
+        conn = self._get_conn()
+        placeholders = ",".join("?" * len(ids))
+        rows = conn.execute(
+            f"""
+            SELECT id, linked_entry_id, singer_name, phone, user_agent,
+                   created_at, source_type, additional_singers
+            FROM sing_requests
+            WHERE linked_entry_id IN ({placeholders})
+              AND created_at >= ?
+            ORDER BY id DESC
+            """,
+            tuple(ids + [night_started]),
         ).fetchall()
         return [self._row_to_dict(r) for r in rows]
 

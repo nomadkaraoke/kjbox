@@ -6099,6 +6099,20 @@ function buildSingerRow(singer) {
     name.textContent = singer.name;
     info.appendChild(name);
 
+    // Device icon \u2014 only for singers with a real singer-UI device session, so
+    // the KJ can tell them apart at a glance from duet-partner labels / KJ-added
+    // entries. Click opens the captured device details.
+    if (singer.session && singer.session.has_device) {
+        const dev = document.createElement('button');
+        dev.className = 'singer-device-icon';
+        dev.textContent = '\uD83D\uDCF1'; // \uD83D\uDCF1
+        const summary = singerDeviceSummary(singer.session);
+        dev.title = 'Linked device session'
+            + (summary ? ' \u2014 ' + summary : '') + ' (tap for details)';
+        dev.onclick = (ev) => { ev.stopPropagation(); openSingerDeviceModal(singer); };
+        info.appendChild(dev);
+    }
+
     if (singer.has_tipped) {
         const tip = document.createElement('span');
         tip.className = 'singer-stats-tip';
@@ -6199,7 +6213,7 @@ function buildSingerActions(actions, singer, row) {
     mergeBtn.className = 'singer-stats-btn';
     mergeBtn.textContent = 'Merge';
     mergeBtn.title = 'Merge this singer into another \u2014 use when the same person was added under two different names';
-    mergeBtn.onclick = (ev) => showMergeDropdown(ev, singer);
+    mergeBtn.onclick = () => openMergeModal(singer);
     actions.appendChild(mergeBtn);
 
     const splitBtn = document.createElement('button');
@@ -6596,41 +6610,275 @@ function enterSingerEditMode(row, singer) {
     });
 }
 
-function showMergeDropdown(ev, singer) {
-    document.querySelectorAll('.singer-merge-dropdown').forEach(d => d.remove());
+// One-line human summary of a singer.session's device, e.g.
+// "iPhone · Safari · iOS 17.4". '' when nothing was captured.
+function singerDeviceSummary(session) {
+    const d = (session && session.device) || {};
+    const parts = [];
+    for (const x of [d.device, d.browser, d.os]) {
+        if (x && parts.indexOf(x) === -1) parts.push(x);
+    }
+    return parts.join(' · ');
+}
 
-    const others = singerStatsData
-        .filter(s => s.name.toLowerCase() !== singer.name.toLowerCase() && s.status !== 'done')
-        .map(s => s.name);
+// Human label + css class for a singer's provenance origin.
+function singerOriginMeta(session) {
+    const origin = (session && session.origin) || null;
+    if (origin === 'singer_ui') return { label: 'Linked device session', cls: 'origin-device' };
+    if (origin === 'duet_partner') return { label: 'Duet-partner label (no own device)', cls: 'origin-duet' };
+    if (origin === 'kj_added') return { label: 'Added by KJ (no device)', cls: 'origin-kj' };
+    return { label: 'Unknown origin', cls: 'origin-unknown' };
+}
 
-    if (others.length === 0) return;
+let openSingerDeviceName = null;
+function closeSingerDeviceModal() {
+    openSingerDeviceName = null;
+    document.querySelectorAll('.singer-device-modal-backdrop').forEach(d => d.remove());
+    document.removeEventListener('keydown', singerDeviceEscHandler);
+}
+function singerDeviceEscHandler(e) { if (e.key === 'Escape') closeSingerDeviceModal(); }
 
-    const dropdown = document.createElement('div');
-    dropdown.className = 'singer-merge-dropdown';
-    others.forEach(targetName => {
-        const opt = document.createElement('button');
-        opt.className = 'singer-merge-option';
-        opt.textContent = targetName;
-        opt.onclick = () => {
-            dropdown.remove();
-            singerAction('merge', { source_name: singer.name, target_name: targetName });
+// Popup showing whatever we captured about the device that created this singer.
+function openSingerDeviceModal(singer) {
+    if (openSingerDeviceName === singer.name
+        && document.querySelector('.singer-device-modal-backdrop')) {
+        closeSingerDeviceModal();
+        return;
+    }
+    closeSingerDeviceModal();
+
+    const s = singer.session || {};
+    const d = s.device || {};
+    const backdrop = document.createElement('div');
+    backdrop.className = 'singer-device-modal-backdrop';
+    backdrop.onclick = (ev) => { if (ev.target === backdrop) closeSingerDeviceModal(); };
+
+    const origin = singerOriginMeta(s);
+    const rows = [];
+    const summary = singerDeviceSummary(s);
+    if (summary) rows.push(['Device', summary]);
+    if (d.device && !summary.startsWith(d.device)) rows.push(['Model', d.device]);
+    if (s.phone) rows.push(['Phone on file', s.phone]);
+    if (s.request_count) rows.push(['Songs submitted', String(s.request_count)]);
+    if (s.sources && s.sources.length) rows.push(['Sources', s.sources.join(', ')]);
+    if (s.first_request_at) {
+        const dt = new Date(s.first_request_at.replace(' ', 'T'));
+        rows.push(['First submitted', isNaN(dt) ? s.first_request_at : dt.toLocaleTimeString()]);
+    }
+
+    const rowsHtml = rows.map(([k, v]) =>
+        '<div class="device-kv"><span class="device-k">' + escHtml(k) + '</span>'
+        + '<span class="device-v">' + escHtml(v) + '</span></div>').join('');
+
+    const rawHtml = d.raw
+        ? '<div class="device-ua-label">Raw User-Agent</div>'
+          + '<pre class="device-ua">' + escHtml(d.raw) + '</pre>'
+        : '<div class="device-ua-label">No User-Agent captured for this singer’s device '
+          + '(submitted before device capture shipped, or KJ-added).</div>';
+
+    backdrop.innerHTML =
+        '<div class="singer-device-modal">'
+        + '<div class="singer-device-modal-head">'
+        +   '<h3>' + escHtml(singer.name) + ' — device</h3>'
+        +   '<button class="singer-device-modal-close" title="Close">&times;</button>'
+        + '</div>'
+        + '<div class="singer-device-modal-body">'
+        +   '<div class="device-origin ' + origin.cls + '">' + escHtml(origin.label) + '</div>'
+        +   (rowsHtml || '<div class="device-empty">No device details captured.</div>')
+        +   rawHtml
+        + '</div>'
+        + '</div>';
+    backdrop.querySelector('.singer-device-modal-close').onclick = closeSingerDeviceModal;
+
+    document.body.appendChild(backdrop);
+    openSingerDeviceName = singer.name;
+    document.addEventListener('keydown', singerDeviceEscHandler);
+}
+
+// --- Merge modal ---------------------------------------------------------
+// Replaces the old inline dropdown: a real modal with a searchable/scrollable
+// singer list and an explicit confirm step that spells out exactly which singer
+// is kept and what history moves.
+let mergeModalState = null;
+function closeMergeModal() {
+    mergeModalState = null;
+    document.querySelectorAll('.merge-modal-backdrop').forEach(d => d.remove());
+    document.removeEventListener('keydown', mergeModalEscHandler);
+}
+function mergeModalEscHandler(e) { if (e.key === 'Escape') closeMergeModal(); }
+
+function singerByName(name) {
+    const lower = (name || '').toLowerCase();
+    return (singerStatsData || []).find(s => s.name.toLowerCase() === lower) || null;
+}
+
+function openMergeModal(singer) {
+    closeMergeModal();
+    mergeModalState = { origin: singer.name, partner: null, keep: null, query: '' };
+
+    const backdrop = document.createElement('div');
+    backdrop.className = 'merge-modal-backdrop';
+    backdrop.onclick = (ev) => { if (ev.target === backdrop) closeMergeModal(); };
+
+    const modal = document.createElement('div');
+    modal.className = 'merge-modal';
+    backdrop.appendChild(modal);
+    document.body.appendChild(backdrop);
+
+    document.addEventListener('keydown', mergeModalEscHandler);
+    renderMergeModal();
+}
+
+// Small badge string for a singer option/summary (device + counts + status).
+function singerBadgesHtml(s) {
+    if (!s) return '';
+    const b = [];
+    if (s.session && s.session.has_device) b.push('<span class="merge-badge merge-badge-device">📱 device</span>');
+    else if (s.session && s.session.origin === 'duet_partner') b.push('<span class="merge-badge merge-badge-duet">duet label</span>');
+    else b.push('<span class="merge-badge merge-badge-kj">KJ-added</span>');
+    b.push('<span class="merge-badge">' + (s.entries_sung || 0) + ' sung</span>');
+    b.push('<span class="merge-badge">' + (s.entries_waiting || 0) + ' queued</span>');
+    if (s.status && s.status !== 'active') b.push('<span class="merge-badge merge-badge-status">' + escHtml(s.status) + '</span>');
+    return b.join(' ');
+}
+
+// Fill the step-1 option list from the current search query, binding each
+// option's click. Called on open and on every keystroke (list only — the
+// search input keeps focus + caret position).
+function renderMergeOptionList() {
+    const modal = document.querySelector('.merge-modal');
+    if (!modal || !mergeModalState) return;
+    const st = mergeModalState;
+    const origin = singerByName(st.origin);
+    if (!origin) return;
+    const list = modal.querySelector('.merge-option-list');
+    if (!list) return;
+
+    const q = st.query.trim().toLowerCase();
+    const others = (singerStatsData || [])
+        .filter(s => s.name.toLowerCase() !== st.origin.toLowerCase())
+        .filter(s => !q || s.name.toLowerCase().includes(q))
+        // Real-device sessions first (most likely merge intent), then by name.
+        .sort((a, b) => {
+            const ad = (a.session && a.session.has_device) ? 0 : 1;
+            const bd = (b.session && b.session.has_device) ? 0 : 1;
+            if (ad !== bd) return ad - bd;
+            return a.name.localeCompare(b.name);
+        });
+
+    list.innerHTML = others.map(s =>
+        '<button class="merge-option" data-name="' + escAttr(s.name) + '">'
+        + '<span class="merge-option-name">' + escHtml(s.name) + '</span>'
+        + '<span class="merge-option-badges">' + singerBadgesHtml(s) + '</span>'
+        + '</button>').join('') || '<div class="merge-empty">No matching singers.</div>';
+
+    list.querySelectorAll('.merge-option').forEach(btn => {
+        btn.onclick = () => {
+            st.partner = btn.getAttribute('data-name');
+            // Default keeper: the phone-linked singer when exactly one has a
+            // device (the KJ's stated preference); else the picked partner.
+            const p = singerByName(st.partner);
+            const oDev = !!(origin.session && origin.session.has_device);
+            const pDev = !!(p && p.session && p.session.has_device);
+            if (oDev && !pDev) st.keep = origin.name;
+            else st.keep = st.partner;
+            renderMergeModal();
         };
-        dropdown.appendChild(opt);
     });
+}
 
-    const btn = ev.currentTarget;
-    const rect = btn.getBoundingClientRect();
-    dropdown.style.top = (rect.bottom + 2) + 'px';
-    dropdown.style.left = rect.left + 'px';
-    document.body.appendChild(dropdown);
+function renderMergeModal() {
+    const modal = document.querySelector('.merge-modal');
+    if (!modal || !mergeModalState) return;
+    const st = mergeModalState;
+    const origin = singerByName(st.origin);
+    if (!origin) { closeMergeModal(); return; }
 
-    const close = (e) => {
-        if (!dropdown.contains(e.target)) {
-            dropdown.remove();
-            document.removeEventListener('click', close);
-        }
+    if (!st.partner) {
+        // Step 1 — pick who to merge with. Static shell rendered once; only the
+        // option list re-renders on search input so the caret never jumps.
+        modal.innerHTML =
+            '<div class="merge-modal-head">'
+            +   '<h3>Merge “' + escHtml(origin.name) + '”</h3>'
+            +   '<button class="merge-modal-close" title="Close">&times;</button>'
+            + '</div>'
+            + '<div class="merge-modal-sub">' + escHtml(origin.name) + ' ' + singerBadgesHtml(origin) + '</div>'
+            + '<input class="merge-search" type="text" placeholder="Search singers…" value="' + escAttr(st.query) + '">'
+            + '<div class="merge-option-list"></div>'
+            + '<div class="merge-hint">Pick the singer this person should be combined with. '
+            +   'You’ll confirm which name is kept next.</div>';
+
+        modal.querySelector('.merge-modal-close').onclick = closeMergeModal;
+        const search = modal.querySelector('.merge-search');
+        search.oninput = () => { st.query = search.value; renderMergeOptionList(); };
+        renderMergeOptionList();
+        search.focus();
+        return;
+    }
+
+    // Step 2 — confirm direction.
+    const partner = singerByName(st.partner);
+    if (!partner) { st.partner = null; st.keep = null; renderMergeModal(); return; }
+    const keepName = st.keep;
+    const removeName = (keepName.toLowerCase() === origin.name.toLowerCase()) ? partner.name : origin.name;
+    const keep = singerByName(keepName);
+    const remove = singerByName(removeName);
+
+    const combinedSung = (keep.entries_sung || 0) + (remove.entries_sung || 0);
+    const combinedQueued = (keep.entries_waiting || 0) + (remove.entries_waiting || 0);
+
+    const keepDev = !!(keep.session && keep.session.has_device);
+    const removeDev = !!(remove.session && remove.session.has_device);
+    let warnHtml = '';
+    if (removeDev && !keepDev) {
+        warnHtml = '<div class="merge-warn">⚠️ You’re removing <strong>' + escHtml(remove.name)
+            + '</strong>, who has a real phone session, and keeping <strong>' + escHtml(keep.name)
+            + '</strong>, who doesn’t. You usually want to keep the phone-linked singer — use Swap.</div>';
+    }
+    let deviceNoteHtml = '';
+    if (keepDev) {
+        deviceNoteHtml = '<div class="merge-note">' + escHtml(keep.name)
+            + ' has a linked phone session, so they’ll now see ' + escHtml(remove.name)
+            + '’s songs in their history (and any SMS/notifications stay on their number).</div>';
+    }
+
+    modal.innerHTML =
+        '<div class="merge-modal-head">'
+        +   '<h3>Confirm merge</h3>'
+        +   '<button class="merge-modal-close" title="Close">&times;</button>'
+        + '</div>'
+        + '<div class="merge-confirm">'
+        +   '<div class="merge-side merge-keep">'
+        +     '<div class="merge-side-tag">✓ KEEP</div>'
+        +     '<div class="merge-side-name">' + escHtml(keep.name) + '</div>'
+        +     '<div class="merge-side-badges">' + singerBadgesHtml(keep) + '</div>'
+        +   '</div>'
+        +   '<div class="merge-arrow">← merges in</div>'
+        +   '<div class="merge-side merge-remove">'
+        +     '<div class="merge-side-tag">✗ REMOVE</div>'
+        +     '<div class="merge-side-name">' + escHtml(remove.name) + '</div>'
+        +     '<div class="merge-side-badges">' + singerBadgesHtml(remove) + '</div>'
+        +   '</div>'
+        + '</div>'
+        + warnHtml
+        + '<div class="merge-summary">After merging, <strong>' + escHtml(keep.name)
+        +   '</strong> will have <strong>' + combinedSung + ' sung</strong> and <strong>'
+        +   combinedQueued + ' queued</strong>. The name “' + escHtml(remove.name)
+        +   '” disappears from the list.</div>'
+        + deviceNoteHtml
+        + '<div class="merge-actions">'
+        +   '<button class="merge-btn-back">← Back</button>'
+        +   '<button class="merge-btn-swap">⇄ Swap (keep ' + escHtml(remove.name) + ')</button>'
+        +   '<button class="merge-btn-confirm">Merge — keep ' + escHtml(keep.name) + '</button>'
+        + '</div>';
+
+    modal.querySelector('.merge-modal-close').onclick = closeMergeModal;
+    modal.querySelector('.merge-btn-back').onclick = () => { st.partner = null; st.keep = null; renderMergeModal(); };
+    modal.querySelector('.merge-btn-swap').onclick = () => { st.keep = remove.name; renderMergeModal(); };
+    modal.querySelector('.merge-btn-confirm').onclick = () => {
+        closeMergeModal();
+        singerAction('merge', { source_name: remove.name, target_name: keep.name });
     };
-    setTimeout(() => document.addEventListener('click', close), 0);
 }
 
 function enterRotationEditMode(row, entry, focusTarget) {

@@ -178,3 +178,39 @@ class TestSplitSingerE2E:
         )
         assert page.locator('.singer-stats-name', has_text='KaiSplit').count() > 0
         assert page.locator('.singer-stats-name', has_text='KaiSplit P').count() > 0
+
+
+class TestMergeModalE2E:
+    def test_merge_modal_flow_and_no_device_icon_for_kj_added(self, app_page):
+        page = app_page
+
+        # Two KJ-added singers so Merge has a target.
+        page.locator('.rotation-add-btn').click()
+        page.locator('#singer-input-container').wait_for(state='visible')
+        for singer, song in (('MergeA', 'Song A'), ('MergeB', 'Song B')):
+            page.locator('#rotation-singer').fill(singer)
+            page.locator('#rotation-singer').press('Enter')
+            page.locator('#rotation-song').fill(song)
+            page.locator('#rotation-add-btn-submit').click()
+            page.locator('.rotation-entry', has_text=singer).last.wait_for(state='visible')
+
+        row_a = page.locator('.singer-stats-row', has_text='MergeA').first
+        row_a.wait_for(state='visible', timeout=15000)
+
+        # KJ-added singers have no linked device session → no 📱 icon.
+        assert row_a.locator('.singer-device-icon').count() == 0
+
+        # Merge opens the new modal (not the old inline dropdown).
+        row_a.locator('.singer-stats-btn', has_text='Merge').click()
+        page.locator('.merge-modal').wait_for(state='visible', timeout=5000)
+        assert page.locator('.merge-search').count() == 1
+
+        # Pick MergeB as the partner → confirm step spells out keep/remove.
+        page.locator('.merge-option', has_text='MergeB').first.click()
+        page.locator('.merge-confirm').wait_for(state='visible', timeout=5000)
+        assert page.locator('.merge-keep').count() == 1
+        assert page.locator('.merge-btn-confirm').count() == 1
+
+        # Swap flips the keeper; Confirm performs the merge and closes the modal.
+        page.locator('.merge-btn-confirm').click()
+        page.locator('.merge-modal').wait_for(state='hidden', timeout=5000)
