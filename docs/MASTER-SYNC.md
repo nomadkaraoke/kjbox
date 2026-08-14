@@ -43,6 +43,38 @@ service `Environment=PATH=...`.
 4. Enable the timer: `sudo systemctl enable --now nomad-master-sync.timer`
 5. Confirm cadence: `systemctl list-timers nomad-master-sync.timer`.
 
+## On-demand sync — the "Sync Masters" button
+The Media panel has a **Sync Masters** button (next to *Rescan Media*) that triggers an
+immediate master-mirror pull instead of waiting for the timer. Use it on the night when a
+track you just finished on gen.nomadkaraoke.com hasn't shown up yet.
+
+- Endpoint: `POST /master-sync/run` → runs the same gcloud rsync **in-process** (no sudo) in a
+  background thread; the button polls `GET /master-sync/status` and reports how many new tracks
+  landed, then refreshes the library so they're immediately searchable/linkable.
+- It reuses the timer's flock (`/tmp/nomad-master-sync.lock`), so a manual run and the periodic
+  timer can never overlap. The `POST /master-sync/run` click always returns immediately
+  (`{"started": true, "running": true}`); if the timer holds the lock, the background worker
+  ends with `{"error": "busy"}`, which the button surfaces via the `GET /master-sync/status` poll.
+- The kj-controller service does **not** put the Cloud SDK on `PATH`, so the in-app call uses an
+  absolute gcloud path: `master_sync_gcloud_bin` in `config.json` if set, else
+  `/opt/nomad/google-cloud-sdk/bin/gcloud`, else bare `gcloud` (dev/test). Only set the config
+  key if the SDK lives somewhere non-standard.
+
+## Timer cadence — 60s
+The timer polls **every 60 seconds** (`OnUnitActiveSec=60s`) so a just-published master lands on
+the box within ~1 minute of worst-case passive latency. The run is cheap (additive rsync,
+`Nice=10` + idle IO, ~10-30s, no-op when nothing changed).
+
+**Applying a timer/unit change is NOT automatic** — auto-deploy pulls the repo but does not
+re-copy systemd units. After editing `deploy/nomad-master-sync.timer` (or `.service`), on the
+device run:
+```bash
+sudo cp /opt/nomad/kjbox/kj-controller/deploy/nomad-master-sync.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl restart nomad-master-sync.timer
+systemctl list-timers nomad-master-sync.timer   # confirm the new cadence
+```
+
 ## Reconcile / deletions (v0.60.0+)
 Each run does an additive `gcloud storage rsync` (copy new/changed), **then a guarded
 reconcile** that deletes local masters no longer present in GCS — so upstream deletes/renames

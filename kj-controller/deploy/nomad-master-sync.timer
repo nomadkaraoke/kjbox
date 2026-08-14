@@ -1,10 +1,15 @@
 [Unit]
-Description=Run Nomad master-catalog GCS sync every 5 minutes
+Description=Run Nomad master-catalog GCS sync every minute
 
 [Timer]
-OnBootSec=3min
-OnUnitActiveSec=5min
-AccuracySec=30s
+OnBootSec=1min
+# Poll every 60s so a just-published master lands on the box within ~1 minute
+# (worst-case passive latency), not up to 5. The run is cheap: additive gcloud
+# rsync, Nice=10 + IOSchedulingClass=idle, ~10-30s, and a no-op when nothing
+# changed. The flock in sync_masters serialises overlapping ticks. The in-app
+# "Sync Masters" button (/master-sync/run) covers the "I need it NOW" case.
+OnUnitActiveSec=60s
+AccuracySec=15s
 Persistent=true
 
 [Install]

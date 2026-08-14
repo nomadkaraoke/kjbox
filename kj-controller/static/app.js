@@ -455,6 +455,68 @@ async function rescanMedia() {
     }
 }
 
+// Pull just-published NOMAD master tracks from the cloud on demand, instead of
+// waiting for the ~1-minute auto-sync timer. The backend runs the gcloud rsync in
+// a background thread; we poll /master-sync/status until it finishes, then refresh
+// the library so the new track is immediately searchable/linkable.
+async function syncMasters() {
+    const btn = document.getElementById('sync-masters-btn');
+    if (btn && btn.dataset.busy === '1') return;
+    if (btn) {
+        btn.dataset.busy = '1';
+        btn.disabled = true;
+        btn.dataset.label = btn.textContent;
+        btn.textContent = 'Syncing…';
+    }
+    log('Syncing master catalog from cloud…');
+    const start = await apiCall('/master-sync/run', {});
+
+    const finish = () => {
+        if (btn) {
+            btn.dataset.busy = '0';
+            btn.disabled = false;
+            btn.textContent = btn.dataset.label || 'Sync Masters';
+        }
+    };
+    if (!start || (!start.started && !start.running)) { finish(); return; }
+
+    const poll = async () => {
+        let s = null;
+        try {
+            const resp = await fetch('/master-sync/status');
+            s = await resp.json();
+        } catch (e) { s = null; }
+        if (!s) { setTimeout(poll, 2000); return; }
+        if (s.running) { setTimeout(poll, 2000); return; }
+
+        finish();
+        const res = s.result || {};
+        if (res.error) {
+            // 'disabled' (master_sync_enabled=false) and 'busy' are informational —
+            // no sync ran, so don't claim success or refresh the library.
+            const busy = res.error === 'busy';
+            const disabled = res.error === 'disabled';
+            log(disabled
+                ? 'Master sync is disabled in config.json.'
+                : busy
+                    ? 'Master sync already running — try again in a moment.'
+                    : `Master sync failed: ${res.error}`,
+                (busy || disabled) ? 'info' : 'error');
+            return;
+        }
+        const n = res.copied || 0;
+        log(n
+            ? `Master sync: ${n} new track(s) downloaded and ready to link.`
+            : 'Master sync: already up to date.', 'success');
+        await refreshMediaData();
+        if (searchActive) {
+            const query = document.getElementById('catalog-search').value.trim();
+            if (query) catalogSearch(query);
+        }
+    };
+    setTimeout(poll, 1500);
+}
+
 async function fixAudio() {
     log('Restarting VLC instances to fix audio...');
     const data = await apiCall('/fix_audio', {});

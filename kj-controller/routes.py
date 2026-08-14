@@ -1180,6 +1180,62 @@ def handle_rescan():
     return jsonify({"success": True, "count": len(media.index)})
 
 
+# Guards the lazy creation of app._master_sync_state so two simultaneous first
+# requests can't each build a separate holder (one worker would then update a
+# dict that /master-sync/status never reads).
+_master_sync_state_init_lock = threading.Lock()
+
+
+def _master_sync_state(app):
+    """Lazily-created holder for the background "Sync Masters" run. One run at a
+    time; the button polls /master-sync/status for the result."""
+    with _master_sync_state_init_lock:
+        st = getattr(app, "_master_sync_state", None)
+        if st is None:
+            st = {"lock": threading.Lock(), "running": False, "result": None}
+            app._master_sync_state = st
+        return st
+
+
+@routes_bp.route('/master-sync/run', methods=['POST'])
+def master_sync_run():
+    """Trigger an immediate master-mirror GCS sync (the "Sync Masters" button).
+
+    Pulls just-published NOMAD master tracks onto the box on demand instead of
+    waiting for the periodic timer. Runs in a background thread so the request
+    returns instantly; the button polls /master-sync/status. In-process (no
+    sudo) — reuses the timer's flock so a manual run and the timer can't overlap.
+    """
+    app = current_app._get_current_object()
+    state = _master_sync_state(app)
+    with state["lock"]:
+        if state["running"]:
+            return jsonify({"started": False, "running": True})
+        state["running"] = True
+        state["result"] = None
+
+    def _worker():
+        from scripts.sync_masters import run_master_sync_now
+        try:
+            result = run_master_sync_now(app.kj_config)
+        except Exception as exc:  # noqa: BLE001 - surface any failure to the button
+            result = {"error": str(exc)}
+        with state["lock"]:
+            state["running"] = False
+            state["result"] = result
+
+    threading.Thread(target=_worker, daemon=True).start()
+    return jsonify({"started": True, "running": True})
+
+
+@routes_bp.route('/master-sync/status', methods=['GET'])
+def master_sync_status():
+    """Progress/result for the most recent "Sync Masters" run (button polls this)."""
+    state = _master_sync_state(current_app._get_current_object())
+    with state["lock"]:
+        return jsonify({"running": state["running"], "result": state["result"]})
+
+
 @routes_bp.route('/filler_music', methods=['GET'])
 def list_filler_music():
     """Returns a list of available filler music files."""

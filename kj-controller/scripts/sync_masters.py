@@ -207,6 +207,52 @@ def _vocals_config_view(config):
     return view
 
 
+def resolve_gcloud_bin(config):
+    """Absolute gcloud path for IN-PROCESS callers (the "Sync Masters" button).
+
+    The systemd timer unit sets ``Environment=PATH=.../google-cloud-sdk/bin:...``
+    so a bare ``gcloud`` resolves there. The kj-controller service does NOT put the
+    Cloud SDK on PATH, so an in-app call must use an absolute path or the rsync
+    fails with FileNotFoundError. Order: explicit config override → the standard SDK
+    location if present → bare ``gcloud`` (dev/test, where it's on PATH)."""
+    explicit = (config.get("master_sync_gcloud_bin") or "").strip()
+    if explicit:
+        return explicit
+    sdk = "/opt/nomad/google-cloud-sdk/bin/gcloud"
+    return sdk if os.path.exists(sdk) else "gcloud"
+
+
+def run_master_sync_now(config=None, *, gcloud_bin=None):
+    """On-demand master-mirror sync for the in-app "Sync Masters" button.
+
+    Master-mirror only (skips the vocals-guide sync — a manual trigger is about
+    getting a just-published karaoke track onto the box fast, and vocals guides
+    are glob-resolved at play time, never indexed). Shares the timer's flock so a
+    manual run and the periodic timer can never overlap; returns
+    ``{"error": "busy"}`` if the lock is held. On any change, ``run_sync`` pokes
+    ``/rescan`` so the media index — and therefore link/search results — updates
+    immediately."""
+    if config is None:
+        config = load_config()
+    if gcloud_bin is None:
+        gcloud_bin = resolve_gcloud_bin(config)
+    lock = open(LOCK_PATH, "w")
+    try:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            return {"changed": False, "copied": 0, "deleted": 0,
+                    "rescanned": False, "error": "busy"}
+        try:
+            return run_sync(config, gcloud_bin=gcloud_bin)
+        finally:
+            fcntl.flock(lock, fcntl.LOCK_UN)
+    finally:
+        # Always close the fd — including the "busy" early return — so repeated
+        # rejected clicks can't leak descriptors until GC.
+        lock.close()
+
+
 def main():
     lock = open(LOCK_PATH, "w")
     try:

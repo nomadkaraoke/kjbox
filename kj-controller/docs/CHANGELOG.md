@@ -4,6 +4,19 @@ Dated entries, newest first. Each entry notes any required deploy steps.
 
 ---
 
+## 2026-08-14 - Faster master sync: "Sync Masters" button + 60s timer (v0.92.0)
+
+**Deploy:** backend (`routes.py`, `scripts/sync_masters.py`) → **requires `systemctl restart kj-controller`** (interrupts playback — deploy between songs). Also frontend (`app.js`, `templates/index.html`). **Timer change needs a manual device step** (auto-deploy does NOT re-copy systemd units): `sudo cp deploy/nomad-master-sync.timer /etc/systemd/system/ && sudo systemctl daemon-reload && sudo systemctl restart nomad-master-sync.timer`.
+
+- **Why:** after finishing a track on gen.nomadkaraoke.com, the 720p master could take up to ~5 minutes to appear in the KJ's link/search results — long enough to panic mid-show. The file was arriving correctly; the wait was the master-sync cadence, with no way to force it and no feedback.
+- **60s timer:** `nomad-master-sync.timer` now polls every 60s (was 5min), cutting worst-case passive latency from ~5min to ~1min. The run stays cheap (additive `gcloud storage rsync`, `Nice=10` + idle IO, no-op when nothing changed); the flock serialises overlapping ticks.
+- **"Sync Masters" button:** new button in the Media panel (next to *Rescan Media*) triggers an immediate pull on demand. `POST /master-sync/run` runs the rsync in-process (no sudo) on a background thread; the button polls `GET /master-sync/status` and reports how many new tracks landed, then refreshes the library so they're instantly searchable/linkable.
+- **Safety:** the manual run reuses the timer's flock (`/tmp/nomad-master-sync.lock`) so a click and the timer can never overlap (returns `busy` if the timer is mid-run). Because the kj-controller service lacks the Cloud SDK on `PATH`, the in-app call resolves an absolute gcloud path (`master_sync_gcloud_bin` config override → `/opt/nomad/google-cloud-sdk/bin/gcloud` → bare `gcloud`).
+- **Tests:** `test_routes_master_sync.py` (run/status/busy/exception) and new `test_sync_masters.py` cases for `resolve_gcloud_bin` + `run_master_sync_now`.
+- Full runbook: [docs/MASTER-SYNC.md](../../docs/MASTER-SYNC.md).
+
+---
+
 ## 2026-08-13 - Singer session provenance + smarter Merge (v0.91.0)
 
 **Deploy:** backend (`sing_store.py`, `sing.py`, `routes.py`, new `ua_parse.py`) → **requires `systemctl restart kj-controller`** (interrupts playback — deploy between songs). Also frontend (`app.js`, `style.css`). **DB migration:** additive `sing_requests.user_agent` column (auto-applied on boot; safe to roll back — the column is simply ignored).

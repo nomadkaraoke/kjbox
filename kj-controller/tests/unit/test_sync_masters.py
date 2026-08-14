@@ -331,3 +331,44 @@ def test_main_master_error_still_sets_nonzero_rc(monkeypatch):
     monkeypatch.setattr(sm, "load_config", lambda: {"master_sync_enabled": True, "download_folder": "/dl"})
     monkeypatch.setattr(sm, "run_sync", lambda config, **kw: {"error": "boom"})
     assert sm.main() == 1
+
+
+def test_resolve_gcloud_bin_explicit_override():
+    assert sm.resolve_gcloud_bin({"master_sync_gcloud_bin": "/custom/gcloud"}) == "/custom/gcloud"
+
+
+def test_resolve_gcloud_bin_falls_back_to_bare_when_sdk_absent(monkeypatch):
+    # No SDK on disk and no override -> bare "gcloud" (dev/test, where it's on PATH).
+    monkeypatch.setattr(sm.os.path, "exists", lambda p: False)
+    assert sm.resolve_gcloud_bin({}) == "gcloud"
+
+
+def test_resolve_gcloud_bin_prefers_sdk_path_when_present(monkeypatch):
+    sdk = "/opt/nomad/google-cloud-sdk/bin/gcloud"
+    monkeypatch.setattr(sm.os.path, "exists", lambda p: p == sdk)
+    assert sm.resolve_gcloud_bin({}) == sdk
+
+
+def test_run_master_sync_now_delegates_with_resolved_gcloud(tmp_path, monkeypatch):
+    captured = {}
+
+    def fake_run_sync(config, *, gcloud_bin="gcloud", requests_lib=None):
+        captured["gcloud_bin"] = gcloud_bin
+        return {"changed": True, "copied": 2, "error": None}
+
+    monkeypatch.setattr(sm, "run_sync", fake_run_sync)
+    out = sm.run_master_sync_now(_cfg(tmp_path), gcloud_bin="/abs/gcloud")
+    assert out["copied"] == 2
+    assert captured["gcloud_bin"] == "/abs/gcloud"
+
+
+def test_run_master_sync_now_reports_busy_when_lock_held(tmp_path, monkeypatch):
+    # Simulate the timer holding the flock: flock raises OSError -> "busy", never runs rsync.
+    monkeypatch.setattr(sm.fcntl, "flock",
+                        lambda *a, **k: (_ for _ in ()).throw(OSError("locked")))
+    called = {"ran": False}
+    monkeypatch.setattr(sm, "run_sync",
+                        lambda *a, **k: called.__setitem__("ran", True) or {})
+    out = sm.run_master_sync_now(_cfg(tmp_path), gcloud_bin="/abs/gcloud")
+    assert out["error"] == "busy"
+    assert called["ran"] is False
