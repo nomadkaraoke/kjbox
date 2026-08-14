@@ -588,6 +588,7 @@ def submit():
         source_meta=source_meta,
         notes=notes,
         additional_singers=additional,
+        user_agent=request.headers.get("User-Agent", "")[:500],
     )
 
     auto_approved = False
@@ -1020,6 +1021,7 @@ def change_request(req_id):
         source_type=source_type, source_ref=source_ref, source_meta=source_meta,
         token=req["token"], additional_singers=req.get("additional_singers"),
         supersedes_request_id=req_id,
+        user_agent=request.headers.get("User-Agent", "")[:500],
     )
     return jsonify({"success": True, "request": {
         **_public_request_view(new_req), "edit_token": new_req.get("edit_token")}})

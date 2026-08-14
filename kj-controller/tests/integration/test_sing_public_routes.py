@@ -195,6 +195,17 @@ class TestSubmit:
         # Stored
         assert sing_app.sing_store.count_pending() == 1
 
+    def test_submit_captures_user_agent(self, client, sing_app, token):
+        ua = ("Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) "
+              "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1")
+        resp = client.post(
+            f"/sing/submit?t={token}", json=self._body(),
+            headers={"User-Agent": ua},
+        )
+        assert resp.status_code == 200
+        req_id = resp.get_json()["request"]["id"]
+        assert sing_app.sing_store.get_request(req_id)["user_agent"] == ua
+
     def test_missing_singer_name(self, client, token):
         resp = client.post(f"/sing/submit?t={token}", json=self._body(singer_name=""))
         assert resp.status_code == 400

@@ -44,6 +44,7 @@ class TestSchemaInit:
             "song_artist", "song_title", "source_type", "source_ref",
             "source_meta", "notes", "status", "rejected_reason",
             "reviewed_at", "linked_entry_id", "additional_singers",
+            "user_agent",
         }
         assert expected <= cols
 
@@ -801,3 +802,41 @@ class TestAutoReorder:
         s1.set_auto_reorder(False)
         assert SingStore(db).is_auto_reorder() is False
         s1.close()
+
+
+class TestUserAgentAndSessionLookup:
+    def test_user_agent_persisted(self, store):
+        ua = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) Safari/604.1"
+        r = store.create_request(
+            singer_name="Chaila R", phone="", source_type="kn",
+            source_ref="https://youtu.be/x", user_agent=ua,
+        )
+        assert store.get_request(r["id"])["user_agent"] == ua
+
+    def test_user_agent_defaults_none(self, store):
+        r = store.create_request(singer_name="Al", phone="", source_type="local", source_ref="/a.mp4")
+        assert store.get_request(r["id"])["user_agent"] is None
+
+    def test_get_requests_for_entries_night_scoped(self, store):
+        # Mark the night as started in the past so today's rows are in-scope.
+        store._set_meta("night_started_at", "2000-01-01 00:00:00")
+        r = store.create_request(
+            singer_name="Chaila R", phone="808", source_type="kn",
+            source_ref="https://youtu.be/x", user_agent="UA-1",
+        )
+        store.mark_approved(r["id"], linked_entry_id=711)
+
+        got = store.get_requests_for_entries([711], store.get_night_started_at())
+        assert len(got) == 1
+        assert got[0]["linked_entry_id"] == 711
+        assert got[0]["singer_name"] == "Chaila R"
+        assert got[0]["user_agent"] == "UA-1"
+
+    def test_get_requests_for_entries_fails_closed_without_night(self, store):
+        r = store.create_request(singer_name="Al", phone="", source_type="local", source_ref="/a.mp4")
+        store.mark_approved(r["id"], linked_entry_id=5)
+        # No night_started passed → fails closed (empty), never phantom-matches.
+        assert store.get_requests_for_entries([5], None) == []
+
+    def test_get_requests_for_entries_empty_ids(self, store):
+        assert store.get_requests_for_entries([], "2000-01-01 00:00:00") == []

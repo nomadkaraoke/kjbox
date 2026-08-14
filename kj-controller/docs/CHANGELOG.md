@@ -4,6 +4,15 @@ Dated entries, newest first. Each entry notes any required deploy steps.
 
 ---
 
+## 2026-08-13 - Singer session provenance + smarter Merge (v0.91.0)
+
+**Deploy:** backend (`sing_store.py`, `sing.py`, `routes.py`, new `ua_parse.py`) → **requires `systemctl restart kj-controller`** (interrupts playback — deploy between songs). Also frontend (`app.js`, `style.css`). **DB migration:** additive `sing_requests.user_agent` column (auto-applied on boot; safe to roll back — the column is simply ignored).
+
+- **Why:** the "two Chailas" incident — the KJ Singers list showed the same person twice because one entry was her own self-registered singer ("Chaila R", from her phone) and the other was a **duet-partner label** ("Chaila") that another singer typed into their own submission. Nothing in the UI distinguished a real device session from a duet label or a KJ-hand-added entry, and Merge didn't say which singer was kept.
+- **Device capture:** every singer-UI `/submit` and `/change` now records the submitting device's `User-Agent` on `sing_requests`. A small heuristic parser (`ua_parse.py`) turns it into a friendly "iPhone · Safari · iOS 17.4" summary (Android UAs also expose the model, e.g. SM-S911B).
+- **Provenance on the Singers list:** each singer now carries a `session` block classifying them as `singer_ui` (own device — gets a 📱 icon), `duet_partner` (credited in someone else's request), or `kj_added` (typed in by the KJ). Only real device sessions show the 📱 icon; clicking it opens a **device-details popup** (parsed device, phone on file, first submitted, song count, sources, raw User-Agent).
+- **Merge redesign:** the inline dropdown is now a **modal** with a searchable/scrollable singer list (real-device sessions sorted first, each showing device/sung/queued badges). Selecting a partner opens a **confirm step** that spells out exactly which name is KEPT vs REMOVED, the combined sung/queued totals, and a note that a phone-linked keeper inherits the other's history. When you'd merge a phone-linked singer *away* into a non-linked one, it warns and offers **Swap** — defaulting the keeper to the device-linked singer (the KJ's stated preference).
+
 ## 2026-07-17 - Auto Order — fair automatic rotation reordering (v0.90.0)
 
 **Deploy:** backend (`routes.py`, `rotation.py`, `rotation_store.py`, `sing_store.py`, `sing.py`, new `auto_order.py`) → **requires `systemctl restart kj-controller`** (interrupts playback — deploy between songs). Also frontend (`app.js`, `index.html`). No DB migration (reuses the `rotation_meta` key/value table).

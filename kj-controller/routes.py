@@ -2909,12 +2909,97 @@ def _add_last_sang_to_singer_stats(singer_stats, rotation):
         singer["last_sang_minutes"] = mins
 
 
+def _add_singer_session_info(singer_stats, app=None):
+    """Attach ``session`` provenance to each singer stat dict.
+
+    Answers "how did this singer come to exist?" so the KJ can tell a real
+    singer-UI device session apart from a duet-partner label or a KJ-hand-added
+    entry — and pick the right keeper when merging. Best-effort: any failure
+    leaves ``session`` absent rather than breaking the rotation poll.
+
+    Classification per singer (matching their rotation-entry ids to linked
+    ``sing_requests``, night-scoped):
+      - ``singer_ui``    — owns >=1 linked request whose ``singer_name`` is theirs
+                           -> ``has_device`` True; carries device/phone details.
+      - ``duet_partner`` — only appears in another request's ``additional_singers``.
+      - ``kj_added``     — has entries but no linked request (KJ typed them in).
+    """
+    from ua_parse import parse_user_agent
+
+    app = app or current_app._get_current_object()
+    sing_store = getattr(app, "sing_store", None)
+    if sing_store is None:
+        return
+    try:
+        night_started = sing_store.get_night_started_at()
+        all_ids = []
+        for s in singer_stats:
+            for e in (s.get("entries") or []):
+                if e.get("id") is not None:
+                    all_ids.append(e["id"])
+        reqs = sing_store.get_requests_for_entries(all_ids, night_started)
+    except Exception:
+        return
+
+    # entry_id -> linked requests (query already returns newest id first).
+    by_entry = {}
+    for r in reqs:
+        by_entry.setdefault(r["linked_entry_id"], []).append(r)
+
+    for singer in singer_stats:
+        try:
+            name_lower = singer["name"].strip().lower()
+            own = []
+            is_duet_partner = False
+            for e in (singer.get("entries") or []):
+                for r in by_entry.get(e.get("id"), []):
+                    if (r.get("singer_name") or "").strip().lower() == name_lower:
+                        own.append(r)
+                    else:
+                        for p in (r.get("additional_singers") or []):
+                            if isinstance(p, dict) and (p.get("name") or "").strip().lower() == name_lower:
+                                is_duet_partner = True
+
+            if own:
+                own.sort(key=lambda r: r.get("id") or 0, reverse=True)
+                newest = own[0]
+                # Prefer the newest non-empty phone (singers sometimes drop the
+                # number on later submits after giving it the first time).
+                phone = ""
+                for r in own:
+                    if (r.get("phone") or "").strip():
+                        phone = r["phone"].strip()
+                        break
+                singer["session"] = {
+                    "origin": "singer_ui",
+                    "has_device": True,
+                    "phone": phone,
+                    "device": parse_user_agent(newest.get("user_agent")),
+                    "request_count": len(own),
+                    "first_request_at": min(r.get("created_at") or "" for r in own) or None,
+                    "sources": sorted({r.get("source_type") for r in own if r.get("source_type")}),
+                }
+            else:
+                singer["session"] = {
+                    "origin": "duet_partner" if is_duet_partner else "kj_added",
+                    "has_device": False,
+                    "phone": "",
+                    "device": parse_user_agent(""),
+                    "request_count": 0,
+                    "first_request_at": None,
+                    "sources": [],
+                }
+        except Exception:
+            continue
+
+
 def _singer_action_response(rotation):
     """Build standard response for singer action routes."""
     entries = rotation.get_rotation()
     _decorate_rotation_entries(entries, rotation)
     singer_stats = rotation.get_singer_stats()
     _add_last_sang_to_singer_stats(singer_stats, rotation)
+    _add_singer_session_info(singer_stats)
     return jsonify({"success": True, "entries": entries, "singer_stats": singer_stats})
 
 
@@ -3148,6 +3233,7 @@ def get_rotation():
         _decorate_rotation_entries(entries, rotation)
         singer_stats = rotation.get_singer_stats()
         _add_last_sang_to_singer_stats(singer_stats, rotation)
+        _add_singer_session_info(singer_stats)
         return jsonify({
             "entries": entries,
             "singer_stats": singer_stats,
