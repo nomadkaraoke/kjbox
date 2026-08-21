@@ -4614,10 +4614,45 @@ li.media-no-audio {
 .stats-muted { color: #777; padding: 8px; }
 
 
-/* Singer-cancelled rotation entries (soft cancel) */
-.rotation-entry.rotation-cancelled { opacity: 0.6; }
+/* Singer-cancelled rotation entries (soft cancel): a subtle red pulse to flag
+   they're going away, then a short fade/collapse (rotation-cancelled-leaving)
+   before the row auto-removes — the KJ never has to click Dismiss. */
+.rotation-entry.rotation-cancelled {
+    opacity: 0.85;
+    animation: rotation-cancelled-pulse 1.3s ease-in-out infinite;
+}
 .rotation-entry.rotation-cancelled .rotation-name,
 .rotation-entry.rotation-cancelled .rotation-singer-pill,
 .rotation-entry.rotation-cancelled .rotation-song { text-decoration: line-through; }
 .rotation-badge.badge-cancelled { background: #7a2e0b; color: #ffd6a2; }
 .rotation-btn.rotation-btn-dismiss { border-color: #7a2e0b; color: #ffd6a2; }
+
+@keyframes rotation-cancelled-pulse {
+    0%, 100% { background: rgba(220, 38, 38, 0.06); }
+    50%      { background: rgba(220, 38, 38, 0.22); }
+}
+
+.rotation-entry.rotation-cancelled-leaving {
+    animation: rotation-cancelled-leave 0.45s ease-in forwards;
+    overflow: hidden;
+    pointer-events: none;
+}
+
+@keyframes rotation-cancelled-leave {
+    0%   { opacity: 0.85; transform: translateX(0); max-height: 200px; }
+    100% {
+        opacity: 0;
+        transform: translateX(24px);
+        max-height: 0;
+        padding-top: 0;
+        padding-bottom: 0;
+        margin-top: 0;
+        margin-bottom: 0;
+        border-width: 0;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .rotation-entry.rotation-cancelled { animation: none; background: rgba(220, 38, 38, 0.14); }
+    .rotation-entry.rotation-cancelled-leaving { animation-duration: 0.15s; }
+}

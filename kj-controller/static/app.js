@@ -5416,6 +5416,70 @@ function formatMinsAgoLong(mins) {
     return parts.join(' ');
 }
 
+// Singer-cancelled rows are shown briefly (a red pulse) then auto-removed so the
+// KJ never has to click Dismiss. Each cancelled row gets a one-shot countdown
+// timer on first appearance; removal fires a fixed delay later regardless of the
+// (up-to-10s) rotation poll cadence, then a short leave animation + server delete.
+const CANCELLED_AUTO_REMOVE_MS = 4000;   // pulse window before the row leaves
+const CANCELLED_LEAVE_MS = 450;          // fade/collapse animation duration
+const cancelledTimers = new Map();       // entry id -> pending countdown timeout handle
+const cancelledDismissing = new Set();   // entry ids already leaving / being deleted
+
+// Arm the auto-remove countdown for a freshly-rendered cancelled row. Idempotent
+// across the poll re-renders: one timer per entry until it leaves or is restored.
+function maybeAutoRemoveCancelled(entry, row) {
+    const id = entry.id;
+    if (cancelledDismissing.has(id)) {
+        // Mid-flight: a poll re-rendered the list before the delete landed. Keep
+        // the fresh node in its leaving state rather than resetting the animation.
+        row.classList.add('rotation-cancelled-leaving');
+        return;
+    }
+    if (!cancelledTimers.has(id)) {
+        cancelledTimers.set(id, setTimeout(() => beginCancelledLeave(id), CANCELLED_AUTO_REMOVE_MS));
+    }
+}
+
+// Countdown elapsed: play the leave animation on the live row (the DOM node has
+// likely been rebuilt by polls since we armed the timer, so re-query by id) then
+// delete server-side. The leave class also blocks re-renders during the fade.
+function beginCancelledLeave(id) {
+    cancelledTimers.delete(id);
+    if (cancelledDismissing.has(id)) return;
+    // Bail if it's no longer cancelled (the KJ restored it to Waiting in time).
+    const current = (rotationData || []).find(e => e.id === id);
+    if (!current || (current.status || '').toLowerCase() !== 'cancelled') return;
+
+    cancelledDismissing.add(id);
+    const liveRow = document.querySelector(`.rotation-entry[data-entry-id="${id}"]`);
+    if (liveRow) liveRow.classList.add('rotation-cancelled-leaving');
+    setTimeout(() => autoRemoveCancelledEntry(id), CANCELLED_LEAVE_MS);
+}
+
+async function autoRemoveCancelledEntry(entryId) {
+    try {
+        const response = await fetch('/rotation/delete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: entryId })
+        });
+        const data = await response.json();
+        if (response.ok && data.entries) rotationData = data.entries;
+        // On failure we leave rotationData as-is; the next poll refreshes it and,
+        // if the row is still cancelled, a later render re-schedules the removal.
+    } catch (e) {
+        // Network blip — same self-healing path as above via the next poll.
+    } finally {
+        cancelledDismissing.delete(entryId);
+        // Clear leave state so the guarded re-render below isn't skipped. If the
+        // delete failed the entry is still cancelled in rotationData, and the
+        // re-render re-arms a fresh countdown (self-healing retry).
+        document.querySelectorAll('.rotation-cancelled-leaving')
+            .forEach(el => el.classList.remove('rotation-cancelled-leaving'));
+        renderRotation(rotationData);
+    }
+}
+
 function renderRotation(entries) {
     const list = document.getElementById('rotation-list');
     if (!list) return;
@@ -5424,7 +5488,22 @@ function renderRotation(entries) {
     // Also hold while the SMS details modal is open: it closes over its row's DOM
     // node for the Resend handoff, and a background poll rebuilding the list would
     // detach that node (Resend would then throw and silently do nothing).
-    if (document.querySelector('.rotation-editing, .sms-details-modal')) return;
+    // Also hold while a cancelled row is playing its leave animation so the poll
+    // doesn't rip the node out mid-fade.
+    if (document.querySelector('.rotation-editing, .sms-details-modal, .rotation-cancelled-leaving')) return;
+
+    // Cancel any armed auto-remove countdown for entries that are no longer
+    // cancelled (e.g. the KJ restored one to Waiting in time) so a later
+    // re-cancel starts a fresh window rather than removing it immediately.
+    const cancelledIds = new Set(
+        entries.filter(e => (e.status || '').toLowerCase() === 'cancelled').map(e => e.id)
+    );
+    for (const [id, handle] of cancelledTimers) {
+        if (!cancelledIds.has(id)) {
+            clearTimeout(handle);
+            cancelledTimers.delete(id);
+        }
+    }
 
     if (!entries.length) {
         list.innerHTML = '<div class="rotation-empty">No singers in queue</div>';
@@ -5435,6 +5514,7 @@ function renderRotation(entries) {
     entries.forEach((entry, idx) => {
         const row = document.createElement('div');
         row.className = 'rotation-entry';
+        row.dataset.entryId = entry.id;   // lets async handlers re-find this row after poll re-renders
         const statusLower = (entry.status || '').toLowerCase();
         if (statusLower.includes('singing') || statusLower === 'now singing') {
             row.classList.add('rotation-singing');
@@ -5446,6 +5526,7 @@ function renderRotation(entries) {
             row.classList.add('rotation-skipped');
         } else if (statusLower === 'cancelled') {
             row.classList.add('rotation-cancelled');
+            maybeAutoRemoveCancelled(entry, row);
         }
 
         // Shift+hover: show edit indicator
@@ -5652,7 +5733,7 @@ function renderRotation(entries) {
         } else if (statusLower === 'cancelled') {
             badge.textContent = 'CANCELLED';
             badge.classList.add('badge-cancelled');
-            badge.title = 'Cancelled by the singer — Dismiss to remove, or set Waiting to restore';
+            badge.title = 'Cancelled by the singer — removing automatically; set Waiting to restore';
         }
         if (badge.textContent) info.appendChild(badge);
 
@@ -5913,19 +5994,9 @@ function renderRotation(entries) {
         };
         actions.appendChild(moreBtn);
 
-        // Dismiss button — only on singer-cancelled rows (quick remove; the
-        // KJ can still Restore via the "…" menu → Waiting).
-        if (statusLower === 'cancelled') {
-            const dismissBtn = document.createElement('button');
-            dismissBtn.className = 'rotation-btn rotation-btn-dismiss';
-            dismissBtn.textContent = 'Dismiss';
-            dismissBtn.title = 'Remove this cancelled singer from the rotation';
-            dismissBtn.onclick = (e) => {
-                e.stopPropagation();
-                deleteRotationEntry(entry.id, entry.singer);
-            };
-            actions.appendChild(dismissBtn);
-        }
+        // Singer-cancelled rows auto-remove after a brief red pulse (see
+        // maybeAutoRemoveCancelled) — no manual Dismiss button needed. The KJ can
+        // still catch it in the window and Restore via the "…" menu → Waiting.
 
         // Edit pencil button
         const editBtn = document.createElement('button');

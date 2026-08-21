@@ -323,7 +323,7 @@ class TestSingerHappinessPills:
 
 
 class TestCancelledEntry:
-    def test_cancelled_entry_renders_distinctly_with_dismiss(self, rotation_page):
+    def test_cancelled_entry_pulses_then_auto_removes(self, rotation_page):
         page = rotation_page
         page.locator('#rotation-singer').fill('CancelMe')
         page.locator('#rotation-singer').press('Enter')
@@ -342,8 +342,17 @@ class TestCancelledEntry:
         }""")
         cancelled = page.locator('.rotation-entry.rotation-cancelled')
         cancelled.first.wait_for(state='visible')
+        # Renders distinctly with the CANCELLED badge, and there is no manual
+        # Dismiss button — the row removes itself.
         assert cancelled.locator('.badge-cancelled').count() > 0
-        assert cancelled.locator('.rotation-btn-dismiss').count() > 0
+        assert cancelled.locator('.rotation-btn-dismiss').count() == 0
+        # After the pulse window + leave animation the row auto-removes. The
+        # 2s poll drives renderRotation, which fires the delete once the window
+        # elapses; allow generous slack for poll + fade + network round-trip.
+        page.wait_for_function(
+            "() => document.querySelectorAll('.rotation-entry.rotation-cancelled').length === 0",
+            timeout=15000,
+        )
 
 
 class TestChangeReorderPanel:
