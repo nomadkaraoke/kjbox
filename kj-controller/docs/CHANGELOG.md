@@ -4,6 +4,17 @@ Dated entries, newest first. Each entry notes any required deploy steps.
 
 ---
 
+## 2026-08-21 - Singer-cancelled rows auto-remove (no Dismiss click) (v0.93.0)
+
+**Deploy:** frontend only (`static/app.js`, `static/style.css`) → **no service restart** (takes effect on next browser refresh; version bump busts the `app.js?v=` cache).
+
+- **Why:** when a singer cancels/removes their own track it dropped into the rotation as a struck-through `CANCELLED` row that lingered until the KJ clicked **Dismiss** — an extra chore mid-show. The KJ shouldn't have to acknowledge a cancellation; the entry can just go.
+- **Behaviour:** a singer-cancelled row now shows a subtle red pulse for a few seconds (so the KJ sees who bailed), then plays a short fade/collapse and removes itself server-side (`POST /rotation/delete`). No manual Dismiss button anymore. There's still a grace window — the KJ can catch it and Restore via the "…" menu → **Waiting**.
+- **How:** frontend-only. Each cancelled row arms a one-shot ~4s countdown on first render (`maybeAutoRemoveCancelled`), independent of the up-to-10s rotation poll, so removal is prompt and deterministic. The countdown is cancelled if the KJ restores the row first; the delete self-heals via the next poll if the network blips. Rows now carry `data-entry-id` so the async handler can re-find the live node after a poll re-render, and the leave animation holds off re-renders mid-fade.
+- **Tests:** `test_rotation_e2e.py::TestCancelledEntry` updated — asserts the distinct CANCELLED render with **no** Dismiss button, then waits for the row to auto-remove.
+
+---
+
 ## 2026-08-14 - Faster master sync: "Sync Masters" button + 60s timer (v0.92.0)
 
 **Deploy:** backend (`routes.py`, `scripts/sync_masters.py`) → **requires `systemctl restart kj-controller`** (interrupts playback — deploy between songs). Also frontend (`app.js`, `templates/index.html`). **Timer change needs a manual device step** (auto-deploy does NOT re-copy systemd units): `sudo cp deploy/nomad-master-sync.timer /etc/systemd/system/ && sudo systemctl daemon-reload && sudo systemctl restart nomad-master-sync.timer`.
