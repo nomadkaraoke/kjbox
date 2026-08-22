@@ -2806,21 +2806,23 @@ def _find_usb_ssd_device():
     Extreme Pro rather than blindly taking the first — guards against another
     USB disk being mistaken for it.
     """
+    usb_disks = []
     try:
         out = subprocess.run(
             ["lsblk", "-S", "-n", "-P", "-o", "NAME,TRAN,MODEL"],
             capture_output=True, text=True, timeout=5,
         )
+        # shlex.split() can raise ValueError on a malformed line — keep it inside
+        # the guard so a weird device model can't 500 the whole stats endpoint.
+        for line in out.stdout.splitlines():
+            fields = {}
+            for tok in shlex.split(line):
+                key, _, val = tok.partition("=")
+                fields[key] = val
+            if fields.get("TRAN") == "usb" and fields.get("NAME"):
+                usb_disks.append((fields["NAME"], fields.get("MODEL", "")))
     except Exception:
         return None
-    usb_disks = []
-    for line in out.stdout.splitlines():
-        fields = {}
-        for tok in shlex.split(line):
-            key, _, val = tok.partition("=")
-            fields[key] = val
-        if fields.get("TRAN") == "usb" and fields.get("NAME"):
-            usb_disks.append((fields["NAME"], fields.get("MODEL", "")))
     if not usb_disks:
         return None
     for name, model in usb_disks:

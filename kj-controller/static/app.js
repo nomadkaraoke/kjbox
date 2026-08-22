@@ -4812,6 +4812,7 @@ function updateTempRow(kind, prefix, history, temp) {
     const valEl = document.getElementById(prefix + '-val');
     if (temp === undefined || temp === null) {
         if (wrap) wrap.style.display = 'none';   // sensor absent — hide the row
+        history.length = 0;   // drop stale history so a reconnect starts fresh
         return;
     }
     if (wrap) wrap.style.display = '';
@@ -4853,7 +4854,10 @@ function updateTempNote(d) {
     const warnMin = d.ssd_warning_time_min;
     const critMin = d.ssd_critical_time_min;
     note.classList.remove('temp-ok', 'temp-warn');
-    if (warnMin === undefined || warnMin === null) {
+    // Show the note if the drive reported either lifetime counter.
+    const haveWarn = warnMin !== undefined && warnMin !== null;
+    const haveCrit = critMin !== undefined && critMin !== null;
+    if (!haveWarn && !haveCrit) {
         note.textContent = '';
         return;
     }

@@ -81,6 +81,13 @@ def test_find_usb_ssd_none_when_lsblk_raises(monkeypatch):
     assert routes._find_usb_ssd_device() is None
 
 
+def test_find_usb_ssd_none_on_malformed_line(monkeypatch):
+    # A line with an unbalanced quote makes shlex.split raise ValueError — it
+    # must be swallowed (return None), never propagate up to 500 /system/stats.
+    _stub_lsblk(monkeypatch, 'NAME="sda" TRAN="usb" MODEL="Broken\n')
+    assert routes._find_usb_ssd_device() is None
+
+
 # --- USB SSD (smartctl) ----------------------------------------------------
 
 _SMART_JSON = json.dumps({
