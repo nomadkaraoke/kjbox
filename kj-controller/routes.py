@@ -6,6 +6,7 @@ import os
 import queue
 import random
 import re
+import shlex
 import struct
 import subprocess
 import tempfile
@@ -2788,33 +2789,45 @@ def _read_ambient_temp_c():
 
 
 # smartctl spawns a sudo subprocess and pokes the USB bridge; cache the reading
-# so a 5s poll doesn't hammer the drive. Temps move slowly — 20s is plenty.
-_SSD_TEMP_CACHE = {"ts": 0.0, "data": None}
+# so a 5s poll doesn't hammer the drive. Temps move slowly — 20s is plenty. The
+# cache also covers *failed* probes so a missing/unresponsive smartctl doesn't
+# spawn a fresh (up-to-10s-blocking) subprocess on every poll.
+_SSD_TEMP_CACHE = {"ts": 0.0, "data": None, "populated": False}
 _SSD_TEMP_TTL = 20.0
-_USB_SSD_DEVICE = {"path": None, "checked": False}
 
 
 def _find_usb_ssd_device():
-    """Path of the first USB-attached disk (the 4TB SSD), cached. None if absent
-    (e.g. on a NomadPi with no external drive)."""
-    if _USB_SSD_DEVICE["checked"]:
-        return _USB_SSD_DEVICE["path"]
-    path = None
+    """Path of the USB-attached 4TB SSD, or None if absent (e.g. a NomadPi with
+    no external drive).
+
+    Re-detected on every call (lsblk is cheap, and callers already rate-limit us
+    via the temp cache) so a reconnect that renames the device node is picked
+    up. Among USB disks, prefer one whose model identifies it as the SanDisk
+    Extreme Pro rather than blindly taking the first — guards against another
+    USB disk being mistaken for it.
+    """
     try:
         out = subprocess.run(
-            ["lsblk", "-S", "-n", "-o", "NAME,TRAN"],
+            ["lsblk", "-S", "-n", "-P", "-o", "NAME,TRAN,MODEL"],
             capture_output=True, text=True, timeout=5,
         )
-        for line in out.stdout.splitlines():
-            parts = line.split()
-            if len(parts) >= 2 and parts[-1] == "usb":
-                path = "/dev/" + parts[0]
-                break
     except Exception:
-        path = None
-    _USB_SSD_DEVICE["path"] = path
-    _USB_SSD_DEVICE["checked"] = True
-    return path
+        return None
+    usb_disks = []
+    for line in out.stdout.splitlines():
+        fields = {}
+        for tok in shlex.split(line):
+            key, _, val = tok.partition("=")
+            fields[key] = val
+        if fields.get("TRAN") == "usb" and fields.get("NAME"):
+            usb_disks.append((fields["NAME"], fields.get("MODEL", "")))
+    if not usb_disks:
+        return None
+    for name, model in usb_disks:
+        low = model.lower()
+        if "sandisk" in low or "extreme" in low:
+            return "/dev/" + name
+    return "/dev/" + usb_disks[0][0]
 
 
 def _read_usb_ssd_temp():
@@ -2823,11 +2836,12 @@ def _read_usb_ssd_temp():
     Returns {temp_c, warning_time_min, critical_time_min}. The two *_time_min
     fields are cumulative lifetime minutes the drive has spent above its warning
     / critical thresholds (persisted in the drive's own SMART log across
-    reboots) — the honest "has this ever overheated" record.
+    reboots) — the honest "has this ever overheated" record. Either may be None
+    if the drive omits it.
     """
     now = time.monotonic()
     cache = _SSD_TEMP_CACHE
-    if cache["data"] is not None and now - cache["ts"] < _SSD_TEMP_TTL:
+    if cache["populated"] and now - cache["ts"] < _SSD_TEMP_TTL:
         return cache["data"]
     dev = _find_usb_ssd_device()
     result = None
@@ -2851,8 +2865,10 @@ def _read_usb_ssd_temp():
                     }
         except Exception:
             result = None
+    # Cache successes AND failures for the TTL (see comment on the cache dict).
     cache["ts"] = now
     cache["data"] = result
+    cache["populated"] = True
     return result
 
 
@@ -2880,8 +2896,12 @@ def system_stats():
         ssd = _read_usb_ssd_temp()
         if ssd is not None:
             payload["ssd_temp_c"] = ssd["temp_c"]
-            payload["ssd_warning_time_min"] = ssd["warning_time_min"]
-            payload["ssd_critical_time_min"] = ssd["critical_time_min"]
+            # Lifetime over-temp counters are omitted (not null) when the drive
+            # doesn't report them, matching the other optional temp fields.
+            if ssd["warning_time_min"] is not None:
+                payload["ssd_warning_time_min"] = ssd["warning_time_min"]
+            if ssd["critical_time_min"] is not None:
+                payload["ssd_critical_time_min"] = ssd["critical_time_min"]
         return jsonify(payload)
     except ImportError:
         return jsonify({"error": "psutil not installed"}), 501
