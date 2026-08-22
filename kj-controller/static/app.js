@@ -4749,6 +4749,16 @@ setInterval(fetchRotation, 10000);
 const SPARK_MAX = 30;
 const cpuHistory = [];
 const memHistory = [];
+const ambientHistory = [];
+const ssdHistory = [];
+
+// Temperature thresholds (Celsius) for coloring the graphs. Ambient is a
+// motherboard/room proxy; the 4TB USB SSD is a SanDisk NVMe that throttles up
+// near 70C+.
+const TEMP_SCALE = {
+    ambient: { min: 15, max: 55, warn: 40, crit: 50 },
+    ssd:     { min: 20, max: 80, warn: 60, crit: 70 },
+};
 
 async function fetchSystemStats() {
     try {
@@ -4787,7 +4797,74 @@ async function fetchSystemStats() {
         if (memHistory.length > SPARK_MAX) memHistory.shift();
         renderSparkline('stat-cpu-spark', cpuHistory, '');
         renderSparkline('stat-mem-spark', memHistory, 'spark-mem');
+
+        // Temperatures (Ambient + 4TB USB SSD) — each its own graph. Rows hide
+        // when their sensor isn't present (e.g. no USB SSD attached).
+        updateTempRow('ambient', 'stat-ambient', ambientHistory, d.ambient_temp_c);
+        updateTempRow('ssd', 'stat-ssd', ssdHistory, d.ssd_temp_c);
+        updateTempNote(d);
     } catch (_) {}
+}
+
+// Update one temperature row: value text (colored by threshold), history, graph.
+function updateTempRow(kind, prefix, history, temp) {
+    const wrap = document.getElementById(prefix + '-wrap');
+    const valEl = document.getElementById(prefix + '-val');
+    if (temp === undefined || temp === null) {
+        if (wrap) wrap.style.display = 'none';   // sensor absent — hide the row
+        return;
+    }
+    if (wrap) wrap.style.display = '';
+    const sc = TEMP_SCALE[kind];
+    if (valEl) {
+        valEl.textContent = Math.round(temp) + '°C';
+        valEl.classList.toggle('temp-warm', temp >= sc.warn && temp < sc.crit);
+        valEl.classList.toggle('temp-hot', temp >= sc.crit);
+    }
+    history.push(temp);
+    if (history.length > SPARK_MAX) history.shift();
+    renderTempSparkline(prefix + '-spark', history, sc);
+}
+
+// Sparkline scaled to a fixed temperature range, bars colored per reading.
+function renderTempSparkline(id, data, sc) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    while (el.children.length > data.length) el.removeChild(el.lastChild);
+    while (el.children.length < data.length) {
+        el.appendChild(document.createElement('div'));
+    }
+    const span = Math.max(1, sc.max - sc.min);
+    data.forEach((val, i) => {
+        const bar = el.children[i];
+        bar.className = 'sys-stat-spark-bar'
+            + (val >= sc.crit ? ' temp-hot' : val >= sc.warn ? ' temp-warm' : '');
+        const frac = Math.min(1, Math.max(0, (val - sc.min) / span));
+        bar.style.height = Math.max(1, frac * 20) + 'px';
+        const ago = (data.length - 1 - i) * 5;
+        bar.title = Math.round(val) + '°C (' + (ago === 0 ? 'now' : ago + 's ago') + ')';
+    });
+}
+
+// Reassurance line driven by the SSD's lifetime SMART over-temp counters.
+function updateTempNote(d) {
+    const note = document.getElementById('sys-temp-note');
+    if (!note) return;
+    const warnMin = d.ssd_warning_time_min;
+    const critMin = d.ssd_critical_time_min;
+    note.classList.remove('temp-ok', 'temp-warn');
+    if (warnMin === undefined || warnMin === null) {
+        note.textContent = '';
+        return;
+    }
+    if ((warnMin || 0) === 0 && (critMin || 0) === 0) {
+        note.classList.add('temp-ok');
+        note.textContent = '✓ 4TB SSD has never exceeded its safe temperature (0 min over warning, lifetime)';
+    } else {
+        note.classList.add('temp-warn');
+        note.textContent = '⚠ 4TB SSD lifetime over-temp: ' + (warnMin || 0)
+            + ' min over warning, ' + (critMin || 0) + ' min over critical';
+    }
 }
 
 function renderSparkline(id, data, cls) {

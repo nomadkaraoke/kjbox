@@ -2758,15 +2758,113 @@ def system_shutdown():
 
 # --- System Stats ---
 
+# The mini PC lives in a room that can get very hot (AC off for days, ambient
+# outdoor 100F+). These helpers expose two temperatures the CPU sensor alone
+# can't tell us about: the motherboard ACPI "ambient" zone (a room-temperature
+# proxy) and the connected 4TB USB SSD (a SanDisk Extreme Pro — an NVMe drive
+# behind an ASMedia USB bridge, only reachable via smartctl's `sntasmedia`
+# passthrough; plain `sensors` can't see it).
+
+def _read_ambient_temp_c():
+    """ACPI motherboard/ambient thermal zone in Celsius, or None.
+
+    psutil exposes acpitz as several sensors; on this board one is a -273C
+    invalid sentinel and the other tracks room/board temperature. Return the
+    lowest physically-plausible reading (the CPU-independent ambient one).
+    """
+    try:
+        import psutil
+        temps = psutil.sensors_temperatures()
+    except Exception:
+        return None
+    candidates = []
+    for entry in temps.get('acpitz', []) or []:
+        cur = getattr(entry, 'current', None)
+        if cur is not None and -40 < cur < 150:
+            candidates.append(cur)
+    if not candidates:
+        return None
+    return round(min(candidates), 1)
+
+
+# smartctl spawns a sudo subprocess and pokes the USB bridge; cache the reading
+# so a 5s poll doesn't hammer the drive. Temps move slowly — 20s is plenty.
+_SSD_TEMP_CACHE = {"ts": 0.0, "data": None}
+_SSD_TEMP_TTL = 20.0
+_USB_SSD_DEVICE = {"path": None, "checked": False}
+
+
+def _find_usb_ssd_device():
+    """Path of the first USB-attached disk (the 4TB SSD), cached. None if absent
+    (e.g. on a NomadPi with no external drive)."""
+    if _USB_SSD_DEVICE["checked"]:
+        return _USB_SSD_DEVICE["path"]
+    path = None
+    try:
+        out = subprocess.run(
+            ["lsblk", "-S", "-n", "-o", "NAME,TRAN"],
+            capture_output=True, text=True, timeout=5,
+        )
+        for line in out.stdout.splitlines():
+            parts = line.split()
+            if len(parts) >= 2 and parts[-1] == "usb":
+                path = "/dev/" + parts[0]
+                break
+    except Exception:
+        path = None
+    _USB_SSD_DEVICE["path"] = path
+    _USB_SSD_DEVICE["checked"] = True
+    return path
+
+
+def _read_usb_ssd_temp():
+    """Temperature + lifetime over-temp history for the 4TB USB SSD, or None.
+
+    Returns {temp_c, warning_time_min, critical_time_min}. The two *_time_min
+    fields are cumulative lifetime minutes the drive has spent above its warning
+    / critical thresholds (persisted in the drive's own SMART log across
+    reboots) — the honest "has this ever overheated" record.
+    """
+    now = time.monotonic()
+    cache = _SSD_TEMP_CACHE
+    if cache["data"] is not None and now - cache["ts"] < _SSD_TEMP_TTL:
+        return cache["data"]
+    dev = _find_usb_ssd_device()
+    result = None
+    if dev:
+        try:
+            out = subprocess.run(
+                ["sudo", "-n", "smartctl", "-j", "-x", "-d", "sntasmedia", dev],
+                capture_output=True, text=True, timeout=10,
+            )
+            # smartctl's exit code is a status bitmask (non-zero even on success);
+            # the JSON on stdout is valid regardless, so parse it either way.
+            if out.stdout:
+                d = json.loads(out.stdout)
+                h = d.get("nvme_smart_health_information_log", {}) or {}
+                temp = h.get("temperature")
+                if temp is not None:
+                    result = {
+                        "temp_c": temp,
+                        "warning_time_min": h.get("warning_temp_time"),
+                        "critical_time_min": h.get("critical_comp_time"),
+                    }
+        except Exception:
+            result = None
+    cache["ts"] = now
+    cache["data"] = result
+    return result
+
+
 @routes_bp.route('/system/stats', methods=['GET'])
 def system_stats():
-    """Returns CPU, memory, and disk usage for the system stats widget."""
+    """Returns CPU, memory, disk usage and temperatures for the stats widget."""
     try:
         import psutil
         cpu = psutil.cpu_percent(interval=0)
         mem = psutil.virtual_memory()
         disk = psutil.disk_usage('/')
-        return jsonify({
+        payload = {
             "cpu_percent": cpu,
             "mem_percent": mem.percent,
             "mem_used_gb": round(mem.used / (1024**3), 1),
@@ -2774,7 +2872,17 @@ def system_stats():
             "disk_percent": disk.percent,
             "disk_used_gb": round(disk.used / (1024**3), 1),
             "disk_total_gb": round(disk.total / (1024**3), 1),
-        })
+        }
+        # Temperatures (best-effort — never let a missing sensor break stats).
+        ambient = _read_ambient_temp_c()
+        if ambient is not None:
+            payload["ambient_temp_c"] = ambient
+        ssd = _read_usb_ssd_temp()
+        if ssd is not None:
+            payload["ssd_temp_c"] = ssd["temp_c"]
+            payload["ssd_warning_time_min"] = ssd["warning_time_min"]
+            payload["ssd_critical_time_min"] = ssd["critical_time_min"]
+        return jsonify(payload)
     except ImportError:
         return jsonify({"error": "psutil not installed"}), 501
     except Exception as e:

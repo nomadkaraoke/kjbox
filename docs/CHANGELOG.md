@@ -2,6 +2,21 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-08-22 - Feature: Ambient + 4TB USB SSD temperature graphs in System → Stats (v0.94.0)
+
+Added two live temperature graphs to the System → Stats section, alongside
+CPU/MEM/DISK: **Ambient** (the motherboard ACPI thermal zone, a room-temperature
+proxy) and **4TB SSD** (the connected SanDisk Extreme Pro). The USB SSD is an
+NVMe drive behind an ASMedia bridge that `sensors` can't see — it's read with
+`sudo smartctl -j -x -d sntasmedia /dev/sda` (device auto-detected via `lsblk
+-S`, cached 20s). Bars color cool→warm→hot by threshold. A note line surfaces
+the drive's **lifetime SMART over-temp counters** (`warning_temp_time` /
+`critical_comp_time`) — the persistent "has it ever overheated" record; on
+NomadPC both read 0 min. Requires `smartmontools` (added to MINIPC-SETUP.md);
+degrades gracefully (row hides) if absent or on a Pi with no external drive.
+`GET /system/stats` now also returns `ambient_temp_c`, `ssd_temp_c`,
+`ssd_warning_time_min`, `ssd_critical_time_min` (each omitted when unavailable).
+
 ## 2026-07-17 - Fix: VLC video no longer covered by the rotation ticker (v0.87.2)
 
 The VLC karaoke renderer now honours the reserved top ticker strip
