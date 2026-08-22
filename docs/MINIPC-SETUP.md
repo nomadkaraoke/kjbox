@@ -378,10 +378,19 @@ sudo apt install -y \
     python3-venv \
     python3-pip \
     fonts-dejavu \
+    smartmontools \
     curl
 ```
 
 **Already present:** git, vlc, conky-all, yt-dlp, avahi-daemon.
+
+> **`smartmontools`** provides `smartctl`, used by the System → Stats temperature
+> graphs to read the 4TB USB SSD's temperature (a SanDisk Extreme Pro — an NVMe
+> drive behind an ASMedia USB bridge, only reachable via `smartctl -d sntasmedia
+> /dev/sda`). The app runs as `nomad`, which has passwordless sudo
+> (`/etc/sudoers.d/nomad-nopasswd`), so no extra sudoers entry is needed. If
+> `smartctl` is absent the SSD graph simply hides — the rest of Stats is
+> unaffected.
 
 ### 3.2 Clone the Repository
 
