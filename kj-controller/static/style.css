@@ -3453,6 +3453,17 @@ body {
     font-size: 0.9em;
 }
 
+.rotation-priority-badge {
+    font-size: 0.85em;
+    font-weight: 700;
+}
+.rotation-priority-badge.up {
+    color: #2ecc71;
+}
+.rotation-priority-badge.down {
+    color: #95a5a6;
+}
+
 .singer-section {
     margin-bottom: 0.5rem;
 }

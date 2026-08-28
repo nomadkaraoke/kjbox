@@ -8,6 +8,10 @@ import threading
 # Human-editable fields that define a "meaningful" difference between two
 # rotation states (position is deliberately excluded — reordering is low-stakes
 # and would make every diff noisy).
+# priority_bias is intentionally NOT here: a bump's visible effect is the re-weave
+# (a reorder), and position is likewise excluded — both are surfaced by the undo
+# action label ("Bump up"/"Bump down"), not as a field diff. Listing it made a
+# bias-only change render as a no-op "Waiting → Waiting" row in the undo preview.
 _DIFF_FIELDS = ("singer", "song_artist", "status", "notes", "paid")
 
 
@@ -156,6 +160,7 @@ class RotationStore:
                 status      TEXT NOT NULL DEFAULT 'Waiting',
                 notes       TEXT NOT NULL DEFAULT '',
                 position    INTEGER NOT NULL DEFAULT 0,
+                priority_bias INTEGER NOT NULL DEFAULT 0,
                 file_path   TEXT,
                 duration    INTEGER,
                 download_source TEXT DEFAULT NULL,
@@ -227,6 +232,7 @@ class RotationStore:
             ("gen_job_id", "TEXT DEFAULT NULL"),
             ("gen_status", "TEXT DEFAULT NULL"),
             ("paid", "INTEGER NOT NULL DEFAULT 0"),
+            ("priority_bias", "INTEGER NOT NULL DEFAULT 0"),
             ("singers_json", "TEXT DEFAULT NULL"),
             ("done_at", "TEXT DEFAULT NULL"),
             ("playability_warning", "TEXT DEFAULT NULL"),
@@ -869,6 +875,76 @@ class RotationStore:
         return self.get_entry(entry_id)
 
     # ------------------------------------------------------------------
+    # Priority bias (Auto Order bump up / down)
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _coerce_bias(bias):
+        """Clamp an arbitrary value to the tri-state {-1, 0, +1}.
+
+        The column is a plain INTEGER (kept extensible), but the only values the
+        UI produces — and the only ones Auto Order reasons about — are bump-up
+        (+1), normal (0), and bump-down (-1). Anything positive/negative is
+        clamped to +1/-1 so a stray value can never over/under-weight the weave.
+        """
+        try:
+            b = int(bias)
+        except (TypeError, ValueError):
+            return 0
+        if b > 0:
+            return 1
+        if b < 0:
+            return -1
+        return 0
+
+    def set_priority_bias(self, entry_id, bias):
+        """Set the Auto Order priority bias on a single entry.
+
+        ``bias`` is coerced to {-1, 0, +1} (bump down / normal / bump up).
+        Raises ValueError if entry_id not found.
+        """
+        if self.get_entry(entry_id) is None:
+            raise ValueError(f"Entry {entry_id} not found")
+        conn = self._get_conn()
+        conn.execute(
+            "UPDATE rotation_entries SET priority_bias = ?, updated_at = datetime('now', 'localtime') "
+            "WHERE id = ?",
+            (self._coerce_bias(bias), entry_id),
+        )
+        conn.commit()
+        return self.get_entry(entry_id)
+
+    def set_singer_priority_bias(self, singer_name, bias):
+        """Set the priority bias for every non-done entry a singer appears in.
+
+        Mirrors ``set_singer_status``: checks both the ``singer`` field and the
+        individual names in ``singers_json``; skips entries whose current status
+        is 'Done'. ``bias`` is coerced to {-1, 0, +1}.
+        """
+        b = self._coerce_bias(bias)
+        conn = self._get_conn()
+        rows = conn.execute("SELECT * FROM rotation_entries").fetchall()
+        for row in rows:
+            entry = self._row_to_dict(row)
+            if entry["status"].lower() == "done":
+                continue
+            if entry.get("singers_json"):
+                try:
+                    names = json.loads(entry["singers_json"])
+                except (ValueError, TypeError):
+                    names = [entry["singer"]]
+            else:
+                names = [entry["singer"]]
+            if singer_name in names:
+                conn.execute(
+                    "UPDATE rotation_entries "
+                    "SET priority_bias = ?, updated_at = datetime('now', 'localtime') "
+                    "WHERE id = ?",
+                    (b, entry["id"]),
+                )
+        conn.commit()
+
+    # ------------------------------------------------------------------
     # Singer action methods
     # ------------------------------------------------------------------
 
@@ -1263,6 +1339,7 @@ class RotationStore:
                     "file_path", "duration", "download_source", "download_status",
                     "download_id", "url_fallback", "gen_job_id", "gen_status",
                     "playability_warning", "singers_json", "paid",
+                    "priority_bias",
                 ]
                 vals = [
                     e["id"], e["singer"], e["song_artist"], e["status"],
@@ -1273,6 +1350,7 @@ class RotationStore:
                     track["gen_job_id"], track["gen_status"],
                     track["playability_warning"],
                     e.get("singers_json"), int(bool(e.get("paid", 0))),
+                    self._coerce_bias(e.get("priority_bias", 0)),
                 ]
                 # Preserve created_at when the snapshot carries it.
                 if e.get("created_at"):
