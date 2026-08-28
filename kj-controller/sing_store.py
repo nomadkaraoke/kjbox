@@ -161,9 +161,16 @@ class SingStore:
             -- once and stores in localStorage. Persists across nights on purpose
             -- (a regular keeps their chosen name) — device_id is stable per
             -- browser, so there's no cross-night id-reuse hazard here.
+            -- `origin` (2026-08-28) records who established the alias: 'kj' for a
+            -- KJ rename/merge (a deliberate "these are one person" assertion) vs
+            -- 'self' for a singer's own /sing/rename. Only 'kj' aliases mark a
+            -- CANONICAL identity that a later self-rename may propagate across the
+            -- whole name-group — a singer self-renaming their own songs must never
+            -- gain the power to rename a coincidental same-name walk-in.
             CREATE TABLE IF NOT EXISTS singer_aliases (
                 device_id      TEXT PRIMARY KEY,
                 canonical_name TEXT NOT NULL,
+                origin         TEXT NOT NULL DEFAULT 'self',
                 updated_at     TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
             );
             """
@@ -217,6 +224,20 @@ class SingStore:
         try:
             conn.execute(
                 "ALTER TABLE sing_requests ADD COLUMN device_id TEXT DEFAULT NULL"
+            )
+        except sqlite3.OperationalError as e:
+            if "duplicate column name" not in str(e).lower():
+                raise
+        # Additive migration — `singer_aliases.origin` (2026-08-28). Distinguishes
+        # KJ-established identities ('kj', from a rename/merge) from a singer's own
+        # self-rename ('self'). Only 'kj' unlocks a whole-group rename. Pre-upgrade
+        # rows can't be told apart, so they default to 'self' — the SAFE choice:
+        # they behave exactly as before (edit_token-scoped renames) and never gain
+        # the power to sweep up a coincidental same-name singer. A merge done after
+        # the upgrade writes fresh 'kj' aliases, so the fix applies going forward.
+        try:
+            conn.execute(
+                "ALTER TABLE singer_aliases ADD COLUMN origin TEXT NOT NULL DEFAULT 'self'"
             )
         except sqlite3.OperationalError as e:
             if "duplicate column name" not in str(e).lower():
@@ -740,20 +761,31 @@ class SingStore:
         ).fetchone()
         return row[0] if row else None
 
-    def set_alias(self, device_id, canonical_name):
-        """Upsert a device → canonical-name mapping. No-op on blank input."""
+    def set_alias(self, device_id, canonical_name, origin="self"):
+        """Upsert a device → canonical-name mapping. No-op on blank input.
+
+        ``origin`` is 'kj' when a KJ rename/merge established the identity, else
+        'self' (a singer's own /sing/rename). 'kj' is STICKY: once a device is a
+        KJ-established identity it stays one even if the singer later self-renames
+        — the KJ's assertion that a name is a managed identity outlives a
+        subsequent self-edit. Only 'kj' aliases satisfy is_canonical_identity.
+        """
         device_id = (device_id or "").strip()
         canonical_name = (canonical_name or "").strip()
+        origin = "kj" if origin == "kj" else "self"
         if not device_id or not canonical_name:
             return
         conn = self._get_conn()
         conn.execute(
-            "INSERT INTO singer_aliases (device_id, canonical_name, updated_at) "
-            "VALUES (?, ?, datetime('now', 'localtime')) "
+            "INSERT INTO singer_aliases (device_id, canonical_name, origin, updated_at) "
+            "VALUES (?, ?, ?, datetime('now', 'localtime')) "
             "ON CONFLICT(device_id) DO UPDATE SET "
             "  canonical_name = excluded.canonical_name, "
+            # Never downgrade a KJ-established identity back to 'self'.
+            "  origin = CASE WHEN singer_aliases.origin = 'kj' OR excluded.origin = 'kj' "
+            "                THEN 'kj' ELSE 'self' END, "
             "  updated_at = datetime('now', 'localtime')",
-            (device_id, canonical_name),
+            (device_id, canonical_name, origin),
         )
         conn.commit()
 
@@ -771,21 +803,24 @@ class SingStore:
     def is_canonical_identity(self, name):
         """True if ``name`` is a KJ-established singer identity.
 
-        An identity is "established" once at least one device's alias points at
-        ``name`` — which happens when a KJ renames/merges someone into it (or the
-        singer themselves renamed to it). This is the trust anchor that lets a
-        self-service rename safely carry the WHOLE name-group rather than only
-        the calling device's own songs: two coincidental same-name walk-ins have
-        no alias, so they never rename each other, whereas a KJ-merged singer —
-        deliberately asserted to be one person — does.
+        An identity is "established" only when at least one device carries a
+        KJ-origin alias to ``name`` — i.e. a KJ renamed/merged someone into it.
+        This is the trust anchor that lets a self-service rename safely carry the
+        WHOLE name-group rather than only the calling device's own songs.
+
+        A singer's OWN /sing/rename records a 'self'-origin alias, which does NOT
+        count here — otherwise a singer who self-renamed their song to "Mike"
+        could, on a second rename, sweep up a coincidental second "Mike" walk-in
+        whose edit_token they never held. Only the KJ's explicit assertion that a
+        name is one managed identity unlocks whole-group renames.
         """
         name = (name or "").strip()
         if not name:
             return False
         conn = self._get_conn()
         row = conn.execute(
-            "SELECT 1 FROM singer_aliases WHERE LOWER(canonical_name) = LOWER(?) "
-            "LIMIT 1",
+            "SELECT 1 FROM singer_aliases "
+            "WHERE LOWER(canonical_name) = LOWER(?) AND origin = 'kj' LIMIT 1",
             (name,),
         ).fetchone()
         return row is not None
@@ -838,7 +873,7 @@ class SingStore:
         ).fetchall()
         device_ids = [r[0] for r in rows]
         for did in device_ids:
-            self.set_alias(did, name)
+            self.set_alias(did, name, origin="kj")
         return len(device_ids)
 
     def persist_rename(self, old_name, new_name, night_started=None):
@@ -874,7 +909,8 @@ class SingStore:
         ).fetchall()
         device_ids = [r[0] for r in rows]
         for did in device_ids:
-            self.set_alias(did, new_name)
+            # A KJ/merge rename establishes a managed identity (origin='kj').
+            self.set_alias(did, new_name, origin="kj")
         # Rewrite the tonight requests' primary singer_name for provenance.
         conn.execute(
             "UPDATE sing_requests SET singer_name = ? "

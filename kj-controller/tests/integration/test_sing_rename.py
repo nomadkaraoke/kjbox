@@ -285,3 +285,35 @@ class TestMergedIdentitySelfRename:
         # Only device A's own entry renamed; the other Mike is untouched.
         assert sing_app.rotation.store.get_entry(e_b)["singer"] == "Mike"
         assert sing_app.sing_store.get_alias("dev-mike-b") is None
+
+    def test_double_self_rename_never_hijacks_a_coincidental_name(
+        self, client, auto_approve, token
+    ):
+        """A singer's OWN alias must never unlock a whole-group rename. Device A
+        self-renames into "Mike" (creating a 'self' alias), then self-renames
+        again FROM "Mike" — the independent "Mike" walk-in (device B) must stay
+        untouched because only a KJ merge establishes a shared identity."""
+        sing_app = auto_approve
+        r_a = _submit(client, token, device_id="dev-alpha",
+                      singer_name="Alpha", title="Song A")
+        r_b = _submit(client, token, device_id="dev-beta",
+                      singer_name="Mike", title="Song B")
+        e_b = r_b.get_json()["request"]["linked_entry_id"]
+
+        # First self-rename: Alpha → Mike (collides with the other singer's name).
+        rr = r_a.get_json()["request"]
+        client.post(
+            f"/sing/rename?t={token}",
+            json={"new_name": "Mike", "device_id": "dev-alpha",
+                  "items": [{"id": rr["id"], "edit_token": rr["edit_token"]}]},
+        )
+        # Second self-rename from the now-shared name "Mike" → "Mikey".
+        rr2 = sing_app.sing_store.get_request(rr["id"])
+        client.post(
+            f"/sing/rename?t={token}",
+            json={"new_name": "Mikey", "device_id": "dev-alpha",
+                  "items": [{"id": rr["id"], "edit_token": rr2["edit_token"]}]},
+        )
+        # Device B's genuinely-separate "Mike" entry must NOT have been renamed.
+        assert sing_app.rotation.store.get_entry(e_b)["singer"] == "Mike"
+        assert sing_app.sing_store.get_alias("dev-beta") is None

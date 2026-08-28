@@ -1214,7 +1214,12 @@ def rename_me():
 
     for old in verified_old_names:
         try:
-            if store.is_canonical_identity(old):
+            # Escalate to a whole-group rename ONLY for a KJ-established identity
+            # AND only when we have a night marker to scope the request rewrite —
+            # without one, persist_rename would touch every historical request
+            # under this name, so we fail closed to the safe edit_token-scoped
+            # path rather than risk clobbering prior nights.
+            if store.is_canonical_identity(old) and night_started:
                 if rotation is not None:
                     rotation.rename_singer(old, new_name)
                 store.persist_rename(old, new_name, night_started=night_started)

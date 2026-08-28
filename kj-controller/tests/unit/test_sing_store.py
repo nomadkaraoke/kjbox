@@ -922,14 +922,29 @@ class TestDeviceIdAndAliases:
         )
         assert store.persist_rename("Nomad", "Nomad K", night_started=night) == 0
 
-    def test_is_canonical_identity(self, store):
+    def test_is_canonical_identity_only_counts_kj_origin(self, store):
         assert store.is_canonical_identity("Jasmine!") is False
+        # A singer's own self-rename alias ('self') does NOT establish an identity.
         store.set_alias("dev-a", "Jasmine!")
+        assert store.is_canonical_identity("Jasmine!") is False
+        # A KJ rename/merge alias ('kj') does.
+        store.set_alias("dev-b", "Jasmine!", origin="kj")
         assert store.is_canonical_identity("Jasmine!") is True
         # Case-insensitive; blank is never an identity.
         assert store.is_canonical_identity("jasmine!") is True
         assert store.is_canonical_identity("") is False
         assert store.is_canonical_identity(None) is False
+
+    def test_set_alias_kj_origin_is_sticky(self, store):
+        # Once a device is a KJ-established identity, a later self-rename to a new
+        # name keeps 'kj' origin so it stays a managed identity.
+        store.set_alias("dev-a", "Jasmine!", origin="kj")
+        store.set_alias("dev-a", "Jazz")  # default origin='self'
+        assert store.get_alias("dev-a") == "Jazz"
+        assert store.is_canonical_identity("Jazz") is True
+        # A brand-new self alias stays 'self'.
+        store.set_alias("dev-c", "Chris")
+        assert store.is_canonical_identity("Chris") is False
 
     def test_remap_aliases_repoints_whole_group(self, store):
         store.set_alias("dev-a", "Jasmine!")
