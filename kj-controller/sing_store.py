@@ -853,9 +853,9 @@ class SingStore:
         """Alias every device that submitted under ``name`` tonight → ``name``.
 
         Records the devices behind a name as one established identity (a
-        self-alias). Called on the KEEP side of a KJ merge so the merged singer
-        is a recognised identity even from a device that never had to be renamed
-        — which is what makes a later self-service rename carry the whole group.
+        KJ-origin alias). Called on the KEEP side of a KJ merge so the merged
+        singer is a recognised identity even from a device that never had to be
+        renamed — which is what makes a later self-service rename carry the group.
         Best-effort; returns the number of devices marked.
 
         Night-scoped like the rest of request/phone resolution. The marker is
