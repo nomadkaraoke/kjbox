@@ -4,6 +4,17 @@ Dated entries, newest first. Each entry notes any required deploy steps.
 
 ---
 
+## 2026-08-27 - Auto Order keeps "Being Made" tracks pinned at the bottom (v0.96.0)
+
+**Deploy:** backend (`auto_order.py`) → **requires `systemctl restart kj-controller`** (interrupts playback — deploy between songs).
+
+- **Why:** a track still being generated ("Being Made (!)") isn't playable yet, so it shouldn't be woven up the queue by the fair reorder — it just gets in the way. The KJ wants every making track parked at the very bottom until the video is ready, at which point they flip its status back to Waiting by hand.
+- **Behaviour:** the "Reorder" button (and the auto-reorder-on-new-entry path) now pulls all entries whose status contains "being made" to the very bottom of the queue, in their existing relative order, and holds them out of the fair weave entirely. Everything else is ordered normally above them. The pin overrides even the sacred rows 1–3 lock (a making track at the top still sinks). Each pinned row's rationale reads `held at bottom (being made)`.
+- **How:** pure-algorithm change in `auto_order.py`. `EntryView` gains a `being_made` flag (derived in `build_entry_views` from the entry status); `compute_auto_order` splits those entries off before the greedy weave (extracted into `_weave()`) and appends them at the tail. Top-five bump detection now uses woven position (not the stale original index) so a duplicate that shifts into row 4/5 when a making entry is pinned out is still bumped. No frontend change — the UI already renders by queue position.
+- **Tests:** 6 new unit tests in `tests/unit/test_auto_order.py` (pin mid-queue, sink a making entry from the locked head, reason/moved flag, all-making preserves order, `build_entry_views` status parsing, top-five-bump regression).
+
+---
+
 ## 2026-08-27 - Remove 4TB SSD smartctl temp polling — it hung the drive mid-show (v0.95.0)
 
 **Deploy:** backend (`routes.py`) + frontend (`app.js`, `style.css`, `templates/index.html`) → **requires `systemctl restart kj-controller`** (deploy between songs via the Update button; mpv playback survives the restart).
