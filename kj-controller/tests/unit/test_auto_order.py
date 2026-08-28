@@ -430,6 +430,71 @@ def test_metrics_projected_wait_uses_real_durations():
 
 
 # ---------------------------------------------------------------------------
+# "Being made" pinning — tracks still being generated sink to the very bottom
+# ---------------------------------------------------------------------------
+
+def test_being_made_entries_pinned_to_bottom():
+    # M1/M2 are being made but sit mid-queue; a long-waiting new singer is below
+    # them. After reorder, both making entries drop to the very bottom regardless
+    # of fairness/wait, and the new singer is woven above them.
+    before = _mk([
+        ("A", 0, 5, "a"), ("B", 0, 5, "b"), ("C", 0, 5, "c"),
+        ("M1", 0, 90, "m1"), ("D", 0, 5, "d"), ("M2", 0, 80, "m2"),
+        ("New", 0, 120, "n"),
+    ])
+    before[3].being_made = True   # M1
+    before[5].being_made = True   # M2
+    res = compute_auto_order(before)
+    ids = res.ordered_ids
+    # Both making entries occupy the final two slots (relative order preserved).
+    assert ids[-2:] == [4, 6]
+    # Neither making id appears anywhere above the bottom two.
+    assert 4 not in ids[:-2] and 6 not in ids[:-2]
+
+
+def test_being_made_at_top_is_still_sunk():
+    # Even a making entry sitting in the sacred locked head (row 1) drops to the
+    # bottom — the pin overrides the lock.
+    before = _mk([
+        ("M", 0, 5, "m"), ("A", 3, 5, "a"), ("B", 3, 5, "b"),
+        ("C", 3, 5, "c"), ("D", 3, 5, "d"),
+    ])
+    before[0].being_made = True
+    res = compute_auto_order(before)
+    assert res.ordered_ids[-1] == 1          # M sunk to the bottom
+    assert 1 not in res.ordered_ids[:-1]
+
+
+def test_being_made_reason_and_moved_flag():
+    before = _mk([("A", 0, 5, "a"), ("M", 0, 5, "m"), ("B", 0, 5, "b")])
+    before[1].being_made = True
+    res = compute_auto_order(before)
+    pin = next(p for p in res.placements if p.entry.id == 2)
+    assert "being made" in pin.reason.lower()
+    assert pin.new_index == 2                # moved from index 1 to the bottom
+    assert pin.moved
+
+
+def test_all_being_made_preserves_order():
+    before = _mk([("A", 0, 5, "a"), ("B", 0, 5, "b"), ("C", 0, 5, "c")])
+    for e in before:
+        e.being_made = True
+    res = compute_auto_order(before)
+    assert res.ordered_ids == [1, 2, 3]
+    assert not res.changed
+
+
+def test_build_entry_views_flags_being_made_status():
+    entries = [
+        {"id": 1, "singer": "A", "song_artist": "a", "status": "Waiting"},
+        {"id": 2, "singer": "B", "song_artist": "b", "status": "Being Made (!)"},
+    ]
+    views = build_entry_views(entries)
+    assert views[0].being_made is False
+    assert views[1].being_made is True
+
+
+# ---------------------------------------------------------------------------
 # Determinism — same input always yields the same output (no hidden randomness)
 # ---------------------------------------------------------------------------
 

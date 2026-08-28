@@ -11,6 +11,10 @@ the defaults live in ``docs/archive/2026-07-16-auto-order-rotation-plan.md``.
 
 High level:
 
+* Entries still **being made** (``being_made``) are pinned to the very bottom of
+  the queue in their existing relative order and held out of the weave entirely —
+  the KJ flips them back to "Waiting" once the track is ready. Everything below
+  reasons only about the remaining (woven) entries.
 * Rows 1..3 (``always_lock``) are SACRED — never moved.
 * Rows 4-5 are frozen too, EXCEPT a duplicate of a singer already sitting in rows 1-3
   may be bumped out of the top five (a singer shouldn't occupy two of the first five
@@ -113,6 +117,9 @@ class EntryView:
                                      # (e.g. "Tara" then "Anya & Tara") don't go back-to-back.
     duration: Optional[float] = None  # linked karaoke file length in SECONDS (for
                                      # projecting real wait times; None -> avg fallback).
+    being_made: bool = False         # track is still being generated ("Being Made") —
+                                     # pinned to the very bottom and held out of the
+                                     # fair weave until the KJ flips it back to Waiting.
 
     def __post_init__(self):
         if not self.members:
@@ -181,6 +188,8 @@ def build_entry_views(entries):
             members = tuple(p.strip().lower() for p in owner.split("&") if p.strip()) or (owner,)
         seq = per_owner_count.get(owner, 0)
         per_owner_count[owner] = seq + 1
+        # "Being Made (!)" status → pin to the bottom until the KJ flips it back.
+        being_made = "being made" in (e.get("status") or "").strip().lower()
         views.append(EntryView(
             id=e.get("id"),
             owner=owner,
@@ -192,6 +201,7 @@ def build_entry_views(entries):
             song_artist=e.get("song_artist") or "",
             members=members,
             duration=e.get("duration"),
+            being_made=being_made,
         ))
     return views
 
@@ -213,13 +223,52 @@ def compute_auto_order(entries, config=None):
 
     ``entries`` is a list of :class:`EntryView` in current display order.
     Returns an :class:`AutoOrderResult`.
+
+    Entries still ``being_made`` are pinned to the very bottom (in their existing
+    relative order) and held out of the weave entirely; only the remaining entries
+    are fairly reordered above them.
     """
     config = config or AutoOrderConfig()
-    n = len(entries)
-    if n == 0:
+    if len(entries) == 0:
         return AutoOrderResult(order=[], placements=[])
 
-    locked_idx = _locked_indices(entries, config)
+    # Split off "being made" entries — they always sink to the bottom, untouched by
+    # the fair weave, until the KJ flips their status back to Waiting.
+    making = [e for e in entries if e.being_made]
+    woven_input = [e for e in entries if not e.being_made] if making else entries
+
+    locked_idx = _locked_indices(woven_input, config)
+    result_order = _weave(woven_input, locked_idx, config) + making
+
+    # Build placements + rationale. Making entries were never woven, so their reason
+    # reflects the pin, not the locked head.
+    placements = []
+    for new_idx, e in enumerate(result_order):
+        moved = (new_idx != e.orig_index)
+        if e.being_made:
+            reason = "held at bottom (being made)"
+        else:
+            reason = _reason_for(e, new_idx, config, locked_region=(new_idx in locked_idx))
+        placements.append(Placement(entry=e, new_index=new_idx, moved=moved, reason=reason))
+
+    return AutoOrderResult(
+        order=result_order,
+        placements=placements,
+        metrics_before=compute_metrics(entries, config),
+        metrics_after=compute_metrics(result_order, config),
+    )
+
+
+def _weave(entries, locked_idx, config):
+    """Scored greedy weave of ``entries`` (list[EntryView]) → new ordered list.
+
+    Rows are positional in the passed list; ``locked_idx`` (from ``_locked_indices``)
+    are frozen in place and everything else fills the open slots. Callers that pin
+    some entries out of the weave (e.g. "being made") pass only the woven entries.
+    """
+    n = len(entries)
+    if n == 0:
+        return []
 
     # Place locked entries at their fixed positions; the rest are the pool that
     # fills the remaining "open" slots (ascending).
@@ -285,25 +334,7 @@ def compute_auto_order(entries, config=None):
             member_last_time[m] = time_ahead
         time_ahead += _slot_minutes(best, config)
 
-    result_order = result
-
-    # Build placements + rationale.
-    placements = []
-    for new_idx, e in enumerate(result_order):
-        moved = (new_idx != e.orig_index)
-        placements.append(Placement(
-            entry=e,
-            new_index=new_idx,
-            moved=moved,
-            reason=_reason_for(e, new_idx, config, locked_region=(new_idx in locked_idx)),
-        ))
-
-    return AutoOrderResult(
-        order=result_order,
-        placements=placements,
-        metrics_before=compute_metrics(entries, config),
-        metrics_after=compute_metrics(result_order, config),
-    )
+    return result
 
 
 def _locked_indices(entries, config):
