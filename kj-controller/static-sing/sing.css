@@ -48,6 +48,16 @@ p { margin: 0.5rem 0; }
 .hint { color: var(--nk-text-dim); font-size: 0.9rem; }
 .error { color: var(--nk-error); font-size: 0.9rem; min-height: 1em; }
 
+/* Persistent self-rename affordance (landing / search / done). Underlined so
+   it reads as tappable, with a comfortable touch target on mobile. */
+.edit-name-link {
+  color: var(--nk-accent, #ff4dcf);
+  text-decoration: underline;
+  white-space: nowrap;
+  padding: 0.15rem 0;
+}
+.done-identity { margin-top: -0.25rem; }
+
 label {
   display: block;
   margin: 0.75rem 0;

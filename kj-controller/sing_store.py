@@ -151,6 +151,21 @@ class SingStore:
             );
             CREATE INDEX IF NOT EXISTS idx_sing_push_token_phone
                 ON sing_push_subscriptions(token, phone);
+
+            -- Device → canonical-name mapping (2026-08-27). A singer's display
+            -- name is free text they type on their phone (localStorage), so a KJ
+            -- or self-service rename would otherwise be lost the next time that
+            -- device submits a song. An alias row makes a rename stick: at
+            -- /sing/submit the typed name is overridden by the device's canonical
+            -- name (if any). Keyed on the opaque device_id the client generates
+            -- once and stores in localStorage. Persists across nights on purpose
+            -- (a regular keeps their chosen name) — device_id is stable per
+            -- browser, so there's no cross-night id-reuse hazard here.
+            CREATE TABLE IF NOT EXISTS singer_aliases (
+                device_id      TEXT PRIMARY KEY,
+                canonical_name TEXT NOT NULL,
+                updated_at     TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+            );
             """
         )
         # Additive migration — `additional_singers` was added 2026-05-15 for
@@ -190,6 +205,18 @@ class SingStore:
         try:
             conn.execute(
                 "ALTER TABLE sing_requests ADD COLUMN user_agent TEXT DEFAULT NULL"
+            )
+        except sqlite3.OperationalError as e:
+            if "duplicate column name" not in str(e).lower():
+                raise
+        # Additive migration — `device_id` (2026-08-27) is the opaque, stable
+        # per-browser identifier the singer UI generates once and stores in
+        # localStorage. Lets a rename (KJ-side or singer self-service) persist to
+        # future submissions from the same device via the singer_aliases table.
+        # Existing rows get NULL (unknown device — never alias-matched).
+        try:
+            conn.execute(
+                "ALTER TABLE sing_requests ADD COLUMN device_id TEXT DEFAULT NULL"
             )
         except sqlite3.OperationalError as e:
             if "duplicate column name" not in str(e).lower():
@@ -420,6 +447,7 @@ class SingStore:
         additional_singers=None,
         supersedes_request_id=None,
         user_agent=None,
+        device_id=None,
     ):
         """Insert a new pending request and return the created row as a dict."""
         if not singer_name:
@@ -444,8 +472,8 @@ class SingStore:
                 (token, singer_name, phone, song_artist, song_title,
                  source_type, source_ref, source_meta, notes,
                  additional_singers, edit_token, supersedes_request_id,
-                 user_agent)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 user_agent, device_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 request_token,
@@ -461,6 +489,7 @@ class SingStore:
                 edit_token,
                 supersedes_request_id,
                 (user_agent or None),
+                (device_id or None),
             ),
         )
         conn.commit()
@@ -690,6 +719,97 @@ class SingStore:
         )
         conn.commit()
         return self.get_request(request_id)
+
+    # ------------------------------------------------------------------
+    # Singer aliases — device_id → canonical display name
+    # ------------------------------------------------------------------
+
+    def get_alias(self, device_id):
+        """Return the canonical name a device is mapped to, or None.
+
+        Called on every /sing/submit to override the free-text name a device
+        types (localStorage) with the name a KJ or the singer themselves chose.
+        """
+        device_id = (device_id or "").strip()
+        if not device_id:
+            return None
+        conn = self._get_conn()
+        row = conn.execute(
+            "SELECT canonical_name FROM singer_aliases WHERE device_id = ?",
+            (device_id,),
+        ).fetchone()
+        return row[0] if row else None
+
+    def set_alias(self, device_id, canonical_name):
+        """Upsert a device → canonical-name mapping. No-op on blank input."""
+        device_id = (device_id or "").strip()
+        canonical_name = (canonical_name or "").strip()
+        if not device_id or not canonical_name:
+            return
+        conn = self._get_conn()
+        conn.execute(
+            "INSERT INTO singer_aliases (device_id, canonical_name, updated_at) "
+            "VALUES (?, ?, datetime('now', 'localtime')) "
+            "ON CONFLICT(device_id) DO UPDATE SET "
+            "  canonical_name = excluded.canonical_name, "
+            "  updated_at = datetime('now', 'localtime')",
+            (device_id, canonical_name),
+        )
+        conn.commit()
+
+    def clear_alias(self, device_id):
+        """Drop a device's alias (used when a device declares a new identity)."""
+        device_id = (device_id or "").strip()
+        if not device_id:
+            return
+        conn = self._get_conn()
+        conn.execute(
+            "DELETE FROM singer_aliases WHERE device_id = ?", (device_id,)
+        )
+        conn.commit()
+
+    def persist_rename(self, old_name, new_name, night_started=None):
+        """Make a KJ/merge rename of ``old_name`` → ``new_name`` sticky.
+
+        1. Aliases every device that submitted a request under ``old_name`` (as
+           the primary singer) tonight so their FUTURE submissions resolve to
+           ``new_name`` at /sing/submit time.
+        2. Rewrites those requests' stored ``singer_name`` to ``new_name`` so
+           singer-session provenance (which matches request.singer_name against
+           the current rotation-entry name) keeps working after the rename.
+
+        Night-scoped (``created_at >= night_started``) like the rest of the
+        request/phone resolution to avoid touching prior nights' history. Returns
+        the number of distinct devices aliased. Best-effort; safe to call for a
+        name that has no portal submissions (returns 0).
+        """
+        old_name = (old_name or "").strip()
+        new_name = (new_name or "").strip()
+        if not old_name or not new_name or old_name.lower() == new_name.lower():
+            return 0
+        conn = self._get_conn()
+        params = [old_name]
+        night_clause = ""
+        if night_started:
+            night_clause = " AND created_at >= ?"
+            params.append(night_started)
+        rows = conn.execute(
+            "SELECT DISTINCT device_id FROM sing_requests "
+            "WHERE LOWER(singer_name) = LOWER(?)"
+            "  AND device_id IS NOT NULL AND device_id != ''" + night_clause,
+            tuple(params),
+        ).fetchall()
+        device_ids = [r[0] for r in rows]
+        for did in device_ids:
+            self.set_alias(did, new_name)
+        # Rewrite the tonight requests' primary singer_name for provenance.
+        conn.execute(
+            "UPDATE sing_requests SET singer_name = ? "
+            "WHERE LOWER(singer_name) = LOWER(?)" + night_clause,
+            tuple([new_name] + params),
+        )
+        conn.commit()
+        return len(device_ids)
 
     # ------------------------------------------------------------------
     # Push subscription CRUD (sub-project #4)

@@ -840,3 +840,84 @@ class TestUserAgentAndSessionLookup:
 
     def test_get_requests_for_entries_empty_ids(self, store):
         assert store.get_requests_for_entries([], "2000-01-01 00:00:00") == []
+
+
+# ---------------------------------------------------------------------------
+# device_id column + singer aliases (persistent rename)
+# ---------------------------------------------------------------------------
+
+class TestDeviceIdAndAliases:
+    def test_device_id_column_and_table_exist(self, store):
+        conn = store._get_conn()
+        cols = {row[1] for row in conn.execute(
+            "PRAGMA table_info(sing_requests)"
+        ).fetchall()}
+        assert "device_id" in cols
+        tables = {row[0] for row in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'"
+        ).fetchall()}
+        assert "singer_aliases" in tables
+
+    def test_create_request_stores_device_id(self, store):
+        r = store.create_request(
+            singer_name="Lyle", phone="", source_type="local",
+            source_ref="/a.mp4", device_id="dev-abc",
+        )
+        assert store.get_request(r["id"])["device_id"] == "dev-abc"
+
+    def test_alias_set_get_clear(self, store):
+        assert store.get_alias("dev-1") is None
+        store.set_alias("dev-1", "Lyle")
+        assert store.get_alias("dev-1") == "Lyle"
+        # Upsert overwrites the previous mapping (singer's latest choice wins).
+        store.set_alias("dev-1", "Lyle Smith")
+        assert store.get_alias("dev-1") == "Lyle Smith"
+        store.clear_alias("dev-1")
+        assert store.get_alias("dev-1") is None
+
+    def test_alias_ignores_blank_input(self, store):
+        store.set_alias("", "Nobody")
+        store.set_alias("dev-2", "")
+        assert store.get_alias("") is None
+        assert store.get_alias("dev-2") is None
+
+    def test_persist_rename_aliases_matching_devices(self, store):
+        night = store.ensure_night_started()
+        store.create_request(
+            singer_name="The only Lyle at karaoke", phone="",
+            source_type="local", source_ref="/a.mp4", device_id="dev-lyle",
+        )
+        n = store.persist_rename("The only Lyle at karaoke", "Lyle", night_started=night)
+        assert n == 1
+        # Future submissions from that device resolve to the new name.
+        assert store.get_alias("dev-lyle") == "Lyle"
+
+    def test_persist_rename_rewrites_request_names_for_provenance(self, store):
+        night = store.ensure_night_started()
+        r = store.create_request(
+            singer_name="Bobby", phone="", source_type="local",
+            source_ref="/a.mp4", device_id="dev-bob",
+        )
+        store.persist_rename("bobby", "Bob", night_started=night)  # case-insensitive
+        assert store.get_request(r["id"])["singer_name"] == "Bob"
+
+    def test_persist_rename_noop_for_unknown_name(self, store):
+        night = store.ensure_night_started()
+        assert store.persist_rename("Ghost", "Casper", night_started=night) == 0
+
+    def test_persist_rename_noop_when_same_name(self, store):
+        night = store.ensure_night_started()
+        store.create_request(
+            singer_name="Sam", phone="", source_type="local",
+            source_ref="/a.mp4", device_id="dev-sam",
+        )
+        assert store.persist_rename("Sam", "sam", night_started=night) == 0
+        assert store.get_alias("dev-sam") is None
+
+    def test_persist_rename_skips_requests_without_device(self, store):
+        night = store.ensure_night_started()
+        # A KJ-hand-added-style request with no device_id must not create an alias.
+        store.create_request(
+            singer_name="Nomad", phone="", source_type="local", source_ref="/a.mp4",
+        )
+        assert store.persist_rename("Nomad", "Nomad K", night_started=night) == 0

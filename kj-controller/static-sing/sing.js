@@ -108,6 +108,29 @@ function pruneRequestIds(token, queriedIds, returnedIds) {
   catch { /* private browsing — best-effort */ }
 }
 
+// Stable, opaque per-browser identifier generated once and kept in
+// localStorage. Sent with every submission so a rename (KJ-side or the singer's
+// own) can be pinned to this device and persist across future songs, instead of
+// the singer re-appearing under whatever free-text name is still cached here.
+const DEVICE_ID_KEY = "sing_device_id";
+function _genDeviceId() {
+  try {
+    const a = new Uint8Array(16);
+    crypto.getRandomValues(a);
+    return Array.from(a, (b) => b.toString(16).padStart(2, "0")).join("");
+  } catch {
+    // crypto unavailable (ancient/locked-down browser) — a non-crypto id is
+    // fine here; it only needs to be unique-per-device, not unguessable.
+    return "d" + Date.now().toString(36) + Math.random().toString(36).slice(2);
+  }
+}
+function getDeviceId() {
+  let d = LS.get(DEVICE_ID_KEY);
+  if (!d) { d = _genDeviceId(); LS.set(DEVICE_ID_KEY, d); }
+  return d;
+}
+const DEVICE_ID = getDeviceId();
+
 const PHONE_RE = /^\+?[0-9 \-()]{7,20}$/;
 
 const state = {
@@ -216,6 +239,38 @@ async function reorderSongs(items) {
   });
 }
 
+// Persistently rename this singer. Sends the device's own request ids +
+// per-request edit tokens so the server can rewrite the entries/requests this
+// device owns, and records a device alias so future submissions use the new
+// name too. Safe with no owned songs (just sets the alias for next time).
+async function renameMe(newName) {
+  const items = [];
+  const store = _readMyRequestStore();
+  if (store && store.token === TOKEN && Array.isArray(store.ids)) {
+    for (const id of store.ids) {
+      const tok = store.tokens && store.tokens[String(id)];
+      if (tok) items.push({ id, edit_token: tok });
+    }
+  }
+  return fetchJson(`${BASE}/rename`, {
+    method: "POST",
+    body: JSON.stringify({ new_name: newName, device_id: DEVICE_ID, items }),
+  });
+}
+
+// Drop this device's alias when the visitor declares they're someone new
+// ("switch" on the landing screen) — best-effort so it never blocks the UI.
+async function forgetIdentity() {
+  try {
+    await fetch(`${BASE}/forget?t=${encodeURIComponent(TOKEN)}`, {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ device_id: DEVICE_ID }),
+    });
+  } catch { /* best-effort */ }
+}
+
 // --- Render helpers --------------------------------------------------------
 
 function el(tag, attrs = {}, ...children) {
@@ -249,6 +304,12 @@ function render() {
     state.changeRequestId = null;
     state.changeEditToken = null;
   }
+  // Identity edit-mode flags are only meaningful while on the identity step;
+  // clear them anywhere else so a stale "edit" can't mislabel a later setup.
+  if (state.step !== "identity") {
+    state._identityMode = null;
+    state._identityReturnStep = null;
+  }
   root.innerHTML = "";
   const view = {
     landing: renderLanding,
@@ -265,6 +326,29 @@ function render() {
 
 function back(to) {
   return () => { state.step = to; render(); };
+}
+
+// Enter the identity form in "edit my name" mode: pre-filled with the current
+// name/phone, and on save it persistently renames the singer (keeping their
+// songs) rather than starting a fresh identity. `returnStep` is where Save/Back
+// return to (the screen the singer launched the edit from).
+function enterEditName(returnStep) {
+  state._identityMode = "edit";
+  state._identityReturnStep = returnStep || "search";
+  state._identityDraft = { name: state.name, phone: state.phone, err: "" };
+  state.step = "identity";
+  render();
+}
+
+// Small "· edit name" affordance shared by the landing, search, and done
+// screens so a returning singer can fix their name from wherever they are.
+function editNameLink(returnStep, label) {
+  return el("a", {
+    href: "#",
+    class: "edit-name-link",
+    "data-testid": "edit-name",
+    onclick: (e) => { e.preventDefault(); enterEditName(returnStep); },
+  }, label || "edit name");
 }
 
 // --- Views -----------------------------------------------------------------
@@ -488,11 +572,18 @@ function renderLanding() {
       },
     }, state.name ? "Continue" : "Get started"),
     state.name ? el("p", { class: "hint" },
-      `Not ${state.name}? `,
-      el("a", { href: "#", onclick: (e) => {
+      "You're ", el("strong", {}, state.name), " · ",
+      editNameLink("landing"), " · ",
+      `Not you? `,
+      el("a", { href: "#", "data-testid": "switch-identity", onclick: (e) => {
         e.preventDefault();
+        // A different person on this device — forget the old singer's alias so
+        // their KJ-corrected name doesn't leak onto this person's songs.
+        forgetIdentity();
         state.name = state.phone = "";
         LS.set("sing_name", ""); LS.set("sing_phone", "");
+        state._identityMode = "setup";
+        state._identityReturnStep = "search";
         state.step = "identity"; render();
       } }, "switch")
     ) : null,
@@ -507,8 +598,20 @@ function renderIdentity() {
     state._identityDraft = { name: state.name, phone: state.phone, err: "" };
   }
   const draft = state._identityDraft;
+  // "edit" mode = a returning singer fixing their name (keeps their songs);
+  // "setup" (default) = first-time / switched-identity name entry.
+  const isEdit = state._identityMode === "edit";
+  const returnStep = state._identityReturnStep || "search";
 
-  const onSubmit = (e) => {
+  const leaveIdentity = (to) => {
+    state._identityDraft = null;
+    state._identityMode = null;
+    state._identityReturnStep = null;
+    state.step = to;
+    render();
+  };
+
+  const onSubmit = async (e) => {
     e.preventDefault();
     if (!draft.name.trim()) {
       draft.err = "Please enter your name.";
@@ -520,13 +623,32 @@ function renderIdentity() {
       draft.err = "Please enter a valid phone number (digits, spaces, or + allowed), or leave it blank.";
       rerender(); return;
     }
-    state.name = draft.name.trim();
+    const newName = draft.name.trim();
+
+    // Edit mode with a genuinely changed name: persist the rename server-side
+    // BEFORE committing locally, so the singer's existing songs/entries are
+    // rewritten and future submissions stick to the new name. If it fails, keep
+    // them on the form with an error rather than silently diverging.
+    if (isEdit && newName !== (state.name || "").trim()) {
+      const btn = root.querySelector(".identity-save");
+      if (btn) { btn.disabled = true; btn.textContent = "Saving…"; }
+      try {
+        await renameMe(newName);
+      } catch (err) {
+        draft.err = err && err.status === 429
+          ? "You've made a lot of changes — wait a minute and try again."
+          : "Couldn't save your new name — check your connection and retry.";
+        rerender(); return;
+      }
+    }
+
+    state.name = newName;
     state.phone = phoneTrimmed;
     LS.set("sing_name", state.name);
     LS.set("sing_phone", state.phone);
-    state._identityDraft = null;
-    state.step = "search";
-    render();
+    // Editing from the done screen returns there and re-polls (so the renamed
+    // songs show); otherwise fall through to search as the setup flow always did.
+    leaveIdentity(isEdit ? returnStep : "search");
   };
 
   function rerender() {
@@ -535,7 +657,10 @@ function renderIdentity() {
   }
 
   return el("main", { class: "sing-card" },
-    el("h2", {}, "Your details"),
+    el("h2", {}, isEdit ? "Edit your name" : "Your details"),
+    isEdit ? el("p", { class: "hint" },
+      "Change how your name shows on the rotation. Your songs stay yours — "
+      + "this updates them and anything you add next.") : null,
     el("form", { onsubmit: onSubmit },
       el("label", {}, "First name + last initial",
         el("input", {
@@ -555,8 +680,8 @@ function renderIdentity() {
       ),
       draft.err ? el("p", { class: "error" }, draft.err) : null,
       el("div", { class: "row" },
-        el("button", { type: "button", class: "btn ghost", onclick: () => { state._identityDraft = null; state.step = "landing"; render(); } }, "Back"),
-        el("button", { type: "submit", class: "btn primary" }, "Next"),
+        el("button", { type: "button", class: "btn ghost", onclick: () => leaveIdentity(isEdit ? returnStep : "landing") }, isEdit ? "Cancel" : "Back"),
+        el("button", { type: "submit", class: "btn primary identity-save" }, isEdit ? "Save name" : "Next"),
       ),
     ),
   );
@@ -1107,9 +1232,11 @@ function renderSearch() {
 
   const card = el("main", { class: "sing-card" },
     el("h2", {}, "Pick your song"),
-    el("p", { class: "hint" }, state.simpleMode
-      ? `Hi ${state.name.split(/\s+/)[0]} — search for a song below. If we don't have it, just ask the KJ at the front.`
-      : `Hi ${state.name.split(/\s+/)[0]} — search for a song below. If we don't have it, you'll get options for how to get it on screen.`),
+    el("p", { class: "hint" },
+      (state.simpleMode
+        ? `Hi ${state.name.split(/\s+/)[0]} — search for a song below. If we don't have it, just ask the KJ at the front. `
+        : `Hi ${state.name.split(/\s+/)[0]} — search for a song below. If we don't have it, you'll get options for how to get it on screen. `),
+      "(", editNameLink("search", "not you?"), ")"),
     el("input", {
       type: "search",
       placeholder: "Type artist or song title…",
@@ -1204,6 +1331,7 @@ function renderConfirm() {
 
       const payload = {
         singer_name: state.name,
+        device_id: DEVICE_ID,
         phone: state.phone,
         song_artist: state.selected.song_artist || "",
         song_title: state.selected.song_title || "",
@@ -1456,6 +1584,9 @@ function renderDone() {
   const card = el("main", { class: "sing-card" },
     renderNowPlaying(),
     el("h2", {}, "Your songs tonight"),
+    state.name ? el("p", { class: "hint done-identity" },
+      "Singing as ", el("strong", {}, state.name), " · ",
+      editNameLink("done")) : null,
     el("div", { class: "songs-list" }, "Loading your songs…"),
     // Populated by pollMyRequests once we know which songs are already sung;
     // stays hidden until there's at least one, so the active list stays clean.
