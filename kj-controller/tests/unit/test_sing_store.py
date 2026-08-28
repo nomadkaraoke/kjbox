@@ -921,3 +921,66 @@ class TestDeviceIdAndAliases:
             singer_name="Nomad", phone="", source_type="local", source_ref="/a.mp4",
         )
         assert store.persist_rename("Nomad", "Nomad K", night_started=night) == 0
+
+    def test_is_canonical_identity_only_counts_kj_origin(self, store):
+        assert store.is_canonical_identity("Jasmine!") is False
+        # A singer's own self-rename alias ('self') does NOT establish an identity.
+        store.set_alias("dev-a", "Jasmine!")
+        assert store.is_canonical_identity("Jasmine!") is False
+        # A KJ rename/merge alias ('kj') does.
+        store.set_alias("dev-b", "Jasmine!", origin="kj")
+        assert store.is_canonical_identity("Jasmine!") is True
+        # Case-insensitive; blank is never an identity.
+        assert store.is_canonical_identity("jasmine!") is True
+        assert store.is_canonical_identity("") is False
+        assert store.is_canonical_identity(None) is False
+
+    def test_set_alias_self_update_resets_kj_authority(self, store):
+        # KJ authority does NOT travel onto a name the SINGER later chose: a
+        # self-rename resets origin to 'self', so a past merge can't be laundered
+        # into whole-group power over a coincidental same-name walk-in.
+        store.set_alias("dev-a", "Jasmine!", origin="kj")
+        assert store.is_canonical_identity("Jasmine!") is True
+        store.set_alias("dev-a", "Jazz")  # singer self-rename → 'self'
+        assert store.get_alias("dev-a") == "Jazz"
+        assert store.is_canonical_identity("Jazz") is False
+        # A brand-new self alias stays 'self'.
+        store.set_alias("dev-c", "Chris")
+        assert store.is_canonical_identity("Chris") is False
+
+    def test_remap_aliases_repoints_whole_group(self, store):
+        store.set_alias("dev-a", "Jasmine!")
+        store.set_alias("dev-b", "Jasmine!")
+        store.set_alias("dev-c", "Someone Else")
+        store.remap_aliases("Jasmine!", "Jazz")
+        assert store.get_alias("dev-a") == "Jazz"
+        assert store.get_alias("dev-b") == "Jazz"
+        # Devices in a different identity are untouched.
+        assert store.get_alias("dev-c") == "Someone Else"
+
+    def test_remap_aliases_noops(self, store):
+        store.set_alias("dev-a", "Jasmine!")
+        store.remap_aliases("Jasmine!", "jasmine!")  # same name (case-insensitive)
+        assert store.get_alias("dev-a") == "Jasmine!"
+        store.remap_aliases("", "X")
+        store.remap_aliases("Jasmine!", "")
+        assert store.get_alias("dev-a") == "Jasmine!"
+
+    def test_mark_identity_aliases_tonight_devices(self, store):
+        night = store.ensure_night_started()
+        store.create_request(
+            singer_name="Jasmine!", phone="", source_type="local",
+            source_ref="/a.mp4", device_id="dev-jas",
+        )
+        n = store.mark_identity("Jasmine!", night_started=night)
+        assert n == 1
+        assert store.get_alias("dev-jas") == "Jasmine!"
+        assert store.is_canonical_identity("Jasmine!") is True
+
+    def test_mark_identity_skips_requests_without_device(self, store):
+        night = store.ensure_night_started()
+        store.create_request(
+            singer_name="Nomad", phone="", source_type="local", source_ref="/a.mp4",
+        )
+        assert store.mark_identity("Nomad", night_started=night) == 0
+        assert store.is_canonical_identity("Nomad") is False

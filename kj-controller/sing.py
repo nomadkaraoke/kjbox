@@ -1174,6 +1174,7 @@ def rename_me():
     # requests count — a device can never rename someone else's entries.
     entry_ids_by_old = {}
     verified_request_ids = []
+    verified_old_names = set()
     for it in items:
         if not isinstance(it, dict):
             continue
@@ -1190,21 +1191,45 @@ def rename_me():
             continue
         verified_request_ids.append(rid)
         old = (req.get("singer_name") or "").strip()
-        if (
-            old
-            and old.lower() != new_name.lower()
-            and req.get("status") == "approved"
-            and req.get("linked_entry_id")
-        ):
-            entry_ids_by_old.setdefault(old, []).append(req["linked_entry_id"])
+        if old and old.lower() != new_name.lower():
+            verified_old_names.add(old)
+            if req.get("status") == "approved" and req.get("linked_entry_id"):
+                entry_ids_by_old.setdefault(old, []).append(req["linked_entry_id"])
 
-    # Rewrite the rotation entries the singer owns.
-    if rotation is not None:
-        for old, eids in entry_ids_by_old.items():
-            try:
-                rotation.rename_singer_in_entries(old, new_name, eids)
-            except Exception:
-                current_app.logger.exception("self-rename: entry rewrite failed")
+    # Rewrite the rotation entries. Two modes, decided per old-name:
+    #
+    #  • Established identity (a KJ merged/renamed this singer into ``old``):
+    #    the singer is deliberately asserted to be ONE person, so a rename must
+    #    carry the WHOLE name-group across the rotation — not just the songs this
+    #    one device owns — else she re-splits under the stale name (the reported
+    #    "Jasmine" / "Jasmine!" bug). We also migrate every device aliased to
+    #    ``old`` and rewrite tonight's requests so no session reverts later.
+    #  • Otherwise (a plain typed name, no merge): stay scoped to edit_token-owned
+    #    entries so two coincidental same-name walk-ins never rename each other.
+    night_started = None
+    try:
+        night_started = store.get_night_started_at()
+    except Exception:
+        current_app.logger.exception("self-rename: night lookup failed")
+
+    for old in verified_old_names:
+        try:
+            # Escalate to a whole-group rename ONLY for a KJ-established identity
+            # AND only when we have a night marker to scope the request rewrite —
+            # without one, persist_rename would touch every historical request
+            # under this name, so we fail closed to the safe edit_token-scoped
+            # path rather than risk clobbering prior nights.
+            if store.is_canonical_identity(old) and night_started:
+                if rotation is not None:
+                    rotation.rename_singer(old, new_name)
+                store.persist_rename(old, new_name, night_started=night_started)
+                store.remap_aliases(old, new_name)
+            elif rotation is not None and old in entry_ids_by_old:
+                rotation.rename_singer_in_entries(
+                    old, new_name, entry_ids_by_old[old]
+                )
+        except Exception:
+            current_app.logger.exception("self-rename: entry rewrite failed")
 
     # Rewrite the verified requests' stored name (keeps provenance + the done
     # screen consistent, and means a pending request is approved under the new
