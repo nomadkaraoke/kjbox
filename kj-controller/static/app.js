@@ -6804,6 +6804,9 @@ async function singerAction(action, data) {    showRotationIndicator('spin');
         if (editingRow) editingRow.classList.remove('singer-editing');
         if (result.entries) { rotationData = result.entries; renderRotation(rotationData); }
         if (result.singer_stats) { renderSingerStats(result.singer_stats); }
+        // Some singer actions (e.g. priority bump) re-weave and return fresh undo/redo
+        // state; refresh the buttons so Undo isn't stale until the next poll.
+        if (result.history) rotationHistory.updateButtons(result.history);
         showRotationIndicator('success');
     } catch (e) {
         showRotationIndicator('error');

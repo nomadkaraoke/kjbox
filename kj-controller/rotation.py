@@ -239,6 +239,10 @@ class RotationManager:
 
     def set_priority_bias(self, entry_id, bias):
         """Set the Auto Order priority bias (bump up/down) on a single entry."""
+        # Validate BEFORE checkpointing: an unknown id must 404 without leaving an
+        # undo checkpoint behind (which would also wipe the redo stack).
+        if self.store.get_entry(entry_id) is None:
+            raise ValueError(f"Entry {entry_id} not found")
         self._before_mutation(self._bias_label(bias))
         entry = self.store.set_priority_bias(entry_id, bias)
         self._after_mutation()

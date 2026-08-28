@@ -138,10 +138,13 @@ class TestSetPriorityEndpoint:
         resp = client.post("/rotation/set-priority", json={"bias": 1})
         assert resp.status_code == 400
 
-    def test_unknown_entry_is_404(self, app, client):
+    def test_unknown_entry_is_404_without_leaking_a_checkpoint(self, app, client):
         app.rotation.add_entry("Solo", "s")  # ensure rotation is configured
+        undo_before = app.rotation.history_status()["undo"]
         resp = client.post("/rotation/set-priority", json={"id": 99999, "bias": 1})
         assert resp.status_code == 404
+        # A failed (unknown-id) set must not leave an undo checkpoint behind.
+        assert app.rotation.history_status()["undo"] == undo_before
 
     def test_503_when_rotation_absent(self, app, client):
         app.rotation = None

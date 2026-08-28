@@ -8,7 +8,11 @@ import threading
 # Human-editable fields that define a "meaningful" difference between two
 # rotation states (position is deliberately excluded — reordering is low-stakes
 # and would make every diff noisy).
-_DIFF_FIELDS = ("singer", "song_artist", "status", "notes", "paid", "priority_bias")
+# priority_bias is intentionally NOT here: a bump's visible effect is the re-weave
+# (a reorder), and position is likewise excluded — both are surfaced by the undo
+# action label ("Bump up"/"Bump down"), not as a field diff. Listing it made a
+# bias-only change render as a no-op "Waiting → Waiting" row in the undo preview.
+_DIFF_FIELDS = ("singer", "song_artist", "status", "notes", "paid")
 
 
 def _human_view(entry):
