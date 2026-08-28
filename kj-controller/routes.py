@@ -4362,7 +4362,17 @@ def merge_singers_route():
         return jsonify({"error": "source_name and target_name are required"}), 400
     try:
         rotation.merge_singers(source, target)
+        # Alias the SOURCE devices onto the target (persist_rename) AND record the
+        # TARGET's own devices as the same established identity (mark_identity), so
+        # a later self-service rename from EITHER side carries the whole merged
+        # group instead of re-splitting the singer.
         _persist_singer_rename(source, target)
+        store = getattr(current_app, 'sing_store', None)
+        if store is not None:
+            try:
+                store.mark_identity(target, night_started=store.get_night_started_at())
+            except Exception:
+                current_app.logger.exception("merge mark_identity failed")
         return _singer_action_response(rotation)
     except Exception as e:
         return jsonify({"error": str(e)}), 500

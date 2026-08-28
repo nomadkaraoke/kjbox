@@ -768,6 +768,79 @@ class SingStore:
         )
         conn.commit()
 
+    def is_canonical_identity(self, name):
+        """True if ``name`` is a KJ-established singer identity.
+
+        An identity is "established" once at least one device's alias points at
+        ``name`` — which happens when a KJ renames/merges someone into it (or the
+        singer themselves renamed to it). This is the trust anchor that lets a
+        self-service rename safely carry the WHOLE name-group rather than only
+        the calling device's own songs: two coincidental same-name walk-ins have
+        no alias, so they never rename each other, whereas a KJ-merged singer —
+        deliberately asserted to be one person — does.
+        """
+        name = (name or "").strip()
+        if not name:
+            return False
+        conn = self._get_conn()
+        row = conn.execute(
+            "SELECT 1 FROM singer_aliases WHERE LOWER(canonical_name) = LOWER(?) "
+            "LIMIT 1",
+            (name,),
+        ).fetchone()
+        return row is not None
+
+    def remap_aliases(self, old_name, new_name):
+        """Re-point every device aliased to ``old_name`` at ``new_name``.
+
+        Used when a merged identity is renamed: all the devices the KJ merged
+        into ``old_name`` must follow the singer to ``new_name`` so none of them
+        re-splits under the stale name on a future submission. Cross-night like
+        the aliases themselves (device_id is stable per browser). No-op on blank
+        input or a no-op rename.
+        """
+        old_name = (old_name or "").strip()
+        new_name = (new_name or "").strip()
+        if not old_name or not new_name or old_name.lower() == new_name.lower():
+            return
+        conn = self._get_conn()
+        conn.execute(
+            "UPDATE singer_aliases SET canonical_name = ?, "
+            "  updated_at = datetime('now', 'localtime') "
+            "WHERE LOWER(canonical_name) = LOWER(?)",
+            (new_name, old_name),
+        )
+        conn.commit()
+
+    def mark_identity(self, name, night_started=None):
+        """Alias every device that submitted under ``name`` tonight → ``name``.
+
+        Records the devices behind a name as one established identity (a
+        self-alias). Called on the KEEP side of a KJ merge so the merged singer
+        is a recognised identity even from a device that never had to be renamed
+        — which is what makes a later self-service rename carry the whole group.
+        Best-effort; returns the number of devices marked.
+        """
+        name = (name or "").strip()
+        if not name:
+            return 0
+        conn = self._get_conn()
+        params = [name]
+        night_clause = ""
+        if night_started:
+            night_clause = " AND created_at >= ?"
+            params.append(night_started)
+        rows = conn.execute(
+            "SELECT DISTINCT device_id FROM sing_requests "
+            "WHERE LOWER(singer_name) = LOWER(?)"
+            "  AND device_id IS NOT NULL AND device_id != ''" + night_clause,
+            tuple(params),
+        ).fetchall()
+        device_ids = [r[0] for r in rows]
+        for did in device_ids:
+            self.set_alias(did, name)
+        return len(device_ids)
+
     def persist_rename(self, old_name, new_name, night_started=None):
         """Make a KJ/merge rename of ``old_name`` → ``new_name`` sticky.
 

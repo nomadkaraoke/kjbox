@@ -4,6 +4,18 @@ Dated entries, newest first. Each entry notes any required deploy steps.
 
 ---
 
+## 2026-08-28 - Merging singers unifies their identity so self-rename doesn't re-split (v0.98.0)
+
+**Deploy:** backend (`sing.py`, `sing_store.py`, `routes.py`) → **requires `systemctl restart kj-controller`** (backend change; deploy between songs). No migration.
+
+- **Why:** a singer submitted from two browser sessions (two stable `device_id`s) under two typed variants — "Jasmine" and "Jasmine!". The KJ merged them into one displayed singer, which correctly unified the *rotation entries* but not the *identity*: when she then renamed herself on her phone, `/sing/rename` only rewrote the songs THAT one device owned (per-request `edit_token`), so the other session's song stayed under the old name and she **re-split** into two singers, only one renamed. A KJ merge is a deliberate assertion that these are one person — a later rename has to carry the whole group.
+- **What changed — merge marks a canonical identity:** `POST /rotation/singer/merge` already aliased the *source* devices onto the target (`persist_rename`); it now also calls `SingStore.mark_identity(target)`, aliasing the target's own devices so the *keep* side is recognised as the same established identity too. An identity is "established" once any device's alias points at that name.
+- **What changed — self-rename escalates for an established identity:** `/sing/rename` now decides per old-name. If `SingStore.is_canonical_identity(old)` (a KJ merged/renamed this singer into it), the rename carries the **whole rotation name-group** (`rename_singer`), migrates **every** device aliased to the old name (`remap_aliases`), and rewrites tonight's requests (`persist_rename`) — so no session reverts on a future submission. If the name was never merged (a plain typed name), it stays scoped to edit_token-owned entries exactly as before, so two coincidental same-name walk-ins can never rename each other.
+- **New `SingStore` helpers:** `is_canonical_identity(name)` (any alias → this name?), `remap_aliases(old, new)` (re-point a whole identity group's device aliases), `mark_identity(name, night_started)` (alias tonight's devices under a name to itself). All case-insensitive, best-effort, no-ops on blank input.
+- **Tests:** 6 new unit tests (`test_sing_store.py` — the three new helpers, incl. same-name/blank no-ops and device-less skips) + 3 new integration tests (`test_sing_rename.py::TestMergedIdentitySelfRename` — merge→self-rename renames the whole group, migrates all device aliases, and the no-merge control that stays scoped). Full unit + integration suite green.
+
+---
+
 ## 2026-08-27 - Persistent singer rename — self-service + KJ-side both stick (v0.97.0)
 
 **Deploy:** backend (`sing.py`, `sing_store.py`, `rotation.py`, `rotation_store.py`, `routes.py`) + frontend (`static-sing/sing.js`, `sing.css`) → **requires `systemctl restart kj-controller`** (backend change; deploy between songs). Additive SQLite migration runs on boot (new `sing_requests.device_id` column + `singer_aliases` table) — no manual step.
