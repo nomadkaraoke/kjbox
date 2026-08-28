@@ -4,6 +4,18 @@ Dated entries, newest first. Each entry notes any required deploy steps.
 
 ---
 
+## 2026-08-27 - Persistent singer rename — self-service + KJ-side both stick (v0.97.0)
+
+**Deploy:** backend (`sing.py`, `sing_store.py`, `rotation.py`, `rotation_store.py`, `routes.py`) + frontend (`static-sing/sing.js`, `sing.css`) → **requires `systemctl restart kj-controller`** (backend change; deploy between songs). Additive SQLite migration runs on boot (new `sing_requests.device_id` column + `singer_aliases` table) — no manual step.
+
+- **Why:** a singer's name is free text they type once and their phone re-sends on every submission, so renaming them (from the KJ console *or* by the singer themselves) was lost the next time they added a song — they'd re-appear under the old name. Real case: "The only Lyle at karaoke" wanted to just be "Lyle". The old singer-UI "switch" link wiped their identity (and phone) and started fresh, which isn't a rename.
+- **What changed — mechanism:** the singer SPA now generates a stable opaque `device_id` (crypto-random, kept in `localStorage`) and sends it with every `/sing/submit`; it's stored on a new `sing_requests.device_id` column. A new `singer_aliases` table maps `device_id → canonical_name`, consulted at submit time to override the typed name. Aliases persist across nights on purpose (a regular keeps their chosen name — `device_id` is stable per browser, so there's no cross-night id-reuse hazard).
+- **Singer self-service:** an **"edit name"** affordance on the landing, search, and done screens opens the identity form pre-filled; saving calls `POST /sing/rename`, which rewrites the rotation entries + requests the device proves it owns (per-request `edit_token`, so nobody can rename someone else's songs) and records the alias. Their songs stay theirs — no re-split. The landing **"switch"** link (different person, same phone) now also `POST /sing/forget`s the alias so the previous singer's corrected name doesn't leak onto the new person.
+- **KJ-side:** the existing **Rename** and **Merge** singer actions now also persist. After rewriting the entries they call `SingStore.persist_rename(old, new)`, which aliases every device that submitted under the old name tonight and rewrites those requests' `singer_name` (so the 📱 session-provenance matching keeps working). Future submissions from that phone resolve to the new name automatically. Best-effort — an alias-write failure never fails the rename.
+- **Tests:** 10 new unit tests (`test_sing_store.py` — alias CRUD, `device_id` storage, `persist_rename` scoping/provenance) + a new `test_sing_rename.py` integration suite (16 tests: submit override, self-rename rewrites entry/request/alias, future-submission resolution, edit_token ownership enforcement, `/sing/forget`, KJ rename + merge persistence).
+
+---
+
 ## 2026-08-27 - Auto Order keeps "Being Made" tracks pinned at the bottom (v0.96.0)
 
 **Deploy:** backend (`auto_order.py`) → **requires `systemctl restart kj-controller`** (interrupts playback — deploy between songs).

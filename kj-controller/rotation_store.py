@@ -915,6 +915,53 @@ class RotationStore:
             left.add(new_name.strip().lower())
             self._set_left_singer_names(left)
 
+    def rename_singer_in_entries(self, old_name, new_name, entry_ids):
+        """Rename ``old_name`` → ``new_name`` within a SPECIFIC set of entries.
+
+        Like ``rename_singer`` but scoped to ``entry_ids`` (and tolerant of ids
+        that no longer exist — silently skipped rather than raising). Used by the
+        singer self-service rename (`/sing/rename`), where the device may only
+        rewrite the entries it proved ownership of via edit_token — never the
+        whole rotation. Case-insensitive match on ``old_name``; multi-singer
+        (singers_json) entries have only the matching name replaced, preserving
+        duet partners.
+        """
+        old_key = (old_name or "").strip().lower()
+        new_name = (new_name or "").strip()
+        if not old_key or not new_name or not entry_ids:
+            return
+        conn = self._get_conn()
+        for entry_id in entry_ids:
+            entry = self.get_entry(entry_id)
+            if entry is None:
+                continue
+            if entry.get("singers_json"):
+                try:
+                    names = json.loads(entry["singers_json"])
+                except (ValueError, TypeError):
+                    names = [entry["singer"]]
+                if not any((n or "").strip().lower() == old_key for n in names):
+                    continue
+                new_names = [
+                    new_name if (n or "").strip().lower() == old_key else n
+                    for n in names
+                ]
+                new_display = " & ".join(new_names)
+                conn.execute(
+                    "UPDATE rotation_entries "
+                    "SET singer = ?, singers_json = ?, updated_at = datetime('now', 'localtime') "
+                    "WHERE id = ?",
+                    (new_display, json.dumps(new_names), entry_id),
+                )
+            elif (entry["singer"] or "").strip().lower() == old_key:
+                conn.execute(
+                    "UPDATE rotation_entries "
+                    "SET singer = ?, updated_at = datetime('now', 'localtime') "
+                    "WHERE id = ?",
+                    (new_name, entry_id),
+                )
+        conn.commit()
+
     def merge_singers(self, source_name, target_name):
         """Merge source_name into target_name across all entries.
 

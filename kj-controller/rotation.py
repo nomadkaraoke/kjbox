@@ -319,6 +319,12 @@ class RotationManager:
         self.store.rename_singer(old_name, new_name)
         self._after_mutation()
 
+    def rename_singer_in_entries(self, old_name, new_name, entry_ids):
+        """Rename a singer within a specific set of entries (self-service scope)."""
+        self._before_mutation(f"Rename {old_name} → {new_name}")
+        self.store.rename_singer_in_entries(old_name, new_name, entry_ids)
+        self._after_mutation()
+
     def merge_singers(self, source_name, target_name):
         """Merge source singer into target across all entries."""
         self._before_mutation(f"Merge {source_name} → {target_name}")

@@ -4314,6 +4314,24 @@ def redo_rotation():
     return _undo_or_redo('redo')
 
 
+def _persist_singer_rename(old_name, new_name):
+    """Make a KJ rename/merge stick to future singer-portal submissions.
+
+    Renaming rotation entries alone is transient: the singer's device keeps
+    re-submitting their old typed name. Aliasing the device(s) that submitted
+    under ``old_name`` tonight means /sing/submit resolves them to ``new_name``
+    from now on. Best-effort — a failure here must never fail the rename itself.
+    """
+    store = getattr(current_app, 'sing_store', None)
+    if store is None:
+        return
+    try:
+        night_started = store.get_night_started_at()
+        store.persist_rename(old_name, new_name, night_started=night_started)
+    except Exception:
+        current_app.logger.exception("persist_singer_rename failed")
+
+
 @routes_bp.route('/rotation/singer/rename', methods=['POST'])
 def rename_singer_route():
     rotation = current_app.rotation
@@ -4326,6 +4344,7 @@ def rename_singer_route():
         return jsonify({"error": "old_name and new_name are required"}), 400
     try:
         rotation.rename_singer(old_name, new_name)
+        _persist_singer_rename(old_name, new_name)
         return _singer_action_response(rotation)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -4343,6 +4362,7 @@ def merge_singers_route():
         return jsonify({"error": "source_name and target_name are required"}), 400
     try:
         rotation.merge_singers(source, target)
+        _persist_singer_rename(source, target)
         return _singer_action_response(rotation)
     except Exception as e:
         return jsonify({"error": str(e)}), 500

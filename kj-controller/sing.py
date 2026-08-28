@@ -538,6 +538,7 @@ def submit():
 
     data = request.get_json(force=True, silent=True) or {}
     singer_name = (data.get("singer_name") or "").strip()
+    device_id = (data.get("device_id") or "").strip()[:64]
     phone = (data.get("phone") or "").strip()
     song_artist = (data.get("song_artist") or "").strip()
     song_title = (data.get("song_title") or "").strip()
@@ -552,6 +553,14 @@ def submit():
 
     if not singer_name:
         return jsonify({"error": "singer_name is required"}), 400
+    # Device alias override — a KJ or the singer themselves may have renamed this
+    # device's singer; the typed name (from the device's localStorage) is stale
+    # until they refresh, so the canonical name wins. Keeps a renamed singer from
+    # re-splitting into their old name every time they add another song.
+    if device_id:
+        canonical = store.get_alias(device_id)
+        if canonical:
+            singer_name = canonical
     # Phone is optional — KJs use it to text singers when they're up, but
     # singers can opt out. If supplied, the format must still parse so the
     # KJ doesn't waste time trying to dial garbage.
@@ -589,6 +598,7 @@ def submit():
         notes=notes,
         additional_singers=additional,
         user_agent=request.headers.get("User-Agent", "")[:500],
+        device_id=device_id or None,
     )
 
     auto_approved = False
@@ -1022,6 +1032,7 @@ def change_request(req_id):
         token=req["token"], additional_singers=req.get("additional_singers"),
         supersedes_request_id=req_id,
         user_agent=request.headers.get("User-Agent", "")[:500],
+        device_id=req.get("device_id"),
     )
     return jsonify({"success": True, "request": {
         **_public_request_view(new_req), "edit_token": new_req.get("edit_token")}})
@@ -1079,6 +1090,7 @@ def reorder_requests():
         source_type="reorder", source_ref=None,
         source_meta={"ordered_entry_ids": ordered_entry_ids},
         token=token,
+        device_id=first_req.get("device_id"),
     )
 
     # Auto-approve applies the singer's reorder immediately — it only shuffles
@@ -1101,6 +1113,140 @@ def reorder_requests():
         "request": _public_request_view(rr),
         "auto_approved": auto_approved,
     })
+
+
+_MAX_SINGER_NAME_LEN = 100
+
+
+@sing_bp.route("/rename", methods=["POST"])
+def rename_me():
+    """Singer renames THEMSELVES from the portal, persistently.
+
+    Unlike the landing "switch" (which forgets the device identity and starts
+    fresh), this keeps the device's ownership of its songs: it rewrites the
+    singer's name on the rotation entries + requests it proves ownership of (via
+    each request's edit_token), and records a device alias so EVERY future
+    submission from this device resolves to the new name too. That's what makes
+    the rename stick — the singer stops re-appearing under their old typed name.
+
+    Body: ``{new_name, device_id, items: [{id, edit_token}, ...]}``. ``items``
+    is the device's own request list (id + per-request secret) from localStorage;
+    an empty list is valid (a singer with no live songs still sets their alias
+    for future submissions).
+    """
+    store = getattr(current_app, "sing_store", None)
+    if store is None:
+        return jsonify({"error": "not_configured"}), 503
+
+    cfg = current_app.kj_config
+    if _rate_limit_exceeded(
+        _client_ip(request),
+        _safe_int(cfg.get("sing_rate_limit_per_ip"), 5),
+        _safe_int(cfg.get("sing_rate_limit_window_s"), 300),
+    ):
+        return jsonify({"error": "rate_limited"}), 429
+
+    token = _extract_token()
+    if not token or not _is_token_valid(store, token):
+        return jsonify({"error": "not_open"}), 403
+
+    data = request.get_json(silent=True) or {}
+    new_name = (data.get("new_name") or "").strip()
+    if not new_name:
+        return jsonify({"error": "new_name is required"}), 400
+    if len(new_name) > _MAX_SINGER_NAME_LEN:
+        return jsonify({"error": "new_name too long"}), 400
+    device_id = (data.get("device_id") or "").strip()[:64]
+    # A persistent rename is meaningless without the device id — the alias is
+    # what makes it stick to future submissions. The singer UI always sends one;
+    # reject the request rather than silently doing a one-off (non-sticky) rename.
+    if not device_id:
+        return jsonify({"error": "device_id is required"}), 400
+
+    items = data.get("items") or []
+    if not isinstance(items, list):
+        return jsonify({"error": "items must be a list"}), 400
+
+    rotation = getattr(current_app, "rotation", None)
+    # Group the entries we're allowed to rewrite by their current name so a
+    # duet name is replaced precisely (rename_singer_in_entries is case-
+    # insensitive on the old name). Only edit_token-verified, tonight, own-token
+    # requests count — a device can never rename someone else's entries.
+    entry_ids_by_old = {}
+    verified_request_ids = []
+    for it in items:
+        if not isinstance(it, dict):
+            continue
+        try:
+            rid = int(it.get("id"))
+        except (TypeError, ValueError):
+            continue
+        req = store.get_request(rid)
+        if req is None or req.get("token") != token or not _belongs_to_current_night(store, req):
+            continue
+        stored = req.get("edit_token") or ""
+        provided = it.get("edit_token") or ""
+        if not stored or not secrets.compare_digest(str(provided), str(stored)):
+            continue
+        verified_request_ids.append(rid)
+        old = (req.get("singer_name") or "").strip()
+        if (
+            old
+            and old.lower() != new_name.lower()
+            and req.get("status") == "approved"
+            and req.get("linked_entry_id")
+        ):
+            entry_ids_by_old.setdefault(old, []).append(req["linked_entry_id"])
+
+    # Rewrite the rotation entries the singer owns.
+    if rotation is not None:
+        for old, eids in entry_ids_by_old.items():
+            try:
+                rotation.rename_singer_in_entries(old, new_name, eids)
+            except Exception:
+                current_app.logger.exception("self-rename: entry rewrite failed")
+
+    # Rewrite the verified requests' stored name (keeps provenance + the done
+    # screen consistent, and means a pending request is approved under the new
+    # name).
+    for rid in verified_request_ids:
+        try:
+            store.update_request(rid, singer_name=new_name)
+        except Exception:
+            current_app.logger.exception("self-rename: request rewrite failed")
+
+    # Alias the device so future submissions resolve to the new name even before
+    # the singer's localStorage catches up. The singer's own choice always wins
+    # over any earlier KJ-set alias for this device. Best-effort — the entry and
+    # request rewrites above already succeeded, so an alias-write failure must
+    # not turn the whole rename into a 500.
+    try:
+        store.set_alias(device_id, new_name)
+    except Exception:
+        current_app.logger.exception("self-rename: alias write failed")
+
+    return jsonify({"success": True, "new_name": new_name})
+
+
+@sing_bp.route("/forget", methods=["POST"])
+def forget_me():
+    """Drop this device's canonical-name alias.
+
+    Called when a device declares a NEW identity via the landing "switch" link —
+    a different person on the same phone must not inherit the previous singer's
+    KJ-corrected name. Best-effort; always 204 so the client never blocks on it.
+    """
+    store = getattr(current_app, "sing_store", None)
+    if store is None:
+        return ("", 204)
+    data = request.get_json(silent=True) or {}
+    device_id = (data.get("device_id") or "").strip()[:64]
+    if device_id:
+        try:
+            store.clear_alias(device_id)
+        except Exception:
+            current_app.logger.exception("forget_me: clear_alias failed")
+    return ("", 204)
 
 
 # --- Response shaping ----------------------------------------------------
