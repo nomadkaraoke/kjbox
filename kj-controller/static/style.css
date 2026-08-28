@@ -2172,14 +2172,6 @@ body {
 .sys-stat-spark-bar.temp-hot { background: #ef4444; }
 .sys-stat-value.temp-warm { color: #f59e0b; }
 .sys-stat-value.temp-hot { color: #ef4444; }
-.sys-temp-note {
-    font-size: 0.6em;
-    color: #666;
-    margin-top: 6px;
-    letter-spacing: 0.3px;
-}
-.sys-temp-note.temp-ok { color: #4ade80; }
-.sys-temp-note.temp-warn { color: #f59e0b; }
 
 /* --- Performance Monitor panel --- */
 .perf-header {

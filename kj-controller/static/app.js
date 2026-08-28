@@ -4750,14 +4750,12 @@ const SPARK_MAX = 30;
 const cpuHistory = [];
 const memHistory = [];
 const ambientHistory = [];
-const ssdHistory = [];
 
-// Temperature thresholds (Celsius) for coloring the graphs. Ambient is a
-// motherboard/room proxy; the 4TB USB SSD is a SanDisk NVMe that throttles up
-// near 70C+.
+// Temperature thresholds (Celsius) for coloring the graph. Ambient is a
+// motherboard/room proxy. (The 4TB USB SSD temp graph was removed in v0.95.0:
+// the smartctl polling behind it hung the drive's USB bridge firmware.)
 const TEMP_SCALE = {
     ambient: { min: 15, max: 55, warn: 40, crit: 50 },
-    ssd:     { min: 20, max: 80, warn: 60, crit: 70 },
 };
 
 async function fetchSystemStats() {
@@ -4798,11 +4796,8 @@ async function fetchSystemStats() {
         renderSparkline('stat-cpu-spark', cpuHistory, '');
         renderSparkline('stat-mem-spark', memHistory, 'spark-mem');
 
-        // Temperatures (Ambient + 4TB USB SSD) — each its own graph. Rows hide
-        // when their sensor isn't present (e.g. no USB SSD attached).
+        // Ambient temperature graph. Row hides when the sensor isn't present.
         updateTempRow('ambient', 'stat-ambient', ambientHistory, d.ambient_temp_c);
-        updateTempRow('ssd', 'stat-ssd', ssdHistory, d.ssd_temp_c);
-        updateTempNote(d);
     } catch (_) {}
 }
 
@@ -4845,30 +4840,6 @@ function renderTempSparkline(id, data, sc) {
         const ago = (data.length - 1 - i) * 5;
         bar.title = Math.round(val) + '°C (' + (ago === 0 ? 'now' : ago + 's ago') + ')';
     });
-}
-
-// Reassurance line driven by the SSD's lifetime SMART over-temp counters.
-function updateTempNote(d) {
-    const note = document.getElementById('sys-temp-note');
-    if (!note) return;
-    const warnMin = d.ssd_warning_time_min;
-    const critMin = d.ssd_critical_time_min;
-    note.classList.remove('temp-ok', 'temp-warn');
-    // Show the note if the drive reported either lifetime counter.
-    const haveWarn = warnMin !== undefined && warnMin !== null;
-    const haveCrit = critMin !== undefined && critMin !== null;
-    if (!haveWarn && !haveCrit) {
-        note.textContent = '';
-        return;
-    }
-    if ((warnMin || 0) === 0 && (critMin || 0) === 0) {
-        note.classList.add('temp-ok');
-        note.textContent = '✓ 4TB SSD has never exceeded its safe temperature (0 min over warning, lifetime)';
-    } else {
-        note.classList.add('temp-warn');
-        note.textContent = '⚠ 4TB SSD lifetime over-temp: ' + (warnMin || 0)
-            + ' min over warning, ' + (critMin || 0) + ' min over critical';
-    }
 }
 
 function renderSparkline(id, data, cls) {

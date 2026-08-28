@@ -4,6 +4,18 @@ Dated entries, newest first. Each entry notes any required deploy steps.
 
 ---
 
+## 2026-08-27 - Remove 4TB SSD smartctl temp polling — it hung the drive mid-show (v0.95.0)
+
+**Deploy:** backend (`routes.py`) + frontend (`app.js`, `style.css`, `templates/index.html`) → **requires `systemctl restart kj-controller`** (deploy between songs via the Update button; mpv playback survives the restart).
+
+- **Why:** during a live show (2026-08-27, ~21:03), the 4TB SanDisk Extreme Pro dropped to "medium not present" / 0 capacity 11 minutes after waking from sleep mode, killing local-media playback (`POST /play` → 400 "Invalid or inaccessible file path"). Software resets (UAS unbind/rebind, xHCI PCI reset) couldn't recover it — only a physical unplug/replug did. The trigger: v0.94.0's SSD temperature polling ran `sudo smartctl -j -x -d sntasmedia /dev/sda` every ~20s while the Stats panel was open; NVMe admin passthrough via the drive's internal ASMedia bridge is known to hang that firmware, and this was the polling's first sustained run (it shipped 5 minutes before the device entered a 5-day sleep).
+- **What changed:** removed `_find_usb_ssd_device` / `_read_usb_ssd_temp` and the `ssd_temp_c` / `ssd_warning_time_min` / `ssd_critical_time_min` fields from `GET /system/stats`; removed the "4TB SSD" graph row and lifetime over-temp note from the Stats panel. The ambient (ACPI) temperature graph stays — it never touches the drive.
+- **Do not reintroduce** smartctl/NVMe-passthrough polling against this drive. If drive temperature monitoring is ever wanted again, it needs a bridge-safe approach verified against this exact bridge off-show.
+- **Tests:** `test_routes_system_stats.py` rewritten — ambient coverage kept, plus a regression guard that the `ssd_*` fields and helpers stay gone.
+- Full incident writeup: [docs/TROUBLESHOOTING.md § 4TB USB SSD drops offline](../../docs/TROUBLESHOOTING.md#4tb-usb-ssd-drops-offline-medium-not-present--0-capacity).
+
+---
+
 ## 2026-08-21 - Singer-cancelled rows auto-remove (no Dismiss click) (v0.93.0)
 
 **Deploy:** frontend only (`static/app.js`, `static/style.css`) → **no service restart** (takes effect on next browser refresh; version bump busts the `app.js?v=` cache).

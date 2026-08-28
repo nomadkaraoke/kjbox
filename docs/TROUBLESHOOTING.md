@@ -205,6 +205,36 @@ ssh nomadpc "curl -s -X POST http://127.0.0.1:5001/fix_audio -H 'Content-Type: a
 Track A auto-recovery (v0.68.0+) auto-restarts the engine and shows the KJ an amber banner if a
 file still crashes it, so a crash is a ~2s blip rather than a dead show.
 
+## 4TB USB SSD Drops Offline (Medium Not Present / 0 Capacity)
+
+**Symptoms:**
+- Local-media plays fail with `POST /play` → 400 "Invalid or inaccessible file path" while
+  YouTube/internal-NVMe files still play fine.
+- The drive still shows as mounted, but any file access returns `Input/output error`.
+- `ssh nomadpc 'sudo dmesg -T | grep sda'` shows `Sense Key : Not Ready ... Medium not present`
+  and EXT4 errors; eventually `Aborting journal on device sda1-8`.
+- After a USB reset, `lsblk` shows `sda 0B` — the bridge enumerates but reports zero capacity.
+
+**Cause (2026-08-27 incident):** the SanDisk Extreme Pro's internal ASMedia USB-NVMe bridge
+firmware hung. Trigger was v0.94.0's SSD temperature polling (`smartctl -d sntasmedia` NVMe
+admin passthrough every ~20s while the Stats panel was open) — that passthrough is known to hang
+ASMedia bridge firmware. The polling was removed in v0.95.0; **do not reintroduce smartctl
+polling against this drive**.
+
+**Fix — only a physical power cycle recovers it:**
+1. Unplug the SSD's USB cable from the NomadPC, wait ~10 seconds, plug it back in.
+2. The drive auto-mounts and ext4 journal recovery runs on mount (check
+   `sudo dmesg -T | tail` for `recovery complete`). No fsck needed — the errors are clean read
+   failures from the hang, not corruption.
+3. Verify: `df -h /media/nomad/Nomad4TBOne` shows 3.6T, and a file reads end-to-end.
+
+**What does NOT work** (tried during the incident): `umount` + USB unbind/rebind
+(`/sys/bus/usb/drivers/usb/{unbind,bind}`), xHCI PCI unbind/rebind, `uhubctl` (no per-port
+power switching on this board), SCSI device delete + rescan. The bridge re-enumerates each time
+but keeps reporting 0 blocks because VBUS never drops. Note: if the whole xHCI controller
+(`0000:00:0d.0`) vanishes from PCI after an unplug (D3cold), `echo 1 | sudo tee
+/sys/bus/pci/rescan` brings it back.
+
 ## Singer Submission Shows "Unavailable" or Auto-Swapped Version
 
 A singer submitted a song through the `/sing` UI and it either quietly played a **different
