@@ -4,6 +4,19 @@ Dated entries, newest first. Each entry notes any required deploy steps.
 
 ---
 
+## 2026-08-28 - Bump singers/entries up or down in Auto Order (v0.99.0)
+
+**Deploy:** backend (`rotation_store.py`, `rotation.py`, `auto_order.py`, `routes.py`) + frontend (`static/app.js`, `static/style.css`) → **requires `systemctl restart kj-controller`** (backend change; deploy between songs). Additive SQLite migration runs on boot (new `rotation_entries.priority_bias` column, default `0`) — no manual step.
+
+- **Why:** the KJ had no way to tell Auto Order "put this person higher/lower than fairness alone would." The `paid ♥` flag is a display badge only — it was never read by the weave. KJs need to bump a hyped-up regular up, or gently push a repeat-hogger down, and have it *stick* every time Auto Order re-runs.
+- **What changed:** a new per-entry **`priority_bias`** (tri-state: bump up `+1` / normal `0` / bump down `-1`). Auto Order (`auto_order.py`) reads it as a strong scoring term (`w_priority_bias = 8000`) that dominates every soft factor (fairness, wait, overdue, new-singer, stickiness, spacing-preference) but stays far below the back-to-back veto — so a bump can **never** force the same singer to sing twice in a row, and it never overrides the sacred locked head (rows 1–3) or the "being made" bottom-pin.
+- **Auto-applies:** setting a bump immediately re-runs Auto Order (via the shared `_auto_order_response`) so the queue visibly re-weaves. The bias set + re-weave collapse into a **single Undo** (`reorder_by_ids(..., checkpoint=False)` under one pre-bump checkpoint).
+- **UI:** a ⬆/⬇ badge next to the paid heart on any bumped row; a **Bump Up / Normal / Bump Down** section in the rotation entry "…" menu; and a **Priority** control in the per-singer actions that biases *all* of a singer's entries at once.
+- **Endpoints:** `POST /rotation/set-priority {id, bias}` and `POST /rotation/singer/priority {name, bias}` (bias ∈ {-1, 0, 1}); both return the standard re-weave payload.
+- **Tests:** 7 store unit tests (set/clamp/singer-scope/`singers_json` member/restore round-trip), 5 auto-order unit tests (bump up lifts, bump down sinks, veto still wins, being-made pin holds, view parsing), and 10 route integration tests (persist + re-weave, single-undo, bias validation incl. boolean rejection, 404/503, singer-scope).
+
+---
+
 ## 2026-08-28 - Merging singers unifies their identity so self-rename doesn't re-split (v0.98.0)
 
 **Deploy:** backend (`sing.py`, `sing_store.py`, `routes.py`) → **requires `systemctl restart kj-controller`** (backend change; deploy between songs). Additive SQLite migration runs on boot (new `singer_aliases.origin` column, defaults `'self'`) — no manual step.

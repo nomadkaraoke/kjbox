@@ -83,6 +83,13 @@ class AutoOrderConfig:
     w_overdue: float = 450.0    # per overdue step: a singer waiting well past the
                                 # max can leapfrog even new singers for ONE song
                                 # (then their wait resets and they drop back)
+    w_priority_bias: float = 8000.0  # KJ manual bump up/down (per-entry priority_bias
+                                # of +1/-1). Deliberately dominates every SOFT term above
+                                # (fairness 160, wait <=96, overdue <=1350, new-singer 400,
+                                # bump-top5 6000) so a bump wins — but stays far below the
+                                # back-to-back veto (100000), so it can never force the same
+                                # singer twice in a row. Does not override the locked head or
+                                # the "being made" pin (both decided before scoring).
 
     # Wait pressure keeps growing past max_wait_minutes (up to this multiple) so an
     # egregious 2.5-hour wait outranks a merely-long one instead of both capping out.
@@ -120,6 +127,9 @@ class EntryView:
     being_made: bool = False         # track is still being generated ("Being Made") —
                                      # pinned to the very bottom and held out of the
                                      # fair weave until the KJ flips it back to Waiting.
+    priority_bias: int = 0           # KJ manual bump: +1 up, -1 down, 0 normal. Adds a
+                                     # strong scoring term so the weave leans this entry
+                                     # earlier/later (never overriding the back-to-back veto).
 
     def __post_init__(self):
         if not self.members:
@@ -202,6 +212,7 @@ def build_entry_views(entries):
             members=members,
             duration=e.get("duration"),
             being_made=being_made,
+            priority_bias=int(e.get("priority_bias") or 0),
         ))
     return views
 
@@ -492,7 +503,13 @@ def _score(e, slot, member_slots, time_ahead, member_last_time, config):
             deficit = (config.spread_target + 1 - dist) / float(config.spread_target)
             spacing = -config.w_spacing * deficit
 
-    return fairness + promote + wait + overdue + stick + spacing
+    # KJ manual bump: a strong, flat lean toward the front (+1) or back (-1). It
+    # dominates every soft term above so the KJ's intent wins, but since it's well
+    # below w_back_to_back, a bumped-up singer still yields rather than sing twice
+    # in a row (the -w_back_to_back spacing term cancels it out).
+    bias = config.w_priority_bias * e.priority_bias
+
+    return fairness + promote + wait + overdue + stick + spacing + bias
 
 
 def _reason_for(e, new_idx, config, locked_region):

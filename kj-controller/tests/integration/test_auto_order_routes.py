@@ -103,6 +103,73 @@ class TestAutoReorderTrigger:
         assert resp.get_json()["success"] is True
 
 
+class TestSetPriorityEndpoint:
+    def test_bump_up_persists_and_reweaves(self, app, client):
+        new_id = _seed_veterans_then_newbie(app)
+        # A veteran's queued song sitting low in the queue.
+        low = app.rotation.get_rotation()[-2]["id"]
+        resp = client.post("/rotation/set-priority", json={"id": low, "bias": 1})
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["success"] is True
+        # The bias persisted on the entry...
+        biased = next(e for e in data["entries"] if e["id"] == low)
+        assert biased["priority_bias"] == 1
+        # ...and the response carries the standard re-weave payload.
+        assert "singer_stats" in data and "history" in data and "rev" in data
+
+    def test_bump_up_is_a_single_undoable_step(self, app, client):
+        _seed_veterans_then_newbie(app)
+        low = app.rotation.get_rotation()[-2]["id"]
+        client.post("/rotation/set-priority", json={"id": low, "bias": 1})
+        # One undo clears the bias (part of the same checkpoint).
+        app.rotation.undo()
+        assert app.rotation.store.get_entry(low)["priority_bias"] == 0
+
+    def test_rejects_bad_bias(self, client):
+        resp = client.post("/rotation/set-priority", json={"id": 1, "bias": 2})
+        assert resp.status_code == 400
+
+    def test_rejects_boolean_bias(self, client):
+        resp = client.post("/rotation/set-priority", json={"id": 1, "bias": True})
+        assert resp.status_code == 400
+
+    def test_missing_id(self, client):
+        resp = client.post("/rotation/set-priority", json={"bias": 1})
+        assert resp.status_code == 400
+
+    def test_unknown_entry_is_404(self, app, client):
+        app.rotation.add_entry("Solo", "s")  # ensure rotation is configured
+        resp = client.post("/rotation/set-priority", json={"id": 99999, "bias": 1})
+        assert resp.status_code == 404
+
+    def test_503_when_rotation_absent(self, app, client):
+        app.rotation = None
+        resp = client.post("/rotation/set-priority", json={"id": 1, "bias": 1})
+        assert resp.status_code == 503
+
+
+class TestSingerPriorityEndpoint:
+    def test_biases_every_entry_for_the_singer(self, app, client):
+        r = app.rotation
+        a1 = r.add_entry("Dave", "one")
+        a2 = r.add_entry("Dave", "two")
+        r.add_entry("Erin", "e")
+        resp = client.post("/rotation/singer/priority", json={"name": "Dave", "bias": -1})
+        assert resp.status_code == 200
+        assert r.store.get_entry(a1["id"])["priority_bias"] == -1
+        assert r.store.get_entry(a2["id"])["priority_bias"] == -1
+
+    def test_requires_name(self, client):
+        resp = client.post("/rotation/singer/priority", json={"bias": 1})
+        assert resp.status_code == 400
+
+    def test_rejects_bad_bias(self, app, client):
+        app.rotation.add_entry("Dave", "one")
+        resp = client.post("/rotation/singer/priority", json={"name": "Dave", "bias": 7})
+        assert resp.status_code == 400
+
+
 class TestAutoReorderConfig:
     def test_get_config_exposes_auto_reorder_default_off(self, client):
         resp = client.get("/rotation/requests/config")

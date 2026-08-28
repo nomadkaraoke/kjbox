@@ -5722,6 +5722,16 @@ function renderRotation(entries) {
             heart.title = 'This singer tipped tonight \u2014 paid priority';
             info.appendChild(heart);
         }
+        if (entry.priority_bias > 0 || entry.priority_bias < 0) {
+            const up = entry.priority_bias > 0;
+            const badge = document.createElement('span');
+            badge.className = 'rotation-priority-badge ' + (up ? 'up' : 'down');
+            badge.textContent = up ? ' \u2b06' : ' \u2b07';
+            badge.title = up
+                ? 'Bumped up in Auto Order'
+                : 'Bumped down in Auto Order';
+            info.appendChild(badge);
+        }
         if (entry.song_artist) info.appendChild(song);
 
         // Tier-2 render-verification flag: the linked file passed the inline
@@ -6040,6 +6050,27 @@ function renderRotation(entries) {
                 }
             };
             dropdown.appendChild(paidItem);
+            // Auto Order priority bump (tri-state): bump up / normal / bump down.
+            const prioSep = document.createElement('div');
+            prioSep.className = 'rotation-dropdown-sep';
+            dropdown.appendChild(prioSep);
+            const curBias = entry.priority_bias || 0;
+            [
+                { bias: 1, label: 'Bump Up ⬆' },
+                { bias: 0, label: 'Normal' },
+                { bias: -1, label: 'Bump Down ⬇' },
+            ].forEach(opt => {
+                const item = document.createElement('button');
+                item.className = 'rotation-dropdown-item';
+                item.textContent = (opt.bias === curBias ? '✓ ' : '') + opt.label;
+                if (opt.bias === curBias) item.disabled = true;
+                item.onclick = async (ev) => {
+                    ev.stopPropagation();
+                    dropdown.remove();
+                    await setRotationPriority(entry.id, opt.bias);
+                };
+                dropdown.appendChild(item);
+            });
             row.appendChild(dropdown);
             const close = () => { dropdown.remove(); document.removeEventListener('click', close); };
             setTimeout(() => document.addEventListener('click', close), 0);
@@ -6418,6 +6449,38 @@ function buildSingerActions(actions, singer, row) {
             : 'Singer stepped away \u2014 hold all their songs until they return';
         brbBtn.onclick = () => singerAction('brb', { name: singer.name, brb: singer.status !== 'brb' });
         actions.appendChild(brbBtn);
+
+        // Priority bump: opens a tri-state menu that biases ALL this singer's
+        // entries up/down and re-weaves Auto Order.
+        const prioBtn = document.createElement('button');
+        prioBtn.className = 'singer-stats-btn';
+        prioBtn.textContent = 'Priority';
+        prioBtn.title = 'Bump all this singer’s songs up or down in Auto Order';
+        prioBtn.onclick = (e) => {
+            e.stopPropagation();
+            document.querySelectorAll('.rotation-dropdown').forEach(d => d.remove());
+            const dropdown = document.createElement('div');
+            dropdown.className = 'rotation-dropdown';
+            [
+                { bias: 1, label: 'Bump Up ⬆' },
+                { bias: 0, label: 'Normal' },
+                { bias: -1, label: 'Bump Down ⬇' },
+            ].forEach(opt => {
+                const item = document.createElement('button');
+                item.className = 'rotation-dropdown-item';
+                item.textContent = opt.label;
+                item.onclick = (ev) => {
+                    ev.stopPropagation();
+                    dropdown.remove();
+                    singerAction('priority', { name: singer.name, bias: opt.bias });
+                };
+                dropdown.appendChild(item);
+            });
+            row.appendChild(dropdown);
+            const close = () => { dropdown.remove(); document.removeEventListener('click', close); };
+            setTimeout(() => document.addEventListener('click', close), 0);
+        };
+        actions.appendChild(prioBtn);
     }
 
     const leftBtn = document.createElement('button');
@@ -7852,6 +7915,34 @@ async function autoOrderRotation() {
         if (data.history) rotationHistory.updateButtons(data.history);
         showRotationIndicator('success');
         log(data.changed ? 'Auto Order applied.' : 'Auto Order: already in order.', 'success');
+    } catch (e) {
+        showRotationIndicator('error');
+    }
+}
+
+// Set the Auto Order bump (priority bias) on one entry. The backend applies the
+// bias then re-runs Auto Order, returning the same payload shape as autoOrderRotation.
+async function setRotationPriority(entryId, bias) {
+    showRotationIndicator('spin');
+    try {
+        const response = await fetch('/rotation/set-priority', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: entryId, bias }),
+        });
+        const data = await response.json();
+        if (!response.ok || data.success === false) {
+            showRotationIndicator('error');
+            log('Priority change failed: ' + (data.error || 'unknown error'), 'error');
+            return;
+        }
+        if (data.entries) {
+            rotationData = data.entries;
+            renderRotation(rotationData);
+            if (data.singer_stats) renderSingerStats(data.singer_stats);
+        }
+        if (data.history) rotationHistory.updateButtons(data.history);
+        showRotationIndicator('success');
     } catch (e) {
         showRotationIndicator('error');
     }

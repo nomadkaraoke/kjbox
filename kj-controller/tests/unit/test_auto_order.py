@@ -534,3 +534,80 @@ def test_output_is_deterministic_and_non_mutating():
     assert r1.ordered_ids == r2.ordered_ids
     # Pure function: the input entries are not mutated in order OR field values.
     assert snapshot(before) == before_state
+
+
+# ---------------------------------------------------------------------------
+# Priority bias — KJ manual bump up / down
+# ---------------------------------------------------------------------------
+
+def test_bump_up_lifts_a_mid_queue_singer():
+    # Everyone equally fair/waiting; without a bump the order is stable. Bumping the
+    # last singer up must lift them above their un-bumped peers (out of the frozen
+    # head, which is rows 1-5 by default).
+    before = _mk([
+        ("A", 1, 5, "a"), ("B", 1, 5, "b"), ("C", 1, 5, "c"),
+        ("D", 1, 5, "d"), ("E", 1, 5, "e"), ("F", 1, 5, "f"),
+        ("G", 1, 5, "g"), ("H", 1, 5, "h"),
+    ])
+    baseline = compute_auto_order(before).ordered_ids
+    assert baseline.index(8) > 5  # H sits low without a bump
+    before[7].priority_bias = 1   # bump H up
+    order = compute_auto_order(before).ordered_ids
+    assert order.index(8) < baseline.index(8)   # H rose
+    assert order.index(8) == 5                   # lands at the first free (post-head) slot
+
+
+def test_bump_down_sinks_an_otherwise_fair_singer():
+    # New (0 sung) is the fairest, so in the free region (rows 6+) it normally floats
+    # to the first open slot; bumping New down must drop it to the very tail instead.
+    before = _mk([
+        ("A", 1, 5, "a"), ("B", 1, 5, "b"), ("C", 1, 5, "c"),
+        ("D", 1, 5, "d"), ("E", 1, 5, "e"),   # frozen head (rows 1-5)
+        ("F", 1, 5, "f"), ("G", 1, 5, "g"), ("New", 0, 5, "n"),  # free region
+    ])
+    baseline = compute_auto_order(before).ordered_ids
+    assert baseline.index(8) == 5   # New normally floats to the first free slot
+    before[7].priority_bias = -1    # bump New down
+    order = compute_auto_order(before).ordered_ids
+    assert order.index(8) == len(order) - 1   # New sinks to the very bottom
+
+
+def test_bump_up_never_forces_a_back_to_back():
+    # Anya has two entries, both bumped up hard. The veto must still prevent her two
+    # songs landing adjacent — other free-region singers get woven between them.
+    before = _mk([
+        ("Andrew", 1, 5, "x"), ("Bob", 1, 5, "b"), ("Cara", 1, 5, "c"),
+        ("Dan", 1, 5, "d"), ("Ed", 1, 5, "e"),   # frozen head
+        ("Anya", 0, 5, "a1"), ("Fred", 1, 5, "f"),
+        ("Anya", 0, 5, "a2"), ("Gwen", 1, 5, "g"),
+    ])
+    before[5].priority_bias = 1
+    before[7].priority_bias = 1
+    order = compute_auto_order(before).order
+    for i in range(1, len(order)):
+        assert not (set(order[i].members) & set(order[i - 1].members))
+
+
+def test_bump_does_not_disturb_being_made_pin():
+    # A bumped-up "being made" entry is still held at the very bottom — the pin is
+    # structural (decided before scoring), so the bias can't lift it into the weave.
+    before = _mk([
+        ("A", 1, 5, "a"), ("B", 1, 5, "b"), ("C", 1, 5, "c"),
+        ("M", 0, 5, "m"),
+    ])
+    before[3].being_made = True
+    before[3].priority_bias = 1
+    order = compute_auto_order(before).ordered_ids
+    assert order[-1] == 4   # M stays pinned at the bottom despite the bump-up
+
+
+def test_build_entry_views_reads_priority_bias():
+    entries = [
+        {"id": 1, "singer": "A", "song_artist": "a", "priority_bias": 1},
+        {"id": 2, "singer": "B", "song_artist": "b", "priority_bias": -1},
+        {"id": 3, "singer": "C", "song_artist": "c"},  # missing -> 0
+    ]
+    views = build_entry_views(entries)
+    assert views[0].priority_bias == 1
+    assert views[1].priority_bias == -1
+    assert views[2].priority_bias == 0

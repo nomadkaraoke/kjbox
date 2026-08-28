@@ -135,7 +135,7 @@ class RotationManager:
         self.store.move_entry(entry_id, new_position)
         self._after_mutation()
 
-    def reorder_by_ids(self, ordered_ids, label="Auto Order"):
+    def reorder_by_ids(self, ordered_ids, label="Auto Order", checkpoint=True):
         """Apply a computed reordering of the visible queue as one undoable step.
 
         ``ordered_ids`` is the new order for the entries it names; they keep the set
@@ -143,6 +143,10 @@ class RotationManager:
         once so a single Undo reverts the whole reorder. Returns True if anything
         changed (no checkpoint/rev-bump when it's already in order — avoids polluting
         the undo stack when Auto Order is a no-op).
+
+        ``checkpoint=False`` skips the undo checkpoint — used when the caller has
+        already checkpointed a wider action (e.g. a priority bump that both sets the
+        bias AND re-weaves, so the whole thing is a single Undo).
         """
         # Peek without mutating: only checkpoint if the order actually changes, so a
         # no-op Auto Order doesn't pollute the undo stack.
@@ -150,7 +154,8 @@ class RotationManager:
         target = [i for i in ordered_ids if i in set(current)]
         if target == current:
             return False
-        self._before_mutation(label)
+        if checkpoint:
+            self._before_mutation(label)
         changed = self.store.reorder_by_ids(ordered_ids)
         if changed:
             self._after_mutation()
@@ -225,6 +230,25 @@ class RotationManager:
         entry = self.store.set_paid(entry_id, paid)
         self._after_mutation()
         return entry
+
+    @staticmethod
+    def _bias_label(bias):
+        """Undo-stack label for a priority change."""
+        b = RotationStore._coerce_bias(bias)
+        return "Bump up" if b > 0 else "Bump down" if b < 0 else "Reset priority"
+
+    def set_priority_bias(self, entry_id, bias):
+        """Set the Auto Order priority bias (bump up/down) on a single entry."""
+        self._before_mutation(self._bias_label(bias))
+        entry = self.store.set_priority_bias(entry_id, bias)
+        self._after_mutation()
+        return entry
+
+    def set_singer_priority_bias(self, name, bias):
+        """Set the priority bias on every non-done entry for a singer."""
+        self._before_mutation(f"{self._bias_label(bias)}: {name}")
+        self.store.set_singer_priority_bias(name, bias)
+        self._after_mutation()
 
     def complete_gen_job(self, job_id, file_path):
         """Called by gen poller when a gen job completes and file is downloaded."""
@@ -407,6 +431,7 @@ class RotationManager:
                     "song_artist": e["song_artist"],
                     "status": e["status"],
                     "paid": bool(e["paid"]),
+                    "priority_bias": e["priority_bias"],
                 }
                 for e in entries
             ]

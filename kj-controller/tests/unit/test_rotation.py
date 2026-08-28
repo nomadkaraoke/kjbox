@@ -291,7 +291,7 @@ class TestDisplayCache:
         with open(cache_file) as f:
             data = json.load(f)
         entry = data["queue"][0]
-        assert set(entry.keys()) == {"singer", "song_artist", "status", "paid"}
+        assert set(entry.keys()) == {"singer", "song_artist", "status", "paid", "priority_bias"}
 
     def test_cache_updated_after_status_change(self, tmp_path):
         cache_file = str(tmp_path / "rotation_cache.json")

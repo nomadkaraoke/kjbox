@@ -3507,7 +3507,7 @@ def move_rotation_entry():
         return jsonify({"error": str(e)}), 500
 
 
-def run_auto_order(app, label="Auto Order"):
+def run_auto_order(app, label="Auto Order", checkpoint=True):
     """Re-run the visible rotation through Auto Order and apply it.
 
     Pure algorithm in ``auto_order.py``; this glue decorates the current queue
@@ -3515,6 +3515,10 @@ def run_auto_order(app, label="Auto Order"):
     computes the new order, and applies it as one undoable step. Returns the
     ``AutoOrderResult`` (or ``None`` if rotation isn't configured). Applying is a
     no-op — and skipped — when the queue is already in order.
+
+    ``checkpoint=False`` re-weaves without its own undo checkpoint — used by the
+    priority-bump path, which checkpoints the pre-bump state itself so the bias set
+    + re-weave collapse into a single Undo.
 
     Shared by the on-demand ``/rotation/auto-order`` button and the automatic
     on-new-entry trigger. Best-effort for the auto path: the caller wraps it so a
@@ -3529,7 +3533,7 @@ def run_auto_order(app, label="Auto Order"):
     _decorate_rotation_entries(entries, rotation)
     views = build_entry_views(entries)
     result = compute_auto_order(views)
-    rotation.reorder_by_ids(result.ordered_ids, label=label)
+    rotation.reorder_by_ids(result.ordered_ids, label=label, checkpoint=checkpoint)
     return result
 
 
@@ -3551,6 +3555,34 @@ def maybe_auto_reorder(app):
         app.logger.exception("auto-reorder after new entry failed")
 
 
+def _auto_order_response(app, checkpoint=True):
+    """Re-run Auto Order and build the standard rotation response payload.
+
+    Shared by the on-demand Auto Order button and the bump-priority endpoints,
+    which all want the same thing: re-weave the visible queue (one undoable step)
+    and return the freshly decorated entries + singer stats + rev + history so the
+    UI re-renders identically. Returns a JSON-ready dict.
+
+    ``checkpoint=False`` re-weaves without adding its own undo entry — the priority
+    endpoints already checkpointed the pre-bump state, so the bias set + re-weave
+    are a single Undo.
+    """
+    result = run_auto_order(app, checkpoint=checkpoint)
+    rotation = app.rotation
+    entries = rotation.get_rotation()
+    _decorate_rotation_entries(entries, rotation)
+    singer_stats = rotation.get_singer_stats()
+    _add_last_sang_to_singer_stats(singer_stats, rotation)
+    return {
+        "success": True,
+        "changed": bool(result and result.changed),
+        "entries": entries,
+        "singer_stats": singer_stats,
+        "rev": rotation.store.get_rev(),
+        "history": rotation.history_status(),
+    }
+
+
 @routes_bp.route('/rotation/auto-order', methods=['POST'])
 def auto_order_rotation():
     """On-demand Auto Order: reorder the visible queue for fairness + spacing.
@@ -3561,20 +3593,7 @@ def auto_order_rotation():
     if not hasattr(current_app, 'rotation') or current_app.rotation is None:
         return jsonify({"error": "Rotation not configured"}), 503
     try:
-        result = run_auto_order(current_app._get_current_object())
-        rotation = current_app.rotation
-        entries = rotation.get_rotation()
-        _decorate_rotation_entries(entries, rotation)
-        singer_stats = rotation.get_singer_stats()
-        _add_last_sang_to_singer_stats(singer_stats, rotation)
-        return jsonify({
-            "success": True,
-            "changed": bool(result and result.changed),
-            "entries": entries,
-            "singer_stats": singer_stats,
-            "rev": rotation.store.get_rev(),
-            "history": rotation.history_status(),
-        })
+        return jsonify(_auto_order_response(current_app._get_current_object()))
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -4176,6 +4195,55 @@ def set_rotation_paid():
         return jsonify({"error": str(e)}), 500
 
 
+def _parse_bias(data):
+    """Extract + validate a priority ``bias`` field from a request body.
+
+    Returns ``(bias, None)`` on success or ``(None, (payload, status))`` on error.
+    Accepts only the tri-state -1 / 0 / 1 (bump down / normal / bump up).
+    """
+    raw = data.get('bias')
+    if not isinstance(raw, int) or isinstance(raw, bool) or raw not in (-1, 0, 1):
+        return None, ({"error": "bias must be one of -1, 0, 1"}, 400)
+    return raw, None
+
+
+@routes_bp.route('/rotation/set-priority', methods=['POST'])
+def set_rotation_priority():
+    """Set the Auto Order bump (priority bias) on a single entry, then re-weave.
+
+    ``{id, bias}`` — bias is -1 (bump down) / 0 (normal) / 1 (bump up). Applying
+    immediately re-runs Auto Order as one undoable step so the queue visibly
+    reorders, and returns the standard rotation payload for the UI to re-render.
+    """
+    rotation = current_app.rotation
+    if not hasattr(current_app, 'rotation') or current_app.rotation is None:
+        return jsonify({"error": "Rotation not configured"}), 503
+    data = request.get_json(force=True)
+    raw_id = data.get('id')
+    if raw_id is None:
+        return jsonify({"error": "id is required"}), 400
+    try:
+        entry_id = int(raw_id)
+    except (TypeError, ValueError):
+        return jsonify({"error": "id must be an integer"}), 400
+    if entry_id < 1:
+        return jsonify({"error": "id must be >= 1"}), 400
+
+    bias, err = _parse_bias(data)
+    if err is not None:
+        payload, status = err
+        return jsonify(payload), status
+
+    try:
+        rotation.set_priority_bias(entry_id, bias)
+        return jsonify(_auto_order_response(
+            current_app._get_current_object(), checkpoint=False))
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 404
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @routes_bp.route('/rotation/sync-status', methods=['GET'])
 def rotation_sync_status():
     """Return the current sheet sync status."""
@@ -4392,6 +4460,33 @@ def singer_brb_route():
         new_status = "On Hold (BRB)" if brb else "Waiting"
         rotation.set_singer_status(name, new_status)
         return _singer_action_response(rotation)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@routes_bp.route('/rotation/singer/priority', methods=['POST'])
+def singer_priority_route():
+    """Bump every non-done entry for a singer up/down, then re-weave.
+
+    ``{name, bias}`` — bias -1 / 0 / 1. Applies the bias to all the singer's
+    entries and re-runs Auto Order as one undoable step, returning the standard
+    rotation payload so the UI re-renders.
+    """
+    rotation = current_app.rotation
+    if not hasattr(current_app, 'rotation') or current_app.rotation is None:
+        return jsonify({"error": "Rotation not configured"}), 503
+    data = request.get_json(force=True)
+    name = data.get('name', '').strip()
+    if not name:
+        return jsonify({"error": "name is required"}), 400
+    bias, err = _parse_bias(data)
+    if err is not None:
+        payload, status = err
+        return jsonify(payload), status
+    try:
+        rotation.set_singer_priority_bias(name, bias)
+        return jsonify(_auto_order_response(
+            current_app._get_current_object(), checkpoint=False))
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

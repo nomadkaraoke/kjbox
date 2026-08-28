@@ -1032,6 +1032,57 @@ class TestSetPaid:
         assert entry["paid"] == 0
 
 
+class TestSetPriorityBias:
+    def test_default_is_zero(self, store):
+        entry = store.add_entry("Alice", "Song A")
+        assert entry["priority_bias"] == 0
+
+    def test_set_up_and_down(self, store):
+        entry = store.add_entry("Alice", "Song A")
+        store.set_priority_bias(entry["id"], 1)
+        assert store.get_entry(entry["id"])["priority_bias"] == 1
+        store.set_priority_bias(entry["id"], -1)
+        assert store.get_entry(entry["id"])["priority_bias"] == -1
+        store.set_priority_bias(entry["id"], 0)
+        assert store.get_entry(entry["id"])["priority_bias"] == 0
+
+    def test_bias_is_clamped_to_tri_state(self, store):
+        entry = store.add_entry("Alice", "Song A")
+        store.set_priority_bias(entry["id"], 5)
+        assert store.get_entry(entry["id"])["priority_bias"] == 1
+        store.set_priority_bias(entry["id"], -9)
+        assert store.get_entry(entry["id"])["priority_bias"] == -1
+
+    def test_set_nonexistent_entry_raises(self, store):
+        with pytest.raises(ValueError):
+            store.set_priority_bias(9999, 1)
+
+    def test_singer_bias_applies_to_all_non_done_entries(self, store):
+        a1 = store.add_entry("Alice", "Song A")
+        a2 = store.add_entry("Alice", "Song B")
+        bob = store.add_entry("Bob", "Song C")
+        store.update_status(a2["id"], "Done")
+        store.set_singer_priority_bias("Alice", 1)
+        # Both of Alice's non-done entries biased; her Done entry and Bob untouched.
+        assert store.get_entry(a1["id"])["priority_bias"] == 1
+        assert store.get_entry(a2["id"])["priority_bias"] == 0
+        assert store.get_entry(bob["id"])["priority_bias"] == 0
+
+    def test_singer_bias_matches_singers_json_member(self, store):
+        entry = store.add_entry("", singers=["Anya", "Tara"])
+        store.set_singer_priority_bias("Tara", -1)
+        assert store.get_entry(entry["id"])["priority_bias"] == -1
+
+    def test_restore_entries_round_trips_bias(self, store):
+        entry = store.add_entry("Alice", "Song A")
+        store.set_priority_bias(entry["id"], 1)
+        snapshot = store.get_all_entries()
+        # Wipe the bias, then restore the snapshot — bias must come back.
+        store.set_priority_bias(entry["id"], 0)
+        store.restore_entries(snapshot)
+        assert store.get_entry(entry["id"])["priority_bias"] == 1
+
+
 # ---------------------------------------------------------------------------
 # Task 1 (new): Left status exclusion + get_singer_stats
 # ---------------------------------------------------------------------------
