@@ -484,6 +484,26 @@ def test_all_being_made_preserves_order():
     assert not res.changed
 
 
+def test_being_made_pin_preserves_top_five_bump():
+    # A "being made" entry sits in row 1 (removed from the weave, sunk to the
+    # bottom), which shifts a DUPLICATE of a locked singer from original row 6 up
+    # into woven row 5. That duplicate must still be bumped OUT of the top five —
+    # bump detection uses woven position, not the stale original index.
+    before = _mk([
+        ("M", 0, 5, "m"),                                   # id 1 — being made
+        ("A", 1, 5, "a1"), ("B", 1, 5, "b"), ("C", 1, 5, "c"),
+        ("D", 1, 5, "d"),
+        ("A", 1, 5, "a2"),                                  # id 6 — duplicate of A
+        ("New", 0, 5, "n"),                                 # id 7 — fills the freed row
+    ])
+    before[0].being_made = True
+    res = compute_auto_order(before)
+    ids = res.ordered_ids
+    assert ids[-1] == 1                    # M sunk to the very bottom
+    assert 6 not in ids[:5]                # duplicate A bumped out of the top five
+    assert ids[4] == 7                     # a genuinely different singer takes row 5
+
+
 def test_build_entry_views_flags_being_made_status():
     entries = [
         {"id": 1, "singer": "A", "song_artist": "a", "status": "Waiting"},

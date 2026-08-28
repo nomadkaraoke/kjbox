@@ -301,8 +301,11 @@ def _weave(entries, locked_idx, config):
     # leave the top five entirely. This is a strong scoring penalty (not a hard
     # exclusion) so that avoiding a back-to-back always wins over it — otherwise
     # bumping a duplicate down could force a spacing-violating singer up into the
-    # slot it vacated.
-    bumped_ids = {id(e) for e in pool if e.orig_index < config.lock_head}
+    # slot it vacated. Identified by WOVEN position (not orig_index): "being made"
+    # entries pinned out of the weave shift the head, so an entry originally below
+    # row 5 can land in woven row 4/5 and must be eligible to bump.
+    bumped_ids = {id(entries[i]) for i in range(min(config.lock_head, n))
+                  if i not in locked_idx}
 
     # Walk every position in order; locked ones are already placed (just accumulate
     # their real duration), open ones get filled. ``time_ahead`` = minutes of songs
