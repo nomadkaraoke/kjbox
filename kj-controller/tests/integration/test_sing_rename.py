@@ -136,6 +136,15 @@ class TestSelfRename:
         )
         assert resp.status_code == 400
 
+    def test_rename_requires_device_id(self, client, token):
+        # Without a device_id the rename can't be made sticky — reject it rather
+        # than silently doing a one-off rename that reverts on the next song.
+        resp = client.post(
+            f"/sing/rename?t={token}",
+            json={"new_name": "Lyle", "device_id": "", "items": []},
+        )
+        assert resp.status_code == 400
+
     def test_rename_requires_token(self, client):
         resp = client.post(
             "/sing/rename",

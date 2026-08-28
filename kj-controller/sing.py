@@ -1157,6 +1157,11 @@ def rename_me():
     if len(new_name) > _MAX_SINGER_NAME_LEN:
         return jsonify({"error": "new_name too long"}), 400
     device_id = (data.get("device_id") or "").strip()[:64]
+    # A persistent rename is meaningless without the device id — the alias is
+    # what makes it stick to future submissions. The singer UI always sends one;
+    # reject the request rather than silently doing a one-off (non-sticky) rename.
+    if not device_id:
+        return jsonify({"error": "device_id is required"}), 400
 
     items = data.get("items") or []
     if not isinstance(items, list):
@@ -1212,9 +1217,13 @@ def rename_me():
 
     # Alias the device so future submissions resolve to the new name even before
     # the singer's localStorage catches up. The singer's own choice always wins
-    # over any earlier KJ-set alias for this device.
-    if device_id:
+    # over any earlier KJ-set alias for this device. Best-effort — the entry and
+    # request rewrites above already succeeded, so an alias-write failure must
+    # not turn the whole rename into a 500.
+    try:
         store.set_alias(device_id, new_name)
+    except Exception:
+        current_app.logger.exception("self-rename: alias write failed")
 
     return jsonify({"success": True, "new_name": new_name})
 

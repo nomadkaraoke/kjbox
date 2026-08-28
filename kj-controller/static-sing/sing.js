@@ -129,7 +129,17 @@ function getDeviceId() {
   if (!d) { d = _genDeviceId(); LS.set(DEVICE_ID_KEY, d); }
   return d;
 }
-const DEVICE_ID = getDeviceId();
+let DEVICE_ID = getDeviceId();
+
+// Mint a fresh device identity — used when a *different* person takes over the
+// same phone ("switch"). Rotating synchronously (rather than only deleting the
+// old alias in the background) guarantees the new person's very next submission
+// can't be resolved against the previous singer's alias, even if the async
+// /sing/forget for the old id is still in flight.
+function rotateDeviceId() {
+  DEVICE_ID = _genDeviceId();
+  LS.set(DEVICE_ID_KEY, DEVICE_ID);
+}
 
 const PHONE_RE = /^\+?[0-9 \-()]{7,20}$/;
 
@@ -577,9 +587,11 @@ function renderLanding() {
       `Not you? `,
       el("a", { href: "#", "data-testid": "switch-identity", onclick: (e) => {
         e.preventDefault();
-        // A different person on this device — forget the old singer's alias so
-        // their KJ-corrected name doesn't leak onto this person's songs.
+        // A different person on this device — delete the old singer's alias
+        // (background) AND rotate to a fresh device id synchronously so their
+        // KJ-corrected name can't leak onto this person's next submission.
         forgetIdentity();
+        rotateDeviceId();
         state.name = state.phone = "";
         LS.set("sing_name", ""); LS.set("sing_phone", "");
         state._identityMode = "setup";
