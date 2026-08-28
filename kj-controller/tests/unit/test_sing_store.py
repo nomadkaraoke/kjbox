@@ -935,13 +935,15 @@ class TestDeviceIdAndAliases:
         assert store.is_canonical_identity("") is False
         assert store.is_canonical_identity(None) is False
 
-    def test_set_alias_kj_origin_is_sticky(self, store):
-        # Once a device is a KJ-established identity, a later self-rename to a new
-        # name keeps 'kj' origin so it stays a managed identity.
+    def test_set_alias_self_update_resets_kj_authority(self, store):
+        # KJ authority does NOT travel onto a name the SINGER later chose: a
+        # self-rename resets origin to 'self', so a past merge can't be laundered
+        # into whole-group power over a coincidental same-name walk-in.
         store.set_alias("dev-a", "Jasmine!", origin="kj")
-        store.set_alias("dev-a", "Jazz")  # default origin='self'
+        assert store.is_canonical_identity("Jasmine!") is True
+        store.set_alias("dev-a", "Jazz")  # singer self-rename → 'self'
         assert store.get_alias("dev-a") == "Jazz"
-        assert store.is_canonical_identity("Jazz") is True
+        assert store.is_canonical_identity("Jazz") is False
         # A brand-new self alias stays 'self'.
         store.set_alias("dev-c", "Chris")
         assert store.is_canonical_identity("Chris") is False

@@ -765,10 +765,14 @@ class SingStore:
         """Upsert a device → canonical-name mapping. No-op on blank input.
 
         ``origin`` is 'kj' when a KJ rename/merge established the identity, else
-        'self' (a singer's own /sing/rename). 'kj' is STICKY: once a device is a
-        KJ-established identity it stays one even if the singer later self-renames
-        — the KJ's assertion that a name is a managed identity outlives a
-        subsequent self-edit. Only 'kj' aliases satisfy is_canonical_identity.
+        'self' (a singer's own /sing/rename). The stored origin always reflects
+        the LAST writer: a KJ action stamps 'kj'; a self-rename stamps 'self'.
+        Crucially, KJ authority does NOT travel with a device onto a name the
+        SINGER later chose — a self-rename that changes the name resets origin to
+        'self', so a singer can never launder a past merge into whole-group power
+        over a coincidental same-name walk-in. Only 'kj' aliases satisfy
+        is_canonical_identity; a genuinely KJ-merged multi-device identity stays
+        canonical via the sibling devices the KJ/merge path re-stamps 'kj'.
         """
         device_id = (device_id or "").strip()
         canonical_name = (canonical_name or "").strip()
@@ -781,9 +785,7 @@ class SingStore:
             "VALUES (?, ?, ?, datetime('now', 'localtime')) "
             "ON CONFLICT(device_id) DO UPDATE SET "
             "  canonical_name = excluded.canonical_name, "
-            # Never downgrade a KJ-established identity back to 'self'.
-            "  origin = CASE WHEN singer_aliases.origin = 'kj' OR excluded.origin = 'kj' "
-            "                THEN 'kj' ELSE 'self' END, "
+            "  origin = excluded.origin, "
             "  updated_at = datetime('now', 'localtime')",
             (device_id, canonical_name, origin),
         )
@@ -855,16 +857,20 @@ class SingStore:
         is a recognised identity even from a device that never had to be renamed
         — which is what makes a later self-service rename carry the whole group.
         Best-effort; returns the number of devices marked.
+
+        Night-scoped like the rest of request/phone resolution. The marker is
+        resolved internally when not passed; with no night at all we fail closed
+        (return 0) rather than mark every historical device under ``name``.
         """
         name = (name or "").strip()
         if not name:
             return 0
+        night_started = night_started or self.get_night_started_at()
+        if not night_started:
+            return 0
         conn = self._get_conn()
-        params = [name]
-        night_clause = ""
-        if night_started:
-            night_clause = " AND created_at >= ?"
-            params.append(night_started)
+        params = [name, night_started]
+        night_clause = " AND created_at >= ?"
         rows = conn.execute(
             "SELECT DISTINCT device_id FROM sing_requests "
             "WHERE LOWER(singer_name) = LOWER(?)"
@@ -887,20 +893,22 @@ class SingStore:
            the current rotation-entry name) keeps working after the rename.
 
         Night-scoped (``created_at >= night_started``) like the rest of the
-        request/phone resolution to avoid touching prior nights' history. Returns
-        the number of distinct devices aliased. Best-effort; safe to call for a
-        name that has no portal submissions (returns 0).
+        request/phone resolution to avoid touching prior nights' history. The
+        marker is resolved internally when not passed; with no night at all we
+        fail closed (return 0) rather than rewrite every historical request under
+        ``old_name``. Returns the number of distinct devices aliased. Best-effort;
+        safe to call for a name that has no portal submissions (returns 0).
         """
         old_name = (old_name or "").strip()
         new_name = (new_name or "").strip()
         if not old_name or not new_name or old_name.lower() == new_name.lower():
             return 0
+        night_started = night_started or self.get_night_started_at()
+        if not night_started:
+            return 0
         conn = self._get_conn()
-        params = [old_name]
-        night_clause = ""
-        if night_started:
-            night_clause = " AND created_at >= ?"
-            params.append(night_started)
+        params = [old_name, night_started]
+        night_clause = " AND created_at >= ?"
         rows = conn.execute(
             "SELECT DISTINCT device_id FROM sing_requests "
             "WHERE LOWER(singer_name) = LOWER(?)"
