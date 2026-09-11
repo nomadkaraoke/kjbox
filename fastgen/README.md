@@ -67,6 +67,23 @@ fastgen "ABBA" "Waterloo" --height 720
 Auto-fetch needs `FLACFETCH_API_URL` + `FLACFETCH_API_KEY` in the environment
 (loaded from the workspace `.envrc` via direnv).
 
+### Upload to the kjbox
+
+`--upload` sends the finished mp4 to the NomadPC kjbox (same server-side import as
+the KJ UI's "Choose file to upload…"), tagged with a **`FASTGEN`** label so these
+low-res drafts are obvious in the library and never confused with a proper
+version (the label survives kjbox's title normalisation; a filename marker does
+not). Or upload any file on its own with the standalone **`kjupload`**:
+
+```bash
+fastgen "ABBA" "Waterloo" --upload            # generate + upload, labelled FASTGEN
+kjupload "some video.mp4" --label FASTGEN      # upload an existing file
+```
+
+Needs `KJBOX_CF_ACCESS_CLIENT_ID` + `KJBOX_CF_ACCESS_CLIENT_SECRET` (workspace
+`.envrc`) to pass Cloudflare Access. To find/remove drafts later, filter by the
+`FASTGEN` label in the KJ UI.
+
 Tip: symlink it onto your PATH once — `ln -s "$PWD/fastgen" /usr/local/bin/fastgen`
 — then just `fastgen "Artist" "Title" file`. Takes ~1 min for a 3-min song on a
 laptop; then upload the mp4 to kjbox yourself.
