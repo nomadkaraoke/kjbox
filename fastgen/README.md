@@ -19,16 +19,21 @@ The hard part is getting each line on screen *when it's actually sung* without a
 full AudioShake/forced-alignment pass. fastgen tries, in order:
 
 1. **Synced lyrics (implemented).** LRCLIB returns line-level `[mm:ss.xx]`
-   timestamps for most popular songs. Each line is *time-anchored*: it reaches a
-   fixed on-screen reading position exactly at its timestamp. The scroll rate
+   timestamps for most popular songs — and you can paste an `.lrc` from anywhere
+   into `--lyrics-file` (auto-detected). Each line is *time-anchored*: it reaches
+   a fixed on-screen reading position exactly at its timestamp. The scroll rate
    varies between lines (held lines linger, quick lines fly, instrumental gaps
    pause) — driven by a piecewise-linear ffmpeg `overlay y` expression.
-2. **Forced alignment (planned).** When only plain lyrics exist, align the known
-   text to the vocal stem (already produced in step 1) with a lightweight CTC
-   aligner (torchaudio Wav2Vec2 / MMS_FA — much lighter than Whisper/MFA) to
-   synthesise line/word timestamps, then feed the same time-anchored scroll.
-3. **Constant crawl (fallback).** No timing available → scroll the whole block at
-   a constant rate across the song duration (true Star Wars style).
+2. **Forced alignment (implemented).** When only *plain* lyrics exist (LRCLIB
+   plain, or a pasted `--lyrics-file`), we align the known text to the separated
+   **vocal stem** with whisper: it transcribes the vocals with word timestamps,
+   we match what it *heard* to the lyric words we *know* (difflib), and give each
+   line the time of its earliest matched word (unmatched lines interpolate). Uses
+   the already-installed `openai-whisper` — no torchaudio. This is the path for
+   niche songs. Cost: ~1× real-time on CPU with `--whisper-model base` (i.e. a
+   3-min song adds ~3 min); only runs when there's no synced source.
+3. **Constant crawl (fallback).** No lyrics timing and alignment unavailable/failed
+   → scroll the whole block at a constant rate across the song (true Star Wars).
 
 ## Run (simple wrapper — for live use)
 
@@ -60,13 +65,16 @@ python fastgen.py path/to/audio.flac --artist "ABBA" --title "Waterloo"
 # Iterate on the render only (skip the slow separation step):
 python fastgen.py audio.flac --artist ABBA --title Waterloo --skip-separation
 
-# Use your own lyrics text instead of LRCLIB (plain text; constant crawl):
-python fastgen.py audio.flac --artist ABBA --title Waterloo --lyrics-file lyrics.txt
+# Niche song: paste lyrics you found online (plain text OR .lrc) — plain text is
+# auto-timed via whisper alignment; .lrc is used directly:
+python fastgen.py audio.flac --artist X --title Y --lyrics-file lyrics.txt
+python fastgen.py audio.flac --artist X --title Y --lyrics-file lyrics.txt --whisper-model small --lang es
 ```
 
 Useful flags: `--model` (separator model), `--height` (default 480), `--wrap`
 (chars/line before wrapping), `--reading` (active-line position, default 0.42),
-`--fps`, `--font`, `--out`, `--keep-temp`.
+`--whisper-model` (tiny/base/small/medium), `--lang`, `--no-align`, `--fps`,
+`--font`, `--out`, `--keep-temp`.
 
 ## Measured (ABBA – Waterloo, 2:45, on an M-series laptop **CPU**)
 
@@ -104,8 +112,11 @@ service, or a hot instance) it drops to seconds → **sub-30s total is realistic
   on-device ffmpeg).
 - **Cheap gen API tier**: expose as a ~$1/track "draft" tier in karaoke-gen
   (gen already has an LRCLIB client + ffmpeg/libass render to reuse).
-- **Tier 2 forced alignment**: CTC alignment on the vocal stem for songs without
-  LRCLIB synced lyrics (see "Lyric sync" above).
+- **Faster alignment**: whisper `base` is ~1× real-time on CPU. Options — try
+  segment-level timing (drop `word_timestamps`, ~3-5× faster, coarser), MPS/GPU,
+  or a hot cloud aligner. Only matters for the niche fallback path.
+- **VAD-guided fallback**: if alignment matches too few lines, distribute lines
+  across vocal-active regions (detected from the stem) instead of a blind crawl.
 - **Star Wars perspective**: add a `perspective`/`v360`-style tilt so the crawl
   recedes toward the top.
 - **Fewer lines / bigger text**: the current reading window shows ~8 lines; a

@@ -3,3 +3,4 @@
 audio-separator
 requests
 Pillow
+openai-whisper   # Tier-B forced alignment of untimed lyrics (no torchaudio needed)

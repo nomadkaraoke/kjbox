@@ -26,6 +26,7 @@ Requires: ffmpeg/ffprobe on PATH, the `audio-separator` package, `requests`.
 from __future__ import annotations
 
 import argparse
+import difflib
 import glob
 import os
 import re
@@ -88,34 +89,37 @@ def probe_duration(audio_path: str) -> float:
 
 
 # --------------------------------------------------------------------------- #
-# Step 1: separate instrumental (single fast model)
+# Step 1: separate stems (single fast model)
 # --------------------------------------------------------------------------- #
-def separate_instrumental(audio_path: str, workdir: str, model: str) -> str:
+def separate_stems(audio_path: str, workdir: str, model: str) -> tuple[str, "str | None"]:
+    """Separate with a single fast model; return (instrumental, vocals|None).
+
+    We write BOTH stems (the model produces them together, so the extra output
+    is nearly free): the instrumental is the video's audio track, and the vocals
+    stem feeds Tier-B forced alignment when lyrics have no timing.
+    """
     # Imported lazily so `--skip-separation` works without the heavy dep loaded.
     from audio_separator.separator import Separator
 
-    sep = Separator(
-        output_dir=workdir,
-        output_format="WAV",
-        output_single_stem="Instrumental",  # only write the instrumental stem
-    )
+    sep = Separator(output_dir=workdir, output_format="WAV")
     sep.load_model(model_filename=model)
     outputs = sep.separate(audio_path)
 
     # `separate()` returns basenames (recent versions) or paths; resolve robustly.
-    candidates = []
+    produced = []
     for name in outputs or []:
-        candidates.append(name if os.path.isabs(name) else os.path.join(workdir, name))
-    candidates += glob.glob(os.path.join(workdir, "*Instrumental*.wav"))
-    candidates = [c for c in candidates if os.path.exists(c)]
-    if not candidates:
+        produced.append(name if os.path.isabs(name) else os.path.join(workdir, name))
+    produced += glob.glob(os.path.join(workdir, "*.wav"))
+    produced = [c for c in produced if os.path.exists(c)]
+
+    inst = next((c for c in produced if "instrumental" in os.path.basename(c).lower()), None)
+    vocals = next((c for c in produced if "vocals" in os.path.basename(c).lower()), None)
+    if inst is None:
         raise RuntimeError(
             f"Separation produced no instrumental file in {workdir}. "
             f"Model output was: {outputs!r}"
         )
-    # Prefer a file whose name mentions Instrumental.
-    inst = next((c for c in candidates if "instrumental" in os.path.basename(c).lower()), candidates[0])
-    return inst
+    return inst, vocals
 
 
 # --------------------------------------------------------------------------- #
@@ -192,6 +196,126 @@ def fetch_lyrics(artist: str, title: str, duration: float | None) -> "Lyrics | N
     return None
 
 
+def load_lyrics_file(path: str) -> Lyrics:
+    """Load a local lyrics file. Auto-detects LRC (`[mm:ss.xx]`) vs plain text —
+    so a pasted `.lrc` from anywhere online goes straight to the synced tier."""
+    with open(path, encoding="utf-8") as fh:
+        text = fh.read()
+    if _LRC_RE.search(text):
+        return Lyrics("synced", _strip_lrc_timestamps(text), _parse_synced(text))
+    return Lyrics("plain", text)
+
+
+# --------------------------------------------------------------------------- #
+# Step 2b: Tier-B forced alignment (whisper) — time untimed lyrics
+# --------------------------------------------------------------------------- #
+def _norm_word(w: str) -> str:
+    """Normalise a token for matching: lowercase, keep alphanumerics only."""
+    return re.sub(r"[^0-9a-z]+", "", w.lower())
+
+
+def align_plain_lyrics(
+    vocals_path: str, plain: str, model_name: str, language: "str | None"
+) -> "list[tuple[str, float | None]] | None":
+    """Align known plain lyrics to the vocal stem via whisper.
+
+    Whisper transcribes the (isolated) vocals with word timestamps; we then align
+    what it *heard* to the lyric words we *know* (difflib) and hand each lyric
+    line the timestamp of its earliest confidently-matched word. Lines we can't
+    match keep `None` — the scroll interpolates their position between anchors.
+
+    Returns a list of (line_text, anchor_seconds|None) for every non-empty lyric
+    line, or None if whisper heard nothing to anchor on.
+    """
+    import whisper  # lazy — heavy, only needed on the no-timing path
+
+    model = whisper.load_model(model_name)
+    result = model.transcribe(
+        vocals_path, word_timestamps=True, language=language,
+        condition_on_previous_text=False, fp16=False,
+    )
+
+    heard: list[tuple[str, float]] = []
+    for seg in result.get("segments", []):
+        for w in seg.get("words", []):
+            nw = _norm_word(w.get("word", ""))
+            if nw:
+                heard.append((nw, float(w["start"])))
+    if not heard:
+        return None
+
+    # Flatten known lyric words, remembering each word's line index.
+    lyric_lines = [ln.strip() for ln in plain.splitlines()]
+    known: list[str] = []
+    known_line: list[int] = []
+    for li, line in enumerate(lyric_lines):
+        for tok in line.split():
+            nw = _norm_word(tok)
+            if nw:
+                known.append(nw)
+                known_line.append(li)
+
+    if not known:
+        return None
+
+    # Match heard-word stream to known-word stream; carry timestamps across.
+    sm = difflib.SequenceMatcher(None, [h[0] for h in heard], known, autojunk=False)
+    known_time: dict[int, float] = {}
+    for a, b, size in sm.get_matching_blocks():
+        for k in range(size):
+            known_time.setdefault(b + k, heard[a + k][1])
+
+    # Earliest matched word-time per line.
+    line_anchor: dict[int, float] = {}
+    for kidx, t in known_time.items():
+        li = known_line[kidx]
+        if li not in line_anchor or t < line_anchor[li]:
+            line_anchor[li] = t
+
+    # Enforce non-decreasing anchors (matching noise can invert a pair).
+    out: list[tuple[str, "float | None"]] = []
+    last = 0.0
+    for li, line in enumerate(lyric_lines):
+        if not line:
+            continue
+        t = line_anchor.get(li)
+        if t is not None:
+            t = max(t, last)
+            last = t
+        out.append((line, t))
+
+    matched = sum(1 for _, t in out if t is not None)
+    log(f"  alignment: matched {matched}/{len(out)} lines from {len(heard)} heard words")
+    return out if matched else None
+
+
+def resolve_timed_lines(
+    lyrics: Lyrics, do_align: bool, vocals_path: "str | None",
+    model_name: str, language: "str | None",
+) -> "tuple[list[tuple[str, float | None]], str]":
+    """Turn fetched lyrics into (line, anchor|None) pairs + a mode label."""
+    if lyrics.kind == "synced" and lyrics.timed:
+        return [(text, t) for t, text in lyrics.timed if text.strip()], "synced"
+
+    # Plain lyrics — try Tier B alignment if we can.
+    if do_align and vocals_path and os.path.exists(vocals_path):
+        t = Timer.begin(f"align lyrics to vocals (whisper {model_name})")
+        try:
+            aligned = align_plain_lyrics(vocals_path, lyrics.plain, model_name, language)
+        except Exception as exc:  # never let alignment sink the whole render
+            log(f"alignment failed ({type(exc).__name__}: {exc}) — falling back to constant crawl")
+            aligned = None
+        t.done()
+        if aligned:
+            return aligned, "aligned"
+
+    # Tier D — no timing available: preserve blank lines for stanza spacing.
+    plain_lines: list[tuple[str, "float | None"]] = []
+    for raw in lyrics.plain.splitlines():
+        plain_lines.append((raw.strip(), None))
+    return plain_lines, "constant"
+
+
 # --------------------------------------------------------------------------- #
 # Step 3: lay out the crawl, rasterise it, and build the time-anchored scroll
 # --------------------------------------------------------------------------- #
@@ -200,26 +324,23 @@ def fetch_lyrics(artist: str, title: str, duration: float | None) -> "Lyrics | N
 VisualLine = "tuple[str, float | None]"
 
 
-def build_visual_lines(artist: str, title: str, lyrics: Lyrics, wrap: int) -> list:
+def build_visual_lines(artist: str, title: str, timed_lines: list, wrap: int) -> list:
+    """Expand (line_text, anchor|None) pairs into wrapped visual lines.
+
+    Wrapping splits a lyric line into several rows; only the first row carries
+    the anchor time (the moment that line should reach the reading position)."""
     header = [("", None), ("", None),
               (artist.upper(), None), (title.upper(), None),
               ("", None), ("", None)]
     body: list = []
-    if lyrics.kind == "synced" and lyrics.timed:
-        for start, text in lyrics.timed:
-            text = text.strip()
-            if not text:
-                continue  # instrumental gap — the scroll naturally lingers here
-            wrapped = textwrap.wrap(text, width=wrap) or [""]
-            for i, w in enumerate(wrapped):
-                body.append((w, start if i == 0 else None))  # anchor first wrap-row
-    else:
-        for raw in lyrics.plain.splitlines():
-            raw = raw.strip()
-            if not raw:
-                body.append(("", None))
-                continue
-            body.extend((w, None) for w in (textwrap.wrap(raw, width=wrap) or [""]))
+    for text, anchor in timed_lines:
+        text = text.strip()
+        if not text:
+            body.append(("", None))  # stanza / instrumental gap
+            continue
+        wrapped = textwrap.wrap(text, width=wrap) or [""]
+        for i, w in enumerate(wrapped):
+            body.append((w, anchor if i == 0 else None))
     return header + body + [("", None)] * 3
 
 
@@ -344,7 +465,15 @@ def main(argv: list[str]) -> int:
                     help="Vertical reading position for the active line (0=top, 1=bottom; default 0.42)")
     ap.add_argument("--fps", type=int, default=24, help="Output frame rate (default: 24)")
     ap.add_argument("--font", default=DEFAULT_FONT, help="Path to a .ttf font")
-    ap.add_argument("--lyrics-file", help="Use this local lyrics .txt instead of fetching from LRCLIB")
+    ap.add_argument("--lyrics-file",
+                    help="Use a local lyrics file instead of LRCLIB. Auto-detects LRC (timed) vs plain text.")
+    ap.add_argument("--whisper-model", default="base",
+                    help="Whisper model for Tier-B alignment of untimed lyrics "
+                         "(tiny/base/small/medium; bigger = slower but better on hard/foreign tracks; default: base)")
+    ap.add_argument("--lang", default=None,
+                    help="Language hint for alignment (e.g. en, es). Default: auto-detect.")
+    ap.add_argument("--no-align", action="store_true",
+                    help="Disable Tier-B forced alignment; untimed lyrics use a constant crawl.")
     ap.add_argument("--skip-separation", action="store_true",
                     help="Use the input audio directly as the 'instrumental' (for iterating on the render)")
     ap.add_argument("--keep-temp", action="store_true", help="Keep the working directory")
@@ -367,46 +496,56 @@ def main(argv: list[str]) -> int:
         t.done()
         log(f"  duration: {duration:.1f}s")
 
-        # 1) Instrumental
-        if args.skip_separation:
-            log("skip-separation: using input audio as the instrumental track")
-            instrumental = args.audio
-        else:
-            t = Timer.begin(f"separate instrumental (model={args.model})")
-            instrumental = separate_instrumental(args.audio, workdir, args.model)
-            t.done()
-            log(f"  instrumental: {instrumental}")
-
-        # 2) Lyrics (prefer time-synced)
+        # 1) Lyrics (prefer time-synced) — cheap, and decides whether we need
+        #    the vocal stem for alignment.
         if args.lyrics_file:
-            with open(args.lyrics_file, encoding="utf-8") as fh:
-                lyrics = Lyrics("plain", fh.read())
-            log(f"lyrics: loaded plain lyrics from {args.lyrics_file}")
+            lyrics = load_lyrics_file(args.lyrics_file)
+            log(f"lyrics: loaded {lyrics.kind.upper()} lyrics from {args.lyrics_file}")
         else:
             t = Timer.begin("fetch lyrics (LRCLIB)")
             lyrics = fetch_lyrics(args.artist, args.title, duration)
             t.done()
             if not lyrics:
                 log(f"No lyrics found on LRCLIB for '{args.artist} - {args.title}'.")
-                log("Try a different spelling of the artist/title, or pass --lyrics-file.")
+                log("Try a different spelling, or find lyrics online and pass --lyrics-file.")
                 return 1
-            if lyrics.kind == "synced":
-                log(f"  lyrics: SYNCED — {len(lyrics.timed)} timed lines (time-anchored scroll)")
-            else:
-                log(f"  lyrics: PLAIN — {len(lyrics.plain.splitlines())} lines (no timing → constant crawl)")
+            log(f"  lyrics: {lyrics.kind.upper()} "
+                f"({len(lyrics.timed) if lyrics.timed else len(lyrics.plain.splitlines())} lines)")
 
-        # 3) Render
+        # 2) Separate stems (instrumental = video audio; vocals = alignment input)
+        if args.skip_separation:
+            log("skip-separation: using input audio as the instrumental track")
+            instrumental, vocals = args.audio, None
+        else:
+            t = Timer.begin(f"separate stems (model={args.model})")
+            instrumental, vocals = separate_stems(args.audio, workdir, args.model)
+            t.done()
+            log(f"  instrumental: {os.path.basename(instrumental)}"
+                + (f" | vocals: {os.path.basename(vocals)}" if vocals else ""))
+
+        # 3) Resolve line timing: synced → aligned (whisper) → constant crawl.
+        timed_lines, mode = resolve_timed_lines(
+            lyrics, do_align=not args.no_align, vocals_path=vocals,
+            model_name=args.whisper_model, language=args.lang,
+        )
+        mode_label = {
+            "synced": "time-anchored (LRCLIB synced)",
+            "aligned": "time-anchored (whisper forced alignment)",
+            "constant": "constant crawl (no timing available)",
+        }[mode]
+        log(f"  timing: {mode_label}")
+
+        # 4) Render
         width = round(args.height * 16 / 9)
         width += width % 2  # ffmpeg needs even dimensions
         fontsize = max(18, round(args.height * 0.07))
-        lines = build_visual_lines(args.artist, args.title, lyrics, args.wrap)
+        lines = build_visual_lines(args.artist, args.title, timed_lines, args.wrap)
 
         t = Timer.begin("rasterise crawl (PIL)")
         crawl_png, img_h, centers = render_crawl_png(lines, width, fontsize, args.font, workdir)
         t.done()
 
-        y_expr, timed = build_scroll_y_expr(lines, centers, duration, args.height, img_h, args.reading)
-        log(f"  scroll: {'time-anchored (synced timestamps)' if timed else 'constant crawl'}")
+        y_expr, _timed = build_scroll_y_expr(lines, centers, duration, args.height, img_h, args.reading)
 
         t = Timer.begin(f"render {args.height}p crawl video (ffmpeg)")
         render_video(instrumental, crawl_png, y_expr, out_path, width, args.height, args.fps)
