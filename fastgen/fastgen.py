@@ -387,7 +387,8 @@ def main(argv: list[str]) -> int:
             lyrics = fetch_lyrics(args.artist, args.title, duration)
             t.done()
             if not lyrics:
-                log("No lyrics found on LRCLIB — cannot build a lyrics crawl. Aborting.")
+                log(f"No lyrics found on LRCLIB for '{args.artist} - {args.title}'.")
+                log("Try a different spelling of the artist/title, or pass --lyrics-file.")
                 return 1
             if lyrics.kind == "synced":
                 log(f"  lyrics: SYNCED — {len(lyrics.timed)} timed lines (time-anchored scroll)")
@@ -413,7 +414,7 @@ def main(argv: list[str]) -> int:
 
         elapsed = total.done()
         size_mb = os.path.getsize(out_path) / 1e6
-        log(f"DONE → {out_path} ({size_mb:.1f} MB) in {elapsed:.1f}s wall-clock")
+        log(f"DONE → {os.path.abspath(out_path)} ({size_mb:.1f} MB) in {elapsed:.1f}s wall-clock")
         return 0
     finally:
         if args.keep_temp:

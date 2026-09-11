@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+#
+# fastgen — minimal wrapper for live use.
+#
+#   fastgen "Artist" "Title" /path/to/audio            # -> "Artist - Title (Fastgen).mp4" in $PWD
+#   fastgen "Artist" "Title" /path/to/audio out.mp4    # explicit output path
+#   fastgen "Artist" "Title" /path/to/audio --height 720   # extra flags forwarded to fastgen.py
+#
+# Generates a 480p Star Wars-style scrolling-lyrics karaoke video locally
+# (fast instrumental separation + LRCLIB synced lyrics). Upload the mp4 to kjbox
+# yourself. See README.md for details and flags (--height, --model, --reading, ...).
+#
+set -euo pipefail
+
+if [ "$#" -lt 3 ]; then
+  echo 'Usage: fastgen "Artist" "Title" /path/to/audio [output.mp4] [--flags...]' >&2
+  echo 'Example: fastgen "ABBA" "Waterloo" ~/Downloads/waterloo.flac' >&2
+  exit 2
+fi
+
+ARTIST="$1"; TITLE="$2"; AUDIO="$3"; shift 3
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Pick a Python that has audio-separator. Prefer the nomadkaraoke conda env;
+# override with FASTGEN_PYTHON=/path/to/python if needed.
+PY="${FASTGEN_PYTHON:-}"
+if [ -z "$PY" ]; then
+  if [ -x /Users/andrew/miniforge3/envs/nomadkaraoke/bin/python3 ]; then
+    PY=/Users/andrew/miniforge3/envs/nomadkaraoke/bin/python3
+  else
+    PY=python3
+  fi
+fi
+
+# An optional 4th positional (not starting with '-') is the output path.
+OUT_ARGS=()
+if [ "$#" -gt 0 ] && [ "${1#-}" = "$1" ]; then
+  OUT_ARGS=(--out "$1"); shift
+fi
+
+exec "$PY" "$DIR/fastgen.py" "$AUDIO" \
+  --artist "$ARTIST" --title "$TITLE" "${OUT_ARGS[@]}" "$@"

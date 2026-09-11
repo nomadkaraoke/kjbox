@@ -30,7 +30,28 @@ full AudioShake/forced-alignment pass. fastgen tries, in order:
 3. **Constant crawl (fallback).** No timing available → scroll the whole block at
    a constant rate across the song duration (true Star Wars style).
 
-## Run
+## Run (simple wrapper — for live use)
+
+The `fastgen` wrapper takes positional **artist, title, audio** and writes the
+mp4 into the current folder. It auto-selects the right Python env, so you can run
+it from anywhere:
+
+```bash
+# writes "ABBA - Waterloo (Fastgen).mp4" into the current directory
+/path/to/fastgen/fastgen "ABBA" "Waterloo" ~/Downloads/waterloo.flac
+
+# explicit output path:
+fastgen "ABBA" "Waterloo" ~/Downloads/waterloo.flac ~/Desktop/waterloo.mp4
+
+# higher res for a projector:
+fastgen "ABBA" "Waterloo" ~/Downloads/waterloo.flac --height 720
+```
+
+Tip: symlink it onto your PATH once — `ln -s "$PWD/fastgen" /usr/local/bin/fastgen`
+— then just `fastgen "Artist" "Title" file`. Takes ~1 min for a 3-min song on a
+laptop; then upload the mp4 to kjbox yourself.
+
+## Run (direct — for iterating)
 
 ```bash
 # From the nomadkaraoke conda env (has audio-separator + ffmpeg)
@@ -39,12 +60,13 @@ python fastgen.py path/to/audio.flac --artist "ABBA" --title "Waterloo"
 # Iterate on the render only (skip the slow separation step):
 python fastgen.py audio.flac --artist ABBA --title Waterloo --skip-separation
 
-# Use your own lyrics text instead of LRCLIB:
+# Use your own lyrics text instead of LRCLIB (plain text; constant crawl):
 python fastgen.py audio.flac --artist ABBA --title Waterloo --lyrics-file lyrics.txt
 ```
 
 Useful flags: `--model` (separator model), `--height` (default 480), `--wrap`
-(chars/line before wrapping), `--font`, `--out`, `--keep-temp`.
+(chars/line before wrapping), `--reading` (active-line position, default 0.42),
+`--fps`, `--font`, `--out`, `--keep-temp`.
 
 ## Measured (ABBA – Waterloo, 2:45, on an M-series laptop **CPU**)
 
