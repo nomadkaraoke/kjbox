@@ -373,7 +373,7 @@ def resolve_timed_lines(
 VisualLine = "tuple[str, float | None]"
 
 
-def insert_instrumental_gaps(timed_lines: list, threshold: float, gap_lines: int = 2) -> list:
+def insert_instrumental_gaps(timed_lines: list, threshold: float, gap_lines: int = 1) -> list:
     """Insert blank spacer lines where consecutive anchored lines are far apart.
 
     A >threshold-second jump between two sung lines means an instrumental break;
@@ -553,6 +553,8 @@ def main(argv: list[str]) -> int:
                     help="Mix the vocal stem back in at this level as a singer guide (0 disables; default 0.3)")
     ap.add_argument("--gap-threshold", type=float, default=5.0,
                     help="Insert a blank spacer where sung lines are >N seconds apart (0 disables; default 5)")
+    ap.add_argument("--gap-lines", type=int, default=1,
+                    help="How many blank rows to insert at an instrumental gap (default 1)")
     ap.add_argument("--font", default=DEFAULT_FONT, help="Path to a .ttf font")
     ap.add_argument("--lyrics-file",
                     help="Use a local lyrics file instead of LRCLIB. Auto-detects LRC (timed) vs plain text.")
@@ -637,7 +639,7 @@ def main(argv: list[str]) -> int:
 
         # 4) Render
         if mode != "constant":
-            timed_lines = insert_instrumental_gaps(timed_lines, args.gap_threshold)
+            timed_lines = insert_instrumental_gaps(timed_lines, args.gap_threshold, args.gap_lines)
         width = round(args.height * 16 / 9)
         width += width % 2  # ffmpeg needs even dimensions
         fontsize = max(18, round(args.height * 0.07))
