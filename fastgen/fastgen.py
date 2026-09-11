@@ -373,6 +373,26 @@ def resolve_timed_lines(
 VisualLine = "tuple[str, float | None]"
 
 
+def insert_instrumental_gaps(timed_lines: list, threshold: float, gap_lines: int = 2) -> list:
+    """Insert blank spacer lines where consecutive anchored lines are far apart.
+
+    A >threshold-second jump between two sung lines means an instrumental break;
+    a few blank rows there make the crawl visibly open up (an empty gap scrolls
+    through the reading zone) so the singer sees "nothing to sing right now".
+    """
+    if threshold <= 0:
+        return timed_lines
+    out: list = []
+    last_t: "float | None" = None
+    for text, anchor in timed_lines:
+        if anchor is not None:
+            if last_t is not None and anchor - last_t > threshold:
+                out.extend([("", None)] * gap_lines)
+            last_t = anchor
+        out.append((text, anchor))
+    return out
+
+
 def build_visual_lines(artist: str, title: str, timed_lines: list, wrap: int) -> list:
     """Expand (line_text, anchor|None) pairs into wrapped visual lines.
 
@@ -479,17 +499,31 @@ def build_scroll_y_expr(
 
 
 def render_video(
-    instrumental: str, crawl_png: str, y_expr: str,
-    out_path: str, width: int, height: int, fps: int,
+    instrumental: str, vocals: "str | None", vocals_level: float,
+    crawl_png: str, y_expr: str, out_path: str, width: int, height: int, fps: int,
 ) -> None:
-    filt = f"[0:v][1:v]overlay=x=(W-w)/2:y={y_expr}[v]"
-    cmd = [
-        "ffmpeg", "-y",
+    overlay = f"[0:v][1:v]overlay=x=(W-w)/2:y={y_expr}[v]"
+    inputs = [
         "-f", "lavfi", "-i", f"color=c=black:s={width}x{height}:r={fps}",
         "-loop", "1", "-framerate", str(fps), "-i", crawl_png,
         "-i", instrumental,
+    ]
+
+    # Optionally mix the vocal stem back in quietly as a singer guide (no word
+    # highlighting, so a faint lead vocal helps). Sum without amix normalisation;
+    # instrumental + k·vocals stays ≤ the original mix, so no extra clipping.
+    if vocals and vocals_level > 0:
+        inputs += ["-i", vocals]
+        audio = (f"[2:a]volume=1[gi];[3:a]volume={vocals_level:.3f}[gv];"
+                 f"[gi][gv]amix=inputs=2:normalize=0:duration=first[a]")
+        filt, amap = overlay + ";" + audio, ["-map", "[a]"]
+    else:
+        filt, amap = overlay, ["-map", "2:a"]
+
+    cmd = [
+        "ffmpeg", "-y", *inputs,
         "-filter_complex", filt,
-        "-map", "[v]", "-map", "2:a",
+        "-map", "[v]", *amap,
         "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p",
         "-c:a", "aac", "-b:a", "192k",
         "-shortest",
@@ -515,6 +549,10 @@ def main(argv: list[str]) -> int:
     ap.add_argument("--reading", type=float, default=0.42,
                     help="Vertical reading position for the active line (0=top, 1=bottom; default 0.42)")
     ap.add_argument("--fps", type=int, default=24, help="Output frame rate (default: 24)")
+    ap.add_argument("--vocals-level", type=float, default=0.3,
+                    help="Mix the vocal stem back in at this level as a singer guide (0 disables; default 0.3)")
+    ap.add_argument("--gap-threshold", type=float, default=5.0,
+                    help="Insert a blank spacer where sung lines are >N seconds apart (0 disables; default 5)")
     ap.add_argument("--font", default=DEFAULT_FONT, help="Path to a .ttf font")
     ap.add_argument("--lyrics-file",
                     help="Use a local lyrics file instead of LRCLIB. Auto-detects LRC (timed) vs plain text.")
@@ -598,6 +636,8 @@ def main(argv: list[str]) -> int:
         log(f"  timing: {mode_label}")
 
         # 4) Render
+        if mode != "constant":
+            timed_lines = insert_instrumental_gaps(timed_lines, args.gap_threshold)
         width = round(args.height * 16 / 9)
         width += width % 2  # ffmpeg needs even dimensions
         fontsize = max(18, round(args.height * 0.07))
@@ -609,8 +649,11 @@ def main(argv: list[str]) -> int:
 
         y_expr, _timed = build_scroll_y_expr(lines, centers, duration, args.height, img_h, args.reading)
 
+        guide = vocals and args.vocals_level > 0 and not args.skip_separation
+        log(f"  guide vocals: {'on @ %.0f%%' % (args.vocals_level * 100) if guide else 'off'}")
         t = Timer.begin(f"render {args.height}p crawl video (ffmpeg)")
-        render_video(instrumental, crawl_png, y_expr, out_path, width, args.height, args.fps)
+        render_video(instrumental, vocals, args.vocals_level, crawl_png, y_expr,
+                     out_path, width, args.height, args.fps)
         t.done()
 
         elapsed = total.done()

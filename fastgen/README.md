@@ -11,7 +11,10 @@ Given **artist + title** (and optionally an audio file), it produces a low-res
    (no slow ensemble) — default `UVR-MDX-NET-Inst_HQ_4.onnx` (writes both stems).
 2. **Get lyrics + timing** (see "Lyric sync" below).
 3. **Render** the lyrics scrolling upward (**Star Wars crawl**) over a solid
-   background, muxed with the instrumental, in a single ffmpeg pass.
+   background in a single ffmpeg pass. The audio is the instrumental with the
+   **vocal stem mixed back in quietly (30%) as a singer guide** (`--vocals-level`),
+   and where two sung lines are **>5s apart a blank gap is inserted** so an empty
+   space scrolls by during instrumental breaks (`--gap-threshold`).
 
 Deliberately primitive: no lyrics review, no cloud round-trips. Optimised for
 speed and "good enough" sync.
@@ -83,11 +86,12 @@ python fastgen.py audio.flac --artist X --title Y --lyrics-file lyrics.txt
 python fastgen.py audio.flac --artist X --title Y --lyrics-file lyrics.txt --whisper-model small --lang es
 ```
 
-Useful flags: `--url` (fetch a specific URL), `--model` (separator model),
-`--height` (default 480), `--wrap` (chars/line), `--reading` (active-line
-position, default 0.42), `--whisper-model` (tiny/base/small/medium),
-`--precise-align` (per-word timing, slower), `--lang`, `--no-align`, `--fps`,
-`--font`, `--out`, `--keep-temp`.
+Useful flags: `--url` (fetch a specific URL), `--vocals-level` (guide-vocal
+volume, default 0.3, 0=off), `--gap-threshold` (instrumental-gap seconds, default
+5, 0=off), `--model` (separator model), `--height` (default 480), `--wrap`
+(chars/line), `--reading` (active-line position, default 0.42), `--whisper-model`
+(tiny/base/small/medium), `--precise-align` (per-word timing, slower), `--lang`,
+`--no-align`, `--fps`, `--font`, `--out`, `--keep-temp`.
 
 ## Measured (ABBA – Waterloo, 2:45, on an M-series laptop **CPU**)
 
