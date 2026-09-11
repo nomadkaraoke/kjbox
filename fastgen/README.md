@@ -10,9 +10,25 @@ video as fast as possible, entirely locally:
 3. **Render** the lyrics scrolling upward (**Star Wars crawl**) over a solid
    background, muxed with the instrumental, in a single ffmpeg pass.
 
-Deliberately primitive: no precise per-word timing, no lyrics review, no cloud
-round-trips. The crawl is a constant-rate scroll paced across the song duration
-— "good enough" sync, optimised for speed.
+Deliberately primitive: no lyrics review, no cloud round-trips. Optimised for
+speed and "good enough" sync.
+
+### Lyric sync (tiered)
+
+The hard part is getting each line on screen *when it's actually sung* without a
+full AudioShake/forced-alignment pass. fastgen tries, in order:
+
+1. **Synced lyrics (implemented).** LRCLIB returns line-level `[mm:ss.xx]`
+   timestamps for most popular songs. Each line is *time-anchored*: it reaches a
+   fixed on-screen reading position exactly at its timestamp. The scroll rate
+   varies between lines (held lines linger, quick lines fly, instrumental gaps
+   pause) — driven by a piecewise-linear ffmpeg `overlay y` expression.
+2. **Forced alignment (planned).** When only plain lyrics exist, align the known
+   text to the vocal stem (already produced in step 1) with a lightweight CTC
+   aligner (torchaudio Wav2Vec2 / MMS_FA — much lighter than Whisper/MFA) to
+   synthesise line/word timestamps, then feed the same time-anchored scroll.
+3. **Constant crawl (fallback).** No timing available → scroll the whole block at
+   a constant rate across the song duration (true Star Wars style).
 
 ## Run
 
@@ -66,7 +82,9 @@ service, or a hot instance) it drops to seconds → **sub-30s total is realistic
   on-device ffmpeg).
 - **Cheap gen API tier**: expose as a ~$1/track "draft" tier in karaoke-gen
   (gen already has an LRCLIB client + ffmpeg/libass render to reuse).
-- **Better sync**: use LRCLIB *synced* line timestamps to pace the scroll (or a
-  lightweight vocal-stem alignment) instead of a constant crawl.
+- **Tier 2 forced alignment**: CTC alignment on the vocal stem for songs without
+  LRCLIB synced lyrics (see "Lyric sync" above).
 - **Star Wars perspective**: add a `perspective`/`v360`-style tilt so the crawl
   recedes toward the top.
+- **Fewer lines / bigger text**: the current reading window shows ~8 lines; a
+  tighter window may read better on a projector.
