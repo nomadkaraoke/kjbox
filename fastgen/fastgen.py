@@ -119,18 +119,49 @@ def separate_instrumental(audio_path: str, workdir: str, model: str) -> str:
 
 
 # --------------------------------------------------------------------------- #
-# Step 2: fetch lyrics from LRCLIB
+# Step 2: fetch lyrics from LRCLIB (prefer time-synced)
 # --------------------------------------------------------------------------- #
+@dataclass
+class Lyrics:
+    """Fetched lyrics. `timed` holds (start_seconds, line) pairs when the source
+    provided synced (LRC) lyrics; otherwise it is None and only `plain` is set."""
+
+    kind: str                                        # "synced" | "plain"
+    plain: str
+    timed: "list[tuple[float, str]] | None" = None
+
+
+_LRC_RE = re.compile(r"\[(\d+):(\d+(?:\.\d+)?)\]")
+
+
 def _strip_lrc_timestamps(synced: str) -> str:
-    """Turn `[mm:ss.xx] line` synced lyrics into plain text lines."""
-    lines = []
+    return "\n".join(_LRC_RE.sub("", raw).strip() for raw in synced.splitlines()).strip()
+
+
+def _parse_synced(synced: str) -> list[tuple[float, str]]:
+    """Parse `[mm:ss.xx] line` LRC into sorted (start_seconds, text) pairs."""
+    out: list[tuple[float, str]] = []
     for raw in synced.splitlines():
-        line = re.sub(r"\[\d+:\d+(?:\.\d+)?\]", "", raw).strip()
-        lines.append(line)
-    return "\n".join(lines).strip()
+        m = _LRC_RE.match(raw)
+        if not m:
+            continue
+        start = int(m.group(1)) * 60 + float(m.group(2))
+        out.append((start, _LRC_RE.sub("", raw).strip()))
+    out.sort(key=lambda p: p[0])
+    return out
 
 
-def fetch_lyrics(artist: str, title: str, duration: float | None) -> str | None:
+def _lyrics_from_payload(data: dict) -> "Lyrics | None":
+    synced = data.get("syncedLyrics")
+    if synced and synced.strip():
+        return Lyrics("synced", _strip_lrc_timestamps(synced), _parse_synced(synced))
+    plain = data.get("plainLyrics")
+    if plain and plain.strip():
+        return Lyrics("plain", plain)
+    return None
+
+
+def fetch_lyrics(artist: str, title: str, duration: float | None) -> "Lyrics | None":
     session = requests.Session()
     session.headers["User-Agent"] = USER_AGENT
 
@@ -141,25 +172,20 @@ def fetch_lyrics(artist: str, title: str, duration: float | None) -> str | None:
     try:
         r = session.get(f"{LRCLIB_BASE}/get", params=params, timeout=15)
         if r.status_code == 200:
-            data = r.json()
-            body = data.get("plainLyrics") or (
-                _strip_lrc_timestamps(data["syncedLyrics"]) if data.get("syncedLyrics") else None
-            )
-            if body:
-                return body
+            got = _lyrics_from_payload(r.json())
+            if got:
+                return got
     except requests.RequestException as exc:
         log(f"LRCLIB get failed: {exc}")
 
-    # 2) Fallback search — take the first hit that actually has lyrics.
+    # 2) Fallback search — first hit with lyrics, preferring synced results.
     try:
         r = session.get(f"{LRCLIB_BASE}/search", params={"q": f"{artist} {title}"}, timeout=15)
         if r.status_code == 200:
-            for hit in r.json():
-                body = hit.get("plainLyrics") or (
-                    _strip_lrc_timestamps(hit["syncedLyrics"]) if hit.get("syncedLyrics") else None
-                )
-                if body:
-                    return body
+            for hit in sorted(r.json(), key=lambda h: 0 if h.get("syncedLyrics") else 1):
+                got = _lyrics_from_payload(hit)
+                if got:
+                    return got
     except requests.RequestException as exc:
         log(f"LRCLIB search failed: {exc}")
 
@@ -167,32 +193,45 @@ def fetch_lyrics(artist: str, title: str, duration: float | None) -> str | None:
 
 
 # --------------------------------------------------------------------------- #
-# Step 3: build the crawl text + render with ffmpeg
+# Step 3: lay out the crawl, rasterise it, and build the time-anchored scroll
 # --------------------------------------------------------------------------- #
-def build_crawl_lines(artist: str, title: str, lyrics: str, wrap: int) -> list[str]:
-    wrapped: list[str] = []
-    for line in lyrics.splitlines():
-        line = line.strip()
-        if not line:
-            wrapped.append("")  # preserve stanza breaks
-            continue
-        wrapped.extend(textwrap.wrap(line, width=wrap) or [""])
+# A "visual line" is one rendered row of text plus an optional anchor time — the
+# moment that line should reach the on-screen reading position.
+VisualLine = "tuple[str, float | None]"
 
-    header = [artist.upper(), title.upper(), "", ""]
-    # A few leading blanks so the crawl eases in from below the frame,
-    # and trailing blanks so it fully clears the top.
-    return ["", ""] + header + wrapped + ["", "", ""]
+
+def build_visual_lines(artist: str, title: str, lyrics: Lyrics, wrap: int) -> list:
+    header = [("", None), ("", None),
+              (artist.upper(), None), (title.upper(), None),
+              ("", None), ("", None)]
+    body: list = []
+    if lyrics.kind == "synced" and lyrics.timed:
+        for start, text in lyrics.timed:
+            text = text.strip()
+            if not text:
+                continue  # instrumental gap — the scroll naturally lingers here
+            wrapped = textwrap.wrap(text, width=wrap) or [""]
+            for i, w in enumerate(wrapped):
+                body.append((w, start if i == 0 else None))  # anchor first wrap-row
+    else:
+        for raw in lyrics.plain.splitlines():
+            raw = raw.strip()
+            if not raw:
+                body.append(("", None))
+                continue
+            body.extend((w, None) for w in (textwrap.wrap(raw, width=wrap) or [""]))
+    return header + body + [("", None)] * 3
 
 
 def render_crawl_png(
-    lines: list[str], width: int, fontsize: int, font_path: str, workdir: str
-) -> tuple[str, int]:
-    """Render the whole crawl to one tall RGBA PNG with PIL.
+    lines: list, width: int, fontsize: int, font_path: str, workdir: str
+) -> tuple[str, int, list]:
+    """Rasterise the whole crawl to one tall PNG; return (path, height, centers).
 
-    We rasterise with PIL rather than ffmpeg's drawtext because ffmpeg 8's
-    always-on harfbuzz shaping renders a `.notdef` box for every newline in a
-    multi-line textfile. PIL also gives clean per-line centering and a stroke
-    outline, and leaves room to add a Star Wars perspective later.
+    `centers[i]` is the vertical centre (px, image coords) of visual line i, used
+    to anchor lines to their sung time. We rasterise with PIL rather than ffmpeg
+    drawtext because ffmpeg 8's always-on harfbuzz shaping renders a `.notdef`
+    box for every newline in a multi-line textfile.
     """
     from PIL import Image, ImageDraw, ImageFont
 
@@ -203,44 +242,81 @@ def render_crawl_png(
     pad = fontsize  # keep first/last lines (and their stroke) off the edges
 
     height = pad * 2 + line_advance * len(lines)
-    img = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    img = Image.new("RGB", (width, height), (0, 0, 0))
     draw = ImageDraw.Draw(img)
 
+    centers: list = []
     y = pad
-    for line in lines:
-        if line:
-            line_w = draw.textlength(line, font=font)
-            x = (width - line_w) / 2
+    for text, _anchor in lines:
+        if text:
+            line_w = draw.textlength(text, font=font)
             draw.text(
-                (x, y), line, font=font,
-                fill=(255, 232, 31, 255),          # Star Wars crawl yellow
-                stroke_width=stroke, stroke_fill=(0, 0, 0, 255),
+                ((width - line_w) / 2, y), text, font=font,
+                fill=(255, 232, 31),                     # Star Wars crawl yellow
+                stroke_width=stroke, stroke_fill=(0, 0, 0),
             )
+        centers.append(y + line_advance / 2)
         y += line_advance
 
     png_path = os.path.join(workdir, "crawl.png")
     img.save(png_path)
-    return png_path, height
+    return png_path, height, centers
+
+
+def build_scroll_y_expr(
+    lines: list, centers: list, duration: float,
+    frame_h: int, img_h: int, reading_frac: float,
+) -> tuple[str, bool]:
+    """Build the ffmpeg `overlay` y expression; return (expr, is_time_anchored).
+
+    Convention: y = position of the PNG's top edge relative to the frame top, so
+    image row `c` shows at frame row `y + c`. We want each anchored line's centre
+    `c_i` to sit at the reading row `R` at its time `t_i`, i.e. y(t_i) = R - c_i.
+    Between anchors the scroll is piecewise-linear (rate varies, so held lines
+    linger and quick lines fly past). With no anchors we fall back to a constant
+    crawl across the whole song.
+    """
+    reading_row = reading_frac * frame_h
+    pts = [(0.0, float(frame_h))]  # t=0: PNG fully below the frame (nothing shown yet)
+    for (_text, anchor), c in zip(lines, centers):
+        if anchor is not None and 0.0 < anchor < duration:
+            pts.append((float(anchor), reading_row - c))
+
+    timed = len(pts) > 1
+    if timed:
+        pts.append((duration, pts[-1][1]))       # freeze on the last line to the end
+    else:
+        pts.append((duration, -float(img_h)))    # constant crawl fully off the top
+
+    # Keep strictly-increasing time breakpoints.
+    clean = [pts[0]]
+    for t, y in pts[1:]:
+        if t > clean[-1][0] + 1e-3:
+            clean.append((t, y))
+    pts = clean
+
+    # Continuous piecewise-linear scroll as a flat sum of ramps (no nested ifs,
+    # evaluated once per frame): y = Y0 + M0*(t-T0) + Σ (Mk - M[k-1])*max(0,t-Tk).
+    # Commas inside max() are escaped (\,) for the filtergraph parser.
+    slopes = [(pts[i + 1][1] - pts[i][1]) / (pts[i + 1][0] - pts[i][0]) for i in range(len(pts) - 1)]
+    terms = [f"{pts[0][1]:.2f}", f"({slopes[0]:.5f})*(t-{pts[0][0]:.3f})"]
+    for k in range(1, len(slopes)):
+        dm = slopes[k] - slopes[k - 1]
+        if abs(dm) < 1e-6:
+            continue
+        terms.append(f"({dm:.5f})*max(0\\,t-{pts[k][0]:.3f})")
+    return "+".join(terms), timed
 
 
 def render_video(
-    instrumental: str,
-    crawl_png: str,
-    duration: float,
-    out_path: str,
-    width: int,
-    height: int,
+    instrumental: str, crawl_png: str, y_expr: str,
+    out_path: str, width: int, height: int, fps: int,
 ) -> None:
-    # Constant-rate upward crawl: the PNG travels from just below the frame
-    # (y=H) to fully above it (y=-h), a distance of (H+h), across the full song
-    # duration. W/H = background dims, w/h = overlay (PNG) dims, t = timestamp.
-    y_expr = f"H-(t)*((H+h)/{duration:.3f})"
     filt = f"[0:v][1:v]overlay=x=(W-w)/2:y={y_expr}[v]"
-
     cmd = [
         "ffmpeg", "-y",
-        "-f", "lavfi", "-i", f"color=c=black:s={width}x{height}:r=24",
-        "-loop", "1", "-framerate", "24", "-i", crawl_png,
+        "-f", "lavfi", "-i", f"color=c=black:s={width}x{height}:r={fps}",
+        "-loop", "1", "-framerate", str(fps), "-i", crawl_png,
         "-i", instrumental,
         "-filter_complex", filt,
         "-map", "[v]", "-map", "2:a",
@@ -264,6 +340,9 @@ def main(argv: list[str]) -> int:
     ap.add_argument("--model", default=DEFAULT_MODEL, help=f"audio-separator model (default: {DEFAULT_MODEL})")
     ap.add_argument("--height", type=int, default=480, help="Output height in px (default: 480)")
     ap.add_argument("--wrap", type=int, default=34, help="Max characters per lyric line before wrapping")
+    ap.add_argument("--reading", type=float, default=0.42,
+                    help="Vertical reading position for the active line (0=top, 1=bottom; default 0.42)")
+    ap.add_argument("--fps", type=int, default=24, help="Output frame rate (default: 24)")
     ap.add_argument("--font", default=DEFAULT_FONT, help="Path to a .ttf font")
     ap.add_argument("--lyrics-file", help="Use this local lyrics .txt instead of fetching from LRCLIB")
     ap.add_argument("--skip-separation", action="store_true",
@@ -298,11 +377,11 @@ def main(argv: list[str]) -> int:
             t.done()
             log(f"  instrumental: {instrumental}")
 
-        # 2) Lyrics
+        # 2) Lyrics (prefer time-synced)
         if args.lyrics_file:
             with open(args.lyrics_file, encoding="utf-8") as fh:
-                lyrics = fh.read()
-            log(f"lyrics: loaded {len(lyrics)} chars from {args.lyrics_file}")
+                lyrics = Lyrics("plain", fh.read())
+            log(f"lyrics: loaded plain lyrics from {args.lyrics_file}")
         else:
             t = Timer.begin("fetch lyrics (LRCLIB)")
             lyrics = fetch_lyrics(args.artist, args.title, duration)
@@ -310,20 +389,26 @@ def main(argv: list[str]) -> int:
             if not lyrics:
                 log("No lyrics found on LRCLIB — cannot build a lyrics crawl. Aborting.")
                 return 1
-            log(f"  lyrics: {len(lyrics.splitlines())} lines, {len(lyrics)} chars")
+            if lyrics.kind == "synced":
+                log(f"  lyrics: SYNCED — {len(lyrics.timed)} timed lines (time-anchored scroll)")
+            else:
+                log(f"  lyrics: PLAIN — {len(lyrics.plain.splitlines())} lines (no timing → constant crawl)")
 
         # 3) Render
         width = round(args.height * 16 / 9)
         width += width % 2  # ffmpeg needs even dimensions
         fontsize = max(18, round(args.height * 0.07))
-        lines = build_crawl_lines(args.artist, args.title, lyrics, args.wrap)
+        lines = build_visual_lines(args.artist, args.title, lyrics, args.wrap)
 
         t = Timer.begin("rasterise crawl (PIL)")
-        crawl_png, _png_h = render_crawl_png(lines, width, fontsize, args.font, workdir)
+        crawl_png, img_h, centers = render_crawl_png(lines, width, fontsize, args.font, workdir)
         t.done()
 
+        y_expr, timed = build_scroll_y_expr(lines, centers, duration, args.height, img_h, args.reading)
+        log(f"  scroll: {'time-anchored (synced timestamps)' if timed else 'constant crawl'}")
+
         t = Timer.begin(f"render {args.height}p crawl video (ffmpeg)")
-        render_video(instrumental, crawl_png, duration, out_path, width, args.height)
+        render_video(instrumental, crawl_png, y_expr, out_path, width, args.height, args.fps)
         t.done()
 
         elapsed = total.done()
