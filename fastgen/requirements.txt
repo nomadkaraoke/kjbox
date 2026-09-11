@@ -1,0 +1,5 @@
+# fastgen POC dependencies (plus ffmpeg/ffprobe on PATH).
+# On the dev machine these come from the `nomadkaraoke` conda env.
+audio-separator
+requests
+Pillow

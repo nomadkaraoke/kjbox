@@ -1,0 +1,72 @@
+# fastgen — ultrafast, low-cost, on-demand karaoke (proof of concept)
+
+Seed of the **"Ultrafast, low-cost, on-demand karaoke generation"** backlog item.
+Given input **audio + artist + title**, it produces a low-res (480p) "karaoke"
+video as fast as possible, entirely locally:
+
+1. **Separate the instrumental** with a *single fast* audio-separator model
+   (no slow ensemble) — default `UVR-MDX-NET-Inst_HQ_4.onnx`.
+2. **Fetch lyrics** from the internet (LRCLIB — free, no API key).
+3. **Render** the lyrics scrolling upward (**Star Wars crawl**) over a solid
+   background, muxed with the instrumental, in a single ffmpeg pass.
+
+Deliberately primitive: no precise per-word timing, no lyrics review, no cloud
+round-trips. The crawl is a constant-rate scroll paced across the song duration
+— "good enough" sync, optimised for speed.
+
+## Run
+
+```bash
+# From the nomadkaraoke conda env (has audio-separator + ffmpeg)
+python fastgen.py path/to/audio.flac --artist "ABBA" --title "Waterloo"
+
+# Iterate on the render only (skip the slow separation step):
+python fastgen.py audio.flac --artist ABBA --title Waterloo --skip-separation
+
+# Use your own lyrics text instead of LRCLIB:
+python fastgen.py audio.flac --artist ABBA --title Waterloo --lyrics-file lyrics.txt
+```
+
+Useful flags: `--model` (separator model), `--height` (default 480), `--wrap`
+(chars/line before wrapping), `--font`, `--out`, `--keep-temp`.
+
+## Measured (ABBA – Waterloo, 2:45, on an M-series laptop **CPU**)
+
+| Stage | Time |
+|---|---|
+| probe duration | 0.1s |
+| separate instrumental (single MDX model) | **41.6s** |
+| fetch lyrics (LRCLIB) | 0.3s |
+| rasterise crawl (PIL) | 0.2s |
+| render 480p video (ffmpeg, ~17× realtime) | 9.7s |
+| **total** | **51.8s** |
+
+Separation dominates. On the L4 GPU (the existing `audio-separator` Cloud Run
+service, or a hot instance) it drops to seconds → **sub-30s total is realistic**.
+
+## Design notes / gotchas
+
+- **Render is PIL → PNG → ffmpeg `overlay` scroll**, *not* ffmpeg `drawtext`.
+  ffmpeg 8's always-on harfbuzz shaping renders a `.notdef` box for every
+  newline in a multi-line `textfile`, and the `text_shaping` toggle was removed.
+  Rasterising the whole crawl with PIL sidesteps that, gives clean per-line
+  centering + a stroke outline, and leaves room for a real 3D perspective later.
+- Lyrics are wrapped to `--wrap` chars (PIL/drawtext don't auto-wrap).
+- Single fast model via `Separator(output_single_stem="Instrumental")` — only
+  the instrumental stem is written.
+
+## Where this is heading (backlog vision)
+
+- **GPU separation**: route step 1 to the existing `audio-separator` Cloud Run
+  L4 service (or a hot/min-instances=1 instance) instead of local CPU. Add a
+  `--source-url` (YouTube) ingest to the separator so a KJ box only has to
+  *download* the finished instrumental (one-way transfer).
+- **On-device home = kjbox**: wrap this as a "Fast generate" action in the
+  kj-controller (reuses mpv for instant playback, the generic downloader, and
+  on-device ffmpeg).
+- **Cheap gen API tier**: expose as a ~$1/track "draft" tier in karaoke-gen
+  (gen already has an LRCLIB client + ffmpeg/libass render to reuse).
+- **Better sync**: use LRCLIB *synced* line timestamps to pace the scroll (or a
+  lightweight vocal-stem alignment) instead of a constant crawl.
+- **Star Wars perspective**: add a `perspective`/`v360`-style tilt so the crawl
+  recedes toward the top.
