@@ -89,6 +89,41 @@ def probe_duration(audio_path: str) -> float:
 
 
 # --------------------------------------------------------------------------- #
+# Step 0.5: fetch source audio via flacfetch-remote (when no file is given)
+# --------------------------------------------------------------------------- #
+def fetch_audio(artist: str, title: str, url: "str | None", workdir: str) -> str:
+    """Download source audio with the `flacfetch-remote` CLI (auto-selected).
+
+    Uses the same remote flacfetch API karaoke-gen uses (torrent/Spotify/YouTube);
+    needs FLACFETCH_API_URL + FLACFETCH_API_KEY in the environment (workspace
+    `.envrc` via direnv). A specific `url` skips search and grabs it directly.
+    """
+    if not os.environ.get("FLACFETCH_API_URL") or not os.environ.get("FLACFETCH_API_KEY"):
+        raise RuntimeError(
+            "flacfetch needs FLACFETCH_API_URL and FLACFETCH_API_KEY in the environment "
+            "(load the workspace .envrc via direnv), or pass an audio file / --url."
+        )
+
+    # Prefer the flacfetch-remote next to our interpreter (the wrapper runs a
+    # specific conda python that isn't necessarily 'activated' on PATH).
+    exe = os.path.join(os.path.dirname(sys.executable), "flacfetch-remote")
+    if not os.path.exists(exe):
+        exe = "flacfetch-remote"
+
+    cmd = [exe, "--auto", "-o", workdir, "--filename", "source"]
+    cmd += ["--url", url] if url else ["-a", artist, "-t", title]
+    subprocess.run(cmd, check=True)
+
+    got = glob.glob(os.path.join(workdir, "source.*"))
+    if not got:  # fall back to any audio-like file flacfetch may have named itself
+        got = [f for f in glob.glob(os.path.join(workdir, "*"))
+               if f.lower().endswith((".flac", ".m4a", ".opus", ".mp3", ".wav", ".ogg", ".webm"))]
+    if not got:
+        raise RuntimeError("flacfetch did not produce an audio file.")
+    return got[0]
+
+
+# --------------------------------------------------------------------------- #
 # Step 1: separate stems (single fast model)
 # --------------------------------------------------------------------------- #
 def separate_stems(audio_path: str, workdir: str, model: str) -> tuple[str, "str | None"]:
@@ -215,32 +250,45 @@ def _norm_word(w: str) -> str:
 
 
 def align_plain_lyrics(
-    vocals_path: str, plain: str, model_name: str, language: "str | None"
+    vocals_path: str, plain: str, model_name: str, language: "str | None",
+    precise: bool = False,
 ) -> "list[tuple[str, float | None]] | None":
     """Align known plain lyrics to the vocal stem via whisper.
 
-    Whisper transcribes the (isolated) vocals with word timestamps; we then align
-    what it *heard* to the lyric words we *know* (difflib) and hand each lyric
-    line the timestamp of its earliest confidently-matched word. Lines we can't
-    match keep `None` — the scroll interpolates their position between anchors.
+    Whisper transcribes the (isolated) vocals; we align what it *heard* to the
+    lyric words we *know* (difflib) and hand each lyric line the timestamp of its
+    earliest confidently-matched word. Unmatched lines keep `None` — the scroll
+    interpolates their position between anchors.
 
-    Returns a list of (line_text, anchor_seconds|None) for every non-empty lyric
-    line, or None if whisper heard nothing to anchor on.
+    By default we use **segment-level** timing (fast): transcribe without word
+    timestamps and spread each segment's words linearly across its [start, end].
+    That's plenty for a line-level scroll that always shows several lines. Pass
+    `precise=True` for whisper's per-word DTW timestamps (3-5× slower).
+
+    Returns (line_text, anchor_seconds|None) per non-empty lyric line, or None if
+    whisper heard nothing to anchor on.
     """
     import whisper  # lazy — heavy, only needed on the no-timing path
 
     model = whisper.load_model(model_name)
     result = model.transcribe(
-        vocals_path, word_timestamps=True, language=language,
+        vocals_path, word_timestamps=precise, language=language,
         condition_on_previous_text=False, fp16=False,
     )
 
     heard: list[tuple[str, float]] = []
     for seg in result.get("segments", []):
-        for w in seg.get("words", []):
-            nw = _norm_word(w.get("word", ""))
-            if nw:
-                heard.append((nw, float(w["start"])))
+        if precise and seg.get("words"):
+            for w in seg["words"]:
+                nw = _norm_word(w.get("word", ""))
+                if nw:
+                    heard.append((nw, float(w["start"])))
+        else:
+            # Segment-level: spread this segment's words across [start, end].
+            s, e = float(seg["start"]), float(seg["end"])
+            words = [nw for nw in (_norm_word(t) for t in seg.get("text", "").split()) if nw]
+            for i, nw in enumerate(words):
+                heard.append((nw, s + (e - s) * (i / max(1, len(words)))))
     if not heard:
         return None
 
@@ -291,7 +339,7 @@ def align_plain_lyrics(
 
 def resolve_timed_lines(
     lyrics: Lyrics, do_align: bool, vocals_path: "str | None",
-    model_name: str, language: "str | None",
+    model_name: str, language: "str | None", precise: bool = False,
 ) -> "tuple[list[tuple[str, float | None]], str]":
     """Turn fetched lyrics into (line, anchor|None) pairs + a mode label."""
     if lyrics.kind == "synced" and lyrics.timed:
@@ -299,9 +347,10 @@ def resolve_timed_lines(
 
     # Plain lyrics — try Tier B alignment if we can.
     if do_align and vocals_path and os.path.exists(vocals_path):
-        t = Timer.begin(f"align lyrics to vocals (whisper {model_name})")
+        grain = "word-level" if precise else "segment-level"
+        t = Timer.begin(f"align lyrics to vocals (whisper {model_name}, {grain})")
         try:
-            aligned = align_plain_lyrics(vocals_path, lyrics.plain, model_name, language)
+            aligned = align_plain_lyrics(vocals_path, lyrics.plain, model_name, language, precise)
         except Exception as exc:  # never let alignment sink the whole render
             log(f"alignment failed ({type(exc).__name__}: {exc}) — falling back to constant crawl")
             aligned = None
@@ -454,9 +503,11 @@ def render_video(
 # --------------------------------------------------------------------------- #
 def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(description="Ultrafast minimal local karaoke video POC")
-    ap.add_argument("audio", help="Input audio file (any ffmpeg-readable format)")
+    ap.add_argument("audio", nargs="?",
+                    help="Input audio file. If omitted, fetched automatically via flacfetch-remote.")
     ap.add_argument("--artist", required=True)
     ap.add_argument("--title", required=True)
+    ap.add_argument("--url", help="Fetch audio from this URL (YouTube/any yt-dlp site) via flacfetch.")
     ap.add_argument("--out", help="Output mp4 path (default: '<Artist> - <Title> (Fastgen).mp4')")
     ap.add_argument("--model", default=DEFAULT_MODEL, help=f"audio-separator model (default: {DEFAULT_MODEL})")
     ap.add_argument("--height", type=int, default=480, help="Output height in px (default: 480)")
@@ -474,12 +525,14 @@ def main(argv: list[str]) -> int:
                     help="Language hint for alignment (e.g. en, es). Default: auto-detect.")
     ap.add_argument("--no-align", action="store_true",
                     help="Disable Tier-B forced alignment; untimed lyrics use a constant crawl.")
+    ap.add_argument("--precise-align", action="store_true",
+                    help="Use whisper per-word timestamps for alignment (3-5× slower, finer).")
     ap.add_argument("--skip-separation", action="store_true",
                     help="Use the input audio directly as the 'instrumental' (for iterating on the render)")
     ap.add_argument("--keep-temp", action="store_true", help="Keep the working directory")
     args = ap.parse_args(argv)
 
-    if not os.path.exists(args.audio):
+    if args.audio and not os.path.exists(args.audio):
         log(f"Input audio not found: {args.audio}")
         return 2
     if not os.path.exists(args.font):
@@ -491,8 +544,17 @@ def main(argv: list[str]) -> int:
     total = Timer.begin(f"fastgen '{args.artist} - {args.title}'")
 
     try:
+        # 0) Source audio — fetch via flacfetch if none supplied (or a URL given).
+        if args.audio and not args.url:
+            audio_path = args.audio
+        else:
+            t = Timer.begin("fetch audio (flacfetch-remote)")
+            audio_path = fetch_audio(args.artist, args.title, args.url, workdir)
+            t.done()
+            log(f"  audio: {os.path.basename(audio_path)}")
+
         t = Timer.begin("probe duration")
-        duration = probe_duration(args.audio)
+        duration = probe_duration(audio_path)
         t.done()
         log(f"  duration: {duration:.1f}s")
 
@@ -515,10 +577,10 @@ def main(argv: list[str]) -> int:
         # 2) Separate stems (instrumental = video audio; vocals = alignment input)
         if args.skip_separation:
             log("skip-separation: using input audio as the instrumental track")
-            instrumental, vocals = args.audio, None
+            instrumental, vocals = audio_path, None
         else:
             t = Timer.begin(f"separate stems (model={args.model})")
-            instrumental, vocals = separate_stems(args.audio, workdir, args.model)
+            instrumental, vocals = separate_stems(audio_path, workdir, args.model)
             t.done()
             log(f"  instrumental: {os.path.basename(instrumental)}"
                 + (f" | vocals: {os.path.basename(vocals)}" if vocals else ""))
@@ -526,7 +588,7 @@ def main(argv: list[str]) -> int:
         # 3) Resolve line timing: synced → aligned (whisper) → constant crawl.
         timed_lines, mode = resolve_timed_lines(
             lyrics, do_align=not args.no_align, vocals_path=vocals,
-            model_name=args.whisper_model, language=args.lang,
+            model_name=args.whisper_model, language=args.lang, precise=args.precise_align,
         )
         mode_label = {
             "synced": "time-anchored (LRCLIB synced)",

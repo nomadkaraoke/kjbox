@@ -1,12 +1,15 @@
 # fastgen — ultrafast, low-cost, on-demand karaoke (proof of concept)
 
 Seed of the **"Ultrafast, low-cost, on-demand karaoke generation"** backlog item.
-Given input **audio + artist + title**, it produces a low-res (480p) "karaoke"
-video as fast as possible, entirely locally:
+Given **artist + title** (and optionally an audio file), it produces a low-res
+(480p) "karaoke" video as fast as possible, mostly locally:
 
+0. **Fetch audio** if no file is given — via `flacfetch-remote` (the same remote
+   flacfetch API karaoke-gen uses; needs `FLACFETCH_API_URL`/`KEY`). Or pass a
+   file, or a `--url` (YouTube/any yt-dlp site).
 1. **Separate the instrumental** with a *single fast* audio-separator model
-   (no slow ensemble) — default `UVR-MDX-NET-Inst_HQ_4.onnx`.
-2. **Fetch lyrics** from the internet (LRCLIB — free, no API key).
+   (no slow ensemble) — default `UVR-MDX-NET-Inst_HQ_4.onnx` (writes both stems).
+2. **Get lyrics + timing** (see "Lyric sync" below).
 3. **Render** the lyrics scrolling upward (**Star Wars crawl**) over a solid
    background, muxed with the instrumental, in a single ffmpeg pass.
 
@@ -30,8 +33,10 @@ full AudioShake/forced-alignment pass. fastgen tries, in order:
    we match what it *heard* to the lyric words we *know* (difflib), and give each
    line the time of its earliest matched word (unmatched lines interpolate). Uses
    the already-installed `openai-whisper` — no torchaudio. This is the path for
-   niche songs. Cost: ~1× real-time on CPU with `--whisper-model base` (i.e. a
-   3-min song adds ~3 min); only runs when there's no synced source.
+   niche songs. **Segment-level by default** (fast: ~15s for a 3-min song with
+   `--whisper-model base`; words spread linearly within each whisper segment —
+   coarse but fine since several lines are always on screen). `--precise-align`
+   switches to per-word DTW timestamps (3-5× slower). Only runs off the synced path.
 3. **Constant crawl (fallback).** No lyrics timing and alignment unavailable/failed
    → scroll the whole block at a constant rate across the song (true Star Wars).
 
@@ -42,15 +47,22 @@ mp4 into the current folder. It auto-selects the right Python env, so you can ru
 it from anywhere:
 
 ```bash
-# writes "ABBA - Waterloo (Fastgen).mp4" into the current directory
-/path/to/fastgen/fastgen "ABBA" "Waterloo" ~/Downloads/waterloo.flac
+# no audio file → auto-fetches the audio via flacfetch (needs the workspace .envrc)
+/path/to/fastgen/fastgen "ABBA" "Waterloo"
 
-# explicit output path:
-fastgen "ABBA" "Waterloo" ~/Downloads/waterloo.flac ~/Desktop/waterloo.mp4
+# or give it an audio file:
+fastgen "ABBA" "Waterloo" ~/Downloads/waterloo.flac
 
-# higher res for a projector:
-fastgen "ABBA" "Waterloo" ~/Downloads/waterloo.flac --height 720
+# or a URL (YouTube / any yt-dlp site) — fastest fetch:
+fastgen "ABBA" "Waterloo" https://youtu.be/VIDEO_ID
+
+# explicit output path / higher res for a projector:
+fastgen "ABBA" "Waterloo" ~/Downloads/waterloo.flac ~/Desktop/out.mp4
+fastgen "ABBA" "Waterloo" --height 720
 ```
+
+Auto-fetch needs `FLACFETCH_API_URL` + `FLACFETCH_API_KEY` in the environment
+(loaded from the workspace `.envrc` via direnv).
 
 Tip: symlink it onto your PATH once — `ln -s "$PWD/fastgen" /usr/local/bin/fastgen`
 — then just `fastgen "Artist" "Title" file`. Takes ~1 min for a 3-min song on a
@@ -71,9 +83,10 @@ python fastgen.py audio.flac --artist X --title Y --lyrics-file lyrics.txt
 python fastgen.py audio.flac --artist X --title Y --lyrics-file lyrics.txt --whisper-model small --lang es
 ```
 
-Useful flags: `--model` (separator model), `--height` (default 480), `--wrap`
-(chars/line before wrapping), `--reading` (active-line position, default 0.42),
-`--whisper-model` (tiny/base/small/medium), `--lang`, `--no-align`, `--fps`,
+Useful flags: `--url` (fetch a specific URL), `--model` (separator model),
+`--height` (default 480), `--wrap` (chars/line), `--reading` (active-line
+position, default 0.42), `--whisper-model` (tiny/base/small/medium),
+`--precise-align` (per-word timing, slower), `--lang`, `--no-align`, `--fps`,
 `--font`, `--out`, `--keep-temp`.
 
 ## Measured (ABBA – Waterloo, 2:45, on an M-series laptop **CPU**)
