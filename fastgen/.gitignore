@@ -9,3 +9,4 @@
 *.m4a
 *.opus
 *.ogg
+__pycache__/
