@@ -69,14 +69,16 @@ Auto-fetch needs `FLACFETCH_API_URL` + `FLACFETCH_API_KEY` in the environment
 
 ### Upload to the kjbox
 
-`--upload` sends the finished mp4 to the NomadPC kjbox (same server-side import as
-the KJ UI's "Choose file to upload…"), tagged with a **`FASTGEN`** label so these
-low-res drafts are obvious in the library and never confused with a proper
-version (the label survives kjbox's title normalisation; a filename marker does
-not). Or upload any file on its own with the standalone **`kjupload`**:
+**Uploading to the NomadPC kjbox is on by default** — the finished mp4 goes
+through the same server-side import as the KJ UI's "Choose file to upload…",
+tagged with a **`FASTGEN`** label so these low-res drafts are obvious in the
+library and never confused with a proper version (the label survives kjbox's
+title normalisation; a filename marker does not). Use `--no-upload` to skip it,
+or upload any file on its own with the standalone **`kjupload`**:
 
 ```bash
-fastgen "ABBA" "Waterloo" --upload            # generate + upload, labelled FASTGEN
+fastgen "ABBA" "Waterloo"                      # generate + upload (default), labelled FASTGEN
+fastgen "ABBA" "Waterloo" --no-upload          # generate only, keep it local
 kjupload "some video.mp4" --label FASTGEN      # upload an existing file
 ```
 

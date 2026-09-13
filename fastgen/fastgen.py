@@ -569,8 +569,9 @@ def main(argv: list[str]) -> int:
                     help="Use whisper per-word timestamps for alignment (3-5× slower, finer).")
     ap.add_argument("--skip-separation", action="store_true",
                     help="Use the input audio directly as the 'instrumental' (for iterating on the render)")
-    ap.add_argument("--upload", action="store_true",
-                    help="After generating, upload the mp4 to the nomadpc kjbox (like the KJ UI upload)")
+    ap.add_argument("--upload", action=argparse.BooleanOptionalAction, default=True,
+                    help="Upload the finished mp4 to the nomadpc kjbox, labelled FASTGEN "
+                         "(default: on; use --no-upload to skip)")
     ap.add_argument("--keep-temp", action="store_true", help="Keep the working directory")
     args = ap.parse_args(argv)
 
