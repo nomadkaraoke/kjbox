@@ -24,7 +24,16 @@ if [ "$#" -lt 2 ]; then
 fi
 
 ARTIST="$1"; TITLE="$2"; shift 2
-DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Resolve this script's real directory, following symlinks (so a PATH symlink
+# into fastgen/ still finds fastgen.py). Portable — no `readlink -f` (BSD/macOS).
+SOURCE="${BASH_SOURCE[0]}"
+while [ -h "$SOURCE" ]; do
+  D="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+  SOURCE="$(readlink "$SOURCE")"
+  [ "${SOURCE#/}" = "$SOURCE" ] && SOURCE="$D/$SOURCE"
+done
+DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
 
 # Optional leading positional: an audio file path OR a URL to fetch.
 SRC_ARGS=()
