@@ -1,0 +1,7 @@
+# fastgen POC dependencies (plus ffmpeg/ffprobe on PATH).
+# On the dev machine these come from the `nomadkaraoke` conda env.
+audio-separator
+requests
+Pillow
+openai-whisper   # Tier-B forced alignment of untimed lyrics (no torchaudio needed)
+flacfetch        # provides the `flacfetch-remote` CLI for auto-fetching audio

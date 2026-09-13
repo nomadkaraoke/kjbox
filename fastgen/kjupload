@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+#
+# kjupload — upload media file(s) to the nomadpc kjbox (as if via the KJ UI).
+#
+#   kjupload FILE [FILE ...]
+#
+# Needs KJBOX_CF_ACCESS_CLIENT_ID / KJBOX_CF_ACCESS_CLIENT_SECRET in the
+# environment (workspace .envrc via direnv). See kjupload.py for details.
+#
+set -euo pipefail
+
+# Resolve this script's real directory, following symlinks (PATH symlink safe).
+SOURCE="${BASH_SOURCE[0]}"
+while [ -h "$SOURCE" ]; do
+  D="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+  SOURCE="$(readlink "$SOURCE")"
+  [ "${SOURCE#/}" = "$SOURCE" ] && SOURCE="$D/$SOURCE"
+done
+DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+PY="${FASTGEN_PYTHON:-}"
+if [ -z "$PY" ]; then
+  if [ -x /Users/andrew/miniforge3/envs/nomadkaraoke/bin/python3 ]; then
+    PY=/Users/andrew/miniforge3/envs/nomadkaraoke/bin/python3
+  else
+    PY=python3
+  fi
+fi
+
+exec "$PY" "$DIR/kjupload.py" "$@"
