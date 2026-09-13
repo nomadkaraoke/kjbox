@@ -1,0 +1,11 @@
+# fastgen generates media locally (and uploads to kjbox) — never commit outputs.
+*.mp4
+*.mkv
+*.webm
+*.mov
+*.wav
+*.flac
+*.mp3
+*.m4a
+*.opus
+*.ogg
