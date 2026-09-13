@@ -134,6 +134,46 @@ class PhoneNormalizationError(ValueError):
     """Raised when a phone number can't be parsed/validated."""
 
 
+# North American Numbering Plan regions share country code "1".
+_NANP_REGIONS = {"US", "CA"}
+
+
+def _normalize_phone_fallback(raw, default_region):
+    """E.164 normalization without libphonenumber (dev / missing-dep path).
+
+    Correct for NANP (US/CA), *including* the common failure where the singer
+    types their own country-code ``1`` in front of a 10-digit number (e.g.
+    ``18034042707``). The old naïve version blindly prepended ``+1`` and
+    produced the non-routable ``+118034042707``; here we detect the leading
+    ``1`` and keep it as the country code.
+
+    Non-NANP regions assume the user typed a full international number — the
+    fallback can't strip national trunk prefixes (e.g. AU/UK leading ``0``);
+    that correctness needs libphonenumber, which production installs.
+    """
+    has_plus = raw.startswith("+")
+    digits = re.sub(r"\D", "", raw)
+    if not digits:
+        raise PhoneNormalizationError("phone has no digits")
+
+    if default_region in _NANP_REGIONS and not has_plus:
+        # 10 significant digits, optionally with a leading "1" country code.
+        if len(digits) == 11 and digits.startswith("1"):
+            return "+" + digits
+        if len(digits) == 10:
+            return "+1" + digits
+        raise PhoneNormalizationError(
+            "phone is not a valid US/CA number "
+            "(need 10 digits, or 11 with a leading 1)"
+        )
+
+    # Had a leading "+", or a non-NANP region: trust the digits as an
+    # international number and just guarantee the leading "+".
+    if len(digits) < 8:
+        raise PhoneNormalizationError("phone is too short")
+    return "+" + digits
+
+
 def normalize_phone(raw, default_region="US"):
     """Parse ``raw`` to E.164 format.
 
@@ -149,14 +189,7 @@ def normalize_phone(raw, default_region="US"):
         raise PhoneNormalizationError("phone is empty")
 
     if not _HAS_PHONENUMBERS:
-        # Best-effort fallback: strip non-digit/+, ensure leading +.
-        digits = re.sub(r"[^\d+]", "", raw)
-        if not digits:
-            raise PhoneNormalizationError("phone has no digits")
-        if digits.startswith("+"):
-            return digits
-        # Naïve country-code prefix — only correct for US/CA defaults.
-        return "+1" + digits if default_region == "US" else "+" + digits
+        return _normalize_phone_fallback(raw, default_region)
 
     region = default_region if not raw.startswith("+") else None
     try:

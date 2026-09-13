@@ -147,6 +147,59 @@ class TestNormalizePhone:
         with pytest.raises(sms.PhoneNormalizationError):
             sms.normalize_phone("123", default_region="US")
 
+    def test_us_with_leading_country_code(self):
+        # Singer typed their own "1" country code in front of a 10-digit
+        # number. Must NOT become +11803... (the reported non-routable bug).
+        assert sms.normalize_phone("18034042707", default_region="US") == "+18034042707"
+
+    def test_us_with_leading_country_code_and_formatting(self):
+        assert sms.normalize_phone("1 (803) 404-2707", default_region="US") == "+18034042707"
+
+
+# ---------------------------------------------------------------------------
+# normalize_phone — fallback path (libphonenumber NOT installed)
+#
+# Directly exercises _normalize_phone_fallback so it's covered even in the
+# production-shaped env where the dep is missing (see kj-controller device).
+# ---------------------------------------------------------------------------
+
+class TestNormalizePhoneFallback:
+    def test_us_ten_digits(self):
+        assert sms._normalize_phone_fallback("8034042707", "US") == "+18034042707"
+
+    def test_us_leading_country_code(self):
+        # THE bug: 11 digits with a leading 1 must keep the 1 as country code,
+        # not gain a second one (+118034042707 → non-routable).
+        assert sms._normalize_phone_fallback("18034042707", "US") == "+18034042707"
+
+    def test_us_leading_country_code_with_formatting(self):
+        assert sms._normalize_phone_fallback("1-803-404-2707", "US") == "+18034042707"
+
+    def test_ca_leading_country_code(self):
+        assert sms._normalize_phone_fallback("14035551234", "CA") == "+14035551234"
+
+    def test_us_already_e164_preserved(self):
+        assert sms._normalize_phone_fallback("+18034042707", "US") == "+18034042707"
+
+    def test_us_wrong_length_rejected(self):
+        with pytest.raises(sms.PhoneNormalizationError):
+            sms._normalize_phone_fallback("123456", "US")
+
+    def test_no_digits_rejected(self):
+        with pytest.raises(sms.PhoneNormalizationError):
+            sms._normalize_phone_fallback("abc", "US")
+
+    def test_international_region_prepends_plus(self):
+        # Non-NANP region: trust the digits as a full international number.
+        assert sms._normalize_phone_fallback("447123456789", "GB") == "+447123456789"
+
+    def test_normalize_phone_uses_fallback_when_lib_missing(self, monkeypatch):
+        # End-to-end: force the missing-dep branch and reproduce the reported
+        # production scenario (device has no phonenumbers installed).
+        monkeypatch.setattr(sms, "_HAS_PHONENUMBERS", False)
+        assert sms.normalize_phone("18034042707", default_region="US") == "+18034042707"
+        assert sms.normalize_phone("8034042707", default_region="US") == "+18034042707"
+
 
 # ---------------------------------------------------------------------------
 # Telnyx send
