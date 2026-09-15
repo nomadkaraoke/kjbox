@@ -11,14 +11,14 @@ from unittest.mock import patch
 import karaoke_nerds
 
 # Flat community rows as returned by the Divebar Cloud Function's
-# `kn_community_search` action: {artist, title, brand, watch}.
+# `kn_community_search` action: {artist, title, brand (a CODE), watch}.
 FIXTURE_ROWS = [
-    {"artist": "Artist One", "title": "Test Song", "brand": "Karaoke Version",
-     "watch": "https://www.youtube.com/watch?v=abc123&list=PLtest"},
-    {"artist": "Artist One", "title": "Test Song", "brand": "ObsKure Karaoke",
-     "watch": "https://www.youtube.com/watch?v=def456&list=PLother"},
-    {"artist": "Artist Two", "title": "Another Song", "brand": "Sing King",
-     "watch": "https://www.youtube.com/watch?v=ghi789"},
+    {"artist": "Artist One", "title": "Test Song", "brand": "KV",
+     "watch": "https://www.youtube.com/watch?v=abc123defgh&list=PLtest"},
+    {"artist": "Artist One", "title": "Test Song", "brand": "OBSK",
+     "watch": "https://youtu.be/def456ijklm"},
+    {"artist": "Artist Two", "title": "Another Song", "brand": "SK",
+     "watch": "https://www.youtube.com/watch?v=ghi789nopqr"},
 ]
 
 
@@ -40,17 +40,19 @@ class TestSearchGrouping:
         with self._patch(FIXTURE_ROWS):
             songs = karaoke_nerds.search("test")
         kv = songs[0]["tracks"][0]
+        # Catalog stores the code; the human name is resolved for display.
+        assert kv["brand_code"] == "KV"
         assert kv["brand_name"] == "Karaoke Version"
-        # Community catalog carries no brand code; ranking resolves via brand_name.
-        assert kv["brand_code"] == ""
         # Every catalog row is a community/web track.
         assert kv["is_community"] is True
 
-    def test_youtube_url_list_param_stripped(self):
+    def test_youtube_url_canonicalized(self):
         with self._patch(FIXTURE_ROWS):
             songs = karaoke_nerds.search("test")
-        assert songs[0]["tracks"][0]["youtube_url"] == "https://www.youtube.com/watch?v=abc123"
-        assert songs[1]["tracks"][0]["youtube_url"] == "https://www.youtube.com/watch?v=ghi789"
+        # Both youtube.com/watch (with &list) and youtu.be forms -> canonical watch?v=.
+        assert songs[0]["tracks"][0]["youtube_url"] == "https://www.youtube.com/watch?v=abc123defgh"
+        assert songs[0]["tracks"][1]["youtube_url"] == "https://www.youtube.com/watch?v=def456ijklm"
+        assert songs[1]["tracks"][0]["youtube_url"] == "https://www.youtube.com/watch?v=ghi789nopqr"
 
     def test_dedupes_identical_brand_and_url(self):
         rows = FIXTURE_ROWS + [dict(FIXTURE_ROWS[0])]  # exact duplicate row
@@ -72,15 +74,21 @@ class TestSearchGrouping:
             assert karaoke_nerds.search("x") == []
 
 
-class TestCleanYoutubeUrl:
+class TestNormalizeYoutubeUrl:
+    def test_youtu_be_short_form(self):
+        assert karaoke_nerds._normalize_youtube_url("https://youtu.be/dQw4w9WgXcQ") \
+            == "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+
     def test_strips_list_param(self):
-        url = "https://www.youtube.com/watch?v=abc123&list=PLtest123"
-        assert karaoke_nerds._clean_youtube_url(url) == "https://www.youtube.com/watch?v=abc123"
+        url = "https://www.youtube.com/watch?v=dQw4w9WgXcQ&list=PLtest123"
+        assert karaoke_nerds._normalize_youtube_url(url) == "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
 
-    def test_no_list_param(self):
-        url = "https://www.youtube.com/watch?v=abc123"
-        assert karaoke_nerds._clean_youtube_url(url) == "https://www.youtube.com/watch?v=abc123"
+    def test_plain_watch_url_unchanged(self):
+        url = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+        assert karaoke_nerds._normalize_youtube_url(url) == url
 
-    def test_list_in_middle(self):
-        url = "https://www.youtube.com/watch?v=abc&list=PLtest&index=1"
-        assert karaoke_nerds._clean_youtube_url(url) == "https://www.youtube.com/watch?v=abc&index=1"
+    def test_empty_returns_empty(self):
+        assert karaoke_nerds._normalize_youtube_url("") == ""
+
+    def test_unparseable_returned_as_is(self):
+        assert karaoke_nerds._normalize_youtube_url("not a url") == "not a url"

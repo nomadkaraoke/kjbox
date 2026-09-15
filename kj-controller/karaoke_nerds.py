@@ -17,7 +17,16 @@ the ``/sing/search`` blueprint need no changes:
 import re
 
 import divebar
+import version_priority
 from utils import log_message
+
+# Extract a YouTube video id from any of KaraokeNerds' stored watch-URL forms
+# (youtu.be/<id>, /watch?v=<id>, /embed/<id>, /shorts/<id>) so we emit the
+# canonical youtube.com/watch?v=<id> the old scrape produced (stable media ids).
+_YT_ID_RE = re.compile(
+    r"(?:youtu\.be/|youtube\.com/(?:watch\?(?:[^&]*&)*v=|embed/|shorts/|v/))"
+    r"([A-Za-z0-9_-]{11})"
+)
 
 
 def search(query, config=None):
@@ -25,9 +34,9 @@ def search(query, config=None):
 
     Returns a list of song dicts, each with title, artist, and a tracks list.
     Every returned track is a community/web version (that is what the catalog
-    holds), so ``is_community`` is always True. ``brand_code`` is unknown from
-    this catalog (only the brand name is stored) and is left blank — version
-    ranking resolves the canonical brand from ``brand_name`` + ``is_community``.
+    holds), so ``is_community`` is always True. The catalog stores the brand
+    *code*; the human ``brand_name`` is resolved from it for display, and version
+    ranking resolves the canonical brand from ``brand_code`` + ``is_community``.
     """
     try:
         rows = divebar.kn_community_search(query, config=config)
@@ -50,8 +59,8 @@ def _group_results(rows):
         title = (r.get("title") or "").strip()
         if not title:
             continue
-        brand_name = (r.get("brand") or "").strip()
-        youtube_url = _clean_youtube_url(r.get("watch") or "") or None
+        brand_code = (r.get("brand") or "").strip()
+        youtube_url = _normalize_youtube_url(r.get("watch") or "") or None
 
         key = (artist.lower(), title.lower())
         song = songs.get(key)
@@ -59,13 +68,13 @@ def _group_results(rows):
             song = {"title": title, "artist": artist, "tracks": [], "_seen": set()}
             songs[key] = song
 
-        dedup = (brand_name, youtube_url)
+        dedup = (brand_code, youtube_url)
         if dedup in song["_seen"]:
             continue
         song["_seen"].add(dedup)
         song["tracks"].append({
-            "brand_name": brand_name,
-            "brand_code": "",
+            "brand_name": version_priority.display_name_for(brand_code),
+            "brand_code": brand_code,
             "youtube_url": youtube_url,
             "is_community": True,
         })
@@ -76,6 +85,16 @@ def _group_results(rows):
     return result
 
 
-def _clean_youtube_url(url):
-    """Strip playlist params from YouTube URLs, keep just the video URL."""
-    return re.sub(r"&list=[^&]*", "", url)
+def _normalize_youtube_url(url):
+    """Canonicalize a watch URL to youtube.com/watch?v=<id>.
+
+    Returns the canonical URL, or the stripped original if no 11-char id parses
+    (never fabricates), or "" when empty.
+    """
+    url = (url or "").strip()
+    if not url:
+        return ""
+    m = _YT_ID_RE.search(url)
+    if m:
+        return f"https://www.youtube.com/watch?v={m.group(1)}"
+    return url
