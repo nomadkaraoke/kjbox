@@ -2,6 +2,19 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-09-14 - Change: Karaoke Nerds search no longer scrapes karaokenerds.com (v0.100.0)
+
+`karaoke_nerds.search()` (song search behind `/karaoke-nerds/search`,
+`/rotation/search`, and the public `/sing/search`) previously scraped
+karaokenerds.com/Search on every query — including per singer keystroke during
+live shows — which drove KaraokeNerds' aggressive 429 rate limiting. It now
+queries **our own** `karaokenerds_community` catalog through the Divebar Cloud
+Function (`divebar.kn_community_search`, new `kn_community_search` action),
+refreshed daily by the authorized `kn-data-sync` export. Same result shape, no
+new device config (reuses `divebar_api_url`). **Requires** the Divebar Cloud
+Function's `kn_community_search` action to be deployed first (karaoke-gen infra).
+Nothing on the device touches karaokenerds.com anymore.
+
 ## 2026-08-22 - Feature: Ambient + 4TB USB SSD temperature graphs in System → Stats (v0.94.0)
 
 Added two live temperature graphs to the System → Stats section, alongside

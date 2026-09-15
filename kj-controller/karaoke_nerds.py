@@ -1,140 +1,79 @@
-"""Karaoke Nerds search integration — scrapes karaokenerds.com for web-only tracks."""
+"""Karaoke Nerds search — backed by OUR OWN community catalog, not a live scrape.
+
+Historically this module scraped karaokenerds.com/Search on every query (including
+the public, singer-facing search on sing.nomadkaraoke.com). KaraokeNerds now rate-
+limits (429) aggressively, and scraping their site per singer keystroke was the main
+driver. This now queries our own `karaokenerds_community` table through the Divebar
+Cloud Function (``divebar.kn_community_search``), which is refreshed daily by the one
+authorized `kn-data-sync` export job. Nothing here touches karaokenerds.com.
+
+The public ``search()`` return shape is unchanged, so ``routes.unified_search`` and
+the ``/sing/search`` blueprint need no changes:
+
+    [{"title", "artist", "tracks": [{"brand_name", "brand_code", "youtube_url",
+                                     "is_community"}]}]
+"""
 
 import re
-from urllib.parse import urlencode
 
-import requests
-from bs4 import BeautifulSoup
-
+import divebar
 from utils import log_message
-
-SEARCH_URL = "https://karaokenerds.com/Search"
-REQUEST_TIMEOUT = 8
-USER_AGENT = "NomadKJ/1.0"
 
 
 def search(query, config=None):
-    """Search karaokenerds.com for web-only karaoke tracks.
+    """Search our community karaoke catalog for web-playable tracks.
 
-    Returns a list of song dicts, each with title, artist, and tracks list.
-    Tracks include brand info, YouTube URL, and community status.
+    Returns a list of song dicts, each with title, artist, and a tracks list.
+    Every returned track is a community/web version (that is what the catalog
+    holds), so ``is_community`` is always True. ``brand_code`` is unknown from
+    this catalog (only the brand name is stored) and is left blank — version
+    ranking resolves the canonical brand from ``brand_name`` + ``is_community``.
     """
-    params = urlencode({"query": query, "webFilter": "OnlyWeb"})
-    url = f"{SEARCH_URL}?{params}"
-
     try:
-        resp = requests.get(
-            url,
-            headers={"User-Agent": USER_AGENT},
-            timeout=REQUEST_TIMEOUT,
-        )
-        resp.raise_for_status()
-    except Exception as e:
-        log_message(f"Karaoke Nerds search error: {e}", config)
+        rows = divebar.kn_community_search(query, config=config)
+    except Exception as e:  # noqa: BLE001 — best-effort; never break search
+        log_message(f"Karaoke Nerds community search error: {e}", config)
         return []
 
-    return parse_results(resp.text, config)
+    return _group_results(rows)
 
 
-def parse_results(html, config=None):
-    """Parse karaokenerds.com search results HTML into structured data."""
-    soup = BeautifulSoup(html, "html.parser")
-    table = soup.find("table")
-    if not table:
-        return []
+def _group_results(rows):
+    """Group flat community rows into songs with a deduped tracks list.
 
-    tbody = table.find("tbody")
-    if not tbody:
-        return []
-
-    songs = []
-    rows = tbody.find_all("tr", recursive=False)
-
-    i = 0
-    while i < len(rows):
-        row = rows[i]
-
-        # Song rows have class "group"
-        if "group" not in row.get("class", []):
-            i += 1
+    Rows are ``{artist, title, brand, watch}``. Songs are keyed by
+    (artist, title) case-insensitively; tracks are deduped by (brand, youtube_url).
+    """
+    songs = {}
+    for r in rows:
+        artist = (r.get("artist") or "").strip()
+        title = (r.get("title") or "").strip()
+        if not title:
             continue
+        brand_name = (r.get("brand") or "").strip()
+        youtube_url = _clean_youtube_url(r.get("watch") or "") or None
 
-        # Extract title and artist from the song row
-        cells = row.find_all("td")
-        if len(cells) < 3:
-            i += 1
+        key = (artist.lower(), title.lower())
+        song = songs.get(key)
+        if song is None:
+            song = {"title": title, "artist": artist, "tracks": [], "_seen": set()}
+            songs[key] = song
+
+        dedup = (brand_name, youtube_url)
+        if dedup in song["_seen"]:
             continue
+        song["_seen"].add(dedup)
+        song["tracks"].append({
+            "brand_name": brand_name,
+            "brand_code": "",
+            "youtube_url": youtube_url,
+            "is_community": True,
+        })
 
-        title_link = cells[0].find("a")
-        artist_link = cells[1].find("a")
-        title = title_link.get_text(strip=True) if title_link else ""
-        artist = artist_link.get_text(strip=True) if artist_link else ""
-
-        # The next row should be the details row with tracks
-        tracks = []
-        if i + 1 < len(rows):
-            details_row = rows[i + 1]
-            if "details" in details_row.get("class", []):
-                tracks = _parse_tracks(details_row)
-                i += 2
-            else:
-                i += 1
-        else:
-            i += 1
-
-        if title:
-            songs.append({
-                "title": title,
-                "artist": artist,
-                "tracks": tracks,
-            })
-
-    return songs
-
-
-def _parse_tracks(details_row):
-    """Parse track list items from a details row."""
-    tracks = []
-    for li in details_row.find_all("li", class_="track"):
-        track = _parse_single_track(li)
-        if track:
-            tracks.append(track)
-    return tracks
-
-
-def _parse_single_track(li):
-    """Parse a single track <li> element."""
-    # Brand name: first <a> in the li
-    brand_link = li.find("a")
-    brand_name = brand_link.get_text(strip=True) if brand_link else ""
-
-    # Brand code: text inside .badge span
-    badge = li.find("span", class_="badge")
-    brand_code = ""
-    if badge:
-        # Get text content, excluding child img text
-        brand_code = badge.get_text(strip=True)
-
-    # YouTube URL: link containing youtube.com
-    youtube_url = None
-    for a in li.find_all("a", href=True):
-        href = a["href"]
-        if "youtube.com" in href:
-            youtube_url = _clean_youtube_url(href)
-            break
-
-    # Community: presence of img.check
-    is_community = bool(li.find("img", class_="check"))
-
-    if not youtube_url:
-        return None
-
-    return {
-        "brand_name": brand_name,
-        "brand_code": brand_code,
-        "youtube_url": youtube_url,
-        "is_community": is_community,
-    }
+    result = list(songs.values())
+    for song in result:
+        song.pop("_seen", None)
+    return result
 
 
 def _clean_youtube_url(url):
