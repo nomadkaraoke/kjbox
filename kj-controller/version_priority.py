@@ -85,6 +85,34 @@ for _canonical, _aliases, _display in COMMERCIAL_BRANDS:
         _ALIAS_TO_CANONICAL[_alias.upper().strip()] = (_canonical, "commercial")
 
 
+# Brand code -> human display name (for UI labels only; does NOT affect ranking).
+# Seeded from the priority registry above, plus the highest-frequency community
+# brands that aren't in the ranking lists (harvested from KaraokeNerds). This
+# reproduces the human names the old live scrape showed now that our own catalog
+# stores only the brand code. Unknown codes fall back to the code.
+_EXTRA_DISPLAY_NAMES = {
+    "IKV": "Imperfekt Karaoke",
+    "ZP": "Zipper Karaoke",
+    "JL311": "Rock Solid Karaoke",
+    "CAR": "Caritas",
+    "MKU": "Mobile Karaoke Unit",
+    "VONAGAM": "Vonagam Karaoke",
+    "GR": "ggnzla RECORDS",
+    "HALJAM": "Hal Jam",
+    "REEKIES": "Reekies Karaoke",
+    "DJS": "DJ Sauly Karaoke",
+}
+_CODE_TO_DISPLAY = {c: d for (c, _a, d) in COMMUNITY_BRANDS + COMMERCIAL_BRANDS}
+_CODE_TO_DISPLAY.update(_EXTRA_DISPLAY_NAMES)
+
+
+def display_name_for(code):
+    """Human display name for a brand code; the code itself if unknown."""
+    if not code:
+        return ""
+    return _CODE_TO_DISPLAY.get(code.upper().strip(), code)
+
+
 # Regex for extracting alpha-prefix brand code from a local disc_id.
 # Stops at the first non-letter character so "KVD-22524" -> "KVD",
 # "SC2411-08" -> "SC", "LEMMY-001" -> "LEMMY".

@@ -66,6 +66,43 @@ def search(query, config=None, limit=50):
         return []
 
 
+def kn_community_search(query, config=None, limit=50):
+    """Search our OWN KaraokeNerds community catalog via the Divebar Cloud Function.
+
+    This replaces the old live scrape of karaokenerds.com. The Cloud Function
+    reads `karaokenerds_community` (the free, directly-playable web/YouTube tracks
+    populated daily by the authorized `kn-data-sync` export). Returns a flat list
+    of ``{artist, title, brand, watch}`` rows (grouped into songs by the caller),
+    or ``[]`` on any error/timeout (best-effort — never raises).
+    """
+    config = config or {}
+    api_url = _get_api_url(config)
+    if not api_url or not query:
+        return []
+
+    try:
+        resp = requests.post(
+            api_url,
+            json={"action": "kn_community_search", "query": query, "limit": limit},
+            timeout=_TIMEOUT,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+
+        if data.get("status") != "ok":
+            logger.error("KN community search error: %s", data.get("message"))
+            return []
+
+        return data.get("results", [])
+
+    except requests.Timeout:
+        logger.warning("KN community search timed out")
+        return []
+    except requests.RequestException as e:
+        logger.error("KN community search failed: %s", e)
+        return []
+
+
 def lookup_kn_ids(kn_ids, config=None):
     """
     Look up which KN song IDs have Divebar versions.

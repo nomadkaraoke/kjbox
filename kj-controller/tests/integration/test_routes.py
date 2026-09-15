@@ -974,33 +974,13 @@ def test_kn_search_short_query(flask_test_client):
     assert response.status_code == 400
 
 
-@patch('karaoke_nerds.requests.get')
-def test_kn_search_returns_results(mock_get, flask_test_client):
-    """POST /karaoke-nerds/search returns parsed results."""
-    from unittest.mock import MagicMock
-    mock_resp = MagicMock()
-    mock_resp.text = """
-    <table class="table"><tbody>
-        <tr class="group">
-            <td><a>Test Song</a></td>
-            <td><a>Test Artist</a></td>
-            <td><a href="#">1 Brand</a></td>
-        </tr>
-        <tr class="details d-none">
-            <td colspan="30"><ul class="list-group">
-                <li class="track list-group-item d-flex p-0">
-                    <a class="pr-1">Brand Name</a>
-                    <div class="ml-auto">
-                        <a href="https://www.youtube.com/watch?v=test123"><img class="web"></a>
-                        <a><span class="badge badge-primary badge-pill">BN</span></a>
-                    </div>
-                </li>
-            </ul></td>
-        </tr>
-    </tbody></table>
-    """
-    mock_resp.raise_for_status = MagicMock()
-    mock_get.return_value = mock_resp
+@patch('karaoke_nerds.divebar.kn_community_search')
+def test_kn_search_returns_results(mock_kn, flask_test_client):
+    """POST /karaoke-nerds/search groups our community catalog rows into songs."""
+    mock_kn.return_value = [
+        {"artist": "Test Artist", "title": "Test Song", "brand": "Brand Name",
+         "watch": "https://www.youtube.com/watch?v=test123"},
+    ]
 
     response = flask_test_client.post('/karaoke-nerds/search',
         data=json.dumps({"query": "test song"}),
@@ -1010,12 +990,13 @@ def test_kn_search_returns_results(mock_get, flask_test_client):
     assert len(data) == 1
     assert data[0]["title"] == "Test Song"
     assert len(data[0]["tracks"]) == 1
+    assert data[0]["tracks"][0]["is_community"] is True
 
 
-@patch('karaoke_nerds.requests.get')
-def test_kn_search_handles_error(mock_get, flask_test_client):
-    """POST /karaoke-nerds/search returns empty on network error."""
-    mock_get.side_effect = Exception("Connection refused")
+@patch('karaoke_nerds.divebar.kn_community_search')
+def test_kn_search_handles_error(mock_kn, flask_test_client):
+    """POST /karaoke-nerds/search returns empty when the backend errors."""
+    mock_kn.side_effect = Exception("backend down")
 
     response = flask_test_client.post('/karaoke-nerds/search',
         data=json.dumps({"query": "test song"}),

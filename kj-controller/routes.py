@@ -1821,7 +1821,10 @@ def _set_xfce_wallpaper(image_path):
 
 @routes_bp.route('/karaoke-nerds/search', methods=['POST'])
 def kn_search():
-    """Search karaokenerds.com for web-only karaoke tracks."""
+    """Search our own community karaoke catalog for web-playable tracks.
+
+    Backed by `karaokenerds_community` via the Divebar Cloud Function — no live
+    scrape of karaokenerds.com (see karaoke_nerds.search)."""
     data = request.get_json(silent=True) or {}
     query = data.get('query', '').strip()
     if not query or len(query) < 2:
