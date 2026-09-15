@@ -16,6 +16,7 @@ import unicodedata
 from flask import Blueprint, Response, current_app, jsonify, render_template, request, send_file
 
 import divebar
+import fuzzy_match
 import karaoke_nerds
 import library_media
 import mediainfo
@@ -38,6 +39,10 @@ from preview import parse_range
 # Tracks whether the system is in Browser mode (Chromium) vs VLC mode (default).
 # This is module-level so it survives across requests but resets on service restart.
 _browser_mode = False
+
+# Cap on typo-tolerant local media-index matches appended per search, so a loose
+# query can't flood the picker with weak fuzzy hits (exact matches are uncapped).
+LOCAL_FUZZY_LIMIT = 10
 
 routes_bp = Blueprint('routes', __name__)
 
@@ -4702,6 +4707,54 @@ def _suppress_mastered_kn_tracks(local_results, kn_results):
         kn_results[:] = kept_songs
 
 
+def _build_local_media_row(app, path, entry):
+    """Build a flat search-result row for a downloaded media-index file.
+
+    Shared by the exact-substring and typo-tolerant fuzzy passes over
+    ``app.media.index`` so both produce the identical row shape. Prefers the
+    curated media_library identity (clean artist/title) over a raw filename
+    parse; see the inline notes for the master-mirror disc_id nuance.
+    """
+    from catalog import parse_karaoke_filename
+    from naming import strip_media_id_token
+    fname = entry.get("filename", "") or ""
+    # Prefer the clean, curated media_library identity when present:
+    # canonical-slug download filenames carry a trailing ` [media_id]`
+    # token that a raw filename parse would leak into the title
+    # (e.g. "Vienna [yt-I8wu3lLbB0k]"). The scan already resolved the
+    # real artist/title into media_library, so use that; otherwise fall
+    # back to a deterministic parse of the token-stripped filename.
+    parsed_disc_id, parsed_artist, parsed_title = parse_karaoke_filename(
+        strip_media_id_token(fname))
+    ml_row = (app.media_library.get_by_path(path)
+              if getattr(app, "media_library", None) else None)
+    if ml_row and ((ml_row.get("artist") or "").strip()
+                   or (ml_row.get("title") or "").strip()):
+        # Keep the parsed disc_id ONLY for master-mirror files: their
+        # GCS-native "NOMAD-####" name is exactly what marks them as the
+        # official NOMAD community release, and resolve_brand needs that
+        # prefix (dropping it mis-classifies masters as "From YouTube —
+        # unverified"). For other curated rows the parsed disc_id can be
+        # a false positive from a hyphenated title, so keep it out.
+        disc_id = (parsed_disc_id
+                   if ml_row.get("source") == SOURCE_MASTER else None)
+        artist = ml_row.get("artist") or ""
+        title = ml_row.get("title") or ""
+    else:
+        disc_id, artist, title = (
+            parsed_disc_id, parsed_artist, parsed_title)
+    return {
+        "path": path,
+        "filename": entry.get("filename"),
+        "artist": artist,
+        "title": title or strip_media_id_token(
+            os.path.splitext(fname)[0]),
+        "disc_id": disc_id,
+        "format": os.path.splitext(fname)[1].lstrip('.'),
+        "duration": entry.get("duration"),
+    }
+
+
 def unified_search(query, app, *, grouped=False, local_only=False):
     """Unified search helper: local catalog + Karaoke Nerds + Divebar cross-reference.
 
@@ -4733,52 +4786,32 @@ def unified_search(query, app, *, grouped=False, local_only=False):
     # Also search downloaded media files (not in external catalog). Needles and
     # haystack both go through the shared normalizer so they meet in one
     # canonical space (e.g. an "and" query matches a "&" filename, diacritics
-    # fold, etc.) — same pipeline as the catalog FTS path.
+    # fold, etc.) — same pipeline as the catalog FTS path. Files that miss the
+    # exact-substring test get a second, typo-tolerant fuzzy pass so a
+    # misspelled query ("books from boxs") still surfaces an already-downloaded
+    # file — the same recall the Karaoke Nerds / Divebar catalog search gives.
     local_paths = {r.get("path") for r in local_results}
     query_terms_clean = _tokens(query)
+    norm_query = _normalize_text(query)
+    q_sig = fuzzy_match.significant_tokens(norm_query)
+    fuzzy_hits = []  # (overlap, score, path, entry) for the typo-tolerant pass
     for path, entry in app.media.index.items():
         if path in local_paths:
             continue
         searchable = _normalize_text(entry.get("display_name") or entry.get("filename", ""))
         if query_terms_clean and all(term in searchable for term in query_terms_clean):
-            from catalog import parse_karaoke_filename
-            from naming import strip_media_id_token
-            fname = entry.get("filename", "") or ""
-            # Prefer the clean, curated media_library identity when present:
-            # canonical-slug download filenames carry a trailing ` [media_id]`
-            # token that a raw filename parse would leak into the title
-            # (e.g. "Vienna [yt-I8wu3lLbB0k]"). The scan already resolved the
-            # real artist/title into media_library, so use that; otherwise fall
-            # back to a deterministic parse of the token-stripped filename.
-            parsed_disc_id, parsed_artist, parsed_title = parse_karaoke_filename(
-                strip_media_id_token(fname))
-            ml_row = (app.media_library.get_by_path(path)
-                      if getattr(app, "media_library", None) else None)
-            if ml_row and ((ml_row.get("artist") or "").strip()
-                           or (ml_row.get("title") or "").strip()):
-                # Keep the parsed disc_id ONLY for master-mirror files: their
-                # GCS-native "NOMAD-####" name is exactly what marks them as the
-                # official NOMAD community release, and resolve_brand needs that
-                # prefix (dropping it mis-classifies masters as "From YouTube —
-                # unverified"). For other curated rows the parsed disc_id can be
-                # a false positive from a hyphenated title, so keep it out.
-                disc_id = (parsed_disc_id
-                           if ml_row.get("source") == SOURCE_MASTER else None)
-                artist = ml_row.get("artist") or ""
-                title = ml_row.get("title") or ""
-            else:
-                disc_id, artist, title = (
-                    parsed_disc_id, parsed_artist, parsed_title)
-            local_results.append({
-                "path": path,
-                "filename": entry.get("filename"),
-                "artist": artist,
-                "title": title or strip_media_id_token(
-                    os.path.splitext(fname)[0]),
-                "disc_id": disc_id,
-                "format": os.path.splitext(fname)[1].lstrip('.'),
-                "duration": entry.get("duration"),
-            })
+            local_results.append(_build_local_media_row(app, path, entry))
+        else:
+            fz = fuzzy_match.score(norm_query, searchable, q_sig=q_sig)
+            if fz is not None:
+                fuzzy_hits.append((fz[0], fz[1], path, entry))
+
+    # Append typo-tolerant matches after the exact ones (best-first), capped so
+    # a loose query can't flood the picker. Ranking mirrors the catalog fuzzy
+    # fallback: real-word overlap first, then WRatio score.
+    fuzzy_hits.sort(key=lambda h: (h[0], h[1]), reverse=True)
+    for _overlap, _score, path, entry in fuzzy_hits[:LOCAL_FUZZY_LIMIT]:
+        local_results.append(_build_local_media_row(app, path, entry))
 
     if local_only:
         # Live "Try Another" fast path — annotate + rank the local library only,

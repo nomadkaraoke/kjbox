@@ -13,6 +13,7 @@ KJ Controller is a Flask + vanilla JS web app for managing live karaoke shows. I
 | `app.py` | App factory (`create_app`) and entry point (`start_app`). Bootstraps all services, mounts blueprints. |
 | `routes.py` | REST API endpoints (search, queue, playback, catalog, rotation, etc.) |
 | `catalog.py` | `ExternalCatalog` — SQLite FTS5 song search with rapidfuzz fuzzy fallback |
+| `fuzzy_match.py` | Shared precision-gated rapidfuzz scorer used by both `catalog._fuzzy_search` and the media-index search in `routes.unified_search` |
 | `text_normalize.py` | Single source of truth for song-text normalization (Python); mirrored by `static/text_normalize.js` |
 | `media.py` | `MediaIndex` — scans local folders, validates files, tracks download state |
 | `rotation.py` | `RotationManager` — coordinator: delegates to `rotation_store` + `rotation_sync` |
@@ -64,7 +65,7 @@ KJ Controller is a Flask + vanilla JS web app for managing live karaoke shows. I
 
 - `catalog.py` — index-time: `_normalize_for_search()` wraps `normalize()` when building `media_fts` and `media_trigram`.
 - `catalog.py` — query-time: `search()` normalizes the query before building the FTS5 MATCH expression.
-- `routes.py` — `unified_search`: normalizes user input before filtering local-media results.
+- `routes.py` — `unified_search`: normalizes user input before matching local-media results.
 - `routes.py` — `_normalize_song_key`: normalizes artist+title for grouping duplicate results.
 - `static/app.js` — frontend normalizes the search box value before sending queries, matching the backend canonical space.
 
@@ -73,6 +74,8 @@ KJ Controller is a Flask + vanilla JS web app for managing live karaoke shows. I
 1. FTS5 MATCH on `media_fts` (fast, prefix-aware).
 2. LIKE fallback for queries that produce no FTS5 hits (catches punctuation mismatches).
 3. rapidfuzz `WRatio` over `media_trigram` candidates (catches typos). Scores below `FUZZY_SCORE_CUTOFF` (default 80) are discarded.
+
+The tier-3 scoring gates live in `fuzzy_match.py` (`WRatio ≥ FUZZY_SCORE_CUTOFF`, plus ≥ `FUZZY_MIN_TOKEN_OVERLAP` of the query's significant (len ≥ 4) tokens present verbatim; near-exact `FUZZY_SHORT_QUERY_CUTOFF` for all-short queries). `routes.unified_search` reuses the **same** `fuzzy_match.score()` as a second pass over the downloaded-media (`media.index`) files that miss the exact-substring test — so an already-downloaded local file surfaces for a typo'd query ("books from boxs") just like the Karaoke Nerds / Divebar community catalog does. These fuzzy local hits rank after exact ones (best-first) and are capped by `LOCAL_FUZZY_LIMIT`.
 
 ### Versioning and reindex
 
@@ -92,6 +95,8 @@ The service logs a `WARNING` at startup when it detects a stale index (see `app.
 - `scripts/search_metrics.py` — computes recall@K over the corpus to give confidence that normalization changes do not regress search quality.
 - `tests/unit/test_text_normalize.py` — unit tests for the normalizer pipeline.
 - `tests/unit/test_catalog.py` — unit tests for `ExternalCatalog` search, fuzzy fallback, and index-staleness detection.
+- `tests/unit/test_fuzzy_match.py` — unit tests for the shared `fuzzy_match` scorer (precision gates + overlap).
+- `tests/integration/test_unified_search_fuzzy_local.py` — `unified_search` surfaces already-downloaded files for typo'd queries.
 
 ---
 
@@ -109,7 +114,9 @@ Singer browser
                     │       └── rapidfuzz over media_trigram
                     │
                     └── routes.unified_search()
-                            └── normalize + filter local media index
+                            └── normalize + match local media index
+                                    ├── exact-substring pass
+                                    └── fuzzy_match.score() typo pass
 ```
 
 ---

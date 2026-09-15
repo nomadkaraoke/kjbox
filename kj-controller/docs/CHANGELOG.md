@@ -4,6 +4,17 @@ Dated entries, newest first. Each entry notes any required deploy steps.
 
 ---
 
+## 2026-09-15 - Local file search tolerates typos, matching the community catalog (v0.101.0)
+
+**Deploy:** backend (`routes.py`, `catalog.py`, new `fuzzy_match.py`) → **requires `systemctl restart kj-controller`** (backend change; deploy between songs). No migration.
+
+- **Why:** searching the song-link picker for a correctly-spelled title ("books from boxes") found the already-downloaded local file (`downloads/NOMAD-720p`) and offered **Link**, but a typo ("books from **boxs**") only surfaced the Karaoke Nerds / Divebar **community** release (offering **Download** — a needless re-download of a track we already hold). The KN/Divebar catalog search matches server-side and is typo-tolerant; the local media-index search was exact-substring only, so a typo dropped the local file entirely.
+- **What changed:** the downloaded-media (`media.index`) branch of `unified_search` now runs a second, **typo-tolerant fuzzy pass** for any file that misses the exact-substring test. It reuses the exact precision gates the external-catalog fuzzy fallback already uses (rapidfuzz `WRatio` ≥ 80, plus ≥ 50% of the query's significant (len ≥ 4) tokens must appear verbatim — near-exact 95 for all-short queries), so "books from boxs" now Links the local file while unrelated queries stay out.
+- **Single source of truth:** the scoring gates moved into a new shared `fuzzy_match` module used by **both** `catalog._fuzzy_search` and the media-index pass, so the local library and the community catalog tolerate typos identically. Fuzzy local hits are ranked best-first (real-word overlap, then score) and capped (`LOCAL_FUZZY_LIMIT = 10`) so a loose query can't flood the picker; exact matches are uncapped and always rank first. The live "Try Another" (`local_only`) fast path inherits the same tolerance.
+- **Tests:** 6 `fuzzy_match` unit tests (typo-with-overlap passes, unrelated/short-typo rejected, empty inputs, precomputed `q_sig` parity, significant-token filtering) + 5 integration tests on `unified_search` (typo surfaces the downloaded file, exact still matches, unrelated stays out, cap enforced, `local_only` inherits it). Full suite green.
+
+---
+
 ## 2026-08-28 - Bump singers/entries up or down in Auto Order (v0.99.0)
 
 **Deploy:** backend (`rotation_store.py`, `rotation.py`, `auto_order.py`, `routes.py`) + frontend (`static/app.js`, `static/style.css`) → **requires `systemctl restart kj-controller`** (backend change; deploy between songs). Additive SQLite migration runs on boot (new `rotation_entries.priority_bias` column, default `0`) — no manual step.

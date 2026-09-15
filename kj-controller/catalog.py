@@ -5,7 +5,7 @@ import re
 import sqlite3
 import unicodedata
 
-from rapidfuzz import fuzz
+import fuzzy_match
 from text_normalize import (
     normalize as _normalize_for_search,
     fts_match_query as _fts5_safe_query,
@@ -14,17 +14,11 @@ from text_normalize import (
     NORMALIZER_VERSION,
 )
 
-
-# Fuzzy fallback score cutoff (0-100). Tunable; validated by scripts/search_metrics.py.
-FUZZY_SCORE_CUTOFF = 80
-# Min fraction of the query's significant tokens (len>=4) that must appear in a
-# fuzzy candidate. Precision gate: stops WRatio's partial_ratio from inventing
-# matches that share no real words (real-data analysis: 190/254 fuzzy hits were
-# zero-overlap garbage at the old WRatio>=80-only setting).
-FUZZY_MIN_TOKEN_OVERLAP = 0.5
-# When the query has NO significant (len>=4) tokens, the overlap gate can't apply;
-# require a near-exact score instead.
-FUZZY_SHORT_QUERY_CUTOFF = 95
+# Fuzzy fallback tunables live in fuzzy_match (shared with the media-index
+# search in routes.unified_search). Re-exported here for backward compat.
+FUZZY_SCORE_CUTOFF = fuzzy_match.FUZZY_SCORE_CUTOFF
+FUZZY_MIN_TOKEN_OVERLAP = fuzzy_match.FUZZY_MIN_TOKEN_OVERLAP
+FUZZY_SHORT_QUERY_CUTOFF = fuzzy_match.FUZZY_SHORT_QUERY_CUTOFF
 
 
 def parse_karaoke_filename(filename):
@@ -420,7 +414,7 @@ class ExternalCatalog:
         norm_q = _normalize_for_search(query)
         if len(norm_q) < 3:
             return []
-        q_sig = {t for t in norm_q.split() if len(t) >= 4}
+        q_sig = fuzzy_match.significant_tokens(norm_q)
         candidates = self._trigram_candidates(
             query, limit=max(200, (limit + offset) * 20))
         scored = []
@@ -428,20 +422,11 @@ class ExternalCatalog:
             hay = _normalize_for_search(
                 ((c.get("artist") or "") + " " + (c.get("title") or "")).strip()
             )
-            score = fuzz.WRatio(norm_q, hay)
-            if score < FUZZY_SCORE_CUTOFF:
+            res = fuzzy_match.score(norm_q, hay, q_sig=q_sig)
+            if res is None:
                 continue
-            if q_sig:
-                hay_tokens = set(hay.split())
-                overlap = len(q_sig & hay_tokens) / len(q_sig)
-                if overlap < FUZZY_MIN_TOKEN_OVERLAP:
-                    continue
-            else:
-                # No significant tokens to gate on; require near-exact match.
-                if score < FUZZY_SHORT_QUERY_CUTOFF:
-                    continue
-                overlap = 0.0
-            scored.append((overlap, score, c))
+            overlap, wratio = res
+            scored.append((overlap, wratio, c))
         # Rank by overlap first (real-word agreement), then fuzzy score.
         scored.sort(key=lambda s: (s[0], s[1]), reverse=True)
         return [c for _, _, c in scored[offset:offset + limit]]
