@@ -256,6 +256,14 @@ def find_sibling_audio(cdg_file_id, artist, title, brand_code, config=None):
     brand + basename match avoids pairing across brands, or across different
     versions of the same song within one brand.
 
+    The caller's artist/title text may not match the index verbatim (e.g. a
+    KaraokeNerds-normalized request stores "Jose Feliciano" while the divebar
+    index has "José Feliciano", and the lookup service matches by plain
+    substring), so a miss on the combined query falls back to title-only and
+    then artist-only searches before giving up. Any query that surfaces both
+    the cdg row and its brand+basename sibling is trustworthy — the match
+    criteria themselves never loosen.
+
     Returns ``{"file_id": ..., "format": ...}`` for the sibling audio, or
     ``None`` when no companion audio exists (a genuinely orphaned CDG).
     """
@@ -263,38 +271,48 @@ def find_sibling_audio(cdg_file_id, artist, title, brand_code, config=None):
 
     artist = (artist or "").strip()
     title = (title or "").strip()
-    results = search(f"{artist} {title}".strip(), config=config) or []
-
-    # Flatten the grouped songs into a single list of tracks.
-    tracks = [t for song in results for t in song.get("tracks", [])]
 
     def _stem(p):
         return os.path.splitext(os.path.basename(p or ""))[0].lower().strip()
 
-    cdg = next((t for t in tracks if t.get("file_id") == cdg_file_id), None)
-    if cdg is None:
-        # The cdg row didn't come back in the fresh search, so we can't read its
-        # drive_path to confirm a basename match. Fail closed rather than guess:
-        # pairing the wrong song's audio is worse than pairing none.
-        return None
-    cdg_stem = _stem(cdg.get("drive_path"))
-    if not cdg_stem:
-        # No usable basename to match on — refuse rather than risk an empty-stem
-        # match against another empty-stem track.
-        return None
+    queries = []
+    for q in (f"{artist} {title}".strip(), title, artist):
+        if q and q not in queries:
+            queries.append(q)
 
-    for t in tracks:
-        if t.get("file_id") == cdg_file_id:
+    for query in queries:
+        results = search(query, config=config) or []
+
+        # Flatten the grouped songs into a single list of tracks.
+        tracks = [t for song in results for t in song.get("tracks", [])]
+
+        cdg = next((t for t in tracks if t.get("file_id") == cdg_file_id), None)
+        if cdg is None:
+            # The cdg row didn't come back in this search, so we can't read its
+            # drive_path to confirm a basename match here. Try a looser query
+            # rather than guess: pairing the wrong song's audio is worse than
+            # pairing none.
             continue
-        if (t.get("format") or "").lower() not in _CDG_AUDIO_FORMATS:
-            continue
-        if brand_code and t.get("brand_code") != brand_code:
-            continue
-        # Require a basename match so we never pair the wrong audio when a brand
-        # has several tracks for one song.
-        if _stem(t.get("drive_path")) != cdg_stem:
-            continue
-        return {"file_id": t.get("file_id"), "format": (t.get("format") or "").lower()}
+        cdg_stem = _stem(cdg.get("drive_path"))
+        if not cdg_stem:
+            # No usable basename to match on — refuse rather than risk an
+            # empty-stem match against another empty-stem track. A different
+            # query would return the same row, so don't bother retrying.
+            return None
+
+        for t in tracks:
+            if t.get("file_id") == cdg_file_id:
+                continue
+            if (t.get("format") or "").lower() not in _CDG_AUDIO_FORMATS:
+                continue
+            if brand_code and t.get("brand_code") != brand_code:
+                continue
+            # Require a basename match so we never pair the wrong audio when a
+            # brand has several tracks for one song.
+            if _stem(t.get("drive_path")) != cdg_stem:
+                continue
+            return {"file_id": t.get("file_id"),
+                    "format": (t.get("format") or "").lower()}
 
     return None
 

@@ -301,3 +301,68 @@ class TestFindSiblingAudio:
             "sdk_cdg", "ABBA", "Dancing Queen", "SDK",
             config={"divebar_api_url": "http://test"})
         assert sib is None
+
+    # ---- Query-fallback ladder (accent / artist-text mismatch) ----
+
+    FELIZ_GROUP = [{
+        "artist": "José Feliciano", "title": "Feliz Navidad",
+        "tracks": [
+            {"file_id": "sdk_cdg", "brand_code": "SDK", "format": "cdg",
+             "drive_path": "Sandell Karaoke/CDG/CDG G-L/(SDK) José Feliciano - Feliz Navidad.cdg"},
+            {"file_id": "sdk_mp3", "brand_code": "SDK", "format": "mp3",
+             "drive_path": "Sandell Karaoke/CDG/CDG G-L/(SDK) José Feliciano - Feliz Navidad.mp3"},
+        ],
+    }]
+
+    @patch("divebar.search")
+    def test_falls_back_to_title_only_on_accent_mismatch(self, mock_search):
+        # Live incident: request stores "Jose Feliciano" (no accent) but the
+        # index has "José Feliciano", and the lookup service matches by plain
+        # substring — the combined query misses, the title-only query hits.
+        def by_query(query, config=None):
+            return self.FELIZ_GROUP if query == "Feliz Navidad" else []
+        mock_search.side_effect = by_query
+        sib = divebar.find_sibling_audio(
+            "sdk_cdg", "Jose Feliciano", "Feliz Navidad", "SDK",
+            config={"divebar_api_url": "http://test"})
+        assert sib == {"file_id": "sdk_mp3", "format": "mp3"}
+        queries = [c.args[0] for c in mock_search.call_args_list]
+        assert queries == ["Jose Feliciano Feliz Navidad", "Feliz Navidad"]
+
+    @patch("divebar.search")
+    def test_falls_back_to_artist_only_as_last_resort(self, mock_search):
+        def by_query(query, config=None):
+            return self.SDK_GROUP if query == "ABBA" else []
+        mock_search.side_effect = by_query
+        sib = divebar.find_sibling_audio(
+            "sdk_cdg", "ABBA", "Dansing Kween", "SDK",
+            config={"divebar_api_url": "http://test"})
+        assert sib == {"file_id": "sdk_mp3", "format": "mp3"}
+        queries = [c.args[0] for c in mock_search.call_args_list]
+        assert queries == ["ABBA Dansing Kween", "Dansing Kween", "ABBA"]
+
+    @patch("divebar.search")
+    def test_keeps_trying_when_cdg_found_but_sibling_truncated(self, mock_search):
+        # The first query surfaces the cdg row but its mp3 fell outside the
+        # result limit; a later query returns both — pairing must still succeed.
+        cdg_only = [{
+            "artist": "ABBA", "title": "Dancing Queen",
+            "tracks": [self.SDK_GROUP[0]["tracks"][1]],
+        }]
+        def by_query(query, config=None):
+            return self.SDK_GROUP if query == "Dancing Queen" else cdg_only
+        mock_search.side_effect = by_query
+        sib = divebar.find_sibling_audio(
+            "sdk_cdg", "ABBA", "Dancing Queen", "SDK",
+            config={"divebar_api_url": "http://test"})
+        assert sib == {"file_id": "sdk_mp3", "format": "mp3"}
+
+    @patch("divebar.search")
+    def test_skips_blank_and_duplicate_queries(self, mock_search):
+        mock_search.return_value = self.SDK_GROUP
+        sib = divebar.find_sibling_audio(
+            "sdk_cdg", "", "Dancing Queen", "SDK",
+            config={"divebar_api_url": "http://test"})
+        assert sib is not None
+        queries = [c.args[0] for c in mock_search.call_args_list]
+        assert queries == ["Dancing Queen"]
