@@ -3625,7 +3625,7 @@ function renderKNResults(songs) {
                     playMedia(downloadedPath);
                 };
                 actions.appendChild(playBtn);
-            } else {
+            } else if (track.youtube_url) {
                 const dlBtn = document.createElement('button');
                 dlBtn.className = 'kn-download-btn';
                 dlBtn.textContent = 'Download';
@@ -3634,6 +3634,14 @@ function renderKNResults(songs) {
                     downloadKNTrack(track.youtube_url);
                 };
                 actions.appendChild(dlBtn);
+            } else {
+                // Full-catalog (commercial disc) release — exists on KN but has
+                // no web version, so there is nothing to download or play.
+                const badge = document.createElement('span');
+                badge.className = 'kn-disc-only-badge';
+                badge.textContent = 'Disc only';
+                badge.title = 'Commercial release with no web version — check the local library';
+                actions.appendChild(badge);
             }
 
             trackEl.appendChild(info);

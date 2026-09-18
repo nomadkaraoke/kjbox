@@ -1140,6 +1140,10 @@ body {
     font-size: 0.7em; padding: 2px 8px; border-radius: 4px; flex-shrink: 0;
     background-color: rgba(34, 197, 94, 0.12); border: 1px solid rgba(34, 197, 94, 0.3); color: #22c55e;
 }
+.kn-disc-only-badge {
+    font-size: 0.7em; padding: 2px 8px; border-radius: 4px; flex-shrink: 0;
+    background-color: rgba(255, 255, 255, 0.04); border: 1px solid #3a3a3a; color: #888;
+}
 
 .kn-local-section { border-bottom: 1px solid #2a2a2a; background-color: rgba(34, 197, 94, 0.04); }
 .kn-local-header {

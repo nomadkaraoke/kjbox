@@ -974,13 +974,20 @@ def test_kn_search_short_query(flask_test_client):
     assert response.status_code == 400
 
 
-@patch('karaoke_nerds.divebar.kn_community_search')
+@patch('karaoke_nerds.divebar.kn_search')
 def test_kn_search_returns_results(mock_kn, flask_test_client):
-    """POST /karaoke-nerds/search groups our community catalog rows into songs."""
-    mock_kn.return_value = [
-        {"artist": "Test Artist", "title": "Test Song", "brand": "Brand Name",
-         "watch": "https://www.youtube.com/watch?v=test123"},
-    ]
+    """POST /karaoke-nerds/search groups community rows + merges full-catalog brands."""
+    mock_kn.return_value = {
+        "community": [
+            {"artist": "Test Artist", "title": "Test Song", "brand": "Brand Name",
+             "watch": "https://www.youtube.com/watch?v=test123"},
+        ],
+        # Full catalog lists the community code plus a disc-only commercial brand.
+        "full": [
+            {"artist": "Test Artist", "title": "Test Song",
+             "brands": "Brand Name,SF"},
+        ],
+    }
 
     response = flask_test_client.post('/karaoke-nerds/search',
         data=json.dumps({"query": "test song"}),
@@ -989,11 +996,16 @@ def test_kn_search_returns_results(mock_kn, flask_test_client):
     data = json.loads(response.data)
     assert len(data) == 1
     assert data[0]["title"] == "Test Song"
-    assert len(data[0]["tracks"]) == 1
-    assert data[0]["tracks"][0]["is_community"] is True
+    tracks = data[0]["tracks"]
+    assert len(tracks) == 2
+    by_code = {t["brand_code"]: t for t in tracks}
+    assert by_code["Brand Name"]["is_community"] is True
+    # Commercial disc release: present, but with nothing to download.
+    assert by_code["SF"]["is_community"] is False
+    assert by_code["SF"]["youtube_url"] is None
 
 
-@patch('karaoke_nerds.divebar.kn_community_search')
+@patch('karaoke_nerds.divebar.kn_search')
 def test_kn_search_handles_error(mock_kn, flask_test_client):
     """POST /karaoke-nerds/search returns empty when the backend errors."""
     mock_kn.side_effect = Exception("backend down")
