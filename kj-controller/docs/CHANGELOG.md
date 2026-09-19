@@ -4,6 +4,16 @@ Dated entries, newest first. Each entry notes any required deploy steps.
 
 ---
 
+## 2026-09-18 - Loose-CDG approval no longer fails on accented artist names (v0.101.1)
+
+**Deploy:** backend (`divebar.py`) → **requires `systemctl restart kj-controller`** (backend change; deploy between songs). No migration.
+
+- **Why:** approving a singer request for a Sandell loose-CDG track ("Feliz Navidad — Jose Feliciano") failed with *"This CDG has no audio track available in the mirror — pick another version"* even though the sibling `.mp3` exists in the mirror. The request stores the KaraokeNerds-normalized artist **"Jose Feliciano"** (no accent) while the Divebar index has **"José Feliciano"**; `find_sibling_audio` re-searches with `"{artist} {title}"` and the divebar-lookup service matches by plain substring, so the query returned zero rows and pairing failed closed.
+- **What changed:** `find_sibling_audio` now walks a query ladder — `"{artist} {title}"` → title-only → artist-only — and pairs from the first search that surfaces the cdg row *and* its brand+basename sibling. The match criteria themselves (same brand, same filename stem, audio format) never loosen, so wrong-audio pairing remains impossible; only the search query gets progressively broader. Also covers the case where the first query surfaces the cdg but the mp3 falls outside the result limit.
+- **Tests:** 4 new unit tests (title-only fallback on accent mismatch reproducing the incident, artist-only last resort, sibling-truncated retry, blank/duplicate query skipping); existing sibling tests unchanged and green.
+
+---
+
 ## 2026-09-15 - Local file search tolerates typos, matching the community catalog (v0.101.0)
 
 **Deploy:** backend (`routes.py`, `catalog.py`, new `fuzzy_match.py`) → **requires `systemctl restart kj-controller`** (backend change; deploy between songs). No migration.
