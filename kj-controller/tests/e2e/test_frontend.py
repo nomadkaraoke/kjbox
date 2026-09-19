@@ -245,6 +245,64 @@ class TestKnDiscOnlyRendering:
         assert errors == []
 
 
+class TestKnLocalMasterMatching:
+    """KN panel matches local NOMAD masters (which have no youtube_id).
+
+    Regression: masters ("NOMAD-xxxx - Artist - Title.mp4", source 'master')
+    only joined KN rows by YouTube video id, so the NOMAD row offered a
+    re-download of a release already on disk; and "In your collection" only
+    queried the external catalog, so local files never appeared there."""
+
+    # Master filename/display uses accented "Maxïmo" + "from"; the KN song
+    # uses "From" — matching must be accent- and case-insensitive.
+    _SEED = (
+        "() => {"
+        "  localMediaItems = [{"
+        "    display_name: 'Max\\u00efmo Park - Books from Boxes',"
+        "    file_path: '/opt/nomad/downloads/NOMAD-720p/NOMAD-0729 - Max\\u00efmo Park - Books from Boxes.mp4',"
+        "    source: 'master', media_kind: 'mp4' }];"
+        "  renderKNResults([{ artist: 'Max\\u00efmo Park', title: 'Books From Boxes', tracks: ["
+        "    { brand_name: 'Nomad Karaoke', brand_code: 'NOMAD', is_community: true,"
+        "      youtube_url: 'https://www.youtube.com/watch?v=RlBlAKxyqZw' },"
+        "    { brand_name: 'Karaoke Version', brand_code: 'KV', is_community: false,"
+        "      youtube_url: null },"
+        "  ]}]);"
+        "}"
+    )
+
+    def test_nomad_row_plays_local_master_instead_of_download(self, app_page):
+        errors = []
+        app_page.on("pageerror", lambda e: errors.append(str(e)))
+        app_page.evaluate(self._SEED)
+        app_page.locator(".kn-song-header").click()
+
+        # NOMAD row: recognized as already on disk -> Downloaded badge + Play.
+        expect(app_page.locator(".kn-downloaded-badge")).to_have_count(1)
+        expect(app_page.locator(".kn-track .kn-play-btn")).to_have_count(1)
+        # No Download button anywhere: NOMAD is local, KV is disc-only.
+        expect(app_page.locator(".kn-download-btn")).to_have_count(0)
+        expect(app_page.locator(".kn-disc-only-badge")).to_have_count(1)
+        assert errors == []
+
+    def test_collection_section_includes_local_media_index(self, app_page):
+        errors = []
+        app_page.on("pageerror", lambda e: errors.append(str(e)))
+        app_page.evaluate(self._SEED)
+        # Expanding lazy-loads the collection section; the catalog endpoint is
+        # unavailable in the test app, so any rows must come from the local
+        # media index.
+        app_page.locator(".kn-song-header").click()
+
+        section = app_page.locator(".kn-local-section")
+        expect(section).to_have_count(1)
+        expect(app_page.locator(".kn-local-header")).to_contain_text("In your collection (1)")
+        row = app_page.locator(".kn-local-match")
+        expect(row).to_have_count(1)
+        expect(row).to_contain_text("Books from Boxes")
+        expect(row.locator(".kn-play-btn")).to_have_count(1)
+        assert errors == []
+
+
 # ---------------------------------------------------------------------------
 # Library row structure — play/preview/edit/delete buttons unified with the
 # rotation row (no Copy button, colorised format pill, click-to-copy name,

@@ -3536,6 +3536,18 @@ function renderKNResults(songs) {
         localMediaItems.filter(i => i.youtube_id).map(i => [i.youtube_id, i.file_path])
     );
 
+    // Local NOMAD masters (source 'master', the NOMAD-720p mirror) carry no
+    // youtube_id — they're named "NOMAD-xxxx - Artist - Title", not
+    // "[yt-<id>]" — so the video-id join above can never find them. Match
+    // them to the KN NOMAD row by normalized "artist title" instead, so our
+    // own release shows Play rather than offering a pointless re-download.
+    const masterPathByNorm = new Map(
+        localMediaItems
+            .filter(i => i.source === 'master' && (i.file_path || i.path))
+            .map(i => [normalizeForSearch((i.display_name || '').toLowerCase()),
+                       i.file_path || i.path])
+    );
+
     songs.forEach((song, idx) => {
         const songId = `kn-song-${idx}`;
         const trackCount = song.tracks.length;
@@ -3571,6 +3583,8 @@ function renderKNResults(songs) {
         const trackList = document.createElement('div');
         trackList.className = 'kn-track-list' + (isExpanded ? '' : ' collapsed');
         trackList.id = songId;
+
+        const songNorm = normalizeForSearch(`${song.artist} ${song.title}`.toLowerCase());
 
         // Backend has sorted tracks by priority_rank already.
         song.tracks.forEach(track => {
@@ -3608,7 +3622,10 @@ function renderKNResults(songs) {
             }
 
             const videoId = extractYouTubeId(track.youtube_url);
-            const downloadedPath = videoId ? downloadedIdToPath.get(videoId) : null;
+            const downloadedPath = (videoId ? downloadedIdToPath.get(videoId) : null)
+                // The KN NOMAD row IS our own release — play the local master.
+                || (track.brand_code === 'NOMAD' ? masterPathByNorm.get(songNorm) : null)
+                || null;
 
             const actions = document.createElement('span');
             actions.className = 'kn-track-actions';
@@ -3679,8 +3696,22 @@ async function loadKNCatalogMatches(songId) {
         const resp = await fetch(`/search?q=${encodeURIComponent(query)}&limit=5`);
         if (resp.ok) results = await resp.json();
     } catch (_) { /* catalog unavailable */ }
+    if (!Array.isArray(results)) results = [];
 
-    if (!Array.isArray(results) || results.length === 0) return;
+    // The catalog only covers the external (4TB) library. Downloads and
+    // NOMAD-720p masters live in the local media index — include them here
+    // (same dual local+catalog search the Library panel does), else our own
+    // releases look absent from the collection. Deliberately not
+    // filterLocalMedia(): that applies the Library's format-filter toolbar,
+    // which shouldn't hide matches in this panel.
+    const terms = normalizeForSearch(query.toLowerCase()).split(/\s+/).filter(t => t);
+    const localMatches = localMediaItems.filter(item => {
+        const text = normalizeForSearch(
+            ((item.display_name || '') + ' ' + (item.channel || '')).toLowerCase());
+        return terms.length && terms.every(term => text.includes(term));
+    }).slice(0, 5);
+
+    if (results.length === 0 && localMatches.length === 0) return;
 
     const trackList = document.getElementById(songId);
     if (!trackList) return;
@@ -3690,8 +3721,42 @@ async function loadKNCatalogMatches(songId) {
 
     const header = document.createElement('div');
     header.className = 'kn-local-header';
-    header.textContent = `In your collection (${results.length})`;
+    header.textContent = `In your collection (${results.length + localMatches.length})`;
     section.appendChild(header);
+
+    localMatches.forEach(item => {
+        const row = document.createElement('div');
+        row.className = 'kn-local-match';
+
+        const detail = document.createElement('div');
+        detail.className = 'catalog-detail';
+
+        const titleRow = document.createElement('span');
+        titleRow.textContent = (item.display_name || item.file_path || '') + ' ';
+        titleRow.appendChild(mediaFormatBadge(item));
+        detail.appendChild(titleRow);
+
+        const fp = item.file_path || item.path || '';
+        if (fp) {
+            const folderSpan = document.createElement('div');
+            folderSpan.className = 'catalog-folder';
+            folderSpan.textContent = prettyFolder(fp.replace(/\/[^/]*$/, ''));
+            folderSpan.title = fp;
+            detail.appendChild(folderSpan);
+        }
+
+        const playBtn = document.createElement('button');
+        playBtn.className = 'kn-play-btn';
+        playBtn.textContent = 'Play';
+        playBtn.onclick = (e) => {
+            e.stopPropagation();
+            playMedia(fp);
+        };
+
+        row.appendChild(detail);
+        row.appendChild(playBtn);
+        section.appendChild(row);
+    });
 
     results.forEach(match => {
         const row = document.createElement('div');
