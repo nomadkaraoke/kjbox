@@ -202,6 +202,50 @@ class TestAvailableSongs:
 
 
 # ---------------------------------------------------------------------------
+# KN panel — disc-only (commercial, no-URL) track rendering
+# ---------------------------------------------------------------------------
+
+class TestKnDiscOnlyRendering:
+    """KN panel renders disc-only (commercial, no-URL) tracks without crashing.
+
+    Regression: v0.102.0's full-catalog merge introduced tracks with
+    youtube_url null; extractYouTubeId did `url.match(...)` and threw
+    "can't access property 'match', url is null" mid-render, leaving the
+    song rows dead (couldn't expand)."""
+
+    _SONGS = [{
+        "artist": "Jason Aldean", "title": "Big Green Tractor",
+        "tracks": [
+            {"brand_name": "Karaoke Version", "brand_code": "KV",
+             "youtube_url": None, "is_community": False},
+            {"brand_name": "Community Brand", "brand_code": "CB1",
+             "youtube_url": "https://www.youtube.com/watch?v=abc123defgh",
+             "is_community": True},
+        ],
+    }]
+
+    def test_disc_only_track_renders_badge_not_download(self, app_page):
+        errors = []
+        app_page.on("pageerror", lambda e: errors.append(str(e)))
+        app_page.evaluate("(songs) => renderKNResults(songs)", self._SONGS)
+        assert errors == [], f"renderKNResults threw: {errors}"
+
+        # Song header rendered and expandable.
+        header = app_page.locator(".kn-song-header")
+        expect(header).to_have_count(1)
+        header.click()
+        expect(app_page.locator(".kn-track")).to_have_count(2)
+
+        # Disc-only track: muted badge, no Download button.
+        badge = app_page.locator(".kn-disc-only-badge")
+        expect(badge).to_have_count(1)
+        expect(badge).to_have_text("Disc only")
+        # The playable community track still gets its Download button.
+        expect(app_page.locator(".kn-download-btn")).to_have_count(1)
+        assert errors == []
+
+
+# ---------------------------------------------------------------------------
 # Library row structure — play/preview/edit/delete buttons unified with the
 # rotation row (no Copy button, colorised format pill, click-to-copy name,
 # two-click delete confirm).

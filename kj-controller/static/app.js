@@ -3480,6 +3480,8 @@ async function updateApp() {
 // --- Karaoke Nerds Search ---
 
 function extractYouTubeId(url) {
+    // Null-safe: disc-only KN tracks (commercial releases) have youtube_url null.
+    if (!url) return null;
     const m = url.match(/(?:youtube\.com\/watch\?.*v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
     return m ? m[1] : null;
 }
@@ -3499,7 +3501,7 @@ async function searchKaraokeNerds() {
     log(`Searching Karaoke Nerds: ${query}`);
     btn.disabled = true;
     status.classList.remove('hidden');
-    document.getElementById('kn-stage').textContent = 'Searching karaokenerds.com...';
+    document.getElementById('kn-stage').textContent = 'Searching KaraokeNerds mirror...';
 
     const data = await apiCall('/karaoke-nerds/search', { query });
 
