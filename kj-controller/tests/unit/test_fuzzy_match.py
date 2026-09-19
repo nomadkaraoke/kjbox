@@ -14,20 +14,39 @@ def _score(query, hay):
 
 class TestFuzzyScore:
     def test_typo_with_other_matching_words_passes(self):
-        # "boxs" is a typo, but "books"/"from" still overlap -> match.
+        # "boxs" is a typo of "boxes"; every significant token is covered -> match.
         res = _score("books from boxs", "Maximo Park - Books from Boxes")
         assert res is not None
         overlap, wratio = res
-        assert overlap >= fuzzy_match.FUZZY_MIN_TOKEN_OVERLAP
+        assert overlap > 0
         assert wratio >= fuzzy_match.FUZZY_SCORE_CUTOFF
 
     def test_unrelated_text_is_rejected(self):
         assert _score("completely unrelated query", "Maximo Park - Books from Boxes") is None
 
-    def test_single_word_typo_no_overlap_rejected(self):
-        # Only significant token is the typo itself -> zero overlap -> None.
-        # (Matches catalog behavior; KN/Divebar covers this case.)
-        assert _score("viena", "Billy Joel - Vienna") is None
+    def test_missing_query_word_is_rejected(self):
+        # Regression (v0.101.0 was too loose): "queen bohemian" must NOT match
+        # other Queen songs just because "queen" overlaps and WRatio is high.
+        # Token-AND: "bohemian" is covered by nothing in the haystack -> None.
+        assert _score("queen bohemian", "Queen - We Will Rock You") is None
+        assert _score("queen bohemian", "Queen - Bohemian Rhapsody") is not None
+
+    def test_single_word_typo_is_covered(self):
+        # A lone typo token within edit distance of a haystack word matches
+        # (same tolerance as the community catalog: viena -> Vienna).
+        assert _score("viena", "Billy Joel - Vienna") is not None
+        assert _score("zomvie", "The Cranberries - Zombie") is not None
+
+    def test_partial_word_prefix_is_covered(self):
+        # Substring coverage: partially-typed word still matches.
+        assert _score("queen bohem", "Queen - Bohemian Rhapsody") is not None
+
+    def test_verbatim_matches_rank_above_typo_matches(self):
+        exact = _score("books from boxes", "Maximo Park - Books from Boxes")
+        typo = _score("books from boxs", "Maximo Park - Books from Boxes")
+        assert exact is not None and typo is not None
+        # overlap counts only VERBATIM tokens, so the exact query ranks higher.
+        assert exact[0] > typo[0]
 
     def test_empty_inputs_return_none(self):
         assert fuzzy_match.score("", "anything") is None

@@ -12,18 +12,16 @@ needle and haystack meet in the same canonical space (diacritics folded,
 """
 
 from rapidfuzz import fuzz
+from rapidfuzz.distance import Levenshtein
 
-# Fuzzy fallback score cutoff (0-100). Tunable; validated by scripts/search_metrics.py.
+# Historical WRatio cutoff (0-100). No longer a gate — full token coverage
+# replaced it (see score()) — kept for scripts/search_metrics.py analyses and
+# the catalog re-export.
 FUZZY_SCORE_CUTOFF = 80
-# Min fraction of the query's significant tokens (len>=4) that must appear in a
-# fuzzy candidate. Precision gate: stops WRatio's partial_ratio from inventing
-# matches that share no real words (real-data analysis: 190/254 fuzzy hits were
-# zero-overlap garbage at the old WRatio>=80-only setting).
-FUZZY_MIN_TOKEN_OVERLAP = 0.5
-# When the query has NO significant (len>=4) tokens, the overlap gate can't apply;
+# When the query has NO significant (len>=4) tokens, the coverage gate can't apply;
 # require a near-exact score instead.
 FUZZY_SHORT_QUERY_CUTOFF = 95
-# A token this long or longer counts as "significant" for the overlap gate.
+# A token this long or longer counts as "significant" for the coverage gate.
 SIGNIFICANT_TOKEN_LEN = 4
 
 
@@ -35,36 +33,63 @@ def significant_tokens(norm_query):
     return {t for t in norm_query.split() if len(t) >= SIGNIFICANT_TOKEN_LEN}
 
 
+def _typo_threshold(tok):
+    # Max edit distance for a token to count as a typo of a haystack word,
+    # scaled by length so short tokens stay near-exact. Mirrors the community
+    # catalog's fuzzy matching (divebar-lookup CF _kn_match_parts).
+    n = len(tok)
+    if n < SIGNIFICANT_TOKEN_LEN:
+        return 0
+    return 1 if n <= 6 else 2
+
+
+def _token_covered(tok, hay_tokens, norm_hay):
+    """A query token is covered when it appears in the haystack as a substring
+    (exact word or partial typing, e.g. "bohem" in "bohemian") or within a
+    small Levenshtein distance of some haystack word (typo, e.g. "boxs" for
+    "boxes")."""
+    if tok in norm_hay:
+        return True
+    thr = _typo_threshold(tok)
+    return any(Levenshtein.distance(tok, w) <= thr for w in hay_tokens)
+
+
 def score(norm_query, norm_hay, q_sig=None):
     """Fuzzy-match ``norm_hay`` against ``norm_query``; return ``(overlap, wratio)`` or ``None``.
 
     Both arguments must already be normalized via ``text_normalize.normalize``.
-    Applies the same precision gates as the catalog fuzzy fallback:
+    Precision gate (token-AND, mirroring the community-catalog search):
 
-    - ``WRatio`` must be at least ``FUZZY_SCORE_CUTOFF``.
-    - At least ``FUZZY_MIN_TOKEN_OVERLAP`` of the query's significant (len>=4)
-      tokens must appear verbatim in the haystack. This stops WRatio's
-      partial_ratio component from matching text that shares no real words.
-    - If the query has no significant tokens (all short), the overlap gate can't
-      apply, so require a near-exact ``FUZZY_SHORT_QUERY_CUTOFF`` score instead.
+    - EVERY significant (len>=4) query token must be covered by the haystack —
+      present as a substring, or a typo within a small edit distance of some
+      haystack word (see :func:`_token_covered`). Typo tolerance never excuses
+      a MISSING word, so "queen bohemian" cannot match "Queen - We Will Rock
+      You". (The previous gate required only 50% of tokens verbatim plus
+      WRatio>=80, which let any two-word query match everything else by that
+      artist.) Full coverage is a stronger relevance signal than WRatio, so
+      when it applies WRatio is ranking-only — a lone typo like "viena" still
+      matches "Billy Joel - Vienna" even though WRatio is diluted by the long
+      haystack.
+    - If the query has no significant tokens (all short), the coverage gate
+      can't apply, so require a near-exact ``FUZZY_SHORT_QUERY_CUTOFF`` WRatio.
 
-    Returns a ``(overlap, wratio)`` tuple (both higher-is-better, so callers can
-    rank by overlap first then score) when the haystack passes, else ``None``.
-    Pass ``q_sig`` (from :func:`significant_tokens`) to avoid recomputing it in
-    a hot loop over many candidates.
+    Returns a ``(overlap, wratio)`` tuple when the haystack passes, else
+    ``None``. ``overlap`` is the fraction of significant tokens present
+    VERBATIM (typo/partial coverage counts for the gate but not the rank), so
+    exact-word matches sort above typo matches; both elements are
+    higher-is-better for (overlap, score) ranking. Pass ``q_sig`` (from
+    :func:`significant_tokens`) to avoid recomputing it in a hot loop.
     """
     if not norm_query or not norm_hay:
         return None
     if q_sig is None:
         q_sig = significant_tokens(norm_query)
     wratio = fuzz.WRatio(norm_query, norm_hay)
-    if wratio < FUZZY_SCORE_CUTOFF:
-        return None
     if q_sig:
         hay_tokens = set(norm_hay.split())
-        overlap = len(q_sig & hay_tokens) / len(q_sig)
-        if overlap < FUZZY_MIN_TOKEN_OVERLAP:
+        if not all(_token_covered(t, hay_tokens, norm_hay) for t in q_sig):
             return None
+        overlap = len(q_sig & hay_tokens) / len(q_sig)
     else:
         if wratio < FUZZY_SHORT_QUERY_CUTOFF:
             return None
