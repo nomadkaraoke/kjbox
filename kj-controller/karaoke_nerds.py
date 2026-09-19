@@ -1,11 +1,19 @@
-"""Karaoke Nerds search — backed by OUR OWN community catalog, not a live scrape.
+"""Karaoke Nerds search — backed by OUR OWN catalog copies, not a live scrape.
 
 Historically this module scraped karaokenerds.com/Search on every query (including
 the public, singer-facing search on sing.nomadkaraoke.com). KaraokeNerds now rate-
 limits (429) aggressively, and scraping their site per singer keystroke was the main
-driver. This now queries our own `karaokenerds_community` table through the Divebar
-Cloud Function (``divebar.kn_community_search``), which is refreshed daily by the one
-authorized `kn-data-sync` export job. Nothing here touches karaokenerds.com.
+driver. This now queries our own copies of BOTH KN catalogs through the Divebar
+Cloud Function (``divebar.kn_search``, one HTTP call / one BigQuery job), refreshed
+daily by the one authorized `kn-data-sync` export job. Nothing here touches
+karaokenerds.com.
+
+Community rows (`karaokenerds_community`) are the free, web-playable tracks and
+carry a YouTube URL. Full-catalog rows (`karaokenerds_raw`) list EVERY release KN
+knows about — including commercial disc brands with no web version — and merge in
+as ``is_community=False`` tracks with ``youtube_url=None`` (the same shape the old
+scrape produced for them), so a song that only exists on commercial discs still
+shows up instead of "No results found".
 
 The public ``search()`` return shape is unchanged, so ``routes.unified_search`` and
 the ``/sing/search`` blueprint need no changes:
@@ -30,21 +38,25 @@ _YT_ID_RE = re.compile(
 
 
 def search(query, config=None):
-    """Search our community karaoke catalog for web-playable tracks.
+    """Search our KaraokeNerds catalog copies (community + full).
 
     Returns a list of song dicts, each with title, artist, and a tracks list.
-    Every returned track is a community/web version (that is what the catalog
-    holds), so ``is_community`` is always True. The catalog stores the brand
-    *code*; the human ``brand_name`` is resolved from it for display, and version
-    ranking resolves the canonical brand from ``brand_code`` + ``is_community``.
+    Community/web tracks come first per song (``is_community=True`` with a
+    playable ``youtube_url``); commercial disc releases from the full catalog
+    follow (``is_community=False``, ``youtube_url=None``). The catalogs store
+    brand *codes*; the human ``brand_name`` is resolved from them for display,
+    and version ranking resolves the canonical brand from ``brand_code`` +
+    ``is_community``.
     """
     try:
-        rows = divebar.kn_community_search(query, config=config)
+        data = divebar.kn_search(query, config=config)
     except Exception as e:  # noqa: BLE001 — best-effort; never break search
-        log_message(f"Karaoke Nerds community search error: {e}", config)
+        log_message(f"Karaoke Nerds search error: {e}", config)
         return []
 
-    return _group_results(rows)
+    songs = _group_results(data.get("community") or [])
+    _merge_full_catalog(songs, data.get("full") or [])
+    return songs
 
 
 def _group_results(rows):
@@ -83,6 +95,44 @@ def _group_results(rows):
     for song in result:
         song.pop("_seen", None)
     return result
+
+
+def _merge_full_catalog(songs, full_rows):
+    """Fold full-catalog rows into the community-grouped ``songs`` in place.
+
+    Full rows are ``{artist, title, brands}`` where ``brands`` is KN's
+    comma-separated brand-code list for that song — it includes the community
+    codes too, so any code already present on the song (as a playable community
+    track) is skipped. The remaining codes are appended as commercial disc
+    releases: ``is_community=False`` and ``youtube_url=None`` (nothing to
+    download — they only exist on physical/commercial media).
+    """
+    by_key = {(s["artist"].lower(), s["title"].lower()): s for s in songs}
+    for r in full_rows:
+        artist = (r.get("artist") or "").strip()
+        title = (r.get("title") or "").strip()
+        if not title:
+            continue
+
+        key = (artist.lower(), title.lower())
+        song = by_key.get(key)
+        if song is None:
+            song = {"title": title, "artist": artist, "tracks": []}
+            by_key[key] = song
+            songs.append(song)
+
+        have = {(t.get("brand_code") or "").upper() for t in song["tracks"]}
+        for code in (r.get("brands") or "").split(","):
+            code = code.strip()
+            if not code or code.upper() in have:
+                continue
+            have.add(code.upper())
+            song["tracks"].append({
+                "brand_name": version_priority.display_name_for(code),
+                "brand_code": code,
+                "youtube_url": None,
+                "is_community": False,
+            })
 
 
 def _normalize_youtube_url(url):

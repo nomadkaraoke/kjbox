@@ -103,6 +103,48 @@ def kn_community_search(query, config=None, limit=50):
         return []
 
 
+def kn_search(query, config=None, limit=50):
+    """Search BOTH KaraokeNerds catalogs via the Divebar Cloud Function.
+
+    One HTTP call, one BigQuery job server-side (the CF UNIONs the two tables).
+    ``community`` rows are the web-playable tracks (``{artist, title, brand,
+    watch}``); ``full`` rows are the complete KN catalog (``{artist, title,
+    brands}`` — comma-separated brand CODES, including commercial disc brands
+    that have no web version and therefore no URL). Returns empty lists on any
+    error/timeout (best-effort — never raises).
+    """
+    empty = {"community": [], "full": []}
+    config = config or {}
+    api_url = _get_api_url(config)
+    if not api_url or not query:
+        return empty
+
+    try:
+        resp = requests.post(
+            api_url,
+            json={"action": "kn_search", "query": query, "limit": limit},
+            timeout=_TIMEOUT,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+
+        if data.get("status") != "ok":
+            logger.error("KN search error: %s", data.get("message"))
+            return empty
+
+        return {
+            "community": data.get("community", []),
+            "full": data.get("full", []),
+        }
+
+    except requests.Timeout:
+        logger.warning("KN search timed out")
+        return empty
+    except requests.RequestException as e:
+        logger.error("KN search failed: %s", e)
+        return empty
+
+
 def lookup_kn_ids(kn_ids, config=None):
     """
     Look up which KN song IDs have Divebar versions.

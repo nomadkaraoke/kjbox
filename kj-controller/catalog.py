@@ -17,7 +17,6 @@ from text_normalize import (
 # Fuzzy fallback tunables live in fuzzy_match (shared with the media-index
 # search in routes.unified_search). Re-exported here for backward compat.
 FUZZY_SCORE_CUTOFF = fuzzy_match.FUZZY_SCORE_CUTOFF
-FUZZY_MIN_TOKEN_OVERLAP = fuzzy_match.FUZZY_MIN_TOKEN_OVERLAP
 FUZZY_SHORT_QUERY_CUTOFF = fuzzy_match.FUZZY_SHORT_QUERY_CUTOFF
 
 
@@ -401,13 +400,13 @@ class ExternalCatalog:
 
         Only called when both FTS5 MATCH and LIKE fallback return nothing.
         Uses the trigram index to retrieve candidates (typo-tolerant recall),
-        then scores each with WRatio and filters by FUZZY_SCORE_CUTOFF.
+        then gates each on full token coverage via fuzzy_match.score.
 
-        Precision gate: a candidate must share at least FUZZY_MIN_TOKEN_OVERLAP
-        of the query's significant tokens (len>=4) with the candidate text.
-        This prevents WRatio's partial_ratio component from producing false
-        positives where no real words are shared (real-data: 190/254 fuzzy hits
-        at WRatio>=80 had zero token overlap).
+        Precision gate: EVERY significant query token (len>=4) must be covered
+        by the candidate text — verbatim/substring or within a small edit
+        distance (fuzzy_match._token_covered). This prevents WRatio's
+        partial_ratio component from producing false positives where query
+        words are simply missing from the candidate.
 
         Ranking: overlap first (real-word agreement), then WRatio score.
         """
