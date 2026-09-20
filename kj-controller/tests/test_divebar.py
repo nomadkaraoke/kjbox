@@ -156,6 +156,17 @@ class TestSearchCache:
         assert mock_post.call_count == 2
 
     @patch("divebar.requests.post")
+    def test_api_url_change_is_a_cache_miss(self, mock_post):
+        """A config reload can repoint divebar_api_url mid-process; the old
+        endpoint's results must never be served for the new endpoint."""
+        mock_post.return_value = _ok_response({"status": "ok", "results": self.ROWS})
+
+        divebar.search("queen", config={"divebar_api_url": "http://old"})
+        divebar.search("queen", config={"divebar_api_url": "http://new"})
+
+        assert mock_post.call_count == 2
+
+    @patch("divebar.requests.post")
     def test_eviction_keeps_cache_bounded(self, mock_post):
         mock_post.return_value = _ok_response({"status": "ok", "results": []})
 

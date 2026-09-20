@@ -31,10 +31,12 @@ _search_cache = {}  # key -> (expires_at_monotonic, value)
 _search_cache_lock = threading.Lock()
 
 
-def _cache_key(action, query, limit):
+def _cache_key(api_url, action, query, limit):
     # Case/whitespace-insensitive: the CF folds case (and accents) server-side,
     # so "Queen  Bohemian" and "queen bohemian" are the same remote query.
-    return (action, " ".join((query or "").casefold().split()), limit)
+    # The endpoint is part of the key so a config reload that repoints
+    # divebar_api_url can never serve the previous endpoint's results.
+    return (api_url, action, " ".join((query or "").casefold().split()), limit)
 
 
 def _cache_get(key):
@@ -96,7 +98,7 @@ def search(query, config=None, limit=50):
         logger.warning("divebar_api_url not configured")
         return []
 
-    cache_key = _cache_key("search", query, limit)
+    cache_key = _cache_key(api_url, "search", query, limit)
     cached = _cache_get(cache_key)
     if cached is not None:
         return cached
@@ -141,7 +143,7 @@ def kn_community_search(query, config=None, limit=50):
     if not api_url or not query:
         return []
 
-    cache_key = _cache_key("kn_community_search", query, limit)
+    cache_key = _cache_key(api_url, "kn_community_search", query, limit)
     cached = _cache_get(cache_key)
     if cached is not None:
         return cached
@@ -187,7 +189,7 @@ def kn_search(query, config=None, limit=50):
     if not api_url or not query:
         return empty
 
-    cache_key = _cache_key("kn_search", query, limit)
+    cache_key = _cache_key(api_url, "kn_search", query, limit)
     cached = _cache_get(cache_key)
     if cached is not None:
         return cached
