@@ -62,6 +62,109 @@ class TestSearch:
         assert results == []
 
 
+def _ok_response(payload):
+    resp = MagicMock()
+    resp.status_code = 200
+    resp.json.return_value = payload
+    return resp
+
+
+class TestSearchCache:
+    """Tests for the shared TTL cache over the CF search actions."""
+
+    CFG = {"divebar_api_url": "http://test"}
+    ROWS = [{"file_id": "a1", "artist": "Queen", "title": "Bohemian Rhapsody",
+             "brand": "WTF Karaoke", "format": "mp4", "file_size": 1}]
+
+    @patch("divebar.requests.post")
+    def test_repeat_search_served_from_cache(self, mock_post):
+        mock_post.return_value = _ok_response({"status": "ok", "results": self.ROWS})
+
+        first = divebar.search("bohemian rhapsody", config=self.CFG)
+        second = divebar.search("bohemian rhapsody", config=self.CFG)
+
+        assert mock_post.call_count == 1
+        assert second == first
+
+    @patch("divebar.requests.post")
+    def test_cache_key_folds_case_and_whitespace(self, mock_post):
+        mock_post.return_value = _ok_response({"status": "ok", "results": self.ROWS})
+
+        divebar.search("Bohemian  Rhapsody", config=self.CFG)
+        divebar.search("bohemian rhapsody", config=self.CFG)
+
+        assert mock_post.call_count == 1
+
+    @patch("divebar.requests.post")
+    def test_different_limit_is_a_different_entry(self, mock_post):
+        mock_post.return_value = _ok_response({"status": "ok", "results": self.ROWS})
+
+        divebar.search("bohemian rhapsody", config=self.CFG, limit=50)
+        divebar.search("bohemian rhapsody", config=self.CFG, limit=100)
+
+        assert mock_post.call_count == 2
+
+    @patch("divebar.requests.post")
+    def test_cache_hits_are_isolated_copies(self, mock_post):
+        """Callers mutate results in-place (annotations, in_library flags);
+        that must never leak into what the next request receives."""
+        mock_post.return_value = _ok_response({"status": "ok", "results": self.ROWS})
+
+        first = divebar.search("bohemian rhapsody", config=self.CFG)
+        first[0]["tracks"][0]["divebar"] = {"file_id": "mutated"}
+        first[0]["polluted"] = True
+
+        second = divebar.search("bohemian rhapsody", config=self.CFG)
+        assert "polluted" not in second[0]
+        assert "divebar" not in second[0]["tracks"][0]
+
+    @patch("divebar.requests.post")
+    def test_errors_are_not_cached(self, mock_post):
+        import requests as req
+        mock_post.side_effect = req.Timeout()
+        assert divebar.search("queen", config=self.CFG) == []
+
+        mock_post.side_effect = None
+        mock_post.return_value = _ok_response({"status": "ok", "results": self.ROWS})
+        results = divebar.search("queen", config=self.CFG)
+
+        assert len(results) == 1
+        assert mock_post.call_count == 2
+
+    @patch("divebar.requests.post")
+    def test_entries_expire_after_ttl(self, mock_post):
+        mock_post.return_value = _ok_response({"status": "ok", "results": self.ROWS})
+        divebar.search("queen", config=self.CFG)
+
+        with patch("divebar.time.monotonic",
+                   return_value=__import__("time").monotonic() + divebar._SEARCH_CACHE_TTL + 1):
+            divebar.search("queen", config=self.CFG)
+
+        assert mock_post.call_count == 2
+
+    @patch("divebar.requests.post")
+    def test_kn_search_and_community_search_cached_independently(self, mock_post):
+        mock_post.return_value = _ok_response(
+            {"status": "ok", "results": [], "community": [], "full": []})
+
+        divebar.kn_search("queen", config=self.CFG)
+        divebar.kn_search("queen", config=self.CFG)
+        divebar.kn_community_search("queen", config=self.CFG)
+        divebar.kn_community_search("queen", config=self.CFG)
+
+        # One remote call per action — same-name queries don't collide across actions.
+        assert mock_post.call_count == 2
+
+    @patch("divebar.requests.post")
+    def test_eviction_keeps_cache_bounded(self, mock_post):
+        mock_post.return_value = _ok_response({"status": "ok", "results": []})
+
+        for i in range(divebar._SEARCH_CACHE_MAX_ENTRIES + 10):
+            divebar.search(f"query {i}", config=self.CFG)
+
+        assert len(divebar._search_cache) <= divebar._SEARCH_CACHE_MAX_ENTRIES
+
+
 class TestLookupKnIds:
     """Tests for divebar.lookup_kn_ids()."""
 

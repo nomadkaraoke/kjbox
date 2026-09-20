@@ -4,6 +4,17 @@ Dated entries, newest first. Each entry notes any required deploy steps.
 
 ---
 
+## 2026-09-20 - Rotation/singer search ~2x faster: parallel Cloud Function calls + result cache (v0.104.0)
+
+**Deploy:** backend (`routes.py`, `divebar.py`) → **requires `systemctl restart kj-controller`** (backend change; deploy between songs). No migration.
+
+- **Why:** every debounced keystroke in the KJ link search AND the public singer UI ran `unified_search`, whose two Divebar Cloud Function calls (`kn_search` + `search`, each a ~1.5s BigQuery job) executed **serially** — ~3.0s of a measured 3.2–3.4s total, with no caching at any layer. A busy show with several singers typing produced a steady stream of duplicate BigQuery jobs, each paying full latency.
+- **Parallel CF calls:** `unified_search` now submits `karaoke_nerds.search` and `divebar.search` to a 2-thread pool so the search pays for the slower call, not the sum (~3.2s → ~1.8s uncached). Error isolation is unchanged: either call failing still degrades exactly as before (`karaoke_nerds_timeout` flag / empty mirror rows).
+- **5-minute result cache:** `divebar.py` gained an in-process TTL cache (capped at 256 entries) over the three CF search actions (`search`, `kn_search`, `kn_community_search`), keyed by action + case/whitespace-folded query + limit. Incremental typing, KJ/singer overlap, repeat searches, and the loose-CDG sibling re-search on approval now hit the cache (~instant) instead of BigQuery. Only successful responses are cached — an error/timeout never pins an empty result — and cache hits return deep copies so callers' in-place annotations (`in_library`, `track['divebar']`, version ranking) can't leak across requests.
+- **Tests:** 8 cache unit tests (hit/case-fold/limit-isolation/copy-isolation/error-not-cached/TTL-expiry/action-isolation/bounded-eviction) + a barrier-based concurrency test proving the two CF calls overlap, + a both-CFs-down degradation test. Full suite green.
+
+---
+
 ## 2026-09-18 - Loose-CDG approval no longer fails on accented artist names (v0.101.1)
 
 **Deploy:** backend (`divebar.py`) → **requires `systemctl restart kj-controller`** (backend change; deploy between songs). No migration.

@@ -268,6 +268,54 @@ class TestUnifiedSearch:
             assert len(data["local"]) >= 1
             assert len(data["karaoke_nerds"]) >= 1
 
+    def test_kn_and_divebar_searches_run_concurrently(self, search_client, search_app):
+        """The two CF calls (~1.5s BigQuery each) must overlap, not run serially.
+
+        Each mocked call waits on a shared 2-party barrier: it only passes if
+        the OTHER call is in flight at the same time. Serial execution would
+        time out the barrier and fail the search with empty results.
+        """
+        import threading
+        barrier = threading.Barrier(2, timeout=5)
+
+        def kn_search(query, cfg):
+            barrier.wait()
+            return [{"title": "Bohemian Rhapsody", "artist": "Queen", "tracks": [
+                {"brand_name": "KFN", "brand_code": "KFN-1234",
+                 "youtube_url": "https://youtube.com/watch?v=abc", "is_community": True}
+            ]}]
+
+        def db_search(query, cfg, limit=100):
+            barrier.wait()
+            return []
+
+        with patch.object(search_app.catalog, 'search', return_value=[]), \
+             patch('routes.karaoke_nerds.search', side_effect=kn_search), \
+             patch('routes.divebar.search', side_effect=db_search):
+            resp = search_client.get('/rotation/search?q=bohemian')
+            assert resp.status_code == 200
+            data = resp.get_json()
+            assert len(data["karaoke_nerds"]) == 1
+            # Legacy shape omits the timeout flag when False.
+            assert "karaoke_nerds_timeout" not in data
+
+    def test_both_cf_calls_failing_still_returns_local(self, search_client, search_app):
+        """Simultaneous KN + divebar failures degrade to local-only results."""
+        with patch.object(search_app.catalog, 'is_available', return_value=True), \
+             patch.object(search_app.catalog, 'search', return_value=[
+                 {"path": "/media/song.zip", "artist": "Queen", "title": "Bohemian Rhapsody",
+                  "format": "cdg+mp3", "disc_id": "ASK-002204"}
+             ]), \
+             patch('routes.karaoke_nerds.search', side_effect=Exception("timeout")), \
+             patch('routes.divebar.search', side_effect=Exception("connection refused")):
+            resp = search_client.get('/rotation/search?q=bohemian')
+            assert resp.status_code == 200
+            data = resp.get_json()
+            assert len(data["local"]) == 1
+            assert data["karaoke_nerds"] == []
+            assert data["divebar"] == []
+            assert data["karaoke_nerds_timeout"] is True
+
 
 class TestPriorityAnnotation:
     def test_local_results_annotated(self, search_client, search_app):

@@ -126,6 +126,15 @@ def _reset_rate_limiter():
     sing._validate_rate_limit_state.clear()
 
 
+@pytest.fixture(autouse=True)
+def _reset_divebar_search_cache():
+    """Each test starts with an empty divebar CF search cache."""
+    import divebar
+    divebar.clear_search_cache()
+    yield
+    divebar.clear_search_cache()
+
+
 @pytest.fixture
 def sing_app(mock_config):
     from app import create_app
