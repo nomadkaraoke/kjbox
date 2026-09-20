@@ -1,5 +1,6 @@
 """Flask Blueprint with all route handlers."""
 
+import concurrent.futures
 import glob
 import json
 import os
@@ -4826,23 +4827,26 @@ def unified_search(query, app, *, grouped=False, local_only=False):
             "karaoke_nerds_timeout": False,
         }
 
+    # Karaoke Nerds and the Divebar GCS-mirror search are independent Cloud
+    # Function calls, each latency-bound at ~1.5s of BigQuery — run them
+    # concurrently so the search pays for the slower one, not the sum. Both
+    # send the raw user query (each service does its own server-side
+    # matching), and each stays best-effort: mirror versions surface even
+    # when KN is slow or returns nothing, and vice versa.
     kn_results = []
     kn_timeout = False
-    try:
-        # Send the raw user query: Karaoke Nerds does its own server-side
-        # matching, so do not pre-normalize it here.
-        kn_results = karaoke_nerds.search(query, cfg)
-    except Exception:
-        kn_timeout = True
-
-    # Divebar GCS-mirror search runs independently of Karaoke Nerds so mirror
-    # versions surface even when KN is slow or returns nothing. Best-effort.
     db_results = []
-    try:
-        # Raw user query: Divebar does its own server-side matching.
-        db_results = divebar.search(query, cfg, limit=100)
-    except Exception:
-        db_results = []
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+        kn_future = pool.submit(karaoke_nerds.search, query, cfg)
+        db_future = pool.submit(divebar.search, query, cfg, limit=100)
+        try:
+            kn_results = kn_future.result()
+        except Exception:
+            kn_timeout = True
+        try:
+            db_results = db_future.result()
+        except Exception:
+            db_results = []
 
     # Mark KN tracks already present in the local library (singer-facing hint).
     for song in kn_results:

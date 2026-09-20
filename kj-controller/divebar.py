@@ -5,13 +5,69 @@ Calls the Divebar Lookup API (Cloud Function) to search the indexed
 Divebar Google Drive catalog and look up KN cross-references.
 """
 
+import copy
 import logging
+import threading
+import time
+
 import requests
 
 logger = logging.getLogger(__name__)
 
 # Default timeout for API calls
 _TIMEOUT = 10
+
+# In-process TTL cache for CF search results. Both the KJ link search and the
+# public singer UI fire a search per debounced keystroke, and each search costs
+# a ~1.5s BigQuery job server-side — so incremental typing ("queen", "queen b",
+# "queen bo"...) and KJ/singer overlap re-run identical queries constantly.
+# Only successful responses are cached (errors/timeouts stay uncached so a
+# blip doesn't pin an empty result for the TTL). Callers mutate returned
+# structures in-place (in_library flags, track['divebar'], version
+# annotations), so hits return a deep copy, never the cached object.
+_SEARCH_CACHE_TTL = 300  # seconds
+_SEARCH_CACHE_MAX_ENTRIES = 256
+_search_cache = {}  # key -> (expires_at_monotonic, value)
+_search_cache_lock = threading.Lock()
+
+
+def _cache_key(api_url, action, query, limit):
+    # Case/whitespace-insensitive: the CF folds case (and accents) server-side,
+    # so "Queen  Bohemian" and "queen bohemian" are the same remote query.
+    # The endpoint is part of the key so a config reload that repoints
+    # divebar_api_url can never serve the previous endpoint's results.
+    return (api_url, action, " ".join((query or "").casefold().split()), limit)
+
+
+def _cache_get(key):
+    with _search_cache_lock:
+        hit = _search_cache.get(key)
+        if hit is None:
+            return None
+        expires_at, value = hit
+        if expires_at < time.monotonic():
+            del _search_cache[key]
+            return None
+    return copy.deepcopy(value)
+
+
+def _cache_put(key, value):
+    now = time.monotonic()
+    with _search_cache_lock:
+        if len(_search_cache) >= _SEARCH_CACHE_MAX_ENTRIES:
+            expired = [k for k, (exp, _) in _search_cache.items() if exp < now]
+            for k in expired:
+                del _search_cache[k]
+            while len(_search_cache) >= _SEARCH_CACHE_MAX_ENTRIES:
+                # Python dicts iterate in insertion order — evict oldest first.
+                del _search_cache[next(iter(_search_cache))]
+        _search_cache[key] = (now + _SEARCH_CACHE_TTL, copy.deepcopy(value))
+
+
+def clear_search_cache():
+    """Drop all cached search results (tests; config/catalog changes)."""
+    with _search_cache_lock:
+        _search_cache.clear()
 
 
 def _get_api_url(config):
@@ -42,6 +98,11 @@ def search(query, config=None, limit=50):
         logger.warning("divebar_api_url not configured")
         return []
 
+    cache_key = _cache_key(api_url, "search", query, limit)
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
+
     try:
         resp = requests.post(
             api_url,
@@ -56,7 +117,9 @@ def search(query, config=None, limit=50):
             return []
 
         # Group flat results by (artist, title) into songs with tracks
-        return _group_results(data.get("results", []))
+        grouped = _group_results(data.get("results", []))
+        _cache_put(cache_key, grouped)
+        return grouped
 
     except requests.Timeout:
         logger.warning("Divebar search timed out")
@@ -80,6 +143,11 @@ def kn_community_search(query, config=None, limit=50):
     if not api_url or not query:
         return []
 
+    cache_key = _cache_key(api_url, "kn_community_search", query, limit)
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
+
     try:
         resp = requests.post(
             api_url,
@@ -93,7 +161,9 @@ def kn_community_search(query, config=None, limit=50):
             logger.error("KN community search error: %s", data.get("message"))
             return []
 
-        return data.get("results", [])
+        results = data.get("results", [])
+        _cache_put(cache_key, results)
+        return results
 
     except requests.Timeout:
         logger.warning("KN community search timed out")
@@ -119,6 +189,11 @@ def kn_search(query, config=None, limit=50):
     if not api_url or not query:
         return empty
 
+    cache_key = _cache_key(api_url, "kn_search", query, limit)
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
+
     try:
         resp = requests.post(
             api_url,
@@ -132,10 +207,12 @@ def kn_search(query, config=None, limit=50):
             logger.error("KN search error: %s", data.get("message"))
             return empty
 
-        return {
+        result = {
             "community": data.get("community", []),
             "full": data.get("full", []),
         }
+        _cache_put(cache_key, result)
+        return result
 
     except requests.Timeout:
         logger.warning("KN search timed out")
