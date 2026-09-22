@@ -35,7 +35,6 @@ import fuzzy_match
 from text_normalize import (
     normalize as _normalize,
     fts_match_query as _fts5_safe_query,
-    tokens as _query_tokens,
     NORMALIZER_VERSION,
 )
 
@@ -44,6 +43,12 @@ logger = logging.getLogger(__name__)
 SOURCE_KN_COMMUNITY = "kn_community"
 SOURCE_KN_FULL = "kn_full"
 SOURCE_DIVEBAR = "divebar"
+
+# Trigram candidates fed to the Python-side fuzzy gate on an FTS miss.
+# bm25-ranked, so the true match sits near the top; 250 keeps the box's
+# worst-case miss cost bounded (each candidate costs a rapidfuzz score —
+# 1000+ of them dominated a measured 4s no-match search on the device).
+_FUZZY_CANDIDATE_LIMIT = 250
 
 # A mirror older than this falls back to the live Cloud Function path: stale
 # results are worse than slow ones once the export pipeline has been broken
@@ -196,24 +201,28 @@ class CatalogMirror:
         except sqlite3.Error:
             return []
 
-        like_rows = self._like_fallback(conn, source, normalized, limit)
-        if like_rows:
-            return like_rows
+        # No general LIKE stage here (unlike ExternalCatalog.search): there
+        # LIKE catches raw-text punctuation divergence, but this table's
+        # norm_text AND the FTS index hold the SAME normalized text, so LIKE
+        # only adds mid-word substring recall — which the trigram ladder
+        # below already provides — at the cost of a full 413k-row scan per
+        # source on every miss (measured: the dominant term in a 4s
+        # worst-case search on the box). EXCEPT for queries too short to
+        # form a trigram: those get a narrow LIKE fallback, since the fuzzy
+        # ladder can't serve them at all.
+        if len(normalized) < 3:
+            return self._short_query_like(conn, source, normalized, limit)
         return self._fuzzy_search(conn, source, query, limit)
 
-    def _like_fallback(self, conn, source, normalized, limit):
-        """Token-AND substring match over the pre-normalized text column.
-        Catches tokenization divergence (e.g. partial-word queries)."""
-        terms = _query_tokens(normalized)
-        if not terms:
+    def _short_query_like(self, conn, source, normalized, limit):
+        """Substring fallback for sub-trigram (1-2 char) queries only."""
+        if not normalized:
             return []
-        conditions = ["e.norm_text LIKE ?" for _ in terms]
-        params = [f"%{t}%" for t in terms] + [source, limit]
         try:
             rows = conn.execute(
                 "SELECT e.payload FROM entries e "
-                f"WHERE {' AND '.join(conditions)} AND e.source = ? LIMIT ?",
-                params,
+                "WHERE e.source = ? AND e.norm_text LIKE ? LIMIT ?",
+                (source, f"%{normalized}%", limit),
             ).fetchall()
             return [json.loads(r["payload"]) for r in rows]
         except sqlite3.Error:
@@ -237,7 +246,7 @@ class CatalogMirror:
                 "WHERE entries_trigram MATCH ? "
                 "ORDER BY rank LIMIT ?",
                 (f'({match_expr}) AND source: "{source}"',
-                 max(200, limit * 20)),
+                 _FUZZY_CANDIDATE_LIMIT),
             ).fetchall()
         except sqlite3.Error:
             return []
