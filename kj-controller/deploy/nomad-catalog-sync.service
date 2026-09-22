@@ -1,0 +1,13 @@
+[Unit]
+Description=Nomad catalog-mirror sync (KN + Divebar exports -> local SQLite)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=nomad
+Nice=10
+IOSchedulingClass=idle
+WorkingDirectory=/opt/nomad/kjbox/kj-controller
+Environment=PATH=/opt/nomad/google-cloud-sdk/bin:/usr/bin:/bin
+ExecStart=/opt/nomad/kjbox/kj-controller/venv/bin/python -m scripts.sync_catalogs

@@ -117,7 +117,7 @@ def search(query, config=None, limit=50):
             return []
 
         # Group flat results by (artist, title) into songs with tracks
-        grouped = _group_results(data.get("results", []))
+        grouped = group_results(data.get("results", []))
         _cache_put(cache_key, grouped)
         return grouped
 
@@ -360,7 +360,8 @@ def get_download_url(file_id, config=None):
 _CDG_AUDIO_FORMATS = {"mp3", "m4a", "wav", "flac", "ogg", "opus", "aac", "mp2"}
 
 
-def find_sibling_audio(cdg_file_id, artist, title, brand_code, config=None):
+def find_sibling_audio(cdg_file_id, artist, title, brand_code, config=None,
+                       search_fn=None):
     """Resolve the audio track that belongs to a loose (un-zipped) CDG track.
 
     Some brands (e.g. Sandell Karaoke) store a CDG's graphics and its audio as
@@ -383,10 +384,18 @@ def find_sibling_audio(cdg_file_id, artist, title, brand_code, config=None):
     the cdg row and its brand+basename sibling is trustworthy — the match
     criteria themselves never loosen.
 
+    ``search_fn(query)`` overrides the catalog search used for pairing
+    (callers with a fresh local catalog mirror pass a mirror-backed search so
+    approval pairing works offline); defaults to the remote ``search``.
+
     Returns ``{"file_id": ..., "format": ...}`` for the sibling audio, or
     ``None`` when no companion audio exists (a genuinely orphaned CDG).
     """
     import os
+
+    if search_fn is None:
+        def search_fn(q):
+            return search(q, config=config)
 
     artist = (artist or "").strip()
     title = (title or "").strip()
@@ -400,7 +409,7 @@ def find_sibling_audio(cdg_file_id, artist, title, brand_code, config=None):
             queries.append(q)
 
     for query in queries:
-        results = search(query, config=config) or []
+        results = search_fn(query) or []
 
         # Flatten the grouped songs into a single list of tracks.
         tracks = [t for song in results for t in song.get("tracks", [])]
@@ -463,7 +472,7 @@ def classify_download_url(url):
     return None
 
 
-def _group_results(results):
+def group_results(results):
     """Group flat search results into songs with tracks."""
     songs = {}
     for r in results:
@@ -500,3 +509,7 @@ def _format_file_size(size_bytes):
     if size_bytes < 1024 * 1024:
         return f"{size_bytes / 1024:.0f} KB"
     return f"{size_bytes / (1024 * 1024):.1f} MB"
+
+
+# Backward-compat alias (the grouping helper was private before the catalog mirror).
+_group_results = group_results

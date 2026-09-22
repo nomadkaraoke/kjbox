@@ -641,7 +641,10 @@ def _resolve_divebar_spec(file_id, artist, title, brand_code, fmt, cfg):
     if ext == ".cdg":
         # A bare .cdg is graphics-only. Pair it with its sibling audio and ship a
         # cdg+mp3 zip, or fail closed — never queue a silent .cdg.
-        sibling = divebar.find_sibling_audio(file_id, artist, title, brand_code, cfg)
+        mirror = getattr(current_app, "catalog_mirror", None)
+        sibling = divebar.find_sibling_audio(
+            file_id, artist, title, brand_code, cfg,
+            search_fn=lambda q: _divebar_search_local_first(q, cfg, mirror))
         if not sibling:
             return None, ("This CDG has no audio track available in the mirror — "
                           "pick another version.", 422)
@@ -1171,6 +1174,20 @@ def delete_media():
         return jsonify({"error": f"Error deleting file: {e}"}), 500
 
     return jsonify({"success": True, "message": f"Deleted {os.path.basename(validated)}"})
+
+
+@routes_bp.route('/catalog-mirror/reload', methods=['POST'])
+def catalog_mirror_reload():
+    """Reopen the catalog-mirror DB after the sync script's atomic swap."""
+    mirror = getattr(current_app, "catalog_mirror", None)
+    if mirror is None:
+        return jsonify({"error": "catalog mirror not configured"}), 404
+    mirror.reload()
+    stats = mirror.stats()
+    log_message(
+        f"Catalog mirror reloaded: usable={stats.get('usable')} "
+        f"sources={stats.get('sources')}", current_app.kj_config)
+    return jsonify({"success": True, "stats": stats})
 
 
 @routes_bp.route('/rescan', methods=['POST'])
@@ -1838,7 +1855,9 @@ def kn_search():
 
     cfg = current_app.kj_config
     log_message(f"Karaoke Nerds search: {query}", cfg)
-    results = karaoke_nerds.search(query, config=cfg)
+    results = karaoke_nerds.search(
+        query, config=cfg,
+        mirror=getattr(current_app, "catalog_mirror", None))
     # Annotate each track with priority_rank and sort the per-song track
     # lists best-first so the frontend can render in order without
     # duplicating the brand registry.
@@ -2821,6 +2840,14 @@ def system_stats():
         ambient = _read_ambient_temp_c()
         if ambient is not None:
             payload["ambient_temp_c"] = ambient
+        # Catalog-mirror freshness (best-effort) so the KJ can see at a glance
+        # whether searches are served locally or via the Cloud Function.
+        mirror = getattr(current_app, "catalog_mirror", None)
+        if mirror is not None:
+            try:
+                payload["catalog_mirror"] = mirror.stats()
+            except Exception:
+                pass
         return jsonify(payload)
     except ImportError:
         return jsonify({"error": "psutil not installed"}), 501
@@ -4756,6 +4783,21 @@ def _build_local_media_row(app, path, entry):
     }
 
 
+def _divebar_search_local_first(query, cfg, mirror, limit=100):
+    """Divebar-mirror rows via the local catalog mirror when it is fresh
+    (grouped with the same helper as the remote path), else the Cloud
+    Function. Mirror trouble falls through to the remote path — search must
+    never get worse because the local mirror is broken."""
+    if mirror is not None:
+        try:
+            if mirror.is_usable():
+                return divebar.group_results(
+                    mirror.divebar_search(query, limit=limit))
+        except Exception:
+            pass
+    return divebar.search(query, cfg, limit=limit)
+
+
 def unified_search(query, app, *, grouped=False, local_only=False):
     """Unified search helper: local catalog + Karaoke Nerds + Divebar cross-reference.
 
@@ -4836,9 +4878,10 @@ def unified_search(query, app, *, grouped=False, local_only=False):
     kn_results = []
     kn_timeout = False
     db_results = []
+    mirror = getattr(app, "catalog_mirror", None)
     with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
-        kn_future = pool.submit(karaoke_nerds.search, query, cfg)
-        db_future = pool.submit(divebar.search, query, cfg, limit=100)
+        kn_future = pool.submit(karaoke_nerds.search, query, cfg, mirror)
+        db_future = pool.submit(_divebar_search_local_first, query, cfg, mirror)
         try:
             kn_results = kn_future.result()
         except Exception:
