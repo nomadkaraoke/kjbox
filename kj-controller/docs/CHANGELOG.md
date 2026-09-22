@@ -4,6 +4,15 @@ Dated entries, newest first. Each entry notes any required deploy steps.
 
 ---
 
+## 2026-09-22 - Catalog-mirror miss-latency fix (v0.105.1)
+
+**Deploy:** backend (`catalog_mirror.py`) → **requires `systemctl restart kj-controller`** (deploy between songs). No migration.
+
+- **Why:** live-verifying v0.105.0 on NomadPC showed exact searches at 0.25s but up to **4.2s** when a query had no match in one of the big sources — each missing source paid a LIKE full-scan of the 413k-row table plus up to 1000 Python-side rapidfuzz scores.
+- **What:** removed the mirror's LIKE stage (unlike the external catalog, norm_text and the FTS index hold the SAME normalized text, so LIKE only duplicated the trigram ladder's substring recall at full-scan cost) and capped trigram fuzzy candidates at 250 (bm25-ranked, so the true match sits near the top). Local benchmark vs the real 413k-row mirror: worst case 4.2s → 0.26–0.63s; exact queries unchanged.
+
+---
+
 ## 2026-09-22 - Local catalog mirror: KN + Divebar searches run on-box (v0.105.0)
 
 **Deploy:** backend (`catalog_mirror.py`, `routes.py`, `divebar.py`, `karaoke_nerds.py`, `app.py`, `config.py`, `scripts/sync_catalogs.py`) → **requires `systemctl restart kj-controller`** (deploy between songs). **One-time device setup:** install `systemd/nomad-catalog-sync.{service,timer}` (`sudo cp` to `/etc/systemd/system/` + `sudo systemctl enable --now nomad-catalog-sync.timer`), then run the sync once. No migration.
