@@ -201,14 +201,32 @@ class CatalogMirror:
         except sqlite3.Error:
             return []
 
-        # No LIKE stage here (unlike ExternalCatalog.search): there LIKE
-        # catches raw-text punctuation divergence, but this table's norm_text
-        # AND the FTS index hold the SAME normalized text, so LIKE only adds
-        # mid-word substring recall — which the trigram ladder below already
-        # provides — at the cost of a full 413k-row scan per source on every
-        # miss (measured: the dominant term in a 4s worst-case search on the
-        # box).
+        # No general LIKE stage here (unlike ExternalCatalog.search): there
+        # LIKE catches raw-text punctuation divergence, but this table's
+        # norm_text AND the FTS index hold the SAME normalized text, so LIKE
+        # only adds mid-word substring recall — which the trigram ladder
+        # below already provides — at the cost of a full 413k-row scan per
+        # source on every miss (measured: the dominant term in a 4s
+        # worst-case search on the box). EXCEPT for queries too short to
+        # form a trigram: those get a narrow LIKE fallback, since the fuzzy
+        # ladder can't serve them at all.
+        if len(normalized) < 3:
+            return self._short_query_like(conn, source, normalized, limit)
         return self._fuzzy_search(conn, source, query, limit)
+
+    def _short_query_like(self, conn, source, normalized, limit):
+        """Substring fallback for sub-trigram (1-2 char) queries only."""
+        if not normalized:
+            return []
+        try:
+            rows = conn.execute(
+                "SELECT e.payload FROM entries e "
+                "WHERE e.source = ? AND e.norm_text LIKE ? LIMIT ?",
+                (source, f"%{normalized}%", limit),
+            ).fetchall()
+            return [json.loads(r["payload"]) for r in rows]
+        except sqlite3.Error:
+            return []
 
     def _fuzzy_search(self, conn, source, query, limit):
         """Typo-tolerant fallback: trigram candidates re-ranked through the

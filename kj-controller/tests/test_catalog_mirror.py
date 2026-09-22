@@ -129,6 +129,13 @@ class TestSearchSemantics:
         assert {t["format"] for t in grouped[0]["tracks"]} == {"cdg", "mp3"}
         assert grouped[0]["tracks"][0]["brand_code"] == "SDK"
 
+    def test_sub_trigram_query_still_substring_matches(self, mirror):
+        # 1-2 char queries can't form a trigram, so the fuzzy ladder can't
+        # serve them — a narrow LIKE fallback preserves substring recall
+        # ("ee" is mid-word in "Queen").
+        out = mirror.kn_search("ee")
+        assert any(r["artist"] == "Queen" for r in out["community"])
+
     def test_unrelated_query_returns_nothing(self, mirror):
         assert mirror.divebar_search("taylor swift shake it off") == []
         assert mirror.kn_search("taylor swift shake it off") == {
