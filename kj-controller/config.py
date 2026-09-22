@@ -57,6 +57,16 @@ def load_config(config_file=None):
         # "" -> derived as http://127.0.0.1:<app_bind_port>/rescan (the app's internal
         # port); NOT flask_port (the public proxy, e.g. Caddy on 80).
         "master_sync_rescan_url": "",
+        # Local catalog mirror (KN community + KN full + Divebar index in one
+        # SQLite FTS db) — searches serve locally when the mirror is fresh,
+        # falling back to the Divebar Cloud Function otherwise. Synced daily
+        # by scripts/sync_catalogs.py (systemd/nomad-catalog-sync.timer).
+        "catalog_mirror_enabled": True,
+        # "" -> <app dir>/catalog_mirror.db
+        "catalog_mirror_db": "",
+        "catalog_mirror_max_age_days": 8,
+        # "" -> derived as http://127.0.0.1:<app_bind_port>/catalog-mirror/reload
+        "catalog_mirror_reload_url": "",
         # Original-vocals guide sync: karaoke-gen pushes a padded guide (silence[intro] +
         # vocals) per new NOMAD master to this sibling prefix; the master-sync timer pulls
         # it into NOMAD-vocals-padded/ (where _resolve_vocals_guide looks) to feed the

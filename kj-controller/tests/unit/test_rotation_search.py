@@ -278,7 +278,7 @@ class TestUnifiedSearch:
         import threading
         barrier = threading.Barrier(2, timeout=5)
 
-        def kn_search(query, cfg):
+        def kn_search(query, cfg, mirror=None):
             barrier.wait()
             return [{"title": "Bohemian Rhapsody", "artist": "Queen", "tracks": [
                 {"brand_name": "KFN", "brand_code": "KFN-1234",
@@ -298,6 +298,38 @@ class TestUnifiedSearch:
             assert len(data["karaoke_nerds"]) == 1
             # Legacy shape omits the timeout flag when False.
             assert "karaoke_nerds_timeout" not in data
+
+    def test_fresh_catalog_mirror_serves_search_without_cf(self, search_client, search_app):
+        """With a usable local mirror, neither Cloud Function client is hit."""
+        class FakeMirror:
+            def is_usable(self, max_age_days=None):
+                return True
+
+            def kn_search(self, query, limit=50):
+                return {"community": [{"artist": "Queen", "title": "Bohemian Rhapsody",
+                                       "brand": "KV", "watch": "https://youtu.be/x"}],
+                        "full": []}
+
+            def divebar_search(self, query, limit=100):
+                return [{"file_id": "f9", "brand": "Karaoke Version",
+                         "brand_code": "KV", "artist": "Queen",
+                         "title": "Bohemian Rhapsody", "filename": "z.mp4",
+                         "format": "mp4", "file_size": 1,
+                         "drive_path": "KV/z.mp4", "in_gcs": True}]
+
+        search_app.catalog_mirror = FakeMirror()
+
+        def _boom(*a, **k):
+            raise AssertionError("CF client must not be called with a fresh mirror")
+
+        with patch.object(search_app.catalog, 'search', return_value=[]), \
+             patch('divebar.kn_search', side_effect=_boom), \
+             patch('divebar.search', side_effect=_boom):
+            resp = search_client.get('/rotation/search?q=bohemian rhapsody')
+            assert resp.status_code == 200
+            data = resp.get_json()
+            assert len(data["karaoke_nerds"]) == 1
+            assert data["karaoke_nerds"][0]["tracks"][0]["divebar"]["file_id"] == "f9"
 
     def test_both_cf_calls_failing_still_returns_local(self, search_client, search_app):
         """Simultaneous KN + divebar failures degrade to local-only results."""

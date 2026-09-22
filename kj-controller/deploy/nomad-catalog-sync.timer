@@ -1,0 +1,15 @@
+[Unit]
+Description=Daily catalog-mirror sync (plus catch-up after boot)
+
+[Timer]
+# Daily at 12:15 UTC — hours after the nightly divebar index (2-6 AM) and the
+# kn-data-sync export have both finished, so the box picks up complete data.
+OnCalendar=*-*-* 12:15:00 UTC
+# Also run 10 minutes after boot: the box is powered off between shows, so
+# Persistent alone could leave a stale mirror on show night.
+OnBootSec=10min
+Persistent=true
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target

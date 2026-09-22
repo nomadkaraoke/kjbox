@@ -37,7 +37,7 @@ _YT_ID_RE = re.compile(
 )
 
 
-def search(query, config=None):
+def search(query, config=None, mirror=None):
     """Search our KaraokeNerds catalog copies (community + full).
 
     Returns a list of song dicts, each with title, artist, and a tracks list.
@@ -47,12 +47,25 @@ def search(query, config=None):
     brand *codes*; the human ``brand_name`` is resolved from them for display,
     and version ranking resolves the canonical brand from ``brand_code`` +
     ``is_community``.
+
+    When a fresh local catalog ``mirror`` is available the search runs
+    entirely on-box (<50ms, offline-capable); otherwise it falls back to the
+    Divebar Cloud Function (one BigQuery job, ~1.5s, TTL-cached).
     """
-    try:
-        data = divebar.kn_search(query, config=config)
-    except Exception as e:  # noqa: BLE001 — best-effort; never break search
-        log_message(f"Karaoke Nerds search error: {e}", config)
-        return []
+    data = None
+    if mirror is not None:
+        try:
+            if mirror.is_usable():
+                data = mirror.kn_search(query)
+        except Exception as e:  # noqa: BLE001 — mirror trouble -> remote path
+            log_message(f"Catalog mirror KN search error: {e}", config)
+            data = None
+    if data is None:
+        try:
+            data = divebar.kn_search(query, config=config)
+        except Exception as e:  # noqa: BLE001 — best-effort; never break search
+            log_message(f"Karaoke Nerds search error: {e}", config)
+            return []
 
     songs = _group_results(data.get("community") or [])
     _merge_full_catalog(songs, data.get("full") or [])

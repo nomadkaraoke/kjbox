@@ -10,6 +10,7 @@ import time
 from flask import Flask, g, request
 
 from catalog import ExternalCatalog
+from catalog_mirror import CatalogMirror
 from config import CONFIG_FILE, is_pi, load_config
 from media import MediaIndex
 from media_library import MediaLibraryStore
@@ -251,6 +252,7 @@ def create_app(config=None):
     )
     flask_app.audio_monitor = AudioMonitor(flask_app.vlc, cfg)
     flask_app.catalog = ExternalCatalog(cfg)
+    flask_app.catalog_mirror = CatalogMirror(cfg)
     try:
         if flask_app.catalog.is_available() and flask_app.catalog.index_is_stale():
             flask_app.logger.warning(
@@ -447,6 +449,7 @@ def start_app():  # pragma: no cover
     flask_app.vlc = vlc
     flask_app.audio_monitor = AudioMonitor(vlc, cfg)
     flask_app.catalog = ExternalCatalog(cfg)
+    flask_app.catalog_mirror = CatalogMirror(cfg)
     flask_app.zip_playback = ZipPlayback(cfg)
     flask_app.chromium = ChromiumManager(cfg)
     flask_app.overlay_manager = overlay_mgr

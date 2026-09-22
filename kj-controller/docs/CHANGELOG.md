@@ -4,6 +4,19 @@ Dated entries, newest first. Each entry notes any required deploy steps.
 
 ---
 
+## 2026-09-22 - Local catalog mirror: KN + Divebar searches run on-box (v0.105.0)
+
+**Deploy:** backend (`catalog_mirror.py`, `routes.py`, `divebar.py`, `karaoke_nerds.py`, `app.py`, `config.py`, `scripts/sync_catalogs.py`) → **requires `systemctl restart kj-controller`** (deploy between songs). **One-time device setup:** install `systemd/nomad-catalog-sync.{service,timer}` (`sudo cp` to `/etc/systemd/system/` + `sudo systemctl enable --now nomad-catalog-sync.timer`), then run the sync once. No migration.
+
+- **Why:** even with v0.104.0's parallelization + cache, an uncached rotation/singer search still paid ~1.8s of BigQuery latency via two Cloud Function calls — and any search needed working venue Wi-Fi. All three remote catalogs are small enough to hold locally.
+- **What:** `catalog_mirror.py` mirrors KaraokeNerds community (~63k), KaraokeNerds full (~300k), and the Divebar Drive index (~200k) into ONE local SQLite DB (`catalog_mirror.db`), searched with the box's existing shared engine (text_normalize + FTS5 `unicode61 remove_diacritics` + trigram candidates + `fuzzy_match` full-coverage gate — identical semantics to the external-catalog and media-index searches). Search methods return the exact remote API shapes, so `unified_search`, the KN panel, and loose-CDG sibling pairing are drop-in consumers.
+- **Sync:** `scripts/sync_catalogs.py` (daily timer + 10min-after-boot) downloads the Divebar export (public bucket, plain HTTPS) and the KN exports (private bucket, via the master-sync SA key), hash-skips unchanged sources, rebuilds to `<db>.new` and atomically replaces (never writes into a live SQLite), then POSTs `/catalog-mirror/reload`.
+- **Freshness gate:** searches serve locally only when the mirror is <8 days old (`catalog_mirror_max_age_days`) and normalizer-current; otherwise every path falls back to the Cloud Function exactly as before (`catalog_mirror_enabled` is the kill switch). Mirror errors also fall through — search can never get worse because the mirror is broken.
+- **Visibility:** `/system/stats` gains a `catalog_mirror` block (usable, age, per-source counts); `/catalog-mirror/reload` reopens the DB after a sync swap.
+- **Tests:** 23 new (build atomicity, shape parity with the remote APIs, accent/word-order/typo semantics, freshness gating + fallbacks, sibling pairing via mirror, sync hash-skip/poke/failure paths) + a route test proving a fresh mirror serves `/rotation/search` with zero CF calls.
+
+---
+
 ## 2026-09-20 - Rotation/singer search ~2x faster: parallel Cloud Function calls + result cache (v0.104.0)
 
 **Deploy:** backend (`routes.py`, `divebar.py`) → **requires `systemctl restart kj-controller`** (backend change; deploy between songs). No migration.
