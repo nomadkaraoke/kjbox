@@ -481,3 +481,33 @@ class TestAnnotateVersionsSetsStatedFlag:
         rows = [{"disc_id": "ASK-011277", "filename": "ASK-011277 - Q - X.zip"}]
         annotate_versions(rows, _cfg(), shape="rotation_search_local")
         assert rows[0]["priority_stated"] is False
+
+
+class TestAnnotateVersionsSetsDisplayName:
+    """priority_display gives singer-facing UIs the human brand name
+    ("Karaoke Version" not "KV") without re-deriving the registry client-side.
+    """
+
+    def test_registry_brand_kn_track(self):
+        tracks = [{"brand_code": "KV", "youtube_url": "https://yt"}]
+        annotate_versions(tracks, _cfg(), shape="rotation_search_kn")
+        assert tracks[0]["priority_display"] == "Karaoke Version"
+
+    def test_registry_brand_local_row(self):
+        rows = [{"disc_id": "NOMAD-0729", "filename": "NOMAD-0729 - A - B.mp4"}]
+        annotate_versions(rows, _cfg(), shape="rotation_search_local")
+        assert rows[0]["priority_display"] == "Nomad Karaoke"
+
+    def test_unrecognized_brand_falls_back_to_name_then_code(self):
+        tracks = [{"brand_code": "XYZQ", "brand_name": "Xylophone Karaoke",
+                   "youtube_url": "https://yt"}]
+        annotate_versions(tracks, _cfg(), shape="rotation_search_kn")
+        assert tracks[0]["priority_display"] == "Xylophone Karaoke"
+        tracks = [{"brand_code": "XYZQ", "youtube_url": "https://yt"}]
+        annotate_versions(tracks, _cfg(), shape="rotation_search_kn")
+        assert tracks[0]["priority_display"] == "XYZQ"
+
+    def test_unknown_local_row_stays_empty(self):
+        rows = [{"disc_id": "ASK-011277", "filename": "ASK-011277 - Q - X.zip"}]
+        annotate_versions(rows, _cfg(), shape="rotation_search_local")
+        assert rows[0]["priority_display"] == ""

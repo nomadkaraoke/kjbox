@@ -7,6 +7,7 @@ Design doc: docs/archive/2026-04-18-public-request-form-design.md
 """
 
 import json
+import os
 import re
 import secrets
 import threading
@@ -21,6 +22,7 @@ from flask import (
     jsonify,
     render_template,
     request,
+    send_from_directory,
     session,
     url_for,
 )
@@ -521,6 +523,116 @@ def search():
     if data.get("karaoke_nerds_timeout"):
         response["karaoke_nerds_timeout"] = True
     return jsonify(response)
+
+
+# --- Singer-facing version details + preview ------------------------------
+# The public host (sing.nomadkaraoke.com) blocks every non-sing endpoint, so
+# the version-picker's technical-details modal and preview player need their
+# own token-gated routes here. They delegate to the same implementations the
+# KJ UI uses (mediainfo probe, PreviewService) — no duplicated logic.
+
+# KJ-static assets the singer preview modal reuses (preview player + CDG
+# renderer + hls.js). Whitelist, never a raw path.
+_LIB_FILES = {
+    "preview.js": ("static", "preview.js"),
+    "cdg.js": ("static", "cdg.js"),
+    "hls.min.js": (os.path.join("static", "vendor"), "hls.min.js"),
+}
+
+# Preview transcodes can be expensive; keep one phone from hammering the box
+# during a live show. Distinct bucket so it never eats the submit budget.
+_preview_rate_limit_state = defaultdict(deque)
+
+# Descriptor sources a singer can legitimately reach from their search
+# results. "make"/"kj_pick" have nothing to stream; anything else is noise.
+_SING_PREVIEW_SOURCES = {"local", "divebar", "youtube"}
+
+
+@sing_bp.route("/lib/<name>", methods=["GET"])
+@require_token
+def lib_file(name):
+    entry = _LIB_FILES.get(name)
+    if not entry:
+        abort(404)
+    folder, fname = entry
+    base = os.path.join(os.path.dirname(os.path.abspath(__file__)), folder)
+    return send_from_directory(base, fname)
+
+
+@sing_bp.route("/media-info", methods=["POST"])
+@require_token
+def media_info():
+    """Technical details for a library file (format pill → details modal).
+
+    Same path validation + ffprobe as the KJ's /media/info, but the on-disk
+    path is withheld from the response — singers get the spec sheet, not the
+    server's filesystem layout.
+    """
+    import mediainfo
+    from routes import _resolve_media_path
+
+    data = request.get_json(force=True, silent=True) or {}
+    file_path = (data.get("file_path") or "").strip()
+    if not file_path:
+        return jsonify({"ok": False, "error": "file_path is required"}), 400
+    real = _resolve_media_path(file_path)
+    if not real:
+        return jsonify({"ok": False, "error": "File not found"}), 404
+    info = mediainfo.probe_media_info(real)
+    info.pop("path", None)
+    info["filename"] = os.path.basename(real)
+    return jsonify(info)
+
+
+@sing_bp.route("/preview/resolve", methods=["POST"])
+@require_token
+def preview_resolve():
+    cfg = current_app.kj_config
+    limit = _safe_int(cfg.get("sing_preview_rate_limit"), 12)
+    window = _safe_int(cfg.get("sing_preview_rate_window_s"), 60)
+    if _rate_limit_exceeded(_client_ip(request), limit, window,
+                            state=_preview_rate_limit_state):
+        return jsonify({"mode": "unavailable",
+                        "reason": "Too many previews — wait a moment"}), 429
+    descriptor = request.get_json(silent=True) or {}
+    if (not isinstance(descriptor, dict)
+            or descriptor.get("source") not in _SING_PREVIEW_SOURCES):
+        return jsonify({"mode": "unavailable", "reason": "Invalid request"}), 400
+    preview = getattr(current_app, "preview", None)
+    if preview is None:
+        return jsonify({"mode": "unavailable", "reason": "Preview not available"}), 503
+    # Deliberately NOT recording preview stats — the KJ-side play/preview
+    # counters mean "the KJ auditioned this file"; singer curiosity would
+    # drown that signal.
+    return jsonify(preview.resolve(descriptor))
+
+
+@sing_bp.route("/preview/close", methods=["POST"])
+@require_token
+def preview_close():
+    from routes import preview_close as _impl
+    return _impl()
+
+
+@sing_bp.route("/preview/stream/<tok>", methods=["GET"])
+@require_token
+def preview_stream(tok):
+    from routes import preview_stream as _impl
+    return _impl(tok)
+
+
+@sing_bp.route("/preview/cdg/<tok>/<part>", methods=["GET"])
+@require_token
+def preview_cdg(tok, part):
+    from routes import preview_cdg as _impl
+    return _impl(tok, part)
+
+
+@sing_bp.route("/preview/hls/<tok>/<path:name>", methods=["GET"])
+@require_token
+def preview_hls(tok, name):
+    from routes import preview_hls as _impl
+    return _impl(tok, name)
 
 
 @sing_bp.route("/submit", methods=["POST"])

@@ -56,6 +56,7 @@
      data-make-requests-enabled="{{ '1' if make_requests_enabled else '0' }}"
      data-simple-mode="{{ '1' if simple_mode else '0' }}">
 </div>
+<nav id="sing-tabs" class="sing-tabs" hidden></nav>
 {% endif %}
 <div id="sing-rules-footer"></div>
 <script type="module" src="{{ url_for('sing.static', filename='sing.js') }}?v={{ config.get('APP_VERSION', '') }}"></script>

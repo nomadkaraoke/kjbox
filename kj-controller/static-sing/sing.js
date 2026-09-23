@@ -298,8 +298,63 @@ function el(tag, attrs = {}, ...children) {
   return node;
 }
 
+// --- Hash routing ----------------------------------------------------------
+// Each step maps to a location.hash so the browser Back button navigates
+// INSIDE the SPA (previously it left the page entirely) and a reload restores
+// the singer to the section they were on.
+
+const STEP_HASH = {
+  landing: "",
+  identity: "#name",
+  search: "#search",
+  confirm: "#confirm",
+  done: "#mysongs",
+  rotation: "#rotation",
+};
+
+function _stepFromHash(hash) {
+  const h = (hash || "").split("?")[0];
+  for (const [step, sh] of Object.entries(STEP_HASH)) {
+    if (sh && sh === h) return step;
+  }
+  return "landing";
+}
+
+// A hash can point at a step whose prerequisites are gone (e.g. reload on
+// #confirm loses the in-memory selection) — degrade to the nearest sane step.
+function _sanitizeStep(step) {
+  if (step === "confirm" && !state.selected) step = "search";
+  if ((step === "search" || step === "confirm") && !state.name) step = "identity";
+  return step;
+}
+
+let _suppressHashSync = false;   // true while handling popstate (hash already correct)
+
+function _syncHash() {
+  if (_suppressHashSync || typeof history === "undefined") return;
+  const want = STEP_HASH[state.step] ?? "";
+  const cur = window.location.hash || "";
+  if (cur === want) { state._navReplace = false; return; }
+  const url = window.location.pathname + window.location.search + want;
+  try {
+    if (state._navReplace) history.replaceState(null, "", url);
+    else history.pushState(null, "", url);
+  } catch { /* sandboxed iframe etc. — navigation still works, just no history */ }
+  state._navReplace = false;
+}
+
+window.addEventListener("popstate", () => {
+  _suppressHashSync = true;
+  try {
+    state.step = _sanitizeStep(_stepFromHash(window.location.hash));
+    render();
+  } finally {
+    _suppressHashSync = false;
+  }
+});
+
 function render() {
-  if (nowPlayingTimer && state.step !== "landing" && state.step !== "done") {
+  if (nowPlayingTimer && !["landing", "done", "rotation"].includes(state.step)) {
     clearInterval(nowPlayingTimer);
     nowPlayingTimer = null;
   }
@@ -327,11 +382,14 @@ function render() {
     search: renderSearch,
     confirm: renderConfirm,
     done: renderDone,
+    rotation: renderRotation,
   }[state.step] || renderLanding;
   root.appendChild(view());
-  // The persistent "My songs" bar lives outside #sing-root so it survives the
-  // innerHTML reset above; refresh its visibility/content for the new step.
+  // The persistent "My songs" bar and bottom tab bar live outside #sing-root
+  // so they survive the innerHTML reset above; refresh them for the new step.
   updateMySongsBar();
+  updateTabsBar();
+  _syncHash();
 }
 
 function back(to) {
@@ -464,7 +522,32 @@ function _formatUpdatedAt(fetchedAt) {
   return ageM === 1 ? "updated 1 min ago" : `updated ${ageM} min ago`;
 }
 
-function _renderRotationBody(payload) {
+// The "updated Xs ago · ↻ Refresh" strip appended to every rotation body.
+// `data-fetched-at` lets the shared ticker recompute the age text in place
+// without a full re-render; `onRefresh` (when given) wires the manual button.
+function _renderFreshnessRow(fetchedAt, onRefresh) {
+  const row = el("div", { class: "rotation-fresh-row" },
+    el("span", { class: "rotation-updated", "data-fetched-at": String(fetchedAt) },
+      _formatUpdatedAt(fetchedAt)),
+  );
+  if (onRefresh) {
+    const btn = el("button", {
+      class: "rotation-refresh",
+      "data-testid": "rotation-refresh",
+      onclick: async (e) => {
+        e.preventDefault();
+        btn.disabled = true;
+        btn.textContent = "Refreshing…";
+        try { await onRefresh(); }
+        finally { btn.disabled = false; btn.textContent = "↻ Refresh"; }
+      },
+    }, "↻ Refresh");
+    row.appendChild(btn);
+  }
+  return row;
+}
+
+function _renderRotationBody(payload, onRefresh) {
   const body = el("div", { class: "rotation-body" });
   body.appendChild(el("p", { class: "rotation-caveat" },
     el("em", {},
@@ -476,6 +559,7 @@ function _renderRotationBody(payload) {
   if (entries.length === 0) {
     body.appendChild(el("p", { class: "rotation-empty" },
       "Rotation hasn't started yet — you could be the first!"));
+    body.appendChild(_renderFreshnessRow(payload?._fetchedAt || Date.now(), onRefresh));
     return body;
   }
 
@@ -492,8 +576,7 @@ function _renderRotationBody(payload) {
     ));
   }
   body.appendChild(list);
-  body.appendChild(el("p", { class: "rotation-updated" },
-    _formatUpdatedAt(payload._fetchedAt)));
+  body.appendChild(_renderFreshnessRow(payload._fetchedAt, onRefresh));
   return body;
 }
 
@@ -522,46 +605,119 @@ function _updateRotationSummary(detailsEl, count) {
     : "See full rotation";
 }
 
+// Auto-refetch cadence while a rotation view is open, and how often the
+// "updated Xs ago" label re-computes. The label ticking is what keeps the
+// age honest — the old one-shot render sat on "updated just now" forever.
+const ROTATION_AUTO_REFRESH_MS = 30000;
+const ROTATION_TICK_MS = 5000;
+
+// Wire a container that holds a `.rotation-body` into the live-rotation
+// lifecycle: cache-aware load, 30s auto-refresh while visible, a ticking
+// age label, and a manual ↻ Refresh button. `isActive()` gates the timers
+// (e.g. a <details> is active only while open); timers self-clean when the
+// container leaves the DOM (every render() rebuilds the page).
+function attachRotationLive(container, { isActive = () => true, onCount } = {}) {
+  let timers = [];
+  const stop = () => { timers.forEach(clearInterval); timers = []; };
+
+  const renderPayload = (payload) => {
+    const slot = container.querySelector(".rotation-body");
+    if (!slot) return;
+    slot.replaceWith(_renderRotationBody(payload, () => load({ force: true })));
+    if (onCount) onCount(payload.entries?.length || 0);
+  };
+
+  const load = async ({ force = false } = {}) => {
+    const cached = state.rotationCache;
+    if (!force && cached && Date.now() - cached.fetchedAt < ROTATION_CACHE_TTL_MS) {
+      renderPayload({ ...cached.payload, _fetchedAt: cached.fetchedAt });
+      return;
+    }
+    // Only flash "Loading" when there's nothing on screen yet — background
+    // refreshes swap the list in place without a visual blank.
+    if (!container.querySelector(".rotation-list") && !container.querySelector(".rotation-empty")) {
+      const slot = container.querySelector(".rotation-body");
+      if (slot) slot.replaceWith(_renderRotationLoading());
+    }
+    try {
+      const payload = await fetchRotation();
+      onPollSuccess();
+      const fetchedAt = Date.now();
+      state.rotationCache = { fetchedAt, payload };
+      renderPayload({ ...payload, _fetchedAt: fetchedAt });
+    } catch (e) {
+      onPollFailure();
+      // Keep showing stale data (with its honest age) over an error screen.
+      if (!container.querySelector(".rotation-list")) {
+        const slot = container.querySelector(".rotation-body");
+        if (slot) slot.replaceWith(_renderRotationError(e.status));
+      }
+    }
+  };
+
+  const start = () => {
+    if (timers.length) return;
+    timers.push(setInterval(() => {
+      if (!container.isConnected || !isActive()) { stop(); return; }
+      load({ force: true });
+    }, ROTATION_AUTO_REFRESH_MS));
+    timers.push(setInterval(() => {
+      if (!container.isConnected || !isActive()) { stop(); return; }
+      const label = container.querySelector(".rotation-updated");
+      if (label) {
+        const at = parseInt(label.getAttribute("data-fetched-at"), 10);
+        if (at) label.textContent = _formatUpdatedAt(at);
+      }
+    }, ROTATION_TICK_MS));
+  };
+
+  return { load, start, stop };
+}
+
 function renderRotationExpander() {
   const details = el("details", { class: "rotation-expander" },
     el("summary", {}, "See full rotation"),
     el("div", { class: "rotation-body" }),  // placeholder; populated on toggle
   );
 
-  // If we already have a fresh cache, populate the body up-front so that
+  const live = attachRotationLive(details, {
+    isActive: () => details.open,
+    onCount: (n) => _updateRotationSummary(details, n),
+  });
+
+  // If we already have a cached payload, populate the body up-front so that
   // returning to the landing screen after Back-from-Search renders instantly
-  // when the user re-expands.
-  if (state.rotationCache && Date.now() - state.rotationCache.fetchedAt < ROTATION_CACHE_TTL_MS) {
+  // when the user re-expands (the age label stays honest either way).
+  if (state.rotationCache) {
     const payload = { ...state.rotationCache.payload, _fetchedAt: state.rotationCache.fetchedAt };
-    details.querySelector(".rotation-body").replaceWith(_renderRotationBody(payload));
+    details.querySelector(".rotation-body").replaceWith(
+      _renderRotationBody(payload, () => live.load({ force: true })));
     _updateRotationSummary(details, payload.entries?.length || 0);
   }
 
-  details.addEventListener("toggle", async () => {
-    if (!details.open) return;
-    // Serve from cache if fresh.
-    if (state.rotationCache && Date.now() - state.rotationCache.fetchedAt < ROTATION_CACHE_TTL_MS) {
-      const payload = { ...state.rotationCache.payload, _fetchedAt: state.rotationCache.fetchedAt };
-      details.querySelector(".rotation-body").replaceWith(_renderRotationBody(payload));
-      _updateRotationSummary(details, payload.entries?.length || 0);
-      return;
-    }
-    // Otherwise refetch.
-    details.querySelector(".rotation-body").replaceWith(_renderRotationLoading());
-    try {
-      const payload = await fetchRotation();
-      const fetchedAt = Date.now();
-      state.rotationCache = { fetchedAt, payload };
-      details.querySelector(".rotation-body").replaceWith(
-        _renderRotationBody({ ...payload, _fetchedAt: fetchedAt }),
-      );
-      _updateRotationSummary(details, payload.entries?.length || 0);
-    } catch (e) {
-      details.querySelector(".rotation-body").replaceWith(_renderRotationError(e.status));
-    }
+  details.addEventListener("toggle", () => {
+    if (!details.open) { live.stop(); return; }
+    live.load();
+    live.start();
   });
 
   return details;
+}
+
+// Full-page rotation view (the 📋 Rotation tab). Same live lifecycle as the
+// expanders — auto-refresh while the tab is showing, ticking age, manual ↻.
+function renderRotation() {
+  const card = el("main", { class: "sing-card sing-rotation-page" },
+    renderNowPlaying(),
+    el("h2", {}, "Tonight's rotation"),
+    el("div", { class: "rotation-body" }),
+  );
+  const live = attachRotationLive(card, {
+    isActive: () => state.step === "rotation",
+  });
+  live.load();
+  live.start();
+  return card;
 }
 
 function renderLanding() {
@@ -729,6 +885,318 @@ function _versionSection(version) {
   return "online";
 }
 
+// --- Generic singer modal ---------------------------------------------------
+// One shared overlay for the pill-tap info modals (community/commercial
+// explainer, brand info, technical details). Closes on ×, backdrop tap, Esc.
+
+function openSingModal(title, ...children) {
+  closeSingModal();
+  const dialog = el("div", { class: "sing-modal" },
+    el("div", { class: "sing-modal-head" },
+      el("h3", { class: "sing-modal-title" }, title),
+      el("button", { class: "sing-modal-close", "aria-label": "Close",
+        onclick: () => closeSingModal() }, "×"),
+    ),
+    el("div", { class: "sing-modal-body" }, ...children),
+  );
+  const backdrop = el("div", { id: "sing-modal-backdrop", class: "sing-modal-backdrop" }, dialog);
+  backdrop.addEventListener("click", (e) => { if (e.target === backdrop) closeSingModal(); });
+  document.body.appendChild(backdrop);
+  return dialog;
+}
+
+function closeSingModal() {
+  const existing = document.getElementById("sing-modal-backdrop");
+  if (existing) existing.remove();
+}
+
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") closeSingModal();
+});
+
+// --- Community vs Commercial explainer (tappable class pill) ---------------
+
+const CLASS_EXPLAINER = {
+  community: {
+    title: "Community track",
+    lines: [
+      ["What it is", "The original recording of the song, with the lead vocal removed by AI and karaoke lyrics added by a hobbyist producer."],
+      ["How it sounds", "Like the real song — same instruments, same backing vocals, same energy."],
+      ["Good for", "Recent releases, niche songs, and anyone who wants it to sound exactly like the record."],
+    ],
+  },
+  commercial: {
+    title: "Commercial track",
+    lines: [
+      ["What it is", "A professional karaoke production: a cover band re-records the backing track and a company adds the lyrics."],
+      ["How it sounds", "Like classic karaoke — a faithful cover, but not the original recording."],
+      ["Good for", "Classics and well-known hits; lyric timing is usually rock solid."],
+    ],
+  },
+};
+
+function openClassExplainer(cls) {
+  const info = CLASS_EXPLAINER[cls];
+  if (!info) return;
+  const other = cls === "community" ? CLASS_EXPLAINER.commercial : CLASS_EXPLAINER.community;
+  openSingModal(info.title,
+    el("dl", { class: "sing-info-list" },
+      info.lines.flatMap(([k, v]) => [el("dt", {}, k), el("dd", {}, v)])),
+    el("p", { class: "sing-modal-hint" },
+      `Compare: ${other.title.toLowerCase()}s ${cls === "community"
+        ? "are re-recorded covers made for karaoke — they sound like karaoke."
+        : "use the original song's audio with the vocals removed — they sound like the record."}`),
+  );
+}
+
+// --- Brand info (tappable brand pill) --------------------------------------
+// Curated blurbs for the brands in the version-priority registry. Written
+// in-house — karaokenerds.com must never be scraped (workspace hard rule).
+
+const BRAND_INFO = {
+  // Community
+  CC:    "One of the most prolific community producers — original-recording tracks with AI vocal removal and clean, readable lyrics.",
+  LC:    "Community producer known for careful lyric timing across a broad rock and alternative catalogue.",
+  FBK:   "Funbox Karaoke — community producer with wide coverage of modern pop and recent releases.",
+  BELLY: "BellySings — community producer using original recordings with AI vocal removal.",
+  NOMAD: "Made by Nomad Karaoke — your KJ's own tracks, built from the original recording with AI vocal separation and hand-reviewed lyrics.",
+  FAKEY: "FakeyOke — community producer covering songs the commercial brands never made.",
+  PMK:   "Punk Media Karaoke — community specialist in punk, emo and alternative tracks.",
+  OBSK:  "ObsKure Karaoke — community producer focused on obscure and niche songs.",
+  SDK:   "SNDL Karaoke — high-volume community producer using original recordings.",
+  DBK:   "Deep Bench Karaoke — community producer with a deep catalogue of lesser-known songs.",
+  // Commercial
+  KV:    "Karaoke Version — one of the biggest professional catalogues in the world. Studio-quality cover recordings with reliable lyric timing.",
+  SC:    "Sound Choice — the legendary US brand many KJs consider the gold standard of professional karaoke.",
+  SBI:   "SBI Karaoke — major commercial producer with a large international catalogue.",
+  SF:    "Sunfly — long-running UK commercial brand with decades of chart coverage.",
+  CB:    "Chart Buster — US commercial brand, especially strong on country music.",
+  ZM:    "Zoom Entertainments — UK commercial brand with a broad pop catalogue.",
+  VS:    "Vocal Star — UK commercial karaoke producer.",
+  SK:    "Sing King — one of the biggest karaoke channels on YouTube; professional cover recordings.",
+  MR:    "Mr. Entertainer — UK commercial brand with a large budget-friendly catalogue.",
+  PT:    "Party Tyme Karaoke — US commercial brand with wide chart coverage.",
+  EK:    "Easy Karaoke — UK commercial karaoke producer.",
+};
+
+function openBrandInfo(version) {
+  const name = version.priority_display
+    || (version.kn && (version.kn.brand_name || version.kn.brand_code))
+    || "This brand";
+  const cls = version.priority_class;
+  const blurb = BRAND_INFO[version.priority_brand]
+    || (cls === "community"
+      ? "A community karaoke producer — tracks are built from the original recording with the lead vocal removed by AI."
+      : cls === "commercial"
+        ? "A commercial karaoke producer — tracks are professional cover re-recordings made for karaoke."
+        : "We don't know much about this producer — ask the KJ if you're unsure.");
+  openSingModal(name,
+    cls && cls !== "unknown"
+      ? el("p", { class: `sing-brand-class sing-brand-class-${cls}` },
+          cls === "community" ? "Community producer" : "Commercial producer")
+      : null,
+    el("p", {}, blurb),
+    version.priority_stated
+      ? el("p", { class: "sing-modal-hint" }, "⭐ Your KJ rates this brand as reliably high quality.")
+      : null,
+  );
+}
+
+// --- Format pill + technical details (2C) ----------------------------------
+
+function _fmtBytes(bytes) {
+  if (!bytes || bytes < 0) return null;
+  const units = ["B", "KB", "MB", "GB"];
+  let i = 0, n = bytes;
+  while (n >= 1024 && i < units.length - 1) { n /= 1024; i++; }
+  return (i === 0 ? String(n) : n.toFixed(n < 10 ? 2 : 1)) + " " + units[i];
+}
+
+function _fmtBitrate(bps) {
+  if (!bps || bps < 0) return null;
+  if (bps >= 1e6) return (bps / 1e6).toFixed(1) + " Mbps";
+  if (bps >= 1e3) return Math.round(bps / 1e3) + " kbps";
+  return bps + " bps";
+}
+
+function _fmtDuration(s) {
+  if (s == null || isNaN(s)) return null;
+  const m = Math.floor(s / 60), sec = Math.round(s % 60);
+  return `${m}:${String(sec).padStart(2, "0")}`;
+}
+
+// Human format label for the pill: "MP4", "CDG+MP3", "MKV", …
+function _versionFormat(version) {
+  const fromExt = (nameOrPath) => {
+    const m = /\.([a-z0-9]+)$/i.exec(nameOrPath || "");
+    return m ? m[1].toUpperCase() : "";
+  };
+  const norm = (f) => {
+    const up = (f || "").toUpperCase();
+    if (up === "ZIP" || up === "CDG_ZIP" || up === "CDG-ZIP") return "CDG+MP3";
+    return up;
+  };
+  if (version.source === "local") {
+    const local = version.local || {};
+    return norm(local.format || fromExt(local.filename || local.path)) || "FILE";
+  }
+  const kn = version.kn || {};
+  if (kn.divebar && kn.divebar.file_id) {
+    return norm(kn.divebar.format || fromExt(kn.divebar.drive_path)) || "FILE";
+  }
+  return "YouTube";
+}
+
+function _mediaInfoRows(info) {
+  const rows = [];
+  const add = (label, value) => { if (value) rows.push([label, value]); };
+  add("Container", info.container);
+  if (info.note) add("Type", info.note);
+  if (info.video) {
+    const v = info.video;
+    const res = (v.width && v.height) ? `${v.width}×${v.height}` : null;
+    const fps = v.fps ? `${Math.round(v.fps * 100) / 100} fps` : null;
+    add("Video", [(v.codec || "").toUpperCase(), res, fps, v.profile].filter(Boolean).join(" · "));
+  }
+  if (info.audio) {
+    const a = info.audio;
+    const sr = a.sample_rate ? `${a.sample_rate / 1000} kHz` : null;
+    const ch = a.channel_layout || (a.channels ? `${a.channels}ch` : null);
+    add("Audio", [(a.codec || "").toUpperCase(), sr, ch, _fmtBitrate(a.bit_rate)].filter(Boolean).join(" · "));
+  }
+  add("Overall bitrate", _fmtBitrate(info.bit_rate));
+  add("Duration", info.duration != null ? _fmtDuration(info.duration) : null);
+  add("File size", _fmtBytes(info.size_bytes));
+  return rows;
+}
+
+function _infoDl(rows) {
+  return el("dl", { class: "sing-info-list" },
+    rows.flatMap(([k, v]) => [el("dt", {}, k), el("dd", {}, String(v))]));
+}
+
+async function openFormatDetails(group, version) {
+  const fmt = _versionFormat(version);
+  const title = `${group.title} — ${fmt}`;
+  if (version.source === "local") {
+    const dialog = openSingModal(title, el("p", { class: "hint" }, "Reading file details…"));
+    try {
+      const info = await fetchJson(`${BASE}/media-info`, {
+        method: "POST",
+        body: JSON.stringify({ file_path: (version.local || {}).path }),
+      });
+      const body = dialog.querySelector(".sing-modal-body");
+      if (!body || !body.isConnected) return;   // modal closed while loading
+      body.innerHTML = "";
+      if (info.ok === false) {
+        body.appendChild(el("p", { class: "error" }, info.error || "Couldn't read file details."));
+      } else {
+        body.appendChild(_infoDl(_mediaInfoRows(info)));
+        body.appendChild(el("p", { class: "sing-modal-hint" }, "This file is on the KJ's machine — ready to play instantly."));
+      }
+    } catch {
+      const body = dialog.querySelector(".sing-modal-body");
+      if (body && body.isConnected) {
+        body.innerHTML = "";
+        body.appendChild(el("p", { class: "error" }, "Couldn't load file details."));
+      }
+    }
+    return;
+  }
+  const kn = version.kn || {};
+  if (kn.divebar && kn.divebar.file_id) {
+    const rows = [["Format", fmt]];
+    if (kn.divebar.quality) rows.push(["Quality", kn.divebar.quality]);
+    const size = _fmtBytes(kn.divebar.file_size);
+    if (size) rows.push(["File size", size]);
+    openSingModal(title, _infoDl(rows),
+      el("p", { class: "sing-modal-hint" },
+        "Stored in our cloud library — the KJ's system fetches it automatically when you pick it."));
+    return;
+  }
+  openSingModal(`${group.title} — YouTube`,
+    el("p", {}, "This version streams from YouTube. If you pick it, the KJ's system downloads it before you're up — quality depends on the upload."));
+}
+
+// --- Version preview (2D) ---------------------------------------------------
+// Reuses the KJ UI's preview player (static/preview.js + cdg.js + hls.js),
+// served through token-gated /sing/lib/* routes. window.__PREVIEW_URL rewrites
+// the player's internal endpoints onto the singer blueprint with the event
+// token attached.
+
+window.__PREVIEW_URL = (path) => {
+  const mapped = path === "/static/vendor/hls.min.js"
+    ? `${BASE}/lib/hls.min.js`
+    : `${BASE}${path}`;
+  return `${mapped}${mapped.includes("?") ? "&" : "?"}t=${encodeURIComponent(TOKEN)}`;
+};
+
+let _previewLibsPromise = null;
+
+function _loadScript(src) {
+  return new Promise((resolve, reject) => {
+    const s = document.createElement("script");
+    s.src = src;
+    s.onload = resolve;
+    s.onerror = () => { s.remove(); reject(new Error(`failed: ${src}`)); };
+    document.head.appendChild(s);
+  });
+}
+
+function ensurePreviewLibs() {
+  if (typeof window.openPreview === "function") return Promise.resolve();
+  if (_previewLibsPromise) return _previewLibsPromise;
+  const q = (n) => `${BASE}/lib/${n}?t=${encodeURIComponent(TOKEN)}`;
+  _previewLibsPromise = _loadScript(q("cdg.js"))
+    .then(() => _loadScript(q("preview.js")))
+    .catch((e) => { _previewLibsPromise = null; throw e; });
+  return _previewLibsPromise;
+}
+
+function ensurePreviewModalDom() {
+  if (document.getElementById("preview-modal")) return;
+  const modal = el("div", { id: "preview-modal", class: "sing-modal-backdrop hidden" },
+    el("div", { class: "sing-modal sing-preview-modal" },
+      el("div", { class: "sing-modal-head" },
+        el("h3", { id: "preview-modal-title", class: "sing-modal-title" }, "Preview"),
+        el("button", { class: "sing-modal-close", "aria-label": "Close",
+          onclick: () => { if (typeof window.closePreview === "function") window.closePreview(); } }, "×"),
+      ),
+      el("div", { id: "preview-modal-body", class: "preview-body" }),
+      el("div", { id: "preview-modal-footer", class: "preview-footer" }),
+    ),
+  );
+  modal.addEventListener("click", (e) => {
+    if (e.target === modal && typeof window.closePreview === "function") window.closePreview();
+  });
+  document.body.appendChild(modal);
+}
+
+function _previewDescriptor(group, version) {
+  const title = `${group.title} — ${group.artist}`;
+  if (version.source === "local") {
+    return { source: "local", file_path: (version.local || {}).path, title };
+  }
+  const kn = version.kn || {};
+  if (kn.divebar && kn.divebar.file_id) {
+    return { source: "divebar", file_id: kn.divebar.file_id,
+             format: kn.divebar.format, title };
+  }
+  return { source: "youtube", youtube_url: kn.youtube_url || kn.url || "", title };
+}
+
+async function openVersionPreview(group, version) {
+  ensurePreviewModalDom();
+  try {
+    await ensurePreviewLibs();
+  } catch {
+    openSingModal("Preview", el("p", { class: "error" },
+      "Couldn't load the preview player — check your connection and try again."));
+    return;
+  }
+  window.openPreview(_previewDescriptor(group, version));
+}
+
 function renderSearch() {
   let results = { songs: [] };
   let loading = false;
@@ -809,7 +1277,7 @@ function renderSearch() {
           source_ref: track.divebar.file_id,
           song_artist: group.artist,
           song_title: group.title,
-          label: `${group.title} — ${group.artist} (community karaoke)`,
+          label: `${group.title} — ${group.artist} (from our cloud library)`,
           source_meta: { brand_code: track.brand_code, disc_id: track.disc_id, format: track.divebar.format },
         }
       : {
@@ -832,7 +1300,7 @@ function renderSearch() {
       source_ref: null,
       song_artist: group.artist,
       song_title: group.title,
-      label: `${group.title} — ${group.artist} (KJ picks best version)`,
+      label: `${group.title} — ${group.artist} (best version auto-selected)`,
       source_meta: {
         group_key: group.key,
         version_count: group.version_count,
@@ -934,51 +1402,46 @@ function renderSearch() {
   }
 
   function renderVersionRow(group, version, isBest) {
-    let icon, primary, secondary = "", pathBlock = null;
+    const kn = version.kn || {};
+    const local = version.local || {};
+    const hasDivebar = !!(kn.divebar && kn.divebar.file_id);
+    const cls = version.priority_class
+      || (version.source === "kn" ? (kn.is_community ? "community" : "commercial") : "unknown");
+    const fmt = _versionFormat(version);
+
+    // Who made it — full display name when we know the brand, otherwise the
+    // best identifier we have (disc id for library files, raw KN code).
+    const brandLabel = version.priority_display
+      || kn.brand_name || kn.brand_code
+      || local.disc_id
+      || "Unknown brand";
+
+    // Where it plays from — replaces the old filename/full-path noise.
+    let sourceLine;
     if (version.source === "local") {
-      const local = version.local || {};
-      icon = "📁";
-      const format = (local.format || "").toUpperCase();
-      primary = format
-        ? `${local.disc_id || "Local"} — ${format}`
-        : (local.disc_id || "Local file");
-      secondary = local.filename || "";
-      if (local.path) {
-        pathBlock = el("details", { class: "sing-version-path-wrap" },
-          el("summary", { class: "sing-version-path-summary" }, "show full path"),
-          el("div", { class: "sing-version-path" }, local.path),
-        );
-      }
+      sourceLine = "On the KJ's machine — plays instantly";
+    } else if (hasDivebar) {
+      const size = _humanFileSize(kn.divebar.file_size);
+      sourceLine = size ? `In our cloud library · ${size}` : "In our cloud library";
     } else {
-      const kn = version.kn || {};
-      const hasDivebar = !!(kn.divebar && kn.divebar.file_id);
-      const isCommunity = !!kn.is_community;
-      const brand = kn.brand_name || kn.brand_code || "Unknown brand";
-      if (hasDivebar) {
-        icon = "🎤";
-        const format = (kn.divebar.format || "").toUpperCase();
-        const quality = kn.divebar.quality ? ` (${kn.divebar.quality})` : "";
-        primary = format ? `${brand} — ${format}${quality}` : brand;
-        const size = _humanFileSize(kn.divebar.file_size);
-        secondary = size ? `via Divebar · ${size}` : "via Divebar";
-        if (kn.divebar.drive_path) {
-          pathBlock = el("details", { class: "sing-version-path-wrap" },
-            el("summary", { class: "sing-version-path-summary" }, "show full path"),
-            el("div", { class: "sing-version-path" }, kn.divebar.drive_path),
-          );
-        }
-      } else if (isCommunity) {
-        icon = "🧑‍🤝‍🧑";
-        primary = brand;
-        secondary = "Community · YouTube (download required)";
-      } else {
-        icon = "🌐";
-        primary = brand;
-        secondary = "Commercial · YouTube (download required)";
-      }
+      sourceLine = "On YouTube — downloaded if you pick it";
     }
+
+    const pills = el("div", { class: "sing-version-pills" });
+    if (cls === "community" || cls === "commercial") {
+      pills.appendChild(el("button", {
+        class: `sing-pill sing-pill-${cls}`,
+        title: "What does this mean?",
+        onclick: (e) => { e.stopPropagation(); openClassExplainer(cls); },
+      }, cls === "community" ? "Community" : "Commercial"));
+    }
+    pills.appendChild(el("button", {
+      class: "sing-pill sing-pill-format",
+      title: "Technical details",
+      onclick: (e) => { e.stopPropagation(); openFormatDetails(group, version); },
+    }, fmt));
+
     const card = el("div", { class: "sing-version-card" },
-      el("div", { class: "sing-version-icon" }, icon),
       el("div", { class: "sing-version-main" },
         el("div", { class: "sing-version-primary" },
           isBest
@@ -987,15 +1450,26 @@ function renderSearch() {
                 ? el("span", { class: "sing-version-star", title: "Reliably high-quality brand" }, "⭐")
                 : null),
           (isBest || version.priority_stated) ? " " : null,
-          primary,
+          el("button", {
+            class: "sing-version-brand",
+            title: "About this producer",
+            onclick: (e) => { e.stopPropagation(); openBrandInfo(version); },
+          }, brandLabel),
         ),
-        secondary ? el("div", { class: "sing-version-secondary" }, secondary) : null,
-        pathBlock,
+        pills,
+        el("div", { class: "sing-version-secondary" }, sourceLine),
       ),
-      el("button", {
-        class: "sing-version-pick",
-        onclick: (e) => { e.stopPropagation(); if (!armed()) return; pickSpecificVersion(group, version); },
-      }, "Pick this version →"),
+      el("div", { class: "sing-version-actions" },
+        el("button", {
+          class: "sing-version-preview",
+          "data-testid": "version-preview",
+          onclick: (e) => { e.stopPropagation(); if (!armed()) return; openVersionPreview(group, version); },
+        }, "▶ Preview"),
+        el("button", {
+          class: "sing-version-pick",
+          onclick: (e) => { e.stopPropagation(); if (!armed()) return; pickSpecificVersion(group, version); },
+        }, "Pick this version →"),
+      ),
     );
     return card;
   }
@@ -1021,7 +1495,9 @@ function renderSearch() {
 
     const sections = [
       { key: "library", label: "In our library" },
-      { key: "divebar", label: "Community karaoke (in our library)" },
+      // Divebar cross-refs can be commercial too — the old "Community
+      // karaoke" label lied whenever a commercial mirror file landed here.
+      { key: "divebar", label: "In our cloud library" },
       { key: "online", label: "Online only (download needed)" },
       { key: "community", label: "Community (AI vocal removal)" },
     ];
@@ -1196,7 +1672,7 @@ function renderSearch() {
       // Multi-version groups: "Let the KJ pick". Single-version: "Add to queue".
       const ctaLabel = isSingle
         ? "Add to queue"
-        : "Let the KJ pick the best version →";
+        : "Auto-select best version →";
       const onCtaClick = isSingle
         ? () => pickSingleVersion(group)
         : () => pickKjChoice(group);
@@ -1313,6 +1789,7 @@ function renderConfirm() {
         state.changeRequestId = null;
         state.changeEditToken = null;
         state.step = "done";
+        state._navReplace = true;   // Back shouldn't land on the stale confirm
         render();
         return;
       }
@@ -1360,6 +1837,7 @@ function renderConfirm() {
       // offer self-service cancel.
       rememberRequestId(TOKEN, data.request.id, data.request.edit_token);
       state.step = "done";
+      state._navReplace = true;   // Back shouldn't land on the stale confirm
       render();
     } catch (e) {
       err = e.status === 429
@@ -1429,11 +1907,11 @@ function renderConfirm() {
   const _confirmSourceLine = (s) => {
     switch (s && s.source_type) {
       case "local": return "In our library";
-      case "divebar": return "Community karaoke (in our library)";
+      case "divebar": return "In our cloud library";
       case "kn": return "Online karaoke (download needed)";
       case "youtube": return "From a YouTube link";
       case "make": return "The KJ will make this for you";
-      case "kj_pick": return "The KJ will pick the best version";
+      case "kj_pick": return "We'll auto-select the best version for you";
       default: return "";
     }
   };
@@ -1629,21 +2107,16 @@ function renderDone() {
 
   setTimeout(maybeShowPushPrompt, 2000);
   pollMyRequests(card);
-  // The rotation expander still uses the existing /sing/rotation path.
+  // The rotation expander shares the live-rotation lifecycle (auto-refresh,
+  // ticking age label, manual ↻) with the landing expander.
   const upcoming = card.querySelector(".upcoming");
-  upcoming.addEventListener("toggle", async (e) => {
-    if (!e.target.open) return;
-    if (upcoming.dataset.loaded === "1") return;
-    const slot = upcoming.querySelector(".rotation-body");
-    if (!slot) return;
-    slot.textContent = "Loading…";
-    try {
-      const payload = await fetchRotation();
-      upcoming.dataset.loaded = "1";
-      slot.replaceWith(_renderRotationBody({ ...payload, _fetchedAt: Date.now() }));
-    } catch {
-      slot.textContent = "Couldn't load — try closing and reopening.";
-    }
+  const upcomingLive = attachRotationLive(upcoming, {
+    isActive: () => upcoming.open,
+  });
+  upcoming.addEventListener("toggle", () => {
+    if (!upcoming.open) { upcomingLive.stop(); return; }
+    upcomingLive.load();
+    upcomingLive.start();
   });
   return card;
 }
@@ -1672,6 +2145,7 @@ async function pollMyRequests(card) {
         nowPlaying: data.now_playing || null,
         loaded: true,
       };
+      updateTabsBar();   // keep the My-songs tab badge in step with the poll
       const npNode = card.querySelector(".now-playing");
       if (npNode) updateNowPlaying(npNode, data.now_playing);
       const slot = card.querySelector(".songs-list");
@@ -1855,6 +2329,7 @@ function startBarPoll() {
 // Show/hide/populate the persistent bar. Hidden on the done screen (which IS
 // the list) and whenever this device owns no live songs tonight.
 function updateMySongsBar() {
+  updateTabsBar();   // the tab badge shares the mySongs view-model
   const bar = document.getElementById("sing-mysongs-bar");
   if (!bar) return;
   const live = _liveSongs(state.mySongs.items);
@@ -1880,6 +2355,52 @@ function updateMySongsBar() {
   ));
   bar.removeAttribute("hidden");
   startBarPoll();
+}
+
+// --- Bottom tab bar --------------------------------------------------------
+// Persistent navigation between the three singer-facing sections. Lives
+// outside #sing-root (sibling nav in sing.html) so it survives re-renders.
+
+function _activeTabForStep(step) {
+  if (step === "search" || step === "confirm") return "request";
+  if (step === "done") return "mysongs";
+  if (step === "rotation") return "rotation";
+  return null;   // landing / identity — no tab highlighted
+}
+
+function _goRequestTab() {
+  // Same gate as the landing CTA: identity first if we don't know the singer.
+  const phoneOk = !state.phone || PHONE_RE.test(state.phone);
+  state.step = state.name && phoneOk ? "search" : "identity";
+  render();
+}
+
+function updateTabsBar() {
+  const bar = document.getElementById("sing-tabs");
+  if (!bar) return;
+  const active = _activeTabForStep(state.step);
+  const liveCount = _liveSongs(state.mySongs.items).length;
+  const mk = (key, icon, label, onclick, badge) => el("button", {
+    class: "sing-tab" + (active === key ? " active" : ""),
+    "data-testid": `tab-${key}`,
+    "aria-current": active === key ? "page" : null,
+    onclick,
+  },
+    el("span", { class: "sing-tab-icon" }, icon),
+    el("span", { class: "sing-tab-label" }, label),
+    badge ? el("span", { class: "sing-tab-badge" }, String(badge)) : null,
+  );
+  bar.innerHTML = "";
+  bar.appendChild(mk("request", "🎵", "Request", () => {
+    if (active !== "request") _goRequestTab();
+  }));
+  bar.appendChild(mk("mysongs", "🎤", "My songs", () => {
+    if (state.step !== "done") { state.step = "done"; render(); }
+  }, liveCount || null));
+  bar.appendChild(mk("rotation", "📋", "Rotation", () => {
+    if (state.step !== "rotation") { state.step = "rotation"; render(); }
+  }));
+  bar.removeAttribute("hidden");
 }
 
 // --- Service worker registration ------------------------------------------
@@ -2187,6 +2708,13 @@ if (codeEntryEl) {
     // id disappears from the done-screen list.
     rememberRequestId(TOKEN, legacyId);
     state.step = "done";
+  }
+  // Hash restore — a reload (or a shared link with a hash) puts the singer
+  // back on the section they were on instead of resetting to the landing
+  // screen. A legacy ?r=<id> entry wins (it already forces the done screen).
+  if (state.step !== "done" && window.location.hash) {
+    state.step = _sanitizeStep(_stepFromHash(window.location.hash));
+    state._navReplace = true;   // correct a degraded hash without a history entry
   }
   // SW + push only make sense in the main SPA path (requires a valid token).
   registerServiceWorker().then((reg) => { swRegistration = reg; });

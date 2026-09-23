@@ -2,6 +2,36 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-09-22 - Feature: Singer UI — decision-grade version picker, tabs, honest refresh (v0.107.0)
+
+Four singer-UX improvements to the public `/sing/*` SPA:
+
+1. **"Auto-select best version" wording** — the multi-version CTA no longer
+   claims "the KJ picks" (auto-approve is normally on). Verified first that
+   auto-pick (`resolve_kj_pick_best`) ranks with the same
+   `version_priority.rank_version` + config the admin picker and the
+   rotation-link "Best" pill use — new tests pin the equivalence.
+2. **Version rows that help singers decide** — each expanded version shows a
+   tappable **Community/Commercial pill** (explains cover-band audio vs
+   original-audio-minus-vocals), the **full brand name** ("Karaoke Version"
+   not "KV", via new `priority_display` from `annotate_versions`) tappable
+   for a curated brand blurb, a **format pill** (MP4 / CDG+MP3) opening a
+   technical-details modal (new token-gated `POST /sing/media-info`, path
+   withheld), and a **▶ Preview** button reusing the KJ preview player
+   (`static/preview.js` gained a `window.__PREVIEW_URL` hook; new
+   `/sing/preview/*` + `/sing/lib/*` token-gated, rate-limited delegates).
+   Filenames/full paths no longer shown to singers.
+3. **Bottom tab bar + hash routing** — 🎵 Request / 🎤 My songs (live badge) /
+   📋 Rotation (new full-page view). Steps map to `location.hash`, so browser
+   Back navigates inside the SPA and a reload restores the section.
+4. **Honest rotation freshness** — the "updated just now" label previously
+   rendered once and never changed; rotation views now tick the age every 5s,
+   auto-refresh every 30s while visible, and carry a manual ↻ Refresh button.
+
+No device config changes (optional: `sing_preview_rate_limit`,
+`sing_preview_rate_window_s`, default 12/60s). Backend (`sing.py`,
+`version_priority.py`) requires a service restart.
+
 ## 2026-09-22 - Change: KN panel + Library filter unified onto the shared search engine (v0.106.0)
 
 Search-unification recs 5–6 (final two items of the 2026-09-19 handoff). `POST

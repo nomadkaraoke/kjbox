@@ -605,3 +605,188 @@ class TestMySongsPersistence:
         page.reload()
         expect(page.locator("text=Request a song")).to_be_visible()
         expect(page.locator('[data-testid="mysongs-bar"]')).to_be_hidden()
+
+
+class TestVersionRowEnrichment:
+    """The expanded version list gives singers decision-grade info: tappable
+    community/commercial pills, full brand names with an info modal, a format
+    pill that opens technical details, and a Preview button."""
+
+    def _open_versions(self, page, live_server, live_token):
+        page.add_init_script("window.__SING_ARM_MS = 0;")
+        _login(page, live_server, live_token)
+        body = {"songs": [{
+            "key": "q:multi", "artist": "Queen", "title": "Bo Rhap",
+            "version_count": 3, "in_library": True,
+            "versions": [
+                {"source": "local", "priority_stated": True,
+                 "priority_class": "community", "priority_brand": "NOMAD",
+                 "priority_display": "Nomad Karaoke",
+                 "local": {"path": "/media/NOMAD-1 - Q - B.mp4",
+                           "disc_id": "NOMAD-1", "format": "mp4",
+                           "filename": "NOMAD-1 - Q - B.mp4",
+                           "artist": "Queen", "title": "Bo Rhap"}},
+                {"source": "kn", "priority_stated": True,
+                 "priority_class": "commercial", "priority_brand": "KV",
+                 "priority_display": "Karaoke Version",
+                 "kn": {"brand_code": "KV", "brand_name": "Karaoke Version",
+                        "is_community": False,
+                        "divebar": {"file_id": "dv1", "format": "zip",
+                                    "file_size": 40000000}}},
+                {"source": "kn", "priority_stated": False,
+                 "priority_class": "commercial",
+                 "kn": {"brand_code": "XX", "brand_name": "Mystery Brand",
+                        "is_community": False,
+                        "youtube_url": "https://youtu.be/x"}},
+            ]}]}
+        page.route("**/sing/search*", lambda r: r.fulfill(
+            status=200, content_type="application/json", body=json.dumps(body)))
+        page.evaluate("window.__sing_state.step = 'search'; window.__sing_render();")
+        page.locator('input[type="search"]').fill("bo rhap")
+        expect(page.locator(".result-row")).to_be_visible()
+        page.locator(".sing-versions-toggle").click()
+
+    def test_cta_wording_is_auto_select(self, page, live_server, live_token):
+        self._open_versions(page, live_server, live_token)
+        expect(page.locator(".btn-primary-cta")).to_have_text("Auto-select best version →")
+
+    def test_class_and_format_pills_render(self, page, live_server, live_token):
+        self._open_versions(page, live_server, live_token)
+        first = page.locator(".sing-version-card").nth(0)
+        expect(first.locator(".sing-pill-community")).to_have_text("Community")
+        expect(first.locator(".sing-pill-format")).to_have_text("MP4")
+        second = page.locator(".sing-version-card").nth(1)
+        expect(second.locator(".sing-pill-commercial")).to_have_text("Commercial")
+        expect(second.locator(".sing-pill-format")).to_have_text("CDG+MP3")
+
+    def test_brand_shows_full_display_name(self, page, live_server, live_token):
+        self._open_versions(page, live_server, live_token)
+        expect(page.locator(".sing-version-brand").nth(0)).to_have_text("Nomad Karaoke")
+        expect(page.locator(".sing-version-brand").nth(1)).to_have_text("Karaoke Version")
+
+    def test_class_pill_opens_explainer_modal(self, page, live_server, live_token):
+        self._open_versions(page, live_server, live_token)
+        page.locator(".sing-pill-community").first.click()
+        expect(page.locator(".sing-modal-title")).to_have_text("Community track")
+        expect(page.locator(".sing-modal-body")).to_contain_text("vocal removed by AI")
+        page.locator(".sing-modal-close").click()
+        expect(page.locator("#sing-modal-backdrop")).to_have_count(0)
+
+    def test_brand_tap_opens_brand_info(self, page, live_server, live_token):
+        self._open_versions(page, live_server, live_token)
+        page.locator(".sing-version-brand").nth(1).click()
+        expect(page.locator(".sing-modal-title")).to_have_text("Karaoke Version")
+        expect(page.locator(".sing-modal-body")).to_contain_text("professional")
+
+    def test_format_pill_opens_details_for_divebar(self, page, live_server, live_token):
+        self._open_versions(page, live_server, live_token)
+        second = page.locator(".sing-version-card").nth(1)
+        second.locator(".sing-pill-format").click()
+        expect(page.locator(".sing-modal-body")).to_contain_text("38.1 MB")
+        expect(page.locator(".sing-modal-body")).to_contain_text("cloud library")
+
+    def test_format_pill_fetches_media_info_for_local(self, page, live_server, live_token):
+        self._open_versions(page, live_server, live_token)
+        page.route("**/media-info*", lambda r: r.fulfill(
+            status=200, content_type="application/json",
+            body=json.dumps({"ok": True, "container": "mov,mp4",
+                             "video": {"codec": "h264", "width": 1280, "height": 720},
+                             "duration": 218, "size_bytes": 6700000})))
+        page.locator(".sing-version-card").nth(0).locator(".sing-pill-format").click()
+        expect(page.locator(".sing-modal-body")).to_contain_text("1280×720")
+        expect(page.locator(".sing-modal-body")).to_contain_text("3:38")
+
+    def test_preview_button_present_on_every_row(self, page, live_server, live_token):
+        self._open_versions(page, live_server, live_token)
+        expect(page.locator('[data-testid="version-preview"]')).to_have_count(2)
+        # (third row sits behind the online-collapse toggle)
+
+    def test_no_full_path_shown_to_singers(self, page, live_server, live_token):
+        self._open_versions(page, live_server, live_token)
+        expect(page.locator(".sing-version-path-summary")).to_have_count(0)
+        expect(page.locator(".sing-version-expander")).not_to_contain_text("/media/")
+
+
+class TestTabsAndRouting:
+    def test_tab_bar_renders_three_tabs(self, page, live_server, live_token):
+        _login(page, live_server, live_token)
+        expect(page.locator('[data-testid="tab-request"]')).to_be_visible()
+        expect(page.locator('[data-testid="tab-mysongs"]')).to_be_visible()
+        expect(page.locator('[data-testid="tab-rotation"]')).to_be_visible()
+
+    def test_rotation_tab_opens_rotation_page(self, page, live_server, live_token):
+        _login(page, live_server, live_token)
+        page.locator('[data-testid="tab-rotation"]').click()
+        expect(page.locator("h2:has-text(\"Tonight's rotation\")")).to_be_visible()
+        assert page.evaluate("window.location.hash") == "#rotation"
+
+    def test_browser_back_navigates_inside_spa(self, page, live_server, live_token):
+        _login(page, live_server, live_token)
+        page.locator('[data-testid="tab-rotation"]').click()
+        expect(page.locator("h2:has-text(\"Tonight's rotation\")")).to_be_visible()
+        page.go_back()
+        # Back returns to the landing screen, not out of the app.
+        expect(page.locator("h1:has-text('Request a song')")).to_be_visible()
+        assert page.url.startswith(live_server)
+
+    def test_reload_restores_section_from_hash(self, page, live_server, live_token):
+        _login(page, live_server, live_token)
+        page.locator('[data-testid="tab-rotation"]').click()
+        expect(page.locator("h2:has-text(\"Tonight's rotation\")")).to_be_visible()
+        page.reload()
+        expect(page.locator("h2:has-text(\"Tonight's rotation\")")).to_be_visible()
+
+    def test_stale_confirm_hash_degrades_to_search(self, page, live_server, live_token):
+        _login(page, live_server, live_token)
+        page.goto(f"{live_server}/sing/?t={live_token}#confirm")
+        # No in-memory selection after a fresh load → search screen instead.
+        expect(page.locator("h2:has-text('Pick your song')")).to_be_visible()
+
+    def test_request_tab_gates_on_identity(self, page, live_server, live_token):
+        page.goto(f"{live_server}/sing/?t={live_token}")
+        expect(page.locator("#sing-root")).to_be_visible()
+        page.evaluate("localStorage.removeItem('sing_name')")
+        page.evaluate("window.__sing_state.name = ''")
+        page.locator('[data-testid="tab-request"]').click()
+        expect(page.locator("h2:has-text('Your details')")).to_be_visible()
+
+
+class TestRotationFreshness:
+    _PAYLOAD = {"entries": [
+        {"position": 1, "first_name": "Alice", "song_artist": "Song — Artist",
+         "now_singing": False, "range_low_s": 60, "range_high_s": 240},
+    ]}
+
+    def _mock_rotation(self, page):
+        # The e2e fixture's config lacks the wait-estimate keys the real
+        # /sing/rotation needs; the freshness UI only cares about the payload.
+        page.route("**/sing/rotation*", lambda r: r.fulfill(
+            status=200, content_type="application/json",
+            body=json.dumps(self._PAYLOAD)))
+
+    def test_rotation_page_has_refresh_and_age_label(self, page, live_server, live_token):
+        _login(page, live_server, live_token)
+        self._mock_rotation(page)
+        page.locator('[data-testid="tab-rotation"]').click()
+        expect(page.locator('[data-testid="rotation-refresh"]')).to_be_visible()
+        expect(page.locator(".rotation-updated")).to_contain_text("updated just now")
+
+    def test_manual_refresh_refetches(self, page, live_server, live_token):
+        _login(page, live_server, live_token)
+        self._mock_rotation(page)
+        page.locator('[data-testid="tab-rotation"]').click()
+        expect(page.locator('[data-testid="rotation-refresh"]')).to_be_visible()
+        with page.expect_request("**/sing/rotation*"):
+            page.locator('[data-testid="rotation-refresh"]').click()
+
+    def test_age_label_ticks_as_data_ages(self, page, live_server, live_token):
+        _login(page, live_server, live_token)
+        self._mock_rotation(page)
+        page.locator('[data-testid="tab-rotation"]').click()
+        label = page.locator(".rotation-updated")
+        expect(label).to_be_visible()
+        # Backdate the payload timestamp, then wait for the 5s ticker to fire.
+        page.evaluate(
+            "document.querySelector('.rotation-updated')"
+            ".setAttribute('data-fetched-at', String(Date.now() - 45000))")
+        expect(label).to_contain_text("s ago", timeout=8000)

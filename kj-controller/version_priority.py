@@ -371,4 +371,12 @@ def annotate_versions(versions, cfg, *, shape="kj_pick"):
         v["priority_class"] = classification
         v["priority_rank"] = rank_version(v, cfg)
         v["priority_stated"] = is_stated_brand(canonical, classification)
+        # Human-readable brand name for singer-facing UIs ("Karaoke Version"
+        # instead of "KV"). Falls back through the raw inputs when the brand
+        # isn't in the registry, and stays "" when nothing is known.
+        v["priority_display"] = (
+            display_name_for(canonical)
+            or (inputs.get("brand_name") or "")
+            or display_name_for(inputs.get("brand_code"))
+        )
     return versions

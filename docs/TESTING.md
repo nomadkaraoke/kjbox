@@ -169,7 +169,7 @@ one Android device and one iPhone before shipping push changes to prod.
 
 ### Song selection — per-version expander (Phase B)
 
-- [ ] Search a multi-version song. Tap "N versions available →" → card expands inline, Primary "Let the KJ pick" CTA remains at top, toggle flips to "Hide versions ↑".
+- [ ] Search a multi-version song. Tap "N versions available →" → card expands inline, Primary "Auto-select best version" CTA remains at top, toggle flips to "Hide versions ↑".
 - [ ] First expand (cleared localStorage) shows the Commercial vs Community callout with two bullets + "Got it" button.
 - [ ] Tap "Got it" → callout disappears; reload → still dismissed. Expand another song → no callout.
 - [ ] A local version card shows brand/format (e.g. "EEK-00391 — CDG+MP3"), filename, and a collapsed "show full path ▸" chevron. Tapping reveals the monospace full path with word-break wrapping.
@@ -180,14 +180,14 @@ one Android device and one iPhone before shipping push changes to prod.
 - [ ] Tap "Pick this version →" on a local version → confirmation shows `{title} — {artist} ({filename})`. Submit → admin sees a normal `source_type=local` pending row with a green Approve button (no kj_pick picker).
 - [ ] Tap "Pick this version →" on a KN+divebar → confirmation shows brand name, submit → admin sees `source_type=divebar`.
 - [ ] Tap "Pick this version →" on a KN-only → submit → admin sees `source_type=kn` / `youtube`.
-- [ ] After expanding, the primary "Let the KJ pick" button still works (submits `kj_pick` as Phase A).
+- [ ] After expanding, the primary "Auto-select best version" button still works (submits `kj_pick` as Phase A).
 - [ ] Re-tap the toggle → card collapses back. Expand again → no CC explainer (it stays dismissed).
 
 ### Song selection — grouped search + KJ picks version (Phase A)
 
-- [ ] Search for a song with multiple versions (e.g. "bohemian rhapsody") → one card per unique `(artist, title)`, not one per version. Card shows "Let the KJ pick the best version →" CTA and an inert "N versions available →" hint below it.
+- [ ] Search for a song with multiple versions (e.g. "bohemian rhapsody") → one card per unique `(artist, title)`, not one per version. Card shows "Auto-select best version →" CTA and an inert "N versions available →" hint below it.
 - [ ] Search for a song with exactly one version (e.g. an obscure title with only a single KN track) → card shows "Add to queue" CTA (no KJ-picks framing, no "N versions" hint).
-- [ ] Tap "Let the KJ pick" → confirm page shows "{title} — {artist} (KJ picks best version)". Submit → admin sees a pending row with an amber `kj_pick` badge and inline picker.
+- [ ] Tap "Auto-select best version" → confirm page shows "{title} — {artist} (best version auto-selected)". Submit → admin sees a pending row with an amber `kj_pick` badge and inline picker.
 - [ ] Admin picker shows candidates ranked: locals (📁) first, then Divebar (💿), then community (🎤), then YouTube (📺). Each row has its own "Approve with this →" button.
 - [ ] Tap "Approve with this" on a local version → no download queued, rotation entry file_path set, request row's `source_type` = `local`.
 - [ ] Tap "Approve with this" on a KN+divebar version → download queued with source=divebar. Request row's `source_type` = `divebar`.
@@ -218,7 +218,7 @@ Persistent server flag `kj_simple_mode` (in `sing_meta`); UI is CSS-driven via
 
 - [ ] With Simple Mode ON, reload the singer SPA. `#sing-root` carries `data-simple-mode="1"`.
 - [ ] Search for something that returns zero hits → empty-state shows a single header "We don't have that one." + paragraph "Try another search, or talk to the KJ at the front." No paste-YouTube card, no ask-KJ card, no DIY card.
-- [ ] Search a multi-version song (e.g. "bohemian rhapsody") → the "Let the KJ pick the best version →" CTA is absent. Versions list renders inline (no toggle button). Singer must tap a specific version's "Pick this version →" button.
+- [ ] Search a multi-version song (e.g. "bohemian rhapsody") → the "Auto-select best version →" CTA is absent. Versions list renders inline (no toggle button). Singer must tap a specific version's "Pick this version →" button.
 - [ ] Search a single-version song → "Add to queue" CTA still appears (singer can still pick songs with one version).
 - [ ] Singer's confirm screen subtitle reads "If we don't have it, just ask the KJ at the front." (advanced mode shows "you'll get options for how to get it on screen.").
 - [ ] Pick a `local` / `divebar` / `kn` version and submit → request lands in pending queue. KJ approves → rotation plays normally.
@@ -238,7 +238,7 @@ Persistent server flag `kj_simple_mode` (in `sing_meta`); UI is CSS-driven via
 
 **Stale-PWA recovery (no automated test):**
 
-- [ ] Load `/sing/?t=<token>` with Simple Mode OFF. Type a query, find a multi-version song, tap "Let the KJ pick the best version →" — but don't submit yet.
+- [ ] Load `/sing/?t=<token>` with Simple Mode OFF. Type a query, find a multi-version song, tap "Auto-select best version →" — but don't submit yet.
 - [ ] In another browser, KJ flips Simple Mode ON.
 - [ ] Back in the singer browser, complete the confirm screen and submit → server returns 400. Error message in the UI reads "Song requests are currently restricted. Please refresh this page for the updated options." (not the generic "ask the KJ if requests are paused").
 
