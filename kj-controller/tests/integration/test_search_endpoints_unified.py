@@ -8,13 +8,19 @@
   on disk), making the KN panel's client-side matching obsolete.
 """
 import json
+import types
 from unittest.mock import patch
 
-import types
-
-import pytest
-
 import routes
+
+# One community row from the mocked Divebar CF, reused across the KN tests.
+_KN_PAYLOAD = {
+    "community": [
+        {"artist": "Test Artist", "title": "Test Song", "brand": "CB",
+         "watch": "https://www.youtube.com/watch?v=abc123defgh"},
+    ],
+    "full": [],
+}
 
 
 # --- /library/search ------------------------------------------------------
@@ -81,13 +87,7 @@ def test_kn_search_attaches_local_path_for_downloaded_video(
         mock_kn, flask_app, flask_test_client):
     """A KN track whose YouTube video is already on disk gets local_path so
     the panel renders "Downloaded → Play" with no client-side id join."""
-    mock_kn.return_value = {
-        "community": [
-            {"artist": "Test Artist", "title": "Test Song", "brand": "CB",
-             "watch": "https://www.youtube.com/watch?v=abc123defgh"},
-        ],
-        "full": [],
-    }
+    mock_kn.return_value = _KN_PAYLOAD
     flask_app.media.index["/downloads/Test Artist - Test Song [yt-abc123defgh].mp4"] = {
         "path": "/downloads/Test Artist - Test Song [yt-abc123defgh].mp4",
         "filename": "Test Artist - Test Song [yt-abc123defgh].mp4",
@@ -109,18 +109,67 @@ def test_kn_search_attaches_local_path_for_downloaded_video(
 @patch('karaoke_nerds.divebar.kn_search')
 def test_kn_search_no_local_path_when_not_downloaded(
         mock_kn, flask_test_client):
-    mock_kn.return_value = {
-        "community": [
-            {"artist": "Test Artist", "title": "Test Song", "brand": "CB",
-             "watch": "https://www.youtube.com/watch?v=abc123defgh"},
-        ],
-        "full": [],
-    }
+    mock_kn.return_value = _KN_PAYLOAD
     response = flask_test_client.post('/karaoke-nerds/search',
         data=json.dumps({"query": "test song"}),
         content_type='application/json')
     songs = json.loads(response.data)["karaoke_nerds"]
     assert "local_path" not in songs[0]["tracks"][0]
+
+
+_MASTER_PATH = ("/downloads/NOMAD-720p/"
+                "NOMAD-0729 - Maxïmo Park - Books from Boxes.mp4")
+_MASTER_ENTRY = {
+    "path": _MASTER_PATH,
+    "filename": "NOMAD-0729 - Maxïmo Park - Books from Boxes.mp4",
+    "display_name": "Maxïmo Park - Books from Boxes",
+}
+_KN_NOMAD_PAYLOAD = {
+    "community": [
+        # Accent/case differ from the on-disk master — the join must fold both.
+        {"artist": "Maximo Park", "title": "Books From Boxes", "brand": "NOMAD",
+         "watch": "https://www.youtube.com/watch?v=RlBlAKxyqZw"},
+    ],
+    "full": [],
+}
+
+
+@patch('karaoke_nerds.divebar.kn_search')
+def test_kn_search_master_join_is_query_independent(
+        mock_kn, flask_app, flask_test_client):
+    """A KN NOMAD row gets local_path from the on-disk master even when the
+    LOCAL search misses it (the master join scans the whole media index, like
+    the client-side masterPathByNorm map it replaced — not just the rows the
+    user's query happened to surface)."""
+    mock_kn.return_value = _KN_NOMAD_PAYLOAD
+    flask_app.media.index[_MASTER_PATH] = dict(_MASTER_ENTRY)
+
+    # Query that matches nothing locally (the KN mock answers regardless).
+    response = flask_test_client.post('/karaoke-nerds/search',
+        data=json.dumps({"query": "zz unrelated query"}),
+        content_type='application/json')
+    data = json.loads(response.data)
+    assert data["local"] == []  # local search really did miss
+    songs = data["karaoke_nerds"]
+    assert len(songs) == 1
+    assert songs[0]["tracks"][0]["local_path"] == _MASTER_PATH
+
+
+@patch('karaoke_nerds.divebar.kn_search')
+def test_kn_search_suppresses_mastered_nomad_row_when_local_hit(
+        mock_kn, flask_app, flask_test_client):
+    """When the local search DOES surface the master, the redundant KN NOMAD
+    row is suppressed and the master rides in the payload's local rows."""
+    mock_kn.return_value = _KN_NOMAD_PAYLOAD
+    flask_app.media.index[_MASTER_PATH] = dict(_MASTER_ENTRY)
+
+    response = flask_test_client.post('/karaoke-nerds/search',
+        data=json.dumps({"query": "books from boxes"}),
+        content_type='application/json')
+    data = json.loads(response.data)
+    assert any(r.get("path") == _MASTER_PATH for r in data["local"])
+    # The song's only track was the redundant NOMAD row -> song dropped.
+    assert data["karaoke_nerds"] == []
 
 
 # --- _attach_local_paths_to_kn unit ---------------------------------------

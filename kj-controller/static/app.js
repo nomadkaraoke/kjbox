@@ -2378,6 +2378,7 @@ fetch('/youtube/status').then(r => r.json()).then(updateYtHealthDot).catch(() =>
 
 let searchActive = false;
 let searchDebounceTimer = null;
+let librarySearchAbort = null;
 
 function getFormatBadgeClass(format) {
     if (format === 'cdg+mp3') return 'zip';
@@ -2511,7 +2512,12 @@ function catalogItemToMediaItem(item) {
     const ext = item.filename && item.filename.includes('.')
         ? '.' + item.filename.split('.').pop().toLowerCase() : '';
     return {
-        display_name: (item.filename || '').replace(/\.\w+$/, ''),
+        // Strip a trailing " [yt-<id>]"-style media_id token: a media-index
+        // row can land here when localMediaItems is stale (fresh page load,
+        // download just finished) and its raw filename carries the token.
+        display_name: (item.filename || '')
+            .replace(/\.\w+$/, '')
+            .replace(/\s*\[[a-z]+-[^\]\s]+\]\s*$/, ''),
         file_path: item.path,
         folder: item.folder,
         // mediaFormatBadge maps 'cdg-zip' -> the yellow "cdg+mp3" pill; other
@@ -2547,8 +2553,14 @@ async function catalogSearch(query) {
     const clientMatches = filterLocalMedia(query);
     renderUnifiedResults(clientMatches, [], query);
 
+    // Abort the superseded request so the box doesn't keep running full
+    // catalog+media scans for keystrokes the KJ has already typed past.
+    if (librarySearchAbort) librarySearchAbort.abort();
+    librarySearchAbort = new AbortController();
     try {
-        const response = await fetch(`/library/search?q=${encodeURIComponent(query)}&limit=50`);
+        const response = await fetch(
+            `/library/search?q=${encodeURIComponent(query)}&limit=50`,
+            { signal: librarySearchAbort.signal });
         if (!response.ok) return;
         const data = await response.json();
         // Partition server rows: paths we hold in the media index render as
@@ -3504,8 +3516,6 @@ function extractYouTubeId(url) {
     return m ? m[1] : null;
 }
 
-let knExpandedSongs = {};
-
 async function searchKaraokeNerds() {
     const input = document.getElementById('kn-query');
     const btn = document.getElementById('kn-search-btn');
@@ -3554,7 +3564,6 @@ function clearKNResults() {
 function renderKNResults(songs, localRows = [], mirrorRows = []) {
     const container = document.getElementById('kn-results');
     container.innerHTML = '';
-    knExpandedSongs = {};
 
     // Local library matches come server-matched (same engine as rotation
     // search, typo-tolerant, ranked — masters first). A KN NOMAD row whose
@@ -3566,16 +3575,14 @@ function renderKNResults(songs, localRows = [], mirrorRows = []) {
     songs.forEach((song, idx) => {
         const songId = `kn-song-${idx}`;
         const trackCount = song.tracks.length;
-        const isExpanded = false;
-        knExpandedSongs[songId] = isExpanded;
 
-        // Song header
+        // Song header (collapsed by default; expansion state lives in the DOM)
         const header = document.createElement('div');
         header.className = 'kn-song-header';
         header.onclick = () => toggleKNSong(songId);
 
         const chevron = document.createElement('span');
-        chevron.className = 'folder-chevron' + (isExpanded ? ' expanded' : '');
+        chevron.className = 'folder-chevron';
         chevron.id = 'kn-chevron-' + idx;
         chevron.textContent = '\u25B6';
 
@@ -3595,7 +3602,7 @@ function renderKNResults(songs, localRows = [], mirrorRows = []) {
 
         // Track list
         const trackList = document.createElement('div');
-        trackList.className = 'kn-track-list' + (isExpanded ? '' : ' collapsed');
+        trackList.className = 'kn-track-list collapsed';
         trackList.id = songId;
 
         // Backend has sorted tracks by priority_rank already.
@@ -3658,23 +3665,13 @@ function renderKNResults(songs, localRows = [], mirrorRows = []) {
             } else if (track.divebar && track.divebar.file_id) {
                 // Same-brand file in the Divebar GCS mirror (server xref) —
                 // download from there instead of YouTube (canonical file).
-                const dlBtn = document.createElement('button');
-                dlBtn.className = 'kn-download-btn';
-                dlBtn.textContent = 'Download';
-                dlBtn.title = 'From the GCS mirror (not YouTube)';
-                dlBtn.onclick = (e) => {
-                    e.stopPropagation();
-                    downloadDivebarTrack({
-                        file_id: track.divebar.file_id,
-                        artist: song.artist,
-                        title: song.title,
-                        brand_code: track.brand_code,
-                        format: track.divebar.format,
-                    });
-                    dlBtn.disabled = true;
-                    dlBtn.textContent = 'Queued';
-                };
-                actions.appendChild(dlBtn);
+                actions.appendChild(makeDivebarDownloadBtn({
+                    file_id: track.divebar.file_id,
+                    artist: song.artist,
+                    title: song.title,
+                    brand_code: track.brand_code,
+                    format: track.divebar.format,
+                }, 'From the GCS mirror (not YouTube)'));
             } else if (track.youtube_url) {
                 const dlBtn = document.createElement('button');
                 dlBtn.className = 'kn-download-btn';
@@ -3709,20 +3706,21 @@ function renderKNResults(songs, localRows = [], mirrorRows = []) {
     }
 }
 
-// "In your library" — server-matched local rows (media index + external
-// catalog) for the query, via the shared engine: typo-tolerant, ranked,
-// masters first. Replaces the old per-song lazy "In your collection"
-// section and its client-side term filter.
-function renderKnLibrarySection(rows) {
+// One shared skeleton for the KN panel's local sections ("In your library",
+// "GCS mirror"): header with count, then a row per item with a title line,
+// a format pill (click for tech details when a local path exists), a muted
+// subline, and one action button.
+function renderKnSection(headerText, rows, rowProps) {
     const section = document.createElement('div');
     section.className = 'kn-local-section';
 
     const header = document.createElement('div');
     header.className = 'kn-local-header';
-    header.textContent = `In your library (${rows.length})`;
+    header.textContent = headerText;
     section.appendChild(header);
 
     rows.forEach(r => {
+        const props = rowProps(r);
         const row = document.createElement('div');
         row.className = 'kn-local-match';
 
@@ -3730,26 +3728,58 @@ function renderKnLibrarySection(rows) {
         detail.className = 'catalog-detail';
 
         const titleRow = document.createElement('span');
-        const name = [r.artist, r.title].filter(Boolean).join(' - ')
-            || (r.filename || '').replace(/\.\w+$/, '');
-        titleRow.textContent = name + ' ';
-        if (r.format) {
-            const badge = document.createElement('span');
-            badge.className = `format-badge ${getFormatBadgeClass(r.format)}`;
-            badge.textContent = formatPillLabel(r.format);
-            titleRow.appendChild(badge);
+        titleRow.textContent = props.name + ' ';
+        if (props.format) {
+            // Same colorised pill as the Library rows, incl. the
+            // click-for-technical-details modal when we have a local path.
+            titleRow.appendChild(mediaFormatBadge({
+                media_kind: props.format === 'cdg+mp3' ? 'cdg-zip' : props.format,
+                file_path: props.path,
+                display_name: props.name,
+            }));
         }
         detail.appendChild(titleRow);
 
-        const folder = r.folder || (r.path || '').replace(/\/[^/]*$/, '');
-        if (folder) {
-            const folderSpan = document.createElement('div');
-            folderSpan.className = 'catalog-folder';
-            folderSpan.textContent = prettyFolder(folder);
-            folderSpan.title = r.path || folder;
-            detail.appendChild(folderSpan);
+        if (props.subline && props.subline.text) {
+            const sub = document.createElement('div');
+            sub.className = 'catalog-folder';
+            sub.textContent = props.subline.text;
+            if (props.subline.title) sub.title = props.subline.title;
+            detail.appendChild(sub);
         }
 
+        row.appendChild(detail);
+        row.appendChild(props.actionBtn);
+        section.appendChild(row);
+    });
+
+    return section;
+}
+
+// Download-from-GCS-mirror button (same payload the Divebar panel sends).
+function makeDivebarDownloadBtn(payload, title) {
+    const dlBtn = document.createElement('button');
+    dlBtn.className = 'kn-download-btn';
+    dlBtn.textContent = 'Download';
+    dlBtn.title = title;
+    dlBtn.onclick = (e) => {
+        e.stopPropagation();
+        downloadDivebarTrack(payload);
+        dlBtn.disabled = true;
+        dlBtn.textContent = 'Queued';
+    };
+    return dlBtn;
+}
+
+// "In your library" -- server-matched local rows (media index + external
+// catalog) for the query, via the shared engine: typo-tolerant, ranked,
+// masters first. Replaces the old per-song lazy "In your collection"
+// section and its client-side term filter.
+function renderKnLibrarySection(rows) {
+    return renderKnSection(`In your library (${rows.length})`, rows, r => {
+        const name = [r.artist, r.title].filter(Boolean).join(' - ')
+            || (r.filename || '').replace(/\.\w+$/, '');
+        const folder = r.folder || (r.path || '').replace(/\/[^/]*$/, '');
         const playBtn = document.createElement('button');
         playBtn.className = 'kn-play-btn';
         playBtn.textContent = 'Play';
@@ -3757,72 +3787,34 @@ function renderKnLibrarySection(rows) {
             e.stopPropagation();
             playMedia(r.path);
         };
-
-        row.appendChild(detail);
-        row.appendChild(playBtn);
-        section.appendChild(row);
+        return {
+            name: name,
+            format: r.format,
+            path: r.path,
+            subline: folder
+                ? { text: prettyFolder(folder), title: r.path || folder }
+                : null,
+            actionBtn: playBtn,
+        };
     });
-
-    return section;
 }
 
 // Standalone Divebar GCS-mirror versions, downloadable directly (same
 // payload as the Divebar panel's rows).
 function renderKnMirrorSection(rows) {
-    const section = document.createElement('div');
-    section.className = 'kn-local-section';
-
-    const header = document.createElement('div');
-    header.className = 'kn-local-header';
-    header.textContent = `GCS mirror (${rows.length})`;
-    section.appendChild(header);
-
-    rows.forEach(dv => {
-        const row = document.createElement('div');
-        row.className = 'kn-local-match';
-
-        const detail = document.createElement('div');
-        detail.className = 'catalog-detail';
-
-        const titleRow = document.createElement('span');
-        titleRow.textContent =
-            [dv.artist, dv.title].filter(Boolean).join(' - ') + ' ';
-        if (dv.format) {
-            const badge = document.createElement('span');
-            badge.className = `format-badge ${getFormatBadgeClass(dv.format)}`;
-            badge.textContent = formatPillLabel(dv.format);
-            titleRow.appendChild(badge);
-        }
-        detail.appendChild(titleRow);
-
-        const brandSpan = document.createElement('div');
-        brandSpan.className = 'catalog-folder';
-        brandSpan.textContent = dv.brand_name || dv.brand_code || '';
-        detail.appendChild(brandSpan);
-
-        const dlBtn = document.createElement('button');
-        dlBtn.className = 'kn-download-btn';
-        dlBtn.textContent = 'Download';
-        dlBtn.title = 'From the GCS mirror';
-        dlBtn.onclick = (e) => {
-            e.stopPropagation();
-            downloadDivebarTrack({
-                file_id: dv.file_id,
-                artist: dv.artist,
-                title: dv.title,
-                brand_code: dv.brand_code,
-                format: dv.format,
-            });
-            dlBtn.disabled = true;
-            dlBtn.textContent = 'Queued';
-        };
-
-        row.appendChild(detail);
-        row.appendChild(dlBtn);
-        section.appendChild(row);
-    });
-
-    return section;
+    return renderKnSection(`GCS mirror (${rows.length})`, rows, dv => ({
+        name: [dv.artist, dv.title].filter(Boolean).join(' - '),
+        format: dv.format,
+        path: null,
+        subline: { text: dv.brand_name || dv.brand_code || '' },
+        actionBtn: makeDivebarDownloadBtn({
+            file_id: dv.file_id,
+            artist: dv.artist,
+            title: dv.title,
+            brand_code: dv.brand_code,
+            format: dv.format,
+        }, 'From the GCS mirror'),
+    }));
 }
 
 function toggleKNSong(songId) {

@@ -19,6 +19,8 @@ tolerance as rotation search ("boks" now finds "Books from Boxes"); the
 old client-side term filter remains only as instant first paint + offline
 fallback. No device config changes.
 
+## 2026-09-14 - Change: Karaoke Nerds search no longer scrapes karaokenerds.com (v0.100.0)
+
 `karaoke_nerds.search()` (song search behind `/karaoke-nerds/search`,
 `/rotation/search`, and the public `/sing/search`) previously scraped
 karaokenerds.com/Search on every query — including per singer keystroke during
