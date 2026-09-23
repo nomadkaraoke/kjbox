@@ -644,15 +644,27 @@ def preview_hls(tok, name):
 # bump as the KJ-UI "bump up" button. Never auto-approved: the KJ should see
 # the money arrive before priority changes.
 
+# amount_style tells the client how to deep-link a chosen amount into the
+# method URL: "path" appends /<amount> (Cash App, PayPal.me), "venmo" appends
+# the Venmo pay-intent query, "none" opens the URL as-is (Stripe, tip page).
 _TIP_METHOD_BUILDERS = (
-    # (config_key, method_key, label, url_builder)
+    # (config_key, method_key, label, url_builder, amount_style)
     ("sing_tip_venmo", "venmo", "Venmo",
-     lambda h: f"https://venmo.com/u/{h.lstrip('@')}"),
+     lambda h: f"https://venmo.com/{h.lstrip('@')}", "venmo"),
     ("sing_tip_cashapp", "cashapp", "Cash App",
-     lambda h: f"https://cash.app/${h.lstrip('$')}"),
+     lambda h: f"https://cash.app/${h.lstrip('$')}", "path"),
     ("sing_tip_paypal", "paypal", "PayPal",
-     lambda h: f"https://paypal.me/{h}"),
+     lambda h: f"https://paypal.me/{h}", "path"),
 )
+
+# Card / Apple Pay / Google Pay via the existing Nomad Karaoke Stripe payment
+# link (the one the live nomadkaraoke.com/tip page uses).
+_TIP_STRIPE_KEY = "sing_tip_stripe_url"
+
+# Zero-config fallback: the live tips page (Stripe + Cash App + Venmo +
+# PayPal + Zelle) that already exists on the public website. Means tipping is
+# ON out of the box; set sing_tips_enabled=false to kill it.
+_DEFAULT_TIP_PAGE_URL = "https://nomadkaraoke.com/tip"
 
 _MAX_TIP_AMOUNT = 500
 
@@ -661,16 +673,29 @@ _tip_rate_limit_state = defaultdict(deque)
 
 def _tip_methods(cfg):
     methods = []
-    for cfg_key, key, label, build in _TIP_METHOD_BUILDERS:
+    for cfg_key, key, label, build, amount_style in _TIP_METHOD_BUILDERS:
         handle = str((cfg or {}).get(cfg_key) or "").strip()
         if handle:
-            methods.append({"key": key, "label": label, "url": build(handle)})
+            methods.append({"key": key, "label": label, "url": build(handle),
+                            "amount_style": amount_style})
+    stripe = str((cfg or {}).get(_TIP_STRIPE_KEY) or "").strip()
+    if stripe.startswith("https://"):
+        methods.append({"key": "stripe", "label": "Card / Apple Pay",
+                        "url": stripe, "amount_style": "none"})
     custom = str((cfg or {}).get("sing_tip_url") or "").strip()
     if custom.startswith(("http://", "https://")):
         methods.append({
             "key": "custom",
             "label": str((cfg or {}).get("sing_tip_url_label") or "Tip link").strip(),
             "url": custom,
+            "amount_style": "none",
+        })
+    if not methods:
+        methods.append({
+            "key": "page",
+            "label": "Tip — card, Venmo, Cash App & more",
+            "url": _DEFAULT_TIP_PAGE_URL,
+            "amount_style": "none",
         })
     return methods
 

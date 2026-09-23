@@ -49,6 +49,40 @@ Follow-up batch (same release, 2026-09-23):
    unambiguous first-name, or length-scaled Damerau-Levenshtein typo match) so
    "sara" no longer re-enters "Sarah B." as a duplicate singer.
 
+Third batch (same release, 2026-09-23):
+
+8. **House rules → Rotation tab only, single layer** — the collapsed section
+   now lives only on the 📋 Rotation view and expands straight to the full
+   rules (no nested "Read the full rules").
+9. **Tip tab last + smoother payments** — tab order is now Request · My
+   songs · Rotation · 💜 Tip. The tip flow is amount-first: $5/$10/$20
+   presets (♥ marks ≥ threshold) + custom, with the chosen amount
+   deep-linked into each payment app (Cash App/PayPal path amounts, Venmo
+   pay intent). New `sing_tip_stripe_url` config key surfaces a "Card /
+   Apple Pay" button (Nomad's existing Stripe payment link
+   `https://buy.stripe.com/00geUZgfHdhx6TS001` — the same one the live
+   nomadkaraoke.com/tip page uses). **Zero-config fallback**: with no tip
+   keys configured, tipping is ON pointing at nomadkaraoke.com/tip
+   (`sing_tips_enabled: false` disables). While the Tip tab is open, claim
+   statuses poll every 15s so a KJ confirmation reaches the singer.
+10. **Infra (Cloudflare, recorded per standing rule)** — the parked
+   `kjtip.me` zone now 301-redirects everything to
+   `https://nomadkaraoke.com/tip` (proxied placeholder A `192.0.2.1` +
+   `www` CNAME, zone dynamic-redirect ruleset "kjtip.me → nomadkaraoke.com/tip").
+   Handy short link for venue signage/QR.
+11. **Dev harness rewritten** — `dev_server.py` now runs the REAL
+   RotationManager/SingStore/SmsStore on `~/kjdata-dev/rotation.db`
+   (seeded with a realistic mid-night rotation: now-singing/up-next/duet/
+   ♥-tipped/bumped/on-hold entries + pending song & tip claims), fixing the
+   mock's broken `/sing/my-requests`. `--reseed` wipes+reseeds, `--db PATH`
+   runs any rotation.db, `--fetch-real` scp's a read-only copy of the live
+   DB from nomadpc. Sheet sync is stripped from dev config.
+
+Suggested box config for direct payment buttons (fewer taps than the page):
+`"sing_tip_venmo": "beveradb"`, `"sing_tip_cashapp": "beveradb"`,
+`"sing_tip_paypal": "beveradbus"`,
+`"sing_tip_stripe_url": "https://buy.stripe.com/00geUZgfHdhx6TS001"`.
+
 Backend (`sing.py`, `routes.py`, `version_priority.py`) requires a service
 restart.
 

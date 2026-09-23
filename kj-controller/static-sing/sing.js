@@ -394,6 +394,7 @@ function render() {
   // so they survive the innerHTML reset above; refresh them for the new step.
   updateMySongsBar();
   updateTabsBar();
+  updateRulesFooterVisibility();
   _syncHash();
 }
 
@@ -772,15 +773,62 @@ function renderTip() {
       + "marked with a heart so everyone can see it's fair."));
   }
 
+  // Amount first — method links deep-link the chosen amount straight into
+  // the payment app (Cash App/PayPal path amounts, Venmo pay intent).
+  let chosenAmount = info.threshold > 0 ? info.threshold : 10;
+
+  const methodUrl = (m, amount) => {
+    if (!(amount > 0)) return m.url;
+    if (m.amount_style === "path") return `${m.url}/${amount}`;
+    if (m.amount_style === "venmo") {
+      return `${m.url}?txn=pay&amount=${amount}&note=${encodeURIComponent("Karaoke tip")}`;
+    }
+    return m.url;
+  };
+
   const methods = el("div", { class: "sing-tip-methods" });
+  const methodLinks = [];
   for (const m of info.methods || []) {
-    methods.appendChild(el("a", {
+    const a = el("a", {
       class: "btn primary sing-tip-method",
-      href: m.url,
+      href: methodUrl(m, chosenAmount),
       target: "_blank",
       rel: "noopener",
-    }, `${m.label} →`));
+    }, `${m.label} →`);
+    methodLinks.push([a, m]);
+    methods.appendChild(a);
   }
+
+  const amountInput = el("input", {
+    type: "number", class: "sing-empty-input", placeholder: "Amount (e.g. 20)",
+    inputmode: "decimal", min: "1", step: "1",
+    value: String(chosenAmount),
+    "data-testid": "tip-amount",
+  });
+  const presetRow = el("div", { class: "sing-tip-presets" });
+  const setAmount = (val) => {
+    chosenAmount = val;
+    amountInput.value = String(val);
+    for (const [a, m] of methodLinks) a.href = methodUrl(m, val);
+    for (const b of presetRow.querySelectorAll(".sing-tip-preset")) {
+      b.classList.toggle("active", parseFloat(b.dataset.amount) === val);
+    }
+  };
+  for (const amt of [5, 10, 20]) {
+    presetRow.appendChild(el("button", {
+      class: "sing-tip-preset" + (amt === chosenAmount ? " active" : ""),
+      "data-amount": String(amt),
+      onclick: () => setAmount(amt),
+    }, info.threshold > 0 && amt >= info.threshold ? `$${amt} ♥` : `$${amt}`));
+  }
+  amountInput.addEventListener("input", () => {
+    const v = parseFloat(amountInput.value);
+    if (v > 0) setAmount(v);
+  });
+  card.appendChild(el("div", { class: "sing-tip-amount-row" },
+    presetRow,
+    el("label", { class: "sing-empty-label sing-tip-custom" }, "Custom $", amountInput),
+  ));
   card.appendChild(methods);
 
   // Claim form — after tipping in their payment app, the singer tells us so
@@ -788,11 +836,6 @@ function renderTip() {
   const nameInput = el("input", {
     type: "text", class: "sing-empty-input", placeholder: "Your name",
     value: state.name || "",
-  });
-  const amountInput = el("input", {
-    type: "number", class: "sing-empty-input", placeholder: "Amount (e.g. 20)",
-    inputmode: "decimal", min: "1", step: "1",
-    "data-testid": "tip-amount",
   });
   const methodSelect = el("select", { class: "sing-empty-input sing-tip-method-select" },
     el("option", { value: "" }, "How did you tip?"),
@@ -842,14 +885,14 @@ function renderTip() {
   card.appendChild(el("div", { class: "sing-tip-claim" },
     el("h3", {}, "Sent one? Let the KJ know"),
     el("label", { class: "sing-empty-label" }, "Name", nameInput),
-    el("label", { class: "sing-empty-label" }, "Amount ($)", amountInput),
     el("label", { class: "sing-empty-label" }, "Method", methodSelect),
     submitBtn,
     err,
   ));
 
-  const claims = _myTipClaims();
-  if (claims.length) {
+  const claimsSection = () => {
+    const claims = _myTipClaims();
+    if (!claims.length) return null;
     const list = el("div", { class: "sing-tip-claims" },
       el("h3", {}, "Your tips tonight"));
     for (const it of claims) {
@@ -861,8 +904,36 @@ function renderTip() {
         el("div", { class: "song-card-status" }, _tipStatusLine(req)),
       ));
     }
-    card.appendChild(list);
+    return list;
+  };
+  const initial = claimsSection();
+  if (initial) card.appendChild(initial);
+
+  // Direct load onto #tip (reload/deep link): the view-model is empty until
+  // something fetches it — pull once now so past claims appear immediately.
+  if (!state.mySongs.loaded && readMyRequestIds(TOKEN).length) {
+    refreshMySongs().then(() => {
+      if (state.step !== "tip" || !card.isConnected) return;
+      const fresh = claimsSection();
+      const existing = card.querySelector(".sing-tip-claims");
+      if (existing && fresh) existing.replaceWith(fresh);
+      else if (fresh) card.appendChild(fresh);
+    });
   }
+
+  // Keep claim statuses fresh while this tab is open — the done-screen and
+  // bar polls don't run here (tips aren't "live songs"), so without this a
+  // KJ confirmation would never reach the singer's eyes.
+  const timer = setInterval(async () => {
+    if (state.step !== "tip" || !card.isConnected) { clearInterval(timer); return; }
+    await refreshMySongs();
+    if (state.step !== "tip" || !card.isConnected) { clearInterval(timer); return; }
+    const fresh = claimsSection();
+    const existing = card.querySelector(".sing-tip-claims");
+    if (existing && fresh) existing.replaceWith(fresh);
+    else if (fresh) card.appendChild(fresh);
+    else if (existing) existing.remove();
+  }, 15000);
   return card;
 }
 
@@ -2594,14 +2665,14 @@ function updateTabsBar() {
   bar.appendChild(mk("mysongs", "🎤", "My songs", () => {
     if (state.step !== "done") { state.step = "done"; render(); }
   }, liveCount || null));
+  bar.appendChild(mk("rotation", "📋", "Rotation", () => {
+    if (state.step !== "rotation") { state.step = "rotation"; render(); }
+  }));
   if (state.tipInfo && state.tipInfo.enabled) {
     bar.appendChild(mk("tip", "💜", "Tip", () => {
       if (state.step !== "tip") { state.step = "tip"; render(); }
     }));
   }
-  bar.appendChild(mk("rotation", "📋", "Rotation", () => {
-    if (state.step !== "rotation") { state.step = "rotation"; render(); }
-  }));
   bar.removeAttribute("hidden");
 }
 
@@ -2767,28 +2838,26 @@ function maybeShowPushPrompt() {
   container.appendChild(btn);
 }
 
-// --- Persistent rules footer ----------------------------------------------
+// --- Rules footer (Rotation tab only) --------------------------------------
+
+// Show/hide the footer per step: rules belong with the rotation view (where
+// queue-fairness questions actually come up), not under every screen.
+function updateRulesFooterVisibility() {
+  const slot = document.getElementById("sing-rules-footer");
+  if (!slot) return;
+  slot.hidden = state.step !== "rotation";
+}
 
 function renderRulesFooter() {
   const slot = document.getElementById("sing-rules-footer");
   if (!slot) return;
   slot.innerHTML = "";
-  // Collapsed by default — a one-line affordance instead of a full section
-  // dominating every screen. Expansion state persists for the page life only
-  // (deliberate: it should fold back on next visit).
+  slot.hidden = true;   // hidden until a render lands on the rotation step
+  // Collapsed by default; expanding shows the full rules directly (single
+  // layer — no nested "Read the full rules").
   slot.appendChild(el("details", { class: "rules-footer" },
     el("summary", { class: "rules-footer-summary" }, "🎤 House rules"),
-    el("ul", { class: "rules-short" },
-      el("li", {}, "First come, first sing"),
-      el("li", {}, "New singers get priority"),
-      el("li", {}, "Multiple songs? We'll spread them out"),
-      el("li", {}, "Duets welcome — add partners on the confirm screen (up to 3 extras)"),
-      el("li", {}, "Need to leave? Ask the KJ"),
-      el("li", {}, "♥ = paid priority ($20+)"),
-    ),
-    el("details", { class: "rules-full" },
-      el("summary", {}, "Read the full rules"),
-      el("ol", { class: "rules-list" },
+    el("ol", { class: "rules-list" },
         el("li", {},
           el("h4", {}, "First come, first sing"),
           el("p", {}, "The default order is the order you submit your request. "
@@ -2826,7 +2895,6 @@ function renderRulesFooter() {
             + "very soon. Paid entries are marked with a ♥ on the rotation screen so "
             + "everyone can see it's fair."),
         ),
-      ),
     ),
   ));
 }

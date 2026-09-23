@@ -1,85 +1,144 @@
-"""Local dev server with mock rotation data for UI testing.
+"""Local dev server running the REAL kjbox backend on a local SQLite DB.
 
-Usage: python dev_server.py
-Opens at http://localhost:5555
+Unlike the old mock-rotation version, this uses the real RotationManager /
+SingStore / SmsStore (they all share ``rotation_db_path``), so the singer UI
+and KJ UI behave exactly like a live night: /sing/my-requests, wait
+estimates, hearts, priority bias, duet pills, tip claims — all real code
+paths. VLC/mpv/Chromium managers degrade gracefully on a laptop.
+
+Usage:
+  python dev_server.py                 # dev DB at ~/kjdata-dev/rotation.db;
+                                       # seeds a realistic mid-night rotation
+                                       # if the rotation is empty
+  python dev_server.py --reseed        # wipe the dev DB, seed fresh
+  python dev_server.py --db PATH       # run against a specific rotation.db
+                                       # (e.g. a copy of a real night)
+  python dev_server.py --fetch-real    # scp the live DB from nomadpc into
+                                       # ~/kjdata-dev/real-night.db (read-only
+                                       # copy of the box; never writes back)
+                                       # and run against it
+
+Opens at http://localhost:5555 (KJ UI) — the singer UI URL (with the event
+token) is printed at startup.
 """
 
-import sys
+import argparse
 import os
+import subprocess
+import sys
 
 sys.path.insert(0, os.path.dirname(__file__))
 
-from app import create_app
+DEV_DATA_DIR = os.path.expanduser("~/kjdata-dev")
+DEV_DB = os.path.join(DEV_DATA_DIR, "rotation.db")
+REAL_COPY_DB = os.path.join(DEV_DATA_DIR, "real-night.db")
+# Where the live box keeps its DB (rotation_db_path default in app.py).
+NOMADPC_DB = "kjdata/rotation.db"
 
 
-class MockRotation:
-    """In-memory rotation for local UI testing."""
+def fetch_real_db():
+    """Copy the live rotation.db off nomadpc (read-only on the remote side)."""
+    os.makedirs(DEV_DATA_DIR, exist_ok=True)
+    print(f"Copying nomadpc:{NOMADPC_DB} -> {REAL_COPY_DB} …")
+    subprocess.run(["scp", f"nomadpc:{NOMADPC_DB}", REAL_COPY_DB], check=True)
+    print("Done — running against a COPY; the box is untouched.")
+    return REAL_COPY_DB
 
-    def __init__(self):
-        self._entries = [
-            {"row_index": 2, "singer": "Andrew", "song_artist": "Maximo Park - Books From Boxes", "status": "Up Next", "notes": ""},
-            {"row_index": 3, "singer": "Lindsay", "song_artist": "FOB - Hallelujah", "status": "Waiting", "notes": ""},
-            {"row_index": 4, "singer": "Greg", "song_artist": "Go Getter Greg", "status": "Waiting", "notes": ""},
-            {"row_index": 5, "singer": "Andrew", "song_artist": "Panic! At the Disco - London Beckoned Songs About Money Written By Machines", "status": "Waiting", "notes": ""},
-            {"row_index": 6, "singer": "Sarah", "song_artist": "Fleetwood Mac - Dreams", "status": "Waiting", "notes": "first timer"},
-            {"row_index": 7, "singer": "Mike", "song_artist": "Journey - Don't Stop Believin", "status": "Being Made (!)", "notes": ""},
-            {"row_index": 8, "singer": "Jen", "song_artist": "Adele - Rolling in the Deep", "status": "On Hold (BRB)", "notes": ""},
-        ]
-        self._next_row = 9
 
-    def get_rotation(self, force_refresh=False):
-        return [e for e in self._entries if e.get("status", "").lower() != "done"]
+def seed_rotation(app):
+    """Seed a realistic mid-night rotation + request queue into empty stores."""
+    rotation = app.rotation
+    store = app.sing_store
 
-    def update_status(self, row_index, new_status):
-        for e in self._entries:
-            if e["row_index"] == row_index:
-                e["status"] = new_status
-                break
+    def add(singer, song, **kw):
+        return rotation.add_entry(singer, song, **kw)["id"]
 
-    def mark_singing(self, row_index):
-        for e in self._entries:
-            if e["status"].lower() in ("now singing", "singing now", "singing"):
-                e["status"] = "Waiting"
-            if e["row_index"] == row_index:
-                e["status"] = "Now Singing"
+    # History — two songs already sung tonight (feeds last-sang + fairness).
+    for singer, song in (
+        ("Sarah B.", "Fleetwood Mac - Dreams"),
+        ("Mike", "Journey - Don't Stop Believin'"),
+    ):
+        eid = add(singer, song)
+        rotation.update_status(eid, "Done")
 
-    def mark_up_next(self, row_index):
-        for e in self._entries:
-            if e["status"].lower() in ("up next", "next"):
-                e["status"] = "Waiting"
-            if e["row_index"] == row_index:
-                e["status"] = "Up Next"
+    # Live queue.
+    now = add("Lindsay", "Fall Out Boy - Sugar, We're Goin Down")
+    rotation.mark_singing(now)
 
-    def add_entry(self, singer, song_artist, notes=""):
-        self._entries.append({
-            "row_index": self._next_row,
-            "singer": singer,
-            "song_artist": song_artist,
-            "status": "Waiting",
-            "notes": notes,
-        })
-        self._next_row += 1
+    nxt = add("Andrew", "Maximo Park - Books From Boxes")
+    rotation.mark_up_next(nxt)
 
-    def update_entry(self, row_index, singer=None, song_artist=None):
-        for e in self._entries:
-            if e["row_index"] == row_index:
-                if singer is not None:
-                    e["singer"] = singer
-                if song_artist is not None:
-                    e["song_artist"] = song_artist
-                break
+    add("Greg", "Chappell Roan - Pink Pony Club")
+    duet = add("Sarah B.", "Elton John & Kiki Dee - Don't Go Breaking My Heart",
+               singers=["Sarah B.", "Mike"])
+    tipper = add("Jen", "Adele - Rolling in the Deep")
+    rotation.set_paid(tipper, True)                      # ♥ tipped tonight
+    rotation.set_singer_priority_bias("Jen", 1)          # … and bumped
+    add("Priya", "Whitney Houston - I Wanna Dance with Somebody")
+    add("Andrew", "Panic! At the Disco - London Beckoned Songs About Money Written by Machines")
+    hold = add("Casey", "Radiohead - Creep", notes="stepped outside")
+    rotation.update_status(hold, "On Hold (BRB)")
 
-    def delete_entry(self, row_index):
-        self._entries = [e for e in self._entries if e["row_index"] != row_index]
+    # Request queue — one pending song + one pending tip claim so the KJ
+    # panel has cards to act on.
+    store.create_request(
+        singer_name="Priya", phone="", song_artist="Carly Rae Jepsen",
+        song_title="Call Me Maybe", source_type="local",
+        source_ref="/media/CRJ - Call Me Maybe.mp4", source_meta=None,
+        notes="", device_id="dev-seed-priya",
+    )
+    store.create_request(
+        singer_name="Greg", phone="", song_artist="", song_title="",
+        source_type="tip", source_ref=None,
+        source_meta={"amount": 25, "method": "Venmo"},
+        notes="Tip claim: $25 via Venmo", device_id="dev-seed-greg",
+    )
+    print(f"Seeded {len(rotation.get_rotation())} active entries "
+          "(+2 sung, 1 pending request, 1 tip claim)")
 
-    def archive_rotation(self):
-        count = len(self._entries)
-        self._entries = []
-        return count
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--db", help="run against this rotation.db")
+    parser.add_argument("--reseed", action="store_true",
+                        help="wipe the dev DB and seed fresh")
+    parser.add_argument("--fetch-real", action="store_true",
+                        help="scp the live DB from nomadpc first (read-only copy)")
+    parser.add_argument("--no-seed", action="store_true",
+                        help="skip seeding even if the rotation is empty")
+    args = parser.parse_args()
+
+    if args.fetch_real:
+        db_path = fetch_real_db()
+    elif args.db:
+        db_path = os.path.abspath(args.db)
+    else:
+        os.makedirs(DEV_DATA_DIR, exist_ok=True)
+        db_path = DEV_DB
+        if args.reseed and os.path.exists(db_path):
+            os.unlink(db_path)
+            print("Dev DB wiped.")
+
+    from config import load_config
+    from app import create_app
+
+    cfg = load_config()
+    cfg["rotation_db_path"] = db_path
+    # Never sync a dev rotation to the real Google Sheet.
+    cfg.pop("rotation_sheet_id", None)
+
+    app = create_app(config=cfg)
+
+    seed_allowed = not (args.no_seed or args.db or args.fetch_real)
+    if seed_allowed and not app.rotation.get_rotation():
+        seed_rotation(app)
+
+    token = app.sing_store.ensure_token()
+    print(f"\nDB:        {db_path}")
+    print("KJ UI:     http://localhost:5555")
+    print(f"Singer UI: http://localhost:5555/sing/?t={token}\n")
+    app.run(host="127.0.0.1", port=5555, debug=True)
 
 
 if __name__ == "__main__":
-    app = create_app()
-    app.rotation = MockRotation()
-    print("Dev server with mock rotation at http://localhost:5555")
-    app.run(host="127.0.0.1", port=5555, debug=True)
+    main()

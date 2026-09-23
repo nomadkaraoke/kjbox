@@ -339,6 +339,30 @@ input:focus {
   padding: 0.6rem 0.8rem;
   font-size: 0.9rem;
 }
+.sing-tip-amount-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.75rem;
+  margin: 1rem 0 0.25rem;
+}
+.sing-tip-presets { display: flex; gap: 0.4rem; }
+.sing-tip-preset {
+  border: 1px solid var(--nk-border);
+  background: var(--nk-card-2);
+  color: var(--nk-text);
+  border-radius: 8px;
+  font-size: 0.95rem;
+  font-weight: 700;
+  padding: 0.55rem 0.8rem;
+  cursor: pointer;
+}
+.sing-tip-preset.active {
+  border-color: var(--nk-accent);
+  color: var(--nk-accent);
+  background: rgba(255, 77, 207, 0.08);
+}
+.sing-tip-custom { flex: 1; }
+.sing-tip-custom input { width: 100%; }
 .sing-tip-methods {
   display: flex;
   flex-direction: column;

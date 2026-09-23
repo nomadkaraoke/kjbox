@@ -793,14 +793,22 @@ class TestRotationFreshness:
 
 
 class TestHouseRulesCollapsed:
-    def test_rules_are_a_collapsed_one_liner(self, page, live_server, live_token):
+    def test_rules_only_on_rotation_tab_and_single_layer(self, page, live_server, live_token):
         _login(page, live_server, live_token)
+        # Hidden on the landing screen (and every non-rotation step).
+        expect(page.locator(".rules-footer")).to_be_hidden()
+        page.route("**/sing/rotation*", lambda r: r.fulfill(
+            status=200, content_type="application/json",
+            body=json.dumps({"entries": []})))
+        page.locator('[data-testid="tab-rotation"]').click()
         rules = page.locator(".rules-footer")
         expect(rules).to_be_visible()
-        # Collapsed by default — the list only shows after tapping the summary.
-        expect(page.locator(".rules-short")).to_be_hidden()
+        # Collapsed by default; expanding shows the FULL rules directly —
+        # no nested "Read the full rules" second layer.
+        expect(page.locator(".rules-list")).to_be_hidden()
         page.locator(".rules-footer-summary").click()
-        expect(page.locator(".rules-short")).to_be_visible()
+        expect(page.locator(".rules-list")).to_be_visible()
+        expect(page.locator(".rules-footer summary")).to_have_count(1)
 
 
 class TestPartnerChips:
@@ -830,7 +838,8 @@ class TestPartnerChips:
 
 class TestTipTab:
     _INFO = {"enabled": True, "threshold": 20, "methods": [
-        {"key": "venmo", "label": "Venmo", "url": "https://venmo.com/u/nomadkaraoke"},
+        {"key": "venmo", "label": "Venmo", "url": "https://venmo.com/nomadkaraoke",
+         "amount_style": "venmo"},
     ]}
 
     def _login_with_tips(self, page, live_server, live_token):
@@ -839,8 +848,21 @@ class TestTipTab:
             status=200, content_type="application/json", body=json.dumps(self._INFO)))
         _login(page, live_server, live_token)
 
-    def test_tab_hidden_when_tips_not_configured(self, page, live_server, live_token):
-        _login(page, live_server, live_token)   # real endpoint: no handles → disabled
+    def test_tab_shown_by_default_via_tip_page_fallback(self, page, live_server, live_token):
+        # Zero config → the live nomadkaraoke.com/tip page fallback keeps
+        # tipping ON, so the tab appears (and sits LAST in the bar).
+        _login(page, live_server, live_token)
+        tip_tab = page.locator('[data-testid="tab-tip"]')
+        expect(tip_tab).to_be_visible()
+        assert page.evaluate(
+            "[...document.querySelectorAll('#sing-tabs .sing-tab')]"
+            ".map(b => b.dataset.testid).pop()") == "tab-tip"
+
+    def test_tab_hidden_when_explicitly_disabled(self, page, live_server, live_token):
+        page.route("**/sing/tip-info*", lambda r: r.fulfill(
+            status=200, content_type="application/json",
+            body=json.dumps({"enabled": False, "threshold": 20, "methods": []})))
+        _login(page, live_server, live_token)
         expect(page.locator('[data-testid="tab-rotation"]')).to_be_visible()
         expect(page.locator('[data-testid="tab-tip"]')).to_have_count(0)
 
@@ -850,7 +872,13 @@ class TestTipTab:
         expect(page.locator("h2:has-text('Tip the KJ')")).to_be_visible()
         expect(page.locator(".sing-tip-perk")).to_contain_text("$20+")
         link = page.locator(".sing-tip-method")
-        expect(link).to_have_attribute("href", "https://venmo.com/u/nomadkaraoke")
+        # Threshold ($20) is the default chosen amount; venmo deep-links it.
+        expect(link).to_have_attribute(
+            "href", "https://venmo.com/nomadkaraoke?txn=pay&amount=20&note=Karaoke%20tip")
+        # Switching the preset re-deep-links the method buttons.
+        page.locator('.sing-tip-preset[data-amount="5"]').click()
+        expect(link).to_have_attribute(
+            "href", "https://venmo.com/nomadkaraoke?txn=pay&amount=5&note=Karaoke%20tip")
         assert page.evaluate("window.location.hash") == "#tip"
 
     def test_claim_posts_amount_and_method(self, page, live_server, live_token):

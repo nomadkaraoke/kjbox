@@ -18,8 +18,8 @@ import sing as sing_mod
 def tip_config(sing_app):
     """Enable tipping with a Venmo handle; restore config after."""
     cfg = sing_app.kj_config
-    keys = ("sing_tip_venmo", "sing_tip_cashapp", "sing_tip_url",
-            "sing_tip_url_label", "sing_tips_enabled",
+    keys = ("sing_tip_venmo", "sing_tip_cashapp", "sing_tip_stripe_url",
+            "sing_tip_url", "sing_tip_url_label", "sing_tips_enabled",
             "sing_tip_priority_threshold")
     saved = {k: cfg.get(k) for k in keys}
     cfg["sing_tip_venmo"] = "nomadkaraoke"
@@ -40,13 +40,20 @@ def _claim(client, token, **overrides):
 
 
 class TestTipInfo:
-    def test_disabled_without_any_handles(self, client, token):
+    def test_zero_config_falls_back_to_live_tip_page(self, client, token):
+        # Tipping is ON out of the box, pointing at the existing
+        # nomadkaraoke.com/tip page (Stripe + Cash App + Venmo + PayPal).
         resp = client.get(f"/sing/tip-info?t={token}")
         assert resp.status_code == 200
-        assert resp.get_json()["enabled"] is False
+        data = resp.get_json()
+        assert data["enabled"] is True
+        assert [m["key"] for m in data["methods"]] == ["page"]
+        assert data["methods"][0]["url"] == "https://nomadkaraoke.com/tip"
+        assert data["methods"][0]["amount_style"] == "none"
 
     def test_enabled_with_handle_and_builds_urls(self, client, token, tip_config):
         tip_config["sing_tip_cashapp"] = "$nomadkj"
+        tip_config["sing_tip_stripe_url"] = "https://buy.stripe.com/test123"
         tip_config["sing_tip_url"] = "https://tip.example/kj"
         tip_config["sing_tip_url_label"] = "Card"
         resp = client.get(f"/sing/tip-info?t={token}")
@@ -54,9 +61,15 @@ class TestTipInfo:
         assert data["enabled"] is True
         assert data["threshold"] == 20   # default
         urls = {m["key"]: m["url"] for m in data["methods"]}
-        assert urls["venmo"] == "https://venmo.com/u/nomadkaraoke"
+        assert urls["venmo"] == "https://venmo.com/nomadkaraoke"
         assert urls["cashapp"] == "https://cash.app/$nomadkj"
+        assert urls["stripe"] == "https://buy.stripe.com/test123"
         assert urls["custom"] == "https://tip.example/kj"
+        # Direct handles configured → the zero-config page fallback is absent.
+        assert "page" not in urls
+        styles = {m["key"]: m["amount_style"] for m in data["methods"]}
+        assert styles == {"venmo": "venmo", "cashapp": "path",
+                          "stripe": "none", "custom": "none"}
 
     def test_explicit_disable_wins(self, client, token, tip_config):
         tip_config["sing_tips_enabled"] = False
@@ -73,8 +86,12 @@ class TestTipInfo:
 
 
 class TestTipClaim:
-    def test_rejected_when_tips_disabled(self, client, token):
-        assert _claim(client, token).status_code == 400
+    def test_rejected_when_tips_disabled(self, client, sing_app, token):
+        sing_app.kj_config["sing_tips_enabled"] = False
+        try:
+            assert _claim(client, token).status_code == 400
+        finally:
+            sing_app.kj_config.pop("sing_tips_enabled", None)
 
     def test_creates_tip_request(self, client, sing_app, token, tip_config):
         resp = _claim(client, token)
