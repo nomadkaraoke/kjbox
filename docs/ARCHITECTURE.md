@@ -170,6 +170,7 @@ utils.py → (stdlib only)
 | POST | `/av/reset` | Run fix-hdmi-audio.sh to restore known-good AV state, restart VLC |
 | POST | `/av/vlc-device` | Temporarily switch VLC audio device (hw:X,Y or named device) |
 | GET | `/search` | FTS5 full-text search over external catalog |
+| GET | `/library/search` | Local-only unified search (media index + external catalog) via `unified_search(local_only=True)` — same typo tolerance as rotation search; backs the Library panel filter (`?q=query&limit=`, min 2 chars) |
 | GET | `/catalog/stats` | Catalog availability, total count, format breakdown |
 | POST | `/catalog/build` | Build/rebuild catalog from file list |
 | GET | `/overlays` | List all configured overlays |
@@ -182,7 +183,7 @@ utils.py → (stdlib only)
 | POST | `/divebar/search` | Search Divebar community karaoke catalog (48K+ tracks from 62 brands) |
 | POST | `/divebar/kn-lookup` | Cross-reference KN song IDs with Divebar catalog |
 | POST | `/divebar/download` | Queue download of a Divebar track from Google Drive |
-| POST | `/karaoke-nerds/search` | Search karaokenerds.com for web-only tracks |
+| POST | `/karaoke-nerds/search` | KN catalog search, server-composed via `unified_search` — returns `{local, karaoke_nerds, divebar, karaoke_nerds_timeout}` with per-track `in_library` / `local_path` / `divebar` mirror xref |
 | GET | `/karaoke-nerds/config` | Get preferred brand codes for KN result sorting |
 | POST | `/karaoke-nerds/config` | Set preferred brand codes for KN result sorting |
 | POST | `/youtube/search` | Search YouTube via yt-dlp (extract_flat metadata) |

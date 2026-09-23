@@ -1464,6 +1464,29 @@ def search_catalog():
     return jsonify(results)
 
 
+@routes_bp.route('/library/search')
+def library_search():
+    """Typo-tolerant search over the local library only (media index + external
+    catalog), via the SAME engine as rotation search — ``unified_search`` with
+    ``local_only=True`` (text_normalize + FTS5 + trigram + fuzzy_match). Backs
+    the Library panel's filter so "boks" finds "Books from Boxes" there exactly
+    as it does in rotation search. Rows are annotated + ranked; external-catalog
+    rows carry ``folder``, media-index rows carry ``duration``.
+    """
+    query = request.args.get('q', '').strip()
+    if len(query) < 2:
+        return jsonify({"error": "Query must be at least 2 characters"}), 400
+    try:
+        limit = min(int(request.args.get('limit', 50)), 200)
+    except (ValueError, TypeError):
+        limit = 50
+
+    result = unified_search(
+        query, current_app._get_current_object(),
+        local_only=True, catalog_limit=limit)
+    return jsonify({"results": result["local"][:limit]})
+
+
 @routes_bp.route('/catalog/stats')
 def catalog_stats():
     """Return catalog statistics."""
@@ -1844,10 +1867,18 @@ def _set_xfce_wallpaper(image_path):
 
 @routes_bp.route('/karaoke-nerds/search', methods=['POST'])
 def kn_search():
-    """Search our own community karaoke catalog for web-playable tracks.
+    """Search the KaraokeNerds catalogs, composed server-side via unified_search.
 
-    Backed by `karaokenerds_community` via the Divebar Cloud Function — no live
-    scrape of karaokenerds.com (see karaoke_nerds.search)."""
+    Backed by our own catalog copies (local mirror first, Divebar Cloud
+    Function fallback — never a live scrape of karaokenerds.com). Returns the
+    full unified-search payload ``{local, karaoke_nerds, divebar,
+    karaoke_nerds_timeout}`` so the KN panel gets the exact same composition
+    as rotation/singer search: server-side ``in_library`` + ``local_path``,
+    Divebar GCS-mirror cross-ref (``track.divebar``), and local-master
+    suppression — with no client-side matching logic. Per-song track lists
+    are sorted best-first so the frontend renders in order without
+    duplicating the brand registry.
+    """
     data = request.get_json(silent=True) or {}
     query = data.get('query', '').strip()
     if not query or len(query) < 2:
@@ -1855,18 +1886,11 @@ def kn_search():
 
     cfg = current_app.kj_config
     log_message(f"Karaoke Nerds search: {query}", cfg)
-    results = karaoke_nerds.search(
-        query, config=cfg,
-        mirror=getattr(current_app, "catalog_mirror", None))
-    # Annotate each track with priority_rank and sort the per-song track
-    # lists best-first so the frontend can render in order without
-    # duplicating the brand registry.
-    for song in results:
-        version_priority.annotate_versions(
-            song.get("tracks") or [], cfg, shape="rotation_search_kn")
+    result = unified_search(query, current_app._get_current_object())
+    for song in result["karaoke_nerds"]:
         (song.get("tracks") or []).sort(
             key=lambda t: t.get("priority_rank", 9999))
-    return jsonify(results)
+    return jsonify(result)
 
 
 @routes_bp.route('/karaoke-nerds/config', methods=['GET'])
@@ -4783,6 +4807,34 @@ def _build_local_media_row(app, path, entry):
     }
 
 
+def _attach_local_paths_to_kn(app, kn_results):
+    """Attach ``local_path`` to KN tracks whose YouTube video is already on disk.
+
+    Joins each track's youtube_url video id against the media index's
+    ``youtube_id`` (parsed from legacy ``<id>__`` names or the canonical
+    ``[yt-<id>]`` media_id token). Server-side replacement for the frontends'
+    client-side id joins, so every unified-search consumer can render
+    "Downloaded → Play" without re-deriving the match. Mutates tracks in place.
+    """
+    yt_to_path = {}
+    for path, entry in app.media.index.items():
+        vid = entry.get("youtube_id")
+        if not vid:
+            mid = entry.get("media_id") or ""
+            if mid.startswith("yt-") and len(mid) == 14:  # "yt-" + 11-char id
+                vid = mid[3:]
+        if vid and vid not in yt_to_path:
+            yt_to_path[vid] = path
+    if not yt_to_path:
+        return
+    for song in kn_results or []:
+        for track in song.get("tracks") or []:
+            vid = youtube_id_from_url(track.get("youtube_url"))
+            path = yt_to_path.get(vid) if vid else None
+            if path:
+                track["local_path"] = path
+
+
 def _divebar_search_local_first(query, cfg, mirror, limit=100):
     """Divebar-mirror rows via the local catalog mirror when it is fresh
     (grouped with the same helper as the remote path), else the Cloud
@@ -4798,7 +4850,8 @@ def _divebar_search_local_first(query, cfg, mirror, limit=100):
     return divebar.search(query, cfg, limit=limit)
 
 
-def unified_search(query, app, *, grouped=False, local_only=False):
+def unified_search(query, app, *, grouped=False, local_only=False,
+                   catalog_limit=10):
     """Unified search helper: local catalog + Karaoke Nerds + Divebar cross-reference.
 
     Shared by /rotation/search (KJ-side) and /sing/search (singer-side) so
@@ -4814,11 +4867,14 @@ def unified_search(query, app, *, grouped=False, local_only=False):
     lookup are skipped entirely and only the local library (catalog + scanned
     media) is returned, annotated + rankable. This powers the live "Try
     Another" swap where the KJ needs instant results, not an 8s web scrape.
+
+    ``catalog_limit`` caps the external-catalog rows (default 10, matching the
+    rotation picker; /library/search passes a larger cap for the Library panel).
     """
     cfg = app.kj_config
     local_results = []
     if app.catalog.is_available():
-        local_results = app.catalog.search(query, limit=10)
+        local_results = app.catalog.search(query, limit=catalog_limit)
 
     # Add duration from media index where available
     for result in local_results:
@@ -4899,6 +4955,13 @@ def unified_search(query, app, *, grouped=False, local_only=False):
                 and r.get("title", "").lower() == song.get("title", "").lower()
                 for r in local_results
             )
+
+    # Mark KN tracks whose YouTube video is already downloaded (track.local_path)
+    # so consumers render "Downloaded → Play" without a client-side id join.
+    try:
+        _attach_local_paths_to_kn(app, kn_results)
+    except Exception:
+        pass  # best-effort; never break search
 
     # Cross-reference mirror files against local + KN: attaches track['divebar']
     # for same-brand matches (so that row downloads from GCS, not YouTube) and

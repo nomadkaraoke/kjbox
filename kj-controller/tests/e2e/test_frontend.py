@@ -246,60 +246,83 @@ class TestKnDiscOnlyRendering:
 
 
 class TestKnLocalMasterMatching:
-    """KN panel matches local NOMAD masters (which have no youtube_id).
+    """KN panel renders server-composed local matches (was: client matching).
 
-    Regression: masters ("NOMAD-xxxx - Artist - Title.mp4", source 'master')
-    only joined KN rows by YouTube video id, so the NOMAD row offered a
-    re-download of a release already on disk; and "In your collection" only
-    queried the external catalog, so local files never appeared there."""
+    Since the rec-5 backend composition, /karaoke-nerds/search returns the
+    full unified-search payload: a track whose YouTube video is on disk
+    arrives with ``local_path`` (server-side id join); a locally-mastered
+    NOMAD release is suppressed from the KN rows server-side and surfaces in
+    the payload's ``local`` rows, rendered as "In your library" with Play.
+    """
 
-    # Master filename/display uses accented "Maxïmo" + "from"; the KN song
-    # uses "From" — matching must be accent- and case-insensitive.
+    # Server-shaped payload: CB1 track carries local_path (already
+    # downloaded); KV is disc-only; the suppressed NOMAD master arrives as a
+    # local library row (accented "Maxïmo" display must render as-is).
     _SEED = (
         "() => {"
-        "  localMediaItems = [{"
-        "    display_name: 'Max\\u00efmo Park - Books from Boxes',"
-        "    file_path: '/opt/nomad/downloads/NOMAD-720p/NOMAD-0729 - Max\\u00efmo Park - Books from Boxes.mp4',"
-        "    source: 'master', media_kind: 'mp4' }];"
-        "  renderKNResults([{ artist: 'Max\\u00efmo Park', title: 'Books From Boxes', tracks: ["
-        "    { brand_name: 'Nomad Karaoke', brand_code: 'NOMAD', is_community: true,"
-        "      youtube_url: 'https://www.youtube.com/watch?v=RlBlAKxyqZw' },"
-        "    { brand_name: 'Karaoke Version', brand_code: 'KV', is_community: false,"
-        "      youtube_url: null },"
-        "  ]}]);"
+        "  renderKNResults(["
+        "    { artist: 'Max\\u00efmo Park', title: 'Books From Boxes', tracks: ["
+        "      { brand_name: 'Community Brand', brand_code: 'CB1', is_community: true,"
+        "        youtube_url: 'https://www.youtube.com/watch?v=RlBlAKxyqZw',"
+        "        local_path: '/opt/nomad/downloads/Max\\u00efmo Park - Books from Boxes [yt-RlBlAKxyqZw].mp4' },"
+        "      { brand_name: 'Karaoke Version', brand_code: 'KV', is_community: false,"
+        "        youtube_url: null },"
+        "    ]}"
+        "  ], ["
+        "    { path: '/opt/nomad/downloads/NOMAD-720p/NOMAD-0729 - Max\\u00efmo Park - Books from Boxes.mp4',"
+        "      filename: 'NOMAD-0729 - Max\\u00efmo Park - Books from Boxes.mp4',"
+        "      artist: 'Max\\u00efmo Park', title: 'Books from Boxes', format: 'mp4' }"
+        "  ]);"
         "}"
     )
 
-    def test_nomad_row_plays_local_master_instead_of_download(self, app_page):
+    def test_local_path_track_plays_local_file_instead_of_download(self, app_page):
         errors = []
         app_page.on("pageerror", lambda e: errors.append(str(e)))
         app_page.evaluate(self._SEED)
         app_page.locator(".kn-song-header").click()
 
-        # NOMAD row: recognized as already on disk -> Downloaded badge + Play.
+        # local_path track: recognized as already on disk -> Downloaded + Play.
         expect(app_page.locator(".kn-downloaded-badge")).to_have_count(1)
         expect(app_page.locator(".kn-track .kn-play-btn")).to_have_count(1)
-        # No Download button anywhere: NOMAD is local, KV is disc-only.
+        # No Download button anywhere: CB1 is local, KV is disc-only.
         expect(app_page.locator(".kn-download-btn")).to_have_count(0)
         expect(app_page.locator(".kn-disc-only-badge")).to_have_count(1)
         assert errors == []
 
-    def test_collection_section_includes_local_media_index(self, app_page):
+    def test_library_section_renders_server_local_rows(self, app_page):
         errors = []
         app_page.on("pageerror", lambda e: errors.append(str(e)))
         app_page.evaluate(self._SEED)
-        # Expanding lazy-loads the collection section; the catalog endpoint is
-        # unavailable in the test app, so any rows must come from the local
-        # media index.
-        app_page.locator(".kn-song-header").click()
 
+        # Rendered eagerly from the payload's local rows — no lazy fetch.
         section = app_page.locator(".kn-local-section")
         expect(section).to_have_count(1)
-        expect(app_page.locator(".kn-local-header")).to_contain_text("In your collection (1)")
+        expect(app_page.locator(".kn-local-header")).to_contain_text("In your library (1)")
         row = app_page.locator(".kn-local-match")
         expect(row).to_have_count(1)
         expect(row).to_contain_text("Books from Boxes")
         expect(row.locator(".kn-play-btn")).to_have_count(1)
+        assert errors == []
+
+    def test_divebar_xref_track_downloads_from_mirror(self, app_page):
+        """A community track with a server-attached GCS-mirror file offers a
+        mirror download (not YouTube) — handoff gap F2."""
+        errors = []
+        app_page.on("pageerror", lambda e: errors.append(str(e)))
+        app_page.evaluate(
+            "() => renderKNResults([{ artist: 'A', title: 'T', tracks: ["
+            "  { brand_name: 'Sunfly', brand_code: 'SF', is_community: false,"
+            "    youtube_url: null,"
+            "    divebar: { file_id: 'f123', format: 'zip' } },"
+            "]}])"
+        )
+        app_page.locator(".kn-song-header").click()
+
+        btn = app_page.locator(".kn-download-btn")
+        expect(btn).to_have_count(1)
+        expect(btn).to_have_attribute("title", "From the GCS mirror (not YouTube)")
+        expect(app_page.locator(".kn-disc-only-badge")).to_have_count(0)
         assert errors == []
 
 

@@ -994,15 +994,22 @@ def test_kn_search_returns_results(mock_kn, flask_test_client):
         content_type='application/json')
     assert response.status_code == 200
     data = json.loads(response.data)
-    assert len(data) == 1
-    assert data[0]["title"] == "Test Song"
-    tracks = data[0]["tracks"]
+    # Server-composed unified payload (same shape as rotation search).
+    assert set(data) >= {"local", "karaoke_nerds", "divebar",
+                         "karaoke_nerds_timeout"}
+    songs = data["karaoke_nerds"]
+    assert len(songs) == 1
+    assert songs[0]["title"] == "Test Song"
+    tracks = songs[0]["tracks"]
     assert len(tracks) == 2
     by_code = {t["brand_code"]: t for t in tracks}
     assert by_code["Brand Name"]["is_community"] is True
     # Commercial disc release: present, but with nothing to download.
     assert by_code["SF"]["is_community"] is False
     assert by_code["SF"]["youtube_url"] is None
+    # Tracks arrive sorted best-first by the server-side ranking.
+    ranks = [t.get("priority_rank", 9999) for t in tracks]
+    assert ranks == sorted(ranks)
 
 
 @patch('karaoke_nerds.divebar.kn_search')
@@ -1015,7 +1022,7 @@ def test_kn_search_handles_error(mock_kn, flask_test_client):
         content_type='application/json')
     assert response.status_code == 200
     data = json.loads(response.data)
-    assert data == []
+    assert data["karaoke_nerds"] == []
 
 
 def test_kn_get_config(flask_test_client):

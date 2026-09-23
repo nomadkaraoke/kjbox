@@ -2541,21 +2541,39 @@ async function catalogSearch(query) {
     searchActive = true;
     document.getElementById('search-clear').classList.remove('hidden');
 
-    const localResults = filterLocalMedia(query);
-    renderUnifiedResults(localResults, [], query);
+    // Instant first paint from the client-side filter (also the offline
+    // fallback); the server pass below then replaces it with the shared
+    // search engine's results — same typo tolerance as rotation search.
+    const clientMatches = filterLocalMedia(query);
+    renderUnifiedResults(clientMatches, [], query);
 
-    let catalogResults = [];
     try {
-        const response = await fetch(`/search?q=${encodeURIComponent(query)}&limit=50`);
-        if (response.ok) {
-            catalogResults = await response.json();
+        const response = await fetch(`/library/search?q=${encodeURIComponent(query)}&limit=50`);
+        if (!response.ok) return;
+        const data = await response.json();
+        // Partition server rows: paths we hold in the media index render as
+        // full library items (edit/delete, format toolbar respected); the
+        // rest are external-catalog rows.
+        const byPath = new Map(localMediaItems.map(i => [i.file_path, i]));
+        const libraryItems = [];
+        const catalogResults = [];
+        (data.results || []).forEach(r => {
+            const item = byPath.get(r.path);
+            if (item) libraryItems.push(item);
+            else catalogResults.push(r);
+        });
+        // Union in client-only matches (e.g. a query hitting the YouTube
+        // channel name, which the server haystack doesn't index) so the
+        // server pass never loses something the first paint showed.
+        const seen = new Set(libraryItems.map(i => i.file_path));
+        clientMatches.forEach(i => {
+            if (!seen.has(i.file_path)) libraryItems.push(i);
+        });
+        if (searchActive && document.getElementById('catalog-search').value.trim() === query) {
+            renderUnifiedResults(applyMediaFilter(libraryItems), catalogResults, query);
         }
     } catch (error) {
-        // Catalog unavailable, show local results only
-    }
-
-    if (searchActive && document.getElementById('catalog-search').value.trim() === query) {
-        renderUnifiedResults(localResults, catalogResults, query);
+        // Server unavailable — the client-filtered first paint stands.
     }
 }
 
@@ -3487,7 +3505,6 @@ function extractYouTubeId(url) {
 }
 
 let knExpandedSongs = {};
-let knSongData = {};
 
 async function searchKaraokeNerds() {
     const input = document.getElementById('kn-query');
@@ -3507,18 +3524,26 @@ async function searchKaraokeNerds() {
 
     btn.disabled = false;
     status.classList.add('hidden');
-    if (data) {
-        if (Array.isArray(data) && data.length === 0) {
-            log('No results found on Karaoke Nerds.', 'error');
-            document.getElementById('kn-results').innerHTML =
-                '<div class="kn-no-results">No results found.</div>';
-        } else if (data.error) {
-            log(`Search error: ${data.error}`, 'error');
-        } else {
-            log(`Found ${data.length} song${data.length !== 1 ? 's' : ''} on Karaoke Nerds.`, 'success');
-            renderKNResults(data);
-        }
+    if (!data) return;
+    if (data.error) {
+        log(`Search error: ${data.error}`, 'error');
+        return;
     }
+    // Server-composed unified payload — the same composition rotation/singer
+    // search get: KN songs (tracks pre-sorted, with in_library / local_path /
+    // divebar mirror xref), local library matches for the query, and
+    // standalone GCS-mirror versions. No client-side matching.
+    const songs = data.karaoke_nerds || [];
+    const localRows = data.local || [];
+    const mirrorRows = data.divebar || [];
+    if (songs.length === 0 && localRows.length === 0 && mirrorRows.length === 0) {
+        log('No results found on Karaoke Nerds.', 'error');
+        document.getElementById('kn-results').innerHTML =
+            '<div class="kn-no-results">No results found.</div>';
+        return;
+    }
+    log(`Found ${songs.length} song${songs.length !== 1 ? 's' : ''} on Karaoke Nerds.`, 'success');
+    renderKNResults(songs, localRows, mirrorRows);
 }
 
 function clearKNResults() {
@@ -3526,34 +3551,23 @@ function clearKNResults() {
     document.getElementById('kn-query').value = '';
 }
 
-function renderKNResults(songs) {
+function renderKNResults(songs, localRows = [], mirrorRows = []) {
     const container = document.getElementById('kn-results');
     container.innerHTML = '';
     knExpandedSongs = {};
-    knSongData = {};
 
-    const downloadedIdToPath = new Map(
-        localMediaItems.filter(i => i.youtube_id).map(i => [i.youtube_id, i.file_path])
-    );
-
-    // Local NOMAD masters (source 'master', the NOMAD-720p mirror) carry no
-    // youtube_id — they're named "NOMAD-xxxx - Artist - Title", not
-    // "[yt-<id>]" — so the video-id join above can never find them. Match
-    // them to the KN NOMAD row by normalized "artist title" instead, so our
-    // own release shows Play rather than offering a pointless re-download.
-    const masterPathByNorm = new Map(
-        localMediaItems
-            .filter(i => i.source === 'master' && (i.file_path || i.path))
-            .map(i => [normalizeForSearch((i.display_name || '').toLowerCase()),
-                       i.file_path || i.path])
-    );
+    // Local library matches come server-matched (same engine as rotation
+    // search, typo-tolerant, ranked — masters first). A KN NOMAD row whose
+    // master we hold is suppressed server-side; its local copy shows here.
+    if (localRows.length > 0) {
+        container.appendChild(renderKnLibrarySection(localRows));
+    }
 
     songs.forEach((song, idx) => {
         const songId = `kn-song-${idx}`;
         const trackCount = song.tracks.length;
         const isExpanded = false;
         knExpandedSongs[songId] = isExpanded;
-        knSongData[songId] = { song, catalogLoaded: false };
 
         // Song header
         const header = document.createElement('div');
@@ -3583,8 +3597,6 @@ function renderKNResults(songs) {
         const trackList = document.createElement('div');
         trackList.className = 'kn-track-list' + (isExpanded ? '' : ' collapsed');
         trackList.id = songId;
-
-        const songNorm = normalizeForSearch(`${song.artist} ${song.title}`.toLowerCase());
 
         // Backend has sorted tracks by priority_rank already.
         song.tracks.forEach(track => {
@@ -3621,11 +3633,10 @@ function renderKNResults(songs) {
                 info.appendChild(badge);
             }
 
-            const videoId = extractYouTubeId(track.youtube_url);
-            const downloadedPath = (videoId ? downloadedIdToPath.get(videoId) : null)
-                // The KN NOMAD row IS our own release — play the local master.
-                || (track.brand_code === 'NOMAD' ? masterPathByNorm.get(songNorm) : null)
-                || null;
+            // Server-side join: track.local_path is set when this track's
+            // YouTube video is already on disk (NOMAD masters we hold are
+            // suppressed server-side and surface in the library section).
+            const downloadedPath = track.local_path || null;
 
             const actions = document.createElement('span');
             actions.className = 'kn-track-actions';
@@ -3644,6 +3655,26 @@ function renderKNResults(songs) {
                     playMedia(downloadedPath);
                 };
                 actions.appendChild(playBtn);
+            } else if (track.divebar && track.divebar.file_id) {
+                // Same-brand file in the Divebar GCS mirror (server xref) —
+                // download from there instead of YouTube (canonical file).
+                const dlBtn = document.createElement('button');
+                dlBtn.className = 'kn-download-btn';
+                dlBtn.textContent = 'Download';
+                dlBtn.title = 'From the GCS mirror (not YouTube)';
+                dlBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    downloadDivebarTrack({
+                        file_id: track.divebar.file_id,
+                        artist: song.artist,
+                        title: song.title,
+                        brand_code: track.brand_code,
+                        format: track.divebar.format,
+                    });
+                    dlBtn.disabled = true;
+                    dlBtn.textContent = 'Queued';
+                };
+                actions.appendChild(dlBtn);
             } else if (track.youtube_url) {
                 const dlBtn = document.createElement('button');
                 dlBtn.className = 'kn-download-btn';
@@ -3670,6 +3701,128 @@ function renderKNResults(songs) {
 
         container.appendChild(trackList);
     });
+
+    // Standalone GCS-mirror versions — brands neither a KN row nor a local
+    // file covers (server-composed, same rows rotation search surfaces).
+    if (mirrorRows.length > 0) {
+        container.appendChild(renderKnMirrorSection(mirrorRows));
+    }
+}
+
+// "In your library" — server-matched local rows (media index + external
+// catalog) for the query, via the shared engine: typo-tolerant, ranked,
+// masters first. Replaces the old per-song lazy "In your collection"
+// section and its client-side term filter.
+function renderKnLibrarySection(rows) {
+    const section = document.createElement('div');
+    section.className = 'kn-local-section';
+
+    const header = document.createElement('div');
+    header.className = 'kn-local-header';
+    header.textContent = `In your library (${rows.length})`;
+    section.appendChild(header);
+
+    rows.forEach(r => {
+        const row = document.createElement('div');
+        row.className = 'kn-local-match';
+
+        const detail = document.createElement('div');
+        detail.className = 'catalog-detail';
+
+        const titleRow = document.createElement('span');
+        const name = [r.artist, r.title].filter(Boolean).join(' - ')
+            || (r.filename || '').replace(/\.\w+$/, '');
+        titleRow.textContent = name + ' ';
+        if (r.format) {
+            const badge = document.createElement('span');
+            badge.className = `format-badge ${getFormatBadgeClass(r.format)}`;
+            badge.textContent = formatPillLabel(r.format);
+            titleRow.appendChild(badge);
+        }
+        detail.appendChild(titleRow);
+
+        const folder = r.folder || (r.path || '').replace(/\/[^/]*$/, '');
+        if (folder) {
+            const folderSpan = document.createElement('div');
+            folderSpan.className = 'catalog-folder';
+            folderSpan.textContent = prettyFolder(folder);
+            folderSpan.title = r.path || folder;
+            detail.appendChild(folderSpan);
+        }
+
+        const playBtn = document.createElement('button');
+        playBtn.className = 'kn-play-btn';
+        playBtn.textContent = 'Play';
+        playBtn.onclick = (e) => {
+            e.stopPropagation();
+            playMedia(r.path);
+        };
+
+        row.appendChild(detail);
+        row.appendChild(playBtn);
+        section.appendChild(row);
+    });
+
+    return section;
+}
+
+// Standalone Divebar GCS-mirror versions, downloadable directly (same
+// payload as the Divebar panel's rows).
+function renderKnMirrorSection(rows) {
+    const section = document.createElement('div');
+    section.className = 'kn-local-section';
+
+    const header = document.createElement('div');
+    header.className = 'kn-local-header';
+    header.textContent = `GCS mirror (${rows.length})`;
+    section.appendChild(header);
+
+    rows.forEach(dv => {
+        const row = document.createElement('div');
+        row.className = 'kn-local-match';
+
+        const detail = document.createElement('div');
+        detail.className = 'catalog-detail';
+
+        const titleRow = document.createElement('span');
+        titleRow.textContent =
+            [dv.artist, dv.title].filter(Boolean).join(' - ') + ' ';
+        if (dv.format) {
+            const badge = document.createElement('span');
+            badge.className = `format-badge ${getFormatBadgeClass(dv.format)}`;
+            badge.textContent = formatPillLabel(dv.format);
+            titleRow.appendChild(badge);
+        }
+        detail.appendChild(titleRow);
+
+        const brandSpan = document.createElement('div');
+        brandSpan.className = 'catalog-folder';
+        brandSpan.textContent = dv.brand_name || dv.brand_code || '';
+        detail.appendChild(brandSpan);
+
+        const dlBtn = document.createElement('button');
+        dlBtn.className = 'kn-download-btn';
+        dlBtn.textContent = 'Download';
+        dlBtn.title = 'From the GCS mirror';
+        dlBtn.onclick = (e) => {
+            e.stopPropagation();
+            downloadDivebarTrack({
+                file_id: dv.file_id,
+                artist: dv.artist,
+                title: dv.title,
+                brand_code: dv.brand_code,
+                format: dv.format,
+            });
+            dlBtn.disabled = true;
+            dlBtn.textContent = 'Queued';
+        };
+
+        row.appendChild(detail);
+        row.appendChild(dlBtn);
+        section.appendChild(row);
+    });
+
+    return section;
 }
 
 function toggleKNSong(songId) {
@@ -3680,125 +3833,6 @@ function toggleKNSong(songId) {
     const idx = songId.replace('kn-song-', '');
     const chevron = document.getElementById('kn-chevron-' + idx);
     if (chevron) chevron.classList.toggle('expanded', !isCollapsed);
-    if (!isCollapsed) loadKNCatalogMatches(songId);
-}
-
-async function loadKNCatalogMatches(songId) {
-    const data = knSongData[songId];
-    if (!data || data.catalogLoaded) return;
-    data.catalogLoaded = true;
-
-    const { song } = data;
-    const query = `${song.artist} ${song.title}`.trim();
-
-    let results = [];
-    try {
-        const resp = await fetch(`/search?q=${encodeURIComponent(query)}&limit=5`);
-        if (resp.ok) results = await resp.json();
-    } catch (_) { /* catalog unavailable */ }
-    if (!Array.isArray(results)) results = [];
-
-    // The catalog only covers the external (4TB) library. Downloads and
-    // NOMAD-720p masters live in the local media index — include them here
-    // (same dual local+catalog search the Library panel does), else our own
-    // releases look absent from the collection. Deliberately not
-    // filterLocalMedia(): that applies the Library's format-filter toolbar,
-    // which shouldn't hide matches in this panel.
-    const terms = normalizeForSearch(query.toLowerCase()).split(/\s+/).filter(t => t);
-    const localMatches = localMediaItems.filter(item => {
-        const text = normalizeForSearch(
-            ((item.display_name || '') + ' ' + (item.channel || '')).toLowerCase());
-        return terms.length && terms.every(term => text.includes(term));
-    }).slice(0, 5);
-
-    if (results.length === 0 && localMatches.length === 0) return;
-
-    const trackList = document.getElementById(songId);
-    if (!trackList) return;
-
-    const section = document.createElement('div');
-    section.className = 'kn-local-section';
-
-    const header = document.createElement('div');
-    header.className = 'kn-local-header';
-    header.textContent = `In your collection (${results.length + localMatches.length})`;
-    section.appendChild(header);
-
-    localMatches.forEach(item => {
-        const row = document.createElement('div');
-        row.className = 'kn-local-match';
-
-        const detail = document.createElement('div');
-        detail.className = 'catalog-detail';
-
-        const titleRow = document.createElement('span');
-        titleRow.textContent = (item.display_name || item.file_path || '') + ' ';
-        titleRow.appendChild(mediaFormatBadge(item));
-        detail.appendChild(titleRow);
-
-        const fp = item.file_path || item.path || '';
-        if (fp) {
-            const folderSpan = document.createElement('div');
-            folderSpan.className = 'catalog-folder';
-            folderSpan.textContent = prettyFolder(fp.replace(/\/[^/]*$/, ''));
-            folderSpan.title = fp;
-            detail.appendChild(folderSpan);
-        }
-
-        const playBtn = document.createElement('button');
-        playBtn.className = 'kn-play-btn';
-        playBtn.textContent = 'Play';
-        playBtn.onclick = (e) => {
-            e.stopPropagation();
-            playMedia(fp);
-        };
-
-        row.appendChild(detail);
-        row.appendChild(playBtn);
-        section.appendChild(row);
-    });
-
-    results.forEach(match => {
-        const row = document.createElement('div');
-        row.className = 'kn-local-match';
-
-        const detail = document.createElement('div');
-        detail.className = 'catalog-detail';
-
-        const titleRow = document.createElement('span');
-        titleRow.textContent = match.filename.replace(/\.\w+$/, '') + ' ';
-        if (match.format) {
-            const badge = document.createElement('span');
-            badge.className = `format-badge ${getFormatBadgeClass(match.format)}`;
-            badge.textContent = formatPillLabel(match.format);
-            titleRow.appendChild(badge);
-        }
-        detail.appendChild(titleRow);
-
-        if (match.folder) {
-            const folderSpan = document.createElement('div');
-            folderSpan.className = 'catalog-folder';
-            folderSpan.textContent = match.folder
-                .replace(/^\/mnt\/[^/]+\//, '')
-                .replace(/^\/Volumes\/[^/]+\//, '');
-            folderSpan.title = match.folder;
-            detail.appendChild(folderSpan);
-        }
-
-        const playBtn = document.createElement('button');
-        playBtn.className = 'kn-play-btn';
-        playBtn.textContent = 'Play';
-        playBtn.onclick = (e) => {
-            e.stopPropagation();
-            playMedia(match.path);
-        };
-
-        row.appendChild(detail);
-        row.appendChild(playBtn);
-        section.appendChild(row);
-    });
-
-    trackList.insertBefore(section, trackList.firstChild);
 }
 
 function downloadKNTrack(youtubeUrl) {
@@ -4182,10 +4216,6 @@ function formatFileSize(bytes) {
     return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
 }
 
-// Divebar cross-reference for KN results
-async function loadDivebarBadges() {
-    // Placeholder for KN cross-reference badges (future enhancement)
-}
 
 // --- Divebar Status ---
 
