@@ -3810,6 +3810,12 @@ body {
 .pr-badge.pr-divebar { background: #1e7cbf; color: #fff; }
 .pr-badge.pr-local { background: #3a8a3a; color: #fff; }
 
+/* Tip claim rows — purple accent so money stands out from song requests. */
+.pending-req-row.pr-tip-row {
+    background: rgba(142, 90, 214, 0.08);
+    border-left: 3px solid #8e5ad6;
+}
+
 .pr-actions {
     display: flex;
     gap: 0.3rem;

@@ -330,6 +330,40 @@ input:focus {
 }
 .sing-version-pick:hover { background: var(--nk-accent); color: var(--nk-bg); }
 
+/* --- 💜 Tip tab ------------------------------------------------------------ */
+
+.sing-tip-perk {
+  background: rgba(142, 90, 214, 0.12);
+  border: 1px solid rgba(142, 90, 214, 0.4);
+  border-radius: 8px;
+  padding: 0.6rem 0.8rem;
+  font-size: 0.9rem;
+}
+.sing-tip-methods {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin: 1rem 0;
+}
+.sing-tip-method { text-align: center; text-decoration: none; }
+.sing-tip-claim {
+  margin-top: 1.25rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--nk-border);
+}
+.sing-tip-claim h3 { margin-top: 0; }
+.sing-tip-method-select {
+  width: 100%;
+  background: var(--nk-card-2);
+  color: var(--nk-text);
+  border: 1px solid var(--nk-border);
+  border-radius: 8px;
+  padding: 0.6rem;
+  font-size: 1rem;
+}
+.sing-tip-submit { margin-top: 0.5rem; }
+.sing-tip-claims { margin-top: 1.25rem; }
+
 /* --- Shared singer modal (pill info, tech details, preview) --------------- */
 
 .sing-modal-backdrop {
@@ -635,18 +669,28 @@ input:focus {
 }
 .sing-code-error { color: var(--nk-error); font-size: 0.9rem; margin-top: 0.75rem; }
 
-/* --- Rules footer (every page) -------------------------------------------- */
+/* --- Rules footer (collapsed one-liner on every page) ---------------------- */
 .rules-footer {
   max-width: 480px;
   margin: 0 auto 2rem;
-  padding: 1.25rem 1.5rem;
+  padding: 0.6rem 1.5rem;
   background: var(--nk-card-2);
   border: 1px solid var(--nk-border);
   border-radius: 12px;
   color: var(--nk-text-dim);
   font-size: 0.9rem;
 }
-.rules-footer h3 { margin-top: 0; color: var(--nk-text); }
+.rules-footer[open] { padding: 0.6rem 1.5rem 1.25rem; }
+.rules-footer-summary {
+  cursor: pointer;
+  font-weight: 700;
+  color: var(--nk-text);
+  list-style: none;
+  padding: 0.2rem 0;
+}
+.rules-footer-summary::-webkit-details-marker { display: none; }
+.rules-footer-summary::before { content: "▸ "; color: var(--nk-text-dim); }
+.rules-footer[open] > .rules-footer-summary::before { content: "▾ "; }
 .rules-footer .rules-short { list-style: none; padding-left: 0; margin: 0.25rem 0 0.75rem; }
 .rules-footer .rules-short li { padding: 0.35rem 0; border-bottom: 1px solid var(--nk-border); }
 .rules-footer .rules-short li:last-child { border-bottom: 0; }
@@ -878,6 +922,28 @@ input:focus {
   color: #ddd;
   margin-bottom: 8px;
 }
+.partner-chips-label {
+  font-size: 0.8em;
+  color: var(--nk-text-dim);
+  margin-bottom: 6px;
+}
+.partner-chips-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.partner-chip {
+  border: 1px solid var(--nk-border);
+  background: var(--nk-card-2);
+  color: var(--nk-text);
+  border-radius: 999px;
+  font-size: 0.85em;
+  padding: 4px 12px;
+  cursor: pointer;
+  min-height: 0;
+}
+.partner-chip:active { border-color: var(--nk-accent); color: var(--nk-accent); }
 .partner-row {
   display: grid;
   grid-template-columns: 1fr 1fr auto;

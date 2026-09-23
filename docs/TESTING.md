@@ -187,12 +187,13 @@ one Android device and one iPhone before shipping push changes to prod.
 
 - [ ] Search for a song with multiple versions (e.g. "bohemian rhapsody") → one card per unique `(artist, title)`, not one per version. Card shows "Auto-select best version →" CTA and an inert "N versions available →" hint below it.
 - [ ] Search for a song with exactly one version (e.g. an obscure title with only a single KN track) → card shows "Add to queue" CTA (no KJ-picks framing, no "N versions" hint).
-- [ ] Tap "Auto-select best version" → confirm page shows "{title} — {artist} (best version auto-selected)". Submit → admin sees a pending row with an amber `kj_pick` badge and inline picker.
-- [ ] Admin picker shows candidates ranked: locals (📁) first, then Divebar (💿), then community (🎤), then YouTube (📺). Each row has its own "Approve with this →" button.
+- [ ] Tap "Auto-select best version" → confirm page shows "{title} — {artist} (best version auto-selected)".
+- [ ] With auto-approve **off**: submit → admin sees a pending row with an amber `kj_pick` badge and inline picker (the "auto-selected" wording describes what the default ⭐ BEST pick will be — the KJ can still override).
+- [ ] With auto-approve **on**: submit → request auto-binds to the top-ranked version and lands in the rotation approved; no pending row.
+- [ ] Admin picker shows candidates in `rank_version` order (community brands by priority — local/Divebar tie-break first — then commercial by priority, then unknowns; a top community Divebar track legitimately outranks a lesser local file). Each row has its own "Approve with this →" button.
 - [ ] Tap "Approve with this" on a local version → no download queued, rotation entry file_path set, request row's `source_type` = `local`.
 - [ ] Tap "Approve with this" on a KN+divebar version → download queued with source=divebar. Request row's `source_type` = `divebar`.
 - [ ] Tap "Approve with this" on a KN YouTube-only version → download queued with source=youtube. Request row's `source_type` = `youtube`.
-- [ ] With auto-approve **enabled**, submit a `kj_pick` → still lands in pending queue (auto-approve is skipped for `kj_pick`). Submit a `local` → still auto-approves.
 - [ ] Reject a `kj_pick` request (no version picked) → request row's `source_type` stays `kj_pick` (unbound), status = `rejected`.
 - [ ] Admin sends `POST /rotation/requests/<id>/approve` with no `version_index` on a `kj_pick` → 400 with "version_index required". Row stays pending.
 

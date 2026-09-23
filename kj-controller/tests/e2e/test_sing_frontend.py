@@ -790,3 +790,84 @@ class TestRotationFreshness:
             "document.querySelector('.rotation-updated')"
             ".setAttribute('data-fetched-at', String(Date.now() - 45000))")
         expect(label).to_contain_text("s ago", timeout=8000)
+
+
+class TestHouseRulesCollapsed:
+    def test_rules_are_a_collapsed_one_liner(self, page, live_server, live_token):
+        _login(page, live_server, live_token)
+        rules = page.locator(".rules-footer")
+        expect(rules).to_be_visible()
+        # Collapsed by default — the list only shows after tapping the summary.
+        expect(page.locator(".rules-short")).to_be_hidden()
+        page.locator(".rules-footer-summary").click()
+        expect(page.locator(".rules-short")).to_be_visible()
+
+
+class TestPartnerChips:
+    def test_chip_tap_adds_partner_row(self, page, live_server, live_token):
+        page.add_init_script("window.__SING_ARM_MS = 0;")
+        _login(page, live_server, live_token)   # identity = "Alice"
+        page.route("**/sing/singers*", lambda r: r.fulfill(
+            status=200, content_type="application/json",
+            body=json.dumps({"singers": ["Sarah B.", "Mike", "Alice"]})))
+        page.evaluate(
+            """() => {
+                window.__sing_state.selected = {
+                    source_type: 'local', source_ref: '/m/x.mp4',
+                    song_artist: 'Queen', song_title: 'Under Pressure',
+                };
+                window.__sing_state.step = 'confirm';
+                window.__sing_render();
+            }""")
+        chips = page.locator('[data-testid="partner-chip"]')
+        # Alice (the requester) is filtered out of her own chip list.
+        expect(chips).to_have_count(2)
+        chips.filter(has_text="Sarah B.").click()
+        expect(page.locator('[data-testid="partner-name-0"]')).to_have_value("Sarah B.")
+        # The used chip disappears from the refreshed list.
+        expect(page.locator('[data-testid="partner-chip"]')).to_have_count(1)
+
+
+class TestTipTab:
+    _INFO = {"enabled": True, "threshold": 20, "methods": [
+        {"key": "venmo", "label": "Venmo", "url": "https://venmo.com/u/nomadkaraoke"},
+    ]}
+
+    def _login_with_tips(self, page, live_server, live_token):
+        # tip-info is fetched at boot — the route must exist before goto.
+        page.route("**/sing/tip-info*", lambda r: r.fulfill(
+            status=200, content_type="application/json", body=json.dumps(self._INFO)))
+        _login(page, live_server, live_token)
+
+    def test_tab_hidden_when_tips_not_configured(self, page, live_server, live_token):
+        _login(page, live_server, live_token)   # real endpoint: no handles → disabled
+        expect(page.locator('[data-testid="tab-rotation"]')).to_be_visible()
+        expect(page.locator('[data-testid="tab-tip"]')).to_have_count(0)
+
+    def test_tab_appears_and_opens_tip_page(self, page, live_server, live_token):
+        self._login_with_tips(page, live_server, live_token)
+        page.locator('[data-testid="tab-tip"]').click()
+        expect(page.locator("h2:has-text('Tip the KJ')")).to_be_visible()
+        expect(page.locator(".sing-tip-perk")).to_contain_text("$20+")
+        link = page.locator(".sing-tip-method")
+        expect(link).to_have_attribute("href", "https://venmo.com/u/nomadkaraoke")
+        assert page.evaluate("window.location.hash") == "#tip"
+
+    def test_claim_posts_amount_and_method(self, page, live_server, live_token):
+        self._login_with_tips(page, live_server, live_token)
+        page.route("**/sing/tip-claim*", lambda r: r.fulfill(
+            status=200, content_type="application/json",
+            body=json.dumps({"request": {
+                "id": 991, "source_type": "tip", "status": "pending",
+                "singer_name": "Alice", "tip_amount": 25, "tip_method": "Venmo",
+                "edit_token": "tok991",
+            }})))
+        page.locator('[data-testid="tab-tip"]').click()
+        page.locator('[data-testid="tip-amount"]').fill("25")
+        page.locator(".sing-tip-method-select").select_option("Venmo")
+        with page.expect_request("**/sing/tip-claim*") as req_info:
+            page.locator('[data-testid="tip-submit"]').click()
+        body = req_info.value.post_data_json
+        assert body["amount"] == 25
+        assert body["method"] == "Venmo"
+        assert body["singer_name"] == "Alice"

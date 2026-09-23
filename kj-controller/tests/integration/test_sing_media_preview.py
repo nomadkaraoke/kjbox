@@ -67,8 +67,11 @@ class TestMediaInfo:
                 fh.write(b"PK\x03\x04fakezip")
         if not target:
             pytest.skip("no writable media folder in test config")
-        resp = client.post(
-            f"/sing/media-info?t={token}", json={"file_path": target})
+        try:
+            resp = client.post(
+                f"/sing/media-info?t={token}", json={"file_path": target})
+        finally:
+            os.unlink(target)
         assert resp.status_code == 200
         info = resp.get_json()
         # A fake zip fails the probe gracefully OR describes itself — either

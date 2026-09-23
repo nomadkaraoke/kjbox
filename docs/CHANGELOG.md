@@ -28,9 +28,29 @@ Four singer-UX improvements to the public `/sing/*` SPA:
    rendered once and never changed; rotation views now tick the age every 5s,
    auto-refresh every 30s while visible, and carry a manual ↻ Refresh button.
 
-No device config changes (optional: `sing_preview_rate_limit`,
-`sing_preview_rate_window_s`, default 12/60s). Backend (`sing.py`,
-`version_priority.py`) requires a service restart.
+Follow-up batch (same release, 2026-09-23):
+
+5. **House rules tucked away** — the 🎤 House rules section is now a collapsed
+   one-line `<details>` instead of a full card dominating every screen.
+6. **💜 Tip tab + tip-for-heart priority** — new tab (shown when the KJ
+   configures payment handles) linking to Venmo / Cash App / PayPal / custom
+   URL. After tipping, the singer files a claim (`POST /sing/tip-claim` → a
+   `source_type="tip"` meta-request, never auto-approved); the KJ's Requests
+   panel shows "💜 Tip $25 — Confirm/Dismiss". Confirming hearts (`paid` ♥)
+   every active entry the singer appears in and, at/above
+   `sing_tip_priority_threshold` (default $20), applies the same singer-level
+   +1 `priority_bias` as the rotation view's bump-up button. New config keys
+   (all optional): `sing_tip_venmo`, `sing_tip_cashapp`, `sing_tip_paypal`,
+   `sing_tip_url` (+ `sing_tip_url_label`), `sing_tip_priority_threshold`,
+   `sing_tips_enabled` (explicit off switch).
+7. **Duet partner auto-match** — the confirm screen offers tap-to-add chips
+   of tonight's known singers (`GET /sing/singers`), and `/sing/submit`
+   canonicalizes typed partner names onto known spellings (folded-exact,
+   unambiguous first-name, or length-scaled Damerau-Levenshtein typo match) so
+   "sara" no longer re-enters "Sarah B." as a duplicate singer.
+
+Backend (`sing.py`, `routes.py`, `version_priority.py`) requires a service
+restart.
 
 ## 2026-09-22 - Change: KN panel + Library filter unified onto the shared search engine (v0.106.0)
 

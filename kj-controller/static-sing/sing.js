@@ -172,6 +172,9 @@ const state = {
   // the first successful probe so the bar doesn't flash before we know.
   mySongs: { items: [], nowPlaying: null, loaded: false },
   _barPollTimer: null,
+  // Tip config ({enabled, threshold, methods}) — fetched once at boot; the
+  // 💜 Tip tab only renders when the KJ has payment handles configured.
+  tipInfo: null,
 };
 
 const MAX_PARTNERS = 3;
@@ -310,6 +313,7 @@ const STEP_HASH = {
   confirm: "#confirm",
   done: "#mysongs",
   rotation: "#rotation",
+  tip: "#tip",
 };
 
 function _stepFromHash(hash) {
@@ -383,6 +387,7 @@ function render() {
     confirm: renderConfirm,
     done: renderDone,
     rotation: renderRotation,
+    tip: renderTip,
   }[state.step] || renderLanding;
   root.appendChild(view());
   // The persistent "My songs" bar and bottom tab bar live outside #sing-root
@@ -585,14 +590,21 @@ function _renderRotationLoading() {
     el("p", { class: "rotation-loading" }, "Loading rotation…"));
 }
 
-function _renderRotationError(status) {
+function _renderRotationError(status, onRetry) {
   const body = el("div", { class: "rotation-body" });
   if (status === 403) {
     body.appendChild(el("p", { class: "rotation-error" },
       "Requests just closed — ask the KJ."));
   } else {
     body.appendChild(el("p", { class: "rotation-error" },
-      "Couldn't load rotation — close and tap again to retry."));
+      "Couldn't load the rotation."));
+    if (onRetry) {
+      body.appendChild(el("button", {
+        class: "rotation-refresh",
+        "data-testid": "rotation-retry",
+        onclick: (e) => { e.preventDefault(); onRetry(); },
+      }, "↻ Try again"));
+    }
   }
   return body;
 }
@@ -650,7 +662,7 @@ function attachRotationLive(container, { isActive = () => true, onCount } = {}) 
       // Keep showing stale data (with its honest age) over an error screen.
       if (!container.querySelector(".rotation-list")) {
         const slot = container.querySelector(".rotation-body");
-        if (slot) slot.replaceWith(_renderRotationError(e.status));
+        if (slot) slot.replaceWith(_renderRotationError(e.status, () => load({ force: true })));
       }
     }
   };
@@ -717,6 +729,140 @@ function renderRotation() {
   });
   live.load();
   live.start();
+  return card;
+}
+
+// --- 💜 Tip tab -------------------------------------------------------------
+// Singers tip through the KJ's own payment app (links from config), then file
+// a claim; the KJ confirms it from the Requests panel, which hearts their
+// entries and (at/above the threshold) bumps their rotation priority.
+
+function _myTipClaims() {
+  return (state.mySongs.items || []).filter(
+    (it) => it.request && it.request.source_type === "tip");
+}
+
+function _tipStatusLine(req) {
+  if (req.status === "approved") return "✓ Confirmed — thank you! ♥";
+  if (req.status === "rejected") return "Not confirmed — see the KJ if that's a surprise.";
+  return "Waiting for the KJ to confirm…";
+}
+
+function renderTip() {
+  const card = el("main", { class: "sing-card sing-tip-page" },
+    el("h2", {}, "💜 Tip the KJ"),
+  );
+  // Reload landing directly on #tip races the boot-time tip-info fetch —
+  // show a loading line rather than a false "not set up".
+  if (state.tipInfo === null) {
+    card.appendChild(el("p", { class: "hint" }, "Loading…"));
+    return card;
+  }
+  const info = state.tipInfo;
+  if (!info.enabled) {
+    card.appendChild(el("p", { class: "hint" },
+      "Tipping isn't set up for this event — cash always works though!"));
+    return card;
+  }
+
+  card.appendChild(el("p", {}, "Tips keep the show going — thank you!"));
+  if (info.threshold > 0) {
+    card.appendChild(el("p", { class: "sing-tip-perk" },
+      `♥ Tip $${info.threshold}+ and you'll be bumped up the rotation, `
+      + "marked with a heart so everyone can see it's fair."));
+  }
+
+  const methods = el("div", { class: "sing-tip-methods" });
+  for (const m of info.methods || []) {
+    methods.appendChild(el("a", {
+      class: "btn primary sing-tip-method",
+      href: m.url,
+      target: "_blank",
+      rel: "noopener",
+    }, `${m.label} →`));
+  }
+  card.appendChild(methods);
+
+  // Claim form — after tipping in their payment app, the singer tells us so
+  // the KJ gets a Confirm card in the Requests panel.
+  const nameInput = el("input", {
+    type: "text", class: "sing-empty-input", placeholder: "Your name",
+    value: state.name || "",
+  });
+  const amountInput = el("input", {
+    type: "number", class: "sing-empty-input", placeholder: "Amount (e.g. 20)",
+    inputmode: "decimal", min: "1", step: "1",
+    "data-testid": "tip-amount",
+  });
+  const methodSelect = el("select", { class: "sing-empty-input sing-tip-method-select" },
+    el("option", { value: "" }, "How did you tip?"),
+    (info.methods || []).map((m) => el("option", { value: m.label }, m.label)),
+    el("option", { value: "Cash" }, "Cash"),
+    el("option", { value: "Other" }, "Other"),
+  );
+  const err = el("p", { class: "error" }, "");
+  const submitBtn = el("button", {
+    class: "btn primary sing-tip-submit",
+    "data-testid": "tip-submit",
+  }, "I sent a tip →");
+  submitBtn.onclick = async () => {
+    const name = (nameInput.value || "").trim();
+    const amount = parseFloat(amountInput.value);
+    if (!name) { err.textContent = "Please enter your name."; return; }
+    if (!(amount > 0)) { err.textContent = "Please enter the tip amount."; return; }
+    err.textContent = "";
+    submitBtn.disabled = true;
+    submitBtn.textContent = "Sending…";
+    try {
+      if (name !== state.name) {
+        state.name = name;
+        LS.set("sing_name", name);
+      }
+      const resp = await fetchJson(`${BASE}/tip-claim`, {
+        method: "POST",
+        body: JSON.stringify({
+          singer_name: name,
+          device_id: DEVICE_ID,
+          phone: state.phone || "",
+          amount,
+          method: methodSelect.value || "",
+        }),
+      });
+      rememberRequestId(TOKEN, resp.request.id, resp.request.edit_token);
+      await refreshMySongs();   // pull the new claim into the view-model
+      render();                 // re-render shows it under "Your tips tonight"
+    } catch (e) {
+      submitBtn.disabled = false;
+      submitBtn.textContent = "I sent a tip →";
+      err.textContent = e.status === 429
+        ? "That's a lot of tip claims — give it a few minutes."
+        : "Couldn't send — flag the KJ down instead.";
+    }
+  };
+  card.appendChild(el("div", { class: "sing-tip-claim" },
+    el("h3", {}, "Sent one? Let the KJ know"),
+    el("label", { class: "sing-empty-label" }, "Name", nameInput),
+    el("label", { class: "sing-empty-label" }, "Amount ($)", amountInput),
+    el("label", { class: "sing-empty-label" }, "Method", methodSelect),
+    submitBtn,
+    err,
+  ));
+
+  const claims = _myTipClaims();
+  if (claims.length) {
+    const list = el("div", { class: "sing-tip-claims" },
+      el("h3", {}, "Your tips tonight"));
+    for (const it of claims) {
+      const req = it.request;
+      const amt = req.tip_amount != null ? `$${req.tip_amount}` : "";
+      list.appendChild(el("div", { class: "song-card", "data-status": req.status },
+        el("div", { class: "song-card-title" },
+          `${amt}${req.tip_method ? ` via ${req.tip_method}` : ""}`),
+        el("div", { class: "song-card-status" }, _tipStatusLine(req)),
+      ));
+    }
+    card.appendChild(list);
+  }
   return card;
 }
 
@@ -1855,10 +2001,56 @@ function renderConfirm() {
     }
   };
 
+  // Fold a name the same way the server does (casefold + accents stripped +
+  // punctuation → space) so chip filtering agrees with backend dedup.
+  const foldName = (n) => (n || "")
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase().replace(/[^a-z0-9\s]/g, " ").trim().replace(/\s+/g, " ");
+
+  // Tap-to-add chips of tonight's known singers — avoids retyping (and
+  // misspelling) a person who already signed up on their own phone.
+  async function loadPartnerChips(container) {
+    let names = state._knownSingers;
+    if (!Array.isArray(names)) {
+      try {
+        const data = await fetchJson(`${BASE}/singers`);
+        names = state._knownSingers = data.singers || [];
+      } catch { return; }   // chips are sugar — typing still works
+    }
+    // Yield once: with a cached list we'd otherwise hit the isConnected
+    // check while the card is still detached (mid-render), and bail.
+    await Promise.resolve();
+    if (!container.isConnected) return;
+    const taken = new Set([foldName(state.name),
+      ...state.additional.map((p) => foldName(p.name))]);
+    const avail = names.filter((n) => foldName(n) && !taken.has(foldName(n)));
+    container.innerHTML = "";
+    if (!avail.length || state.additional.length >= MAX_PARTNERS) return;
+    container.appendChild(el("div", { class: "partner-chips-label" },
+      "Singing with someone already on the list? Tap their name:"));
+    const rowEl = el("div", { class: "partner-chips-row" });
+    for (const n of avail.slice(0, 12)) {
+      rowEl.appendChild(el("button", {
+        type: "button",
+        class: "partner-chip",
+        "data-testid": "partner-chip",
+        onclick: () => {
+          if (state.additional.length >= MAX_PARTNERS) return;
+          state.additional.push({ name: n, phone: "" });
+          rerender();
+        },
+      }, n));
+    }
+    container.appendChild(rowEl);
+  }
+
   function renderPartnersSection() {
     const wrap = el("div", { class: "partners-section" },
       el("div", { class: "partners-title" }, "Singing with anyone else? (optional)"),
     );
+    const chips = el("div", { class: "partner-chips" });
+    wrap.appendChild(chips);
+    loadPartnerChips(chips);
     state.additional.forEach((p, i) => {
       wrap.appendChild(el("div", {
         class: "partner-row",
@@ -2235,6 +2427,7 @@ function _liveSongs(items) {
   // bar count or keep a finished singer pinned to the done screen on reload.
   return (items || []).filter(
     (it) => it.request
+      && it.request.source_type !== "tip"   // tip claims live on the Tip tab
       && !it.performed
       && !["cancelled", "rejected"].includes(it.request.status),
   );
@@ -2246,7 +2439,10 @@ function _liveSongs(items) {
 // songs still waiting on the KJ. Without this the list renders in submission
 // order, which looks wrong after a reorder.
 function _splitAndSortSongs(items) {
-  const all = items || [];
+  // Tip claims ride the same my-requests feed but are not songs — they render
+  // on the Tip tab, never in the songs list.
+  const all = (items || []).filter(
+    (it) => !it.request || it.request.source_type !== "tip");
   const performed = all.filter((it) => it.performed);
   const active = all.filter((it) => !it.performed);
   active.sort((a, b) => _activeSortKey(a) - _activeSortKey(b));
@@ -2365,6 +2561,7 @@ function _activeTabForStep(step) {
   if (step === "search" || step === "confirm") return "request";
   if (step === "done") return "mysongs";
   if (step === "rotation") return "rotation";
+  if (step === "tip") return "tip";
   return null;   // landing / identity — no tab highlighted
 }
 
@@ -2397,6 +2594,11 @@ function updateTabsBar() {
   bar.appendChild(mk("mysongs", "🎤", "My songs", () => {
     if (state.step !== "done") { state.step = "done"; render(); }
   }, liveCount || null));
+  if (state.tipInfo && state.tipInfo.enabled) {
+    bar.appendChild(mk("tip", "💜", "Tip", () => {
+      if (state.step !== "tip") { state.step = "tip"; render(); }
+    }));
+  }
   bar.appendChild(mk("rotation", "📋", "Rotation", () => {
     if (state.step !== "rotation") { state.step = "rotation"; render(); }
   }));
@@ -2571,8 +2773,11 @@ function renderRulesFooter() {
   const slot = document.getElementById("sing-rules-footer");
   if (!slot) return;
   slot.innerHTML = "";
-  slot.appendChild(el("section", { class: "rules-footer" },
-    el("h3", {}, "🎤 House rules"),
+  // Collapsed by default — a one-line affordance instead of a full section
+  // dominating every screen. Expansion state persists for the page life only
+  // (deliberate: it should fold back on next visit).
+  slot.appendChild(el("details", { class: "rules-footer" },
+    el("summary", { class: "rules-footer-summary" }, "🎤 House rules"),
     el("ul", { class: "rules-short" },
       el("li", {}, "First come, first sing"),
       el("li", {}, "New singers get priority"),
@@ -2718,6 +2923,14 @@ if (codeEntryEl) {
   }
   // SW + push only make sense in the main SPA path (requires a valid token).
   registerServiceWorker().then((reg) => { swRegistration = reg; });
+  // Tip config — one cheap GET; the 💜 tab appears when it lands (if enabled).
+  fetchJson(`${BASE}/tip-info`)
+    .then((d) => {
+      state.tipInfo = d;
+      if (state.step === "tip") render();   // reload landed straight on #tip
+      else updateTabsBar();
+    })
+    .catch(() => { /* tab simply stays hidden */ });
   render();
   // Smart restore — if this device already submitted songs for tonight, bring
   // the singer back to their "Your songs tonight" list on reload (the ids +

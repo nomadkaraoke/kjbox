@@ -9174,6 +9174,25 @@ const SingRequests = (() => {
     function renderRow(req) {
         const row = document.createElement('div');
         row.className = 'pending-req-row';
+        // Tip claim — not a song. Confirm hearts the singer's entries and
+        // (>= threshold) applies the same +1 bump as the rotation bump-up.
+        if (req.source_type === 'tip') {
+            let meta = {};
+            try { meta = JSON.parse(req.source_meta || '{}') || {}; } catch (e) { /* leave empty */ }
+            const amt = (meta.amount != null && meta.amount !== '') ? `$${meta.amount}` : 'amount unknown';
+            const via = meta.method ? ` via ${meta.method}` : '';
+            row.className = 'pending-req-row pr-tip-row';
+            row.innerHTML = `
+              <div class="pr-main"><strong>💜 Tip ${escapeHtml(amt)}</strong>
+                <span class="pr-song">${escapeHtml(req.singer_name)}${escapeHtml(via)}</span></div>
+              <div class="pr-actions">
+                <button class="btn-approve" data-id="${req.id}" title="Confirm the tip arrived — hearts their rotation entries and bumps priority if at/above the threshold">Confirm</button>
+                <button class="btn-reject" data-id="${req.id}" title="Dismiss without applying priority">Dismiss</button>
+              </div>`;
+            row.querySelector('.btn-approve').addEventListener('click', () => approve(req.id));
+            row.querySelector('.btn-reject').addEventListener('click', () => reject(req.id));
+            return row;
+        }
         // Reorder request — not a song; minimal row with Approve/Reject only.
         if (req.source_type === 'reorder') {
             row.className = 'pending-req-row pr-reorder';

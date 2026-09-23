@@ -635,6 +635,121 @@ def preview_hls(tok, name):
     return _impl(tok, name)
 
 
+# --- Tipping (tip-for-heart priority) --------------------------------------
+# The KJ configures payment handles in config.json; singers tip through their
+# own payment app, then file a claim here. The claim rides the existing
+# sing_requests queue (source_type="tip", like the "reorder" meta-request) so
+# the KJ confirms it from the normal Requests panel — confirmation hearts the
+# singer's entries and, at/above the threshold, applies the same +1 priority
+# bump as the KJ-UI "bump up" button. Never auto-approved: the KJ should see
+# the money arrive before priority changes.
+
+_TIP_METHOD_BUILDERS = (
+    # (config_key, method_key, label, url_builder)
+    ("sing_tip_venmo", "venmo", "Venmo",
+     lambda h: f"https://venmo.com/u/{h.lstrip('@')}"),
+    ("sing_tip_cashapp", "cashapp", "Cash App",
+     lambda h: f"https://cash.app/${h.lstrip('$')}"),
+    ("sing_tip_paypal", "paypal", "PayPal",
+     lambda h: f"https://paypal.me/{h}"),
+)
+
+_MAX_TIP_AMOUNT = 500
+
+_tip_rate_limit_state = defaultdict(deque)
+
+
+def _tip_methods(cfg):
+    methods = []
+    for cfg_key, key, label, build in _TIP_METHOD_BUILDERS:
+        handle = str((cfg or {}).get(cfg_key) or "").strip()
+        if handle:
+            methods.append({"key": key, "label": label, "url": build(handle)})
+    custom = str((cfg or {}).get("sing_tip_url") or "").strip()
+    if custom.startswith(("http://", "https://")):
+        methods.append({
+            "key": "custom",
+            "label": str((cfg or {}).get("sing_tip_url_label") or "Tip link").strip(),
+            "url": custom,
+        })
+    return methods
+
+
+def _tips_enabled(cfg):
+    flag = (cfg or {}).get("sing_tips_enabled")
+    if flag is False:
+        return False
+    return bool(_tip_methods(cfg))
+
+
+def _tip_threshold(cfg):
+    return max(0, _safe_int((cfg or {}).get("sing_tip_priority_threshold"), 20))
+
+
+@sing_bp.route("/tip-info", methods=["GET"])
+@require_token
+def tip_info():
+    cfg = current_app.kj_config
+    return jsonify({
+        "enabled": _tips_enabled(cfg),
+        "threshold": _tip_threshold(cfg),
+        "methods": _tip_methods(cfg),
+    })
+
+
+@sing_bp.route("/tip-claim", methods=["POST"])
+@require_token
+def tip_claim():
+    cfg = current_app.kj_config
+    store = current_app.sing_store
+    if not _tips_enabled(cfg):
+        return jsonify({"error": "tips_disabled"}), 400
+    if _rate_limit_exceeded(_client_ip(request), 5, 600,
+                            state=_tip_rate_limit_state):
+        return jsonify({"error": "rate_limited"}), 429
+
+    data = request.get_json(force=True, silent=True) or {}
+    singer_name = (data.get("singer_name") or "").strip()
+    device_id = (data.get("device_id") or "").strip()[:64]
+    method = (data.get("method") or "").strip()[:32]
+    if not singer_name:
+        return jsonify({"error": "singer_name is required"}), 400
+    try:
+        amount = round(float(data.get("amount")), 2)
+    except (TypeError, ValueError):
+        return jsonify({"error": "amount must be a number"}), 400
+    if not (0 < amount <= _MAX_TIP_AMOUNT):
+        return jsonify({"error": f"amount must be between 0 and {_MAX_TIP_AMOUNT}"}), 400
+
+    # Same device-alias override as /submit — a KJ-corrected name wins.
+    if device_id:
+        canonical = store.get_alias(device_id)
+        if canonical:
+            singer_name = canonical
+
+    # Phone is optional context for the KJ; silently drop a malformed one
+    # rather than failing the claim (the money already moved).
+    phone = (data.get("phone") or "").strip()
+    if phone and not _PHONE_RE.match(phone):
+        phone = ""
+
+    req = store.create_request(
+        singer_name=singer_name,
+        phone=phone,
+        song_artist="",
+        song_title="",
+        source_type="tip",
+        source_ref=None,
+        source_meta={"amount": amount, "method": method},
+        notes=f"Tip claim: ${amount:g}" + (f" via {method}" if method else ""),
+        user_agent=request.headers.get("User-Agent", "")[:500],
+        device_id=device_id or None,
+    )
+    return jsonify({
+        "request": {**_public_request_view(req), "edit_token": req.get("edit_token")},
+    })
+
+
 @sing_bp.route("/submit", methods=["POST"])
 @require_token
 def submit():
@@ -698,6 +813,13 @@ def submit():
             return jsonify({"error": err}), 400
         if not (song_artist and song_title):
             return jsonify({"error": "song_artist and song_title are required for kj_pick"}), 400
+
+    # Duet-partner dedup: fold typed partner names onto tonight's canonical
+    # singer spellings ("sara" → "Sarah B.") so the rotation's exact-string
+    # identity doesn't sprout near-duplicate singers.
+    if additional:
+        additional = _canonicalize_partners(
+            current_app._get_current_object(), additional, singer_name)
 
     req = store.create_request(
         singer_name=singer_name,
@@ -885,6 +1007,146 @@ def rotation():
             "range_high_s": est["range_high_s"],
         })
     return jsonify({"entries": out, "spread_source": spread_source})
+
+
+# --- Known-singer matching (duet partner dedup) ----------------------------
+# Rotation identity is the exact singer-name string (fairness weave, stats,
+# bias all match on it), so a partner typed as "sara" when "Sarah B." already
+# sings tonight creates a phantom duplicate. Submissions canonicalize partner
+# names against tonight's known singers; the confirm screen offers the same
+# list as tap-to-add chips (the names are already public on the venue screen).
+
+def _known_singer_names(app):
+    """Every singer name known to tonight's event, first-seen casing kept.
+
+    Sources: rotation entries (primary ``singer`` + every ``singers_json``
+    member, any status — a Done singer is still a known person) and active
+    sing requests (pending/approved primaries + their partners).
+    """
+    names = []
+    seen = set()
+
+    def add(name):
+        n = (name or "").strip()
+        if not n:
+            return
+        key = _fold_name(n)
+        if key and key not in seen:
+            seen.add(key)
+            names.append(n)
+
+    rotation_mgr = getattr(app, "rotation", None)
+    if rotation_mgr is not None:
+        try:
+            for entry in rotation_mgr.get_rotation():
+                raw = entry.get("singers_json")
+                members = None
+                if raw:
+                    try:
+                        members = json.loads(raw) if isinstance(raw, str) else raw
+                    except (ValueError, TypeError):
+                        members = None
+                for n in (members or [entry.get("singer")]):
+                    add(n)
+        except Exception:
+            current_app.logger.exception("known-singers: rotation scan failed")
+    store = getattr(app, "sing_store", None)
+    if store is not None:
+        try:
+            for status_filter in ("pending", "approved"):
+                for req in store.list_requests(status=status_filter):
+                    if not _belongs_to_current_night(store, req):
+                        continue
+                    add(req.get("singer_name"))
+                    for p in (req.get("additional_singers") or []):
+                        add(p.get("name"))
+        except Exception:
+            current_app.logger.exception("known-singers: request scan failed")
+    return names
+
+
+def _fold_name(name):
+    """Casefolded, accent-stripped, alnum+space form for name comparison."""
+    import unicodedata
+    decomposed = unicodedata.normalize("NFKD", name or "")
+    stripped = "".join(c for c in decomposed if not unicodedata.combining(c))
+    cleaned = "".join(c if (c.isalnum() or c.isspace()) else " " for c in stripped)
+    return " ".join(cleaned.casefold().split())
+
+
+def match_known_singer(typed, known_names, exclude=None):
+    """Return the canonical known-singer spelling for ``typed``, or None.
+
+    Match ladder (conservative — a wrong merge is worse than a duplicate):
+      1. Exact folded equality.
+      2. Typed name equals the FIRST NAME of exactly one known singer
+         ("sarah" → "Sarah B.", but ambiguous across "Sarah B."/"Sarah K."
+         stays unmatched).
+      3. Whole-name typo: Damerau-Levenshtein distance within a
+         length-scaled budget (1 edit for 4-6 chars, 2 for 7+; short names
+         must match exactly) with the same first letter, against exactly one
+         known singer.
+    ``exclude`` (the requester's own name) never matches — a partner "who is
+    the requester" is user error, not a dedup target.
+    """
+    typed_fold = _fold_name(typed)
+    if not typed_fold:
+        return None
+    exclude_fold = _fold_name(exclude) if exclude else None
+    candidates = [
+        (n, _fold_name(n)) for n in known_names
+        if _fold_name(n) and _fold_name(n) != exclude_fold
+    ]
+    for name, fold in candidates:
+        if fold == typed_fold:
+            return name
+    first_name_hits = [
+        name for name, fold in candidates
+        if " " not in typed_fold and fold.split()[0] == typed_fold
+    ]
+    if len(first_name_hits) == 1:
+        return first_name_hits[0]
+    try:
+        from rapidfuzz.distance import DamerauLevenshtein
+
+        def _budget(n):
+            if n < 4:
+                return 0
+            return 1 if n < 7 else 2
+
+        typo_hits = [
+            name for name, fold in candidates
+            if fold[:1] == typed_fold[:1]
+            and DamerauLevenshtein.distance(typed_fold, fold)
+                <= _budget(max(len(typed_fold), len(fold)))
+        ]
+        if len(typo_hits) == 1:
+            return typo_hits[0]
+    except Exception:
+        pass
+    return None
+
+
+def _canonicalize_partners(app, partners, self_name):
+    """Rewrite each partner's name to tonight's canonical spelling when an
+    unambiguous known singer matches. Unmatched names pass through verbatim."""
+    if not partners:
+        return partners
+    known = _known_singer_names(app)
+    out = []
+    for p in partners:
+        matched = match_known_singer(p.get("name"), known, exclude=self_name)
+        out.append({**p, "name": matched} if matched else p)
+    return out
+
+
+@sing_bp.route("/singers", methods=["GET"])
+@require_token
+def known_singers():
+    """Tonight's known singer names for the confirm screen's partner chips."""
+    return jsonify({
+        "singers": _known_singer_names(current_app._get_current_object()),
+    })
 
 
 @sing_bp.route("/status/<int:request_id>", methods=["GET"])
@@ -1430,7 +1692,7 @@ def _now_view(entry):
 
 def _public_request_view(req):
     """Hide internal/PII fields from singer-facing responses."""
-    return {
+    view = {
         "id": req["id"],
         "singer_name": req["singer_name"],
         "song_artist": req["song_artist"],
@@ -1441,6 +1703,17 @@ def _public_request_view(req):
         "linked_entry_id": req.get("linked_entry_id"),
         "additional_singers": req.get("additional_singers"),
     }
+    # Tip claims: surface the claimed amount/method so the Tip tab can show
+    # "$25 via Venmo — waiting for KJ" without exposing raw source_meta.
+    if req.get("source_type") == "tip":
+        meta_raw = req.get("source_meta")
+        try:
+            meta = meta_raw if isinstance(meta_raw, dict) else json.loads(meta_raw or "{}")
+        except (TypeError, ValueError):
+            meta = {}
+        view["tip_amount"] = meta.get("amount")
+        view["tip_method"] = meta.get("method")
+    return view
 
 
 def _public_queue_view(entries):
