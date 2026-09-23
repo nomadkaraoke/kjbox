@@ -215,6 +215,14 @@ def youtube_id_from_url(url):
     return None
 
 
+def youtube_id_from_media_id(media_id):
+    """The 11-char video id from a canonical ``yt-<id>`` media_id, else None."""
+    mid = media_id or ""
+    if mid.startswith("yt-") and len(mid) == 14:  # "yt-" + 11-char id
+        return mid[3:]
+    return None
+
+
 def merge_llm_result(deterministic, llm, threshold):
     """Fold an LLM parse result into a deterministic identity behind a gate.
 

@@ -13,8 +13,8 @@ from config import MEDIA_EXTENSIONS, resolve_preview_cache_dir
 from utils import log_message, sanitize_filename_part, parse_youtube_filename
 from naming import (
     parse_identity, extract_media_id, media_id_for, content_hash,
-    build_slug_filename, merge_llm_result, strip_media_id_token, SOURCE_UPLOAD,
-    DOWNLOAD_SOURCES,
+    build_slug_filename, merge_llm_result, strip_media_id_token,
+    youtube_id_from_media_id, SOURCE_UPLOAD, DOWNLOAD_SOURCES,
 )
 
 # media_id prefix -> canonical source, for identity of brand-new tokened files.
@@ -526,9 +526,10 @@ class MediaIndex:
             # unverified" and the KJ is offered a pointless re-download. The legacy
             # parse (when present) already set youtube_id and agrees, so it wins.
             if "youtube_id" not in item:
-                mid = item.get("media_id") or entry.get("media_id") or ""
-                if mid.startswith("yt-") and len(mid) == 14:  # "yt-" + 11-char id
-                    item["youtube_id"] = mid[3:]
+                vid = youtube_id_from_media_id(
+                    item.get("media_id") or entry.get("media_id"))
+                if vid:
+                    item["youtube_id"] = vid
             items.append(item)
 
         items.sort(key=lambda x: x['mtime'], reverse=True)

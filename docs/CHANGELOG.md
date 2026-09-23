@@ -2,6 +2,23 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-09-22 - Change: KN panel + Library filter unified onto the shared search engine (v0.106.0)
+
+Search-unification recs 5–6 (final two items of the 2026-09-19 handoff). `POST
+/karaoke-nerds/search` now returns the full `unified_search` payload — the KN
+panel gets the exact composition rotation/singer search get: server-side
+`in_library`, Divebar GCS-mirror cross-ref (`track.divebar` → panel downloads
+from the mirror instead of YouTube), local-master suppression, and a new
+server-side `local_path` join (KN track's YouTube video already on disk →
+"Downloaded / Play"). The panel's client-side matching from #219
+(youtube_id map, normalized master match, per-song "In your collection" term
+filter) is deleted — replaced by server-provided "In your library" and
+"GCS mirror" sections. New `GET /library/search` backs the Library panel's
+filter with `unified_search(local_only=True)`, giving it the same typo
+tolerance as rotation search ("boks" now finds "Books from Boxes"); the
+old client-side term filter remains only as instant first paint + offline
+fallback. No device config changes.
+
 ## 2026-09-14 - Change: Karaoke Nerds search no longer scrapes karaokenerds.com (v0.100.0)
 
 `karaoke_nerds.search()` (song search behind `/karaoke-nerds/search`,

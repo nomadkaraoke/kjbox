@@ -1464,6 +1464,42 @@ def search_catalog():
     return jsonify(results)
 
 
+@routes_bp.route('/library/search')
+def library_search():
+    """Typo-tolerant search over the local library only (media index + external
+    catalog), via the SAME engine as rotation search — ``unified_search`` with
+    ``local_only=True`` (text_normalize + FTS5 + trigram + fuzzy_match). Backs
+    the Library panel's filter so "boks" finds "Books from Boxes" there exactly
+    as it does in rotation search. Rows are annotated + ranked; external-catalog
+    rows carry ``folder``, media-index rows carry ``duration``.
+    """
+    query = request.args.get('q', '').strip()
+    if len(query) < 2:
+        return jsonify({"error": "Query must be at least 2 characters"}), 400
+    try:
+        limit = int(request.args.get('limit', 50))
+    except (ValueError, TypeError):
+        limit = 50
+    limit = max(1, min(limit, 200))
+
+    result = unified_search(
+        query, current_app._get_current_object(),
+        local_only=True, catalog_limit=limit)
+    rows = result["local"]
+    if len(rows) > limit:
+        # unified_search puts external-catalog rows first and media-index rows
+        # (incl. the typo-tolerant fuzzy hits this endpoint exists for) after
+        # them — a plain [:limit] would cut exactly those local files whenever
+        # the 415K-row catalog alone fills the budget. Keep media rows
+        # (bounded: exact matches + LOCAL_FUZZY_LIMIT) in preference to
+        # catalog overflow. Media rows have no ``folder`` column.
+        media_rows = [r for r in rows if "folder" not in r]
+        catalog_rows = [r for r in rows if "folder" in r]
+        rows = (media_rows[:limit]
+                + catalog_rows[:max(0, limit - len(media_rows))])
+    return jsonify({"results": rows})
+
+
 @routes_bp.route('/catalog/stats')
 def catalog_stats():
     """Return catalog statistics."""
@@ -1844,10 +1880,18 @@ def _set_xfce_wallpaper(image_path):
 
 @routes_bp.route('/karaoke-nerds/search', methods=['POST'])
 def kn_search():
-    """Search our own community karaoke catalog for web-playable tracks.
+    """Search the KaraokeNerds catalogs, composed server-side via unified_search.
 
-    Backed by `karaokenerds_community` via the Divebar Cloud Function — no live
-    scrape of karaokenerds.com (see karaoke_nerds.search)."""
+    Backed by our own catalog copies (local mirror first, Divebar Cloud
+    Function fallback — never a live scrape of karaokenerds.com). Returns the
+    full unified-search payload ``{local, karaoke_nerds, divebar,
+    karaoke_nerds_timeout}`` so the KN panel gets the exact same composition
+    as rotation/singer search: server-side ``in_library`` + ``local_path``,
+    Divebar GCS-mirror cross-ref (``track.divebar``), and local-master
+    suppression — with no client-side matching logic. Per-song track lists
+    are sorted best-first so the frontend renders in order without
+    duplicating the brand registry.
+    """
     data = request.get_json(silent=True) or {}
     query = data.get('query', '').strip()
     if not query or len(query) < 2:
@@ -1855,18 +1899,7 @@ def kn_search():
 
     cfg = current_app.kj_config
     log_message(f"Karaoke Nerds search: {query}", cfg)
-    results = karaoke_nerds.search(
-        query, config=cfg,
-        mirror=getattr(current_app, "catalog_mirror", None))
-    # Annotate each track with priority_rank and sort the per-song track
-    # lists best-first so the frontend can render in order without
-    # duplicating the brand registry.
-    for song in results:
-        version_priority.annotate_versions(
-            song.get("tracks") or [], cfg, shape="rotation_search_kn")
-        (song.get("tracks") or []).sort(
-            key=lambda t: t.get("priority_rank", 9999))
-    return jsonify(results)
+    return jsonify(unified_search(query, current_app._get_current_object()))
 
 
 @routes_bp.route('/karaoke-nerds/config', methods=['GET'])
@@ -4783,6 +4816,62 @@ def _build_local_media_row(app, path, entry):
     }
 
 
+def _attach_local_paths_to_kn(app, kn_results):
+    """Attach ``local_path`` to KN tracks whose file is already on disk.
+
+    Two query-INDEPENDENT joins over the whole media index (so recall does not
+    depend on whether the local search happened to surface the file for the
+    user's query):
+
+    - YouTube join: each track's youtube_url video id against the media
+      index's ``youtube_id`` (parsed from legacy ``<id>__`` names or the
+      canonical ``[yt-<id>]`` media_id token).
+    - Master join: KN NOMAD rows against local NOMAD-720p masters (which carry
+      no youtube_id) by normalized (artist, title) — the server-side
+      replacement for the old client-side ``masterPathByNorm`` map.
+
+    Server-side replacement for the frontends' client-side id joins, so every
+    unified-search consumer can render "Downloaded → Play" without re-deriving
+    the match. Mutates tracks in place. (When the local search DID surface the
+    master, ``_suppress_mastered_kn_tracks`` later drops the NOMAD row
+    entirely; this attach covers the misses.)
+    """
+    if not any(song.get("tracks") for song in kn_results or []):
+        return
+    from catalog import parse_karaoke_filename
+    from naming import strip_media_id_token, youtube_id_from_media_id
+    yt_to_path = {}
+    master_by_key = {}
+    # list(): download-worker threads insert/delete index entries concurrently.
+    for path, entry in list(app.media.index.items()):
+        fname = entry.get("filename", "") or ""
+        vid = entry.get("youtube_id") or youtube_id_from_media_id(
+            entry.get("media_id"))
+        if vid and vid not in yt_to_path:
+            yt_to_path[vid] = path
+        if classify_source(fname) == SOURCE_MASTER:
+            _disc, m_artist, m_title = parse_karaoke_filename(
+                strip_media_id_token(fname))
+            master_by_key.setdefault(
+                _normalize_song_key(m_artist, m_title), path)
+    if not yt_to_path and not master_by_key:
+        return
+    for song in kn_results or []:
+        song_key = _normalize_song_key(song.get("artist"), song.get("title"))
+        for track in song.get("tracks") or []:
+            vid = youtube_id_from_url(track.get("youtube_url"))
+            path = yt_to_path.get(vid) if vid else None
+            if not path and master_by_key:
+                canonical, _cls = version_priority.resolve_brand(
+                    brand_code=track.get("brand_code"),
+                    brand_name=track.get("brand_name"),
+                    is_community=track.get("is_community"))
+                if canonical == "NOMAD":
+                    path = master_by_key.get(song_key)
+            if path:
+                track["local_path"] = path
+
+
 def _divebar_search_local_first(query, cfg, mirror, limit=100):
     """Divebar-mirror rows via the local catalog mirror when it is fresh
     (grouped with the same helper as the remote path), else the Cloud
@@ -4798,7 +4887,8 @@ def _divebar_search_local_first(query, cfg, mirror, limit=100):
     return divebar.search(query, cfg, limit=limit)
 
 
-def unified_search(query, app, *, grouped=False, local_only=False):
+def unified_search(query, app, *, grouped=False, local_only=False,
+                   catalog_limit=10):
     """Unified search helper: local catalog + Karaoke Nerds + Divebar cross-reference.
 
     Shared by /rotation/search (KJ-side) and /sing/search (singer-side) so
@@ -4814,11 +4904,14 @@ def unified_search(query, app, *, grouped=False, local_only=False):
     lookup are skipped entirely and only the local library (catalog + scanned
     media) is returned, annotated + rankable. This powers the live "Try
     Another" swap where the KJ needs instant results, not an 8s web scrape.
+
+    ``catalog_limit`` caps the external-catalog rows (default 10, matching the
+    rotation picker; /library/search passes a larger cap for the Library panel).
     """
     cfg = app.kj_config
     local_results = []
     if app.catalog.is_available():
-        local_results = app.catalog.search(query, limit=10)
+        local_results = app.catalog.search(query, limit=catalog_limit)
 
     # Add duration from media index where available
     for result in local_results:
@@ -4838,7 +4931,9 @@ def unified_search(query, app, *, grouped=False, local_only=False):
     norm_query = _normalize_text(query)
     q_sig = fuzzy_match.significant_tokens(norm_query)
     fuzzy_hits = []  # (overlap, score, path, entry) for the typo-tolerant pass
-    for path, entry in app.media.index.items():
+    # list(): download-worker threads insert/delete index entries concurrently;
+    # iterating the live dict can raise "dictionary changed size" mid-search.
+    for path, entry in list(app.media.index.items()):
         if path in local_paths:
             continue
         searchable = _normalize_text(entry.get("display_name") or entry.get("filename", ""))
@@ -4900,6 +4995,13 @@ def unified_search(query, app, *, grouped=False, local_only=False):
                 for r in local_results
             )
 
+    # Mark KN tracks whose YouTube video is already downloaded (track.local_path)
+    # so consumers render "Downloaded → Play" without a client-side id join.
+    try:
+        _attach_local_paths_to_kn(app, kn_results)
+    except Exception:
+        pass  # best-effort; never break search
+
     # Cross-reference mirror files against local + KN: attaches track['divebar']
     # for same-brand matches (so that row downloads from GCS, not YouTube) and
     # returns standalone mirror rows the KJ can pick directly.
@@ -4945,6 +5047,10 @@ def unified_search(query, app, *, grouped=False, local_only=False):
     for song in kn_results:
         version_priority.annotate_versions(
             song.get("tracks") or [], cfg, shape="rotation_search_kn")
+        # Sort per-song tracks best-first so "the payload arrives ranked" is a
+        # property of unified_search itself, not of any one endpoint.
+        (song.get("tracks") or []).sort(
+            key=lambda t: t.get("priority_rank", 9999))
 
     # Home the unknown-brand local files (the old "Unknown" dumping ground) into
     # meaningful groups: 4TB-SSD library by folder, YTDownloads by trust.
