@@ -106,6 +106,16 @@ Fifth batch (same release, 2026-09-23):
    historical plays (into `~/kjdata-dev/media_library.db` — the dev config
    redirects `media_db_path` so seeds never touch a real stats DB).
 
+15. **Pre-tabs landing screen removed** — the old home screen (now-playing
+   widget + rotation expander + "Get started" gate) was an orphan once the
+   tab bar existed: not a tab, duplicated the Rotation tab, and buried
+   Request behind a Continue tap. Fresh visits now boot straight into the
+   Request flow (search when the singer is known, the name screen — which
+   inherited the welcome copy and a "Switch singer" link — when not).
+   Smart-restore to My songs still applies from an untouched boot screen; a
+   stale `#name` hash degrades to search once identity exists; the search
+   screen's dead-end Back button is gone (tabs are the navigation).
+
 Backend (`sing.py`, `sing_store.py`, `routes.py`, `version_priority.py`)
 requires a service restart.
 

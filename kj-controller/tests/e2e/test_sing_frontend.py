@@ -536,10 +536,10 @@ class TestMySongsPersistence:
         page.locator('[data-testid="request-another"]').click()
         expect(page.locator('[data-testid="mysongs-bar"]')).to_contain_text("#4")
 
-    def test_stale_night_prunes_and_stays_on_landing(self, page, live_server, live_token):
+    def test_stale_night_prunes_and_stays_on_boot_screen(self, page, live_server, live_token):
         # localStorage still holds last night's ids, but the server night-scopes
-        # them out (empty). The singer stays on landing and the dead ids are
-        # pruned so the bar never shows a phantom count.
+        # them out (empty). The singer stays on the boot (search) screen and the
+        # dead ids are pruned so the bar never shows a phantom count.
         self._seed_ls(page, live_server, live_token,
                       {"token": live_token, "ids": [9999], "tokens": {"9999": "old"}})
         self._route_my_requests(page, [])
@@ -547,7 +547,7 @@ class TestMySongsPersistence:
             page.reload()
         # The boot probe must actually carry the stored id (contract check).
         assert "ids=9999" in req_info.value.url
-        expect(page.locator("h1:has-text('Request a song')")).to_be_visible()   # landing
+        expect(page.locator("h2:has-text('Pick your song')")).to_be_visible()   # boot screen
         expect(page.locator(".song-card-title")).to_have_count(0)
         expect(page.locator('[data-testid="mysongs-bar"]')).to_be_hidden()
         # Stored ids were pruned to empty.
@@ -555,9 +555,9 @@ class TestMySongsPersistence:
             "() => JSON.parse(localStorage.getItem('sing_my_request_ids')).ids")
         assert remaining == []
 
-    def test_cancelled_only_stays_on_landing(self, page, live_server, live_token):
-        # A device whose only song was cancelled isn't yanked off landing (the
-        # bar filters cancelled out too), even though the id still resolves.
+    def test_cancelled_only_stays_on_boot_screen(self, page, live_server, live_token):
+        # A device whose only song was cancelled isn't yanked off the boot
+        # screen (the bar filters cancelled out too), though the id resolves.
         self._seed_ls(page, live_server, live_token,
                       {"token": live_token, "ids": [7], "tokens": {"7": "t7"}})
         cancelled = {"request": {"id": 7, "singer_name": "Alice", "song_artist": "Q",
@@ -567,7 +567,7 @@ class TestMySongsPersistence:
         self._route_my_requests(page, [cancelled])
         with page.expect_request("**/sing/my-requests*"):
             page.reload()
-        expect(page.locator("h1:has-text('Request a song')")).to_be_visible()
+        expect(page.locator("h2:has-text('Pick your song')")).to_be_visible()
         expect(page.locator('[data-testid="mysongs-bar"]')).to_be_hidden()
 
     def test_prune_preserves_ids_added_mid_flight(self, page, live_server, live_token):
@@ -599,12 +599,23 @@ class TestMySongsPersistence:
         assert result == [111]
 
     def test_no_bar_and_no_restore_without_songs(self, page, live_server, live_token):
-        # A fresh device (no stored ids) sees the normal landing, no bar.
+        # A known-name device with no stored ids boots straight to search.
         page.goto(f"{live_server}/sing/?t={live_token}")
         page.evaluate("localStorage.setItem('sing_name', 'Alice')")
         page.reload()
-        expect(page.locator("text=Request a song")).to_be_visible()
+        expect(page.locator("h2:has-text('Pick your song')")).to_be_visible()
         expect(page.locator('[data-testid="mysongs-bar"]')).to_be_hidden()
+
+    def test_fresh_device_boots_to_name_screen(self, page, live_server, live_token):
+        # No identity at all → the name screen, carrying the old landing's
+        # welcome copy, with the Request tab highlighted.
+        page.goto(f"{live_server}/sing/?t={live_token}")
+        page.evaluate("localStorage.clear()")
+        page.reload()
+        expect(page.locator("h2:has-text('Request a song')")).to_be_visible()
+        expect(page.locator("text=what should we call you")).to_be_visible()
+        expect(page.locator('[data-testid="tab-request"]')).to_have_class(
+            "sing-tab active")
 
 
 class TestVersionRowEnrichment:
@@ -725,8 +736,8 @@ class TestTabsAndRouting:
         page.locator('[data-testid="tab-rotation"]').click()
         expect(page.locator("h2:has-text(\"Tonight's rotation\")")).to_be_visible()
         page.go_back()
-        # Back returns to the landing screen, not out of the app.
-        expect(page.locator("h1:has-text('Request a song')")).to_be_visible()
+        # Back returns to the boot (search) screen, not out of the app.
+        expect(page.locator("h2:has-text('Pick your song')")).to_be_visible()
         assert page.url.startswith(live_server)
 
     def test_reload_restores_section_from_hash(self, page, live_server, live_token):
@@ -748,7 +759,8 @@ class TestTabsAndRouting:
         page.evaluate("localStorage.removeItem('sing_name')")
         page.evaluate("window.__sing_state.name = ''")
         page.locator('[data-testid="tab-request"]').click()
-        expect(page.locator("h2:has-text('Your details')")).to_be_visible()
+        expect(page.locator("h2:has-text('Request a song')")).to_be_visible()
+        expect(page.locator("text=what should we call you")).to_be_visible()
 
 
 class TestRotationFreshness:
@@ -795,7 +807,7 @@ class TestRotationFreshness:
 class TestHouseRulesCollapsed:
     def test_rules_only_on_rotation_tab_and_single_layer(self, page, live_server, live_token):
         _login(page, live_server, live_token)
-        # Hidden on the landing screen (and every non-rotation step).
+        # Hidden on every non-rotation step.
         expect(page.locator(".rules-footer")).to_be_hidden()
         page.route("**/sing/rotation*", lambda r: r.fulfill(
             status=200, content_type="application/json",

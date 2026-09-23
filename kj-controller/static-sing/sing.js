@@ -144,7 +144,7 @@ function rotateDeviceId() {
 const PHONE_RE = /^\+?[0-9 \-()]{7,20}$/;
 
 const state = {
-  step: "landing",
+  step: null,   // resolved at bootstrap: hash > legacy ?r= > _bootStep()
   name: LS.get("sing_name"),
   phone: LS.get("sing_phone"),
   query: "",
@@ -307,7 +307,6 @@ function el(tag, attrs = {}, ...children) {
 // the singer to the section they were on.
 
 const STEP_HASH = {
-  landing: "",
   identity: "#name",
   search: "#search",
   confirm: "#confirm",
@@ -316,19 +315,35 @@ const STEP_HASH = {
   tip: "#tip",
 };
 
+// The pre-tabs "landing" screen is gone: a fresh visit (no hash) boots
+// straight into the Request flow — search when we know the singer, the
+// name screen when we don't. Tabs + smart-restore cover everything the
+// landing page used to do.
+function _bootStep() {
+  const phoneOk = !state.phone || PHONE_RE.test(state.phone);
+  return state.name && phoneOk ? "search" : "identity";
+}
+
 function _stepFromHash(hash) {
   const h = (hash || "").split("?")[0];
   for (const [step, sh] of Object.entries(STEP_HASH)) {
-    if (sh && sh === h) return step;
+    if (sh === h) return step;
   }
-  return "landing";
+  return null;   // no/unknown hash — caller falls back to _bootStep()
 }
 
 // A hash can point at a step whose prerequisites are gone (e.g. reload on
 // #confirm loses the in-memory selection) — degrade to the nearest sane step.
 function _sanitizeStep(step) {
+  if (!step) step = _bootStep();
   if (step === "confirm" && !state.selected) step = "search";
   if ((step === "search" || step === "confirm") && !state.name) step = "identity";
+  // A stale #name hash (pushed during first-time setup) on a device that
+  // already has a good identity — a reload or Back must not strand the
+  // singer on the setup form they've completed.
+  if (step === "identity" && !state._identityMode && _bootStep() !== "identity") {
+    step = _bootStep();
+  }
   return step;
 }
 
@@ -358,7 +373,7 @@ window.addEventListener("popstate", () => {
 });
 
 function render() {
-  if (nowPlayingTimer && !["landing", "done", "rotation"].includes(state.step)) {
+  if (nowPlayingTimer && !["done", "rotation"].includes(state.step)) {
     clearInterval(nowPlayingTimer);
     nowPlayingTimer = null;
   }
@@ -380,15 +395,19 @@ function render() {
     state._identityReturnStep = null;
   }
   root.innerHTML = "";
-  const view = {
-    landing: renderLanding,
+  const views = {
     identity: renderIdentity,
     search: renderSearch,
     confirm: renderConfirm,
     done: renderDone,
     rotation: renderRotation,
     tip: renderTip,
-  }[state.step] || renderLanding;
+  };
+  let view = views[state.step];
+  if (!view) {
+    state.step = _bootStep();
+    view = views[state.step];
+  }
   root.appendChild(view());
   // The persistent "My songs" bar and bottom tab bar live outside #sing-root
   // so they survive the innerHTML reset above; refresh them for the new step.
@@ -610,14 +629,6 @@ function _renderRotationError(status, onRetry) {
   return body;
 }
 
-function _updateRotationSummary(detailsEl, count) {
-  const summary = detailsEl.querySelector("summary");
-  if (!summary) return;
-  summary.textContent = count > 0
-    ? `See full rotation (${count} ${count === 1 ? "singer" : "singers"})`
-    : "See full rotation";
-}
-
 // Auto-refetch cadence while a rotation view is open, and how often the
 // "updated Xs ago" label re-computes. The label ticking is what keeps the
 // age honest — the old one-shot render sat on "updated just now" forever.
@@ -629,7 +640,7 @@ const ROTATION_TICK_MS = 5000;
 // age label, and a manual ↻ Refresh button. `isActive()` gates the timers
 // (e.g. a <details> is active only while open); timers self-clean when the
 // container leaves the DOM (every render() rebuilds the page).
-function attachRotationLive(container, { isActive = () => true, onCount } = {}) {
+function attachRotationLive(container, { isActive = () => true } = {}) {
   let timers = [];
   const stop = () => { timers.forEach(clearInterval); timers = []; };
 
@@ -637,7 +648,6 @@ function attachRotationLive(container, { isActive = () => true, onCount } = {}) 
     const slot = container.querySelector(".rotation-body");
     if (!slot) return;
     slot.replaceWith(_renderRotationBody(payload, () => load({ force: true })));
-    if (onCount) onCount(payload.entries?.length || 0);
   };
 
   const load = async ({ force = false } = {}) => {
@@ -685,36 +695,6 @@ function attachRotationLive(container, { isActive = () => true, onCount } = {}) 
   };
 
   return { load, start, stop };
-}
-
-function renderRotationExpander() {
-  const details = el("details", { class: "rotation-expander" },
-    el("summary", {}, "See full rotation"),
-    el("div", { class: "rotation-body" }),  // placeholder; populated on toggle
-  );
-
-  const live = attachRotationLive(details, {
-    isActive: () => details.open,
-    onCount: (n) => _updateRotationSummary(details, n),
-  });
-
-  // If we already have a cached payload, populate the body up-front so that
-  // returning to the landing screen after Back-from-Search renders instantly
-  // when the user re-expands (the age label stays honest either way).
-  if (state.rotationCache) {
-    const payload = { ...state.rotationCache.payload, _fetchedAt: state.rotationCache.fetchedAt };
-    details.querySelector(".rotation-body").replaceWith(
-      _renderRotationBody(payload, () => live.load({ force: true })));
-    _updateRotationSummary(details, payload.entries?.length || 0);
-  }
-
-  details.addEventListener("toggle", () => {
-    if (!details.open) { live.stop(); return; }
-    live.load();
-    live.start();
-  });
-
-  return details;
 }
 
 // Full-page rotation view (the 📋 Rotation tab). Same live lifecycle as the
@@ -1020,42 +1000,19 @@ function renderTip() {
   return card;
 }
 
-function renderLanding() {
-  return el("main", { class: "sing-card" },
-    renderNowPlaying(),   // Task 5 populates this; stub is harmless
-    renderRotationExpander(),
-    el("h1", {}, "Request a song"),
-    el("p", {},
-      "Tap below to add your song to the rotation. The KJ will call you up when you're on."),
-    el("button", {
-      class: "btn primary",
-      onclick: () => {
-        // Phone is optional — only the name gates progression. If present,
-        // it must still parse (defence against a corrupted LS value).
-        const phoneOk = !state.phone || PHONE_RE.test(state.phone);
-        state.step = state.name && phoneOk ? "search" : "identity";
-        render();
-      },
-    }, state.name ? "Continue" : "Get started"),
-    state.name ? el("p", { class: "hint" },
-      "You're ", el("strong", {}, state.name), " · ",
-      editNameLink("landing"), " · ",
-      `Not you? `,
-      el("a", { href: "#", "data-testid": "switch-identity", onclick: (e) => {
-        e.preventDefault();
-        // A different person on this device — delete the old singer's alias
-        // (background) AND rotate to a fresh device id synchronously so their
-        // KJ-corrected name can't leak onto this person's next submission.
-        forgetIdentity();
-        rotateDeviceId();
-        state.name = state.phone = "";
-        LS.set("sing_name", ""); LS.set("sing_phone", "");
-        state._identityMode = "setup";
-        state._identityReturnStep = "search";
-        state.step = "identity"; render();
-      } }, "switch")
-    ) : null,
-  );
+// A different person taking over this device — delete the old singer's alias
+// (background) AND rotate to a fresh device id synchronously so their
+// KJ-corrected name can't leak onto this person's next submission.
+function switchIdentity() {
+  forgetIdentity();
+  rotateDeviceId();
+  state.name = state.phone = "";
+  LS.set("sing_name", ""); LS.set("sing_phone", "");
+  state._identityDraft = null;
+  state._identityMode = "setup";
+  state._identityReturnStep = "search";
+  state.step = "identity";
+  render();
 }
 
 function renderIdentity() {
@@ -1125,10 +1082,13 @@ function renderIdentity() {
   }
 
   return el("main", { class: "sing-card" },
-    el("h2", {}, isEdit ? "Edit your name" : "Your details"),
+    el("h2", {}, isEdit ? "Edit your name" : "Request a song"),
     isEdit ? el("p", { class: "hint" },
       "Change how your name shows on the rotation. Your songs stay yours — "
-      + "this updates them and anything you add next.") : null,
+      + "this updates them and anything you add next.")
+      : el("p", {},
+        "Add your song to the rotation — the KJ will call you up when "
+        + "you're on. First, what should we call you?"),
     el("form", { onsubmit: onSubmit },
       el("label", {}, "First name + last initial",
         el("input", {
@@ -1148,10 +1108,18 @@ function renderIdentity() {
       ),
       draft.err ? el("p", { class: "error" }, draft.err) : null,
       el("div", { class: "row" },
-        el("button", { type: "button", class: "btn ghost", onclick: () => leaveIdentity(isEdit ? returnStep : "landing") }, isEdit ? "Cancel" : "Back"),
+        isEdit ? el("button", { type: "button", class: "btn ghost",
+          onclick: () => leaveIdentity(returnStep) }, "Cancel") : null,
         el("button", { type: "submit", class: "btn primary identity-save" }, isEdit ? "Save name" : "Next"),
       ),
     ),
+    isEdit ? el("p", { class: "hint" },
+      "Different person? ",
+      el("a", { href: "#", "data-testid": "switch-identity", onclick: (e) => {
+        e.preventDefault();
+        switchIdentity();
+      } }, "Switch singer"),
+      " — starts fresh on this phone.") : null,
   );
 }
 
@@ -2108,9 +2076,6 @@ function renderSearch() {
     // they can clear the search box and type a nonsense query to reach
     // empty-state.
     renderInspiration(),
-    el("div", { class: "row" },
-      el("button", { class: "btn ghost", onclick: back("identity") }, "Back"),
-    ),
   );
 
   if (state.query) doSearch(state.query);
@@ -2760,7 +2725,7 @@ function updateMySongsBar() {
 // outside #sing-root (sibling nav in sing.html) so it survives re-renders.
 
 function _activeTabForStep(step) {
-  if (step === "search" || step === "confirm") return "request";
+  if (step === "search" || step === "confirm" || step === "identity") return "request";
   if (step === "done") return "mysongs";
   if (step === "rotation") return "rotation";
   if (step === "tip") return "tip";
@@ -3114,9 +3079,9 @@ if (codeEntryEl) {
     state.step = "done";
   }
   // Hash restore — a reload (or a shared link with a hash) puts the singer
-  // back on the section they were on instead of resetting to the landing
-  // screen. A legacy ?r=<id> entry wins (it already forces the done screen).
-  if (state.step !== "done" && window.location.hash) {
+  // back on the section they were on; a fresh no-hash visit boots straight
+  // into the Request flow. A legacy ?r=<id> entry wins (done screen).
+  if (state.step !== "done") {
     state.step = _sanitizeStep(_stepFromHash(window.location.hash));
     state._navReplace = true;   // correct a degraded hash without a history entry
   }
@@ -3143,13 +3108,20 @@ if (codeEntryEl) {
 }
 
 function bootRestore(attempt) {
-  if (state.step !== "landing" || !readMyRequestIds(TOKEN).length) return;
+  // Restorable = still sitting on an untouched boot screen (search with no
+  // typed query, or the name form with nothing typed). The moment they
+  // interact, never yank them to their songs list.
+  const restorable = () =>
+    (state.step === "search" && !(state.query || "").trim())
+    || (state.step === "identity"
+        && !(state._identityDraft && state._identityDraft.name !== state.name));
+  if (!restorable() || !readMyRequestIds(TOKEN).length) return;
   refreshMySongs().then((res) => {
     if (res.ok) {
-      if (res.live > 0 && state.step === "landing") { state.step = "done"; render(); }
+      if (res.live > 0 && restorable()) { state.step = "done"; render(); }
       return;   // definitive answer (songs restored, or a genuinely empty night)
     }
-    if (attempt < 3 && state.step === "landing") {
+    if (attempt < 3 && restorable()) {
       setTimeout(() => bootRestore(attempt + 1), 2000 * (attempt + 1));
     }
   });
