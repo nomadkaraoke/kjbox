@@ -952,3 +952,39 @@ class TestSongHistoryInspiration:
         page.evaluate("window.__sing_state.step = 'search'; window.__sing_render();")
         page.locator(".sing-history-summary").click()
         expect(page.locator(".sing-history-body")).to_contain_text("tonight's the night")
+
+
+class TestMySongsStatusBanner:
+    def test_banner_shows_personal_position_not_venue_now_next(self, page, live_server, live_token):
+        _login(page, live_server, live_token)
+        self_np = {"now_singing": {"first_name": "Lindsay", "song_artist": "X"},
+                   "up_next": {"first_name": "Someone"}, "queued_count": 9}
+        item = {"request": {"id": 1, "singer_name": "Alice", "song_artist": "Q",
+                            "song_title": "Bo Rhap", "source_type": "local",
+                            "status": "approved", "created_at": "now",
+                            "linked_entry_id": 5, "additional_singers": None},
+                "performed": False,
+                "estimate": {"position": 5, "now_singing": False,
+                             "range_low_s": 600, "range_high_s": 900}}
+        page.route("**/sing/my-requests*", lambda r: r.fulfill(
+            status=200, content_type="application/json",
+            body=json.dumps({"now_playing": self_np, "requests": [item]})))
+        page.evaluate(
+            "(s) => localStorage.setItem('sing_my_request_ids', JSON.stringify(s))",
+            {"token": live_token, "ids": [1], "tokens": {}})
+        page.evaluate("window.__sing_state.step = 'done'; window.__sing_render();")
+        banner = page.locator(".sing-my-status")
+        expect(banner).to_be_visible()
+        expect(banner).to_contain_text("#5")
+        # The venue-wide Now/Next widget is gone from this screen.
+        expect(page.locator(".now-playing")).to_have_count(0)
+
+    def test_banner_hidden_without_live_songs(self, page, live_server, live_token):
+        _login(page, live_server, live_token)
+        page.route("**/sing/my-requests*", lambda r: r.fulfill(
+            status=200, content_type="application/json",
+            body=json.dumps({"now_playing": {"now_singing": None, "up_next": None,
+                                             "queued_count": 0}, "requests": []})))
+        page.evaluate("window.__sing_state.step = 'done'; window.__sing_render();")
+        expect(page.locator("h2:has-text('Your songs tonight')")).to_be_visible()
+        expect(page.locator(".sing-my-status")).to_be_hidden()

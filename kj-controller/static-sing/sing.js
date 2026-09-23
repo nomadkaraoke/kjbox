@@ -373,7 +373,7 @@ window.addEventListener("popstate", () => {
 });
 
 function render() {
-  if (nowPlayingTimer && !["done", "rotation"].includes(state.step)) {
+  if (nowPlayingTimer && state.step !== "rotation") {
     clearInterval(nowPlayingTimer);
     nowPlayingTimer = null;
   }
@@ -2444,7 +2444,10 @@ function _renderSongCard(item, reorderCtx) {
 
 function renderDone() {
   const card = el("main", { class: "sing-card" },
-    renderNowPlaying(),
+    // Personal status banner — "how close am I?" at a glance. The venue-wide
+    // Now/Next lives on the Rotation tab; repeating it here buried the one
+    // thing this screen is about. Populated by pollMyRequests.
+    el("div", { class: "sing-my-status", hidden: "" }),
     el("h2", {}, "Your songs tonight"),
     state.name ? el("p", { class: "hint done-identity" },
       "Singing as ", el("strong", {}, state.name), " · ",
@@ -2505,8 +2508,16 @@ async function pollMyRequests(card) {
         loaded: true,
       };
       updateTabsBar();   // keep the My-songs tab badge in step with the poll
-      const npNode = card.querySelector(".now-playing");
-      if (npNode) updateNowPlaying(npNode, data.now_playing);
+      const banner = card.querySelector(".sing-my-status");
+      if (banner) {
+        const summary = _mySongsPillSummary(data.requests || []);
+        if (summary) {
+          banner.textContent = summary;
+          banner.removeAttribute("hidden");
+        } else {
+          banner.setAttribute("hidden", "");
+        }
+      }
       const slot = card.querySelector(".songs-list");
       const sungSection = card.querySelector(".sung-section");
       // Split sung songs out of the active list and sort what's left into the
@@ -3070,13 +3081,16 @@ if (codeEntryEl) {
   initCodeEntry();
 } else if (root) {
   if (INITIAL_REQUEST_ID) {
-    const legacyId = parseInt(INITIAL_REQUEST_ID, 10);
-    state.request = { id: legacyId };
-    // Persist so a legacy ?r=<id> entry survives a "Request another song"
-    // — otherwise the next submit overwrites state.request and the original
-    // id disappears from the done-screen list.
-    rememberRequestId(TOKEN, legacyId);
-    state.step = "done";
+    // ?r= accepts one id (legacy links) or a comma list (dev harness /
+    // KJ-shared "your songs" links). Persist them all so they survive a
+    // "Request another song" and feed the done-screen list.
+    const ids = String(INITIAL_REQUEST_ID).split(",")
+      .map((x) => parseInt(x, 10)).filter((n) => !isNaN(n));
+    if (ids.length) {
+      ids.forEach((id) => rememberRequestId(TOKEN, id));
+      state.request = { id: ids[0] };
+      state.step = "done";
+    }
   }
   // Hash restore — a reload (or a shared link with a hash) puts the singer
   // back on the section they were on; a fresh no-hash visit boots straight

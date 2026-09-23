@@ -34,15 +34,125 @@ DEV_DB = os.path.join(DEV_DATA_DIR, "rotation.db")
 REAL_COPY_DB = os.path.join(DEV_DATA_DIR, "real-night.db")
 # Where the live box keeps its DB (rotation_db_path default in app.py).
 NOMADPC_DB = "kjdata/rotation.db"
+# LAN alias first, Cloudflare tunnel fallback for when the Mac isn't at home.
+NOMADPC_HOSTS = ("nomadpc", "nomadpctunnel")
 
 
 def fetch_real_db():
-    """Copy the live rotation.db off nomadpc (read-only on the remote side)."""
+    """Copy the live rotation.db off the box (read-only on the remote side)."""
     os.makedirs(DEV_DATA_DIR, exist_ok=True)
-    print(f"Copying nomadpc:{NOMADPC_DB} -> {REAL_COPY_DB} …")
-    subprocess.run(["scp", f"nomadpc:{NOMADPC_DB}", REAL_COPY_DB], check=True)
-    print("Done — running against a COPY; the box is untouched.")
-    return REAL_COPY_DB
+    for host in NOMADPC_HOSTS:
+        print(f"Copying {host}:{NOMADPC_DB} -> {REAL_COPY_DB} …")
+        proc = subprocess.run(
+            ["scp", "-o", "ConnectTimeout=10", f"{host}:{NOMADPC_DB}", REAL_COPY_DB])
+        if proc.returncode == 0:
+            print("Done — running against a COPY; the box is untouched.")
+            return REAL_COPY_DB
+    raise SystemExit("Could not reach the box via any of: " + ", ".join(NOMADPC_HOSTS))
+
+
+def restore_archived_night(db_path, night):
+    """Rebuild rotation_entries (in the LOCAL COPY) from an archived night.
+
+    ``night`` is a YYYY-MM-DD night_date or "biggest". Archive rows are all
+    terminal (Done), so we restore a believable MID-NIGHT snapshot: the first
+    ~40%% stay Done, then one Now Singing, one Up Next, and the rest Waiting.
+    Never resets sqlite_sequence (id reuse corrupts cross-night stats).
+    """
+    import sqlite3
+
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    try:
+        if night == "biggest":
+            row = conn.execute(
+                "SELECT night_date, COUNT(*) n FROM rotation_archive "
+                "GROUP BY night_date ORDER BY n DESC LIMIT 1").fetchone()
+            if not row:
+                raise SystemExit("No archived nights in this DB")
+            night = row["night_date"]
+        rows = conn.execute(
+            "SELECT * FROM rotation_archive WHERE night_date = ? "
+            "ORDER BY position, id", (night,)).fetchall()
+        if not rows:
+            raise SystemExit(f"No archived entries for night {night}")
+
+        done_upto = max(1, int(len(rows) * 0.4))
+        conn.execute("DELETE FROM rotation_entries")
+        for i, r in enumerate(rows):
+            if i < done_upto:
+                status = "Done"
+            elif i == done_upto:
+                status = "Now Singing"
+            elif i == done_upto + 1:
+                status = "Up Next"
+            else:
+                status = "Waiting"
+            done_at = None
+            if status == "Done":
+                # Stagger sung times so last-sang ordering looks real.
+                done_at = f"2026-01-01 {19 + i // 30}:{(i * 3) % 60:02d}:00"
+            conn.execute(
+                "INSERT INTO rotation_entries "
+                "(singer, song_artist, status, notes, position, file_path, duration, "
+                " created_at, updated_at, done_at) "
+                "VALUES (?,?,?,?,?,?,?, datetime('now','localtime'), "
+                "        datetime('now','localtime'), ?)",
+                (r["singer"], r["song_artist"], status, r["notes"] or "",
+                 i + 1, r["file_path"], r["duration"], done_at))
+        conn.commit()
+        print(f"Restored night {night}: {len(rows)} tracks, "
+              f"{done_upto} already sung, mid-night snapshot.")
+        return night
+    finally:
+        conn.close()
+
+
+def link_requests_for_singer(app, name):
+    """Attribute a singer's rotation entries to a fresh device via ?r= ids.
+
+    "My songs" is driven by request ids stored on the singer's own phone —
+    a review browser has none. Create approved sing_requests linked to every
+    entry ``name`` appears in and return the ids for a ?r=1,2,3 URL.
+    """
+    import json as _json
+
+    store = app.sing_store
+    device_id = f"dev-review-{name.lower().replace(' ', '-')}"
+    ids = []
+    # Read straight from SQLite: get_rotation() drops Done entries, but sung
+    # songs are exactly what makes the review realistic. Also clear any
+    # attribution rows from a previous run (each restart re-links).
+    import sqlite3
+    conn = sqlite3.connect(app.rotation.store.db_path)
+    conn.row_factory = sqlite3.Row
+    try:
+        conn.execute("DELETE FROM sing_requests WHERE device_id = ?", (device_id,))
+        conn.commit()
+        entries = conn.execute(
+            "SELECT id, singer, song_artist, singers_json FROM rotation_entries").fetchall()
+    finally:
+        conn.close()
+    for e in entries:
+        members = None
+        if e["singers_json"]:
+            try:
+                members = _json.loads(e["singers_json"])
+            except (ValueError, TypeError):
+                members = None
+        if name not in (members or [e["singer"]]):
+            continue
+        # "Artist - Title" is the display convention; best-effort split.
+        parts = (e["song_artist"] or "").split(" - ", 1)
+        artist, title = (parts[0], parts[1]) if len(parts) == 2 else ("", parts[0])
+        req = store.create_request(
+            singer_name=name, phone="", song_artist=artist, song_title=title,
+            source_type="local", source_ref=e["song_artist"] or "seed",
+            source_meta=None, notes="", device_id=device_id,
+        )
+        store.mark_approved(req["id"], linked_entry_id=e["id"])
+        ids.append(req["id"])
+    return ids[:20]   # /sing/my-requests caps at 20 ids per call
 
 
 def seed_rotation(app):
@@ -127,7 +237,15 @@ def main():
     parser.add_argument("--reseed", action="store_true",
                         help="wipe the dev DB and seed fresh")
     parser.add_argument("--fetch-real", action="store_true",
-                        help="scp the live DB from nomadpc first (read-only copy)")
+                        help="scp the live DB from the box first (read-only copy; "
+                             "tries nomadpc then nomadpctunnel)")
+    parser.add_argument("--night", metavar="DATE|biggest",
+                        help="restore an archived night (YYYY-MM-DD or 'biggest') "
+                             "into the local copy's live rotation as a mid-night "
+                             "snapshot — pairs with --fetch-real/--db")
+    parser.add_argument("--as", dest="as_singer", default="Andrew",
+                        help="singer to attribute in the printed 'My songs' "
+                             "review URL (default: Andrew)")
     parser.add_argument("--no-seed", action="store_true",
                         help="skip seeding even if the rotation is empty")
     args = parser.parse_args()
@@ -142,6 +260,12 @@ def main():
         if args.reseed and os.path.exists(db_path):
             os.unlink(db_path)
             print("Dev DB wiped.")
+
+    if args.night:
+        if db_path == DEV_DB:
+            raise SystemExit("--night needs a real DB: pair it with "
+                             "--fetch-real or --db PATH")
+        restore_archived_night(db_path, args.night)
 
     from config import load_config
     from app import create_app
@@ -176,8 +300,20 @@ def main():
     token = app.sing_store.ensure_token()
     print(f"\nDB:        {db_path}")
     print("KJ UI:     http://localhost:5555")
-    print(f"Singer UI: http://localhost:5555/sing/?t={token}\n")
-    app.run(host="127.0.0.1", port=5555, debug=True)
+    print(f"Singer UI: http://localhost:5555/sing/?t={token}")
+    # Attribute a singer's entries to a review browser: "My songs" runs off
+    # request ids stored on the singer's own phone, so hand the reviewer a
+    # ?r= URL carrying freshly-linked ids for their entries.
+    if args.as_singer:
+        req_ids = link_requests_for_singer(app, args.as_singer)
+        if req_ids:
+            r = ",".join(str(i) for i in req_ids)
+            print(f"Singer UI as {args.as_singer} (their songs attributed): "
+                  f"http://localhost:5555/sing/?t={token}&r={r}")
+    print()
+    # No reloader: it re-executes main() in a child process, which would
+    # re-restore --night with fresh entry ids and orphan the ?r= links.
+    app.run(host="127.0.0.1", port=5555, debug=True, use_reloader=False)
 
 
 if __name__ == "__main__":

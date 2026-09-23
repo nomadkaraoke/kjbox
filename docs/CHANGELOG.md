@@ -116,6 +116,24 @@ Fifth batch (same release, 2026-09-23):
    stale `#name` hash degrades to search once identity exists; the search
    screen's dead-end Back button is gone (tabs are the navigation).
 
+16. **My songs: personal status banner** — the venue-wide Now/Next widget
+   (duplicating the Rotation tab) is replaced by a personal banner: "🎤
+   You're next" / "#70 · ~305–311 min", fed by the singer's own queue
+   positions; hidden when they have no live songs.
+17. **?r= accepts a comma list** — `?r=1,2,3` seeds several request ids at
+   once (legacy single-id links unchanged). Powers the dev harness's
+   "review as <singer>" URLs; also usable by a KJ to hand someone their
+   songs list.
+18. **Dev harness: real nights** — `--fetch-real` now tries `nomadpc` then
+   `nomadpctunnel`; new `--night YYYY-MM-DD|biggest` restores an archived
+   night from the copied DB into the live rotation as a mid-night snapshot
+   (first ~40% Done, one Now Singing, one Up Next, rest Waiting — e.g.
+   2026-04-09: 118 tracks, 45 singers); `--as <name>` (default Andrew)
+   links approved sing_requests to that singer's entries and prints a
+   ready `?r=` singer URL so "My songs" shows their attributed songs
+   (queued + Already sung). Reloader disabled (it re-ran the restore and
+   orphaned the links).
+
 Backend (`sing.py`, `sing_store.py`, `routes.py`, `version_priority.py`)
 requires a service restart.
 
