@@ -417,6 +417,74 @@ class SingStore:
         self._set_meta(SIMPLE_MODE_KEY, "1" if enabled else "0")
 
     # ------------------------------------------------------------------
+    # Tip settings — KJ-editable from the Public Request Form modal.
+    # Stored as one JSON blob; keys absent here fall back to config.json
+    # (sing_tip_* keys) and then in-code defaults. See sing._tip_settings.
+    # ------------------------------------------------------------------
+
+    TIP_SETTINGS_KEY = "sing_tip_settings"
+    # The editable field allowlist (and their expected types for validation).
+    TIP_SETTING_FIELDS = {
+        "enabled": bool,       # explicit on/off; absent = default on
+        "kj_name": str,        # "Andrew" → singer UI says "Tip Andrew"
+        "venmo": str,          # username (no @)
+        "cashapp": str,        # cashtag (no $)
+        "paypal": str,         # paypal.me handle
+        "zelle": str,          # phone/email shown with a copy button
+        "stripe_url": str,     # https://buy.stripe.com/… payment link
+        "threshold": (int, float),  # $ amount that earns the ♥ + bump
+    }
+
+    def get_tip_settings(self):
+        """Return the KJ-saved tip settings dict (may be empty)."""
+        raw = self._get_meta(self.TIP_SETTINGS_KEY)
+        if not raw:
+            return {}
+        try:
+            data = json.loads(raw)
+            return data if isinstance(data, dict) else {}
+        except (ValueError, TypeError):
+            return {}
+
+    def set_tip_settings(self, settings):
+        """Merge-validate ``settings`` into the stored blob.
+
+        Only allowlisted keys are kept; strings are trimmed; an empty string
+        deletes the key (so clearing a field in the modal reverts to the
+        config.json / default fallback). Raises ValueError on bad types.
+        """
+        if not isinstance(settings, dict):
+            raise ValueError("tip settings must be an object")
+        current = self.get_tip_settings()
+        for key, value in settings.items():
+            expected = self.TIP_SETTING_FIELDS.get(key)
+            if expected is None:
+                continue   # unknown key — ignore rather than fail the save
+            if value is None:
+                current.pop(key, None)
+                continue
+            if expected is bool:
+                if not isinstance(value, bool):
+                    raise ValueError(f"{key} must be a boolean")
+                current[key] = value
+            elif expected is str:
+                if not isinstance(value, str):
+                    raise ValueError(f"{key} must be a string")
+                trimmed = value.strip()
+                if trimmed:
+                    current[key] = trimmed
+                else:
+                    current.pop(key, None)
+            else:   # numeric threshold
+                if isinstance(value, bool) or not isinstance(value, (int, float)):
+                    raise ValueError(f"{key} must be a number")
+                if value < 0:
+                    raise ValueError(f"{key} must be >= 0")
+                current[key] = value
+        self._set_meta(self.TIP_SETTINGS_KEY, json.dumps(current))
+        return current
+
+    # ------------------------------------------------------------------
     # SMS settings — per-event template + default region for normalization
     # ------------------------------------------------------------------
 

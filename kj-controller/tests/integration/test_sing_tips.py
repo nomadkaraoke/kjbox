@@ -185,3 +185,81 @@ class TestTipInMyRequests:
         assert view["source_type"] == "tip"
         assert view["tip_amount"] == 25
         assert view["tip_method"] == "Venmo"
+
+
+class TestTipSettingsStore:
+    """KJ-editable tip settings (Public Request Form modal) live in
+    rotation_meta and override config.json fallbacks."""
+
+    def test_store_settings_override_config(self, client, sing_app, token, tip_config):
+        sing_app.sing_store.set_tip_settings({
+            "kj_name": "Andrew", "venmo": "modal-venmo", "zelle": "(803) 636-3267",
+            "threshold": 15,
+        })
+        try:
+            data = client.get(f"/sing/tip-info?t={token}").get_json()
+        finally:
+            sing_app.sing_store._set_meta("sing_tip_settings", "{}")
+        assert data["kj_name"] == "Andrew"
+        assert data["threshold"] == 15
+        by_key = {m["key"]: m for m in data["methods"]}
+        # Modal venmo wins over the tip_config fixture's config-level venmo.
+        assert by_key["venmo"]["url"] == "https://venmo.com/modal-venmo"
+        assert by_key["zelle"]["value"] == "(803) 636-3267"
+        assert by_key["zelle"]["amount_style"] == "copy"
+
+    def test_clearing_a_field_reverts_to_config_fallback(self, sing_app, tip_config):
+        store = sing_app.sing_store
+        store.set_tip_settings({"venmo": "modal-venmo"})
+        store.set_tip_settings({"venmo": ""})   # empty string clears
+        try:
+            assert "venmo" not in store.get_tip_settings()
+        finally:
+            store._set_meta("sing_tip_settings", "{}")
+
+    def test_set_rejects_bad_types(self, sing_app):
+        store = sing_app.sing_store
+        import pytest as _pytest
+        with _pytest.raises(ValueError):
+            store.set_tip_settings({"enabled": "yes"})
+        with _pytest.raises(ValueError):
+            store.set_tip_settings({"threshold": -5})
+        with _pytest.raises(ValueError):
+            store.set_tip_settings("nope")
+
+    def test_admin_config_roundtrip(self, sing_app):
+        admin = sing_app.test_client()
+        try:
+            resp = admin.post("/rotation/requests/config", json={
+                "tip_settings": {"kj_name": "Andrew", "cashapp": "beveradb",
+                                 "enabled": True, "threshold": 25}})
+            assert resp.status_code == 200
+            got = admin.get("/rotation/requests/config").get_json()["tip_settings"]
+            assert got["kj_name"] == "Andrew"
+            assert got["cashapp"] == "beveradb"
+            assert got["threshold"] == 25
+            assert got["enabled"] is True
+        finally:
+            sing_app.sing_store._set_meta("sing_tip_settings", "{}")
+
+    def test_admin_config_rejects_bad_settings(self, sing_app):
+        admin = sing_app.test_client()
+        resp = admin.post("/rotation/requests/config", json={
+            "tip_settings": {"threshold": "lots"}})
+        assert resp.status_code == 400
+
+    def test_modal_threshold_drives_confirm_bump(self, client, sing_app, token, tip_config):
+        # Store threshold 30 > claim 25 → heart only, no bump — proving
+        # apply_confirmed_tip reads the modal-effective threshold.
+        sing_app.sing_store.set_tip_settings({"threshold": 30})
+        entry = sing_app.rotation.add_entry("Andrew", "Song A")
+        try:
+            req_id = _claim(client, token, amount=25).get_json()["request"]["id"]
+            ap = sing_app.test_client().post(
+                f"/rotation/requests/{req_id}/approve", json={})
+            assert ap.status_code == 200
+        finally:
+            sing_app.sing_store._set_meta("sing_tip_settings", "{}")
+        got = {e["id"]: e for e in sing_app.rotation.get_rotation()}[entry["id"]]
+        assert got["paid"] == 1
+        assert got["priority_bias"] == 0

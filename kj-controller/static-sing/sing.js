@@ -749,31 +749,67 @@ function _tipStatusLine(req) {
   return "Waiting for the KJ to confirm…";
 }
 
+// Brand colors + inline SVG icons matching the public nomadkaraoke.com/tip
+// page (path data lifted from public-website components/TipPage.tsx).
+const TIP_BRAND_ICON_PATHS = {
+  cashapp: "M23.59 3.47A5.1 5.1 0 0 0 20.54.42C19.23-.04 17.79-.12 16.42.11L15.55.24a37.5 37.5 0 0 0-7.1 2.08L7.78 2.6a5.1 5.1 0 0 0-3.05 3.05l-.28.67A37.5 37.5 0 0 0 2.37 13.4l-.13.88c-.23 1.37-.15 2.81.31 4.12a5.1 5.1 0 0 0 3.05 3.05c1.31.46 2.75.54 4.12.31l.88-.13a37.5 37.5 0 0 0 7.1-2.08l.67-.28a5.1 5.1 0 0 0 3.05-3.05l.28-.67a37.5 37.5 0 0 0 2.08-7.1l.13-.88c.23-1.37.15-2.81-.31-4.12zM15.84 13.54c-.28 1.23-1.1 2.16-2.36 2.68l.1.95a.72.72 0 0 1-.7.79h-1.52a.72.72 0 0 1-.71-.64l-.1-.83c-.78-.12-1.56-.41-2.24-.82a.72.72 0 0 1-.2-1.05l.7-.96a.72.72 0 0 1 .96-.2c.53.3 1.12.5 1.65.5.6 0 1.15-.18 1.15-.75 0-.5-.38-.71-1.56-1.1-1.57-.52-3.19-1.24-3.19-3.28 0-1.44.96-2.6 2.56-3.02l-.1-.85a.72.72 0 0 1 .7-.79h1.52c.37 0 .67.28.71.64l.09.75c.56.1 1.12.3 1.65.58a.72.72 0 0 1 .22 1.05l-.63.93a.72.72 0 0 1-.97.23c-.46-.24-.96-.4-1.4-.4-.67 0-1.05.26-1.05.65 0 .5.48.68 1.58 1.05 1.73.57 3.19 1.3 3.19 3.29z",
+  venmo: "M20.396 2.408c.648 1.08.936 2.196.936 3.6 0 4.476-3.816 10.296-6.912 14.376H7.2L4.392 2.76l6.228-.576 1.62 13.056c1.5-2.448 3.348-6.3 3.348-8.928 0-1.344-.228-2.268-.612-3.024l5.42-.88z",
+  paypal: "M7.076 21.337H2.47a.641.641 0 0 1-.633-.74L4.944 2.23A.77.77 0 0 1 5.703 1.6h6.794c2.354 0 4.226.678 5.25 1.903.44.527.735 1.124.865 1.786.14.7.1 1.537-.12 2.488l-.008.034v.3l.236.134c.2.1.376.225.534.374a3.2 3.2 0 0 1 .82 1.3c.2.652.253 1.432.154 2.32-.114 1.02-.37 1.91-.762 2.64a5.28 5.28 0 0 1-1.224 1.56 4.97 4.97 0 0 1-1.744 1.01c-.678.24-1.467.363-2.346.363H13.34a.95.95 0 0 0-.938.803l-.012.07-.352 2.233-.01.05a.95.95 0 0 1-.937.803H7.076z",
+  zelle: "M4.583 3h14.834A1.583 1.583 0 0 1 21 4.583v2.26a1.583 1.583 0 0 1-.433 1.09L11.2 17.834h8.217A1.583 1.583 0 0 1 21 19.417v1.166A1.583 1.583 0 0 1 19.417 22H4.583A1.583 1.583 0 0 1 3 20.417v-2.26a1.583 1.583 0 0 1 .433-1.09L12.8 7.166H4.583A1.583 1.583 0 0 1 3 5.583V4.583A1.583 1.583 0 0 1 4.583 3z",
+  card: "M22 6v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2zM4 9h16V7H4v2zm0 4v5h16v-5H4z",
+};
+
+const TIP_BRANDS = {
+  cashapp: { color: "#00D632" },
+  venmo:   { color: "#008CFF" },
+  paypal:  { color: "#0070BA" },
+  zelle:   { color: "#6D1ED4" },
+  stripe:  { color: "#7C3AED", icon: "card" },
+  custom:  { color: "#7C3AED", icon: "card" },
+  page:    { color: "#7C3AED", icon: "card" },
+};
+
+function _tipIcon(name) {
+  const span = document.createElement("span");
+  span.className = "sing-tip-icon";
+  const path = TIP_BRAND_ICON_PATHS[name] || TIP_BRAND_ICON_PATHS.card;
+  span.innerHTML =
+    `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="${path}"/></svg>`;
+  return span;
+}
+
 function renderTip() {
+  // Header mirrors the public tip page: outline heart + "Tip {KJ name}".
+  const info = state.tipInfo;
+  const kjName = (info && info.kj_name) || "";
   const card = el("main", { class: "sing-card sing-tip-page" },
-    el("h2", {}, "💜 Tip the KJ"),
+    el("h2", { class: "sing-tip-title" },
+      el("span", { class: "sing-tip-heart" }, "♡"),
+      ` Tip ${kjName || "the KJ"}`),
   );
   // Reload landing directly on #tip races the boot-time tip-info fetch —
   // show a loading line rather than a false "not set up".
-  if (state.tipInfo === null) {
+  if (info === null) {
     card.appendChild(el("p", { class: "hint" }, "Loading…"));
     return card;
   }
-  const info = state.tipInfo;
   if (!info.enabled) {
     card.appendChild(el("p", { class: "hint" },
       "Tipping isn't set up for this event — cash always works though!"));
     return card;
   }
 
-  card.appendChild(el("p", {}, "Tips keep the show going — thank you!"));
+  card.appendChild(el("p", { class: "sing-tip-sub" },
+    kjName
+      ? "Thanks for singing with me! Tips are always appreciated."
+      : "Thanks for singing with us! Tips are always appreciated."));
   if (info.threshold > 0) {
     card.appendChild(el("p", { class: "sing-tip-perk" },
       `♥ Tip $${info.threshold}+ and you'll be bumped up the rotation, `
       + "marked with a heart so everyone can see it's fair."));
   }
 
-  // Amount first — method links deep-link the chosen amount straight into
+  // Amount first — method buttons deep-link the chosen amount straight into
   // the payment app (Cash App/PayPal path amounts, Venmo pay intent).
   let chosenAmount = info.threshold > 0 ? info.threshold : 10;
 
@@ -786,35 +822,81 @@ function renderTip() {
     return m.url;
   };
 
+  const fmtAmount = (a) => (a % 1 === 0 ? `$${a}` : `$${a.toFixed(2)}`);
+
   const methods = el("div", { class: "sing-tip-methods" });
-  const methodLinks = [];
+  const methodEls = [];   // [element, method] — hrefs + suffixes re-render on amount change
   for (const m of info.methods || []) {
-    const a = el("a", {
-      class: "btn primary sing-tip-method",
-      href: methodUrl(m, chosenAmount),
-      target: "_blank",
-      rel: "noopener",
-    }, `${m.label} →`);
-    methodLinks.push([a, m]);
-    methods.appendChild(a);
+    const brand = TIP_BRANDS[m.key] || TIP_BRANDS.page;
+    const icon = _tipIcon(brand.icon || m.key);
+    const nameEl = el("span", { class: "sing-tip-method-name" }, m.label);
+    let node;
+    if (m.amount_style === "copy") {
+      // Zelle — no URL scheme; copy the phone/email to the clipboard.
+      // navigator.clipboard needs a secure context; the venue-wifi http URL
+      // falls back to the legacy textarea + execCommand path.
+      const copyValue = () => {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          return navigator.clipboard.writeText(m.value).then(() => true, () => false);
+        }
+        try {
+          const ta = document.createElement("textarea");
+          ta.value = m.value;
+          ta.style.position = "fixed";
+          ta.style.opacity = "0";
+          document.body.appendChild(ta);
+          ta.select();
+          const ok = document.execCommand("copy");
+          ta.remove();
+          return Promise.resolve(ok);
+        } catch { return Promise.resolve(false); }
+      };
+      const sub = el("span", { class: "sing-tip-method-sub" }, `· ${m.value} ⧉`);
+      node = el("button", {
+        class: "sing-tip-method",
+        style: `background:${brand.color}`,
+        onclick: async () => {
+          const ok = await copyValue();
+          sub.textContent = ok ? "· Copied!" : `· ${m.value}`;
+          setTimeout(() => { sub.textContent = `· ${m.value} ⧉`; }, 2000);
+        },
+      }, icon, nameEl, sub);
+    } else {
+      const sub = el("span", { class: "sing-tip-method-sub" },
+        m.amount_style === "none"
+          ? (m.key === "stripe" ? "· enter amount on next page" : "")
+          : `· ${fmtAmount(chosenAmount)}`);
+      node = el("a", {
+        class: "sing-tip-method",
+        style: `background:${brand.color}`,
+        href: methodUrl(m, chosenAmount),
+        target: "_blank",
+        rel: "noopener",
+      }, icon, nameEl, sub);
+      methodEls.push([node, m, sub]);
+    }
+    methods.appendChild(node);
   }
 
   const amountInput = el("input", {
-    type: "number", class: "sing-empty-input", placeholder: "Amount (e.g. 20)",
+    type: "number", class: "sing-empty-input sing-tip-custom-input",
+    placeholder: "$ Custom amount",
     inputmode: "decimal", min: "1", step: "1",
-    value: String(chosenAmount),
     "data-testid": "tip-amount",
   });
   const presetRow = el("div", { class: "sing-tip-presets" });
-  const setAmount = (val) => {
+  const setAmount = (val, fromInput) => {
     chosenAmount = val;
-    amountInput.value = String(val);
-    for (const [a, m] of methodLinks) a.href = methodUrl(m, val);
+    if (!fromInput) amountInput.value = "";
+    for (const [a, m, sub] of methodEls) {
+      a.href = methodUrl(m, val);
+      if (m.amount_style !== "none") sub.textContent = `· ${fmtAmount(val)}`;
+    }
     for (const b of presetRow.querySelectorAll(".sing-tip-preset")) {
-      b.classList.toggle("active", parseFloat(b.dataset.amount) === val);
+      b.classList.toggle("active", !fromInput && parseFloat(b.dataset.amount) === val);
     }
   };
-  for (const amt of [5, 10, 20]) {
+  for (const amt of [3, 5, 10, 20]) {
     presetRow.appendChild(el("button", {
       class: "sing-tip-preset" + (amt === chosenAmount ? " active" : ""),
       "data-amount": String(amt),
@@ -823,13 +905,14 @@ function renderTip() {
   }
   amountInput.addEventListener("input", () => {
     const v = parseFloat(amountInput.value);
-    if (v > 0) setAmount(v);
+    if (v > 0) setAmount(v, true);
   });
-  card.appendChild(el("div", { class: "sing-tip-amount-row" },
-    presetRow,
-    el("label", { class: "sing-empty-label sing-tip-custom" }, "Custom $", amountInput),
-  ));
+  card.appendChild(el("h3", { class: "sing-tip-amount-heading" }, "$ Select amount"));
+  card.appendChild(presetRow);
+  card.appendChild(amountInput);
   card.appendChild(methods);
+  card.appendChild(el("p", { class: "hint sing-tip-choose" },
+    "Choose your preferred method above. Thank you!"));
 
   // Claim form — after tipping in their payment app, the singer tells us so
   // the KJ gets a Confirm card in the Requests panel.
@@ -850,9 +933,9 @@ function renderTip() {
   }, "I sent a tip →");
   submitBtn.onclick = async () => {
     const name = (nameInput.value || "").trim();
-    const amount = parseFloat(amountInput.value);
+    const amount = chosenAmount;   // presets or custom input, whichever is live
     if (!name) { err.textContent = "Please enter your name."; return; }
-    if (!(amount > 0)) { err.textContent = "Please enter the tip amount."; return; }
+    if (!(amount > 0)) { err.textContent = "Please pick the tip amount above."; return; }
     err.textContent = "";
     submitBtn.disabled = true;
     submitBtn.textContent = "Sending…";

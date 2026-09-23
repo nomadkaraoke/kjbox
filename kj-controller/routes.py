@@ -5643,9 +5643,13 @@ def apply_confirmed_tip(app, req):
         if name in (members or [entry.get("singer")]):
             rotation.set_paid(entry["id"], True)
 
-    cfg = getattr(app, "kj_config", None) or {}
+    # Effective threshold comes from the same modal-editable settings the
+    # singer UI shows ("$20+ gets you bumped") — never a diverging value.
+    from sing import _tip_settings
+    settings = _tip_settings(getattr(app, "kj_config", None),
+                             getattr(app, "sing_store", None))
     try:
-        threshold = float(cfg.get("sing_tip_priority_threshold", 20))
+        threshold = float(settings["threshold"])
     except (TypeError, ValueError):
         threshold = 20.0
     if amount >= threshold:
@@ -6037,7 +6041,16 @@ def get_sing_config():
         "sms_template_is_custom": store.get_sms_template() is not None,
         "sms_default_region": store.get_sms_default_region(),
         "sms_from_number": sms_cfg.get("from_number") or None,
+        # Tip settings — effective values (modal > config.json > defaults) so
+        # the Public Request Form modal shows what singers actually see.
+        "tip_settings": _effective_tip_settings(store),
     })
+
+
+def _effective_tip_settings(store):
+    from sing import _tip_settings, _tips_enabled
+    settings = _tip_settings(current_app.kj_config, store)
+    return {**settings, "enabled": _tips_enabled(settings)}
 
 
 @routes_bp.route('/rotation/requests/config', methods=['POST'])
@@ -6126,6 +6139,13 @@ def update_sing_config():
         except ValueError as exc:
             return jsonify({"error": str(exc)}), 400
         changed["sms_default_region"] = data["sms_default_region"]
+
+    if "tip_settings" in data:
+        try:
+            store.set_tip_settings(data["tip_settings"])
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
+        changed["tip_settings"] = _effective_tip_settings(store)
 
     return jsonify({"success": True, "changed": changed})
 

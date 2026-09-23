@@ -644,26 +644,10 @@ def preview_hls(tok, name):
 # bump as the KJ-UI "bump up" button. Never auto-approved: the KJ should see
 # the money arrive before priority changes.
 
-# amount_style tells the client how to deep-link a chosen amount into the
-# method URL: "path" appends /<amount> (Cash App, PayPal.me), "venmo" appends
-# the Venmo pay-intent query, "none" opens the URL as-is (Stripe, tip page).
-_TIP_METHOD_BUILDERS = (
-    # (config_key, method_key, label, url_builder, amount_style)
-    ("sing_tip_venmo", "venmo", "Venmo",
-     lambda h: f"https://venmo.com/{h.lstrip('@')}", "venmo"),
-    ("sing_tip_cashapp", "cashapp", "Cash App",
-     lambda h: f"https://cash.app/${h.lstrip('$')}", "path"),
-    ("sing_tip_paypal", "paypal", "PayPal",
-     lambda h: f"https://paypal.me/{h}", "path"),
-)
-
-# Card / Apple Pay / Google Pay via the existing Nomad Karaoke Stripe payment
-# link (the one the live nomadkaraoke.com/tip page uses).
-_TIP_STRIPE_KEY = "sing_tip_stripe_url"
-
 # Zero-config fallback: the live tips page (Stripe + Cash App + Venmo +
 # PayPal + Zelle) that already exists on the public website. Means tipping is
-# ON out of the box; set sing_tips_enabled=false to kill it.
+# ON out of the box; the KJ can disable or override from the Public Request
+# Form modal.
 _DEFAULT_TIP_PAGE_URL = "https://nomadkaraoke.com/tip"
 
 _MAX_TIP_AMOUNT = 500
@@ -671,17 +655,75 @@ _MAX_TIP_AMOUNT = 500
 _tip_rate_limit_state = defaultdict(deque)
 
 
-def _tip_methods(cfg):
+def _tip_settings(cfg, store):
+    """Effective tip settings: KJ modal (rotation_meta) > config.json > defaults.
+
+    Returns a plain dict with keys: enabled, kj_name, venmo, cashapp, paypal,
+    zelle, stripe_url, threshold.
+    """
+    cfg = cfg or {}
+    saved = {}
+    if store is not None:
+        try:
+            saved = store.get_tip_settings()
+        except Exception:
+            saved = {}
+
+    def pick(key, cfg_key, default=""):
+        if key in saved:
+            return saved[key]
+        return cfg.get(cfg_key, default)
+
+    enabled = saved.get("enabled")
+    if enabled is None:
+        enabled = cfg.get("sing_tips_enabled")
+    threshold = pick("threshold", "sing_tip_priority_threshold", 20)
+    try:
+        threshold = max(0, float(threshold))
+    except (TypeError, ValueError):
+        threshold = 20
+    return {
+        "enabled": enabled,   # None = default-on
+        "kj_name": str(pick("kj_name", "sing_tip_kj_name") or "").strip(),
+        "venmo": str(pick("venmo", "sing_tip_venmo") or "").strip(),
+        "cashapp": str(pick("cashapp", "sing_tip_cashapp") or "").strip(),
+        "paypal": str(pick("paypal", "sing_tip_paypal") or "").strip(),
+        "zelle": str(pick("zelle", "sing_tip_zelle") or "").strip(),
+        "stripe_url": str(pick("stripe_url", "sing_tip_stripe_url") or "").strip(),
+        "threshold": int(threshold) if float(threshold).is_integer() else threshold,
+    }
+
+
+def _tip_methods(settings, cfg=None):
+    """Build the singer-facing method list from effective settings.
+
+    amount_style tells the client how to deep-link a chosen amount:
+    "path" appends /<amount> (Cash App, PayPal.me), "venmo" appends the
+    Venmo pay-intent query, "copy" is a copy-to-clipboard value (Zelle),
+    "none" opens the URL as-is (Stripe card link, tip page).
+    """
     methods = []
-    for cfg_key, key, label, build, amount_style in _TIP_METHOD_BUILDERS:
-        handle = str((cfg or {}).get(cfg_key) or "").strip()
-        if handle:
-            methods.append({"key": key, "label": label, "url": build(handle),
-                            "amount_style": amount_style})
-    stripe = str((cfg or {}).get(_TIP_STRIPE_KEY) or "").strip()
-    if stripe.startswith("https://"):
-        methods.append({"key": "stripe", "label": "Card / Apple Pay",
-                        "url": stripe, "amount_style": "none"})
+    if settings["cashapp"]:
+        methods.append({"key": "cashapp", "label": "CashApp",
+                        "url": f"https://cash.app/${settings['cashapp'].lstrip('$')}",
+                        "amount_style": "path"})
+    if settings["venmo"]:
+        methods.append({"key": "venmo", "label": "Venmo",
+                        "url": f"https://venmo.com/{settings['venmo'].lstrip('@')}",
+                        "amount_style": "venmo"})
+    if settings["paypal"]:
+        methods.append({"key": "paypal", "label": "PayPal",
+                        "url": f"https://paypal.me/{settings['paypal']}",
+                        "amount_style": "path"})
+    if settings["zelle"]:
+        methods.append({"key": "zelle", "label": "Zelle",
+                        "value": settings["zelle"],
+                        "amount_style": "copy"})
+    if settings["stripe_url"].startswith("https://"):
+        methods.append({"key": "stripe", "label": "Card",
+                        "url": settings["stripe_url"],
+                        "amount_style": "none"})
+    # Legacy custom-URL config key still honoured (config.json only).
     custom = str((cfg or {}).get("sing_tip_url") or "").strip()
     if custom.startswith(("http://", "https://")):
         methods.append({
@@ -700,25 +742,22 @@ def _tip_methods(cfg):
     return methods
 
 
-def _tips_enabled(cfg):
-    flag = (cfg or {}).get("sing_tips_enabled")
-    if flag is False:
+def _tips_enabled(settings):
+    if settings["enabled"] is False:
         return False
-    return bool(_tip_methods(cfg))
-
-
-def _tip_threshold(cfg):
-    return max(0, _safe_int((cfg or {}).get("sing_tip_priority_threshold"), 20))
+    return True   # methods list always has at least the page fallback
 
 
 @sing_bp.route("/tip-info", methods=["GET"])
 @require_token
 def tip_info():
     cfg = current_app.kj_config
+    settings = _tip_settings(cfg, getattr(current_app, "sing_store", None))
     return jsonify({
-        "enabled": _tips_enabled(cfg),
-        "threshold": _tip_threshold(cfg),
-        "methods": _tip_methods(cfg),
+        "enabled": _tips_enabled(settings),
+        "threshold": settings["threshold"],
+        "kj_name": settings["kj_name"],
+        "methods": _tip_methods(settings, cfg),
     })
 
 
@@ -727,7 +766,7 @@ def tip_info():
 def tip_claim():
     cfg = current_app.kj_config
     store = current_app.sing_store
-    if not _tips_enabled(cfg):
+    if not _tips_enabled(_tip_settings(cfg, store)):
         return jsonify({"error": "tips_disabled"}), 400
     if _rate_limit_exceeded(_client_ip(request), 5, 600,
                             state=_tip_rate_limit_state):

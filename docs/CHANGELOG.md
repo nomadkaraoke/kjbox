@@ -78,13 +78,23 @@ Third batch (same release, 2026-09-23):
    runs any rotation.db, `--fetch-real` scp's a read-only copy of the live
    DB from nomadpc. Sheet sync is stripped from dev config.
 
-Suggested box config for direct payment buttons (fewer taps than the page):
-`"sing_tip_venmo": "beveradb"`, `"sing_tip_cashapp": "beveradb"`,
-`"sing_tip_paypal": "beveradbus"`,
-`"sing_tip_stripe_url": "https://buy.stripe.com/00geUZgfHdhx6TS001"`.
+Fourth batch (same release, 2026-09-23):
 
-Backend (`sing.py`, `routes.py`, `version_priority.py`) requires a service
-restart.
+12. **Tip tab parity with nomadkaraoke.com/tip + KJ-configurable settings** —
+   the singer Tip tab now mirrors the public tip page: "♡ Tip {KJ name}"
+   header, $3/$5/$10/$20 presets + custom amount, and branded method buttons
+   (CashApp green / Venmo blue / PayPal blue / Zelle purple with
+   copy-to-clipboard / Card purple) using the same icons, colors, and URL
+   shapes as `public-website components/TipPage.tsx`. All tip settings are
+   now editable from the **Public Request Form modal** (💜 Tipping section):
+   enable toggle, KJ display name, Venmo/Cash App/PayPal usernames, Zelle
+   phone/email, Stripe card link, ♥ threshold. Stored in `rotation_meta`
+   (`sing_tip_settings` JSON) — modal values override the `sing_tip_*`
+   config.json fallbacks, and clearing a field reverts to the fallback.
+   `apply_confirmed_tip` reads the same effective threshold the singers see.
+
+Backend (`sing.py`, `sing_store.py`, `routes.py`, `version_priority.py`)
+requires a service restart.
 
 ## 2026-09-22 - Change: KN panel + Library filter unified onto the shared search engine (v0.106.0)
 
