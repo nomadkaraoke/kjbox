@@ -244,8 +244,8 @@ def main():
                              "into the local copy's live rotation as a mid-night "
                              "snapshot — pairs with --fetch-real/--db")
     parser.add_argument("--as", dest="as_singer", default="Andrew",
-                        help="singer to attribute in the printed 'My songs' "
-                             "review URL (default: Andrew)")
+                        help="singer(s) to attribute in printed 'My songs' "
+                             "review URLs — comma-separated (default: Andrew)")
     parser.add_argument("--no-seed", action="store_true",
                         help="skip seeding even if the rotation is empty")
     args = parser.parse_args()
@@ -304,12 +304,14 @@ def main():
     # Attribute a singer's entries to a review browser: "My songs" runs off
     # request ids stored on the singer's own phone, so hand the reviewer a
     # ?r= URL carrying freshly-linked ids for their entries.
-    if args.as_singer:
-        req_ids = link_requests_for_singer(app, args.as_singer)
+    for singer in [n.strip() for n in (args.as_singer or "").split(",") if n.strip()]:
+        req_ids = link_requests_for_singer(app, singer)
         if req_ids:
             r = ",".join(str(i) for i in req_ids)
-            print(f"Singer UI as {args.as_singer} (their songs attributed): "
+            print(f"Singer UI as {singer} ({len(req_ids)} songs attributed): "
                   f"http://localhost:5555/sing/?t={token}&r={r}")
+        else:
+            print(f"Singer UI as {singer}: no rotation entries found for that name")
     print()
     # No reloader: it re-executes main() in a child process, which would
     # re-restore --night with fresh entry ids and orphan the ?r= links.

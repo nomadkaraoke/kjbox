@@ -506,35 +506,47 @@ class TestMySongsPersistence:
         # Bar is redundant on the done screen (which IS the list), so it hides.
         expect(page.locator('[data-testid="mysongs-bar"]')).to_be_hidden()
 
-    def test_bar_visible_off_done_and_reopens_list(self, page, live_server, live_token):
+    def test_bar_urgent_names_next_song_and_reopens_list(self, page, live_server, live_token):
+        # Nearly-up (position ≤ 3) → the bar appears on any tab, naming the
+        # actual next song; tapping returns to the list.
         self._seed_ls(page, live_server, live_token,
                       {"token": live_token, "ids": [4242], "tokens": {"4242": "secret-xyz"}})
-        self._route_my_requests(page, [self._pending_song()])
+        song = self._pending_song()
+        song["request"]["status"] = "approved"
+        song["estimate"] = {"position": 2, "range_low_s": 200, "range_high_s": 400,
+                            "now_singing": False}
+        self._route_my_requests(page, [song])
         page.reload()
         expect(page.locator(".song-card-title")).to_be_visible()   # restored to done
-        # Leave the done screen — the persistent bar should appear.
         page.locator('[data-testid="request-another"]').click()
         bar = page.locator('[data-testid="mysongs-bar"]')
         expect(bar).to_be_visible()
-        expect(bar).to_contain_text("My song (1)")
-        # Tapping the bar returns to the list.
+        expect(bar).to_contain_text("Your next song")
+        expect(bar).to_contain_text("Bo Rhap")
         bar.click()
         expect(page.locator(".song-card-title")).to_be_visible()
 
-    def test_bar_shows_status_at_a_glance(self, page, live_server, live_token):
-        # A queued song with a position surfaces its wait on the bar.
+    def test_bar_hidden_off_rotation_when_not_urgent(self, page, live_server, live_token):
+        # A far-off song (#4) doesn't earn bar space on the Request tab; it
+        # appears on the Rotation tab (queue-scanning context) with h/m waits.
         self._seed_ls(page, live_server, live_token,
                       {"token": live_token, "ids": [11], "tokens": {"11": "t11"}})
         song = {"request": {"id": 11, "singer_name": "Alice", "song_artist": "Q",
                             "song_title": "One", "source_type": "local", "status": "approved",
                             "created_at": "now", "linked_entry_id": 101, "additional_singers": None},
-                "estimate": {"position": 4, "range_low_s": 600, "range_high_s": 900,
+                "estimate": {"position": 4, "range_low_s": 4500, "range_high_s": 5400,
                              "now_singing": False}}
         self._route_my_requests(page, [song])
+        page.route("**/sing/rotation*", lambda r: r.fulfill(
+            status=200, content_type="application/json", body=json.dumps({"entries": []})))
         page.reload()
         expect(page.locator(".song-card-title")).to_be_visible()
         page.locator('[data-testid="request-another"]').click()
-        expect(page.locator('[data-testid="mysongs-bar"]')).to_contain_text("#4")
+        expect(page.locator('[data-testid="mysongs-bar"]')).to_be_hidden()
+        page.locator('[data-testid="tab-rotation"]').click()
+        bar = page.locator('[data-testid="mysongs-bar"]')
+        expect(bar).to_be_visible()
+        expect(bar).to_contain_text("#4 · ~1h 15m–1h 30m")
 
     def test_stale_night_prunes_and_stays_on_boot_screen(self, page, live_server, live_token):
         # localStorage still holds last night's ids, but the server night-scopes

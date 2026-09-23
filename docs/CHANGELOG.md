@@ -134,6 +134,15 @@ Fifth batch (same release, 2026-09-23):
    (queued + Already sung). Reloader disabled (it re-ran the restore and
    orphaned the links).
 
+19. **My-songs bar reworked** — it now names the singer's actual next song
+   ("Your next song (of 11): Good Charlotte — Anthem") instead of a bare
+   count, and only appears where it earns the space: on the Rotation tab,
+   or on any tab (green urgent styling) when the singer is ≤3 songs from
+   the mic. Wait estimates everywhere now format ≥1h as "1h 28m" instead
+   of "88 min" (rotation list, song cards, bar, My-songs banner).
+   Dev harness `--as` takes a comma list and prints one attributed singer
+   URL each (e.g. `--as Andrew,Celeste,Jasmine`).
+
 Backend (`sing.py`, `sing_store.py`, `routes.py`, `version_priority.py`)
 requires a service restart.
 

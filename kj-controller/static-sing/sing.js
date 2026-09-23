@@ -534,9 +534,21 @@ function _waitText(entry) {
   // Position 2 is "up next" only when there is actually someone on stage at #1.
   // Detected via the cached payload: the caller passes a hasNowSinging flag.
   if (entry._hasNowSinging && entry.position === 2) return "up next";
-  const low = Math.round(entry.range_low_s / 60);
-  const high = Math.round(entry.range_high_s / 60);
-  return `~${low}–${high} min`;
+  return _fmtWaitRange(entry.range_low_s, entry.range_high_s);
+}
+
+// "305 min" reads terribly at real-night scale — format ≥1h as "5h 5m".
+function _fmtDur(seconds) {
+  const m = Math.round(seconds / 60);
+  if (m < 60) return `${m} min`;
+  const h = Math.floor(m / 60), rem = m % 60;
+  return rem ? `${h}h ${rem}m` : `${h}h`;
+}
+
+function _fmtWaitRange(lowS, highS) {
+  const highM = Math.round(highS / 60);
+  if (highM < 60) return `~${Math.round(lowS / 60)}–${highM} min`;
+  return `~${_fmtDur(lowS)}–${_fmtDur(highS)}`;
 }
 
 function _formatUpdatedAt(fetchedAt) {
@@ -2338,9 +2350,7 @@ function _statusLine(item) {
   if (est.position === 1) return "🎤 You're next — head to the mic";
   if (est.position === 2) return "About 1 song to go";
   if (est.position >= 3) {
-    const low = Math.round(est.range_low_s / 60);
-    const high = Math.round(est.range_high_s / 60);
-    return `You're #${est.position} — about ${low}–${high} min`;
+    return `You're #${est.position} — ${_fmtWaitRange(est.range_low_s, est.range_high_s)}`;
   }
   return "Added to the queue.";
 }
@@ -2673,9 +2683,7 @@ function _mySongsPillSummary(items) {
     const est = withPos[0].estimate;
     if (est.position === 1) return "🎤 You're next";
     if (est.position === 2) return "🎤 Almost up — 1 to go";
-    const low = Math.round(est.range_low_s / 60);
-    const high = Math.round(est.range_high_s / 60);
-    return `#${est.position} · ~${low}–${high} min`;
+    return `#${est.position} · ${_fmtWaitRange(est.range_low_s, est.range_high_s)}`;
   }
   if (live.some((it) => it.request.status === "pending")) return "Waiting for KJ…";
   return "In the queue";
@@ -2700,35 +2708,52 @@ function startBarPoll() {
   }, 20000);
 }
 
-// Show/hide/populate the persistent bar. Hidden on the done screen (which IS
-// the list) and whenever this device owns no live songs tonight.
+// Show/hide/populate the persistent bar. It names the singer's NEXT song and
+// appears only where it earns its space: on the Rotation tab (context while
+// scanning the queue) or on any tab when the singer is nearly up (≤3 to go /
+// on now). The My-songs tab badge covers the ambient "I have songs" signal.
 function updateMySongsBar() {
   updateTabsBar();   // the tab badge shares the mySongs view-model
   const bar = document.getElementById("sing-mysongs-bar");
   if (!bar) return;
   const live = _liveSongs(state.mySongs.items);
-  if (state.step === "done" || live.length === 0) {
+  // Keep the poll running whenever there are live songs — the tab badge and
+  // this bar's urgency check both depend on fresh estimates.
+  if (live.length > 0 && state.step !== "done") startBarPoll();
+  else stopBarPoll();
+
+  const urgent = live.some((it) => it.estimate
+    && (it.estimate.now_singing
+        || (typeof it.estimate.position === "number" && it.estimate.position <= 3)));
+  const show = live.length > 0 && state.step !== "done"
+    && (urgent || state.step === "rotation");
+  if (!show) {
     bar.setAttribute("hidden", "");
     bar.innerHTML = "";
-    stopBarPoll();
     return;
   }
-  const count = live.length;
+  // The next song = first live item in actual sing order.
+  const next = live.slice().sort((a, b) => _activeSortKey(a) - _activeSortKey(b))[0];
+  const req = next.request;
+  const songText = [req.song_title, req.song_artist].filter(Boolean).join(" — ")
+    || "your song";
   const summary = _mySongsPillSummary(state.mySongs.items);
   bar.innerHTML = "";
   bar.appendChild(el("button", {
-    class: "mysongs-pill",
+    class: "mysongs-pill" + (urgent ? " mysongs-urgent" : ""),
     "data-testid": "mysongs-bar",
     onclick: () => { state.step = "done"; render(); },
   },
     el("span", { class: "mysongs-icon" }, "🎤"),
-    el("span", { class: "mysongs-label" },
-      `My song${count === 1 ? "" : "s"} (${count})`),
+    el("span", { class: "mysongs-next" },
+      el("span", { class: "mysongs-next-label" },
+        live.length > 1 ? `Your next song (of ${live.length})` : "Your next song"),
+      el("span", { class: "mysongs-next-song" }, songText),
+    ),
     summary ? el("span", { class: "mysongs-status" }, summary) : null,
     el("span", { class: "mysongs-chevron" }, "›"),
   ));
   bar.removeAttribute("hidden");
-  startBarPoll();
 }
 
 // --- Bottom tab bar --------------------------------------------------------
