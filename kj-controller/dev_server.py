@@ -79,6 +79,29 @@ def seed_rotation(app):
     hold = add("Casey", "Radiohead - Creep", notes="stepped outside")
     rotation.update_status(hold, "On Hold (BRB)")
 
+    # Historical play stats (media_library.db) — feeds the KJ Song Stats
+    # panel AND the singer UI's "sung here before?" inspiration section.
+    stats = getattr(app, "stats", None)
+    if stats is not None and not (stats.overview() or {}).get("plays"):
+        history = [
+            ("Andrew", "Maxïmo Park", "Books from Boxes", 3),
+            ("Andrew", "Foo Fighters", "My Hero", 2),
+            ("Andrew", "Billy Joel", "Vienna", 1),
+            ("Sarah B.", "Fleetwood Mac", "Dreams", 4),
+            ("Jen", "Adele", "Rolling in the Deep", 2),
+            ("Mike", "Journey", "Don't Stop Believin'", 5),
+        ]
+        eid = 1000
+        for singer, artist, title, plays in history:
+            for n in range(plays):
+                eid += 1
+                stats.record_play(
+                    f"seed-{artist}-{title}".lower().replace(" ", "-"),
+                    entry_id=eid, singer=singer, artist=artist, title=title,
+                    song_key=f"{artist}|{title}".lower(),
+                    played_at=f"2026-0{(n % 6) + 3}-15 21:{10 + n:02d}:00",
+                    night_date=f"2026-0{(n % 6) + 3}-15", source="live")
+
     # Request queue — one pending song + one pending tip claim so the KJ
     # panel has cards to act on.
     store.create_request(
@@ -124,6 +147,9 @@ def main():
 
     cfg = load_config()
     cfg["rotation_db_path"] = db_path
+    # Keep play-stats writes in the dev dir too (never the repo/box copy).
+    os.makedirs(DEV_DATA_DIR, exist_ok=True)
+    cfg["media_db_path"] = os.path.join(DEV_DATA_DIR, "media_library.db")
     # Never sync a dev rotation to the real Google Sheet.
     cfg.pop("rotation_sheet_id", None)
 

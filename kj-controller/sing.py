@@ -1213,6 +1213,52 @@ def known_singers():
     })
 
 
+@sing_bp.route("/my-stats", methods=["GET"])
+@require_token
+def my_stats():
+    """Song-history inspiration for the search screen.
+
+    Returns the named singer's past songs (from the KJ's play-stats DB,
+    matched on normalized singer name — same matching the KJ Song Stats
+    panel uses) plus the venue's overall top songs. Both are "what gets sung
+    here" data that's already public on the venue screen; no phone numbers
+    or per-person data beyond song titles and counts.
+    """
+    stats = getattr(current_app, "stats", None)
+    if stats is None:
+        return jsonify({"my_songs": [], "top_songs": []})
+    name = (request.args.get("name") or "").strip()
+
+    def slim(rows, with_last=False):
+        out = []
+        for r in rows or []:
+            item = {
+                "artist": r.get("artist") or "",
+                "title": r.get("title") or "",
+                "plays": r.get("plays") or 0,
+            }
+            if with_last:
+                item["last_sung"] = r.get("last_sung")
+            out.append(item)
+        return out
+
+    my_songs = []
+    if name:
+        try:
+            my_songs = stats.singer_songs(name, limit=50)
+        except Exception:
+            current_app.logger.exception("my-stats: singer_songs failed")
+    try:
+        top = stats.top_songs(limit=10)
+    except Exception:
+        current_app.logger.exception("my-stats: top_songs failed")
+        top = []
+    return jsonify({
+        "my_songs": slim(my_songs, with_last=True),
+        "top_songs": slim(top),
+    })
+
+
 @sing_bp.route("/status/<int:request_id>", methods=["GET"])
 def status(request_id):
     """Return the singer's own request status.

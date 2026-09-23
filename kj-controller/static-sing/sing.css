@@ -700,7 +700,61 @@ input:focus {
   text-align: center;
 }
 
-.upcoming summary { padding: 0.5rem 0; color: var(--nk-text-dim); cursor: pointer; }
+/* --- "Sung here before?" inspiration section (search screen) -------------- */
+.sing-history {
+  margin: 0.75rem 0 0.25rem;
+  border: 1px solid var(--nk-border);
+  border-radius: 10px;
+  background: var(--nk-card-2);
+  padding: 0.5rem 0.9rem;
+}
+.sing-history-summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--nk-text-dim);
+  list-style: none;
+  padding: 0.2rem 0;
+}
+.sing-history-summary::-webkit-details-marker { display: none; }
+.sing-history-summary::before { content: "▸ "; }
+.sing-history[open] > .sing-history-summary::before { content: "▾ "; }
+.sing-history[open] > .sing-history-summary { color: var(--nk-text); }
+.sing-history-body h4 {
+  margin: 0.75rem 0 0.25rem;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--nk-text-dim);
+}
+.sing-history-list { display: flex; flex-direction: column; }
+.sing-history-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  width: 100%;
+  background: none;
+  border: 0;
+  border-bottom: 1px solid var(--nk-border);
+  color: var(--nk-text);
+  font-size: 0.9rem;
+  text-align: left;
+  padding: 0.45rem 0.1rem;
+  cursor: pointer;
+  min-height: 0;
+}
+.sing-history-row:last-child { border-bottom: 0; }
+.sing-history-row:active .sing-history-song { color: var(--nk-accent); }
+.sing-history-song {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sing-history-plays {
+  color: var(--nk-accent);
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
 .queue-list { max-height: 320px; overflow-y: auto; }
 .queue-row {
   display: grid;

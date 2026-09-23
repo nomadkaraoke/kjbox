@@ -2018,6 +2018,66 @@ function renderSearch() {
     return container;
   }
 
+  // Collapsed inspiration section — the singer's own play history (from the
+  // KJ's Song Stats DB) + the venue's crowd favourites. A regular who can't
+  // decide gets "what have I sung before?" one tap away; tapping a row runs
+  // the search for it.
+  function renderInspiration() {
+    const details = el("details", { class: "sing-history", "data-testid": "song-history" },
+      el("summary", { class: "sing-history-summary" }, "🎤 Sung here before? Need ideas?"),
+      el("div", { class: "sing-history-body" }, el("p", { class: "hint" }, "Loading…")),
+    );
+    let requested = false;
+    details.addEventListener("toggle", async () => {
+      if (!details.open || requested) return;
+      requested = true;
+      const body = details.querySelector(".sing-history-body");
+      try {
+        const data = await fetchJson(
+          `${BASE}/my-stats?name=${encodeURIComponent(state.name || "")}`);
+        if (!body.isConnected) return;
+        body.innerHTML = "";
+        const addList = (heading, rows) => {
+          if (!rows || !rows.length) return;
+          body.appendChild(el("h4", {}, heading));
+          const list = el("div", { class: "sing-history-list" });
+          for (const r of rows) {
+            const label = `${r.artist ? `${r.artist} – ` : ""}${r.title || ""}`;
+            list.appendChild(el("button", {
+              class: "sing-history-row",
+              onclick: () => {
+                const q = label.replace(" – ", " ");
+                state.query = q;
+                const input = card.querySelector('input[type="search"]');
+                if (input) input.value = q;
+                details.open = false;
+                err = ""; loading = true; update();
+                doSearch(q);
+              },
+            },
+              el("span", { class: "sing-history-song" }, label),
+              el("span", { class: "sing-history-plays" }, `▶ ${r.plays}`),
+            ));
+          }
+          body.appendChild(list);
+        };
+        addList("You've sung before", data.my_songs);
+        addList("Crowd favourites here", data.top_songs);
+        if (!body.children.length) {
+          body.appendChild(el("p", { class: "hint" },
+            "No song history yet — tonight's the night!"));
+        }
+      } catch {
+        if (body.isConnected) {
+          body.innerHTML = "";
+          body.appendChild(el("p", { class: "hint" }, "Couldn't load song history."));
+        }
+        requested = false;   // allow a retry on next expand
+      }
+    });
+    return details;
+  }
+
   const card = el("main", { class: "sing-card" },
     el("h2", {}, "Pick your song"),
     el("p", { class: "hint" },
@@ -2047,6 +2107,7 @@ function renderSearch() {
     // result set doesn't need them as secondary options; if they want them,
     // they can clear the search box and type a nonsense query to reach
     // empty-state.
+    renderInspiration(),
     el("div", { class: "row" },
       el("button", { class: "btn ghost", onclick: back("identity") }, "Back"),
     ),
@@ -2443,27 +2504,14 @@ function renderDone() {
       },
     }, "+ Request another song"),
     el("div", { id: "push-optin", class: "push-optin" }),
-    el("details", { class: "upcoming" },
-      el("summary", {}, "Show upcoming singers"),
-      el("div", { class: "rotation-body" }, "Open to load…"),
-    ),
+    // (The old "Show upcoming singers" expander lived here — the dedicated
+    // 📋 Rotation tab replaced it.)
     el("p", { class: "hint" },
       "Keep this page open — it'll update automatically. Good luck!"),
   );
 
   setTimeout(maybeShowPushPrompt, 2000);
   pollMyRequests(card);
-  // The rotation expander shares the live-rotation lifecycle (auto-refresh,
-  // ticking age label, manual ↻) with the landing expander.
-  const upcoming = card.querySelector(".upcoming");
-  const upcomingLive = attachRotationLive(upcoming, {
-    isActive: () => upcoming.open,
-  });
-  upcoming.addEventListener("toggle", () => {
-    if (!upcoming.open) { upcomingLive.stop(); return; }
-    upcomingLive.load();
-    upcomingLive.start();
-  });
   return card;
 }
 

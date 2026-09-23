@@ -93,6 +93,19 @@ Fourth batch (same release, 2026-09-23):
    config.json fallbacks, and clearing a field reverts to the fallback.
    `apply_confirmed_tip` reads the same effective threshold the singers see.
 
+Fifth batch (same release, 2026-09-23):
+
+13. **"Show upcoming singers" removed from My songs** — redundant with the
+   dedicated 📋 Rotation tab.
+14. **"Sung here before? Need ideas?" on the Request screen** — collapsed
+   `<details>` under the search box showing the singer's own play history
+   ("You've sung before", from the same play-stats DB as the KJ Song Stats
+   panel, matched on normalized singer name) plus "Crowd favourites here"
+   (venue top songs). Tapping a row fills the search box and runs the
+   search. New token-gated `GET /sing/my-stats`. Dev harness now seeds
+   historical plays (into `~/kjdata-dev/media_library.db` — the dev config
+   redirects `media_db_path` so seeds never touch a real stats DB).
+
 Backend (`sing.py`, `sing_store.py`, `routes.py`, `version_priority.py`)
 requires a service restart.
 

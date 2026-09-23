@@ -899,3 +899,44 @@ class TestTipTab:
         assert body["amount"] == 25
         assert body["method"] == "Venmo"
         assert body["singer_name"] == "Alice"
+
+
+class TestSongHistoryInspiration:
+    def test_upcoming_singers_expander_removed_from_done(self, page, live_server, live_token):
+        _login(page, live_server, live_token)
+        page.evaluate("window.__sing_state.step = 'done'; window.__sing_render();")
+        expect(page.locator("h2:has-text('Your songs tonight')")).to_be_visible()
+        expect(page.locator("text=Show upcoming singers")).to_have_count(0)
+
+    def test_collapsed_history_expands_and_search_on_tap(self, page, live_server, live_token):
+        page.add_init_script("window.__SING_ARM_MS = 0;")
+        _login(page, live_server, live_token)
+        page.route("**/sing/my-stats*", lambda r: r.fulfill(
+            status=200, content_type="application/json",
+            body=json.dumps({
+                "my_songs": [{"artist": "Maximo Park", "title": "Books From Boxes",
+                              "plays": 3, "last_sung": "2026-09-20 22:11:00"}],
+                "top_songs": [{"artist": "Foo Fighters", "title": "My Hero", "plays": 15}],
+            })))
+        page.evaluate("window.__sing_state.step = 'search'; window.__sing_render();")
+        history = page.locator('[data-testid="song-history"]')
+        expect(history).to_be_visible()
+        # Collapsed by default — the body only renders after expanding.
+        expect(page.locator(".sing-history-row")).to_have_count(0)
+        page.locator(".sing-history-summary").click()
+        expect(page.locator(".sing-history-body h4").nth(0)).to_have_text("You've sung before")
+        expect(page.locator(".sing-history-row")).to_have_count(2)
+        expect(page.locator(".sing-history-row").nth(0)).to_contain_text("▶ 3")
+        # Tapping a row runs the search for that song.
+        with page.expect_request("**/sing/search*"):
+            page.locator(".sing-history-row").nth(0).click()
+        expect(page.locator('input[type="search"]')).to_have_value("Maximo Park Books From Boxes")
+
+    def test_empty_history_message(self, page, live_server, live_token):
+        _login(page, live_server, live_token)
+        page.route("**/sing/my-stats*", lambda r: r.fulfill(
+            status=200, content_type="application/json",
+            body=json.dumps({"my_songs": [], "top_songs": []})))
+        page.evaluate("window.__sing_state.step = 'search'; window.__sing_render();")
+        page.locator(".sing-history-summary").click()
+        expect(page.locator(".sing-history-body")).to_contain_text("tonight's the night")
