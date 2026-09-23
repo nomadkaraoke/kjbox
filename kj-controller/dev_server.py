@@ -49,6 +49,7 @@ def seed_rotation(app):
     """Seed a realistic mid-night rotation + request queue into empty stores."""
     rotation = app.rotation
     store = app.sing_store
+    store.set_auto_approve(True)   # Andrew's usual live setting
 
     def add(singer, song, **kw):
         return rotation.add_entry(singer, song, **kw)["id"]
@@ -150,6 +151,19 @@ def main():
     # Keep play-stats writes in the dev dir too (never the repo/box copy).
     os.makedirs(DEV_DATA_DIR, exist_ok=True)
     cfg["media_db_path"] = os.path.join(DEV_DATA_DIR, "media_library.db")
+    # Real song search off the box: the Divebar Cloud Function serves the KN
+    # community catalog + GCS-mirror search (unauthenticated HTTP; the local
+    # catalog mirror is only the on-box speed layer and gracefully falls
+    # through to the CF when absent). Same endpoint the box uses.
+    if not cfg.get("divebar_api_url"):
+        cfg["divebar_api_url"] = (
+            "https://us-central1-nomadkaraoke.cloudfunctions.net/divebar-lookup")
+    # Downloads land in the dev dir so song ADDITIONS work end-to-end
+    # (divebar/YouTube fetches write here; playback needs the real box).
+    media_dir = os.path.join(DEV_DATA_DIR, "videos")
+    os.makedirs(media_dir, exist_ok=True)
+    cfg["download_folder"] = media_dir
+    cfg["media_folders"] = [media_dir]
     # Never sync a dev rotation to the real Google Sheet.
     cfg.pop("rotation_sheet_id", None)
 
