@@ -129,8 +129,8 @@
       "commercialWhat": "A professional karaoke production: a cover band re-records the backing track and a company adds the lyrics.",
       "commercialHow": "Like classic karaoke — a faithful cover, but not the original recording.",
       "commercialGood": "Classics and well-known hits; lyric timing is usually very reliable.",
-      "compareCommunity": "Compare: commercial tracks are re-recorded covers made for karaoke — they sound like karaoke.",
-      "compareCommercial": "Compare: community tracks use the original song's audio with the vocals removed — they sound like the record."
+      "commercialSummary": "For comparison, commercial tracks are covers re-recorded for karaoke — they sound like karaoke.",
+      "communitySummary": "For comparison, community tracks use the original song's audio with the vocals removed — they sound like the record."
     },
     "brands": {
       "CC": "One of the most prolific community producers — original-recording tracks with AI vocal removal and clean, readable lyrics.",

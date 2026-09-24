@@ -193,6 +193,20 @@ def merge_deep(base: dict, overlay: dict) -> dict:
     return result
 
 
+def prune_to_english(data: dict, english: dict) -> dict:
+    """Drop keys that no longer exist in en.json (renamed/removed keys would
+    otherwise linger in every locale after a delta run and fail parity)."""
+    out = {}
+    for key, value in english.items():
+        if key not in data:
+            continue
+        if isinstance(value, dict) and isinstance(data[key], dict):
+            out[key] = prune_to_english(data[key], value)
+        else:
+            out[key] = data[key]
+    return out
+
+
 def compute_changed_keys(current: dict, snapshot: dict) -> set:
     """Return set of dot-separated keys that are new or changed."""
     current_flat = flatten_keys(current)
@@ -440,9 +454,10 @@ async def translate_locale(
                         dst = dst.setdefault(part, {})
                     dst[parts[-1]] = translated_value
 
-                # Merge with existing data if in delta mode
+                # Merge with existing data if in delta mode, then drop keys
+                # that were removed/renamed in en.json since the last run.
                 if existing_data is not None and delta_keys is not None:
-                    parsed = merge_deep(existing_data, parsed)
+                    parsed = prune_to_english(merge_deep(existing_data, parsed), english_data)
 
                 # Write output
                 out_path = messages_dir / f"{target_locale}.json"
@@ -524,9 +539,10 @@ async def translate_locale(
 
             cache.upload(target_locale)
 
-        # Merge delta into existing if applicable
+        # Merge delta into existing if applicable, then drop keys that were
+        # removed/renamed in en.json since the last run.
         if existing_data is not None and delta_keys is not None:
-            parsed = merge_deep(existing_data, parsed)
+            parsed = prune_to_english(merge_deep(existing_data, parsed), english_data)
 
         # Write output
         out_path = messages_dir / f"{target_locale}.json"
@@ -655,6 +671,8 @@ async def async_main(args):
                     print(f"  {locale}: failed")
     else:
         print()
+    if failed:
+        sys.exit(1)
 
 
 def main():

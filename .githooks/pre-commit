@@ -27,10 +27,16 @@ fi
 MESSAGES_DIR="kj-controller/static-sing/messages"
 if git diff --cached --name-only --diff-filter=ACM | grep -q "^${MESSAGES_DIR}/en\.json$"; then
   echo "i18n: singer UI en.json changed — running translation pipeline..."
-  if python scripts/translate.py --messages-dir "$MESSAGES_DIR" --target all --skip-review 2>&1 | tail -5; then
-    git add "$MESSAGES_DIR"/*.json
+  I18N_LOG="$(mktemp)"
+  if python scripts/translate.py --messages-dir "$MESSAGES_DIR" --target all --skip-review >"$I18N_LOG" 2>&1; then
+    tail -5 "$I18N_LOG"
+    # Stage only the real locale files + the delta snapshot — never a
+    # `<locale>.raw.json` left behind by a malformed model response.
+    git add "$MESSAGES_DIR"/[a-z][a-z].json "$MESSAGES_DIR"/.en-snapshot.json 2>/dev/null || true
     echo "i18n: translations refreshed and staged."
   else
-    echo "  Warning: translation failed (GCP auth may be missing). CI will flag missing keys."
+    tail -15 "$I18N_LOG"
+    echo "  Warning: translation failed (GCP auth may be missing, or a locale failed). CI will flag missing keys."
   fi
+  rm -f "$I18N_LOG"
 fi

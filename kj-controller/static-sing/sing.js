@@ -1325,8 +1325,8 @@ function openClassExplainer(cls) {
       el("dt", {}, t("versions.explainer.goodFor")), el("dd", {}, p("Good")),
     ),
     el("p", { class: "sing-modal-hint" },
-      cls === "community" ? t("versions.explainer.compareCommunity")
-                          : t("versions.explainer.compareCommercial")),
+      cls === "community" ? t("versions.explainer.commercialSummary")
+                          : t("versions.explainer.communitySummary")),
   );
 }
 

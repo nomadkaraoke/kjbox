@@ -121,16 +121,27 @@ export async function initI18n(base, version) {
   await _activate(want);
 }
 
+// Sequence token so two quick taps in the picker can't race: only the most
+// recent _activate() call may commit its result.
+let _activateSeq = 0;
+
 async function _activate(locale) {
+  const seq = ++_activateSeq;
   if (locale === "en" || !LOCALES[locale]) {
     _locale = "en";
     _messages = _en;
   } else {
+    let loaded = null;
     try {
-      _messages = await _fetchMessages(locale);
-      _locale = locale;
+      loaded = await _fetchMessages(locale);
     } catch (e) {
       console.warn(`i18n: ${locale}.json failed to load — falling back to English`, e);
+    }
+    if (seq !== _activateSeq) return;   // superseded by a newer choice — drop this result
+    if (loaded) {
+      _messages = loaded;
+      _locale = locale;
+    } else {
       _locale = "en";
       _messages = _en;
     }

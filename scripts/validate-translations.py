@@ -46,7 +46,7 @@ def validate_locale(en_flat: dict, locale_path: Path, keys_only: bool = False) -
 
     # Check valid JSON
     try:
-        with open(locale_path) as f:
+        with open(locale_path, encoding="utf-8") as f:
             raw = f.read()
         data = json.loads(raw)
     except json.JSONDecodeError as e:
@@ -128,7 +128,7 @@ def main():
         print(f"Error: {en_path} not found")
         sys.exit(1)
 
-    with open(en_path) as f:
+    with open(en_path, encoding="utf-8") as f:
         en_data = json.load(f)
     en_flat = flatten_keys(en_data)
 

@@ -6,12 +6,17 @@ on:
       - "kj-controller/static-sing/messages/**"
       - "kj-controller/static-sing/i18n.js"
       - "kj-controller/static-sing/sing.js"
+      - "kj-controller/templates/sing.html"
       - "scripts/translate.py"
       - "scripts/validate-translations.py"
+      - "scripts/check-i18n-keys.py"
   push:
     branches: [main]
     paths:
       - "kj-controller/static-sing/messages/**"
+
+permissions:
+  contents: read
 
 jobs:
   validate:

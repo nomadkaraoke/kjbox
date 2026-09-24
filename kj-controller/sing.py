@@ -123,10 +123,23 @@ def _singer_rate_limited(req, data=None):
     if isinstance(data, dict):
         device_id = str(data.get("device_id") or "").strip()[:64]
     ip = _client_ip(req)
-    if _rate_limit_exceeded(f"ip:{ip}", ip_limit, window):
-        return True
-    if device_id and _rate_limit_exceeded(f"dev:{device_id}", dev_limit, window):
-        return True
+    # Check BOTH budgets before recording either slot: a phone that has hit
+    # its own limit must not keep burning the shared per-IP budget with every
+    # rejected retry (that would eventually 429 everyone else at the venue).
+    now = time.monotonic()
+    cutoff = now - window
+    keys = [(f"ip:{ip}", ip_limit)]
+    if device_id:
+        keys.append((f"dev:{device_id}", dev_limit))
+    with _rate_limit_lock:
+        for key, limit in keys:
+            q = _rate_limit_state[key]
+            while q and q[0] < cutoff:
+                q.popleft()
+            if len(q) >= limit:
+                return True
+        for key, _limit in keys:
+            _rate_limit_state[key].append(now)
     return False
 
 

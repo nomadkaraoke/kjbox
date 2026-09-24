@@ -54,6 +54,21 @@ class TestSingerRateLimit:
             body = {"device_id": "minted-99"}
             assert sing._singer_rate_limited(_Req("10.0.0.9", body), body)
 
+    def test_rejected_device_does_not_burn_the_shared_ip_budget(self, flask_app):
+        """A phone that has hit its own limit must not consume an IP slot on
+        every rejected retry — that would 429 everyone else at the venue."""
+        with flask_app.app_context():
+            flask_app.kj_config["sing_rate_limit_per_device"] = 1
+            flask_app.kj_config["sing_rate_limit_per_ip"] = 3
+            spent = {"device_id": "spent"}
+            assert not sing._singer_rate_limited(_Req("10.0.0.3", spent), spent)
+            for _ in range(10):
+                assert sing._singer_rate_limited(_Req("10.0.0.3", spent), spent)
+            # Only ONE ip slot was ever recorded → two more devices still fit.
+            for name in ("fresh-1", "fresh-2"):
+                body = {"device_id": name}
+                assert not sing._singer_rate_limited(_Req("10.0.0.3", body), body)
+
     def test_reads_body_when_not_supplied(self, flask_app):
         with flask_app.app_context():
             flask_app.kj_config["sing_rate_limit_per_device"] = 1
