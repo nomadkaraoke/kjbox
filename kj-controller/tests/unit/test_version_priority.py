@@ -129,6 +129,11 @@ class TestResolveBrandFromDiscId:
         assert code == "CC"
         assert cls == "community"
 
+    def test_mr_and_pt_download_disc_prefixes(self):
+        """Local library download sets: "ME-" = Mr. Entertainer, "PY-" = Party Tyme."""
+        assert resolve_brand(disc_id="ME-01169") == ("MR", "commercial")
+        assert resolve_brand(disc_id="PY-00234") == ("PT", "commercial")
+
     def test_sc_disc_id_with_number_run(self):
         code, cls = resolve_brand(disc_id="SC2411-08")
         assert code == "SC"

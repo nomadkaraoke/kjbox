@@ -1145,11 +1145,14 @@ body {
     background-color: rgba(255, 255, 255, 0.04); border: 1px solid #3a3a3a; color: #888;
 }
 
-.kn-local-section { border-bottom: 1px solid #2a2a2a; background-color: rgba(34, 197, 94, 0.04); }
-.kn-local-header {
-    padding: 5px 12px 3px 28px;
-    font-size: 0.7em; color: #22c55e; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;
+/* Library files inside a KN song group: brand line + folder subline. */
+.kn-version-main { display: flex; flex-direction: column; flex: 1; min-width: 0; gap: 2px; }
+.kn-local-version .kn-brand-name { color: #a8e6a8; }
+.kn-local-version .catalog-folder {
+    color: rgba(34, 197, 94, 0.45); font-size: 0.8em;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
+.kn-song-header .kn-downloaded-badge { font-weight: 400; }
 .kn-local-match {
     display: flex; align-items: center; justify-content: space-between;
     padding: 5px 12px 5px 28px; border-top: 1px solid rgba(34, 197, 94, 0.1); gap: 8px;

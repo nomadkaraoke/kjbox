@@ -132,6 +132,22 @@ def fts_match_query(text):
     return ' '.join(quoted)
 
 
+# Bracketed file-quality tags that karaoke filenames carry on the artist or
+# title ("Fall Out Boy (MPX)", "Dance, Dance [HM]"). They describe the file,
+# not the song, so they must not split a song into its own group. Musical
+# qualifiers like "(Live)" are deliberately NOT here — those stay distinct.
+_FILE_TAG_RE = re.compile(
+    r'\s*[\[(]\s*(?:mpx|multiplex|hm|homemade)\s*[\])]',
+    re.IGNORECASE,
+)
+
+
 def group_key(artist, title):
-    """Deterministic (artist, title) -> collapse key for grouping results."""
-    return f"{normalize(artist)}|||{normalize(title)}"
+    """Deterministic (artist, title) -> collapse key for grouping results.
+
+    Grouping-only: drops file-quality tags (see ``_FILE_TAG_RE``) before
+    normalizing. Not used for indexing, so NORMALIZER_VERSION is unaffected.
+    """
+    def _key(text):
+        return normalize(_FILE_TAG_RE.sub(' ', text or ''))
+    return f"{_key(artist)}|||{_key(title)}"

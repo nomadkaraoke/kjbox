@@ -3539,21 +3539,19 @@ async function searchKaraokeNerds() {
         log(`Search error: ${data.error}`, 'error');
         return;
     }
-    // Server-composed unified payload — the same composition rotation/singer
-    // search get: KN songs (tracks pre-sorted, with in_library / local_path /
-    // divebar mirror xref), local library matches for the query, and
-    // standalone GCS-mirror versions. No client-side matching.
-    const songs = data.karaoke_nerds || [];
-    const localRows = data.local || [];
-    const mirrorRows = data.divebar || [];
-    if (songs.length === 0 && localRows.length === 0 && mirrorRows.length === 0) {
+    // Server-composed, song-grouped payload — the same grouping singer search
+    // gets: one group per song holding its library files, KN tracks (with
+    // local_path / divebar mirror xref) and standalone GCS-mirror files,
+    // ranked best-first. No client-side matching.
+    const groups = data.songs || [];
+    if (groups.length === 0) {
         log('No results found on Karaoke Nerds.', 'error');
         document.getElementById('kn-results').innerHTML =
             '<div class="kn-no-results">No results found.</div>';
         return;
     }
-    log(`Found ${songs.length} song${songs.length !== 1 ? 's' : ''} on Karaoke Nerds.`, 'success');
-    renderKNResults(songs, localRows, mirrorRows);
+    log(`Found ${groups.length} song${groups.length !== 1 ? 's' : ''}.`, 'success');
+    renderKNResults(groups);
 }
 
 function clearKNResults() {
@@ -3561,199 +3559,207 @@ function clearKNResults() {
     document.getElementById('kn-query').value = '';
 }
 
-function renderKNResults(songs, localRows = [], mirrorRows = []) {
+function renderKNResults(groups) {
     const container = document.getElementById('kn-results');
     container.innerHTML = '';
 
-    // Local library matches come server-matched (same engine as rotation
-    // search, typo-tolerant, ranked — masters first). A KN NOMAD row whose
-    // master we hold is suppressed server-side; its local copy shows here.
-    if (localRows.length > 0) {
-        container.appendChild(renderKnLibrarySection(localRows));
-    }
-
-    songs.forEach((song, idx) => {
+    groups.forEach((group, idx) => {
         const songId = `kn-song-${idx}`;
-        const trackCount = song.tracks.length;
+        const versions = group.versions || [];
+        // The top-ranked song opens by default; the rest start collapsed.
+        const expanded = idx === 0;
 
-        // Song header (collapsed by default; expansion state lives in the DOM)
         const header = document.createElement('div');
         header.className = 'kn-song-header';
         header.onclick = () => toggleKNSong(songId);
 
         const chevron = document.createElement('span');
-        chevron.className = 'folder-chevron';
+        chevron.className = 'folder-chevron' + (expanded ? ' expanded' : '');
         chevron.id = 'kn-chevron-' + idx;
-        chevron.textContent = '\u25B6';
+        chevron.textContent = '▶';
 
         const titleText = document.createElement('span');
         titleText.className = 'kn-song-title';
-        titleText.textContent = `${song.title} \u2014 ${song.artist}`;
-
-        const count = document.createElement('span');
-        count.className = 'kn-track-count';
-        count.textContent = `${trackCount} track${trackCount !== 1 ? 's' : ''}`;
+        titleText.textContent = `${group.title} — ${group.artist}`;
 
         header.appendChild(chevron);
         header.appendChild(titleText);
-        header.appendChild(createCopyBtn(`${song.artist} - ${song.title}`));
+
+        const localCount = versions.filter(v => v.source === 'local').length;
+        if (localCount > 0) {
+            const lib = document.createElement('span');
+            lib.className = 'kn-downloaded-badge';
+            lib.textContent = `${localCount} in library`;
+            header.appendChild(lib);
+        }
+
+        header.appendChild(createCopyBtn(`${group.artist} - ${group.title}`));
+
+        const count = document.createElement('span');
+        count.className = 'kn-track-count';
+        count.textContent = `${versions.length} version${versions.length !== 1 ? 's' : ''}`;
         header.appendChild(count);
         container.appendChild(header);
 
-        // Track list
         const trackList = document.createElement('div');
-        trackList.className = 'kn-track-list collapsed';
+        trackList.className = 'kn-track-list' + (expanded ? '' : ' collapsed');
         trackList.id = songId;
 
-        // Backend has sorted tracks by priority_rank already.
-        song.tracks.forEach(track => {
-            const trackEl = document.createElement('div');
-            const isPreferred = track.priority_class === 'community'
-                && (track.priority_rank ?? 9999) < 1000;
-            trackEl.className = 'kn-track' +
-                (track.is_community ? ' community' : '') +
-                (isPreferred ? ' preferred' : '');
-
-            const info = document.createElement('span');
-            info.className = 'kn-track-info';
-
-            const brandSpan = document.createElement('span');
-            brandSpan.className = 'kn-brand-name';
-            brandSpan.textContent = track.brand_name;
-            info.appendChild(brandSpan);
-
-            const codeSpan = document.createElement('span');
-            codeSpan.className = 'kn-brand-code';
-            codeSpan.textContent = track.brand_code;
-            info.appendChild(codeSpan);
-
-            if (track.is_community) {
-                const badge = document.createElement('span');
-                badge.className = 'kn-community-badge';
-                badge.textContent = 'Community';
-                info.appendChild(badge);
-            } else if (isPreferred) {
-                const badge = document.createElement('span');
-                badge.className = 'kn-preferred-badge';
-                badge.textContent = '\u2605';
-                badge.title = 'Preferred brand';
-                info.appendChild(badge);
-            }
-
-            // Server-side join: track.local_path is set when this track's
-            // YouTube video is already on disk (NOMAD masters we hold are
-            // suppressed server-side and surface in the library section).
-            const downloadedPath = track.local_path || null;
-
-            const actions = document.createElement('span');
-            actions.className = 'kn-track-actions';
-
-            if (downloadedPath) {
-                const badge = document.createElement('span');
-                badge.className = 'kn-downloaded-badge';
-                badge.textContent = '\u2713 Downloaded';
-                actions.appendChild(badge);
-
-                const playBtn = document.createElement('button');
-                playBtn.className = 'kn-play-btn';
-                playBtn.textContent = 'Play';
-                playBtn.onclick = (e) => {
-                    e.stopPropagation();
-                    playMedia(downloadedPath);
-                };
-                actions.appendChild(playBtn);
-            } else if (track.divebar && track.divebar.file_id) {
-                // Same-brand file in the Divebar GCS mirror (server xref) —
-                // download from there instead of YouTube (canonical file).
-                actions.appendChild(makeDivebarDownloadBtn({
-                    file_id: track.divebar.file_id,
-                    artist: song.artist,
-                    title: song.title,
-                    brand_code: track.brand_code,
-                    format: track.divebar.format,
-                }, 'From the GCS mirror (not YouTube)'));
-            } else if (track.youtube_url) {
-                const dlBtn = document.createElement('button');
-                dlBtn.className = 'kn-download-btn';
-                dlBtn.textContent = 'Download';
-                dlBtn.onclick = (e) => {
-                    e.stopPropagation();
-                    downloadKNTrack(track.youtube_url);
-                };
-                actions.appendChild(dlBtn);
-            } else {
-                // Full-catalog (commercial disc) release — exists on KN but has
-                // no web version, so there is nothing to download or play.
-                const badge = document.createElement('span');
-                badge.className = 'kn-disc-only-badge';
-                badge.textContent = 'Disc only';
-                badge.title = 'Commercial release with no web version — check the local library';
-                actions.appendChild(badge);
-            }
-
-            trackEl.appendChild(info);
-            trackEl.appendChild(actions);
-            trackList.appendChild(trackEl);
+        // Backend has sorted versions by priority_rank already.
+        versions.forEach(v => {
+            trackList.appendChild(v.source === 'local'
+                ? renderKnLocalVersion(v)
+                : renderKnTrackVersion(group, v));
         });
 
         container.appendChild(trackList);
     });
-
-    // Standalone GCS-mirror versions — brands neither a KN row nor a local
-    // file covers (server-composed, same rows rotation search surfaces).
-    if (mirrorRows.length > 0) {
-        container.appendChild(renderKnMirrorSection(mirrorRows));
-    }
 }
 
-// One shared skeleton for the KN panel's local sections ("In your library",
-// "GCS mirror"): header with count, then a row per item with a title line,
-// a format pill (click for tech details when a local path exists), a muted
-// subline, and one action button.
-function renderKnSection(headerText, rows, rowProps) {
-    const section = document.createElement('div');
-    section.className = 'kn-local-section';
+// Brand name + code (+ Community / preferred badge) — the left-hand identity
+// shared by every version row in the KN panel.
+function knVersionInfo(brandName, brandCode, v, isCommunity) {
+    const info = document.createElement('span');
+    info.className = 'kn-track-info';
 
-    const header = document.createElement('div');
-    header.className = 'kn-local-header';
-    header.textContent = headerText;
-    section.appendChild(header);
+    const brandSpan = document.createElement('span');
+    brandSpan.className = 'kn-brand-name';
+    brandSpan.textContent = brandName;
+    info.appendChild(brandSpan);
 
-    rows.forEach(r => {
-        const props = rowProps(r);
-        const row = document.createElement('div');
-        row.className = 'kn-local-match';
+    if (brandCode && brandCode !== brandName) {
+        const codeSpan = document.createElement('span');
+        codeSpan.className = 'kn-brand-code';
+        codeSpan.textContent = brandCode;
+        info.appendChild(codeSpan);
+    }
 
-        const detail = document.createElement('div');
-        detail.className = 'catalog-detail';
+    const isPreferred = v.priority_class === 'community'
+        && (v.priority_rank ?? 9999) < 1000;
+    if (isCommunity) {
+        const badge = document.createElement('span');
+        badge.className = 'kn-community-badge';
+        badge.textContent = 'Community';
+        info.appendChild(badge);
+    } else if (isPreferred) {
+        const badge = document.createElement('span');
+        badge.className = 'kn-preferred-badge';
+        badge.textContent = '★';
+        badge.title = 'Preferred brand';
+        info.appendChild(badge);
+    }
+    return info;
+}
 
-        const titleRow = document.createElement('span');
-        titleRow.textContent = props.name + ' ';
-        if (props.format) {
-            // Same colorised pill as the Library rows, incl. the
-            // click-for-technical-details modal when we have a local path.
-            titleRow.appendChild(mediaFormatBadge({
-                media_kind: props.format === 'cdg+mp3' ? 'cdg-zip' : props.format,
-                file_path: props.path,
-                display_name: props.name,
-            }));
-        }
-        detail.appendChild(titleRow);
+function knVersionRow(v, isCommunity) {
+    const isPreferred = v.priority_class === 'community'
+        && (v.priority_rank ?? 9999) < 1000;
+    const row = document.createElement('div');
+    row.className = 'kn-track' +
+        (isCommunity ? ' community' : '') +
+        (isPreferred ? ' preferred' : '');
+    return row;
+}
 
-        if (props.subline && props.subline.text) {
-            const sub = document.createElement('div');
-            sub.className = 'catalog-folder';
-            sub.textContent = props.subline.text;
-            if (props.subline.title) sub.title = props.subline.title;
-            detail.appendChild(sub);
-        }
+function knPlayBtn(path) {
+    const playBtn = document.createElement('button');
+    playBtn.className = 'kn-play-btn';
+    playBtn.textContent = 'Play';
+    playBtn.onclick = (e) => {
+        e.stopPropagation();
+        playMedia(path);
+    };
+    return playBtn;
+}
 
-        row.appendChild(detail);
-        row.appendChild(props.actionBtn);
-        section.appendChild(row);
-    });
+// A file in the local library: brand + disc id, colorised format pill (click
+// for technical details), folder subline, Play.
+function renderKnLocalVersion(v) {
+    const r = v.local || {};
+    const row = knVersionRow(v, false);
+    row.classList.add('kn-local-version');
 
-    return section;
+    const main = document.createElement('div');
+    main.className = 'kn-version-main';
+    const info = knVersionInfo(v.priority_display || 'Library file',
+        r.disc_id || '', v, v.priority_class === 'community');
+    if (r.format) {
+        info.appendChild(mediaFormatBadge({
+            media_kind: r.format === 'cdg+mp3' ? 'cdg-zip' : r.format,
+            file_path: r.path,
+            display_name: [r.artist, r.title].filter(Boolean).join(' - '),
+        }));
+    }
+    main.appendChild(info);
+
+    const folder = r.folder || (r.path || '').replace(/\/[^/]*$/, '');
+    if (folder) {
+        const sub = document.createElement('div');
+        sub.className = 'catalog-folder';
+        sub.textContent = prettyFolder(folder);
+        sub.title = r.path || folder;
+        main.appendChild(sub);
+    }
+    row.appendChild(main);
+
+    const actions = document.createElement('span');
+    actions.className = 'kn-track-actions';
+    actions.appendChild(knPlayBtn(r.path));
+    row.appendChild(actions);
+    return row;
+}
+
+// A KaraokeNerds track (or a standalone GCS-mirror file, which the server
+// folds in with the same shape: kn.divebar set, no YouTube URL).
+function renderKnTrackVersion(group, v) {
+    const track = v.kn || {};
+    const row = knVersionRow(v, track.is_community);
+    row.appendChild(knVersionInfo(track.brand_name || track.brand_code || '',
+        track.brand_code || '', v, track.is_community));
+
+    const actions = document.createElement('span');
+    actions.className = 'kn-track-actions';
+
+    // Server-side join: track.local_path is set when this track's YouTube
+    // video is already on disk.
+    if (track.local_path) {
+        const badge = document.createElement('span');
+        badge.className = 'kn-downloaded-badge';
+        badge.textContent = '✓ Downloaded';
+        actions.appendChild(badge);
+        actions.appendChild(knPlayBtn(track.local_path));
+    } else if (track.divebar && track.divebar.file_id) {
+        // Same-brand file in the Divebar GCS mirror (server xref) —
+        // download from there instead of YouTube (canonical file).
+        actions.appendChild(makeDivebarDownloadBtn({
+            file_id: track.divebar.file_id,
+            artist: group.artist,
+            title: group.title,
+            brand_code: track.brand_code,
+            format: track.divebar.format,
+        }, track.mirror_only ? 'From the GCS mirror'
+                             : 'From the GCS mirror (not YouTube)'));
+    } else if (track.youtube_url) {
+        const dlBtn = document.createElement('button');
+        dlBtn.className = 'kn-download-btn';
+        dlBtn.textContent = 'Download';
+        dlBtn.onclick = (e) => {
+            e.stopPropagation();
+            downloadKNTrack(track.youtube_url);
+        };
+        actions.appendChild(dlBtn);
+    } else {
+        // Full-catalog (commercial disc) release — exists on KN but has
+        // no web version, so there is nothing to download or play.
+        const badge = document.createElement('span');
+        badge.className = 'kn-disc-only-badge';
+        badge.textContent = 'Disc only';
+        badge.title = 'Commercial release with no web version';
+        actions.appendChild(badge);
+    }
+
+    row.appendChild(actions);
+    return row;
 }
 
 // Download-from-GCS-mirror button (same payload the Divebar panel sends).
@@ -3769,52 +3775,6 @@ function makeDivebarDownloadBtn(payload, title) {
         dlBtn.textContent = 'Queued';
     };
     return dlBtn;
-}
-
-// "In your library" -- server-matched local rows (media index + external
-// catalog) for the query, via the shared engine: typo-tolerant, ranked,
-// masters first. Replaces the old per-song lazy "In your collection"
-// section and its client-side term filter.
-function renderKnLibrarySection(rows) {
-    return renderKnSection(`In your library (${rows.length})`, rows, r => {
-        const name = [r.artist, r.title].filter(Boolean).join(' - ')
-            || (r.filename || '').replace(/\.\w+$/, '');
-        const folder = r.folder || (r.path || '').replace(/\/[^/]*$/, '');
-        const playBtn = document.createElement('button');
-        playBtn.className = 'kn-play-btn';
-        playBtn.textContent = 'Play';
-        playBtn.onclick = (e) => {
-            e.stopPropagation();
-            playMedia(r.path);
-        };
-        return {
-            name: name,
-            format: r.format,
-            path: r.path,
-            subline: folder
-                ? { text: prettyFolder(folder), title: r.path || folder }
-                : null,
-            actionBtn: playBtn,
-        };
-    });
-}
-
-// Standalone Divebar GCS-mirror versions, downloadable directly (same
-// payload as the Divebar panel's rows).
-function renderKnMirrorSection(rows) {
-    return renderKnSection(`GCS mirror (${rows.length})`, rows, dv => ({
-        name: [dv.artist, dv.title].filter(Boolean).join(' - '),
-        format: dv.format,
-        path: null,
-        subline: { text: dv.brand_name || dv.brand_code || '' },
-        actionBtn: makeDivebarDownloadBtn({
-            file_id: dv.file_id,
-            artist: dv.artist,
-            title: dv.title,
-            brand_code: dv.brand_code,
-            format: dv.format,
-        }, 'From the GCS mirror'),
-    }));
 }
 
 function toggleKNSong(songId) {

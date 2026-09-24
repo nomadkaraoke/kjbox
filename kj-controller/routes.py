@@ -283,6 +283,39 @@ def _enrich_search_stats(result):
             pass
 
 
+def _kn_track_is_playable(track):
+    """True when a KN track can actually be fetched: a YouTube URL, a
+    Divebar GCS-mirror file, or an already-downloaded local copy."""
+    return bool(
+        (track.get("youtube_url") or "").strip()
+        or (track.get("divebar") or {}).get("file_id")
+        or track.get("local_path")
+    )
+
+
+def _version_is_playable(version):
+    return version["source"] == "local" or _kn_track_is_playable(version["kn"])
+
+
+_DISC_PREFIX_RE = re.compile(r"^([A-Za-z]+)")
+
+
+def _version_brand_keys(version):
+    """Brand identities a grouped version answers to: its canonical registry
+    brand plus the raw code (KN ``brand_code`` / a local file's disc-id prefix,
+    e.g. "ASK" from "ASK-036498") so unregistered brands still match."""
+    keys = {version.get("priority_brand")}
+    if version["source"] == "local":
+        m = _DISC_PREFIX_RE.match((version["local"] or {}).get("disc_id") or "")
+        if m:
+            keys.add(m.group(1).upper())
+    else:
+        keys.add((version["kn"].get("brand_code") or "").upper())
+    keys.discard(None)
+    keys.discard("")
+    return keys
+
+
 def _group_relevance(group, query_key):
     """Sort key for singer-facing groups — higher is better.
 
@@ -314,7 +347,8 @@ def _group_relevance(group, query_key):
     )
 
 
-def _group_search_results(local_results, kn_results, query=None):
+def _group_search_results(local_results, kn_results, query=None,
+                          divebar_rows=None, include_disc_only=False):
     """Collapse local + KN results into one group per normalized (artist, title).
 
     Args:
@@ -325,6 +359,15 @@ def _group_search_results(local_results, kn_results, query=None):
         query: the singer's search text — when given, groups are ranked by
             ``_group_relevance`` (title match → availability → version count)
             instead of raw catalog order.
+        divebar_rows: standalone GCS-mirror rows from
+            ``_surface_divebar_versions`` (brands no KN row or local file
+            covers). Each joins its song's group as a KN-shaped version with
+            ``kn.divebar`` set and no YouTube URL — the shape every consumer
+            already renders, previews and submits as ``source_type=divebar``.
+        include_disc_only: keep KN tracks with neither a YouTube URL nor a
+            mirror file (commercial disc releases). The singer flow strips
+            them (unapprovable); the KJ's KN panel keeps them as information,
+            minus brands the group already has a playable version of.
 
     Returns a list of group dicts:
 
@@ -365,6 +408,8 @@ def _group_search_results(local_results, kn_results, query=None):
         song_artist = song.get("artist") or ""
         song_title = song.get("title") or ""
         for track in song.get("tracks") or []:
+            if not include_disc_only and not _kn_track_is_playable(track):
+                continue
             key = _normalize_song_key(song_artist, song_title)
             g = groups.setdefault(key, {
                 "key": key,
@@ -377,6 +422,37 @@ def _group_search_results(local_results, kn_results, query=None):
                 "kn": {**track, "song_artist": song_artist,
                        "song_title": song_title},
             })
+
+    for row in divebar_rows or []:
+        artist = row.get("artist") or ""
+        title = row.get("title") or ""
+        key = _normalize_song_key(artist, title)
+        g = groups.setdefault(key, {
+            "key": key,
+            "artist": artist,
+            "title": title,
+            "versions": [],
+        })
+        g["versions"].append({
+            "source": "kn",
+            "kn": {
+                "brand_code": row.get("brand_code"),
+                "brand_name": row.get("brand_name"),
+                "is_community": row.get("priority_class") == "community",
+                "youtube_url": "",
+                "mirror_only": True,
+                "divebar": {
+                    "file_id": row.get("file_id"),
+                    "format": row.get("format"),
+                    "file_size": row.get("file_size"),
+                    "in_gcs": row.get("in_gcs"),
+                    "brand": row.get("brand_name"),
+                    "brand_code": row.get("brand_code"),
+                },
+                "song_artist": artist,
+                "song_title": title,
+            },
+        })
 
     try:
         cfg = current_app.kj_config
@@ -403,7 +479,23 @@ def _group_search_results(local_results, kn_results, query=None):
         # Annotate every version with priority_rank/brand/class, then sort
         # in-place so clients that ignore the rank field still see best-first.
         version_priority.annotate_versions(versions, cfg, shape="kj_pick")
-        versions.sort(key=lambda v: v.get("priority_rank", 9999))
+        if include_disc_only:
+            # A disc-only row for a brand we can already play is pure noise
+            # ("SC — Disc only" under our own SC file); keep only the ones
+            # that tell the KJ about a brand we don't have.
+            playable_brands = set()
+            for v in versions:
+                if _version_is_playable(v):
+                    playable_brands |= _version_brand_keys(v)
+            versions[:] = [
+                v for v in versions
+                if _version_is_playable(v)
+                or not (_version_brand_keys(v) & playable_brands)
+            ]
+            g["version_count"] = len(versions)
+        # Playable versions first, then (KN panel only) disc-only info rows.
+        versions.sort(key=lambda v: (not _version_is_playable(v),
+                                     v.get("priority_rank", 9999)))
         out.append(g)
 
     if query:
@@ -1924,13 +2016,12 @@ def kn_search():
 
     Backed by our own catalog copies (local mirror first, Divebar Cloud
     Function fallback — never a live scrape of karaokenerds.com). Returns the
-    full unified-search payload ``{local, karaoke_nerds, divebar,
-    karaoke_nerds_timeout}`` so the KN panel gets the exact same composition
-    as rotation/singer search: server-side ``in_library`` + ``local_path``,
-    Divebar GCS-mirror cross-ref (``track.divebar``), and local-master
-    suppression — with no client-side matching logic. Per-song track lists
-    are sorted best-first so the frontend renders in order without
-    duplicating the brand registry.
+    same song-grouped shape as singer search, ``{songs, karaoke_nerds_timeout}``:
+    one group per normalized (artist, title) holding local files, KN tracks
+    (with ``local_path`` / Divebar mirror cross-ref) and standalone GCS-mirror
+    files, ranked best-first — so the panel and the singer UI can never
+    disagree about which versions a song has. Unlike the singer flow, disc-only
+    KN tracks are kept (for brands we don't already have) as information.
     """
     data = request.get_json(silent=True) or {}
     query = data.get('query', '').strip()
@@ -1939,7 +2030,19 @@ def kn_search():
 
     cfg = current_app.kj_config
     log_message(f"Karaoke Nerds search: {query}", cfg)
-    return jsonify(unified_search(query, current_app._get_current_object()))
+    # Same local-catalog cap as singer search (sing_search_catalog_limit):
+    # the picker's default 10 truncates popular songs' library versions.
+    return jsonify(unified_search(
+        query, current_app._get_current_object(), grouped=True,
+        include_disc_only=True,
+        catalog_limit=_kn_panel_catalog_limit(current_app.kj_config)))
+
+
+def _kn_panel_catalog_limit(cfg):
+    try:
+        return max(1, min(int(cfg.get("sing_search_catalog_limit") or 60), 200))
+    except (TypeError, ValueError):
+        return 60
 
 
 @routes_bp.route('/karaoke-nerds/config', methods=['GET'])
@@ -4928,17 +5031,18 @@ def _divebar_search_local_first(query, cfg, mirror, limit=100):
 
 
 def unified_search(query, app, *, grouped=False, local_only=False,
-                   catalog_limit=10):
+                   catalog_limit=10, include_disc_only=False):
     """Unified search helper: local catalog + Karaoke Nerds + Divebar cross-reference.
 
     Shared by /rotation/search (KJ-side) and /sing/search (singer-side) so
     the same result shape (including Divebar file_id cross-ref and in_library
     flags) reaches both consumers.
 
-    When ``grouped=True`` (singer-facing flow only) the return shape changes to
-    ``{"songs": [...group dicts...], "karaoke_nerds_timeout": bool}`` — see
-    ``_group_search_results``. The admin-side flow keeps ``grouped=False`` so
-    existing callers aren't disrupted.
+    When ``grouped=True`` (singer search and the KJ's KN panel) the return
+    shape changes to ``{"songs": [...group dicts...], "karaoke_nerds_timeout":
+    bool}`` — see ``_group_search_results``; ``include_disc_only`` keeps
+    unplayable disc-only KN tracks for the KN panel. Rotation search keeps
+    ``grouped=False`` (flat sections).
 
     When ``local_only=True`` the slow Karaoke Nerds scrape and Divebar mirror
     lookup are skipped entirely and only the local library (catalog + scanned
@@ -5061,20 +5165,14 @@ def unified_search(query, app, *, grouped=False, local_only=False,
         pass  # best-effort; never break search
 
     if grouped:
-        # Defensive filter (Phase B §4): a KN track with neither a YouTube URL
-        # nor a divebar mirror is unapprovable — strip it so the singer never
-        # sees it, which also keeps per-group `versions` cleaner.
-        filtered_kn = []
-        for song in kn_results:
-            good_tracks = [
-                t for t in song.get("tracks") or []
-                if (t.get("youtube_url") or "").strip()
-                or (t.get("divebar") or {}).get("file_id")
-            ]
-            if good_tracks:
-                filtered_kn.append({**song, "tracks": good_tracks})
+        # One group per song holding every version: local files, KN tracks,
+        # and standalone GCS-mirror files. Unplayable disc-only KN tracks are
+        # stripped for singers (Phase B §4) and kept for the KJ's KN panel.
         return {
-            "songs": _group_search_results(local_results, filtered_kn, query=query),
+            "songs": _group_search_results(
+                local_results, kn_results, query=query,
+                divebar_rows=divebar_rows,
+                include_disc_only=include_disc_only),
             "karaoke_nerds_timeout": kn_timeout,
         }
 

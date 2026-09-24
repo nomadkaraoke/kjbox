@@ -121,6 +121,16 @@ class TestQueryAndGroupKey:
     def test_fts_single_token_prefix(self):
         assert fts_match_query("jovi") == '"jovi"*'
 
+    def test_group_key_strips_file_quality_tags(self):
+        assert group_key("Fall Out Boy (MPX)", "Dance, Dance") == \
+            group_key("Fall Out Boy", "Dance Dance")
+        assert group_key("Fall Out Boy", "Dance, Dance [HM]") == \
+            group_key("Fall Out Boy", "Dance Dance")
+
+    def test_group_key_keeps_musical_qualifiers(self):
+        assert group_key("Queen", "Bohemian Rhapsody (Live)") != \
+            group_key("Queen", "Bohemian Rhapsody")
+
     def test_group_key_none_safe(self):
         assert group_key(None, None) == "|||"
 

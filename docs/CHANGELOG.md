@@ -2,6 +2,34 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-09-24 - Fix: KN panel grouped by song + mirror-only versions reach singers (v0.109.0)
+
+Report: searching "fall out boy dance dance" in the KN panel showed library files in a flat
+"In your library" list, the song split across KN's "Dance, Dance" (community) and
+"Dance Dance" (full catalog) spellings, and a Funbox GCS-mirror file in its own section —
+and the singer UI didn't show the Funbox file at all.
+
+- **Singer search now includes standalone GCS-mirror versions.** The grouped branch of
+  `unified_search` computed `divebar_rows` but never passed them to
+  `_group_search_results`, so any mirror file that no KN row or local file covered was
+  silently dropped for singers. They now join their song's group as a KN-shaped version
+  (`kn.divebar` set, no YouTube URL, `mirror_only: true`) — the shape the singer UI already
+  renders, previews and submits as `source_type=divebar` (and kj_pick binds to), so no
+  singer frontend change was needed.
+- **KN panel uses the singer grouping.** `POST /karaoke-nerds/search` now returns
+  `{songs, karaoke_nerds_timeout}` (`unified_search(grouped=True, include_disc_only=True)`):
+  one collapsible row per song holding its library files, KN tracks and mirror files,
+  playable versions best-first, then disc-only KN rows — only for brands we don't already
+  have (matched by canonical brand or raw code / disc-id prefix). Header shows
+  "N in library" + version count; the top song opens by default. Local-catalog cap raised
+  from 10 to `sing_search_catalog_limit` (60), matching singer search.
+- **Grouping key ignores file-quality tags** `(MPX)` / `[HM]` (and `multiplex` /
+  `homemade`), which split "Fall Out Boy (MPX)" and "Dance, Dance [HM]" into their own
+  groups. Grouping-only (`text_normalize.group_key`); `(Live)` etc. stay distinct.
+- **Brand registry:** `ME-` / `PY-` disc prefixes now resolve to Mr. Entertainer / Party
+  Tyme (the library's download sets), so those files rank as commercial brands instead
+  of "Library file".
+
 ## 2026-09-24 - Fix: Singer UI i18n on the public host + tappable rotation preview (v0.108.1)
 
 - v0.108.0 rendered raw translation keys on `sing.nomadkaraoke.com`: `i18n.js` fetched

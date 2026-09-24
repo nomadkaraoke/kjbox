@@ -3,9 +3,10 @@
 - ``GET /library/search`` backs the Library panel's filter with the SAME
   engine as rotation search (``unified_search(local_only=True)``) so it gains
   typo tolerance the client-side JS term filter never had.
-- ``POST /karaoke-nerds/search`` returns the full unified payload, including
-  the new server-side ``local_path`` join (KN track's YouTube video already
-  on disk), making the KN panel's client-side matching obsolete.
+- ``POST /karaoke-nerds/search`` returns the song-grouped payload (same
+  grouping as singer search), including the server-side ``local_path`` join
+  (KN track's YouTube video already on disk), making the KN panel's
+  client-side matching obsolete.
 """
 import json
 import types
@@ -82,6 +83,12 @@ def test_library_search_respects_limit(flask_app, flask_test_client):
 
 # --- /karaoke-nerds/search local_path join --------------------------------
 
+def _versions(data, source):
+    """Flatten the grouped KN-panel payload to one source's version dicts."""
+    return [v[source] for g in data["songs"] for v in g["versions"]
+            if v["source"] == source]
+
+
 @patch('karaoke_nerds.divebar.kn_search')
 def test_kn_search_attaches_local_path_for_downloaded_video(
         mock_kn, flask_app, flask_test_client):
@@ -99,9 +106,9 @@ def test_kn_search_attaches_local_path_for_downloaded_video(
         data=json.dumps({"query": "test song"}),
         content_type='application/json')
     assert response.status_code == 200
-    songs = json.loads(response.data)["karaoke_nerds"]
-    assert len(songs) == 1
-    track = songs[0]["tracks"][0]
+    tracks = _versions(json.loads(response.data), "kn")
+    assert len(tracks) == 1
+    track = tracks[0]
     assert track["local_path"] == \
         "/downloads/Test Artist - Test Song [yt-abc123defgh].mp4"
 
@@ -113,8 +120,8 @@ def test_kn_search_no_local_path_when_not_downloaded(
     response = flask_test_client.post('/karaoke-nerds/search',
         data=json.dumps({"query": "test song"}),
         content_type='application/json')
-    songs = json.loads(response.data)["karaoke_nerds"]
-    assert "local_path" not in songs[0]["tracks"][0]
+    tracks = _versions(json.loads(response.data), "kn")
+    assert "local_path" not in tracks[0]
 
 
 _MASTER_PATH = ("/downloads/NOMAD-720p/"
@@ -149,17 +156,17 @@ def test_kn_search_master_join_is_query_independent(
         data=json.dumps({"query": "zz unrelated query"}),
         content_type='application/json')
     data = json.loads(response.data)
-    assert data["local"] == []  # local search really did miss
-    songs = data["karaoke_nerds"]
-    assert len(songs) == 1
-    assert songs[0]["tracks"][0]["local_path"] == _MASTER_PATH
+    assert _versions(data, "local") == []  # local search really did miss
+    tracks = _versions(data, "kn")
+    assert len(tracks) == 1
+    assert tracks[0]["local_path"] == _MASTER_PATH
 
 
 @patch('karaoke_nerds.divebar.kn_search')
 def test_kn_search_suppresses_mastered_nomad_row_when_local_hit(
         mock_kn, flask_app, flask_test_client):
     """When the local search DOES surface the master, the redundant KN NOMAD
-    row is suppressed and the master rides in the payload's local rows."""
+    row is suppressed and the master is the song's only (local) version."""
     mock_kn.return_value = _KN_NOMAD_PAYLOAD
     flask_app.media.index[_MASTER_PATH] = dict(_MASTER_ENTRY)
 
@@ -167,9 +174,9 @@ def test_kn_search_suppresses_mastered_nomad_row_when_local_hit(
         data=json.dumps({"query": "books from boxes"}),
         content_type='application/json')
     data = json.loads(response.data)
-    assert any(r.get("path") == _MASTER_PATH for r in data["local"])
-    # The song's only track was the redundant NOMAD row -> song dropped.
-    assert data["karaoke_nerds"] == []
+    assert any(r.get("path") == _MASTER_PATH for r in _versions(data, "local"))
+    # The song's only KN track was the redundant NOMAD row -> suppressed.
+    assert _versions(data, "kn") == []
 
 
 # --- _attach_local_paths_to_kn unit ---------------------------------------
