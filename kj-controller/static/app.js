@@ -9613,6 +9613,25 @@ const SingRequests = (() => {
             const el2 = document.getElementById(id);
             if (el2 && document.activeElement !== el2) el2.value = ts[key] ?? '';
         }
+
+        // --- Footer & venue notices section ---
+        const fs = config.footer_settings || { message: '', notices: [] };
+        const noticeBoxes = document.querySelectorAll('#sing-footer-notices input[data-notice]');
+        noticeBoxes.forEach((box) => {
+            box.checked = (fs.notices || []).includes(box.dataset.notice);
+        });
+        const msgEl = document.getElementById('sing-footer-message');
+        if (msgEl && document.activeElement !== msgEl) msgEl.value = fs.message || '';
+        const footerStatus = document.getElementById('sing-footer-status');
+        if (footerStatus) {
+            const n = (fs.notices || []).length;
+            const parts = [];
+            if (n) parts.push(`${n} notice${n === 1 ? '' : 's'}`);
+            if (fs.message) parts.push('custom message');
+            footerStatus.textContent = parts.length ? `✓ ${parts.join(' + ')}` : 'off';
+            footerStatus.className = 'sing-sms-status ' +
+                (parts.length ? 'sing-sms-status-ok' : 'sing-sms-status-off');
+        }
     }
 
     async function postConfig(body) {
@@ -9795,7 +9814,18 @@ const SingRequests = (() => {
         if (await postConfig(body)) await fetchConfig();
     }
 
-    return { start, openModal, closeModal, toggleEnabled, toggleAutoApprove, toggleAcceptMake, toggleAutoSmsNext, toggleAutoReorder, autoSmsNextEnabled, regenerate, setCustom, saveSmsTemplate, resetSmsTemplate, toggleTipsEnabled, saveTipSettings, copyUrl };
+    async function saveFooterSettings() {
+        const notices = [...document.querySelectorAll('#sing-footer-notices input[data-notice]:checked')]
+            .map((box) => box.dataset.notice);
+        const msgEl = document.getElementById('sing-footer-message');
+        const body = { footer_settings: {
+            message: msgEl ? msgEl.value.trim() : '',
+            notices,
+        } };
+        if (await postConfig(body)) await fetchConfig();
+    }
+
+    return { start, openModal, closeModal, toggleEnabled, toggleAutoApprove, toggleAcceptMake, toggleAutoSmsNext, toggleAutoReorder, autoSmsNextEnabled, regenerate, setCustom, saveSmsTemplate, resetSmsTemplate, toggleTipsEnabled, saveTipSettings, saveFooterSettings, copyUrl };
 })();
 
 function openSingRequestsModal()   { SingRequests.openModal(); }
@@ -9811,6 +9841,7 @@ function saveSingSmsTemplate()     { SingRequests.saveSmsTemplate(); }
 function resetSingSmsTemplate()    { SingRequests.resetSmsTemplate(); }
 function toggleSingTipsEnabled(c)  { SingRequests.toggleTipsEnabled(c); }
 function saveSingTipSettings()     { SingRequests.saveTipSettings(); }
+function saveSingFooterSettings()  { SingRequests.saveFooterSettings(); }
 function copySingUrl(scope)        { SingRequests.copyUrl(scope); }
 
 window.addEventListener('DOMContentLoaded', () => SingRequests.start());

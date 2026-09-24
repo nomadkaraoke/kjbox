@@ -1078,7 +1078,7 @@ input:focus {
 .rotation-refresh:disabled { opacity: 0.6; cursor: default; }
 .rotation-refresh:active { color: var(--nk-text); }
 
-@media (max-width: 380px) {
+@media (max-width: 480px) {
   .rotation-row {
     grid-template-columns: 1.8rem 1fr auto;
     grid-template-areas:
@@ -1291,3 +1291,164 @@ input:focus {
   opacity: 0.7;
 }
 .sung-details .song-card-done .song-card-status { color: #7ecb7e; }
+
+/* --- i18n / language pill ---------------------------------------------------- */
+.sing-card { position: relative; }
+.sing-lang-pill {
+  position: absolute;
+  top: 0.6rem;
+  right: 0.6rem;
+  background: none;
+  border: 1px solid var(--nk-border);
+  border-radius: 999px;
+  color: var(--nk-text-dim);
+  font-size: 0.72rem;
+  font-family: inherit;
+  padding: 0.15rem 0.55rem;
+  cursor: pointer;
+  min-height: 0;
+  line-height: 1.4;
+  z-index: 2;
+}
+.sing-lang-pill:hover, .sing-lang-pill:active { color: var(--nk-text); border-color: var(--nk-text-dim); }
+[dir="rtl"] .sing-lang-pill { right: auto; left: 0.6rem; }
+.sing-lang-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.35rem;
+  margin-top: 0.5rem;
+}
+.sing-lang-option {
+  background: var(--nk-card-2);
+  border: 1px solid var(--nk-border);
+  border-radius: 8px;
+  color: var(--nk-text);
+  font-family: inherit;
+  font-size: 0.9rem;
+  padding: 0.55rem 0.6rem;
+  text-align: start;
+  cursor: pointer;
+}
+.sing-lang-option.active { border-color: var(--nk-accent); color: var(--nk-accent); }
+.sing-lang-option:active { background: var(--nk-border); }
+
+/* --- Brand strip (first screen) ---------------------------------------------- */
+.sing-brand {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.4rem;
+  margin: 0 3.2rem 0.6rem 0;
+  font-size: 0.8rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--nk-accent);
+}
+[dir="rtl"] .sing-brand { margin: 0 0 0.6rem 3.2rem; }
+.sing-brand-name { font-weight: 700; }
+.sing-brand-host { color: var(--nk-text-dim); text-transform: none; letter-spacing: 0; }
+
+/* --- Results: one CTA + "best version picked automatically" hint ------------- */
+.sing-auto-hint {
+  color: var(--nk-text-dim);
+  font-size: 0.78rem;
+  text-align: center;
+  margin-top: -0.1rem;
+}
+/* Single-version songs get the same decision row inline, minus the pick button. */
+.result-row.grouped .sing-version-compact {
+  margin: 0.35rem 0 0;
+  background: transparent;
+  border-color: var(--nk-border);
+}
+.result-row.grouped .sing-version-compact .sing-version-actions { justify-content: flex-end; }
+
+/* --- Change-song mode banner ------------------------------------------------- */
+.sing-change-banner {
+  background: rgba(255, 77, 207, 0.08);
+  border: 1px solid rgba(255, 77, 207, 0.35);
+  border-radius: 10px;
+  padding: 0.7rem 0.9rem;
+  margin: 0 0 0.75rem;
+}
+.sing-change-title { font-weight: 700; }
+.sing-change-hint { color: var(--nk-text-dim); font-size: 0.85rem; margin: 0.15rem 0 0.5rem; }
+.sing-change-keep { width: 100%; }
+.song-card-replaces { font-size: 0.82em; color: var(--nk-text-dim); margin-top: 3px; }
+
+/* --- Next-song bar: status wraps under the song instead of truncating -------- */
+.mysongs-next { flex: 1; }
+.mysongs-status {
+  margin-left: 0;
+  margin-top: 0.1rem;
+  font-size: 0.82rem;
+  white-space: normal;
+  overflow: visible;
+}
+
+/* --- Notification block: links keep the accent colour on the "on" line ------- */
+.notify-line a { color: var(--nk-accent); text-decoration: underline; }
+
+/* --- RTL: mirror the few places that hard-code a side ------------------------ */
+[dir="rtl"] .result-row { text-align: right; }
+[dir="rtl"] .rotation-wait { text-align: left; }
+[dir="rtl"] .mysongs-pill { text-align: right; }
+[dir="rtl"] .sing-tab-badge { right: auto; left: calc(50% - 1.6rem); }
+
+/* --- Event footer: KJ message + venue notices ---------------------------------- */
+.sing-event-footer {
+  max-width: 480px;
+  margin: 0 auto 1rem;
+  padding: 0 1.5rem;
+}
+.sing-notices {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.sing-notice {
+  color: var(--nk-text-dim);
+  font-size: 0.85rem;
+  line-height: 1.4;
+  padding: 0.45rem 0.7rem;
+  background: var(--nk-card);
+  border: 1px solid var(--nk-border);
+  border-radius: 8px;
+}
+.sing-footer-message {
+  margin-top: 0.5rem;
+  padding: 0.6rem 0.8rem;
+  border-radius: 8px;
+  background: rgba(255, 77, 207, 0.07);
+  border: 1px solid rgba(255, 77, 207, 0.3);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.sing-footer-message-label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--nk-accent);
+  margin-bottom: 0.2rem;
+}
+.sing-footer-message-body { font-size: 0.9rem; }
+
+/* --- ▶ Preview on rotation rows and My-songs cards ------------------------------ */
+.rotation-preview {
+  background: none;
+  border: 1px solid var(--nk-border);
+  border-radius: 999px;
+  color: var(--nk-text-dim);
+  font-size: 0.65rem;
+  line-height: 1;
+  padding: 0.2rem 0.45rem;
+  margin-inline-start: 0.4rem;
+  cursor: pointer;
+  min-height: 0;
+  vertical-align: middle;
+}
+.rotation-preview:active, .rotation-preview:hover { color: var(--nk-accent); border-color: var(--nk-accent); }
+.song-card-action-preview { color: var(--nk-text); }

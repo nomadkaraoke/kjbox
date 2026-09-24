@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
-<title>Nomad Karaoke — Request a song</title>
+<title data-i18n="meta.title">Nomad Karaoke — Request a song</title>
 <link rel="icon" href="{{ url_for('sing.static', filename='favicon.ico') }}">
 <link rel="stylesheet" href="{{ url_for('sing.static', filename='sing.css') }}?v={{ config.get('APP_VERSION', '') }}">
 {% if not closed and not code_entry %}
@@ -20,20 +20,23 @@
 {% endif %}
 </head>
 <body class="sing">
-<div id="sing-offline" class="offline-banner" hidden>
+{#- Server-rendered strings carry data-i18n keys; i18n.js swaps them for the
+    singer's language once the message file loads. English stays inline as the
+    no-JS fallback. -#}
+<div id="sing-offline" class="offline-banner" data-i18n="common.offline" hidden>
   No internet — keep this page open and we'll update when we're back.
 </div>
 <div id="sing-mysongs-bar" class="mysongs-bar" hidden></div>
 {% if closed %}
 <main class="sing-card sing-closed">
-  <h1>Requests aren't open right now</h1>
-  <p>The KJ hasn't started a new event, or has paused requests. Please ask them.</p>
+  <h1 data-i18n="closed.title">Requests aren't open right now</h1>
+  <p data-i18n="closed.body">The host hasn't started a new event, or has paused requests. Please ask them.</p>
 </main>
 {% elif code_entry %}
 <main class="sing-card sing-enter-code" id="sing-enter-code"
       data-bad-code="{{ '1' if bad_code else '' }}">
-  <h1>Enter your code</h1>
-  <p>Look for the 4-digit code on the karaoke screen.</p>
+  <h1 data-i18n="code.title">Enter your code</h1>
+  <p data-i18n="code.body">Look for the 4-digit code on the karaoke screen.</p>
   <form id="sing-code-form" novalidate>
     <input type="text"
            id="sing-code-input"
@@ -44,8 +47,9 @@
            minlength="4"
            placeholder="0000"
            aria-label="4-digit event code"
+           data-i18n-aria-label="code.ariaLabel"
            autofocus>
-    <button type="submit">Continue</button>
+    <button type="submit" data-i18n="code.continue">Continue</button>
     <p class="sing-code-error" id="sing-code-error" hidden></p>
   </form>
 </main>
@@ -54,11 +58,14 @@
      data-token="{{ token }}"
      data-request-id="{{ request_id }}"
      data-make-requests-enabled="{{ '1' if make_requests_enabled else '0' }}"
-     data-simple-mode="{{ '1' if simple_mode else '0' }}">
+     data-simple-mode="{{ '1' if simple_mode else '0' }}"
+     data-sms-region="{{ sms_region or 'US' }}"
+     data-kj-name="{{ kj_name or '' }}">
 </div>
-<nav id="sing-tabs" class="sing-tabs" hidden></nav>
 {% endif %}
+<div id="sing-event-footer" class="sing-event-footer" hidden></div>
 <div id="sing-rules-footer"></div>
+<nav id="sing-tabs" class="sing-tabs" hidden></nav>
 <script type="module" src="{{ url_for('sing.static', filename='sing.js') }}?v={{ config.get('APP_VERSION', '') }}"></script>
 </body>
 </html>

@@ -283,7 +283,38 @@ def _enrich_search_stats(result):
             pass
 
 
-def _group_search_results(local_results, kn_results):
+def _group_relevance(group, query_key):
+    """Sort key for singer-facing groups — higher is better.
+
+    Singers overwhelmingly want the well-known recording of the song they
+    typed, and the strongest signal we have for "well-known" is how many
+    karaoke versions exist (every brand made one). Grouping used to keep raw
+    catalog order, which put Boyce Avenue's "Despacito" above Luis Fonsi's and
+    buried Jeff Buckley's "Hallelujah" behind Rammstein's.
+
+    Weights (in priority order): the title itself matching the query (rather
+    than a "(Live)" / "Parody of …" variant), playable-now availability,
+    version count (capped so one brand-farm song can't dominate), then
+    alphabetical artist as a stable tie-break.
+    """
+    title_key = _normalize_song_key("", group.get("title")) or ""
+    q = query_key or ""
+    if q and title_key == q:
+        title_score = 2
+    elif q and (title_key.startswith(q) or q.startswith(title_key)):
+        title_score = 1
+    else:
+        title_score = 0
+    return (
+        title_score,
+        1 if group.get("in_library") else 0,
+        min(group.get("version_count", 0), 12),
+        # Python sorts ascending; negate via reverse in the caller, so make the
+        # alphabetical tie-break "smaller is better" by inverting it here.
+    )
+
+
+def _group_search_results(local_results, kn_results, query=None):
     """Collapse local + KN results into one group per normalized (artist, title).
 
     Args:
@@ -291,6 +322,9 @@ def _group_search_results(local_results, kn_results):
             ``unified_search`` produces — ``{path, filename, artist, title, ...}``.
         kn_results: list of Karaoke Nerds songs, each with a ``tracks`` sub-list
             already (optionally) cross-referenced against Divebar.
+        query: the singer's search text — when given, groups are ranked by
+            ``_group_relevance`` (title match → availability → version count)
+            instead of raw catalog order.
 
     Returns a list of group dicts:
 
@@ -371,6 +405,12 @@ def _group_search_results(local_results, kn_results):
         version_priority.annotate_versions(versions, cfg, shape="kj_pick")
         versions.sort(key=lambda v: v.get("priority_rank", 9999))
         out.append(g)
+
+    if query:
+        query_key = _normalize_song_key("", query) or ""
+        # Stable sort: equal-relevance groups keep catalog order, then the
+        # relevance tuple (all "bigger is better") is applied descending.
+        out.sort(key=lambda g: _group_relevance(g, query_key), reverse=True)
 
     return out
 
@@ -5034,7 +5074,7 @@ def unified_search(query, app, *, grouped=False, local_only=False,
             if good_tracks:
                 filtered_kn.append({**song, "tracks": good_tracks})
         return {
-            "songs": _group_search_results(local_results, filtered_kn),
+            "songs": _group_search_results(local_results, filtered_kn, query=query),
             "karaoke_nerds_timeout": kn_timeout,
         }
 
@@ -6046,6 +6086,8 @@ def get_sing_config():
         # Tip settings — effective values (modal > config.json > defaults) so
         # the Public Request Form modal shows what singers actually see.
         "tip_settings": _effective_tip_settings(store),
+        # Footer message + toggled venue notices shown under every singer screen.
+        "footer_settings": store.get_footer_settings(),
     })
 
 
@@ -6148,6 +6190,12 @@ def update_sing_config():
         except ValueError as exc:
             return jsonify({"error": str(exc)}), 400
         changed["tip_settings"] = _effective_tip_settings(store)
+
+    if "footer_settings" in data:
+        try:
+            changed["footer_settings"] = store.set_footer_settings(data["footer_settings"])
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
 
     return jsonify({"success": True, "changed": changed})
 

@@ -1,0 +1,38 @@
+name: i18n
+
+on:
+  pull_request:
+    paths:
+      - "kj-controller/static-sing/messages/**"
+      - "kj-controller/static-sing/i18n.js"
+      - "kj-controller/static-sing/sing.js"
+      - "kj-controller/templates/sing.html"
+      - "scripts/translate.py"
+      - "scripts/validate-translations.py"
+      - "scripts/check-i18n-keys.py"
+  push:
+    branches: [main]
+    paths:
+      - "kj-controller/static-sing/messages/**"
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: "Singer UI translations (key parity)"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      # Every locale file must carry every key in en.json with its
+      # {placeholders} intact. Regenerate with:
+      #   python scripts/translate.py --messages-dir kj-controller/static-sing/messages --target all
+      - name: Validate singer UI translations
+        run: python scripts/validate-translations.py --messages-dir kj-controller/static-sing/messages
+      # Every t()/tn() key used by sing.js must exist in en.json (catches typos
+      # before they render as raw keys on a singer's phone).
+      - name: Check sing.js keys against en.json
+        run: python scripts/check-i18n-keys.py

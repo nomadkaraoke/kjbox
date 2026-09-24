@@ -1390,6 +1390,30 @@
                         <button class="sing-sms-save-btn" onclick="saveSingTipSettings()">Save tipping</button>
                     </div>
                 </div>
+                <div class="sing-requests-row sing-tips-row sing-footer-row">
+                    <div class="sing-sms-header">
+                        <strong>📣 Footer &amp; venue notices</strong>
+                        <span id="sing-footer-status" class="sing-sms-status"></span>
+                    </div>
+                    <p class="sing-hint">Shown under every screen of the singer page (translated into the singer&rsquo;s language). Tick the pre-built notices that apply tonight; the free-text message is shown exactly as typed.</p>
+                    <div class="sing-footer-notices" id="sing-footer-notices">
+                        <label><input type="checkbox" data-notice="chargers"> 🔌 Phone chargers at the host&rsquo;s table</label>
+                        <label><input type="checkbox" data-notice="lyricsScreen"> 📺 Lyrics are on the big screen</label>
+                        <label><input type="checkbox" data-notice="duets"> 🎤 Duets &amp; groups welcome</label>
+                        <label><input type="checkbox" data-notice="moreSongs"> 📱 Add more songs any time from this page</label>
+                        <label><input type="checkbox" data-notice="tipsHelp"> 💜 Tips keep the show going</label>
+                        <label><input type="checkbox" data-notice="wifi"> 📶 Free wifi — ask the host for the password</label>
+                        <label><input type="checkbox" data-notice="water"> 💧 Free water for singers at the bar</label>
+                        <label><input type="checkbox" data-notice="photos"> 📸 Photos &amp; videos welcome</label>
+                    </div>
+                    <label class="sing-footer-message-label">Custom message (optional)
+                        <textarea id="sing-footer-message" rows="2" maxlength="400" placeholder="e.g. Last requests at 12:30 — kitchen closes at 11!"></textarea>
+                    </label>
+                    <div class="sing-sms-actions">
+                        <span class="sing-sms-spacer"></span>
+                        <button class="sing-sms-save-btn" onclick="saveSingFooterSettings()">Save footer</button>
+                    </div>
+                </div>
                 <div class="sing-requests-row sing-qr-row">
                     <div class="sing-qr-card">
                         <div>Tunnel QR</div>

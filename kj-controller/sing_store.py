@@ -435,6 +435,70 @@ class SingStore:
         "threshold": (int, float),  # $ amount that earns the ♥ + bump
     }
 
+    # ------------------------------------------------------------------
+    # Footer settings — the KJ's free-text message shown under every singer
+    # screen, plus the pre-built venue notices (phone chargers etc.) they've
+    # switched on. Same rotation_meta JSON-blob pattern as tip settings.
+    # ------------------------------------------------------------------
+
+    FOOTER_SETTINGS_KEY = "sing_footer_settings"
+    FOOTER_MESSAGE_MAX = 400
+    # Pre-built notices the KJ can toggle. The singer UI owns the (translated)
+    # copy + icon per key; the store only validates membership.
+    FOOTER_NOTICE_KEYS = (
+        "chargers", "lyricsScreen", "duets", "moreSongs",
+        "tipsHelp", "wifi", "water", "photos",
+    )
+
+    def get_footer_settings(self):
+        """``{"message": str, "notices": [key, ...]}`` — always both keys."""
+        raw = self._get_meta(self.FOOTER_SETTINGS_KEY)
+        data = {}
+        if raw:
+            try:
+                parsed = json.loads(raw)
+                data = parsed if isinstance(parsed, dict) else {}
+            except (ValueError, TypeError):
+                data = {}
+        message = data.get("message")
+        notices = data.get("notices")
+        return {
+            "message": message if isinstance(message, str) else "",
+            "notices": [n for n in (notices if isinstance(notices, list) else [])
+                        if n in self.FOOTER_NOTICE_KEYS],
+        }
+
+    def set_footer_settings(self, settings):
+        """Merge ``settings`` ({message?, notices?}) into the stored blob.
+
+        ``message`` is trimmed and capped; ``notices`` must be a list of
+        known keys (unknown keys are dropped, order preserved). Raises
+        ValueError on bad types.
+        """
+        if not isinstance(settings, dict):
+            raise ValueError("footer settings must be an object")
+        current = self.get_footer_settings()
+        if "message" in settings:
+            msg = settings["message"]
+            if msg is None:
+                msg = ""
+            if not isinstance(msg, str):
+                raise ValueError("message must be a string")
+            current["message"] = msg.strip()[: self.FOOTER_MESSAGE_MAX]
+        if "notices" in settings:
+            notices = settings["notices"]
+            if notices is None:
+                notices = []
+            if not isinstance(notices, list) or not all(isinstance(n, str) for n in notices):
+                raise ValueError("notices must be a list of strings")
+            seen = []
+            for n in notices:
+                if n in self.FOOTER_NOTICE_KEYS and n not in seen:
+                    seen.append(n)
+            current["notices"] = seen
+        self._set_meta(self.FOOTER_SETTINGS_KEY, json.dumps(current))
+        return current
+
     def get_tip_settings(self):
         """Return the KJ-saved tip settings dict (may be empty)."""
         raw = self._get_meta(self.TIP_SETTINGS_KEY)
