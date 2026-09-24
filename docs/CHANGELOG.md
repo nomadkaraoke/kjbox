@@ -2,6 +2,41 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-09-24 - Feature: Singer UI polish — app-shell header, "Existing singer" picker, honest availability copy (v0.110.0)
+
+Andrew's device-testing feedback on v0.108.x, three items:
+
+1. **Version rows say how sure we are it'll play** (not where the file lives), with a
+   coloured tier dot on a full-width line under each version:
+   🟢 local — "Definitely available — works even offline";
+   🔵 cloud mirror — "Very reliable — from our cloud library · 9 MB";
+   🟠 YouTube — "Almost always works — YouTube downloads occasionally fail".
+   Confirm-screen source lines reworded to match.
+2. **Duet partners: "👥 Existing singer" / "+ New singer"** replace the always-visible
+   wall of everyone's names. Existing opens a picker built for 50+ names: fixed-height
+   modal, filter box pinned on top (accent/case-folded, Unicode-aware), A–Z list with
+   sticky letter headers, 46px tap rows, already-added names disabled, and a
+   "+ Add "X" as a new singer" escape hatch when the filter finds nobody (or the list
+   fails to load). Picked partners render as a name + "On tonight's list" row (no
+   name/phone fields). Backend: `/sing/singers` now splits KJ-typed duet labels
+   ("Anya & Celeste", "Cam + Taylor" — no `singers_json`) into individuals
+   (`_split_duet_name`; `&`/`+` only, never "and").
+3. **Consistent app-shell header, no tab-switch pop-in.** A persistent `<header>` outside
+   `#sing-root` holds brand + 🌐 language (a real flex row — the pill used to be absolutely
+   positioned in every card and overlapped the first thing in it) and a status stack built
+   from ONE `statusTile()` component: "Your next song" (My songs always, Rotation, or any
+   tab when ≤3 from the mic → green) and "Now on stage / Up next" (Rotation). CSS layout
+   tokens (`--nk-shell-w`, `--nk-gutter`, `--nk-pad`, `--nk-radius*`) give the header,
+   tiles, cards and footers one shared column, so edges line up on every tab. Jank fixes:
+   everything paints synchronously from cached state (`state.nowPlaying` fed by both
+   `/now` and `/my-requests`; My songs list painted from the cached view-model; rotation
+   list stale-while-revalidate) and refreshes in place; the stage tile's first load is a
+   same-size skeleton. Replaces the old in-card "You're next" banner, the "Now / Up next"
+   widget and the sticky next-song bar (the bottom tab bar already reaches My songs).
+
+Tests: e2e `TestExistingSingerPicker` (5), `TestShellHeader` (3), availability tiers;
+integration `TestSplitDuetName` + KJ-typed duet endpoint case.
+
 ## 2026-09-24 - Fix: KN panel grouped by song + mirror-only versions reach singers (v0.109.0)
 
 Report: searching "fall out boy dance dance" in the KN panel showed library files in a flat

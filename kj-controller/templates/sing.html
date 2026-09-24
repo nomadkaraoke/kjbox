@@ -26,7 +26,14 @@
 <div id="sing-offline" class="offline-banner" data-i18n="common.offline" hidden>
   No internet — keep this page open and we'll update when we're back.
 </div>
-<div id="sing-mysongs-bar" class="mysongs-bar" hidden></div>
+{#- App shell header: brand + 🌐 language row, then the status tiles
+    (your next song / who's on stage). Lives OUTSIDE #sing-root so it never
+    blanks or re-lays-out when a tab re-renders; sing.js fills it from cached
+    state synchronously and refreshes it in place. -#}
+<header id="sing-header" class="sing-header sing-shell" hidden>
+  <div class="sing-topbar"></div>
+  <div id="sing-mysongs-bar" class="sing-status-stack" hidden></div>
+</header>
 {% if closed %}
 <main class="sing-card sing-closed">
   <h1 data-i18n="closed.title">Requests aren't open right now</h1>

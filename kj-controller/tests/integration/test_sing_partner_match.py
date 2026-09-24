@@ -8,7 +8,7 @@ confirm screen's chips come from ``GET /sing/singers``.
 
 import json
 
-from sing import match_known_singer, _fold_name
+from sing import match_known_singer, _fold_name, _split_duet_name
 
 
 class TestFoldName:
@@ -55,6 +55,22 @@ class TestMatchKnownSinger:
         assert match_known_singer("", self.KNOWN) is None
 
 
+class TestSplitDuetName:
+    def test_splits_on_ampersand_and_plus(self):
+        assert _split_duet_name("Anya & Celeste") == ["Anya", "Celeste"]
+        assert _split_duet_name("Cam+Taylor + Jo") == ["Cam", "Taylor", "Jo"]
+
+    def test_leaves_single_names_and_and_alone(self):
+        assert _split_duet_name("Sarah B.") == ["Sarah B."]
+        assert _split_duet_name("Anderson") == ["Anderson"]
+        assert _split_duet_name("Rock and Roll Rob") == ["Rock and Roll Rob"]
+
+    def test_empty(self):
+        assert _split_duet_name("") == []
+        assert _split_duet_name(None) == []
+        assert _split_duet_name(" & ") == []
+
+
 class TestKnownSingersEndpoint:
     def test_requires_token(self, client):
         assert client.get("/sing/singers").status_code == 403
@@ -72,6 +88,18 @@ class TestKnownSingersEndpoint:
         singers = resp.get_json()["singers"]
         for expected in ("Sarah B.", "Mike", "Duet Dana", "Pending Pete"):
             assert expected in singers
+
+    def test_kj_typed_duet_listed_as_individuals(self, client, sing_app, token):
+        # A KJ-typed "Anya & Celeste" (no singers_json) is two people — the
+        # "Existing singer" picker must never offer the pair as one person.
+        sing_app.rotation.add_entry("Anya & Celeste", "Song A")
+        sing_app.rotation.add_entry("Cam + Taylor", "Song B")
+        sing_app.rotation.add_entry("Celeste", "Song C")
+        singers = client.get(f"/sing/singers?t={token}").get_json()["singers"]
+        assert "Anya & Celeste" not in singers and "Cam + Taylor" not in singers
+        for name in ("Anya", "Cam", "Taylor"):
+            assert name in singers
+        assert singers.count("Celeste") == 1
 
     def test_dedupes_by_folded_name(self, client, sing_app, token):
         sing_app.rotation.add_entry("Sarah B.", "Song A")

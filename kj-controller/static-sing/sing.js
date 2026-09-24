@@ -210,6 +210,9 @@ const state = {
   // for tonight without being on the done screen. `loaded` flips true after
   // the first successful probe so the bar doesn't flash before we know.
   mySongs: { items: [], nowPlaying: null, loaded: false },
+  // Latest venue now/next ({now_singing, up_next, queued_count}) from either
+  // /now or /my-requests — feeds the stage tile without a fresh fetch.
+  nowPlaying: null,
   _barPollTimer: null,
   // Tip config ({enabled, threshold, methods}) — fetched once at boot; the
   // 💜 Tip tab only renders when the KJ has payment handles configured.
@@ -390,6 +393,7 @@ function openLanguageModal() {
 // Rebuild everything that holds translated text after a locale switch.
 function rerenderForLocale() {
   applyStaticStrings(document);
+  renderShellTopbar();
   renderRulesFooter();
   renderEventFooter();
   if (root) render();
@@ -508,10 +512,11 @@ function render() {
   }
   const card = view();
   root.appendChild(card);
-  // Language pill rides on every card (top-right corner).
-  if (card && card.classList && card.classList.contains("sing-card")) card.prepend(langPill());
-  // The persistent "My songs" bar and bottom tab bar live outside #sing-root
-  // so they survive the innerHTML reset above; refresh them for the new step.
+  // The shell header (brand + 🌐 + status tiles) and bottom tab bar live
+  // outside #sing-root so they survive the innerHTML reset above; refresh
+  // them for the new step — synchronously, from cached state, so nothing
+  // pops in a few hundred ms after a tab switch.
+  renderShellTopbar();
   updateMySongsBar();
   updateTabsBar();
   updateRulesFooterVisibility();
@@ -551,64 +556,27 @@ function editNameLink(returnStep, label) {
 
 let nowPlayingTimer = null;
 
-function renderNowPlaying() {
-  const node = el("div", { class: "now-playing", "data-loading": "true" },
-    el("div", { class: "np-loading" }, t("rotation.checking")),
-  );
-  fetchNowPlaying(node);
-  return node;
-}
-
-async function fetchNowPlaying(node) {
-  if (nowPlayingTimer) { clearInterval(nowPlayingTimer); nowPlayingTimer = null; }
+// Venue "who's on stage" feed for the Rotation tab's stage tile. The tile
+// renders from `state.nowPlaying` (also refreshed by the my-requests poll),
+// so switching tabs shows the last-known value instantly; this poll just
+// keeps it fresh while the Rotation tab is open.
+function startStagePoll() {
+  if (nowPlayingTimer) return;
   const tick = async () => {
     try {
       const resp = await fetch(`${BASE}/now?t=${encodeURIComponent(TOKEN)}`, {
         credentials: "same-origin",
       });
-      if (!resp.ok) { onPollFailure(); return renderNowError(node); }
+      if (!resp.ok) { onPollFailure(); return; }
       onPollSuccess();
-      updateNowPlaying(node, await resp.json());
+      state.nowPlaying = await resp.json();
+      updateMySongsBar();
     } catch {
-      onPollFailure();
-      renderNowError(node);
+      onPollFailure();   // keep showing the last-known stage — never blank it
     }
   };
-  await tick();
+  tick();
   nowPlayingTimer = setInterval(tick, 15000);
-}
-
-function updateNowPlaying(node, data) {
-  node.innerHTML = "";
-  node.removeAttribute("data-loading");
-  const { now_singing, up_next, queued_count } = data || {};
-  if (!now_singing && !up_next && !queued_count) {
-    node.appendChild(el("div", { class: "np-empty" }, t("rotation.empty")));
-    return;
-  }
-  if (now_singing) {
-    node.appendChild(el("div", { class: "np-line np-now" },
-      el("span", { class: "np-label" }, t("rotation.nowLabel")),
-      el("span", { class: "np-singer" }, now_singing.first_name || "—"),
-      now_singing.song_artist
-        ? el("span", { class: "np-song" }, `— ${now_singing.song_artist}`)
-        : null,
-    ));
-  }
-  if (up_next) {
-    node.appendChild(el("div", { class: "np-line np-next" },
-      el("span", { class: "np-label" }, t("rotation.nextLabel")),
-      el("span", { class: "np-singer" }, up_next.first_name || "—"),
-    ));
-  } else if (!now_singing && queued_count) {
-    node.appendChild(el("div", { class: "np-line" }, t("rotation.between")));
-  }
-}
-
-function renderNowError(node) {
-  node.innerHTML = "";
-  node.removeAttribute("data-loading");
-  // Silent failure — don't clutter the card while the status poll still has a chance.
 }
 
 // --- Full rotation expander -----------------------------------------------
@@ -778,10 +746,13 @@ function attachRotationLive(container, { isActive = () => true } = {}) {
 
   const load = async ({ force = false } = {}) => {
     const cached = state.rotationCache;
-    if (!force && cached && Date.now() - cached.fetchedAt < ROTATION_CACHE_TTL_MS) {
+    // Stale-while-revalidate: paint whatever we have (with its honest age)
+    // straight away, then refresh behind it if it's older than the TTL — a
+    // tab switch never shows "Loading…" once the list has been seen.
+    if (cached && !container.querySelector(".rotation-list")) {
       renderPayload({ ...cached.payload, _fetchedAt: cached.fetchedAt });
-      return;
     }
+    if (!force && cached && Date.now() - cached.fetchedAt < ROTATION_CACHE_TTL_MS) return;
     // Only flash "Loading" when there's nothing on screen yet — background
     // refreshes swap the list in place without a visual blank.
     if (!container.querySelector(".rotation-list") && !container.querySelector(".rotation-empty")) {
@@ -826,8 +797,9 @@ function attachRotationLive(container, { isActive = () => true } = {}) {
 // Full-page rotation view (the 📋 Rotation tab). Same live lifecycle as the
 // expanders — auto-refresh while the tab is showing, ticking age, manual ↻.
 function renderRotation() {
+  // Who's on stage now is the stage tile in the shell header.
+  startStagePoll();
   const card = el("main", { class: "sing-card sing-rotation-page" },
-    renderNowPlaying(),
     el("h2", {}, t("rotation.title")),
     el("div", { class: "rotation-body" }),
   );
@@ -1136,7 +1108,7 @@ function switchIdentity() {
   render();
 }
 
-// Brand strip at the top of the first screen so a QR scan lands on something
+// Brand strip in the shell top bar so a QR scan lands on something
 // recognisably "the karaoke night", not an anonymous form.
 function brandHeader() {
   return el("div", { class: "sing-brand", "data-testid": "brand-header" },
@@ -1211,13 +1183,10 @@ function renderIdentity() {
 
   function rerender() {
     root.innerHTML = "";
-    const card = renderIdentity();
-    root.appendChild(card);
-    card.prepend(langPill());
+    root.appendChild(renderIdentity());
   }
 
   return el("main", { class: "sing-card" },
-    isEdit ? null : brandHeader(),
     el("h2", {}, isEdit ? t("identity.editTitle") : t("identity.title")),
     isEdit ? el("p", { class: "hint" }, t("identity.editHint"))
       : el("p", {}, t("identity.intro")),
@@ -1832,15 +1801,22 @@ function renderSearch() {
     const brandLabel = knownName
       || (local.disc_id ? t("versions.libraryFile", { id: local.disc_id }) : t("versions.unknownBrand"));
 
-    // Where it plays from — replaces the old filename/full-path noise.
-    let sourceLine;
+    // How sure we are it'll play — the thing a singer choosing between
+    // versions actually needs (not "where the file lives"). Three honest
+    // tiers, each with a coloured dot: on the box (certain, works offline) →
+    // our cloud mirror (very reliable) → YouTube (a download that
+    // occasionally fails).
+    let sourceLine, avail;
     if (version.source === "local") {
       sourceLine = t("versions.sourceLocal");
+      avail = "sure";
     } else if (hasDivebar) {
       const size = _humanFileSize(kn.divebar.file_size);
       sourceLine = size ? t("versions.sourceCloud", { size }) : t("versions.sourceCloudNoSize");
+      avail = "high";
     } else {
       sourceLine = t("versions.sourceYouTube");
+      avail = "likely";
     }
 
     const pills = el("div", { class: "sing-version-pills" });
@@ -1885,9 +1861,12 @@ function renderSearch() {
           }, brandLabel),
         ),
         pills,
-        el("div", { class: "sing-version-secondary" }, sourceLine),
       ),
       actions,
+      // Full card width under brand + buttons — the reliability note is the
+      // deciding detail, so it shouldn't wrap into a narrow column.
+      el("div", { class: `sing-version-secondary sing-avail sing-avail-${avail}`,
+        "data-testid": "version-availability" }, sourceLine),
     );
     return card;
   }
@@ -2249,9 +2228,7 @@ function renderConfirm() {
 
   function rerender() {
     root.innerHTML = "";
-    const card = renderConfirm();
-    root.appendChild(card);
-    card.prepend(langPill());
+    root.appendChild(renderConfirm());
   }
 
   const send = async () => {
@@ -2345,56 +2322,141 @@ function renderConfirm() {
     }
   };
 
-  // Fold a name the same way the server does (casefold + accents stripped +
-  // punctuation → space) so chip filtering agrees with backend dedup.
+  // Fold a name like the server does (casefold + accents stripped +
+  // punctuation → space) so picker filtering agrees with backend dedup.
   const foldName = (n) => (n || "")
     .normalize("NFD").replace(/[̀-ͯ]/g, "")
-    .toLowerCase().replace(/[^a-z0-9\s]/g, " ").trim().replace(/\s+/g, " ");
+    // Unicode-aware so non-Latin names (José, 김민수, Анна) aren't folded away.
+    .toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, " ").trim().replace(/\s+/g, " ");
 
-  // Tap-to-add chips of tonight's known singers — avoids retyping (and
-  // misspelling) a person who already signed up on their own phone.
-  async function loadPartnerChips(container) {
-    let names = state._knownSingers;
-    if (!Array.isArray(names)) {
-      try {
-        const data = await fetchJson(`${BASE}/singers`);
-        names = state._knownSingers = data.singers || [];
-      } catch { return; }   // chips are sugar — typing still works
-    }
-    // Yield once: with a cached list we'd otherwise hit the isConnected
-    // check while the card is still detached (mid-render), and bail.
-    await Promise.resolve();
-    if (!container.isConnected) return;
-    const taken = new Set([foldName(state.name),
-      ...state.additional.map((p) => foldName(p.name))]);
-    const avail = names.filter((n) => foldName(n) && !taken.has(foldName(n)));
-    container.innerHTML = "";
-    if (!avail.length || state.additional.length >= MAX_PARTNERS) return;
-    container.appendChild(el("div", { class: "partner-chips-label" }, t("confirm.chipsLabel")));
-    const rowEl = el("div", { class: "partner-chips-row" });
-    for (const n of avail.slice(0, 12)) {
-      rowEl.appendChild(el("button", {
-        type: "button",
-        class: "partner-chip",
-        "data-testid": "partner-chip",
-        onclick: () => {
-          if (state.additional.length >= MAX_PARTNERS) return;
-          state.additional.push({ name: n, phone: "" });
-          rerender();
+  // Tonight's known singers (rotation, any status + pending requests) for
+  // the "Existing singer" picker. Cached for the page; a failed fetch just
+  // means the picker offers "add as a new singer" instead.
+  async function loadKnownSingers() {
+    if (Array.isArray(state._knownSingers)) return state._knownSingers;
+    const data = await fetchJson(`${BASE}/singers`);
+    return (state._knownSingers = data.singers || []);
+  }
+
+  function addPartner(p) {
+    if (state.additional.length >= MAX_PARTNERS) return;
+    state.additional.push(p);
+    rerender();
+  }
+
+  // "Existing singer" → a modal picker built for a long list (50+ names on
+  // a busy night): a filter box pinned at the top, A–Z list with letter
+  // headers, big full-width tap rows, and a "not here? add as new" escape
+  // hatch when the filter finds nobody.
+  function openExistingPicker() {
+    const filter = el("input", {
+      type: "search",
+      class: "partner-picker-filter",
+      "data-testid": "partner-picker-filter",
+      placeholder: t("confirm.pickerFilter"),
+      autocomplete: "off",
+      autocapitalize: "words",
+      "aria-label": t("confirm.pickerFilter"),
+    });
+    const list = el("div", { class: "partner-picker-list", "data-testid": "partner-picker-list", role: "listbox" },
+      el("p", { class: "hint" }, t("common.loading")));
+    const dialog = openSingModal(t("confirm.pickerTitle"),
+      el("p", { class: "sing-modal-hint partner-picker-hint" }, t("confirm.pickerHint")),
+      filter, list);
+    dialog.classList.add("partner-picker");
+
+    let names = null;
+    const draw = () => {
+      list.innerHTML = "";
+      if (names === null) return;
+      const self = foldName(state.name);
+      const added = new Set(state.additional.map((p) => foldName(p.name)));
+      const q = foldName(filter.value);
+      const pool = names
+        .filter((n) => foldName(n) && foldName(n) !== self)
+        .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
+      const shown = q ? pool.filter((n) => foldName(n).includes(q)) : pool;
+      if (!shown.length) {
+        list.appendChild(el("p", { class: "hint partner-picker-empty" },
+          q ? t("confirm.pickerNoMatch", { query: filter.value.trim() })
+            : t("confirm.pickerEmpty")));
+        const typed = filter.value.trim();
+        list.appendChild(el("button", {
+          type: "button",
+          class: "btn ghost partner-picker-new",
+          "data-testid": "partner-picker-new",
+          onclick: () => { closeSingModal(); addPartner({ name: typed, phone: "" }); },
+        }, typed ? t("confirm.pickerAddNew", { name: typed }) : t("confirm.newSinger")));
+        return;
+      }
+      // Letter headers only help when scanning a long, unfiltered list.
+      const withHeaders = !q && shown.length > 12;
+      let letter = null;
+      for (const n of shown) {
+        const first = (foldName(n)[0] || "#").toUpperCase();
+        if (withHeaders && first !== letter) {
+          letter = first;
+          list.appendChild(el("div", { class: "partner-picker-letter", "aria-hidden": "true" }, letter));
+        }
+        const isAdded = added.has(foldName(n));
+        list.appendChild(el("button", {
+          type: "button",
+          class: "partner-picker-row" + (isAdded ? " added" : ""),
+          "data-testid": "partner-picker-row",
+          role: "option",
+          disabled: isAdded ? "" : null,
+          onclick: () => { closeSingModal(); addPartner({ name: n, phone: "", existing: true }); },
         },
-      }, n));
-    }
-    container.appendChild(rowEl);
+          el("span", { class: "partner-picker-name" }, n),
+          isAdded ? el("span", { class: "partner-picker-added" }, t("confirm.pickerAdded")) : null,
+        ));
+      }
+    };
+    filter.addEventListener("input", draw);
+    // Keyboard straight into the filter on desktop; on touch the keyboard
+    // would cover half the list, so let them scroll first.
+    if (window.matchMedia && window.matchMedia("(pointer: fine)").matches) filter.focus();
+
+    loadKnownSingers()
+      .then((n) => { names = n; if (list.isConnected) draw(); })
+      .catch(() => {
+        names = [];
+        if (!list.isConnected) return;
+        list.innerHTML = "";
+        list.appendChild(el("p", { class: "hint" }, t("confirm.pickerFailed")));
+        list.appendChild(el("button", {
+          type: "button", class: "btn ghost partner-picker-new", "data-testid": "partner-picker-new",
+          onclick: () => { closeSingModal(); addPartner({ name: "", phone: "" }); },
+        }, t("confirm.newSinger")));
+      });
   }
 
   function renderPartnersSection() {
     const wrap = el("div", { class: "partners-section" },
       el("div", { class: "partners-title" }, t("confirm.partnersTitle")),
     );
-    const chips = el("div", { class: "partner-chips" });
-    wrap.appendChild(chips);
-    loadPartnerChips(chips);
     state.additional.forEach((p, i) => {
+      const remove = el("button", {
+        type: "button",
+        class: "partner-remove",
+        "aria-label": t("confirm.removePartner"),
+        onclick: () => { state.additional.splice(i, 1); rerender(); },
+      }, "×");
+      if (p.existing) {
+        // Picked from tonight's list — the host already knows them, so no
+        // name/phone fields to fill (or mistype).
+        wrap.appendChild(el("div", {
+          class: "partner-row partner-row-existing",
+          "data-testid": "partner-row",
+        },
+          el("div", { class: "partner-existing" },
+            el("span", { class: "partner-existing-name", "data-testid": `partner-existing-${i}` }, p.name),
+            el("span", { class: "partner-existing-note" }, t("confirm.partnerOnList")),
+          ),
+          remove,
+        ));
+        return;
+      }
       wrap.appendChild(el("div", {
         class: "partner-row",
         "data-testid": "partner-row",
@@ -2413,24 +2475,29 @@ function renderConfirm() {
           "data-testid": `partner-phone-${i}`,
           oninput: (e) => { state.additional[i].phone = e.target.value; },
         }),
-        el("button", {
-          type: "button",
-          class: "partner-remove",
-          "aria-label": t("confirm.removePartner"),
-          onclick: () => { state.additional.splice(i, 1); rerender(); },
-        }, "×"),
+        remove,
       ));
     });
     if (state.additional.length < MAX_PARTNERS) {
-      wrap.appendChild(el("button", {
-        type: "button",
-        class: "partners-add",
-        "data-testid": "add-singer",
-        onclick: () => {
-          state.additional.push({ name: "", phone: "" });
-          rerender();
-        },
-      }, state.additional.length === 0 ? t("confirm.addSinger") : t("confirm.addAnother")));
+      wrap.appendChild(el("div", { class: "partners-add-row" },
+        el("button", {
+          type: "button",
+          class: "partners-add",
+          "data-testid": "add-existing-singer",
+          onclick: openExistingPicker,
+        }, t("confirm.existingSinger")),
+        el("button", {
+          type: "button",
+          class: "partners-add",
+          "data-testid": "add-singer",
+          onclick: () => {
+            state.additional.push({ name: "", phone: "" });
+            rerender();
+            // Straight into the new name field.
+            root.querySelector(`[data-testid="partner-name-${state.additional.length - 1}"]`)?.focus();
+          },
+        }, t("confirm.newSinger")),
+      ));
     } else {
       wrap.appendChild(el("div", { class: "partners-cap-hint" },
         t("confirm.maxSingers", { count: MAX_PARTNERS + 1 })));
@@ -2670,6 +2737,8 @@ function _enableReorderDrag(list) {
 
 // One-shot confirmation line shown after a reorder request is filed.
 let _reorderNotice = "";
+let _reorderNoticeUntil = 0;   // shown for a fixed window, across repaints
+const REORDER_NOTICE_MS = 15000;
 
 function renderReorderView() {
   const { rows, tokens } = _reorderableSongs();
@@ -2695,6 +2764,7 @@ function renderReorderView() {
       await reorderSongs(order.map((id) => ({ id, edit_token: tokens[id] })));
       state._reorderMode = false;
       _reorderNotice = t("mySongs.reorderRequested");
+      _reorderNoticeUntil = Date.now() + REORDER_NOTICE_MS;
       render();
     } catch (e) {
       saveBtn.disabled = false;
@@ -2715,11 +2785,9 @@ function renderReorderView() {
 }
 
 function renderDone() {
+  // "How close am I?" is the shell's status tile (same component as every
+  // other tab), not an in-card banner.
   const card = el("main", { class: "sing-card" },
-    // Personal status banner — "how close am I?" at a glance. The venue-wide
-    // Now/Next lives on the Rotation tab; repeating it here buried the one
-    // thing this screen is about. Populated by pollMyRequests.
-    el("div", { class: "sing-my-status", hidden: "" }),
     el("h2", {}, t("mySongs.title")),
     state.name ? el("p", { class: "hint done-identity" },
       t("mySongs.singingAs"), " ", el("strong", {}, state.name), " · ",
@@ -2767,6 +2835,56 @@ async function pollMyRequests(card) {
     state._statusPollTimer = null;
   }
 
+  // Paint the list/controls from a my-requests payload. Called synchronously
+  // with the cached view-model on render (so a tab switch shows the songs
+  // immediately instead of "Loading…"), then again by every poll.
+  const paint = (data) => {
+    const hasNowSinging = !!(data.now_playing && data.now_playing.now_singing);
+    // A drag in progress must never be clobbered by the poll — freeze the
+    // list (and controls) until the singer saves or cancels.
+    if (state._reorderMode) return;
+    const controls = card.querySelector(".reorder-controls");
+    if (controls) {
+      controls.innerHTML = "";
+      // Time-boxed rather than "until the next paint": the cached first paint
+      // and the poll response both repaint within milliseconds of each other.
+      if (_reorderNotice && Date.now() < _reorderNoticeUntil) {
+        controls.appendChild(el("p", { class: "hint reorder-notice" }, _reorderNotice));
+      }
+      if (_reorderableSongs().rows.length >= 2) {
+        controls.appendChild(el("button", {
+          class: "btn ghost reorder-toggle",
+          "data-testid": "reorder-songs",
+          onclick: () => { state._reorderMode = true; render(); },
+        }, t("mySongs.reorderButton")));
+      }
+    }
+    const slot = card.querySelector(".songs-list");
+    const sungSection = card.querySelector(".sung-section");
+    // Split sung songs out of the active list and sort what's left into the
+    // order it'll actually be sung, so a reordered queue reads correctly.
+    const { active, performed } = _splitAndSortSongs(data.requests);
+    if (slot) {
+      slot.innerHTML = "";
+      if (!active.length && !performed.length) {
+        slot.appendChild(el("p", { class: "hint" }, t("mySongs.none")));
+      } else if (!active.length) {
+        slot.appendChild(el("p", { class: "hint" }, t("mySongs.allDone")));
+      } else {
+        for (const item of active) slot.appendChild(_renderSongCard(item, { hasNowSinging }));
+      }
+    }
+    if (sungSection) _renderSungSection(sungSection, performed);
+  };
+
+  // Cached first paint — only when the cache can include the just-submitted
+  // request (otherwise the new song would blink in on the first poll).
+  const cachedIds = new Set((state.mySongs.items || []).map((it) => it.request && it.request.id));
+  if (state.mySongs.loaded && state.mySongs.items.length
+      && (!state.request?.id || cachedIds.has(state.request.id))) {
+    paint({ requests: state.mySongs.items, now_playing: state.mySongs.nowPlaying });
+  }
+
   const tick = async () => {
     // Keep only the most-recent stored ids (oldest→newest), then prepend the
     // just-submitted request, staying within the server's MY_REQUESTS_MAX cap.
@@ -2778,59 +2896,17 @@ async function pollMyRequests(card) {
     try {
       const data = await fetchMyRequests(ids);
       onPollSuccess();
-      // Keep the persistent bar's view-model fresh so navigating back to the
-      // landing/search screens shows an up-to-date count and status.
+      // Keep the shared view-model fresh: the shell status tiles and the tab
+      // badge read it, and the next visit to this tab paints from it.
       state.mySongs = {
         items: data.requests || [],
         nowPlaying: data.now_playing || null,
         loaded: true,
       };
-      updateTabsBar();   // keep the My-songs tab badge in step with the poll
-      const hasNowSinging = !!(data.now_playing && data.now_playing.now_singing);
-      const banner = card.querySelector(".sing-my-status");
-      if (banner) {
-        const summary = _mySongsPillSummary(data.requests || [], hasNowSinging);
-        if (summary) {
-          banner.textContent = summary;
-          banner.removeAttribute("hidden");
-        } else {
-          banner.setAttribute("hidden", "");
-        }
-      }
-      // A drag in progress must never be clobbered by the poll — freeze the
-      // list (and controls) until the singer saves or cancels.
-      if (state._reorderMode) return;
-      const controls = card.querySelector(".reorder-controls");
-      if (controls) {
-        controls.innerHTML = "";
-        if (_reorderNotice) {
-          controls.appendChild(el("p", { class: "hint reorder-notice" }, _reorderNotice));
-          _reorderNotice = "";   // shown until the next poll repaints (~15s)
-        }
-        if (_reorderableSongs().rows.length >= 2) {
-          controls.appendChild(el("button", {
-            class: "btn ghost reorder-toggle",
-            "data-testid": "reorder-songs",
-            onclick: () => { state._reorderMode = true; render(); },
-          }, t("mySongs.reorderButton")));
-        }
-      }
-      const slot = card.querySelector(".songs-list");
-      const sungSection = card.querySelector(".sung-section");
-      // Split sung songs out of the active list and sort what's left into the
-      // order it'll actually be sung, so a reordered queue reads correctly.
-      const { active, performed } = _splitAndSortSongs(data.requests);
-      if (slot) {
-        slot.innerHTML = "";
-        if (!active.length && !performed.length) {
-          slot.appendChild(el("p", { class: "hint" }, t("mySongs.none")));
-        } else if (!active.length) {
-          slot.appendChild(el("p", { class: "hint" }, t("mySongs.allDone")));
-        } else {
-          for (const item of active) slot.appendChild(_renderSongCard(item, { hasNowSinging }));
-        }
-      }
-      if (sungSection) _renderSungSection(sungSection, performed);
+      if (data.now_playing) state.nowPlaying = data.now_playing;
+      updateMySongsBar();
+      if (!card.isConnected) return;
+      paint(data);
     } catch {
       onPollFailure();
     }
@@ -2863,6 +2939,7 @@ async function refreshMySongs() {
     // still come back (status cancelled), so they survive the prune.
     pruneRequestIds(TOKEN, queried, items.map((it) => it.request.id));
     state.mySongs = { items, nowPlaying: data.now_playing || null, loaded: true };
+    if (data.now_playing) state.nowPlaying = data.now_playing;
     updateMySongsBar();
     // LIVE count (excludes cancelled/rejected) so boot smart-restore and the
     // bar agree — a device whose only song was cancelled isn't yanked off the
@@ -2977,53 +3054,122 @@ function startBarPoll() {
   }, 20000);
 }
 
-// Show/hide/populate the persistent bar. It names the singer's NEXT song and
-// appears only where it earns its space: on the Rotation tab (context while
-// scanning the queue) or on any tab when the singer is nearly up (≤3 to go /
-// on now). The My-songs tab badge covers the ambient "I have songs" signal.
-function updateMySongsBar() {
-  updateTabsBar();   // the tab badge shares the mySongs view-model
-  const bar = document.getElementById("sing-mysongs-bar");
-  if (!bar) return;
-  const live = _liveSongs(state.mySongs.items);
-  // Keep the poll running whenever there are live songs — the tab badge and
-  // this bar's urgency check both depend on fresh estimates.
-  if (live.length > 0 && state.step !== "done") startBarPoll();
-  else stopBarPoll();
+// --- Shell header: top bar + status tiles ---------------------------------
 
+// Brand + 🌐 language pill, one flex row above everything. Rebuilt on render
+// and locale switch (cheap, synchronous — no layout shift).
+function renderShellTopbar() {
+  const header = document.getElementById("sing-header");
+  const bar = header && header.querySelector(".sing-topbar");
+  if (!bar) return;
+  bar.innerHTML = "";
+  bar.appendChild(brandHeader());
+  bar.appendChild(langPill());
+  header.removeAttribute("hidden");
+}
+
+// One tile component for every status readout — same box, same three-line
+// type scale (label / primary / detail). `onclick` makes it a button.
+function statusTile({ variant, icon, label, primary, detail, onclick, testid, loading }) {
+  const cls = ["status-tile", ...variant.split(" ").map((v) => `status-tile--${v}`)];
+  if (loading) cls.push("status-tile--loading");
+  return el(onclick ? "button" : "div", {
+    class: cls.join(" "),
+    "data-testid": testid,
+    type: onclick ? "button" : null,
+    onclick: onclick || null,
+    "aria-busy": loading ? "true" : null,
+  },
+    el("span", { class: "status-tile-icon", "aria-hidden": "true" }, icon),
+    el("span", { class: "status-tile-body" },
+      label ? el("span", { class: "status-tile-label" }, label) : null,
+      el("span", { class: "status-tile-primary" }, primary || "\u00a0"),
+      (Array.isArray(detail) ? detail.some(Boolean) : detail)
+        ? el("span", { class: "status-tile-detail" }, detail) : null,
+    ),
+    onclick ? el("span", { class: "status-tile-chevron", "aria-hidden": "true" }, "›") : null,
+  );
+}
+
+// "Who's on stage" — Rotation tab only. A skeleton tile of identical size
+// holds the space until the first read lands, so the list never jumps.
+function _stageTile() {
+  const np = state.nowPlaying;
+  if (!np) {
+    return statusTile({ variant: "stage", icon: "🎤", label: t("rotation.stageLabel"),
+      primary: t("rotation.checking"), detail: "…", testid: "status-stage", loading: true });
+  }
+  const { now_singing, up_next, queued_count } = np;
+  if (!now_singing && !up_next) {
+    return statusTile({ variant: "stage", icon: "🎤", label: t("rotation.stageLabel"),
+      primary: queued_count ? t("rotation.between") : t("rotation.empty"), testid: "status-stage" });
+  }
+  const who = (x) => (x && (x.display_name || x.first_name)) || "—";
+  return statusTile({
+    variant: "stage",
+    icon: "🎤",
+    label: t("rotation.nowOnStage"),
+    primary: now_singing ? who(now_singing) : t("rotation.between"),
+    detail: [
+      now_singing && now_singing.song_artist
+        ? el("span", { class: "status-tile-song" }, now_singing.song_artist) : null,
+      up_next ? el("span", { class: "status-tile-next" }, t("rotation.upNextName", { name: who(up_next) })) : null,
+    ],
+    testid: "status-stage",
+  });
+}
+
+// "Your next song" — the singer's own status. Shown on My songs (always,
+// when they have songs), on Rotation (context while scanning the queue),
+// and on any tab once they're nearly up (≤3 to go / on now → green).
+function _youTile(live) {
   const urgent = live.some((it) => it.estimate
     && (it.estimate.now_singing
         || (typeof it.estimate.position === "number" && it.estimate.position <= 3)));
-  const show = live.length > 0 && state.step !== "done"
-    && (urgent || state.step === "rotation");
-  if (!show) {
-    bar.setAttribute("hidden", "");
-    bar.innerHTML = "";
-    return;
-  }
-  // The next song = first live item in actual sing order.
   const next = live.slice().sort((a, b) => _activeSortKey(a) - _activeSortKey(b))[0];
   const req = next.request;
   const songText = [req.song_title, req.song_artist].filter(Boolean).join(" — ")
     || t("mySongs.barYourSong");
-  const hasNowSinging = !!(state.mySongs.nowPlaying && state.mySongs.nowPlaying.now_singing);
-  const summary = _mySongsPillSummary(state.mySongs.items, hasNowSinging);
-  bar.innerHTML = "";
-  bar.appendChild(el("button", {
-    class: "mysongs-pill" + (urgent ? " mysongs-urgent" : ""),
-    "data-testid": "mysongs-bar",
-    onclick: () => { state.step = "done"; render(); },
-  },
-    el("span", { class: "mysongs-icon" }, "🎤"),
-    el("span", { class: "mysongs-next" },
-      el("span", { class: "mysongs-next-label" },
-        live.length > 1 ? t("mySongs.barNextOf", { count: live.length }) : t("mySongs.barNext")),
-      el("span", { class: "mysongs-next-song" }, songText),
-      summary ? el("span", { class: "mysongs-status" }, summary) : null,
-    ),
-    el("span", { class: "mysongs-chevron" }, "›"),
-  ));
-  bar.removeAttribute("hidden");
+  const hasNowSinging = !!(state.nowPlaying && state.nowPlaying.now_singing);
+  // The tile has its own 🎤 icon — drop the one baked into the banner copy.
+  const summary = _mySongsPillSummary(state.mySongs.items, hasNowSinging).replace(/^🎤\s*/u, "");
+  const onMySongs = state.step === "done";
+  return {
+    urgent,
+    node: statusTile({
+      variant: urgent ? "you urgent" : "you",
+      icon: "🎤",
+      label: live.length > 1 ? t("mySongs.barNextOf", { count: live.length }) : t("mySongs.barNext"),
+      primary: songText,
+      detail: summary,
+      testid: "mysongs-bar",
+      onclick: onMySongs ? null : () => { state.step = "done"; render(); },
+    }),
+  };
+}
+
+// Show/hide/populate the status tiles for the current step. Name kept for
+// the many poll call sites; it's the whole status stack now.
+function updateMySongsBar() {
+  updateTabsBar();   // the tab badge shares the mySongs view-model
+  const stack = document.getElementById("sing-mysongs-bar");
+  if (!stack) return;
+  const live = _liveSongs(state.mySongs.items);
+  // Keep the poll running whenever there are live songs — the tab badge and
+  // the tile's urgency check both depend on fresh estimates.
+  if (live.length > 0 && state.step !== "done") startBarPoll();
+  else stopBarPoll();
+
+  const tiles = [];
+  if (live.length > 0) {
+    const you = _youTile(live);
+    if (you.urgent || state.step === "done" || state.step === "rotation") tiles.push(you.node);
+  }
+  if (state.step === "rotation") tiles.push(_stageTile());
+  stack.innerHTML = "";
+  if (!tiles.length) { stack.setAttribute("hidden", ""); return; }
+  tiles.forEach((n) => stack.appendChild(n));
+  stack.removeAttribute("hidden");
 }
 
 // --- Bottom tab bar --------------------------------------------------------
