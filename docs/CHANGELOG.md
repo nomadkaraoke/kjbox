@@ -2,6 +2,25 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-09-24 - Feature: KN panel buttons match rotation search — source-coloured Download + ▶ Preview (v0.111.0)
+
+Andrew wanted to tell GCS-mirror downloads from YouTube downloads at a glance in the
+Karaoke Nerds panel, the same way the rotation-link search already shows them:
+
+- **Download buttons show their source.** YouTube = red outline + YouTube icon, GCS
+  mirror = green outline + Drive icon. They reuse the rotation search's `RS_ICON_*`
+  SVGs and `dl-youtube`/`dl-mirror` classes (`knSourceDownloadBtn`). Clicking a mirror
+  download shows "Queued" and keeps the icon.
+- **▶ Preview on every playable version:** library files, already-downloaded tracks,
+  mirror files and YouTube tracks. It uses the shared `previewButtonHtml` from
+  `preview.js`, so it opens the same in-browser audition modal as rotation search.
+  Disc-only rows have nothing to audition, so they get no Preview button.
+- The rotation-search button styles (22px height, pink/green/red accents, fixed 88px
+  Play/Download width) now also apply to `.kn-track-actions`. KN version rows wrap
+  their badges under the brand name, so the name isn't squeezed to one letter.
+- Tests: 4 new e2e tests in `TestKnGroupedPanel` (source icon/class, Queued keeps the
+  icon, Preview count incl. none on disc-only rows, Preview descriptor).
+
 ## 2026-09-24 - Feature: Singer UI polish — app-shell header, "Existing singer" picker, honest availability copy (v0.110.0)
 
 Andrew's device-testing feedback on v0.108.x, three items:

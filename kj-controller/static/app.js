@@ -3704,6 +3704,10 @@ function renderKnLocalVersion(v) {
 
     const actions = document.createElement('span');
     actions.className = 'kn-track-actions';
+    if (r.path) {
+        actions.appendChild(knPreviewBtn({ source: 'local', file_path: r.path,
+            title: [r.artist, r.title].filter(Boolean).join(' - ') }));
+    }
     actions.appendChild(knPlayBtn(r.path));
     row.appendChild(actions);
     return row;
@@ -3722,15 +3726,20 @@ function renderKnTrackVersion(group, v) {
 
     // Server-side join: track.local_path is set when this track's YouTube
     // video is already on disk.
+    const songArtist = group.artist + ' - ' + group.title;
     if (track.local_path) {
         const badge = document.createElement('span');
         badge.className = 'kn-downloaded-badge';
         badge.textContent = '✓ Downloaded';
         actions.appendChild(badge);
+        actions.appendChild(knPreviewBtn({ source: 'local', file_path: track.local_path,
+            title: songArtist }));
         actions.appendChild(knPlayBtn(track.local_path));
     } else if (track.divebar && track.divebar.file_id) {
         // Same-brand file in the Divebar GCS mirror (server xref) —
         // download from there instead of YouTube (canonical file).
+        actions.appendChild(knPreviewBtn({ source: 'divebar', file_id: track.divebar.file_id,
+            format: track.divebar.format, title: songArtist }));
         actions.appendChild(makeDivebarDownloadBtn({
             file_id: track.divebar.file_id,
             artist: group.artist,
@@ -3740,9 +3749,9 @@ function renderKnTrackVersion(group, v) {
         }, track.mirror_only ? 'From the GCS mirror'
                              : 'From the GCS mirror (not YouTube)'));
     } else if (track.youtube_url) {
-        const dlBtn = document.createElement('button');
-        dlBtn.className = 'kn-download-btn';
-        dlBtn.textContent = 'Download';
+        actions.appendChild(knPreviewBtn({ source: 'youtube', youtube_url: track.youtube_url,
+            title: songArtist }));
+        const dlBtn = knSourceDownloadBtn('youtube', 'From YouTube');
         dlBtn.onclick = (e) => {
             e.stopPropagation();
             downloadKNTrack(track.youtube_url);
@@ -3764,17 +3773,34 @@ function renderKnTrackVersion(group, v) {
 
 // Download-from-GCS-mirror button (same payload the Divebar panel sends).
 function makeDivebarDownloadBtn(payload, title) {
-    const dlBtn = document.createElement('button');
-    dlBtn.className = 'kn-download-btn';
-    dlBtn.textContent = 'Download';
-    dlBtn.title = title;
+    const dlBtn = knSourceDownloadBtn('mirror', title);
     dlBtn.onclick = (e) => {
         e.stopPropagation();
         downloadDivebarTrack(payload);
         dlBtn.disabled = true;
-        dlBtn.textContent = 'Queued';
+        dlBtn.querySelector('.rs-dl-txt').textContent = 'Queued';
     };
     return dlBtn;
+}
+
+// Download button colour-coded by source, same as the rotation-search rows
+// (rotDownloadBtn): mirror = Drive icon + green, YouTube = YT icon + red.
+function knSourceDownloadBtn(source, title) {
+    const isMirror = source === 'mirror';
+    const dlBtn = document.createElement('button');
+    dlBtn.className = 'kn-download-btn ' + (isMirror ? 'dl-mirror' : 'dl-youtube');
+    dlBtn.title = title;
+    dlBtn.innerHTML = (isMirror ? RS_ICON_DRIVE : RS_ICON_YT)
+        + '<span class="rs-dl-txt">Download</span>';
+    return dlBtn;
+}
+
+// ▶ Preview — the shared browser-audition button (preview.js), as in the
+// rotation-search rows.
+function knPreviewBtn(descriptor) {
+    const tmp = document.createElement('span');
+    tmp.innerHTML = previewButtonHtml(descriptor);
+    return tmp.firstChild;
 }
 
 function toggleKNSong(songId) {
