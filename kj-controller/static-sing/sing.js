@@ -101,6 +101,17 @@ function readMyRequestIds(token) {
   return store.ids.slice();
 }
 
+// Forget one request on this device (the singer dismissed it) — it's no
+// longer queried, so it drops out of My songs for good.
+function forgetRequestId(token, id) {
+  const store = _readMyRequestStore();
+  if (!store || store.token !== token) return;
+  store.ids = store.ids.filter((x) => String(x) !== String(id));
+  if (store.tokens) delete store.tokens[String(id)];
+  try { localStorage.setItem(MY_REQUESTS_KEY, JSON.stringify(store)); }
+  catch { /* private browsing — best-effort */ }
+}
+
 function readEditToken(token, id) {
   const store = _readMyRequestStore();
   if (!store || store.token !== token || !store.tokens) return "";
@@ -2576,6 +2587,8 @@ function _statusLine(item, hasNowSinging) {
   const req = item.request;
   if (item.performed) return t("mySongs.statusSung");
   if (req.status === "rejected") return t("mySongs.statusRejected");
+  if (req.status === "cancelled") return t("mySongs.statusCancelled");
+  if (item.removed) return t("mySongs.statusRemoved");
   if (req.status === "pending") return t("mySongs.statusPending");
   const est = item.estimate;
   if (!est) return t("mySongs.statusQueued");
@@ -2641,6 +2654,22 @@ function _renderSongCard(item, ctx = {}) {
   // Likewise a song that is playing RIGHT NOW: swapping or cancelling it from
   // the phone can only confuse the host mid-performance.
   if (item.estimate && item.estimate.now_singing) return finish();
+  // Host said no, or took it off the list: the singer should see that, but
+  // must be able to clear it rather than carry it all night.
+  if (req.status === "rejected" || item.removed) {
+    actions.appendChild(el("button", {
+      class: "song-card-action",
+      "data-testid": "dismiss-song",
+      title: t("mySongs.dismissTitle"),
+      onclick: (e) => {
+        e.stopPropagation();
+        forgetRequestId(TOKEN, req.id);
+        state.mySongs.items = (state.mySongs.items || []).filter((it) => it.request.id !== req.id);
+        render();
+      },
+    }, t("mySongs.dismiss")));
+    return finish();
+  }
   // Self-service actions — only for a request this device owns (has the
   // edit_token for) and that is still editable (pending or in the queue).
   // Compact, right-aligned so the card stays two lines tall.
@@ -2686,6 +2715,12 @@ function _renderSongCard(item, ctx = {}) {
             return;
           }
         } catch { e.target.disabled = false; alert(t("mySongs.cancelOffline")); return; }
+        // Cancelled songs leave the list straight away (no struck-through
+        // leftovers); a short notice confirms the tap.
+        for (const it of state.mySongs.items || []) {
+          if (it.request.id === req.id) it.request.status = "cancelled";
+        }
+        flashMySongsNotice(t("mySongs.cancelledNotice", { song }));
         if (typeof window.__sing_render === "function") window.__sing_render();
       },
     }, t("mySongs.cancel"));
@@ -2750,6 +2785,13 @@ let _reorderNotice = "";
 let _reorderNoticeUntil = 0;   // shown for a fixed window, across repaints
 const REORDER_NOTICE_MS = 15000;
 
+// One-line confirmation above the My songs list (reorder sent, song
+// cancelled…), time-boxed so repaints don't eat it.
+function flashMySongsNotice(text) {
+  _reorderNotice = text;
+  _reorderNoticeUntil = Date.now() + REORDER_NOTICE_MS;
+}
+
 function renderReorderView() {
   const { rows, tokens } = _reorderableSongs();
   const list = el("div", { class: "reorder-list", "data-testid": "reorder-list" });
@@ -2773,8 +2815,7 @@ function renderReorderView() {
     try {
       await reorderSongs(order.map((id) => ({ id, edit_token: tokens[id] })));
       state._reorderMode = false;
-      _reorderNotice = t("mySongs.reorderRequested");
-      _reorderNoticeUntil = Date.now() + REORDER_NOTICE_MS;
+      flashMySongsNotice(t("mySongs.reorderRequested"));
       render();
     } catch (e) {
       saveBtn.disabled = false;
@@ -2972,6 +3013,7 @@ function _liveSongs(items) {
     (it) => it.request
       && it.request.source_type !== "tip"   // tip claims live on the Tip tab
       && !it.performed
+      && !it.removed
       && !["cancelled", "rejected"].includes(it.request.status),
   );
 }
@@ -2987,7 +3029,9 @@ function _splitAndSortSongs(items) {
   const all = (items || []).filter(
     (it) => !it.request || it.request.source_type !== "tip");
   const performed = all.filter((it) => it.performed);
-  const active = all.filter((it) => !it.performed);
+  // Cancelled songs (✕ Cancel, or the original replaced by a ⇄ Change) are
+  // gone from the singer's night — don't list them at all.
+  const active = all.filter((it) => !it.performed && it.request.status !== "cancelled");
   active.sort((a, b) => _activeSortKey(a) - _activeSortKey(b));
   return { active, performed };
 }
@@ -2998,7 +3042,7 @@ function _activeSortKey(item) {
   if (est && est.now_singing) return -1;            // on the mic right now
   if (est && typeof est.position === "number") return est.position;  // 1,2,3…
   if (req.status === "pending") return 1e6;         // awaiting KJ approval
-  if (req.status === "rejected") return 2e6;        // needs a chat with the KJ
+  if (req.status === "rejected" || item.removed) return 2e6;   // host said no / took it off
   return 1.5e6;                                      // approved but no estimate
 }
 

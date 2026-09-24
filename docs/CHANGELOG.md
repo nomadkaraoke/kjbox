@@ -21,6 +21,22 @@ Karaoke Nerds panel, the same way the rotation-link search already shows them:
 - Tests: 4 new e2e tests in `TestKnGroupedPanel` (source icon/class, Queued keeps the
   icon, Preview count incl. none on disc-only rows, Preview descriptor).
 
+## 2026-09-24 - Fix: Cancelled / host-removed songs no longer linger on My songs (v0.111.1)
+
+Report: a cancelled song stayed on the singer's list, struck through, reading "Added to the
+queue." — `_statusLine` had no `cancelled` case and fell through to the default.
+
+- **Singer-cancelled songs leave the list** (✕ Cancel, and the original of a ⇄ Change, which
+  the server cancels on approval). The card disappears immediately on a successful cancel
+  (local state updated, no wait for the poll) with a 15 s "Cancelled: <song>" notice.
+- **Host-removed songs are named honestly**: `/sing/my-requests` now sets `removed: true` when
+  an approved request's rotation entry was cancelled by the host (status `Cancelled` — it
+  stays in the rotation for the KJ, and the phone used to compute a bogus "#N in line" for
+  it) or deleted. Shown as "The host took this song off the list — ask them if that's a
+  surprise."; not counted as a live song (tab badge, status tile).
+- **✕ Dismiss** on rejected and host-removed cards forgets the request on this device
+  (`forgetRequestId`) so the singer isn't stuck with it all night.
+
 ## 2026-09-24 - Feature: Singer UI polish — app-shell header, "Existing singer" picker, honest availability copy (v0.110.0)
 
 Andrew's device-testing feedback on v0.108.x, three items:

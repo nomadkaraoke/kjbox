@@ -333,6 +333,70 @@ class TestSelfServiceCancel:
             page.locator('[data-testid="cancel-song"]').click()
         assert "secret-xyz" in (req_info.value.post_data or "")
 
+    def _done_with(self, page, live_server, live_token, items, ids, tokens=None):
+        _login(page, live_server, live_token)
+        page.evaluate("(s) => localStorage.setItem('sing_my_request_ids', JSON.stringify(s))",
+                      {"token": live_token, "ids": ids, "tokens": tokens or {}})
+        page.route("**/sing/my-requests*", lambda route: route.fulfill(
+            status=200, content_type="application/json", body=json.dumps({
+                "now_playing": {"now_singing": None, "up_next": None, "queued_count": 0},
+                "requests": items})))
+        page.evaluate("window.__sing_state.step = 'done'; window.__sing_render();")
+
+    @staticmethod
+    def _req(rid, title, status, **extra):
+        item = {"request": {"id": rid, "singer_name": "Alice", "song_artist": "FOB",
+                            "song_title": title, "source_type": "local", "status": status,
+                            "created_at": "now", "linked_entry_id": 100 + rid,
+                            "additional_singers": None}, "performed": False}
+        item.update(extra)
+        return item
+
+    def test_cancelled_songs_are_not_listed(self, page, live_server, live_token):
+        # Includes the original of a ⇄ Change (the server cancels it on approval).
+        self._done_with(page, live_server, live_token, [
+            self._req(1, "Dance, Dance", "approved", estimate={"position": 5, "now_singing": False,
+                      "range_low_s": 900, "range_high_s": 1260}),
+            self._req(2, "Dance, Dance", "cancelled"),
+        ], [1, 2])
+        expect(page.locator(".song-card")).to_have_count(1)
+        expect(page.locator("#sing-root")).not_to_contain_text("Added to the queue.")
+
+    def test_cancel_removes_card_immediately_with_notice(self, page, live_server, live_token):
+        self._done_with(page, live_server, live_token,
+                        [self._req(7, "Bo Rhap", "pending"), self._req(8, "Other", "pending")],
+                        [7, 8], {"7": "tok7", "8": "tok8"})
+        expect(page.locator(".song-card")).to_have_count(2)
+        # From now on the server reports it cancelled; hang the poll so the
+        # card must disappear from local state, not a refetch.
+        page.unroute("**/sing/my-requests*")
+        page.route("**/sing/my-requests*", lambda r: None)
+        page.route("**/sing/requests/7/cancel", lambda r: r.fulfill(
+            status=200, content_type="application/json",
+            body=json.dumps({"success": True, "request": {"id": 7, "status": "cancelled"}})))
+        page.on("dialog", lambda d: d.accept())
+        page.locator(".song-card", has_text="Bo Rhap").locator('[data-testid="cancel-song"]').click()
+        expect(page.locator(".song-card")).to_have_count(1)
+        expect(page.locator(".reorder-notice")).to_have_text("Cancelled: Bo Rhap — FOB")
+
+    def test_rejected_and_host_removed_can_be_dismissed(self, page, live_server, live_token):
+        self._done_with(page, live_server, live_token, [
+            self._req(3, "Nope", "rejected"),
+            self._req(4, "Gone", "approved", removed=True),
+        ], [3, 4], {"3": "t3", "4": "t4"})
+        gone = page.locator(".song-card", has_text="Gone")
+        expect(gone).to_contain_text("The host took this song off the list")
+        expect(gone.locator('[data-testid="cancel-song"]')).to_have_count(0)
+        gone.locator('[data-testid="dismiss-song"]').click()
+        expect(page.locator(".song-card", has_text="Gone")).to_have_count(0)
+        page.locator(".song-card", has_text="Nope").locator('[data-testid="dismiss-song"]').click()
+        expect(page.locator(".song-card")).to_have_count(0)
+        # Forgotten on this device — never queried again.
+        stored = page.evaluate("() => JSON.parse(localStorage.getItem('sing_my_request_ids'))")
+        assert stored["ids"] == [] and stored["tokens"] == {}
+        # Host-removed songs don't count as live (tab badge / status tile).
+        expect(page.locator('[data-testid="mysongs-bar"]')).to_have_count(0)
+
     def test_no_cancel_button_without_edit_token(self, page, live_server, live_token):
         _login(page, live_server, live_token)
         # Stored id but NO edit_token for it (e.g. a different device / legacy).

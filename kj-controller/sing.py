@@ -1502,6 +1502,11 @@ def my_requests():
     # queue only (get_rotation drops done/left), so a linked id that isn't in
     # it is either performed or gone — resolve those with a targeted lookup.
     active_ids = {e["id"] for e in entries}
+    # Host-cancelled entries stay in the rotation (visible to the KJ) but are
+    # not the singer's queue slot any more — report them as removed, never
+    # with a "#N in line" estimate.
+    cancelled_ids = {e["id"] for e in entries
+                     if (e.get("status") or "").lower() == "cancelled"}
 
     out = []
     for rid in ids:
@@ -1517,7 +1522,9 @@ def my_requests():
         linked = req.get("linked_entry_id")
         performed = False
         if linked:
-            if linked in active_ids:
+            if linked in cancelled_ids:
+                item["removed"] = True
+            elif linked in active_ids:
                 item["estimate"] = compute_estimate(
                     entries, linked, current_app.kj_config,
                 )
@@ -1531,6 +1538,11 @@ def my_requests():
                 status = ((entry or {}).get("status") or "").lower()
                 if status in ("done", "left"):
                     performed = True
+                else:
+                    # Approved, but its entry is gone from the queue without
+                    # being sung — the host cancelled or deleted it. Say so
+                    # (the phone used to show "Added to the queue." forever).
+                    item["removed"] = True
         item["performed"] = performed
         out.append(item)
 
