@@ -700,6 +700,31 @@ input:focus {
   text-align: center;
 }
 
+/* --- Notifications section (My songs) -------------------------------------- */
+.notify-heading {
+  margin: 1.25rem 0 0.4rem;
+  color: var(--nk-text);
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 1rem;
+}
+.notify-lines { display: flex; flex-direction: column; gap: 0.4rem; }
+.notify-line { margin: 0; font-size: 0.9rem; }
+.notify-on { color: var(--nk-good); }
+.notify-off { color: var(--nk-warn); }
+.notify-enable { align-self: flex-start; }
+.notify-ios summary { cursor: pointer; color: var(--nk-text); font-weight: 600; }
+.notify-ios p { color: var(--nk-text-dim); font-size: 0.85rem; }
+.notify-phone-editor {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.notify-phone-input { flex: 1; min-width: 180px; }
+.notify-phone-editor .error { width: 100%; margin: 0; }
+.notify-summary { margin-top: 0.4rem; }
+
 /* --- My-songs personal status banner --------------------------------------- */
 .sing-my-status {
   background: linear-gradient(135deg, rgba(255, 77, 207, 0.18), rgba(255, 77, 207, 0.05));
@@ -1186,8 +1211,45 @@ input:focus {
 
 /* Self-service change + reorder on the done screen */
 .song-card-change { margin-top: 6px; font-size: 0.85rem; opacity: 0.85; }
-.song-card-reorder { display: flex; gap: 8px; margin-top: 8px; }
-.song-card-reorder button { flex: 1; font-size: 0.85rem; }
+/* Drag-to-reorder mode (replaces the old per-card ▲▼ buttons) */
+.reorder-controls { margin: 0 0 0.5rem; }
+.reorder-toggle { width: 100%; }
+.reorder-notice { color: var(--nk-good); margin: 0 0 0.5rem; }
+.reorder-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-bottom: 0.75rem;
+}
+.reorder-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.55rem 0.7rem;
+  background: var(--nk-card-2);
+  border: 1px solid var(--nk-border);
+  border-radius: 8px;
+  user-select: none;
+}
+.reorder-row.dragging {
+  border-color: var(--nk-accent);
+  background: rgba(255, 77, 207, 0.12);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+}
+.reorder-handle {
+  touch-action: none;   /* the handle drags; the rest of the list scrolls */
+  cursor: grab;
+  color: var(--nk-text-dim);
+  font-size: 1.1rem;
+  padding: 0.2rem 0.3rem;
+}
+.reorder-row.dragging .reorder-handle { cursor: grabbing; }
+.reorder-song {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
 .song-card-reorder button[disabled] { opacity: 0.4; }
 
 

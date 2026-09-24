@@ -371,7 +371,7 @@ class TestChangeReorderControls:
         assert page.evaluate("window.__sing_state.step") == "search"
         assert page.evaluate("window.__sing_state.changeRequestId") == 11
 
-    def test_reorder_down_sends_both_tokens(self, page, live_server, live_token):
+    def test_drag_reorder_saves_new_order_with_tokens(self, page, live_server, live_token):
         reqs = [
             {"request": {"id": 11, "singer_name": "A", "song_artist": "Q", "song_title": "One",
                 "source_type": "local", "status": "approved", "created_at": "now",
@@ -388,13 +388,52 @@ class TestChangeReorderControls:
             status=200, content_type="application/json",
             body=json.dumps({"success": True, "request": {"id": 99, "status": "pending",
                                                           "source_type": "reorder"}})))
-        page.on("dialog", lambda d: d.accept())
-        first_down = page.locator('[data-testid="reorder-down"]').first
-        expect(first_down).to_be_visible()
+        # Cards themselves carry no ▲▼ buttons any more.
+        expect(page.locator('[data-testid="cancel-song"]').first).to_be_visible()
+        expect(page.locator('[data-testid="reorder-up"]')).to_have_count(0)
+        # Enter drag mode.
+        page.locator('[data-testid="reorder-songs"]').click()
+        rows = page.locator(".reorder-row")
+        expect(rows).to_have_count(2)
+        assert rows.nth(0).inner_text().find("One") >= 0
+        # Drag the first row's handle below the second row.
+        h = page.locator(".reorder-row").nth(0).locator(".reorder-handle")
+        h_box = h.bounding_box()
+        target = page.locator(".reorder-row").nth(1).bounding_box()
+        page.mouse.move(h_box["x"] + h_box["width"] / 2, h_box["y"] + h_box["height"] / 2)
+        page.mouse.down()
+        end_y = target["y"] + target["height"] + 8
+        for step in range(1, 6):
+            page.mouse.move(h_box["x"], h_box["y"] + (end_y - h_box["y"]) * step / 5)
+        page.mouse.up()
+        assert page.locator(".reorder-row").nth(0).inner_text().find("Two") >= 0
+        # Save posts the NEW order with both edit tokens.
         with page.expect_request("**/sing/requests/reorder*") as req_info:
-            first_down.click()
-        body = req_info.value.post_data or ""
-        assert "tok11" in body and "tok12" in body
+            page.locator('[data-testid="reorder-save"]').click()
+        body = json.loads(req_info.value.post_data or "{}")
+        assert [it["id"] for it in body["items"]] == [12, 11]
+        assert {it["edit_token"] for it in body["items"]} == {"tok11", "tok12"}
+        # Mode exits with a confirmation notice.
+        expect(page.locator(".reorder-notice")).to_contain_text("KJ will confirm")
+
+    def test_reorder_cancel_restores_list(self, page, live_server, live_token):
+        reqs = [
+            {"request": {"id": 11, "singer_name": "A", "song_artist": "Q", "song_title": "One",
+                "source_type": "local", "status": "approved", "created_at": "now",
+                "linked_entry_id": 101, "additional_singers": None},
+             "estimate": {"position": 3}},
+            {"request": {"id": 12, "singer_name": "A", "song_artist": "Q", "song_title": "Two",
+                "source_type": "local", "status": "approved", "created_at": "now",
+                "linked_entry_id": 102, "additional_singers": None},
+             "estimate": {"position": 5}},
+        ]
+        self._seed_done(page, live_server, live_token, reqs,
+                        {"token": live_token, "ids": [11, 12], "tokens": {"11": "tok11", "12": "tok12"}})
+        page.locator('[data-testid="reorder-songs"]').click()
+        expect(page.locator(".reorder-row")).to_have_count(2)
+        page.locator('[data-testid="reorder-exit"]').click()
+        expect(page.locator(".song-card-title").first).to_be_visible()
+        expect(page.locator(".reorder-row")).to_have_count(0)
 
 
 class TestDoneScreenOrderingAndSung:
@@ -1000,3 +1039,58 @@ class TestMySongsStatusBanner:
         page.evaluate("window.__sing_state.step = 'done'; window.__sing_render();")
         expect(page.locator("h2:has-text('Your songs tonight')")).to_be_visible()
         expect(page.locator(".sing-my-status")).to_be_hidden()
+
+
+class TestNotificationsSection:
+    _ITEM = {"request": {"id": 21, "singer_name": "Alice", "song_artist": "Q",
+                         "song_title": "One", "source_type": "local",
+                         "status": "approved", "created_at": "now",
+                         "linked_entry_id": 5, "additional_singers": None},
+             "performed": False, "estimate": {"position": 5, "now_singing": False,
+                                              "range_low_s": 600, "range_high_s": 900}}
+
+    def _open_done(self, page, live_server, live_token, phone=""):
+        _login(page, live_server, live_token)
+        if phone:
+            page.evaluate("(p) => localStorage.setItem('sing_phone', p)", phone)
+            page.evaluate("(p) => { window.__sing_state.phone = p; }", phone)
+        page.evaluate(
+            "(s) => localStorage.setItem('sing_my_request_ids', JSON.stringify(s))",
+            {"token": live_token, "ids": [21], "tokens": {"21": "tok21"}})
+        page.route("**/sing/my-requests*", lambda r: r.fulfill(
+            status=200, content_type="application/json",
+            body=json.dumps({"now_playing": {"now_singing": None, "up_next": None,
+                                             "queued_count": 1},
+                             "requests": [self._ITEM]})))
+        page.evaluate("window.__sing_state.step = 'done'; window.__sing_render();")
+        # The section renders on a 2s delay ("you're in!" registers first).
+        page.evaluate("window.setTimeout ? null : null")
+
+    def test_explains_channels_with_number(self, page, live_server, live_token):
+        self._open_done(page, live_server, live_token, phone="+1 555 123 4567")
+        section = page.locator("#push-optin")
+        expect(section.locator(".notify-heading")).to_contain_text("When you're up",
+                                                                   timeout=8000)
+        expect(section).to_contain_text("Text message to +1 555 123 4567")
+        expect(section.locator(".notify-summary")).to_be_visible()
+
+    def test_add_number_after_signup_posts_update_phone(self, page, live_server, live_token):
+        self._open_done(page, live_server, live_token)
+        section = page.locator("#push-optin")
+        expect(section).to_contain_text("Want a text when you're up?", timeout=8000)
+        page.locator('[data-testid="notify-add-phone"]').click()
+        page.locator('[data-testid="notify-phone"]').fill("+1 555 222 3333")
+        with page.expect_request("**/sing/update-phone*") as req_info:
+            page.locator('[data-testid="notify-phone-save"]').click()
+        body = json.loads(req_info.value.post_data or "{}")
+        assert body["phone"] == "+1 555 222 3333"
+        assert body["items"] == [{"id": 21, "edit_token": "tok21"}]
+        # Section re-renders showing the SMS channel is now on.
+        expect(section).to_contain_text("Text message to +1 555 222 3333")
+
+    def test_change_number_link(self, page, live_server, live_token):
+        self._open_done(page, live_server, live_token, phone="+1 555 123 4567")
+        section = page.locator("#push-optin")
+        expect(section).to_contain_text("change number", timeout=8000)
+        page.locator('[data-testid="notify-change-phone"]').click()
+        expect(page.locator('[data-testid="notify-phone"]')).to_have_value("+1 555 123 4567")

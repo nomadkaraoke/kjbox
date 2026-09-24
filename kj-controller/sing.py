@@ -1602,6 +1602,61 @@ def reorder_requests():
 _MAX_SINGER_NAME_LEN = 100
 
 
+@sing_bp.route("/update-phone", methods=["POST"])
+def update_phone():
+    """Singer adds/changes their contact number after submitting.
+
+    The "you're up" SMS resolves the phone from the singer's own request rows
+    (newest non-empty wins — see routes._resolve_sms_target), so writing the
+    new number onto every request this device proves ownership of (via each
+    request's edit_token) makes texting work retroactively for songs already
+    in the queue. Future submissions carry the number via the client's stored
+    state; the push subscription re-syncs client-side after this call.
+
+    Body: ``{phone, device_id, items: [{id, edit_token}, ...]}``.
+    """
+    store = getattr(current_app, "sing_store", None)
+    if store is None:
+        return jsonify({"error": "not_configured"}), 503
+
+    cfg = current_app.kj_config
+    if _rate_limit_exceeded(
+        _client_ip(request),
+        _safe_int(cfg.get("sing_rate_limit_per_ip"), 5),
+        _safe_int(cfg.get("sing_rate_limit_window_s"), 300),
+    ):
+        return jsonify({"error": "rate_limited"}), 429
+
+    token = _extract_token()
+    if not token or not _is_token_valid(store, token):
+        return jsonify({"error": "not_open"}), 403
+
+    data = request.get_json(silent=True) or {}
+    phone = (data.get("phone") or "").strip()
+    if not phone or not _PHONE_RE.match(phone):
+        return jsonify({"error": "phone format invalid"}), 400
+    items = data.get("items") or []
+    if not isinstance(items, list):
+        return jsonify({"error": "items must be a list"}), 400
+
+    updated = 0
+    for item in items[:_MY_REQUESTS_MAX_IDS]:
+        if not isinstance(item, dict):
+            continue
+        req = store.get_request(item.get("id"))
+        if req is None or req.get("token") != token:
+            continue
+        if not _belongs_to_current_night(store, req):
+            continue
+        supplied = (item.get("edit_token") or "").strip()
+        if not supplied or supplied != (req.get("edit_token") or ""):
+            continue
+        store.set_request_phone(req["id"], phone)
+        updated += 1
+
+    return jsonify({"success": True, "updated": updated})
+
+
 @sing_bp.route("/rename", methods=["POST"])
 def rename_me():
     """Singer renames THEMSELVES from the portal, persistently.

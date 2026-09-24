@@ -149,6 +149,22 @@ Fifth batch (same release, 2026-09-23):
    harness's per-singer review URLs now include the tokens, so reviewing
    as Celeste shows the complete self-service card controls.
 
+21. **Drag-to-reorder** — the per-card ▲▼ buttons are gone; a "↕ Reorder
+   songs" button on My songs (shown with 2+ reorderable songs) switches to a
+   compact drag list (⠿ handle, pointer-based so it works on touch; the
+   handle is touch-action:none while the list still scrolls), then "Save new
+   order" files ONE reorder request with the full order. Poll repaints are
+   suspended while dragging.
+22. **Notifications explained + add-a-number** — the My-songs opt-in block is
+   now a "🔔 When you're up" section listing each channel's real status
+   (browser pop-up on/off/blocked/iOS-install; text message to <number>)
+   plus a plain-language summary ("You'll get BOTH a pop-up and a text").
+   Singers can add or change a mobile number after signup: new
+   `POST /sing/update-phone` writes it onto every request the device proves
+   ownership of (edit_token), which is exactly where `_resolve_sms_target`
+   reads the number — so "you're up" texts work retroactively. The push
+   subscription re-syncs with the new number client-side.
+
 Backend (`sing.py`, `sing_store.py`, `routes.py`, `version_priority.py`)
 requires a service restart.
 

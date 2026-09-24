@@ -388,6 +388,8 @@ function render() {
     state.changeRequestId = null;
     state.changeEditToken = null;
   }
+  // Reorder mode is a done-screen overlay — any navigation away discards it.
+  if (state._reorderMode && state.step !== "done") state._reorderMode = false;
   // Identity edit-mode flags are only meaningful while on the identity step;
   // clear them anywhere else so a stale "edit" can't mislabel a later setup.
   if (state.step !== "identity") {
@@ -2355,7 +2357,7 @@ function _statusLine(item) {
   return "Added to the queue.";
 }
 
-function _renderSongCard(item, reorderCtx) {
+function _renderSongCard(item) {
   const req = item.request;
   const song = (req.song_title || "") + (req.song_artist ? ` — ${req.song_artist}` : "");
   const partners = req.additional_singers || [];
@@ -2413,43 +2415,106 @@ function _renderSongCard(item, reorderCtx) {
       },
     }, "Change song"));
   }
-  // Reorder — when this device owns 2+ queued (approved) songs, let the singer
-  // nudge their own songs' order (the KJ approves the reorder).
-  if (reorderCtx && reorderCtx.order.length >= 2 && reorderCtx.order.includes(req.id)) {
-    const idx = reorderCtx.order.indexOf(req.id);
-    const upBtn = el("button", { class: "btn ghost", "data-testid": "reorder-up" }, "▲ Up");
-    const downBtn = el("button", { class: "btn ghost", "data-testid": "reorder-down" }, "▼ Down");
-    const setEnabled = (on) => {
-      upBtn.disabled = !on || idx === 0;
-      downBtn.disabled = !on || idx === reorderCtx.order.length - 1;
-    };
-    let busy = false;   // in-flight guard: no overlapping reorder requests
-    const move = (delta) => async (e) => {
-      e.stopPropagation();
-      if (busy) return;
-      const j = idx + delta;
-      if (j < 0 || j >= reorderCtx.order.length) return;
-      const order = reorderCtx.order.slice();
-      [order[idx], order[j]] = [order[j], order[idx]];
-      const items = order.map((id) => ({ id, edit_token: reorderCtx.tokens[id] }));
-      busy = true;
-      setEnabled(false);
-      try {
-        await reorderSongs(items);
-        alert("Reorder requested — the KJ will confirm it.");
-        if (typeof window.__sing_render === "function") window.__sing_render();
-      } catch {
-        alert("Couldn't reorder — please see the KJ.");
-        busy = false;
-        setEnabled(true);   // re-arm so the singer can retry
-      }
-    };
-    upBtn.onclick = move(-1);
-    downBtn.onclick = move(1);
-    setEnabled(true);
-    card.appendChild(el("div", { class: "song-card-reorder" }, upBtn, downBtn));
-  }
   return card;
+}
+
+// The device's reorderable songs (approved + owned edit_token + a real queue
+// position), in current sing order. Shared by the "Reorder songs" toggle and
+// the drag view.
+function _reorderableSongs() {
+  const { active } = _splitAndSortSongs(state.mySongs.items);
+  const rows = [];
+  const tokens = {};
+  for (const item of active) {
+    const r = item.request;
+    const tok = readEditToken(TOKEN, r.id);
+    if (r.status === "approved" && tok
+        && item.estimate && typeof item.estimate.position === "number") {
+      tokens[r.id] = tok;
+      rows.push(item);
+    }
+  }
+  return { rows, tokens };
+}
+
+// Pointer-based drag sorting — HTML5 DnD is unusable on mobile. Dragging is
+// restricted to the ⠿ handle (touch-action:none there) so the list itself
+// still scrolls normally.
+function _enableReorderDrag(list) {
+  let dragRow = null;
+  list.addEventListener("pointerdown", (e) => {
+    const handle = e.target.closest(".reorder-handle");
+    if (!handle) return;
+    dragRow = handle.closest(".reorder-row");
+    dragRow.classList.add("dragging");
+    try { handle.setPointerCapture(e.pointerId); } catch { /* old browsers */ }
+    e.preventDefault();
+  });
+  list.addEventListener("pointermove", (e) => {
+    if (!dragRow) return;
+    e.preventDefault();
+    const others = [...list.querySelectorAll(".reorder-row:not(.dragging)")];
+    const next = others.find((r) => {
+      const rect = r.getBoundingClientRect();
+      return e.clientY < rect.top + rect.height / 2;
+    });
+    if (next) list.insertBefore(dragRow, next);
+    else list.appendChild(dragRow);
+  });
+  const drop = () => {
+    if (dragRow) { dragRow.classList.remove("dragging"); dragRow = null; }
+  };
+  list.addEventListener("pointerup", drop);
+  list.addEventListener("pointercancel", drop);
+}
+
+// One-shot confirmation line shown after a reorder request is filed.
+let _reorderNotice = "";
+
+function renderReorderView() {
+  const { rows, tokens } = _reorderableSongs();
+  const list = el("div", { class: "reorder-list", "data-testid": "reorder-list" });
+  for (const item of rows) {
+    const r = item.request;
+    list.appendChild(el("div", { class: "reorder-row", "data-id": String(r.id) },
+      el("span", { class: "reorder-handle", "aria-label": "Drag to reorder" }, "⠿"),
+      el("span", { class: "reorder-song" },
+        [r.song_title, r.song_artist].filter(Boolean).join(" — ") || "(song)"),
+    ));
+  }
+  _enableReorderDrag(list);
+  const err = el("p", { class: "error" }, "");
+  const saveBtn = el("button", {
+    class: "btn primary", "data-testid": "reorder-save",
+  }, "Save new order");
+  saveBtn.onclick = async () => {
+    const order = [...list.querySelectorAll(".reorder-row")]
+      .map((r) => parseInt(r.dataset.id, 10));
+    saveBtn.disabled = true;
+    saveBtn.textContent = "Saving…";
+    try {
+      await reorderSongs(order.map((id) => ({ id, edit_token: tokens[id] })));
+      state._reorderMode = false;
+      _reorderNotice = "Reorder requested — the KJ will confirm it.";
+      render();
+    } catch {
+      saveBtn.disabled = false;
+      saveBtn.textContent = "Save new order";
+      err.textContent = "Couldn't save the new order — try again or see the KJ.";
+    }
+  };
+  return el("div", { class: "reorder-mode" },
+    el("p", { class: "hint" },
+      "Drag ⠿ to put your songs in the order you want to sing them, then save. "
+      + "The KJ confirms the change."),
+    list,
+    el("div", { class: "row" },
+      el("button", { class: "btn ghost", "data-testid": "reorder-exit",
+        onclick: () => { state._reorderMode = false; render(); } }, "Cancel"),
+      saveBtn,
+    ),
+    err,
+  );
 }
 
 function renderDone() {
@@ -2462,7 +2527,11 @@ function renderDone() {
     state.name ? el("p", { class: "hint done-identity" },
       "Singing as ", el("strong", {}, state.name), " · ",
       editNameLink("done")) : null,
-    el("div", { class: "songs-list" }, "Loading your songs…"),
+    // "↕ Reorder songs" toggle (+ post-save notice) — filled by the poll.
+    el("div", { class: "reorder-controls" }),
+    state._reorderMode
+      ? renderReorderView()
+      : el("div", { class: "songs-list" }, "Loading your songs…"),
     // Populated by pollMyRequests once we know which songs are already sung;
     // stays hidden until there's at least one, so the active list stays clean.
     el("div", { class: "sung-section", hidden: "" }),
@@ -2528,6 +2597,24 @@ async function pollMyRequests(card) {
           banner.setAttribute("hidden", "");
         }
       }
+      // A drag in progress must never be clobbered by the poll — freeze the
+      // list (and controls) until the singer saves or cancels.
+      if (state._reorderMode) return;
+      const controls = card.querySelector(".reorder-controls");
+      if (controls) {
+        controls.innerHTML = "";
+        if (_reorderNotice) {
+          controls.appendChild(el("p", { class: "hint reorder-notice" }, _reorderNotice));
+          _reorderNotice = "";   // shown until the next poll repaints (~15s)
+        }
+        if (_reorderableSongs().rows.length >= 2) {
+          controls.appendChild(el("button", {
+            class: "btn ghost reorder-toggle",
+            "data-testid": "reorder-songs",
+            onclick: () => { state._reorderMode = true; render(); },
+          }, "↕ Reorder songs"));
+        }
+      }
       const slot = card.querySelector(".songs-list");
       const sungSection = card.querySelector(".sung-section");
       // Split sung songs out of the active list and sort what's left into the
@@ -2542,24 +2629,7 @@ async function pollMyRequests(card) {
           slot.appendChild(el("p", { class: "hint" },
             "All your songs are done — tap 'Request another song' below for more."));
         } else {
-          // Build reorder context: this device's own queued (approved) songs,
-          // in display order, that we hold an edit_token for. Sung songs are
-          // already excluded (they're in `performed`, not `active`), and a
-          // real queue position is required so a not-yet-estimated song can't
-          // sneak in.
-          const order = [];
-          const tokens = {};
-          for (const item of active) {
-            const r = item.request;
-            const tok = readEditToken(TOKEN, r.id);
-            if (r.status === "approved" && tok
-                && item.estimate && typeof item.estimate.position === "number") {
-              order.push(r.id);
-              tokens[r.id] = tok;
-            }
-          }
-          const reorderCtx = { order, tokens };
-          for (const item of active) slot.appendChild(_renderSongCard(item, reorderCtx));
+          for (const item of active) slot.appendChild(_renderSongCard(item));
         }
       }
       if (sungSection) _renderSungSection(sungSection, performed);
@@ -2898,76 +2968,142 @@ window.addEventListener("beforeinstallprompt", (e) => {
   deferredInstallPrompt = e;
 });
 
-function maybeShowIosInstructions() {
-  if (!IS_IOS || IS_STANDALONE) return false;
-  const container = document.getElementById("push-optin");
-  if (!container) return true;
-  container.innerHTML = "";
-  container.classList.add("ios-install");
-  container.appendChild(
-    el("div", {},
-      el("strong", {}, "📱 iPhone? Get tapped when you're up."),
-      el("p", {},
-        "Tap the Share button, then ",
-        el("strong", {}, "Add to Home Screen"),
-        ", then reopen from your home screen. You'll then be able to enable notifications."),
-      el("button", {
-        class: "btn ghost",
-        onclick: (e) => { e.target.closest(".push-optin").remove(); },
-      }, "Got it"),
-    ),
-  );
-  return true;
+// --- Notifications section (My songs screen) --------------------------------
+// Explains exactly which channels will fire — browser push, SMS, or both —
+// and lets the singer add/change a mobile number AFTER signup (the number is
+// written onto their owned request rows, which is where the "you're up" SMS
+// resolves it from).
+
+async function _savePhoneNumber(phone) {
+  const items = [];
+  const store = _readMyRequestStore();
+  if (store && store.token === TOKEN && Array.isArray(store.ids)) {
+    for (const id of store.ids) {
+      const tok = store.tokens && store.tokens[String(id)];
+      if (tok) items.push({ id, edit_token: tok });
+    }
+  }
+  await fetchJson(`${BASE}/update-phone`, {
+    method: "POST",
+    body: JSON.stringify({ phone, device_id: DEVICE_ID, items }),
+  });
+  state.phone = phone;
+  LS.set("sing_phone", phone);
+  // Keep the push subscription's phone in sync (idempotent upsert).
+  ensurePushSubscription();
 }
 
-// Show/hide/update the push-opt-in block based on current Notification.permission.
-// Called from renderDone() with a 2s delay so the "you're in!" line registers first.
+// Inline add/change-number editor. `onSaved` re-renders the section.
+function _phoneEditor(onSaved) {
+  const input = el("input", {
+    type: "tel", class: "sing-empty-input notify-phone-input",
+    placeholder: "+1 555 123 4567",
+    value: state.phone || "",
+    "data-testid": "notify-phone",
+  });
+  const err = el("p", { class: "error" }, "");
+  const saveBtn = el("button", {
+    class: "btn primary notify-phone-save",
+    "data-testid": "notify-phone-save",
+  }, "Save number");
+  saveBtn.onclick = async () => {
+    const phone = (input.value || "").trim();
+    if (!phone || !PHONE_RE.test(phone)) {
+      err.textContent = "That number doesn't look right — digits, spaces, or + only.";
+      return;
+    }
+    saveBtn.disabled = true;
+    saveBtn.textContent = "Saving…";
+    try {
+      await _savePhoneNumber(phone);
+      onSaved();
+    } catch {
+      saveBtn.disabled = false;
+      saveBtn.textContent = "Save number";
+      err.textContent = "Couldn't save — check your connection and try again.";
+    }
+  };
+  return el("div", { class: "notify-phone-editor" }, input, saveBtn, err);
+}
+
 function maybeShowPushPrompt() {
   const container = document.getElementById("push-optin");
   if (!container) return;
-  // iOS Safari outside a standalone PWA can't use Web Push — show instructions instead
-  if (maybeShowIosInstructions()) return;
-  if (!("Notification" in window) || !swRegistration) {
-    container.remove();
-    return;
-  }
-  const perm = Notification.permission;
-  if (perm === "granted") {
-    ensurePushSubscription();  // idempotent — ensures server row exists for this device
-    container.innerHTML = "";
-    container.textContent = "✓ Notifications on — we'll buzz you when you're up.";
-    container.classList.add("push-on");
-    return;
-  }
-  if (perm === "denied") {
-    container.innerHTML = "";
-    container.textContent = "Notifications blocked — keep this tab open for updates.";
-    container.classList.add("push-blocked");
-    return;
-  }
-  // perm === "default" — show the prompt button
+
+  const rerenderSection = () => maybeShowPushPrompt();
+  const smsOn = !!(state.phone && PHONE_RE.test(state.phone));
+  const iosNoPwa = IS_IOS && !IS_STANDALONE;
+  const pushSupported = !iosNoPwa && ("Notification" in window) && !!swRegistration;
+  const perm = pushSupported ? Notification.permission : null;
+
   container.innerHTML = "";
-  const btn = el("button", {
-    class: "btn primary",
-    onclick: async () => {
+  container.classList.remove("push-on", "push-blocked", "ios-install");
+  container.appendChild(el("h3", { class: "notify-heading" }, "🔔 When you're up"));
+
+  const lines = el("div", { class: "notify-lines" });
+  container.appendChild(lines);
+
+  // --- Browser-push line ---
+  if (perm === "granted") {
+    ensurePushSubscription();   // idempotent — ensures the server row exists
+    lines.appendChild(el("p", { class: "notify-line notify-on" },
+      "✓ Browser notification — pops up on this device."));
+  } else if (perm === "default") {
+    const btn = el("button", { class: "btn primary notify-enable" },
+      "🔔 Turn on browser notifications");
+    btn.onclick = async () => {
       btn.disabled = true;
       btn.textContent = "Asking…";
-      const result = await requestPushPermission();
-      if (result === "granted") {
-        container.innerHTML = "";
-        container.textContent = "✓ Notifications on — we'll buzz you when you're up.";
-        container.classList.add("push-on");
-      } else {
-        btn.disabled = false;
-        btn.textContent = "🔔 Notify me when I'm up";
-        if (result === "denied") {
-          container.appendChild(el("p", { class: "hint" },
-            "You blocked notifications — keep this tab open for updates."));
-        }
-      }
-    },
-  }, "🔔 Notify me when I'm up");
-  container.appendChild(btn);
+      await requestPushPermission();
+      rerenderSection();
+    };
+    lines.appendChild(btn);
+  } else if (perm === "denied") {
+    lines.appendChild(el("p", { class: "notify-line notify-off" },
+      "Browser notifications are blocked for this site."));
+  } else if (iosNoPwa) {
+    lines.appendChild(el("details", { class: "notify-ios" },
+      el("summary", {}, "📱 iPhone? Enable pop-up notifications"),
+      el("p", {},
+        "Tap the Share button, then ",
+        el("strong", {}, "Add to Home Screen"),
+        ", then reopen from your home screen — notifications work from there."),
+    ));
+  }
+
+  // --- SMS line ---
+  if (smsOn) {
+    const line = el("p", { class: "notify-line notify-on" },
+      `✓ Text message to ${state.phone} · `,
+      el("a", { href: "#", "data-testid": "notify-change-phone", onclick: (e) => {
+        e.preventDefault();
+        line.replaceWith(_phoneEditor(rerenderSection));
+      } }, "change number"),
+    );
+    lines.appendChild(line);
+  } else {
+    const line = el("p", { class: "notify-line" },
+      "Want a text when you're up? ",
+      el("a", { href: "#", "data-testid": "notify-add-phone", onclick: (e) => {
+        e.preventDefault();
+        line.replaceWith(_phoneEditor(rerenderSection));
+      } }, "Add your number"),
+    );
+    lines.appendChild(line);
+  }
+
+  // --- Summary of what will actually happen ---
+  let summary;
+  if (perm === "granted" && smsOn) {
+    summary = "You'll get BOTH a pop-up on this device and a text.";
+  } else if (perm === "granted") {
+    summary = "You'll get a pop-up on this device (no text — no number on file).";
+  } else if (smsOn) {
+    summary = "You'll get a text — no pop-ups on this device.";
+  } else {
+    summary = "No notifications yet — the KJ will call your name. Keep this page open for live updates.";
+  }
+  container.appendChild(el("p", { class: "hint notify-summary" }, summary));
 }
 
 // --- Rules footer (Rotation tab only) --------------------------------------

@@ -654,6 +654,17 @@ class SingStore:
     def count_pending(self):
         return self.count_by_status().get("pending", 0)
 
+    def set_request_phone(self, request_id, phone):
+        """Update just the contact phone on a request (singer added/changed
+        their number after submitting). Returns the updated row."""
+        conn = self._get_conn()
+        conn.execute(
+            "UPDATE sing_requests SET phone = ? WHERE id = ?",
+            ((phone or "").strip(), request_id),
+        )
+        conn.commit()
+        return self.get_request(request_id)
+
     def update_request(
         self,
         request_id,
