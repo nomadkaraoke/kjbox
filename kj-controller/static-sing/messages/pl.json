@@ -408,6 +408,17 @@
     "photos": "📸 Zdjęcia i nagrania są mile widziane."
   },
   "footer": {
-    "fromHost": "Wiadomość od prowadzącego"
+    "fromHost": "Wiadomość od prowadzącego",
+    "followUs": "Obserwuj nas",
+    "website": "Strona internetowa",
+    "email": "E-mail"
+  },
+  "photoConsent": {
+    "question": "📷 Czy zgadzasz się na publikację zdjęć lub filmów z Twoim dzisiejszym występem w mediach społecznościowych?",
+    "yes": "👍 Tak, zgadzam się",
+    "no": "🚫 Proszę nie",
+    "hint": "Twój KJ widzi Twój wybór obok Twojego imienia. Możesz go zmienić w dowolnej chwili w sekcji Moje piosenki.",
+    "saved": "✓ Zapisano — Twój KJ widzi Twój wybór.",
+    "saveFailed": "Nie udało się zapisać — spróbuj ponownie."
   }
 }

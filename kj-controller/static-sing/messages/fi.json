@@ -408,6 +408,17 @@
     "photos": "📸 Valokuvat ja videot ovat tervetulleita."
   },
   "footer": {
-    "fromHost": "Viesti vetäjältäsi"
+    "fromHost": "Viesti vetäjältäsi",
+    "followUs": "Seuraa meitä",
+    "website": "Verkkosivusto",
+    "email": "Sähköposti"
+  },
+  "photoConsent": {
+    "question": "📷 Sopiiko, että esityksestäsi tänä iltana otettuja kuvia tai videoita julkaistaan sosiaalisessa mediassa?",
+    "yes": "👍 Kyllä, sopii hyvin",
+    "no": "🚫 Ei kiitos",
+    "hint": "KJ näkee valintasi nimesi vieressä. Voit muuttaa sitä milloin tahansa Omat laulut -osiosta.",
+    "saved": "✓ Tallennettu — KJ näkee valintasi.",
+    "saveFailed": "Tallennus epäonnistui — yritä uudelleen."
   }
 }

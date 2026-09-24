@@ -408,6 +408,17 @@
     "photos": "📸 Gambar dan video dialu-alukan."
   },
   "footer": {
-    "fromHost": "Nota daripada hos anda"
+    "fromHost": "Nota daripada hos anda",
+    "followUs": "Ikuti kami",
+    "website": "Laman web",
+    "email": "E-mel"
+  },
+  "photoConsent": {
+    "question": "📷 Adakah anda okey jika gambar atau video anda menyanyi malam ini dimuat naik ke media sosial?",
+    "yes": "👍 Ya, tiada masalah",
+    "no": "🚫 Tolong jangan",
+    "hint": "Hos anda akan melihat pilihan anda di sebelah nama anda. Anda boleh menukarnya pada bila-bila masa dari Lagu saya.",
+    "saved": "✓ Disimpan — hos anda boleh melihat pilihan anda.",
+    "saveFailed": "Tidak dapat disimpan — sila cuba lagi."
   }
 }

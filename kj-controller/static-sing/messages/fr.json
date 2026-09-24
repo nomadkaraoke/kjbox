@@ -408,6 +408,17 @@
     "photos": "📸 Les photos et vidéos sont les bienvenues."
   },
   "footer": {
-    "fromHost": "Un mot de ton KJ"
+    "fromHost": "Un mot de ton KJ",
+    "followUs": "Suis-nous",
+    "website": "Site web",
+    "email": "E-mail"
+  },
+  "photoConsent": {
+    "question": "📷 Ça te va si des photos ou vidéos de toi en train de chanter ce soir sont publiées sur les réseaux sociaux ?",
+    "yes": "👍 Oui, ça me va",
+    "no": "🚫 Non merci",
+    "hint": "Ton hôte voit ton choix à côté de ton nom. Tu peux le modifier à tout moment depuis Mes chansons.",
+    "saved": "✓ Enregistré — ton hôte peut voir ton choix.",
+    "saveFailed": "Impossible d'enregistrer — réessaie s'il te plaît."
   }
 }

@@ -408,6 +408,17 @@
     "photos": "📸 Foto e video sono i benvenuti."
   },
   "footer": {
-    "fromHost": "Un messaggio dal tuo host"
+    "fromHost": "Un messaggio dal tuo host",
+    "followUs": "Seguici",
+    "website": "Sito web",
+    "email": "Email"
+  },
+  "photoConsent": {
+    "question": "📷 Va bene se foto o video di te che canti stasera vengono pubblicati sui social media?",
+    "yes": "👍 Sì, va bene",
+    "no": "🚫 Preferisco di no",
+    "hint": "Il KJ vede la tua scelta accanto al tuo nome. Puoi cambiarla in qualsiasi momento da Le mie canzoni.",
+    "saved": "✓ Salvato — il KJ può vedere la tua scelta.",
+    "saveFailed": "Impossibile salvare — riprova."
   }
 }

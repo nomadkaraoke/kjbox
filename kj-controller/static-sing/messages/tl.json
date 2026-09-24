@@ -408,6 +408,17 @@
     "photos": "📸 Welcome ang mga photo at video."
   },
   "footer": {
-    "fromHost": "Mensahe mula sa iyong host"
+    "fromHost": "Mensahe mula sa iyong host",
+    "followUs": "Sundan kami",
+    "website": "Website",
+    "email": "Email"
+  },
+  "photoConsent": {
+    "question": "📷 Ayos lang ba na i-post sa social media ang mga litrato o video mo habang kumakanta ngayong gabi?",
+    "yes": "👍 Oo, ayos lang",
+    "no": "🚫 Huwag po",
+    "hint": "Makikita ng host ang pinili mo sa tabi ng pangalan mo. Pwede mo itong baguhin anumang oras sa Mga kanta ko.",
+    "saved": "✓ Na-save na — makikita ng host ang pinili mo.",
+    "saveFailed": "Hindi na-save — pakisubukan ulit."
   }
 }

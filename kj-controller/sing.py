@@ -884,10 +884,11 @@ def tip_info():
 @sing_bp.route("/event-info", methods=["GET"])
 @require_token
 def event_info():
-    """Venue context for the singer UI footer: the KJ's free-text message and
-    the pre-built notices they've switched on (phone chargers, wifi, …)."""
+    """Venue context for the singer UI footer: the KJ's free-text message, the
+    pre-built notices they've switched on (phone chargers, wifi, …), their
+    social links, and whether to ask singers for photo/video consent."""
     store = getattr(current_app, "sing_store", None)
-    footer = {"message": "", "notices": []}
+    footer = {"message": "", "notices": [], "social": {}, "ask_photo_consent": False}
     if store is not None:
         try:
             footer = store.get_footer_settings()
@@ -898,6 +899,8 @@ def event_info():
         "kj_name": settings.get("kj_name") or "",
         "footer_message": footer.get("message") or "",
         "notices": footer.get("notices") or [],
+        "social": footer.get("social") or {},
+        "ask_photo_consent": bool(footer.get("ask_photo_consent")),
     })
 
 
@@ -976,6 +979,9 @@ def submit():
     source_ref = data.get("source_ref") or None
     source_meta = data.get("source_meta") or None
     notes = (data.get("notes") or "").strip()
+    photo_consent = data.get("photo_consent")
+    if photo_consent not in (None, "", "yes", "no"):
+        return jsonify({"error": "photo_consent must be 'yes' or 'no'"}), 400
     additional_raw = data.get("additional_singers")
     additional, additional_err = _validate_additional_singers(additional_raw)
     if additional_err:
@@ -1037,6 +1043,15 @@ def submit():
         user_agent=request.headers.get("User-Agent", "")[:500],
         device_id=device_id or None,
     )
+
+    # Social-media photo consent rides along with each request (the device
+    # remembers the singer's choice), recorded against the canonical name so
+    # the KJ's rotation shows it. Best-effort — never fail a song request.
+    if photo_consent:
+        try:
+            store.set_photo_consent(singer_name, photo_consent, source="singer")
+        except Exception:
+            current_app.logger.exception("submit: photo consent write failed")
 
     auto_approved = False
     # Auto-approve also handles kj_pick: rather than deferring to the KJ, bind
@@ -1814,6 +1829,57 @@ def update_phone():
     return jsonify({"success": True, "updated": updated})
 
 
+@sing_bp.route("/photo-consent", methods=["POST"])
+def photo_consent():
+    """Singer changes their social-media photo/video consent after submitting.
+
+    Ownership is proven the same way as /update-phone (each item's
+    edit_token); the choice is recorded for the singer name on every verified
+    tonight request. A device with no requests yet gets ``updated: 0`` — its
+    choice is sent with its first /submit instead.
+
+    Body: ``{consent: "yes"|"no", items: [{id, edit_token}, ...]}``.
+    """
+    store = getattr(current_app, "sing_store", None)
+    if store is None:
+        return jsonify({"error": "not_configured"}), 503
+
+    if _singer_rate_limited(request):
+        return jsonify({"error": "rate_limited"}), 429
+
+    token = _extract_token()
+    if not token or not _is_token_valid(store, token):
+        return jsonify({"error": "not_open"}), 403
+
+    data = request.get_json(silent=True) or {}
+    consent = data.get("consent")
+    if consent not in ("yes", "no"):
+        return jsonify({"error": "consent must be 'yes' or 'no'"}), 400
+    items = data.get("items") or []
+    if not isinstance(items, list):
+        return jsonify({"error": "items must be a list"}), 400
+
+    names = []
+    for item in items[:_MY_REQUESTS_MAX_IDS]:
+        if not isinstance(item, dict):
+            continue
+        req = store.get_request(item.get("id"))
+        if req is None or req.get("token") != token:
+            continue
+        if not _belongs_to_current_night(store, req):
+            continue
+        stored = req.get("edit_token") or ""
+        if not stored or not secrets.compare_digest(str(item.get("edit_token") or ""), str(stored)):
+            continue
+        key = store.photo_consent_key(req.get("singer_name"))
+        if key and key not in {store.photo_consent_key(n) for n in names}:
+            names.append(req["singer_name"])
+
+    for name in names:
+        store.set_photo_consent(name, consent, source="singer")
+    return jsonify({"success": True, "updated": len(names)})
+
+
 @sing_bp.route("/rename", methods=["POST"])
 def rename_me():
     """Singer renames THEMSELVES from the portal, persistently.
@@ -1921,6 +1987,13 @@ def rename_me():
                 )
         except Exception:
             current_app.logger.exception("self-rename: entry rewrite failed")
+
+    # The singer's photo-consent choice follows them to the new name.
+    for old in verified_old_names:
+        try:
+            store.carry_photo_consent(old, new_name)
+        except Exception:
+            current_app.logger.exception("self-rename: photo consent carry failed")
 
     # Rewrite the verified requests' stored name (keeps provenance + the done
     # screen consistent, and means a pending request is approved under the new

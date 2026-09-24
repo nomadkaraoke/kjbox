@@ -3505,6 +3505,39 @@ def _add_media_meta(entries):
             continue
 
 
+def _add_photo_consent(entries, app=None):
+    """Attach ``photo_consent = {singer_name: "yes"|"no"|None}`` to each entry.
+
+    One map entry per singer on the row (duet rows list every partner) so the
+    KJ UI can put a 📷 / 🚫 marker beside each name. Tonight-scoped choices
+    from the singer UI or the KJ. Best-effort: a store error leaves Nones.
+    """
+    app = app or current_app._get_current_object()
+    store = getattr(app, "sing_store", None)
+    consents = {}
+    if store is not None:
+        try:
+            consents = store.get_photo_consents()
+        except Exception:
+            consents = {}
+    for e in entries:
+        names = None
+        if e.get("singers_json"):
+            try:
+                parsed = json.loads(e["singers_json"])
+                if isinstance(parsed, list):
+                    names = [n for n in parsed if isinstance(n, str)]
+            except (TypeError, ValueError):
+                names = None
+        if not names:
+            names = [e.get("singer") or ""]
+        out = {}
+        for n in names:
+            rec = consents.get(" ".join(n.split()).casefold()) if n else None
+            out[n] = rec["consent"] if rec else None
+        e["photo_consent"] = out
+
+
 def _decorate_rotation_entries(entries, rotation):
     """Attach every frontend-facing computed field to rotation entries.
 
@@ -3526,6 +3559,7 @@ def _decorate_rotation_entries(entries, rotation):
     _add_wait_pills(entries, rotation)
     _add_sms_status(entries)
     _add_media_meta(entries)
+    _add_photo_consent(entries)
 
 
 @routes_bp.route('/rotation', methods=['GET'])
@@ -4628,6 +4662,27 @@ def rename_singer_route():
         return _singer_action_response(rotation)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+@routes_bp.route('/rotation/singer/photo-consent', methods=['POST'])
+def singer_photo_consent_route():
+    """KJ sets/clears a singer's social-media photo consent for tonight.
+
+    Body: ``{singer, consent: "yes"|"no"|null}``.
+    """
+    rotation = getattr(current_app, 'rotation', None)
+    store = getattr(current_app, 'sing_store', None)
+    if rotation is None or store is None:
+        return jsonify({"error": "Rotation not configured"}), 503
+    data = request.get_json(force=True, silent=True) or {}
+    singer = (data.get('singer') or '').strip()
+    consent = data.get('consent')
+    if not singer:
+        return jsonify({"error": "singer is required"}), 400
+    if consent not in ('yes', 'no', None):
+        return jsonify({"error": "consent must be 'yes', 'no' or null"}), 400
+    store.set_photo_consent(singer, consent, source='kj')
+    return _singer_action_response(rotation)
 
 
 @routes_bp.route('/rotation/singer/merge', methods=['POST'])

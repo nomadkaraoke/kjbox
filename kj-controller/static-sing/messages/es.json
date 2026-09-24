@@ -408,6 +408,17 @@
     "photos": "📸 Las fotos y videos son bienvenidos."
   },
   "footer": {
-    "fromHost": "Una nota de tu anfitrión"
+    "fromHost": "Una nota de tu anfitrión",
+    "followUs": "Síguenos",
+    "website": "Sitio web",
+    "email": "Correo"
+  },
+  "photoConsent": {
+    "question": "📷 ¿Te parece bien si se publican fotos o videos tuyos cantando esta noche en las redes sociales?",
+    "yes": "👍 Sí, está bien",
+    "no": "🚫 Por favor, no",
+    "hint": "Tu anfitrión verá tu elección junto a tu nombre. Puedes cambiarla en cualquier momento en Mis canciones.",
+    "saved": "✓ Guardado — tu anfitrión puede ver tu elección.",
+    "saveFailed": "No se pudo guardar — por favor, inténtalo de nuevo."
   }
 }

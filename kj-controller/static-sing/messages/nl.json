@@ -408,6 +408,17 @@
     "photos": "📸 Foto's en video's zijn welkom."
   },
   "footer": {
-    "fromHost": "Een bericht van je host"
+    "fromHost": "Een bericht van je host",
+    "followUs": "Volg ons",
+    "website": "Website",
+    "email": "E-mail"
+  },
+  "photoConsent": {
+    "question": "📷 Vind je het goed als er vanavond foto's of video's van je optreden op social media worden geplaatst?",
+    "yes": "👍 Ja, dat is prima",
+    "no": "🚫 Liever niet",
+    "hint": "Je host ziet je keuze naast je naam. Je kunt dit op elk moment wijzigen via Mijn nummers.",
+    "saved": "✓ Opgeslagen — je host kan je keuze zien.",
+    "saveFailed": "Opslaan is niet gelukt — probeer het opnieuw."
   }
 }

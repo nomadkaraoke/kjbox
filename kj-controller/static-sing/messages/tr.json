@@ -408,6 +408,17 @@
     "photos": "📸 Fotoğraf ve video çekebilirsin."
   },
   "footer": {
-    "fromHost": "Sunucundan bir not"
+    "fromHost": "Sunucundan bir not",
+    "followUs": "Bizi takip et",
+    "website": "Web sitesi",
+    "email": "E-posta"
+  },
+  "photoConsent": {
+    "question": "📷 Bu gece şarkı söylerken çekilen fotoğraf veya videolarının sosyal medyada paylaşılması senin için uygun mu?",
+    "yes": "👍 Evet, sorun değil",
+    "no": "🚫 Lütfen paylaşılmasın",
+    "hint": "Sunucun seçimini adının yanında görür. Bunu istediğin zaman Şarkılarım'dan değiştirebilirsin.",
+    "saved": "✓ Kaydedildi — sunucun seçimini görebilir.",
+    "saveFailed": "Kaydedilemedi — lütfen tekrar dene."
   }
 }

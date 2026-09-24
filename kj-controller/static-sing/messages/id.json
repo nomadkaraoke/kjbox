@@ -408,6 +408,17 @@
     "photos": "📸 Boleh ambil foto dan video."
   },
   "footer": {
-    "fromHost": "Catatan dari host-mu"
+    "fromHost": "Catatan dari host-mu",
+    "followUs": "Ikuti kami",
+    "website": "Website",
+    "email": "Email"
+  },
+  "photoConsent": {
+    "question": "📷 Apakah boleh jika foto atau video Anda saat bernyanyi malam ini diposting ke media sosial?",
+    "yes": "👍 Ya, boleh",
+    "no": "🚫 Tolong jangan",
+    "hint": "Host Anda akan melihat pilihan ini di sebelah nama Anda. Anda bisa mengubahnya kapan saja di menu Lagu saya.",
+    "saved": "✓ Tersimpan — host Anda bisa melihat pilihan Anda.",
+    "saveFailed": "Gagal menyimpan — silakan coba lagi."
   }
 }

@@ -1549,6 +1549,59 @@ button.status-tile:active { transform: scale(0.99); }
 }
 .sing-footer-message-body { font-size: 0.9rem; }
 
+/* Social link icons (KJ-configured) under the notices. */
+.sing-social {
+  margin-top: 0.75rem;
+  text-align: center;
+}
+.sing-social-label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--nk-text-dim);
+  margin-bottom: 0.4rem;
+}
+.sing-social-links {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+.sing-social-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 999px;
+  background: var(--nk-card);
+  border: 1px solid var(--nk-border);
+  color: var(--nk-text);
+}
+.sing-social-link:hover,
+.sing-social-link:focus-visible { color: var(--nk-accent); border-color: var(--nk-accent); }
+.sing-social-link svg { width: 1.15rem; height: 1.15rem; }
+
+/* Social-media photo/video consent picker (confirm step + My songs). */
+.photo-consent {
+  margin: 0.75rem 0;
+  padding: 0.7rem 0.8rem;
+  border: 1px solid var(--nk-border);
+  border-radius: var(--nk-radius-sm);
+  background: var(--nk-card);
+}
+.photo-consent-question { margin: 0 0 0.5rem; font-size: 0.92rem; }
+.photo-consent-choices { gap: 0.5rem; }
+.photo-consent-choices .photo-consent-btn { flex: 1 1 0; }
+.photo-consent-btn.selected {
+  border-color: var(--nk-accent);
+  color: var(--nk-accent);
+  background: rgba(255, 77, 207, 0.08);
+}
+.photo-consent .hint { margin: 0.45rem 0 0; }
+.notify-lines + .notify-summary + .photo-consent,
+.notify-summary + .photo-consent { margin-top: 0.9rem; }
+
 /* --- ▶ Preview on rotation rows and My-songs cards ------------------------------ */
 .rotation-preview {
   background: none;

@@ -408,6 +408,17 @@
     "photos": "📸 Fotos und Videos sind willkommen."
   },
   "footer": {
-    "fromHost": "Eine Nachricht von deinem KJ"
+    "fromHost": "Eine Nachricht von deinem KJ",
+    "followUs": "Folge uns",
+    "website": "Website",
+    "email": "E-Mail"
+  },
+  "photoConsent": {
+    "question": "📷 Ist es okay, wenn heute Abend Fotos oder Videos von dir beim Singen auf Social Media gepostet werden?",
+    "yes": "👍 Ja, das ist okay",
+    "no": "🚫 Bitte nicht",
+    "hint": "Dein Host sieht deine Auswahl neben deinem Namen. Du kannst sie jederzeit unter „Meine Songs“ ändern.",
+    "saved": "✓ Gespeichert — dein Host kann deine Auswahl sehen.",
+    "saveFailed": "Das konnte nicht gespeichert werden — bitte versuche es noch einmal."
   }
 }
