@@ -1117,6 +1117,9 @@ body {
 .kn-track.preferred:hover { background-color: rgba(255, 223, 107, 0.08); }
 
 .kn-track-info { display: flex; align-items: center; gap: 6px; flex: 1; min-width: 0; overflow: hidden; }
+/* KN version rows carry up to three action buttons — let the badges wrap under
+   the brand name rather than squeezing the name down to one letter. */
+.kn-track-list .kn-track-info { flex-wrap: wrap; row-gap: 3px; }
 .kn-brand-name { color: #e5e5e5; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .kn-brand-code { color: #666; font-size: 0.8em; font-weight: 600; flex-shrink: 0; }
 .kn-song-title { color: #999; font-size: 0.8em; margin-left: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -1236,33 +1239,46 @@ body {
 .rotation-search-dropdown .rs-note-edit:hover { color: #fcd34d; border-color: rgba(251, 191, 36, 0.8); background: rgba(251, 191, 36, 0.12); }
 
 /* Buttons: preview ▶, Link, Download. Same height/radius/border; only the accent
-   colour differs by role (preview=pink, Link/mirror=green, YouTube=red). */
+   colour differs by role (preview=pink, Link/mirror=green, YouTube=red). Shared
+   with the Karaoke Nerds panel's version rows (.kn-track-actions). */
 .rotation-search-dropdown .preview-btn,
 .rotation-search-dropdown .kn-play-btn,
-.rotation-search-dropdown .kn-download-btn {
+.rotation-search-dropdown .kn-download-btn,
+.kn-track-actions .preview-btn,
+.kn-track-actions .kn-play-btn,
+.kn-track-actions .kn-download-btn {
     display: inline-flex; align-items: center; justify-content: center; gap: 5px;
     box-sizing: border-box; height: 22px; padding: 0 8px; margin: 0;
     font-size: 0.72rem; font-weight: 500; line-height: 1;
     border: 1px solid transparent; border-radius: 5px; background: transparent;
     cursor: pointer; white-space: nowrap;
 }
-.rotation-search-dropdown .preview-btn {
+.rotation-search-dropdown .preview-btn,
+.kn-track-actions .preview-btn {
     border-color: rgba(255, 91, 184, 0.4); color: #ff7acc;
 }
-.rotation-search-dropdown .preview-btn:hover { background: rgba(255, 91, 184, 0.15); color: #ff9bd6; }
-.rotation-search-dropdown .preview-btn .pv-ico { font-size: 0.72rem; line-height: 1; }
+.rotation-search-dropdown .preview-btn:hover,
+.kn-track-actions .preview-btn:hover { background: rgba(255, 91, 184, 0.15); color: #ff9bd6; }
+.rotation-search-dropdown .preview-btn .pv-ico,
+.kn-track-actions .preview-btn .pv-ico { font-size: 0.72rem; line-height: 1; }
 .rotation-search-dropdown .kn-play-btn,
-.rotation-search-dropdown .kn-download-btn.dl-mirror {
+.rotation-search-dropdown .kn-download-btn.dl-mirror,
+.kn-track-actions .kn-play-btn,
+.kn-track-actions .kn-download-btn.dl-mirror {
     flex: 0 0 88px; width: 88px;
     border-color: rgba(34, 197, 94, 0.4); color: #86efac; background: rgba(34, 197, 94, 0.08);
 }
 .rotation-search-dropdown .kn-play-btn:hover,
-.rotation-search-dropdown .kn-download-btn.dl-mirror:hover { background: rgba(34, 197, 94, 0.18); color: #4ade80; }
-.rotation-search-dropdown .kn-download-btn.dl-youtube {
+.rotation-search-dropdown .kn-download-btn.dl-mirror:hover,
+.kn-track-actions .kn-play-btn:hover,
+.kn-track-actions .kn-download-btn.dl-mirror:hover { background: rgba(34, 197, 94, 0.18); color: #4ade80; }
+.rotation-search-dropdown .kn-download-btn.dl-youtube,
+.kn-track-actions .kn-download-btn.dl-youtube {
     flex: 0 0 88px; width: 88px;
     border-color: rgba(196, 48, 43, 0.55); color: #f0857f; background: rgba(196, 48, 43, 0.08);
 }
-.rotation-search-dropdown .kn-download-btn.dl-youtube:hover { background: rgba(196, 48, 43, 0.2); color: #ff9d97; }
+.rotation-search-dropdown .kn-download-btn.dl-youtube:hover,
+.kn-track-actions .kn-download-btn.dl-youtube:hover { background: rgba(196, 48, 43, 0.2); color: #ff9d97; }
 .rs-dl-ico { flex-shrink: 0; display: block; }
 .rs-dl-txt { line-height: 1; }
 
@@ -1863,6 +1879,13 @@ body {
     /* KN tracks: improve touch targets */
     .kn-track { padding: 8px 10px 8px 16px; }
     .kn-download-btn { padding: 6px 12px; }
+    /* Up to three controls (✓ Downloaded + Preview + Play) — let them wrap
+       onto a second line and keep at least ~40% of the row for the name. */
+    .kn-track-list .kn-track-info { flex-basis: 40%; }
+    .kn-track-list .kn-track-actions {
+        flex-shrink: 1; flex-wrap: wrap; justify-content: flex-end; row-gap: 4px;
+        max-width: 60%;
+    }
 
     /* Media list items: larger touch targets */
     #media-list li { padding: 12px; font-size: 0.85em; }

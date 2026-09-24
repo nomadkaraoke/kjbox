@@ -338,6 +338,55 @@ class TestKnGroupedPanel:
         expect(btn).to_have_count(1)
         expect(btn).to_have_attribute("title", "From the GCS mirror (not YouTube)")
 
+    def test_download_buttons_show_source_icon_like_rotation_search(self, app_page):
+        """Download buttons carry the rotation-search source styling: mirror =
+        green + Drive icon, YouTube = red + YT icon."""
+        app_page.evaluate(self._SEED)
+        mirror = app_page.locator("#kn-song-0 .kn-download-btn")
+        expect(mirror).to_have_class(re.compile(r"\bdl-mirror\b"))
+        expect(mirror.locator("svg.rs-dl-ico")).to_have_count(1)
+        expect(mirror).to_have_text("Download")
+
+        app_page.evaluate(
+            "() => renderKNResults([{ artist: 'A', title: 'B', versions: ["
+            "  { source: 'kn', priority_rank: 100, kn: { brand_name: 'Lemmy Caution',"
+            "    brand_code: 'LC', is_community: true,"
+            "    youtube_url: 'https://www.youtube.com/watch?v=abcdefghijk' } } ] }])")
+        yt = app_page.locator("#kn-song-0 .kn-download-btn")
+        expect(yt).to_have_class(re.compile(r"\bdl-youtube\b"))
+        expect(yt.locator("svg.rs-dl-ico")).to_have_count(1)
+        expect(yt).to_have_attribute("title", "From YouTube")
+
+    def test_mirror_download_click_keeps_icon_and_shows_queued(self, app_page):
+        app_page.evaluate(self._SEED)
+        app_page.evaluate("() => { window.downloadDivebarTrack = () => {}; }")
+        btn = app_page.locator("#kn-song-0 .kn-download-btn")
+        btn.click()
+        expect(btn).to_be_disabled()
+        expect(btn).to_have_text("Queued")
+        expect(btn.locator("svg.rs-dl-ico")).to_have_count(1)
+
+    def test_every_playable_version_has_a_preview_button(self, app_page):
+        """▶ Preview on library, downloaded, mirror and YouTube rows; none on
+        disc-only rows (nothing to audition)."""
+        app_page.evaluate(self._SEED)
+        song = app_page.locator("#kn-song-0")
+        # library file + downloaded CB1 + FBK mirror; KV is disc-only.
+        expect(song.locator(".preview-btn")).to_have_count(3)
+        disc_row = song.locator(".kn-track", has=app_page.locator(".kn-disc-only-badge"))
+        expect(disc_row.locator(".preview-btn")).to_have_count(0)
+
+    def test_preview_button_carries_version_descriptor(self, app_page):
+        app_page.evaluate(self._SEED)
+        mirror_row = app_page.locator("#kn-song-0 .kn-track",
+                                      has=app_page.locator(".kn-download-btn"))
+        onclick = mirror_row.locator(".preview-btn").get_attribute("onclick")
+        enc = re.search(r"openPreviewEnc\('([^']+)'\)", onclick).group(1)
+        pv = app_page.evaluate("(e) => JSON.parse(decodeURIComponent(e))", enc)
+        assert pv["source"] == "divebar"
+        assert pv["file_id"] == "fbk1"
+        assert pv["format"] == "cdg"
+
 
 # ---------------------------------------------------------------------------
 # Library row structure — play/preview/edit/delete buttons unified with the
