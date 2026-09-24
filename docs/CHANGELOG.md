@@ -2,6 +2,22 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-09-24 - Fix: Cancelled / host-removed songs no longer linger on My songs (v0.111.1)
+
+Report: a cancelled song stayed on the singer's list, struck through, reading "Added to the
+queue." — `_statusLine` had no `cancelled` case and fell through to the default.
+
+- **Singer-cancelled songs leave the list** (✕ Cancel, and the original of a ⇄ Change, which
+  the server cancels on approval). The card disappears immediately on a successful cancel
+  (local state updated, no wait for the poll) with a 15 s "Cancelled: <song>" notice.
+- **Host-removed songs are named honestly**: `/sing/my-requests` now sets `removed: true` when
+  an approved request's rotation entry was cancelled by the host (status `Cancelled` — it
+  stays in the rotation for the KJ, and the phone used to compute a bogus "#N in line" for
+  it) or deleted. Shown as "The host took this song off the list — ask them if that's a
+  surprise."; not counted as a live song (tab badge, status tile).
+- **✕ Dismiss** on rejected and host-removed cards forgets the request on this device
+  (`forgetRequestId`) so the singer isn't stuck with it all night.
+
 ## 2026-09-24 - Feature: KN panel buttons match rotation search — source-coloured Download + ▶ Preview (v0.111.0)
 
 Andrew wanted to tell GCS-mirror downloads from YouTube downloads at a glance in the

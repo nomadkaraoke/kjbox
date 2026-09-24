@@ -651,6 +651,38 @@ class TestMyRequests:
         assert "estimate" not in item
 
 
+    def _approved(self, sing_app):
+        r1 = self._create(sing_app)
+        from routes import approve_sing_request
+        entry_id = approve_sing_request(sing_app, sing_app.sing_store.get_request(r1["id"]))
+        sing_app.sing_store.mark_approved(r1["id"], linked_entry_id=entry_id)
+        return r1, entry_id
+
+    def test_removed_flag_when_host_cancels_entry(self, client, sing_app, token):
+        # Host cancelled the entry: not sung, not queued — the phone must say
+        # so instead of "Added to the queue." forever.
+        r1, entry_id = self._approved(sing_app)
+        sing_app.rotation.update_status(entry_id, "Cancelled")
+        item = client.get(f"/sing/my-requests?ids={r1['id']}&t={token}").get_json()["requests"][0]
+        assert item["removed"] is True
+        assert item["performed"] is False
+        assert "estimate" not in item
+
+    def test_removed_flag_when_host_deletes_entry(self, client, sing_app, token):
+        r1, entry_id = self._approved(sing_app)
+        sing_app.rotation.delete_entry(entry_id)
+        item = client.get(f"/sing/my-requests?ids={r1['id']}&t={token}").get_json()["requests"][0]
+        assert item["removed"] is True
+
+    def test_no_removed_flag_while_queued_or_sung(self, client, sing_app, token):
+        r1, entry_id = self._approved(sing_app)
+        item = client.get(f"/sing/my-requests?ids={r1['id']}&t={token}").get_json()["requests"][0]
+        assert "removed" not in item
+        sing_app.rotation.update_status(entry_id, "Done")
+        item = client.get(f"/sing/my-requests?ids={r1['id']}&t={token}").get_json()["requests"][0]
+        assert "removed" not in item and item["performed"] is True
+
+
 class TestSelfServiceCancel:
     def _body(self, **o):
         b = {"singer_name": "Alice", "phone": "", "song_artist": "Queen",
