@@ -782,6 +782,7 @@ input:focus {
 .sing-history-row:last-child { border-bottom: 0; }
 .sing-history-row:active .sing-history-song { color: var(--nk-accent); }
 .sing-history-song {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

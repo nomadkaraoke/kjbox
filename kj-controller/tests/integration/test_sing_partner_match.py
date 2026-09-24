@@ -35,6 +35,13 @@ class TestMatchKnownSinger:
         known = ["Sarah B.", "Sarah K."]
         assert match_known_singer("sarah", known) is None
 
+    def test_ambiguous_first_name_never_falls_through_to_typo_pass(self):
+        # "sarah" is within typo distance of "Sarah B." (fold "sarah b") but
+        # NOT of "Sarah Christopher" — the typo pass would "uniquely" pick
+        # Sarah B. if ambiguity didn't hard-stop the ladder.
+        known = ["Sarah B.", "Sarah Christopher"]
+        assert match_known_singer("sarah", known) is None
+
     def test_typo_match_when_unambiguous(self):
         assert match_known_singer("Mkie", self.KNOWN) == "Mike"
 

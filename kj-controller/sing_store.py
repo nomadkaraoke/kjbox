@@ -478,8 +478,9 @@ class SingStore:
             else:   # numeric threshold
                 if isinstance(value, bool) or not isinstance(value, (int, float)):
                     raise ValueError(f"{key} must be a number")
-                if value < 0:
-                    raise ValueError(f"{key} must be >= 0")
+                import math
+                if not math.isfinite(value) or value < 0:
+                    raise ValueError(f"{key} must be a finite number >= 0")
                 current[key] = value
         self._set_meta(self.TIP_SETTINGS_KEY, json.dumps(current))
         return current

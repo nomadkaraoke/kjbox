@@ -225,6 +225,10 @@ class TestTipSettingsStore:
         with _pytest.raises(ValueError):
             store.set_tip_settings({"threshold": -5})
         with _pytest.raises(ValueError):
+            store.set_tip_settings({"threshold": float("nan")})
+        with _pytest.raises(ValueError):
+            store.set_tip_settings({"threshold": float("inf")})
+        with _pytest.raises(ValueError):
             store.set_tip_settings("nope")
 
     def test_admin_config_roundtrip(self, sing_app):

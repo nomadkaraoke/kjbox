@@ -897,9 +897,11 @@ function renderTip() {
       onclick: () => setAmount(amt),
     }, info.threshold > 0 && amt >= info.threshold ? `$${amt} ♥` : `$${amt}`));
   }
+  const defaultAmount = chosenAmount;
   amountInput.addEventListener("input", () => {
     const v = parseFloat(amountInput.value);
     if (v > 0) setAmount(v, true);
+    else if (!amountInput.value.trim()) setAmount(defaultAmount);   // cleared → default preset
   });
   card.appendChild(el("h3", { class: "sing-tip-amount-heading" }, "$ Select amount"));
   card.appendChild(presetRow);
@@ -3262,7 +3264,9 @@ if (codeEntryEl) {
     }
     if (ids.length) {
       state.request = { id: ids[0] };
-      state.step = "done";
+      // Only force the done screen on a hashless entry — a reload of a ?r=
+      // link that's since navigated to #rotation etc. keeps its section.
+      if (!window.location.hash) state.step = "done";
     }
   }
   // Hash restore — a reload (or a shared link with a hash) puts the singer
@@ -3281,7 +3285,13 @@ if (codeEntryEl) {
       if (state.step === "tip") render();   // reload landed straight on #tip
       else updateTabsBar();
     })
-    .catch(() => { /* tab simply stays hidden */ });
+    .catch(() => {
+      // Failed fetch: resolve to disabled so a direct #tip landing shows the
+      // "not set up" copy instead of an eternal "Loading…". The tab stays
+      // hidden for this page-load; a reload retries.
+      state.tipInfo = { enabled: false, threshold: 0, methods: [] };
+      if (state.step === "tip") render();
+    });
   render();
   // Smart restore — if this device already submitted songs for tonight, bring
   // the singer back to their "Your songs tonight" list on reload (the ids +

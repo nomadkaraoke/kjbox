@@ -257,9 +257,11 @@ def main():
     else:
         os.makedirs(DEV_DATA_DIR, exist_ok=True)
         db_path = DEV_DB
-        if args.reseed and os.path.exists(db_path):
-            os.unlink(db_path)
-            print("Dev DB wiped.")
+        if args.reseed:
+            for f in (db_path, os.path.join(DEV_DATA_DIR, "media_library.db")):
+                if os.path.exists(f):
+                    os.unlink(f)
+            print("Dev DBs wiped (rotation + play stats).")
 
     if args.night:
         if db_path == DEV_DB:

@@ -5654,6 +5654,8 @@ def apply_confirmed_tip(app, req):
         threshold = 20.0
     if amount >= threshold:
         rotation.set_singer_priority_bias(name, 1)
+        return True   # caller re-weaves so the bump is visible immediately
+    return False
 
 
 def apply_reorder_request(app, req):
@@ -6190,12 +6192,19 @@ def approve_sing_request_route(req_id):
     # the same singer-level +1 bump as the rotation view's bump-up button.
     if req["source_type"] == "tip":
         try:
-            apply_confirmed_tip(current_app._get_current_object(), req)
+            bumped = apply_confirmed_tip(current_app._get_current_object(), req)
             store.mark_approved(req_id, linked_entry_id=None)
         except Exception as exc:
             return jsonify({"error": str(exc)}), 500
         # No push-notify: the "your song was approved" template doesn't fit.
-        maybe_auto_reorder(current_app._get_current_object())
+        if bumped:
+            # Mirror the rotation bump-up button: re-weave NOW so the paid
+            # bump is visible even with auto-reorder off (maybe_auto_reorder
+            # would silently no-op there).
+            try:
+                run_auto_order(current_app._get_current_object(), checkpoint=True)
+            except Exception:
+                current_app.logger.exception("post-tip auto-order failed")
         return jsonify({"success": True, "request": store.get_request(req_id), "entry_id": None})
 
     # Reorder request: not a song — apply the singer's requested order to their

@@ -9190,7 +9190,8 @@ const SingRequests = (() => {
                 <button class="btn-reject" data-id="${req.id}" title="Dismiss without applying priority">Dismiss</button>
               </div>`;
             row.querySelector('.btn-approve').addEventListener('click', () => approve(req.id));
-            row.querySelector('.btn-reject').addEventListener('click', () => reject(req.id));
+            row.querySelector('.btn-reject').addEventListener('click', () => reject(req.id,
+                'Dismiss this tip claim? No message is sent to the singer — their Tip tab just shows it as not confirmed.'));
             return row;
         }
         // Reorder request — not a song; minimal row with Approve/Reject only.
@@ -9493,8 +9494,8 @@ const SingRequests = (() => {
         if (typeof fetchRotation === 'function') fetchRotation();
     }
 
-    async function reject(id) {
-        if (!confirm('Reject this request? The singer will be asked to see the KJ.')) return;
+    async function reject(id, message) {
+        if (!confirm(message || 'Reject this request? The singer will be asked to see the KJ.')) return;
         try {
             const resp = await fetch(`/rotation/requests/${id}/reject`, {
                 method: 'POST',

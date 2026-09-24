@@ -773,9 +773,11 @@ def tip_claim():
         return jsonify({"error": "rate_limited"}), 429
 
     data = request.get_json(force=True, silent=True) or {}
-    singer_name = (data.get("singer_name") or "").strip()
-    device_id = (data.get("device_id") or "").strip()[:64]
-    method = (data.get("method") or "").strip()[:32]
+    if not isinstance(data, dict):
+        return jsonify({"error": "body must be a JSON object"}), 400
+    singer_name = str(data.get("singer_name") or "").strip()
+    device_id = str(data.get("device_id") or "").strip()[:64]
+    method = str(data.get("method") or "").strip()[:32]
     if not singer_name:
         return jsonify({"error": "singer_name is required"}), 400
     try:
@@ -1170,6 +1172,11 @@ def match_known_singer(typed, known_names, exclude=None):
     ]
     if len(first_name_hits) == 1:
         return first_name_hits[0]
+    if len(first_name_hits) > 1:
+        # Ambiguous first name ("sarah" with Sarah B. AND Sarah C.) — stop
+        # here; the typo pass could otherwise "uniquely" pick whichever
+        # variant happens to sit within edit distance. Wrong merge > dup.
+        return None
     try:
         from rapidfuzz.distance import DamerauLevenshtein
 
