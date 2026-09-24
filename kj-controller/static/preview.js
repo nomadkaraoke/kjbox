@@ -14,6 +14,13 @@
 
   function byId(id) { return document.getElementById(id); }
 
+  // URL indirection so the singer UI (sing.js) can reuse this module against
+  // its own token-gated /sing/preview/* + /sing/lib/* routes. The KJ UI
+  // defines no hook and gets the original same-origin paths untouched.
+  function _u(path) {
+    return (typeof window.__PREVIEW_URL === 'function') ? window.__PREVIEW_URL(path) : path;
+  }
+
   function attrEsc(s) {
     return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;')
                     .replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -76,7 +83,7 @@
 
     var res;
     try {
-      var r = await fetch('/preview/resolve', {
+      var r = await fetch(_u('/preview/resolve'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(descriptor),
@@ -104,8 +111,8 @@
     }
 
     switch (res.mode) {
-      case 'native_video': _mountVideo(body, '/preview/stream/' + res.token, descriptor); break;
-      case 'native_audio': _mountAudio(body, '/preview/stream/' + res.token); break;
+      case 'native_video': _mountVideo(body, _u('/preview/stream/' + res.token), descriptor); break;
+      case 'native_audio': _mountAudio(body, _u('/preview/stream/' + res.token)); break;
       case 'cdg': _mountCdg(body, res.token, gen); break;
       case 'hls': _mountHls(body, res.token, descriptor, gen); break;
       case 'youtube': _mountYouTube(body, res.youtube_url); break;
@@ -145,14 +152,14 @@
     var canvas = document.createElement('canvas');
     canvas.width = 300; canvas.height = 216; canvas.className = 'preview-cdg-canvas';
     var audio = document.createElement('audio');
-    audio.controls = true; audio.autoplay = true; audio.src = '/preview/cdg/' + token + '/audio';
+    audio.controls = true; audio.autoplay = true; audio.src = _u('/preview/cdg/' + token + '/audio');
     body.appendChild(canvas);
     body.appendChild(audio);
     _activeMedia = audio;
 
     var player = null;
     try {
-      var resp = await fetch('/preview/cdg/' + token + '/graphics');
+      var resp = await fetch(_u('/preview/cdg/' + token + '/graphics'));
       var buf = await resp.arrayBuffer();
       if (gen !== _previewGen || _activeMedia !== audio) return;  // superseded mid-fetch
       if (typeof CDGPlayer === 'function') {
@@ -174,7 +181,7 @@
     if (_hlsLibPromise) return _hlsLibPromise;
     _hlsLibPromise = new Promise(function (resolve, reject) {
       var s = document.createElement('script');
-      s.src = '/static/vendor/hls.min.js';
+      s.src = _u('/static/vendor/hls.min.js');
       s.onload = resolve;
       s.onerror = function (err) {
         // Don't cache the rejection — a transient load failure shouldn't break
@@ -194,7 +201,7 @@
     v.controls = true; v.autoplay = true; v.playsInline = true;
     body.appendChild(v);
     _activeMedia = v;
-    var url = '/preview/hls/' + token + '/index.m3u8';
+    var url = _u('/preview/hls/' + token + '/index.m3u8');
     if (v.canPlayType('application/vnd.apple.mpegurl')) { v.src = url; return; }
     _loadHlsLib().then(function () {
       if (gen !== _previewGen || _activeMedia !== v) return;  // superseded during load
@@ -242,7 +249,7 @@
 
   function _postClose(token) {
     try {
-      fetch('/preview/close', {
+      fetch(_u('/preview/close'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token: token }),

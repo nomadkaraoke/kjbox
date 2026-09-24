@@ -371,7 +371,7 @@ class TestChangeReorderControls:
         assert page.evaluate("window.__sing_state.step") == "search"
         assert page.evaluate("window.__sing_state.changeRequestId") == 11
 
-    def test_reorder_down_sends_both_tokens(self, page, live_server, live_token):
+    def test_drag_reorder_saves_new_order_with_tokens(self, page, live_server, live_token):
         reqs = [
             {"request": {"id": 11, "singer_name": "A", "song_artist": "Q", "song_title": "One",
                 "source_type": "local", "status": "approved", "created_at": "now",
@@ -388,13 +388,52 @@ class TestChangeReorderControls:
             status=200, content_type="application/json",
             body=json.dumps({"success": True, "request": {"id": 99, "status": "pending",
                                                           "source_type": "reorder"}})))
-        page.on("dialog", lambda d: d.accept())
-        first_down = page.locator('[data-testid="reorder-down"]').first
-        expect(first_down).to_be_visible()
+        # Cards themselves carry no ▲▼ buttons any more.
+        expect(page.locator('[data-testid="cancel-song"]').first).to_be_visible()
+        expect(page.locator('[data-testid="reorder-up"]')).to_have_count(0)
+        # Enter drag mode.
+        page.locator('[data-testid="reorder-songs"]').click()
+        rows = page.locator(".reorder-row")
+        expect(rows).to_have_count(2)
+        assert rows.nth(0).inner_text().find("One") >= 0
+        # Drag the first row's handle below the second row.
+        h = page.locator(".reorder-row").nth(0).locator(".reorder-handle")
+        h_box = h.bounding_box()
+        target = page.locator(".reorder-row").nth(1).bounding_box()
+        page.mouse.move(h_box["x"] + h_box["width"] / 2, h_box["y"] + h_box["height"] / 2)
+        page.mouse.down()
+        end_y = target["y"] + target["height"] + 8
+        for step in range(1, 6):
+            page.mouse.move(h_box["x"], h_box["y"] + (end_y - h_box["y"]) * step / 5)
+        page.mouse.up()
+        assert page.locator(".reorder-row").nth(0).inner_text().find("Two") >= 0
+        # Save posts the NEW order with both edit tokens.
         with page.expect_request("**/sing/requests/reorder*") as req_info:
-            first_down.click()
-        body = req_info.value.post_data or ""
-        assert "tok11" in body and "tok12" in body
+            page.locator('[data-testid="reorder-save"]').click()
+        body = json.loads(req_info.value.post_data or "{}")
+        assert [it["id"] for it in body["items"]] == [12, 11]
+        assert {it["edit_token"] for it in body["items"]} == {"tok11", "tok12"}
+        # Mode exits with a confirmation notice.
+        expect(page.locator(".reorder-notice")).to_contain_text("KJ will confirm")
+
+    def test_reorder_cancel_restores_list(self, page, live_server, live_token):
+        reqs = [
+            {"request": {"id": 11, "singer_name": "A", "song_artist": "Q", "song_title": "One",
+                "source_type": "local", "status": "approved", "created_at": "now",
+                "linked_entry_id": 101, "additional_singers": None},
+             "estimate": {"position": 3}},
+            {"request": {"id": 12, "singer_name": "A", "song_artist": "Q", "song_title": "Two",
+                "source_type": "local", "status": "approved", "created_at": "now",
+                "linked_entry_id": 102, "additional_singers": None},
+             "estimate": {"position": 5}},
+        ]
+        self._seed_done(page, live_server, live_token, reqs,
+                        {"token": live_token, "ids": [11, 12], "tokens": {"11": "tok11", "12": "tok12"}})
+        page.locator('[data-testid="reorder-songs"]').click()
+        expect(page.locator(".reorder-row")).to_have_count(2)
+        page.locator('[data-testid="reorder-exit"]').click()
+        expect(page.locator(".song-card-title").first).to_be_visible()
+        expect(page.locator(".reorder-row")).to_have_count(0)
 
 
 class TestDoneScreenOrderingAndSung:
@@ -506,40 +545,52 @@ class TestMySongsPersistence:
         # Bar is redundant on the done screen (which IS the list), so it hides.
         expect(page.locator('[data-testid="mysongs-bar"]')).to_be_hidden()
 
-    def test_bar_visible_off_done_and_reopens_list(self, page, live_server, live_token):
+    def test_bar_urgent_names_next_song_and_reopens_list(self, page, live_server, live_token):
+        # Nearly-up (position ≤ 3) → the bar appears on any tab, naming the
+        # actual next song; tapping returns to the list.
         self._seed_ls(page, live_server, live_token,
                       {"token": live_token, "ids": [4242], "tokens": {"4242": "secret-xyz"}})
-        self._route_my_requests(page, [self._pending_song()])
+        song = self._pending_song()
+        song["request"]["status"] = "approved"
+        song["estimate"] = {"position": 2, "range_low_s": 200, "range_high_s": 400,
+                            "now_singing": False}
+        self._route_my_requests(page, [song])
         page.reload()
         expect(page.locator(".song-card-title")).to_be_visible()   # restored to done
-        # Leave the done screen — the persistent bar should appear.
         page.locator('[data-testid="request-another"]').click()
         bar = page.locator('[data-testid="mysongs-bar"]')
         expect(bar).to_be_visible()
-        expect(bar).to_contain_text("My song (1)")
-        # Tapping the bar returns to the list.
+        expect(bar).to_contain_text("Your next song")
+        expect(bar).to_contain_text("Bo Rhap")
         bar.click()
         expect(page.locator(".song-card-title")).to_be_visible()
 
-    def test_bar_shows_status_at_a_glance(self, page, live_server, live_token):
-        # A queued song with a position surfaces its wait on the bar.
+    def test_bar_hidden_off_rotation_when_not_urgent(self, page, live_server, live_token):
+        # A far-off song (#4) doesn't earn bar space on the Request tab; it
+        # appears on the Rotation tab (queue-scanning context) with h/m waits.
         self._seed_ls(page, live_server, live_token,
                       {"token": live_token, "ids": [11], "tokens": {"11": "t11"}})
         song = {"request": {"id": 11, "singer_name": "Alice", "song_artist": "Q",
                             "song_title": "One", "source_type": "local", "status": "approved",
                             "created_at": "now", "linked_entry_id": 101, "additional_singers": None},
-                "estimate": {"position": 4, "range_low_s": 600, "range_high_s": 900,
+                "estimate": {"position": 4, "range_low_s": 4500, "range_high_s": 5400,
                              "now_singing": False}}
         self._route_my_requests(page, [song])
+        page.route("**/sing/rotation*", lambda r: r.fulfill(
+            status=200, content_type="application/json", body=json.dumps({"entries": []})))
         page.reload()
         expect(page.locator(".song-card-title")).to_be_visible()
         page.locator('[data-testid="request-another"]').click()
-        expect(page.locator('[data-testid="mysongs-bar"]')).to_contain_text("#4")
+        expect(page.locator('[data-testid="mysongs-bar"]')).to_be_hidden()
+        page.locator('[data-testid="tab-rotation"]').click()
+        bar = page.locator('[data-testid="mysongs-bar"]')
+        expect(bar).to_be_visible()
+        expect(bar).to_contain_text("#4 · ~1h 15m–1h 30m")
 
-    def test_stale_night_prunes_and_stays_on_landing(self, page, live_server, live_token):
+    def test_stale_night_prunes_and_stays_on_boot_screen(self, page, live_server, live_token):
         # localStorage still holds last night's ids, but the server night-scopes
-        # them out (empty). The singer stays on landing and the dead ids are
-        # pruned so the bar never shows a phantom count.
+        # them out (empty). The singer stays on the boot (search) screen and the
+        # dead ids are pruned so the bar never shows a phantom count.
         self._seed_ls(page, live_server, live_token,
                       {"token": live_token, "ids": [9999], "tokens": {"9999": "old"}})
         self._route_my_requests(page, [])
@@ -547,7 +598,7 @@ class TestMySongsPersistence:
             page.reload()
         # The boot probe must actually carry the stored id (contract check).
         assert "ids=9999" in req_info.value.url
-        expect(page.locator("h1:has-text('Request a song')")).to_be_visible()   # landing
+        expect(page.locator("h2:has-text('Pick your song')")).to_be_visible()   # boot screen
         expect(page.locator(".song-card-title")).to_have_count(0)
         expect(page.locator('[data-testid="mysongs-bar"]')).to_be_hidden()
         # Stored ids were pruned to empty.
@@ -555,9 +606,9 @@ class TestMySongsPersistence:
             "() => JSON.parse(localStorage.getItem('sing_my_request_ids')).ids")
         assert remaining == []
 
-    def test_cancelled_only_stays_on_landing(self, page, live_server, live_token):
-        # A device whose only song was cancelled isn't yanked off landing (the
-        # bar filters cancelled out too), even though the id still resolves.
+    def test_cancelled_only_stays_on_boot_screen(self, page, live_server, live_token):
+        # A device whose only song was cancelled isn't yanked off the boot
+        # screen (the bar filters cancelled out too), though the id resolves.
         self._seed_ls(page, live_server, live_token,
                       {"token": live_token, "ids": [7], "tokens": {"7": "t7"}})
         cancelled = {"request": {"id": 7, "singer_name": "Alice", "song_artist": "Q",
@@ -567,7 +618,7 @@ class TestMySongsPersistence:
         self._route_my_requests(page, [cancelled])
         with page.expect_request("**/sing/my-requests*"):
             page.reload()
-        expect(page.locator("h1:has-text('Request a song')")).to_be_visible()
+        expect(page.locator("h2:has-text('Pick your song')")).to_be_visible()
         expect(page.locator('[data-testid="mysongs-bar"]')).to_be_hidden()
 
     def test_prune_preserves_ids_added_mid_flight(self, page, live_server, live_token):
@@ -599,9 +650,447 @@ class TestMySongsPersistence:
         assert result == [111]
 
     def test_no_bar_and_no_restore_without_songs(self, page, live_server, live_token):
-        # A fresh device (no stored ids) sees the normal landing, no bar.
+        # A known-name device with no stored ids boots straight to search.
         page.goto(f"{live_server}/sing/?t={live_token}")
         page.evaluate("localStorage.setItem('sing_name', 'Alice')")
         page.reload()
-        expect(page.locator("text=Request a song")).to_be_visible()
+        expect(page.locator("h2:has-text('Pick your song')")).to_be_visible()
         expect(page.locator('[data-testid="mysongs-bar"]')).to_be_hidden()
+
+    def test_fresh_device_boots_to_name_screen(self, page, live_server, live_token):
+        # No identity at all → the name screen, carrying the old landing's
+        # welcome copy, with the Request tab highlighted.
+        page.goto(f"{live_server}/sing/?t={live_token}")
+        page.evaluate("localStorage.clear()")
+        page.reload()
+        expect(page.locator("h2:has-text('Request a song')")).to_be_visible()
+        expect(page.locator("text=what should we call you")).to_be_visible()
+        expect(page.locator('[data-testid="tab-request"]')).to_have_class(
+            "sing-tab active")
+
+
+class TestVersionRowEnrichment:
+    """The expanded version list gives singers decision-grade info: tappable
+    community/commercial pills, full brand names with an info modal, a format
+    pill that opens technical details, and a Preview button."""
+
+    def _open_versions(self, page, live_server, live_token):
+        page.add_init_script("window.__SING_ARM_MS = 0;")
+        _login(page, live_server, live_token)
+        body = {"songs": [{
+            "key": "q:multi", "artist": "Queen", "title": "Bo Rhap",
+            "version_count": 3, "in_library": True,
+            "versions": [
+                {"source": "local", "priority_stated": True,
+                 "priority_class": "community", "priority_brand": "NOMAD",
+                 "priority_display": "Nomad Karaoke",
+                 "local": {"path": "/media/NOMAD-1 - Q - B.mp4",
+                           "disc_id": "NOMAD-1", "format": "mp4",
+                           "filename": "NOMAD-1 - Q - B.mp4",
+                           "artist": "Queen", "title": "Bo Rhap"}},
+                {"source": "kn", "priority_stated": True,
+                 "priority_class": "commercial", "priority_brand": "KV",
+                 "priority_display": "Karaoke Version",
+                 "kn": {"brand_code": "KV", "brand_name": "Karaoke Version",
+                        "is_community": False,
+                        "divebar": {"file_id": "dv1", "format": "zip",
+                                    "file_size": 40000000}}},
+                {"source": "kn", "priority_stated": False,
+                 "priority_class": "commercial",
+                 "kn": {"brand_code": "XX", "brand_name": "Mystery Brand",
+                        "is_community": False,
+                        "youtube_url": "https://youtu.be/x"}},
+            ]}]}
+        page.route("**/sing/search*", lambda r: r.fulfill(
+            status=200, content_type="application/json", body=json.dumps(body)))
+        page.evaluate("window.__sing_state.step = 'search'; window.__sing_render();")
+        page.locator('input[type="search"]').fill("bo rhap")
+        expect(page.locator(".result-row")).to_be_visible()
+        page.locator(".sing-versions-toggle").click()
+
+    def test_cta_wording_is_auto_select(self, page, live_server, live_token):
+        self._open_versions(page, live_server, live_token)
+        expect(page.locator(".btn-primary-cta")).to_have_text("Auto-select best version →")
+
+    def test_class_and_format_pills_render(self, page, live_server, live_token):
+        self._open_versions(page, live_server, live_token)
+        first = page.locator(".sing-version-card").nth(0)
+        expect(first.locator(".sing-pill-community")).to_have_text("Community")
+        expect(first.locator(".sing-pill-format")).to_have_text("MP4")
+        second = page.locator(".sing-version-card").nth(1)
+        expect(second.locator(".sing-pill-commercial")).to_have_text("Commercial")
+        expect(second.locator(".sing-pill-format")).to_have_text("CDG+MP3")
+
+    def test_brand_shows_full_display_name(self, page, live_server, live_token):
+        self._open_versions(page, live_server, live_token)
+        expect(page.locator(".sing-version-brand").nth(0)).to_have_text("Nomad Karaoke")
+        expect(page.locator(".sing-version-brand").nth(1)).to_have_text("Karaoke Version")
+
+    def test_class_pill_opens_explainer_modal(self, page, live_server, live_token):
+        self._open_versions(page, live_server, live_token)
+        page.locator(".sing-pill-community").first.click()
+        expect(page.locator(".sing-modal-title")).to_have_text("Community track")
+        expect(page.locator(".sing-modal-body")).to_contain_text("vocal removed by AI")
+        page.locator(".sing-modal-close").click()
+        expect(page.locator("#sing-modal-backdrop")).to_have_count(0)
+
+    def test_brand_tap_opens_brand_info(self, page, live_server, live_token):
+        self._open_versions(page, live_server, live_token)
+        page.locator(".sing-version-brand").nth(1).click()
+        expect(page.locator(".sing-modal-title")).to_have_text("Karaoke Version")
+        expect(page.locator(".sing-modal-body")).to_contain_text("professional")
+
+    def test_format_pill_opens_details_for_divebar(self, page, live_server, live_token):
+        self._open_versions(page, live_server, live_token)
+        second = page.locator(".sing-version-card").nth(1)
+        second.locator(".sing-pill-format").click()
+        expect(page.locator(".sing-modal-body")).to_contain_text("38.1 MB")
+        expect(page.locator(".sing-modal-body")).to_contain_text("cloud library")
+
+    def test_format_pill_fetches_media_info_for_local(self, page, live_server, live_token):
+        self._open_versions(page, live_server, live_token)
+        page.route("**/media-info*", lambda r: r.fulfill(
+            status=200, content_type="application/json",
+            body=json.dumps({"ok": True, "container": "mov,mp4",
+                             "video": {"codec": "h264", "width": 1280, "height": 720},
+                             "duration": 218, "size_bytes": 6700000})))
+        page.locator(".sing-version-card").nth(0).locator(".sing-pill-format").click()
+        expect(page.locator(".sing-modal-body")).to_contain_text("1280×720")
+        expect(page.locator(".sing-modal-body")).to_contain_text("3:38")
+
+    def test_preview_button_present_on_every_row(self, page, live_server, live_token):
+        self._open_versions(page, live_server, live_token)
+        expect(page.locator('[data-testid="version-preview"]')).to_have_count(2)
+        # (third row sits behind the online-collapse toggle)
+
+    def test_no_full_path_shown_to_singers(self, page, live_server, live_token):
+        self._open_versions(page, live_server, live_token)
+        expect(page.locator(".sing-version-path-summary")).to_have_count(0)
+        expect(page.locator(".sing-version-expander")).not_to_contain_text("/media/")
+
+
+class TestTabsAndRouting:
+    def test_tab_bar_renders_three_tabs(self, page, live_server, live_token):
+        _login(page, live_server, live_token)
+        expect(page.locator('[data-testid="tab-request"]')).to_be_visible()
+        expect(page.locator('[data-testid="tab-mysongs"]')).to_be_visible()
+        expect(page.locator('[data-testid="tab-rotation"]')).to_be_visible()
+
+    def test_rotation_tab_opens_rotation_page(self, page, live_server, live_token):
+        _login(page, live_server, live_token)
+        page.locator('[data-testid="tab-rotation"]').click()
+        expect(page.locator("h2:has-text(\"Tonight's rotation\")")).to_be_visible()
+        assert page.evaluate("window.location.hash") == "#rotation"
+
+    def test_browser_back_navigates_inside_spa(self, page, live_server, live_token):
+        _login(page, live_server, live_token)
+        page.locator('[data-testid="tab-rotation"]').click()
+        expect(page.locator("h2:has-text(\"Tonight's rotation\")")).to_be_visible()
+        page.go_back()
+        # Back returns to the boot (search) screen, not out of the app.
+        expect(page.locator("h2:has-text('Pick your song')")).to_be_visible()
+        assert page.url.startswith(live_server)
+
+    def test_reload_restores_section_from_hash(self, page, live_server, live_token):
+        _login(page, live_server, live_token)
+        page.locator('[data-testid="tab-rotation"]').click()
+        expect(page.locator("h2:has-text(\"Tonight's rotation\")")).to_be_visible()
+        page.reload()
+        expect(page.locator("h2:has-text(\"Tonight's rotation\")")).to_be_visible()
+
+    def test_stale_confirm_hash_degrades_to_search(self, page, live_server, live_token):
+        _login(page, live_server, live_token)
+        page.goto(f"{live_server}/sing/?t={live_token}#confirm")
+        # No in-memory selection after a fresh load → search screen instead.
+        expect(page.locator("h2:has-text('Pick your song')")).to_be_visible()
+
+    def test_request_tab_gates_on_identity(self, page, live_server, live_token):
+        page.goto(f"{live_server}/sing/?t={live_token}")
+        expect(page.locator("#sing-root")).to_be_visible()
+        page.evaluate("localStorage.removeItem('sing_name')")
+        page.evaluate("window.__sing_state.name = ''")
+        page.locator('[data-testid="tab-request"]').click()
+        expect(page.locator("h2:has-text('Request a song')")).to_be_visible()
+        expect(page.locator("text=what should we call you")).to_be_visible()
+
+
+class TestRotationFreshness:
+    _PAYLOAD = {"entries": [
+        {"position": 1, "first_name": "Alice", "song_artist": "Song — Artist",
+         "now_singing": False, "range_low_s": 60, "range_high_s": 240},
+    ]}
+
+    def _mock_rotation(self, page):
+        # The e2e fixture's config lacks the wait-estimate keys the real
+        # /sing/rotation needs; the freshness UI only cares about the payload.
+        page.route("**/sing/rotation*", lambda r: r.fulfill(
+            status=200, content_type="application/json",
+            body=json.dumps(self._PAYLOAD)))
+
+    def test_rotation_page_has_refresh_and_age_label(self, page, live_server, live_token):
+        _login(page, live_server, live_token)
+        self._mock_rotation(page)
+        page.locator('[data-testid="tab-rotation"]').click()
+        expect(page.locator('[data-testid="rotation-refresh"]')).to_be_visible()
+        expect(page.locator(".rotation-updated")).to_contain_text("updated just now")
+
+    def test_manual_refresh_refetches(self, page, live_server, live_token):
+        _login(page, live_server, live_token)
+        self._mock_rotation(page)
+        page.locator('[data-testid="tab-rotation"]').click()
+        expect(page.locator('[data-testid="rotation-refresh"]')).to_be_visible()
+        with page.expect_request("**/sing/rotation*"):
+            page.locator('[data-testid="rotation-refresh"]').click()
+
+    def test_age_label_ticks_as_data_ages(self, page, live_server, live_token):
+        _login(page, live_server, live_token)
+        self._mock_rotation(page)
+        page.locator('[data-testid="tab-rotation"]').click()
+        label = page.locator(".rotation-updated")
+        expect(label).to_be_visible()
+        # Backdate the payload timestamp, then wait for the 5s ticker to fire.
+        page.evaluate(
+            "document.querySelector('.rotation-updated')"
+            ".setAttribute('data-fetched-at', String(Date.now() - 45000))")
+        expect(label).to_contain_text("s ago", timeout=8000)
+
+
+class TestHouseRulesCollapsed:
+    def test_rules_only_on_rotation_tab_and_single_layer(self, page, live_server, live_token):
+        _login(page, live_server, live_token)
+        # Hidden on every non-rotation step.
+        expect(page.locator(".rules-footer")).to_be_hidden()
+        page.route("**/sing/rotation*", lambda r: r.fulfill(
+            status=200, content_type="application/json",
+            body=json.dumps({"entries": []})))
+        page.locator('[data-testid="tab-rotation"]').click()
+        rules = page.locator(".rules-footer")
+        expect(rules).to_be_visible()
+        # Collapsed by default; expanding shows the FULL rules directly —
+        # no nested "Read the full rules" second layer.
+        expect(page.locator(".rules-list")).to_be_hidden()
+        page.locator(".rules-footer-summary").click()
+        expect(page.locator(".rules-list")).to_be_visible()
+        expect(page.locator(".rules-footer summary")).to_have_count(1)
+
+
+class TestPartnerChips:
+    def test_chip_tap_adds_partner_row(self, page, live_server, live_token):
+        page.add_init_script("window.__SING_ARM_MS = 0;")
+        _login(page, live_server, live_token)   # identity = "Alice"
+        page.route("**/sing/singers*", lambda r: r.fulfill(
+            status=200, content_type="application/json",
+            body=json.dumps({"singers": ["Sarah B.", "Mike", "Alice"]})))
+        page.evaluate(
+            """() => {
+                window.__sing_state.selected = {
+                    source_type: 'local', source_ref: '/m/x.mp4',
+                    song_artist: 'Queen', song_title: 'Under Pressure',
+                };
+                window.__sing_state.step = 'confirm';
+                window.__sing_render();
+            }""")
+        chips = page.locator('[data-testid="partner-chip"]')
+        # Alice (the requester) is filtered out of her own chip list.
+        expect(chips).to_have_count(2)
+        chips.filter(has_text="Sarah B.").click()
+        expect(page.locator('[data-testid="partner-name-0"]')).to_have_value("Sarah B.")
+        # The used chip disappears from the refreshed list.
+        expect(page.locator('[data-testid="partner-chip"]')).to_have_count(1)
+
+
+class TestTipTab:
+    _INFO = {"enabled": True, "threshold": 20, "methods": [
+        {"key": "venmo", "label": "Venmo", "url": "https://venmo.com/nomadkaraoke",
+         "amount_style": "venmo"},
+    ]}
+
+    def _login_with_tips(self, page, live_server, live_token):
+        # tip-info is fetched at boot — the route must exist before goto.
+        page.route("**/sing/tip-info*", lambda r: r.fulfill(
+            status=200, content_type="application/json", body=json.dumps(self._INFO)))
+        _login(page, live_server, live_token)
+
+    def test_tab_shown_by_default_via_tip_page_fallback(self, page, live_server, live_token):
+        # Zero config → the live nomadkaraoke.com/tip page fallback keeps
+        # tipping ON, so the tab appears (and sits LAST in the bar).
+        _login(page, live_server, live_token)
+        tip_tab = page.locator('[data-testid="tab-tip"]')
+        expect(tip_tab).to_be_visible()
+        assert page.evaluate(
+            "[...document.querySelectorAll('#sing-tabs .sing-tab')]"
+            ".map(b => b.dataset.testid).pop()") == "tab-tip"
+
+    def test_tab_hidden_when_explicitly_disabled(self, page, live_server, live_token):
+        page.route("**/sing/tip-info*", lambda r: r.fulfill(
+            status=200, content_type="application/json",
+            body=json.dumps({"enabled": False, "threshold": 20, "methods": []})))
+        _login(page, live_server, live_token)
+        expect(page.locator('[data-testid="tab-rotation"]')).to_be_visible()
+        expect(page.locator('[data-testid="tab-tip"]')).to_have_count(0)
+
+    def test_tab_appears_and_opens_tip_page(self, page, live_server, live_token):
+        self._login_with_tips(page, live_server, live_token)
+        page.locator('[data-testid="tab-tip"]').click()
+        expect(page.locator("h2:has-text('Tip the KJ')")).to_be_visible()
+        expect(page.locator(".sing-tip-perk")).to_contain_text("$20+")
+        link = page.locator(".sing-tip-method")
+        # Threshold ($20) is the default chosen amount; venmo deep-links it.
+        expect(link).to_have_attribute(
+            "href", "https://venmo.com/nomadkaraoke?txn=pay&amount=20&note=Karaoke%20tip")
+        # Switching the preset re-deep-links the method buttons.
+        page.locator('.sing-tip-preset[data-amount="5"]').click()
+        expect(link).to_have_attribute(
+            "href", "https://venmo.com/nomadkaraoke?txn=pay&amount=5&note=Karaoke%20tip")
+        assert page.evaluate("window.location.hash") == "#tip"
+
+    def test_claim_posts_amount_and_method(self, page, live_server, live_token):
+        self._login_with_tips(page, live_server, live_token)
+        page.route("**/sing/tip-claim*", lambda r: r.fulfill(
+            status=200, content_type="application/json",
+            body=json.dumps({"request": {
+                "id": 991, "source_type": "tip", "status": "pending",
+                "singer_name": "Alice", "tip_amount": 25, "tip_method": "Venmo",
+                "edit_token": "tok991",
+            }})))
+        page.locator('[data-testid="tab-tip"]').click()
+        page.locator('[data-testid="tip-amount"]').fill("25")
+        page.locator(".sing-tip-method-select").select_option("Venmo")
+        with page.expect_request("**/sing/tip-claim*") as req_info:
+            page.locator('[data-testid="tip-submit"]').click()
+        body = req_info.value.post_data_json
+        assert body["amount"] == 25
+        assert body["method"] == "Venmo"
+        assert body["singer_name"] == "Alice"
+
+
+class TestSongHistoryInspiration:
+    def test_upcoming_singers_expander_removed_from_done(self, page, live_server, live_token):
+        _login(page, live_server, live_token)
+        page.evaluate("window.__sing_state.step = 'done'; window.__sing_render();")
+        expect(page.locator("h2:has-text('Your songs tonight')")).to_be_visible()
+        expect(page.locator("text=Show upcoming singers")).to_have_count(0)
+
+    def test_collapsed_history_expands_and_search_on_tap(self, page, live_server, live_token):
+        page.add_init_script("window.__SING_ARM_MS = 0;")
+        _login(page, live_server, live_token)
+        page.route("**/sing/my-stats*", lambda r: r.fulfill(
+            status=200, content_type="application/json",
+            body=json.dumps({
+                "my_songs": [{"artist": "Maximo Park", "title": "Books From Boxes",
+                              "plays": 3, "last_sung": "2026-09-20 22:11:00"}],
+                "top_songs": [{"artist": "Foo Fighters", "title": "My Hero", "plays": 15}],
+            })))
+        page.evaluate("window.__sing_state.step = 'search'; window.__sing_render();")
+        history = page.locator('[data-testid="song-history"]')
+        expect(history).to_be_visible()
+        # Collapsed by default — the body only renders after expanding.
+        expect(page.locator(".sing-history-row")).to_have_count(0)
+        page.locator(".sing-history-summary").click()
+        expect(page.locator(".sing-history-body h4").nth(0)).to_have_text("You've sung before")
+        expect(page.locator(".sing-history-row")).to_have_count(2)
+        expect(page.locator(".sing-history-row").nth(0)).to_contain_text("▶ 3")
+        # Tapping a row runs the search for that song.
+        with page.expect_request("**/sing/search*"):
+            page.locator(".sing-history-row").nth(0).click()
+        expect(page.locator('input[type="search"]')).to_have_value("Maximo Park Books From Boxes")
+
+    def test_empty_history_message(self, page, live_server, live_token):
+        _login(page, live_server, live_token)
+        page.route("**/sing/my-stats*", lambda r: r.fulfill(
+            status=200, content_type="application/json",
+            body=json.dumps({"my_songs": [], "top_songs": []})))
+        page.evaluate("window.__sing_state.step = 'search'; window.__sing_render();")
+        page.locator(".sing-history-summary").click()
+        expect(page.locator(".sing-history-body")).to_contain_text("tonight's the night")
+
+
+class TestMySongsStatusBanner:
+    def test_banner_shows_personal_position_not_venue_now_next(self, page, live_server, live_token):
+        _login(page, live_server, live_token)
+        self_np = {"now_singing": {"first_name": "Lindsay", "song_artist": "X"},
+                   "up_next": {"first_name": "Someone"}, "queued_count": 9}
+        item = {"request": {"id": 1, "singer_name": "Alice", "song_artist": "Q",
+                            "song_title": "Bo Rhap", "source_type": "local",
+                            "status": "approved", "created_at": "now",
+                            "linked_entry_id": 5, "additional_singers": None},
+                "performed": False,
+                "estimate": {"position": 5, "now_singing": False,
+                             "range_low_s": 600, "range_high_s": 900}}
+        page.route("**/sing/my-requests*", lambda r: r.fulfill(
+            status=200, content_type="application/json",
+            body=json.dumps({"now_playing": self_np, "requests": [item]})))
+        page.evaluate(
+            "(s) => localStorage.setItem('sing_my_request_ids', JSON.stringify(s))",
+            {"token": live_token, "ids": [1], "tokens": {}})
+        page.evaluate("window.__sing_state.step = 'done'; window.__sing_render();")
+        banner = page.locator(".sing-my-status")
+        expect(banner).to_be_visible()
+        expect(banner).to_contain_text("#5")
+        # The venue-wide Now/Next widget is gone from this screen.
+        expect(page.locator(".now-playing")).to_have_count(0)
+
+    def test_banner_hidden_without_live_songs(self, page, live_server, live_token):
+        _login(page, live_server, live_token)
+        page.route("**/sing/my-requests*", lambda r: r.fulfill(
+            status=200, content_type="application/json",
+            body=json.dumps({"now_playing": {"now_singing": None, "up_next": None,
+                                             "queued_count": 0}, "requests": []})))
+        page.evaluate("window.__sing_state.step = 'done'; window.__sing_render();")
+        expect(page.locator("h2:has-text('Your songs tonight')")).to_be_visible()
+        expect(page.locator(".sing-my-status")).to_be_hidden()
+
+
+class TestNotificationsSection:
+    _ITEM = {"request": {"id": 21, "singer_name": "Alice", "song_artist": "Q",
+                         "song_title": "One", "source_type": "local",
+                         "status": "approved", "created_at": "now",
+                         "linked_entry_id": 5, "additional_singers": None},
+             "performed": False, "estimate": {"position": 5, "now_singing": False,
+                                              "range_low_s": 600, "range_high_s": 900}}
+
+    def _open_done(self, page, live_server, live_token, phone=""):
+        _login(page, live_server, live_token)
+        if phone:
+            page.evaluate("(p) => localStorage.setItem('sing_phone', p)", phone)
+            page.evaluate("(p) => { window.__sing_state.phone = p; }", phone)
+        page.evaluate(
+            "(s) => localStorage.setItem('sing_my_request_ids', JSON.stringify(s))",
+            {"token": live_token, "ids": [21], "tokens": {"21": "tok21"}})
+        page.route("**/sing/my-requests*", lambda r: r.fulfill(
+            status=200, content_type="application/json",
+            body=json.dumps({"now_playing": {"now_singing": None, "up_next": None,
+                                             "queued_count": 1},
+                             "requests": [self._ITEM]})))
+        page.evaluate("window.__sing_state.step = 'done'; window.__sing_render();")
+        # The section renders on a 2s delay ("you're in!" registers first).
+        page.evaluate("window.setTimeout ? null : null")
+
+    def test_explains_channels_with_number(self, page, live_server, live_token):
+        self._open_done(page, live_server, live_token, phone="+1 555 123 4567")
+        section = page.locator("#push-optin")
+        expect(section.locator(".notify-heading")).to_contain_text("When you're up",
+                                                                   timeout=8000)
+        expect(section).to_contain_text("Text message to +1 555 123 4567")
+        expect(section.locator(".notify-summary")).to_be_visible()
+
+    def test_add_number_after_signup_posts_update_phone(self, page, live_server, live_token):
+        self._open_done(page, live_server, live_token)
+        section = page.locator("#push-optin")
+        expect(section).to_contain_text("Want a text when you're up?", timeout=8000)
+        page.locator('[data-testid="notify-add-phone"]').click()
+        page.locator('[data-testid="notify-phone"]').fill("+1 555 222 3333")
+        with page.expect_request("**/sing/update-phone*") as req_info:
+            page.locator('[data-testid="notify-phone-save"]').click()
+        body = json.loads(req_info.value.post_data or "{}")
+        assert body["phone"] == "+1 555 222 3333"
+        assert body["items"] == [{"id": 21, "edit_token": "tok21"}]
+        # Section re-renders showing the SMS channel is now on.
+        expect(section).to_contain_text("Text message to +1 555 222 3333")
+
+    def test_change_number_link(self, page, live_server, live_token):
+        self._open_done(page, live_server, live_token, phone="+1 555 123 4567")
+        section = page.locator("#push-optin")
+        expect(section).to_contain_text("change number", timeout=8000)
+        page.locator('[data-testid="notify-change-phone"]').click()
+        expect(page.locator('[data-testid="notify-phone"]')).to_have_value("+1 555 123 4567")

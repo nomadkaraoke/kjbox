@@ -9174,6 +9174,26 @@ const SingRequests = (() => {
     function renderRow(req) {
         const row = document.createElement('div');
         row.className = 'pending-req-row';
+        // Tip claim — not a song. Confirm hearts the singer's entries and
+        // (>= threshold) applies the same +1 bump as the rotation bump-up.
+        if (req.source_type === 'tip') {
+            let meta = {};
+            try { meta = JSON.parse(req.source_meta || '{}') || {}; } catch (e) { /* leave empty */ }
+            const amt = (meta.amount != null && meta.amount !== '') ? `$${meta.amount}` : 'amount unknown';
+            const via = meta.method ? ` via ${meta.method}` : '';
+            row.className = 'pending-req-row pr-tip-row';
+            row.innerHTML = `
+              <div class="pr-main"><strong>💜 Tip ${escapeHtml(amt)}</strong>
+                <span class="pr-song">${escapeHtml(req.singer_name)}${escapeHtml(via)}</span></div>
+              <div class="pr-actions">
+                <button class="btn-approve" data-id="${req.id}" title="Confirm the tip arrived — hearts their rotation entries and bumps priority if at/above the threshold">Confirm</button>
+                <button class="btn-reject" data-id="${req.id}" title="Dismiss without applying priority">Dismiss</button>
+              </div>`;
+            row.querySelector('.btn-approve').addEventListener('click', () => approve(req.id));
+            row.querySelector('.btn-reject').addEventListener('click', () => reject(req.id,
+                'Dismiss this tip claim? No message is sent to the singer — their Tip tab just shows it as not confirmed.'));
+            return row;
+        }
         // Reorder request — not a song; minimal row with Approve/Reject only.
         if (req.source_type === 'reorder') {
             row.className = 'pending-req-row pr-reorder';
@@ -9474,8 +9494,8 @@ const SingRequests = (() => {
         if (typeof fetchRotation === 'function') fetchRotation();
     }
 
-    async function reject(id) {
-        if (!confirm('Reject this request? The singer will be asked to see the KJ.')) return;
+    async function reject(id, message) {
+        if (!confirm(message || 'Reject this request? The singer will be asked to see the KJ.')) return;
         try {
             const resp = await fetch(`/rotation/requests/${id}/reject`, {
                 method: 'POST',
@@ -9564,6 +9584,34 @@ const SingRequests = (() => {
         }
         if (smsRegion && config.sms_default_region) {
             smsRegion.value = config.sms_default_region;
+        }
+
+        // --- Tipping section ---
+        const ts = config.tip_settings || {};
+        const tipToggle = document.getElementById('sing-tips-enabled-toggle');
+        if (tipToggle) tipToggle.checked = ts.enabled !== false;
+        const tipStatus = document.getElementById('sing-tips-status');
+        if (tipStatus) {
+            const direct = ['venmo', 'cashapp', 'paypal', 'zelle', 'stripe_url']
+                .filter((k) => ts[k]).length;
+            tipStatus.textContent = ts.enabled === false
+                ? 'off'
+                : (direct ? `✓ ${direct} direct method${direct === 1 ? '' : 's'}`
+                          : '↪ Nomad tip page fallback');
+            tipStatus.className = 'sing-sms-status ' +
+                (ts.enabled === false ? 'sing-sms-status-off' : 'sing-sms-status-ok');
+        }
+        for (const [id, key] of [
+            ['sing-tip-kj-name', 'kj_name'],
+            ['sing-tip-venmo', 'venmo'],
+            ['sing-tip-cashapp', 'cashapp'],
+            ['sing-tip-paypal', 'paypal'],
+            ['sing-tip-zelle', 'zelle'],
+            ['sing-tip-stripe-url', 'stripe_url'],
+            ['sing-tip-threshold', 'threshold'],
+        ]) {
+            const el2 = document.getElementById(id);
+            if (el2 && document.activeElement !== el2) el2.value = ts[key] ?? '';
         }
     }
 
@@ -9715,7 +9763,39 @@ const SingRequests = (() => {
         if (await postConfig({ sms_template: null })) await fetchConfig();
     }
 
-    return { start, openModal, closeModal, toggleEnabled, toggleAutoApprove, toggleAcceptMake, toggleAutoSmsNext, toggleAutoReorder, autoSmsNextEnabled, regenerate, setCustom, saveSmsTemplate, resetSmsTemplate, copyUrl };
+    async function toggleTipsEnabled(checked) {
+        const ok = await postConfig({ tip_settings: { enabled: checked } });
+        if (!ok) {
+            const el = document.getElementById('sing-tips-enabled-toggle');
+            if (el) el.checked = !checked;
+        }
+        await fetchConfig();
+    }
+
+    async function saveTipSettings() {
+        const val = (id) => {
+            const el = document.getElementById(id);
+            return el ? el.value.trim() : '';
+        };
+        const thresholdRaw = val('sing-tip-threshold');
+        const threshold = thresholdRaw === '' ? null : parseFloat(thresholdRaw);
+        if (threshold !== null && (isNaN(threshold) || threshold < 0)) {
+            alert('♥ threshold must be a number ≥ 0 (or empty for the default).');
+            return;
+        }
+        const body = { tip_settings: {
+            kj_name: val('sing-tip-kj-name'),
+            venmo: val('sing-tip-venmo'),
+            cashapp: val('sing-tip-cashapp'),
+            paypal: val('sing-tip-paypal'),
+            zelle: val('sing-tip-zelle'),
+            stripe_url: val('sing-tip-stripe-url'),
+            threshold: threshold,
+        } };
+        if (await postConfig(body)) await fetchConfig();
+    }
+
+    return { start, openModal, closeModal, toggleEnabled, toggleAutoApprove, toggleAcceptMake, toggleAutoSmsNext, toggleAutoReorder, autoSmsNextEnabled, regenerate, setCustom, saveSmsTemplate, resetSmsTemplate, toggleTipsEnabled, saveTipSettings, copyUrl };
 })();
 
 function openSingRequestsModal()   { SingRequests.openModal(); }
@@ -9729,6 +9809,8 @@ function regenerateSingToken()     { SingRequests.regenerate(); }
 function setCustomSingToken()      { SingRequests.setCustom(); }
 function saveSingSmsTemplate()     { SingRequests.saveSmsTemplate(); }
 function resetSingSmsTemplate()    { SingRequests.resetSmsTemplate(); }
+function toggleSingTipsEnabled(c)  { SingRequests.toggleTipsEnabled(c); }
+function saveSingTipSettings()     { SingRequests.saveTipSettings(); }
 function copySingUrl(scope)        { SingRequests.copyUrl(scope); }
 
 window.addEventListener('DOMContentLoaded', () => SingRequests.start());

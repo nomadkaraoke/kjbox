@@ -305,3 +305,84 @@ class TestPickVersionFromKjPick:
         req = _req_with_versions([{"source": "spotify", "spotify": {"id": "x"}}])
         with pytest.raises(ValueError):
             _pick_version_from_kj_pick(req, 0)
+
+
+class TestAutoPickMatchesKjBest:
+    """Auto-pick must choose the SAME winner the KJ-side rotation-link search
+    marks with its gold "Best" pill. Both sides rank through
+    ``version_priority.rank_version`` with the same config, so the version with
+    the lowest rank in the snapshot is the one auto-pick binds.
+    """
+
+    # A realistic mixed snapshot, deliberately shuffled so no ordering
+    # assumption can pass by accident:
+    #   idx 0 — commercial KN, YouTube only (KV)          → commercial tier
+    #   idx 1 — local library file, NOMAD disc id          → community tier
+    #   idx 2 — community KN with a Divebar cross-ref (CC) → community tier, top brand
+    #   idx 3 — commercial KN, YouTube only (unknown code) → commercial-unknown tier
+    def _versions(self):
+        return [
+            {"source": "kn", "kn": {"brand_code": "KV", "is_community": False,
+                                    "youtube_url": "https://yt/kv"}},
+            {"source": "local", "local": {"path": "/media/NOMAD-0001 - A - B.mp4",
+                                          "disc_id": "NOMAD-0001",
+                                          "filename": "NOMAD-0001 - A - B.mp4"}},
+            {"source": "kn", "kn": {"brand_code": "CC", "is_community": True,
+                                    "divebar": {"file_id": "dv-cc-1",
+                                                "drive_path": "CC/track.zip"},
+                                    "youtube_url": "https://yt/cc"}},
+            {"source": "kn", "kn": {"brand_code": "XYZQ", "is_community": False,
+                                    "youtube_url": "https://yt/xyzq"}},
+        ]
+
+    def test_ranked_order_matches_rank_version(self):
+        """The index ordering mirrors a direct rank_version sort — the same
+        computation the admin picker and rotation-link search use."""
+        import copy
+        import version_priority
+        from routes import _ranked_version_indices
+
+        cfg = {}
+        versions = self._versions()
+        expected = sorted(
+            range(len(versions)),
+            key=lambda i: version_priority.rank_version(
+                copy.deepcopy(versions[i]), cfg))
+        assert _ranked_version_indices(copy.deepcopy(versions), cfg) == expected
+        # And concretely: CC (community, top priority, divebar) wins; the
+        # unknown-brand commercial YouTube row comes last.
+        assert expected[0] == 2
+        assert expected[-1] == 3
+
+    def test_resolve_binds_the_rank_winner(self, client, sing_app, token):
+        """End to end through /sing/submit with auto-approve ON: the bound
+        source is the CC Divebar file, not the first-listed version."""
+        from unittest.mock import patch
+
+        sing_app.sing_store.set_auto_approve(True)
+        body = _kj_pick_body(source_meta={"versions": self._versions()})
+        with patch("routes.divebar.get_download_url",
+                   return_value="https://dl/cc-1.zip"), \
+                patch("routes._download_worker"):
+            resp = client.post(f"/sing/submit?t={token}", json=body)
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["auto_approved"] is True
+        stored = sing_app.sing_store.get_request(data["request"]["id"])
+        assert stored["source_type"] == "divebar"
+        assert stored["source_ref"] == "dv-cc-1"
+
+    def test_kj_config_priority_override_respected(self):
+        """A KJ re-ordering kn_priority_community flips the winner — proving
+        auto-pick reads the same config keys as the KJ-side ranking."""
+        import version_priority
+        from routes import _ranked_version_indices
+
+        cfg = {"kn_priority_community": ["NOMAD", "CC"]}
+        versions = self._versions()
+        order = _ranked_version_indices(versions, cfg)
+        # NOMAD local now outranks CC divebar.
+        assert order[0] == 1
+        assert order[1] == 2
+        assert version_priority.rank_version(versions[1], cfg) < \
+            version_priority.rank_version(versions[2], cfg)

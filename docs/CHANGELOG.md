@@ -2,6 +2,178 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-09-22 - Feature: Singer UI — decision-grade version picker, tabs, honest refresh (v0.107.0)
+
+Four singer-UX improvements to the public `/sing/*` SPA:
+
+1. **"Auto-select best version" wording** — the multi-version CTA no longer
+   claims "the KJ picks" (auto-approve is normally on). Verified first that
+   auto-pick (`resolve_kj_pick_best`) ranks with the same
+   `version_priority.rank_version` + config the admin picker and the
+   rotation-link "Best" pill use — new tests pin the equivalence.
+2. **Version rows that help singers decide** — each expanded version shows a
+   tappable **Community/Commercial pill** (explains cover-band audio vs
+   original-audio-minus-vocals), the **full brand name** ("Karaoke Version"
+   not "KV", via new `priority_display` from `annotate_versions`) tappable
+   for a curated brand blurb, a **format pill** (MP4 / CDG+MP3) opening a
+   technical-details modal (new token-gated `POST /sing/media-info`, path
+   withheld), and a **▶ Preview** button reusing the KJ preview player
+   (`static/preview.js` gained a `window.__PREVIEW_URL` hook; new
+   `/sing/preview/*` + `/sing/lib/*` token-gated, rate-limited delegates).
+   Filenames/full paths no longer shown to singers.
+3. **Bottom tab bar + hash routing** — 🎵 Request / 🎤 My songs (live badge) /
+   📋 Rotation (new full-page view). Steps map to `location.hash`, so browser
+   Back navigates inside the SPA and a reload restores the section.
+4. **Honest rotation freshness** — the "updated just now" label previously
+   rendered once and never changed; rotation views now tick the age every 5s,
+   auto-refresh every 30s while visible, and carry a manual ↻ Refresh button.
+
+Follow-up batch (same release, 2026-09-23):
+
+5. **House rules tucked away** — the 🎤 House rules section is now a collapsed
+   one-line `<details>` instead of a full card dominating every screen.
+6. **💜 Tip tab + tip-for-heart priority** — new tab (shown when the KJ
+   configures payment handles) linking to Venmo / Cash App / PayPal / custom
+   URL. After tipping, the singer files a claim (`POST /sing/tip-claim` → a
+   `source_type="tip"` meta-request, never auto-approved); the KJ's Requests
+   panel shows "💜 Tip $25 — Confirm/Dismiss". Confirming hearts (`paid` ♥)
+   every active entry the singer appears in and, at/above
+   `sing_tip_priority_threshold` (default $20), applies the same singer-level
+   +1 `priority_bias` as the rotation view's bump-up button. New config keys
+   (all optional): `sing_tip_venmo`, `sing_tip_cashapp`, `sing_tip_paypal`,
+   `sing_tip_url` (+ `sing_tip_url_label`), `sing_tip_priority_threshold`,
+   `sing_tips_enabled` (explicit off switch).
+7. **Duet partner auto-match** — the confirm screen offers tap-to-add chips
+   of tonight's known singers (`GET /sing/singers`), and `/sing/submit`
+   canonicalizes typed partner names onto known spellings (folded-exact,
+   unambiguous first-name, or length-scaled Damerau-Levenshtein typo match) so
+   "sara" no longer re-enters "Sarah B." as a duplicate singer.
+
+Third batch (same release, 2026-09-23):
+
+8. **House rules → Rotation tab only, single layer** — the collapsed section
+   now lives only on the 📋 Rotation view and expands straight to the full
+   rules (no nested "Read the full rules").
+9. **Tip tab last + smoother payments** — tab order is now Request · My
+   songs · Rotation · 💜 Tip. The tip flow is amount-first: $5/$10/$20
+   presets (♥ marks ≥ threshold) + custom, with the chosen amount
+   deep-linked into each payment app (Cash App/PayPal path amounts, Venmo
+   pay intent). New `sing_tip_stripe_url` config key surfaces a "Card /
+   Apple Pay" button (Nomad's existing Stripe payment link
+   `https://buy.stripe.com/00geUZgfHdhx6TS001` — the same one the live
+   nomadkaraoke.com/tip page uses). **Zero-config fallback**: with no tip
+   keys configured, tipping is ON pointing at nomadkaraoke.com/tip
+   (`sing_tips_enabled: false` disables). While the Tip tab is open, claim
+   statuses poll every 15s so a KJ confirmation reaches the singer.
+10. **Infra (Cloudflare, recorded per standing rule)** — the parked
+   `kjtip.me` zone now 301-redirects everything to
+   `https://nomadkaraoke.com/tip` (proxied placeholder A `192.0.2.1` +
+   `www` CNAME, zone dynamic-redirect ruleset "kjtip.me → nomadkaraoke.com/tip").
+   Handy short link for venue signage/QR.
+11. **Dev harness rewritten** — `dev_server.py` now runs the REAL
+   RotationManager/SingStore/SmsStore on `~/kjdata-dev/rotation.db`
+   (seeded with a realistic mid-night rotation: now-singing/up-next/duet/
+   ♥-tipped/bumped/on-hold entries + pending song & tip claims), fixing the
+   mock's broken `/sing/my-requests`. `--reseed` wipes+reseeds, `--db PATH`
+   runs any rotation.db, `--fetch-real` scp's a read-only copy of the live
+   DB from nomadpc. Sheet sync is stripped from dev config.
+
+Fourth batch (same release, 2026-09-23):
+
+12. **Tip tab parity with nomadkaraoke.com/tip + KJ-configurable settings** —
+   the singer Tip tab now mirrors the public tip page: "♡ Tip {KJ name}"
+   header, $3/$5/$10/$20 presets + custom amount, and branded method buttons
+   (CashApp green / Venmo blue / PayPal blue / Zelle purple with
+   copy-to-clipboard / Card purple) using the same icons, colors, and URL
+   shapes as `public-website components/TipPage.tsx`. All tip settings are
+   now editable from the **Public Request Form modal** (💜 Tipping section):
+   enable toggle, KJ display name, Venmo/Cash App/PayPal usernames, Zelle
+   phone/email, Stripe card link, ♥ threshold. Stored in `rotation_meta`
+   (`sing_tip_settings` JSON) — modal values override the `sing_tip_*`
+   config.json fallbacks, and clearing a field reverts to the fallback.
+   `apply_confirmed_tip` reads the same effective threshold the singers see.
+
+Fifth batch (same release, 2026-09-23):
+
+13. **"Show upcoming singers" removed from My songs** — redundant with the
+   dedicated 📋 Rotation tab.
+14. **"Sung here before? Need ideas?" on the Request screen** — collapsed
+   `<details>` under the search box showing the singer's own play history
+   ("You've sung before", from the same play-stats DB as the KJ Song Stats
+   panel, matched on normalized singer name) plus "Crowd favourites here"
+   (venue top songs). Tapping a row fills the search box and runs the
+   search. New token-gated `GET /sing/my-stats`. Dev harness now seeds
+   historical plays (into `~/kjdata-dev/media_library.db` — the dev config
+   redirects `media_db_path` so seeds never touch a real stats DB).
+
+15. **Pre-tabs landing screen removed** — the old home screen (now-playing
+   widget + rotation expander + "Get started" gate) was an orphan once the
+   tab bar existed: not a tab, duplicated the Rotation tab, and buried
+   Request behind a Continue tap. Fresh visits now boot straight into the
+   Request flow (search when the singer is known, the name screen — which
+   inherited the welcome copy and a "Switch singer" link — when not).
+   Smart-restore to My songs still applies from an untouched boot screen; a
+   stale `#name` hash degrades to search once identity exists; the search
+   screen's dead-end Back button is gone (tabs are the navigation).
+
+16. **My songs: personal status banner** — the venue-wide Now/Next widget
+   (duplicating the Rotation tab) is replaced by a personal banner: "🎤
+   You're next" / "#70 · ~305–311 min", fed by the singer's own queue
+   positions; hidden when they have no live songs.
+17. **?r= accepts a comma list** — `?r=1,2,3` seeds several request ids at
+   once (legacy single-id links unchanged). Powers the dev harness's
+   "review as <singer>" URLs; also usable by a KJ to hand someone their
+   songs list.
+18. **Dev harness: real nights** — `--fetch-real` now tries `nomadpc` then
+   `nomadpctunnel`; new `--night YYYY-MM-DD|biggest` restores an archived
+   night from the copied DB into the live rotation as a mid-night snapshot
+   (first ~40% Done, one Now Singing, one Up Next, rest Waiting — e.g.
+   2026-04-09: 118 tracks, 45 singers); `--as <name>` (default Andrew)
+   links approved sing_requests to that singer's entries and prints a
+   ready `?r=` singer URL so "My songs" shows their attributed songs
+   (queued + Already sung). Reloader disabled (it re-ran the restore and
+   orphaned the links).
+
+19. **My-songs bar reworked** — it now names the singer's actual next song
+   ("Your next song (of 11): Good Charlotte — Anthem") instead of a bare
+   count, and only appears where it earns the space: on the Rotation tab,
+   or on any tab (green urgent styling) when the singer is ≤3 songs from
+   the mic. Wait estimates everywhere now format ≥1h as "1h 28m" instead
+   of "88 min" (rotation list, song cards, bar, My-songs banner).
+   Dev harness `--as` takes a comma list and prints one attributed singer
+   URL each (e.g. `--as Andrew,Celeste,Jasmine`).
+
+20. **?r= carries edit tokens** — items may be `id` (read-only status view)
+   or `id:edit_token` (full self-service: Cancel / Change song / ▲▼
+   reorder, exactly as if the device had submitted the song). The dev
+   harness's per-singer review URLs now include the tokens, so reviewing
+   as Celeste shows the complete self-service card controls.
+
+21. **Drag-to-reorder** — the per-card ▲▼ buttons are gone; a "↕ Reorder
+   songs" button on My songs (shown with 2+ reorderable songs) switches to a
+   compact drag list (⠿ handle, pointer-based so it works on touch; the
+   handle is touch-action:none while the list still scrolls), then "Save new
+   order" files ONE reorder request with the full order. Poll repaints are
+   suspended while dragging.
+22. **Notifications explained + add-a-number** — the My-songs opt-in block is
+   now a "🔔 When you're up" section listing each channel's real status
+   (browser pop-up on/off/blocked/iOS-install; text message to <number>)
+   plus a plain-language summary ("You'll get BOTH a pop-up and a text").
+   Singers can add or change a mobile number after signup: new
+   `POST /sing/update-phone` writes it onto every request the device proves
+   ownership of (edit_token), which is exactly where `_resolve_sms_target`
+   reads the number — so "you're up" texts work retroactively. The push
+   subscription re-syncs with the new number client-side.
+
+23. **Compact song cards** — Cancel/Change are now small right-aligned
+   buttons ("⇄ Change" / "✕ Cancel") beside the title+status, roughly
+   halving card height. Change is NOT redundant with cancel+re-request:
+   it files a supersede, so on approval the new song keeps the original
+   entry's queue slot instead of dropping to the bottom (tooltip added).
+
+Backend (`sing.py`, `sing_store.py`, `routes.py`, `version_priority.py`)
+requires a service restart.
+
 ## 2026-09-22 - Change: KN panel + Library filter unified onto the shared search engine (v0.106.0)
 
 Search-unification recs 5–6 (final two items of the 2026-09-19 handoff). `POST

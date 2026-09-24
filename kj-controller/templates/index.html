@@ -1369,6 +1369,27 @@
                         <button class="sing-sms-save-btn" onclick="saveSingSmsTemplate()">Save</button>
                     </div>
                 </div>
+                <div class="sing-requests-row sing-tips-row">
+                    <div class="sing-sms-header">
+                        <strong>💜 Tipping</strong>
+                        <span id="sing-tips-status" class="sing-sms-status"></span>
+                    </div>
+                    <label class="sing-tips-enable"><input type="checkbox" id="sing-tips-enabled-toggle" onchange="toggleSingTipsEnabled(this.checked)"> Show the Tip tab to singers</label>
+                    <p class="sing-hint">Singers pay you directly through your own accounts, then file a claim you Confirm from the Requests panel. Confirmed tips get a ♥ on the rotation; tips at or above the threshold also get the same priority bump as the rotation &ldquo;bump up&rdquo; button. Empty fields fall back to the Nomad tip page.</p>
+                    <div class="sing-tips-grid">
+                        <label>Your name <input type="text" id="sing-tip-kj-name" placeholder="e.g. Andrew" autocomplete="off"></label>
+                        <label>♥ threshold ($) <input type="number" id="sing-tip-threshold" min="0" step="1" placeholder="20"></label>
+                        <label>Venmo username <input type="text" id="sing-tip-venmo" placeholder="e.g. beveradb" autocomplete="off"></label>
+                        <label>Cash App cashtag <input type="text" id="sing-tip-cashapp" placeholder="e.g. beveradb" autocomplete="off"></label>
+                        <label>PayPal.me handle <input type="text" id="sing-tip-paypal" placeholder="e.g. beveradbus" autocomplete="off"></label>
+                        <label>Zelle phone/email <input type="text" id="sing-tip-zelle" placeholder="e.g. (803) 636-3267" autocomplete="off"></label>
+                        <label class="sing-tips-wide">Card payment link (Stripe) <input type="url" id="sing-tip-stripe-url" placeholder="https://buy.stripe.com/…" autocomplete="off"></label>
+                    </div>
+                    <div class="sing-sms-actions">
+                        <span class="sing-sms-spacer"></span>
+                        <button class="sing-sms-save-btn" onclick="saveSingTipSettings()">Save tipping</button>
+                    </div>
+                </div>
                 <div class="sing-requests-row sing-qr-row">
                     <div class="sing-qr-card">
                         <div>Tunnel QR</div>

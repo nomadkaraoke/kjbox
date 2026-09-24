@@ -26,7 +26,61 @@ html, body {
   min-height: 100vh;
 }
 
-body.sing { padding: 0; }
+body.sing {
+  padding: 0;
+  /* Room for the fixed bottom tab bar (+ iOS home-indicator inset). */
+  padding-bottom: calc(3.6rem + env(safe-area-inset-bottom, 0px));
+}
+
+/* --- Bottom tab bar -------------------------------------------------------- */
+
+.sing-tabs {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 40;
+  display: flex;
+  justify-content: space-around;
+  background: rgba(10, 10, 10, 0.96);
+  backdrop-filter: blur(8px);
+  border-top: 1px solid var(--nk-border);
+  padding: 0.3rem 0.5rem calc(0.3rem + env(safe-area-inset-bottom, 0px));
+}
+.sing-tab {
+  flex: 1;
+  max-width: 10rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.1rem;
+  background: none;
+  border: 0;
+  color: var(--nk-text-dim);
+  font-size: 0.7rem;
+  padding: 0.25rem 0.4rem;
+  cursor: pointer;
+  position: relative;
+  border-radius: 8px;
+}
+.sing-tab .sing-tab-icon { font-size: 1.15rem; line-height: 1.2; }
+.sing-tab.active { color: var(--nk-accent); }
+.sing-tab:active { background: var(--nk-card-2); }
+.sing-tab-badge {
+  position: absolute;
+  top: 0;
+  right: calc(50% - 1.6rem);
+  background: var(--nk-accent);
+  color: #fff;
+  font-size: 0.65rem;
+  font-weight: 700;
+  min-width: 1.1rem;
+  height: 1.1rem;
+  line-height: 1.1rem;
+  border-radius: 999px;
+  text-align: center;
+  padding: 0 0.2rem;
+}
 
 .sing-card {
   max-width: 480px;
@@ -191,7 +245,7 @@ input:focus {
 }
 .sing-version-card {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 0.6rem;
   padding: 0.5rem 0.6rem;
   margin-bottom: 0.3rem;
@@ -200,30 +254,70 @@ input:focus {
   border-radius: 6px;
 }
 .sing-version-card:last-child { margin-bottom: 0; }
-.sing-version-icon { font-size: 1.1rem; line-height: 1.4; }
 .sing-version-main { flex: 1; min-width: 0; }
 .sing-version-primary { font-weight: 600; font-size: 0.9rem; }
-.sing-version-secondary { color: var(--nk-text-dim); font-size: 0.8rem; }
-.sing-version-path-wrap { margin-top: 0.2rem; }
-.sing-version-path-summary {
-  color: var(--nk-text-dim);
-  font-size: 0.72rem;
+.sing-version-brand {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--nk-text);
+  font: inherit;
+  font-weight: 600;
   cursor: pointer;
-  list-style: none;
+  text-decoration: underline dotted var(--nk-text-dim);
+  text-underline-offset: 3px;
 }
-.sing-version-path-summary::-webkit-details-marker { display: none; }
-.sing-version-path-summary::before { content: "▸ "; }
-.sing-version-path-wrap[open] .sing-version-path-summary::before { content: "▾ "; }
-.sing-version-path {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 0.75rem;
+.sing-version-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin: 0.25rem 0;
+}
+.sing-pill {
+  border: 1px solid var(--nk-border);
+  background: var(--nk-card-2);
   color: var(--nk-text-dim);
-  word-break: break-all;
-  line-height: 1.25;
-  margin-top: 0.2rem;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 0.1rem 0.55rem;
+  cursor: pointer;
+  min-height: 0;
 }
+.sing-pill-community {
+  color: var(--nk-good);
+  border-color: rgba(50, 213, 138, 0.5);
+  background: rgba(50, 213, 138, 0.1);
+}
+.sing-pill-commercial {
+  color: #7ab8ff;
+  border-color: rgba(122, 184, 255, 0.45);
+  background: rgba(122, 184, 255, 0.1);
+}
+.sing-pill-format {
+  color: var(--nk-accent);
+  border-color: rgba(255, 77, 207, 0.45);
+  background: rgba(255, 77, 207, 0.08);
+}
+.sing-version-secondary { color: var(--nk-text-dim); font-size: 0.8rem; }
+.sing-version-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  align-items: stretch;
+}
+.sing-version-preview {
+  padding: 0.3rem 0.7rem;
+  background: none;
+  border: 1px solid var(--nk-border);
+  color: var(--nk-text-dim);
+  border-radius: 6px;
+  font-size: 0.78rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.sing-version-preview:hover { color: var(--nk-accent); border-color: var(--nk-accent); }
 .sing-version-pick {
-  align-self: center;
   padding: 0.4rem 0.7rem;
   background: var(--nk-card-2);
   border: 1px solid var(--nk-accent);
@@ -235,6 +329,212 @@ input:focus {
   white-space: nowrap;
 }
 .sing-version-pick:hover { background: var(--nk-accent); color: var(--nk-bg); }
+
+/* --- 💜 Tip tab ------------------------------------------------------------ */
+
+.sing-tip-perk {
+  background: rgba(142, 90, 214, 0.12);
+  border: 1px solid rgba(142, 90, 214, 0.4);
+  border-radius: 8px;
+  padding: 0.6rem 0.8rem;
+  font-size: 0.9rem;
+}
+.sing-tip-title {
+  text-align: center;
+  font-size: 1.6rem;
+}
+.sing-tip-heart {
+  color: var(--nk-accent);
+  font-weight: 400;
+}
+.sing-tip-sub {
+  text-align: center;
+  color: var(--nk-text-dim);
+  margin-top: -0.25rem;
+}
+.sing-tip-amount-heading {
+  margin: 1.1rem 0 0.5rem;
+  color: var(--nk-text);
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 1.05rem;
+}
+.sing-tip-presets {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.5rem;
+}
+.sing-tip-preset {
+  border: 1px solid var(--nk-border);
+  background: var(--nk-card-2);
+  color: var(--nk-text-dim);
+  border-radius: 10px;
+  font-size: 1.05rem;
+  font-weight: 700;
+  padding: 0.7rem 0;
+  cursor: pointer;
+  text-align: center;
+}
+.sing-tip-preset.active {
+  border-color: var(--nk-accent);
+  color: #fff;
+  background: var(--nk-accent);
+  box-shadow: 0 0 16px rgba(255, 77, 207, 0.35);
+}
+.sing-tip-custom-input {
+  width: 100%;
+  margin-top: 0.5rem;
+  border-radius: 10px;
+}
+.sing-tip-methods {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin: 1.1rem 0 0.5rem;
+}
+.sing-tip-method {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  width: 100%;
+  border: 0;
+  border-radius: 12px;
+  padding: 0.85rem 1rem;
+  color: #fff;
+  font-size: 1.05rem;
+  font-weight: 700;
+  text-decoration: none;
+  cursor: pointer;
+  filter: saturate(1);
+}
+.sing-tip-method:active { filter: brightness(0.88); }
+.sing-tip-icon { display: inline-flex; }
+.sing-tip-icon svg { width: 1.2rem; height: 1.2rem; }
+.sing-tip-method-sub {
+  font-weight: 500;
+  font-size: 0.95rem;
+  opacity: 0.9;
+}
+.sing-tip-choose { text-align: center; }
+.sing-tip-claim {
+  margin-top: 1.25rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--nk-border);
+}
+.sing-tip-claim h3 { margin-top: 0; }
+.sing-tip-method-select {
+  width: 100%;
+  background: var(--nk-card-2);
+  color: var(--nk-text);
+  border: 1px solid var(--nk-border);
+  border-radius: 8px;
+  padding: 0.6rem;
+  font-size: 1rem;
+}
+.sing-tip-submit { margin-top: 0.5rem; }
+.sing-tip-claims { margin-top: 1.25rem; }
+
+/* --- Shared singer modal (pill info, tech details, preview) --------------- */
+
+.sing-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: rgba(0, 0, 0, 0.65);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+.sing-modal-backdrop.hidden { display: none; }
+.sing-modal {
+  background: var(--nk-card);
+  border: 1px solid var(--nk-border);
+  border-radius: 12px;
+  max-width: 440px;
+  width: 100%;
+  max-height: 85vh;
+  overflow-y: auto;
+  padding: 1rem 1.1rem 1.1rem;
+}
+.sing-preview-modal { max-width: 560px; }
+.sing-modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+.sing-modal-title { margin: 0; font-size: 1.05rem; color: var(--nk-accent);
+  text-transform: none; letter-spacing: 0; }
+.sing-modal-close {
+  background: none;
+  border: 0;
+  color: var(--nk-text-dim);
+  font-size: 1.5rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0.1rem 0.4rem;
+  min-height: 0;
+}
+.sing-modal-close:hover { color: var(--nk-text); }
+.sing-modal-hint { color: var(--nk-text-dim); font-size: 0.82rem; margin: 0.6rem 0 0; }
+.sing-info-list { margin: 0; }
+.sing-info-list dt {
+  color: var(--nk-text-dim);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-top: 0.6rem;
+}
+.sing-info-list dt:first-child { margin-top: 0; }
+.sing-info-list dd { margin: 0.1rem 0 0; font-size: 0.9rem; }
+.sing-brand-class { font-size: 0.8rem; font-weight: 700; margin: 0 0 0.5rem; }
+.sing-brand-class-community { color: var(--nk-good); }
+.sing-brand-class-commercial { color: #7ab8ff; }
+
+/* Preview player internals (classes come from the shared preview.js) */
+.preview-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  min-height: 80px;
+  justify-content: center;
+}
+.preview-body video,
+.preview-body canvas.preview-cdg-canvas {
+  width: 100%;
+  max-width: 520px;
+  background: #000;
+  border-radius: 6px;
+}
+.preview-body canvas.preview-cdg-canvas { image-rendering: pixelated; }
+.preview-body audio { width: 100%; max-width: 520px; }
+.preview-body iframe.preview-yt {
+  width: 100%;
+  max-width: 520px;
+  aspect-ratio: 16 / 9;
+  border: 0;
+  border-radius: 6px;
+}
+.preview-loading,
+.preview-unavailable { color: var(--nk-text-dim); padding: 18px; text-align: center; }
+.preview-unavailable { color: var(--nk-error); }
+.preview-type-badge {
+  display: inline-block;
+  font-size: 0.7rem;
+  font-weight: normal;
+  color: var(--nk-text-dim);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  padding: 1px 7px;
+  margin-left: 8px;
+  vertical-align: middle;
+}
+.preview-footer { display: none; }   /* KJ-only link flow — no footer for singers */
 
 /* Phase B — Commercial vs Community explainer. One-time strip, dismissed
    permanently via localStorage. Styled as a soft info callout. */
@@ -400,7 +700,98 @@ input:focus {
   text-align: center;
 }
 
-.upcoming summary { padding: 0.5rem 0; color: var(--nk-text-dim); cursor: pointer; }
+/* --- Notifications section (My songs) -------------------------------------- */
+.notify-heading {
+  margin: 1.25rem 0 0.4rem;
+  color: var(--nk-text);
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 1rem;
+}
+.notify-lines { display: flex; flex-direction: column; gap: 0.4rem; }
+.notify-line { margin: 0; font-size: 0.9rem; }
+.notify-on { color: var(--nk-good); }
+.notify-off { color: var(--nk-warn); }
+.notify-enable { align-self: flex-start; }
+.notify-ios summary { cursor: pointer; color: var(--nk-text); font-weight: 600; }
+.notify-ios p { color: var(--nk-text-dim); font-size: 0.85rem; }
+.notify-phone-editor {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.notify-phone-input { flex: 1; min-width: 180px; }
+.notify-phone-editor .error { width: 100%; margin: 0; }
+.notify-summary { margin-top: 0.4rem; }
+
+/* --- My-songs personal status banner --------------------------------------- */
+.sing-my-status {
+  background: linear-gradient(135deg, rgba(255, 77, 207, 0.18), rgba(255, 77, 207, 0.05));
+  border: 1px solid rgba(255, 77, 207, 0.35);
+  border-radius: 10px;
+  padding: 0.7rem 1rem;
+  margin-bottom: 1rem;
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+/* --- "Sung here before?" inspiration section (search screen) -------------- */
+.sing-history {
+  margin: 0.75rem 0 0.25rem;
+  border: 1px solid var(--nk-border);
+  border-radius: 10px;
+  background: var(--nk-card-2);
+  padding: 0.5rem 0.9rem;
+}
+.sing-history-summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--nk-text-dim);
+  list-style: none;
+  padding: 0.2rem 0;
+}
+.sing-history-summary::-webkit-details-marker { display: none; }
+.sing-history-summary::before { content: "▸ "; }
+.sing-history[open] > .sing-history-summary::before { content: "▾ "; }
+.sing-history[open] > .sing-history-summary { color: var(--nk-text); }
+.sing-history-body h4 {
+  margin: 0.75rem 0 0.25rem;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--nk-text-dim);
+}
+.sing-history-list { display: flex; flex-direction: column; }
+.sing-history-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  width: 100%;
+  background: none;
+  border: 0;
+  border-bottom: 1px solid var(--nk-border);
+  color: var(--nk-text);
+  font-size: 0.9rem;
+  text-align: left;
+  padding: 0.45rem 0.1rem;
+  cursor: pointer;
+  min-height: 0;
+}
+.sing-history-row:last-child { border-bottom: 0; }
+.sing-history-row:active .sing-history-song { color: var(--nk-accent); }
+.sing-history-song {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sing-history-plays {
+  color: var(--nk-accent);
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
 .queue-list { max-height: 320px; overflow-y: auto; }
 .queue-row {
   display: grid;
@@ -440,18 +831,28 @@ input:focus {
 }
 .sing-code-error { color: var(--nk-error); font-size: 0.9rem; margin-top: 0.75rem; }
 
-/* --- Rules footer (every page) -------------------------------------------- */
+/* --- Rules footer (collapsed one-liner on every page) ---------------------- */
 .rules-footer {
   max-width: 480px;
   margin: 0 auto 2rem;
-  padding: 1.25rem 1.5rem;
+  padding: 0.6rem 1.5rem;
   background: var(--nk-card-2);
   border: 1px solid var(--nk-border);
   border-radius: 12px;
   color: var(--nk-text-dim);
   font-size: 0.9rem;
 }
-.rules-footer h3 { margin-top: 0; color: var(--nk-text); }
+.rules-footer[open] { padding: 0.6rem 1.5rem 1.25rem; }
+.rules-footer-summary {
+  cursor: pointer;
+  font-weight: 700;
+  color: var(--nk-text);
+  list-style: none;
+  padding: 0.2rem 0;
+}
+.rules-footer-summary::-webkit-details-marker { display: none; }
+.rules-footer-summary::before { content: "▸ "; color: var(--nk-text-dim); }
+.rules-footer[open] > .rules-footer-summary::before { content: "▾ "; }
 .rules-footer .rules-short { list-style: none; padding-left: 0; margin: 0.25rem 0 0.75rem; }
 .rules-footer .rules-short li { padding: 0.35rem 0; border-bottom: 1px solid var(--nk-border); }
 .rules-footer .rules-short li:last-child { border-bottom: 0; }
@@ -506,8 +907,29 @@ input:focus {
   box-shadow: 0 2px 10px rgba(0,0,0,0.3);
 }
 .mysongs-pill:active { transform: scale(0.99); }
+.mysongs-pill.mysongs-urgent {
+  border-color: var(--nk-good);
+  background: linear-gradient(135deg, rgba(50, 213, 138, 0.2), rgba(255, 77, 207, 0.12));
+}
 .mysongs-icon { font-size: 1.1rem; }
-.mysongs-label { font-weight: 600; white-space: nowrap; }
+.mysongs-next {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.25;
+}
+.mysongs-next-label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--nk-text-dim);
+}
+.mysongs-next-song {
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .mysongs-status {
   color: var(--nk-accent-hover);
   font-weight: 500;
@@ -630,12 +1052,31 @@ input:focus {
   white-space: nowrap;
   text-align: right;
 }
-.rotation-updated {
+.rotation-fresh-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.75rem;
   margin: 0.5rem 0 0;
+}
+.rotation-updated {
+  margin: 0;
   font-size: 0.75rem;
   color: var(--nk-text-dim);
   text-align: right;
 }
+.rotation-refresh {
+  background: none;
+  border: 1px solid var(--nk-border);
+  border-radius: 999px;
+  color: var(--nk-text-dim);
+  font-size: 0.75rem;
+  padding: 0.2rem 0.65rem;
+  cursor: pointer;
+  min-height: 0;
+}
+.rotation-refresh:disabled { opacity: 0.6; cursor: default; }
+.rotation-refresh:active { color: var(--nk-text); }
 
 @media (max-width: 380px) {
   .rotation-row {
@@ -664,6 +1105,28 @@ input:focus {
   color: #ddd;
   margin-bottom: 8px;
 }
+.partner-chips-label {
+  font-size: 0.8em;
+  color: var(--nk-text-dim);
+  margin-bottom: 6px;
+}
+.partner-chips-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.partner-chip {
+  border: 1px solid var(--nk-border);
+  background: var(--nk-card-2);
+  color: var(--nk-text);
+  border-radius: 999px;
+  font-size: 0.85em;
+  padding: 4px 12px;
+  cursor: pointer;
+  min-height: 0;
+}
+.partner-chip:active { border-color: var(--nk-accent); color: var(--nk-accent); }
 .partner-row {
   display: grid;
   grid-template-columns: 1fr 1fr auto;
@@ -702,16 +1165,40 @@ input:focus {
 /* Multi-song done-screen list. */
 .songs-list { margin: 10px 0; }
 .song-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   margin: 8px 0;
-  padding: 12px;
+  padding: 10px 12px;
   background: rgba(255, 255, 255, 0.04);
   border-left: 3px solid #ff4dcf;
   border-radius: 4px;
 }
 .song-card[data-status="rejected"] { border-left-color: #ff6655; }
 .song-card[data-status="pending"]  { border-left-color: #888; }
+.song-card-main { flex: 1; min-width: 0; }
 .song-card-title { font-weight: 600; margin-bottom: 4px; }
 .song-card-status { font-size: 0.92em; color: #ccc; }
+.song-card-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  align-items: stretch;
+  flex-shrink: 0;
+}
+.song-card-action {
+  background: none;
+  border: 1px solid var(--nk-border);
+  border-radius: 6px;
+  color: var(--nk-text-dim);
+  font-size: 0.78rem;
+  padding: 0.25rem 0.6rem;
+  cursor: pointer;
+  min-height: 0;
+  white-space: nowrap;
+}
+.song-card-action:active { color: var(--nk-text); border-color: var(--nk-text-dim); }
+.song-card-action-cancel:active { color: var(--nk-error); border-color: var(--nk-error); }
 .song-card-partners {
   font-size: 0.85em;
   color: #ff4dcf;
@@ -749,8 +1236,45 @@ input:focus {
 
 /* Self-service change + reorder on the done screen */
 .song-card-change { margin-top: 6px; font-size: 0.85rem; opacity: 0.85; }
-.song-card-reorder { display: flex; gap: 8px; margin-top: 8px; }
-.song-card-reorder button { flex: 1; font-size: 0.85rem; }
+/* Drag-to-reorder mode (replaces the old per-card ▲▼ buttons) */
+.reorder-controls { margin: 0 0 0.5rem; }
+.reorder-toggle { width: 100%; }
+.reorder-notice { color: var(--nk-good); margin: 0 0 0.5rem; }
+.reorder-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-bottom: 0.75rem;
+}
+.reorder-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.55rem 0.7rem;
+  background: var(--nk-card-2);
+  border: 1px solid var(--nk-border);
+  border-radius: 8px;
+  user-select: none;
+}
+.reorder-row.dragging {
+  border-color: var(--nk-accent);
+  background: rgba(255, 77, 207, 0.12);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+}
+.reorder-handle {
+  touch-action: none;   /* the handle drags; the rest of the list scrolls */
+  cursor: grab;
+  color: var(--nk-text-dim);
+  font-size: 1.1rem;
+  padding: 0.2rem 0.3rem;
+}
+.reorder-row.dragging .reorder-handle { cursor: grabbing; }
+.reorder-song {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
 .song-card-reorder button[disabled] { opacity: 0.4; }
 
 

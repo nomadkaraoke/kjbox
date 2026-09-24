@@ -144,7 +144,7 @@ function rotateDeviceId() {
 const PHONE_RE = /^\+?[0-9 \-()]{7,20}$/;
 
 const state = {
-  step: "landing",
+  step: null,   // resolved at bootstrap: hash > legacy ?r= > _bootStep()
   name: LS.get("sing_name"),
   phone: LS.get("sing_phone"),
   query: "",
@@ -172,6 +172,9 @@ const state = {
   // the first successful probe so the bar doesn't flash before we know.
   mySongs: { items: [], nowPlaying: null, loaded: false },
   _barPollTimer: null,
+  // Tip config ({enabled, threshold, methods}) — fetched once at boot; the
+  // 💜 Tip tab only renders when the KJ has payment handles configured.
+  tipInfo: null,
 };
 
 const MAX_PARTNERS = 3;
@@ -298,8 +301,79 @@ function el(tag, attrs = {}, ...children) {
   return node;
 }
 
+// --- Hash routing ----------------------------------------------------------
+// Each step maps to a location.hash so the browser Back button navigates
+// INSIDE the SPA (previously it left the page entirely) and a reload restores
+// the singer to the section they were on.
+
+const STEP_HASH = {
+  identity: "#name",
+  search: "#search",
+  confirm: "#confirm",
+  done: "#mysongs",
+  rotation: "#rotation",
+  tip: "#tip",
+};
+
+// The pre-tabs "landing" screen is gone: a fresh visit (no hash) boots
+// straight into the Request flow — search when we know the singer, the
+// name screen when we don't. Tabs + smart-restore cover everything the
+// landing page used to do.
+function _bootStep() {
+  const phoneOk = !state.phone || PHONE_RE.test(state.phone);
+  return state.name && phoneOk ? "search" : "identity";
+}
+
+function _stepFromHash(hash) {
+  const h = (hash || "").split("?")[0];
+  for (const [step, sh] of Object.entries(STEP_HASH)) {
+    if (sh === h) return step;
+  }
+  return null;   // no/unknown hash — caller falls back to _bootStep()
+}
+
+// A hash can point at a step whose prerequisites are gone (e.g. reload on
+// #confirm loses the in-memory selection) — degrade to the nearest sane step.
+function _sanitizeStep(step) {
+  if (!step) step = _bootStep();
+  if (step === "confirm" && !state.selected) step = "search";
+  if ((step === "search" || step === "confirm") && !state.name) step = "identity";
+  // A stale #name hash (pushed during first-time setup) on a device that
+  // already has a good identity — a reload or Back must not strand the
+  // singer on the setup form they've completed.
+  if (step === "identity" && !state._identityMode && _bootStep() !== "identity") {
+    step = _bootStep();
+  }
+  return step;
+}
+
+let _suppressHashSync = false;   // true while handling popstate (hash already correct)
+
+function _syncHash() {
+  if (_suppressHashSync || typeof history === "undefined") return;
+  const want = STEP_HASH[state.step] ?? "";
+  const cur = window.location.hash || "";
+  if (cur === want) { state._navReplace = false; return; }
+  const url = window.location.pathname + window.location.search + want;
+  try {
+    if (state._navReplace) history.replaceState(null, "", url);
+    else history.pushState(null, "", url);
+  } catch { /* sandboxed iframe etc. — navigation still works, just no history */ }
+  state._navReplace = false;
+}
+
+window.addEventListener("popstate", () => {
+  _suppressHashSync = true;
+  try {
+    state.step = _sanitizeStep(_stepFromHash(window.location.hash));
+    render();
+  } finally {
+    _suppressHashSync = false;
+  }
+});
+
 function render() {
-  if (nowPlayingTimer && state.step !== "landing" && state.step !== "done") {
+  if (nowPlayingTimer && state.step !== "rotation") {
     clearInterval(nowPlayingTimer);
     nowPlayingTimer = null;
   }
@@ -314,6 +388,8 @@ function render() {
     state.changeRequestId = null;
     state.changeEditToken = null;
   }
+  // Reorder mode is a done-screen overlay — any navigation away discards it.
+  if (state._reorderMode && state.step !== "done") state._reorderMode = false;
   // Identity edit-mode flags are only meaningful while on the identity step;
   // clear them anywhere else so a stale "edit" can't mislabel a later setup.
   if (state.step !== "identity") {
@@ -321,17 +397,26 @@ function render() {
     state._identityReturnStep = null;
   }
   root.innerHTML = "";
-  const view = {
-    landing: renderLanding,
+  const views = {
     identity: renderIdentity,
     search: renderSearch,
     confirm: renderConfirm,
     done: renderDone,
-  }[state.step] || renderLanding;
+    rotation: renderRotation,
+    tip: renderTip,
+  };
+  let view = views[state.step];
+  if (!view) {
+    state.step = _bootStep();
+    view = views[state.step];
+  }
   root.appendChild(view());
-  // The persistent "My songs" bar lives outside #sing-root so it survives the
-  // innerHTML reset above; refresh its visibility/content for the new step.
+  // The persistent "My songs" bar and bottom tab bar live outside #sing-root
+  // so they survive the innerHTML reset above; refresh them for the new step.
   updateMySongsBar();
+  updateTabsBar();
+  updateRulesFooterVisibility();
+  _syncHash();
 }
 
 function back(to) {
@@ -451,9 +536,21 @@ function _waitText(entry) {
   // Position 2 is "up next" only when there is actually someone on stage at #1.
   // Detected via the cached payload: the caller passes a hasNowSinging flag.
   if (entry._hasNowSinging && entry.position === 2) return "up next";
-  const low = Math.round(entry.range_low_s / 60);
-  const high = Math.round(entry.range_high_s / 60);
-  return `~${low}–${high} min`;
+  return _fmtWaitRange(entry.range_low_s, entry.range_high_s);
+}
+
+// "305 min" reads terribly at real-night scale — format ≥1h as "5h 5m".
+function _fmtDur(seconds) {
+  const m = Math.round(seconds / 60);
+  if (m < 60) return `${m} min`;
+  const h = Math.floor(m / 60), rem = m % 60;
+  return rem ? `${h}h ${rem}m` : `${h}h`;
+}
+
+function _fmtWaitRange(lowS, highS) {
+  const highM = Math.round(highS / 60);
+  if (highM < 60) return `~${Math.round(lowS / 60)}–${highM} min`;
+  return `~${_fmtDur(lowS)}–${_fmtDur(highS)}`;
 }
 
 function _formatUpdatedAt(fetchedAt) {
@@ -464,7 +561,32 @@ function _formatUpdatedAt(fetchedAt) {
   return ageM === 1 ? "updated 1 min ago" : `updated ${ageM} min ago`;
 }
 
-function _renderRotationBody(payload) {
+// The "updated Xs ago · ↻ Refresh" strip appended to every rotation body.
+// `data-fetched-at` lets the shared ticker recompute the age text in place
+// without a full re-render; `onRefresh` (when given) wires the manual button.
+function _renderFreshnessRow(fetchedAt, onRefresh) {
+  const row = el("div", { class: "rotation-fresh-row" },
+    el("span", { class: "rotation-updated", "data-fetched-at": String(fetchedAt) },
+      _formatUpdatedAt(fetchedAt)),
+  );
+  if (onRefresh) {
+    const btn = el("button", {
+      class: "rotation-refresh",
+      "data-testid": "rotation-refresh",
+      onclick: async (e) => {
+        e.preventDefault();
+        btn.disabled = true;
+        btn.textContent = "Refreshing…";
+        try { await onRefresh(); }
+        finally { btn.disabled = false; btn.textContent = "↻ Refresh"; }
+      },
+    }, "↻ Refresh");
+    row.appendChild(btn);
+  }
+  return row;
+}
+
+function _renderRotationBody(payload, onRefresh) {
   const body = el("div", { class: "rotation-body" });
   body.appendChild(el("p", { class: "rotation-caveat" },
     el("em", {},
@@ -476,6 +598,7 @@ function _renderRotationBody(payload) {
   if (entries.length === 0) {
     body.appendChild(el("p", { class: "rotation-empty" },
       "Rotation hasn't started yet — you could be the first!"));
+    body.appendChild(_renderFreshnessRow(payload?._fetchedAt || Date.now(), onRefresh));
     return body;
   }
 
@@ -492,8 +615,7 @@ function _renderRotationBody(payload) {
     ));
   }
   body.appendChild(list);
-  body.appendChild(el("p", { class: "rotation-updated" },
-    _formatUpdatedAt(payload._fetchedAt)));
+  body.appendChild(_renderFreshnessRow(payload._fetchedAt, onRefresh));
   return body;
 }
 
@@ -502,104 +624,411 @@ function _renderRotationLoading() {
     el("p", { class: "rotation-loading" }, "Loading rotation…"));
 }
 
-function _renderRotationError(status) {
+function _renderRotationError(status, onRetry) {
   const body = el("div", { class: "rotation-body" });
   if (status === 403) {
     body.appendChild(el("p", { class: "rotation-error" },
       "Requests just closed — ask the KJ."));
   } else {
     body.appendChild(el("p", { class: "rotation-error" },
-      "Couldn't load rotation — close and tap again to retry."));
+      "Couldn't load the rotation."));
+    if (onRetry) {
+      body.appendChild(el("button", {
+        class: "rotation-refresh",
+        "data-testid": "rotation-retry",
+        onclick: (e) => { e.preventDefault(); onRetry(); },
+      }, "↻ Try again"));
+    }
   }
   return body;
 }
 
-function _updateRotationSummary(detailsEl, count) {
-  const summary = detailsEl.querySelector("summary");
-  if (!summary) return;
-  summary.textContent = count > 0
-    ? `See full rotation (${count} ${count === 1 ? "singer" : "singers"})`
-    : "See full rotation";
-}
+// Auto-refetch cadence while a rotation view is open, and how often the
+// "updated Xs ago" label re-computes. The label ticking is what keeps the
+// age honest — the old one-shot render sat on "updated just now" forever.
+const ROTATION_AUTO_REFRESH_MS = 30000;
+const ROTATION_TICK_MS = 5000;
 
-function renderRotationExpander() {
-  const details = el("details", { class: "rotation-expander" },
-    el("summary", {}, "See full rotation"),
-    el("div", { class: "rotation-body" }),  // placeholder; populated on toggle
-  );
+// Wire a container that holds a `.rotation-body` into the live-rotation
+// lifecycle: cache-aware load, 30s auto-refresh while visible, a ticking
+// age label, and a manual ↻ Refresh button. `isActive()` gates the timers
+// (e.g. a <details> is active only while open); timers self-clean when the
+// container leaves the DOM (every render() rebuilds the page).
+function attachRotationLive(container, { isActive = () => true } = {}) {
+  let timers = [];
+  const stop = () => { timers.forEach(clearInterval); timers = []; };
 
-  // If we already have a fresh cache, populate the body up-front so that
-  // returning to the landing screen after Back-from-Search renders instantly
-  // when the user re-expands.
-  if (state.rotationCache && Date.now() - state.rotationCache.fetchedAt < ROTATION_CACHE_TTL_MS) {
-    const payload = { ...state.rotationCache.payload, _fetchedAt: state.rotationCache.fetchedAt };
-    details.querySelector(".rotation-body").replaceWith(_renderRotationBody(payload));
-    _updateRotationSummary(details, payload.entries?.length || 0);
-  }
+  const renderPayload = (payload) => {
+    const slot = container.querySelector(".rotation-body");
+    if (!slot) return;
+    slot.replaceWith(_renderRotationBody(payload, () => load({ force: true })));
+  };
 
-  details.addEventListener("toggle", async () => {
-    if (!details.open) return;
-    // Serve from cache if fresh.
-    if (state.rotationCache && Date.now() - state.rotationCache.fetchedAt < ROTATION_CACHE_TTL_MS) {
-      const payload = { ...state.rotationCache.payload, _fetchedAt: state.rotationCache.fetchedAt };
-      details.querySelector(".rotation-body").replaceWith(_renderRotationBody(payload));
-      _updateRotationSummary(details, payload.entries?.length || 0);
+  const load = async ({ force = false } = {}) => {
+    const cached = state.rotationCache;
+    if (!force && cached && Date.now() - cached.fetchedAt < ROTATION_CACHE_TTL_MS) {
+      renderPayload({ ...cached.payload, _fetchedAt: cached.fetchedAt });
       return;
     }
-    // Otherwise refetch.
-    details.querySelector(".rotation-body").replaceWith(_renderRotationLoading());
+    // Only flash "Loading" when there's nothing on screen yet — background
+    // refreshes swap the list in place without a visual blank.
+    if (!container.querySelector(".rotation-list") && !container.querySelector(".rotation-empty")) {
+      const slot = container.querySelector(".rotation-body");
+      if (slot) slot.replaceWith(_renderRotationLoading());
+    }
     try {
       const payload = await fetchRotation();
+      onPollSuccess();
       const fetchedAt = Date.now();
       state.rotationCache = { fetchedAt, payload };
-      details.querySelector(".rotation-body").replaceWith(
-        _renderRotationBody({ ...payload, _fetchedAt: fetchedAt }),
-      );
-      _updateRotationSummary(details, payload.entries?.length || 0);
+      renderPayload({ ...payload, _fetchedAt: fetchedAt });
     } catch (e) {
-      details.querySelector(".rotation-body").replaceWith(_renderRotationError(e.status));
+      onPollFailure();
+      // Keep showing stale data (with its honest age) over an error screen.
+      if (!container.querySelector(".rotation-list")) {
+        const slot = container.querySelector(".rotation-body");
+        if (slot) slot.replaceWith(_renderRotationError(e.status, () => load({ force: true })));
+      }
     }
-  });
+  };
 
-  return details;
+  const start = () => {
+    if (timers.length) return;
+    timers.push(setInterval(() => {
+      if (!container.isConnected || !isActive()) { stop(); return; }
+      load({ force: true });
+    }, ROTATION_AUTO_REFRESH_MS));
+    timers.push(setInterval(() => {
+      if (!container.isConnected || !isActive()) { stop(); return; }
+      const label = container.querySelector(".rotation-updated");
+      if (label) {
+        const at = parseInt(label.getAttribute("data-fetched-at"), 10);
+        if (at) label.textContent = _formatUpdatedAt(at);
+      }
+    }, ROTATION_TICK_MS));
+  };
+
+  return { load, start, stop };
 }
 
-function renderLanding() {
-  return el("main", { class: "sing-card" },
-    renderNowPlaying(),   // Task 5 populates this; stub is harmless
-    renderRotationExpander(),
-    el("h1", {}, "Request a song"),
-    el("p", {},
-      "Tap below to add your song to the rotation. The KJ will call you up when you're on."),
-    el("button", {
-      class: "btn primary",
-      onclick: () => {
-        // Phone is optional — only the name gates progression. If present,
-        // it must still parse (defence against a corrupted LS value).
-        const phoneOk = !state.phone || PHONE_RE.test(state.phone);
-        state.step = state.name && phoneOk ? "search" : "identity";
-        render();
-      },
-    }, state.name ? "Continue" : "Get started"),
-    state.name ? el("p", { class: "hint" },
-      "You're ", el("strong", {}, state.name), " · ",
-      editNameLink("landing"), " · ",
-      `Not you? `,
-      el("a", { href: "#", "data-testid": "switch-identity", onclick: (e) => {
-        e.preventDefault();
-        // A different person on this device — delete the old singer's alias
-        // (background) AND rotate to a fresh device id synchronously so their
-        // KJ-corrected name can't leak onto this person's next submission.
-        forgetIdentity();
-        rotateDeviceId();
-        state.name = state.phone = "";
-        LS.set("sing_name", ""); LS.set("sing_phone", "");
-        state._identityMode = "setup";
-        state._identityReturnStep = "search";
-        state.step = "identity"; render();
-      } }, "switch")
-    ) : null,
+// Full-page rotation view (the 📋 Rotation tab). Same live lifecycle as the
+// expanders — auto-refresh while the tab is showing, ticking age, manual ↻.
+function renderRotation() {
+  const card = el("main", { class: "sing-card sing-rotation-page" },
+    renderNowPlaying(),
+    el("h2", {}, "Tonight's rotation"),
+    el("div", { class: "rotation-body" }),
   );
+  const live = attachRotationLive(card, {
+    isActive: () => state.step === "rotation",
+  });
+  live.load();
+  live.start();
+  return card;
+}
+
+// --- 💜 Tip tab -------------------------------------------------------------
+// Singers tip through the KJ's own payment app (links from config), then file
+// a claim; the KJ confirms it from the Requests panel, which hearts their
+// entries and (at/above the threshold) bumps their rotation priority.
+
+function _myTipClaims() {
+  return (state.mySongs.items || []).filter(
+    (it) => it.request && it.request.source_type === "tip");
+}
+
+function _tipStatusLine(req) {
+  if (req.status === "approved") return "✓ Confirmed — thank you! ♥";
+  if (req.status === "rejected") return "Not confirmed — see the KJ if that's a surprise.";
+  return "Waiting for the KJ to confirm…";
+}
+
+// Brand colors + inline SVG icons matching the public nomadkaraoke.com/tip
+// page (path data lifted from public-website components/TipPage.tsx).
+const TIP_BRAND_ICON_PATHS = {
+  cashapp: "M23.59 3.47A5.1 5.1 0 0 0 20.54.42C19.23-.04 17.79-.12 16.42.11L15.55.24a37.5 37.5 0 0 0-7.1 2.08L7.78 2.6a5.1 5.1 0 0 0-3.05 3.05l-.28.67A37.5 37.5 0 0 0 2.37 13.4l-.13.88c-.23 1.37-.15 2.81.31 4.12a5.1 5.1 0 0 0 3.05 3.05c1.31.46 2.75.54 4.12.31l.88-.13a37.5 37.5 0 0 0 7.1-2.08l.67-.28a5.1 5.1 0 0 0 3.05-3.05l.28-.67a37.5 37.5 0 0 0 2.08-7.1l.13-.88c.23-1.37.15-2.81-.31-4.12zM15.84 13.54c-.28 1.23-1.1 2.16-2.36 2.68l.1.95a.72.72 0 0 1-.7.79h-1.52a.72.72 0 0 1-.71-.64l-.1-.83c-.78-.12-1.56-.41-2.24-.82a.72.72 0 0 1-.2-1.05l.7-.96a.72.72 0 0 1 .96-.2c.53.3 1.12.5 1.65.5.6 0 1.15-.18 1.15-.75 0-.5-.38-.71-1.56-1.1-1.57-.52-3.19-1.24-3.19-3.28 0-1.44.96-2.6 2.56-3.02l-.1-.85a.72.72 0 0 1 .7-.79h1.52c.37 0 .67.28.71.64l.09.75c.56.1 1.12.3 1.65.58a.72.72 0 0 1 .22 1.05l-.63.93a.72.72 0 0 1-.97.23c-.46-.24-.96-.4-1.4-.4-.67 0-1.05.26-1.05.65 0 .5.48.68 1.58 1.05 1.73.57 3.19 1.3 3.19 3.29z",
+  venmo: "M20.396 2.408c.648 1.08.936 2.196.936 3.6 0 4.476-3.816 10.296-6.912 14.376H7.2L4.392 2.76l6.228-.576 1.62 13.056c1.5-2.448 3.348-6.3 3.348-8.928 0-1.344-.228-2.268-.612-3.024l5.42-.88z",
+  paypal: "M7.076 21.337H2.47a.641.641 0 0 1-.633-.74L4.944 2.23A.77.77 0 0 1 5.703 1.6h6.794c2.354 0 4.226.678 5.25 1.903.44.527.735 1.124.865 1.786.14.7.1 1.537-.12 2.488l-.008.034v.3l.236.134c.2.1.376.225.534.374a3.2 3.2 0 0 1 .82 1.3c.2.652.253 1.432.154 2.32-.114 1.02-.37 1.91-.762 2.64a5.28 5.28 0 0 1-1.224 1.56 4.97 4.97 0 0 1-1.744 1.01c-.678.24-1.467.363-2.346.363H13.34a.95.95 0 0 0-.938.803l-.012.07-.352 2.233-.01.05a.95.95 0 0 1-.937.803H7.076z",
+  zelle: "M4.583 3h14.834A1.583 1.583 0 0 1 21 4.583v2.26a1.583 1.583 0 0 1-.433 1.09L11.2 17.834h8.217A1.583 1.583 0 0 1 21 19.417v1.166A1.583 1.583 0 0 1 19.417 22H4.583A1.583 1.583 0 0 1 3 20.417v-2.26a1.583 1.583 0 0 1 .433-1.09L12.8 7.166H4.583A1.583 1.583 0 0 1 3 5.583V4.583A1.583 1.583 0 0 1 4.583 3z",
+  card: "M22 6v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2zM4 9h16V7H4v2zm0 4v5h16v-5H4z",
+};
+
+const TIP_BRANDS = {
+  cashapp: { color: "#00D632" },
+  venmo:   { color: "#008CFF" },
+  paypal:  { color: "#0070BA" },
+  zelle:   { color: "#6D1ED4" },
+  stripe:  { color: "#7C3AED", icon: "card" },
+  custom:  { color: "#7C3AED", icon: "card" },
+  page:    { color: "#7C3AED", icon: "card" },
+};
+
+function _tipIcon(name) {
+  const span = document.createElement("span");
+  span.className = "sing-tip-icon";
+  const path = TIP_BRAND_ICON_PATHS[name] || TIP_BRAND_ICON_PATHS.card;
+  span.innerHTML =
+    `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="${path}"/></svg>`;
+  return span;
+}
+
+function renderTip() {
+  // Header mirrors the public tip page: outline heart + "Tip {KJ name}".
+  const info = state.tipInfo;
+  const kjName = (info && info.kj_name) || "";
+  const card = el("main", { class: "sing-card sing-tip-page" },
+    el("h2", { class: "sing-tip-title" },
+      el("span", { class: "sing-tip-heart" }, "♡"),
+      ` Tip ${kjName || "the KJ"}`),
+  );
+  // Reload landing directly on #tip races the boot-time tip-info fetch —
+  // show a loading line rather than a false "not set up".
+  if (info === null) {
+    card.appendChild(el("p", { class: "hint" }, "Loading…"));
+    return card;
+  }
+  if (!info.enabled) {
+    card.appendChild(el("p", { class: "hint" },
+      "Tipping isn't set up for this event — cash always works though!"));
+    return card;
+  }
+
+  card.appendChild(el("p", { class: "sing-tip-sub" },
+    kjName
+      ? "Thanks for singing with me! Tips are always appreciated."
+      : "Thanks for singing with us! Tips are always appreciated."));
+  if (info.threshold > 0) {
+    card.appendChild(el("p", { class: "sing-tip-perk" },
+      `♥ Tip $${info.threshold}+ and you'll be bumped up the rotation, `
+      + "marked with a heart so everyone can see it's fair."));
+  }
+
+  // Amount first — method buttons deep-link the chosen amount straight into
+  // the payment app (Cash App/PayPal path amounts, Venmo pay intent).
+  let chosenAmount = info.threshold > 0 ? info.threshold : 10;
+
+  const methodUrl = (m, amount) => {
+    if (!(amount > 0)) return m.url;
+    if (m.amount_style === "path") return `${m.url}/${amount}`;
+    if (m.amount_style === "venmo") {
+      return `${m.url}?txn=pay&amount=${amount}&note=${encodeURIComponent("Karaoke tip")}`;
+    }
+    return m.url;
+  };
+
+  const fmtAmount = (a) => (a % 1 === 0 ? `$${a}` : `$${a.toFixed(2)}`);
+
+  const methods = el("div", { class: "sing-tip-methods" });
+  const methodEls = [];   // [element, method] — hrefs + suffixes re-render on amount change
+  for (const m of info.methods || []) {
+    const brand = TIP_BRANDS[m.key] || TIP_BRANDS.page;
+    const icon = _tipIcon(brand.icon || m.key);
+    const nameEl = el("span", { class: "sing-tip-method-name" }, m.label);
+    let node;
+    if (m.amount_style === "copy") {
+      // Zelle — no URL scheme; copy the phone/email to the clipboard.
+      // navigator.clipboard needs a secure context; the venue-wifi http URL
+      // falls back to the legacy textarea + execCommand path.
+      const copyValue = () => {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          return navigator.clipboard.writeText(m.value).then(() => true, () => false);
+        }
+        try {
+          const ta = document.createElement("textarea");
+          ta.value = m.value;
+          ta.style.position = "fixed";
+          ta.style.opacity = "0";
+          document.body.appendChild(ta);
+          ta.select();
+          const ok = document.execCommand("copy");
+          ta.remove();
+          return Promise.resolve(ok);
+        } catch { return Promise.resolve(false); }
+      };
+      const sub = el("span", { class: "sing-tip-method-sub" }, `· ${m.value} ⧉`);
+      node = el("button", {
+        class: "sing-tip-method",
+        style: `background:${brand.color}`,
+        onclick: async () => {
+          const ok = await copyValue();
+          sub.textContent = ok ? "· Copied!" : `· ${m.value}`;
+          setTimeout(() => { sub.textContent = `· ${m.value} ⧉`; }, 2000);
+        },
+      }, icon, nameEl, sub);
+    } else {
+      const sub = el("span", { class: "sing-tip-method-sub" },
+        m.amount_style === "none"
+          ? (m.key === "stripe" ? "· enter amount on next page" : "")
+          : `· ${fmtAmount(chosenAmount)}`);
+      node = el("a", {
+        class: "sing-tip-method",
+        style: `background:${brand.color}`,
+        href: methodUrl(m, chosenAmount),
+        target: "_blank",
+        rel: "noopener",
+      }, icon, nameEl, sub);
+      methodEls.push([node, m, sub]);
+    }
+    methods.appendChild(node);
+  }
+
+  const amountInput = el("input", {
+    type: "number", class: "sing-empty-input sing-tip-custom-input",
+    placeholder: "$ Custom amount",
+    inputmode: "decimal", min: "1", step: "1",
+    "data-testid": "tip-amount",
+  });
+  const presetRow = el("div", { class: "sing-tip-presets" });
+  const setAmount = (val, fromInput) => {
+    chosenAmount = val;
+    if (!fromInput) amountInput.value = "";
+    for (const [a, m, sub] of methodEls) {
+      a.href = methodUrl(m, val);
+      if (m.amount_style !== "none") sub.textContent = `· ${fmtAmount(val)}`;
+    }
+    for (const b of presetRow.querySelectorAll(".sing-tip-preset")) {
+      b.classList.toggle("active", !fromInput && parseFloat(b.dataset.amount) === val);
+    }
+  };
+  for (const amt of [3, 5, 10, 20]) {
+    presetRow.appendChild(el("button", {
+      class: "sing-tip-preset" + (amt === chosenAmount ? " active" : ""),
+      "data-amount": String(amt),
+      onclick: () => setAmount(amt),
+    }, info.threshold > 0 && amt >= info.threshold ? `$${amt} ♥` : `$${amt}`));
+  }
+  const defaultAmount = chosenAmount;
+  amountInput.addEventListener("input", () => {
+    const v = parseFloat(amountInput.value);
+    if (v > 0) setAmount(v, true);
+    else if (!amountInput.value.trim()) setAmount(defaultAmount);   // cleared → default preset
+  });
+  card.appendChild(el("h3", { class: "sing-tip-amount-heading" }, "$ Select amount"));
+  card.appendChild(presetRow);
+  card.appendChild(amountInput);
+  card.appendChild(methods);
+  card.appendChild(el("p", { class: "hint sing-tip-choose" },
+    "Choose your preferred method above. Thank you!"));
+
+  // Claim form — after tipping in their payment app, the singer tells us so
+  // the KJ gets a Confirm card in the Requests panel.
+  const nameInput = el("input", {
+    type: "text", class: "sing-empty-input", placeholder: "Your name",
+    value: state.name || "",
+  });
+  const methodSelect = el("select", { class: "sing-empty-input sing-tip-method-select" },
+    el("option", { value: "" }, "How did you tip?"),
+    (info.methods || []).map((m) => el("option", { value: m.label }, m.label)),
+    el("option", { value: "Cash" }, "Cash"),
+    el("option", { value: "Other" }, "Other"),
+  );
+  const err = el("p", { class: "error" }, "");
+  const submitBtn = el("button", {
+    class: "btn primary sing-tip-submit",
+    "data-testid": "tip-submit",
+  }, "I sent a tip →");
+  submitBtn.onclick = async () => {
+    const name = (nameInput.value || "").trim();
+    const amount = chosenAmount;   // presets or custom input, whichever is live
+    if (!name) { err.textContent = "Please enter your name."; return; }
+    if (!(amount > 0)) { err.textContent = "Please pick the tip amount above."; return; }
+    err.textContent = "";
+    submitBtn.disabled = true;
+    submitBtn.textContent = "Sending…";
+    try {
+      if (name !== state.name) {
+        state.name = name;
+        LS.set("sing_name", name);
+      }
+      const resp = await fetchJson(`${BASE}/tip-claim`, {
+        method: "POST",
+        body: JSON.stringify({
+          singer_name: name,
+          device_id: DEVICE_ID,
+          phone: state.phone || "",
+          amount,
+          method: methodSelect.value || "",
+        }),
+      });
+      rememberRequestId(TOKEN, resp.request.id, resp.request.edit_token);
+      await refreshMySongs();   // pull the new claim into the view-model
+      render();                 // re-render shows it under "Your tips tonight"
+    } catch (e) {
+      submitBtn.disabled = false;
+      submitBtn.textContent = "I sent a tip →";
+      err.textContent = e.status === 429
+        ? "That's a lot of tip claims — give it a few minutes."
+        : "Couldn't send — flag the KJ down instead.";
+    }
+  };
+  card.appendChild(el("div", { class: "sing-tip-claim" },
+    el("h3", {}, "Sent one? Let the KJ know"),
+    el("label", { class: "sing-empty-label" }, "Name", nameInput),
+    el("label", { class: "sing-empty-label" }, "Method", methodSelect),
+    submitBtn,
+    err,
+  ));
+
+  const claimsSection = () => {
+    const claims = _myTipClaims();
+    if (!claims.length) return null;
+    const list = el("div", { class: "sing-tip-claims" },
+      el("h3", {}, "Your tips tonight"));
+    for (const it of claims) {
+      const req = it.request;
+      const amt = req.tip_amount != null ? `$${req.tip_amount}` : "";
+      list.appendChild(el("div", { class: "song-card", "data-status": req.status },
+        el("div", { class: "song-card-title" },
+          `${amt}${req.tip_method ? ` via ${req.tip_method}` : ""}`),
+        el("div", { class: "song-card-status" }, _tipStatusLine(req)),
+      ));
+    }
+    return list;
+  };
+  const initial = claimsSection();
+  if (initial) card.appendChild(initial);
+
+  // Direct load onto #tip (reload/deep link): the view-model is empty until
+  // something fetches it — pull once now so past claims appear immediately.
+  if (!state.mySongs.loaded && readMyRequestIds(TOKEN).length) {
+    refreshMySongs().then(() => {
+      if (state.step !== "tip" || !card.isConnected) return;
+      const fresh = claimsSection();
+      const existing = card.querySelector(".sing-tip-claims");
+      if (existing && fresh) existing.replaceWith(fresh);
+      else if (fresh) card.appendChild(fresh);
+    });
+  }
+
+  // Keep claim statuses fresh while this tab is open — the done-screen and
+  // bar polls don't run here (tips aren't "live songs"), so without this a
+  // KJ confirmation would never reach the singer's eyes.
+  const timer = setInterval(async () => {
+    if (state.step !== "tip" || !card.isConnected) { clearInterval(timer); return; }
+    await refreshMySongs();
+    if (state.step !== "tip" || !card.isConnected) { clearInterval(timer); return; }
+    const fresh = claimsSection();
+    const existing = card.querySelector(".sing-tip-claims");
+    if (existing && fresh) existing.replaceWith(fresh);
+    else if (fresh) card.appendChild(fresh);
+    else if (existing) existing.remove();
+  }, 15000);
+  return card;
+}
+
+// A different person taking over this device — delete the old singer's alias
+// (background) AND rotate to a fresh device id synchronously so their
+// KJ-corrected name can't leak onto this person's next submission.
+function switchIdentity() {
+  forgetIdentity();
+  rotateDeviceId();
+  state.name = state.phone = "";
+  LS.set("sing_name", ""); LS.set("sing_phone", "");
+  state._identityDraft = null;
+  state._identityMode = "setup";
+  state._identityReturnStep = "search";
+  state.step = "identity";
+  render();
 }
 
 function renderIdentity() {
@@ -669,10 +1098,13 @@ function renderIdentity() {
   }
 
   return el("main", { class: "sing-card" },
-    el("h2", {}, isEdit ? "Edit your name" : "Your details"),
+    el("h2", {}, isEdit ? "Edit your name" : "Request a song"),
     isEdit ? el("p", { class: "hint" },
       "Change how your name shows on the rotation. Your songs stay yours — "
-      + "this updates them and anything you add next.") : null,
+      + "this updates them and anything you add next.")
+      : el("p", {},
+        "Add your song to the rotation — the KJ will call you up when "
+        + "you're on. First, what should we call you?"),
     el("form", { onsubmit: onSubmit },
       el("label", {}, "First name + last initial",
         el("input", {
@@ -692,10 +1124,18 @@ function renderIdentity() {
       ),
       draft.err ? el("p", { class: "error" }, draft.err) : null,
       el("div", { class: "row" },
-        el("button", { type: "button", class: "btn ghost", onclick: () => leaveIdentity(isEdit ? returnStep : "landing") }, isEdit ? "Cancel" : "Back"),
+        isEdit ? el("button", { type: "button", class: "btn ghost",
+          onclick: () => leaveIdentity(returnStep) }, "Cancel") : null,
         el("button", { type: "submit", class: "btn primary identity-save" }, isEdit ? "Save name" : "Next"),
       ),
     ),
+    isEdit ? el("p", { class: "hint" },
+      "Different person? ",
+      el("a", { href: "#", "data-testid": "switch-identity", onclick: (e) => {
+        e.preventDefault();
+        switchIdentity();
+      } }, "Switch singer"),
+      " — starts fresh on this phone.") : null,
   );
 }
 
@@ -727,6 +1167,318 @@ function _versionSection(version) {
   if (kn.divebar && kn.divebar.file_id) return "divebar";
   if (kn.is_community) return "community";
   return "online";
+}
+
+// --- Generic singer modal ---------------------------------------------------
+// One shared overlay for the pill-tap info modals (community/commercial
+// explainer, brand info, technical details). Closes on ×, backdrop tap, Esc.
+
+function openSingModal(title, ...children) {
+  closeSingModal();
+  const dialog = el("div", { class: "sing-modal" },
+    el("div", { class: "sing-modal-head" },
+      el("h3", { class: "sing-modal-title" }, title),
+      el("button", { class: "sing-modal-close", "aria-label": "Close",
+        onclick: () => closeSingModal() }, "×"),
+    ),
+    el("div", { class: "sing-modal-body" }, ...children),
+  );
+  const backdrop = el("div", { id: "sing-modal-backdrop", class: "sing-modal-backdrop" }, dialog);
+  backdrop.addEventListener("click", (e) => { if (e.target === backdrop) closeSingModal(); });
+  document.body.appendChild(backdrop);
+  return dialog;
+}
+
+function closeSingModal() {
+  const existing = document.getElementById("sing-modal-backdrop");
+  if (existing) existing.remove();
+}
+
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") closeSingModal();
+});
+
+// --- Community vs Commercial explainer (tappable class pill) ---------------
+
+const CLASS_EXPLAINER = {
+  community: {
+    title: "Community track",
+    lines: [
+      ["What it is", "The original recording of the song, with the lead vocal removed by AI and karaoke lyrics added by a hobbyist producer."],
+      ["How it sounds", "Like the real song — same instruments, same backing vocals, same energy."],
+      ["Good for", "Recent releases, niche songs, and anyone who wants it to sound exactly like the record."],
+    ],
+  },
+  commercial: {
+    title: "Commercial track",
+    lines: [
+      ["What it is", "A professional karaoke production: a cover band re-records the backing track and a company adds the lyrics."],
+      ["How it sounds", "Like classic karaoke — a faithful cover, but not the original recording."],
+      ["Good for", "Classics and well-known hits; lyric timing is usually rock solid."],
+    ],
+  },
+};
+
+function openClassExplainer(cls) {
+  const info = CLASS_EXPLAINER[cls];
+  if (!info) return;
+  const other = cls === "community" ? CLASS_EXPLAINER.commercial : CLASS_EXPLAINER.community;
+  openSingModal(info.title,
+    el("dl", { class: "sing-info-list" },
+      info.lines.flatMap(([k, v]) => [el("dt", {}, k), el("dd", {}, v)])),
+    el("p", { class: "sing-modal-hint" },
+      `Compare: ${other.title.toLowerCase()}s ${cls === "community"
+        ? "are re-recorded covers made for karaoke — they sound like karaoke."
+        : "use the original song's audio with the vocals removed — they sound like the record."}`),
+  );
+}
+
+// --- Brand info (tappable brand pill) --------------------------------------
+// Curated blurbs for the brands in the version-priority registry. Written
+// in-house — karaokenerds.com must never be scraped (workspace hard rule).
+
+const BRAND_INFO = {
+  // Community
+  CC:    "One of the most prolific community producers — original-recording tracks with AI vocal removal and clean, readable lyrics.",
+  LC:    "Community producer known for careful lyric timing across a broad rock and alternative catalogue.",
+  FBK:   "Funbox Karaoke — community producer with wide coverage of modern pop and recent releases.",
+  BELLY: "BellySings — community producer using original recordings with AI vocal removal.",
+  NOMAD: "Made by Nomad Karaoke — your KJ's own tracks, built from the original recording with AI vocal separation and hand-reviewed lyrics.",
+  FAKEY: "FakeyOke — community producer covering songs the commercial brands never made.",
+  PMK:   "Punk Media Karaoke — community specialist in punk, emo and alternative tracks.",
+  OBSK:  "ObsKure Karaoke — community producer focused on obscure and niche songs.",
+  SDK:   "SNDL Karaoke — high-volume community producer using original recordings.",
+  DBK:   "Deep Bench Karaoke — community producer with a deep catalogue of lesser-known songs.",
+  // Commercial
+  KV:    "Karaoke Version — one of the biggest professional catalogues in the world. Studio-quality cover recordings with reliable lyric timing.",
+  SC:    "Sound Choice — the legendary US brand many KJs consider the gold standard of professional karaoke.",
+  SBI:   "SBI Karaoke — major commercial producer with a large international catalogue.",
+  SF:    "Sunfly — long-running UK commercial brand with decades of chart coverage.",
+  CB:    "Chart Buster — US commercial brand, especially strong on country music.",
+  ZM:    "Zoom Entertainments — UK commercial brand with a broad pop catalogue.",
+  VS:    "Vocal Star — UK commercial karaoke producer.",
+  SK:    "Sing King — one of the biggest karaoke channels on YouTube; professional cover recordings.",
+  MR:    "Mr. Entertainer — UK commercial brand with a large budget-friendly catalogue.",
+  PT:    "Party Tyme Karaoke — US commercial brand with wide chart coverage.",
+  EK:    "Easy Karaoke — UK commercial karaoke producer.",
+};
+
+function openBrandInfo(version) {
+  const name = version.priority_display
+    || (version.kn && (version.kn.brand_name || version.kn.brand_code))
+    || "This brand";
+  const cls = version.priority_class;
+  const blurb = BRAND_INFO[version.priority_brand]
+    || (cls === "community"
+      ? "A community karaoke producer — tracks are built from the original recording with the lead vocal removed by AI."
+      : cls === "commercial"
+        ? "A commercial karaoke producer — tracks are professional cover re-recordings made for karaoke."
+        : "We don't know much about this producer — ask the KJ if you're unsure.");
+  openSingModal(name,
+    cls && cls !== "unknown"
+      ? el("p", { class: `sing-brand-class sing-brand-class-${cls}` },
+          cls === "community" ? "Community producer" : "Commercial producer")
+      : null,
+    el("p", {}, blurb),
+    version.priority_stated
+      ? el("p", { class: "sing-modal-hint" }, "⭐ Your KJ rates this brand as reliably high quality.")
+      : null,
+  );
+}
+
+// --- Format pill + technical details (2C) ----------------------------------
+
+function _fmtBytes(bytes) {
+  if (!bytes || bytes < 0) return null;
+  const units = ["B", "KB", "MB", "GB"];
+  let i = 0, n = bytes;
+  while (n >= 1024 && i < units.length - 1) { n /= 1024; i++; }
+  return (i === 0 ? String(n) : n.toFixed(n < 10 ? 2 : 1)) + " " + units[i];
+}
+
+function _fmtBitrate(bps) {
+  if (!bps || bps < 0) return null;
+  if (bps >= 1e6) return (bps / 1e6).toFixed(1) + " Mbps";
+  if (bps >= 1e3) return Math.round(bps / 1e3) + " kbps";
+  return bps + " bps";
+}
+
+function _fmtDuration(s) {
+  if (s == null || isNaN(s)) return null;
+  const m = Math.floor(s / 60), sec = Math.round(s % 60);
+  return `${m}:${String(sec).padStart(2, "0")}`;
+}
+
+// Human format label for the pill: "MP4", "CDG+MP3", "MKV", …
+function _versionFormat(version) {
+  const fromExt = (nameOrPath) => {
+    const m = /\.([a-z0-9]+)$/i.exec(nameOrPath || "");
+    return m ? m[1].toUpperCase() : "";
+  };
+  const norm = (f) => {
+    const up = (f || "").toUpperCase();
+    if (up === "ZIP" || up === "CDG_ZIP" || up === "CDG-ZIP") return "CDG+MP3";
+    return up;
+  };
+  if (version.source === "local") {
+    const local = version.local || {};
+    return norm(local.format || fromExt(local.filename || local.path)) || "FILE";
+  }
+  const kn = version.kn || {};
+  if (kn.divebar && kn.divebar.file_id) {
+    return norm(kn.divebar.format || fromExt(kn.divebar.drive_path)) || "FILE";
+  }
+  return "YouTube";
+}
+
+function _mediaInfoRows(info) {
+  const rows = [];
+  const add = (label, value) => { if (value) rows.push([label, value]); };
+  add("Container", info.container);
+  if (info.note) add("Type", info.note);
+  if (info.video) {
+    const v = info.video;
+    const res = (v.width && v.height) ? `${v.width}×${v.height}` : null;
+    const fps = v.fps ? `${Math.round(v.fps * 100) / 100} fps` : null;
+    add("Video", [(v.codec || "").toUpperCase(), res, fps, v.profile].filter(Boolean).join(" · "));
+  }
+  if (info.audio) {
+    const a = info.audio;
+    const sr = a.sample_rate ? `${a.sample_rate / 1000} kHz` : null;
+    const ch = a.channel_layout || (a.channels ? `${a.channels}ch` : null);
+    add("Audio", [(a.codec || "").toUpperCase(), sr, ch, _fmtBitrate(a.bit_rate)].filter(Boolean).join(" · "));
+  }
+  add("Overall bitrate", _fmtBitrate(info.bit_rate));
+  add("Duration", info.duration != null ? _fmtDuration(info.duration) : null);
+  add("File size", _fmtBytes(info.size_bytes));
+  return rows;
+}
+
+function _infoDl(rows) {
+  return el("dl", { class: "sing-info-list" },
+    rows.flatMap(([k, v]) => [el("dt", {}, k), el("dd", {}, String(v))]));
+}
+
+async function openFormatDetails(group, version) {
+  const fmt = _versionFormat(version);
+  const title = `${group.title} — ${fmt}`;
+  if (version.source === "local") {
+    const dialog = openSingModal(title, el("p", { class: "hint" }, "Reading file details…"));
+    try {
+      const info = await fetchJson(`${BASE}/media-info`, {
+        method: "POST",
+        body: JSON.stringify({ file_path: (version.local || {}).path }),
+      });
+      const body = dialog.querySelector(".sing-modal-body");
+      if (!body || !body.isConnected) return;   // modal closed while loading
+      body.innerHTML = "";
+      if (info.ok === false) {
+        body.appendChild(el("p", { class: "error" }, info.error || "Couldn't read file details."));
+      } else {
+        body.appendChild(_infoDl(_mediaInfoRows(info)));
+        body.appendChild(el("p", { class: "sing-modal-hint" }, "This file is on the KJ's machine — ready to play instantly."));
+      }
+    } catch {
+      const body = dialog.querySelector(".sing-modal-body");
+      if (body && body.isConnected) {
+        body.innerHTML = "";
+        body.appendChild(el("p", { class: "error" }, "Couldn't load file details."));
+      }
+    }
+    return;
+  }
+  const kn = version.kn || {};
+  if (kn.divebar && kn.divebar.file_id) {
+    const rows = [["Format", fmt]];
+    if (kn.divebar.quality) rows.push(["Quality", kn.divebar.quality]);
+    const size = _fmtBytes(kn.divebar.file_size);
+    if (size) rows.push(["File size", size]);
+    openSingModal(title, _infoDl(rows),
+      el("p", { class: "sing-modal-hint" },
+        "Stored in our cloud library — the KJ's system fetches it automatically when you pick it."));
+    return;
+  }
+  openSingModal(`${group.title} — YouTube`,
+    el("p", {}, "This version streams from YouTube. If you pick it, the KJ's system downloads it before you're up — quality depends on the upload."));
+}
+
+// --- Version preview (2D) ---------------------------------------------------
+// Reuses the KJ UI's preview player (static/preview.js + cdg.js + hls.js),
+// served through token-gated /sing/lib/* routes. window.__PREVIEW_URL rewrites
+// the player's internal endpoints onto the singer blueprint with the event
+// token attached.
+
+window.__PREVIEW_URL = (path) => {
+  const mapped = path === "/static/vendor/hls.min.js"
+    ? `${BASE}/lib/hls.min.js`
+    : `${BASE}${path}`;
+  return `${mapped}${mapped.includes("?") ? "&" : "?"}t=${encodeURIComponent(TOKEN)}`;
+};
+
+let _previewLibsPromise = null;
+
+function _loadScript(src) {
+  return new Promise((resolve, reject) => {
+    const s = document.createElement("script");
+    s.src = src;
+    s.onload = resolve;
+    s.onerror = () => { s.remove(); reject(new Error(`failed: ${src}`)); };
+    document.head.appendChild(s);
+  });
+}
+
+function ensurePreviewLibs() {
+  if (typeof window.openPreview === "function") return Promise.resolve();
+  if (_previewLibsPromise) return _previewLibsPromise;
+  const q = (n) => `${BASE}/lib/${n}?t=${encodeURIComponent(TOKEN)}`;
+  _previewLibsPromise = _loadScript(q("cdg.js"))
+    .then(() => _loadScript(q("preview.js")))
+    .catch((e) => { _previewLibsPromise = null; throw e; });
+  return _previewLibsPromise;
+}
+
+function ensurePreviewModalDom() {
+  if (document.getElementById("preview-modal")) return;
+  const modal = el("div", { id: "preview-modal", class: "sing-modal-backdrop hidden" },
+    el("div", { class: "sing-modal sing-preview-modal" },
+      el("div", { class: "sing-modal-head" },
+        el("h3", { id: "preview-modal-title", class: "sing-modal-title" }, "Preview"),
+        el("button", { class: "sing-modal-close", "aria-label": "Close",
+          onclick: () => { if (typeof window.closePreview === "function") window.closePreview(); } }, "×"),
+      ),
+      el("div", { id: "preview-modal-body", class: "preview-body" }),
+      el("div", { id: "preview-modal-footer", class: "preview-footer" }),
+    ),
+  );
+  modal.addEventListener("click", (e) => {
+    if (e.target === modal && typeof window.closePreview === "function") window.closePreview();
+  });
+  document.body.appendChild(modal);
+}
+
+function _previewDescriptor(group, version) {
+  const title = `${group.title} — ${group.artist}`;
+  if (version.source === "local") {
+    return { source: "local", file_path: (version.local || {}).path, title };
+  }
+  const kn = version.kn || {};
+  if (kn.divebar && kn.divebar.file_id) {
+    return { source: "divebar", file_id: kn.divebar.file_id,
+             format: kn.divebar.format, title };
+  }
+  return { source: "youtube", youtube_url: kn.youtube_url || kn.url || "", title };
+}
+
+async function openVersionPreview(group, version) {
+  ensurePreviewModalDom();
+  try {
+    await ensurePreviewLibs();
+  } catch {
+    openSingModal("Preview", el("p", { class: "error" },
+      "Couldn't load the preview player — check your connection and try again."));
+    return;
+  }
+  window.openPreview(_previewDescriptor(group, version));
 }
 
 function renderSearch() {
@@ -809,7 +1561,7 @@ function renderSearch() {
           source_ref: track.divebar.file_id,
           song_artist: group.artist,
           song_title: group.title,
-          label: `${group.title} — ${group.artist} (community karaoke)`,
+          label: `${group.title} — ${group.artist} (from our cloud library)`,
           source_meta: { brand_code: track.brand_code, disc_id: track.disc_id, format: track.divebar.format },
         }
       : {
@@ -832,7 +1584,7 @@ function renderSearch() {
       source_ref: null,
       song_artist: group.artist,
       song_title: group.title,
-      label: `${group.title} — ${group.artist} (KJ picks best version)`,
+      label: `${group.title} — ${group.artist} (best version auto-selected)`,
       source_meta: {
         group_key: group.key,
         version_count: group.version_count,
@@ -934,51 +1686,46 @@ function renderSearch() {
   }
 
   function renderVersionRow(group, version, isBest) {
-    let icon, primary, secondary = "", pathBlock = null;
+    const kn = version.kn || {};
+    const local = version.local || {};
+    const hasDivebar = !!(kn.divebar && kn.divebar.file_id);
+    const cls = version.priority_class
+      || (version.source === "kn" ? (kn.is_community ? "community" : "commercial") : "unknown");
+    const fmt = _versionFormat(version);
+
+    // Who made it — full display name when we know the brand, otherwise the
+    // best identifier we have (disc id for library files, raw KN code).
+    const brandLabel = version.priority_display
+      || kn.brand_name || kn.brand_code
+      || local.disc_id
+      || "Unknown brand";
+
+    // Where it plays from — replaces the old filename/full-path noise.
+    let sourceLine;
     if (version.source === "local") {
-      const local = version.local || {};
-      icon = "📁";
-      const format = (local.format || "").toUpperCase();
-      primary = format
-        ? `${local.disc_id || "Local"} — ${format}`
-        : (local.disc_id || "Local file");
-      secondary = local.filename || "";
-      if (local.path) {
-        pathBlock = el("details", { class: "sing-version-path-wrap" },
-          el("summary", { class: "sing-version-path-summary" }, "show full path"),
-          el("div", { class: "sing-version-path" }, local.path),
-        );
-      }
+      sourceLine = "On the KJ's machine — plays instantly";
+    } else if (hasDivebar) {
+      const size = _humanFileSize(kn.divebar.file_size);
+      sourceLine = size ? `In our cloud library · ${size}` : "In our cloud library";
     } else {
-      const kn = version.kn || {};
-      const hasDivebar = !!(kn.divebar && kn.divebar.file_id);
-      const isCommunity = !!kn.is_community;
-      const brand = kn.brand_name || kn.brand_code || "Unknown brand";
-      if (hasDivebar) {
-        icon = "🎤";
-        const format = (kn.divebar.format || "").toUpperCase();
-        const quality = kn.divebar.quality ? ` (${kn.divebar.quality})` : "";
-        primary = format ? `${brand} — ${format}${quality}` : brand;
-        const size = _humanFileSize(kn.divebar.file_size);
-        secondary = size ? `via Divebar · ${size}` : "via Divebar";
-        if (kn.divebar.drive_path) {
-          pathBlock = el("details", { class: "sing-version-path-wrap" },
-            el("summary", { class: "sing-version-path-summary" }, "show full path"),
-            el("div", { class: "sing-version-path" }, kn.divebar.drive_path),
-          );
-        }
-      } else if (isCommunity) {
-        icon = "🧑‍🤝‍🧑";
-        primary = brand;
-        secondary = "Community · YouTube (download required)";
-      } else {
-        icon = "🌐";
-        primary = brand;
-        secondary = "Commercial · YouTube (download required)";
-      }
+      sourceLine = "On YouTube — downloaded if you pick it";
     }
+
+    const pills = el("div", { class: "sing-version-pills" });
+    if (cls === "community" || cls === "commercial") {
+      pills.appendChild(el("button", {
+        class: `sing-pill sing-pill-${cls}`,
+        title: "What does this mean?",
+        onclick: (e) => { e.stopPropagation(); openClassExplainer(cls); },
+      }, cls === "community" ? "Community" : "Commercial"));
+    }
+    pills.appendChild(el("button", {
+      class: "sing-pill sing-pill-format",
+      title: "Technical details",
+      onclick: (e) => { e.stopPropagation(); openFormatDetails(group, version); },
+    }, fmt));
+
     const card = el("div", { class: "sing-version-card" },
-      el("div", { class: "sing-version-icon" }, icon),
       el("div", { class: "sing-version-main" },
         el("div", { class: "sing-version-primary" },
           isBest
@@ -987,15 +1734,26 @@ function renderSearch() {
                 ? el("span", { class: "sing-version-star", title: "Reliably high-quality brand" }, "⭐")
                 : null),
           (isBest || version.priority_stated) ? " " : null,
-          primary,
+          el("button", {
+            class: "sing-version-brand",
+            title: "About this producer",
+            onclick: (e) => { e.stopPropagation(); openBrandInfo(version); },
+          }, brandLabel),
         ),
-        secondary ? el("div", { class: "sing-version-secondary" }, secondary) : null,
-        pathBlock,
+        pills,
+        el("div", { class: "sing-version-secondary" }, sourceLine),
       ),
-      el("button", {
-        class: "sing-version-pick",
-        onclick: (e) => { e.stopPropagation(); if (!armed()) return; pickSpecificVersion(group, version); },
-      }, "Pick this version →"),
+      el("div", { class: "sing-version-actions" },
+        el("button", {
+          class: "sing-version-preview",
+          "data-testid": "version-preview",
+          onclick: (e) => { e.stopPropagation(); if (!armed()) return; openVersionPreview(group, version); },
+        }, "▶ Preview"),
+        el("button", {
+          class: "sing-version-pick",
+          onclick: (e) => { e.stopPropagation(); if (!armed()) return; pickSpecificVersion(group, version); },
+        }, "Pick this version →"),
+      ),
     );
     return card;
   }
@@ -1021,7 +1779,9 @@ function renderSearch() {
 
     const sections = [
       { key: "library", label: "In our library" },
-      { key: "divebar", label: "Community karaoke (in our library)" },
+      // Divebar cross-refs can be commercial too — the old "Community
+      // karaoke" label lied whenever a commercial mirror file landed here.
+      { key: "divebar", label: "In our cloud library" },
       { key: "online", label: "Online only (download needed)" },
       { key: "community", label: "Community (AI vocal removal)" },
     ];
@@ -1196,7 +1956,7 @@ function renderSearch() {
       // Multi-version groups: "Let the KJ pick". Single-version: "Add to queue".
       const ctaLabel = isSingle
         ? "Add to queue"
-        : "Let the KJ pick the best version →";
+        : "Auto-select best version →";
       const onCtaClick = isSingle
         ? () => pickSingleVersion(group)
         : () => pickKjChoice(group);
@@ -1242,6 +2002,66 @@ function renderSearch() {
     return container;
   }
 
+  // Collapsed inspiration section — the singer's own play history (from the
+  // KJ's Song Stats DB) + the venue's crowd favourites. A regular who can't
+  // decide gets "what have I sung before?" one tap away; tapping a row runs
+  // the search for it.
+  function renderInspiration() {
+    const details = el("details", { class: "sing-history", "data-testid": "song-history" },
+      el("summary", { class: "sing-history-summary" }, "🎤 Sung here before? Need ideas?"),
+      el("div", { class: "sing-history-body" }, el("p", { class: "hint" }, "Loading…")),
+    );
+    let requested = false;
+    details.addEventListener("toggle", async () => {
+      if (!details.open || requested) return;
+      requested = true;
+      const body = details.querySelector(".sing-history-body");
+      try {
+        const data = await fetchJson(
+          `${BASE}/my-stats?name=${encodeURIComponent(state.name || "")}`);
+        if (!body.isConnected) return;
+        body.innerHTML = "";
+        const addList = (heading, rows) => {
+          if (!rows || !rows.length) return;
+          body.appendChild(el("h4", {}, heading));
+          const list = el("div", { class: "sing-history-list" });
+          for (const r of rows) {
+            const label = `${r.artist ? `${r.artist} – ` : ""}${r.title || ""}`;
+            list.appendChild(el("button", {
+              class: "sing-history-row",
+              onclick: () => {
+                const q = label.replace(" – ", " ");
+                state.query = q;
+                const input = card.querySelector('input[type="search"]');
+                if (input) input.value = q;
+                details.open = false;
+                err = ""; loading = true; update();
+                doSearch(q);
+              },
+            },
+              el("span", { class: "sing-history-song" }, label),
+              el("span", { class: "sing-history-plays" }, `▶ ${r.plays}`),
+            ));
+          }
+          body.appendChild(list);
+        };
+        addList("You've sung before", data.my_songs);
+        addList("Crowd favourites here", data.top_songs);
+        if (!body.children.length) {
+          body.appendChild(el("p", { class: "hint" },
+            "No song history yet — tonight's the night!"));
+        }
+      } catch {
+        if (body.isConnected) {
+          body.innerHTML = "";
+          body.appendChild(el("p", { class: "hint" }, "Couldn't load song history."));
+        }
+        requested = false;   // allow a retry on next expand
+      }
+    });
+    return details;
+  }
+
   const card = el("main", { class: "sing-card" },
     el("h2", {}, "Pick your song"),
     el("p", { class: "hint" },
@@ -1271,9 +2091,7 @@ function renderSearch() {
     // result set doesn't need them as secondary options; if they want them,
     // they can clear the search box and type a nonsense query to reach
     // empty-state.
-    el("div", { class: "row" },
-      el("button", { class: "btn ghost", onclick: back("identity") }, "Back"),
-    ),
+    renderInspiration(),
   );
 
   if (state.query) doSearch(state.query);
@@ -1313,6 +2131,7 @@ function renderConfirm() {
         state.changeRequestId = null;
         state.changeEditToken = null;
         state.step = "done";
+        state._navReplace = true;   // Back shouldn't land on the stale confirm
         render();
         return;
       }
@@ -1360,6 +2179,7 @@ function renderConfirm() {
       // offer self-service cancel.
       rememberRequestId(TOKEN, data.request.id, data.request.edit_token);
       state.step = "done";
+      state._navReplace = true;   // Back shouldn't land on the stale confirm
       render();
     } catch (e) {
       err = e.status === 429
@@ -1377,10 +2197,56 @@ function renderConfirm() {
     }
   };
 
+  // Fold a name the same way the server does (casefold + accents stripped +
+  // punctuation → space) so chip filtering agrees with backend dedup.
+  const foldName = (n) => (n || "")
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase().replace(/[^a-z0-9\s]/g, " ").trim().replace(/\s+/g, " ");
+
+  // Tap-to-add chips of tonight's known singers — avoids retyping (and
+  // misspelling) a person who already signed up on their own phone.
+  async function loadPartnerChips(container) {
+    let names = state._knownSingers;
+    if (!Array.isArray(names)) {
+      try {
+        const data = await fetchJson(`${BASE}/singers`);
+        names = state._knownSingers = data.singers || [];
+      } catch { return; }   // chips are sugar — typing still works
+    }
+    // Yield once: with a cached list we'd otherwise hit the isConnected
+    // check while the card is still detached (mid-render), and bail.
+    await Promise.resolve();
+    if (!container.isConnected) return;
+    const taken = new Set([foldName(state.name),
+      ...state.additional.map((p) => foldName(p.name))]);
+    const avail = names.filter((n) => foldName(n) && !taken.has(foldName(n)));
+    container.innerHTML = "";
+    if (!avail.length || state.additional.length >= MAX_PARTNERS) return;
+    container.appendChild(el("div", { class: "partner-chips-label" },
+      "Singing with someone already on the list? Tap their name:"));
+    const rowEl = el("div", { class: "partner-chips-row" });
+    for (const n of avail.slice(0, 12)) {
+      rowEl.appendChild(el("button", {
+        type: "button",
+        class: "partner-chip",
+        "data-testid": "partner-chip",
+        onclick: () => {
+          if (state.additional.length >= MAX_PARTNERS) return;
+          state.additional.push({ name: n, phone: "" });
+          rerender();
+        },
+      }, n));
+    }
+    container.appendChild(rowEl);
+  }
+
   function renderPartnersSection() {
     const wrap = el("div", { class: "partners-section" },
       el("div", { class: "partners-title" }, "Singing with anyone else? (optional)"),
     );
+    const chips = el("div", { class: "partner-chips" });
+    wrap.appendChild(chips);
+    loadPartnerChips(chips);
     state.additional.forEach((p, i) => {
       wrap.appendChild(el("div", {
         class: "partner-row",
@@ -1429,11 +2295,11 @@ function renderConfirm() {
   const _confirmSourceLine = (s) => {
     switch (s && s.source_type) {
       case "local": return "In our library";
-      case "divebar": return "Community karaoke (in our library)";
+      case "divebar": return "In our cloud library";
       case "kn": return "Online karaoke (download needed)";
       case "youtube": return "From a YouTube link";
       case "make": return "The KJ will make this for you";
-      case "kj_pick": return "The KJ will pick the best version";
+      case "kj_pick": return "We'll auto-select the best version for you";
       default: return "";
     }
   };
@@ -1488,40 +2354,57 @@ function _statusLine(item) {
   if (est.position === 1) return "🎤 You're next — head to the mic";
   if (est.position === 2) return "About 1 song to go";
   if (est.position >= 3) {
-    const low = Math.round(est.range_low_s / 60);
-    const high = Math.round(est.range_high_s / 60);
-    return `You're #${est.position} — about ${low}–${high} min`;
+    return `You're #${est.position} — ${_fmtWaitRange(est.range_low_s, est.range_high_s)}`;
   }
   return "Added to the queue.";
 }
 
-function _renderSongCard(item, reorderCtx) {
+function _renderSongCard(item) {
   const req = item.request;
   const song = (req.song_title || "") + (req.song_artist ? ` — ${req.song_artist}` : "");
   const partners = req.additional_singers || [];
-  const card = el("div", {
-    class: item.performed ? "song-card song-card-done" : "song-card",
-    "data-status": req.status,
-  },
+  const main = el("div", { class: "song-card-main" },
     el("div", { class: "song-card-title" }, song || "(song)"),
     el("div", { class: "song-card-status" }, _statusLine(item)),
   );
   if (partners.length > 0) {
     const names = partners.map((p) => p.name).join(", ");
-    card.appendChild(el("div", { class: "song-card-partners" },
-      `with ${names}`));
+    main.appendChild(el("div", { class: "song-card-partners" }, `with ${names}`));
   }
+  const card = el("div", {
+    class: item.performed ? "song-card song-card-done" : "song-card",
+    "data-status": req.status,
+  }, main);
   // A performed song is read-only — no cancel/change/reorder (the backend would
   // reject them 409 anyway, and there's nothing to change once it's been sung).
   if (item.performed) return card;
-  // Self-service cancel — only for a request this device owns (has the
-  // edit_token for) and that is still cancellable (pending or in the queue).
+  // Self-service actions — only for a request this device owns (has the
+  // edit_token for) and that is still editable (pending or in the queue).
+  // Compact, right-aligned so the card stays two lines tall.
   const editToken = readEditToken(TOKEN, req.id);
   const cancellable = editToken && (req.status === "pending" || req.status === "approved");
   if (cancellable) {
-    card.appendChild(el("button", {
-      class: "btn ghost song-card-cancel",
+    // "Change" ≠ cancel + re-request: it files a SUPERSEDE, so on approval
+    // the new song takes over this entry's queue slot instead of dropping
+    // to the bottom of the rotation.
+    const changeBtn = el("button", {
+      class: "song-card-action",
+      "data-testid": "change-song",
+      title: "Swap the song but keep your place in line",
+      onclick: (e) => {
+        e.stopPropagation();
+        state.changeRequestId = req.id;
+        state.changeEditToken = editToken;
+        state.selected = null;
+        state.query = "";
+        state.step = "search";
+        render();
+      },
+    }, "⇄ Change");
+    const cancelBtn = el("button", {
+      class: "song-card-action song-card-action-cancel",
       "data-testid": "cancel-song",
+      title: "Cancel this song",
       onclick: async (e) => {
         e.stopPropagation();
         if (!confirm(`Cancel "${song}"? The KJ will see it's cancelled.`)) return;
@@ -1537,69 +2420,126 @@ function _renderSongCard(item, reorderCtx) {
         } catch { e.target.disabled = false; alert("Couldn't cancel — check your connection."); return; }
         if (typeof window.__sing_render === "function") window.__sing_render();
       },
-    }, "Cancel this song"));
-    // Change the song of this request (re-enters search in change mode).
-    card.appendChild(el("button", {
-      class: "btn ghost song-card-change",
-      "data-testid": "change-song",
-      onclick: (e) => {
-        e.stopPropagation();
-        state.changeRequestId = req.id;
-        state.changeEditToken = editToken;
-        state.selected = null;
-        state.query = "";
-        state.step = "search";
-        render();
-      },
-    }, "Change song"));
-  }
-  // Reorder — when this device owns 2+ queued (approved) songs, let the singer
-  // nudge their own songs' order (the KJ approves the reorder).
-  if (reorderCtx && reorderCtx.order.length >= 2 && reorderCtx.order.includes(req.id)) {
-    const idx = reorderCtx.order.indexOf(req.id);
-    const upBtn = el("button", { class: "btn ghost", "data-testid": "reorder-up" }, "▲ Up");
-    const downBtn = el("button", { class: "btn ghost", "data-testid": "reorder-down" }, "▼ Down");
-    const setEnabled = (on) => {
-      upBtn.disabled = !on || idx === 0;
-      downBtn.disabled = !on || idx === reorderCtx.order.length - 1;
-    };
-    let busy = false;   // in-flight guard: no overlapping reorder requests
-    const move = (delta) => async (e) => {
-      e.stopPropagation();
-      if (busy) return;
-      const j = idx + delta;
-      if (j < 0 || j >= reorderCtx.order.length) return;
-      const order = reorderCtx.order.slice();
-      [order[idx], order[j]] = [order[j], order[idx]];
-      const items = order.map((id) => ({ id, edit_token: reorderCtx.tokens[id] }));
-      busy = true;
-      setEnabled(false);
-      try {
-        await reorderSongs(items);
-        alert("Reorder requested — the KJ will confirm it.");
-        if (typeof window.__sing_render === "function") window.__sing_render();
-      } catch {
-        alert("Couldn't reorder — please see the KJ.");
-        busy = false;
-        setEnabled(true);   // re-arm so the singer can retry
-      }
-    };
-    upBtn.onclick = move(-1);
-    downBtn.onclick = move(1);
-    setEnabled(true);
-    card.appendChild(el("div", { class: "song-card-reorder" }, upBtn, downBtn));
+    }, "✕ Cancel");
+    card.appendChild(el("div", { class: "song-card-actions" }, changeBtn, cancelBtn));
   }
   return card;
 }
 
+// The device's reorderable songs (approved + owned edit_token + a real queue
+// position), in current sing order. Shared by the "Reorder songs" toggle and
+// the drag view.
+function _reorderableSongs() {
+  const { active } = _splitAndSortSongs(state.mySongs.items);
+  const rows = [];
+  const tokens = {};
+  for (const item of active) {
+    const r = item.request;
+    const tok = readEditToken(TOKEN, r.id);
+    if (r.status === "approved" && tok
+        && item.estimate && typeof item.estimate.position === "number") {
+      tokens[r.id] = tok;
+      rows.push(item);
+    }
+  }
+  return { rows, tokens };
+}
+
+// Pointer-based drag sorting — HTML5 DnD is unusable on mobile. Dragging is
+// restricted to the ⠿ handle (touch-action:none there) so the list itself
+// still scrolls normally.
+function _enableReorderDrag(list) {
+  let dragRow = null;
+  list.addEventListener("pointerdown", (e) => {
+    const handle = e.target.closest(".reorder-handle");
+    if (!handle) return;
+    dragRow = handle.closest(".reorder-row");
+    dragRow.classList.add("dragging");
+    try { handle.setPointerCapture(e.pointerId); } catch { /* old browsers */ }
+    e.preventDefault();
+  });
+  list.addEventListener("pointermove", (e) => {
+    if (!dragRow) return;
+    e.preventDefault();
+    const others = [...list.querySelectorAll(".reorder-row:not(.dragging)")];
+    const next = others.find((r) => {
+      const rect = r.getBoundingClientRect();
+      return e.clientY < rect.top + rect.height / 2;
+    });
+    if (next) list.insertBefore(dragRow, next);
+    else list.appendChild(dragRow);
+  });
+  const drop = () => {
+    if (dragRow) { dragRow.classList.remove("dragging"); dragRow = null; }
+  };
+  list.addEventListener("pointerup", drop);
+  list.addEventListener("pointercancel", drop);
+}
+
+// One-shot confirmation line shown after a reorder request is filed.
+let _reorderNotice = "";
+
+function renderReorderView() {
+  const { rows, tokens } = _reorderableSongs();
+  const list = el("div", { class: "reorder-list", "data-testid": "reorder-list" });
+  for (const item of rows) {
+    const r = item.request;
+    list.appendChild(el("div", { class: "reorder-row", "data-id": String(r.id) },
+      el("span", { class: "reorder-handle", "aria-label": "Drag to reorder" }, "⠿"),
+      el("span", { class: "reorder-song" },
+        [r.song_title, r.song_artist].filter(Boolean).join(" — ") || "(song)"),
+    ));
+  }
+  _enableReorderDrag(list);
+  const err = el("p", { class: "error" }, "");
+  const saveBtn = el("button", {
+    class: "btn primary", "data-testid": "reorder-save",
+  }, "Save new order");
+  saveBtn.onclick = async () => {
+    const order = [...list.querySelectorAll(".reorder-row")]
+      .map((r) => parseInt(r.dataset.id, 10));
+    saveBtn.disabled = true;
+    saveBtn.textContent = "Saving…";
+    try {
+      await reorderSongs(order.map((id) => ({ id, edit_token: tokens[id] })));
+      state._reorderMode = false;
+      _reorderNotice = "Reorder requested — the KJ will confirm it.";
+      render();
+    } catch {
+      saveBtn.disabled = false;
+      saveBtn.textContent = "Save new order";
+      err.textContent = "Couldn't save the new order — try again or see the KJ.";
+    }
+  };
+  return el("div", { class: "reorder-mode" },
+    el("p", { class: "hint" },
+      "Drag ⠿ to put your songs in the order you want to sing them, then save. "
+      + "The KJ confirms the change."),
+    list,
+    el("div", { class: "row" },
+      el("button", { class: "btn ghost", "data-testid": "reorder-exit",
+        onclick: () => { state._reorderMode = false; render(); } }, "Cancel"),
+      saveBtn,
+    ),
+    err,
+  );
+}
+
 function renderDone() {
   const card = el("main", { class: "sing-card" },
-    renderNowPlaying(),
+    // Personal status banner — "how close am I?" at a glance. The venue-wide
+    // Now/Next lives on the Rotation tab; repeating it here buried the one
+    // thing this screen is about. Populated by pollMyRequests.
+    el("div", { class: "sing-my-status", hidden: "" }),
     el("h2", {}, "Your songs tonight"),
     state.name ? el("p", { class: "hint done-identity" },
       "Singing as ", el("strong", {}, state.name), " · ",
       editNameLink("done")) : null,
-    el("div", { class: "songs-list" }, "Loading your songs…"),
+    // "↕ Reorder songs" toggle (+ post-save notice) — filled by the poll.
+    el("div", { class: "reorder-controls" }),
+    state._reorderMode
+      ? renderReorderView()
+      : el("div", { class: "songs-list" }, "Loading your songs…"),
     // Populated by pollMyRequests once we know which songs are already sung;
     // stays hidden until there's at least one, so the active list stays clean.
     el("div", { class: "sung-section", hidden: "" }),
@@ -1619,32 +2559,14 @@ function renderDone() {
       },
     }, "+ Request another song"),
     el("div", { id: "push-optin", class: "push-optin" }),
-    el("details", { class: "upcoming" },
-      el("summary", {}, "Show upcoming singers"),
-      el("div", { class: "rotation-body" }, "Open to load…"),
-    ),
+    // (The old "Show upcoming singers" expander lived here — the dedicated
+    // 📋 Rotation tab replaced it.)
     el("p", { class: "hint" },
       "Keep this page open — it'll update automatically. Good luck!"),
   );
 
   setTimeout(maybeShowPushPrompt, 2000);
   pollMyRequests(card);
-  // The rotation expander still uses the existing /sing/rotation path.
-  const upcoming = card.querySelector(".upcoming");
-  upcoming.addEventListener("toggle", async (e) => {
-    if (!e.target.open) return;
-    if (upcoming.dataset.loaded === "1") return;
-    const slot = upcoming.querySelector(".rotation-body");
-    if (!slot) return;
-    slot.textContent = "Loading…";
-    try {
-      const payload = await fetchRotation();
-      upcoming.dataset.loaded = "1";
-      slot.replaceWith(_renderRotationBody({ ...payload, _fetchedAt: Date.now() }));
-    } catch {
-      slot.textContent = "Couldn't load — try closing and reopening.";
-    }
-  });
   return card;
 }
 
@@ -1672,8 +2594,35 @@ async function pollMyRequests(card) {
         nowPlaying: data.now_playing || null,
         loaded: true,
       };
-      const npNode = card.querySelector(".now-playing");
-      if (npNode) updateNowPlaying(npNode, data.now_playing);
+      updateTabsBar();   // keep the My-songs tab badge in step with the poll
+      const banner = card.querySelector(".sing-my-status");
+      if (banner) {
+        const summary = _mySongsPillSummary(data.requests || []);
+        if (summary) {
+          banner.textContent = summary;
+          banner.removeAttribute("hidden");
+        } else {
+          banner.setAttribute("hidden", "");
+        }
+      }
+      // A drag in progress must never be clobbered by the poll — freeze the
+      // list (and controls) until the singer saves or cancels.
+      if (state._reorderMode) return;
+      const controls = card.querySelector(".reorder-controls");
+      if (controls) {
+        controls.innerHTML = "";
+        if (_reorderNotice) {
+          controls.appendChild(el("p", { class: "hint reorder-notice" }, _reorderNotice));
+          _reorderNotice = "";   // shown until the next poll repaints (~15s)
+        }
+        if (_reorderableSongs().rows.length >= 2) {
+          controls.appendChild(el("button", {
+            class: "btn ghost reorder-toggle",
+            "data-testid": "reorder-songs",
+            onclick: () => { state._reorderMode = true; render(); },
+          }, "↕ Reorder songs"));
+        }
+      }
       const slot = card.querySelector(".songs-list");
       const sungSection = card.querySelector(".sung-section");
       // Split sung songs out of the active list and sort what's left into the
@@ -1688,24 +2637,7 @@ async function pollMyRequests(card) {
           slot.appendChild(el("p", { class: "hint" },
             "All your songs are done — tap 'Request another song' below for more."));
         } else {
-          // Build reorder context: this device's own queued (approved) songs,
-          // in display order, that we hold an edit_token for. Sung songs are
-          // already excluded (they're in `performed`, not `active`), and a
-          // real queue position is required so a not-yet-estimated song can't
-          // sneak in.
-          const order = [];
-          const tokens = {};
-          for (const item of active) {
-            const r = item.request;
-            const tok = readEditToken(TOKEN, r.id);
-            if (r.status === "approved" && tok
-                && item.estimate && typeof item.estimate.position === "number") {
-              order.push(r.id);
-              tokens[r.id] = tok;
-            }
-          }
-          const reorderCtx = { order, tokens };
-          for (const item of active) slot.appendChild(_renderSongCard(item, reorderCtx));
+          for (const item of active) slot.appendChild(_renderSongCard(item));
         }
       }
       if (sungSection) _renderSungSection(sungSection, performed);
@@ -1761,6 +2693,7 @@ function _liveSongs(items) {
   // bar count or keep a finished singer pinned to the done screen on reload.
   return (items || []).filter(
     (it) => it.request
+      && it.request.source_type !== "tip"   // tip claims live on the Tip tab
       && !it.performed
       && !["cancelled", "rejected"].includes(it.request.status),
   );
@@ -1772,7 +2705,10 @@ function _liveSongs(items) {
 // songs still waiting on the KJ. Without this the list renders in submission
 // order, which looks wrong after a reorder.
 function _splitAndSortSongs(items) {
-  const all = items || [];
+  // Tip claims ride the same my-requests feed but are not songs — they render
+  // on the Tip tab, never in the songs list.
+  const all = (items || []).filter(
+    (it) => !it.request || it.request.source_type !== "tip");
   const performed = all.filter((it) => it.performed);
   const active = all.filter((it) => !it.performed);
   active.sort((a, b) => _activeSortKey(a) - _activeSortKey(b));
@@ -1825,9 +2761,7 @@ function _mySongsPillSummary(items) {
     const est = withPos[0].estimate;
     if (est.position === 1) return "🎤 You're next";
     if (est.position === 2) return "🎤 Almost up — 1 to go";
-    const low = Math.round(est.range_low_s / 60);
-    const high = Math.round(est.range_high_s / 60);
-    return `#${est.position} · ~${low}–${high} min`;
+    return `#${est.position} · ${_fmtWaitRange(est.range_low_s, est.range_high_s)}`;
   }
   if (live.some((it) => it.request.status === "pending")) return "Waiting for KJ…";
   return "In the queue";
@@ -1852,34 +2786,104 @@ function startBarPoll() {
   }, 20000);
 }
 
-// Show/hide/populate the persistent bar. Hidden on the done screen (which IS
-// the list) and whenever this device owns no live songs tonight.
+// Show/hide/populate the persistent bar. It names the singer's NEXT song and
+// appears only where it earns its space: on the Rotation tab (context while
+// scanning the queue) or on any tab when the singer is nearly up (≤3 to go /
+// on now). The My-songs tab badge covers the ambient "I have songs" signal.
 function updateMySongsBar() {
+  updateTabsBar();   // the tab badge shares the mySongs view-model
   const bar = document.getElementById("sing-mysongs-bar");
   if (!bar) return;
   const live = _liveSongs(state.mySongs.items);
-  if (state.step === "done" || live.length === 0) {
+  // Keep the poll running whenever there are live songs — the tab badge and
+  // this bar's urgency check both depend on fresh estimates.
+  if (live.length > 0 && state.step !== "done") startBarPoll();
+  else stopBarPoll();
+
+  const urgent = live.some((it) => it.estimate
+    && (it.estimate.now_singing
+        || (typeof it.estimate.position === "number" && it.estimate.position <= 3)));
+  const show = live.length > 0 && state.step !== "done"
+    && (urgent || state.step === "rotation");
+  if (!show) {
     bar.setAttribute("hidden", "");
     bar.innerHTML = "";
-    stopBarPoll();
     return;
   }
-  const count = live.length;
+  // The next song = first live item in actual sing order.
+  const next = live.slice().sort((a, b) => _activeSortKey(a) - _activeSortKey(b))[0];
+  const req = next.request;
+  const songText = [req.song_title, req.song_artist].filter(Boolean).join(" — ")
+    || "your song";
   const summary = _mySongsPillSummary(state.mySongs.items);
   bar.innerHTML = "";
   bar.appendChild(el("button", {
-    class: "mysongs-pill",
+    class: "mysongs-pill" + (urgent ? " mysongs-urgent" : ""),
     "data-testid": "mysongs-bar",
     onclick: () => { state.step = "done"; render(); },
   },
     el("span", { class: "mysongs-icon" }, "🎤"),
-    el("span", { class: "mysongs-label" },
-      `My song${count === 1 ? "" : "s"} (${count})`),
+    el("span", { class: "mysongs-next" },
+      el("span", { class: "mysongs-next-label" },
+        live.length > 1 ? `Your next song (of ${live.length})` : "Your next song"),
+      el("span", { class: "mysongs-next-song" }, songText),
+    ),
     summary ? el("span", { class: "mysongs-status" }, summary) : null,
     el("span", { class: "mysongs-chevron" }, "›"),
   ));
   bar.removeAttribute("hidden");
-  startBarPoll();
+}
+
+// --- Bottom tab bar --------------------------------------------------------
+// Persistent navigation between the three singer-facing sections. Lives
+// outside #sing-root (sibling nav in sing.html) so it survives re-renders.
+
+function _activeTabForStep(step) {
+  if (step === "search" || step === "confirm" || step === "identity") return "request";
+  if (step === "done") return "mysongs";
+  if (step === "rotation") return "rotation";
+  if (step === "tip") return "tip";
+  return null;   // landing / identity — no tab highlighted
+}
+
+function _goRequestTab() {
+  // Same gate as the landing CTA: identity first if we don't know the singer.
+  const phoneOk = !state.phone || PHONE_RE.test(state.phone);
+  state.step = state.name && phoneOk ? "search" : "identity";
+  render();
+}
+
+function updateTabsBar() {
+  const bar = document.getElementById("sing-tabs");
+  if (!bar) return;
+  const active = _activeTabForStep(state.step);
+  const liveCount = _liveSongs(state.mySongs.items).length;
+  const mk = (key, icon, label, onclick, badge) => el("button", {
+    class: "sing-tab" + (active === key ? " active" : ""),
+    "data-testid": `tab-${key}`,
+    "aria-current": active === key ? "page" : null,
+    onclick,
+  },
+    el("span", { class: "sing-tab-icon" }, icon),
+    el("span", { class: "sing-tab-label" }, label),
+    badge ? el("span", { class: "sing-tab-badge" }, String(badge)) : null,
+  );
+  bar.innerHTML = "";
+  bar.appendChild(mk("request", "🎵", "Request", () => {
+    if (active !== "request") _goRequestTab();
+  }));
+  bar.appendChild(mk("mysongs", "🎤", "My songs", () => {
+    if (state.step !== "done") { state.step = "done"; render(); }
+  }, liveCount || null));
+  bar.appendChild(mk("rotation", "📋", "Rotation", () => {
+    if (state.step !== "rotation") { state.step = "rotation"; render(); }
+  }));
+  if (state.tipInfo && state.tipInfo.enabled) {
+    bar.appendChild(mk("tip", "💜", "Tip", () => {
+      if (state.step !== "tip") { state.step = "tip"; render(); }
+    }));
+  }
+  bar.removeAttribute("hidden");
 }
 
 // --- Service worker registration ------------------------------------------
@@ -1972,97 +2976,164 @@ window.addEventListener("beforeinstallprompt", (e) => {
   deferredInstallPrompt = e;
 });
 
-function maybeShowIosInstructions() {
-  if (!IS_IOS || IS_STANDALONE) return false;
-  const container = document.getElementById("push-optin");
-  if (!container) return true;
-  container.innerHTML = "";
-  container.classList.add("ios-install");
-  container.appendChild(
-    el("div", {},
-      el("strong", {}, "📱 iPhone? Get tapped when you're up."),
-      el("p", {},
-        "Tap the Share button, then ",
-        el("strong", {}, "Add to Home Screen"),
-        ", then reopen from your home screen. You'll then be able to enable notifications."),
-      el("button", {
-        class: "btn ghost",
-        onclick: (e) => { e.target.closest(".push-optin").remove(); },
-      }, "Got it"),
-    ),
-  );
-  return true;
+// --- Notifications section (My songs screen) --------------------------------
+// Explains exactly which channels will fire — browser push, SMS, or both —
+// and lets the singer add/change a mobile number AFTER signup (the number is
+// written onto their owned request rows, which is where the "you're up" SMS
+// resolves it from).
+
+async function _savePhoneNumber(phone) {
+  const items = [];
+  const store = _readMyRequestStore();
+  if (store && store.token === TOKEN && Array.isArray(store.ids)) {
+    for (const id of store.ids) {
+      const tok = store.tokens && store.tokens[String(id)];
+      if (tok) items.push({ id, edit_token: tok });
+    }
+  }
+  await fetchJson(`${BASE}/update-phone`, {
+    method: "POST",
+    body: JSON.stringify({ phone, device_id: DEVICE_ID, items }),
+  });
+  state.phone = phone;
+  LS.set("sing_phone", phone);
+  // Keep the push subscription's phone in sync (idempotent upsert).
+  ensurePushSubscription();
 }
 
-// Show/hide/update the push-opt-in block based on current Notification.permission.
-// Called from renderDone() with a 2s delay so the "you're in!" line registers first.
+// Inline add/change-number editor. `onSaved` re-renders the section.
+function _phoneEditor(onSaved) {
+  const input = el("input", {
+    type: "tel", class: "sing-empty-input notify-phone-input",
+    placeholder: "+1 555 123 4567",
+    value: state.phone || "",
+    "data-testid": "notify-phone",
+  });
+  const err = el("p", { class: "error" }, "");
+  const saveBtn = el("button", {
+    class: "btn primary notify-phone-save",
+    "data-testid": "notify-phone-save",
+  }, "Save number");
+  saveBtn.onclick = async () => {
+    const phone = (input.value || "").trim();
+    if (!phone || !PHONE_RE.test(phone)) {
+      err.textContent = "That number doesn't look right — digits, spaces, or + only.";
+      return;
+    }
+    saveBtn.disabled = true;
+    saveBtn.textContent = "Saving…";
+    try {
+      await _savePhoneNumber(phone);
+      onSaved();
+    } catch {
+      saveBtn.disabled = false;
+      saveBtn.textContent = "Save number";
+      err.textContent = "Couldn't save — check your connection and try again.";
+    }
+  };
+  return el("div", { class: "notify-phone-editor" }, input, saveBtn, err);
+}
+
 function maybeShowPushPrompt() {
   const container = document.getElementById("push-optin");
   if (!container) return;
-  // iOS Safari outside a standalone PWA can't use Web Push — show instructions instead
-  if (maybeShowIosInstructions()) return;
-  if (!("Notification" in window) || !swRegistration) {
-    container.remove();
-    return;
-  }
-  const perm = Notification.permission;
-  if (perm === "granted") {
-    ensurePushSubscription();  // idempotent — ensures server row exists for this device
-    container.innerHTML = "";
-    container.textContent = "✓ Notifications on — we'll buzz you when you're up.";
-    container.classList.add("push-on");
-    return;
-  }
-  if (perm === "denied") {
-    container.innerHTML = "";
-    container.textContent = "Notifications blocked — keep this tab open for updates.";
-    container.classList.add("push-blocked");
-    return;
-  }
-  // perm === "default" — show the prompt button
+
+  const rerenderSection = () => maybeShowPushPrompt();
+  const smsOn = !!(state.phone && PHONE_RE.test(state.phone));
+  const iosNoPwa = IS_IOS && !IS_STANDALONE;
+  const pushSupported = !iosNoPwa && ("Notification" in window) && !!swRegistration;
+  const perm = pushSupported ? Notification.permission : null;
+
   container.innerHTML = "";
-  const btn = el("button", {
-    class: "btn primary",
-    onclick: async () => {
+  container.classList.remove("push-on", "push-blocked", "ios-install");
+  container.appendChild(el("h3", { class: "notify-heading" }, "🔔 When you're up"));
+
+  const lines = el("div", { class: "notify-lines" });
+  container.appendChild(lines);
+
+  // --- Browser-push line ---
+  if (perm === "granted") {
+    ensurePushSubscription();   // idempotent — ensures the server row exists
+    lines.appendChild(el("p", { class: "notify-line notify-on" },
+      "✓ Browser notification — pops up on this device."));
+  } else if (perm === "default") {
+    const btn = el("button", { class: "btn primary notify-enable" },
+      "🔔 Turn on browser notifications");
+    btn.onclick = async () => {
       btn.disabled = true;
       btn.textContent = "Asking…";
-      const result = await requestPushPermission();
-      if (result === "granted") {
-        container.innerHTML = "";
-        container.textContent = "✓ Notifications on — we'll buzz you when you're up.";
-        container.classList.add("push-on");
-      } else {
-        btn.disabled = false;
-        btn.textContent = "🔔 Notify me when I'm up";
-        if (result === "denied") {
-          container.appendChild(el("p", { class: "hint" },
-            "You blocked notifications — keep this tab open for updates."));
-        }
-      }
-    },
-  }, "🔔 Notify me when I'm up");
-  container.appendChild(btn);
+      await requestPushPermission();
+      rerenderSection();
+    };
+    lines.appendChild(btn);
+  } else if (perm === "denied") {
+    lines.appendChild(el("p", { class: "notify-line notify-off" },
+      "Browser notifications are blocked for this site."));
+  } else if (iosNoPwa) {
+    lines.appendChild(el("details", { class: "notify-ios" },
+      el("summary", {}, "📱 iPhone? Enable pop-up notifications"),
+      el("p", {},
+        "Tap the Share button, then ",
+        el("strong", {}, "Add to Home Screen"),
+        ", then reopen from your home screen — notifications work from there."),
+    ));
+  }
+
+  // --- SMS line ---
+  if (smsOn) {
+    const line = el("p", { class: "notify-line notify-on" },
+      `✓ Text message to ${state.phone} · `,
+      el("a", { href: "#", "data-testid": "notify-change-phone", onclick: (e) => {
+        e.preventDefault();
+        line.replaceWith(_phoneEditor(rerenderSection));
+      } }, "change number"),
+    );
+    lines.appendChild(line);
+  } else {
+    const line = el("p", { class: "notify-line" },
+      "Want a text when you're up? ",
+      el("a", { href: "#", "data-testid": "notify-add-phone", onclick: (e) => {
+        e.preventDefault();
+        line.replaceWith(_phoneEditor(rerenderSection));
+      } }, "Add your number"),
+    );
+    lines.appendChild(line);
+  }
+
+  // --- Summary of what will actually happen ---
+  let summary;
+  if (perm === "granted" && smsOn) {
+    summary = "You'll get BOTH a pop-up on this device and a text.";
+  } else if (perm === "granted") {
+    summary = "You'll get a pop-up on this device (no text — no number on file).";
+  } else if (smsOn) {
+    summary = "You'll get a text — no pop-ups on this device.";
+  } else {
+    summary = "No notifications yet — the KJ will call your name. Keep this page open for live updates.";
+  }
+  container.appendChild(el("p", { class: "hint notify-summary" }, summary));
 }
 
-// --- Persistent rules footer ----------------------------------------------
+// --- Rules footer (Rotation tab only) --------------------------------------
+
+// Show/hide the footer per step: rules belong with the rotation view (where
+// queue-fairness questions actually come up), not under every screen.
+function updateRulesFooterVisibility() {
+  const slot = document.getElementById("sing-rules-footer");
+  if (!slot) return;
+  slot.hidden = state.step !== "rotation";
+}
 
 function renderRulesFooter() {
   const slot = document.getElementById("sing-rules-footer");
   if (!slot) return;
   slot.innerHTML = "";
-  slot.appendChild(el("section", { class: "rules-footer" },
-    el("h3", {}, "🎤 House rules"),
-    el("ul", { class: "rules-short" },
-      el("li", {}, "First come, first sing"),
-      el("li", {}, "New singers get priority"),
-      el("li", {}, "Multiple songs? We'll spread them out"),
-      el("li", {}, "Duets welcome — add partners on the confirm screen (up to 3 extras)"),
-      el("li", {}, "Need to leave? Ask the KJ"),
-      el("li", {}, "♥ = paid priority ($20+)"),
-    ),
-    el("details", { class: "rules-full" },
-      el("summary", {}, "Read the full rules"),
-      el("ol", { class: "rules-list" },
+  slot.hidden = true;   // hidden until a render lands on the rotation step
+  // Collapsed by default; expanding shows the full rules directly (single
+  // layer — no nested "Read the full rules").
+  slot.appendChild(el("details", { class: "rules-footer" },
+    el("summary", { class: "rules-footer-summary" }, "🎤 House rules"),
+    el("ol", { class: "rules-list" },
         el("li", {},
           el("h4", {}, "First come, first sing"),
           el("p", {}, "The default order is the order you submit your request. "
@@ -2100,7 +3171,6 @@ function renderRulesFooter() {
             + "very soon. Paid entries are marked with a ♥ on the rotation screen so "
             + "everyone can see it's fair."),
         ),
-      ),
     ),
   ));
 }
@@ -2180,16 +3250,48 @@ if (codeEntryEl) {
   initCodeEntry();
 } else if (root) {
   if (INITIAL_REQUEST_ID) {
-    const legacyId = parseInt(INITIAL_REQUEST_ID, 10);
-    state.request = { id: legacyId };
-    // Persist so a legacy ?r=<id> entry survives a "Request another song"
-    // — otherwise the next submit overwrites state.request and the original
-    // id disappears from the done-screen list.
-    rememberRequestId(TOKEN, legacyId);
-    state.step = "done";
+    // ?r= accepts one id (legacy links) or a comma list; each item may be
+    // a bare id (read-only status view) or id:edit_token (full self-service
+    // — cancel/change/reorder — as if this device had submitted the song).
+    // Persist them so they survive a "Request another song".
+    const ids = [];
+    for (const piece of String(INITIAL_REQUEST_ID).split(",")) {
+      const [idRaw, tok] = piece.split(":");
+      const id = parseInt(idRaw, 10);
+      if (isNaN(id)) continue;
+      rememberRequestId(TOKEN, id, (tok || "").trim() || undefined);
+      ids.push(id);
+    }
+    if (ids.length) {
+      state.request = { id: ids[0] };
+      // Only force the done screen on a hashless entry — a reload of a ?r=
+      // link that's since navigated to #rotation etc. keeps its section.
+      if (!window.location.hash) state.step = "done";
+    }
+  }
+  // Hash restore — a reload (or a shared link with a hash) puts the singer
+  // back on the section they were on; a fresh no-hash visit boots straight
+  // into the Request flow. A legacy ?r=<id> entry wins (done screen).
+  if (state.step !== "done") {
+    state.step = _sanitizeStep(_stepFromHash(window.location.hash));
+    state._navReplace = true;   // correct a degraded hash without a history entry
   }
   // SW + push only make sense in the main SPA path (requires a valid token).
   registerServiceWorker().then((reg) => { swRegistration = reg; });
+  // Tip config — one cheap GET; the 💜 tab appears when it lands (if enabled).
+  fetchJson(`${BASE}/tip-info`)
+    .then((d) => {
+      state.tipInfo = d;
+      if (state.step === "tip") render();   // reload landed straight on #tip
+      else updateTabsBar();
+    })
+    .catch(() => {
+      // Failed fetch: resolve to disabled so a direct #tip landing shows the
+      // "not set up" copy instead of an eternal "Loading…". The tab stays
+      // hidden for this page-load; a reload retries.
+      state.tipInfo = { enabled: false, threshold: 0, methods: [] };
+      if (state.step === "tip") render();
+    });
   render();
   // Smart restore — if this device already submitted songs for tonight, bring
   // the singer back to their "Your songs tonight" list on reload (the ids +
@@ -2203,13 +3305,20 @@ if (codeEntryEl) {
 }
 
 function bootRestore(attempt) {
-  if (state.step !== "landing" || !readMyRequestIds(TOKEN).length) return;
+  // Restorable = still sitting on an untouched boot screen (search with no
+  // typed query, or the name form with nothing typed). The moment they
+  // interact, never yank them to their songs list.
+  const restorable = () =>
+    (state.step === "search" && !(state.query || "").trim())
+    || (state.step === "identity"
+        && !(state._identityDraft && state._identityDraft.name !== state.name));
+  if (!restorable() || !readMyRequestIds(TOKEN).length) return;
   refreshMySongs().then((res) => {
     if (res.ok) {
-      if (res.live > 0 && state.step === "landing") { state.step = "done"; render(); }
+      if (res.live > 0 && restorable()) { state.step = "done"; render(); }
       return;   // definitive answer (songs restored, or a genuinely empty night)
     }
-    if (attempt < 3 && state.step === "landing") {
+    if (attempt < 3 && restorable()) {
       setTimeout(() => bootRestore(attempt + 1), 2000 * (attempt + 1));
     }
   });

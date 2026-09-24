@@ -5606,6 +5606,58 @@ def resolve_kj_pick_best(app, req, cfg):
     raise ValueError(f"no resolvable version in kj_pick snapshot: {last_err}")
 
 
+def apply_confirmed_tip(app, req):
+    """Apply a KJ-confirmed tip claim to the rotation.
+
+    Hearts (``paid`` flag) every active entry the singer appears in — same
+    name semantics as ``set_singer_priority_bias`` (primary ``singer`` field
+    or a ``singers_json`` member). At/above ``sing_tip_priority_threshold``
+    (default $20) also applies the singer-level +1 priority bump, identical
+    to the KJ rotation view's bump-up button. A tipper with no entries yet is
+    a no-op — the KJ can heart manually once they request a song.
+    """
+    rotation = app.rotation
+    if rotation is None:
+        raise RuntimeError("Rotation not configured")
+    meta_raw = req.get("source_meta")
+    try:
+        meta = meta_raw if isinstance(meta_raw, dict) else json.loads(meta_raw or "{}")
+    except (TypeError, ValueError):
+        meta = {}
+    try:
+        amount = float(meta.get("amount") or 0)
+    except (TypeError, ValueError):
+        amount = 0.0
+    name = req["singer_name"]
+
+    for entry in rotation.get_rotation():
+        if (entry.get("status") or "").lower() == "done":
+            continue
+        raw = entry.get("singers_json")
+        members = None
+        if raw:
+            try:
+                members = json.loads(raw) if isinstance(raw, str) else raw
+            except (ValueError, TypeError):
+                members = None
+        if name in (members or [entry.get("singer")]):
+            rotation.set_paid(entry["id"], True)
+
+    # Effective threshold comes from the same modal-editable settings the
+    # singer UI shows ("$20+ gets you bumped") — never a diverging value.
+    from sing import _tip_settings
+    settings = _tip_settings(getattr(app, "kj_config", None),
+                             getattr(app, "sing_store", None))
+    try:
+        threshold = float(settings["threshold"])
+    except (TypeError, ValueError):
+        threshold = 20.0
+    if amount >= threshold:
+        rotation.set_singer_priority_bias(name, 1)
+        return True   # caller re-weaves so the bump is visible immediately
+    return False
+
+
 def apply_reorder_request(app, req):
     """Apply a pending ``reorder`` meta-request to the rotation.
 
@@ -5991,7 +6043,16 @@ def get_sing_config():
         "sms_template_is_custom": store.get_sms_template() is not None,
         "sms_default_region": store.get_sms_default_region(),
         "sms_from_number": sms_cfg.get("from_number") or None,
+        # Tip settings — effective values (modal > config.json > defaults) so
+        # the Public Request Form modal shows what singers actually see.
+        "tip_settings": _effective_tip_settings(store),
     })
+
+
+def _effective_tip_settings(store):
+    from sing import _tip_settings, _tips_enabled
+    settings = _tip_settings(current_app.kj_config, store)
+    return {**settings, "enabled": _tips_enabled(settings)}
 
 
 @routes_bp.route('/rotation/requests/config', methods=['POST'])
@@ -6081,6 +6142,13 @@ def update_sing_config():
             return jsonify({"error": str(exc)}), 400
         changed["sms_default_region"] = data["sms_default_region"]
 
+    if "tip_settings" in data:
+        try:
+            store.set_tip_settings(data["tip_settings"])
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
+        changed["tip_settings"] = _effective_tip_settings(store)
+
     return jsonify({"success": True, "changed": changed})
 
 
@@ -6118,6 +6186,26 @@ def approve_sing_request_route(req_id):
         return jsonify({"error": "Request not found"}), 404
     if req["status"] != "pending":
         return jsonify({"error": f"Request is already {req['status']}"}), 409
+
+    # Tip claim: not a song — confirming means "the money arrived". Hearts the
+    # singer's active entries and, at/above the configured threshold, applies
+    # the same singer-level +1 bump as the rotation view's bump-up button.
+    if req["source_type"] == "tip":
+        try:
+            bumped = apply_confirmed_tip(current_app._get_current_object(), req)
+            store.mark_approved(req_id, linked_entry_id=None)
+        except Exception as exc:
+            return jsonify({"error": str(exc)}), 500
+        # No push-notify: the "your song was approved" template doesn't fit.
+        if bumped:
+            # Mirror the rotation bump-up button: re-weave NOW so the paid
+            # bump is visible even with auto-reorder off (maybe_auto_reorder
+            # would silently no-op there).
+            try:
+                run_auto_order(current_app._get_current_object(), checkpoint=True)
+            except Exception:
+                current_app.logger.exception("post-tip auto-order failed")
+        return jsonify({"success": True, "request": store.get_request(req_id), "entry_id": None})
 
     # Reorder request: not a song — apply the singer's requested order to their
     # own entries within the slots they currently occupy, then mark approved.
@@ -6237,8 +6325,10 @@ def reject_sing_request_route(req_id):
     data = request.get_json(force=True, silent=True) or {}
     reason = (data.get("reason") or "").strip() or None
     store.mark_rejected(req_id, reason=reason)
+    # Meta-requests (tip claims) skip the push — the "your song was rejected"
+    # template would read as a song decision.
     dispatcher = getattr(current_app.rotation, "push_dispatcher", None)
-    if dispatcher is not None:
+    if dispatcher is not None and req.get("source_type") != "tip":
         try:
             dispatcher.notify_request_decision(req_id, "rejected", req)
         except Exception:
