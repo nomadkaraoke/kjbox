@@ -284,12 +284,11 @@ def _enrich_search_stats(result):
 
 
 def _kn_track_is_playable(track):
-    """True when a KN track can actually be fetched: a YouTube URL, a
-    Divebar GCS-mirror file, or an already-downloaded local copy."""
+    """True when a KN track is approvable: it has a YouTube URL or a Divebar
+    GCS-mirror file (the refs a singer submit / kj_pick can bind to)."""
     return bool(
         (track.get("youtube_url") or "").strip()
         or (track.get("divebar") or {}).get("file_id")
-        or track.get("local_path")
     )
 
 
