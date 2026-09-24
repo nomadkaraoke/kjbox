@@ -2,6 +2,18 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-09-24 - Fix: Singer UI i18n on the public host + tappable rotation preview (v0.108.1)
+
+- v0.108.0 rendered raw translation keys on `sing.nomadkaraoke.com`: `i18n.js` fetched
+  `/static/messages/<locale>.json` relative to the blueprint base (`""` on the public host),
+  but singer assets are only served under `/sing/static/` there. Fixed in PR #226 by
+  resolving the messages directory from `import.meta.url`; v0.108.1 bumps the asset
+  version so browsers that cached the broken file (4 h `max-age`) pick up the fix, and
+  restarts the service so the new `APP_VERSION` lands in the HTML.
+- Rotation-tab ▶ Preview: the button sat inside the clipped song span, so a long title
+  pushed it out of the tappable area. Title text is now its own clipped span; the button
+  never clips (+ e2e click assertion).
+
 ## 2026-09-23 - Feature: Singer UI walkthrough fixes + full localisation (33 languages) (v0.108.0)
 
 A full "walk the product as a real singer" pass on the live `/sing` UI (two personas,

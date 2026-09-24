@@ -326,6 +326,11 @@ def install_host_guard(flask_app):
     return _sing_host_guard
 
 
+# NOTE for anyone touching the singer SPA's asset URLs: on the public host the
+# blueprint is mounted at `/` (see the rewriter below) but its static files are
+# still served under `/sing/static/`. Derive asset paths from the running
+# script's own URL (`import.meta.url`), never from the mount base — v0.108.0
+# fetched `/static/messages/...` there and rendered raw i18n keys.
 def install_public_host_rewriter(flask_app):
     """Mount the sing blueprint at the ROOT of the public host.
 

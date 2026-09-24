@@ -1,6 +1,6 @@
 // Nomad Karaoke singer service worker.
 // Handles Web Push + notification click. Scope: /sing/
-// sw-v0.23.0
+// sw-v0.23.1
 
 const CACHE = 'nomad-sing-shell-__APP_VERSION__';
 const SHELL = [

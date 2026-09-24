@@ -1452,3 +1452,8 @@ input:focus {
 }
 .rotation-preview:active, .rotation-preview:hover { color: var(--nk-accent); border-color: var(--nk-accent); }
 .song-card-action-preview { color: var(--nk-text); }
+
+/* Rotation song cell: text clips, the ▶ button never does. */
+.rotation-song { display: flex; align-items: center; gap: 0.3rem; min-width: 0; overflow: visible; }
+.rotation-song-text { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rotation-preview { flex: 0 0 auto; margin-inline-start: 0; }

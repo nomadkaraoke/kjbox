@@ -711,9 +711,11 @@ function _renderRotationBody(payload, onRefresh) {
       el("span", { class: "rotation-pos" }, t("rotation.position", { position: entry.position })),
       el("span", { class: "rotation-name" }, entry.now_singing ? `🎤 ${who}` : who),
       el("span", { class: "rotation-song" },
-        songText,
+        el("span", { class: "rotation-song-text" }, songText),
         // Anyone can ▶ preview a song that's already on the box — handy for
-        // "what's that one?" and for picking your own next song.
+        // "what's that one?" and for picking your own next song. The text is
+        // its own clipped span so a long title can't push the button out of
+        // the cell (overflow:hidden would swallow the tap).
         entry.previewable && entry.entry_id
           ? el("button", {
               class: "rotation-preview",
