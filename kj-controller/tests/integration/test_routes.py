@@ -976,7 +976,8 @@ def test_kn_search_short_query(flask_test_client):
 
 @patch('karaoke_nerds.divebar.kn_search')
 def test_kn_search_returns_results(mock_kn, flask_test_client):
-    """POST /karaoke-nerds/search groups community rows + merges full-catalog brands."""
+    """POST /karaoke-nerds/search groups community rows + full-catalog brands
+    into one song-grouped result (the singer-search grouping)."""
     mock_kn.return_value = {
         "community": [
             {"artist": "Test Artist", "title": "Test Song", "brand": "Brand Name",
@@ -994,21 +995,20 @@ def test_kn_search_returns_results(mock_kn, flask_test_client):
         content_type='application/json')
     assert response.status_code == 200
     data = json.loads(response.data)
-    # Server-composed unified payload (same shape as rotation search).
-    assert set(data) >= {"local", "karaoke_nerds", "divebar",
-                         "karaoke_nerds_timeout"}
-    songs = data["karaoke_nerds"]
+    # Server-composed, song-grouped payload (same grouping as singer search).
+    assert set(data) == {"songs", "karaoke_nerds_timeout"}
+    songs = data["songs"]
     assert len(songs) == 1
     assert songs[0]["title"] == "Test Song"
-    tracks = songs[0]["tracks"]
-    assert len(tracks) == 2
-    by_code = {t["brand_code"]: t for t in tracks}
+    versions = songs[0]["versions"]
+    assert len(versions) == 2
+    by_code = {v["kn"]["brand_code"]: v["kn"] for v in versions}
     assert by_code["Brand Name"]["is_community"] is True
-    # Commercial disc release: present, but with nothing to download.
+    # Commercial disc release: kept for the KJ panel, nothing to download.
     assert by_code["SF"]["is_community"] is False
     assert by_code["SF"]["youtube_url"] is None
-    # Tracks arrive sorted best-first by the server-side ranking.
-    ranks = [t.get("priority_rank", 9999) for t in tracks]
+    # Versions arrive sorted best-first by the server-side ranking.
+    ranks = [v.get("priority_rank", 9999) for v in versions]
     assert ranks == sorted(ranks)
 
 
@@ -1022,7 +1022,7 @@ def test_kn_search_handles_error(mock_kn, flask_test_client):
         content_type='application/json')
     assert response.status_code == 200
     data = json.loads(response.data)
-    assert data["karaoke_nerds"] == []
+    assert data["songs"] == []
 
 
 def test_kn_get_config(flask_test_client):

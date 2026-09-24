@@ -213,27 +213,27 @@ class TestKnDiscOnlyRendering:
     "can't access property 'match', url is null" mid-render, leaving the
     song rows dead (couldn't expand)."""
 
-    _SONGS = [{
+    _GROUPS = [{
         "artist": "Jason Aldean", "title": "Big Green Tractor",
-        "tracks": [
-            {"brand_name": "Karaoke Version", "brand_code": "KV",
-             "youtube_url": None, "is_community": False},
-            {"brand_name": "Community Brand", "brand_code": "CB1",
-             "youtube_url": "https://www.youtube.com/watch?v=abc123defgh",
-             "is_community": True},
+        "versions": [
+            {"source": "kn", "priority_rank": 100, "priority_class": "community",
+             "kn": {"brand_name": "Community Brand", "brand_code": "CB1",
+                    "youtube_url": "https://www.youtube.com/watch?v=abc123defgh",
+                    "is_community": True}},
+            {"source": "kn", "priority_rank": 2000, "priority_class": "commercial",
+             "kn": {"brand_name": "Karaoke Version", "brand_code": "KV",
+                    "youtube_url": None, "is_community": False}},
         ],
     }]
 
     def test_disc_only_track_renders_badge_not_download(self, app_page):
         errors = []
         app_page.on("pageerror", lambda e: errors.append(str(e)))
-        app_page.evaluate("(songs) => renderKNResults(songs)", self._SONGS)
+        app_page.evaluate("(groups) => renderKNResults(groups)", self._GROUPS)
         assert errors == [], f"renderKNResults threw: {errors}"
 
-        # Song header rendered and expandable.
-        header = app_page.locator(".kn-song-header")
-        expect(header).to_have_count(1)
-        header.click()
+        # Song header rendered; the top song opens by default.
+        expect(app_page.locator(".kn-song-header")).to_have_count(1)
         expect(app_page.locator(".kn-track")).to_have_count(2)
 
         # Disc-only track: muted badge, no Download button.
@@ -245,85 +245,98 @@ class TestKnDiscOnlyRendering:
         assert errors == []
 
 
-class TestKnLocalMasterMatching:
-    """KN panel renders server-composed local matches (was: client matching).
+class TestKnGroupedPanel:
+    """KN panel renders the server's song-grouped payload: one collapsible
+    row per song holding its library files, KN tracks and GCS-mirror files
+    (the singer-search grouping — was: flat "In your library" + "GCS mirror"
+    sections beside the KN songs)."""
 
-    Since the rec-5 backend composition, /karaoke-nerds/search returns the
-    full unified-search payload: a track whose YouTube video is on disk
-    arrives with ``local_path`` (server-side id join); a locally-mastered
-    NOMAD release is suppressed from the KN rows server-side and surfaces in
-    the payload's ``local`` rows, rendered as "In your library" with Play.
-    """
-
-    # Server-shaped payload: CB1 track carries local_path (already
-    # downloaded); KV is disc-only; the suppressed NOMAD master arrives as a
-    # local library row (accented "Maxïmo" display must render as-is).
+    # Accented "Maxïmo" display must render as-is.
     _SEED = (
         "() => {"
         "  renderKNResults(["
-        "    { artist: 'Max\\u00efmo Park', title: 'Books From Boxes', tracks: ["
-        "      { brand_name: 'Community Brand', brand_code: 'CB1', is_community: true,"
+        "    { artist: 'Max\\u00efmo Park', title: 'Books From Boxes', versions: ["
+        "      { source: 'local', priority_rank: 10, priority_class: 'community',"
+        "        priority_display: 'Nomad Karaoke', local: {"
+        "        path: '/opt/nomad/downloads/NOMAD-720p/NOMAD-0729 - Max\\u00efmo Park - Books from Boxes.mp4',"
+        "        filename: 'NOMAD-0729 - Max\\u00efmo Park - Books from Boxes.mp4',"
+        "        artist: 'Max\\u00efmo Park', title: 'Books from Boxes',"
+        "        disc_id: 'NOMAD-0729', format: 'mp4' } },"
+        "      { source: 'kn', priority_rank: 120, priority_class: 'community', kn: {"
+        "        brand_name: 'Community Brand', brand_code: 'CB1', is_community: true,"
         "        youtube_url: 'https://www.youtube.com/watch?v=RlBlAKxyqZw',"
-        "        local_path: '/opt/nomad/downloads/Max\\u00efmo Park - Books from Boxes [yt-RlBlAKxyqZw].mp4' },"
-        "      { brand_name: 'Karaoke Version', brand_code: 'KV', is_community: false,"
-        "        youtube_url: null },"
-        "    ]}"
-        "  ], ["
-        "    { path: '/opt/nomad/downloads/NOMAD-720p/NOMAD-0729 - Max\\u00efmo Park - Books from Boxes.mp4',"
-        "      filename: 'NOMAD-0729 - Max\\u00efmo Park - Books from Boxes.mp4',"
-        "      artist: 'Max\\u00efmo Park', title: 'Books from Boxes', format: 'mp4' }"
+        "        local_path: '/opt/nomad/downloads/Max\\u00efmo Park - Books from Boxes [yt-RlBlAKxyqZw].mp4' } },"
+        "      { source: 'kn', priority_rank: 130, priority_class: 'community', kn: {"
+        "        brand_name: 'Funbox Karaoke', brand_code: 'FBK', is_community: true,"
+        "        youtube_url: '', mirror_only: true,"
+        "        divebar: { file_id: 'fbk1', format: 'cdg' } } },"
+        "      { source: 'kn', priority_rank: 2000, priority_class: 'commercial', kn: {"
+        "        brand_name: 'Karaoke Version', brand_code: 'KV', is_community: false,"
+        "        youtube_url: null } },"
+        "    ]},"
+        "    { artist: 'Maxïmo Park', title: 'Apply Some Pressure', versions: ["
+        "      { source: 'kn', priority_rank: 120, kn: { brand_name: 'Sunfly',"
+        "        brand_code: 'SF', is_community: false, youtube_url: null,"
+        "        divebar: { file_id: 'f123', format: 'zip' } } },"
+        "    ]},"
         "  ]);"
         "}"
     )
 
-    def test_local_path_track_plays_local_file_instead_of_download(self, app_page):
+    def test_all_versions_of_a_song_live_under_its_header(self, app_page):
         errors = []
         app_page.on("pageerror", lambda e: errors.append(str(e)))
         app_page.evaluate(self._SEED)
-        app_page.locator(".kn-song-header").click()
 
-        # local_path track: recognized as already on disk -> Downloaded + Play.
-        expect(app_page.locator(".kn-downloaded-badge")).to_have_count(1)
-        expect(app_page.locator(".kn-track .kn-play-btn")).to_have_count(1)
-        # No Download button anywhere: CB1 is local, KV is disc-only.
-        expect(app_page.locator(".kn-download-btn")).to_have_count(0)
-        expect(app_page.locator(".kn-disc-only-badge")).to_have_count(1)
+        expect(app_page.locator(".kn-song-header")).to_have_count(2)
+        first = app_page.locator("#kn-song-0")
+        expect(first).to_be_visible()
+        expect(first.locator(".kn-track")).to_have_count(4)
+        # No flat side sections any more.
+        expect(app_page.locator(".kn-local-section")).to_have_count(0)
+        # Header summarises library availability + version count.
+        header = app_page.locator(".kn-song-header").first
+        expect(header).to_contain_text("1 in library")
+        expect(header).to_contain_text("4 versions")
         assert errors == []
 
-    def test_library_section_renders_server_local_rows(self, app_page):
-        errors = []
-        app_page.on("pageerror", lambda e: errors.append(str(e)))
+    def test_only_the_top_song_starts_expanded(self, app_page):
         app_page.evaluate(self._SEED)
+        expect(app_page.locator("#kn-song-1")).to_be_hidden()
+        app_page.locator(".kn-song-header").nth(1).click()
+        expect(app_page.locator("#kn-song-1")).to_be_visible()
 
-        # Rendered eagerly from the payload's local rows — no lazy fetch.
-        section = app_page.locator(".kn-local-section")
-        expect(section).to_have_count(1)
-        expect(app_page.locator(".kn-local-header")).to_contain_text("In your library (1)")
-        row = app_page.locator(".kn-local-match")
+    def test_library_version_row_plays_local_file(self, app_page):
+        app_page.evaluate(self._SEED)
+        row = app_page.locator("#kn-song-0 .kn-local-version")
         expect(row).to_have_count(1)
-        expect(row).to_contain_text("Books from Boxes")
+        expect(row).to_contain_text("Nomad Karaoke")
+        expect(row).to_contain_text("NOMAD-0729")
         expect(row.locator(".kn-play-btn")).to_have_count(1)
-        assert errors == []
+
+    def test_local_path_track_plays_instead_of_download(self, app_page):
+        app_page.evaluate(self._SEED)
+        song = app_page.locator("#kn-song-0")
+        # CB1 is already downloaded -> Downloaded + Play; the library row
+        # has its own Play too.
+        expect(song.locator(".kn-downloaded-badge")).to_have_count(1)
+        expect(song.locator(".kn-play-btn")).to_have_count(2)
+        expect(song.locator(".kn-disc-only-badge")).to_have_count(1)
+
+    def test_mirror_only_version_downloads_from_mirror(self, app_page):
+        app_page.evaluate(self._SEED)
+        btn = app_page.locator("#kn-song-0 .kn-download-btn")
+        expect(btn).to_have_count(1)
+        expect(btn).to_have_attribute("title", "From the GCS mirror")
 
     def test_divebar_xref_track_downloads_from_mirror(self, app_page):
-        """A community track with a server-attached GCS-mirror file offers a
-        mirror download (not YouTube) — handoff gap F2."""
-        errors = []
-        app_page.on("pageerror", lambda e: errors.append(str(e)))
-        app_page.evaluate(
-            "() => renderKNResults([{ artist: 'A', title: 'T', tracks: ["
-            "  { brand_name: 'Sunfly', brand_code: 'SF', is_community: false,"
-            "    youtube_url: null,"
-            "    divebar: { file_id: 'f123', format: 'zip' } },"
-            "]}])"
-        )
-        app_page.locator(".kn-song-header").click()
-
-        btn = app_page.locator(".kn-download-btn")
+        """A KN track with a server-attached GCS-mirror file offers a mirror
+        download (not YouTube) — handoff gap F2."""
+        app_page.evaluate(self._SEED)
+        app_page.locator(".kn-song-header").nth(1).click()
+        btn = app_page.locator("#kn-song-1 .kn-download-btn")
         expect(btn).to_have_count(1)
         expect(btn).to_have_attribute("title", "From the GCS mirror (not YouTube)")
-        expect(app_page.locator(".kn-disc-only-badge")).to_have_count(0)
-        assert errors == []
 
 
 # ---------------------------------------------------------------------------

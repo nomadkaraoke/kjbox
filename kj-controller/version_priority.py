@@ -38,8 +38,10 @@ COMMERCIAL_BRANDS = [
     # high-frequency unlisted
     ("VS",     ["VS", "Vocal Star"],                               "Vocal Star"),
     ("SK",     ["SK", "Sing King"],                                "Sing King"),
-    ("MR",     ["MR", "Mr. Entertainer", "Mr Entertainer"],        "Mr. Entertainer"),
-    ("PT",     ["PT", "Party Tyme"],                               "Party Tyme"),
+    # "ME" / "PY" are the disc-id prefixes of the MR / PT digital-download
+    # sets in the local library ("ME-01169", "PY-00234").
+    ("MR",     ["MR", "ME", "Mr. Entertainer", "Mr Entertainer"],  "Mr. Entertainer"),
+    ("PT",     ["PT", "PY", "Party Tyme"],                         "Party Tyme"),
     ("EK",     ["EK", "EDK", "EdKara", "EDKARA", "Easy Karaoke"],  "Easy Karaoke"),
 ]
 

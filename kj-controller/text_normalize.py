@@ -133,5 +133,27 @@ def fts_match_query(text):
 
 
 def group_key(artist, title):
-    """Deterministic (artist, title) -> collapse key for grouping results."""
+    """Deterministic (artist, title) -> collapse key for grouping results.
+
+    Also the persisted play-stats ``song_key`` — never change its output
+    without migrating stored keys. Result grouping that should ignore
+    file-quality tags uses ``result_group_key``.
+    """
     return f"{normalize(artist)}|||{normalize(title)}"
+
+
+# Bracketed file-quality tags that karaoke filenames carry on the artist or
+# title ("Fall Out Boy (MPX)", "Dance, Dance [HM]"). They describe the file,
+# not the song, so they must not split a song into its own search-result
+# group. Musical qualifiers like "(Live)" are deliberately NOT here.
+_FILE_TAG_RE = re.compile(
+    r'\s*[\[(]\s*(?:mpx|multiplex|hm|homemade)\s*[\])]',
+    re.IGNORECASE,
+)
+
+
+def result_group_key(artist, title):
+    """``group_key`` with file-quality tags dropped — for collapsing search
+    results only (never persisted, so the stored ``song_key`` is unchanged)."""
+    return group_key(_FILE_TAG_RE.sub(' ', artist or ''),
+                     _FILE_TAG_RE.sub(' ', title or ''))
