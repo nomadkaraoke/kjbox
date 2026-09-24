@@ -1,6 +1,7 @@
 """End-to-end tests for the public /sing/* singer UI."""
 
 import json
+import re
 
 from playwright.sync_api import expect
 
@@ -129,8 +130,9 @@ class TestDoneMultiSong:
             "(rid) => { window.__sing_state.request = {id: rid}; window.__sing_state.step = 'done'; window.__sing_render(); }",
             r1["id"],
         )
-        expect(page.locator("text=Wonderwall")).to_be_visible()
-        expect(page.locator("text=Don't Look Back in Anger")).to_be_visible()
+        # Scoped to the card — the shell status tile also names the next song.
+        expect(page.locator("#sing-root >> text=Wonderwall")).to_be_visible()
+        expect(page.locator("#sing-root >> text=Don't Look Back in Anger")).to_be_visible()
         expect(page.locator('[data-testid="request-another"]')).to_be_visible()
 
     def test_request_another_returns_to_search(self, page, live_server, live_token):
@@ -258,7 +260,8 @@ class TestConfirmHardening:
         self._confirm(page, live_server, live_token)
         expect(page.locator(".confirm-title")).to_have_text("Bohemian Rhapsody")
         expect(page.locator(".confirm-artist")).to_have_text("Queen")
-        expect(page.locator(".confirm-source")).to_have_text("In our library")
+        expect(page.locator(".confirm-source")).to_have_text(
+            "On the host's machine — definitely available")
         expect(page.locator(".confirm-searched")).to_contain_text("bohemian")
         expect(page.locator(".submit-btn")).to_have_text("Yes — send it in")
         expect(page.get_by_role("button", name="← Pick a different song")).to_be_visible()
@@ -541,9 +544,12 @@ class TestMySongsPersistence:
         self._route_my_requests(page, [self._pending_song()])
         page.reload()
         expect(page.locator(".song-card-title")).to_be_visible()
-        expect(page.locator("text=Bo Rhap")).to_be_visible()
-        # Bar is redundant on the done screen (which IS the list), so it hides.
-        expect(page.locator('[data-testid="mysongs-bar"]')).to_be_hidden()
+        expect(page.locator("#sing-root >> text=Bo Rhap")).to_be_visible()
+        # On My songs the status tile is shown (same component as every tab)
+        # but isn't a link — you're already on the list.
+        tile = page.locator('[data-testid="mysongs-bar"]')
+        expect(tile).to_be_visible()
+        assert tile.evaluate("n => n.tagName") == "DIV"
 
     def test_bar_urgent_names_next_song_and_reopens_list(self, page, live_server, live_token):
         # Nearly-up (position ≤ 3) → the bar appears on any tab, naming the
@@ -707,6 +713,20 @@ class TestVersionRowEnrichment:
         page.locator('input[type="search"]').fill("bo rhap")
         expect(page.locator(".result-row")).to_be_visible()
         page.locator(".sing-versions-toggle").click()
+
+    def test_availability_tiers_say_how_sure_it_will_play(self, page, live_server, live_token):
+        self._open_versions(page, live_server, live_token)
+        cards = page.locator(".sing-version-card")
+        local = cards.nth(0).locator('[data-testid="version-availability"]')
+        expect(local).to_have_text("Definitely available — works even offline")
+        expect(local).to_have_class(re.compile("sing-avail-sure"))
+        cloud = cards.nth(1).locator('[data-testid="version-availability"]')
+        expect(cloud).to_contain_text("Very reliable — from our cloud library")
+        expect(cloud).to_have_class(re.compile("sing-avail-high"))
+        page.locator('[data-testid="online-collapse-toggle"]').click()
+        yt = cards.nth(2).locator('[data-testid="version-availability"]')
+        expect(yt).to_have_text("Almost always works — YouTube downloads occasionally fail")
+        expect(yt).to_have_class(re.compile("sing-avail-likely"))
 
     def test_cta_wording_is_request_this_song(self, page, live_server, live_token):
         self._open_versions(page, live_server, live_token)
@@ -874,15 +894,21 @@ class TestHouseRulesCollapsed:
         expect(page.locator(".rules-footer summary")).to_have_count(1)
 
 
-class TestPartnerChips:
-    def test_chip_tap_adds_partner_row(self, page, live_server, live_token):
+class TestExistingSingerPicker:
+    """Confirm screen: "Existing singer" / "New singer" instead of an
+    always-visible wall of everyone's names."""
+
+    _SINGERS = ["Sarah B.", "mike", "Alice", "Zoë", "Bob"] + [f"Guest {i:02d}" for i in range(50)]
+
+    def _to_confirm(self, page, live_server, live_token, singers=None, status=200):
         page.add_init_script("window.__SING_ARM_MS = 0;")
         _login(page, live_server, live_token)   # identity = "Alice"
         page.route("**/sing/singers*", lambda r: r.fulfill(
-            status=200, content_type="application/json",
-            body=json.dumps({"singers": ["Sarah B.", "Mike", "Alice"]})))
+            status=status, content_type="application/json",
+            body=json.dumps({"singers": singers if singers is not None else self._SINGERS})))
         page.evaluate(
             """() => {
+                window.__sing_state._knownSingers = undefined;
                 window.__sing_state.selected = {
                     source_type: 'local', source_ref: '/m/x.mp4',
                     song_artist: 'Queen', song_title: 'Under Pressure',
@@ -890,13 +916,134 @@ class TestPartnerChips:
                 window.__sing_state.step = 'confirm';
                 window.__sing_render();
             }""")
-        chips = page.locator('[data-testid="partner-chip"]')
-        # Alice (the requester) is filtered out of her own chip list.
-        expect(chips).to_have_count(2)
-        chips.filter(has_text="Sarah B.").click()
-        expect(page.locator('[data-testid="partner-name-0"]')).to_have_value("Sarah B.")
-        # The used chip disappears from the refreshed list.
-        expect(page.locator('[data-testid="partner-chip"]')).to_have_count(1)
+
+    def test_no_names_shown_until_existing_tapped(self, page, live_server, live_token):
+        self._to_confirm(page, live_server, live_token)
+        expect(page.locator('[data-testid="add-existing-singer"]')).to_have_text("👥 Existing singer")
+        expect(page.locator('[data-testid="add-singer"]')).to_have_text("+ New singer")
+        expect(page.locator('[data-testid="partner-picker-row"]')).to_have_count(0)
+        expect(page.locator(".sing-card")).not_to_contain_text("Sarah B.")
+
+    def test_long_list_sorted_scrollable_excludes_self(self, page, live_server, live_token):
+        self._to_confirm(page, live_server, live_token)
+        page.locator('[data-testid="add-existing-singer"]').click()
+        rows = page.locator('[data-testid="partner-picker-row"]')
+        # 55 names minus the requester (Alice).
+        expect(rows).to_have_count(54)
+        names = rows.locator(".partner-picker-name").all_inner_texts()
+        assert names == sorted(names, key=str.casefold)
+        assert "Alice" not in names
+        # Letter headers for a long unfiltered list; the list (not the page) scrolls.
+        expect(page.locator(".partner-picker-letter").first).to_be_visible()
+        scrolls = page.locator('[data-testid="partner-picker-list"]').evaluate(
+            "n => n.scrollHeight > n.clientHeight")
+        assert scrolls
+
+    def test_filter_then_tap_adds_existing_partner(self, page, live_server, live_token):
+        captured = {}
+        def handle(route):
+            captured["body"] = route.request.post_data_json
+            route.continue_()
+        page.route("**/sing/submit*", handle)
+        self._to_confirm(page, live_server, live_token)
+        page.locator('[data-testid="add-existing-singer"]').click()
+        page.locator('[data-testid="partner-picker-filter"]').fill("zoe")   # accent-folded
+        rows = page.locator('[data-testid="partner-picker-row"]')
+        expect(rows).to_have_count(1)
+        rows.first.click()
+        expect(page.locator(".sing-modal")).to_have_count(0)
+        expect(page.locator('[data-testid="partner-existing-0"]')).to_have_text("Zoë")
+        # No name/phone inputs for someone already on the list.
+        expect(page.locator('[data-testid="partner-name-0"]')).to_have_count(0)
+        # Re-opening shows them as already added (disabled).
+        page.locator('[data-testid="add-existing-singer"]').click()
+        page.locator('[data-testid="partner-picker-filter"]').fill("zo")
+        expect(rows.first).to_be_disabled()
+        expect(rows.first).to_contain_text("Added")
+        page.keyboard.press("Escape")
+        page.locator(".submit-btn").click()
+        expect(page.locator("text=Your songs tonight")).to_be_visible(timeout=5000)
+        assert captured["body"]["additional_singers"] == [{"name": "Zoë", "phone": ""}]
+
+    def test_no_match_offers_add_as_new(self, page, live_server, live_token):
+        self._to_confirm(page, live_server, live_token)
+        page.locator('[data-testid="add-existing-singer"]').click()
+        page.locator('[data-testid="partner-picker-filter"]').fill("Priya K.")
+        expect(page.locator('[data-testid="partner-picker-row"]')).to_have_count(0)
+        page.locator('[data-testid="partner-picker-new"]').click()
+        expect(page.locator('[data-testid="partner-name-0"]')).to_have_value("Priya K.")
+
+    def test_fetch_failure_falls_back_to_new_singer(self, page, live_server, live_token):
+        self._to_confirm(page, live_server, live_token, status=500)
+        page.locator('[data-testid="add-existing-singer"]').click()
+        page.locator('[data-testid="partner-picker-new"]').click()
+        expect(page.locator('[data-testid="partner-name-0"]')).to_be_visible()
+
+
+class TestShellHeader:
+    """Brand + 🌐 + status tiles live in one persistent header, the same on
+    every tab, painted from cached state (no pop-in on tab switches)."""
+
+    _NP = {"now_singing": {"first_name": "Jasmine", "song_artist": "Cage The Elephant - Ain't No Rest"},
+           "up_next": {"first_name": "Celeste"}, "queued_count": 9}
+    _ITEM = {"request": {"id": 31, "singer_name": "Alice", "song_artist": "Hard-Fi",
+                         "song_title": "Cash Machine", "source_type": "local",
+                         "status": "approved", "created_at": "now",
+                         "linked_entry_id": 5, "additional_singers": None},
+             "performed": False,
+             "estimate": {"position": 7, "now_singing": False,
+                          "range_low_s": 1500, "range_high_s": 1800}}
+
+    def _seed(self, page, live_server, live_token):
+        _login(page, live_server, live_token)
+        page.route("**/sing/my-requests*", lambda r: r.fulfill(
+            status=200, content_type="application/json",
+            body=json.dumps({"now_playing": self._NP, "requests": [self._ITEM]})))
+        page.route("**/sing/rotation*", lambda r: r.fulfill(
+            status=200, content_type="application/json", body=json.dumps({"entries": []})))
+        page.route("**/sing/now*", lambda r: r.fulfill(
+            status=200, content_type="application/json", body=json.dumps(self._NP)))
+        page.evaluate(
+            "(s) => localStorage.setItem('sing_my_request_ids', JSON.stringify(s))",
+            {"token": live_token, "ids": [31], "tokens": {"31": "t"}})
+        page.evaluate("window.__sing_state.step = 'done'; window.__sing_render();")
+        expect(page.locator(".song-card-title")).to_have_text("Cash Machine — Hard-Fi")
+
+    def test_lang_pill_in_topbar_not_in_cards(self, page, live_server, live_token):
+        _login(page, live_server, live_token)
+        page.evaluate("window.__sing_state.step = 'search'; window.__sing_render();")
+        expect(page.locator("#sing-header .sing-topbar [data-testid='lang-pill']")).to_be_visible()
+        expect(page.locator("#sing-header [data-testid='brand-header']")).to_be_visible()
+        expect(page.locator(".sing-card [data-testid='lang-pill']")).to_have_count(0)
+
+    def test_header_and_cards_share_one_column(self, page, live_server, live_token):
+        self._seed(page, live_server, live_token)
+        page.locator('[data-testid="tab-rotation"]').click()
+        sels = ('[data-testid="mysongs-bar"]', '[data-testid="status-stage"]', ".sing-rotation-page")
+        for sel in sels:
+            expect(page.locator(sel)).to_be_visible()
+        boxes = [page.locator(sel).bounding_box() for sel in sels]
+        assert len({round(b["x"]) for b in boxes}) == 1
+        assert len({round(b["width"]) for b in boxes}) == 1
+
+    def test_tab_switch_paints_from_cache_without_waiting(self, page, live_server, live_token):
+        self._seed(page, live_server, live_token)
+        page.locator('[data-testid="tab-rotation"]').click()
+        expect(page.locator('[data-testid="status-stage"]')).to_contain_text("Jasmine")
+        # Now make every API call hang: switching tabs must still show the
+        # songs, the tiles and the stage from cached state immediately.
+        page.unroute("**/sing/my-requests*")
+        page.unroute("**/sing/now*")
+        page.route("**/sing/my-requests*", lambda r: None)
+        page.route("**/sing/now*", lambda r: None)
+        page.locator('[data-testid="tab-mysongs"]').click()
+        expect(page.locator(".song-card-title")).to_have_text("Cash Machine — Hard-Fi", timeout=500)
+        expect(page.locator('[data-testid="mysongs-bar"]')).to_contain_text("#7 in line", timeout=500)
+        page.locator('[data-testid="tab-rotation"]').click()
+        stage = page.locator('[data-testid="status-stage"]')
+        expect(stage).to_contain_text("Jasmine", timeout=500)
+        expect(stage).to_contain_text("Up next: Celeste")
+        expect(stage).not_to_have_class(re.compile("status-tile--loading"))
 
 
 class TestTipTab:
@@ -1024,11 +1171,11 @@ class TestMySongsStatusBanner:
             "(s) => localStorage.setItem('sing_my_request_ids', JSON.stringify(s))",
             {"token": live_token, "ids": [1], "tokens": {}})
         page.evaluate("window.__sing_state.step = 'done'; window.__sing_render();")
-        banner = page.locator(".sing-my-status")
+        banner = page.locator('[data-testid="mysongs-bar"]')
         expect(banner).to_be_visible()
         expect(banner).to_contain_text("#5")
-        # The venue-wide Now/Next widget is gone from this screen.
-        expect(page.locator(".now-playing")).to_have_count(0)
+        # The venue-wide stage tile is Rotation-tab only.
+        expect(page.locator('[data-testid="status-stage"]')).to_have_count(0)
 
     def test_banner_hidden_without_live_songs(self, page, live_server, live_token):
         _login(page, live_server, live_token)
@@ -1038,7 +1185,7 @@ class TestMySongsStatusBanner:
                                              "queued_count": 0}, "requests": []})))
         page.evaluate("window.__sing_state.step = 'done'; window.__sing_render();")
         expect(page.locator("h2:has-text('Your songs tonight')")).to_be_visible()
-        expect(page.locator(".sing-my-status")).to_be_hidden()
+        expect(page.locator('[data-testid="mysongs-bar"]')).to_have_count(0)
 
 
 class TestNotificationsSection:

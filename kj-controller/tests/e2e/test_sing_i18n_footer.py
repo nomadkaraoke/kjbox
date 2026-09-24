@@ -255,7 +255,9 @@ class TestMySongsCards:
         expect(cards.nth(0)).to_contain_text("You're next — right after this song")
         expect(cards.nth(1).locator('[data-testid="replaces-line"]')).to_have_text(
             "Replaces Dancing Queen — Glow once the host confirms")
-        expect(page.locator(".sing-my-status")).to_have_text("🎤 You're next — after this song")
+        # The tile carries its own 🎤 icon; the status line doesn't repeat it.
+        expect(page.locator('[data-testid="mysongs-bar"] .status-tile-detail')).to_have_text(
+            "You're next — after this song")
 
 
 class TestRotationDuetsAndPreview:

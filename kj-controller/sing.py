@@ -1254,7 +1254,12 @@ def _known_singer_names(app):
                         members = json.loads(raw) if isinstance(raw, str) else raw
                     except (ValueError, TypeError):
                         members = None
-                for n in (members or [entry.get("singer")]):
+                if not members:
+                    # Duets typed by the KJ as one "Anya & Celeste" singer
+                    # (no singers_json) are two people — list each, so the
+                    # partner picker never offers a pair as a person.
+                    members = _split_duet_name(entry.get("singer"))
+                for n in members:
                     add(n)
         except Exception:
             current_app.logger.exception("known-singers: rotation scan failed")
@@ -1271,6 +1276,13 @@ def _known_singer_names(app):
         except Exception:
             current_app.logger.exception("known-singers: request scan failed")
     return names
+
+
+def _split_duet_name(name):
+    """Split a KJ-typed duet label ("Anya & Celeste", "Cam + Taylor") into
+    member names. Only '&' and '+' separate — 'and' can be part of a name."""
+    parts = re.split(r"\s*[&+]\s*", (name or "").strip())
+    return [p for p in (x.strip() for x in parts) if p]
 
 
 def _fold_name(name):

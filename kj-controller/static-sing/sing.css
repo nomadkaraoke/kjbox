@@ -12,6 +12,16 @@
   --nk-warn: #f4a83a;
   --nk-error: #ff6b6b;
   --nk-border: #2a2a2a;
+
+  /* Layout tokens — every top-level block (header, cards, footers) shares ONE
+     column width and gutter so edges line up on every tab. */
+  --nk-shell-w: 480px;
+  --nk-gutter: 0.75rem;          /* screen edge → column, on phones */
+  --nk-pad: 1.25rem;             /* inside a card */
+  --nk-gap: 0.75rem;             /* between stacked top-level blocks */
+  --nk-radius: 12px;             /* cards */
+  --nk-radius-sm: 10px;          /* tiles, inner panels */
+  --nk-tile-pad: 0.65rem 0.9rem;
 }
 
 * { box-sizing: border-box; }
@@ -82,12 +92,24 @@ body.sing {
   padding: 0 0.2rem;
 }
 
+/* The shared column. Anything top-level uses this width so the header,
+   status tiles, cards and footers have identical left/right edges. */
+.sing-shell,
+.sing-card,
+.rules-footer,
+.sing-event-footer {
+  width: calc(100% - 2 * var(--nk-gutter));
+  max-width: var(--nk-shell-w);
+  margin-left: auto;
+  margin-right: auto;
+}
+
 .sing-card {
-  max-width: 480px;
-  margin: 1.5rem auto;
-  padding: 1.5rem;
+  margin-top: var(--nk-gap);
+  margin-bottom: 1.5rem;
+  padding: var(--nk-pad);
   background: var(--nk-card);
-  border-radius: 12px;
+  border-radius: var(--nk-radius);
   border: 1px solid var(--nk-border);
 }
 
@@ -300,6 +322,22 @@ input:focus {
   background: rgba(255, 77, 207, 0.08);
 }
 .sing-version-secondary { color: var(--nk-text-dim); font-size: 0.8rem; }
+/* Availability tier dot: green = on the box (certain, even offline),
+   teal = our cloud mirror (very reliable), amber = YouTube (download can fail). */
+.sing-avail { display: flex; gap: 0.4rem; align-items: baseline; flex-basis: 100%; }
+.sing-version-card:has(.sing-avail) { flex-wrap: wrap; row-gap: 0.3rem; }
+.sing-avail::before {
+  content: "";
+  flex: none;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  transform: translateY(-0.05rem);
+  background: var(--nk-text-dim);
+}
+.sing-avail-sure::before { background: var(--nk-good); }
+.sing-avail-high::before { background: #4fc3d9; }
+.sing-avail-likely::before { background: var(--nk-warn); }
 .sing-version-actions {
   display: flex;
   flex-direction: column;
@@ -725,16 +763,6 @@ input:focus {
 .notify-phone-editor .error { width: 100%; margin: 0; }
 .notify-summary { margin-top: 0.4rem; }
 
-/* --- My-songs personal status banner --------------------------------------- */
-.sing-my-status {
-  background: linear-gradient(135deg, rgba(255, 77, 207, 0.18), rgba(255, 77, 207, 0.05));
-  border: 1px solid rgba(255, 77, 207, 0.35);
-  border-radius: 10px;
-  padding: 0.7rem 1rem;
-  margin-bottom: 1rem;
-  font-size: 1.05rem;
-  font-weight: 700;
-}
 
 /* --- "Sung here before?" inspiration section (search screen) -------------- */
 .sing-history {
@@ -833,8 +861,7 @@ input:focus {
 
 /* --- Rules footer (collapsed one-liner on every page) ---------------------- */
 .rules-footer {
-  max-width: 480px;
-  margin: 0 auto 2rem;
+  margin-bottom: 2rem;
   padding: 0.6rem 1.5rem;
   background: var(--nk-card-2);
   border: 1px solid var(--nk-border);
@@ -862,83 +889,116 @@ input:focus {
 .rules-footer .rules-list h4 { margin: 0 0 0.2rem; color: var(--nk-text); font-size: 0.95rem; }
 .rules-footer .rules-list p { margin: 0; }
 
-/* --- Now playing widget ---------------------------------------------------- */
-.now-playing {
-  padding: 0.75rem;
-  margin-bottom: 1rem;
-  border-radius: 10px;
-  background: linear-gradient(135deg, rgba(255,77,207,0.08), rgba(111,0,255,0.08));
-  border: 1px solid var(--nk-border);
-  font-size: 0.95rem;
+/* --- App shell header ------------------------------------------------------ */
+/* Brand + 🌐 language on one row (a real flex row — the pill used to be
+   absolutely positioned inside each card and overlapped whatever came first),
+   then the status tiles. Outside #sing-root, so tab switches never blank it. */
+.sing-header {
+  padding-top: 0.6rem;
 }
-.now-playing[data-loading="true"] { color: var(--nk-text-dim); font-style: italic; }
-.np-loading, .np-empty { padding: 0.25rem 0; color: var(--nk-text-dim); }
-.np-line { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: baseline; padding: 0.2rem 0; }
-.np-label { font-weight: 600; color: var(--nk-accent); }
-.np-singer { font-weight: 500; color: var(--nk-text); }
-.np-song { color: var(--nk-text-dim); }
-
-/* --- Persistent "My songs" bar --------------------------------------------- */
-/* Always-visible shortcut back to the singer's own songs (survives reload).
-   Sticky under the offline banner so it's reachable from any screen. */
-.mysongs-bar {
-  position: sticky;
-  top: 0;
-  z-index: 9;
-  max-width: 480px;
-  margin: 0.75rem auto 0;
-  padding: 0 1rem;
-}
-.offline-banner:not([hidden]) + .mysongs-bar { top: 2.4rem; }
-.mysongs-pill {
+.sing-topbar {
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  min-height: 1.9rem;
+  padding: 0 0.15rem;
+}
+.sing-topbar .sing-brand { margin: 0; min-width: 0; }
+.sing-topbar .sing-brand-host {
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+/* --- Status tiles ------------------------------------------------------------ */
+/* ONE component for every "where are things at" readout: your next song
+   (.status-tile--you, green when you're nearly up) and who's on stage
+   (.status-tile--stage). Same width, radius, padding and three-line type
+   scale everywhere — label / primary / detail. */
+/* Not sticky: two pinned tiles would eat a phone screen over a long
+   rotation, and the bottom tab bar already reaches My songs from anywhere. */
+.sing-status-stack {
+  display: flex;
+  flex-direction: column;
   gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+.sing-status-stack[hidden] { display: none; }
+.status-tile {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
   width: 100%;
-  padding: 0.7rem 0.9rem;
-  border-radius: 10px;
-  border: 1px solid var(--nk-accent);
-  background: linear-gradient(135deg, rgba(255,77,207,0.16), rgba(111,0,255,0.14));
+  min-height: 3.6rem;
+  padding: var(--nk-tile-pad);
+  border-radius: var(--nk-radius-sm);
+  border: 1px solid var(--nk-border);
+  background: linear-gradient(135deg, rgba(255,77,207,0.08), rgba(111,0,255,0.08)), var(--nk-card);
   color: var(--nk-text);
+  font: inherit;
   font-size: 0.95rem;
-  font-family: inherit;
-  cursor: pointer;
   text-align: left;
   box-shadow: 0 2px 10px rgba(0,0,0,0.3);
 }
-.mysongs-pill:active { transform: scale(0.99); }
-.mysongs-pill.mysongs-urgent {
-  border-color: var(--nk-good);
-  background: linear-gradient(135deg, rgba(50, 213, 138, 0.2), rgba(255, 77, 207, 0.12));
+button.status-tile { cursor: pointer; }
+button.status-tile:active { transform: scale(0.99); }
+.status-tile--you {
+  border-color: rgba(255, 77, 207, 0.55);
+  background: linear-gradient(135deg, rgba(255,77,207,0.16), rgba(111,0,255,0.12)), var(--nk-card);
 }
-.mysongs-icon { font-size: 1.1rem; }
-.mysongs-next {
+.status-tile--urgent {
+  border-color: var(--nk-good);
+  background: linear-gradient(135deg, rgba(50,213,138,0.2), rgba(255,77,207,0.12)), var(--nk-card);
+}
+.status-tile-icon { font-size: 1.15rem; flex: none; width: 1.4rem; text-align: center; }
+.status-tile-body {
   display: flex;
   flex-direction: column;
   min-width: 0;
-  line-height: 1.25;
+  flex: 1;
+  line-height: 1.3;
 }
-.mysongs-next-label {
+.status-tile-label {
   font-size: 0.7rem;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.05em;
   color: var(--nk-text-dim);
 }
-.mysongs-next-song {
+.status-tile-primary {
   font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.mysongs-status {
+.status-tile-detail {
   color: var(--nk-accent-hover);
+  font-size: 0.88rem;
   font-weight: 500;
-  margin-left: auto;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  /* Wraps rather than truncating — "#70 in line · ~5h 5m–5h 11m" is the
+     part a singer actually came to read. */
+  overflow-wrap: anywhere;
 }
-.mysongs-chevron { color: var(--nk-text-dim); font-size: 1.2rem; line-height: 1; }
+.status-tile--urgent .status-tile-detail { color: var(--nk-good); }
+.status-tile--stage .status-tile-detail { color: var(--nk-text-dim); display: flex; flex-direction: column; }
+.status-tile-song { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.status-tile-next { color: var(--nk-accent-hover); }
+.status-tile-chevron { flex: none; color: var(--nk-text-dim); font-size: 1.2rem; }
+/* Skeleton while the very first stage read is in flight — same box, so
+   nothing below it moves when the real text lands. */
+.status-tile--loading .status-tile-primary,
+.status-tile--loading .status-tile-detail {
+  color: transparent;
+  border-radius: 4px;
+  background: linear-gradient(90deg, #222 0%, #2e2e2e 50%, #222 100%);
+  background-size: 200% 100%;
+  animation: nk-shimmer 1.2s linear infinite;
+}
+.status-tile--loading .status-tile-primary { width: 60%; }
+.status-tile--loading .status-tile-detail { width: 40%; margin-top: 0.25rem; }
+@keyframes nk-shimmer { to { background-position: -200% 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .status-tile--loading .status-tile-primary,
+  .status-tile--loading .status-tile-detail { animation: none; }
+}
 
 /* --- Offline banner --------------------------------------------------------- */
 .offline-banner {
@@ -1105,31 +1165,9 @@ input:focus {
   color: #ddd;
   margin-bottom: 8px;
 }
-.partner-chips-label {
-  font-size: 0.8em;
-  color: var(--nk-text-dim);
-  margin-bottom: 6px;
-}
-.partner-chips-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-bottom: 8px;
-}
-.partner-chip {
-  border: 1px solid var(--nk-border);
-  background: var(--nk-card-2);
-  color: var(--nk-text);
-  border-radius: 999px;
-  font-size: 0.85em;
-  padding: 4px 12px;
-  cursor: pointer;
-  min-height: 0;
-}
-.partner-chip:active { border-color: var(--nk-accent); color: var(--nk-accent); }
 .partner-row {
   display: grid;
-  grid-template-columns: 1fr 1fr auto;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr) auto;
   gap: 6px;
   margin-bottom: 6px;
 }
@@ -1146,15 +1184,98 @@ input:focus {
   cursor: pointer;
 }
 .partner-remove:hover { background: #2a2a2a; color: #fff; }
+.partners-add-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
 .partners-add {
   background: transparent;
-  border: 1px dashed #ff4dcf;
-  color: #ff4dcf;
-  padding: 8px 12px;
-  border-radius: 4px;
+  border: 1px dashed var(--nk-accent);
+  color: var(--nk-accent);
+  padding: 10px 12px;
+  border-radius: 8px;
   cursor: pointer;
   width: 100%;
+  font-family: inherit;
+  font-size: 0.95rem;
 }
+/* A partner picked from tonight's list: name + "On tonight's list", no
+   fields to fill. */
+.partner-row-existing { grid-template-columns: 1fr auto; align-items: center; }
+.partner-existing {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 6px 10px;
+  background: var(--nk-card-2);
+  border: 1px solid var(--nk-border);
+  border-radius: 8px;
+  line-height: 1.3;
+}
+.partner-existing-name { font-weight: 600; overflow-wrap: anywhere; }
+.partner-existing-note { font-size: 0.78rem; color: var(--nk-good); }
+.partner-row-existing .partner-remove { height: 100%; min-height: 40px; }
+
+/* "Existing singer" picker modal — built for 50+ names: fixed-height dialog,
+   filter pinned on top, only the list scrolls. */
+.sing-modal.partner-picker {
+  display: flex;
+  flex-direction: column;
+  height: min(85vh, 640px);
+  overflow: hidden;
+}
+.partner-picker .sing-modal-body {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+}
+.partner-picker-hint { margin: 0 0 0.5rem; }
+.partner-picker-filter { margin: 0 0 0.5rem; flex: none; }
+.partner-picker-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  margin: 0 -0.25rem;
+  padding: 0 0.25rem;
+}
+.partner-picker-letter {
+  position: sticky;
+  top: 0;
+  background: var(--nk-card);
+  color: var(--nk-accent);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  padding: 0.45rem 0.25rem 0.2rem;
+}
+.partner-picker-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  width: 100%;
+  min-height: 46px;
+  padding: 0.55rem 0.75rem;
+  margin: 0 0 4px;
+  background: var(--nk-card-2);
+  border: 1px solid var(--nk-border);
+  border-radius: 8px;
+  color: var(--nk-text);
+  font: inherit;
+  font-size: 1rem;
+  text-align: start;
+  cursor: pointer;
+}
+.partner-picker-row:active { border-color: var(--nk-accent); }
+.partner-picker-row.added { opacity: 0.55; cursor: default; }
+.partner-picker-name { overflow-wrap: anywhere; }
+.partner-picker-added { font-size: 0.8rem; color: var(--nk-good); white-space: nowrap; }
+.partner-picker-empty { margin: 0.5rem 0.25rem; }
+.partner-picker-new { width: 100%; margin-top: 0.25rem; }
 .partners-add:hover { background: rgba(255, 77, 207, 0.08); }
 .partners-cap-hint {
   font-size: 0.85em;
@@ -1295,9 +1416,7 @@ input:focus {
 /* --- i18n / language pill ---------------------------------------------------- */
 .sing-card { position: relative; }
 .sing-lang-pill {
-  position: absolute;
-  top: 0.6rem;
-  right: 0.6rem;
+  flex: none;
   background: none;
   border: 1px solid var(--nk-border);
   border-radius: 999px;
@@ -1311,7 +1430,12 @@ input:focus {
   z-index: 2;
 }
 .sing-lang-pill:hover, .sing-lang-pill:active { color: var(--nk-text); border-color: var(--nk-text-dim); }
-[dir="rtl"] .sing-lang-pill { right: auto; left: 0.6rem; }
+/* Pages without the app shell (code entry, closed) still carry the pill in
+   their card — pin it to the card's corner there only. */
+.sing-enter-code .sing-lang-pill,
+.sing-closed .sing-lang-pill { position: absolute; top: 0.6rem; right: 0.6rem; }
+[dir="rtl"] .sing-enter-code .sing-lang-pill,
+[dir="rtl"] .sing-closed .sing-lang-pill { right: auto; left: 0.6rem; }
 .sing-lang-list {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1338,7 +1462,7 @@ input:focus {
   flex-wrap: wrap;
   align-items: baseline;
   gap: 0.4rem;
-  margin: 0 3.2rem 0.6rem 0;
+  margin: 0;
   font-size: 0.8rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -1376,30 +1500,19 @@ input:focus {
 .sing-change-keep { width: 100%; }
 .song-card-replaces { font-size: 0.82em; color: var(--nk-text-dim); margin-top: 3px; }
 
-/* --- Next-song bar: status wraps under the song instead of truncating -------- */
-.mysongs-next { flex: 1; }
-.mysongs-status {
-  margin-left: 0;
-  margin-top: 0.1rem;
-  font-size: 0.82rem;
-  white-space: normal;
-  overflow: visible;
-}
-
 /* --- Notification block: links keep the accent colour on the "on" line ------- */
 .notify-line a { color: var(--nk-accent); text-decoration: underline; }
 
 /* --- RTL: mirror the few places that hard-code a side ------------------------ */
 [dir="rtl"] .result-row { text-align: right; }
 [dir="rtl"] .rotation-wait { text-align: left; }
-[dir="rtl"] .mysongs-pill { text-align: right; }
+[dir="rtl"] .status-tile { text-align: right; }
+[dir="rtl"] .status-tile-chevron { transform: scaleX(-1); }
 [dir="rtl"] .sing-tab-badge { right: auto; left: calc(50% - 1.6rem); }
 
 /* --- Event footer: KJ message + venue notices ---------------------------------- */
 .sing-event-footer {
-  max-width: 480px;
-  margin: 0 auto 1rem;
-  padding: 0 1.5rem;
+  margin-bottom: 1rem;
 }
 .sing-notices {
   list-style: none;
