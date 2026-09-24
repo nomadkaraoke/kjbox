@@ -276,3 +276,13 @@ class TestRotationDuetsAndPreview:
         expect(rows.nth(0).locator(".rotation-name")).to_have_text("José & Maria")
         expect(rows.nth(0).locator('[data-testid="rotation-preview"]')).to_be_visible()
         expect(rows.nth(1).locator('[data-testid="rotation-preview"]')).to_have_count(0)
+        # The button must actually be tappable even next to a long title
+        # (a clipped song span used to swallow the tap on real phones).
+        page.route("**/sing/preview/resolve*", lambda r: r.fulfill(
+            status=404, content_type="application/json",
+            body=json.dumps({"mode": "unavailable", "reason": "Not ready to preview yet"})))
+        page.route("**/sing/lib/*", lambda r: r.fulfill(
+            status=200, content_type="application/javascript",
+            body="window.openPreview = (d) => { window.__previewed = d; };"))
+        rows.nth(0).locator('[data-testid="rotation-preview"]').click(timeout=3000)
+        page.wait_for_function("window.__previewed && window.__previewed.entry_id === 11")
