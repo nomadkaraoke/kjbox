@@ -100,6 +100,54 @@ def _rate_limit_exceeded(ip, limit, window_s, state=_rate_limit_state):
         return False
 
 
+# Singer self-service mutations (submit / cancel / change / reorder /
+# update-phone / rename) share one budget. It used to be keyed purely by client
+# IP, which on venue wifi is ONE address for the whole crowd — a group of six
+# friends signing up together could lock the bar out for five minutes. Budget
+# per device first (the SPA's localStorage device_id rides on every mutation),
+# with a much looser per-IP ceiling as the backstop against a scripted flood
+# that mints a new device_id per call.
+_DEVICE_RATE_DEFAULT = 8
+_IP_RATE_DEFAULT = 60
+
+
+def _singer_rate_limited(req, data=None):
+    """True when this request should 429. Consumes one slot on success."""
+    cfg = current_app.kj_config or {}
+    window = _safe_int(cfg.get("sing_rate_limit_window_s"), 300)
+    ip_limit = _safe_int(cfg.get("sing_rate_limit_per_ip"), _IP_RATE_DEFAULT)
+    dev_limit = _safe_int(cfg.get("sing_rate_limit_per_device"), _DEVICE_RATE_DEFAULT)
+    if data is None:
+        data = req.get_json(force=True, silent=True) or {}
+    device_id = ""
+    if isinstance(data, dict):
+        device_id = str(data.get("device_id") or "").strip()[:64]
+    ip = _client_ip(req)
+    if _rate_limit_exceeded(f"ip:{ip}", ip_limit, window):
+        return True
+    if device_id and _rate_limit_exceeded(f"dev:{device_id}", dev_limit, window):
+        return True
+    return False
+
+
+def _safe_call(fn, default=None):
+    """Call a store accessor that may not exist / may raise (older stores,
+    test fixtures); template context must never 500 the singer page."""
+    try:
+        return fn()
+    except Exception:
+        return default
+
+
+def _display_names(singer):
+    """Every first name in a rotation singer string — "José Álvarez & Maria G."
+    → "José & Maria" — so a duet partner can find themselves in the public
+    rotation instead of seeing only the lead's name."""
+    parts = [p.strip() for p in (singer or "").split("&")]
+    firsts = [p.split()[0] for p in parts if p]
+    return " & ".join(firsts)
+
+
 # --- Token gate ----------------------------------------------------------
 
 def _extract_token():
@@ -394,14 +442,22 @@ def landing():
         ), (400 if bad_code else 200)
 
     session["sing_token"] = token
+    cfg = current_app.kj_config
+    try:
+        kj_name = _tip_settings(cfg, store).get("kj_name") or ""
+    except Exception:
+        kj_name = ""
     return render_template(
         "sing.html",
         closed=False,
         token=token,
         request_id=request.args.get("r", ""),
-        vapid_public_key=current_app.kj_config.get("vapid_public_key", ""),
+        vapid_public_key=cfg.get("vapid_public_key", ""),
         make_requests_enabled=store.is_accepting_make_requests(),
         simple_mode=store.is_simple_mode(),
+        # Venue context for copy: phone-number example + branding strip.
+        sms_region=(_safe_call(store.get_sms_default_region) or "US"),
+        kj_name=kj_name,
     )
 
 
@@ -508,8 +564,13 @@ def search():
     # Lazy import avoids a circular dependency at module import time.
     from routes import unified_search
 
+    # A wider local-catalog cap than the KJ picker's 10: the grouped view ranks
+    # songs by how many versions exist, and capping the FTS rows at 10 used to
+    # truncate exactly the popular songs (10 local "Hallelujah" files for Jeff
+    # Buckley alone) that singers are looking for. The local FTS is fast.
     data = unified_search(
         query, current_app._get_current_object(), grouped=True,
+        catalog_limit=_safe_int(current_app.kj_config.get("sing_search_catalog_limit"), 60),
     )
     # Phase C — carries the KJ's current "accept make requests" flag alongside
     # the results so the empty-state triage can show/hide card 2 without a
@@ -584,6 +645,38 @@ def media_info():
     return jsonify(info)
 
 
+def _entry_previewable(entry):
+    """True when a rotation entry has a linked file present on disk."""
+    if not entry:
+        return False
+    path = entry.get("file_path")
+    if not path:
+        return False
+    try:
+        return os.path.exists(path)
+    except (TypeError, ValueError):
+        return False
+
+
+def _entry_preview_descriptor(entry_id):
+    """Build a local preview descriptor for a rotation entry, or None."""
+    try:
+        entry_id = int(entry_id)
+    except (TypeError, ValueError):
+        return None
+    rotation_mgr = getattr(current_app, "rotation", None)
+    if rotation_mgr is None:
+        return None
+    entry = rotation_mgr.store.get_entry(entry_id)
+    if not _entry_previewable(entry):
+        return None
+    return {
+        "source": "local",
+        "file_path": entry["file_path"],
+        "title": entry.get("song_artist") or "",
+    }
+
+
 @sing_bp.route("/preview/resolve", methods=["POST"])
 @require_token
 def preview_resolve():
@@ -595,8 +688,17 @@ def preview_resolve():
         return jsonify({"mode": "unavailable",
                         "reason": "Too many previews — wait a moment"}), 429
     descriptor = request.get_json(silent=True) or {}
-    if (not isinstance(descriptor, dict)
-            or descriptor.get("source") not in _SING_PREVIEW_SOURCES):
+    if not isinstance(descriptor, dict):
+        return jsonify({"mode": "unavailable", "reason": "Invalid request"}), 400
+    # "entry" — preview a song already on tonight's rotation by its entry id
+    # (My songs / Rotation tab). Resolved server-side so the file path never
+    # leaves the box; only entries with a linked, present file qualify.
+    if descriptor.get("source") == "entry":
+        descriptor = _entry_preview_descriptor(descriptor.get("entry_id"))
+        if descriptor is None:
+            return jsonify({"mode": "unavailable",
+                            "reason": "Not ready to preview yet"}), 404
+    if descriptor.get("source") not in _SING_PREVIEW_SOURCES:
         return jsonify({"mode": "unavailable", "reason": "Invalid request"}), 400
     preview = getattr(current_app, "preview", None)
     if preview is None:
@@ -761,6 +863,26 @@ def tip_info():
     })
 
 
+@sing_bp.route("/event-info", methods=["GET"])
+@require_token
+def event_info():
+    """Venue context for the singer UI footer: the KJ's free-text message and
+    the pre-built notices they've switched on (phone chargers, wifi, …)."""
+    store = getattr(current_app, "sing_store", None)
+    footer = {"message": "", "notices": []}
+    if store is not None:
+        try:
+            footer = store.get_footer_settings()
+        except Exception:
+            pass
+    settings = _tip_settings(current_app.kj_config, store)
+    return jsonify({
+        "kj_name": settings.get("kj_name") or "",
+        "footer_message": footer.get("message") or "",
+        "notices": footer.get("notices") or [],
+    })
+
+
 @sing_bp.route("/tip-claim", methods=["POST"])
 @require_token
 def tip_claim():
@@ -823,13 +945,10 @@ def submit():
     cfg = current_app.kj_config
     store = current_app.sing_store
 
-    limit = _safe_int(cfg.get("sing_rate_limit_per_ip"), 5)
-    window = _safe_int(cfg.get("sing_rate_limit_window_s"), 300)
-    ip = _client_ip(request)
-    if _rate_limit_exceeded(ip, limit, window):
+    data = request.get_json(force=True, silent=True) or {}
+    if _singer_rate_limited(request, data):
         return jsonify({"error": "rate_limited"}), 429
 
-    data = request.get_json(force=True, silent=True) or {}
     singer_name = (data.get("singer_name") or "").strip()
     device_id = (data.get("device_id") or "").strip()[:64]
     phone = (data.get("phone") or "").strip()
@@ -1065,8 +1184,13 @@ def rotation():
         out.append({
             "position": est["position"],
             "first_name": singer.split()[0] if singer else "",
+            "display_name": _display_names(singer),
             "song_artist": entry.get("song_artist") or "",
             "status": entry.get("status") or "",
+            # Singers can ▶ preview any song that's already on the box (the
+            # path itself is never exposed — see /preview/resolve "entry").
+            "entry_id": entry.get("id"),
+            "previewable": _entry_previewable(entry),
             "now_singing": est["now_singing"],
             "expected_s": est["expected_s"],
             "range_low_s": est["range_low_s"],
@@ -1367,6 +1491,8 @@ def my_requests():
                 item["estimate"] = compute_estimate(
                     entries, linked, current_app.kj_config,
                 )
+                active_entry = next((e for e in entries if e["id"] == linked), None)
+                item["previewable"] = _entry_previewable(active_entry)
             elif rotation_mgr is not None:
                 # Not in the active queue — check whether it was sung (Done) or
                 # the singer left, so the done screen files it under "Already
@@ -1394,10 +1520,7 @@ def cancel_request(req_id):
     if store is None:
         return jsonify({"error": "not_configured"}), 503
 
-    cfg = current_app.kj_config
-    limit = _safe_int(cfg.get("sing_rate_limit_per_ip"), 5)
-    window = _safe_int(cfg.get("sing_rate_limit_window_s"), 300)
-    if _rate_limit_exceeded(_client_ip(request), limit, window):
+    if _singer_rate_limited(request):
         return jsonify({"error": "rate_limited"}), 429
 
     token = _extract_token()
@@ -1451,12 +1574,7 @@ def change_request(req_id):
     store = getattr(current_app, "sing_store", None)
     if store is None:
         return jsonify({"error": "not_configured"}), 503
-    cfg = current_app.kj_config
-    if _rate_limit_exceeded(
-        _client_ip(request),
-        _safe_int(cfg.get("sing_rate_limit_per_ip"), 5),
-        _safe_int(cfg.get("sing_rate_limit_window_s"), 300),
-    ):
+    if _singer_rate_limited(request):
         return jsonify({"error": "rate_limited"}), 429
     token = _extract_token()
     if not token or not _is_token_valid(store, token):
@@ -1536,12 +1654,7 @@ def reorder_requests():
     store = getattr(current_app, "sing_store", None)
     if store is None:
         return jsonify({"error": "not_configured"}), 503
-    cfg = current_app.kj_config
-    if _rate_limit_exceeded(
-        _client_ip(request),
-        _safe_int(cfg.get("sing_rate_limit_per_ip"), 5),
-        _safe_int(cfg.get("sing_rate_limit_window_s"), 300),
-    ):
+    if _singer_rate_limited(request):
         return jsonify({"error": "rate_limited"}), 429
     token = _extract_token()
     if not token or not _is_token_valid(store, token):
@@ -1626,12 +1739,7 @@ def update_phone():
     if store is None:
         return jsonify({"error": "not_configured"}), 503
 
-    cfg = current_app.kj_config
-    if _rate_limit_exceeded(
-        _client_ip(request),
-        _safe_int(cfg.get("sing_rate_limit_per_ip"), 5),
-        _safe_int(cfg.get("sing_rate_limit_window_s"), 300),
-    ):
+    if _singer_rate_limited(request):
         return jsonify({"error": "rate_limited"}), 429
 
     token = _extract_token()
@@ -1684,12 +1792,7 @@ def rename_me():
     if store is None:
         return jsonify({"error": "not_configured"}), 503
 
-    cfg = current_app.kj_config
-    if _rate_limit_exceeded(
-        _client_ip(request),
-        _safe_int(cfg.get("sing_rate_limit_per_ip"), 5),
-        _safe_int(cfg.get("sing_rate_limit_window_s"), 300),
-    ):
+    if _singer_rate_limited(request):
         return jsonify({"error": "rate_limited"}), 429
 
     token = _extract_token()
@@ -1858,6 +1961,7 @@ def _now_view(entry):
     singer = entry.get("singer") or ""
     return {
         "first_name": singer.split()[0] if singer else "",
+        "display_name": _display_names(singer),
         "song_artist": entry.get("song_artist") or "",
     }
 
@@ -1874,6 +1978,9 @@ def _public_request_view(req):
         "created_at": req["created_at"],
         "linked_entry_id": req.get("linked_entry_id"),
         "additional_singers": req.get("additional_singers"),
+        # A pending "change" names the request it will replace so the singer's
+        # list can say "replaces X" instead of showing two unrelated songs.
+        "supersedes_request_id": req.get("supersedes_request_id"),
     }
     # Tip claims: surface the claimed amount/method so the Tip tab can show
     # "$25 via Venmo — waiting for KJ" without exposing raw source_meta.

@@ -4710,3 +4710,15 @@ li.media-no-audio {
     .rotation-entry.rotation-cancelled { animation: none; background: rgba(220, 38, 38, 0.14); }
     .rotation-entry.rotation-cancelled-leaving { animation-duration: 0.15s; }
 }
+
+/* Public Request Form modal — footer & venue notices section */
+.sing-footer-notices {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.35rem;
+  margin: 0.25rem 0 0.5rem;
+}
+.sing-footer-notices label { display: flex; align-items: flex-start; gap: 0.45rem; font-size: 0.9rem; line-height: 1.35; }
+.sing-footer-notices input { margin-top: 0.2rem; flex: 0 0 auto; }
+.sing-footer-message-label { display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.85rem; }
+.sing-footer-message-label textarea { width: 100%; resize: vertical; font-family: inherit; }

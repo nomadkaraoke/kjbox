@@ -171,3 +171,34 @@ kj-controller/
       test_search_routes.py # Search, catalog, ZIP playback route tests
       test_rotation_routes.py # Rotation API route tests
 ```
+
+## Singer UI localisation (i18n)
+
+The public `/sing` page is fully localised (33 languages) with the same pipeline as
+karaoke-gen. **Never hardcode a user-facing string in `static-sing/sing.js` or
+`templates/sing.html`** — add it to `static-sing/messages/en.json` and use `t("key")`,
+`tn("key", count)` (CLDR plural forms under `key.one` / `key.other`) or, for
+server-rendered markup, `data-i18n="key"` / `data-i18n-placeholder` / `data-i18n-aria-label`.
+`{name}`-style placeholders are interpolated; brand names live in `scripts/glossary.json`
+so translators never touch them.
+
+```bash
+# Regenerate every locale after editing en.json (incremental, uses the shared GCS cache):
+python scripts/translate.py --messages-dir kj-controller/static-sing/messages --target all
+# Just one locale / see what would be sent to Gemini:
+python scripts/translate.py --messages-dir kj-controller/static-sing/messages --target es --dry-run
+# Checks CI runs (.github/workflows/i18n.yml):
+python scripts/validate-translations.py --messages-dir kj-controller/static-sing/messages
+python scripts/check-i18n-keys.py
+```
+
+Requires GCP ADC (`gcloud auth application-default login`) for Gemini via Vertex AI and the
+`nomadkaraoke-translation-cache` bucket. The pre-commit hook (`git config core.hooksPath
+.githooks`) re-runs the pipeline automatically when `en.json` is staged; the workspace-level
+`scripts/translate-all.sh` covers this directory too.
+
+Runtime (`static-sing/i18n.js`): locale is chosen from `?lang=xx` → `localStorage.sing_lang`
+→ `navigator.languages` → English. English is always loaded as the fallback so a missing key
+never renders raw. `ar`/`he` flip `<html dir="rtl">`. The 🌐 pill on every card opens the
+picker; switching re-fetches messages and re-renders without a reload. Playwright tests can
+call `window.__sing_setLocale("es")` and stub `**/static/messages/es.json*`.

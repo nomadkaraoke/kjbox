@@ -260,7 +260,7 @@ class TestConfirmHardening:
         expect(page.locator(".confirm-artist")).to_have_text("Queen")
         expect(page.locator(".confirm-source")).to_have_text("In our library")
         expect(page.locator(".confirm-searched")).to_contain_text("bohemian")
-        expect(page.locator(".submit-btn")).to_have_text("Yes — send to the KJ")
+        expect(page.locator(".submit-btn")).to_have_text("Yes — send it in")
         expect(page.get_by_role("button", name="← Pick a different song")).to_be_visible()
 
 
@@ -414,7 +414,7 @@ class TestChangeReorderControls:
         assert [it["id"] for it in body["items"]] == [12, 11]
         assert {it["edit_token"] for it in body["items"]} == {"tok11", "tok12"}
         # Mode exits with a confirmation notice.
-        expect(page.locator(".reorder-notice")).to_contain_text("KJ will confirm")
+        expect(page.locator(".reorder-notice")).to_contain_text("host will confirm")
 
     def test_reorder_cancel_restores_list(self, page, live_server, live_token):
         reqs = [
@@ -585,7 +585,7 @@ class TestMySongsPersistence:
         page.locator('[data-testid="tab-rotation"]').click()
         bar = page.locator('[data-testid="mysongs-bar"]')
         expect(bar).to_be_visible()
-        expect(bar).to_contain_text("#4 · ~1h 15m–1h 30m")
+        expect(bar).to_contain_text("#4 in line · ~1h 15m–1h 30m")
 
     def test_stale_night_prunes_and_stays_on_boot_screen(self, page, live_server, live_token):
         # localStorage still holds last night's ids, but the server night-scopes
@@ -708,9 +708,9 @@ class TestVersionRowEnrichment:
         expect(page.locator(".result-row")).to_be_visible()
         page.locator(".sing-versions-toggle").click()
 
-    def test_cta_wording_is_auto_select(self, page, live_server, live_token):
+    def test_cta_wording_is_request_this_song(self, page, live_server, live_token):
         self._open_versions(page, live_server, live_token)
-        expect(page.locator(".btn-primary-cta")).to_have_text("Auto-select best version →")
+        expect(page.locator(".btn-primary-cta")).to_have_text("Request this song →")
 
     def test_class_and_format_pills_render(self, page, live_server, live_token):
         self._open_versions(page, live_server, live_token)
@@ -932,7 +932,7 @@ class TestTipTab:
     def test_tab_appears_and_opens_tip_page(self, page, live_server, live_token):
         self._login_with_tips(page, live_server, live_token)
         page.locator('[data-testid="tab-tip"]').click()
-        expect(page.locator("h2:has-text('Tip the KJ')")).to_be_visible()
+        expect(page.locator("h2:has-text('Tip the host')")).to_be_visible()
         expect(page.locator(".sing-tip-perk")).to_contain_text("$20+")
         link = page.locator(".sing-tip-method")
         # Threshold ($20) is the default chosen amount; venmo deep-links it.
@@ -987,7 +987,7 @@ class TestSongHistoryInspiration:
         # Collapsed by default — the body only renders after expanding.
         expect(page.locator(".sing-history-row")).to_have_count(0)
         page.locator(".sing-history-summary").click()
-        expect(page.locator(".sing-history-body h4").nth(0)).to_have_text("You've sung before")
+        expect(page.locator(".sing-history-body h4").nth(0)).to_have_text("You've sung here before")
         expect(page.locator(".sing-history-row")).to_have_count(2)
         expect(page.locator(".sing-history-row").nth(0)).to_contain_text("▶ 3")
         # Tapping a row runs the search for that song.
