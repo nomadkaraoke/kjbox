@@ -194,6 +194,8 @@ const state = {
   step: null,   // resolved at bootstrap: hash > legacy ?r= > _bootStep()
   name: LS.get("sing_name"),
   phone: LS.get("sing_phone"),
+  // Social-media photo/video consent: "yes" | "no" | "" (not asked yet).
+  photoConsent: LS.get("sing_photo_consent"),
   query: "",
   selected: null,   // { source_type, source_ref, song_artist, song_title, label }
   makeArtist: "",
@@ -1111,8 +1113,8 @@ function renderTip() {
 function switchIdentity() {
   forgetIdentity();
   rotateDeviceId();
-  state.name = state.phone = "";
-  LS.set("sing_name", ""); LS.set("sing_phone", "");
+  state.name = state.phone = state.photoConsent = "";
+  LS.set("sing_name", ""); LS.set("sing_phone", ""); LS.set("sing_photo_consent", "");
   state._identityDraft = null;
   state._identityMode = "setup";
   state._identityReturnStep = "search";
@@ -1564,6 +1566,62 @@ async function loadEventInfo() {
     state.eventInfo = null;
   }
   renderEventFooter();
+  // My songs' consent picker depends on event info — redraw if it's showing.
+  if (askPhotoConsent() && document.getElementById("push-optin")) maybeShowPushPrompt();
+}
+
+// Social link icons (simple-icons paths, 24×24). Website/email use generic
+// glyphs. Order follows the server's FOOTER_SOCIAL_KEYS.
+const SOCIAL_ICONS = {
+  instagram: "M7.03.084c-1.277.06-2.149.264-2.91.563a5.874 5.874 0 0 0-2.124 1.388 5.878 5.878 0 0 0-1.38 2.127C.321 4.926.12 5.8.064 7.076.008 8.354-.005 8.764.001 12.023c.007 3.259.021 3.667.083 4.947.061 1.277.264 2.149.563 2.911.308.789.72 1.457 1.388 2.123a5.872 5.872 0 0 0 2.129 1.38c.763.295 1.636.496 2.913.552 1.278.056 1.689.069 4.947.063 3.257-.007 3.668-.021 4.947-.082 1.28-.06 2.147-.265 2.91-.563a5.881 5.881 0 0 0 2.123-1.388 5.881 5.881 0 0 0 1.38-2.129c.295-.763.496-1.636.551-2.912.056-1.28.07-1.69.063-4.948-.006-3.258-.02-3.667-.081-4.947-.06-1.28-.264-2.148-.564-2.911a5.892 5.892 0 0 0-1.387-2.123 5.857 5.857 0 0 0-2.128-1.38C19.074.322 18.202.12 16.924.066 15.647.009 15.236-.006 11.977 0 8.718.008 8.31.021 7.03.084m.14 21.693c-1.17-.05-1.805-.245-2.228-.408a3.736 3.736 0 0 1-1.382-.895 3.695 3.695 0 0 1-.9-1.378c-.165-.423-.363-1.058-.417-2.228-.06-1.264-.072-1.644-.08-4.848-.006-3.204.006-3.583.061-4.848.05-1.169.246-1.805.408-2.228.216-.561.477-.96.895-1.382a3.705 3.705 0 0 1 1.379-.9c.423-.165 1.057-.361 2.227-.417 1.265-.06 1.644-.072 4.848-.08 3.203-.006 3.583.006 4.85.062 1.168.05 1.804.244 2.227.408.56.216.96.475 1.382.895.421.42.681.817.9 1.378.165.422.362 1.056.417 2.227.06 1.265.074 1.645.08 4.848.005 3.203-.006 3.583-.061 4.848-.051 1.17-.245 1.805-.408 2.23-.216.56-.477.96-.896 1.38a3.705 3.705 0 0 1-1.378.9c-.422.165-1.058.362-2.226.418-1.266.06-1.645.072-4.85.079-3.204.007-3.582-.006-4.848-.06m9.783-16.192a1.44 1.44 0 1 0 1.437-1.442 1.44 1.44 0 0 0-1.437 1.442M5.839 12.012a6.161 6.161 0 1 0 12.323-.024 6.162 6.162 0 0 0-12.323.024M8 12.008A4 4 0 1 1 12.008 16 4 4 0 0 1 8 12.008",
+  facebook: "M9.101 23.691v-7.98H6.627v-3.667h2.474v-1.58c0-4.085 1.848-5.978 5.858-5.978.401 0 .955.042 1.468.103a8.68 8.68 0 0 1 1.141.195v3.325a8.623 8.623 0 0 0-.653-.036 26.805 26.805 0 0 0-.733-.009c-.707 0-1.259.096-1.675.309a1.686 1.686 0 0 0-.679.622c-.258.42-.374.995-.374 1.752v1.297h3.919l-.386 2.103-.287 1.564h-3.246v8.245C19.396 23.238 24 18.179 24 12.044c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.628 3.874 10.35 9.101 11.647Z",
+  tiktok: "M12.525.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.05-2.89-.35-4.2-.97-.57-.26-1.1-.59-1.62-.93-.01 2.92.01 5.84-.02 8.75-.08 1.4-.54 2.79-1.35 3.94-1.31 1.92-3.58 3.17-5.91 3.21-1.43.08-2.86-.31-4.08-1.03-2.02-1.19-3.44-3.37-3.65-5.71-.02-.5-.03-1-.01-1.49.18-1.9 1.12-3.72 2.58-4.96 1.66-1.44 3.98-2.13 6.15-1.72.02 1.48-.04 2.96-.04 4.44-.99-.32-2.15-.23-3.02.37-.63.41-1.11 1.04-1.36 1.75-.21.51-.15 1.07-.14 1.61.24 1.64 1.82 3.02 3.5 2.87 1.12-.01 2.19-.66 2.77-1.61.19-.33.4-.67.41-1.06.1-1.79.06-3.57.07-5.36.01-4.03-.01-8.05.02-12.07z",
+  youtube: "M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z",
+  x: "M18.901 1.153h3.68l-8.04 9.19L24 22.846h-7.406l-5.8-7.584-6.638 7.584H.474l8.6-9.83L0 1.154h7.594l5.243 6.932ZM17.61 20.644h2.039L6.486 3.24H4.298Z",
+  website: "M12 0a12 12 0 1 0 0 24 12 12 0 0 0 0-24Zm7.93 7h-3.3a18.3 18.3 0 0 0-1.6-4.6A10.03 10.03 0 0 1 19.93 7ZM12 2.05c.9 1.3 1.64 2.97 2.1 4.95H9.9c.46-1.98 1.2-3.65 2.1-4.95ZM2.26 14a10.1 10.1 0 0 1 0-4h3.66a19 19 0 0 0 0 4Zm.81 3h3.3a18.3 18.3 0 0 0 1.6 4.6A10.03 10.03 0 0 1 3.07 17Zm3.3-10h-3.3a10.03 10.03 0 0 1 4.9-4.6A18.3 18.3 0 0 0 6.37 7ZM12 21.95c-.9-1.3-1.64-2.97-2.1-4.95h4.2c-.46 1.98-1.2 3.65-2.1 4.95ZM14.56 14H9.44a17 17 0 0 1 0-4h5.12a17 17 0 0 1 0 4Zm.47 7.6a18.3 18.3 0 0 0 1.6-4.6h3.3a10.03 10.03 0 0 1-4.9 4.6ZM18.08 14a19 19 0 0 0 0-4h3.66a10.1 10.1 0 0 1 0 4Z",
+  email: "M2 4h20a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Zm0 2v.51l10 6.25 10-6.25V6H2Zm20 2.87-9.47 5.92a1 1 0 0 1-1.06 0L2 8.87V18h20V8.87Z",
+};
+const SOCIAL_ORDER = ["instagram", "facebook", "tiktok", "youtube", "x", "website", "email"];
+const SOCIAL_NAMES = { instagram: "Instagram", facebook: "Facebook", tiktok: "TikTok", youtube: "YouTube", x: "X" };
+
+function _socialIcon(key) {
+  const NS = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(NS, "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("aria-hidden", "true");
+  svg.setAttribute("focusable", "false");
+  const path = document.createElementNS(NS, "path");
+  path.setAttribute("d", SOCIAL_ICONS[key]);
+  path.setAttribute("fill", "currentColor");
+  svg.appendChild(path);
+  return svg;
+}
+
+function renderSocialLinks(social) {
+  const links = [];
+  for (const key of SOCIAL_ORDER) {
+    const val = social && social[key];
+    if (!val || typeof val !== "string") continue;
+    // Defence in depth — the server already validates, but this lands in href.
+    if (key !== "email" && !/^https?:\/\//i.test(val)) continue;
+    const href = key === "email" ? `mailto:${val}` : val;
+    const label = SOCIAL_NAMES[key] || t(`footer.${key}`);
+    const a = el("a", {
+      class: `sing-social-link sing-social-${key}`, href,
+      target: key === "email" ? null : "_blank",
+      rel: key === "email" ? null : "noopener noreferrer",
+      title: key === "email" ? val : label,
+      "aria-label": key === "email" ? `${label}: ${val}` : label,
+      "data-social": key,
+    });
+    a.appendChild(_socialIcon(key));
+    links.push(a);
+  }
+  if (!links.length) return null;
+  return el("div", { class: "sing-social", "data-testid": "footer-social" },
+    el("div", { class: "sing-social-label" }, t("footer.followUs")),
+    el("div", { class: "sing-social-links" }, ...links),
+  );
 }
 
 function renderEventFooter() {
@@ -1573,13 +1631,14 @@ function renderEventFooter() {
   slot.innerHTML = "";
   const notices = (info && Array.isArray(info.notices)) ? info.notices : [];
   const message = (info && info.footer_message) || "";
+  const socialEl = renderSocialLinks(info && info.social);
   const lines = [];
   for (const key of notices) {
     const k = `notices.${key}`;
     const text = t(k);
     if (text && text !== k) lines.push(el("li", { class: "sing-notice", "data-notice": key }, text));
   }
-  if (!lines.length && !message) { slot.hidden = true; return; }
+  if (!lines.length && !message && !socialEl) { slot.hidden = true; return; }
   if (lines.length) slot.appendChild(el("ul", { class: "sing-notices" }, ...lines));
   if (message) {
     slot.appendChild(el("div", { class: "sing-footer-message", "data-testid": "footer-message" },
@@ -1587,6 +1646,7 @@ function renderEventFooter() {
       el("div", { class: "sing-footer-message-body" }, message),
     ));
   }
+  if (socialEl) slot.appendChild(socialEl);
   slot.hidden = false;
 }
 
@@ -2308,6 +2368,7 @@ function renderConfirm() {
         source_meta: state.selected.source_meta || null,
       };
       if (cleaned.length > 0) payload.additional_singers = cleaned;
+      if (askPhotoConsent() && state.photoConsent) payload.photo_consent = state.photoConsent;
 
       const data = await submit(payload);
       state.request = data.request;
@@ -2552,6 +2613,9 @@ function renderConfirm() {
       state.phone
         ? t("confirm.detailsWithPhone", { name: state.name, phone: state.phone })
         : t("confirm.details", { name: state.name })),
+    // Asked once per device (then changeable from My songs); optional.
+    !isChange && askPhotoConsent() && !state.photoConsent
+      ? photoConsentPicker((v) => { setPhotoConsentLocal(v); }) : null,
     // Partners belong to the original request — a swap keeps them as they were.
     isChange ? null : renderPartnersSection(),
     el("div", { class: "row confirm-actions" },
@@ -3493,6 +3557,78 @@ function maybeShowPushPrompt() {
   else if (smsOn) summary = t("notify.summarySms");
   else summary = t("notify.summaryNone");
   container.appendChild(el("p", { class: "hint notify-summary" }, summary));
+
+  // --- Social-media photo consent (only when the host asks) ---
+  if (askPhotoConsent()) {
+    const status = el("p", { class: "hint photo-consent-saved", "aria-live": "polite" }, "");
+    container.appendChild(photoConsentPicker(async (v) => {
+      const prev = state.photoConsent;
+      setPhotoConsentLocal(v);
+      try {
+        await savePhotoConsent(v);
+        status.textContent = t("photoConsent.saved");
+      } catch (e) {
+        setPhotoConsentLocal(prev);
+        status.textContent = e && e.status === 429 ? t("common.tooManyChanges") : t("photoConsent.saveFailed");
+      }
+    }, status));
+  }
+}
+
+// --- Social-media photo/video consent ----------------------------------------
+// The host can ask singers whether photos/videos of them may be posted on the
+// venue's social media. The device remembers the answer and sends it with each
+// request; the KJ sees 📷 / crossed-out 📷 beside the name in the rotation.
+
+function askPhotoConsent() {
+  return !!(state.eventInfo && state.eventInfo.ask_photo_consent);
+}
+
+function setPhotoConsentLocal(v) {
+  state.photoConsent = v === "yes" || v === "no" ? v : "";
+  LS.set("sing_photo_consent", state.photoConsent);
+}
+
+async function savePhotoConsent(consent) {
+  const items = [];
+  const store = _readMyRequestStore();
+  if (store && store.token === TOKEN && Array.isArray(store.ids)) {
+    for (const id of store.ids) {
+      const tok = store.tokens && store.tokens[String(id)];
+      if (tok) items.push({ id, edit_token: tok });
+    }
+  }
+  await fetchJson(`${BASE}/photo-consent`, {
+    method: "POST",
+    body: JSON.stringify({ consent, items: items.slice(-MY_REQUESTS_MAX) }),
+  });
+}
+
+// Two-button yes/no picker. `onPick(value)` runs on tap; the picker re-marks
+// itself so the choice is visible immediately. `extra` is appended below.
+function photoConsentPicker(onPick, extra) {
+  const wrap = el("div", { class: "photo-consent", "data-testid": "photo-consent" });
+  const mark = () => {
+    for (const b of wrap.querySelectorAll("button[data-consent]")) {
+      const on = b.dataset.consent === state.photoConsent;
+      b.classList.toggle("selected", on);
+      b.setAttribute("aria-pressed", on ? "true" : "false");
+    }
+  };
+  const btn = (value, label) => el("button", {
+    type: "button", class: "btn ghost photo-consent-btn", "data-consent": value,
+    "data-testid": `photo-consent-${value}`,
+    onclick: () => { onPick(value); mark(); },
+  }, label);
+  wrap.appendChild(el("p", { class: "photo-consent-question" }, t("photoConsent.question")));
+  wrap.appendChild(el("div", { class: "row photo-consent-choices" },
+    btn("yes", t("photoConsent.yes")),
+    btn("no", t("photoConsent.no")),
+  ));
+  wrap.appendChild(el("p", { class: "hint" }, t("photoConsent.hint")));
+  if (extra) wrap.appendChild(extra);
+  mark();
+  return wrap;
 }
 
 // --- Rules footer (Rotation tab only) --------------------------------------

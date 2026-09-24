@@ -2,6 +2,30 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-09-24 - Feature: Footer social links + singer social-media photo consent (v0.112.0)
+
+Andrew asked for social links in the singer page footer, and for singers to say whether
+photos/videos of them may be posted on social media, shown beside their name in the
+KJ rotation.
+
+- **Social links.** The KJ Public Request Form modal → "📣 Footer & venue notices"
+  gained Instagram / Facebook / TikTok / YouTube / X / Website / Email fields. They
+  render as a round icon row ("Follow us") at the bottom of every singer screen.
+  Validated server-side (http(s) only; email → `mailto:`). A failed save now alerts
+  with the server's reason.
+- **Photo consent.** A new "📷 Ask singers whether they're OK with photos/videos…"
+  toggle in the same section. When on, the confirm step asks once per device
+  (optional). The device remembers the answer and sends it with each request. My songs
+  lets the singer change it.
+- **KJ rotation marker.** 📷 on a green tint = OK to post; 📷 struck through in red =
+  please don't. Unknown shows as a faint camera on row hover (always faint on touch
+  screens). Click to cycle unknown → OK → no → unknown. Duet rows get a marker per
+  singer.
+- Storage: night-scoped `singer_photo_consent` table keyed on the folded singer name.
+  It carries across KJ renames/merges and singer self-renames ("no" wins a conflict).
+- New singer strings are translated into all 32 locales.
+- Tests: `tests/test_footer_social_photo_consent.py` (29) +
+  `tests/e2e/test_footer_social_photo_consent.py` (7).
 ## 2026-09-24 - Fix: Cancelled / host-removed songs no longer linger on My songs (v0.111.1)
 
 Report: a cancelled song stayed on the singer's list, struck through, reading "Added to the

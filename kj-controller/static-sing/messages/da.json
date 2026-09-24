@@ -408,6 +408,17 @@
     "photos": "📸 Billeder og videoer er velkomne."
   },
   "footer": {
-    "fromHost": "En besked fra din vært"
+    "fromHost": "En besked fra din vært",
+    "followUs": "Følg os",
+    "website": "Hjemmeside",
+    "email": "E-mail"
+  },
+  "photoConsent": {
+    "question": "📷 Er det i orden, at billeder eller videoer af dig, der synger i aften, deles på sociale medier?",
+    "yes": "👍 Ja, det er fint",
+    "no": "🚫 Nej tak",
+    "hint": "Din vært ser dit valg ved siden af dit navn. Du kan altid ændre det under Mine sange.",
+    "saved": "✓ Gemt — din vært kan se dit valg.",
+    "saveFailed": "Kunne ikke gemme — prøv igen."
   }
 }

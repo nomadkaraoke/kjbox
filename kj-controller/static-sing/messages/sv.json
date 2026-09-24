@@ -408,6 +408,17 @@
     "photos": "📸 Foton och videor är välkomna."
   },
   "footer": {
-    "fromHost": "Ett meddelande från din värd"
+    "fromHost": "Ett meddelande från din värd",
+    "followUs": "Följ oss",
+    "website": "Hemsida",
+    "email": "E-post"
+  },
+  "photoConsent": {
+    "question": "📷 Är det okej om foton eller videor på när du sjunger ikväll läggs upp på sociala medier?",
+    "yes": "👍 Ja, det går bra",
+    "no": "🚫 Helst inte",
+    "hint": "Din värd ser ditt val bredvid ditt namn. Du kan ändra det när som helst under Mina låtar.",
+    "saved": "✓ Sparat — din värd kan se ditt val.",
+    "saveFailed": "Det gick inte att spara — försök igen."
   }
 }

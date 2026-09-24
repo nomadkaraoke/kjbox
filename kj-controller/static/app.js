@@ -5615,6 +5615,48 @@ async function autoRemoveCancelledEntry(entryId) {
     }
 }
 
+// Social-media photo/video consent marker beside a singer's name. The singer
+// chooses on their phone (or the KJ sets it here); 📷 = OK to post, crossed-out
+// 📷 = please don't. Unknown shows only as a faint camera on row hover. Click
+// cycles unknown → OK → no photos → unknown (sets it for the singer, not the row).
+const PHOTO_CONSENT_NEXT = { '': 'yes', yes: 'no', no: null };
+
+function photoConsentMarker(entry, singerName) {
+    const consent = (entry.photo_consent || {})[singerName] || '';
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'rotation-photo-consent photo-consent-' + (consent || 'unknown');
+    btn.dataset.consent = consent || 'unknown';
+    btn.textContent = '\ud83d\udcf7';   // 📷 (the 'no' state is struck through in CSS)
+    btn.title = consent === 'yes'
+        ? singerName + ' is happy to appear in photos/videos on social media (click to change)'
+        : consent === 'no'
+            ? singerName + ' does NOT want photos/videos of them posted on social media (click to change)'
+            : 'Photo/video consent not given yet for ' + singerName + ' (click to set)';
+    btn.setAttribute('aria-label', btn.title);
+    btn.onclick = (ev) => {
+        ev.stopPropagation();
+        setSingerPhotoConsent(singerName, PHOTO_CONSENT_NEXT[consent]);
+    };
+    return btn;
+}
+
+async function setSingerPhotoConsent(singer, consent) {
+    showRotationIndicator('spin');
+    try {
+        const response = await fetch('/rotation/singer/photo-consent', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ singer, consent }),
+        });
+        const data = await response.json();
+        if (data.entries) { rotationData = data.entries; renderRotation(rotationData); }
+        showRotationIndicator(response.ok ? 'success' : 'error');
+    } catch (e) {
+        showRotationIndicator('error');
+    }
+}
+
 function renderRotation(entries) {
     const list = document.getElementById('rotation-list');
     if (!list) return;
@@ -5753,6 +5795,7 @@ function renderRotation(entries) {
                 sp.title = 'Click to copy \u2022 Shift+click to edit';
                 sp.onclick = (ev) => { if (!ev.shiftKey) copyRotationText(sp); };
                 info.appendChild(sp);
+                info.appendChild(photoConsentMarker(entry, s));
             });
         } else {
             // Single singer or legacy: plain text (unchanged)
@@ -5762,6 +5805,7 @@ function renderRotation(entries) {
             name.title = 'Click to copy \u2022 Shift+click to edit';
             name.onclick = (ev) => { if (!ev.shiftKey) copyRotationText(name); };
             info.appendChild(name);
+            info.appendChild(photoConsentMarker(entry, entry.singer));
         }
         // Two compact "singer happiness" pills. Colours consistently mean
         // green = good / red = bad from the SINGER's perspective (how content
@@ -9608,12 +9652,21 @@ const SingRequests = (() => {
         });
         const msgEl = document.getElementById('sing-footer-message');
         if (msgEl && document.activeElement !== msgEl) msgEl.value = fs.message || '';
+        const social = fs.social || {};
+        document.querySelectorAll('#sing-footer-social input[data-social]').forEach((inp) => {
+            if (document.activeElement !== inp) inp.value = social[inp.dataset.social] || '';
+        });
+        const askEl = document.getElementById('sing-footer-ask-photo-consent');
+        if (askEl) askEl.checked = !!fs.ask_photo_consent;
         const footerStatus = document.getElementById('sing-footer-status');
         if (footerStatus) {
             const n = (fs.notices || []).length;
             const parts = [];
             if (n) parts.push(`${n} notice${n === 1 ? '' : 's'}`);
             if (fs.message) parts.push('custom message');
+            const nLinks = Object.keys(social).length;
+            if (nLinks) parts.push(`${nLinks} link${nLinks === 1 ? '' : 's'}`);
+            if (fs.ask_photo_consent) parts.push('photo consent');
             footerStatus.textContent = parts.length ? `✓ ${parts.join(' + ')}` : 'off';
             footerStatus.className = 'sing-sms-status ' +
                 (parts.length ? 'sing-sms-status-ok' : 'sing-sms-status-off');
@@ -9633,7 +9686,13 @@ const SingRequests = (() => {
             alert('Config update failed');
             return false;
         }
-        if (!resp.ok) { alert('Config update failed'); return false; }
+        if (!resp.ok) {
+            // Surface the server's validation message (e.g. a bad social link).
+            let msg = '';
+            try { msg = (await resp.json()).error || ''; } catch (e) { /* non-JSON */ }
+            alert('Config update failed' + (msg ? ': ' + msg : ''));
+            return false;
+        }
         return true;
     }
 
@@ -9804,9 +9863,16 @@ const SingRequests = (() => {
         const notices = [...document.querySelectorAll('#sing-footer-notices input[data-notice]:checked')]
             .map((box) => box.dataset.notice);
         const msgEl = document.getElementById('sing-footer-message');
+        const social = {};
+        document.querySelectorAll('#sing-footer-social input[data-social]').forEach((inp) => {
+            social[inp.dataset.social] = inp.value.trim();
+        });
+        const askEl = document.getElementById('sing-footer-ask-photo-consent');
         const body = { footer_settings: {
             message: msgEl ? msgEl.value.trim() : '',
             notices,
+            social,
+            ask_photo_consent: !!(askEl && askEl.checked),
         } };
         if (await postConfig(body)) await fetchConfig();
     }

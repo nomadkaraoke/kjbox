@@ -408,6 +408,17 @@
     "photos": "📸 Fotografiile și videoclipurile sunt binevenite."
   },
   "footer": {
-    "fromHost": "Un mesaj de la gazda ta"
+    "fromHost": "Un mesaj de la gazda ta",
+    "followUs": "Urmărește-ne",
+    "website": "Website",
+    "email": "Email"
+  },
+  "photoConsent": {
+    "question": "📷 E în regulă dacă pozele sau videoclipurile cu tine cântând în seara asta sunt postate pe rețelele de socializare?",
+    "yes": "👍 Da, e în regulă",
+    "no": "🚫 Te rog, nu",
+    "hint": "Gazda îți vede alegerea lângă nume. O poți schimba oricând din Melodiile mele.",
+    "saved": "✓ Salvat — gazda îți poate vedea alegerea.",
+    "saveFailed": "Nu s-a putut salva — te rog încearcă din nou."
   }
 }

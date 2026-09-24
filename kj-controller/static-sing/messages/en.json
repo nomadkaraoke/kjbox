@@ -408,6 +408,17 @@
     "photos": "📸 Photos and videos are welcome."
   },
   "footer": {
-    "fromHost": "A note from your host"
+    "fromHost": "A note from your host",
+    "followUs": "Follow us",
+    "website": "Website",
+    "email": "Email"
+  },
+  "photoConsent": {
+    "question": "📷 Is it OK if photos or videos of you singing tonight are posted on social media?",
+    "yes": "👍 Yes, that's fine",
+    "no": "🚫 Please don't",
+    "hint": "Your host sees your choice next to your name. You can change it any time from My songs.",
+    "saved": "✓ Saved — your host can see your choice.",
+    "saveFailed": "Couldn't save that — please try again."
   }
 }

@@ -408,6 +408,17 @@
     "photos": "📸 Fotókat és videókat nyugodtan készíthetsz."
   },
   "footer": {
-    "fromHost": "Üzenet a házigazdától"
+    "fromHost": "Üzenet a házigazdától",
+    "followUs": "Kövess minket",
+    "website": "Weboldal",
+    "email": "E-mail"
+  },
+  "photoConsent": {
+    "question": "📷 Rendben van, ha a ma esti éneklésedről készült fotók vagy videók kikerülnek a közösségi médiába?",
+    "yes": "👍 Igen, rendben van",
+    "no": "🚫 Kérlek, ne",
+    "hint": "A házigazdád látja a választásodat a neved mellett. Bármikor megváltoztathatod a Dalaim menüben.",
+    "saved": "✓ Mentve — a házigazdád látja a választásodat.",
+    "saveFailed": "Nem sikerült menteni — kérlek, próbáld újra."
   }
 }

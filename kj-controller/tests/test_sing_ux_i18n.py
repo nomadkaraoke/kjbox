@@ -159,16 +159,16 @@ class TestGroupRelevance:
 class TestFooterSettings:
     def test_store_defaults_and_validation(self, tmp_path):
         store = SingStore(str(tmp_path / "rot.db"))
-        assert store.get_footer_settings() == {"message": "", "notices": []}
+        assert store.get_footer_settings() == {"message": "", "notices": [], "social": {}, "ask_photo_consent": False}
         saved = store.set_footer_settings({
             "message": "  Kitchen closes at 11  ",
             "notices": ["chargers", "bogus", "wifi", "chargers"],
         })
-        assert saved == {"message": "Kitchen closes at 11", "notices": ["chargers", "wifi"]}
+        assert saved == {"message": "Kitchen closes at 11", "notices": ["chargers", "wifi"], "social": {}, "ask_photo_consent": False}
         assert store.get_footer_settings() == saved
         # Partial update keeps the other half.
         store.set_footer_settings({"notices": []})
-        assert store.get_footer_settings() == {"message": "Kitchen closes at 11", "notices": []}
+        assert store.get_footer_settings() == {"message": "Kitchen closes at 11", "notices": [], "social": {}, "ask_photo_consent": False}
         with pytest.raises(ValueError):
             store.set_footer_settings({"notices": "chargers"})
         with pytest.raises(ValueError):
@@ -185,9 +185,9 @@ class TestFooterSettings:
         })
         assert resp.status_code == 200
         assert resp.get_json()["changed"]["footer_settings"] == {
-            "message": "Last call 12:30", "notices": ["lyricsScreen"]}
+            "message": "Last call 12:30", "notices": ["lyricsScreen"], "social": {}, "ask_photo_consent": False}
         cfg = flask_test_client.get("/rotation/requests/config").get_json()
-        assert cfg["footer_settings"] == {"message": "Last call 12:30", "notices": ["lyricsScreen"]}
+        assert cfg["footer_settings"] == {"message": "Last call 12:30", "notices": ["lyricsScreen"], "social": {}, "ask_photo_consent": False}
 
         token = flask_app.sing_store.ensure_token()
         info = flask_test_client.get(f"/sing/event-info?t={token}").get_json()

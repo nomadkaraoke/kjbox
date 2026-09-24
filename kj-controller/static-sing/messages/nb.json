@@ -408,6 +408,17 @@
     "photos": "📸 Bilder og videoer er velkomne."
   },
   "footer": {
-    "fromHost": "En melding fra verten din"
+    "fromHost": "En melding fra verten din",
+    "followUs": "Følg oss",
+    "website": "Nettside",
+    "email": "E-post"
+  },
+  "photoConsent": {
+    "question": "📷 Er det greit om bilder eller videoer av at du synger i kveld legges ut på sosiale medier?",
+    "yes": "👍 Ja, det går fint",
+    "no": "🚫 Helst ikke",
+    "hint": "Verten din ser valget ditt ved siden av navnet ditt. Du kan endre det når som helst under Mine sanger.",
+    "saved": "✓ Lagret — verten din kan se valget ditt.",
+    "saveFailed": "Kunne ikke lagre — prøv igjen."
   }
 }

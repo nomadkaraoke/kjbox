@@ -6,6 +6,7 @@ provides helpers for the short-lived event token that gates that form.
 """
 
 import json
+import re
 import secrets
 import sqlite3
 import threading
@@ -172,6 +173,21 @@ class SingStore:
                 canonical_name TEXT NOT NULL,
                 origin         TEXT NOT NULL DEFAULT 'self',
                 updated_at     TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+            );
+
+            -- Per-singer social-media photo/video consent (2026-09-24). Keyed
+            -- on the folded singer name (rotation identity is the name string)
+            -- and read NIGHT-SCOPED (updated_at >= night_started_at) so a
+            -- same-name walk-in on a later night never inherits someone else's
+            -- choice. The singer's device remembers its own choice and re-sends
+            -- it with each night's first request. consent: 'yes' | 'no';
+            -- source: 'singer' | 'kj'.
+            CREATE TABLE IF NOT EXISTS singer_photo_consent (
+                name_key     TEXT PRIMARY KEY,
+                display_name TEXT NOT NULL,
+                consent      TEXT NOT NULL,
+                source       TEXT NOT NULL DEFAULT 'singer',
+                updated_at   TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
             );
             """
         )
@@ -449,9 +465,46 @@ class SingStore:
         "chargers", "lyricsScreen", "duets", "moreSongs",
         "tipsHelp", "wifi", "water", "photos",
     )
+    # Social links shown as an icon row in the singer footer. Order here is
+    # the render order. "email" is an address (rendered as mailto:); the rest
+    # are http(s) URLs.
+    FOOTER_SOCIAL_KEYS = (
+        "instagram", "facebook", "tiktok", "youtube", "x", "website", "email",
+    )
+    FOOTER_SOCIAL_MAX = 300
+    _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+    @classmethod
+    def _clean_social_value(cls, key, value):
+        """Normalise one social-link value; '' clears it. Raises ValueError."""
+        if value is None:
+            return ""
+        if not isinstance(value, str):
+            raise ValueError(f"social.{key} must be a string")
+        value = value.strip()
+        if not value:
+            return ""
+        if len(value) > cls.FOOTER_SOCIAL_MAX:
+            raise ValueError(f"social.{key} is too long")
+        if key == "email":
+            if value.lower().startswith("mailto:"):
+                value = value[7:]
+            if not cls._EMAIL_RE.match(value):
+                raise ValueError("social.email must be an email address")
+            return value
+        if not re.match(r"^https?://", value, re.IGNORECASE):
+            # Accept a bare "instagram.com/foo" — but never another scheme
+            # (javascript:, data:, …) since this lands in an href.
+            if ":" in value.split("/", 1)[0] or "." not in value:
+                raise ValueError(f"social.{key} must be a web address")
+            value = "https://" + value
+        if any(c.isspace() for c in value):
+            raise ValueError(f"social.{key} must be a web address")
+        return value
 
     def get_footer_settings(self):
-        """``{"message": str, "notices": [key, ...]}`` — always both keys."""
+        """``{"message", "notices", "social", "ask_photo_consent"}`` — always
+        every key. ``social`` holds only the non-empty links."""
         raw = self._get_meta(self.FOOTER_SETTINGS_KEY)
         data = {}
         if raw:
@@ -462,18 +515,24 @@ class SingStore:
                 data = {}
         message = data.get("message")
         notices = data.get("notices")
+        social = data.get("social") if isinstance(data.get("social"), dict) else {}
         return {
             "message": message if isinstance(message, str) else "",
             "notices": [n for n in (notices if isinstance(notices, list) else [])
                         if n in self.FOOTER_NOTICE_KEYS],
+            "social": {k: social[k] for k in self.FOOTER_SOCIAL_KEYS
+                       if isinstance(social.get(k), str) and social[k]},
+            "ask_photo_consent": bool(data.get("ask_photo_consent")),
         }
 
     def set_footer_settings(self, settings):
-        """Merge ``settings`` ({message?, notices?}) into the stored blob.
+        """Merge ``settings`` ({message?, notices?, social?, ask_photo_consent?})
+        into the stored blob.
 
         ``message`` is trimmed and capped; ``notices`` must be a list of
-        known keys (unknown keys are dropped, order preserved). Raises
-        ValueError on bad types.
+        known keys (unknown keys are dropped, order preserved); ``social``
+        replaces the whole link set (unknown keys dropped, blanks cleared, bad
+        URLs/emails rejected). Raises ValueError on bad input.
         """
         if not isinstance(settings, dict):
             raise ValueError("footer settings must be an object")
@@ -496,8 +555,93 @@ class SingStore:
                 if n in self.FOOTER_NOTICE_KEYS and n not in seen:
                     seen.append(n)
             current["notices"] = seen
+        if "social" in settings:
+            social = settings["social"]
+            if social is None:
+                social = {}
+            if not isinstance(social, dict):
+                raise ValueError("social must be an object")
+            cleaned = {}
+            for key in self.FOOTER_SOCIAL_KEYS:
+                val = self._clean_social_value(key, social.get(key))
+                if val:
+                    cleaned[key] = val
+            current["social"] = cleaned
+        if "ask_photo_consent" in settings:
+            current["ask_photo_consent"] = bool(settings["ask_photo_consent"])
         self._set_meta(self.FOOTER_SETTINGS_KEY, json.dumps(current))
         return current
+
+    # ------------------------------------------------------------------
+    # Social-media photo/video consent — per singer NAME, night-scoped.
+    # ------------------------------------------------------------------
+
+    PHOTO_CONSENT_VALUES = ("yes", "no")
+
+    @staticmethod
+    def photo_consent_key(name):
+        """Fold a singer name to its consent key (case/whitespace-insensitive)."""
+        return " ".join((name or "").split()).casefold()
+
+    def set_photo_consent(self, name, consent, source="singer"):
+        """Record ``consent`` ('yes'/'no') for ``name``; ``None`` clears it.
+
+        Raises ValueError on an unknown value or blank name.
+        """
+        key = self.photo_consent_key(name)
+        if not key:
+            raise ValueError("singer name is required")
+        if consent is not None and consent not in self.PHOTO_CONSENT_VALUES:
+            raise ValueError("consent must be 'yes', 'no' or null")
+        conn = self._get_conn()
+        if consent is None:
+            conn.execute("DELETE FROM singer_photo_consent WHERE name_key = ?", (key,))
+        else:
+            conn.execute(
+                "INSERT INTO singer_photo_consent "
+                "(name_key, display_name, consent, source, updated_at) "
+                "VALUES (?, ?, ?, ?, datetime('now', 'localtime')) "
+                "ON CONFLICT(name_key) DO UPDATE SET display_name = excluded.display_name, "
+                "consent = excluded.consent, source = excluded.source, "
+                "updated_at = excluded.updated_at",
+                (key, " ".join(name.split()), consent, source),
+            )
+        conn.commit()
+
+    def get_photo_consents(self):
+        """``{name_key: {"consent", "source"}}`` for choices made tonight.
+
+        Fails closed (empty) with no night marker, like phone resolution.
+        """
+        night_started = self.get_night_started_at()
+        if not night_started:
+            return {}
+        rows = self._get_conn().execute(
+            "SELECT name_key, consent, source FROM singer_photo_consent "
+            "WHERE updated_at >= ?",
+            (night_started,),
+        ).fetchall()
+        return {r[0]: {"consent": r[1], "source": r[2]} for r in rows}
+
+    def get_photo_consent(self, name):
+        """Tonight's consent for ``name`` ('yes'/'no') or None."""
+        rec = self.get_photo_consents().get(self.photo_consent_key(name))
+        return rec["consent"] if rec else None
+
+    def carry_photo_consent(self, old_name, new_name):
+        """Carry tonight's consent across a rename/merge of ``old_name`` →
+        ``new_name``. If both have a choice and they disagree, 'no' wins —
+        never widen permission on a guess. Best-effort; returns the result."""
+        consents = self.get_photo_consents()
+        old = consents.get(self.photo_consent_key(old_name))
+        if not old or not self.photo_consent_key(new_name):
+            return None
+        new = consents.get(self.photo_consent_key(new_name))
+        if new and new["consent"] == old["consent"]:
+            return new["consent"]
+        merged = "no" if new else old["consent"]
+        self.set_photo_consent(new_name, merged, source=(old["source"] if not new else "kj"))
+        return merged
 
     def get_tip_settings(self):
         """Return the KJ-saved tip settings dict (may be empty)."""
@@ -1070,6 +1214,11 @@ class SingStore:
             tuple([new_name] + params),
         )
         conn.commit()
+        # The renamed singer keeps tonight's photo-consent choice.
+        try:
+            self.carry_photo_consent(old_name, new_name)
+        except Exception:
+            pass
         return len(device_ids)
 
     # ------------------------------------------------------------------

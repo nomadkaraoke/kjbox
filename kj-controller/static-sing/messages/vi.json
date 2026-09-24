@@ -408,6 +408,17 @@
     "photos": "📸 Rất hoan nghênh chụp ảnh và quay video."
   },
   "footer": {
-    "fromHost": "Lưu ý từ KJ"
+    "fromHost": "Lưu ý từ KJ",
+    "followUs": "Theo dõi chúng tôi",
+    "website": "Website",
+    "email": "Email"
+  },
+  "photoConsent": {
+    "question": "📷 Bạn có đồng ý để ảnh hoặc video bạn hát tối nay được đăng lên mạng xã hội không?",
+    "yes": "👍 Được, không sao",
+    "no": "🚫 Xin đừng",
+    "hint": "KJ sẽ thấy lựa chọn của bạn bên cạnh tên bạn. Bạn có thể thay đổi bất cứ lúc nào trong phần Bài hát của tôi.",
+    "saved": "✓ Đã lưu — KJ có thể thấy lựa chọn của bạn.",
+    "saveFailed": "Không thể lưu — vui lòng thử lại."
   }
 }

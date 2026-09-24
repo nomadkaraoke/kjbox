@@ -1409,6 +1409,17 @@
                     <label class="sing-footer-message-label">Custom message (optional)
                         <textarea id="sing-footer-message" rows="2" maxlength="400" placeholder="e.g. Last requests at 12:30 — kitchen closes at 11!"></textarea>
                     </label>
+                    <p class="sing-hint"><strong>Social links</strong> &mdash; shown as icons at the bottom of the singer page. Leave blank to hide.</p>
+                    <div class="sing-tips-grid sing-footer-social" id="sing-footer-social">
+                        <label>Instagram <input type="url" data-social="instagram" placeholder="https://www.instagram.com/…" autocomplete="off"></label>
+                        <label>Facebook <input type="url" data-social="facebook" placeholder="https://www.facebook.com/…" autocomplete="off"></label>
+                        <label>TikTok <input type="url" data-social="tiktok" placeholder="https://www.tiktok.com/@…" autocomplete="off"></label>
+                        <label>YouTube <input type="url" data-social="youtube" placeholder="https://www.youtube.com/@…" autocomplete="off"></label>
+                        <label>X / Twitter <input type="url" data-social="x" placeholder="https://x.com/…" autocomplete="off"></label>
+                        <label>Website <input type="url" data-social="website" placeholder="https://…" autocomplete="off"></label>
+                        <label>Email <input type="email" data-social="email" placeholder="you@example.com" autocomplete="off"></label>
+                    </div>
+                    <label class="sing-footer-consent-toggle"><input type="checkbox" id="sing-footer-ask-photo-consent"> 📷 Ask singers whether they&rsquo;re OK with photos/videos of them being posted on social media (shown as 📷 / <s>📷</s> beside their name in the rotation)</label>
                     <div class="sing-sms-actions">
                         <span class="sing-sms-spacer"></span>
                         <button class="sing-sms-save-btn" onclick="saveSingFooterSettings()">Save footer</button>

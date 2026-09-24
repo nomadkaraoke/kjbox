@@ -408,6 +408,17 @@
     "photos": "📸 Les fotos i els vídeos són benvinguts."
   },
   "footer": {
-    "fromHost": "Una nota del teu amfitrió"
+    "fromHost": "Una nota del teu amfitrió",
+    "followUs": "Segueix-nos",
+    "website": "Lloc web",
+    "email": "Correu electrònic"
+  },
+  "photoConsent": {
+    "question": "📷 Et sembla bé que es publiquin fotos o vídeos teus cantant aquesta nit a les xarxes socials?",
+    "yes": "👍 Sí, em sembla bé",
+    "no": "🚫 Prefereixo que no",
+    "hint": "L'amfitrió veu la teva elecció al costat del teu nom. Pots canviar-ho en qualsevol moment des de Les meves cançons.",
+    "saved": "✓ Desat — l'amfitrió pot veure la teva elecció.",
+    "saveFailed": "No s'ha pogut desar — si us plau, torna-ho a provar."
   }
 }

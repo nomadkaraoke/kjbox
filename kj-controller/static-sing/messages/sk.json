@@ -408,6 +408,17 @@
     "photos": "📸 Fotky a videá sú vítané."
   },
   "footer": {
-    "fromHost": "Odkaz od tvojho KJ"
+    "fromHost": "Odkaz od tvojho KJ",
+    "followUs": "Sleduj nás",
+    "website": "Webstránka",
+    "email": "E-mail"
+  },
+  "photoConsent": {
+    "question": "📷 Je v poriadku, ak sa fotky alebo videá, na ktorých dnes večer spievaš, zverejnia na sociálnych sieťach?",
+    "yes": "👍 Áno, je to v poriadku",
+    "no": "🚫 Prosím, nie",
+    "hint": "Tvoj KJ vidí tvoju voľbu vedľa tvojho mena. Môžeš ju kedykoľvek zmeniť v časti Moje piesne.",
+    "saved": "✓ Uložené — tvoj KJ vidí tvoju voľbu.",
+    "saveFailed": "Nepodarilo sa to uložiť — skús to prosím znova."
   }
 }
