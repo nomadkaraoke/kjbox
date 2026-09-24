@@ -2361,29 +2361,48 @@ function _renderSongCard(item) {
   const req = item.request;
   const song = (req.song_title || "") + (req.song_artist ? ` — ${req.song_artist}` : "");
   const partners = req.additional_singers || [];
-  const card = el("div", {
-    class: item.performed ? "song-card song-card-done" : "song-card",
-    "data-status": req.status,
-  },
+  const main = el("div", { class: "song-card-main" },
     el("div", { class: "song-card-title" }, song || "(song)"),
     el("div", { class: "song-card-status" }, _statusLine(item)),
   );
   if (partners.length > 0) {
     const names = partners.map((p) => p.name).join(", ");
-    card.appendChild(el("div", { class: "song-card-partners" },
-      `with ${names}`));
+    main.appendChild(el("div", { class: "song-card-partners" }, `with ${names}`));
   }
+  const card = el("div", {
+    class: item.performed ? "song-card song-card-done" : "song-card",
+    "data-status": req.status,
+  }, main);
   // A performed song is read-only — no cancel/change/reorder (the backend would
   // reject them 409 anyway, and there's nothing to change once it's been sung).
   if (item.performed) return card;
-  // Self-service cancel — only for a request this device owns (has the
-  // edit_token for) and that is still cancellable (pending or in the queue).
+  // Self-service actions — only for a request this device owns (has the
+  // edit_token for) and that is still editable (pending or in the queue).
+  // Compact, right-aligned so the card stays two lines tall.
   const editToken = readEditToken(TOKEN, req.id);
   const cancellable = editToken && (req.status === "pending" || req.status === "approved");
   if (cancellable) {
-    card.appendChild(el("button", {
-      class: "btn ghost song-card-cancel",
+    // "Change" ≠ cancel + re-request: it files a SUPERSEDE, so on approval
+    // the new song takes over this entry's queue slot instead of dropping
+    // to the bottom of the rotation.
+    const changeBtn = el("button", {
+      class: "song-card-action",
+      "data-testid": "change-song",
+      title: "Swap the song but keep your place in line",
+      onclick: (e) => {
+        e.stopPropagation();
+        state.changeRequestId = req.id;
+        state.changeEditToken = editToken;
+        state.selected = null;
+        state.query = "";
+        state.step = "search";
+        render();
+      },
+    }, "⇄ Change");
+    const cancelBtn = el("button", {
+      class: "song-card-action song-card-action-cancel",
       "data-testid": "cancel-song",
+      title: "Cancel this song",
       onclick: async (e) => {
         e.stopPropagation();
         if (!confirm(`Cancel "${song}"? The KJ will see it's cancelled.`)) return;
@@ -2399,21 +2418,8 @@ function _renderSongCard(item) {
         } catch { e.target.disabled = false; alert("Couldn't cancel — check your connection."); return; }
         if (typeof window.__sing_render === "function") window.__sing_render();
       },
-    }, "Cancel this song"));
-    // Change the song of this request (re-enters search in change mode).
-    card.appendChild(el("button", {
-      class: "btn ghost song-card-change",
-      "data-testid": "change-song",
-      onclick: (e) => {
-        e.stopPropagation();
-        state.changeRequestId = req.id;
-        state.changeEditToken = editToken;
-        state.selected = null;
-        state.query = "";
-        state.step = "search";
-        render();
-      },
-    }, "Change song"));
+    }, "✕ Cancel");
+    card.appendChild(el("div", { class: "song-card-actions" }, changeBtn, cancelBtn));
   }
   return card;
 }

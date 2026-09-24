@@ -165,6 +165,12 @@ Fifth batch (same release, 2026-09-23):
    reads the number — so "you're up" texts work retroactively. The push
    subscription re-syncs with the new number client-side.
 
+23. **Compact song cards** — Cancel/Change are now small right-aligned
+   buttons ("⇄ Change" / "✕ Cancel") beside the title+status, roughly
+   halving card height. Change is NOT redundant with cancel+re-request:
+   it files a supersede, so on approval the new song keeps the original
+   entry's queue slot instead of dropping to the bottom (tooltip added).
+
 Backend (`sing.py`, `sing_store.py`, `routes.py`, `version_priority.py`)
 requires a service restart.
 
