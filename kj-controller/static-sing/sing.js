@@ -3106,13 +3106,19 @@ if (codeEntryEl) {
   initCodeEntry();
 } else if (root) {
   if (INITIAL_REQUEST_ID) {
-    // ?r= accepts one id (legacy links) or a comma list (dev harness /
-    // KJ-shared "your songs" links). Persist them all so they survive a
-    // "Request another song" and feed the done-screen list.
-    const ids = String(INITIAL_REQUEST_ID).split(",")
-      .map((x) => parseInt(x, 10)).filter((n) => !isNaN(n));
+    // ?r= accepts one id (legacy links) or a comma list; each item may be
+    // a bare id (read-only status view) or id:edit_token (full self-service
+    // — cancel/change/reorder — as if this device had submitted the song).
+    // Persist them so they survive a "Request another song".
+    const ids = [];
+    for (const piece of String(INITIAL_REQUEST_ID).split(",")) {
+      const [idRaw, tok] = piece.split(":");
+      const id = parseInt(idRaw, 10);
+      if (isNaN(id)) continue;
+      rememberRequestId(TOKEN, id, (tok || "").trim() || undefined);
+      ids.push(id);
+    }
     if (ids.length) {
-      ids.forEach((id) => rememberRequestId(TOKEN, id));
       state.request = { id: ids[0] };
       state.step = "done";
     }

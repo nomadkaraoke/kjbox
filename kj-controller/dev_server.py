@@ -151,7 +151,7 @@ def link_requests_for_singer(app, name):
             source_meta=None, notes="", device_id=device_id,
         )
         store.mark_approved(req["id"], linked_entry_id=e["id"])
-        ids.append(req["id"])
+        ids.append((req["id"], req.get("edit_token") or ""))
     return ids[:20]   # /sing/my-requests caps at 20 ids per call
 
 
@@ -307,7 +307,9 @@ def main():
     for singer in [n.strip() for n in (args.as_singer or "").split(",") if n.strip()]:
         req_ids = link_requests_for_singer(app, singer)
         if req_ids:
-            r = ",".join(str(i) for i in req_ids)
+            # id:edit_token pairs → the review browser gets full self-service
+            # (cancel / change / reorder), exactly like the singer's own phone.
+            r = ",".join(f"{i}:{tok}" if tok else str(i) for i, tok in req_ids)
             print(f"Singer UI as {singer} ({len(req_ids)} songs attributed): "
                   f"http://localhost:5555/sing/?t={token}&r={r}")
         else:

@@ -143,6 +143,12 @@ Fifth batch (same release, 2026-09-23):
    Dev harness `--as` takes a comma list and prints one attributed singer
    URL each (e.g. `--as Andrew,Celeste,Jasmine`).
 
+20. **?r= carries edit tokens** — items may be `id` (read-only status view)
+   or `id:edit_token` (full self-service: Cancel / Change song / ▲▼
+   reorder, exactly as if the device had submitted the song). The dev
+   harness's per-singer review URLs now include the tokens, so reviewing
+   as Celeste shows the complete self-service card controls.
+
 Backend (`sing.py`, `sing_store.py`, `routes.py`, `version_priority.py`)
 requires a service restart.
 
