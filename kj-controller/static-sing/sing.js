@@ -220,6 +220,7 @@ const state = {
 };
 
 const MAX_PARTNERS = 3;
+const KNOWN_SINGERS_TTL_MS = 60000;   // Existing-singer picker list cache
 
 // --- Offline detection -----------------------------------------------------
 
@@ -2330,12 +2331,21 @@ function renderConfirm() {
     .toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, " ").trim().replace(/\s+/g, " ");
 
   // Tonight's known singers (rotation, any status + pending requests) for
-  // the "Existing singer" picker. Cached for the page; a failed fetch just
-  // means the picker offers "add as a new singer" instead.
+  // the "Existing singer" picker. Short-lived cache — new singers sign up
+  // all night; a failed fetch falls back to a stale list if we have one,
+  // else the picker offers "add as a new singer".
   async function loadKnownSingers() {
-    if (Array.isArray(state._knownSingers)) return state._knownSingers;
-    const data = await fetchJson(`${BASE}/singers`);
-    return (state._knownSingers = data.singers || []);
+    const fresh = Array.isArray(state._knownSingers)
+      && Date.now() - (state._knownSingersAt || 0) < KNOWN_SINGERS_TTL_MS;
+    if (fresh) return state._knownSingers;
+    try {
+      const data = await fetchJson(`${BASE}/singers`);
+      state._knownSingersAt = Date.now();
+      return (state._knownSingers = data.singers || []);
+    } catch (e) {
+      if (Array.isArray(state._knownSingers)) return state._knownSingers;
+      throw e;
+    }
   }
 
   function addPartner(p) {
