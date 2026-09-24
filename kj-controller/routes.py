@@ -23,7 +23,8 @@ import library_media
 import mediainfo
 import local_grouping
 import text_normalize
-from text_normalize import normalize as _normalize_text, tokens as _tokens, group_key as _group_key
+from text_normalize import normalize as _normalize_text, tokens as _tokens, group_key as _group_key, \
+    result_group_key as _result_group_key
 import version_priority
 import sing_resolve
 import youtube_health
@@ -394,7 +395,7 @@ def _group_search_results(local_results, kn_results, query=None,
     groups = {}  # key -> group dict (py3.7+ dict preserves insertion order)
 
     for r in local_results or []:
-        key = _normalize_song_key(r.get("artist"), r.get("title"))
+        key = _result_group_key(r.get("artist"), r.get("title"))
         g = groups.setdefault(key, {
             "key": key,
             "artist": r.get("artist") or "",
@@ -409,7 +410,7 @@ def _group_search_results(local_results, kn_results, query=None,
         for track in song.get("tracks") or []:
             if not include_disc_only and not _kn_track_is_playable(track):
                 continue
-            key = _normalize_song_key(song_artist, song_title)
+            key = _result_group_key(song_artist, song_title)
             g = groups.setdefault(key, {
                 "key": key,
                 "artist": song_artist,
@@ -425,7 +426,7 @@ def _group_search_results(local_results, kn_results, query=None,
     for row in divebar_rows or []:
         artist = row.get("artist") or ""
         title = row.get("title") or ""
-        key = _normalize_song_key(artist, title)
+        key = _result_group_key(artist, title)
         g = groups.setdefault(key, {
             "key": key,
             "artist": artist,

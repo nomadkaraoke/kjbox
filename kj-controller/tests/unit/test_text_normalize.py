@@ -7,7 +7,7 @@ def test_rapidfuzz_importable():
 
 
 from text_normalize import (
-    normalize, tokens, fts_match_query, group_key,
+    normalize, tokens, fts_match_query, group_key, result_group_key,
     LATIN_SPECIAL_MAP, ABBREV_MAP, NUMBER_WORDS, ROMAN_NUMERALS,
     NORMALIZER_VERSION,
 )
@@ -121,15 +121,20 @@ class TestQueryAndGroupKey:
     def test_fts_single_token_prefix(self):
         assert fts_match_query("jovi") == '"jovi"*'
 
-    def test_group_key_strips_file_quality_tags(self):
-        assert group_key("Fall Out Boy (MPX)", "Dance, Dance") == \
+    def test_result_group_key_strips_file_quality_tags(self):
+        assert result_group_key("Fall Out Boy (MPX)", "Dance, Dance") == \
             group_key("Fall Out Boy", "Dance Dance")
-        assert group_key("Fall Out Boy", "Dance, Dance [HM]") == \
+        assert result_group_key("Fall Out Boy", "Dance, Dance [HM]") == \
             group_key("Fall Out Boy", "Dance Dance")
 
-    def test_group_key_keeps_musical_qualifiers(self):
-        assert group_key("Queen", "Bohemian Rhapsody (Live)") != \
-            group_key("Queen", "Bohemian Rhapsody")
+    def test_result_group_key_keeps_musical_qualifiers(self):
+        assert result_group_key("Queen", "Bohemian Rhapsody (Live)") != \
+            result_group_key("Queen", "Bohemian Rhapsody")
+
+    def test_group_key_unchanged_for_persisted_song_keys(self):
+        """group_key is the stored play-stats song_key: tags stay in it."""
+        assert group_key("Fall Out Boy (MPX)", "Dance, Dance") != \
+            group_key("Fall Out Boy", "Dance, Dance")
 
     def test_group_key_none_safe(self):
         assert group_key(None, None) == "|||"

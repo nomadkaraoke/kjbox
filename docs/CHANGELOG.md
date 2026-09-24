@@ -23,9 +23,10 @@ and the singer UI didn't show the Funbox file at all.
   have (matched by canonical brand or raw code / disc-id prefix). Header shows
   "N in library" + version count; the top song opens by default. Local-catalog cap raised
   from 10 to `sing_search_catalog_limit` (60), matching singer search.
-- **Grouping key ignores file-quality tags** `(MPX)` / `[HM]` (and `multiplex` /
+- **Result grouping ignores file-quality tags** `(MPX)` / `[HM]` (and `multiplex` /
   `homemade`), which split "Fall Out Boy (MPX)" and "Dance, Dance [HM]" into their own
-  groups. Grouping-only (`text_normalize.group_key`); `(Live)` etc. stay distinct.
+  groups. Grouping-only (`text_normalize.result_group_key`); `group_key` — also the persisted
+  play-stats `song_key` — is unchanged. `(Live)` etc. stay distinct.
 - **Brand registry:** `ME-` / `PY-` disc prefixes now resolve to Mr. Entertainer / Party
   Tyme (the library's download sets), so those files rank as commercial brands instead
   of "Library file".
