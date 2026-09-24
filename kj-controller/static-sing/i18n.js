@@ -93,9 +93,17 @@ export function detectLocale() {
   return "en";
 }
 
+// Message files live next to this module. Resolve them from the module's own
+// URL rather than from the blueprint mount: on the public host the SPA is
+// mounted at `/` but its static files are still served under `/sing/static/`
+// (a bare `/static/...` there is a different route and 404s).
+const STATIC_BASE = (() => {
+  try { return new URL(".", import.meta.url).pathname; } catch { return "/sing/static/"; }
+})();
+
 async function _fetchMessages(locale) {
   const v = _version ? `?v=${encodeURIComponent(_version)}` : "";
-  const resp = await fetch(`${_base}/static/messages/${locale}.json${v}`, { credentials: "same-origin" });
+  const resp = await fetch(`${STATIC_BASE}messages/${locale}.json${v}`, { credentials: "same-origin" });
   if (!resp.ok) throw new Error(`messages ${locale}: ${resp.status}`);
   return resp.json();
 }
