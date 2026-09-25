@@ -45,7 +45,7 @@ rsync -a nomadpc:/home/nomad/kjdata/night-captures/$N/ $D/capture/
 rsync -a nomadpc:/home/nomad/kjdata/action-logs/$N.jsonl $D/actions.jsonl
 # Replace the sidecar's journal with the WHOLE night (covers the time before the
 # sidecar started; journald keeps ~2 weeks). macOS `date -j` computes next-day noon.
-ssh nomadpc "journalctl -u kj-controller -o json --since '$N 16:00' --until "$(date -j -v+1d -f %F $N +%F) 12:00" --no-pager" \
+ssh nomadpc "journalctl -u kj-controller -o json --since '$N 16:00' --until '$(date -j -v+1d -f %F $N +%F) 12:00' --no-pager" \
   > $D/capture/journal.jsonl
 python3 kj-controller/scripts/night_fixture.py --capture $D/capture --actions $D/actions.jsonl \
   --out $D/fixture [--pseudonymize-names]
