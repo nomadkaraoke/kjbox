@@ -24,6 +24,7 @@ from sing_store import SingStore
 from sms_store import SmsStore
 from sleep_mode import SleepManager
 from utils import log_message
+from action_recorder import install_action_recorder
 from audio_monitor import AudioMonitor
 from chromium import ChromiumManager
 from zip_playback import ZipPlayback
@@ -222,6 +223,17 @@ def _install_perf_monitor(flask_app, cfg, start):
             pass
 
 
+def _install_action_recorder(flask_app, cfg, default_enabled):
+    """Record KJ/singer actions to per-night JSONL (docs/NIGHT-RECORDING.md). Non-fatal."""
+    if not cfg.get('action_log_enabled', default_enabled):
+        return
+    log_dir = cfg.get('action_log_dir') or os.path.expanduser('~/kjdata/action-logs')
+    try:
+        install_action_recorder(flask_app, log_dir)
+    except Exception as e:  # pragma: no cover - defensive
+        log_message(f"ActionRecorder init failed (non-fatal): {e}", cfg)
+
+
 def create_app(config=None):
     """Create and configure the Flask application."""
     flask_app = Flask(__name__)
@@ -354,6 +366,7 @@ def create_app(config=None):
     # Start the background sampler only on a real device (config is None); tests
     # pass a config and get the sampler object without a live thread.
     _install_perf_monitor(flask_app, cfg, start=(config is None))
+    _install_action_recorder(flask_app, cfg, default_enabled=(config is None))
 
     flask_app.register_blueprint(routes_bp)
     flask_app.register_blueprint(sing_bp)
@@ -543,6 +556,7 @@ def start_app():  # pragma: no cover
         flask_app.gen_poller = None
 
     _install_perf_monitor(flask_app, cfg, start=True)
+    _install_action_recorder(flask_app, cfg, default_enabled=True)
 
     flask_app.register_blueprint(routes_bp)
     flask_app.register_blueprint(sing_bp)
