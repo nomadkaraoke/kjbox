@@ -1,5 +1,6 @@
 """Integration tests for the public /sing/* blueprint."""
 
+import json
 from unittest.mock import MagicMock
 
 import pytest
@@ -785,6 +786,18 @@ class TestChangeSong:
             "song_artist": "ABBA", "song_title": "SOS"})
         assert resp.status_code == 409
         assert sing_app.rotation.store.get_entry(entry_id)["status"] == "Done"
+
+
+    def test_change_to_popular_kj_pick_is_trimmed_not_refused(self, client, sing_app, token):
+        r = client.post(f"/sing/submit?t={token}", json=self._body()).get_json()["request"]
+        versions = [{"source": "local", "local": {"path": f"/v{i}.mp4"}} for i in range(60)]
+        resp = client.post(f"/sing/requests/{r['id']}/change?t={token}", json={
+            "edit_token": r["edit_token"], "source_type": "kj_pick", "source_ref": None,
+            "source_meta": {"versions": versions},
+            "song_artist": "Backstreet Boys", "song_title": "I Want It That Way"})
+        assert resp.status_code == 200
+        stored = json.loads(sing_app.sing_store.get_request(r["id"])["source_meta"])
+        assert len(stored["versions"]) == 50
 
 
 class TestReorder:

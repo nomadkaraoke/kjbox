@@ -69,6 +69,17 @@ class TestSingerRateLimit:
                 body = {"device_id": name}
                 assert not sing._singer_rate_limited(_Req("10.0.0.3", body), body)
 
+    def test_refund_removes_only_this_requests_slot(self, flask_app):
+        """A refund must not drop a concurrent request's newer timestamp."""
+        with flask_app.test_request_context():
+            flask_app.kj_config["sing_rate_limit_per_device"] = 100
+            body = {"device_id": "race"}
+            assert not sing._singer_rate_limited(_Req("10.0.0.8", body), body)
+            mine = sing.g.sing_rl_device_slot[1]
+            sing._rate_limit_state["dev:race"].append(mine + 1.0)   # concurrent request
+            sing._refund_device_rate_slot()
+            assert list(sing._rate_limit_state["dev:race"]) == [mine + 1.0]
+
     def test_reads_body_when_not_supplied(self, flask_app):
         with flask_app.app_context():
             flask_app.kj_config["sing_rate_limit_per_device"] = 1
@@ -83,17 +94,31 @@ class TestSingerRateLimit:
         flask_app.kj_config["sing_rate_limit_per_ip"] = 100
         first = flask_test_client.post(
             f"/sing/submit?t={token}",
-            json={"singer_name": "Zed", "device_id": "dev-z", "source_type": "make",
-                  "song_artist": "A", "song_title": "B"},
+            json={"singer_name": "Zed", "device_id": "dev-z", "source_type": "local",
+                  "source_ref": "/tmp/a.mp4", "song_artist": "A", "song_title": "B"},
         )
-        assert first.status_code in (200, 201, 400)   # make may be disabled — irrelevant here
+        assert first.status_code == 200
         second = flask_test_client.post(
             f"/sing/submit?t={token}",
-            json={"singer_name": "Zed", "device_id": "dev-z", "source_type": "make",
-                  "song_artist": "A", "song_title": "C"},
+            json={"singer_name": "Zed", "device_id": "dev-z", "source_type": "local",
+                  "source_ref": "/tmp/c.mp4", "song_artist": "A", "song_title": "C"},
         )
         assert second.status_code == 429
         assert second.get_json()["error"] == "rate_limited"
+
+    def test_rejected_submits_do_not_burn_the_device_budget(self, flask_test_client, flask_app):
+        """A singer retrying a submit the server rejects (400) must not lock
+        themselves out with "too many attempts" (Owen, 2026-09-24)."""
+        store = flask_app.sing_store
+        token = store.ensure_token()
+        flask_app.kj_config["sing_rate_limit_per_device"] = 2
+        flask_app.kj_config["sing_rate_limit_per_ip"] = 100
+        bad = {"singer_name": "Owen", "device_id": "dev-owen", "source_type": "local",
+               "song_artist": "A", "song_title": "B"}   # missing source_ref → 400
+        for _ in range(5):
+            assert flask_test_client.post(f"/sing/submit?t={token}", json=bad).status_code == 400
+        good = {**bad, "source_ref": "/tmp/ok.mp4"}
+        assert flask_test_client.post(f"/sing/submit?t={token}", json=good).status_code == 200
 
 
 # --- Duet display names ----------------------------------------------------------

@@ -2,6 +2,21 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-09-24 - Fix: Popular songs (>50 versions) couldn't be requested (v0.114.1)
+
+Singer Owen tapped Backstreet Boys "I Want It That Way" live and got
+5 × "Couldn't send", then "You've submitted a lot". Nothing reached the KJ.
+
+- **Cause:** the song had 60 versions in search. A plain tap sends a `kj_pick` with
+  the whole snapshot, and `_validate_kj_pick_payload` still refused anything over
+  50 (a Phase A guardrail). Search unification now surfaces every local copy, so
+  popular songs go past it.
+- **Fix:** oversized snapshots are trimmed to the 50 best by `priority_rank`
+  (the same ranking auto-approve / ⭐ BEST use). Only >1000 versions are refused.
+- **Also:** a `/sing/submit` 400 now refunds the device's rate-limit slot, so a
+  singer retrying a rejected submit no longer locks themselves out. The per-IP
+  slot is still consumed as the flood backstop.
+
 ## 2026-09-24 - Feature: Night recording — in-app ActionRecorder + sidecar capture (v0.113.0)
 
 First step toward realistic end-to-end tests built from real nights (see
