@@ -2,6 +2,18 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-09-24 - Fix: No answer = no photo consent; My songs consent buttons overflow (v0.112.1)
+
+Andrew's first look at v0.112.0 on the box:
+
+- **Unknown consent now shows as "no photos"** in the KJ rotation. It's the same red
+  struck-through 📷, with a dashed outline so it can still be told apart from an
+  explicit no. Previously it was invisible until hover. Clicking toggles OK ⇄ no
+  (unknown → OK); a click no longer clears a choice back to unknown.
+- **My songs consent buttons no longer overflow the card.** The `.push-optin .btn`
+  240px min-width pushed "🚫 Please don't" out of the box on wide screens. Covered by
+  an e2e bounds check.
+
 ## 2026-09-24 - Feature: Footer social links + singer social-media photo consent (v0.112.0)
 
 Andrew asked for social links in the singer page footer, and for singers to say whether

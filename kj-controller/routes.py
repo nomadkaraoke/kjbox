@@ -3509,8 +3509,9 @@ def _add_photo_consent(entries, app=None):
     """Attach ``photo_consent = {singer_name: "yes"|"no"|None}`` to each entry.
 
     One map entry per singer on the row (duet rows list every partner) so the
-    KJ UI can put a 📷 / 🚫 marker beside each name. Tonight-scoped choices
-    from the singer UI or the KJ. Best-effort: a store error leaves Nones.
+    KJ UI can put a 📷 / struck-through 📷 marker beside each name. Tonight-
+    scoped choices from the singer UI or the KJ. ``None`` (never answered) is
+    shown to the KJ as NO consent. Best-effort: a store error leaves Nones.
     """
     app = app or current_app._get_current_object()
     store = getattr(app, "sing_store", None)
