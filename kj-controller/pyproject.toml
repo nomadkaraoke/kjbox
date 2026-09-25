@@ -1,6 +1,9 @@
 [project]
 name = "kj-controller"
-version = "0.114.1"
+<<<<<<< HEAD
+=======
+version = "0.115.0"
+>>>>>>> 2b0ff4d (Singer self-serve for KJ-added/partner songs + clearer reorder instructions (v0.115.0))
 description = "Web-based karaoke show management with mpv + VLC playback"
 requires-python = ">=3.11"
 

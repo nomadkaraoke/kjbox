@@ -1386,16 +1386,31 @@ button.status-tile:active { transform: scale(0.99); }
   touch-action: none;   /* the handle drags; the rest of the list scrolls */
   cursor: grab;
   color: var(--nk-text-dim);
-  font-size: 1.1rem;
-  padding: 0.2rem 0.3rem;
+  font-size: 1.4rem;
+  padding: 0.3rem 0.5rem;   /* a thumb-sized grab target */
 }
 .reorder-row.dragging .reorder-handle { cursor: grabbing; }
+.reorder-num { color: var(--nk-text-dim); font-variant-numeric: tabular-nums; }
 .reorder-song {
+  flex: 1;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   font-weight: 600;
 }
+.reorder-move {
+  flex: none;
+  width: 2.2rem;
+  height: 2.2rem;
+  border: 1px solid var(--nk-border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--nk-text);
+  font-size: 0.9rem;
+}
+.reorder-move[disabled] { opacity: 0.3; }
+.reorder-instructions { color: var(--nk-text); }
 .song-card-reorder button[disabled] { opacity: 0.4; }
 
 

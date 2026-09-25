@@ -1314,19 +1314,7 @@ def _known_singer_names(app):
     if rotation_mgr is not None:
         try:
             for entry in rotation_mgr.get_rotation():
-                raw = entry.get("singers_json")
-                members = None
-                if raw:
-                    try:
-                        members = json.loads(raw) if isinstance(raw, str) else raw
-                    except (ValueError, TypeError):
-                        members = None
-                if not members:
-                    # Duets typed by the KJ as one "Anya & Celeste" singer
-                    # (no singers_json) are two people — list each, so the
-                    # partner picker never offers a pair as a person.
-                    members = _split_duet_name(entry.get("singer"))
-                for n in members:
+                for n in _entry_members(entry):
                     add(n)
         except Exception:
             current_app.logger.exception("known-singers: rotation scan failed")
@@ -1343,6 +1331,28 @@ def _known_singer_names(app):
         except Exception:
             current_app.logger.exception("known-singers: request scan failed")
     return names
+
+
+def _entry_members(entry):
+    """Every person singing a rotation entry: its ``singers_json`` members, or
+    the primary ``singer`` split on '&'/'+' when the KJ typed a duet as one
+    name ("Anya & Celeste") — so a pair is never treated as one person."""
+    raw = entry.get("singers_json")
+    members = None
+    if raw:
+        try:
+            members = json.loads(raw) if isinstance(raw, str) else raw
+        except (ValueError, TypeError):
+            members = None
+    if not members:
+        members = _split_duet_name(entry.get("singer"))
+    return [str(m) for m in members if m]
+
+
+def _entry_includes_singer(entry, name_fold):
+    """True when the folded singer name is one of the entry's members."""
+    return bool(name_fold) and any(
+        _fold_name(m) == name_fold for m in _entry_members(entry))
 
 
 def _split_duet_name(name):
@@ -1613,7 +1623,72 @@ def my_requests():
         item["performed"] = performed
         out.append(item)
 
+    # Songs this device never submitted but the singer IS in — the KJ typed
+    # them in from the KJ UI, or a duet partner submitted them from their own
+    # phone. They have no edit_token here, so they're matched by the singer's
+    # name (the same public identity the rotation screen shows) and only
+    # offered for reordering, never cancel/change.
+    name_fold = _fold_name(request.args.get("name") or "")
+    if name_fold and entries:
+        out.extend(_name_matched_items(
+            store, entries, name_fold, token,
+            already_linked={it["request"].get("linked_entry_id") for it in out},
+        ))
+
     return jsonify({"now_playing": now_playing_dict, "requests": out})
+
+
+def _name_matched_items(store, entries, name_fold, token, already_linked):
+    """My-songs items for queued rotation entries naming this singer that no
+    request of theirs links to. Each carries a synthetic request view (id None,
+    status approved) so the phone renders it like any queued song, plus
+    ``entry_id`` for reordering, ``added_by_host`` and ``added_by`` (the
+    partner who requested it)."""
+    requester_by_entry = {}
+    try:
+        for req in store.list_requests(status="approved"):
+            if (req.get("linked_entry_id") and req.get("token") == token
+                    and _belongs_to_current_night(store, req)):
+                requester_by_entry[req["linked_entry_id"]] = req.get("singer_name")
+    except Exception:
+        current_app.logger.exception("my-requests: requester lookup failed")
+    items = []
+    for entry in entries:
+        eid = entry.get("id")
+        if eid in already_linked:
+            continue
+        if (entry.get("status") or "").lower() in ("done", "left", "cancelled"):
+            continue
+        if not _entry_includes_singer(entry, name_fold):
+            continue
+        members = _entry_members(entry)
+        requester = requester_by_entry.get(eid)
+        items.append({
+            "request": {
+                "id": None,
+                "singer_name": entry.get("singer") or "",
+                # Rotation stores one "Title - Artist" string.
+                "song_artist": "",
+                "song_title": entry.get("song_artist") or "",
+                "source_type": "rotation",
+                "status": "approved",
+                "created_at": entry.get("created_at"),
+                "linked_entry_id": eid,
+                "additional_singers": [
+                    {"name": m} for m in members if _fold_name(m) != name_fold
+                ] or None,
+                "supersedes_request_id": None,
+            },
+            "entry_id": eid,
+            # No request links it → the host typed it in. A request by this
+            # same singer (an older one past the phone's id window) names no one.
+            "added_by_host": eid not in requester_by_entry,
+            "added_by": requester if requester and _fold_name(requester) != name_fold else None,
+            "estimate": compute_estimate(entries, eid, current_app.kj_config),
+            "previewable": _entry_previewable(entry),
+            "performed": False,
+        })
+    return items
 
 
 @sing_bp.route("/requests/<int:req_id>/cancel", methods=["POST"])
@@ -1774,12 +1849,38 @@ def reorder_requests():
     if not isinstance(items, list) or len(items) < 2:
         return jsonify({"error": "at least two items required"}), 400
 
+    # Items are either an owned request ({id, edit_token}) or a queued entry
+    # the singer is named on but never submitted from this device ({entry_id}
+    # — KJ-added, or requested by a duet partner). The latter are proven by
+    # name only, which is why a reorder can only shuffle songs within the
+    # singer's own slots — it can never move them past anyone else.
+    name = str(data.get("name") or "").strip()[:_MAX_SINGER_NAME_LEN]
+    name_fold = _fold_name(name)
+    rotation_mgr = getattr(current_app, "rotation", None)
     ordered_entry_ids = []
     first_req = None
     seen_ids = set()
+    seen_entries = set()
     for it in items:
         if not isinstance(it, dict):
             return jsonify({"error": "each item must be an object"}), 400
+        if it.get("id") is None and it.get("entry_id") is not None:
+            try:
+                eid = int(it.get("entry_id"))
+            except (TypeError, ValueError):
+                return jsonify({"error": "each item needs an integer id"}), 400
+            if eid in seen_entries:
+                return jsonify({"error": "duplicate id"}), 400
+            seen_entries.add(eid)
+            entry = rotation_mgr.store.get_entry(eid) if rotation_mgr is not None else None
+            if entry is None:
+                return jsonify({"error": "not_found"}), 404
+            if not _entry_includes_singer(entry, name_fold):
+                return jsonify({"error": "forbidden"}), 403
+            if (entry.get("status") or "").lower() in ("done", "left", "cancelled"):
+                return jsonify({"error": "each item must be an approved queued song"}), 409
+            ordered_entry_ids.append(eid)
+            continue
         try:
             rid = int(it.get("id"))
         except (TypeError, ValueError):
@@ -1795,16 +1896,20 @@ def reorder_requests():
             return jsonify({"error": "forbidden"}), 403
         if req["status"] != "approved" or not req.get("linked_entry_id"):
             return jsonify({"error": "each item must be an approved queued song"}), 409
+        if req["linked_entry_id"] in seen_entries:
+            return jsonify({"error": "duplicate id"}), 400
+        seen_entries.add(req["linked_entry_id"])
         ordered_entry_ids.append(req["linked_entry_id"])
         if first_req is None:
             first_req = req
 
+    device_id = str(data.get("device_id") or "").strip()[:64]
     rr = store.create_request(
-        singer_name=first_req["singer_name"], phone="",
+        singer_name=first_req["singer_name"] if first_req else name, phone="",
         source_type="reorder", source_ref=None,
         source_meta={"ordered_entry_ids": ordered_entry_ids},
         token=token,
-        device_id=first_req.get("device_id"),
+        device_id=(first_req.get("device_id") if first_req else None) or device_id or None,
     )
 
     # Auto-approve applies the singer's reorder immediately — it only shuffles

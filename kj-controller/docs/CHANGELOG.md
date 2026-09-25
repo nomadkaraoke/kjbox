@@ -4,6 +4,32 @@ Dated entries, newest first. Each entry notes any required deploy steps.
 
 ---
 
+## 2026-09-24 - Singer self-serve for KJ-added songs + clearer reorder instructions (v0.115.0)
+
+**Deploy:** backend (`sing.py`) + singer frontend (`sing.js`, `sing.css`, 33 locale files) →
+**requires `systemctl restart kj-controller`** (deploy between songs). No migration.
+
+- **Why:** Ashlee A couldn't move "Sabrina Carpenter - buy me presents" earlier from her
+  phone because it wasn't in her My songs at all. The KJ had typed it in the KJ UI (rotation entry
+  #1239 had no `sing_requests` row). My songs only listed requests whose id + edit_token that
+  phone had saved in localStorage, so KJ-added songs and duets a partner submitted from their
+  own phone never showed. Separately, some singers didn't work out how to use the drag-to-reorder
+  view.
+- **What:** `GET /sing/my-requests` takes an optional `name`. Queued rotation entries naming that
+  singer (`singers_json` members, or a KJ-typed "A & B" split on `&`/`+`; compared with the
+  accent/case-folded `_fold_name`) that none of the phone's own requests link to come back as
+  extra items. Each has a synthetic request view (`id: null`, status approved) plus `entry_id`,
+  `added_by_host` and `added_by` (the partner who requested it). The phone shows "Added by the
+  host" / "Added by {name}". `POST /sing/requests/reorder` accepts `{entry_id}` items (with
+  `name`) alongside `{id, edit_token}` items.
+- **Trust model:** name-matched entries are proven by name only, so they can be **reordered** but
+  never cancelled or changed; those still need the edit_token. A reorder only shuffles the
+  singer's songs among the slots they already hold, so nobody can jump ahead of other singers.
+- **Reorder UX:** there's now an explicit instruction line ("press and hold the ⠿ … drag … or tap
+  ▲ / ▼ … then tap Save new order"). Each row has ▲/▼ buttons and a position number, the drag
+  handle is bigger, and an auto-approved reorder says "✓ New order saved." instead of "the host
+  will confirm it".
+
 ## 2026-09-24 - SSD-disconnect banner: detect a wedged external drive and alert the KJ (v0.114.0)
 
 **Deploy:** backend (`external_media_monitor.py`, `app.py`, `routes.py`) + frontend (`index.html`,
