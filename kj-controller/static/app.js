@@ -525,6 +525,28 @@ async function fixAudio() {
     }
 }
 
+// --- External SSD disconnect banner (driven by /status.external_media_alert)
+// Not dismissable — it reflects a live condition (the drive is still
+// unreachable), not a one-off event, so it only clears when the health
+// check on the backend actually passes again.
+let _lastLoggedSsdAlertSince = 0;
+
+function updateSsdAlertBanner(alert) {
+    const banner = document.getElementById('ssd-alert-banner');
+    if (!banner) return;
+    if (!alert) {
+        banner.style.display = 'none';
+        _lastLoggedSsdAlertSince = 0;
+        return;
+    }
+    if (alert.since && alert.since !== _lastLoggedSsdAlertSince) {
+        _lastLoggedSsdAlertSince = alert.since;
+        log(`External media drive unreachable (${alert.mount}) — unplug and replug it now.`, 'error');
+    }
+    document.getElementById('ssd-alert-msg').textContent = alert.message;
+    banner.style.display = 'block';
+}
+
 // --- Video-player crash banner (driven by /status.player_alert) -----------
 let _lastLoggedCrashId = 0;
 
@@ -1646,6 +1668,7 @@ async function updateStatus() {
             audioWarning.style.display = data.audio_error ? 'block' : 'none';
 
             updatePlayerCrashBanner(data.player_alert);
+            updateSsdAlertBanner(data.external_media_alert);
 
             if (data.current_filler_track) {
                 const fillerSelect = document.getElementById('filler-selector');

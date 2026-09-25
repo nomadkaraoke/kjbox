@@ -221,6 +221,15 @@ admin passthrough every ~20s while the Stats panel was open) — that passthroug
 ASMedia bridge firmware. The polling was removed in v0.95.0; **do not reintroduce smartctl
 polling against this drive**.
 
+**Recurrence (2026-09-24):** the bridge hung again with the identical signature (`Sense Key: Not
+Ready`, `Medium not present`, journal I/O errors) with no smartctl process running — so this isn't
+only the v0.94.0 trigger; the bridge can wedge on its own. Same fix (physical replug) recovered it
+cleanly, no fsck needed. Since detection previously relied on the KJ noticing a 400 in the browser
+console, `external_media_monitor.py` (added the same day) now polls `external_media_mount` every
+5s with a plain `os.listdir()` — never smartctl/NVMe passthrough — and surfaces a persistent red
+"SSD disconnected — unplug and replug it now!" banner at the top of the KJ UI as soon as two
+consecutive checks fail. The banner clears itself automatically once the drive responds again.
+
 **Fix — only a physical power cycle recovers it:**
 1. Unplug the SSD's USB cable from the NomadPC, wait ~10 seconds, plug it back in.
 2. The drive auto-mounts and ext4 journal recovery runs on mount (check

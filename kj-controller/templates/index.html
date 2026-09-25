@@ -11,6 +11,10 @@
     <link rel="stylesheet" href="/static/style.css?v={{ app_version }}">
 </head>
 <body>
+    <div id="ssd-alert-banner">
+        ⚠ <span id="ssd-alert-msg"></span> ⚠
+    </div>
+
     <div id="audio-warning">
         Playback may not be progressing. If the song looks stuck, click Fix to restart the player.
         <button onclick="fixAudio()">Fix Audio</button>
