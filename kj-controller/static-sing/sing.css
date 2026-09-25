@@ -1592,7 +1592,9 @@ button.status-tile:active { transform: scale(0.99); }
 }
 .photo-consent-question { margin: 0 0 0.5rem; font-size: 0.92rem; }
 .photo-consent-choices { gap: 0.5rem; }
-.photo-consent-choices .photo-consent-btn { flex: 1 1 0; }
+.photo-consent-choices .photo-consent-btn { flex: 1 1 0; min-width: 0; }
+/* The My songs block lives inside .push-optin, whose buttons have a 240px
+   min-width — two side by side would overflow the card. */
 .photo-consent-btn.selected {
   border-color: var(--nk-accent);
   color: var(--nk-accent);

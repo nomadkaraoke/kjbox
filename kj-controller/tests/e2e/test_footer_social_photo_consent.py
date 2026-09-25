@@ -146,6 +146,14 @@ class TestMySongsConsent:
         picker = page.locator('#push-optin [data-testid="photo-consent"]')
         expect(picker).to_be_visible()
         expect(picker.locator('[data-testid="photo-consent-yes"]')).to_have_attribute("aria-pressed", "true")
+        # Both choices fit inside the picker (the .push-optin 240px button
+        # min-width used to push "Please don't" out of the card).
+        assert page.evaluate("""() => {
+            const box = document.querySelector('#push-optin [data-testid="photo-consent"]')
+                .getBoundingClientRect();
+            return [...document.querySelectorAll('#push-optin .photo-consent-btn')]
+                .every((b) => b.getBoundingClientRect().right <= box.right + 0.5);
+        }""")
         picker.locator('[data-testid="photo-consent-no"]').click()
         expect(picker.locator(".photo-consent-saved")).to_contain_text("Saved")
         assert posted == {"consent": "no", "items": [{"id": 1, "edit_token": "tok1"}]}
@@ -183,17 +191,19 @@ class TestKjRotationMarker:
         expect(rows.nth(3).locator(".rotation-photo-consent")).to_have_count(2)
         assert "does NOT want" in rows.nth(1).locator(".rotation-photo-consent").get_attribute("title")
 
-        # Click cycles: yes → no, no → cleared, unknown → yes. (The stubbed
+        # Unknown = no consent: rendered struck-through like "no".
+        assert "assume NO photos" in rows.nth(2).locator(".rotation-photo-consent").get_attribute("title")
+        # Click toggles: yes → no, no → yes, unknown → yes. (The stubbed
         # response carries no entries, so the rows don't re-render between clicks.)
         rows.nth(0).locator(".rotation-photo-consent").click()
         rows.nth(1).locator(".rotation-photo-consent").click()
-        rows.nth(2).locator(".rotation-photo-consent").click(force=True)   # faint until hover
+        rows.nth(2).locator(".rotation-photo-consent").click()
         for _ in range(50):
             if len(posted) >= 3:
                 break
             page.wait_for_timeout(50)
         assert posted == [
             {"singer": "Lindsay", "consent": "no"},
-            {"singer": "Celine", "consent": None},
+            {"singer": "Celine", "consent": "yes"},
             {"singer": "Bevbot", "consent": "yes"},
         ]

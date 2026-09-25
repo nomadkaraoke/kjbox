@@ -3439,14 +3439,14 @@ body {
     50%      { opacity: 0.35; }
 }
 /* Social-media photo consent beside a singer's name (photoConsentMarker in
-   app.js). OK = plain camera; "no" = camera struck through in red; unknown =
-   hidden until the row is hovered so the KJ can click to set it. */
+   app.js). OK = camera on green; "no" = camera struck through on red; unknown
+   = treated as no (same struck camera) with a dashed outline. */
 .rotation-photo-consent {
     position: relative;
     margin-left: 5px;
     padding: 2px 5px;
     background: none;
-    border: none;
+    border: 1px solid transparent;
     border-radius: 10px;
     font-size: 13px;
     line-height: 1;
@@ -3454,8 +3454,14 @@ body {
     vertical-align: middle;
 }
 .rotation-photo-consent.photo-consent-yes { background: #2d8a4e40; }
-.rotation-photo-consent.photo-consent-no { background: #e74c3c40; }
-.rotation-photo-consent.photo-consent-no::after {
+.rotation-photo-consent.photo-consent-no,
+.rotation-photo-consent.photo-consent-unknown { background: #e74c3c40; }
+.rotation-photo-consent.photo-consent-unknown {
+    background: #e74c3c1f;
+    border: 1px dashed #e74c3c99;
+}
+.rotation-photo-consent.photo-consent-no::after,
+.rotation-photo-consent.photo-consent-unknown::after {
     content: '';
     position: absolute;
     left: 3px;
@@ -3467,12 +3473,6 @@ body {
     transform: rotate(-40deg);
     border-radius: 2px;
     box-shadow: 0 0 0 1px #1a1a1a;
-}
-.rotation-photo-consent.photo-consent-unknown { opacity: 0; filter: grayscale(1); }
-.rotation-entry:hover .rotation-photo-consent.photo-consent-unknown,
-.rotation-photo-consent.photo-consent-unknown:focus-visible { opacity: 0.35; }
-@media (hover: none) {
-    .rotation-photo-consent.photo-consent-unknown { opacity: 0.25; }
 }
 /* Semantic happiness tiers — green = good, red = bad, consistently across both
    pills (see singCountClass/waitClass in app.js). */

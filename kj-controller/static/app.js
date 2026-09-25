@@ -5616,10 +5616,10 @@ async function autoRemoveCancelledEntry(entryId) {
 }
 
 // Social-media photo/video consent marker beside a singer's name. The singer
-// chooses on their phone (or the KJ sets it here); 📷 = OK to post, crossed-out
-// 📷 = please don't. Unknown shows only as a faint camera on row hover. Click
-// cycles unknown → OK → no photos → unknown (sets it for the singer, not the row).
-const PHOTO_CONSENT_NEXT = { '': 'yes', yes: 'no', no: null };
+// chooses on their phone (or the KJ sets it here). No answer = NO consent, so
+// unknown looks like "no" (📷 struck through) with a dashed outline to tell it
+// apart from an explicit no. Click toggles OK ⇄ no (unknown → OK).
+const PHOTO_CONSENT_NEXT = { '': 'yes', yes: 'no', no: 'yes' };
 
 function photoConsentMarker(entry, singerName) {
     const consent = (entry.photo_consent || {})[singerName] || '';
@@ -5627,12 +5627,12 @@ function photoConsentMarker(entry, singerName) {
     btn.type = 'button';
     btn.className = 'rotation-photo-consent photo-consent-' + (consent || 'unknown');
     btn.dataset.consent = consent || 'unknown';
-    btn.textContent = '\ud83d\udcf7';   // 📷 (the 'no' state is struck through in CSS)
+    btn.textContent = '\ud83d\udcf7';   // 📷 ('no'/'unknown' are struck through in CSS)
     btn.title = consent === 'yes'
         ? singerName + ' is happy to appear in photos/videos on social media (click to change)'
         : consent === 'no'
             ? singerName + ' does NOT want photos/videos of them posted on social media (click to change)'
-            : 'Photo/video consent not given yet for ' + singerName + ' (click to set)';
+            : singerName + ' hasn\u2019t given photo/video consent \u2014 assume NO photos (click if they say yes)';
     btn.setAttribute('aria-label', btn.title);
     btn.onclick = (ev) => {
         ev.stopPropagation();
