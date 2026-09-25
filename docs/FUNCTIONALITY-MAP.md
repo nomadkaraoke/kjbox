@@ -984,7 +984,7 @@ Client identity is stored in localStorage:
 - `sing_my_request_ids`: `{token, ids[], tokens{id:edit_token}}` (`:69-154`).
 - `sing_lang` and `sing_rules_commercial_community_seen`.
 
-Every mutation sends `device_id`. Server side, the `singer_aliases` table (`device_id` → `canonical_name`, `origin` `self`|`kj`, `sing_store.py:171`) overrides the typed name on `/submit` and `/tip-claim`.
+Almost every mutation sends `device_id`. **Exceptions (as of v0.114.1):** `savePhotoConsent` (`POST /sing/photo-consent`) and `POST /sing/push/subscribe` do not send it, so their rate limiting falls back to the **venue-wide per-IP budget**. On 2026-09-24, a singer tapping consent 11 times in 10 s got 6 × 429. Server side, the `singer_aliases` table (`device_id` → `canonical_name`, `origin` `self`|`kj`, `sing_store.py:171`) overrides the typed name on `/submit` and `/tip-claim`.
 
 | Capability | sing.js function (line) | HTTP | Backend handler | State mutated | Side effects | Validation / limits |
 |---|---|---|---|---|---|---|

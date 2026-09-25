@@ -54,6 +54,39 @@ Notes:
 - journald on NomadPC is capped at 200MB (~2 weeks), so copy captures off the box
   after each night.
 
+## Mining a night for edge cases
+
+After a show, scan the ActionRecorder log for every non-2xx response. Each distinct
+`(actor, path, status, response.error)` tuple is a candidate regression test or
+E2E scenario:
+
+```bash
+ssh nomadpc 'python3 - <<EOF
+import json, collections
+rows = [json.loads(l) for l in open("/home/nomad/kjdata/action-logs/2026-09-24.jsonl")]
+bad = [r for r in rows if (r.get("status") or 0) >= 400 and not r["path"].endswith(".php")]
+c = collections.Counter((r["actor"], r["method"], r["path"], r["status"],
+                         str((r.get("response") or {}).get("error"))[:60]) for r in bad)
+for k, v in c.most_common(): print(v, k)
+EOF'
+```
+
+Then line the timestamps up against `journalctl -k` (SSD drops), `journalctl -u
+kj-controller`, and the sidecar's `status.jsonl` to find what was really going on.
+The error string the app returned is not always the real cause (see 2026-09-24 below).
+
+Caveats:
+- **`actor` is `kj` for every unmatched route.** `action_recorder.py:148` sets
+  `actor` from `request.endpoint`, and a 404 has no endpoint. So internet
+  vulnerability-scanner probes against the public `sing.` host (`/sing/.env`,
+  `/sing/wp-login.php`, … about 300 on 2026-09-24) show up as **KJ** traffic. Filter
+  404s, or classify by `host`, before building KJ fixtures.
+- Singer requests are keyed by `body.device_id`, except photo-consent and
+  push/subscribe, which don't send it (see FUNCTIONALITY-MAP). Use `client` IP/UA
+  plus `session_id` to stitch those to a phone.
+- Bodies contain `edit_token`s and full kj_pick `versions[]` snapshots (tens of KB).
+  Redact the tokens. Keep the snapshots, because their **size** is the edge case.
+
 ## Privacy
 
 Captures contain real singer names and phone numbers. They stay on NomadPC /
@@ -65,4 +98,4 @@ and Telnyx payload identifiers before landing in the repo.
 
 | Night | Sidecar | ActionRecorder | Notes |
 |---|---|---|---|
-| 2026-09-24 | from 21:11 | from deploy of v0.113.0 (mid-show) | first capture; earlier part of the night is in journald + DB only |
+| 2026-09-24 | from 21:11 | from deploy of v0.113.0 (mid-show) | first capture; earlier part of the night is in journald + DB only. Edge cases found (see TESTING.md § "Edge cases from real nights"): kj_pick >50 versions 400 + rate-limit lockout (fixed v0.114.1); photo-consent 429 via venue-IP budget; push/subscribe 400 with no phone; SSD drop at 22:11 misreported as bad ZIP / bad path on `/play`; ~300 scanner 404s labelled `kj` |

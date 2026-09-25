@@ -264,6 +264,25 @@ find a playable version."
   reachable. Persistent transient errors (timeouts/429) exhaust the bounded retries and then surface
   as terminal ❌. `journalctl -u kj-controller` shows `Sing fallback:` lines tracing each decision.
 
+## Singer Says "Couldn't send" / "You've submitted a lot" (nothing in KJ UI)
+
+The singer UI shows one generic error for every 400, and a 429 once retries use up the
+per-device budget (8 per 5 min). A 400 never creates a request, so the KJ sees nothing.
+
+```bash
+# 1. Status codes + what they searched just before
+ssh nomadpc 'journalctl -u kj-controller --since "-30min" --no-pager | grep -E "POST /submit|GET /search"'
+# 2. The exact error body (ActionRecorder, v0.113.0+). Files roll at NOON, so after
+#    midnight use the previous date: $(date -d "-12 hours" +%F)
+ssh nomadpc 'grep "/sing/submit" ~/kjdata/action-logs/$(date -d "-12 hours" +%F).jsonl | grep "\"status\": 4" | tail -3 | cut -c1-600'
+```
+
+Known causes: `kj_pick too many versions` (fixed v0.114.1), `phone format invalid`,
+`simple_mode_disabled_source`, `make_requests_disabled`. Workaround during a show: add
+the song from the KJ UI, or have the singer expand the song and pick a specific
+version (sends one concrete version, not a `kj_pick`). The device budget clears 5 min
+after the last attempt.
+
 ## Docker Containers Not Running
 
 ```bash

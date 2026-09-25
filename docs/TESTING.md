@@ -69,6 +69,38 @@ Shared fixtures live in `tests/conftest.py`:
 - YouTube health: 90%+
 - VLC subprocess launching: excluded (requires real `cvlc` binary)
 
+## Edge cases from real nights
+
+Found by mining ActionRecorder logs (recipe in [NIGHT-RECORDING.md](NIGHT-RECORDING.md)).
+Every row is a real failure a singer or the KJ hit. Unit/integration coverage must hold
+the "Test" column, and the future E2E night-replay suite must include the scenario.
+
+| Night | Scenario | What happened | Status | Test |
+|---|---|---|---|---|
+| 2026-09-24 | Singer taps a **popular song with >50 versions** (Backstreet Boys "I Want It That Way" = 60) → `kj_pick` | 5 × 400 `kj_pick too many versions (60 > 50)`. The singer saw a generic "Couldn't send", and nothing reached the KJ | ✅ v0.114.1: snapshot trimmed to the best 50 by `priority_rank` (only >1000 or non-object entries refused). Change-song trims too | `test_sing_kj_pick.py::test_trims_oversized_snapshot_to_best_ranked`, `::test_accepts_popular_song_over_trim_cap`, `::test_rejects_non_object_version_entries`, `test_sing_public_routes.py::TestChangeSong::test_change_to_popular_kj_pick_is_trimmed_not_refused` |
+| 2026-09-24 | Singer **retries a rejected submit** | Each 400 used up a device rate-limit slot, so the 6th try got 429 "You've submitted a lot" | ✅ v0.114.1: a submit 400 refunds that request's exact device slot. The per-IP slot is kept as the flood backstop | `test_sing_ux_i18n.py::test_rejected_submits_do_not_burn_the_device_budget`, `::test_refund_removes_only_this_requests_slot` |
+| 2026-09-24 | Singer taps **photo consent** repeatedly (11 × in 10 s) | 6 × 429. `savePhotoConsent` sends no `device_id`, so it only has the **venue-wide per-IP** budget. A busy bar can exhaust it for everyone | ❌ open: send `device_id`, debounce the buttons | — |
+| 2026-09-24 | Singer **without a phone** enables push notifications | 6 × 400 `missing fields` over 27 min. `/sing/push/subscribe` requires `phone`, but phone is optional at signup, so the singer silently never gets pushes | ❌ open: key subscriptions by device/singer when there's no phone | — |
+| 2026-09-24 | **4TB SSD drops out** ("Medium not present") while the KJ plays a song | `/play` returned "ZIP file does not contain a playable .mp3" and "Invalid or inaccessible file path" for files that are fine. The KJ tried 4 versions | 🟡 partly mitigated: v0.114.0 (PR #236) shows a KJ-UI banner when the SSD drops ([session record](sessions/2026-Q3/2026-09-24-ssd-disconnect-banner.md)). The `/play` error text still blames the file | — |
+
+### Rules these imply for new tests and E2E fixtures
+
+- **Use realistic payload sizes.** Fixtures with 2 versions hid the 50-cap for months.
+  Include a popular song with **60+ versions** (local copies + KN + mirror-only) in
+  search/submit fixtures.
+- **Model retries.** Real singers re-tap when they see an error. Any E2E scenario that
+  expects a 4xx should replay it 5–10 times and assert that the phone is *not* then
+  locked out (429), and that a valid follow-up still succeeds.
+- **Model the shared venue IP.** Every phone at the bar shares one public IP (through
+  cloudflared). Tests for any endpoint must check which budget it spends: device
+  (`body.device_id`) or venue IP.
+- **Every mutation must send `device_id`.** Add a test when adding a singer endpoint.
+- **Optional fields must really be optional downstream.** If signup allows no phone,
+  every later feature (push, SMS, rename) must work or degrade clearly without one.
+- **Infra failures must not masquerade as data errors.** Tests around `/play` and
+  downloads should simulate a missing mount (`ENOENT`/`EIO`) and assert an
+  "offline" error, not "bad file".
+
 ## VLC Testing Strategy
 
 VLC code is testable at three levels:
