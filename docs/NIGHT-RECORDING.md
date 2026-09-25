@@ -41,18 +41,25 @@ ssh nomadpc 'sudo systemd-run --unit=kj-night-capture --uid=nomad --gid=nomad \
   --out /home/nomad/kjdata/night-captures/$(date +%F)'
 # after the show (takes a final snapshot):
 ssh nomadpc 'sudo systemctl stop kj-night-capture'
+rsync -a nomadpc:/home/nomad/kjdata/night-captures/$N/ $D/capture/
+rsync -a nomadpc:/home/nomad/kjdata/action-logs/$N.jsonl $D/actions.jsonl
+# Replace the sidecar's journal with the WHOLE night (covers the time before the
+# sidecar started; journald keeps ~2 weeks). macOS `date -j` computes next-day noon.
+ssh nomadpc "journalctl -u kj-controller -o json --since '$N 16:00' --until "$(date -j -v+1d -f %F $N +%F) 12:00" --no-pager" \
+  > $D/capture/journal.jsonl
+python3 kj-controller/scripts/night_fixture.py --capture $D/capture --actions $D/actions.jsonl \
+  --out $D/fixture [--pseudonymize-names]
 ```
 
-Output directory: `db_changes.jsonl`, `status.jsonl`, `journal.jsonl`,
-`capture_log.jsonl`, `snapshots/{start,periodic,final}-*.db.gz`.
-
-Notes:
-- Diffs are keyed by SQLite `rowid` and polled every 1s via `PRAGMA data_version`;
-  a row inserted and deleted within the same second is not seen (the ActionRecorder
-  still has the request). `INSERT OR REPLACE` (e.g. `rotation_meta.last_sheet_sync`)
-  appears as insert+delete pairs.
-- journald on NomadPC is capped at 200MB (~2 weeks), so copy captures off the box
-  after each night.
+`night_fixture.py` harvests every phone number it can see (phone-ish DB columns and
+body keys), then replaces those digit sequences **in any format, anywhere** (SMS
+bodies, Telnyx webhooks, journal lines, JSON columns) with stable fakes
+(`+1555000000N`, same person ⇒ same fake). Client IPs → `10.x.y.z`; push
+endpoint/keys, Telnyx message ids, edit tokens, session hashes → `redacted-<sha>`.
+`redaction.json` holds counts only — the real→fake map is never written.
+Tested in `tests/unit/test_night_fixture.py`; also run a leak check against the raw
+snapshot before publishing (the kjbox repo is **public** — decide on
+`--pseudonymize-names` before committing a fixture).
 
 ## Mining a night for edge cases
 
