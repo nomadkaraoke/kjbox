@@ -3,6 +3,7 @@ drives the KJ UI's alert banner (see docs/TROUBLESHOOTING.md, "4TB USB SSD
 Drops Offline")."""
 
 import os
+import threading
 import time
 
 from external_media_monitor import ExternalMediaMonitor, FAILURE_THRESHOLD
@@ -117,6 +118,27 @@ def test_start_after_stop_resumes_polling(tmp_path):
     mon._thread.join(timeout=2)
 
 
+def test_start_immediately_after_stop_still_restarts(tmp_path):
+    # No join() between stop() and start() — the old loop may still be mid
+    # check_once() when start() is called. start() must wait it out rather
+    # than silently leaving monitoring off (see CodeRabbit finding: restart
+    # race between stop() and start()).
+    mon = ExternalMediaMonitor(_config(str(tmp_path)))
+    mon.stop_join_timeout = 2  # keep the test fast
+    mon.start()
+    first_thread = mon._thread
+    assert first_thread is not None
+
+    mon.stop()
+    mon.start()  # called before first_thread has necessarily exited yet
+    assert mon._thread is not None
+    assert mon._thread.is_alive()
+
+    mon.stop()
+    mon._thread.join(timeout=2)
+    assert not mon._thread.is_alive()
+
+
 def test_check_once_treats_a_stuck_probe_as_unhealthy(tmp_path, monkeypatch):
     mon = ExternalMediaMonitor(_config(str(tmp_path)))
     mon.probe_timeout = 0.05  # keep the test fast
@@ -129,3 +151,30 @@ def test_check_once_treats_a_stuck_probe_as_unhealthy(tmp_path, monkeypatch):
     for _ in range(FAILURE_THRESHOLD):
         mon.check_once()
     assert mon.alert is not None
+
+
+def test_stuck_probe_does_not_accumulate_a_thread_per_poll(tmp_path, monkeypatch):
+    # A prolonged failure polls every CHECK_INTERVAL_SECONDS — if _probe()
+    # stays blocked, each check_once() must NOT spawn another probe thread on
+    # top of the one still running, or a long outage would leak threads
+    # without bound (see CodeRabbit finding: unbounded outstanding probes).
+    mon = ExternalMediaMonitor(_config(str(tmp_path)))
+    mon.probe_timeout = 0.05
+
+    call_count = {"n": 0}
+    release = threading.Event()
+
+    def _stuck(mount):
+        call_count["n"] += 1
+        release.wait(5)  # stays "in flight" until the test releases it
+        return True
+
+    monkeypatch.setattr(ExternalMediaMonitor, "_probe", staticmethod(_stuck))
+    try:
+        mon.check_once()
+        mon.check_once()
+        mon.check_once()
+        assert call_count["n"] == 1
+    finally:
+        release.set()
+        mon._probe_thread.join(timeout=2)

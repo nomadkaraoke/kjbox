@@ -38,15 +38,26 @@ class ExternalMediaMonitor:
         self._alert = None
         self._thread = None
         self._stop_event = threading.Event()
+        self._probe_thread = None
         self.probe_timeout = PROBE_TIMEOUT_SECONDS
+        # Generous bound for start() to wait out an in-flight stop() before
+        # spawning a replacement thread — covers the current check_once()
+        # call finishing (bounded by probe_timeout) plus its own processing.
+        self.stop_join_timeout = CHECK_INTERVAL_SECONDS + PROBE_TIMEOUT_SECONDS + 1
 
     def start(self):
         """Start the background poll loop. No-op if no mount is configured,
-        or if a previously-started loop is still running."""
+        or if a previously-started loop is still running and healthy."""
         if not self.config.get('external_media_mount', ''):
             return
         if self._thread is not None and self._thread.is_alive():
-            return
+            if self._stop_event.is_set():
+                # A stop() is already in flight — wait for the old loop to
+                # actually exit before spawning its replacement, so a
+                # stop()-then-start() pair can't leave monitoring silently off.
+                self._thread.join(self.stop_join_timeout)
+            if self._thread.is_alive():
+                return  # still shutting down — caller can retry start() later
         self._stop_event.clear()
         self._thread = threading.Thread(target=self._loop, daemon=True, name='ssd-health')
         self._thread.start()
@@ -103,15 +114,22 @@ class ExternalMediaMonitor:
         built-in timeout, and nothing in this thread can forcibly interrupt a
         stuck one — so isolate the call on a daemon thread and just stop
         waiting on it. A probe that's still running after the deadline is
-        treated as unhealthy; the orphaned thread is harmless (daemon, and it
-        will exit whenever the syscall eventually returns).
+        treated as unhealthy; the orphaned thread is harmless in isolation,
+        but a prolonged failure polls every CHECK_INTERVAL_SECONDS, so at most
+        one probe thread is ever kept in flight at a time — a still-running
+        one from a prior cycle short-circuits this call as unhealthy instead
+        of piling on another thread every poll.
         """
+        if self._probe_thread is not None and self._probe_thread.is_alive():
+            return False
+
         result = {}
 
         def _run():
             result['ok'] = self._probe(mount)
 
         t = threading.Thread(target=_run, daemon=True)
+        self._probe_thread = t
         t.start()
         t.join(self.probe_timeout)
         if t.is_alive():
