@@ -1535,6 +1535,10 @@ def get_status():
         "renderer": vlc.describe_renderer(),
         "player_alert": vlc.player_alert,
         "player_health_events": vlc.player_health_events,
+        "external_media_alert": (
+            current_app.external_media_monitor.alert
+            if getattr(current_app, 'external_media_monitor', None) else None
+        ),
     }
     try:
         response_payload["simple_mode"] = current_app.sing_store.is_simple_mode()

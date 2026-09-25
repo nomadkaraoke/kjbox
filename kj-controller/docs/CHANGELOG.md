@@ -4,6 +4,29 @@ Dated entries, newest first. Each entry notes any required deploy steps.
 
 ---
 
+## 2026-09-24 - SSD-disconnect banner: detect a wedged external drive and alert the KJ (v0.114.0)
+
+**Deploy:** backend (`external_media_monitor.py`, `app.py`, `routes.py`) + frontend (`index.html`,
+`style.css`, `app.js`) → **requires `systemctl restart kj-controller`** (deploy between songs). No
+migration.
+
+- **Why:** the 4TB USB SSD's ASMedia bridge hung again on 2026-09-24 (see
+  docs/TROUBLESHOOTING.md, "4TB USB SSD Drops Offline" — recurrence note), and the only symptom
+  was a generic `POST /play` → 400 "Invalid or inaccessible file path" that the KJ had to notice
+  and report manually. There was no in-app signal telling them the drive itself needed a physical
+  replug.
+- **What:** `external_media_monitor.py` polls `external_media_mount` every 5s with a plain
+  `os.listdir()` (never smartctl/NVMe passthrough — that's what hung the bridge in the first
+  place) and, after two consecutive failures, surfaces `external_media_alert` on `/status`. The
+  frontend renders it as a sticky, pulsing red banner at the very top of the KJ UI: "SSD
+  disconnected — unplug and replug it now!". It clears itself automatically once the health check
+  passes again — no operator dismiss, since it reflects a live condition rather than a one-off
+  event.
+- **Tests:** `test_external_media_monitor.py` (probe/threshold/recovery logic) +
+  `test_routes_external_media_alert.py` (`/status` wiring).
+
+---
+
 ## 2026-09-22 - Catalog-mirror miss-latency fix (v0.105.1)
 
 **Deploy:** backend (`catalog_mirror.py`) → **requires `systemctl restart kj-controller`** (deploy between songs). No migration.

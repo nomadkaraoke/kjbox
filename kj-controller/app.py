@@ -27,6 +27,7 @@ from utils import log_message
 from action_recorder import install_action_recorder
 from audio_monitor import AudioMonitor
 from chromium import ChromiumManager
+from external_media_monitor import ExternalMediaMonitor
 from zip_playback import ZipPlayback
 
 
@@ -234,6 +235,26 @@ def _install_action_recorder(flask_app, cfg, default_enabled):
         log_message(f"ActionRecorder init failed (non-fatal): {e}", cfg)
 
 
+def _install_external_media_monitor(flask_app, cfg, start):
+    """Attach the ExternalMediaMonitor (external SSD health -> KJ banner).
+
+    `start` gates the background thread: True on real devices, False under
+    tests. Failure here is swallowed so a broken monitor can never block
+    app startup.
+    """
+    try:
+        monitor = ExternalMediaMonitor(cfg)
+        flask_app.external_media_monitor = monitor
+        if start:
+            monitor.start()
+    except Exception as e:  # pragma: no cover - defensive
+        flask_app.external_media_monitor = None
+        try:
+            log_message(f"ExternalMediaMonitor init failed (non-fatal): {e}", cfg)
+        except Exception:
+            pass
+
+
 def create_app(config=None):
     """Create and configure the Flask application."""
     flask_app = Flask(__name__)
@@ -367,6 +388,7 @@ def create_app(config=None):
     # pass a config and get the sampler object without a live thread.
     _install_perf_monitor(flask_app, cfg, start=(config is None))
     _install_action_recorder(flask_app, cfg, default_enabled=(config is None))
+    _install_external_media_monitor(flask_app, cfg, start=(config is None))
 
     flask_app.register_blueprint(routes_bp)
     flask_app.register_blueprint(sing_bp)
@@ -557,6 +579,7 @@ def start_app():  # pragma: no cover
 
     _install_perf_monitor(flask_app, cfg, start=True)
     _install_action_recorder(flask_app, cfg, default_enabled=True)
+    _install_external_media_monitor(flask_app, cfg, start=True)
 
     flask_app.register_blueprint(routes_bp)
     flask_app.register_blueprint(sing_bp)
