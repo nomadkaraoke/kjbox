@@ -69,8 +69,15 @@ class TestValidateHelper:
         err = _validate_kj_pick_payload({"source_meta": {"versions": versions}})
         assert err is None
 
+    def test_accepts_popular_song_over_trim_cap(self):
+        # 2026-09-24: "I Want It That Way" had 60 versions and every singer who
+        # tapped it got a 400 — oversized snapshots are trimmed, not refused.
+        versions = [{"kind": "local", "path": f"/v{i}.mp4"} for i in range(60)]
+        err = _validate_kj_pick_payload({"source_meta": {"versions": versions}})
+        assert err is None
+
     def test_rejects_pathological_version_count(self):
-        versions = [{"kind": "local", "path": f"/v{i}.mp4"} for i in range(51)]
+        versions = [{"kind": "local", "path": f"/v{i}.mp4"} for i in range(1001)]
         err = _validate_kj_pick_payload({"source_meta": {"versions": versions}})
         assert err is not None
         assert "too many" in err.lower()
@@ -180,8 +187,27 @@ class TestKjPickAutoApprove:
         assert sing_app.sing_store.get_request(
             data["request"]["id"])["source_type"] == "kj_pick"
 
-    def test_rejects_too_many_versions(self, client, token):
-        versions = [{"kind": "local", "path": f"/v{i}.mp4"} for i in range(51)]
+    def test_trims_oversized_snapshot_to_best_ranked(self, client, sing_app, token):
+        """60 versions (a popular song) → accepted, trimmed to the 50 best by
+        priority_rank; the best version survives, the worst ones drop."""
+        from sing import _KJ_PICK_MAX_VERSIONS
+
+        # Unbranded filler first, the single best-ranked (SC) version LAST so a
+        # naive head-truncation would lose it.
+        versions = [{"source": "local", "local": {"path": f"/v{i}.mp4", "disc_id": None}}
+                    for i in range(59)]
+        versions.append({"source": "local",
+                         "local": {"path": "/best.zip", "disc_id": "SC8542-01"}})
+        body = _kj_pick_body(source_meta={"versions": versions, "version_count": 60})
+        resp = client.post(f"/sing/submit?t={token}", json=body)
+        assert resp.status_code == 200
+        stored = sing_app.sing_store.get_request(resp.get_json()["request"]["id"])
+        kept = json.loads(stored["source_meta"])["versions"]
+        assert len(kept) == _KJ_PICK_MAX_VERSIONS
+        assert "/best.zip" in [v["local"]["path"] for v in kept]
+
+    def test_rejects_pathological_snapshot(self, client, token):
+        versions = [{"kind": "local", "path": f"/v{i}.mp4"} for i in range(1001)]
         body = _kj_pick_body(source_meta={"versions": versions})
         resp = client.post(f"/sing/submit?t={token}", json=body)
         assert resp.status_code == 400

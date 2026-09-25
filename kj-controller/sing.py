@@ -143,6 +143,25 @@ def _singer_rate_limited(req, data=None):
     return False
 
 
+def _refund_device_rate_slot(data):
+    """Give back the device slot a rejected (400) mutation consumed.
+
+    A singer whose request fails validation will naturally retry; without this
+    each retry burns their per-device budget and they end up locked out with
+    "too many attempts" for a bug that isn't theirs. The per-IP slot is kept
+    so a scripted flood of invalid payloads still hits the IP ceiling.
+    """
+    device_id = ""
+    if isinstance(data, dict):
+        device_id = str(data.get("device_id") or "").strip()[:64]
+    if not device_id:
+        return
+    with _rate_limit_lock:
+        q = _rate_limit_state.get(f"dev:{device_id}")
+        if q:
+            q.pop()
+
+
 def _safe_call(fn, default=None):
     """Call a store accessor that may not exist / may raise (older stores,
     test fixtures); template context must never 500 the singer page."""
@@ -365,7 +384,12 @@ def install_public_host_rewriter(flask_app):
 _PHONE_RE = re.compile(r"^\+?[0-9 \-()]{7,20}$")
 _ALLOWED_SOURCES = {"local", "divebar", "kn", "youtube", "make", "kj_pick"}
 _SIMPLE_MODE_SOURCES = {"local", "divebar", "kn"}
-_KJ_PICK_MAX_VERSIONS = 50  # refuse pathological snapshots (see Phase A §3a)
+# Popular songs legitimately exceed 50 versions now that search surfaces every
+# local copy (e.g. "I Want It That Way" = 60) — so an oversized snapshot is
+# TRIMMED to its best-ranked _KJ_PICK_MAX_VERSIONS, never refused. Only a truly
+# pathological payload (> _KJ_PICK_HARD_LIMIT) is rejected.
+_KJ_PICK_MAX_VERSIONS = 50
+_KJ_PICK_HARD_LIMIT = 1000
 
 
 def _validate_kj_pick_payload(data):
@@ -382,14 +406,28 @@ def _validate_kj_pick_payload(data):
     versions = meta.get("versions") or []
     if not isinstance(versions, list) or not versions:
         return "kj_pick requires source_meta.versions[]"
-    if len(versions) > _KJ_PICK_MAX_VERSIONS:
-        # Guardrail — if we hit this in practice, grouping normalization
-        # missed a dedup opportunity and should be widened.
+    if len(versions) > _KJ_PICK_HARD_LIMIT:
         return (
             f"kj_pick too many versions ({len(versions)} > "
-            f"{_KJ_PICK_MAX_VERSIONS}) — refusing"
+            f"{_KJ_PICK_HARD_LIMIT}) — refusing"
         )
     return None
+
+
+def _trim_kj_pick_versions(meta, cfg):
+    """Keep only the best-ranked ``_KJ_PICK_MAX_VERSIONS`` of a kj_pick snapshot.
+
+    Uses the same ranking as auto-approve / the admin picker's ⭐ BEST, so the
+    versions a KJ would actually choose are always the ones kept. Surviving
+    versions stay in their original (search-time) order.
+    """
+    versions = meta.get("versions") or []
+    if len(versions) <= _KJ_PICK_MAX_VERSIONS:
+        return meta
+    from routes import _ranked_version_indices
+
+    keep = sorted(_ranked_version_indices(versions, cfg)[:_KJ_PICK_MAX_VERSIONS])
+    return {**meta, "versions": [versions[i] for i in keep]}
 
 
 _MAX_ADDITIONAL_SINGERS = 3
@@ -970,6 +1008,10 @@ def submit():
     if _singer_rate_limited(request, data):
         return jsonify({"error": "rate_limited"}), 429
 
+    def _reject(error):
+        _refund_device_rate_slot(data)
+        return jsonify({"error": error}), 400
+
     singer_name = (data.get("singer_name") or "").strip()
     device_id = (data.get("device_id") or "").strip()[:64]
     phone = (data.get("phone") or "").strip()
@@ -981,14 +1023,14 @@ def submit():
     notes = (data.get("notes") or "").strip()
     photo_consent = data.get("photo_consent")
     if photo_consent not in (None, "", "yes", "no"):
-        return jsonify({"error": "photo_consent must be 'yes' or 'no'"}), 400
+        return _reject("photo_consent must be 'yes' or 'no'")
     additional_raw = data.get("additional_singers")
     additional, additional_err = _validate_additional_singers(additional_raw)
     if additional_err:
-        return jsonify({"error": additional_err}), 400
+        return _reject(additional_err)
 
     if not singer_name:
-        return jsonify({"error": "singer_name is required"}), 400
+        return _reject("singer_name is required")
     # Device alias override — a KJ or the singer themselves may have renamed this
     # device's singer; the typed name (from the device's localStorage) is stale
     # until they refresh, so the canonical name wins. Keeps a renamed singer from
@@ -1001,27 +1043,28 @@ def submit():
     # singers can opt out. If supplied, the format must still parse so the
     # KJ doesn't waste time trying to dial garbage.
     if phone and not _PHONE_RE.match(phone):
-        return jsonify({"error": "phone format invalid"}), 400
+        return _reject("phone format invalid")
     if source_type not in _ALLOWED_SOURCES:
-        return jsonify({"error": f"source_type must be one of {sorted(_ALLOWED_SOURCES)}"}), 400
+        return _reject(f"source_type must be one of {sorted(_ALLOWED_SOURCES)}")
     if store.is_simple_mode() and source_type not in _SIMPLE_MODE_SOURCES:
-        return jsonify({"error": "simple_mode_disabled_source"}), 400
+        return _reject("simple_mode_disabled_source")
     if source_type in {"local", "divebar", "kn", "youtube"} and not source_ref:
-        return jsonify({"error": "source_ref is required for this source_type"}), 400
+        return _reject("source_ref is required for this source_type")
     if source_type == "make":
         # Phase C — the KJ can turn this feature off per-event when they're
         # too busy to do same-night lyrics reviews. Defence-in-depth against
         # a stale sing.js from before the toggle flipped.
         if not store.is_accepting_make_requests():
-            return jsonify({"error": "make_requests_disabled"}), 400
+            return _reject("make_requests_disabled")
         if not (song_artist and song_title):
-            return jsonify({"error": "song_artist and song_title are required for make"}), 400
+            return _reject("song_artist and song_title are required for make")
     if source_type == "kj_pick":
         err = _validate_kj_pick_payload(data)
         if err:
-            return jsonify({"error": err}), 400
+            return _reject(err)
+        source_meta = _trim_kj_pick_versions(source_meta, cfg)
         if not (song_artist and song_title):
-            return jsonify({"error": "song_artist and song_title are required for kj_pick"}), 400
+            return _reject("song_artist and song_title are required for kj_pick")
 
     # Duet-partner dedup: fold typed partner names onto tonight's canonical
     # singer spellings ("sara" → "Sarah B.") so the rotation's exact-string
