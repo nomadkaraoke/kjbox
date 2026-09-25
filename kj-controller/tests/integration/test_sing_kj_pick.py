@@ -54,6 +54,12 @@ class TestValidateHelper:
         err = _validate_kj_pick_payload({"source_meta": {"versions": "nope"}})
         assert err is not None
 
+    def test_rejects_non_object_version_entries(self):
+        for bad in (None, "x", 3):
+            err = _validate_kj_pick_payload(
+                {"source_meta": {"versions": [{"kind": "local"}, bad]}})
+            assert err is not None and "objects" in err
+
     def test_rejects_missing_versions_key(self):
         err = _validate_kj_pick_payload({"source_meta": {}})
         assert err is not None

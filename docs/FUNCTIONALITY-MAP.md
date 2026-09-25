@@ -255,7 +255,7 @@ Cross-cutting mechanics that every step relies on:
   7. simple mode allows only `{local, divebar, kn}`;
   8. `source_ref` is required for local/divebar/kn/youtube;
   9. `make` requires `accept_make_requests` plus artist and title;
-  10. `kj_pick` requires a valid `versions` snapshot (max 50).
+  10. `kj_pick` requires a valid `versions` snapshot (object entries, max 1000; trimmed to the 50 best by `priority_rank`).
 - **Duet partners** are canonicalised against tonight's known names (`_canonicalize_partners` S:1370 / `match_known_singer` S:1312).
 - **Backend:** `SS.create_request` (SS:734) stores a pending row with token, a `secrets.token_urlsafe(16)` edit_token, the user agent and the device_id. Then `SS.set_photo_consent` (best-effort).
 - **Auto-approve branch** (when `SS.is_auto_approve()`):

@@ -69,6 +69,17 @@ class TestSingerRateLimit:
                 body = {"device_id": name}
                 assert not sing._singer_rate_limited(_Req("10.0.0.3", body), body)
 
+    def test_refund_removes_only_this_requests_slot(self, flask_app):
+        """A refund must not drop a concurrent request's newer timestamp."""
+        with flask_app.test_request_context():
+            flask_app.kj_config["sing_rate_limit_per_device"] = 100
+            body = {"device_id": "race"}
+            assert not sing._singer_rate_limited(_Req("10.0.0.8", body), body)
+            mine = sing.g.sing_rl_device_slot[1]
+            sing._rate_limit_state["dev:race"].append(mine + 1.0)   # concurrent request
+            sing._refund_device_rate_slot()
+            assert list(sing._rate_limit_state["dev:race"]) == [mine + 1.0]
+
     def test_reads_body_when_not_supplied(self, flask_app):
         with flask_app.app_context():
             flask_app.kj_config["sing_rate_limit_per_device"] = 1

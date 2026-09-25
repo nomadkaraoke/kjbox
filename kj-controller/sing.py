@@ -19,6 +19,7 @@ from flask import (
     Blueprint,
     abort,
     current_app,
+    g,
     jsonify,
     render_template,
     request,
@@ -140,10 +141,14 @@ def _singer_rate_limited(req, data=None):
                 return True
         for key, _limit in keys:
             _rate_limit_state[key].append(now)
+    if device_id:
+        # Remember exactly which slot this request took so a later 400 can
+        # refund it without touching a concurrent request's timestamp.
+        g.sing_rl_device_slot = (f"dev:{device_id}", now)
     return False
 
 
-def _refund_device_rate_slot(data):
+def _refund_device_rate_slot():
     """Give back the device slot a rejected (400) mutation consumed.
 
     A singer whose request fails validation will naturally retry; without this
@@ -151,15 +156,17 @@ def _refund_device_rate_slot(data):
     "too many attempts" for a bug that isn't theirs. The per-IP slot is kept
     so a scripted flood of invalid payloads still hits the IP ceiling.
     """
-    device_id = ""
-    if isinstance(data, dict):
-        device_id = str(data.get("device_id") or "").strip()[:64]
-    if not device_id:
+    slot = g.pop("sing_rl_device_slot", None)
+    if not slot:
         return
+    key, ts = slot
     with _rate_limit_lock:
-        q = _rate_limit_state.get(f"dev:{device_id}")
+        q = _rate_limit_state.get(key)
         if q:
-            q.pop()
+            try:
+                q.remove(ts)
+            except ValueError:
+                pass  # already aged out of the window
 
 
 def _safe_call(fn, default=None):
@@ -406,6 +413,8 @@ def _validate_kj_pick_payload(data):
     versions = meta.get("versions") or []
     if not isinstance(versions, list) or not versions:
         return "kj_pick requires source_meta.versions[]"
+    if not all(isinstance(v, dict) for v in versions):
+        return "kj_pick source_meta.versions[] entries must be objects"
     if len(versions) > _KJ_PICK_HARD_LIMIT:
         return (
             f"kj_pick too many versions ({len(versions)} > "
@@ -1009,7 +1018,7 @@ def submit():
         return jsonify({"error": "rate_limited"}), 429
 
     def _reject(error):
-        _refund_device_rate_slot(data)
+        _refund_device_rate_slot()
         return jsonify({"error": error}), 400
 
     singer_name = (data.get("singer_name") or "").strip()
@@ -1719,6 +1728,7 @@ def change_request(req_id):
         err = _validate_kj_pick_payload(data)
         if err:
             return jsonify({"error": err}), 400
+        source_meta = _trim_kj_pick_versions(source_meta, current_app.kj_config or {})
 
     if req["status"] == "pending":
         # update_request keeps existing values when a field is None, which would
