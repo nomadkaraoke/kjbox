@@ -90,13 +90,17 @@ class ExternalMediaMonitor:
     def _probe(mount):
         """Cheap, fast health check. Returns True if the mount looks healthy.
 
-        Deliberately doesn't check os.path.ismount() first: during the real
-        incident the mount stayed registered (df -h still showed it mounted)
-        while every read failed, so ismount() alone would miss it. A plain
-        os.listdir() catches both a wedged bridge (OSError: I/O error) and an
-        actually-vanished mountpoint (OSError: no such file).
+        Needs both checks: a wedged bridge stays registered as mounted (df -h
+        still showed it mounted during the real incidents) while every read
+        fails, so os.listdir() alone catches that. But a *cleanly* unmounted
+        drive reverts the mount point to an ordinary (often empty, readable)
+        directory on the underlying filesystem — os.listdir() would happily
+        succeed there and falsely report healthy, so os.path.ismount() is
+        checked first to catch that case too.
         """
         try:
+            if not os.path.ismount(mount):
+                return False
             os.listdir(mount)
             return True
         except OSError:

@@ -17,7 +17,11 @@ def test_no_alert_when_mount_not_configured():
     assert mon.alert is None
 
 
-def test_healthy_mount_never_alerts(tmp_path):
+def test_healthy_mount_never_alerts(tmp_path, monkeypatch):
+    # tmp_path is a real, readable directory but not an actual mount point —
+    # simulate the "genuinely mounted" case os.path.ismount() would report on
+    # a real device, since _probe() requires both checks to pass.
+    monkeypatch.setattr(os.path, "ismount", lambda p: True)
     mon = ExternalMediaMonitor(_config(str(tmp_path)))
     for _ in range(FAILURE_THRESHOLD + 2):
         mon.check_once()
@@ -72,6 +76,7 @@ def test_alert_clears_once_mount_recovers(tmp_path, monkeypatch):
 
 
 def test_probe_returns_false_on_oserror_listdir(tmp_path, monkeypatch):
+    monkeypatch.setattr(os.path, "ismount", lambda p: True)
     real_listdir = os.listdir
 
     def _boom(path):
@@ -80,6 +85,14 @@ def test_probe_returns_false_on_oserror_listdir(tmp_path, monkeypatch):
         return real_listdir(path)
 
     monkeypatch.setattr(os, "listdir", _boom)
+    assert ExternalMediaMonitor._probe(str(tmp_path)) is False
+
+
+def test_probe_returns_false_when_cleanly_unmounted(tmp_path, monkeypatch):
+    # The mount point reverted to an ordinary (readable) directory on the
+    # underlying filesystem — os.listdir() would succeed, but ismount() says
+    # it's no longer the drive, so the probe must still report unhealthy.
+    monkeypatch.setattr(os.path, "ismount", lambda p: False)
     assert ExternalMediaMonitor._probe(str(tmp_path)) is False
 
 

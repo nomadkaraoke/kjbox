@@ -542,8 +542,11 @@ function updateSsdAlertBanner(alert) {
     if (alert.since && alert.since !== _lastLoggedSsdAlertSince) {
         _lastLoggedSsdAlertSince = alert.since;
         log(`External media drive unreachable (${alert.mount}) — unplug and replug it now.`, 'error');
+        // Only touch textContent when the alert actually changes — role="alert"
+        // re-announces on every mutation, so updating it on every 2s poll would
+        // repeat the same announcement to screen-reader users indefinitely.
+        document.getElementById('ssd-alert-msg').textContent = alert.message;
     }
-    document.getElementById('ssd-alert-msg').textContent = alert.message;
     banner.style.display = 'block';
 }
 
