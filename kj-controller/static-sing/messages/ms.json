@@ -85,7 +85,8 @@
     "ideasCrowd": "Kegemaran ramai di sini",
     "ideasNone": "Tiada sejarah lagu lagi — malam ini malamnya!",
     "ideasFailed": "Tidak dapat memuatkan sejarah lagu.",
-    "plays": "▶ {count}"
+    "plays": "▶ {count}",
+    "makeOffer": "Bukan versi yang anda mahukan? Kami boleh buatkan untuk anda →"
   },
   "versions": {
     "sectionLibrary": "Dalam pustaka kami",
@@ -190,31 +191,20 @@
     "simpleBody": "Cuba carian lain, atau bercakap dengan hos di depan.",
     "title": "Tidak jumpa dalam katalog kami.",
     "intro": {
-      "one": "Satu cara untuk teruskan:",
-      "other": "{count} cara untuk teruskan — pilih yang sesuai dengan usaha yang anda mahukan."
+      "one": "Ini yang anda boleh buat:",
+      "other": "{count} pilihan untuk anda:"
     },
     "step": "{n}. {title}",
     "youtubeTitle": "Tampal pautan YouTube",
     "youtubeDesc": "Paling pantas. Jika anda jumpa lagu itu di YouTube, tampal pautan dan kami akan gunakannya terus. Kualiti mungkin berbeza.",
     "youtubePlaceholder": "https://youtu.be/…",
     "youtubeCta": "Guna pautan YouTube ini →",
-    "makeTitle": "Minta hos sediakannya malam ini",
-    "makeDesc": "Percuma, tetapi mengambil masa — biasanya 20 minit hingga 1 jam. Hos tidak selalu dapat melakukannya pada malam yang sibuk, dan sesetengah lagu terlalu rumit untuk dibuat secara langsung. Jika hos tidak dapat melakukannya malam ini, mereka akan beritahu anda.",
+    "makeTitle": "Kami akan buatkan untuk anda",
+    "makeDesc": "Taip nama artis dan tajuk lagu dan kami akan buatkan video karaoke untuk anda secara automatik — biasanya siap dalam masa 15–30 minit, dan anda akan masuk giliran sebaik sahaja ia siap. Jika lagu itu perlukan bantuan, hos akan uruskannya.",
     "artist": "Artis",
     "songTitle": "Tajuk lagu",
-    "makeCta": "Tanya hos →",
-    "makeConfirm": "Meminta hos menyediakan \"{title}\" oleh {artist} — ini boleh mengambil masa 20 minit hingga 1 jam, atau mungkin tidak dapat dilakukan malam ini. Pasti?",
-    "diyTitle": "Buat sendiri (paling pantas untuk lagu yang jarang didengar)",
-    "diyDesc": "Jika anda tidak kisah meluangkan masa di telefon, anda boleh buat trek karaoke sendiri di gen.nomadkaraoke.com — ambil masa ~5 minit jika anda semak lirik, lebih lama jika tidak. Kemudian tampal URL YouTube di sini.",
-    "diyHow": "Cara ia berfungsi (ambil masa ~5 minit jika anda fokus)",
-    "diyStep1": "Cari lagu anda di YouTube — mana-mana versi dengan vokal yang jelas.",
-    "diyStep2": "Buka {site}, tampal pautan, tak perlu bayar.",
-    "diyStep3": "Tunggu ~2 minit sementara kami asingkan vokal daripada audio.",
-    "diyStep4": "Skrin semakan lirik akan muncul. Ketik mana-mana baris yang salah, betulkan, simpan. Ini bahagian yang perlukan fokus di telefon — biasanya ~3 minit.",
-    "diyStep5": "Kami akan hasilkan video karaoke dan terbitkannya ke YouTube.",
-    "diyStep6": "Salin URL YouTube baharu, kembali ke sini, tampal ke dalam pilihan YouTube di atas.",
-    "diyNote": "Jumlah masa: ~5–10 minit jika anda fokus. Hos tidak perlu buat apa-apa — lagu anda masuk dalam giliran seperti mana-mana serahan YouTube.",
-    "diyCta": "Buka gen.nomadkaraoke.com →"
+    "makeCta": "Buatkan untuk saya →",
+    "makeMissing": "Sila isikan kedua-dua nama artis dan tajuk lagu."
   },
   "confirm": {
     "title": "Adakah ini lagu yang betul?",
@@ -224,7 +214,7 @@
     "sourceCloud": "Dari pustaka awan kami — sangat dipercayai",
     "sourceOnline": "Dari YouTube — hampir pasti berfungsi",
     "sourceYouTube": "Dari pautan YouTube — hampir pasti berfungsi",
-    "sourceMake": "Hos akan sediakan ini untuk anda",
+    "sourceMake": "Kami akan buatkan video karaoke ini untuk anda — biasanya siap dalam 15–30 minit",
     "sourceAuto": "Kami akan pilih versi terbaik untuk anda",
     "searched": "Anda mencari: \"{query}\"",
     "details": "Butiran anda: {name}",
@@ -251,7 +241,9 @@
     "sendChange": "Ya — tukar lagu saya",
     "tooMany": "Anda telah menghantar terlalu banyak — sila tunggu beberapa minit.",
     "restricted": "Permintaan lagu sedang dihadkan. Sila muat semula halaman ini untuk pilihan terkini.",
-    "failed": "Tidak dapat menghantar — tanya hos jika permintaan dihentikan sementara."
+    "failed": "Tidak dapat menghantar — tanya hos jika permintaan dihentikan sementara.",
+    "makeLimit": "Anda sudah meminta kami membuat beberapa lagu malam ini — pilih satu dari katalog, atau tanya hos.",
+    "makeDisabled": "Hos tidak menerima permintaan buat lagu buat masa ini — sila pilih lagu dari katalog."
   },
   "mySongs": {
     "title": "Lagu anda malam ini",
@@ -265,7 +257,10 @@
     "statusSung": "✓ Anda telah nyanyikan ini — syabas!",
     "statusRejected": "Hos ingin bercakap dengan anda — jumpa hos di meja.",
     "statusPending": "Menunggu hos meluluskan…",
+    "statusMakingPending": "✨ Sedang dibuat untuk anda — menunggu hos memasukkannya ke dalam giliran…",
     "statusQueued": "Ditambah ke dalam giliran.",
+    "statusMaking": "✨ Sedang disediakan untuk anda — anda akan masuk giliran sebaik sahaja ia siap.",
+    "statusMakeNeedsHost": "✨ Sedang dibuat — lagu ini perlukan bantuan daripada hos, jadi ia mungkin mengambil masa sedikit.",
     "statusCancelled": "Dibatalkan.",
     "statusRemoved": "Hos telah mengeluarkan lagu ini daripada senarai — tanyalah mereka jika ada kesilapan.",
     "statusUp": "🎤 Giliran anda — pergi ke pentas!",
@@ -303,6 +298,7 @@
     "bannerAlmost": "🎤 Hampir tiba — 1 lagi",
     "bannerPosition": "#{position} dalam giliran · {wait}",
     "bannerPending": "Menunggu hos…",
+    "bannerMaking": "✨ Sedang disediakan untuk anda",
     "bannerQueued": "Dalam giliran",
     "barNext": "Lagu anda seterusnya",
     "barNextOf": "Lagu anda seterusnya (daripada {count})",

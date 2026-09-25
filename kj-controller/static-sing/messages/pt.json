@@ -85,7 +85,8 @@
     "ideasCrowd": "Favoritas da galera aqui",
     "ideasNone": "Nenhum histórico de músicas ainda — a noite é hoje!",
     "ideasFailed": "Não foi possível carregar o histórico de músicas.",
-    "plays": "▶ {count}"
+    "plays": "▶ {count}",
+    "makeOffer": "Não é a versão que você queria? Podemos criar para você →"
   },
   "versions": {
     "sectionLibrary": "Na nossa biblioteca",
@@ -190,31 +191,20 @@
     "simpleBody": "Tente outra pesquisa ou fale com o anfitrião na frente.",
     "title": "Não encontramos no nosso catálogo.",
     "intro": {
-      "one": "Uma opção:",
-      "other": "{count} opções — escolha a que melhor se adapta ao que você quer fazer."
+      "one": "Veja o que você pode fazer:",
+      "other": "{count} opções:"
     },
     "step": "{n}. {title}",
     "youtubeTitle": "Colar um link do YouTube",
     "youtubeDesc": "Mais rápido. Se você encontrar a música no YouTube, cole o link e usaremos diretamente. A qualidade varia.",
     "youtubePlaceholder": "https://youtu.be/…",
     "youtubeCta": "Usar este link do YouTube →",
-    "makeTitle": "Pedir ao anfitrião para fazer hoje à noite",
-    "makeDesc": "Gratuito, mas leva tempo — geralmente de 20 min a 1 hora. O anfitrião nem sempre consegue encaixar em uma noite movimentada, e algumas músicas são muito complexas para fazer ao vivo. Se ele não puder fazer hoje à noite, ele avisará você.",
+    "makeTitle": "Vamos criar para você",
+    "makeDesc": "Digite o artista e o título da música e nós criaremos um vídeo de karaokê para você automaticamente — geralmente fica pronto em 15 a 30 minutos, e você entra na fila assim que estiver pronto. Se a música precisar de uma ajudinha, o KJ dá uma força.",
     "artist": "Artista",
     "songTitle": "Título da música",
-    "makeCta": "Pedir ao anfitrião →",
-    "makeConfirm": "Pedir ao anfitrião para fazer \"{title}\" de {artist} — isso pode levar de 20 min a 1 hora, ou pode não ser possível hoje à noite. Tem certeza?",
-    "diyTitle": "Faça você mesmo (mais rápido para músicas de nicho)",
-    "diyDesc": "Se você não se importa em usar um pouco o celular, você mesmo pode criar a faixa de karaokê em gen.nomadkaraoke.com — leva ~5 min se você revisar as letras, ou mais se não o fizer. Depois, cole o URL do YouTube de volta aqui.",
-    "diyHow": "Como funciona (leva ~5 min se você focar)",
-    "diyStep1": "Encontre sua música no YouTube — qualquer versão com vocais claros.",
-    "diyStep2": "Abra {site}, cole o link, não pague nada.",
-    "diyStep3": "Aguarde ~2 min enquanto separamos o vocal do áudio.",
-    "diyStep4": "Uma tela de revisão de letras aparecerá. Toque em qualquer linha errada, corrija e salve. Esta é a parte que exige atenção no celular — geralmente ~3 min.",
-    "diyStep5": "Renderizamos o vídeo de karaokê e publicamos no YouTube.",
-    "diyStep6": "Copie o novo URL do YouTube, volte aqui e cole-o na opção do YouTube acima.",
-    "diyNote": "Tempo total: ~5–10 min se você focar. O anfitrião não faz nada — sua música entra na rotação como qualquer envio do YouTube.",
-    "diyCta": "Abrir gen.nomadkaraoke.com →"
+    "makeCta": "Criar para mim →",
+    "makeMissing": "Por favor, preencha o nome do artista e o título da música."
   },
   "confirm": {
     "title": "Esta é a música certa?",
@@ -224,7 +214,7 @@
     "sourceCloud": "Da nossa biblioteca na nuvem — muito confiável",
     "sourceOnline": "Do YouTube — quase sempre funciona",
     "sourceYouTube": "De um link do YouTube — quase sempre funciona",
-    "sourceMake": "O anfitrião vai preparar isso para você",
+    "sourceMake": "Vamos criar um vídeo de karaokê desta música para você — geralmente fica pronto em 15–30 min",
     "sourceAuto": "Vamos escolher a melhor versão para você",
     "searched": "Você pesquisou: \"{query}\"",
     "details": "Seus dados: {name}",
@@ -251,7 +241,9 @@
     "sendChange": "Sim — trocar minha música",
     "tooMany": "Você enviou muitos pedidos — espere alguns minutos.",
     "restricted": "Os pedidos de música estão restritos no momento. Atualize esta página para ver as opções.",
-    "failed": "Não foi possível enviar — pergunte ao anfitrião se os pedidos estão pausados."
+    "failed": "Não foi possível enviar — pergunte ao anfitrião se os pedidos estão pausados.",
+    "makeLimit": "Você já nos pediu para criar algumas músicas esta noite — escolha uma do catálogo ou fale com o anfitrião.",
+    "makeDisabled": "O anfitrião não está aceitando pedidos de criação agora — escolha uma música do catálogo."
   },
   "mySongs": {
     "title": "Suas músicas de hoje",
@@ -265,7 +257,10 @@
     "statusSung": "✓ Você cantou esta — mandou bem!",
     "statusRejected": "O anfitrião precisa falar com você — vá até a mesa dele.",
     "statusPending": "Aguardando a aprovação do anfitrião…",
+    "statusMakingPending": "✨ Sendo criada para você — aguardando o anfitrião adicioná-la à fila…",
     "statusQueued": "Adicionada à fila.",
+    "statusMaking": "✨ Preparando para você — você entra na fila assim que estiver pronto.",
+    "statusMakeNeedsHost": "✨ Sendo criada — esta precisa de uma ajudinha do anfitrião, então pode demorar um pouco mais.",
     "statusCancelled": "Cancelado.",
     "statusRemoved": "O KJ tirou esta música da lista — pergunte a ele se isso for uma surpresa.",
     "statusUp": "🎤 É a sua vez — vá para o palco!",
@@ -303,6 +298,7 @@
     "bannerAlmost": "🎤 Quase lá — falta 1",
     "bannerPosition": "#{position} na fila · {wait}",
     "bannerPending": "Aguardando o anfitrião…",
+    "bannerMaking": "✨ Preparando para você",
     "bannerQueued": "Na fila",
     "barNext": "Sua próxima música",
     "barNextOf": "Sua próxima música (de {count})",

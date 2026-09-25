@@ -423,6 +423,8 @@ class TestApprove:
         entry_id = resp.get_json()["entry_id"]
         entry = admin_app.rotation.store.get_entry(entry_id)
         assert entry["gen_job_id"] == "job_42"
+        # Not singable until the GenPoller links the finished video.
+        assert entry["status"] == "Being Made (!)"
 
     def test_approve_make_gen_failure_keeps_entry_being_made_unlinked(
         self, admin_client, admin_app

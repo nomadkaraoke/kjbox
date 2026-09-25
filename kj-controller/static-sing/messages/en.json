@@ -85,7 +85,8 @@
     "ideasCrowd": "Crowd favourites here",
     "ideasNone": "No song history yet — tonight's the night!",
     "ideasFailed": "Couldn't load song history.",
-    "plays": "▶ {count}"
+    "plays": "▶ {count}",
+    "makeOffer": "Not the version you wanted? We can make it for you →"
   },
   "versions": {
     "sectionLibrary": "In our library",
@@ -190,31 +191,20 @@
     "simpleBody": "Try another search, or talk to the host at the front.",
     "title": "Can't find it in our catalogue.",
     "intro": {
-      "one": "One way forward:",
-      "other": "{count} ways forward — pick the one that fits how much effort you want."
+      "one": "Here's what you can do:",
+      "other": "{count} ways forward:"
     },
     "step": "{n}. {title}",
     "youtubeTitle": "Paste a YouTube link",
     "youtubeDesc": "Fastest. If you can find the song on YouTube, paste the link and we'll use that directly. Quality varies.",
     "youtubePlaceholder": "https://youtu.be/…",
     "youtubeCta": "Use this YouTube link →",
-    "makeTitle": "Ask the host to make it tonight",
-    "makeDesc": "Free, but takes time — usually 20 min to 1 hour. The host can't always fit it in on a busy night, and some songs are too complex to do live. If they can't do it tonight, they'll let you know.",
+    "makeTitle": "We'll make it for you",
+    "makeDesc": "Type the artist and song title and we'll create a karaoke video for you automatically — usually ready in 15–30 minutes, and you'll join the queue as soon as it is. If the song needs a hand, the host steps in.",
     "artist": "Artist",
     "songTitle": "Song title",
-    "makeCta": "Ask the host →",
-    "makeConfirm": "Asking the host to make \"{title}\" by {artist} — this can take 20 min to 1 hour, or may not be possible tonight. Sure?",
-    "diyTitle": "Make it yourself (fastest for niche songs)",
-    "diyDesc": "If you don't mind some phone time, you can make the karaoke track yourself on gen.nomadkaraoke.com — takes ~5 min if you do the lyrics review, longer if you don't. Then paste the YouTube URL back here.",
-    "diyHow": "How it works (takes ~5 min if you focus)",
-    "diyStep1": "Find your song on YouTube — any version with clear vocals.",
-    "diyStep2": "Open {site}, paste the link, pay nothing.",
-    "diyStep3": "Wait ~2 min while we separate the vocal from the audio.",
-    "diyStep4": "A lyrics review screen appears. Tap any wrong line, fix it, save. This is the focused-phone bit — usually ~3 min.",
-    "diyStep5": "We render the karaoke video and publish it to YouTube.",
-    "diyStep6": "Copy the new YouTube URL, come back here, paste it into the YouTube option above.",
-    "diyNote": "Total time: ~5–10 min if you focus. The host does nothing — your song lands in the rotation like any YouTube submission.",
-    "diyCta": "Open gen.nomadkaraoke.com →"
+    "makeCta": "Make it for me →",
+    "makeMissing": "Please fill in both the artist and the song title."
   },
   "confirm": {
     "title": "Is this the right song?",
@@ -224,7 +214,7 @@
     "sourceCloud": "From our cloud library — very reliable",
     "sourceOnline": "From YouTube — almost always works",
     "sourceYouTube": "From a YouTube link — almost always works",
-    "sourceMake": "The host will make this for you",
+    "sourceMake": "We'll make a karaoke video of this for you — usually ready in 15–30 min",
     "sourceAuto": "We'll pick the best version for you",
     "searched": "You searched: \"{query}\"",
     "details": "Your details: {name}",
@@ -251,7 +241,9 @@
     "sendChange": "Yes — swap my song",
     "tooMany": "You've submitted a lot — please wait a few minutes.",
     "restricted": "Song requests are currently restricted. Please refresh this page for the updated options.",
-    "failed": "Couldn't send — ask the host if requests are paused."
+    "failed": "Couldn't send — ask the host if requests are paused.",
+    "makeLimit": "You've already asked us to make a few songs tonight — pick one from the catalogue, or ask the host.",
+    "makeDisabled": "The host isn't taking make-it requests right now — pick a song from the catalogue instead."
   },
   "mySongs": {
     "title": "Your songs tonight",
@@ -265,7 +257,10 @@
     "statusSung": "✓ You sang this — great job!",
     "statusRejected": "The host needs a word — see them at the desk.",
     "statusPending": "Waiting for the host to approve…",
+    "statusMakingPending": "✨ Being made for you — waiting for the host to add it to the queue…",
     "statusQueued": "Added to the queue.",
+    "statusMaking": "✨ Being made for you — you'll join the queue as soon as it's ready.",
+    "statusMakeNeedsHost": "✨ Being made — this one needs a hand from the host, so it may take a little longer.",
     "statusCancelled": "Cancelled.",
     "statusRemoved": "The host took this song off the list — ask them if that's a surprise.",
     "statusUp": "🎤 You're up — head to the stage!",
@@ -303,6 +298,7 @@
     "bannerAlmost": "🎤 Almost up — 1 to go",
     "bannerPosition": "#{position} in line · {wait}",
     "bannerPending": "Waiting for the host…",
+    "bannerMaking": "✨ Being made for you",
     "bannerQueued": "In the queue",
     "barNext": "Your next song",
     "barNextOf": "Your next song (of {count})",

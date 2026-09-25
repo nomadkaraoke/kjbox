@@ -85,7 +85,8 @@
     "ideasCrowd": "Publikfavoriter här",
     "ideasNone": "Ingen låthistorik än — ikväll händer det!",
     "ideasFailed": "Kunde inte ladda låthistorik.",
-    "plays": "▶ {count}"
+    "plays": "▶ {count}",
+    "makeOffer": "Inte versionen du ville ha? Vi kan skapa den åt dig →"
   },
   "versions": {
     "sectionLibrary": "I vårt bibliotek",
@@ -190,31 +191,20 @@
     "simpleBody": "Gör en ny sökning, eller prata med värden där framme.",
     "title": "Hittar den inte i vår katalog.",
     "intro": {
-      "one": "En väg framåt:",
-      "other": "{count} vägar framåt — välj den som passar hur mycket tid du vill lägga."
+      "one": "Här är vad du kan göra:",
+      "other": "{count} alternativ:"
     },
     "step": "{n}. {title}",
     "youtubeTitle": "Klistra in en YouTube-länk",
     "youtubeDesc": "Snabbast. Om du hittar låten på YouTube, klistra in länken så använder vi den direkt. Kvaliteten varierar.",
     "youtubePlaceholder": "https://youtu.be/…",
     "youtubeCta": "Använd denna YouTube-länk →",
-    "makeTitle": "Be värden fixa det ikväll",
-    "makeDesc": "Gratis, men tar tid — oftast 20 min till 1 timme. Värden hinner inte alltid med det under en hektisk kväll, och vissa låtar är för svåra att fixa live. Om de inte kan göra det ikväll så meddelar de dig.",
+    "makeTitle": "Vi skapar den åt dig",
+    "makeDesc": "Skriv in artist och låttitel så skapar vi automatiskt en karaokevideo åt dig — den är oftast klar på 15–30 minuter, och du hamnar i kön så fort den är färdig. Om låten behöver lite hjälp hoppar värden in.",
     "artist": "Artist",
     "songTitle": "Låttitel",
-    "makeCta": "Fråga värden →",
-    "makeConfirm": "Du ber värden att fixa \"{title}\" av {artist} — detta kan ta 20 min till 1 timme, eller kanske inte hinns med ikväll. Är du säker?",
-    "diyTitle": "Gör det själv (snabbast för smala låtar)",
-    "diyDesc": "Om du inte har något emot lite tid på telefonen kan du göra karaokespåret själv på gen.nomadkaraoke.com — det tar ca 5 min om du granskar texten, längre om du inte gör det. Klistra sedan in YouTube-länken här.",
-    "diyHow": "Så här fungerar det (tar ca 5 min om du fokuserar)",
-    "diyStep1": "Hitta din låt på YouTube — vilken version som helst med tydlig sång.",
-    "diyStep2": "Öppna {site}, klistra in länken, betala ingenting.",
-    "diyStep3": "Vänta ca 2 min medan vi separerar sången från musiken.",
-    "diyStep4": "En skärm för textgranskning visas. Tryck på en felaktig rad, fixa den, spara. Detta är den del som kräver fokus — tar oftast ca 3 min.",
-    "diyStep5": "Vi skapar karaoke-videon och publicerar den på YouTube.",
-    "diyStep6": "Kopiera den nya YouTube-länken, kom tillbaka hit och klistra in den i YouTube-alternativet ovan.",
-    "diyNote": "Total tid: ca 5–10 min om du fokuserar. Värden gör ingenting — din låt hamnar i kön precis som vilken YouTube-låt som helst.",
-    "diyCta": "Öppna gen.nomadkaraoke.com →"
+    "makeCta": "Skapa den åt mig →",
+    "makeMissing": "Fyll i både artist och låttitel."
   },
   "confirm": {
     "title": "Är detta rätt låt?",
@@ -224,7 +214,7 @@
     "sourceCloud": "Från vårt molnbibliotek — mycket pålitligt",
     "sourceOnline": "Från YouTube — fungerar nästan alltid",
     "sourceYouTube": "Från en YouTube-länk — fungerar nästan alltid",
-    "sourceMake": "Värden fixar detta åt dig",
+    "sourceMake": "Vi skapar en karaokevideo av den åt dig — oftast klar på 15–30 min",
     "sourceAuto": "Vi väljer den bästa versionen åt dig",
     "searched": "Du sökte: \"{query}\"",
     "details": "Dina uppgifter: {name}",
@@ -251,7 +241,9 @@
     "sendChange": "Ja — byt min låt",
     "tooMany": "Du har skickat in mycket — vänta några minuter.",
     "restricted": "Låtförfrågningar är för närvarande begränsade. Uppdatera den här sidan för aktuella alternativ.",
-    "failed": "Kunde inte skicka — fråga värden om förfrågningar är pausade."
+    "failed": "Kunde inte skicka — fråga värden om förfrågningar är pausade.",
+    "makeLimit": "Du har redan bett oss skapa några låtar ikväll — välj en från katalogen, eller fråga värden.",
+    "makeDisabled": "Värden tar inte emot önskemål om att skapa låtar just nu — välj en låt från katalogen istället."
   },
   "mySongs": {
     "title": "Dina låtar ikväll",
@@ -265,7 +257,10 @@
     "statusSung": "✓ Du har sjungit den här — bra jobbat!",
     "statusRejected": "Värden vill prata med dig — gå till deras bord.",
     "statusPending": "Väntar på att värden ska godkänna…",
+    "statusMakingPending": "✨ Skapas åt dig — väntar på att värden ska lägga till den i kön…",
     "statusQueued": "Tillagd i kön.",
+    "statusMaking": "✨ Skapas åt dig — du hamnar i kön så fort den är färdig.",
+    "statusMakeNeedsHost": "✨ Skapas — den här behöver lite hjälp från värden, så det kan ta lite längre tid.",
     "statusCancelled": "Avbruten.",
     "statusRemoved": "Värden tog bort den här låten från listan — fråga dem om du undrar varför.",
     "statusUp": "🎤 Det är din tur — gå till scenen!",
@@ -303,6 +298,7 @@
     "bannerAlmost": "🎤 Snart din tur — 1 kvar",
     "bannerPosition": "Nr {position} i kön · {wait}",
     "bannerPending": "Väntar på värden…",
+    "bannerMaking": "✨ Skapas åt dig",
     "bannerQueued": "I kön",
     "barNext": "Din nästa låt",
     "barNextOf": "Din nästa låt (av {count})",

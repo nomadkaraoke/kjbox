@@ -625,6 +625,22 @@ input:focus {
   flex-direction: column;
   gap: 0.55rem;
 }
+/* "Not the version you wanted? We can make it" — under non-empty results. */
+.sing-make-offer {
+  margin-top: var(--nk-gap);
+}
+.sing-make-offer-btn {
+  width: 100%;
+  background: none;
+  border: 1px dashed var(--nk-border);
+  border-radius: var(--nk-radius-sm);
+  color: var(--nk-accent);
+  font-weight: 600;
+  padding: 0.8rem 1rem;
+  cursor: pointer;
+}
+.sing-make-offer-btn:hover { color: var(--nk-accent-hover); }
+.sing-empty-missing { margin: 0; }
 .sing-empty-card h4 {
   margin: 0;
   font-size: 0.95rem;

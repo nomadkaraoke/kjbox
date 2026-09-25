@@ -6206,7 +6206,21 @@ def approve_sing_request(app, req, skip_download=False):
         # raise here used to leave the request stuck pending AND spawn a fresh
         # gen job on every re-click — this avoids both.
         from gen_client import map_gen_status
+        import make_jobs
         entry = rotation.add_entry(singer, song_text, singers=singers_list)
+        # Not singable until gen delivers the video: "Being Made (!)" keeps it
+        # pinned below ready songs (Auto Order) until the GenPoller links the
+        # finished file and flips it to "Waiting".
+        try:
+            rotation.mark_being_made(entry["id"])
+        except Exception:
+            app.logger.exception(
+                "Failed to set 'Being Made (!)' status on entry %s", entry["id"],
+            )
+        # Singer make requests start their gen job at submit time — attach that
+        # job rather than creating a duplicate.
+        if make_jobs.attach_on_approve(app, req, entry["id"]):
+            return entry["id"]
         job_id = None
         try:
             result = gen_client.create_job(
@@ -6221,13 +6235,6 @@ def approve_sing_request(app, req, skip_download=False):
                 "leaving it unlinked as 'Being Made (!)': %s",
                 entry["id"], song_text, exc,
             )
-            try:
-                rotation.update_status(entry["id"], "Being Made (!)")
-            except Exception:
-                app.logger.exception(
-                    "Failed to set 'Being Made (!)' status on entry %s",
-                    entry["id"],
-                )
             return entry["id"]
 
         # Gen job created — link it. The job is real even if this local write

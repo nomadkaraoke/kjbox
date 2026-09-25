@@ -85,7 +85,8 @@
     "ideasCrowd": "Buradaki favoriler",
     "ideasNone": "Henüz şarkı geçmişi yok — bu gece o gece!",
     "ideasFailed": "Şarkı geçmişi yüklenemedi.",
-    "plays": "▶ {count}"
+    "plays": "▶ {count}",
+    "makeOffer": "İstediğin versiyon değil mi? Senin için hazırlayabiliriz →"
   },
   "versions": {
     "sectionLibrary": "Kütüphanemizde",
@@ -190,31 +191,20 @@
     "simpleBody": "Başka bir arama yap veya öndeki sunucuyla konuş.",
     "title": "Kataloğumuzda bulunamadı.",
     "intro": {
-      "one": "Bir seçenek:",
-      "other": "{count} seçenek — ne kadar uğraşmak istediğine göre birini seç."
+      "one": "Şunları yapabilirsin:",
+      "other": "{count} seçeneğin var:"
     },
     "step": "{n}. {title}",
     "youtubeTitle": "Bir YouTube bağlantısı yapıştır",
     "youtubeDesc": "En hızlısı. Şarkıyı YouTube'da bulabilirsen bağlantıyı yapıştır, doğrudan onu kullanalım. Kalite değişebilir.",
     "youtubePlaceholder": "https://youtu.be/…",
     "youtubeCta": "Bu YouTube bağlantısını kullan →",
-    "makeTitle": "Sunucudan bu gece hazırlamasını iste",
-    "makeDesc": "Ücretsiz ama zaman alır — genelde 20 dk ile 1 saat arası. Sunucu yoğun bir gecede her zaman vakit bulamayabilir ve bazı şarkılar canlı yapmak için çok karmaşıktır. Bu gece yapamazlarsa sana haber verirler.",
+    "makeTitle": "Senin için hazırlayacağız",
+    "makeDesc": "Sanatçıyı ve şarkı adını yaz, senin için otomatik olarak bir karaoke videosu oluşturalım — genellikle 15–30 dakika içinde hazır olur ve hazır olur olmaz sıraya girersin. Şarkı için yardım gerekirse KJ devreye girer.",
     "artist": "Sanatçı",
     "songTitle": "Şarkı adı",
-    "makeCta": "Sunucuya sor →",
-    "makeConfirm": "Sunucudan {artist} - \"{title}\" şarkısını hazırlamasını istiyorsun — bu 20 dk ile 1 saat arası sürebilir veya bu gece mümkün olmayabilir. Emin misin?",
-    "diyTitle": "Kendin yap (niş şarkılar için en hızlısı)",
-    "diyDesc": "Telefonda biraz vakit harcamak sorun değilse, gen.nomadkaraoke.com adresinde karaoke parçasını kendin yapabilirsin — sözleri incelersen yaklaşık 5 dk sürer. Sonra YouTube URL'sini buraya yapıştır.",
-    "diyHow": "Nasıl çalışır (odaklanırsan ~5 dk sürer)",
-    "diyStep1": "Şarkını YouTube'da bul — vokalleri net olan herhangi bir versiyon.",
-    "diyStep2": "{site} adresini aç, linki yapıştır, hiç para ödeme.",
-    "diyStep3": "Sesi vokalden ayırırken ~2 dk bekle.",
-    "diyStep4": "Söz inceleme ekranı açılır. Yanlış satırlara dokun, düzelt, kaydet. Bu kısım telefona odaklanmayı gerektirir — genelde ~3 dk.",
-    "diyStep5": "Karaoke videosunu oluşturup YouTube'da yayınlıyoruz.",
-    "diyStep6": "Yeni YouTube URL'sini kopyala, buraya dön ve yukarıdaki YouTube seçeneğine yapıştır.",
-    "diyNote": "Toplam süre: odaklanırsan ~5–10 dk. Sunucunun bir şey yapmasına gerek kalmaz — şarkın herhangi bir YouTube isteği gibi sıraya girer.",
-    "diyCta": "gen.nomadkaraoke.com adresini aç →"
+    "makeCta": "Benim için hazırla →",
+    "makeMissing": "Lütfen hem sanatçıyı hem de şarkı adını yaz."
   },
   "confirm": {
     "title": "Doğru şarkı bu mu?",
@@ -224,7 +214,7 @@
     "sourceCloud": "Bulut kütüphanemizden — çok güvenilir",
     "sourceOnline": "YouTube'dan — neredeyse her zaman çalışır",
     "sourceYouTube": "Bir YouTube bağlantısından — neredeyse her zaman çalışır",
-    "sourceMake": "Sunucu bunu senin için hazırlayacak",
+    "sourceMake": "Senin için bunun karaoke videosunu hazırlayacağız — genelde 15-30 dakika içinde hazır olur",
     "sourceAuto": "Senin için en iyi versiyonu seçeceğiz",
     "searched": "Aradığın: \"{query}\"",
     "details": "Bilgilerin: {name}",
@@ -251,7 +241,9 @@
     "sendChange": "Evet — şarkımı değiştir",
     "tooMany": "Çok fazla gönderim yaptın — lütfen birkaç dakika bekle.",
     "restricted": "Şarkı istekleri şu an kısıtlı. Güncel seçenekler için lütfen bu sayfayı yenile.",
-    "failed": "Gönderilemedi — isteklerin duraklatılıp duraklatılmadığını sunucuya sor."
+    "failed": "Gönderilemedi — isteklerin duraklatılıp duraklatılmadığını sunucuya sor.",
+    "makeLimit": "Bu gece zaten birkaç şarkı hazırlamamızı istedin — katalogdan birini seç veya KJ'ye sor.",
+    "makeDisabled": "KJ şu an yeni şarkı hazırlama isteklerini kabul etmiyor — bunun yerine katalogdan bir şarkı seç."
   },
   "mySongs": {
     "title": "Bu geceki şarkıların",
@@ -265,7 +257,10 @@
     "statusSung": "✓ Bunu söyledin — harika iş!",
     "statusRejected": "Sunucunun seninle konuşması gerekiyor — masasına git.",
     "statusPending": "Sunucunun onaylaması bekleniyor…",
+    "statusMakingPending": "✨ Senin için hazırlanıyor — KJ'nin şarkıyı sıraya eklemesi bekleniyor…",
     "statusQueued": "Sıraya eklendi.",
+    "statusMaking": "✨ Senin için hazırlanıyor — hazır olur olmaz sıraya girersin.",
+    "statusMakeNeedsHost": "✨ Hazırlanıyor — bu şarkı için KJ'nin yardımı gerekiyor, bu yüzden biraz daha uzun sürebilir.",
     "statusCancelled": "İptal edildi.",
     "statusRemoved": "Sunucu bu şarkıyı listeden çıkardı — bir yanlışlık olduğunu düşünüyorsan ona sor.",
     "statusUp": "🎤 Sıra sende — sahneye geç!",
@@ -303,6 +298,7 @@
     "bannerAlmost": "🎤 Neredeyse geldi — son 1 kişi",
     "bannerPosition": "Sırada #{position} · {wait}",
     "bannerPending": "Sunucu bekleniyor…",
+    "bannerMaking": "✨ Senin için hazırlanıyor",
     "bannerQueued": "Sırada",
     "barNext": "Sıradaki şarkın",
     "barNextOf": "Sıradaki şarkın (toplam {count})",

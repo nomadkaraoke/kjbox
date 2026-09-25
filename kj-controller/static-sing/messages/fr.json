@@ -85,7 +85,8 @@
     "ideasCrowd": "Les favoris du public ici",
     "ideasNone": "Pas encore d'historique de chansons — c'est pour ce soir !",
     "ideasFailed": "Impossible de charger l'historique des chansons.",
-    "plays": "▶ {count}"
+    "plays": "▶ {count}",
+    "makeOffer": "Ce n'est pas la version que tu voulais ? Nous pouvons la créer pour toi →"
   },
   "versions": {
     "sectionLibrary": "Dans notre bibliothèque",
@@ -190,31 +191,20 @@
     "simpleBody": "Essaie une autre recherche, ou va parler au KJ.",
     "title": "Introuvable dans notre catalogue.",
     "intro": {
-      "one": "Une solution :",
-      "other": "{count} solutions — choisis celle qui te convient selon l'effort que tu veux y mettre."
+      "one": "Voici ce que tu peux faire :",
+      "other": "{count} options :"
     },
     "step": "{n}. {title}",
     "youtubeTitle": "Coller un lien YouTube",
     "youtubeDesc": "Le plus rapide. Si tu trouves la chanson sur YouTube, colle le lien et nous l'utiliserons directement. La qualité peut varier.",
     "youtubePlaceholder": "https://youtu.be/…",
     "youtubeCta": "Utiliser ce lien YouTube →",
-    "makeTitle": "Demander au KJ de la préparer ce soir",
-    "makeDesc": "Gratuit, mais prend du temps — généralement 20 min à 1 heure. Le KJ ne peut pas toujours le faire lors d'une soirée chargée, et certaines chansons sont trop complexes à faire en direct. S'il ne peut pas ce soir, il te le dira.",
+    "makeTitle": "Nous allons la créer pour toi",
+    "makeDesc": "Tape le nom de l'artiste et le titre de la chanson et nous créerons automatiquement une vidéo karaoké pour toi — généralement prête en 15 à 30 minutes, et tu rejoindras la file d'attente dès qu'elle le sera. Si la chanson a besoin d'un coup de pouce, le KJ prend le relais.",
     "artist": "Artiste",
     "songTitle": "Titre de la chanson",
-    "makeCta": "Demander au KJ →",
-    "makeConfirm": "Demander au KJ de préparer \"{title}\" de {artist} — cela peut prendre de 20 min à 1 heure, ou ne pas être possible ce soir. Sûr ?",
-    "diyTitle": "Fais-le toi-même (le plus rapide pour les chansons rares)",
-    "diyDesc": "Si passer un peu de temps sur ton téléphone ne te dérange pas, tu peux créer la piste karaoké toi-même sur gen.nomadkaraoke.com — ça prend ~5 min si tu révises les paroles, plus longtemps sinon. Ensuite, colle l'URL YouTube ici.",
-    "diyHow": "Comment ça marche (prend ~5 min si tu te concentres)",
-    "diyStep1": "Trouve ta chanson sur YouTube — n'importe quelle version avec des voix claires.",
-    "diyStep2": "Ouvre {site}, colle le lien, et ne paie rien.",
-    "diyStep3": "Attends ~2 min pendant que nous séparons la voix de la musique.",
-    "diyStep4": "Un écran de révision des paroles apparaît. Touche une ligne incorrecte, corrige-la, enregistre. C'est la partie qui demande de l'attention — environ 3 min.",
-    "diyStep5": "Nous générons la vidéo karaoké et la publions sur YouTube.",
-    "diyStep6": "Copie la nouvelle URL YouTube, reviens ici, et colle-la dans l'option YouTube ci-dessus.",
-    "diyNote": "Temps total : ~5–10 min si tu te concentres. Le KJ n'a rien à faire — ta chanson s'ajoute à la rotation comme n'importe quelle demande YouTube.",
-    "diyCta": "Ouvrir gen.nomadkaraoke.com →"
+    "makeCta": "La créer pour moi →",
+    "makeMissing": "Merci de renseigner à la fois l'artiste et le titre de la chanson."
   },
   "confirm": {
     "title": "C'est la bonne chanson ?",
@@ -224,7 +214,7 @@
     "sourceCloud": "De notre bibliothèque cloud — très fiable",
     "sourceOnline": "De YouTube — fonctionne presque toujours",
     "sourceYouTube": "D'un lien YouTube — fonctionne presque toujours",
-    "sourceMake": "Le KJ va préparer ça pour toi",
+    "sourceMake": "Nous allons créer une vidéo karaoké de cette chanson pour toi — généralement prête en 15–30 min",
     "sourceAuto": "Nous choisirons la meilleure version pour toi",
     "searched": "Tu as cherché : \"{query}\"",
     "details": "Tes infos : {name}",
@@ -251,7 +241,9 @@
     "sendChange": "Oui — changer ma chanson",
     "tooMany": "Tu as fait beaucoup de demandes — attends quelques minutes.",
     "restricted": "Les demandes de chansons sont actuellement restreintes. Actualise cette page pour voir les options.",
-    "failed": "Envoi impossible — demande au KJ si les demandes sont en pause."
+    "failed": "Envoi impossible — demande au KJ si les demandes sont en pause.",
+    "makeLimit": "Tu nous as déjà demandé de créer quelques chansons ce soir — choisis-en une dans le catalogue, ou demande au KJ.",
+    "makeDisabled": "Le KJ ne prend pas de demandes de création pour le moment — choisis plutôt une chanson dans le catalogue."
   },
   "mySongs": {
     "title": "Tes chansons de ce soir",
@@ -265,7 +257,10 @@
     "statusSung": "✓ Tu as chanté ça — beau travail !",
     "statusRejected": "Le KJ a besoin de te parler — va le voir au bureau.",
     "statusPending": "En attente de l'approbation du KJ…",
+    "statusMakingPending": "✨ En cours de création pour toi — en attendant que le KJ l'ajoute à la file d'attente…",
     "statusQueued": "Ajoutée à la file d'attente.",
+    "statusMaking": "✨ En cours de création pour toi — tu rejoindras la file d'attente dès que ce sera prêt.",
+    "statusMakeNeedsHost": "✨ En cours de création — celle-ci a besoin d'un coup de main du KJ, ça pourrait donc prendre un peu plus de temps.",
     "statusCancelled": "Annulé.",
     "statusRemoved": "Le KJ a retiré cette chanson de la liste — demande-lui si c'est une erreur.",
     "statusUp": "🎤 C'est à toi — monte sur scène !",
@@ -303,6 +298,7 @@
     "bannerAlmost": "🎤 C'est presque ton tour — plus qu'une chanson",
     "bannerPosition": "N°{position} dans la file · {wait}",
     "bannerPending": "En attente du KJ…",
+    "bannerMaking": "✨ En cours de création pour toi",
     "bannerQueued": "Dans la file d'attente",
     "barNext": "Ta prochaine chanson",
     "barNextOf": "Ta prochaine chanson (sur {count})",

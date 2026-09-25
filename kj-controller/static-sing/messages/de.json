@@ -85,7 +85,8 @@
     "ideasCrowd": "Publikumslieblinge hier",
     "ideasNone": "Noch kein Song-Verlauf — heute ist die Nacht!",
     "ideasFailed": "Konnte den Song-Verlauf nicht laden.",
-    "plays": "▶ {count}"
+    "plays": "▶ {count}",
+    "makeOffer": "Nicht die Version, die du wolltest? Wir können sie für dich erstellen →"
   },
   "versions": {
     "sectionLibrary": "In unserer Bibliothek",
@@ -190,31 +191,20 @@
     "simpleBody": "Versuche eine andere Suche oder sprich mit dem KJ vorne.",
     "title": "Nicht in unserem Katalog gefunden.",
     "intro": {
-      "one": "Eine Möglichkeit:",
-      "other": "{count} Möglichkeiten — wähle die, die zu deinem gewünschten Aufwand passt."
+      "one": "Das kannst du tun:",
+      "other": "{count} Möglichkeiten:"
     },
     "step": "{n}. {title}",
     "youtubeTitle": "Füge einen YouTube-Link ein",
     "youtubeDesc": "Am schnellsten. Wenn du den Song auf YouTube findest, füge den Link ein und wir verwenden ihn direkt. Die Qualität variiert.",
     "youtubePlaceholder": "https://youtu.be/…",
     "youtubeCta": "Diesen YouTube-Link verwenden →",
-    "makeTitle": "Bitte den KJ, es heute Abend zu erstellen",
-    "makeDesc": "Kostenlos, braucht aber Zeit — meistens 20 Min. bis 1 Stunde. Der KJ kann es an einem vollen Abend nicht immer unterbringen, und manche Songs sind zu komplex, um sie live zu machen. Wenn es heute Abend nicht klappt, sagt er dir Bescheid.",
+    "makeTitle": "Wir erstellen ihn für dich",
+    "makeDesc": "Gib Künstler und Songtitel ein und wir erstellen automatisch ein Karaoke-Video für dich — normalerweise in 15–30 Minuten fertig, und du kommst auf die Warteliste, sobald es soweit ist. Falls der Song etwas Hilfe braucht, springt der KJ ein.",
     "artist": "Künstler",
     "songTitle": "Songtitel",
-    "makeCta": "Frag den KJ →",
-    "makeConfirm": "Den KJ bitten, \"{title}\" von {artist} zu erstellen — das kann 20 Min. bis 1 Stunde dauern oder heute Abend vielleicht gar nicht möglich sein. Sicher?",
-    "diyTitle": "Mach es selbst (am schnellsten für Nischen-Songs)",
-    "diyDesc": "Wenn dich ein bisschen Zeit am Handy nicht stört, kannst du den Karaoke-Track selbst auf gen.nomadkaraoke.com erstellen — dauert ca. 5 Min., wenn du die Songtexte überprüfst, sonst länger. Füge dann die YouTube-URL hier wieder ein.",
-    "diyHow": "Wie es funktioniert (dauert ca. 5 Min., wenn du dich konzentrierst)",
-    "diyStep1": "Finde deinen Song auf YouTube — jede Version mit klarem Gesang geht.",
-    "diyStep2": "Öffne {site}, füge den Link ein und zahle nichts.",
-    "diyStep3": "Warte ca. 2 Min., während wir den Gesang vom Audio trennen.",
-    "diyStep4": "Ein Bildschirm zur Überprüfung des Songtextes erscheint. Tippe auf falsche Zeilen, korrigiere sie, speichere. Das ist der Teil, der Konzentration am Handy erfordert — meistens ca. 3 Min.",
-    "diyStep5": "Wir rendern das Karaoke-Video und veröffentlichen es auf YouTube.",
-    "diyStep6": "Kopiere die neue YouTube-URL, komm hierher zurück und füge sie oben in die YouTube-Option ein.",
-    "diyNote": "Gesamtzeit: ca. 5–10 Min., wenn du dich konzentrierst. Der KJ muss nichts tun — dein Song landet in der Rotation wie jede YouTube-Einsendung.",
-    "diyCta": "Öffne gen.nomadkaraoke.com →"
+    "makeCta": "Für mich erstellen →",
+    "makeMissing": "Bitte gib sowohl Künstler als auch Songtitel ein."
   },
   "confirm": {
     "title": "Ist das der richtige Song?",
@@ -224,7 +214,7 @@
     "sourceCloud": "Aus unserer Cloud-Bibliothek — sehr zuverlässig",
     "sourceOnline": "Von YouTube — funktioniert fast immer",
     "sourceYouTube": "Von einem YouTube-Link — funktioniert fast immer",
-    "sourceMake": "Der KJ wird das für dich erstellen",
+    "sourceMake": "Wir erstellen ein Karaoke-Video davon für dich — normalerweise in 15–30 Min. fertig",
     "sourceAuto": "Wir wählen die beste Version für dich aus",
     "searched": "Du hast gesucht: \"{query}\"",
     "details": "Deine Daten: {name}",
@@ -251,7 +241,9 @@
     "sendChange": "Ja — meinen Song austauschen",
     "tooMany": "Du hast viel eingereicht — bitte warte ein paar Minuten.",
     "restricted": "Songanfragen sind derzeit eingeschränkt. Bitte aktualisiere diese Seite für die neuesten Optionen.",
-    "failed": "Konnte nicht gesendet werden — frag den KJ, ob Anfragen pausiert sind."
+    "failed": "Konnte nicht gesendet werden — frag den KJ, ob Anfragen pausiert sind.",
+    "makeLimit": "Du hast dir heute Abend schon ein paar Songs erstellen lassen — such dir einen aus dem Katalog aus oder frag den KJ.",
+    "makeDisabled": "Der KJ nimmt im Moment keine Anfragen zum Erstellen von Songs an — such dir stattdessen einen Song aus dem Katalog aus."
   },
   "mySongs": {
     "title": "Deine Songs heute Abend",
@@ -265,7 +257,10 @@
     "statusSung": "✓ Du hast das gesungen — super gemacht!",
     "statusRejected": "Der KJ muss kurz mit dir sprechen — geh nach vorne.",
     "statusPending": "Warte auf Bestätigung vom KJ…",
+    "statusMakingPending": "✨ Wird für dich erstellt — wir warten darauf, dass der KJ ihn zur Warteschlange hinzufügt…",
     "statusQueued": "Zur Warteschlange hinzugefügt.",
+    "statusMaking": "✨ Wird für dich erstellt — du kommst auf die Warteliste, sobald es fertig ist.",
+    "statusMakeNeedsHost": "✨ Wird erstellt — dieser Song braucht etwas Hilfe vom KJ, daher kann es etwas länger dauern.",
     "statusCancelled": "Abgesagt.",
     "statusRemoved": "Der Host hat diesen Song von der Liste genommen — frag nach, falls dich das überrascht.",
     "statusUp": "🎤 Du bist dran — ab auf die Bühne!",
@@ -303,6 +298,7 @@
     "bannerAlmost": "🎤 Fast dran — noch 1 Song",
     "bannerPosition": "Nr. {position} in der Warteschlange · {wait}",
     "bannerPending": "Warte auf den KJ…",
+    "bannerMaking": "✨ Wird für dich erstellt",
     "bannerQueued": "In der Warteschlange",
     "barNext": "Dein nächster Song",
     "barNextOf": "Dein nächster Song (von {count})",

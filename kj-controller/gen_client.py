@@ -7,35 +7,70 @@ import requests
 logger = logging.getLogger(__name__)
 
 REQUEST_TIMEOUT = 30
+# create_job runs gen's audio search inside the request (flacfetch + YouTube
+# fan-out), which can take well over 30s. Timing out client-side does NOT stop
+# the job gen already created, so a too-short timeout orphans real jobs.
+CREATE_JOB_TIMEOUT = 120
 
 
 class GenStatus:
     """Mapped gen status values stored in rotation entries."""
     PROCESSING = "processing"
+    # Gen needs a human before it can continue (pick audio, trim audio, confirm
+    # a long duration) — distinct from lyrics review, which has its own page.
+    NEEDS_INPUT = "needs_input"
     AWAITING_REVIEW = "awaiting_review"
     RENDERING = "rendering"
+    # kjbox-side: gen finished; waiting for master-sync to pull the NOMAD-####
+    # master onto the box so it can be linked (see GenPoller).
+    SYNCING = "syncing"
     COMPLETE = "complete"
     FAILED = "failed"
 
     TERMINAL = {COMPLETE, FAILED}
-    ACTIVE = {PROCESSING, AWAITING_REVIEW, RENDERING}
+    ACTIVE = {PROCESSING, NEEDS_INPUT, AWAITING_REVIEW, RENDERING, SYNCING}
 
 
 _STATUS_MAP = {
     "pending": GenStatus.PROCESSING,
+    "queued": GenStatus.PROCESSING,
+    "processing": GenStatus.PROCESSING,
+    "searching_audio": GenStatus.PROCESSING,
     "downloading": GenStatus.PROCESSING,
+    "downloading_audio": GenStatus.PROCESSING,
+    "download_pending_retry": GenStatus.PROCESSING,
+    "audio_edit_complete": GenStatus.PROCESSING,
+    "audio_complete": GenStatus.PROCESSING,
     "separating_stage1": GenStatus.PROCESSING,
     "separating_stage2": GenStatus.PROCESSING,
     "transcribing": GenStatus.PROCESSING,
+    "correcting": GenStatus.PROCESSING,
+    "lyrics_complete": GenStatus.PROCESSING,
     "generating_screens": GenStatus.PROCESSING,
+    "applying_padding": GenStatus.PROCESSING,
+    "awaiting_audio_selection": GenStatus.NEEDS_INPUT,
+    "awaiting_audio_edit": GenStatus.NEEDS_INPUT,
+    "in_audio_edit": GenStatus.NEEDS_INPUT,
+    "awaiting_duration_confirm": GenStatus.NEEDS_INPUT,
+    "awaiting_instrumental_selection": GenStatus.NEEDS_INPUT,
     "awaiting_review": GenStatus.AWAITING_REVIEW,
     "in_review": GenStatus.AWAITING_REVIEW,
     "review_complete": GenStatus.RENDERING,
     "rendering_video": GenStatus.RENDERING,
+    "render_pending_capacity": GenStatus.RENDERING,
     "generating_video": GenStatus.RENDERING,
     "instrumental_selected": GenStatus.RENDERING,
+    "encoding": GenStatus.RENDERING,
+    "packaging": GenStatus.RENDERING,
+    "uploading": GenStatus.RENDERING,
+    "notifying": GenStatus.RENDERING,
+    "ready_for_finalization": GenStatus.RENDERING,
+    "finalizing": GenStatus.RENDERING,
     "complete": GenStatus.COMPLETE,
+    "prep_complete": GenStatus.COMPLETE,
     "failed": GenStatus.FAILED,
+    "cancelled": GenStatus.FAILED,
+    "error": GenStatus.FAILED,
 }
 
 
@@ -63,7 +98,7 @@ class GenClient:
             f"{self.api_url}/api/audio-search/search",
             json={"artist": artist, "title": title, "auto_download": True, "theme_id": "nomad"},
             headers=self._headers(),
-            timeout=REQUEST_TIMEOUT,
+            timeout=CREATE_JOB_TIMEOUT,
         )
         resp.raise_for_status()
         return resp.json()

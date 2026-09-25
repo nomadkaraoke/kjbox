@@ -6211,10 +6211,23 @@ function renderRotation(entries) {
                 e.stopPropagation();
                 window.open('https://gen.nomadkaraoke.com/app/jobs#/' + entry.gen_job_id + '/review', '_blank');
             };
+        } else if (entry.gen_status === 'needs_input') {
+            prepBadge.textContent = 'NEEDS INPUT';
+            prepBadge.classList.add('prep-review');
+            prepBadge.style.cursor = 'pointer';
+            prepBadge.title = 'Gen needs a decision (audio pick / trim) \u2014 click to open the job';
+            prepBadge.onclick = (e) => {
+                e.stopPropagation();
+                window.open('https://gen.nomadkaraoke.com/app/jobs#/' + entry.gen_job_id, '_blank');
+            };
         } else if (entry.gen_status === 'rendering') {
             prepBadge.textContent = 'RENDERING';
             prepBadge.classList.add('prep-rendering');
             prepBadge.title = 'Karaoke video rendering \u2014 almost ready';
+        } else if (entry.gen_status === 'syncing') {
+            prepBadge.textContent = 'SYNCING';
+            prepBadge.classList.add('prep-rendering');
+            prepBadge.title = 'Video finished \u2014 waiting for master-sync to pull the NOMAD master onto the box (auto-links + moves to Waiting)';
         } else {
             prepBadge.textContent = 'UNLINKED';
             prepBadge.classList.add('prep-unlinked');

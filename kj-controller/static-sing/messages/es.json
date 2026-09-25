@@ -85,7 +85,8 @@
     "ideasCrowd": "Favoritas del público aquí",
     "ideasNone": "Aún no hay historial de canciones — ¡esta noche es la noche!",
     "ideasFailed": "No se pudo cargar el historial de canciones.",
-    "plays": "▶ {count}"
+    "plays": "▶ {count}",
+    "makeOffer": "¿No es la versión que querías? Podemos crearla para ti →"
   },
   "versions": {
     "sectionLibrary": "En nuestra biblioteca",
@@ -190,31 +191,20 @@
     "simpleBody": "Prueba con otra búsqueda, o habla con el anfitrión.",
     "title": "No la encontramos en nuestro catálogo.",
     "intro": {
-      "one": "Una opción:",
-      "other": "{count} opciones — elige la que mejor te venga."
+      "one": "Esto es lo que puedes hacer:",
+      "other": "{count} opciones:"
     },
     "step": "{n}. {title}",
     "youtubeTitle": "Pegar un enlace de YouTube",
     "youtubeDesc": "Lo más rápido. Si puedes encontrar la canción en YouTube, pega el enlace y lo usaremos directamente. La calidad varía.",
     "youtubePlaceholder": "https://youtu.be/…",
     "youtubeCta": "Usar este enlace de YouTube →",
-    "makeTitle": "Pedir al anfitrión que la prepare esta noche",
-    "makeDesc": "Gratis, pero toma tiempo — usualmente de 20 min a 1 hora. El anfitrión no siempre puede hacerlo en una noche ocupada, y algunas canciones son demasiado complejas para hacerlas en vivo. Si no puede hacerlo esta noche, te avisará.",
+    "makeTitle": "La crearemos para ti",
+    "makeDesc": "Escribe el artista y el título de la canción y crearemos un video de karaoke para ti automáticamente; suele estar listo en 15–30 minutos, y entrarás a la cola en cuanto lo esté. Si la canción necesita ayuda, el anfitrión se encarga.",
     "artist": "Artista",
     "songTitle": "Título de la canción",
-    "makeCta": "Pedir al anfitrión →",
-    "makeConfirm": "Pedir al anfitrión que prepare \"{title}\" de {artist} — esto puede tomar de 20 min a 1 hora, o puede que no sea posible esta noche. ¿Seguro?",
-    "diyTitle": "Hazlo tú mismo (lo más rápido para canciones poco comunes)",
-    "diyDesc": "Si no te importa usar un poco el teléfono, puedes crear la pista de karaoke tú mismo en gen.nomadkaraoke.com — toma ~5 min si revisas la letra, más tiempo si no. Luego pega la URL de YouTube aquí de nuevo.",
-    "diyHow": "Cómo funciona (toma ~5 min si te concentras)",
-    "diyStep1": "Busca tu canción en YouTube — cualquier versión con voces claras.",
-    "diyStep2": "Abre {site}, pega el enlace y no pagues nada.",
-    "diyStep3": "Espera ~2 min mientras separamos la voz del audio.",
-    "diyStep4": "Aparecerá una pantalla para revisar la letra. Toca cualquier línea incorrecta, corrígela y guarda. Esta es la parte que requiere atención en el teléfono — usualmente ~3 min.",
-    "diyStep5": "Generamos el video de karaoke y lo publicamos en YouTube.",
-    "diyStep6": "Copia la nueva URL de YouTube, vuelve aquí y pégala en la opción de YouTube de arriba.",
-    "diyNote": "Tiempo total: ~5–10 min si te concentras. El anfitrión no hace nada — tu canción entra en la rotación como cualquier petición de YouTube.",
-    "diyCta": "Abrir gen.nomadkaraoke.com →"
+    "makeCta": "Créala para mí →",
+    "makeMissing": "Por favor, escribe tanto el artista como el título de la canción."
   },
   "confirm": {
     "title": "¿Es esta la canción correcta?",
@@ -224,7 +214,7 @@
     "sourceCloud": "De nuestra biblioteca en la nube — muy confiable",
     "sourceOnline": "De YouTube — casi siempre funciona",
     "sourceYouTube": "De un enlace de YouTube — casi siempre funciona",
-    "sourceMake": "El anfitrión la preparará para ti",
+    "sourceMake": "Te crearemos un video de karaoke de esta canción — normalmente listo en 15–30 min",
     "sourceAuto": "Elegiremos la mejor versión para ti",
     "searched": "Buscaste: \"{query}\"",
     "details": "Tus datos: {name}",
@@ -251,7 +241,9 @@
     "sendChange": "Sí — cambiar mi canción",
     "tooMany": "Has enviado muchas peticiones — por favor, espera unos minutos.",
     "restricted": "Las peticiones de canciones están restringidas actualmente. Por favor, actualiza esta página para ver las opciones actualizadas.",
-    "failed": "No se pudo enviar — pregunta al anfitrión si las peticiones están pausadas."
+    "failed": "No se pudo enviar — pregunta al anfitrión si las peticiones están pausadas.",
+    "makeLimit": "Ya nos has pedido crear algunas canciones esta noche — elige una del catálogo o pregúntale al anfitrión.",
+    "makeDisabled": "El anfitrión no está aceptando peticiones para crear canciones ahora mismo — mejor elige una canción del catálogo."
   },
   "mySongs": {
     "title": "Tus canciones de esta noche",
@@ -265,7 +257,10 @@
     "statusSung": "✓ Cantaste esta — ¡buen trabajo!",
     "statusRejected": "El anfitrión necesita hablar contigo — ve a su mesa.",
     "statusPending": "Esperando que el anfitrión apruebe…",
+    "statusMakingPending": "✨ Creándose para ti — esperando a que el anfitrión la agregue a la lista…",
     "statusQueued": "Añadida a la fila.",
+    "statusMaking": "✨ Creándolo para ti — entrarás a la cola en cuanto esté listo.",
+    "statusMakeNeedsHost": "✨ Creándose — esta necesita ayuda del anfitrión, así que puede tardar un poco más.",
     "statusCancelled": "Cancelada.",
     "statusRemoved": "El anfitrión quitó esta canción de la lista — pregúntale si no te lo esperabas.",
     "statusUp": "🎤 ¡Es tu turno — ve al escenario!",
@@ -303,6 +298,7 @@
     "bannerAlmost": "🎤 Ya casi — falta 1",
     "bannerPosition": "#{position} en la fila · {wait}",
     "bannerPending": "Esperando al anfitrión…",
+    "bannerMaking": "✨ Creándolo para ti",
     "bannerQueued": "En la fila",
     "barNext": "Tu próxima canción",
     "barNextOf": "Tu próxima canción (de {count})",

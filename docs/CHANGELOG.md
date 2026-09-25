@@ -2,6 +2,24 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-09-24 - Feature: Singer "make it" is fully automatic end to end (v0.116.0)
+
+Singers who can't find a song now get "We'll make it for you" (artist + title) right in the
+singer UI, and under normal results as "Not the version you wanted? We can make it". The old
+external "Make it yourself on gen.nomadkaraoke.com" card is gone. See
+[archive/2026-09-24-singer-make-it-auto-flow-plan.md](archive/2026-09-24-singer-make-it-auto-flow-plan.md).
+
+- **The gen job starts when the singer submits**, not when the KJ approves (`make_jobs.py`).
+  Approval attaches that job to the new rotation entry, and never creates a duplicate.
+- **Make entries start as `Being Made (!)`**, so Auto Order keeps them below singable songs.
+- **The GenPoller links the NOMAD-#### master** that master-sync pulls within about 60s. The
+  KJ row shows a SYNCING badge while it waits. After `gen_master_wait_seconds` (600) it falls
+  back to a direct 720p download, then flips the entry to **`Waiting`**.
+- **Singer "My songs"** shows "✨ Being made for you" (or "needs a hand from the host") rather
+  than a queue position.
+- **Per-device limit:** 3 make requests per night (`sing_make_max_per_device`).
+- **Gen status mapping** covers gen's newer statuses. There is a new NEEDS INPUT badge for audio
+  pick/trim. `create_job` timeout is now 120s (it was 30s, which could orphan real gen jobs).
 ## 2026-09-25 - Fix: Real-night edge cases from the 2026-09-24 show (v0.115.0)
 
 Four failures mined from the ActionRecorder log of the 2026-09-24 show

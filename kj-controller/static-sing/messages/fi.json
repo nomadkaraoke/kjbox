@@ -85,7 +85,8 @@
     "ideasCrowd": "Yleisön suosikit täällä",
     "ideasNone": "Ei vielä lauluhistoriaa — tänä iltana räjähtää!",
     "ideasFailed": "Lauluhistorian lataus epäonnistui.",
-    "plays": "▶ {count}"
+    "plays": "▶ {count}",
+    "makeOffer": "Eikö tämä ollut haluamasi versio? Voimme tehdä sen sinulle →"
   },
   "versions": {
     "sectionLibrary": "Kirjastossamme",
@@ -190,31 +191,20 @@
     "simpleBody": "Kokeile toista hakua tai käy juttelemassa vetäjälle.",
     "title": "Ei löydy valikoimastamme.",
     "intro": {
-      "one": "Yksi vaihtoehto:",
-      "other": "{count} vaihtoehtoa — valitse se, joka sopii siihen, kuinka paljon haluat nähdä vaivaa."
+      "one": "Voit tehdä näin:",
+      "other": "{count} vaihtoehtoa:"
     },
     "step": "{n}. {title}",
     "youtubeTitle": "Liitä YouTube-linkki",
     "youtubeDesc": "Nopein. Jos löydät laulun YouTubesta, liitä linkki ja käytämme sitä suoraan. Laatu vaihtelee.",
     "youtubePlaceholder": "https://youtu.be/…",
     "youtubeCta": "Käytä tätä YouTube-linkkiä →",
-    "makeTitle": "Pyydä vetäjää tekemään se tänä iltana",
-    "makeDesc": "Ilmainen, mutta vie aikaa — yleensä 20 minuutista tuntiin. Vetäjä ei aina ehdi kiireisenä iltana, ja jotkut laulut ovat liian monimutkaisia livenä tehtäväksi. Jos se ei onnistu tänään, hän kertoo sinulle.",
+    "makeTitle": "Teemme sen sinulle",
+    "makeDesc": "Kirjoita esittäjä ja kappaleen nimi, niin luomme sinulle karaokevideon automaattisesti — se on yleensä valmis 15–30 minuutissa, ja liityt jonoon heti sen valmistuttua. Jos kappaleen kanssa tarvitaan apua, KJ auttaa.",
     "artist": "Artisti",
     "songTitle": "Kappaleen nimi",
-    "makeCta": "Kysy vetäjältä →",
-    "makeConfirm": "Pyydät vetäjää tekemään laulun \"{title}\" esittäjältä {artist} — tämä voi kestää 20 minuutista tuntiin, tai ei ehkä onnistu tänä iltana. Oletko varma?",
-    "diyTitle": "Tee se itse (nopein harvinaisille lauluille)",
-    "diyDesc": "Jos et välitä pienestä puhelimen näpräämisestä, voit tehdä karaokevideon itse osoitteessa gen.nomadkaraoke.com — kestää n. 5 min jos tarkistat sanat, muuten kauemmin. Liitä sitten YouTube-linkki takaisin tänne.",
-    "diyHow": "Miten se toimii (kestää n. 5 min jos keskityt)",
-    "diyStep1": "Etsi laulusi YouTubesta — mikä tahansa versio, jossa on selkeä lauluääni.",
-    "diyStep2": "Avaa {site}, liitä linkki, etkä maksa mitään.",
-    "diyStep3": "Odota n. 2 min, kun erotamme lauluäänen taustasta.",
-    "diyStep4": "Sanojen tarkistusruutu aukeaa. Napauta väärää riviä, korjaa se ja tallenna. Tämä on se keskittymistä vaativa osuus — yleensä n. 3 min.",
-    "diyStep5": "Teemme karaokevideon ja julkaisemme sen YouTubeen.",
-    "diyStep6": "Kopioi uusi YouTube-linkki, palaa tänne ja liitä se yllä olevaan YouTube-vaihtoehtoon.",
-    "diyNote": "Kokonaisaika: n. 5–10 min jos keskityt. Vetäjän ei tarvitse tehdä mitään — laulusi menee jonoon kuten mikä tahansa YouTube-pyyntö.",
-    "diyCta": "Avaa gen.nomadkaraoke.com →"
+    "makeCta": "Tehkää se minulle →",
+    "makeMissing": "Täytäthän sekä artistin että kappaleen nimen."
   },
   "confirm": {
     "title": "Onko tämä oikea laulu?",
@@ -224,7 +214,7 @@
     "sourceCloud": "Pilvikirjastostamme — erittäin luotettava",
     "sourceOnline": "YouTubesta — toimii melkein aina",
     "sourceYouTube": "YouTube-linkistä — toimii melkein aina",
-    "sourceMake": "Vetäjä tekee tämän sinulle",
+    "sourceMake": "Teemme tästä sinulle karaokevideon — yleensä valmis 15–30 minuutissa",
     "sourceAuto": "Valitsemme sinulle parhaan version",
     "searched": "Hait: \"{query}\"",
     "details": "Tietosi: {name}",
@@ -251,7 +241,9 @@
     "sendChange": "Kyllä — vaihda lauluni",
     "tooMany": "Olet lähettänyt paljon pyyntöjä — odota muutama minuutti.",
     "restricted": "Laulupyynnöt on tällä hetkellä rajoitettu. Päivitä tämä sivu nähdäksesi päivitetyt vaihtoehdot.",
-    "failed": "Lähetys epäonnistui — kysy vetäjältä, onko pyynnöt tauolla."
+    "failed": "Lähetys epäonnistui — kysy vetäjältä, onko pyynnöt tauolla.",
+    "makeLimit": "Olet jo pyytänyt meitä tekemään muutaman kappaleen tänä iltana — valitse kappale valikoimasta tai kysy vetäjältä.",
+    "makeDisabled": "Vetäjä ei juuri nyt ota vastaan pyyntöjä uusien kappaleiden tekemisestä — valitse sen sijaan kappale valikoimasta."
   },
   "mySongs": {
     "title": "Laulusi tänä iltana",
@@ -265,7 +257,10 @@
     "statusSung": "✓ Lauloit tämän — hienoa työtä!",
     "statusRejected": "Vetäjä haluaa jutella — käy hänen luonaan.",
     "statusPending": "Odotetaan vetäjän hyväksyntää…",
+    "statusMakingPending": "✨ Tehdään sinulle — odotetaan, että vetäjä lisää sen jonoon…",
     "statusQueued": "Lisätty jonoon.",
+    "statusMaking": "✨ Valmistetaan sinulle — liityt jonoon heti, kun se on valmis.",
+    "statusMakeNeedsHost": "✨ Tehdään — tämä vaatii vetäjän apua, joten tässä voi kestää hieman kauemmin.",
     "statusCancelled": "Peruttu.",
     "statusRemoved": "KJ poisti tämän kappaleen listalta — kysy häneltä, jos tämä tuli yllätyksenä.",
     "statusUp": "🎤 Sinun vuorosi — suuntaa lavalle!",
@@ -303,6 +298,7 @@
     "bannerAlmost": "🎤 Kohta vuorossa — 1 jäljellä",
     "bannerPosition": "Sija {position} jonossa · {wait}",
     "bannerPending": "Odotetaan vetäjää…",
+    "bannerMaking": "✨ Valmistetaan sinulle",
     "bannerQueued": "Jonossa",
     "barNext": "Seuraava laulusi",
     "barNextOf": "Seuraava laulusi (yhteensä {count})",

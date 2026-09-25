@@ -85,7 +85,8 @@
     "ideasCrowd": "Preferatele publicului aici",
     "ideasNone": "Niciun istoric de piese încă — diseară e seara!",
     "ideasFailed": "Nu s-a putut încărca istoricul pieselor.",
-    "plays": "▶ {count}"
+    "plays": "▶ {count}",
+    "makeOffer": "Nu e versiunea pe care o voiai? O putem crea pentru tine →"
   },
   "versions": {
     "sectionLibrary": "În biblioteca noastră",
@@ -190,31 +191,20 @@
     "simpleBody": "Încearcă altă căutare sau vorbește cu gazda în față.",
     "title": "Nu o găsim în catalogul nostru.",
     "intro": {
-      "one": "O variantă:",
-      "other": "{count} variante — alege-o pe cea care ți se potrivește."
+      "one": "Iată ce poți face:",
+      "other": "{count} opțiuni:"
     },
     "step": "{n}. {title}",
     "youtubeTitle": "Lipește un link YouTube",
     "youtubeDesc": "Cel mai rapid. Dacă găsești piesa pe YouTube, lipește linkul și îl vom folosi direct. Calitatea variază.",
     "youtubePlaceholder": "https://youtu.be/…",
     "youtubeCta": "Folosește acest link YouTube →",
-    "makeTitle": "Roagă gazda să o facă în seara asta",
-    "makeDesc": "Gratuit, dar necesită timp — de obicei 20 min până la 1 oră. Gazda nu are mereu timp într-o seară aglomerată, iar unele piese sunt prea complexe pentru a fi făcute live. Dacă nu poate face asta în seara asta, te va anunța.",
+    "makeTitle": "O vom crea pentru tine",
+    "makeDesc": "Scrie artistul și titlul piesei, iar noi vom crea automat un videoclip de karaoke pentru tine — de obicei durează 15–30 de minute, iar tu vei intra în lista de așteptare imediat ce este gata. Dacă e nevoie de ajutor cu piesa, intervine gazda.",
     "artist": "Artist",
     "songTitle": "Titlul melodiei",
-    "makeCta": "Întreabă gazda →",
-    "makeConfirm": "Îi ceri gazdei să facă „{title}” de {artist} — asta poate dura între 20 de min și 1 oră, sau s-ar putea să nu fie posibil în seara asta. Ești sigur?",
-    "diyTitle": "Fă-o chiar tu (cel mai rapid pentru piese de nișă)",
-    "diyDesc": "Dacă nu te deranjează să stai puțin pe telefon, poți face chiar tu piesa de karaoke pe gen.nomadkaraoke.com — durează ~5 min dacă revizuiești versurile, mai mult dacă nu. Apoi lipește URL-ul YouTube înapoi aici.",
-    "diyHow": "Cum funcționează (durează ~5 min dacă te concentrezi)",
-    "diyStep1": "Găsește piesa pe YouTube — orice versiune cu voce clară.",
-    "diyStep2": "Deschide {site}, lipește linkul, fără să plătești nimic.",
-    "diyStep3": "Așteaptă ~2 min în timp ce separăm vocea de instrumental.",
-    "diyStep4": "Apare un ecran de revizuire a versurilor. Apasă pe orice rând greșit, corectează-l, salvează. Asta e partea care necesită atenție — de obicei ~3 min.",
-    "diyStep5": "Randăm videoclipul de karaoke și îl publicăm pe YouTube.",
-    "diyStep6": "Copiază noul URL YouTube, întoarce-te aici, lipește-l în opțiunea YouTube de mai sus.",
-    "diyNote": "Timp total: ~5–10 min dacă te concentrezi. Gazda nu face nimic — piesa ta ajunge în rotație ca orice altă trimitere YouTube.",
-    "diyCta": "Deschide gen.nomadkaraoke.com →"
+    "makeCta": "Creează-o pentru mine →",
+    "makeMissing": "Te rugăm să completezi atât artistul, cât și titlul piesei."
   },
   "confirm": {
     "title": "Asta e piesa corectă?",
@@ -224,7 +214,7 @@
     "sourceCloud": "Din biblioteca noastră cloud — foarte de încredere",
     "sourceOnline": "De pe YouTube — aproape mereu funcționează",
     "sourceYouTube": "Dintr-un link de YouTube — aproape mereu funcționează",
-    "sourceMake": "Gazda va pregăti asta pentru tine",
+    "sourceMake": "Îți vom crea un videoclip de karaoke cu această piesă — de obicei e gata în 15–30 min.",
     "sourceAuto": "Vom alege cea mai bună versiune pentru tine",
     "searched": "Ai căutat: „{query}”",
     "details": "Detaliile tale: {name}",
@@ -251,7 +241,9 @@
     "sendChange": "Da — schimbă piesa",
     "tooMany": "Ai trimis prea multe — așteaptă câteva minute.",
     "restricted": "Cererile de piese sunt momentan restricționate. Reîncarcă pagina pentru opțiunile actualizate.",
-    "failed": "Nu s-a putut trimite — întreabă gazda dacă cererile sunt pe pauză."
+    "failed": "Nu s-a putut trimite — întreabă gazda dacă cererile sunt pe pauză.",
+    "makeLimit": "Ne-ai cerut deja să creăm câteva piese în seara asta — alege una din catalog sau întreabă gazda.",
+    "makeDisabled": "Gazda nu acceptă cereri de creare de piese în acest moment — alege o piesă din catalog."
   },
   "mySongs": {
     "title": "Piesele tale de diseară",
@@ -265,7 +257,10 @@
     "statusSung": "✓ Ai cântat asta — treabă excelentă!",
     "statusRejected": "Gazda vrea să-ți spună ceva — mergi la pupitru.",
     "statusPending": "Așteptăm ca gazda să aprobe…",
+    "statusMakingPending": "✨ Se creează pentru tine — așteptăm ca gazda să o adauge la rând…",
     "statusQueued": "Adăugat la rând.",
+    "statusMaking": "✨ Se pregătește pentru tine — vei intra în lista de așteptare imediat ce este gata.",
+    "statusMakeNeedsHost": "✨ Se creează — piesa are nevoie de o mână de ajutor de la gazdă, așa că ar putea dura puțin mai mult.",
     "statusCancelled": "Anulat.",
     "statusRemoved": "Gazda a scos această melodie de pe listă — întreab-o dacă e o greșeală.",
     "statusUp": "🎤 E rândul tău — mergi pe scenă!",
@@ -303,6 +298,7 @@
     "bannerAlmost": "🎤 Aproape gata — încă 1",
     "bannerPosition": "#{position} la rând · {wait}",
     "bannerPending": "Așteptăm gazda…",
+    "bannerMaking": "✨ Se pregătește pentru tine",
     "bannerQueued": "La rând",
     "barNext": "Următoarea ta piesă",
     "barNextOf": "Următoarea ta piesă (din {count})",

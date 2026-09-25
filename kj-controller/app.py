@@ -396,6 +396,12 @@ def create_app(config=None):
             flask_app.gen_client, flask_app.rotation,
             flask_app.media, cfg.get('download_folder', ''),
             poll_interval=cfg.get('gen_poll_interval', 60),
+            # Link the NOMAD-#### master pulled by master-sync rather than
+            # downloading a duplicate — only when master-sync is running.
+            master_wait_seconds=(
+                cfg.get('gen_master_wait_seconds', 600)
+                if cfg.get('master_sync_enabled') else 0
+            ),
         )
     else:
         flask_app.gen_client = None
@@ -604,6 +610,12 @@ def start_app():  # pragma: no cover
             flask_app.gen_client, flask_app.rotation,
             flask_app.media, cfg.get('download_folder', ''),
             poll_interval=cfg.get('gen_poll_interval', 60),
+            # Link the NOMAD-#### master pulled by master-sync rather than
+            # downloading a duplicate — only when master-sync is running.
+            master_wait_seconds=(
+                cfg.get('gen_master_wait_seconds', 600)
+                if cfg.get('master_sync_enabled') else 0
+            ),
         )
         flask_app.gen_poller.start()
         log_message("Gen API integration enabled.", cfg)

@@ -171,11 +171,55 @@ class TestSearchDecisionLayer:
         self._search(page, live_server, live_token, [], make_enabled=False)
         wrap = page.locator(".sing-empty-triage")
         expect(wrap).to_be_visible()
+        # Make requests off → only the YouTube card, and no "1." numbering.
+        heads = wrap.locator(".sing-empty-card h4")
+        expect(heads).to_have_count(1)
+        expect(heads.nth(0)).to_have_text("Paste a YouTube link")
+
+    def test_empty_state_leads_with_make_card(self, page, live_server, live_token):
+        self._search(page, live_server, live_token, [], make_enabled=True)
+        wrap = page.locator(".sing-empty-triage")
         expect(wrap.locator(".sing-empty-header p")).to_contain_text("2 ways forward")
         heads = wrap.locator(".sing-empty-card h4")
         expect(heads).to_have_count(2)
-        expect(heads.nth(0)).to_contain_text("1. Paste a YouTube link")
-        expect(heads.nth(1)).to_contain_text("2. Make it yourself")
+        expect(heads.nth(0)).to_contain_text("1. We'll make it for you")
+        expect(heads.nth(1)).to_contain_text("2. Paste a YouTube link")
+        # No external gen.nomadkaraoke.com hand-off any more.
+        expect(page.locator('a[href*="gen.nomadkaraoke.com"]')).to_have_count(0)
+        # Missing fields are flagged inline instead of silently ignored.
+        wrap.locator('[data-testid="make-card"] button').click()
+        expect(wrap.locator(".sing-empty-missing")).to_be_visible()
+        card = wrap.locator('[data-testid="make-card"]')
+        card.locator("input").nth(0).fill("Radiohead")
+        card.locator("input").nth(1).fill("Creep")
+        card.locator("button").click()
+        expect(page.locator("h2")).to_have_text("Is this the right song?")
+
+    def test_make_offer_under_results(self, page, live_server, live_token):
+        song = {"key": "g:one", "artist": "Glow", "title": "Dancing Queen",
+                "version_count": 1, "in_library": False,
+                "versions": [{"source": "kn", "priority_class": "community",
+                              "priority_brand": None, "priority_display": "",
+                              "kn": {"brand_code": "WOBK", "is_community": True,
+                                     "youtube_url": "https://youtu.be/x"}}]}
+        self._search(page, live_server, live_token, [song])
+        offer = page.locator('[data-testid="make-offer"]')
+        expect(offer).to_be_visible()
+        offer.click()
+        expect(page.locator('[data-testid="make-card"]')).to_be_visible()
+        # Search text survives opening the form (results re-render in place).
+        expect(page.locator('input[type="search"]')).to_have_value("query text")
+
+    def test_no_make_offer_when_make_disabled(self, page, live_server, live_token):
+        song = {"key": "g:one", "artist": "Glow", "title": "Dancing Queen",
+                "version_count": 1, "in_library": False,
+                "versions": [{"source": "kn", "priority_class": "community",
+                              "priority_brand": None, "priority_display": "",
+                              "kn": {"brand_code": "WOBK", "is_community": True,
+                                     "youtube_url": "https://youtu.be/x"}}]}
+        self._search(page, live_server, live_token, [song], make_enabled=False)
+        expect(page.locator(".result-row")).to_have_count(1)
+        expect(page.locator('[data-testid="make-offer"]')).to_have_count(0)
 
 
 class TestChangeSongMode:

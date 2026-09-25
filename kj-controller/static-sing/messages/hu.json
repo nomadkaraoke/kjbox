@@ -85,7 +85,8 @@
     "ideasCrowd": "A közönség kedvencei itt",
     "ideasNone": "Még nincsenek dalelőzmények — ma este itt az idő!",
     "ideasFailed": "Nem sikerült betölteni a dalelőzményeket.",
-    "plays": "▶ {count}"
+    "plays": "▶ {count}",
+    "makeOffer": "Nem ezt a verziót kerested? Elkészítjük neked →"
   },
   "versions": {
     "sectionLibrary": "A könyvtárunkban",
@@ -190,31 +191,20 @@
     "simpleBody": "Próbálj meg egy másik keresést, vagy beszélj a házigazdával elöl.",
     "title": "Nem találjuk a katalógusunkban.",
     "intro": {
-      "one": "Egy lehetséges megoldás:",
-      "other": "{count} lehetséges megoldás — válaszd azt, amelyikhez a leginkább van kedved."
+      "one": "Ezt teheted:",
+      "other": "{count} lehetőség:"
     },
     "step": "{n}. {title}",
     "youtubeTitle": "Illessz be egy YouTube linket",
     "youtubeDesc": "A leggyorsabb. Ha megtalálod a dalt a YouTube-on, illeszd be a linket, és közvetlenül azt használjuk. A minőség változó lehet.",
     "youtubePlaceholder": "https://youtu.be/…",
     "youtubeCta": "Használd ezt a YouTube linket →",
-    "makeTitle": "Kérd meg a házigazdát, hogy készítse el ma este",
-    "makeDesc": "Ingyenes, de időbe telik — általában 20 perc és 1 óra között. Egy sűrű estén a házigazdának nem mindig fér bele az idejébe, és néhány dal túl bonyolult ahhoz, hogy élőben megcsinálja. Ha ma este nem megy, szólni fog.",
+    "makeTitle": "Elkészítjük neked",
+    "makeDesc": "Írd be az előadót és a dal címét, és mi automatikusan elkészítünk neked egy karaoke videót — általában 15–30 perc alatt elkészül, és amint megvan, be is kerülsz a sorba. Ha a dalhoz egy kis segítség kell, a házigazda besegít.",
     "artist": "Előadó",
     "songTitle": "Dal címe",
-    "makeCta": "Kérd meg a házigazdát →",
-    "makeConfirm": "Megkéred a házigazdát, hogy készítse el ezt: \"{title}\" - {artist} — ez 20 perctől akár 1 óráig is tarthat, vagy lehet, hogy ma este nem is megoldható. Biztos vagy benne?",
-    "diyTitle": "Készítsd el te magad (a leggyorsabb a ritka dalokhoz)",
-    "diyDesc": "Ha nem bánod, hogy kicsit nyomkodni kell a telefont, te magad is elkészítheted a karaoke alapot a gen.nomadkaraoke.com oldalon — kb. 5 perc, ha megcsinálod a dalszöveg-ellenőrzést, tovább, ha nem. Utána másold be ide a YouTube URL-t.",
-    "diyHow": "Hogyan működik (kb. 5 perc, ha odafigyelsz)",
-    "diyStep1": "Keresd meg a dalt a YouTube-on — bármilyen verzió jó, ahol tisztán hallatszik az ének.",
-    "diyStep2": "Nyisd meg a {site} oldalt, illeszd be a linket, és nem kell fizetned semmit.",
-    "diyStep3": "Várj kb. 2 percet, amíg leválasztjuk az éneket a zenéről.",
-    "diyStep4": "Megjelenik a dalszöveg-ellenőrző képernyő. Koppints a hibás sorokra, javítsd ki, majd mentsd el. Ez a fókuszálós rész — általában kb. 3 perc.",
-    "diyStep5": "Elkészítjük a karaoke videót, és feltöltjük a YouTube-ra.",
-    "diyStep6": "Másold ki az új YouTube URL-t, gyere vissza ide, és illeszd be a fenti YouTube opcióba.",
-    "diyNote": "Összes idő: kb. 5–10 perc, ha odafigyelsz. A házigazdának nincs vele dolga — a dalod úgy kerül a sorba, mint bármelyik YouTube-os kérés.",
-    "diyCta": "Nyisd meg: gen.nomadkaraoke.com →"
+    "makeCta": "Készítsétek el nekem →",
+    "makeMissing": "Kérlek, add meg az előadót és a dal címét is."
   },
   "confirm": {
     "title": "Ez a megfelelő dal?",
@@ -224,7 +214,7 @@
     "sourceCloud": "A felhőkönyvtárunkból — nagyon megbízható",
     "sourceOnline": "A YouTube-ról — szinte mindig működik",
     "sourceYouTube": "Egy YouTube linkről — szinte mindig működik",
-    "sourceMake": "A házigazda elkészíti ezt neked",
+    "sourceMake": "Készítünk ebből neked egy karaoke videót — általában 15–30 perc alatt megvan.",
     "sourceAuto": "Kiválasztjuk neked a legjobb verziót",
     "searched": "Ezt kerested: \"{query}\"",
     "details": "Adataid: {name}",
@@ -251,7 +241,9 @@
     "sendChange": "Igen — cseréld le a dalom",
     "tooMany": "Sokat küldtél be — kérlek, várj néhány percet.",
     "restricted": "A dalkérések jelenleg korlátozva vannak. Kérlek, frissítsd az oldalt az aktuális lehetőségekért.",
-    "failed": "Nem sikerült elküldeni — kérdezd meg a házigazdát, hogy szünetelnek-e a kérések."
+    "failed": "Nem sikerült elküldeni — kérdezd meg a házigazdát, hogy szünetelnek-e a kérések.",
+    "makeLimit": "Ma este már kérted tőlünk pár dal elkészítését — válassz egyet a katalógusból, vagy kérdezd a KJ-t.",
+    "makeDisabled": "A KJ most nem fogad kéréseket új dalok készítésére — válassz inkább egy dalt a katalógusból."
   },
   "mySongs": {
     "title": "A te dalaid ma este",
@@ -265,7 +257,10 @@
     "statusSung": "✓ Ezt már elénekelted — szép munka!",
     "statusRejected": "A házigazda beszélni szeretne veled — keresd meg a pultnál.",
     "statusPending": "Várakozás a házigazda jóváhagyására…",
+    "statusMakingPending": "✨ Készül neked — várjuk, hogy a KJ hozzáadja a sorhoz…",
     "statusQueued": "Hozzáadva a sorhoz.",
+    "statusMaking": "✨ Épp készül neked — amint megvan, bekerülsz a sorba.",
+    "statusMakeNeedsHost": "✨ Készül — ehhez a KJ segítsége kell, így egy picit tovább tarthat.",
     "statusCancelled": "Törölve.",
     "statusRemoved": "A házigazda levette ezt a dalt a listáról — kérdezd meg tőle, ha ez meglepetésként ér.",
     "statusUp": "🎤 Te jössz — irány a színpad!",
@@ -303,6 +298,7 @@
     "bannerAlmost": "🎤 Mindjárt te következel — még 1 dal",
     "bannerPosition": "#{position}. a sorban · {wait}",
     "bannerPending": "Várakozás a házigazdára…",
+    "bannerMaking": "✨ Épp készül neked",
     "bannerQueued": "A sorban",
     "barNext": "A következő dalod",
     "barNextOf": "A következő dalod ({count} dalból)",

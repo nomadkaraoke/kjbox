@@ -85,7 +85,8 @@
     "ideasCrowd": "Oblíbené hity publika",
     "ideasNone": "Zatím žádná historie písní — dnešek to změní!",
     "ideasFailed": "Nepodařilo se načíst historii písní.",
-    "plays": "▶ {count}"
+    "plays": "▶ {count}",
+    "makeOffer": "Není to verze, kterou chceš? Můžeme ji pro tebe vytvořit →"
   },
   "versions": {
     "sectionLibrary": "V naší knihovně",
@@ -190,31 +191,20 @@
     "simpleBody": "Zkus hledat něco jiného, nebo si promluv s KJ vpředu.",
     "title": "Nemůžeme to najít v našem katalogu.",
     "intro": {
-      "one": "Jedna možnost, jak dál:",
-      "other": "{count} možnosti, jak dál — vyber si tu, která ti nejvíc vyhovuje."
+      "one": "Můžeš udělat toto:",
+      "other": "{count} možnosti, jak dál:"
     },
     "step": "{n}. {title}",
     "youtubeTitle": "Vlož odkaz na YouTube",
     "youtubeDesc": "Nejrychlejší. Pokud najdeš píseň na YouTube, vlož odkaz a použijeme ho. Kvalita se může lišit.",
     "youtubePlaceholder": "https://youtu.be/…",
     "youtubeCta": "Použít tenhle odkaz na YouTube →",
-    "makeTitle": "Požádat KJ, ať to dnes večer vytvoří",
-    "makeDesc": "Zdarma, ale trvá to — obvykle 20 minut až 1 hodinu. KJ to nemusí stihnout, když je plno, a některé písně jsou na živou úpravu moc složité. Pokud to dnes večer nepůjde, dá ti vědět.",
+    "makeTitle": "Vytvoříme ji pro tebe",
+    "makeDesc": "Napiš interpreta a název písničky a my ti automaticky vytvoříme karaoke video — většinou je hotové za 15–30 minut, a jakmile bude připravené, přidáme tě do fronty. Pokud písnička potřebuje trochu pomoct, zasáhne KJ.",
     "artist": "Umělec",
     "songTitle": "Název písně",
-    "makeCta": "Požádat KJ →",
-    "makeConfirm": "Žádáš KJ, aby vytvořil \"{title}\" od {artist} — to může trvat 20 minut až 1 hodinu, nebo to dnes večer vůbec nepůjde. Jsi si jistý?",
-    "diyTitle": "Udělej si to sám (nejrychlejší pro vzácné písně)",
-    "diyDesc": "Pokud ti nevadí chvíle na telefonu, můžeš si karaoke stopu vytvořit sám na gen.nomadkaraoke.com — zabere to asi 5 minut, pokud zkontroluješ text, déle, pokud ne. Pak sem vlož zpět YouTube URL.",
-    "diyHow": "Jak to funguje (zabere to asi 5 minut, když se na to soustředíš)",
-    "diyStep1": "Najdi svou píseň na YouTube — jakoukoliv verzi s čistými vokály.",
-    "diyStep2": "Otevři {site}, vlož odkaz, nic neplatíš.",
-    "diyStep3": "Počkej asi 2 minuty, než oddělíme zpěv od hudby.",
-    "diyStep4": "Objeví se obrazovka s kontrolou textu. Ťukni na špatný řádek, oprav ho a ulož. Tohle je ta část na telefonu — obvykle na ~3 minuty.",
-    "diyStep5": "Vytvoříme karaoke video a nahrajeme ho na YouTube.",
-    "diyStep6": "Zkopíruj novou YouTube URL, vrať se sem a vlož ji do možnosti YouTube výše.",
-    "diyNote": "Celkový čas: ~5–10 minut. KJ nemusí dělat nic — tvá píseň se zařadí do rotace jako jakákoliv jiná z YouTube.",
-    "diyCta": "Otevřít gen.nomadkaraoke.com →"
+    "makeCta": "Vytvořit pro mě →",
+    "makeMissing": "Vyplň prosím interpreta i název písničky."
   },
   "confirm": {
     "title": "Je to ta správná píseň?",
@@ -224,7 +214,7 @@
     "sourceCloud": "Z naší cloudové knihovny — velmi spolehlivé",
     "sourceOnline": "Z YouTube — skoro vždy funguje",
     "sourceYouTube": "Z odkazu na YouTube — skoro vždy funguje",
-    "sourceMake": "KJ to pro tebe připraví",
+    "sourceMake": "Vytvoříme pro tebe karaoke video — většinou je hotové za 15–30 minut.",
     "sourceAuto": "Vybereme pro tebe tu nejlepší verzi",
     "searched": "Hledal jsi: \"{query}\"",
     "details": "Tvé údaje: {name}",
@@ -251,7 +241,9 @@
     "sendChange": "Ano — vyměnit mou píseň",
     "tooMany": "Odeslal jsi toho hodně — počkej prosím pár minut.",
     "restricted": "Žádosti o písně jsou momentálně omezené. Obnov tuhle stránku pro aktuální možnosti.",
-    "failed": "Nepodařilo se odeslat — zeptej se KJ, jestli nejsou žádosti pozastavené."
+    "failed": "Nepodařilo se odeslat — zeptej se KJ, jestli nejsou žádosti pozastavené.",
+    "makeLimit": "Dnes večer už jsi nás požádal o vytvoření několika písniček — vyber si nějakou z katalogu, nebo se zeptej KJ.",
+    "makeDisabled": "KJ teď nepřijímá žádosti o vytvoření písniček — vyber si místo toho nějakou z katalogu."
   },
   "mySongs": {
     "title": "Tvé dnešní písně",
@@ -265,7 +257,10 @@
     "statusSung": "✓ Tohle máš odzpíváno — skvělá práce!",
     "statusRejected": "KJ s tebou potřebuje mluvit — zastav se u něj.",
     "statusPending": "Čeká se na schválení od KJ…",
+    "statusMakingPending": "✨ Vytváří se pro tebe — čeká se, až ji KJ přidá do fronty…",
     "statusQueued": "Přidáno do fronty.",
+    "statusMaking": "✨ Připravuje se pro tebe — jakmile bude hotové, přidáme tě do fronty.",
+    "statusMakeNeedsHost": "✨ Vytváří se — s touhle musí pomoct KJ, takže to může trvat o něco déle.",
     "statusCancelled": "Zrušeno.",
     "statusRemoved": "KJ odstranil tuhle písničku ze seznamu — zeptej se ho, jestli je to omyl.",
     "statusUp": "🎤 Jdeš na to — vyraz na pódium!",
@@ -303,6 +298,7 @@
     "bannerAlmost": "🎤 Už to bude — zbývá 1 píseň",
     "bannerPosition": "#{position} v řadě · {wait}",
     "bannerPending": "Čeká se na KJ…",
+    "bannerMaking": "✨ Připravuje se pro tebe",
     "bannerQueued": "Ve frontě",
     "barNext": "Tvá další píseň",
     "barNextOf": "Tvá další píseň (z {count})",

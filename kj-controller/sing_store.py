@@ -275,6 +275,27 @@ class SingStore:
         except sqlite3.OperationalError as e:
             if "duplicate column name" not in str(e).lower():
                 raise
+        # Additive migration — `gen_job_id` / `gen_submit_state` (2026-09-24).
+        # A singer "make" request starts its karaoke-gen job the moment it is
+        # submitted (not when the KJ approves), so the job id has to live on the
+        # request until approval attaches it to a rotation entry.
+        # gen_submit_state: NULL (no early job) | submitting | submitted | failed.
+        for ddl in (
+            "ALTER TABLE sing_requests ADD COLUMN gen_job_id TEXT DEFAULT NULL",
+            "ALTER TABLE sing_requests ADD COLUMN gen_submit_state TEXT DEFAULT NULL",
+        ):
+            try:
+                conn.execute(ddl)
+            except sqlite3.OperationalError as e:
+                if "duplicate column name" not in str(e).lower():
+                    raise
+        # A 'submitting' row at open time belongs to a worker thread that died
+        # with the previous process — it will never finish. Mark it failed so
+        # approval falls back to starting the job itself.
+        conn.execute(
+            "UPDATE sing_requests SET gen_submit_state = 'failed' "
+            "WHERE gen_submit_state = 'submitting'"
+        )
         conn.commit()
 
     # ------------------------------------------------------------------
@@ -1060,6 +1081,30 @@ class SingStore:
         )
         conn.commit()
         return self.get_request(request_id)
+
+    def set_request_gen(self, request_id, gen_job_id, gen_submit_state):
+        """Record the early (submit-time) gen job for a make request."""
+        conn = self._get_conn()
+        conn.execute(
+            "UPDATE sing_requests SET gen_job_id = ?, gen_submit_state = ? WHERE id = ?",
+            (gen_job_id, gen_submit_state, request_id),
+        )
+        conn.commit()
+        return self.get_request(request_id)
+
+    def count_make_requests_for_device(self, device_id, exclude_request_id=None):
+        """Tonight's make requests from one device (cancelled/rejected excluded)."""
+        night_started = self.get_night_started_at()
+        if not device_id or not night_started:
+            return 0
+        conn = self._get_conn()
+        row = conn.execute(
+            "SELECT COUNT(*) FROM sing_requests "
+            "WHERE source_type = 'make' AND device_id = ? AND created_at >= ? "
+            "AND status IN ('pending', 'approved') AND id != ?",
+            (device_id, night_started, exclude_request_id or -1),
+        ).fetchone()
+        return row[0]
 
     def set_linked_entry(self, request_id, linked_entry_id):
         """Update the linked rotation entry id without changing status."""

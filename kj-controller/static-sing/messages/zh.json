@@ -85,7 +85,8 @@
     "ideasCrowd": "大家都在唱",
     "ideasNone": "还没点过歌呢 — 今晚就开个张吧！",
     "ideasFailed": "加载不出点歌记录。",
-    "plays": "▶ {count}"
+    "plays": "▶ {count}",
+    "makeOffer": "不是您想要的版本？我们可以为您制作 →"
   },
   "versions": {
     "sectionLibrary": "在我们的曲库里",
@@ -190,31 +191,20 @@
     "simpleBody": "换个词搜搜看，或者去前面找主持人聊聊。",
     "title": "在曲库里没找到。",
     "intro": {
-      "one": "一种办法：",
-      "other": "{count} 种办法 — 看您想花多少心思啦。"
+      "one": "您可以这样做：",
+      "other": "{count} 种选择："
     },
     "step": "{n}. {title}",
     "youtubeTitle": "粘贴 YouTube 链接",
     "youtubeDesc": "最快。如果您能在 YouTube 上找到，把链接粘过来我们直接用。不过音质可能参差不齐。",
     "youtubePlaceholder": "https://youtu.be/…",
     "youtubeCta": "用这个 YouTube 链接 →",
-    "makeTitle": "请主持人今晚帮忙做",
-    "makeDesc": "免费，但得花点时间 — 通常20分钟到1小时。人多的时候主持人可能顾不上，有些歌太复杂也没法现场做。如果今晚做不了，他们会跟您说的。",
+    "makeTitle": "我们来为您制作",
+    "makeDesc": "输入歌手和歌名，我们会自动为你制作卡拉OK视频——通常15到30分钟就能准备好，一完成就会立刻把你加入排队。如果歌曲需要人工处理，主持人会来帮忙。",
     "artist": "歌手",
     "songTitle": "歌曲名称",
-    "makeCta": "问问主持人 →",
-    "makeConfirm": "请主持人制作 {artist} 的 \"{title}\" — 这可能要花20分钟到1小时，甚至今晚可能做不完。确定吗？",
-    "diyTitle": "自己动手做（小众歌曲最快）",
-    "diyDesc": "如果您不介意花点时间，可以在 gen.nomadkaraoke.com 上自己做个伴奏 — 顺手校对下歌词的话大概要5分钟。弄好后把 YouTube 链接粘回这里就行。",
-    "diyHow": "怎么弄（专心弄大概5分钟）",
-    "diyStep1": "在 YouTube 上找到您的歌 — 人声清晰的版本就行。",
-    "diyStep2": "打开 {site}，粘贴链接，无需付费。",
-    "diyStep3": "等个2分钟左右，我们会把人声和伴奏分开。",
-    "diyStep4": "接着会出来个校对歌词的界面。点错的句子，改好保存。这步得稍微盯一下 — 大概3分钟。",
-    "diyStep5": "我们会生成卡拉OK视频并传到 YouTube 上。",
-    "diyStep6": "复制新的 YouTube 链接，回到这里，粘到上面的 YouTube 选项里。",
-    "diyNote": "总耗时：专心弄大概5-10分钟。主持人什么都不用做 — 您的歌会像其他 YouTube 链接一样直接排队。",
-    "diyCta": "打开 gen.nomadkaraoke.com →"
+    "makeCta": "帮我制作 →",
+    "makeMissing": "请完整填写歌手和歌名。"
   },
   "confirm": {
     "title": "是这首歌吗？",
@@ -224,7 +214,7 @@
     "sourceCloud": "来自我们的云端曲库 — 非常可靠",
     "sourceOnline": "来自 YouTube — 几乎总是可用",
     "sourceYouTube": "来自 YouTube 链接 — 几乎总是可用",
-    "sourceMake": "主持人会帮您制作这首歌",
+    "sourceMake": "我们会为您制作这首歌的卡拉OK视频 —— 通常需要15–30分钟",
     "sourceAuto": "我们会为您挑个最好的版本",
     "searched": "您搜索了：\"{query}\"",
     "details": "您的信息：{name}",
@@ -251,7 +241,9 @@
     "sendChange": "对的 — 换歌",
     "tooMany": "您点得有点多啦 — 请稍等几分钟。",
     "restricted": "目前点歌有限制。请刷新页面看看最新选项。",
-    "failed": "发送失败 — 问问主持人是不是暂停点歌了。"
+    "failed": "发送失败 — 问问主持人是不是暂停点歌了。",
+    "makeLimit": "今晚您已经点了几首需要制作的歌 —— 请从曲库中选一首，或者去问问主持人吧。",
+    "makeDisabled": "主持人现在不接受制作歌曲的请求 —— 请从曲库中选一首吧。"
   },
   "mySongs": {
     "title": "您今晚的歌",
@@ -265,7 +257,10 @@
     "statusSung": "✓ 唱完啦 — 唱得太棒了！",
     "statusRejected": "主持人找您有点事 — 去前面找他们一下吧。",
     "statusPending": "等主持人确认…",
+    "statusMakingPending": "✨ 正在为您制作 —— 等待主持人将其加入排队列表…",
     "statusQueued": "已加入排队。",
+    "statusMaking": "✨ 正在为你制作——准备好后会立刻把你加入排队。",
+    "statusMakeNeedsHost": "✨ 正在制作 —— 这首歌需要主持人协助，所以可能需要稍微久一点。",
     "statusCancelled": "已取消。",
     "statusRemoved": "主持人把这首歌从列表中移除了 — 如果有疑问，请询问他们。",
     "statusUp": "🎤 到您啦 — 快上台吧！",
@@ -303,6 +298,7 @@
     "bannerAlmost": "🎤 马上就到 — 还有1首",
     "bannerPosition": "排在第 {position} 位 · {wait}",
     "bannerPending": "等主持人确认…",
+    "bannerMaking": "✨ 正在为你制作",
     "bannerQueued": "排队中",
     "barNext": "您的下一首歌",
     "barNextOf": "您的下一首歌（共 {count} 首）",

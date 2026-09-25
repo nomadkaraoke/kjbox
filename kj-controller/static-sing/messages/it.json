@@ -85,7 +85,8 @@
     "ideasCrowd": "Le preferite del pubblico qui",
     "ideasNone": "Ancora nessuna cronologia delle canzoni — stasera è la serata giusta!",
     "ideasFailed": "Impossibile caricare la cronologia delle canzoni.",
-    "plays": "▶ {count}"
+    "plays": "▶ {count}",
+    "makeOffer": "Non è la versione che volevi? Possiamo crearla per te →"
   },
   "versions": {
     "sectionLibrary": "Nella nostra libreria",
@@ -190,31 +191,20 @@
     "simpleBody": "Prova un'altra ricerca, o parla con l'host alla postazione.",
     "title": "Non riusciamo a trovarla nel nostro catalogo.",
     "intro": {
-      "one": "Un'alternativa:",
-      "other": "{count} alternative — scegli quella più adatta a te."
+      "one": "Ecco cosa puoi fare:",
+      "other": "{count} opzioni:"
     },
     "step": "{n}. {title}",
     "youtubeTitle": "Incolla un link YouTube",
     "youtubeDesc": "Il più veloce. Se riesci a trovare la canzone su YouTube, incolla il link e useremo direttamente quello. La qualità varia.",
     "youtubePlaceholder": "https://youtu.be/…",
     "youtubeCta": "Usa questo link YouTube →",
-    "makeTitle": "Chiedi all'host di prepararla stasera",
-    "makeDesc": "Gratis, ma richiede tempo — di solito da 20 minuti a 1 ora. L'host non riesce sempre a farlo in una serata affollata, e alcune canzoni sono troppo complesse da fare dal vivo. Se non può farlo stasera, te lo farà sapere.",
+    "makeTitle": "La creeremo per te",
+    "makeDesc": "Scrivi l'artista e il titolo della canzone e creeremo automaticamente un video karaoke per te — di solito è pronto in 15–30 minuti, ed entrerai in coda non appena lo sarà. Se serve una mano con la canzone, interviene il KJ.",
     "artist": "Artista",
     "songTitle": "Titolo della canzone",
-    "makeCta": "Chiedi all'host →",
-    "makeConfirm": "Stai chiedendo all'host di preparare \"{title}\" di {artist} — potrebbe volerci da 20 minuti a 1 ora, o potrebbe non essere possibile stasera. Sicuro?",
-    "diyTitle": "Fallo tu stesso (il più veloce per canzoni di nicchia)",
-    "diyDesc": "Se non ti dispiace passare un po' di tempo al telefono, puoi creare tu stesso la base karaoke su gen.nomadkaraoke.com — ci vogliono circa 5 minuti se fai la revisione del testo, di più altrimenti. Poi incolla di nuovo qui l'URL di YouTube.",
-    "diyHow": "Come funziona (ci vogliono circa 5 minuti se ti concentri)",
-    "diyStep1": "Trova la tua canzone su YouTube — qualsiasi versione con la voce chiara.",
-    "diyStep2": "Apri {site}, incolla il link, non pagare nulla.",
-    "diyStep3": "Aspetta circa 2 minuti mentre separiamo la voce dall'audio.",
-    "diyStep4": "Apparirà una schermata per la revisione del testo. Tocca qualsiasi riga sbagliata, correggila e salva. Questa è la parte in cui devi usare il telefono — di solito circa 3 minuti.",
-    "diyStep5": "Creiamo il video karaoke e lo pubblichiamo su YouTube.",
-    "diyStep6": "Copia il nuovo URL di YouTube, torna qui e incollalo nell'opzione YouTube qui sopra.",
-    "diyNote": "Tempo totale: circa 5–10 minuti se ti concentri. L'host non fa nulla — la tua canzone finisce in rotazione come qualsiasi richiesta da YouTube.",
-    "diyCta": "Apri gen.nomadkaraoke.com →"
+    "makeCta": "Creala per me →",
+    "makeMissing": "Per favore, inserisci sia l'artista che il titolo della canzone."
   },
   "confirm": {
     "title": "È la canzone giusta?",
@@ -224,7 +214,7 @@
     "sourceCloud": "Dalla nostra libreria cloud — molto affidabile",
     "sourceOnline": "Da YouTube — funziona quasi sempre",
     "sourceYouTube": "Da un link YouTube — funziona quasi sempre",
-    "sourceMake": "L'host la preparerà per te",
+    "sourceMake": "Creeremo un video karaoke di questa canzone per te — di solito pronto in 15–30 min",
     "sourceAuto": "Sceglieremo la versione migliore per te",
     "searched": "Hai cercato: \"{query}\"",
     "details": "I tuoi dettagli: {name}",
@@ -251,7 +241,9 @@
     "sendChange": "Sì — cambia la mia canzone",
     "tooMany": "Hai inviato troppe richieste — aspetta qualche minuto.",
     "restricted": "Le richieste di canzoni sono attualmente limitate. Aggiorna questa pagina per le opzioni più recenti.",
-    "failed": "Impossibile inviare — chiedi all'host se le richieste sono in pausa."
+    "failed": "Impossibile inviare — chiedi all'host se le richieste sono in pausa.",
+    "makeLimit": "Ci hai già chiesto di creare alcune canzoni stasera — scegline una dal catalogo, o chiedi al KJ.",
+    "makeDisabled": "Il KJ non accetta richieste di creazione al momento — scegli una canzone dal catalogo."
   },
   "mySongs": {
     "title": "Le tue canzoni di stasera",
@@ -265,7 +257,10 @@
     "statusSung": "✓ Hai cantato questa — ottimo lavoro!",
     "statusRejected": "L'host deve parlarti — vai a trovarlo alla postazione.",
     "statusPending": "In attesa dell'approvazione dell'host…",
+    "statusMakingPending": "✨ In creazione per te — in attesa che il KJ la aggiunga alla coda…",
     "statusQueued": "Aggiunta alla coda.",
+    "statusMaking": "✨ In creazione per te — entrerai in coda non appena sarà pronto.",
+    "statusMakeNeedsHost": "✨ In creazione — questa richiede l'aiuto del KJ, quindi potrebbe volerci un po' di più.",
     "statusCancelled": "Annullata.",
     "statusRemoved": "Il KJ ha rimosso questa canzone dalla lista — chiedigli il motivo se non te l'aspettavi.",
     "statusUp": "🎤 Tocca a te — vai sul palco!",
@@ -303,6 +298,7 @@
     "bannerAlmost": "🎤 Ci siamo quasi — manca 1 canzone",
     "bannerPosition": "#{position} in fila · {wait}",
     "bannerPending": "In attesa dell'host…",
+    "bannerMaking": "✨ In creazione per te",
     "bannerQueued": "In coda",
     "barNext": "La tua prossima canzone",
     "barNextOf": "La tua prossima canzone (di {count})",

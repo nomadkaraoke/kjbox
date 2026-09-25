@@ -85,7 +85,8 @@
     "ideasCrowd": "Mga paborito ng karamihan dito",
     "ideasNone": "Wala pang history ng kanta — ngayong gabi ang simula!",
     "ideasFailed": "Hindi ma-load ang history ng kanta.",
-    "plays": "▶ {count}"
+    "plays": "▶ {count}",
+    "makeOffer": "Hindi ito ang version na gusto mo? Pwede ka naming gawan →"
   },
   "versions": {
     "sectionLibrary": "Nasa library namin",
@@ -190,31 +191,20 @@
     "simpleBody": "Subukan ang ibang search, o kausapin ang host sa unahan.",
     "title": "Hindi mahanap sa aming catalogue.",
     "intro": {
-      "one": "Isang paraan para magpatuloy:",
-      "other": "{count} na paraan para magpatuloy — piliin kung gaano karaming effort ang gusto mo."
+      "one": "Heto ang pwede mong gawin:",
+      "other": "{count} na pwede mong gawin:"
     },
     "step": "{n}. {title}",
     "youtubeTitle": "I-paste ang YouTube link",
     "youtubeDesc": "Pinakamabilis. Kung mahanap mo ang kanta sa YouTube, i-paste ang link at gagamitin namin 'yon nang direkta. Nag-iiba-iba ang quality.",
     "youtubePlaceholder": "https://youtu.be/…",
     "youtubeCta": "Gamitin itong YouTube link →",
-    "makeTitle": "Hilingin sa host na gawin ito ngayong gabi",
-    "makeDesc": "Libre, pero matagal — madalas 20 min hanggang 1 oras. Hindi palaging kaya ng host kapag busy, at may mga kantang masyadong kumplikado para gawin nang live. Kung hindi nila kaya ngayong gabi, sasabihan ka nila.",
+    "makeTitle": "Gagawin namin para sa'yo",
+    "makeDesc": "I-type ang artist at pamagat ng kanta at awtomatiko kaming gagawa ng karaoke video para sa'yo — karaniwang ready na sa loob ng 15–30 minuto, at makakasali ka agad sa pila kapag tapos na ito. Kung kailangan ng tulong sa kanta, tutulong ang KJ.",
     "artist": "Artist",
     "songTitle": "Pamagat ng kanta",
-    "makeCta": "Tanungin ang host →",
-    "makeConfirm": "Hihilingin sa host na gawin ang \"{title}\" ni {artist} — aabutin ito ng 20 min hanggang 1 oras, o baka hindi pwede ngayong gabi. Sigurado ka ba?",
-    "diyTitle": "Gawin mo mismo (pinakamabilis para sa mga niche na kanta)",
-    "diyDesc": "Kung okay lang sa'yo na gumamit ng phone, pwede mong gawin ang karaoke track mismo sa gen.nomadkaraoke.com — aabutin ng ~5 min kung gagawin mo ang lyrics review, mas matagal kung hindi. Pagkatapos, i-paste ang YouTube URL pabalik dito.",
-    "diyHow": "Paano ito gumagana (aabutin ng ~5 min kung magfo-focus ka)",
-    "diyStep1": "Hanapin ang kanta mo sa YouTube — kahit anong version na malinaw ang boses.",
-    "diyStep2": "Buksan ang {site}, i-paste ang link, walang babayaran.",
-    "diyStep3": "Maghintay ng ~2 min habang hinihiwalay namin ang boses sa audio.",
-    "diyStep4": "Lalabas ang lyrics review screen. I-tap ang anumang maling linya, ayusin, i-save. Ito ang parteng kailangan ng focus sa phone — madalas ~3 min.",
-    "diyStep5": "Ire-render namin ang karaoke video at ipa-publish sa YouTube.",
-    "diyStep6": "I-copy ang bagong YouTube URL, bumalik dito, at i-paste sa YouTube option sa itaas.",
-    "diyNote": "Kabuuang oras: ~5–10 min kung magfo-focus ka. Walang gagawin ang host — papasok ang kanta mo sa pila tulad ng ibang YouTube submission.",
-    "diyCta": "Buksan ang gen.nomadkaraoke.com →"
+    "makeCta": "Gawan niyo ako →",
+    "makeMissing": "Pakilagay ang artist at ang pamagat ng kanta."
   },
   "confirm": {
     "title": "Ito ba ang tamang kanta?",
@@ -224,7 +214,7 @@
     "sourceCloud": "Mula sa aming cloud library — talagang maaasahan",
     "sourceOnline": "Mula sa YouTube — halos palaging gumagana",
     "sourceYouTube": "Mula sa isang YouTube link — halos palaging gumagana",
-    "sourceMake": "Gagawin ito ng host para sa'yo",
+    "sourceMake": "Gagawan ka namin ng karaoke video nito — karaniwang handa na sa loob ng 15–30 min",
     "sourceAuto": "Pipiliin namin ang pinakamagandang version para sa'yo",
     "searched": "Hinanap mo: \"{query}\"",
     "details": "Ang iyong detalye: {name}",
@@ -251,7 +241,9 @@
     "sendChange": "Oo — palitan ang kanta ko",
     "tooMany": "Masyado ka nang maraming naipadala — maghintay ng ilang minuto.",
     "restricted": "Limitado ang mga song request ngayon. Paki-refresh ang page na ito para sa mga updated na option.",
-    "failed": "Hindi maipadala — tanungin ang host kung naka-pause ang mga request."
+    "failed": "Hindi maipadala — tanungin ang host kung naka-pause ang mga request.",
+    "makeLimit": "Nakapagpagawa ka na ng ilang kanta ngayong gabi — pumili na lang mula sa catalogue, o magtanong sa host.",
+    "makeDisabled": "Hindi tumatanggap ang host ng make-it requests sa ngayon — pumili na lang ng kanta mula sa catalogue."
   },
   "mySongs": {
     "title": "Mga kanta mo ngayong gabi",
@@ -265,7 +257,10 @@
     "statusSung": "✓ Nakanta mo na ito — ang galing!",
     "statusRejected": "Gusto kang kausapin ng host — puntahan sila sa desk.",
     "statusPending": "Naghihintay na i-approve ng host…",
+    "statusMakingPending": "✨ Ginagawa na para sa'yo — hinihintay na lang ang host na idagdag ito sa pila…",
     "statusQueued": "Naidagdag na sa pila.",
+    "statusMaking": "✨ Ginagawa para sa'yo — makakasali ka agad sa pila kapag ready na ito.",
+    "statusMakeNeedsHost": "✨ Ginagawa na — kailangan nito ng tulong mula sa host, kaya baka matagalan ito nang kaunti.",
     "statusCancelled": "Kanselado.",
     "statusRemoved": "Inalis ng host ang kantang ito sa listahan — tanungin sila kung bakit.",
     "statusUp": "🎤 Turn mo na — pumunta na sa stage!",
@@ -303,6 +298,7 @@
     "bannerAlmost": "🎤 Malapit na — 1 na lang",
     "bannerPosition": "Pang-#{position} sa pila · {wait}",
     "bannerPending": "Naghihintay sa host…",
+    "bannerMaking": "✨ Ginagawa para sa'yo",
     "bannerQueued": "Nasa pila",
     "barNext": "Ang susunod mong kanta",
     "barNextOf": "Ang susunod mong kanta (sa {count})",

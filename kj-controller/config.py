@@ -94,6 +94,9 @@ def load_config(config_file=None):
         "gen_api_url": "",
         "gen_api_token": "",
         "gen_poll_interval": 60,
+        # How long a completed gen job waits for its NOMAD-#### master to arrive
+        # via master-sync before falling back to a direct 720p download.
+        "gen_master_wait_seconds": 600,
         "render_mode": DEFAULT_RENDER_MODE,
         # Pin the iGPU to its max clock while a song plays (unpin when idle) to give
         # 4K decode+composite headroom. No-op on devices without the sudo helper.

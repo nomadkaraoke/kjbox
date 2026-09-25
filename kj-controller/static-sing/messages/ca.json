@@ -85,7 +85,8 @@
     "ideasCrowd": "Les preferides del públic",
     "ideasNone": "Encara no hi ha historial de cançons — aquesta és la nit!",
     "ideasFailed": "No s'ha pogut carregar l'historial de cançons.",
-    "plays": "▶ {count}"
+    "plays": "▶ {count}",
+    "makeOffer": "No és la versió que volies? La podem crear per a tu →"
   },
   "versions": {
     "sectionLibrary": "A la nostra biblioteca",
@@ -190,31 +191,20 @@
     "simpleBody": "Prova una altra cerca, o parla amb l'amfitrió.",
     "title": "No la trobem al nostre catàleg.",
     "intro": {
-      "one": "Una opció per continuar:",
-      "other": "{count} opcions per continuar — tria la que s'adapti a l'esforç que vulguis fer."
+      "one": "Això és el que pots fer:",
+      "other": "{count} opcions per continuar:"
     },
     "step": "{n}. {title}",
     "youtubeTitle": "Enganxa un enllaç de YouTube",
     "youtubeDesc": "El més ràpid. Si pots trobar la cançó a YouTube, enganxa l'enllaç i l'utilitzarem directament. La qualitat pot variar.",
     "youtubePlaceholder": "https://youtu.be/…",
     "youtubeCta": "Utilitza aquest enllaç de YouTube →",
-    "makeTitle": "Demana a l'amfitrió que la prepari aquesta nit",
-    "makeDesc": "Gratuït, però triga un temps — normalment de 20 minuts a 1 hora. L'amfitrió no sempre ho pot fer en una nit enfeinada, i algunes cançons són massa complexes per fer-les en directe. Si no ho pot fer aquesta nit, t'ho farà saber.",
+    "makeTitle": "La crearem per a tu",
+    "makeDesc": "Escriu l'artista i el títol de la cançó i et crearem un vídeo de karaoke automàticament — normalment està llest en 15–30 minuts, i entraràs a la cua tan bon punt ho estigui. Si la cançó necessita un cop de mà, el KJ hi intervindrà.",
     "artist": "Artista",
     "songTitle": "Títol de la cançó",
-    "makeCta": "Pregunta a l'amfitrió →",
-    "makeConfirm": "Demanaràs a l'amfitrió que prepari \"{title}\" de {artist} — això pot trigar de 20 minuts a 1 hora, o potser no serà possible aquesta nit. N'estàs segur?",
-    "diyTitle": "Fes-ho tu mateix (el més ràpid per a cançons poc conegudes)",
-    "diyDesc": "Si no et fa res dedicar-hi una estona amb el telèfon, pots crear la pista de karaoke tu mateix a gen.nomadkaraoke.com — triga uns 5 minuts si revises la lletra, més si no ho fas. Després enganxa l'URL de YouTube aquí.",
-    "diyHow": "Com funciona (triga uns 5 minuts si t'hi concentres)",
-    "diyStep1": "Busca la teva cançó a YouTube — qualsevol versió amb la veu clara.",
-    "diyStep2": "Obre {site}, enganxa l'enllaç, no paguis res.",
-    "diyStep3": "Espera uns 2 minuts mentre separem la veu de l'àudio.",
-    "diyStep4": "Apareixerà una pantalla per revisar la lletra. Toca qualsevol línia incorrecta, arregla-la i desa. Aquesta és la part on has d'estar atent al telèfon — normalment uns 3 minuts.",
-    "diyStep5": "Renderitzem el vídeo de karaoke i el publiquem a YouTube.",
-    "diyStep6": "Copia el nou URL de YouTube, torna aquí i enganxa'l a l'opció de YouTube de dalt.",
-    "diyNote": "Temps total: ~5–10 minuts si t'hi concentres. L'amfitrió no fa res — la teva cançó entra a la rotació com qualsevol petició de YouTube.",
-    "diyCta": "Obre gen.nomadkaraoke.com →"
+    "makeCta": "Creeu-la per a mi →",
+    "makeMissing": "Si us plau, indica tant l'artista com el títol de la cançó."
   },
   "confirm": {
     "title": "És aquesta la cançó correcta?",
@@ -224,7 +214,7 @@
     "sourceCloud": "De la nostra biblioteca al núvol — molt fiable",
     "sourceOnline": "De YouTube — gairebé sempre funciona",
     "sourceYouTube": "D'un enllaç de YouTube — gairebé sempre funciona",
-    "sourceMake": "L'amfitrió la prepararà per a tu",
+    "sourceMake": "Et farem un vídeo de karaoke d'aquesta cançó — normalment està llest en 15–30 min",
     "sourceAuto": "Triarem la millor versió per a tu",
     "searched": "Has cercat: \"{query}\"",
     "details": "Les teves dades: {name}",
@@ -251,7 +241,9 @@
     "sendChange": "Sí — canvia la meva cançó",
     "tooMany": "Has enviat moltes peticions — si us plau, espera uns minuts.",
     "restricted": "Les peticions de cançons estan restringides actualment. Si us plau, actualitza aquesta pàgina per veure les opcions.",
-    "failed": "No s'ha pogut enviar — pregunta a l'amfitrió si les peticions estan pausades."
+    "failed": "No s'ha pogut enviar — pregunta a l'amfitrió si les peticions estan pausades.",
+    "makeLimit": "Ja ens has demanat que creem unes quantes cançons aquesta nit — tria'n una del catàleg, o pregunta a l'amfitrió.",
+    "makeDisabled": "L'amfitrió no accepta peticions per crear cançons ara mateix — tria una cançó del catàleg."
   },
   "mySongs": {
     "title": "Les teves cançons d'aquesta nit",
@@ -265,7 +257,10 @@
     "statusSung": "✓ Has cantat això — molt bé!",
     "statusRejected": "L'amfitrió vol parlar amb tu — ves a veure'l a la taula.",
     "statusPending": "Esperant que l'amfitrió ho aprovi…",
+    "statusMakingPending": "✨ S'està creant per a tu — esperant que l'amfitrió l'afegeixi a la cua…",
     "statusQueued": "Afegida a la cua.",
+    "statusMaking": "✨ S'està preparant per a tu — entraràs a la cua tan bon punt estigui llest.",
+    "statusMakeNeedsHost": "✨ S'està creant — aquesta necessita un cop de mà de l'amfitrió, així que pot trigar una mica més.",
     "statusCancelled": "Cancel·lat.",
     "statusRemoved": "El KJ ha tret aquesta cançó de la llista — pregunta-li si no t'ho esperaves.",
     "statusUp": "🎤 Et toca — cap a l'escenari!",
@@ -303,6 +298,7 @@
     "bannerAlmost": "🎤 Gairebé et toca — falta 1",
     "bannerPosition": "#{position} a la cua · {wait}",
     "bannerPending": "Esperant l'amfitrió…",
+    "bannerMaking": "✨ S'està preparant per a tu",
     "bannerQueued": "A la cua",
     "barNext": "La teva propera cançó",
     "barNextOf": "La teva propera cançó (de {count})",

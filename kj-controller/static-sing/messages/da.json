@@ -85,7 +85,8 @@
     "ideasCrowd": "Publikumsfavoritter her",
     "ideasNone": "Ingen sanghistorik endnu — i aften er aftenen!",
     "ideasFailed": "Kunne ikke indlæse sanghistorik.",
-    "plays": "▶ {count}"
+    "plays": "▶ {count}",
+    "makeOffer": "Ikke den version, du ønskede? Vi kan lave den til dig →"
   },
   "versions": {
     "sectionLibrary": "I vores bibliotek",
@@ -190,31 +191,20 @@
     "simpleBody": "Prøv en anden søgning, eller tal med værten oppe foran.",
     "title": "Vi kan ikke finde den i vores katalog.",
     "intro": {
-      "one": "Én mulighed:",
-      "other": "{count} muligheder — vælg den, der passer til, hvor meget du vil gøre selv."
+      "one": "Her er, hvad du kan gøre:",
+      "other": "{count} muligheder:"
     },
     "step": "{n}. {title}",
     "youtubeTitle": "Indsæt et YouTube-link",
     "youtubeDesc": "Hurtigst. Hvis du kan finde sangen på YouTube, så indsæt linket, og vi bruger det direkte. Kvaliteten varierer.",
     "youtubePlaceholder": "https://youtu.be/…",
     "youtubeCta": "Brug dette YouTube-link →",
-    "makeTitle": "Bed værten om at lave den i aften",
-    "makeDesc": "Gratis, men tager tid — normalt 20 min til 1 time. Værten kan ikke altid nå det på en travl aften, og nogle sange er for komplekse til at lave live. Hvis værten ikke kan nå det i aften, får du besked.",
+    "makeTitle": "Vi laver den til dig",
+    "makeDesc": "Skriv kunstner og sangtitel, så laver vi automatisk en karaokevideo til dig — den er normalt klar på 15–30 minutter, og du kommer i køen, så snart den er færdig. Hvis sangen har brug for en hjælpende hånd, træder værten til.",
     "artist": "Kunstner",
     "songTitle": "Sangtitel",
-    "makeCta": "Spørg værten →",
-    "makeConfirm": "Beder værten om at lave \"{title}\" af {artist} — dette kan tage 20 min til 1 time, eller er måske ikke muligt i aften. Er du sikker?",
-    "diyTitle": "Lav den selv (hurtigst for niche-sange)",
-    "diyDesc": "Hvis du ikke har noget imod lidt tid på telefonen, kan du selv lave karaokesporet på gen.nomadkaraoke.com — det tager ca. 5 min, hvis du gennemgår teksten, længere hvis du ikke gør. Indsæt derefter YouTube-URL'en her igen.",
-    "diyHow": "Sådan fungerer det (tager ca. 5 min, hvis du fokuserer)",
-    "diyStep1": "Find din sang på YouTube — enhver version med tydelig vokal.",
-    "diyStep2": "Åbn {site}, indsæt linket, betal ingenting.",
-    "diyStep3": "Vent ca. 2 min, mens vi adskiller vokalen fra lyden.",
-    "diyStep4": "En skærm til gennemgang af teksten vises. Tryk på en forkert linje, ret den, gem. Dette er den fokuserede del på telefonen — normalt ca. 3 min.",
-    "diyStep5": "Vi genererer karaokevideoen og udgiver den på YouTube.",
-    "diyStep6": "Kopier den nye YouTube-URL, kom tilbage her, og indsæt den i YouTube-muligheden ovenfor.",
-    "diyNote": "Samlet tid: ca. 5–10 min, hvis du fokuserer. Værten gør intet — din sang lander i rotationen ligesom enhver anden YouTube-indsendelse.",
-    "diyCta": "Åbn gen.nomadkaraoke.com →"
+    "makeCta": "Lav den til mig →",
+    "makeMissing": "Udfyld venligst både kunstner og sangtitel."
   },
   "confirm": {
     "title": "Er dette den rigtige sang?",
@@ -224,7 +214,7 @@
     "sourceCloud": "Fra vores cloud-bibliotek — meget pålideligt",
     "sourceOnline": "Fra YouTube — virker næsten altid",
     "sourceYouTube": "Fra et YouTube-link — virker næsten altid",
-    "sourceMake": "Værten laver denne til dig",
+    "sourceMake": "Vi laver en karaokevideo med denne sang til dig — normalt klar på 15–30 min.",
     "sourceAuto": "Vi vælger den bedste version til dig",
     "searched": "Du søgte: \"{query}\"",
     "details": "Dine oplysninger: {name}",
@@ -251,7 +241,9 @@
     "sendChange": "Ja — skift min sang",
     "tooMany": "Du har indsendt mange anmodninger — vent et par minutter.",
     "restricted": "Sanganmodninger er i øjeblikket begrænset. Opdater siden for at se de nyeste muligheder.",
-    "failed": "Kunne ikke sende — spørg værten, om anmodninger er sat på pause."
+    "failed": "Kunne ikke sende — spørg værten, om anmodninger er sat på pause.",
+    "makeLimit": "Du har allerede bedt os om at lave et par sange i aften — vælg en fra kataloget, eller spørg værten.",
+    "makeDisabled": "Værten tager ikke imod ønsker om at få lavet sange lige nu — vælg i stedet en sang fra kataloget."
   },
   "mySongs": {
     "title": "Dine sange i aften",
@@ -265,7 +257,10 @@
     "statusSung": "✓ Du sang denne — godt gået!",
     "statusRejected": "Værten skal lige tale med dig — find værten ved pulten.",
     "statusPending": "Venter på, at værten godkender…",
+    "statusMakingPending": "✨ Bliver lavet til dig — venter på, at værten tilføjer den til køen…",
     "statusQueued": "Tilføjet til køen.",
+    "statusMaking": "✨ Bliver lavet til dig — du kommer i køen, så snart den er klar.",
+    "statusMakeNeedsHost": "✨ Bliver lavet — den kræver en hjælpende hånd fra værten, så det kan tage lidt længere tid.",
     "statusCancelled": "Aflyst.",
     "statusRemoved": "Værten har fjernet denne sang fra listen — spørg dem, hvis det kommer som en overraskelse.",
     "statusUp": "🎤 Det er din tur — gå op på scenen!",
@@ -303,6 +298,7 @@
     "bannerAlmost": "🎤 Næsten din tur — 1 sang tilbage",
     "bannerPosition": "Nr. {position} i køen · {wait}",
     "bannerPending": "Venter på værten…",
+    "bannerMaking": "✨ Bliver lavet til dig",
     "bannerQueued": "I køen",
     "barNext": "Din næste sang",
     "barNextOf": "Din næste sang (ud af {count})",

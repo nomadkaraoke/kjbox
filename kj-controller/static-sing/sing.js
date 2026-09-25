@@ -200,6 +200,7 @@ const state = {
   selected: null,   // { source_type, source_ref, song_artist, song_title, label }
   makeArtist: "",
   makeTitle: "",
+  showMakeForm: false,   // "make it" form opened from under non-empty results
   // New: duet partners typed on the confirm screen. Array of
   // {name, phone}. Capped at MAX_PARTNERS in the render.
   additional: [],
@@ -2009,12 +2010,48 @@ function renderSearch() {
     return wrapper;
   }
 
+  // "Make it" — a karaoke-gen job starts the moment the singer sends the
+  // request; the host only approves the queue slot. Shared by the empty-search
+  // triage and the "can't find the right one?" link under real results.
+  function renderMakeCard(heading) {
+    const mkArtist = el("input", {
+      type: "text", placeholder: t("empty.artist"),
+      class: "sing-empty-input",
+      value: state.makeArtist || "",
+      oninput: (e) => { state.makeArtist = e.target.value; },
+    });
+    const mkTitle = el("input", {
+      type: "text", placeholder: t("empty.songTitle"),
+      class: "sing-empty-input",
+      value: state.makeTitle || "",
+      oninput: (e) => { state.makeTitle = e.target.value; },
+    });
+    const missing = el("p", { class: "error sing-empty-missing", hidden: true }, t("empty.makeMissing"));
+    return el("div", { class: "sing-empty-card sing-make-card", "data-testid": "make-card" },
+      el("h4", {}, heading),
+      el("p", { class: "sing-empty-desc" }, t("empty.makeDesc")),
+      el("label", { class: "sing-empty-label" }, t("empty.artist"), mkArtist),
+      el("label", { class: "sing-empty-label" }, t("empty.songTitle"), mkTitle),
+      missing,
+      el("button", {
+        class: "btn primary sing-empty-submit",
+        onclick: () => {
+          state.makeArtist = (state.makeArtist || "").trim();
+          state.makeTitle = (state.makeTitle || "").trim();
+          if (!state.makeArtist || !state.makeTitle) {
+            missing.hidden = false;
+            return;
+          }
+          pickMake();
+        },
+      }, t("empty.makeCta")),
+    );
+  }
+
   function renderEmptyStateTriage() {
     // Phase C — triage cards surface when search returns nothing but the
-    // singer has clearly tried (query >= 3 chars). Cards are ordered by
-    // ascending singer-effort: paste URL (fastest) → ask KJ (variable time,
-    // may be declined) → make it yourself on gen.nomadkaraoke.com (fastest
-    // for niche songs if the singer is willing to focus on their phone).
+    // singer has clearly tried (query >= 3 chars): have it made for you
+    // (karaoke-gen, fully automatic for most songs), or paste a YouTube link.
     const wrap = el("div", { class: "sing-empty-triage" });
 
     // Simple KJ Mode — no triage cards. Singer can only pick from search
@@ -2027,24 +2064,28 @@ function renderSearch() {
       return wrap;
     }
 
-    // Numbering + "N ways forward" follow what's actually shown — card 2 is
-    // hidden when the KJ isn't taking make-requests tonight.
-    const cardCount = state.makeRequestsEnabled ? 3 : 2;
+    // Numbering + "N ways forward" follow what's actually shown — the make
+    // card is hidden when the KJ isn't taking make-requests tonight.
+    const cardCount = state.makeRequestsEnabled ? 2 : 1;
     let n = 0;
-    const stepTitle = (title) => t("empty.step", { n: ++n, title });
+    const stepTitle = (title) => (cardCount > 1 ? t("empty.step", { n: ++n, title }) : title);
 
     wrap.appendChild(el("div", { class: "sing-empty-header" },
       el("h3", {}, t("empty.title")),
       el("p", {}, tn("empty.intro", cardCount)),
     ));
 
-    // Card 1 — paste YouTube link.
+    if (state.makeRequestsEnabled) {
+      wrap.appendChild(renderMakeCard(stepTitle(t("empty.makeTitle"))));
+    }
+
+    // Paste a YouTube link.
     const ytInput = el("input", {
       type: "url",
       placeholder: t("empty.youtubePlaceholder"),
       class: "sing-empty-input",
     });
-    const card1 = el("div", { class: "sing-empty-card" },
+    wrap.appendChild(el("div", { class: "sing-empty-card" },
       el("h4", {}, stepTitle(t("empty.youtubeTitle"))),
       el("p", { class: "sing-empty-desc" }, t("empty.youtubeDesc")),
       ytInput,
@@ -2055,68 +2096,24 @@ function renderSearch() {
           if (v) pickYouTube(v);
         },
       }, t("empty.youtubeCta")),
-    );
-    wrap.appendChild(card1);
-
-    // Card 2 — ask KJ to make it tonight. Only when flag is on.
-    if (state.makeRequestsEnabled) {
-      const mkArtist = el("input", {
-        type: "text", placeholder: t("empty.artist"),
-        class: "sing-empty-input",
-        value: state.makeArtist || "",
-        oninput: (e) => { state.makeArtist = e.target.value; },
-      });
-      const mkTitle = el("input", {
-        type: "text", placeholder: t("empty.songTitle"),
-        class: "sing-empty-input",
-        value: state.makeTitle || "",
-        oninput: (e) => { state.makeTitle = e.target.value; },
-      });
-      const card2 = el("div", { class: "sing-empty-card" },
-        el("h4", {}, stepTitle(t("empty.makeTitle"))),
-        el("p", { class: "sing-empty-desc" }, t("empty.makeDesc")),
-        el("label", { class: "sing-empty-label" }, t("empty.artist"), mkArtist),
-        el("label", { class: "sing-empty-label" }, t("empty.songTitle"), mkTitle),
-        el("button", {
-          class: "btn primary sing-empty-submit",
-          onclick: () => {
-            if (!state.makeArtist || !state.makeTitle) return;
-            // Confirm dialog surfaces the caveats the singer can't un-know.
-            const ok = confirm(t("empty.makeConfirm", { title: state.makeTitle, artist: state.makeArtist }));
-            if (ok) pickMake();
-          },
-        }, t("empty.makeCta")),
-      );
-      wrap.appendChild(card2);
-    }
-
-    // Card 3 — DIY via gen.nomadkaraoke.com.
-    const howDetails = el("details", { class: "sing-empty-howto" },
-      el("summary", {}, t("empty.diyHow")),
-      el("ol", { class: "sing-empty-howto-steps" },
-        el("li", {}, t("empty.diyStep1")),
-        el("li", {}, ...withStrong(t("empty.diyStep2"), "{site}", "gen.nomadkaraoke.com")),
-        el("li", {}, t("empty.diyStep3")),
-        el("li", {}, t("empty.diyStep4")),
-        el("li", {}, t("empty.diyStep5")),
-        el("li", {}, t("empty.diyStep6")),
-      ),
-      el("p", { class: "sing-empty-howto-note" }, t("empty.diyNote")),
-    );
-    const card3 = el("div", { class: "sing-empty-card" },
-      el("h4", {}, stepTitle(t("empty.diyTitle"))),
-      el("p", { class: "sing-empty-desc" }, t("empty.diyDesc")),
-      howDetails,
-      el("a", {
-        href: "https://gen.nomadkaraoke.com",
-        target: "_blank",
-        rel: "noopener",
-        class: "btn primary sing-empty-submit sing-empty-external",
-      }, t("empty.diyCta")),
-    );
-    wrap.appendChild(card3);
+    ));
 
     return wrap;
+  }
+
+  // Under real results: the singer may want a song the catalogue only has a
+  // near-miss for. Collapsed to one link so it never competes with results.
+  function renderMakeOffer() {
+    if (state.showMakeForm) {
+      return el("div", { class: "sing-make-offer" }, renderMakeCard(t("empty.makeTitle")));
+    }
+    return el("div", { class: "sing-make-offer" },
+      el("button", {
+        class: "btn link sing-make-offer-btn",
+        "data-testid": "make-offer",
+        onclick: () => { state.showMakeForm = true; update(); },
+      }, t("search.makeOffer")),
+    );
   }
 
   function renderResults() {
@@ -2181,6 +2178,11 @@ function renderSearch() {
       container.appendChild(el("div", {
         class: "result-row grouped" + (isExpanded ? " expanded" : ""),
       }, ...children));
+    }
+
+    if (!loading && songs.length > 0 && state.makeRequestsEnabled && !state.simpleMode
+        && state.query?.trim().length >= 3) {
+      container.appendChild(renderMakeOffer());
     }
 
     return container;
@@ -2272,6 +2274,7 @@ function renderSearch() {
       "aria-label": t("search.placeholder"),
       oninput: (e) => {
         state.query = e.target.value;
+        state.showMakeForm = false;   // a new search collapses the make form
         // Immediate feedback: show the searching hint the moment a real query
         // is typed, before the 700ms debounce elapses (matches the KJ side).
         if (e.target.value.trim().length >= 3 && !loading) {
@@ -2283,8 +2286,8 @@ function renderSearch() {
     }),
     renderResults(),
     // Phase C retired the always-visible <details> fallbacks here — empty
-    // search results now render a dedicated triage (paste URL / ask KJ / DIY
-    // via gen) via renderEmptyStateTriage().
+    // search results now render a dedicated triage (make it / paste URL) via
+    // renderEmptyStateTriage().
     renderInspiration(),
   );
 
@@ -2380,11 +2383,15 @@ function renderConfirm() {
       state._navReplace = true;   // Back shouldn't land on the stale confirm
       render();
     } catch (e) {
-      err = e.status === 429
+      err = e.data?.error === "make_limit"
+        ? t("confirm.makeLimit")
+        : e.status === 429
         ? t("confirm.tooMany")
         : e.data?.error === "simple_mode_disabled_source"
           ? t("confirm.restricted")
-          : t("confirm.failed");
+          : e.data?.error === "make_requests_disabled"
+            ? t("confirm.makeDisabled")
+            : t("confirm.failed");
       submitting = false;
       if (submitBtn) {
         submitBtn.disabled = false;
@@ -2663,6 +2670,10 @@ function _statusLine(item, hasNowSinging) {
   if (req.status === "rejected") return t("mySongs.statusRejected");
   if (req.status === "cancelled") return t("mySongs.statusCancelled");
   if (item.removed) return t("mySongs.statusRemoved");
+  if (item.make === "making") {
+    return req.status === "pending" ? t("mySongs.statusMakingPending") : t("mySongs.statusMaking");
+  }
+  if (item.make === "needs_host") return t("mySongs.statusMakeNeedsHost");
   if (req.status === "pending") return t("mySongs.statusPending");
   const est = item.estimate;
   if (!est) return t("mySongs.statusQueued");
@@ -2987,6 +2998,7 @@ function renderDone() {
         state.selected = null;
         state.makeArtist = "";
         state.makeTitle = "";
+        state.showMakeForm = false;
         state.additional = [];
         state.step = "search";
         render();
@@ -3211,6 +3223,7 @@ function _mySongsPillSummary(items, hasNowSinging) {
       position: est.position, wait: _fmtWaitRange(est.range_low_s, est.range_high_s),
     });
   }
+  if (live.some((it) => it.make)) return t("mySongs.bannerMaking");
   if (live.some((it) => it.request.status === "pending")) return t("mySongs.bannerPending");
   return t("mySongs.bannerQueued");
 }
