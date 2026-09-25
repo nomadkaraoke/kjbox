@@ -2,6 +2,19 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-09-24 - Feature: Night recording — in-app ActionRecorder + sidecar capture (v0.113.0)
+
+First step toward realistic end-to-end tests built from real nights (see
+[NIGHT-RECORDING.md](NIGHT-RECORDING.md) and [FUNCTIONALITY-MAP.md](FUNCTIONALITY-MAP.md)).
+
+- **ActionRecorder** (`action_recorder.py`): every non-poll KJ/singer request (body,
+  JSON response, status, timing, client UA/IP) appended to
+  `~/kjdata/action-logs/<night>.jsonl`. On by default on the device
+  (`action_log_enabled`).
+- **Sidecar** (`scripts/night_capture.py`): run as transient unit `kj-night-capture`
+  during a show — DB row diffs, `/status` timeline, journal, periodic snapshots.
+  Output in `~/kjdata/night-captures/<date>/`. Started 21:11 on 2026-09-24.
+
 ## 2026-09-24 - Fix: No answer = no photo consent; My songs consent buttons overflow (v0.112.1)
 
 Andrew's first look at v0.112.0 on the box:
