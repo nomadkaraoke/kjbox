@@ -20,6 +20,11 @@ CHECK_INTERVAL_SECONDS = 5
 # Require this many consecutive failures before alerting, so a single
 # transient hiccup can't flap the banner on and off.
 FAILURE_THRESHOLD = 2
+# Both incidents observed so far failed fast (immediate SCSI "Not Ready"), but
+# a future failure mode of the bridge could block a filesystem call instead of
+# erroring — run the probe on its own thread with this deadline so a stuck
+# syscall can't stall the poll loop and silently stop producing alerts.
+PROBE_TIMEOUT_SECONDS = 3
 
 
 class ExternalMediaMonitor:
@@ -32,19 +37,24 @@ class ExternalMediaMonitor:
         self._consecutive_failures = 0
         self._alert = None
         self._thread = None
-        self._stop = False
+        self._stop_event = threading.Event()
+        self.probe_timeout = PROBE_TIMEOUT_SECONDS
 
     def start(self):
-        """Start the background poll loop. No-op if no mount is configured."""
+        """Start the background poll loop. No-op if no mount is configured,
+        or if a previously-started loop is still running."""
         if not self.config.get('external_media_mount', ''):
             return
-        if self._thread is not None:
+        if self._thread is not None and self._thread.is_alive():
             return
+        self._stop_event.clear()
         self._thread = threading.Thread(target=self._loop, daemon=True, name='ssd-health')
         self._thread.start()
 
     def stop(self):
-        self._stop = True
+        """Signal the poll loop to exit. Wakes it immediately rather than
+        waiting out the current CHECK_INTERVAL_SECONDS sleep."""
+        self._stop_event.set()
 
     @property
     def alert(self):
@@ -53,16 +63,16 @@ class ExternalMediaMonitor:
             return dict(self._alert) if self._alert else None
 
     def _loop(self):
-        while not self._stop:
+        while not self._stop_event.is_set():
             self.check_once()
-            time.sleep(CHECK_INTERVAL_SECONDS)
+            self._stop_event.wait(CHECK_INTERVAL_SECONDS)
 
     def check_once(self):
         """Run a single probe and update alert state. Public for testability."""
         mount = self.config.get('external_media_mount', '')
         if not mount:
             return
-        healthy = self._probe(mount)
+        healthy = self._probe_with_timeout(mount)
         with self._lock:
             if healthy:
                 if self._consecutive_failures or self._alert:
@@ -85,6 +95,28 @@ class ExternalMediaMonitor:
                     "SSD likely needs a physical unplug/replug.",
                     self.config,
                 )
+
+    def _probe_with_timeout(self, mount):
+        """Run _probe() on its own thread with a deadline.
+
+        os.path.ismount()/os.listdir() are ordinary blocking syscalls with no
+        built-in timeout, and nothing in this thread can forcibly interrupt a
+        stuck one — so isolate the call on a daemon thread and just stop
+        waiting on it. A probe that's still running after the deadline is
+        treated as unhealthy; the orphaned thread is harmless (daemon, and it
+        will exit whenever the syscall eventually returns).
+        """
+        result = {}
+
+        def _run():
+            result['ok'] = self._probe(mount)
+
+        t = threading.Thread(target=_run, daemon=True)
+        t.start()
+        t.join(self.probe_timeout)
+        if t.is_alive():
+            return False
+        return result.get('ok', False)
 
     @staticmethod
     def _probe(mount):

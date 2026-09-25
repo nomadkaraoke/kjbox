@@ -3,6 +3,7 @@ drives the KJ UI's alert banner (see docs/TROUBLESHOOTING.md, "4TB USB SSD
 Drops Offline")."""
 
 import os
+import time
 
 from external_media_monitor import ExternalMediaMonitor, FAILURE_THRESHOLD
 
@@ -100,3 +101,31 @@ def test_start_is_noop_without_configured_mount():
     mon = ExternalMediaMonitor(_config(""))
     mon.start()
     assert mon._thread is None
+
+
+def test_start_after_stop_resumes_polling(tmp_path):
+    mon = ExternalMediaMonitor(_config(str(tmp_path)))
+    mon.start()
+    assert mon._thread is not None
+    mon.stop()
+    mon._thread.join(timeout=2)
+    assert not mon._thread.is_alive()
+
+    mon.start()  # must actually spawn a new poll thread, not no-op
+    assert mon._thread.is_alive()
+    mon.stop()
+    mon._thread.join(timeout=2)
+
+
+def test_check_once_treats_a_stuck_probe_as_unhealthy(tmp_path, monkeypatch):
+    mon = ExternalMediaMonitor(_config(str(tmp_path)))
+    mon.probe_timeout = 0.05  # keep the test fast
+
+    def _stuck(mount):
+        time.sleep(0.3)
+        return True
+
+    monkeypatch.setattr(ExternalMediaMonitor, "_probe", staticmethod(_stuck))
+    for _ in range(FAILURE_THRESHOLD):
+        mon.check_once()
+    assert mon.alert is not None
