@@ -416,6 +416,13 @@
                 <div class="header-row">
                     <h2>Search Karaoke Nerds</h2>
                     <div class="header-actions">
+                        <select id="kn-sort" class="kn-sort-select" onchange="setKNSort(this.value)" title="Sort results" aria-label="Sort results">
+                            <option value="best">Sort: Best match</option>
+                            <option value="versions">Sort: Most versions</option>
+                            <option value="library">Sort: Most in library</option>
+                            <option value="title">Sort: Song title (A–Z)</option>
+                            <option value="artist">Sort: Artist (A–Z)</option>
+                        </select>
                         <button class="kn-prefs-btn" id="kn-prefs-toggle" onclick="toggleKNPrefs()" title="Preferred brands settings">Prefs</button>
                     </div>
                 </div>

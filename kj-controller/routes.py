@@ -2061,6 +2061,9 @@ def kn_search():
     files, ranked best-first — so the panel and the singer UI can never
     disagree about which versions a song has. Unlike the singer flow, disc-only
     KN tracks are kept (for brands we don't already have) as information.
+
+    The KJ panel's "Sort:" dropdown re-orders this list client-side
+    (``sortKNGroups`` in app.js); this order is its "Best match" mode.
     """
     data = request.get_json(silent=True) or {}
     query = data.get('query', '').strip()

@@ -4,6 +4,24 @@ Dated entries, newest first. Each entry notes any required deploy steps.
 
 ---
 
+## 2026-09-26 - KN panel "Sort:" dropdown (v0.119.0)
+
+**Deploy:** KJ frontend (`index.html`, `app.js`, `style.css`) + a docstring-only `routes.py`
+change so auto-deploy restarts kj-controller (playback survives) and `app.js?v=0.119.0`
+cache-busts. No migration.
+
+- Andrew: "not sure how these results are sorted currently, seems inconsistent". The server
+  order is `_group_relevance`: title-equals-query first (why "Rihanna — Camille" topped a
+  "rihanna" search) → in library → version count **capped at 12** → catalog order. That's
+  unchanged and is now the "Best match" option.
+- New "Sort:" select beside **Prefs** in the Search Karaoke Nerds header: Best match / Most
+  versions / Most in library / Song title (A–Z) / Artist (A–Z). It re-sorts the last result set
+  client-side (no re-search). Ties keep the best-match order (stable sort). The choice persists in
+  `localStorage['kj-kn-sort']`. Sized from the `--hdr-btn-*` tokens.
+- Test: `tests/e2e/test_frontend.py::TestKnSortDropdown`.
+
+---
+
 ## 2026-09-26 - "Notification / Social media settings" (v0.118.1)
 
 **Deploy:** singer frontend only (`sing.js`, 33 locale files). No `.py` change, so auto-deploy does not restart kj-controller; `sing.js?v=0.118.1` cache-busts from the next restart.
