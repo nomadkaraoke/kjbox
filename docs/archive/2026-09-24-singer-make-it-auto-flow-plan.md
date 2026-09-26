@@ -54,3 +54,51 @@
 - Gen's `auto_download` uses `select_best`; the stricter `pick_auto_selection` (KaraokeHunt intake) would
   need a gen-side endpoint change.
 - Songs gen can't auto-approve stop at `awaiting_review` — the KJ's NEEDS REVIEW badge opens the review.
+
+---
+
+## Revision 2 (2026-09-25) — Andrew's follow-up + decisions
+
+> 1) i want to make sure we replicate (ideally reusing to avoid duplicate code) the critical parts of the
+> karaoke-gen job submission experience for singers, eg.
+>  1.A) if they type an artist/title in a lazy way, the system which karaoke-gen has to detect and
+>  auto-correct the artist/title should definitely be integrated
+>  1.B) singers should choose the input audio using the usual flow which allows users to handle this in
+>  karaoke-gen, eg. it searches for lossless flac based on the artist/title but if it can't find that,
+>  offers spotify/youtube fallback options for niche stuff etc.
+>  1.C) we shouldn't include the audio editing, private delivery or any customisation options in this,
+>  lets keep it to the minimum required to get a good karaoke track produced and published publicly
+>
+> 2) we should capture and verify the user's email address in order for them to use this mode, and the
+> karaoke-gen job should be associated with a real karaoke-gen user. this way we can deliver the usual
+> karaoke-gen delivery to the user's email, but also this means we're essentially converting some of my
+> in-person karaoke night patrons into real karaoke-gen customers.
+
+Decisions (AskUserQuestion, 2026-09-25):
+- **Email verification:** 6-digit emailed code typed into the singer UI (new gen feature); kjbox-originated
+  sign-ups bypass gen's 2-per-IP signup cap (kjbox enforces its own cap).
+- **Credits:** free at Andrew's shows — kjbox tops up 1 credit per make-it job (quietly, no "credits added"
+  email); new singers keep gen's welcome credit.
+- **Lyrics review:** either — singer via gen's usual review email, or the KJ via the NEEDS REVIEW badge;
+  first wins.
+- **Approval:** no reject step for make requests. They go straight into the rotation as Being Made (no
+  approval queue even with auto-approve off); a hard review just stays at the bottom un-reviewed. Singer
+  cancel does NOT cancel the gen job (they still get their video by email).
+- **Linking:** ONLY the NOMAD-#### master from master-sync — no direct-download fallback.
+
+### Gen changes (karaoke-gen)
+1. `POST /api/users/auth/email-code` `{email}` → emails a 6-digit code (10-min expiry, 5 attempts);
+   `POST /api/users/auth/email-code/verify` `{email, code}` → `{session_token, user, credits_granted}`
+   (same account creation + welcome-credit path as magic-link verify). Called by kjbox's server with a
+   partner secret header → exempt from the per-IP signup cap, attributed (`signup_source=kjbox`).
+2. Partner credit top-up: grant 1 credit to a user without the "credits added" email (partner secret).
+3. Review-needed email for these jobs carries a sign-in link (singers never signed in on gen's website).
+4. Jobs tagged via `X-Client-Id: kjbox` (request_metadata) for attribution.
+
+### kjbox changes
+- Singer make flow (server-proxied to gen with the singer's session token, stored server-side per device):
+  email → code → artist/title with gen's match-judge ("Corrected to X — undo" / "Did you mean…?") →
+  audio choice mirroring gen's AudioSourceStep (best pick + "see all N other options" + YouTube-link
+  fallback; tiering ported from `audio-search-utils.ts`) → create-from-search (public, auto review,
+  no audio edit) → rotation entry straight in as Being Made.
+- GenPoller: link only the synced NOMAD master; no direct download.
