@@ -4,6 +4,14 @@ Dated entries, newest first. Each entry notes any required deploy steps.
 
 ---
 
+## 2026-09-26 - Fix KJ notice editor layout (v0.119.1)
+
+**Deploy:** KJ frontend CSS only (`style.css`), so there's no kj-controller restart. Hard-refresh the KJ page, or it takes effect on the next restart.
+
+- The global `input[type="text"] { width: 100% }` out-ranked `.sing-footer-notice-icon`: each notice's emoji box filled the row, and the wording box and ↑/↓ were pushed off-screen. The fix uses row-qualified selectors, and a new e2e test asserts the row layout.
+
+---
+
 ## 2026-09-26 - KN panel "Sort:" dropdown (v0.120.0)
 
 **Deploy:** KJ frontend (`index.html`, `app.js`, `style.css`) + a docstring-only `routes.py`

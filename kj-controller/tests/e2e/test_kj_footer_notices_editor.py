@@ -12,6 +12,23 @@ def _open(app_page):
     return wrap
 
 
+def test_rows_lay_out_emoji_text_and_buttons_on_one_line(app_page, live_server):
+    """2026-09-26: the global input width rule made the emoji box fill the row,
+    pushing the wording box and ↑/↓ off-screen."""
+    wrap = _open(app_page)
+    row = wrap.locator('.sing-footer-notice-row[data-notice="water"]')
+    rb = row.bounding_box()
+    icon = row.locator('[data-role="icon"]').bounding_box()
+    text = row.locator('[data-role="text"]').bounding_box()
+    down = row.locator(".sing-footer-notice-btn").last.bounding_box()
+    assert icon["width"] < 80
+    assert text["width"] > rb["width"] * 0.4
+    assert icon["x"] < text["x"] < down["x"]
+    assert down["x"] + down["width"] <= rb["x"] + rb["width"] + 1   # nothing overflows the row
+    expect(row.locator('[data-role="text"]')).to_have_attribute(
+        "placeholder", "Free water for singers at the bar. (default, translated)")
+
+
 def test_edit_add_and_save_notices(app_page, live_server):
     wrap = _open(app_page)
     expect(wrap.locator('.sing-footer-notice-row[data-notice="water"] [data-role="icon"]')).to_have_value("💧")
