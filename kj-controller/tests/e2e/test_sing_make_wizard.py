@@ -210,8 +210,9 @@ class TestMySongsMakePhases:
         page.route("**/sing/make/review-link/31*", lambda r: _json(r, {"error": "not_in_review"}, 409))
         msgs = []
         page.on("dialog", lambda d: (msgs.append(d.message), d.dismiss()))
-        with page.expect_popup():
-            status.locator('[data-testid="make-review-link"]').click()
-        page.wait_for_function("true")
+        # The alert fires only after the 409 comes back — wait for it explicitly.
+        with page.expect_event("dialog"):
+            with page.expect_popup():
+                status.locator('[data-testid="make-review-link"]').click()
         expect(status.locator('[data-testid="make-review-link"]')).to_have_text("Tap here")
         assert any("already finished" in m for m in msgs)
