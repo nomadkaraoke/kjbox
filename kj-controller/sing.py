@@ -654,6 +654,87 @@ def search():
     return jsonify(response)
 
 
+# --- Search auto-correct (gen's free-text resolver) -------------------------
+# Only asked after the catalogue search found NOTHING: gen splits the one-line
+# query into artist/title and fixes typos ("the strokes max picu" → The Strokes
+# — Machu Picchu); if the corrected search finds songs the singer sees them
+# with gen's "Corrected to … — you typed …  Undo". Cached per query; its own
+# per-device budget so it can't eat the submit/search limits.
+_RESOLVE_CACHE_MAX = 500
+_resolve_cache = {}
+_resolve_rate_state = defaultdict(deque)
+_RESOLVE_RATE_WINDOW_S = 300
+_RESOLVE_RATE_PER_DEVICE = 20
+
+
+def _resolve_rate_limited(device_id):
+    key = f"dev:{device_id}" if device_id else f"ip:{_client_ip(request)}"
+    now = time.monotonic()
+    q = _resolve_rate_state[key]
+    while q and q[0] < now - _RESOLVE_RATE_WINDOW_S:
+        q.popleft()
+    if len(q) >= _RESOLVE_RATE_PER_DEVICE:
+        return True
+    q.append(now)
+    return False
+
+
+def _resolve_query(query):
+    """gen's verdict for ``query`` (cached), or None when unavailable."""
+    key = " ".join(query.split()).casefold()
+    if key in _resolve_cache:
+        return _resolve_cache[key]
+    gen = getattr(current_app, "gen_client", None)
+    if gen is None or not gen.singer_flow_configured():
+        return None
+    try:
+        verdict = gen.resolve_search(query)
+    except Exception as exc:   # offline / gen hiccup: search just stays empty
+        current_app.logger.info("search resolve unavailable: %s", exc)
+        return None
+    if len(_resolve_cache) >= _RESOLVE_CACHE_MAX:
+        _resolve_cache.pop(next(iter(_resolve_cache)))
+    _resolve_cache[key] = verdict
+    return verdict
+
+
+@sing_bp.route("/search/resolve", methods=["GET"])
+@require_token
+def search_resolve():
+    """Auto-correct a search that found nothing.
+
+    → ``{corrected: {artist, title}, typed, songs}`` when gen confidently
+    names a song AND our search for it finds something; ``{alternatives:
+    [{artist, title}]}`` for an ambiguous query ("Did you mean…?");
+    ``{}`` otherwise (the empty-state triage stays as it is).
+    """
+    query = (request.args.get("q") or "").strip()[:200]
+    if len(query) < 3:
+        return jsonify({})
+    if _resolve_rate_limited((request.args.get("device_id") or "").strip()[:64]):
+        return jsonify({"error": "rate_limited"}), 429
+    verdict = _resolve_query(query) or {}
+    kind = verdict.get("kind")
+    if kind in ("cosmetic", "content") and verdict.get("confident"):
+        artist = (verdict.get("canonical_artist") or "").strip()
+        title = (verdict.get("canonical_title") or "").strip()
+        corrected_q = f"{artist} {title}".strip()
+        if artist and title and corrected_q.casefold() != query.casefold():
+            from routes import unified_search
+            data = unified_search(
+                corrected_q, current_app._get_current_object(), grouped=True,
+                catalog_limit=_safe_int(current_app.kj_config.get("sing_search_catalog_limit"), 60))
+            if data.get("songs"):
+                return jsonify({"corrected": {"artist": artist, "title": title},
+                                "typed": query, "songs": data["songs"]})
+    if kind == "ambiguous":
+        alts = [a for a in (verdict.get("alternatives") or [])
+                if isinstance(a, dict) and a.get("artist") and a.get("title")][:4]
+        if alts:
+            return jsonify({"alternatives": [{"artist": a["artist"], "title": a["title"]} for a in alts]})
+    return jsonify({})
+
+
 # --- Singer-facing version details + preview ------------------------------
 # The public host (sing.nomadkaraoke.com) blocks every non-sing endpoint, so
 # the version-picker's technical-details modal and preview player need their
@@ -935,8 +1016,9 @@ def tip_info():
 @require_token
 def event_info():
     """Venue context for the singer UI footer: the KJ's free-text message, the
-    pre-built notices they've switched on (phone chargers, wifi, …), their
-    social links, and whether to ask singers for photo/video consent."""
+    notices they've switched on (pre-built — phone chargers, wifi, … — or their
+    own, with icon), their social/contact links, and whether to ask singers for
+    photo/video consent."""
     store = getattr(current_app, "sing_store", None)
     footer = {"message": "", "notices": [], "social": {}, "ask_photo_consent": False}
     if store is not None:
@@ -949,6 +1031,10 @@ def event_info():
         "kj_name": settings.get("kj_name") or "",
         "footer_message": footer.get("message") or "",
         "notices": footer.get("notices") or [],
+        # Icon/text for the KJ's own notices and their edits to pre-built ones
+        # (only the switched-on ones); the rest use the translated defaults.
+        "notice_defs": {k: v for k, v in (footer.get("notice_defs") or {}).items()
+                        if k in (footer.get("notices") or [])},
         "social": footer.get("social") or {},
         "ask_photo_consent": bool(footer.get("ask_photo_consent")),
     })

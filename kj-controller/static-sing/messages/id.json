@@ -86,7 +86,13 @@
     "ideasNone": "Belum ada riwayat lagu — malam ini saatnya!",
     "ideasFailed": "Tidak bisa memuat riwayat lagu.",
     "plays": "▶ {count}",
-    "makeOffer": "Bukan versi yang kamu mau? Buat sesuai permintaan →"
+    "makeOffer": "Bukan versi yang kamu mau? Buat sesuai permintaan →",
+    "checkingSpelling": "Memeriksa ejaan…",
+    "didYouMean": "Maksudmu…?",
+    "correctedTo": "Dikoreksi menjadi {song} — Anda mengetik “{typed}”.",
+    "usingTyped": "Menggunakan yang Anda ketik: “{typed}”.",
+    "undo": "Urungkan",
+    "useCorrection": "Gunakan koreksi"
   },
   "versions": {
     "sectionLibrary": "Di pustaka kami",
@@ -519,7 +525,11 @@
     "fromHost": "Catatan dari host-mu",
     "followUs": "Ikuti kami",
     "website": "Website",
-    "email": "Email"
+    "email": "Email",
+    "contactUs": "Hubungi kami",
+    "phone": "SMS atau telepon",
+    "text": "💬 SMS",
+    "call": "📞 Telepon"
   },
   "photoConsent": {
     "question": "📷 Apakah boleh jika foto atau video Anda saat bernyanyi malam ini diposting ke media sosial?",

@@ -86,7 +86,13 @@
     "ideasNone": "Wala pang history ng kanta — ngayong gabi ang simula!",
     "ideasFailed": "Hindi ma-load ang history ng kanta.",
     "plays": "▶ {count}",
-    "makeOffer": "Hindi ito ang version na gusto mo? I-generate ito on demand →"
+    "makeOffer": "Hindi ito ang version na gusto mo? I-generate ito on demand →",
+    "checkingSpelling": "Sinusuri ang spelling…",
+    "didYouMean": "Ibig mo bang sabihin ay…?",
+    "correctedTo": "Itinama sa {song} — na-type mo ang “{typed}”.",
+    "usingTyped": "Gagamitin ang na-type mo: “{typed}”.",
+    "undo": "I-undo",
+    "useCorrection": "Gamitin ang itinama"
   },
   "versions": {
     "sectionLibrary": "Nasa library namin",
@@ -519,7 +525,11 @@
     "fromHost": "Mensahe mula sa iyong host",
     "followUs": "Sundan kami",
     "website": "Website",
-    "email": "Email"
+    "email": "Email",
+    "contactUs": "Kontakin kami",
+    "phone": "Mag-text o tumawag",
+    "text": "💬 Text",
+    "call": "📞 Tumawag"
   },
   "photoConsent": {
     "question": "📷 Ayos lang ba na i-post sa social media ang mga litrato o video mo habang kumakanta ngayong gabi?",

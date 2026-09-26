@@ -86,7 +86,13 @@
     "ideasNone": "Chưa có lịch sử bài hát — tối nay là cơ hội của bạn!",
     "ideasFailed": "Không tải được lịch sử bài hát.",
     "plays": "▶ {count}",
-    "makeOffer": "Không phải phiên bản bạn muốn? Tạo theo yêu cầu →"
+    "makeOffer": "Không phải phiên bản bạn muốn? Tạo theo yêu cầu →",
+    "checkingSpelling": "Đang kiểm tra chính tả…",
+    "didYouMean": "Có phải ý bạn là…?",
+    "correctedTo": "Đã sửa thành {song} — bạn đã nhập “{typed}”.",
+    "usingTyped": "Dùng từ bạn đã nhập: “{typed}”.",
+    "undo": "Hoàn tác",
+    "useCorrection": "Dùng từ đã sửa"
   },
   "versions": {
     "sectionLibrary": "Trong thư viện của chúng tôi",
@@ -519,7 +525,11 @@
     "fromHost": "Lưu ý từ KJ",
     "followUs": "Theo dõi chúng tôi",
     "website": "Website",
-    "email": "Email"
+    "email": "Email",
+    "contactUs": "Liên hệ với chúng tôi",
+    "phone": "Nhắn tin hoặc gọi điện",
+    "text": "💬 Nhắn tin",
+    "call": "📞 Gọi điện"
   },
   "photoConsent": {
     "question": "📷 Bạn có đồng ý để ảnh hoặc video bạn hát tối nay được đăng lên mạng xã hội không?",

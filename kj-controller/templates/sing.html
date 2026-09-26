@@ -70,8 +70,10 @@
      data-kj-name="{{ kj_name or '' }}">
 </div>
 {% endif %}
-<div id="sing-event-footer" class="sing-event-footer" hidden></div>
+<!-- House rules (Rotation tab only) sit right under the rotation card, above
+     the venue notices + socials. -->
 <div id="sing-rules-footer"></div>
+<div id="sing-event-footer" class="sing-event-footer" hidden></div>
 <nav id="sing-tabs" class="sing-tabs" hidden></nav>
 <script type="module" src="{{ url_for('sing.static', filename='sing.js') }}?v={{ config.get('APP_VERSION', '') }}"></script>
 </body>

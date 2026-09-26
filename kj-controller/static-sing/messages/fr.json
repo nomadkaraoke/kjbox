@@ -86,7 +86,13 @@
     "ideasNone": "Pas encore d'historique de chansons — c'est pour ce soir !",
     "ideasFailed": "Impossible de charger l'historique des chansons.",
     "plays": "▶ {count}",
-    "makeOffer": "Pas la version que tu voulais ? Génère-la à la demande →"
+    "makeOffer": "Pas la version que tu voulais ? Génère-la à la demande →",
+    "checkingSpelling": "Vérification de l'orthographe…",
+    "didYouMean": "Voulais-tu dire… ?",
+    "correctedTo": "Corrigé en {song} — tu as tapé « {typed} ».",
+    "usingTyped": "On utilise ce que tu as tapé : « {typed} ».",
+    "undo": "Annuler",
+    "useCorrection": "Utiliser la correction"
   },
   "versions": {
     "sectionLibrary": "Dans notre bibliothèque",
@@ -519,7 +525,11 @@
     "fromHost": "Un mot de ton KJ",
     "followUs": "Suis-nous",
     "website": "Site web",
-    "email": "E-mail"
+    "email": "E-mail",
+    "contactUs": "Contacte-nous",
+    "phone": "SMS ou appel",
+    "text": "💬 SMS",
+    "call": "📞 Appeler"
   },
   "photoConsent": {
     "question": "📷 Ça te va si des photos ou vidéos de toi en train de chanter ce soir sont publiées sur les réseaux sociaux ?",

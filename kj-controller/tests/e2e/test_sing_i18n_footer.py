@@ -117,6 +117,58 @@ class TestSearchDecisionLayer:
         page.evaluate("window.__sing_state.step = 'search'; window.__sing_render();")
         page.locator('input[type="search"]').fill("query text")
 
+    def test_multi_version_card_shows_best_version_with_preview(self, page, live_server, live_token):
+        self._search(page, live_server, live_token, [{
+            "key": "g:two", "artist": "The Strokes", "title": "The Adults Are Talking",
+            "version_count": 2, "in_library": True,
+            "versions": [
+                {"source": "kn", "priority_class": "community", "priority_display": "",
+                 "kn": {"brand_code": "KARAR", "is_community": True, "youtube_url": "https://youtu.be/x"}},
+                {"source": "kn", "priority_class": "commercial", "priority_display": "Sound Choice",
+                 "kn": {"brand_code": "SC", "is_community": False, "youtube_url": "https://youtu.be/y"}},
+            ],
+        }])
+        row = page.locator(".result-row").first
+        best = row.locator(".sing-version-compact")
+        expect(best).to_have_count(1)
+        expect(best.locator(".sing-version-best")).to_have_text("Best")
+        expect(best.locator(".sing-pill-community")).to_have_text("Community")
+        expect(best.locator('[data-testid="version-preview"]')).to_be_visible()
+        # Opening the full list replaces the summary row (no duplicate "Best").
+        row.locator(".sing-versions-toggle").click()
+        expect(row.locator(".sing-version-compact")).to_have_count(0)
+        expect(row.locator(".sing-version-expander")).to_be_visible()
+
+    def test_searching_shows_animated_notes(self, page, live_server, live_token):
+        page.add_init_script("window.__SING_ARM_MS = 0;")
+        _login(page, live_server, live_token)
+        page.route("**/sing/search*", lambda r: None)   # never answers → stays searching
+        page.evaluate("window.__sing_state.step = 'search'; window.__sing_render();")
+        page.locator('input[type="search"]').fill("slow search")
+        ind = page.locator('[data-testid="search-searching"]')
+        expect(ind).to_contain_text("Searching…")
+        expect(ind.locator(".sing-note")).to_have_count(4)
+
+    def test_empty_search_is_auto_corrected_with_undo(self, page, live_server, live_token):
+        song = {"key": "g:mp", "artist": "The Strokes", "title": "Machu Picchu", "version_count": 1,
+                "in_library": True, "versions": [{"source": "local", "priority_class": "unknown",
+                "local": {"path": "/m/x.mp4", "filename": "x.mp4", "disc_id": "TOOL-017"}}]}
+        self._search(page, live_server, live_token, [])
+        page.route("**/sing/search/resolve*", lambda r: r.fulfill(
+            status=200, content_type="application/json", body=json.dumps({
+                "corrected": {"artist": "The Strokes", "title": "Machu Picchu"},
+                "typed": "query text", "songs": [song]})))
+        page.locator('input[type="search"]').fill("the strokes max picu")
+        notice = page.locator('[data-testid="search-correction"]')
+        expect(notice).to_contain_text("Corrected to The Strokes — Machu Picchu — you typed “query text”")
+        expect(page.locator(".result-row .r-title")).to_have_text("Machu Picchu")
+        page.locator('[data-testid="search-correction-toggle"]').click()
+        expect(notice).to_contain_text("Using what you typed")
+        expect(page.locator(".result-row")).to_have_count(0)
+        expect(page.locator(".sing-empty-triage")).to_be_visible()
+        page.locator('[data-testid="search-correction-toggle"]').click()
+        expect(page.locator(".result-row .r-title")).to_have_text("Machu Picchu")
+
     def test_single_version_song_gets_preview_pills_and_brand(self, page, live_server, live_token):
         self._search(page, live_server, live_token, [{
             "key": "g:one", "artist": "Glow", "title": "Dancing Queen",

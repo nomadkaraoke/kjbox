@@ -877,7 +877,7 @@ input:focus {
 
 /* --- Rules footer (collapsed one-liner on every page) ---------------------- */
 .rules-footer {
-  margin-bottom: 2rem;
+  margin-bottom: 1rem;
   padding: 0.6rem 1.5rem;
   background: var(--nk-card-2);
   border: 1px solid var(--nk-border);
@@ -1517,6 +1517,16 @@ button.status-tile:active { transform: scale(0.99); }
   border-color: var(--nk-border);
 }
 .result-row.grouped .sing-version-compact .sing-version-actions { justify-content: flex-end; }
+/* On the song card itself (no versions list open) ▶ Preview is the main way to
+   check a version before requesting it — make it easy to spot. */
+.result-row.grouped .sing-version-compact .sing-version-preview {
+  padding: 0.5rem 0.95rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--nk-accent);
+  border-color: rgba(255, 77, 207, 0.55);
+  background: rgba(255, 77, 207, 0.08);
+}
 
 /* --- Change-song mode banner ------------------------------------------------- */
 .sing-change-banner {
@@ -1612,6 +1622,22 @@ button.status-tile:active { transform: scale(0.99); }
 .sing-social-link:hover,
 .sing-social-link:focus-visible { color: var(--nk-accent); border-color: var(--nk-accent); }
 .sing-social-link svg { width: 1.15rem; height: 1.15rem; }
+button.sing-social-link { padding: 0; font: inherit; cursor: pointer; }
+.sing-social-link[aria-expanded="true"] { color: var(--nk-accent); border-color: var(--nk-accent); }
+/* "Follow us" (left) + "Contact us" (right); one group alone centres. */
+.sing-social-groups { display: flex; justify-content: center; align-items: flex-start; gap: 1.25rem 2rem; flex-wrap: wrap; }
+.sing-social-group { min-width: 0; }
+.sing-contact-phone {
+  margin: 0.6rem auto 0;
+  max-width: 20rem;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--nk-border);
+  border-radius: var(--nk-radius-sm);
+  background: var(--nk-card);
+}
+.sing-contact-number { font-weight: 600; font-size: 1.05rem; margin-bottom: 0.45rem; user-select: all; }
+.sing-contact-actions { display: flex; gap: 0.5rem; }
+.sing-contact-actions .btn { flex: 1 1 0; text-decoration: none; }
 
 /* Social-media photo/video consent picker (confirm step + My songs). */
 .photo-consent {
@@ -1767,3 +1793,56 @@ button.status-tile:active { transform: scale(0.99); }
 
 /* My songs: "Tap here" → the singer's own lyrics review on gen. */
 .song-card-review-link { color: var(--nk-accent); font-weight: 600; text-decoration: underline; }
+
+/* --- Search in progress: bouncing, colour-cycling notes ----------------------- */
+.sing-searching {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  padding: 0.9rem 0 0.6rem;
+  color: var(--nk-text);
+  font-weight: 600;
+}
+.sing-searching-notes { display: inline-flex; gap: 0.2rem; font-size: 1.35rem; line-height: 1; }
+.sing-note { display: inline-block; animation: sing-note-bounce 1s ease-in-out infinite, sing-note-hue 2.4s linear infinite; }
+.sing-note-0 { color: #ff4dcf; animation-delay: 0s, 0s; }
+.sing-note-1 { color: #ffb347; animation-delay: 0.15s, -0.6s; }
+.sing-note-2 { color: #32d58a; animation-delay: 0.3s, -1.2s; }
+.sing-note-3 { color: #5ab4ff; animation-delay: 0.45s, -1.8s; }
+.sing-searching-label {
+  background: linear-gradient(90deg, #ff4dcf, #ffb347, #32d58a, #5ab4ff, #ff4dcf);
+  background-size: 300% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: sing-label-shimmer 2.4s linear infinite;
+}
+@keyframes sing-note-bounce {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  30% { transform: translateY(-0.45rem) rotate(-10deg); }
+  60% { transform: translateY(0.1rem) rotate(6deg); }
+}
+@keyframes sing-note-hue { to { filter: hue-rotate(360deg); } }
+@keyframes sing-label-shimmer { to { background-position: 300% 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .sing-note, .sing-searching-label { animation: none; }
+  .sing-searching-label { color: var(--nk-text); background: none; }
+}
+
+/* --- Search auto-correct notice (gen's "Corrected to … — you typed …") ------ */
+.sing-correction {
+  margin: 0.5rem 0;
+  padding: 0.55rem 0.75rem;
+  border: 1px solid var(--nk-border);
+  border-radius: var(--nk-radius-sm);
+  background: var(--nk-card-2);
+  color: var(--nk-text-dim);
+  font-size: 0.88rem;
+}
+.sing-correction::before { content: "✓ "; color: var(--nk-good); }
+.sing-didyoumean::before { content: none; }
+.sing-correction-toggle { color: var(--nk-accent); text-decoration: underline; padding: 0; background: none; border: 0; font: inherit; cursor: pointer; }
+.sing-didyoumean { display: flex; flex-direction: column; gap: 0.4rem; }
+.sing-correction-title { font-weight: 700; color: var(--nk-text); }
+.sing-suggestion { text-align: left; }

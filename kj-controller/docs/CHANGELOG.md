@@ -4,6 +4,26 @@ Dated entries, newest first. Each entry notes any required deploy steps.
 
 ---
 
+## 2026-09-26 - Singer UI batch: Contact us, editable notices, search auto-correct, community folding (v0.119.0)
+
+**Deploy:** backend (`routes.py`, `sing.py`, `sing_store.py`, `gen_client.py`, `version_priority.py`) + KJ frontend (`app.js`, `index.html`, `style.css`) + singer frontend (`sing.js`, `sing.css`, `sing.html`, 33 locale files). Auto-deploy restarts kj-controller; playback survives. Search auto-correct needs karaoke-gen v0.241.0 (`/api/kjbox/catalog/resolve`). Until then it is silently off. No migration: `notice_defs` and `social.phone` are new keys in the existing footer blob.
+
+- **Why:** Andrew's feedback after testing v0.118.
+- **Footer:** "Follow us" (socials, left) and "Contact us" (email plus a new phone button that offers 💬 Text / 📞 Call, right). Phone is set in the same KJ panel. House rules now sit directly under the rotation card.
+- **Editable notices:** KJs can re-word or re-icon the pre-built notices (blank = the translated default), add their own with their own emoji, reorder, and delete. The custom "note from your host" stays separate.
+- **Song cards:** collapsed multi-version songs show the best version's row (Best, Community/Commercial pill, format, availability) with a prominent ▶ Preview.
+- **Searching:** a colourful bouncing-notes animation instead of plain grey "Searching…".
+- **Search auto-correct:**
+  - An empty search asks gen to split and fix the query, then shows the corrected results with "Corrected to … — you typed …. Undo".
+  - "Did you mean…?" appears for ambiguous queries.
+  - Example: "the strokes max picu" → The Strokes — Machu Picchu.
+- **Community folding:**
+  - KN community YouTube releases we already hold on the SSD under the same brand code now fold into the library file. It ranks as that community release and is never re-downloaded.
+  - Example: KARAR "The Adults Are Talking" == `KARAR-093`.
+  - Guards: the song must match exactly, there must be one candidate, and it must be video-to-video. Commercial tracks are never folded.
+
+---
+
 ## 2026-09-26 - "Notification / Social media settings" (v0.118.1)
 
 **Deploy:** singer frontend only (`sing.js`, 33 locale files). No `.py` change, so auto-deploy does not restart kj-controller; `sing.js?v=0.118.1` cache-busts from the next restart.

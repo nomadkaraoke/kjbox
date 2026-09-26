@@ -86,7 +86,13 @@
     "ideasNone": "Noch kein Song-Verlauf — heute ist die Nacht!",
     "ideasFailed": "Konnte den Song-Verlauf nicht laden.",
     "plays": "▶ {count}",
-    "makeOffer": "Nicht die gewünschte Version? Auf Wunsch generieren →"
+    "makeOffer": "Nicht die gewünschte Version? Auf Wunsch generieren →",
+    "checkingSpelling": "Schreibweise wird geprüft…",
+    "didYouMean": "Meintest du…?",
+    "correctedTo": "Korrigiert zu {song} – du hast „{typed}“ eingegeben.",
+    "usingTyped": "Verwende deine Eingabe: „{typed}“.",
+    "undo": "Rückgängig",
+    "useCorrection": "Korrektur verwenden"
   },
   "versions": {
     "sectionLibrary": "In unserer Bibliothek",
@@ -519,7 +525,11 @@
     "fromHost": "Eine Nachricht von deinem KJ",
     "followUs": "Folge uns",
     "website": "Website",
-    "email": "E-Mail"
+    "email": "E-Mail",
+    "contactUs": "Kontaktiere uns",
+    "phone": "SMS oder Anruf",
+    "text": "💬 SMS",
+    "call": "📞 Anrufen"
   },
   "photoConsent": {
     "question": "📷 Ist es okay, wenn heute Abend Fotos oder Videos von dir beim Singen auf Social Media gepostet werden?",

@@ -1399,21 +1399,13 @@
                         <strong>📣 Footer &amp; venue notices</strong>
                         <span id="sing-footer-status" class="sing-sms-status"></span>
                     </div>
-                    <p class="sing-hint">Shown under every screen of the singer page (translated into the singer&rsquo;s language). Tick the pre-built notices that apply tonight; the free-text message is shown exactly as typed.</p>
-                    <div class="sing-footer-notices" id="sing-footer-notices">
-                        <label><input type="checkbox" data-notice="chargers"> 🔌 Phone chargers at the host&rsquo;s table</label>
-                        <label><input type="checkbox" data-notice="lyricsScreen"> 📺 Lyrics are on the big screen</label>
-                        <label><input type="checkbox" data-notice="duets"> 🎤 Duets &amp; groups welcome</label>
-                        <label><input type="checkbox" data-notice="moreSongs"> 📱 Add more songs any time from this page</label>
-                        <label><input type="checkbox" data-notice="tipsHelp"> 💜 Tips keep the show going</label>
-                        <label><input type="checkbox" data-notice="wifi"> 📶 Free wifi — ask the host for the password</label>
-                        <label><input type="checkbox" data-notice="water"> 💧 Free water for singers at the bar</label>
-                        <label><input type="checkbox" data-notice="photos"> 📸 Photos &amp; videos welcome</label>
-                    </div>
+                    <p class="sing-hint">Shown under every screen of the singer page. Tick the notices that apply tonight. Pre-built ones are translated into the singer&rsquo;s language &mdash; unless you re-word them (blank = the default wording). Change any emoji, add your own notices with <strong>+ Add notice</strong>, and reorder with &uarr;/&darr;. The custom message below is shown separately, highlighted as &ldquo;A note from your host&rdquo;.</p>
+                    <div class="sing-footer-notices" id="sing-footer-notices"></div>
+                    <button type="button" class="sing-footer-add-notice" onclick="addSingFooterNotice()">+ Add notice</button>
                     <label class="sing-footer-message-label">Custom message (optional)
                         <textarea id="sing-footer-message" rows="2" maxlength="400" placeholder="e.g. Last requests at 12:30 — kitchen closes at 11!"></textarea>
                     </label>
-                    <p class="sing-hint"><strong>Social links</strong> &mdash; shown as icons at the bottom of the singer page. Leave blank to hide.</p>
+                    <p class="sing-hint"><strong>Social &amp; contact links</strong> &mdash; shown as icons at the bottom of the singer page: socials under &ldquo;Follow us&rdquo;, email + phone under &ldquo;Contact us&rdquo; (the phone button offers Text or Call). Leave blank to hide.</p>
                     <div class="sing-tips-grid sing-footer-social" id="sing-footer-social">
                         <label>Instagram <input type="url" data-social="instagram" placeholder="https://www.instagram.com/…" autocomplete="off"></label>
                         <label>Facebook <input type="url" data-social="facebook" placeholder="https://www.facebook.com/…" autocomplete="off"></label>
@@ -1421,7 +1413,8 @@
                         <label>YouTube <input type="url" data-social="youtube" placeholder="https://www.youtube.com/@…" autocomplete="off"></label>
                         <label>X / Twitter <input type="url" data-social="x" placeholder="https://x.com/…" autocomplete="off"></label>
                         <label>Website <input type="url" data-social="website" placeholder="https://…" autocomplete="off"></label>
-                        <label>Email <input type="email" data-social="email" placeholder="you@example.com" autocomplete="off"></label>
+                        <label>Email <span class="sing-hint-inline">(Contact us)</span> <input type="email" data-social="email" placeholder="you@example.com" autocomplete="off"></label>
+                        <label>Phone for texts/calls <span class="sing-hint-inline">(Contact us)</span> <input type="tel" data-social="phone" placeholder="+1 555 123 4567" autocomplete="off"></label>
                     </div>
                     <label class="sing-footer-consent-toggle"><input type="checkbox" id="sing-footer-ask-photo-consent"> 📷 Ask singers whether they&rsquo;re OK with photos/videos of them being posted on social media (shown as 📷 / <s>📷</s> beside their name in the rotation)</label>
                     <div class="sing-sms-actions">

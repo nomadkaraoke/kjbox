@@ -86,7 +86,13 @@
     "ideasNone": "Ei vielä lauluhistoriaa — tänä iltana räjähtää!",
     "ideasFailed": "Lauluhistorian lataus epäonnistui.",
     "plays": "▶ {count}",
-    "makeOffer": "Eikö ollut haluamasi versio? Luo se tilauksesta →"
+    "makeOffer": "Eikö ollut haluamasi versio? Luo se tilauksesta →",
+    "checkingSpelling": "Tarkistetaan oikeinkirjoitusta…",
+    "didYouMean": "Tarkoititko…?",
+    "correctedTo": "Korjattu muotoon {song} — kirjoitit ”{typed}”.",
+    "usingTyped": "Käytetään kirjoittamaasi: ”{typed}”.",
+    "undo": "Kumoa",
+    "useCorrection": "Käytä korjausta"
   },
   "versions": {
     "sectionLibrary": "Kirjastossamme",
@@ -519,7 +525,11 @@
     "fromHost": "Viesti vetäjältäsi",
     "followUs": "Seuraa meitä",
     "website": "Verkkosivusto",
-    "email": "Sähköposti"
+    "email": "Sähköposti",
+    "contactUs": "Ota yhteyttä",
+    "phone": "Tekstaa tai soita",
+    "text": "💬 Tekstaa",
+    "call": "📞 Soita"
   },
   "photoConsent": {
     "question": "📷 Sopiiko, että esityksestäsi tänä iltana otettuja kuvia tai videoita julkaistaan sosiaalisessa mediassa?",

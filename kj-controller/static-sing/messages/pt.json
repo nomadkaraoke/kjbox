@@ -86,7 +86,13 @@
     "ideasNone": "Nenhum histórico de músicas ainda — a noite é hoje!",
     "ideasFailed": "Não foi possível carregar o histórico de músicas.",
     "plays": "▶ {count}",
-    "makeOffer": "Não é a versão que você queria? Gere sob demanda →"
+    "makeOffer": "Não é a versão que você queria? Gere sob demanda →",
+    "checkingSpelling": "Verificando a ortografia…",
+    "didYouMean": "Você quis dizer…?",
+    "correctedTo": "Corrigido para {song} — você digitou “{typed}”.",
+    "usingTyped": "Usando o que você digitou: “{typed}”.",
+    "undo": "Desfazer",
+    "useCorrection": "Usar a correção"
   },
   "versions": {
     "sectionLibrary": "Na nossa biblioteca",
@@ -519,7 +525,11 @@
     "fromHost": "Um recado do seu anfitrião",
     "followUs": "Siga-nos",
     "website": "Site",
-    "email": "E-mail"
+    "email": "E-mail",
+    "contactUs": "Fale conosco",
+    "phone": "Envie mensagem ou ligue",
+    "text": "💬 Mensagem",
+    "call": "📞 Ligar"
   },
   "photoConsent": {
     "question": "📷 Tudo bem se fotos ou vídeos de você cantando hoje à noite forem postados nas redes sociais?",

@@ -368,6 +368,15 @@ function el(tag, attrs = {}, ...children) {
 // Render a translated sentence that contains one `{token}` with that token
 // replaced by a <strong> — keeps the sentence a single translatable string
 // (word order differs per language) instead of before/after fragments.
+// "Searching…" with bouncing, colour-cycling music notes — easy to notice, so
+// a slow search never looks broken. Screen readers get the plain text.
+function searchingIndicator(label = t("search.searching")) {
+  const notes = el("span", { class: "sing-searching-notes", "aria-hidden": "true" },
+    ...["♪", "♫", "♬", "♩"].map((n, i) => el("span", { class: `sing-note sing-note-${i}` }, n)));
+  return el("div", { class: "sing-searching", role: "status", "data-testid": "search-searching" },
+    notes, el("span", { class: "sing-searching-label" }, label));
+}
+
 function withStrong(sentence, token, strongText) {
   const idx = sentence.indexOf(token);
   if (idx < 0) return [sentence, " ", el("strong", {}, strongText)];
@@ -1597,8 +1606,11 @@ const SOCIAL_ICONS = {
   x: "M18.901 1.153h3.68l-8.04 9.19L24 22.846h-7.406l-5.8-7.584-6.638 7.584H.474l8.6-9.83L0 1.154h7.594l5.243 6.932ZM17.61 20.644h2.039L6.486 3.24H4.298Z",
   website: "M12 0a12 12 0 1 0 0 24 12 12 0 0 0 0-24Zm7.93 7h-3.3a18.3 18.3 0 0 0-1.6-4.6A10.03 10.03 0 0 1 19.93 7ZM12 2.05c.9 1.3 1.64 2.97 2.1 4.95H9.9c.46-1.98 1.2-3.65 2.1-4.95ZM2.26 14a10.1 10.1 0 0 1 0-4h3.66a19 19 0 0 0 0 4Zm.81 3h3.3a18.3 18.3 0 0 0 1.6 4.6A10.03 10.03 0 0 1 3.07 17Zm3.3-10h-3.3a10.03 10.03 0 0 1 4.9-4.6A18.3 18.3 0 0 0 6.37 7ZM12 21.95c-.9-1.3-1.64-2.97-2.1-4.95h4.2c-.46 1.98-1.2 3.65-2.1 4.95ZM14.56 14H9.44a17 17 0 0 1 0-4h5.12a17 17 0 0 1 0 4Zm.47 7.6a18.3 18.3 0 0 0 1.6-4.6h3.3a10.03 10.03 0 0 1-4.9 4.6ZM18.08 14a19 19 0 0 0 0-4h3.66a10.1 10.1 0 0 1 0 4Z",
   email: "M2 4h20a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Zm0 2v.51l10 6.25 10-6.25V6H2Zm20 2.87-9.47 5.92a1 1 0 0 1-1.06 0L2 8.87V18h20V8.87Z",
+  phone: "M6.62 10.79a15.05 15.05 0 0 0 6.59 6.59l2.2-2.2a1 1 0 0 1 1.02-.24c1.12.37 2.33.57 3.57.57a1 1 0 0 1 1 1V20a1 1 0 0 1-1 1C10.61 21 3 13.39 3 4a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1c0 1.25.2 2.45.57 3.57a1 1 0 0 1-.25 1.02l-2.2 2.2Z",
 };
-const SOCIAL_ORDER = ["instagram", "facebook", "tiktok", "youtube", "x", "website", "email"];
+// "Follow us" (left) vs "Contact us" (right) in the footer.
+const SOCIAL_ORDER = ["instagram", "facebook", "tiktok", "youtube", "x", "website"];
+const CONTACT_ORDER = ["email", "phone"];
 const SOCIAL_NAMES = { instagram: "Instagram", facebook: "Facebook", tiktok: "TikTok", youtube: "YouTube", x: "X" };
 
 function _socialIcon(key) {
@@ -1614,31 +1626,90 @@ function _socialIcon(key) {
   return svg;
 }
 
+function _socialLink(key, val) {
+  const label = SOCIAL_NAMES[key] || t(`footer.${key}`);
+  const a = el("a", {
+    class: `sing-social-link sing-social-${key}`, href: val,
+    target: "_blank", rel: "noopener noreferrer",
+    title: label, "aria-label": label, "data-social": key,
+  });
+  a.appendChild(_socialIcon(key));
+  return a;
+}
+
+// Phone: one icon button that opens "💬 Text / 📞 Call" (+ the number, so it
+// can be saved) — the host wants patrons to be able to reach them directly.
+function _phoneButton(number) {
+  const dial = number.replace(/[^\d+]/g, "");
+  const panel = el("div", { class: "sing-contact-phone", "data-testid": "footer-phone-panel", hidden: "" },
+    el("div", { class: "sing-contact-number" }, number),
+    el("div", { class: "sing-contact-actions" },
+      el("a", { class: "btn ghost", href: `sms:${dial}`, "data-testid": "footer-phone-text" }, t("footer.text")),
+      el("a", { class: "btn ghost", href: `tel:${dial}`, "data-testid": "footer-phone-call" }, t("footer.call"))));
+  const btn = el("button", {
+    type: "button", class: "sing-social-link sing-social-phone", "data-social": "phone",
+    title: t("footer.phone"), "aria-label": t("footer.phone"), "aria-expanded": "false",
+    onclick: () => {
+      const open = panel.hidden;
+      panel.hidden = !open;
+      btn.setAttribute("aria-expanded", open ? "true" : "false");
+    },
+  });
+  btn.appendChild(_socialIcon("phone"));
+  return { btn, panel };
+}
+
 function renderSocialLinks(social) {
-  const links = [];
+  social = social || {};
+  const follow = [];
   for (const key of SOCIAL_ORDER) {
-    const val = social && social[key];
-    if (!val || typeof val !== "string") continue;
+    const val = social[key];
     // Defence in depth — the server already validates, but this lands in href.
-    if (key !== "email" && !/^https?:\/\//i.test(val)) continue;
-    const href = key === "email" ? `mailto:${val}` : val;
-    const label = SOCIAL_NAMES[key] || t(`footer.${key}`);
-    const a = el("a", {
-      class: `sing-social-link sing-social-${key}`, href,
-      target: key === "email" ? null : "_blank",
-      rel: key === "email" ? null : "noopener noreferrer",
-      title: key === "email" ? val : label,
-      "aria-label": key === "email" ? `${label}: ${val}` : label,
-      "data-social": key,
-    });
-    a.appendChild(_socialIcon(key));
-    links.push(a);
+    if (typeof val === "string" && /^https?:\/\//i.test(val)) follow.push(_socialLink(key, val));
   }
-  if (!links.length) return null;
+  const contact = [];
+  let phonePanel = null;
+  if (typeof social.email === "string" && social.email) {
+    const a = el("a", {
+      class: "sing-social-link sing-social-email", href: `mailto:${social.email}`,
+      title: social.email, "aria-label": `${t("footer.email")}: ${social.email}`, "data-social": "email",
+    });
+    a.appendChild(_socialIcon("email"));
+    contact.push(a);
+  }
+  if (typeof social.phone === "string" && /\d/.test(social.phone)) {
+    const { btn, panel } = _phoneButton(social.phone);
+    contact.push(btn);
+    phonePanel = panel;
+  }
+  if (!follow.length && !contact.length) return null;
+  const group = (label, links, testid) => el("div", { class: "sing-social-group", "data-testid": testid },
+    el("div", { class: "sing-social-label" }, label),
+    el("div", { class: "sing-social-links" }, ...links));
   return el("div", { class: "sing-social", "data-testid": "footer-social" },
-    el("div", { class: "sing-social-label" }, t("footer.followUs")),
-    el("div", { class: "sing-social-links" }, ...links),
-  );
+    el("div", { class: "sing-social-groups" },
+      follow.length ? group(t("footer.followUs"), follow, "footer-follow") : null,
+      contact.length ? group(t("footer.contactUs"), contact, "footer-contact") : null),
+    phonePanel);
+}
+
+// A notice line: the KJ's own (icon + text), a pre-built one they re-worded
+// or re-iconed, or the pre-built translated default ("💧 Free water…").
+function _noticeText(key, def) {
+  const k = `notices.${key}`;
+  const builtin = t(k);
+  const hasBuiltin = builtin && builtin !== k;
+  if (def && def.text) {
+    // Re-worded pre-built notice with no emoji of its own keeps the default's.
+    const defaultIcon = hasBuiltin ? (builtin.match(/^([^\p{L}\p{N}]+)\s+/u) || [])[1] : "";
+    return [def.icon || defaultIcon, def.text].filter(Boolean).join(" ");
+  }
+  if (!hasBuiltin) return "";
+  if (def && def.icon) {
+    // Swap the default's leading emoji for the KJ's icon.
+    return `${def.icon} ${builtin.replace(/^[^\p{L}\p{N}]+\s+/u, "")}`;
+  }
+  return builtin;
 }
 
 function renderEventFooter() {
@@ -1647,13 +1718,13 @@ function renderEventFooter() {
   const info = state.eventInfo;
   slot.innerHTML = "";
   const notices = (info && Array.isArray(info.notices)) ? info.notices : [];
+  const defs = (info && info.notice_defs && typeof info.notice_defs === "object") ? info.notice_defs : {};
   const message = (info && info.footer_message) || "";
   const socialEl = renderSocialLinks(info && info.social);
   const lines = [];
   for (const key of notices) {
-    const k = `notices.${key}`;
-    const text = t(k);
-    if (text && text !== k) lines.push(el("li", { class: "sing-notice", "data-notice": key }, text));
+    const text = _noticeText(key, defs[key]);
+    if (text) lines.push(el("li", { class: "sing-notice", "data-notice": key }, text));
   }
   if (!lines.length && !message && !socialEl) { slot.hidden = true; return; }
   if (lines.length) slot.appendChild(el("ul", { class: "sing-notices" }, ...lines));
@@ -1671,6 +1742,10 @@ function renderSearch() {
   let results = { songs: [] };
   let loading = false;
   let err = "";
+  // Auto-correct (gen's free-text resolver) for a search that found nothing:
+  // {typed, corrected: {artist, title}, songs, active} or {alternatives}.
+  let correction = null;
+  let resolving = false;
   // Phase B — group keys the singer has expanded. Persists across re-renders
   // triggered by search keystrokes but resets on back/forward navigation.
   const expandedSongs = new Set();
@@ -1703,11 +1778,12 @@ function renderSearch() {
         if (myGen === searchGen) { loading = false; err = ""; update(); }
         return;
       }
-      loading = true; err = ""; update();
+      loading = true; err = ""; correction = null; resolving = false; update();
       try {
         const data = await search(q.trim());
         if (myGen !== searchGen) return;   // superseded — discard stale response
         results = data;
+        if (!(data.songs || []).length) resolveEmptySearch(q.trim(), myGen);
         // Phase C — mirror the server's current flag so a mid-session KJ
         // toggle takes effect on the next search without a page reload.
         if (typeof data.make_requests_enabled === "boolean") {
@@ -1724,6 +1800,54 @@ function renderSearch() {
       }
     }, 700);
   };
+
+  // Nothing found → ask gen to split + typo-correct the query ("the strokes
+  // max picu" → The Strokes — Machu Picchu); if the corrected search finds
+  // songs, show them with "Corrected to … — you typed …  Undo" (like gen).
+  async function resolveEmptySearch(q, gen) {
+    resolving = true; update();
+    try {
+      const data = await fetchJson(
+        `${BASE}/search/resolve?q=${encodeURIComponent(q)}&device_id=${encodeURIComponent(DEVICE_ID)}`);
+      if (gen !== searchGen) return;
+      if (data && data.corrected && (data.songs || []).length) {
+        correction = { typed: data.typed || q, corrected: data.corrected, songs: data.songs, active: true };
+      } else if (data && (data.alternatives || []).length) {
+        correction = { typed: q, alternatives: data.alternatives };
+      }
+    } catch { /* offline / rate-limited: the empty-state triage stays */ }
+    if (gen === searchGen) { resolving = false; update(); }
+  }
+
+  function useAlternative(alt) {
+    const q = `${alt.artist} ${alt.title}`;
+    state.query = q;
+    const input = root.querySelector('input[type="search"]');
+    if (input) input.value = q;
+    doSearch(q);
+  }
+
+  function correctionNotice() {
+    if (!correction) return null;
+    if (correction.alternatives) {
+      return el("div", { class: "sing-correction sing-didyoumean", "data-testid": "search-didyoumean" },
+        el("div", { class: "sing-correction-title" }, t("search.didYouMean")),
+        ...correction.alternatives.map((a) => el("button", {
+          class: "btn ghost sing-suggestion",
+          onclick: (e) => { e.stopPropagation(); useAlternative(a); },
+        }, `${a.title} — ${a.artist}`)));
+    }
+    const song = `${correction.corrected.artist} — ${correction.corrected.title}`;
+    return el("div", { class: "sing-correction", "data-testid": "search-correction" },
+      el("span", {}, correction.active
+        ? t("search.correctedTo", { song, typed: correction.typed })
+        : t("search.usingTyped", { typed: correction.typed })),
+      " ",
+      el("button", {
+        class: "btn link sing-correction-toggle", "data-testid": "search-correction-toggle",
+        onclick: (e) => { e.stopPropagation(); correction.active = !correction.active; update(); },
+      }, correction.active ? t("search.undo") : t("search.useCorrection")));
+  }
 
   // Single-version short-circuit — when a group has exactly one version, we
   // skip the "KJ picks" framing and bind the concrete source immediately.
@@ -2131,12 +2255,15 @@ function renderSearch() {
   function renderResults() {
     const container = el("div", { class: "results" });
     armAt = Date.now() + armMs();   // freshly-built rows are inert briefly (anti-mis-tap)
-    if (loading) container.appendChild(el("p", { class: "hint" }, t("search.searching")));
+    if (loading) container.appendChild(searchingIndicator());
+    else if (resolving) container.appendChild(searchingIndicator(t("search.checkingSpelling")));
     if (err) container.appendChild(el("p", { class: "error" }, err));
+    const notice = !loading ? correctionNotice() : null;
+    if (notice) container.appendChild(notice);
 
-    const songs = results.songs || [];
+    const songs = (correction && correction.active && correction.songs) || results.songs || [];
     // Phase C — genuine empty-state (query was long enough to have searched).
-    if (!loading && !err && state.query?.trim().length >= 3 && songs.length === 0) {
+    if (!loading && !resolving && !err && state.query?.trim().length >= 3 && songs.length === 0) {
       container.appendChild(renderEmptyStateTriage());
     }
 
@@ -2176,6 +2303,12 @@ function renderSearch() {
         children.push(renderVersionsExpander(group));
       } else {
         children.push(el("div", { class: "sing-auto-hint" }, t("search.autoBest")));
+        // Collapsed: show the version the auto-pick would choose (backend
+        // sorts best-first) — ▶ Preview, Community/Commercial + format pills,
+        // who made it, how reliably it plays — without opening the list.
+        if (!isExpanded && group.versions && group.versions[0]) {
+          children.push(renderVersionRow(group, group.versions[0], true, { compact: true }));
+        }
         const toggleLabel = isExpanded
           ? t("search.hideVersions")
           : tn("search.versionsToggle", group.version_count);

@@ -86,7 +86,13 @@
     "ideasNone": "Aún no hay historial de canciones — ¡esta noche es la noche!",
     "ideasFailed": "No se pudo cargar el historial de canciones.",
     "plays": "▶ {count}",
-    "makeOffer": "¿No es la versión que querías? Genérala a pedido →"
+    "makeOffer": "¿No es la versión que querías? Genérala a pedido →",
+    "checkingSpelling": "Revisando la ortografía…",
+    "didYouMean": "¿Quisiste decir…?",
+    "correctedTo": "Corregido a {song} — escribiste “{typed}”.",
+    "usingTyped": "Usando lo que escribiste: “{typed}”.",
+    "undo": "Deshacer",
+    "useCorrection": "Usar la corrección"
   },
   "versions": {
     "sectionLibrary": "En nuestra biblioteca",
@@ -519,7 +525,11 @@
     "fromHost": "Una nota de tu anfitrión",
     "followUs": "Síguenos",
     "website": "Sitio web",
-    "email": "Correo"
+    "email": "Correo",
+    "contactUs": "Contáctanos",
+    "phone": "Envía un mensaje o llama",
+    "text": "💬 Mensaje",
+    "call": "📞 Llamar"
   },
   "photoConsent": {
     "question": "📷 ¿Te parece bien si se publican fotos o videos tuyos cantando esta noche en las redes sociales?",

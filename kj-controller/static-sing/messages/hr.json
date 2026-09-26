@@ -86,7 +86,13 @@
     "ideasNone": "Još nema povijesti pjesama — večeras je ta noć!",
     "ideasFailed": "Ne mogu učitati povijest pjesama.",
     "plays": "▶ {count}",
-    "makeOffer": "Nije verzija koju si htio/la? Generiraj je na zahtjev →"
+    "makeOffer": "Nije verzija koju si htio/la? Generiraj je na zahtjev →",
+    "checkingSpelling": "Provjeravam pravopis…",
+    "didYouMean": "Misliš li na…?",
+    "correctedTo": "Ispravljeno na {song} — tvoj unos je bio “{typed}”.",
+    "usingTyped": "Koristim tvoj unos: “{typed}”.",
+    "undo": "Poništi",
+    "useCorrection": "Koristi ispravak"
   },
   "versions": {
     "sectionLibrary": "U našoj biblioteci",
@@ -519,7 +525,11 @@
     "fromHost": "Poruka od tvog voditelja",
     "followUs": "Prati nas",
     "website": "Web stranica",
-    "email": "E-pošta"
+    "email": "E-pošta",
+    "contactUs": "Kontaktiraj nas",
+    "phone": "Pošalji poruku ili nazovi",
+    "text": "💬 Pošalji poruku",
+    "call": "📞 Nazovi"
   },
   "photoConsent": {
     "question": "📷 Je li u redu da se fotografije ili snimke na kojima večeras pjevaš objave na društvenim mrežama?",
