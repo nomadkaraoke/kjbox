@@ -249,6 +249,19 @@ def _credit_key(app, device_id, artist, title):
     return hashlib.sha256(raw.encode("utf-8")).hexdigest(), night
 
 
+def _grant(app, account, key, only_if_empty):
+    """gen show-credit; retried once on 409 busy_retry (transaction contention)."""
+    for attempt in (1, 2):
+        try:
+            return app.gen_client.grant_show_credit(
+                account["session_token"], key, venue=app.kj_config.get("venue_name"),
+                only_if_empty=only_if_empty)
+        except GenApiError as exc:
+            if exc.status != 409 or attempt == 2:
+                raise
+            time.sleep(0.3)
+
+
 def _show_credit(account, device_id, artist, title):
     """Search-time top-up: +1 credit only if the singer's balance is empty.
 
@@ -266,8 +279,7 @@ def _show_credit(account, device_id, artist, title):
             return False
         keys.add(key)
         st["last_key"][(night, device_id)] = key
-    app.gen_client.grant_show_credit(
-        account["session_token"], key, venue=app.kj_config.get("venue_name"), only_if_empty=True)
+    _grant(app, account, key, only_if_empty=True)
     return True
 
 
@@ -282,8 +294,7 @@ def _submit_credit(app, account, device_id, meta):
     if not key:
         return
     try:
-        app.gen_client.grant_show_credit(
-            account["session_token"], key, venue=app.kj_config.get("venue_name"))
+        _grant(app, account, key, only_if_empty=False)
     except GenApiError as exc:
         # Not fatal: the singer may have their own credit; create reports 402 if not.
         app.logger.warning("make: submit-time show credit not granted: %s", exc)

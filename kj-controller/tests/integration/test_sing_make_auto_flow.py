@@ -132,6 +132,13 @@ class TestCheckAndSearch:
         assert all(c.kwargs["only_if_empty"] is True for c in calls)
         gen.search_audio.assert_called_with("sess-mary", "Radiohead", "Karma Police")
 
+    def test_show_credit_busy_is_retried(self, client, token, gen, signed_in, monkeypatch):
+        import sing_make
+        monkeypatch.setattr(sing_make.time, "sleep", lambda _s: None)
+        gen.grant_show_credit.side_effect = [GenApiError(409, "busy_retry"), {"granted": True}]
+        assert _post(client, token, "search", artist="Radiohead", title="Creep").status_code == 200
+        assert gen.grant_show_credit.call_count == 2
+
     def test_long_song_names_still_get_a_key_gen_accepts(self, client, token, gen, signed_in):
         _post(client, token, "search", artist="Fall Out Boy",
               title="I Slept With Someone in Fall Out Boy and All I Got Was This Stupid Song Written About Me")
