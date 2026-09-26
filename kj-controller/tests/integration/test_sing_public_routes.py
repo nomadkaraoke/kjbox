@@ -935,6 +935,20 @@ class TestIdentityMatchedSongs:
         sing_app.rotation.add_entry("Ashlee A", "Host - X")
         assert len(self._extras(client, token, own)) == 1
 
+    def test_kj_merge_links_phone_that_used_another_spelling(self, client, sing_app, token):
+        """KJ typed songs as "Ashlee A"; she later requested from her phone as
+        "Ash". Merging Ash → Ashlee A in the KJ UI links the phone to all of
+        them — the KJ's and her own."""
+        sing_app.rotation.add_entry("Ashlee A", "Host - X")
+        own = self._submit(client, sing_app, token, "Ash", "Mine", device_id=self.DEV)
+        assert self._extras(client, token, own) == []
+        resp = client.post("/rotation/singer/merge",
+                           json={"source_name": "Ash", "target_name": "Ashlee A"})
+        assert resp.status_code == 200
+        items = self._mine(client, token, ids=own["id"])
+        assert items[0]["request"]["id"] == own["id"]
+        assert [it["request"]["song_title"] for it in items if it.get("entry_id")] == ["Host - X"]
+
     def test_done_and_cancelled_entries_excluded(self, client, sing_app, token):
         own = self._submit(client, sing_app, token, "Ashlee A", "Mine", device_id=self.DEV)
         done = sing_app.rotation.add_entry("Ashlee A", "Sung - X")

@@ -36,7 +36,10 @@ Dated entries, newest first. Each entry notes any required deploy steps.
 - **Scope:** these songs can be **reordered** only, never cancelled or changed (those still need the
   edit_token). A reorder only shuffles the singer's songs among the slots they already hold. A
   singer who has never submitted from their phone tonight has no device identity, so KJ-added
-  songs won't appear for them until they do.
+  songs won't appear for them until they do. Once they submit under the same name it links
+  automatically. If they used a different spelling ("Ash"), **Merge singers** (Ash → Ashlee A)
+  links the phone: `persist_rename` aliases the device and rewrites its requests to the target
+  name, which is what the identity lookup reads.
 - **Reorder UX:** there's now an explicit instruction line ("press and hold the ⠿ … drag … or tap
   ▲ / ▼ … then tap Save new order"). Each row has ▲/▼ buttons and a position number, the drag
   handle is bigger, and an auto-approved reorder says "✓ New order saved." instead of "the host
