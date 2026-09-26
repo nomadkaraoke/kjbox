@@ -41,6 +41,17 @@ class TestPollOnce:
         poller.poll_once()
         mock_rotation.set_gen_status.assert_called_once_with(1, "job-1", "awaiting_review")
 
+    @pytest.mark.parametrize("started_by,expected", [("admin", "host_review"), ("owner", "in_review")])
+    def test_in_review_records_who_opened_it(self, poller, mock_gen_client, mock_rotation,
+                                             started_by, expected):
+        mock_rotation.store.get_active_gen_entries.return_value = [
+            {"id": 1, "gen_job_id": "job-1", "gen_status": "awaiting_review", "song_artist": "S - A"}
+        ]
+        mock_gen_client.get_job_status.return_value = {
+            "status": "in_review", "state_data": {"review_started_by": started_by}}
+        poller.poll_once()
+        mock_rotation.set_gen_status.assert_called_once_with(1, "job-1", expected)
+
     def test_no_update_when_status_same(self, poller, mock_gen_client, mock_rotation):
         mock_rotation.store.get_active_gen_entries.return_value = [
             {"id": 1, "gen_job_id": "job-1", "gen_status": "processing", "song_artist": "Song - Artist"}

@@ -251,8 +251,18 @@ class TestMyRequestsMakePhase:
         item = self._phase(client, token, rid)
         assert item["make"] == "making"
         assert "estimate" not in item                      # not singable yet → no queue slot
-        sing_app.rotation.set_gen_status(entry_id, "job-mary", "awaiting_review")
-        assert self._phase(client, token, rid)["make"] == "needs_host"
+        for gen_status, phase in [
+            ("awaiting_review", "review"),
+            ("in_review", "review_self"),
+            ("host_review", "review_host"),
+            ("rendering", "rendering"),
+            ("syncing", "rendering"),
+            ("needs_input", "needs_host"),
+            ("failed", "needs_host"),
+            ("processing", "making"),
+        ]:
+            sing_app.rotation.set_gen_status(entry_id, "job-mary", gen_status)
+            assert self._phase(client, token, rid)["make"] == phase, gen_status
         sing_app.rotation.complete_gen_job("job-mary", "/m/NOMAD-1 - Radiohead - Creep.mp4")
         assert self._phase(client, token, rid).get("make") is None
         assert sing_app.rotation.store.get_entry(entry_id)["status"] == "Waiting"
@@ -263,3 +273,60 @@ class TestMyRequestsMakePhase:
             "source_ref": "https://youtu.be/x", "song_artist": "R", "song_title": "C",
         }).get_json()["request"]["id"]
         assert "make" not in self._phase(client, token, rid)
+
+
+class TestReviewLink:
+    """"Tap here to review it yourself" → gen's one-click review sign-in link."""
+
+    def _made(self, client, token):
+        body = _submit(client, token).get_json()
+        return body["request"]["id"], body["request"]["edit_token"]
+
+    def _link(self, client, token, rid, edit_token, **extra):
+        return client.post(f"/sing/make/review-link/{rid}?t={token}",
+                           json={"device_id": DEVICE, "edit_token": edit_token, "locale": "es", **extra})
+
+    def test_returns_gen_link_for_own_job(self, client, token, gen, signed_in):
+        rid, edit = self._made(client, token)
+        gen.review_link.return_value = {"url": "https://gen/auth/verify?token=abc",
+                                        "status": "in_review", "review_started_by": "admin"}
+        resp = self._link(client, token, rid, edit)
+        assert resp.status_code == 200
+        assert resp.get_json() == {"url": "https://gen/auth/verify?token=abc", "review_started_by": "admin"}
+        gen.review_link.assert_called_once_with("sess-mary", "job-mary", locale="es")
+
+    def test_needs_the_edit_token(self, client, token, gen, signed_in):
+        rid, _edit = self._made(client, token)
+        assert self._link(client, token, rid, "wrong").status_code == 403
+        assert self._link(client, token, rid, "").status_code == 403
+        gen.review_link.assert_not_called()
+
+    def test_unknown_or_non_make_request_is_404(self, client, token, gen, signed_in):
+        assert self._link(client, token, 99999, "x").status_code == 404
+        req = client.post(f"/sing/submit?t={token}", json={
+            "singer_name": "Mary", "device_id": DEVICE, "source_type": "youtube",
+            "source_ref": "https://youtu.be/x", "song_artist": "R", "song_title": "C",
+        }).get_json()["request"]
+        assert self._link(client, token, req["id"], req["edit_token"]).status_code == 404
+
+    def test_review_already_finished(self, client, token, gen, signed_in):
+        rid, edit = self._made(client, token)
+        gen.review_link.side_effect = GenApiError(409, "not_in_review")
+        resp = self._link(client, token, rid, edit)
+        assert resp.status_code == 409 and resp.get_json()["error"] == "not_in_review"
+
+    def test_other_gen_account_on_this_phone(self, client, token, gen, signed_in):
+        rid, edit = self._made(client, token)
+        gen.review_link.side_effect = GenApiError(404, "not_found")
+        assert self._link(client, token, rid, edit).get_json()["error"] == "wrong_account"
+
+    def test_signed_out_phone(self, client, sing_app, token, gen, signed_in):
+        rid, edit = self._made(client, token)
+        sing_app.sing_store.clear_gen_account(DEVICE)
+        assert self._link(client, token, rid, edit).status_code == 401
+
+    def test_works_after_host_turns_make_it_off(self, client, sing_app, token, gen, signed_in):
+        rid, edit = self._made(client, token)
+        sing_app.sing_store.set_accepting_make_requests(False)
+        gen.review_link.return_value = {"url": "https://gen/x"}
+        assert self._link(client, token, rid, edit).status_code == 200

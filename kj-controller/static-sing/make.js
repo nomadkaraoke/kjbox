@@ -134,6 +134,31 @@ function formatCount(n) {
   return String(n);
 }
 
+function formatMetadata(r) {
+  const parts = [r.release_type, r.year && String(r.year), r.label, r.edition_info, r.quality_data?.media]
+    .filter(Boolean);
+  return parts.length ? `[${parts.join(" / ")}]` : "";
+}
+
+function formatQuality(r) {
+  if (r.quality) return r.quality;
+  const q = r.quality_data;
+  if (!q) return "";
+  return [q.format, q.bit_depth && `${q.bit_depth}bit`, q.bitrate && `${q.bitrate}kbps`, q.media]
+    .filter(Boolean).join(" ");
+}
+
+// gen CATEGORY_CONFIG: rows shown before "+N more", and the header colour.
+const CATEGORY_MAX = {
+  "BEST CHOICE": 3, "HI-RES 24-BIT": 3, "STUDIO ALBUMS": 3, SINGLES: 2, "LIVE VERSIONS": 2,
+  COMPILATIONS: 2, "VINYL RIPS": 2, SPOTIFY: 3, YOUTUBE: 3, OTHER: 3,
+};
+const CATEGORY_CLASS = {
+  "BEST CHOICE": "best", "HI-RES 24-BIT": "hires", "STUDIO ALBUMS": "studio", SINGLES: "singles",
+  "LIVE VERSIONS": "live", COMPILATIONS: "comp", "VINYL RIPS": "vinyl", SPOTIFY: "spotify",
+  YOUTUBE: "youtube", OTHER: "other",
+};
+
 // --- Match-judge (ported from AudioSourceStep.tsx) ---------------------------
 
 const JUDGE_GATE_TIMEOUT_MS = 12000;
@@ -372,53 +397,127 @@ export function createMakeFlow(deps) {
     return [r.title, who, t(`make.${CATEGORY_KEY[cat]}`)].filter(Boolean).join(" · ");
   }
 
-  function badges(r) {
-    const cat = categorizeResult(r);
+  // ---- Result presentation — mirrors gen's AudioSourceStep (PickCard /
+  // ResultCategories / ResultRow): the in-torrent FILENAME is what tells a
+  // right track from a wrong one (album searches return sibling tracks), and
+  // availability decides whether the download succeeds — so both lead.
+
+  function providerPills(r) {
     const out = [];
     const prov = (r.provider || "").toLowerCase();
-    if (prov === "youtube") out.push(el("span", { class: "sing-pill mk-pill-yt" }, "YouTube"));
-    else if (prov === "spotify") out.push(el("span", { class: "sing-pill mk-pill-sp" }, "Spotify"));
-    else if (r.is_lossless) out.push(el("span", { class: "sing-pill mk-pill-lossless" }, t("make.lossless")));
-    if (r.quality_data?.bit_depth === 24) out.push(el("span", { class: "sing-pill mk-pill-hires" }, "24-bit"));
-    if (cat === "VINYL RIPS") out.push(el("span", { class: "sing-pill mk-pill-warn" }, t("make.vinyl")));
+    if (r.is_lossless) out.push(el("span", { class: "mk-tag mk-tag-lossless" }, t("make.losslessTag")));
+    if (prov === "spotify") out.push(el("span", { class: "mk-tag mk-tag-sp" }, "Spotify"));
+    else if (prov === "youtube") out.push(el("span", { class: "mk-tag mk-tag-yt" }, "YouTube"));
     return out;
   }
 
-  function metaLine(r) {
-    const parts = [];
-    if (r.release_type) parts.push(r.release_type);
-    if (r.year) parts.push(String(r.year));
-    if (r.label) parts.push(r.label);
-    if (r.formatted_duration) parts.push(r.formatted_duration);
-    if (r.seeders != null) {
-      const avail = r.seeders >= 50 ? "availHigh" : r.seeders >= 10 ? "availMedium" : "availLow";
-      parts.push(t(`make.${avail}`));
-    } else if (r.view_count) {
-      parts.push(t("make.views", { count: formatCount(r.view_count) }));
-    }
-    return parts.join(" · ");
+  function availabilityBadge(r) {
+    if (r.seeders == null) return null;
+    const lvl = r.seeders >= 50 ? "high" : r.seeders >= 10 ? "medium" : "low";
+    const key = { high: "availHigh", medium: "availMedium", low: "availLow" }[lvl];
+    const tip = { high: "availHighTip", medium: "availMediumTip", low: "availLowTip" }[lvl];
+    return el("span", { class: `mk-tag mk-avail-${lvl}`, title: t(`make.${tip}`) }, t(`make.${key}`));
   }
 
-  function resultRow(r, { primary = false } = {}) {
-    const s = m();
-    const mismatch = checkFilenameMismatch(s.title, r);
+  function viewsBadge(r) {
+    if (r.seeders || r.view_count == null) return null;
+    const lvl = r.view_count >= 1e6 ? "high" : r.view_count >= 1e5 ? "medium" : "none";
+    return el("span", { class: `mk-tag mk-avail-${lvl}` }, t("make.views", { count: formatCount(r.view_count) }));
+  }
+
+  function matchBadge(r, showMatch) {
+    const mm = checkFilenameMismatch(m().title, r);
+    if (!mm.filename) return null;
+    if (mm.isMismatch) {
+      return el("span", { class: "mk-tag mk-tag-warn", title: t("make.fileLooksLike", { file: mm.filename }) },
+        t("make.wrongTrack"));
+    }
+    return showMatch ? el("span", { class: "mk-tag mk-tag-match" }, t("make.titleMatch")) : null;
+  }
+
+  function releaseName(r) {
     const who = (r.provider === "YouTube" && r.channel) ? r.channel : (r.artist || "");
-    return el("div", { class: "mk-result" + (primary ? " mk-result-primary" : ""), "data-testid": "make-result" },
-      el("div", { class: "mk-result-main" },
-        el("div", { class: "mk-result-title" }, r.title || ""),
-        who ? el("div", { class: "mk-result-sub" }, who) : null,
-        el("div", { class: "mk-result-badges" }, ...badges(r)),
-        metaLine(r) ? el("div", { class: "mk-result-meta" }, metaLine(r)) : null,
-        mismatch.isMismatch
-          ? el("div", { class: "mk-result-warn" }, t("make.fileLooksLike", { file: mismatch.filename }))
-          : null,
-      ),
+    return [who, r.title].filter(Boolean).join(" - ");
+  }
+
+  function confidenceReason(best) {
+    const cat = categorizeResult(best);
+    const parts = [];
+    if (cat === "BEST CHOICE") parts.push(t("make.reasonHighQuality"));
+    else if (best.is_lossless) parts.push(t("make.reasonLossless"));
+    else if (best.provider === "YouTube") parts.push(t("make.reasonYoutube"));
+    else parts.push(t("make.reasonLossy"));
+    if (best.title) {
+      const from = [best.release_type, best.year].filter(Boolean).join(", ");
+      if (from) parts.push(t("make.reasonFrom", { what: from }));
+    }
+    if (best.seeders != null) {
+      parts.push(t(best.seeders >= 50 ? "make.reasonReliable"
+        : best.seeders >= 10 ? "make.reasonSlower" : "make.reasonLowAvail"));
+    }
+    return parts.join(", ");
+  }
+
+  function pickWarnings(results, best) {
+    const out = [];
+    const mm = checkFilenameMismatch(m().title, best);
+    if (mm.isMismatch) out.push(t("make.fileLooksLike", { file: mm.filename }));
+    const hasLossless = results.some((r) => !["YOUTUBE", "SPOTIFY", "VINYL RIPS"].includes(categorizeResult(r)));
+    if (!hasLossless) out.push(t("make.warnNoLossless"));
+    else if (categorizeResult(best) === "YOUTUBE") out.push(t("make.warnLossy"));
+    if (best.seeders != null && best.seeders < 10) out.push(t("make.warnLowAvail"));
+    return out;
+  }
+
+  function labelled(label, value, cls) {
+    return el("div", { class: "mk-kv" },
+      el("span", { class: "mk-kv-label" }, label),
+      el("span", { class: `mk-kv-value ${cls || ""}` }, value));
+  }
+
+  // The hero "Perfect match found" / "Recommended audio" card.
+  function pickCard(conf) {
+    const s = m();
+    const best = conf.best;
+    const perfect = conf.tier === 1;
+    const meta = formatMetadata(best);
+    return el("div", { class: `mk-pick ${perfect ? "mk-pick-perfect" : "mk-pick-recommended"}`, "data-testid": "make-pick" },
+      el("div", { class: "mk-pick-head" },
+        el("span", { class: "mk-pick-label" }, perfect ? t("make.perfectMatch") : t("make.recommended")),
+        ...providerPills(best)),
+      el("div", { class: "mk-pick-body", "data-testid": "make-result" },
+        el("p", { class: "mk-reason" }, confidenceReason(best)),
+        best.target_file ? labelled(t("make.filename"), best.target_file, "mk-mono") : null,
+        labelled(t("make.release"), releaseName(best)),
+        el("div", { class: "mk-tags" },
+          el("span", { class: "mk-quality" }, formatQuality(best)),
+          availabilityBadge(best), viewsBadge(best), matchBadge(best, false)),
+        meta ? el("div", { class: "mk-meta" }, meta) : null,
+        ...pickWarnings(s.search.results, best).map((w) => el("div", { class: "mk-result-warn" }, "⚠ ", w)),
+        el("button", {
+          class: "btn primary mk-use-full", "data-testid": "make-use",
+          disabled: s.gate ? null : "disabled",
+          onclick: () => pickResult(best),
+        }, t("make.useThis"))));
+  }
+
+  function resultRow(r, showMatch) {
+    const s = m();
+    const q = formatQuality(r);
+    const meta = formatMetadata(r);
+    return el("div", { class: "mk-row", "data-testid": "make-result" },
+      el("div", { class: "mk-row-main" },
+        el("div", { class: "mk-row-line1" },
+          ...providerPills(r),
+          el("span", { class: "mk-row-name" }, releaseName(r)),
+          q ? el("span", { class: "mk-quality" }, `(${q})`) : null,
+          availabilityBadge(r), viewsBadge(r), matchBadge(r, showMatch)),
+        meta ? el("div", { class: "mk-meta" }, meta) : null,
+        r.target_file ? labelled(t("make.filename"), r.target_file, "mk-mono") : null),
       el("button", {
-        class: primary ? "btn primary mk-use" : "btn ghost mk-use",
-        disabled: s.gate ? null : "disabled",
+        class: "btn mk-select", disabled: s.gate ? null : "disabled",
         onclick: () => pickResult(r),
-      }, primary ? t("make.useThis") : t("make.select")),
-    );
+      }, t("make.select")));
   }
 
   function correctionNotice() {
@@ -469,26 +568,50 @@ export function createMakeFlow(deps) {
     );
   }
 
+  function categoryBlock(g, rows, forceMatch) {
+    const s = m();
+    const flags = rows.map((r) => checkFilenameMismatch(s.title, r).isMismatch);
+    const anyMatch = flags.some((f) => !f);
+    const anyMismatch = flags.some((f) => f);
+    const showMatch = (anyMatch && anyMismatch) || (forceMatch && anyMatch);
+    // Matching filenames first when the category mixes right and wrong tracks.
+    const sorted = anyMatch && anyMismatch
+      ? rows.map((r, i) => [r, flags[i]]).sort((a, b) => a[1] - b[1]).map((x) => x[0])
+      : rows;
+    const max = CATEGORY_MAX[g.category] || 3;
+    const open = s.expanded.has(g.category);
+    const shown = open ? sorted : sorted.slice(0, max);
+    const hidden = rows.length - max;
+    return el("div", { class: "mk-cat", "data-category": g.category },
+      el("div", { class: "mk-cat-head" },
+        el("span", { class: `mk-cat-title mk-cat-${CATEGORY_CLASS[g.category] || "other"}` },
+          t(`make.${CATEGORY_KEY[g.category]}`)),
+        el("span", { class: "mk-cat-count" }, `(${rows.length})`),
+        hidden > 0 ? el("button", {
+          class: "btn link mk-cat-more",
+          onclick: () => { open ? s.expanded.delete(g.category) : s.expanded.add(g.category); rerender(); },
+        }, open ? t("make.showLess") : t("make.moreCount", { count: hidden })) : null),
+      ...shown.map((r) => resultRow(r, showMatch)));
+  }
+
   function othersSection(conf, grouped) {
     const s = m();
     // Tier 3 has no pick card — every result is listed (like gen).
     const expandedAll = conf.tier === 3;
     const others = s.search.results.filter((r) => expandedAll || r !== conf.best);
     if (!others.length) return null;
-    if (!expandedAll && !s.showOthers) {
-      return el("button", {
-        class: "btn link mk-others-toggle", "data-testid": "make-others-toggle",
-        onclick: () => { s.showOthers = true; rerender(); },
-      }, tn("make.seeOthers", others.length));
-    }
+    const toggle = expandedAll ? null : el("button", {
+      class: "btn link mk-others-toggle", "data-testid": "make-others-toggle",
+      onclick: () => { s.showOthers = !s.showOthers; rerender(); },
+    }, s.showOthers ? t("make.hideOthers") : tn("make.seeOthers", others.length));
+    if (!expandedAll && !s.showOthers) return toggle;
     return el("div", { class: "mk-others" },
+      toggle,
+      el("p", { class: "hint mk-others-help" },
+        expandedAll ? t("make.limitedResults") : t("make.othersHelp")),
       ...grouped.map((g) => {
         const rows = g.results.filter((r) => expandedAll || r !== conf.best);
-        if (!rows.length) return null;
-        return el("div", { class: "mk-cat" },
-          el("div", { class: "mk-cat-title" }, t(`make.${CATEGORY_KEY[g.category]}`)),
-          ...rows.map((r) => resultRow(r)),
-        );
+        return rows.length ? categoryBlock(g, rows, expandedAll) : null;
       }),
     );
   }
@@ -527,10 +650,7 @@ export function createMakeFlow(deps) {
         el("ul", {}, ...guidanceTips(results).map((tip) => el("li", {}, tip)))));
       card.appendChild(fallbackSection(true));
     } else {
-      card.appendChild(el("div", { class: "mk-pick", "data-testid": "make-pick" },
-        el("div", { class: `mk-pick-label ${conf.tier === 1 ? "mk-perfect" : "mk-recommended"}` },
-          conf.tier === 1 ? t("make.perfectMatch") : t("make.recommended")),
-        resultRow(conf.best, { primary: true })));
+      card.appendChild(pickCard(conf));
     }
     const others = othersSection(conf, grouped);
     if (others) card.appendChild(others);

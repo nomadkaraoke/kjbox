@@ -72,12 +72,29 @@ class TestMakeWizard:
         # Lazy typing corrected by gen's match-judge, with undo.
         notice = page.locator('[data-testid="make-correction"]')
         expect(notice).to_contain_text("Corrected to Creep — Radiohead")
-        # Other options are one tap away, grouped like gen.
+        # The hero card shows what matters when picking audio — like gen's
+        # Choose Audio step: the in-torrent filename, the release, format,
+        # availability and the bracketed release metadata.
+        pick = page.locator('[data-testid="make-pick"]')
+        expect(pick).to_contain_text("High-quality lossless, from Album, 1993, reliable download")
+        expect(pick.locator(".mk-mono")).to_have_text("02 - Creep.flac")
+        expect(pick).to_contain_text("Release:Radiohead - Pablo Honey")
+        expect(pick.locator(".mk-avail-high")).to_have_text("High avail.")
+        expect(pick).to_contain_text("[Album / 1993]")
+        # Other options are one tap away, grouped like gen (with counts).
         page.locator('[data-testid="make-others-toggle"]').click()
+        expect(page.locator(".mk-others-help")).to_contain_text("Check the filename matches your song")
         expect(page.locator(".mk-cat-title").first).to_have_text("Spotify")
-        page.locator(".mk-use.primary").click()
+        expect(page.locator(".mk-cat-count").first).to_have_text("(1)")
+        expect(page.locator('[data-testid="make-others-toggle"]')).to_have_text("Hide other options")
+        page.locator('[data-testid="make-use"]').click()
         expect(page.locator("h2")).to_have_text("Is this the right song?")
-        expect(page.locator('[data-testid="confirm-make-email"]')).to_contain_text("mary@example.com")
+        expect(page.locator('[data-testid="confirm-make-email"]')).to_contain_text(
+            "email you the finished video file and YouTube link (mary@example.com)")
+        expect(page.locator(".confirm-source")).to_contain_text("kept at the bottom until it's ready")
+        # The raw search text and the audio summary line are gone for make-its.
+        expect(page.locator(".confirm-searched")).to_have_count(0)
+        expect(page.locator(".confirm-make-audio")).to_have_count(0)
         state = page.evaluate("window.__sing_state.selected")
         assert state["song_artist"] == "Radiohead" and state["song_title"] == "Creep"
         assert state["source_meta"] == {**state["source_meta"], "search_session_id": "ss-1", "selection_index": 0}
@@ -127,3 +144,74 @@ class TestMakeWizard:
         page.locator('[data-testid="make-send-code"]').click()
         page.locator('[data-testid="make-code"]').fill("000000")
         expect(page.locator('[data-testid="make-error"]')).to_contain_text("That code isn't right")
+
+    def test_mismatched_filename_flagged_and_matches_sorted_first(self, page, live_server, live_token):
+        wrong = {**LOSSLESS, "index": 3, "seeders": 60, "target_file": "Pablo Honey/03 - Anyone Can Play Guitar.flac"}
+        right = {**LOSSLESS, "index": 4, "seeders": 55, "target_file": "Pablo Honey/02 - Creep.flac"}
+        _open_wizard(page, live_server, live_token, email="m@x.co", results=[LOSSLESS, wrong, right])
+        page.locator('[data-testid="make-others-toggle"]').click()
+        rows = page.locator('.mk-cat[data-category="BEST CHOICE"] .mk-row')
+        expect(rows).to_have_count(2)
+        expect(rows.nth(0)).to_contain_text("02 - Creep.flac")
+        expect(rows.nth(0).locator(".mk-tag-match")).to_have_text("Title match")
+        expect(rows.nth(1).locator(".mk-tag-warn")).to_have_text("Wrong track?")
+
+
+
+class TestMySongsMakePhases:
+    """My songs wording per make phase, and "Tap here" → gen review sign-in link."""
+
+    def _open(self, page, live_server, live_token, phase):
+        _login(page, live_server, live_token)
+        page.evaluate("(t) => localStorage.setItem('sing_my_request_ids', JSON.stringify("
+                      "{token: t, ids: [31], tokens: {'31': 'tok31'}}))", live_token)
+        item = {"request": {"id": 31, "singer_name": "Alice", "song_artist": "The Strokes",
+                            "song_title": "Machu Picchu", "source_type": "make", "status": "approved",
+                            "created_at": "now", "linked_entry_id": 9, "additional_singers": None},
+                "performed": False, "make": phase}
+        page.route("**/sing/my-requests*", lambda r: _json(r, {
+            "now_playing": {"now_singing": None, "up_next": None, "queued_count": 1},
+            "requests": [item]}))
+        page.evaluate("window.__sing_state.step = 'done'; window.__sing_render();")
+        return page.locator(".song-card-status").first
+
+    def test_wording_per_phase(self, page, live_server, live_token):
+        status = self._open(page, live_server, live_token, "making")
+        expect(status).to_have_text("✨ Being made for you — held off the rotation until it's ready.")
+        page.unroute("**/sing/my-requests*")
+        status = self._open(page, live_server, live_token, "rendering")
+        expect(status).to_contain_text("lyrics review completed, rendering")
+        expect(status).to_contain_text("~10 minutes")
+
+    def test_review_link_opens_signed_in_review(self, page, live_server, live_token):
+        status = self._open(page, live_server, live_token, "review")
+        expect(status).to_contain_text("needs lyrics sync review")
+        expect(status).to_contain_text("or the host will as soon as possible")
+        target = f"{live_server}/sing/sw.js?review=ok"
+        sent = {}
+
+        def on_link(route):
+            sent.update(json.loads(route.request.post_data))
+            _json(route, {"url": target, "review_started_by": None})
+        page.route("**/sing/make/review-link/31*", on_link)
+        with page.expect_popup() as popup_info:
+            status.locator('[data-testid="make-review-link"]').click()
+        popup = popup_info.value
+        popup.wait_for_url("**review=ok")
+        assert sent["edit_token"] == "tok31" and sent["device_id"]
+
+    def test_host_already_reviewing(self, page, live_server, live_token):
+        status = self._open(page, live_server, live_token, "review_host")
+        expect(status).to_contain_text("the host has already started the lyrics sync review")
+        expect(status.locator('[data-testid="make-review-link"]')).to_have_text("Tap here")
+
+    def test_review_over_is_explained(self, page, live_server, live_token):
+        status = self._open(page, live_server, live_token, "review_self")
+        page.route("**/sing/make/review-link/31*", lambda r: _json(r, {"error": "not_in_review"}, 409))
+        msgs = []
+        page.on("dialog", lambda d: (msgs.append(d.message), d.dismiss()))
+        with page.expect_popup():
+            status.locator('[data-testid="make-review-link"]').click()
+        page.wait_for_function("true")
+        expect(status.locator('[data-testid="make-review-link"]')).to_have_text("Tap here")
+        assert any("already finished" in m for m in msgs)

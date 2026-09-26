@@ -6211,6 +6211,19 @@ function renderRotation(entries) {
                 e.stopPropagation();
                 window.open('https://gen.nomadkaraoke.com/app/jobs#/' + entry.gen_job_id + '/review', '_blank');
             };
+        } else if (entry.gen_status === 'in_review' || entry.gen_status === 'host_review') {
+            // Lyrics review already opened — by the singer (in_review) or by
+            // the KJ (host_review). Still clickable: either can finish it.
+            prepBadge.textContent = 'IN REVIEW';
+            prepBadge.classList.add('prep-review');
+            prepBadge.style.cursor = 'pointer';
+            prepBadge.title = entry.gen_status === 'host_review'
+                ? 'You started the lyrics review \u2014 click to continue'
+                : 'The singer is reviewing the lyrics \u2014 click to open the review';
+            prepBadge.onclick = (e) => {
+                e.stopPropagation();
+                window.open('https://gen.nomadkaraoke.com/app/jobs#/' + entry.gen_job_id + '/review', '_blank');
+            };
         } else if (entry.gen_status === 'needs_input') {
             prepBadge.textContent = 'NEEDS INPUT';
             prepBadge.classList.add('prep-review');

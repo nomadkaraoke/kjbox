@@ -20,6 +20,11 @@ class GenStatus:
     # a long duration) — distinct from lyrics review, which has its own page.
     NEEDS_INPUT = "needs_input"
     AWAITING_REVIEW = "awaiting_review"
+    # Lyrics review opened (gen ``in_review``) by the singer / unknown, or by
+    # the KJ ("host_review" — gen's state_data.review_started_by == "admin").
+    # The singer page says "the host has already started reviewing".
+    IN_REVIEW = "in_review"
+    HOST_REVIEW = "host_review"
     RENDERING = "rendering"
     # kjbox-side: gen finished; waiting for master-sync to pull the NOMAD-####
     # master onto the box so it can be linked (see GenPoller).
@@ -28,7 +33,8 @@ class GenStatus:
     FAILED = "failed"
 
     TERMINAL = {COMPLETE, FAILED}
-    ACTIVE = {PROCESSING, NEEDS_INPUT, AWAITING_REVIEW, RENDERING, SYNCING}
+    ACTIVE = {PROCESSING, NEEDS_INPUT, AWAITING_REVIEW, IN_REVIEW, HOST_REVIEW,
+              RENDERING, SYNCING}
 
 
 _STATUS_MAP = {
@@ -54,7 +60,7 @@ _STATUS_MAP = {
     "awaiting_duration_confirm": GenStatus.NEEDS_INPUT,
     "awaiting_instrumental_selection": GenStatus.NEEDS_INPUT,
     "awaiting_review": GenStatus.AWAITING_REVIEW,
-    "in_review": GenStatus.AWAITING_REVIEW,
+    "in_review": GenStatus.IN_REVIEW,
     "review_complete": GenStatus.RENDERING,
     "rendering_video": GenStatus.RENDERING,
     "render_pending_capacity": GenStatus.RENDERING,
@@ -87,6 +93,18 @@ class GenApiError(Exception):
 def map_gen_status(api_status):
     """Map a gen API job status string to a rotation display status."""
     return _STATUS_MAP.get(api_status, GenStatus.PROCESSING)
+
+
+def map_gen_job(job_data):
+    """Like ``map_gen_status`` but from the full job, so an in-progress review
+    the KJ opened (``state_data.review_started_by == "admin"``) is told apart."""
+    job_data = job_data or {}
+    status = map_gen_status(job_data.get("status", ""))
+    if status == GenStatus.IN_REVIEW:
+        started_by = (job_data.get("state_data") or {}).get("review_started_by")
+        if started_by == "admin":
+            return GenStatus.HOST_REVIEW
+    return status
 
 
 class GenClient:
@@ -272,3 +290,12 @@ class GenClient:
                                  session_token=session_token, timeout=CREATE_JOB_TIMEOUT,
                                  json={"url": url, "artist": artist, "title": title,
                                        "is_private": False, "review_mode": "auto"})
+
+    def review_link(self, session_token, job_id, locale=None):
+        """One-click sign-in link to the singer's own job's lyrics review.
+
+        → {url, status, review_started_by}; 409 ``not_in_review`` once the
+        review is over."""
+        return self._singer_call("POST", f"/api/kjbox/jobs/{job_id}/review-link",
+                                 session_token=session_token, locale=locale,
+                                 json={"locale": locale})

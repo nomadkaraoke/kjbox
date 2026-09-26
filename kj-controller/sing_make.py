@@ -21,6 +21,7 @@ per-IP signup cap.
 
 import hashlib
 import re
+import secrets
 import threading
 import time
 from collections import defaultdict, deque
@@ -387,3 +388,48 @@ def create_job(app, device_id, artist, title, source_meta):
     if not job_id:
         return None, (jsonify({"error": "gen_unavailable"}), 502)
     return job_id, None
+
+
+@sing_bp.route("/make/review-link/<int:req_id>", methods=["POST"])
+@require_token
+def make_review_link(req_id):
+    """One-click link to the singer's own lyrics review on gen ("Tap here").
+
+    Proven like cancel (the request's edit_token); gen mints the link for the
+    job's owner only, using this device's stored gen sign-in."""
+    from sing import _belongs_to_current_night, _extract_token
+
+    data, device_id = _body()
+    # Not _guard(): an already-made song's review link must keep working even
+    # if the host has since switched make-it requests off.
+    if not make_flow_ready(current_app._get_current_object()):
+        return jsonify({"error": "make_requests_disabled"}), 400
+    if _rate_limited(device_id):
+        return jsonify({"error": "rate_limited"}), 429
+    store = current_app.sing_store
+    account = store.get_gen_account(device_id) if device_id else None
+    if not account:
+        return jsonify({"error": "signin_required"}), 401
+    req = store.get_request(req_id)
+    if (req is None or req.get("token") != _extract_token()
+            or not _belongs_to_current_night(store, req)):
+        return jsonify({"error": "not_found"}), 404
+    stored = req.get("edit_token") or ""
+    if not stored or not secrets.compare_digest(str(data.get("edit_token") or ""), str(stored)):
+        return jsonify({"error": "forbidden"}), 403
+    job_id = req.get("gen_job_id")
+    if req.get("source_type") != "make" or not job_id:
+        return jsonify({"error": "not_found"}), 404
+    try:
+        result = current_app.gen_client.review_link(
+            account["session_token"], job_id, locale=_locale(data))
+    except GenApiError as exc:
+        if exc.status == 409:
+            return jsonify({"error": "not_in_review"}), 409
+        if exc.status == 404:
+            # Signed in on this phone as a different gen account than the job's.
+            return jsonify({"error": "wrong_account"}), 403
+        return gen_error_response(exc, device_id)
+    if not result.get("url"):
+        return jsonify({"error": "gen_unavailable"}), 502
+    return jsonify({"url": result["url"], "review_started_by": result.get("review_started_by")})

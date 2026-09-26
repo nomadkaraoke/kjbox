@@ -1348,8 +1348,11 @@ class TestNotificationsSection:
     def test_explains_channels_with_number(self, page, live_server, live_token):
         self._open_done(page, live_server, live_token, phone="+1 555 123 4567")
         section = page.locator("#push-optin")
-        expect(section.locator(".notify-heading")).to_contain_text("When you're up",
-                                                                   timeout=8000)
+        # A number on file = set up → collapsed toggle; expand it.
+        toggle = section.locator('[data-testid="pref-toggle-notify"]')
+        expect(toggle).to_contain_text("Text message", timeout=8000)
+        toggle.click()
+        expect(section.locator(".pref-box-title")).to_contain_text("Notification preferences")
         expect(section).to_contain_text("Text message to +1 555 123 4567")
         expect(section.locator(".notify-summary")).to_be_visible()
 
@@ -1370,6 +1373,7 @@ class TestNotificationsSection:
     def test_change_number_link(self, page, live_server, live_token):
         self._open_done(page, live_server, live_token, phone="+1 555 123 4567")
         section = page.locator("#push-optin")
-        expect(section).to_contain_text("change number", timeout=8000)
+        section.locator('[data-testid="pref-toggle-notify"]').click(timeout=8000)
+        expect(section).to_contain_text("change number")
         page.locator('[data-testid="notify-change-phone"]').click()
         expect(page.locator('[data-testid="notify-phone"]')).to_have_value("+1 555 123 4567")
