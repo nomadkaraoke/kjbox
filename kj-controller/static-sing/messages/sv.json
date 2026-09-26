@@ -530,7 +530,7 @@
     "saveFailed": "Det gick inte att spara — försök igen."
   },
   "prefs": {
-    "notifyTitle": "🔔 Notisinställningar",
+    "notifyTitle": "🔔 Aviseringsinställningar",
     "socialTitle": "📷 Inställningar för sociala medier",
     "hide": "Dölj ▴",
     "notifyBoth": "Pop-up + sms",

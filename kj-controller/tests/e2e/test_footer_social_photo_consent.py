@@ -310,7 +310,7 @@ class TestPushSubscribeHonesty:
 
 
 class TestPreferenceSections:
-    """My songs: "Notification preferences" + "Social media preferences" are
+    """My songs: "Notification settings" + "Social media settings" are
     open until set up, then collapse to side-by-side toggles."""
 
     def _done(self, page, live_server, live_token, consent):

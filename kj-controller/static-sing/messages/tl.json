@@ -530,8 +530,8 @@
     "saveFailed": "Hindi na-save — pakisubukan ulit."
   },
   "prefs": {
-    "notifyTitle": "🔔 Mga notification preference",
-    "socialTitle": "📷 Mga social media preference",
+    "notifyTitle": "🔔 Mga setting ng notification",
+    "socialTitle": "📷 Mga setting ng social media",
     "hide": "Itago ▴",
     "notifyBoth": "Pop-up + text",
     "notifyPush": "Pop-up sa device na ito",

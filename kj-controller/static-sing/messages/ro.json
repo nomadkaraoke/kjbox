@@ -530,8 +530,8 @@
     "saveFailed": "Nu s-a putut salva — te rog încearcă din nou."
   },
   "prefs": {
-    "notifyTitle": "🔔 Preferințe notificări",
-    "socialTitle": "📷 Preferințe social media",
+    "notifyTitle": "🔔 Setări notificări",
+    "socialTitle": "📷 Setări social media",
     "hide": "Ascunde ▴",
     "notifyBoth": "Pop-up + SMS",
     "notifyPush": "Pop-up pe acest dispozitiv",

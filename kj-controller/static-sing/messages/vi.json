@@ -530,8 +530,8 @@
     "saveFailed": "Không thể lưu — vui lòng thử lại."
   },
   "prefs": {
-    "notifyTitle": "🔔 Tùy chọn thông báo",
-    "socialTitle": "📷 Tùy chọn mạng xã hội",
+    "notifyTitle": "🔔 Cài đặt thông báo",
+    "socialTitle": "📷 Cài đặt mạng xã hội",
     "hide": "Ẩn ▴",
     "notifyBoth": "Pop-up + tin nhắn",
     "notifyPush": "Pop-up trên thiết bị này",

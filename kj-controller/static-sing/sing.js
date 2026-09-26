@@ -3787,7 +3787,8 @@ function maybeShowPushPrompt() {
         type: "button", class: "pref-toggle", "data-testid": `pref-toggle-${sec.key}`,
         "aria-expanded": "false", onclick: () => toggle(sec),
       },
-        el("span", { class: "pref-toggle-title" }, sec.title, " ▾"),
+        // Non-breaking space: the ▾ never wraps onto a line of its own.
+        el("span", { class: "pref-toggle-title" }, sec.title, "\u00a0▾"),
         el("span", { class: "pref-toggle-status" }, sec.status)))));
   }
   for (const sec of sections) {

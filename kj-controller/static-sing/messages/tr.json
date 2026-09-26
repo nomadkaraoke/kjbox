@@ -530,8 +530,8 @@
     "saveFailed": "Kaydedilemedi — lütfen tekrar dene."
   },
   "prefs": {
-    "notifyTitle": "🔔 Bildirim tercihleri",
-    "socialTitle": "📷 Sosyal medya tercihleri",
+    "notifyTitle": "🔔 Bildirim ayarları",
+    "socialTitle": "📷 Sosyal medya ayarları",
     "hide": "Gizle ▴",
     "notifyBoth": "Açılır pencere + SMS",
     "notifyPush": "Bu cihazda açılır pencere",

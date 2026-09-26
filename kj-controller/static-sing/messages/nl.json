@@ -530,8 +530,8 @@
     "saveFailed": "Opslaan is niet gelukt — probeer het opnieuw."
   },
   "prefs": {
-    "notifyTitle": "🔔 Meldingsvoorkeuren",
-    "socialTitle": "📷 Social media voorkeuren",
+    "notifyTitle": "🔔 Meldingsinstellingen",
+    "socialTitle": "📷 Social media-instellingen",
     "hide": "Verberg ▴",
     "notifyBoth": "Pop-up + sms",
     "notifyPush": "Pop-up op dit apparaat",

@@ -530,8 +530,8 @@
     "saveFailed": "Tidak dapat disimpan — sila cuba lagi."
   },
   "prefs": {
-    "notifyTitle": "🔔 Pilihan pemberitahuan",
-    "socialTitle": "📷 Pilihan media sosial",
+    "notifyTitle": "🔔 Tetapan pemberitahuan",
+    "socialTitle": "📷 Tetapan media sosial",
     "hide": "Sembunyikan ▴",
     "notifyBoth": "Tetingkap timbul + mesej teks",
     "notifyPush": "Tetingkap timbul pada peranti ini",
