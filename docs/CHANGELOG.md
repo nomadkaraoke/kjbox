@@ -56,8 +56,11 @@ are easy to type.
     `/etc/dropbear/authorized_keys` (comment `claude-kjbox`). The root password is the router
     admin password, which is not stored in the repo.
 - **Caddy:** new `http://l.kjbox.cc` site in `kj-controller/deploy/Caddyfile`, which reverse
-  proxies to Flask without the https redirect. The Caddyfile is symlinked from the repo, but it
-  needs `sudo systemctl reload caddy` after deploy.
+  proxies to Flask without the https redirect. The Caddyfile is symlinked from the repo, but
+  Caddyfile changes need **`sudo systemctl restart caddy`**. `reload` fails because the global
+  `admin off` disables Caddy's reload API. A restart only blips web connections and never
+  touches playback. Done on NomadPC 2026-09-26 19:36, and the live QR overlay was switched to
+  `follow_event_url` (now `http://kjbox.cc/2121`).
 
 ## 2026-09-25 - Feature: Singer "make it" — karaoke-gen job submission inside the singer UI (v0.117.0)
 

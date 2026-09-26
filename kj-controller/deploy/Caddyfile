@@ -7,6 +7,8 @@
 #
 # Install target: /etc/caddy/Caddyfile  (symlinked from this file — see
 # deploy/install-caddy.sh). Caddy is installed via `apt install caddy`.
+# Apply changes with `sudo systemctl restart caddy` — `reload` fails because
+# `admin off` (below) disables the admin API that reload talks to.
 
 {
 	# We use mkcert-issued certs for nomadpc.local; skip Caddy's ACME.
