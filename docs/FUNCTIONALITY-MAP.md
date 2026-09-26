@@ -720,7 +720,7 @@ These are the `.header-actions` clusters that belong to this section. The rotati
 | Overlays header: Hide, Wallpaper, Backup, Restore, Scan to Sing, + Add (index.html:151-158) | see 3B.7 | | | | |
 | Song Stats header: click the header (or press Enter/Space on it) to collapse or expand; **Refresh** button (index.html:533-539) | `toggleSongStats` 4372, `refreshSongStats` 4337 | see 3B.12 | | localStorage `kjbox.songStatsCollapsed` | |
 | Screen Preview header: Hide / 200px / 400px / Fit / Max (index.html:357-362) | `hideVncPreview`, `setVncSize` | none (noVNC talks to websockify directly, not Flask) | | localStorage `kj-vnc-size` / `kj-vnc-hidden` | |
-| KN header: **Prefs**; Divebar header: **Status**; Upload/Download header: **Settings** (YouTube) | `toggleKNPrefs` 3854, `openDbStatusModal`, `openYtModal` 2172 | see 3B.8 | | | |
+| KN header: **Sort:** select (`setKNSort` → `sortKNGroups`, client-side re-sort of the last result set, persisted `localStorage['kj-kn-sort']`) + **Prefs**; Divebar header: **Status**; Upload/Download header: **Settings** (YouTube) | `toggleKNPrefs` 3854, `openDbStatusModal`, `openYtModal` 2172 | see 3B.8 | | | |
 
 ---
 
