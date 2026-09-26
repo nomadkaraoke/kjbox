@@ -57,8 +57,8 @@ class TestMultiSingerPillCreation:
         page.locator('#rotation-singer').press('Enter')
         page.locator('#rotation-song').fill('Duet Test Song')
         page.locator('#rotation-add-btn-submit').click()
-        # Wait for entry to appear
-        page.locator('.rotation-entry').first.wait_for(state='visible')
+        # Wait for THIS entry (earlier tests' rows are already visible)
+        page.locator('.rotation-singer-pill', has_text='DuetBeta').first.wait_for(state='visible')
         # Multi-singer entry should show individual singer pills
         singer_pills = page.locator('.rotation-singer-pill')
         assert singer_pills.count() >= 2
@@ -394,3 +394,85 @@ class TestChangeReorderPanel:
         page.locator('.pending-req-row.pr-reorder').first.wait_for(state='visible')
         assert page.locator('.pending-req-row.pr-reorder').count() >= 1
         assert page.locator('.pending-req-row.pr-change').count() >= 1
+
+
+class TestExistingSingerSuggest:
+    """The singer field suggests tonight's singers so a KJ-added song carries
+    the exact name the singer's phone knows (that's what puts it in their
+    My songs)."""
+
+    SINGERS = [
+        {"name": "Ashlee A", "on_phone": True},
+        {"name": "Ashley Z", "on_phone": False},
+        {"name": "Bobby K", "on_phone": False},
+    ]
+
+    @pytest.fixture
+    def page_with_singers(self, rotation_page):
+        import json
+        rotation_page.route("**/rotation/singers/known", lambda r: r.fulfill(
+            status=200, content_type="application/json",
+            body=json.dumps({"singers": self.SINGERS})))
+        return rotation_page
+
+    def _pills(self, page):
+        return [t.replace("×", "").strip()
+                for t in page.locator('#singer-input-container .singer-pill').all_text_contents()]
+
+    def test_prefix_lists_matches_with_phone_marker(self, page_with_singers):
+        page = page_with_singers
+        page.locator('#rotation-singer').fill('ash')
+        items = page.locator('.singer-suggest-item')
+        items.first.wait_for(state='visible')
+        assert items.count() == 2
+        assert '📱' in items.nth(0).text_content()   # Ashlee A has the app
+        # "ash" is not a sure match → nothing pre-highlighted.
+        assert page.locator('.singer-suggest-item.active').count() == 0
+
+    def test_arrow_then_tab_picks_exact_spelling(self, page_with_singers):
+        page = page_with_singers
+        inp = page.locator('#rotation-singer')
+        inp.fill('ash')
+        page.locator('.singer-suggest-item').first.wait_for(state='visible')
+        inp.press('ArrowDown')
+        inp.press('Tab')
+        assert self._pills(page) == ['Ashlee A']
+        assert inp.input_value() == ''
+
+    def test_first_name_auto_highlights_and_enter_moves_to_song(self, page_with_singers):
+        page = page_with_singers
+        inp = page.locator('#rotation-singer')
+        inp.fill('ashlee')
+        page.locator('.singer-suggest-item.active').wait_for(state='visible')
+        inp.press('Enter')
+        assert self._pills(page) == ['Ashlee A']
+        assert page.evaluate("document.activeElement.id") == 'rotation-song'
+
+    def test_new_name_is_not_hijacked(self, page_with_singers):
+        page = page_with_singers
+        inp = page.locator('#rotation-singer')
+        inp.fill('Bob')
+        page.locator('.singer-suggest-item').first.wait_for(state='visible')
+        inp.press('Tab')
+        assert self._pills(page) == ['Bob']
+
+    def test_escape_dismisses_then_tab_keeps_typed(self, page_with_singers):
+        page = page_with_singers
+        inp = page.locator('#rotation-singer')
+        inp.fill('ashlee')
+        page.locator('.singer-suggest-item.active').wait_for(state='visible')
+        inp.press('Escape')
+        assert page.locator('.singer-suggest-item').count() == 0
+        inp.press('Tab')
+        assert self._pills(page) == ['ashlee']
+
+    def test_click_picks_and_excludes_already_added(self, page_with_singers):
+        page = page_with_singers
+        inp = page.locator('#rotation-singer')
+        inp.fill('ash')
+        page.locator('.singer-suggest-item', has_text='Ashley Z').click()
+        assert self._pills(page) == ['Ashley Z']
+        inp.fill('ash')
+        page.locator('.singer-suggest-item').first.wait_for(state='visible')
+        texts = page.locator('.singer-suggest-item').all_text_contents()
+        assert len(texts) == 1 and 'Ashlee A' in texts[0]

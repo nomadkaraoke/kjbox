@@ -2,6 +2,7 @@
 
 import json
 import re
+from urllib.parse import unquote
 
 from playwright.sync_api import expect
 
@@ -337,10 +338,15 @@ class TestSelfServiceCancel:
         _login(page, live_server, live_token)
         page.evaluate("(s) => localStorage.setItem('sing_my_request_ids', JSON.stringify(s))",
                       {"token": live_token, "ids": ids, "tokens": tokens or {}})
-        page.route("**/sing/my-requests*", lambda route: route.fulfill(
-            status=200, content_type="application/json", body=json.dumps({
+        def handle(route):
+            # Like the server: only the ids the phone still asks about come
+            # back (it polls by name even with none left).
+            m = re.search(r"[?&]ids=([^&]*)", route.request.url)
+            asked = {int(x) for x in unquote(m.group(1) if m else "").split(",") if x}
+            route.fulfill(status=200, content_type="application/json", body=json.dumps({
                 "now_playing": {"now_singing": None, "up_next": None, "queued_count": 0},
-                "requests": items})))
+                "requests": [it for it in items if it["request"]["id"] in asked]}))
+        page.route("**/sing/my-requests*", handle)
         page.evaluate("window.__sing_state.step = 'done'; window.__sing_render();")
 
     @staticmethod
@@ -501,6 +507,68 @@ class TestChangeReorderControls:
         page.locator('[data-testid="reorder-exit"]').click()
         expect(page.locator(".song-card-title").first).to_be_visible()
         expect(page.locator(".reorder-row")).to_have_count(0)
+
+
+class TestIdentityMatchedSongsUI:
+    """KJ-added / partner-requested songs (matched by name, `entry_id` set)
+    render in My songs and can be reordered alongside the phone's own songs."""
+
+    OWN = {"request": {"id": 11, "singer_name": "Alice", "song_artist": "Q", "song_title": "Own",
+           "source_type": "local", "status": "approved", "created_at": "now",
+           "linked_entry_id": 101, "additional_singers": None},
+           "estimate": {"position": 3}}
+    HOST = {"request": {"id": None, "singer_name": "Alice", "song_artist": "",
+            "song_title": "Host Added - X", "source_type": "rotation", "status": "approved",
+            "created_at": "now", "linked_entry_id": 202, "additional_singers": None},
+            "entry_id": 202, "added_by_host": True, "added_by": None,
+            "estimate": {"position": 5}}
+
+    def _seed(self, page, live_server, live_token, seen_urls):
+        _login(page, live_server, live_token)
+        page.evaluate("(s) => localStorage.setItem('sing_my_request_ids', JSON.stringify(s))",
+                      {"token": live_token, "ids": [11], "tokens": {"11": "tok11"}})
+
+        def handle(route):
+            seen_urls.append(route.request.url)
+            route.fulfill(status=200, content_type="application/json", body=json.dumps({
+                "now_playing": {"now_singing": None, "up_next": None, "queued_count": 0},
+                "requests": [self.OWN, self.HOST]}))
+        page.route("**/sing/my-requests*", handle)
+        page.evaluate("window.__sing_state.step = 'done'; window.__sing_render();")
+
+    def test_host_added_song_shows_with_label_and_no_edit_buttons(self, page, live_server, live_token):
+        urls = []
+        self._seed(page, live_server, live_token, urls)
+        expect(page.locator(".song-card-title")).to_have_count(2)
+        expect(page.locator('[data-testid="added-by-line"]')).to_have_text("Added by the host")
+        # Only the phone's own song can be cancelled/changed.
+        expect(page.locator('[data-testid="cancel-song"]')).to_have_count(1)
+        # Identity is the device, never a claimed name.
+        assert any("device_id=" in u for u in urls)
+        assert not any("name=" in u for u in urls)
+
+    def test_reorder_with_up_button_sends_entry_id_and_name(self, page, live_server, live_token):
+        self._seed(page, live_server, live_token, [])
+        page.route("**/sing/requests/reorder*", lambda route: route.fulfill(
+            status=200, content_type="application/json",
+            body=json.dumps({"success": True, "auto_approved": True,
+                             "request": {"id": 99, "status": "approved", "source_type": "reorder"}})))
+        page.locator('[data-testid="reorder-songs"]').click()
+        expect(page.locator('[data-testid="reorder-instructions"]')).to_contain_text("press and hold")
+        rows = page.locator(".reorder-row")
+        expect(rows).to_have_count(2)
+        # First row can't go up; last can't go down.
+        expect(rows.nth(0).locator('[data-testid="reorder-up"]')).to_be_disabled()
+        expect(rows.nth(1).locator('[data-testid="reorder-down"]')).to_be_disabled()
+        rows.nth(1).locator('[data-testid="reorder-up"]').click()
+        expect(page.locator(".reorder-row").nth(0)).to_contain_text("Host Added")
+        expect(page.locator(".reorder-row").nth(0).locator(".reorder-num")).to_have_text("1.")
+        with page.expect_request("**/sing/requests/reorder*") as req_info:
+            page.locator('[data-testid="reorder-save"]').click()
+        body = json.loads(req_info.value.post_data or "{}")
+        assert body["items"] == [{"entry_id": 202}, {"id": 11, "edit_token": "tok11"}]
+        assert body["device_id"] and "name" not in body
+        expect(page.locator(".reorder-notice")).to_contain_text("New order saved")
 
 
 class TestDoneScreenOrderingAndSung:

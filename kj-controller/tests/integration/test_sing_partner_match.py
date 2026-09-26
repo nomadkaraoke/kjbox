@@ -149,3 +149,22 @@ class TestSubmitCanonicalizesPartners:
         stored = sing_app.sing_store.get_request(resp.get_json()["request"]["id"])
         assert stored["additional_singers"][0] == {
             "name": "Sarah B.", "phone": "+1 555 1234"}
+
+
+class TestKjKnownSingers:
+    """GET /rotation/singers/known — the KJ add/edit singer picker's list."""
+
+    def test_lists_singers_with_phone_flag(self, client, sing_app, token):
+        sing_app.sing_store.set_auto_approve(True)
+        client.post(f"/sing/submit?t={token}", json={
+            "singer_name": "Ashlee A", "phone": "", "song_artist": "Q", "song_title": "S",
+            "source_type": "local", "source_ref": "/s.mp4", "device_id": "dev1"})
+        sing_app.rotation.add_entry("Walk In", "Song - X")
+        done = sing_app.rotation.add_entry("Already Sang", "Song - Y")
+        sing_app.rotation.update_status(done["id"], "Done")
+        singers = {s["name"]: s["on_phone"]
+                   for s in client.get("/rotation/singers/known").get_json()["singers"]}
+        assert singers["Ashlee A"] is True
+        assert singers["Walk In"] is False
+        # A singer who has already sung is still tonight's singer.
+        assert "Already Sang" in singers

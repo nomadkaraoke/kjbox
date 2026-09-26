@@ -3765,6 +3765,34 @@ def add_rotation_entry():
         return jsonify({"error": str(e)}), 500
 
 
+@routes_bp.route('/rotation/singers/known', methods=['GET'])
+def known_rotation_singers():
+    """Tonight's singers for the KJ add/edit singer picker.
+
+    Picking a listed singer (rather than retyping the name) keeps the exact
+    spelling, which is what links a KJ-added song to the singer's phone — My
+    songs matches entries to a phone by the names it has submitted under.
+    ``on_phone`` marks singers with such a phone (they can self-serve).
+    """
+    from sing import _fold_name, _known_singer_names
+
+    app = current_app._get_current_object()
+    names = _known_singer_names(app)
+    on_phone = set()
+    store = getattr(app, 'sing_store', None)
+    if store is not None:
+        try:
+            on_phone = {
+                _fold_name(n) for n in
+                store.singer_names_with_devices(store.get_night_started_at())
+            }
+        except Exception:
+            current_app.logger.exception("known singers: device lookup failed")
+    return jsonify({"singers": [
+        {"name": n, "on_phone": _fold_name(n) in on_phone} for n in names
+    ]})
+
+
 @routes_bp.route('/rotation/move', methods=['POST'])
 def move_rotation_entry():
     """Move a rotation entry to a new position."""

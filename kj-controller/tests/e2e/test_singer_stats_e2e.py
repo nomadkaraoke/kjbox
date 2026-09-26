@@ -223,3 +223,34 @@ class TestMergeModalE2E:
         page.locator('.singer-stats-name', has_text='MergeB').first.wait_for(
             state='detached', timeout=10000)
         assert page.locator('.singer-stats-name', has_text='MergeA').count() > 0
+
+    def test_merge_modal_ranks_likely_match_first_and_enter_picks_it(self, app_page):
+        page = app_page
+        page.locator('.rotation-add-btn').click()
+        page.locator('#singer-input-container').wait_for(state='visible')
+        # "Aaron Q" sorts first alphabetically; "Zelda R" must still come first
+        # for "Zelda" because it's the likely duplicate.
+        for singer, song in (('Zelda', 'Song Z'), ('Aaron Q', 'Song Q'), ('Zelda R', 'Song R')):
+            page.locator('#rotation-singer').fill(singer)
+            page.locator('#rotation-singer').press('Escape')   # no suggestion hijack
+            page.locator('#rotation-singer').press('Enter')
+            page.locator('#rotation-song').fill(song)
+            page.locator('#rotation-add-btn-submit').click()
+            page.locator('.rotation-entry', has_text=song).last.wait_for(state='visible')
+
+        row = page.locator('.singer-stats-row').filter(
+            has=page.locator('.singer-stats-name', has_text='Zelda')).filter(
+            has_not_text='Zelda R').first
+        row.wait_for(state='visible', timeout=15000)
+        row.locator('.singer-stats-btn', has_text='Merge').click()
+        page.locator('.merge-modal').wait_for(state='visible', timeout=5000)
+
+        first = page.locator('.merge-option').first
+        assert 'Zelda R' in first.locator('.merge-option-name').inner_text()
+        assert first.locator('.merge-badge-likely').count() == 1
+        assert page.locator('.merge-option', has_text='Aaron Q').locator(
+            '.merge-badge-likely').count() == 0
+
+        page.locator('.merge-search').press('Enter')
+        page.locator('.merge-confirm').wait_for(state='visible', timeout=5000)
+        assert 'Zelda R' in page.locator('.merge-modal').inner_text()

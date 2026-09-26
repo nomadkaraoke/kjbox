@@ -837,6 +837,33 @@ class SingStore:
         ).fetchall()
         return [self._row_to_dict(r) for r in rows]
 
+    def device_singer_names(self, device_id, since):
+        """Distinct singer names this device has submitted under since ``since``
+        (the night marker) — the server's own record of who the phone is."""
+        if not device_id or not since:
+            return []
+        conn = self._get_conn()
+        rows = conn.execute(
+            "SELECT DISTINCT singer_name FROM sing_requests "
+            "WHERE device_id = ? AND created_at >= ? AND singer_name != ''",
+            (device_id, since),
+        ).fetchall()
+        return [r[0] for r in rows]
+
+    def singer_names_with_devices(self, since):
+        """Singer names tonight that at least one phone has submitted as — the
+        singers who can self-serve from My songs."""
+        if not since:
+            return []
+        conn = self._get_conn()
+        rows = conn.execute(
+            "SELECT DISTINCT singer_name FROM sing_requests "
+            "WHERE device_id IS NOT NULL AND device_id != '' "
+            "AND created_at >= ? AND singer_name != ''",
+            (since,),
+        ).fetchall()
+        return [r[0] for r in rows]
+
     def get_requests_for_entries(self, entry_ids, night_started=None):
         """Return linked sing_requests for the given rotation-entry ids.
 

@@ -1708,6 +1708,10 @@ body {
 .merge-badge-duet { background: #3a2f14; color: #f5c869; }
 .merge-badge-kj { background: #2a2a2a; color: #999; }
 .merge-badge-status { background: #2a2540; color: #b3a8e0; }
+.merge-badge-likely { background: #4a3f12; color: #ffdf6b; }
+.merge-option-likely { border-color: #7d6a2e; }
+/* What Enter in the search box picks */
+.merge-option-top { box-shadow: 0 0 0 1px #ffdf6b inset; }
 .merge-hint, .merge-empty {
     padding: 0.6rem 1rem 1rem;
     font-size: 0.78em;
@@ -3522,6 +3526,40 @@ body {
 }
 .singer-input-container:focus-within {
     border-color: #ffdf6b;
+}
+/* Existing-singer suggestions under the singer field (attachSingerSuggest) */
+.singer-input-container { position: relative; }
+.singer-suggest {
+    position: absolute;
+    top: calc(100% + 2px);
+    left: 0;
+    right: 0;
+    z-index: 50;
+    background: #1e1e1e;
+    border: 1px solid #555;
+    border-radius: 6px;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5);
+    overflow: hidden;
+    cursor: default;
+}
+.singer-suggest.hidden { display: none; }
+.singer-suggest-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 5px 10px;
+    color: #eee;
+    font-size: 14px;
+    cursor: pointer;
+}
+.singer-suggest-item:hover { background: #2e2e2e; }
+.singer-suggest-item.active { background: #4a3f12; color: #ffdf6b; }
+.singer-suggest-phone { font-size: 12px; margin-left: 8px; }
+.singer-suggest-hint {
+    padding: 3px 10px 5px;
+    font-size: 11px;
+    color: #888;
+    border-top: 1px solid #333;
 }
 .singer-input-container input {
     background: none;

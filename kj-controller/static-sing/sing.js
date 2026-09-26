@@ -2626,13 +2626,23 @@ function renderConfirm() {
   );
 }
 
+// The device_id rides along so the server can also return queued songs the
+// singer is on but never submitted from this phone (typed in by the KJ, or
+// requested by a duet partner) — those come back with `entry_id` set. The
+// server works out who this device is from its own records, not a name we send.
+function _myName() {
+  return (state.name || LS.get("sing_name") || "").trim();
+}
+
 async function fetchMyRequests(ids) {
-  if (!ids || !ids.length) {
+  const name = _myName();
+  if ((!ids || !ids.length) && !name) {
     return { now_playing: { now_singing: null, up_next: null, queued_count: 0 }, requests: [] };
   }
-  const q = ids.join(",");
+  const q = (ids || []).join(",");
   const resp = await fetch(
-    `${BASE}/my-requests?ids=${encodeURIComponent(q)}&t=${encodeURIComponent(TOKEN)}`,
+    `${BASE}/my-requests?ids=${encodeURIComponent(q)}&t=${encodeURIComponent(TOKEN)}`
+      + `&device_id=${encodeURIComponent(DEVICE_ID)}`,
     { credentials: "same-origin" },
   );
   if (!resp.ok) {
@@ -2696,6 +2706,11 @@ function _renderSongCard(item, ctx = {}) {
   if (partners.length > 0) {
     const names = partners.map((p) => p.name).join(", ");
     main.appendChild(el("div", { class: "song-card-partners" }, t("mySongs.with", { names })));
+  }
+  if (item.entry_id && (item.added_by_host || item.added_by)) {
+    main.appendChild(el("div", { class: "song-card-partners", "data-testid": "added-by-line" },
+      item.added_by_host ? t("mySongs.addedByHost")
+        : t("mySongs.addedByPartner", { name: item.added_by })));
   }
   const card = el("div", {
     class: item.performed ? "song-card song-card-done" : "song-card",
@@ -2794,23 +2809,34 @@ function _renderSongCard(item, ctx = {}) {
   return finish();
 }
 
-// The device's reorderable songs (approved + owned edit_token + a real queue
-// position), in current sing order. Shared by the "Reorder songs" toggle and
-// the drag view.
+// The device's reorderable songs, in current sing order: approved requests it
+// owns (edit_token) plus queued songs it's named on but didn't submit
+// (`entry_id` — KJ-added or partner-requested). Each needs a real queue
+// position. `payloads` maps a row key to what /requests/reorder expects.
+// Shared by the "Reorder songs" toggle and the drag view.
 function _reorderableSongs() {
   const { active } = _splitAndSortSongs(state.mySongs.items);
   const rows = [];
-  const tokens = {};
+  const payloads = {};
   for (const item of active) {
+    if (!item.estimate || typeof item.estimate.position !== "number") continue;
     const r = item.request;
+    if (item.entry_id) {
+      payloads[`e${item.entry_id}`] = { entry_id: item.entry_id };
+      rows.push(item);
+      continue;
+    }
     const tok = readEditToken(TOKEN, r.id);
-    if (r.status === "approved" && tok
-        && item.estimate && typeof item.estimate.position === "number") {
-      tokens[r.id] = tok;
+    if (r.status === "approved" && tok) {
+      payloads[`r${r.id}`] = { id: r.id, edit_token: tok };
       rows.push(item);
     }
   }
-  return { rows, tokens };
+  return { rows, payloads };
+}
+
+function _reorderKey(item) {
+  return item.entry_id ? `e${item.entry_id}` : `r${item.request.id}`;
 }
 
 // Pointer-based drag sorting — HTML5 DnD is unusable on mobile. Dragging is
@@ -2838,7 +2864,11 @@ function _enableReorderDrag(list) {
     else list.appendChild(dragRow);
   });
   const drop = () => {
-    if (dragRow) { dragRow.classList.remove("dragging"); dragRow = null; }
+    if (dragRow) {
+      dragRow.classList.remove("dragging");
+      dragRow = null;
+      _syncReorderNumbers(list);
+    }
   };
   list.addEventListener("pointerup", drop);
   list.addEventListener("pointercancel", drop);
@@ -2856,30 +2886,61 @@ function flashMySongsNotice(text) {
   _reorderNoticeUntil = Date.now() + REORDER_NOTICE_MS;
 }
 
+// ▲/▼ buttons — the tap-only alternative to dragging for singers who don't
+// discover press-and-drag.
+function _moveReorderRow(row, dir) {
+  const list = row.parentNode;
+  if (dir < 0 && row.previousElementSibling) list.insertBefore(row, row.previousElementSibling);
+  if (dir > 0 && row.nextElementSibling) list.insertBefore(row.nextElementSibling, row);
+  _syncReorderNumbers(list);
+}
+
+function _syncReorderNumbers(list) {
+  const rows = [...list.querySelectorAll(".reorder-row")];
+  rows.forEach((row, i) => {
+    row.querySelector(".reorder-num").textContent = `${i + 1}.`;
+    row.querySelector(".reorder-up").disabled = i === 0;
+    row.querySelector(".reorder-down").disabled = i === rows.length - 1;
+  });
+}
+
 function renderReorderView() {
-  const { rows, tokens } = _reorderableSongs();
+  const { rows, payloads } = _reorderableSongs();
   const list = el("div", { class: "reorder-list", "data-testid": "reorder-list" });
   for (const item of rows) {
     const r = item.request;
-    list.appendChild(el("div", { class: "reorder-row", "data-id": String(r.id) },
+    const row = el("div", { class: "reorder-row", "data-key": _reorderKey(item) },
       el("span", { class: "reorder-handle", "aria-label": t("mySongs.reorderHandle") }, "⠿"),
+      el("span", { class: "reorder-num" }, ""),
       el("span", { class: "reorder-song" }, _songLabel(r)),
-    ));
+    );
+    row.appendChild(el("button", {
+      class: "reorder-move reorder-up", "data-testid": "reorder-up",
+      "aria-label": t("mySongs.reorderUp"),
+      onclick: () => _moveReorderRow(row, -1),
+    }, "▲"));
+    row.appendChild(el("button", {
+      class: "reorder-move reorder-down", "data-testid": "reorder-down",
+      "aria-label": t("mySongs.reorderDown"),
+      onclick: () => _moveReorderRow(row, 1),
+    }, "▼"));
+    list.appendChild(row);
   }
+  _syncReorderNumbers(list);
   _enableReorderDrag(list);
   const err = el("p", { class: "error" }, "");
   const saveBtn = el("button", {
     class: "btn primary", "data-testid": "reorder-save",
   }, t("mySongs.reorderSave"));
   saveBtn.onclick = async () => {
-    const order = [...list.querySelectorAll(".reorder-row")]
-      .map((r) => parseInt(r.dataset.id, 10));
+    const order = [...list.querySelectorAll(".reorder-row")].map((r) => r.dataset.key);
     saveBtn.disabled = true;
     saveBtn.textContent = t("common.saving");
     try {
-      await reorderSongs(order.map((id) => ({ id, edit_token: tokens[id] })));
+      const resp = await reorderSongs(order.map((key) => payloads[key]));
       state._reorderMode = false;
-      flashMySongsNotice(t("mySongs.reorderRequested"));
+      flashMySongsNotice(resp && resp.auto_approved
+        ? t("mySongs.reorderSaved") : t("mySongs.reorderRequested"));
       render();
     } catch (e) {
       saveBtn.disabled = false;
@@ -2888,7 +2949,8 @@ function renderReorderView() {
     }
   };
   return el("div", { class: "reorder-mode" },
-    el("p", { class: "hint" }, t("mySongs.reorderHint")),
+    el("p", { class: "hint reorder-instructions", "data-testid": "reorder-instructions" },
+      t("mySongs.reorderHint")),
     list,
     el("div", { class: "row" },
       el("button", { class: "btn ghost", "data-testid": "reorder-exit",
@@ -3039,7 +3101,7 @@ async function pollMyRequests(card) {
 // non-cancelled/rejected songs. Used by boot smart-restore and the bar poll.
 async function refreshMySongs() {
   const ids = readMyRequestIds(TOKEN);
-  if (!ids.length) {
+  if (!ids.length && !_myName()) {
     state.mySongs = { items: [], nowPlaying: null, loaded: true };
     updateMySongsBar();
     return { ok: true, live: 0 };

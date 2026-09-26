@@ -128,6 +128,197 @@ const rotationHistory = {
     },
 };
 
+// --- Singer picker: suggest tonight's singers while typing a name ---
+// Picking a listed singer keeps their exact spelling. That matters beyond
+// tidiness: a singer's phone finds songs the KJ typed in by matching the names
+// that phone has submitted under, so "Ashlee" vs "Ashlee A" would leave the
+// song off their My songs. 📱 marks singers who have the phone app.
+
+const knownSingers = { list: [], fetchedAt: 0, pending: null };
+const KNOWN_SINGERS_TTL_MS = 15000;
+
+function loadKnownSingers() {
+    if (Date.now() - knownSingers.fetchedAt < KNOWN_SINGERS_TTL_MS) {
+        return Promise.resolve(knownSingers.list);
+    }
+    if (!knownSingers.pending) {
+        knownSingers.pending = fetch('/rotation/singers/known')
+            .then(r => (r.ok ? r.json() : { singers: knownSingers.list }))
+            .then(d => {
+                knownSingers.list = d.singers || [];
+                knownSingers.fetchedAt = Date.now();
+                return knownSingers.list;
+            })
+            .catch(() => knownSingers.list)
+            .finally(() => { knownSingers.pending = null; });
+    }
+    return knownSingers.pending;
+}
+
+// Same folding as the server's sing._fold_name: case/accent-insensitive,
+// punctuation treated as spaces.
+function foldSingerName(name) {
+    return (name || '').normalize('NFKD').replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^\p{L}\p{N}\s]/gu, ' ').toLowerCase().split(/\s+/).filter(Boolean).join(' ');
+}
+
+// How likely two singer names are the same person (0 = unrelated). Used to
+// float probable duplicates to the top of the Merge modal: "Ashlee" ↔
+// "Ashlee R" (same first name), "Ash" ↔ "Ashlee R" (prefix), "Ashley" ↔
+// "Ashlee" (a typo in the first name).
+function singerNameSimilarity(a, b) {
+    const fa = foldSingerName(a);
+    const fb = foldSingerName(b);
+    if (!fa || !fb) return 0;
+    if (fa === fb) return 100;
+    const [firstA] = fa.split(' ');
+    const [firstB] = fb.split(' ');
+    if (firstA === firstB) return 80;
+    const short = fa.length <= fb.length ? fa : fb;
+    const long = short === fa ? fb : fa;
+    if (short.length >= 3 && long.startsWith(short)) return 60;
+    if (firstA.length >= 3 && firstB.length >= 3
+            && (firstA.startsWith(firstB) || firstB.startsWith(firstA))) return 50;
+    const budget = Math.max(firstA.length, firstB.length) >= 7 ? 2 : 1;
+    if (Math.min(firstA.length, firstB.length) >= 4 && firstA[0] === firstB[0]
+            && editDistance(firstA, firstB) <= budget) return 40;
+    return 0;
+}
+
+function editDistance(a, b) {
+    const prev = Array.from({ length: b.length + 1 }, (_, j) => j);
+    for (let i = 1; i <= a.length; i++) {
+        let diag = prev[0];
+        prev[0] = i;
+        for (let j = 1; j <= b.length; j++) {
+            const tmp = prev[j];
+            prev[j] = Math.min(prev[j] + 1, prev[j - 1] + 1,
+                diag + (a[i - 1] === b[j - 1] ? 0 : 1));
+            diag = tmp;
+        }
+    }
+    return prev[b.length];
+}
+
+// Rank known singers against what's typed: exact → name prefix → word prefix
+// → substring. `auto` is the index to pre-highlight, set only for a sure match
+// (the exact name, or the first name of exactly one singer — the same
+// conservative rule the phone uses for duet partners), so Tab/Enter on a
+// genuinely new name still adds it as typed.
+function rankSingerSuggestions(typed, list, exclude) {
+    const q = foldSingerName(typed);
+    if (!q) return { items: [], auto: -1 };
+    const excluded = new Set((exclude || []).map(foldSingerName));
+    const scored = [];
+    for (const s of list) {
+        const fold = foldSingerName(s.name);
+        if (!fold || excluded.has(fold)) continue;
+        let score = -1;
+        if (fold === q) score = 0;
+        else if (fold.startsWith(q)) score = 1;
+        else if (fold.split(' ').some(w => w.startsWith(q))) score = 2;
+        else if (fold.includes(q)) score = 3;
+        if (score >= 0) scored.push({ ...s, fold, score });
+    }
+    scored.sort((a, b) => a.score - b.score || a.name.localeCompare(b.name));
+    const items = scored.slice(0, 8);
+    let auto = items.findIndex(s => s.fold === q);
+    if (auto < 0 && !q.includes(' ')) {
+        const firstNameHits = scored.filter(s => s.fold.split(' ')[0] === q);
+        if (firstNameHits.length === 1) auto = items.indexOf(firstNameHits[0]);
+    }
+    return { items, auto };
+}
+
+// Attach the dropdown to a singer <input> inside a .singer-input-container.
+// Must be attached BEFORE the input's own keydown handler: when the dropdown
+// consumes a key it stops the others from seeing it. Enter picks and then
+// lets the form's own Enter handling (jump to the song field) carry on.
+function attachSingerSuggest(input, { onPick, getExcluded }) {
+    const container = input.closest('.singer-input-container') || input.parentNode;
+    const box = document.createElement('div');
+    box.className = 'singer-suggest hidden';
+    container.appendChild(box);
+    let items = [];
+    let active = -1;
+
+    const close = () => { box.classList.add('hidden'); box.innerHTML = ''; items = []; active = -1; };
+    const paint = () => {
+        box.innerHTML = '';
+        if (!items.length) { box.classList.add('hidden'); return; }
+        items.forEach((s, i) => {
+            const row = document.createElement('div');
+            row.className = 'singer-suggest-item' + (i === active ? ' active' : '');
+            row.textContent = s.name;
+            if (s.on_phone) {
+                const phone = document.createElement('span');
+                phone.className = 'singer-suggest-phone';
+                phone.textContent = '📱';
+                phone.title = 'Has the singer app — can manage their own songs';
+                row.appendChild(phone);
+            }
+            // mousedown (not click) so the input keeps focus.
+            row.addEventListener('mousedown', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                pick(i);
+            });
+            box.appendChild(row);
+        });
+        const hint = document.createElement('div');
+        hint.className = 'singer-suggest-hint';
+        hint.textContent = active >= 0
+            ? 'Tab/Enter: use highlighted · Esc: new singer as typed'
+            : '↓ to pick an existing singer · keep typing for a new one';
+        box.appendChild(hint);
+        box.classList.remove('hidden');
+    };
+    const refresh = async () => {
+        const typed = input.value;
+        const list = await loadKnownSingers();
+        if (input.value !== typed) return;   // typed on while loading
+        const ranked = rankSingerSuggestions(typed, list, getExcluded ? getExcluded() : []);
+        items = ranked.items;
+        active = ranked.auto;
+        paint();
+    };
+    const pick = (i) => {
+        const s = items[i];
+        close();
+        if (!s) return;
+        input.value = '';
+        onPick(s.name);
+        input.focus();
+    };
+
+    box.addEventListener('click', (e) => e.stopPropagation());
+    input.addEventListener('input', refresh);
+    input.addEventListener('focus', () => { if (input.value.trim()) refresh(); });
+    input.addEventListener('blur', () => setTimeout(close, 150));
+    input.addEventListener('keydown', (e) => {
+        if (box.classList.contains('hidden') || !items.length) return;
+        if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            const step = e.key === 'ArrowDown' ? 1 : -1;
+            active = (active + step + items.length + 1) % (items.length + 1);
+            if (active === items.length) active = -1;   // wrap through "none"
+            paint();
+        } else if (e.key === 'Escape') {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            close();
+        } else if (active >= 0 && (e.key === 'Tab' || e.key === ',' || e.key === '&')) {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            pick(active);
+        } else if (active >= 0 && e.key === 'Enter') {
+            pick(active);   // then the form's Enter handler moves on
+        }
+    });
+    return { close };
+}
+
 // --- Singer pill input state ---
 const singerPillInput = {
     pills: [],
@@ -4831,6 +5022,10 @@ document.addEventListener('DOMContentLoaded', () => {
     // Singer pill input keydown handlers
     const singerInput = document.getElementById('rotation-singer');
     if (singerInput) {
+        attachSingerSuggest(singerInput, {
+            onPick: (name) => singerPillInput.addPill(name),
+            getExcluded: () => singerPillInput.pills,
+        });
         singerInput.addEventListener('keydown', (e) => {
             const val = singerInput.value;
 
@@ -7166,22 +7361,31 @@ function renderMergeOptionList() {
     if (!list) return;
 
     const q = st.query.trim().toLowerCase();
+    const sim = (s) => singerNameSimilarity(st.origin, s.name);
     const others = (singerStatsData || [])
         .filter(s => s.name.toLowerCase() !== st.origin.toLowerCase())
         .filter(s => !q || s.name.toLowerCase().includes(q))
-        // Real-device sessions first (most likely merge intent), then by name.
+        // Likely duplicates of this name first ("Ashlee" → "Ashlee R"), then
+        // real-device sessions (most likely merge intent), then by name.
         .sort((a, b) => {
+            const as = sim(a), bs = sim(b);
+            if (as !== bs) return bs - as;
             const ad = (a.session && a.session.has_device) ? 0 : 1;
             const bd = (b.session && b.session.has_device) ? 0 : 1;
             if (ad !== bd) return ad - bd;
             return a.name.localeCompare(b.name);
         });
 
-    list.innerHTML = others.map(s =>
-        '<button class="merge-option" data-name="' + escAttr(s.name) + '">'
-        + '<span class="merge-option-name">' + escHtml(s.name) + '</span>'
-        + '<span class="merge-option-badges">' + singerBadgesHtml(s) + '</span>'
-        + '</button>').join('') || '<div class="merge-empty">No matching singers.</div>';
+    list.innerHTML = others.map((s, i) => {
+        const likely = sim(s) > 0;
+        return '<button class="merge-option' + (likely ? ' merge-option-likely' : '')
+            + (i === 0 ? ' merge-option-top' : '') + '" data-name="' + escAttr(s.name) + '">'
+            + '<span class="merge-option-name">' + escHtml(s.name) + '</span>'
+            + '<span class="merge-option-badges">'
+            + (likely ? '<span class="merge-badge merge-badge-likely">likely match</span> ' : '')
+            + singerBadgesHtml(s) + '</span>'
+            + '</button>';
+    }).join('') || '<div class="merge-empty">No matching singers.</div>';
 
     list.querySelectorAll('.merge-option').forEach(btn => {
         btn.onclick = () => {
@@ -7216,12 +7420,20 @@ function renderMergeModal() {
             + '<div class="merge-modal-sub">' + escHtml(origin.name) + ' ' + singerBadgesHtml(origin) + '</div>'
             + '<input class="merge-search" type="text" placeholder="Search singers…" value="' + escAttr(st.query) + '">'
             + '<div class="merge-option-list"></div>'
-            + '<div class="merge-hint">Pick the singer this person should be combined with. '
+            + '<div class="merge-hint">Pick the singer this person should be combined with '
+            +   '(likely matches are listed first — Enter picks the top one). '
             +   'You’ll confirm which name is kept next.</div>';
 
         modal.querySelector('.merge-modal-close').onclick = closeMergeModal;
         const search = modal.querySelector('.merge-search');
         search.oninput = () => { st.query = search.value; renderMergeOptionList(); };
+        // Enter picks the top option — with a likely match ranked first, that's
+        // usually the whole merge without typing anything.
+        search.onkeydown = (e) => {
+            if (e.key !== 'Enter') return;
+            const top = modal.querySelector('.merge-option');
+            if (top) { e.preventDefault(); top.click(); }
+        };
         renderMergeOptionList();
         search.focus();
         return;
@@ -7364,6 +7576,10 @@ function enterRotationEditMode(row, entry, focusTarget) {
 
     // Clear pre-populated pills, render them inside container
     renderEditPills();
+    attachSingerSuggest(singerInput, {
+        onPick: (name) => { editPills.push(name); renderEditPills(); },
+        getExcluded: () => editPills,
+    });
 
     const songInput = document.createElement('input');
     songInput.type = 'text';
