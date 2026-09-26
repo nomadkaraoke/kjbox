@@ -44,6 +44,17 @@ are easy to type.
       `wildcard_replace(http.request.uri.path, r"/*", r"https://sing.nomadkaraoke.com/?t=${1}")`
       (302).
   - The tunnel has no `l.kjbox.cc` ingress, and none should be added.
+- **Router ("Nomad KJ Box" wifi, GL.iNet 4.8.1 / OpenWrt 23.05, `192.168.8.1`, 2026-09-26):**
+  - A static DHCP lease already existed: `84:47:09:5A:1D:13` → `192.168.8.170` ("NomadPC
+    Ethernet"). dnsmasq `rebind_protection` is `0`.
+  - Added `uci add_list dhcp.@dnsmasq[0].address='/l.kjbox.cc/192.168.8.170'` and reloaded
+    dnsmasq. The router answers locally with no internet, and returns NODATA for AAAA so
+    offline phones don't wait on a dead upstream. This is not visible in the GL.iNet UI; use
+    LuCI or `uci show dhcp`. **If the box's LAN IP changes, update this, the lease and the
+    Cloudflare `l` record.**
+  - Access: `ssh -J nomadpctunnel root@192.168.8.1`. The Mac's `~/.ssh/id_ed25519` key is in
+    `/etc/dropbear/authorized_keys` (comment `claude-kjbox`). The root password is the router
+    admin password, which is not stored in the repo.
 - **Caddy:** new `http://l.kjbox.cc` site in `kj-controller/deploy/Caddyfile`, which reverse
   proxies to Flask without the https redirect. The Caddyfile is symlinked from the repo, but it
   needs `sudo systemctl reload caddy` after deploy.
