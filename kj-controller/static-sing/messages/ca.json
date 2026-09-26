@@ -310,6 +310,7 @@
     "enable": "🔔 Activa les notificacions del navegador",
     "asking": "Demanant…",
     "blocked": "Les notificacions del navegador estan bloquejades per a aquest lloc.",
+    "browserFailed": "Les notificacions del navegador no s'han pogut activar en aquest dispositiu.",
     "iosSummary": "📱 Tens un iPhone? Activa les notificacions emergents",
     "ios": "Toca el botó Compartir, després {addToHome}, i torna-ho a obrir des de la pantalla d'inici — les notificacions funcionen des d'allà.",
     "iosStrong": "Afegeix a la pantalla d'inici",

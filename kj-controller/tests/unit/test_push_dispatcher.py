@@ -129,10 +129,11 @@ class TestRenderPayload:
 # ---------------------------------------------------------------------------
 
 class TestDispatcher:
-    def _make_dispatcher(self, sub_list=None, phone_lookup=None):
+    def _make_dispatcher(self, sub_list=None, phone_lookup=None, device_lookup=None):
         store = MagicMock()
         store.list_active_push_subscriptions.return_value = sub_list or []
         store.find_subs_by_phone.side_effect = lambda token, phone: (phone_lookup or {}).get(phone, [])
+        store.find_subs_by_device.side_effect = lambda token, dev: (device_lookup or {}).get(dev, [])
         rotation = MagicMock()
         rotation.get_rotation.return_value = []
         cfg = {
@@ -144,6 +145,7 @@ class TestDispatcher:
             store=store, rotation=rotation, cfg=cfg,
             get_current_token=lambda: "tok1",
             get_linked_phone_for_entry=lambda e: e.get("singer"),
+            get_linked_device_for_entry=lambda e: e.get("device"),
         )
         # Tests call _dispatch_now directly, bypassing the debounce timer.
         return d, store, rotation
@@ -347,3 +349,58 @@ class TestDispatcher:
             d.notify_rotation_changed()
             time.sleep(0.3)  # enough for the timer to fire once
         assert mock_dispatch.call_count == 1
+
+    # --- Phone-less singers (2026-09-24: "Jasssss" got 6 × 400 and no pushes) ---
+
+    def _phoneless_sub(self, **kw):
+        return {"id": 7, "endpoint": "ep", "p256dh": "p", "auth": "a",
+                "phone": "", "device_id": "dev-jas", "last_sent_state": None, **kw}
+
+    def test_ladder_push_reaches_phoneless_sub_by_device(self):
+        d, _, _ = self._make_dispatcher(sub_list=[self._phoneless_sub()])
+        e1, e2 = _entry(1, singer=""), _entry(2, singer="")
+        e1["device"], e2["device"] = "dev-other", "dev-jas"
+        d.rotation.get_rotation.return_value = [e1, e2]
+        with patch("push_dispatcher.webpush") as wp:
+            d._dispatch_now()
+            d.executor.shutdown(wait=True)
+        assert wp.call_count == 1
+        payload = json.loads(wp.call_args.kwargs["data"])
+        assert payload["data"]["step"] == "up_next"
+
+    def test_phoneless_sub_never_matches_other_phoneless_entries(self):
+        """'' phone must not act as a wildcard across every phone-less singer."""
+        sub = self._phoneless_sub(device_id=None)
+        d, _, _ = self._make_dispatcher(sub_list=[sub])
+        d.rotation.get_rotation.return_value = [_entry(1, singer=""), _entry(2, singer="")]
+        with patch("push_dispatcher.webpush") as wp:
+            d._dispatch_now()
+            d.executor.shutdown(wait=True)
+        wp.assert_not_called()
+
+    def test_unlinked_kj_entries_never_match_a_device_sub(self):
+        d, _, _ = self._make_dispatcher(sub_list=[self._phoneless_sub()])
+        d.rotation.get_rotation.return_value = [_entry(1, singer=None), _entry(2, singer=None)]
+        with patch("push_dispatcher.webpush") as wp:
+            d._dispatch_now()
+            d.executor.shutdown(wait=True)
+        wp.assert_not_called()
+
+    def test_decision_push_reaches_phoneless_sub_by_device(self):
+        sub = self._phoneless_sub()
+        d, _, _ = self._make_dispatcher(device_lookup={"dev-jas": [sub]})
+        req = {"phone": "", "device_id": "dev-jas", "song_artist": "Queen", "song_title": "Radio"}
+        with patch("push_dispatcher.webpush") as wp:
+            d.notify_request_decision(42, "approved", req)
+            d.executor.shutdown(wait=True)
+        assert wp.call_count == 1
+
+    def test_decision_push_not_doubled_when_phone_and_device_both_match(self):
+        sub = self._phoneless_sub(phone="+1")
+        d, _, _ = self._make_dispatcher(phone_lookup={"+1": [sub]},
+                                        device_lookup={"dev-jas": [sub]})
+        req = {"phone": "+1", "device_id": "dev-jas", "song_artist": "Q", "song_title": "R"}
+        with patch("push_dispatcher.webpush") as wp:
+            d.notify_request_decision(42, "approved", req)
+            d.executor.shutdown(wait=True)
+        assert wp.call_count == 1

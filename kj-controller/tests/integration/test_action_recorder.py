@@ -119,3 +119,25 @@ def test_recorder_write_failure_never_breaks_request(rec_app, monkeypatch):
 ])
 def test_night_date_rolls_at_noon(when, expected):
     assert night_date(when) == expected
+
+
+def test_scanner_probe_on_unknown_path_is_not_labelled_kj(rec_app):
+    """2026-09-24: ~300 internet scanner probes (`/sing/.env`, `/sing/wp-login.php`)
+    404'd and were logged as `actor: kj`, polluting KJ fixtures."""
+    with rec_app.test_client() as c:
+        for path in ('/sing/.env', '/sing/wp-login.php', '/sing/.git/config'):
+            assert c.get(path).status_code == 404
+    recs = [r for r in _records(rec_app) if r['status'] == 404]
+    assert len(recs) == 3
+    assert {r['actor'] for r in recs} == {'anonymous'}
+
+
+def test_scanner_probe_on_public_host_root_is_anonymous(rec_app):
+    """On sing.<domain> the rewriter mounts the blueprint at `/`, so a probe
+    for `/.env` arrives as `/sing/.env` — still anonymous, never kj."""
+    rec_app.kj_config['sing_public_host'] = 'sing.example.com'
+    with rec_app.test_client() as c:
+        c.get('/.env', headers={'Host': 'sing.example.com'})
+    (rec,) = [r for r in _records(rec_app) if r['path'].endswith('/.env')]
+    assert rec['status'] == 404
+    assert rec['actor'] == 'anonymous'

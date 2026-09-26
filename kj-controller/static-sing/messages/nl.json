@@ -310,6 +310,7 @@
     "enable": "🔔 Zet browsermeldingen aan",
     "asking": "Vragen…",
     "blocked": "Browsermeldingen zijn geblokkeerd voor deze site.",
+    "browserFailed": "Browsermeldingen konden niet worden ingeschakeld op dit apparaat.",
     "iosSummary": "📱 iPhone? Zet pop-upmeldingen aan",
     "ios": "Tik op de deelknop, dan op {addToHome}, en open het opnieuw vanaf je beginscherm — vanaf daar werken de meldingen.",
     "iosStrong": "Zet op beginscherm",

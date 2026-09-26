@@ -310,6 +310,7 @@
     "enable": "🔔 Activează notificările în browser",
     "asking": "Se cere…",
     "blocked": "Notificările browserului sunt blocate pentru acest site.",
+    "browserFailed": "Notificările din browser nu au putut fi activate pe acest dispozitiv.",
     "iosSummary": "📱 iPhone? Activează notificările pop-up",
     "ios": "Apasă butonul Distribuie, apoi {addToHome}, după care redeschide de pe ecranul principal — de acolo vor funcționa notificările.",
     "iosStrong": "Adaugă pe ecranul de pornire",

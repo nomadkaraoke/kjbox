@@ -310,6 +310,7 @@
     "enable": "🔔 Slå på webbläsarnotiser",
     "asking": "Frågar…",
     "blocked": "Webbläsarnotiser är blockerade för den här sidan.",
+    "browserFailed": "Webbläsarnotiser kunde inte aktiveras på den här enheten.",
     "iosSummary": "📱 iPhone? Aktivera pop-up-notiser",
     "ios": "Tryck på Dela-knappen, sedan {addToHome}, och öppna sedan sidan igen från hemskärmen — notiser fungerar därifrån.",
     "iosStrong": "Lägg till på hemskärmen",

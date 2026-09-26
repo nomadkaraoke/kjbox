@@ -1150,6 +1150,7 @@ def push_subscribe():
     token = _extract_token()
     data = request.get_json(force=True, silent=True) or {}
     phone = (data.get("phone") or "").strip()
+    device_id = str(data.get("device_id") or "").strip()[:64]
     singer_name = (data.get("singer_name") or "").strip()
     sub = data.get("subscription") or {}
     endpoint = (sub.get("endpoint") or "").strip()
@@ -1157,16 +1158,19 @@ def push_subscribe():
     p256dh = (keys.get("p256dh") or "").strip()
     auth_key = (keys.get("auth") or "").strip()
 
-    if not (phone and singer_name and endpoint and p256dh and auth_key):
+    # Phone is optional at signup, so a sub is keyed by phone OR device_id
+    # (the device that made the singer's requests). 2026-09-24: a phone-less
+    # singer got 6 × 400 here and silently never received a push.
+    if not ((phone or device_id) and singer_name and endpoint and p256dh and auth_key):
         return jsonify({"error": "missing fields"}), 400
-    if not _PHONE_RE.match(phone):
+    if phone and not _PHONE_RE.match(phone):
         return jsonify({"error": "phone format invalid"}), 400
 
     user_agent = request.headers.get("User-Agent", "")[:500]
     store.insert_push_subscription(
         token=token, phone=phone, singer_name=singer_name,
         endpoint=endpoint, p256dh=p256dh, auth=auth_key,
-        user_agent=user_agent,
+        user_agent=user_agent, device_id=device_id or None,
     )
     return ("", 204)
 

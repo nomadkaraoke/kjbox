@@ -124,6 +124,24 @@ def _response_body(resp):
         return {'__unparsed_json__': True}
 
 
+def _actor(endpoint, path):
+    """Who made the request: ``singer`` (sing blueprint), ``kj`` (KJ routes),
+    or ``anonymous`` for an unmatched path under ``/sing``.
+
+    Every public-host request is rewritten under ``/sing`` (see
+    ``sing.install_public_host_rewriter``), so an unmatched ``/sing/...`` path is
+    almost always an internet scanner probe (``/sing/.env``,
+    ``/sing/wp-login.php``). Those are kept for security visibility but must not
+    be mistaken for KJ traffic when building fixtures. Unmatched paths on the
+    KJ host (e.g. a 405 from the KJ UI) stay ``kj``.
+    """
+    if endpoint:
+        return 'singer' if endpoint.startswith('sing.') else 'kj'
+    if path == '/sing' or path.startswith('/sing/'):
+        return 'anonymous'
+    return 'kj'
+
+
 def install_action_recorder(flask_app, log_dir):
     """Attach before/after/teardown hooks that append to ``<log_dir>/<night>.jsonl``."""
     recorder = ActionRecorder(log_dir)
@@ -145,7 +163,7 @@ def install_action_recorder(flask_app, log_dir):
                    if request.headers.get(h)}
         return {
             'ts': g._action_rec_ts,
-            'actor': 'singer' if (request.endpoint or '').startswith('sing.') else 'kj',
+            'actor': _actor(request.endpoint, request.path),
             'method': request.method,
             'host': request.host,
             'path': request.path,

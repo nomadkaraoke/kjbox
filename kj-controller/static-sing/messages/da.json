@@ -310,6 +310,7 @@
     "enable": "🔔 Slå browsernotifikationer til",
     "asking": "Spørger…",
     "blocked": "Browsernotifikationer er blokeret for dette websted.",
+    "browserFailed": "Browsernotifikationer kunne ikke slås til på denne enhed.",
     "iosSummary": "📱 iPhone? Aktiver pop-up notifikationer",
     "ios": "Tryk på deleknappen, derefter {addToHome}, og åbn den igen fra din startskærm — så virker notifikationerne derfra.",
     "iosStrong": "Føj til hjemmeskærm",

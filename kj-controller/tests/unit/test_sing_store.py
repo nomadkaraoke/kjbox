@@ -81,6 +81,37 @@ class TestSchemaInit:
         # Second open re-runs init_schema; must not raise.
         SingStore(db_path).close()
 
+    def test_push_device_id_migrates_a_pre_upgrade_db(self, tmp_path):
+        """The live NomadPC DB predates sing_push_subscriptions.device_id —
+        opening it must add the column and keep existing phone subs intact."""
+        import sqlite3
+        db_path = str(tmp_path / "rotation.db")
+        conn = sqlite3.connect(db_path)
+        conn.execute(
+            "CREATE TABLE sing_push_subscriptions ("
+            " id INTEGER PRIMARY KEY AUTOINCREMENT,"
+            " created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),"
+            " updated_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),"
+            " token TEXT NOT NULL, phone TEXT NOT NULL, singer_name TEXT NOT NULL,"
+            " endpoint TEXT NOT NULL, p256dh TEXT NOT NULL, auth TEXT NOT NULL,"
+            " user_agent TEXT, last_sent_state TEXT, last_seen_at TEXT, disabled_at TEXT,"
+            " UNIQUE(token, endpoint))"
+        )
+        conn.execute(
+            "INSERT INTO sing_push_subscriptions (token, phone, singer_name, endpoint, p256dh, auth)"
+            " VALUES ('t', '+61400000001', 'Old', 'ep-old', 'p', 'a')"
+        )
+        conn.commit()
+        conn.close()
+        s = SingStore(db_path)
+        try:
+            (old,) = s.find_subs_by_phone("t", "+61400000001")
+            assert old["device_id"] is None
+            s.insert_push_subscription("t", "", "New", "ep-new", "p", "a", device_id="dev-new")
+            assert s.find_subs_by_device("t", "dev-new")[0]["singer_name"] == "New"
+        finally:
+            s.close()
+
     def test_shares_rotation_meta_with_rotation_store(self, tmp_path):
         """SingStore and RotationStore both use rotation_meta in the same DB."""
         from rotation_store import RotationStore

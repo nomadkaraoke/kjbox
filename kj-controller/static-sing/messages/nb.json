@@ -310,6 +310,7 @@
     "enable": "🔔 Slå på nettleservarsler",
     "asking": "Spør…",
     "blocked": "Nettleservarsler er blokkert for dette nettstedet.",
+    "browserFailed": "Nettleservarsler kunne ikke aktiveres på denne enheten.",
     "iosSummary": "📱 iPhone? Aktiver pop-up-varsler",
     "ios": "Trykk på deleknappen, deretter {addToHome}, og åpne på nytt fra hjemskjermen — da fungerer varslene.",
     "iosStrong": "Legg til på hjemskjerm",

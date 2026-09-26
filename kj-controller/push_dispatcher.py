@@ -55,10 +55,26 @@ def decide_ladder_step(target_entry, all_entries):
 
 def next_entry_for_phone(entries, phone, get_linked_phone):
     """First non-done/left entry whose linked phone matches `phone`."""
+    return next_entry_for_sub(entries, {"phone": phone}, get_linked_phone)
+
+
+def next_entry_for_sub(entries, sub, get_linked_phone, get_linked_device=None):
+    """First non-done/left entry belonging to subscription `sub`.
+
+    An entry belongs to the sub when its linked request has the sub's phone, or
+    — for a singer who signed up without a phone — the sub's device_id. Empty
+    keys never match (an un-linked KJ entry has neither).
+    """
+    phone = sub.get("phone") or ""
+    device = (sub.get("device_id") or "") if get_linked_device else ""
+    if not phone and not device:
+        return None
     for e in entries:
         if (e.get("status") or "").lower() in ("done", "left"):
             continue
-        if get_linked_phone(e) == phone:
+        if phone and get_linked_phone(e) == phone:
+            return e
+        if device and get_linked_device(e) == device:
             return e
     return None
 
@@ -109,7 +125,8 @@ class PushDispatcher:
     DEBOUNCE_SECONDS = 0.5
 
     def __init__(self, store, rotation, cfg,
-                 get_current_token, get_linked_phone_for_entry):
+                 get_current_token, get_linked_phone_for_entry,
+                 get_linked_device_for_entry=None):
         """
         store: SingStore instance (with list_active_push_subscriptions,
             find_subs_by_phone, update_push_sent_state, disable_push_subscription).
@@ -118,12 +135,16 @@ class PushDispatcher:
         get_current_token: callable returning the currently-active event token.
         get_linked_phone_for_entry: callable(entry dict) -> phone or None.
             app.py wires this to sing_requests.phone via linked_entry_id.
+        get_linked_device_for_entry: callable(entry dict) -> device_id or None.
+            Same lookup for sing_requests.device_id — matches the subs of
+            singers who signed up without a phone.
         """
         self.store = store
         self.rotation = rotation
         self.cfg = cfg
         self.get_current_token = get_current_token
         self.get_linked_phone_for_entry = get_linked_phone_for_entry
+        self.get_linked_device_for_entry = get_linked_device_for_entry
         self.executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="push-")
         self._debounce_timer = None
         self._debounce_lock = threading.Lock()
@@ -149,9 +170,13 @@ class PushDispatcher:
         if not token:
             return
         phone = (request_dict or {}).get("phone")
-        if not phone:
-            return
-        subs = self.store.find_subs_by_phone(token, phone)
+        device_id = (request_dict or {}).get("device_id")
+        subs = {s["id"]: s for s in self.store.find_subs_by_phone(token, phone)}
+        # Phone-less singers subscribe by device (a sub with a phone is already
+        # covered above; the id-keyed dict stops a double push if both match).
+        for s in self.store.find_subs_by_device(token, device_id):
+            subs.setdefault(s["id"], s)
+        subs = list(subs.values())
         if not subs:
             return
         # approve/reject plus the auto-fallback outcomes carry their own copy;
@@ -178,10 +203,24 @@ class PushDispatcher:
             log.exception("Rotation fetch failed during push dispatch")
             return
         subs = self.store.list_active_push_subscriptions(token)
+        # Each lookup is a DB query; memoise per dispatch since every sub scans
+        # the same entries.
+        phones, devices = {}, {}
+
+        def linked_phone(e):
+            if e.get("id") not in phones:
+                phones[e.get("id")] = self.get_linked_phone_for_entry(e)
+            return phones[e.get("id")]
+
+        linked_device = None
+        if self.get_linked_device_for_entry is not None:
+            def linked_device(e):
+                if e.get("id") not in devices:
+                    devices[e.get("id")] = self.get_linked_device_for_entry(e)
+                return devices[e.get("id")]
+
         for sub in subs:
-            target = next_entry_for_phone(
-                entries, sub["phone"], self.get_linked_phone_for_entry,
-            )
+            target = next_entry_for_sub(entries, sub, linked_phone, linked_device)
             if target is None:
                 continue
             step = decide_ladder_step(target, entries)

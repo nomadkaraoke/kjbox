@@ -310,6 +310,7 @@
     "enable": "🔔 Hidupkan pemberitahuan pelayar",
     "asking": "Meminta…",
     "blocked": "Pemberitahuan pelayar disekat untuk tapak ini.",
+    "browserFailed": "Notifikasi pelayar tidak dapat diaktifkan pada peranti ini.",
     "iosSummary": "📱 iPhone? Hidupkan pemberitahuan timbul",
     "ios": "Ketik butang Kongsi, kemudian {addToHome}, lepas itu buka semula dari skrin utama anda — pemberitahuan akan berfungsi dari situ.",
     "iosStrong": "Tambah ke Skrin Utama",

@@ -310,6 +310,7 @@
     "enable": "🔔 Turn on browser notifications",
     "asking": "Asking…",
     "blocked": "Browser notifications are blocked for this site.",
+    "browserFailed": "Browser notifications couldn't be turned on on this device.",
     "iosSummary": "📱 iPhone? Enable pop-up notifications",
     "ios": "Tap the Share button, then {addToHome}, then reopen from your home screen — notifications work from there.",
     "iosStrong": "Add to Home Screen",

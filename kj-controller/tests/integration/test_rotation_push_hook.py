@@ -53,3 +53,42 @@ def test_phone_lookup_resolves_via_sing_requests(sing_app):
     # Un-linked rotation entry returns None
     unlinked = sing_app.rotation.add_entry("Bob", song_artist="Manual entry")
     assert dispatcher.get_linked_phone_for_entry(unlinked) is None
+
+
+def test_phoneless_singer_gets_ladder_push_by_device(sing_app):
+    """2026-09-24: "Jasssss" signed up without a phone, enabled push, and never
+    got a single notification. Real wiring end to end: subscribe by device →
+    the singer's approved entry resolves to that sub → a ladder push is sent."""
+    from unittest.mock import patch
+
+    store = sing_app.sing_store
+    token = store.ensure_token()
+    req = store.create_request(
+        singer_name="Jasssss", phone="", device_id="dev-jas",
+        song_artist="Queen", song_title="Bohemian Rhapsody",
+        source_type="make", source_ref=None, source_meta=None, notes="",
+    )
+    # Another phone-less singer ahead of her must NOT be treated as hers.
+    other = store.create_request(
+        singer_name="Kim", phone="", device_id="dev-kim",
+        song_artist="ABBA", song_title="Waterloo",
+        source_type="make", source_ref=None, source_meta=None, notes="",
+    )
+    e_other = sing_app.rotation.add_entry("Kim", song_artist="ABBA — Waterloo")
+    store.mark_approved(other["id"], linked_entry_id=e_other["id"])
+    entry = sing_app.rotation.add_entry("Jasssss", song_artist="Queen — Bohemian Rhapsody")
+    store.mark_approved(req["id"], linked_entry_id=entry["id"])
+    store.insert_push_subscription(
+        token=token, phone="", singer_name="Jasssss", endpoint="https://push/jas",
+        p256dh="p", auth="a", device_id="dev-jas",
+    )
+
+    dispatcher = sing_app.rotation.push_dispatcher
+    assert dispatcher.get_linked_device_for_entry(entry) == "dev-jas"
+    with patch("push_dispatcher.webpush") as wp:
+        dispatcher._dispatch_now()
+        dispatcher.executor.shutdown(wait=True)
+    assert wp.call_count == 1
+    assert wp.call_args.kwargs["subscription_info"]["endpoint"] == "https://push/jas"
+    (sub,) = store.list_active_push_subscriptions(token)
+    assert '"entry_id": %d' % entry["id"] in sub["last_sent_state"]

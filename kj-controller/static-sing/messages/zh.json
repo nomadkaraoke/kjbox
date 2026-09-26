@@ -310,6 +310,7 @@
     "enable": "🔔 开启浏览器通知",
     "asking": "请求中…",
     "blocked": "浏览器把这个网站的通知给屏蔽了。",
+    "browserFailed": "无法在此设备上开启浏览器通知。",
     "iosSummary": "📱 用 iPhone？开启弹窗通知吧",
     "ios": "点击分享按钮，然后选择 {addToHome}，接着从主屏幕重新打开——这样就能收到通知了。",
     "iosStrong": "添加到主屏幕",

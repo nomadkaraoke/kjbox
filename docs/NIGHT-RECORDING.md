@@ -76,14 +76,15 @@ kj-controller`, and the sidecar's `status.jsonl` to find what was really going o
 The error string the app returned is not always the real cause (see 2026-09-24 below).
 
 Caveats:
-- **`actor` is `kj` for every unmatched route.** `action_recorder.py:148` sets
-  `actor` from `request.endpoint`, and a 404 has no endpoint. So internet
-  vulnerability-scanner probes against the public `sing.` host (`/sing/.env`,
-  `/sing/wp-login.php`, … about 300 on 2026-09-24) show up as **KJ** traffic. Filter
-  404s, or classify by `host`, before building KJ fixtures.
-- Singer requests are keyed by `body.device_id`, except photo-consent and
-  push/subscribe, which don't send it (see FUNCTIONALITY-MAP). Use `client` IP/UA
-  plus `session_id` to stitch those to a phone.
+- **`actor`** is `singer` (sing blueprint), `kj` (KJ routes), or `anonymous`: an
+  unmatched `/sing/...` path. Every public-host request is rewritten under `/sing`,
+  so these are almost always internet scanner probes (`/sing/.env`,
+  `/sing/wp-login.php`, … about 300 on 2026-09-24). They're kept for security
+  visibility. Logs from before v0.115.0 label them `kj`: filter 404s, or classify
+  by `host`, before building KJ fixtures from those.
+- Singer requests are keyed by `body.device_id`. Before v0.115.0 photo-consent and
+  push/subscribe didn't send it. For those older logs, use `client` IP/UA plus
+  `session_id` to stitch them to a phone.
 - Bodies contain `edit_token`s and full kj_pick `versions[]` snapshots (tens of KB).
   Redact the tokens. Keep the snapshots, because their **size** is the edge case.
 

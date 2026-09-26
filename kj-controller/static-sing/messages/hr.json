@@ -310,6 +310,7 @@
     "enable": "🔔 Uključi obavijesti preglednika",
     "asking": "Pitam…",
     "blocked": "Obavijesti preglednika su blokirane za ovu stranicu.",
+    "browserFailed": "Obavijesti preglednika nisu se mogle uključiti na ovom uređaju.",
     "iosSummary": "📱 iPhone? Omogući skočne obavijesti",
     "ios": "Dodirni gumb za dijeljenje, zatim {addToHome}, pa ponovno otvori s početnog zaslona — odatle obavijesti rade.",
     "iosStrong": "Dodaj na početni zaslon",

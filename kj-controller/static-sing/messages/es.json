@@ -310,6 +310,7 @@
     "enable": "🔔 Activar notificaciones del navegador",
     "asking": "Preguntando…",
     "blocked": "Las notificaciones del navegador están bloqueadas para este sitio.",
+    "browserFailed": "No se pudieron activar las notificaciones del navegador en este dispositivo.",
     "iosSummary": "📱 ¿iPhone? Activa las notificaciones emergentes",
     "ios": "Toca el botón Compartir, luego {addToHome} y vuelve a abrirlo desde tu pantalla de inicio — las notificaciones funcionan desde ahí.",
     "iosStrong": "Añadir a la pantalla de inicio",

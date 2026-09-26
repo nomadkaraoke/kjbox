@@ -2,6 +2,31 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-09-25 - Fix: Real-night edge cases from the 2026-09-24 show (v0.115.0)
+
+Four failures mined from the ActionRecorder log of the 2026-09-24 show
+(catalogue: [TESTING.md](TESTING.md) § "Edge cases from real nights").
+
+- **Photo consent 429s:** `savePhotoConsent` now sends `device_id` (own budget, not
+  the venue's shared IP). The buttons are disabled while a save is in flight, and
+  re-tapping the current answer sends nothing. A static test now fails on any new
+  singer POST without `device_id`.
+- **Push for singers with no phone:** `/sing/push/subscribe` accepts phone **or**
+  `device_id`. New `sing_push_subscriptions.device_id` column (additive migration).
+  Ladder and decision pushes match phone-less subs by the device that made the
+  request. The client now checks the response instead of claiming push is on.
+- **Per-IP rate limit was 5, not 60:** `config.py` still defaulted
+  `sing_rate_limit_per_ip` to 5 (from the old IP-only limiter), overriding the
+  intended 60. On venue wifi the 6th singer action in 5 min would 429 everyone.
+  Defaults are now 60 per IP and 8 per device.
+- **SSD dropout blamed the file:** `/play` returns 503 `library_drive_offline`
+  (with a "replug the SSD" toast) when the file is under `external_media_mount` and
+  the drive is down, instead of "bad zip" / "invalid path".
+- **ActionRecorder:** unmatched `/sing/...` paths (scanner probes) are logged as
+  `actor: anonymous`, not `kj`.
+- Test infra: `KJ_E2E_PORT` overrides the fixed E2E server port (5099), so two
+  worktrees can run the E2E suite at once.
+
 ## 2026-09-24 - Fix: Popular songs (>50 versions) couldn't be requested (v0.114.1)
 
 Singer Owen tapped Backstreet Boys "I Want It That Way" live and got

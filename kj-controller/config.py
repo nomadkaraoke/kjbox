@@ -116,7 +116,13 @@ def load_config(config_file=None):
         "sing_public_url_base": "https://sing.nomadkaraoke.com",
         "sing_public_host": "sing.nomadkaraoke.com",
         "sing_local_url_base": "",
-        "sing_rate_limit_per_ip": 5,
+        # Singer mutations are budgeted per DEVICE first; per-IP is only the
+        # loose backstop against a device_id-minting flood, because every phone
+        # on venue wifi shares one IP. (Was 5 — a leftover from the IP-only
+        # limiter — which let a 6th action per 5 min 429 the whole bar,
+        # 2026-09-24.) Must match sing._IP_RATE_DEFAULT / _DEVICE_RATE_DEFAULT.
+        "sing_rate_limit_per_ip": 60,
+        "sing_rate_limit_per_device": 8,
         "sing_rate_limit_window_s": 300,
         "sing_estimate_transition_s": 30,
         "sing_estimate_default_song_s": 240,

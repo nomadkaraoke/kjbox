@@ -3372,7 +3372,15 @@ function urlB64ToUint8Array(base64String) {
   return Uint8Array.from(raw, (c) => c.charCodeAt(0));
 }
 
+// Resolves to the subscription, or null when this device will NOT get pushes.
+// Records the outcome in state.pushFailed so the notify panel stays truthful.
 async function ensurePushSubscription() {
+  const sub = await _ensurePushSubscription();
+  state.pushFailed = !sub;
+  return sub;
+}
+
+async function _ensurePushSubscription() {
   if (!swRegistration || !("PushManager" in window)) return null;
   const vapidPub = vapidPublicKey();
   if (!vapidPub) return null;
@@ -3389,16 +3397,25 @@ async function ensurePushSubscription() {
     }
   }
   try {
-    await fetch(`${BASE}/push/subscribe?t=${encodeURIComponent(TOKEN)}`, {
+    // device_id keys the sub for singers without a phone (and gives this
+    // phone its own rate-limit budget).
+    const resp = await fetch(`${BASE}/push/subscribe?t=${encodeURIComponent(TOKEN)}`, {
       method: "POST",
       credentials: "same-origin",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         phone: state.phone,
+        device_id: DEVICE_ID,
         singer_name: state.name,
         subscription: sub.toJSON(),
       }),
     });
+    // A rejected save means the server will never push to us — report "not
+    // subscribed" rather than letting the UI claim notifications are on.
+    if (!resp.ok) {
+      console.warn("push subscribe rejected:", resp.status);
+      return null;
+    }
     return sub;
   } catch (e) {
     console.warn("push subscribe POST failed:", e);
@@ -3508,9 +3525,17 @@ function maybeShowPushPrompt() {
   container.appendChild(lines);
 
   // --- Browser-push line ---
+  const pushOn = perm === "granted" && !state.pushFailed;
   if (perm === "granted") {
-    ensurePushSubscription();   // idempotent — ensures the server row exists
-    lines.appendChild(el("p", { class: "notify-line notify-on" }, t("notify.browserOn")));
+    // Idempotent — ensures the server row exists. Re-render if the outcome
+    // differs from what's shown (e.g. the server rejected the subscription).
+    const shownFailed = !!state.pushFailed;
+    ensurePushSubscription().then(() => {
+      if (!!state.pushFailed !== shownFailed) rerenderSection();
+    });
+    lines.appendChild(shownFailed
+      ? el("p", { class: "notify-line notify-off", "data-testid": "notify-browser-failed" }, t("notify.browserFailed"))
+      : el("p", { class: "notify-line notify-on" }, t("notify.browserOn")));
   } else if (perm === "default") {
     const btn = el("button", { class: "btn primary notify-enable" }, t("notify.enable"));
     btn.onclick = async () => {
@@ -3552,8 +3577,8 @@ function maybeShowPushPrompt() {
 
   // --- Summary of what will actually happen ---
   let summary;
-  if (perm === "granted" && smsOn) summary = t("notify.summaryBoth");
-  else if (perm === "granted") summary = t("notify.summaryPush");
+  if (pushOn && smsOn) summary = t("notify.summaryBoth");
+  else if (pushOn) summary = t("notify.summaryPush");
   else if (smsOn) summary = t("notify.summarySms");
   else summary = t("notify.summaryNone");
   container.appendChild(el("p", { class: "hint notify-summary" }, summary));
@@ -3563,6 +3588,9 @@ function maybeShowPushPrompt() {
     const status = el("p", { class: "hint photo-consent-saved", "aria-live": "polite" }, "");
     container.appendChild(photoConsentPicker(async (v) => {
       const prev = state.photoConsent;
+      // Re-tapping the current answer changes nothing — don't spend a request
+      // on it (2026-09-24: one singer sent 11 identical saves in 10 s → 429s).
+      if (v === prev) { status.textContent = t("photoConsent.saved"); return; }
       setPhotoConsentLocal(v);
       try {
         await savePhotoConsent(v);
@@ -3600,14 +3628,22 @@ async function savePhotoConsent(consent) {
   }
   await fetchJson(`${BASE}/photo-consent`, {
     method: "POST",
-    body: JSON.stringify({ consent, items: items.slice(-MY_REQUESTS_MAX) }),
+    // device_id → this phone's own rate-limit budget, not the venue's shared IP.
+    body: JSON.stringify({ consent, device_id: DEVICE_ID, items: items.slice(-MY_REQUESTS_MAX) }),
   });
 }
 
 // Two-button yes/no picker. `onPick(value)` runs on tap; the picker re-marks
 // itself so the choice is visible immediately. `extra` is appended below.
+// If `onPick` returns a promise (a server save), both buttons stay disabled
+// until it settles so rapid taps can't fire a burst of POSTs.
 function photoConsentPicker(onPick, extra) {
   const wrap = el("div", { class: "photo-consent", "data-testid": "photo-consent" });
+  let busy = false;
+  const setBusy = (on) => {
+    busy = on;
+    for (const b of wrap.querySelectorAll("button[data-consent]")) b.disabled = on;
+  };
   const mark = () => {
     for (const b of wrap.querySelectorAll("button[data-consent]")) {
       const on = b.dataset.consent === state.photoConsent;
@@ -3618,7 +3654,14 @@ function photoConsentPicker(onPick, extra) {
   const btn = (value, label) => el("button", {
     type: "button", class: "btn ghost photo-consent-btn", "data-consent": value,
     "data-testid": `photo-consent-${value}`,
-    onclick: () => { onPick(value); mark(); },
+    onclick: async () => {
+      if (busy) return;
+      const pending = onPick(value);
+      mark();
+      if (!pending || typeof pending.then !== "function") return;
+      setBusy(true);
+      try { await pending; } finally { setBusy(false); mark(); }
+    },
   }, label);
   wrap.appendChild(el("p", { class: "photo-consent-question" }, t("photoConsent.question")));
   wrap.appendChild(el("div", { class: "row photo-consent-choices" },

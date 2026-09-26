@@ -85,6 +85,42 @@ class TestSubscribe:
         assert subs[0]["p256dh"] == "p2"
 
 
+    def test_phoneless_singer_subscribes_by_device(self, client, sing_app, token):
+        """2026-09-24: "Jasssss" (no phone) got 6 × 400 `missing fields` and
+        silently never received a push. Phone is optional; device_id keys it."""
+        sing_app.sing_store.set_enabled(True)
+        resp = client.post(f"/sing/push/subscribe?t={token}", json={
+            "phone": "", "device_id": "dev-jas", "singer_name": "Jasssss",
+            "subscription": VALID_SUB,
+        })
+        assert resp.status_code == 204
+        (sub,) = sing_app.sing_store.list_active_push_subscriptions(token)
+        assert sub["phone"] == ""
+        assert sub["device_id"] == "dev-jas"
+        assert sing_app.sing_store.find_subs_by_device(token, "dev-jas")[0]["id"] == sub["id"]
+        assert sing_app.sing_store.find_subs_by_phone(token, "") == []
+
+    def test_rejects_when_neither_phone_nor_device(self, client, sing_app, token):
+        sing_app.sing_store.set_enabled(True)
+        resp = client.post(f"/sing/push/subscribe?t={token}", json={
+            "phone": "", "singer_name": "Jasssss", "subscription": VALID_SUB,
+        })
+        assert resp.status_code == 400
+
+    def test_adding_a_phone_later_updates_the_same_row(self, client, sing_app, token):
+        """One row per endpoint: a singer who adds a phone after subscribing
+        must not end up with two subs (double pushes)."""
+        sing_app.sing_store.set_enabled(True)
+        for phone in ("", "+61400000001"):
+            resp = client.post(f"/sing/push/subscribe?t={token}", json={
+                "phone": phone, "device_id": "dev-jas", "singer_name": "Jasssss",
+                "subscription": VALID_SUB,
+            })
+            assert resp.status_code == 204
+        (sub,) = sing_app.sing_store.list_active_push_subscriptions(token)
+        assert sub["phone"] == "+61400000001"
+        assert sub["device_id"] == "dev-jas"
+
 class TestUnsubscribe:
     def test_requires_token(self, client):
         resp = client.post("/sing/push/unsubscribe", json={"endpoint": "ep"})

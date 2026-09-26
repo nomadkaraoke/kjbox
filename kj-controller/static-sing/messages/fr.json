@@ -310,6 +310,7 @@
     "enable": "🔔 Activer les notifications du navigateur",
     "asking": "Demande en cours…",
     "blocked": "Les notifications du navigateur sont bloquées pour ce site.",
+    "browserFailed": "Impossible d'activer les notifications du navigateur sur cet appareil.",
     "iosSummary": "📱 iPhone ? Activer les notifications pop-up",
     "ios": "Appuie sur le bouton Partager, puis sur {addToHome}, et rouvre-la depuis ton écran d'accueil — les notifications marcheront à partir de là.",
     "iosStrong": "Sur l'écran d'accueil",
