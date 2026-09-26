@@ -3,7 +3,7 @@
 import pytest
 from unittest.mock import patch
 
-from gen_client import GenClient, GenStatus, map_gen_status
+from gen_client import GenClient, GenStatus, map_gen_job, map_gen_status
 
 
 class TestGenStatus:
@@ -13,8 +13,23 @@ class TestGenStatus:
             assert map_gen_status(state) == GenStatus.PROCESSING
 
     def test_awaiting_review_states(self):
-        for state in ["awaiting_review", "in_review"]:
-            assert map_gen_status(state) == GenStatus.AWAITING_REVIEW
+        assert map_gen_status("awaiting_review") == GenStatus.AWAITING_REVIEW
+        assert map_gen_status("in_review") == GenStatus.IN_REVIEW
+
+    def test_map_gen_job_tells_who_started_the_review(self):
+        def job(status, by=None):
+            return {"status": status, "state_data": {"review_started_by": by} if by else {}}
+        assert map_gen_job(job("in_review", "admin")) == GenStatus.HOST_REVIEW
+        assert map_gen_job(job("in_review", "owner")) == GenStatus.IN_REVIEW
+        assert map_gen_job(job("in_review")) == GenStatus.IN_REVIEW
+        # review_started_by only matters while the review is open.
+        assert map_gen_job(job("rendering_video", "admin")) == GenStatus.RENDERING
+        assert map_gen_job(job("awaiting_review")) == GenStatus.AWAITING_REVIEW
+        assert map_gen_job({"status": "in_review", "state_data": None}) == GenStatus.IN_REVIEW
+        assert map_gen_job(None) == GenStatus.PROCESSING
+
+    def test_review_statuses_are_active(self):
+        assert {GenStatus.IN_REVIEW, GenStatus.HOST_REVIEW} <= GenStatus.ACTIVE
 
     def test_rendering_states(self):
         for state in ["review_complete", "rendering_video", "generating_video", "instrumental_selected"]:

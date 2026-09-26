@@ -2318,14 +2318,22 @@ def _make_enabled(store):
         current_app._get_current_object())
 
 
-# Rotation gen_status → the singer-facing make phase. "making" = gen is
-# working unattended; "needs_host" = a person has to step in (lyrics review,
-# audio pick, or the job failed). None = nothing to add (ready / not a job).
+# Rotation gen_status → the singer-facing make phase:
+#   making       gen is working unattended (audio, separation, transcription)
+#   review       lyrics sync review needed — the singer can do it (review link)
+#                or the host will
+#   review_self  review in progress, opened by the singer (or unknown)
+#   review_host  review in progress, the host opened it first
+#   rendering    review done — rendering / syncing the video (~10 min)
+#   needs_host   the host has to step in (audio pick / trim, or the job failed)
+# None = nothing to add (ready / not a job).
 _MAKE_PHASE_BY_GEN_STATUS = {
     "processing": "making",
-    "rendering": "making",
-    "syncing": "making",
-    "awaiting_review": "needs_host",
+    "rendering": "rendering",
+    "syncing": "rendering",
+    "awaiting_review": "review",
+    "in_review": "review_self",
+    "host_review": "review_host",
     "needs_input": "needs_host",
     "failed": "needs_host",
 }

@@ -143,6 +143,8 @@ class TestMySongsConsent:
         page.evaluate("""(t) => localStorage.setItem('sing_my_request_ids', JSON.stringify(
             {token: t, ids: [1], tokens: {'1': 'tok1'}}))""", live_token)
         page.evaluate("window.__sing_state.step = 'done'; window.__sing_render();")
+        # Already answered → the section starts collapsed; expand it.
+        page.locator('[data-testid="pref-toggle-photo"]').click()
         picker = page.locator('#push-optin [data-testid="photo-consent"]')
         expect(picker).to_be_visible()
         expect(picker.locator('[data-testid="photo-consent-yes"]')).to_have_attribute("aria-pressed", "true")
@@ -183,6 +185,8 @@ class TestMySongsConsent:
         page.reload()
         page.wait_for_function("!!window.__sing_state")
         page.evaluate("window.__sing_state.step = 'done'; window.__sing_render();")
+        # Already answered → the section starts collapsed; expand it.
+        page.locator('[data-testid="pref-toggle-photo"]').click()
         picker = page.locator('#push-optin [data-testid="photo-consent"]')
         expect(picker).to_be_visible()
         # Re-tapping the saved answer is a no-op on the wire.
@@ -295,7 +299,62 @@ class TestPushSubscribeHonesty:
 
     def test_accepted_subscription_shows_on(self, page, live_server, live_token):
         posts = self._setup(page, live_server, live_token, status=204)
+        # Pop-ups on = set up → the section collapses to a toggle showing it.
+        toggle = page.locator('[data-testid="pref-toggle-notify"]')
+        expect(toggle).to_contain_text("Pop-up on this device")
+        toggle.click()
         expect(page.locator("#push-optin .notify-on")).to_be_visible()
         expect(page.locator(".notify-summary")).to_contain_text("pop-up on this device")
         expect(page.locator('[data-testid="notify-browser-failed"]')).to_have_count(0)
         assert posts
+
+
+class TestPreferenceSections:
+    """My songs: "Notification preferences" + "Social media preferences" are
+    open until set up, then collapse to side-by-side toggles."""
+
+    def _done(self, page, live_server, live_token, consent):
+        _event_info(page, ask_photo_consent=True)
+        page.route("**/sing/my-requests*", lambda r: r.fulfill(
+            status=200, content_type="application/json", body=json.dumps({
+                "now_playing": {"now_singing": None, "up_next": None, "queued_count": 0},
+                "requests": []})))
+        _login(page, live_server, live_token, consent=consent)
+        page.reload()
+        page.wait_for_function("!!window.__sing_state")
+        page.evaluate("window.__sing_state.step = 'done'; window.__sing_render();")
+
+    def test_new_singer_sees_both_sections_open(self, page, live_server, live_token):
+        page.add_init_script("localStorage.removeItem('sing_phone')")
+        self._done(page, live_server, live_token, consent="")
+        expect(page.locator('[data-testid="pref-box-notify"]')).to_be_visible()
+        expect(page.locator('[data-testid="pref-box-photo"]')).to_be_visible()
+        expect(page.locator('[data-testid="pref-toggle-photo"]')).to_have_count(0)
+        # Nothing set up yet → no "Hide" (it's what they still need to do).
+        expect(page.locator('[data-testid="pref-hide-photo"]')).to_have_count(0)
+
+    def test_answered_consent_collapses_and_toggles(self, page, live_server, live_token):
+        self._done(page, live_server, live_token, consent="no")
+        toggle = page.locator('[data-testid="pref-toggle-photo"]')
+        expect(toggle).to_contain_text("No photos")
+        expect(page.locator('[data-testid="pref-box-photo"]')).to_have_count(0)
+        toggle.click()
+        expect(page.locator('[data-testid="pref-box-photo"]')).to_be_visible()
+        page.locator('[data-testid="pref-hide-photo"]').click()
+        expect(page.locator('[data-testid="pref-box-photo"]')).to_have_count(0)
+        expect(page.locator('[data-testid="pref-toggle-photo"]')).to_be_visible()
+
+    def test_regular_sees_two_side_by_side_toggles(self, page, live_server, live_token):
+        # A texting number on file = a notification method is on.
+        page.add_init_script("localStorage.setItem('sing_phone', '+15555550123')")
+        self._done(page, live_server, live_token, consent="yes")
+        notify = page.locator('[data-testid="pref-toggle-notify"]')
+        photo = page.locator('[data-testid="pref-toggle-photo"]')
+        expect(notify).to_be_visible()
+        expect(photo).to_be_visible()
+        expect(page.locator('[data-testid="pref-box-notify"]')).to_have_count(0)
+        a, b = notify.bounding_box(), photo.bounding_box()
+        assert abs(a["y"] - b["y"]) < 2 and b["x"] > a["x"]   # one row
+        notify.click()
+        expect(page.locator('[data-testid="pref-box-notify"]')).to_contain_text("+15555550123")
+

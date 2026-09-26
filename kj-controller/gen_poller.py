@@ -4,7 +4,7 @@ import logging
 import os
 import threading
 
-from gen_client import GenStatus, map_gen_status
+from gen_client import GenStatus, map_gen_job
 
 logger = logging.getLogger(__name__)
 
@@ -43,8 +43,7 @@ class GenPoller:
             job_id = entry["gen_job_id"]
             try:
                 job_data = self.gen_client.get_job_status(job_id)
-                api_status = job_data.get("status", "")
-                new_status = map_gen_status(api_status)
+                new_status = map_gen_job(job_data)
                 old_status = entry["gen_status"]
 
                 if new_status == GenStatus.COMPLETE:

@@ -182,7 +182,7 @@ class TestSearchDecisionLayer:
         expect(wrap.locator(".sing-empty-header p")).to_contain_text("2 ways forward")
         heads = wrap.locator(".sing-empty-card h4")
         expect(heads).to_have_count(2)
-        expect(heads.nth(0)).to_contain_text("1. We'll make it for you")
+        expect(heads.nth(0)).to_contain_text("1. Generate on demand")
         expect(heads.nth(1)).to_contain_text("2. Paste a YouTube link")
         # No external gen.nomadkaraoke.com hand-off any more.
         expect(page.locator('a[href*="gen.nomadkaraoke.com"]')).to_have_count(0)
@@ -197,7 +197,7 @@ class TestSearchDecisionLayer:
             body=json.dumps({"ready": True, "email": None})))
         card.locator("button").click()
         # The make wizard starts by verifying the singer's email.
-        expect(page.locator('[data-testid="make-step"] h2')).to_have_text("We'll make it for you")
+        expect(page.locator('[data-testid="make-step"] h2')).to_have_text("Generate on demand")
         expect(page.locator('[data-testid="make-email"]')).to_be_visible()
 
     def test_make_offer_under_results(self, page, live_server, live_token):

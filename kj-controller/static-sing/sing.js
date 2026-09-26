@@ -198,6 +198,9 @@ const state = {
   phone: LS.get("sing_phone"),
   // Social-media photo/video consent: "yes" | "no" | "" (not asked yet).
   photoConsent: LS.get("sing_photo_consent"),
+  // Notification / social-media preference sections: undefined = default
+  // (open until set up), true/false = the singer toggled it this page load.
+  prefOpen: {},
   query: "",
   selected: null,   // { source_type, source_ref, song_artist, song_title, label }
   makeArtist: "",
@@ -2628,15 +2631,15 @@ function renderConfirm() {
       el("div", { class: "confirm-title" }, sel.song_title || sel.label || ""),
       sel.song_artist ? el("div", { class: "confirm-artist" }, sel.song_artist) : null,
       el("div", { class: "confirm-source" }, _confirmSourceLine(sel)),
-      sel.source_type === "make" && sel.source_meta?.audio
-        ? el("div", { class: "confirm-make-audio hint" }, t("confirm.makeAudio", { audio: sel.source_meta.audio }))
-        : null,
       sel.source_type === "make" && state.make?.email
         ? el("div", { class: "confirm-make-email hint", "data-testid": "confirm-make-email" },
             t("confirm.makeEmail", { email: state.make.email }))
         : null,
     ),
-    state.query ? el("p", { class: "confirm-searched hint" }, t("confirm.searched", { query: state.query })) : null,
+    // A make-it already shows the corrected artist/title — the raw search
+    // text is just noise there.
+    state.query && sel.source_type !== "make"
+      ? el("p", { class: "confirm-searched hint" }, t("confirm.searched", { query: state.query })) : null,
     el("p", { class: "hint" },
       state.phone
         ? t("confirm.detailsWithPhone", { name: state.name, phone: state.phone })
@@ -2695,7 +2698,11 @@ function _statusLine(item, hasNowSinging) {
   if (item.make === "making") {
     return req.status === "pending" ? t("mySongs.statusMakingPending") : t("mySongs.statusMaking");
   }
-  if (item.make === "needs_host") return t("mySongs.statusMakeNeedsHost");
+  if (item.make === "rendering") return t("mySongs.statusMakeRendering");
+  if (item.make === "review") return t("mySongs.statusMakeReview", { host: _hostName() });
+  if (item.make === "review_host") return t("mySongs.statusMakeReviewHost", { host: _hostName() });
+  if (item.make === "review_self") return t("mySongs.statusMakeReviewSelf");
+  if (item.make === "needs_host") return t("mySongs.statusMakeNeedsHost", { host: _hostName() });
   if (req.status === "pending") return t("mySongs.statusPending");
   const est = item.estimate;
   if (!est) return t("mySongs.statusQueued");
@@ -2721,13 +2728,60 @@ function _supersededLabel(req) {
   return target ? _songLabel(target.request) : "";
 }
 
+function _hostName() {
+  return KJ_NAME || t("mySongs.theHost");
+}
+
+const _REVIEW_PHASES = new Set(["review", "review_host", "review_self"]);
+
+// "{link} to review it yourself" → the {link} placeholder becomes a tap target
+// that fetches a one-click sign-in link to this song's lyrics review on gen
+// (minted per tap by the box, which holds the singer's gen sign-in).
+function _statusNode(item, hasNowSinging) {
+  const text = _statusLine(item, hasNowSinging);
+  const idx = text.indexOf("{link}");
+  if (!_REVIEW_PHASES.has(item.make) || idx < 0) return text;
+  const req = item.request;
+  const editToken = req.id != null ? readEditToken(TOKEN, req.id) : null;
+  const label = t("mySongs.reviewLink");
+  const link = editToken
+    ? el("a", {
+        href: "#", class: "song-card-review-link", "data-testid": "make-review-link",
+        onclick: (e) => { e.preventDefault(); e.stopPropagation(); openMakeReview(req.id, editToken, e.target); },
+      }, label)
+    : el("strong", {}, label);
+  return el("span", {}, text.slice(0, idx), link, text.slice(idx + "{link}".length));
+}
+
+async function openMakeReview(reqId, editToken, linkEl) {
+  // Open the tab synchronously (inside the tap) so popup blockers allow it,
+  // then point it at the sign-in link once the box has minted it.
+  const win = window.open("", "_blank");
+  const label = linkEl.textContent;
+  linkEl.textContent = t("mySongs.reviewOpening");
+  try {
+    const data = await fetchJson(`${BASE}/make/review-link/${reqId}`, {
+      method: "POST",
+      body: JSON.stringify({ edit_token: editToken, device_id: DEVICE_ID, locale: getLocale() }),
+    });
+    if (win && !win.closed) win.location.href = data.url;
+    else window.location.href = data.url;
+  } catch (e) {
+    if (win) win.close();
+    const code = e && e.data && e.data.error;
+    alert(code === "not_in_review" ? t("mySongs.reviewOver") : t("mySongs.reviewFailed"));
+  } finally {
+    linkEl.textContent = label;
+  }
+}
+
 function _renderSongCard(item, ctx = {}) {
   const req = item.request;
   const song = _songLabel(req);
   const partners = req.additional_singers || [];
   const main = el("div", { class: "song-card-main" },
     el("div", { class: "song-card-title" }, song),
-    el("div", { class: "song-card-status" }, _statusLine(item, ctx.hasNowSinging)),
+    el("div", { class: "song-card-status" }, _statusNode(item, ctx.hasNowSinging)),
   );
   if (req.status === "pending" && req.supersedes_request_id) {
     const old = _supersededLabel(req);
@@ -3616,10 +3670,12 @@ function maybeShowPushPrompt() {
 
   container.innerHTML = "";
   container.classList.remove("push-on", "push-blocked", "ios-install");
-  container.appendChild(el("h3", { class: "notify-heading" }, t("notify.heading")));
-
+  // Any interaction inside the notification box keeps it open across the
+  // re-render it triggers (so it doesn't snap shut the moment it's set up).
+  const pinNotify = () => { state.prefOpen.notify = true; };
+  const notifyBox = el("div", { class: "pref-box-body" });
   const lines = el("div", { class: "notify-lines" });
-  container.appendChild(lines);
+  notifyBox.appendChild(lines);
 
   // --- Browser-push line ---
   const pushOn = perm === "granted" && !state.pushFailed;
@@ -3636,6 +3692,7 @@ function maybeShowPushPrompt() {
   } else if (perm === "default") {
     const btn = el("button", { class: "btn primary notify-enable" }, t("notify.enable"));
     btn.onclick = async () => {
+      pinNotify();
       btn.disabled = true;
       btn.textContent = t("notify.asking");
       await requestPushPermission();
@@ -3657,6 +3714,7 @@ function maybeShowPushPrompt() {
       t("notify.smsOn", { phone: state.phone }),
       el("a", { href: "#", "data-testid": "notify-change-phone", onclick: (e) => {
         e.preventDefault();
+        pinNotify();
         line.replaceWith(_phoneEditor(rerenderSection));
       } }, t("notify.changeNumber")),
     );
@@ -3666,6 +3724,7 @@ function maybeShowPushPrompt() {
       t("notify.wantText"),
       el("a", { href: "#", "data-testid": "notify-add-phone", onclick: (e) => {
         e.preventDefault();
+        pinNotify();
         line.replaceWith(_phoneEditor(rerenderSection));
       } }, t("notify.addNumber")),
     );
@@ -3678,12 +3737,14 @@ function maybeShowPushPrompt() {
   else if (pushOn) summary = t("notify.summaryPush");
   else if (smsOn) summary = t("notify.summarySms");
   else summary = t("notify.summaryNone");
-  container.appendChild(el("p", { class: "hint notify-summary" }, summary));
+  notifyBox.appendChild(el("p", { class: "hint notify-summary" }, summary));
 
   // --- Social-media photo consent (only when the host asks) ---
+  let photoBox = null;
   if (askPhotoConsent()) {
     const status = el("p", { class: "hint photo-consent-saved", "aria-live": "polite" }, "");
-    container.appendChild(photoConsentPicker(async (v) => {
+    photoBox = photoConsentPicker(async (v) => {
+      state.prefOpen.photo = true;   // stay open while they're choosing
       const prev = state.photoConsent;
       // Re-tapping the current answer changes nothing — don't spend a request
       // on it (2026-09-24: one singer sent 11 identical saves in 10 s → 429s).
@@ -3696,7 +3757,49 @@ function maybeShowPushPrompt() {
         setPhotoConsentLocal(prev);
         status.textContent = e && e.status === 429 ? t("common.tooManyChanges") : t("photoConsent.saveFailed");
       }
-    }, status));
+    }, status, { bare: true });
+  }
+
+  // Both are persistent preferences: open by default until set up (at least
+  // one notification method on / a yes-no photo answer), then collapsed to a
+  // one-line toggle so regulars aren't nagged. Collapsed toggles sit side by
+  // side to save vertical space.
+  const sections = [{
+    key: "notify", box: notifyBox, title: t("prefs.notifyTitle"),
+    configured: pushOn || smsOn,
+    status: pushOn && smsOn ? t("prefs.notifyBoth") : pushOn ? t("prefs.notifyPush")
+      : smsOn ? t("prefs.notifySms") : t("prefs.notifyOff"),
+  }];
+  if (photoBox) {
+    sections.push({
+      key: "photo", box: photoBox, title: t("prefs.socialTitle"),
+      configured: state.photoConsent === "yes" || state.photoConsent === "no",
+      status: state.photoConsent === "yes" ? t("prefs.socialYes")
+        : state.photoConsent === "no" ? t("prefs.socialNo") : t("prefs.socialUnset"),
+    });
+  }
+  const isOpen = (sec) => (state.prefOpen[sec.key] ?? !sec.configured);
+  const toggle = (sec) => { state.prefOpen[sec.key] = !isOpen(sec); rerenderSection(); };
+  const collapsed = sections.filter((sec) => !isOpen(sec));
+  if (collapsed.length) {
+    container.appendChild(el("div", { class: "pref-toggles" },
+      ...collapsed.map((sec) => el("button", {
+        type: "button", class: "pref-toggle", "data-testid": `pref-toggle-${sec.key}`,
+        "aria-expanded": "false", onclick: () => toggle(sec),
+      },
+        el("span", { class: "pref-toggle-title" }, sec.title, " ▾"),
+        el("span", { class: "pref-toggle-status" }, sec.status)))));
+  }
+  for (const sec of sections) {
+    if (!isOpen(sec)) continue;
+    container.appendChild(el("section", { class: "pref-box", "data-testid": `pref-box-${sec.key}` },
+      el("div", { class: "pref-box-head" },
+        el("h3", { class: "pref-box-title" }, sec.title),
+        sec.configured ? el("button", {
+          type: "button", class: "btn link pref-hide", "data-testid": `pref-hide-${sec.key}`,
+          "aria-expanded": "true", onclick: () => toggle(sec),
+        }, t("prefs.hide")) : null),
+      sec.box));
   }
 }
 
@@ -3734,8 +3837,10 @@ async function savePhotoConsent(consent) {
 // itself so the choice is visible immediately. `extra` is appended below.
 // If `onPick` returns a promise (a server save), both buttons stay disabled
 // until it settles so rapid taps can't fire a burst of POSTs.
-function photoConsentPicker(onPick, extra) {
-  const wrap = el("div", { class: "photo-consent", "data-testid": "photo-consent" });
+function photoConsentPicker(onPick, extra, { bare = false } = {}) {
+  // `bare`: no box of its own — it sits inside a preference section box.
+  const wrap = el("div", { class: bare ? "photo-consent photo-consent-bare" : "photo-consent",
+    "data-testid": "photo-consent" });
   let busy = false;
   const setBusy = (on) => {
     busy = on;

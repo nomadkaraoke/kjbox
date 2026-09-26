@@ -4,6 +4,35 @@ Dated entries, newest first. Each entry notes any required deploy steps.
 
 ---
 
+## 2026-09-26 - Make-it feedback: gen-style audio pick, clearer phases, "Tap here" review link, collapsible preferences (v0.118.0)
+
+**Deploy:** backend (`gen_client.py`, `gen_poller.py`, `sing.py`, `sing_make.py`) + KJ frontend
+(`app.js`) + singer frontend (`make.js`, `sing.js`, `sing.css`, 33 locale files) → auto-deploy
+restarts kj-controller (playback survives). Needs karaoke-gen with `POST /api/kjbox/jobs/{id}/review-link`
++ `state_data.review_started_by` (the "Tap here" link 404s → "use the link in your email" until
+then). No migration.
+
+- **Why:** Andrew's first on-phone test of the v0.117.0 make-it flow.
+- **Wording:** "We'll make it for you" → "Generate on demand" everywhere (it's the system, and
+  the singer may have to help). Confirm screen: "Our system will make a karaoke video of this song.
+  Your rotation entry is kept at the bottom until it's ready to sing — typically ~30 minutes" and
+  "We'll also email you the finished video file and YouTube link (email)"; the "You searched" and
+  "Audio: …" lines are gone for make-its.
+- **Audio pick mirrors gen's Choose Audio step:** hero card with the in-torrent Filename, Release,
+  format + availability badge, bracketed release metadata and gen's confidence summary; other
+  options grouped by coloured category with counts, filename matches sorted first, "Wrong track?" /
+  "Title match" badges, "+N more", gen's helper text.
+- **My songs phases:** "held off the rotation until it's ready" → "needs lyrics sync review. **Tap
+  here** to review it yourself, or {host} will" → "{host} has already started the lyrics sync
+  review. **Tap here**…" (when the KJ opened it first) → "lyrics review completed, rendering, ~10
+  minutes". `{host}` = the configured KJ name, else "the host". New gen statuses `in_review` /
+  `host_review` (KJ badge: IN REVIEW). New route `POST /sing/make/review-link/<request_id>`.
+- **Preferences:** My songs' "When you're up" and photo-consent blocks became "Notification
+  preferences" / "Social media preferences" boxes: open until set up (a notification method on /
+  a yes-no answer), then collapsed to one-line toggles, side by side when both are collapsed.
+
+---
+
 ## 2026-09-25 - KJ existing-singer picker + phone self-serve for KJ-added songs + clearer reorder (v0.115.0)
 
 **Deploy:** backend (`sing.py`, `sing_store.py`, `routes.py`) + KJ frontend (`app.js`,
