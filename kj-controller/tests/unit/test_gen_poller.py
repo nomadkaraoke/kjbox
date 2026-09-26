@@ -57,56 +57,104 @@ class TestPollOnce:
         poller.poll_once()  # Should not raise
 
 
-class TestHandleComplete:
-    def test_downloads_and_links(self, poller, mock_gen_client, mock_rotation, mock_media):
-        entry = {"id": 1, "gen_job_id": "job-123", "gen_status": "rendering",
-                 "song_artist": "Bohemian Rhapsody - Queen"}
+class TestMasterOnlyCompletion:
+    """Completed jobs link ONLY the NOMAD master pulled by master-sync."""
 
-        mock_rotation.store.get_active_gen_entries.return_value = [entry]
-        mock_gen_client.get_job_status.return_value = {"status": "complete"}
-        mock_gen_client.get_download_url.return_value = "https://api.example.com/download"
-        mock_media.download_from_url.return_value = ("/tmp/downloads/song.mp4", "song.mp4")
+    ENTRY = {"id": 7, "gen_job_id": "job-m", "gen_status": "rendering",
+             "song_artist": "Creep - Radiohead"}
 
+    def _complete(self, gen, rotation, entry=None, brand="NOMAD-1714"):
+        rotation.store.get_active_gen_entries.return_value = [dict(entry or self.ENTRY)]
+        gen.get_job_status.return_value = {"status": "complete",
+                                           "state_data": {"brand_code": brand}}
+
+    def test_links_indexed_master(self, mock_gen_client, mock_rotation, tmp_path):
+        master = tmp_path / "NOMAD-1714 - Radiohead - Creep.mp4"
+        master.write_bytes(b"x")
+        other = tmp_path / "NOMAD-17140 - Someone - Else.mp4"   # prefix look-alike
+        other.write_bytes(b"x")
+        media = MagicMock()
+        media.index = {str(other): {}, str(master): {}}
+        self._complete(mock_gen_client, mock_rotation)
+        GenPoller(mock_gen_client, mock_rotation, media, "/tmp/d").poll_once()
+        mock_rotation.complete_gen_job.assert_called_once_with("job-m", str(master))
+        media.download_from_url.assert_not_called()
+
+    def test_waits_as_syncing_then_links_when_master_arrives(
+        self, mock_gen_client, mock_rotation, tmp_path
+    ):
+        media = MagicMock()
+        media.index = {}
+        poller = GenPoller(mock_gen_client, mock_rotation, media, "/tmp/d")
+        self._complete(mock_gen_client, mock_rotation)
         poller.poll_once()
-
-        mock_gen_client.get_download_url.assert_called_once_with("job-123")
-        mock_media.download_from_url.assert_called_once()
-        mock_rotation.complete_gen_job.assert_called_once_with("job-123", "/tmp/downloads/song.mp4")
-
-    def test_handles_no_download_url(self, poller, mock_gen_client, mock_rotation, mock_media):
-        entry = {"id": 1, "gen_job_id": "job-123", "gen_status": "rendering",
-                 "song_artist": "Song - Artist"}
-
-        mock_rotation.store.get_active_gen_entries.return_value = [entry]
-        mock_gen_client.get_job_status.return_value = {"status": "complete"}
-        mock_gen_client.get_download_url.return_value = None
-
-        poller.poll_once()
-        mock_media.download_from_url.assert_not_called()
-
-    def test_handles_download_failure(self, poller, mock_gen_client, mock_rotation, mock_media):
-        entry = {"id": 1, "gen_job_id": "job-123", "gen_status": "rendering",
-                 "song_artist": "Song - Artist"}
-
-        mock_rotation.store.get_active_gen_entries.return_value = [entry]
-        mock_gen_client.get_job_status.return_value = {"status": "complete"}
-        mock_gen_client.get_download_url.return_value = "https://api.example.com/download"
-        mock_media.download_from_url.return_value = (None, None)
-
-        poller.poll_once()
+        mock_rotation.set_gen_status.assert_called_once_with(7, "job-m", "syncing")
         mock_rotation.complete_gen_job.assert_not_called()
 
+        # Still missing on the next poll: no duplicate status write, no download.
+        self._complete(mock_gen_client, mock_rotation, entry={**self.ENTRY, "gen_status": "syncing"})
+        poller.poll_once()
+        assert mock_rotation.set_gen_status.call_count == 1
 
-class TestStartStop:
-    def test_start_stop(self, poller):
-        poller.start()
-        assert poller._thread.is_alive()
-        poller.stop()
-        assert not poller._thread.is_alive()
+        master = tmp_path / "NOMAD-1714 - Radiohead - Creep.mp4"
+        master.write_bytes(b"x")
+        media.index = {str(master): {}}
+        poller.poll_once()
+        mock_rotation.complete_gen_job.assert_called_once_with("job-m", str(master))
+        media.download_from_url.assert_not_called()
 
-    def test_start_idempotent(self, poller):
-        poller.start()
-        thread1 = poller._thread
-        poller.start()
-        assert poller._thread is thread1
-        poller.stop()
+    def test_never_downloads_directly(self, mock_gen_client, mock_rotation):
+        """Andrew 2026-09-25: only ever the NOMAD file — no fallback download."""
+        media = MagicMock()
+        media.index = {}
+        poller = GenPoller(mock_gen_client, mock_rotation, media, "/tmp/d")
+        self._complete(mock_gen_client, mock_rotation)
+        for _ in range(5):
+            poller.poll_once()
+        media.download_from_url.assert_not_called()
+        mock_gen_client.get_download_url.assert_not_called()
+
+    def test_private_track_waits_and_is_not_downloaded(self, mock_gen_client, mock_rotation):
+        media = MagicMock()
+        media.index = {}
+        self._complete(mock_gen_client, mock_rotation, brand="NOMADNP-0042")
+        GenPoller(mock_gen_client, mock_rotation, media, "/tmp/d").poll_once()
+        mock_rotation.set_gen_status.assert_called_once_with(7, "job-m", "syncing")
+        media.download_from_url.assert_not_called()
+
+
+class TestCompleteGenJobRotationStatus:
+    """RotationManager.complete_gen_job flips Being Made (!) → Waiting."""
+
+    @pytest.fixture
+    def rotation(self):
+        from rotation import RotationManager
+        mgr = RotationManager(":memory:")
+        yield mgr
+
+    def _made_entry(self, rotation, status="Being Made (!)"):
+        entry = rotation.add_entry("Mary", "Creep - Radiohead")
+        rotation.store.update_status(entry["id"], status)
+        rotation.set_gen_status(entry["id"], "job-x", "syncing")
+        return entry["id"]
+
+    def test_being_made_becomes_waiting(self, rotation):
+        eid = self._made_entry(rotation)
+        rotation.complete_gen_job("job-x", "/m/NOMAD-1 - Radiohead - Creep.mp4")
+        entry = rotation.store.get_entry(eid)
+        assert entry["status"] == "Waiting"
+        assert entry["file_path"] == "/m/NOMAD-1 - Radiohead - Creep.mp4"
+        assert entry["gen_status"] == "complete"
+
+    def test_other_status_left_alone(self, rotation):
+        eid = self._made_entry(rotation, status="On Hold (BRB)")
+        rotation.complete_gen_job("job-x", "/m/a.mp4")
+        assert rotation.store.get_entry(eid)["status"] == "On Hold (BRB)"
+
+    def test_kj_manual_link_wins(self, rotation):
+        eid = self._made_entry(rotation)
+        rotation.store.link_file(eid, "/m/kj-choice.mp4", None)
+        rotation.complete_gen_job("job-x", "/m/gen.mp4")
+        entry = rotation.store.get_entry(eid)
+        assert entry["file_path"] == "/m/kj-choice.mp4"
+        assert entry["status"] == "Waiting"

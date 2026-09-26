@@ -34,7 +34,8 @@ def test_singer_submit_recorded_with_body_and_response(rec_app):
     with rec_app.test_client() as c:
         resp = c.post(f'/sing/submit?t={token}', json={
             'singer_name': 'Bob', 'phone': '+61400000099', 'device_id': 'dev-1',
-            'song_artist': 'Queen', 'song_title': 'Radio Ga Ga', 'source_type': 'make',
+            'song_artist': 'Queen', 'song_title': 'Radio Ga Ga', 'source_type': 'youtube',
+            'source_ref': 'https://youtu.be/gaga',
         }, headers={'User-Agent': 'TestPhone/1.0', 'CF-Connecting-IP': '203.0.113.9'})
     assert resp.status_code == 200
     (rec,) = [r for r in _records(rec_app) if r['path'] == '/sing/submit']

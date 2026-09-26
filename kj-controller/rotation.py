@@ -254,13 +254,32 @@ class RotationManager:
         self.store.set_singer_priority_bias(name, bias)
         self._after_mutation()
 
+    BEING_MADE_STATUS = "Being Made (!)"
+
+    def mark_being_made(self, entry_id):
+        """Flag a just-added make entry as not yet singable.
+
+        Part of the approval that created the entry, so no separate undo
+        checkpoint (undoing the add removes the entry anyway)."""
+        self.store.update_status(entry_id, self.BEING_MADE_STATUS)
+        self._after_mutation()
+
     def complete_gen_job(self, job_id, file_path):
-        """Called by gen poller when a gen job completes and file is downloaded."""
+        """Called by gen poller when a gen job completes and its file is on disk.
+
+        Links the file and, if the entry was still "Being Made (!)", makes it
+        singable ("Waiting"). Any other status (the KJ moved it on hold, it is
+        already up, …) is the KJ's call and is left alone."""
         entry = self.store.get_entry_by_gen_job_id(job_id)
         if entry is None:
             return None
-        self.store.link_file(entry["id"], file_path, self._lookup_duration(file_path))
+        # The KJ may have linked something by hand while gen was still working —
+        # their choice wins.
+        if not entry.get("file_path"):
+            self.store.link_file(entry["id"], file_path, self._lookup_duration(file_path))
         self.store.set_gen_status(entry["id"], job_id, "complete")
+        if (entry.get("status") or "") == self.BEING_MADE_STATUS:
+            self.store.update_status(entry["id"], "Waiting")
         self._after_mutation()
         return self.store.get_entry(entry["id"])
 

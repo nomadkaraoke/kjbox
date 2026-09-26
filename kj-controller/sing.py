@@ -390,6 +390,9 @@ def install_public_host_rewriter(flask_app):
 
 _PHONE_RE = re.compile(r"^\+?[0-9 \-()]{7,20}$")
 _ALLOWED_SOURCES = {"local", "divebar", "kn", "youtube", "make", "kj_pick"}
+# Each "make" request starts a real karaoke-gen job the moment it's submitted,
+# so cap them per device per night (config: sing_make_max_per_device).
+_MAKE_MAX_PER_DEVICE_DEFAULT = 3
 _SIMPLE_MODE_SOURCES = {"local", "divebar", "kn"}
 # Popular songs legitimately exceed 50 versions now that search surfaces every
 # local copy (e.g. "I Want It That Way" = 60) — so an oversized snapshot is
@@ -518,7 +521,7 @@ def landing():
         token=token,
         request_id=request.args.get("r", ""),
         vapid_public_key=cfg.get("vapid_public_key", ""),
-        make_requests_enabled=store.is_accepting_make_requests(),
+        make_requests_enabled=_make_enabled(store),
         simple_mode=store.is_simple_mode(),
         # Venue context for copy: phone-number example + branding strip.
         sms_region=(_safe_call(store.get_sms_default_region) or "US"),
@@ -643,7 +646,7 @@ def search():
     store = current_app.sing_store
     response = {
         "songs": data["songs"],
-        "make_requests_enabled": store.is_accepting_make_requests(),
+        "make_requests_enabled": _make_enabled(store),
         "simple_mode": store.is_simple_mode(),
     }
     if data.get("karaoke_nerds_timeout"):
@@ -1067,6 +1070,9 @@ def submit():
             return _reject("make_requests_disabled")
         if not (song_artist and song_title):
             return _reject("song_artist and song_title are required for make")
+        if _make_limit_reached(store, cfg, device_id):
+            _refund_device_rate_slot()
+            return jsonify({"error": "make_limit"}), 429
     if source_type == "kj_pick":
         err = _validate_kj_pick_payload(data)
         if err:
@@ -1082,6 +1088,18 @@ def submit():
         additional = _canonicalize_partners(
             current_app._get_current_object(), additional, singer_name)
 
+    # Make-it: the singer's own karaoke-gen job is created right now, on their
+    # verified gen account (see sing_make) — before the request row exists, so
+    # a gen refusal (expired sign-in, stale search) leaves nothing behind.
+    gen_job_id = None
+    if source_type == "make":
+        import sing_make
+        gen_job_id, make_err = sing_make.create_job(
+            current_app._get_current_object(), device_id, song_artist, song_title, source_meta)
+        if make_err:
+            _refund_device_rate_slot()
+            return make_err
+
     req = store.create_request(
         singer_name=singer_name,
         phone=phone,
@@ -1095,6 +1113,9 @@ def submit():
         user_agent=request.headers.get("User-Agent", "")[:500],
         device_id=device_id or None,
     )
+
+    if gen_job_id:
+        req = store.set_request_gen(req["id"], gen_job_id, "submitted")
 
     # Social-media photo consent rides along with each request (the device
     # remembers the singer's choice), recorded against the canonical name so
@@ -1110,7 +1131,10 @@ def submit():
     # the request to its highest-priority version (the same one the admin picker
     # marks ⭐ BEST) so a rotation entry with a real file is created. Any failure
     # to resolve a version keeps the request pending for manual review.
-    if store.is_auto_approve():
+    # Make-its ALWAYS go straight in (as "Being Made (!)"): the job is already
+    # running and there's nothing for the KJ to decide — a song too hard to
+    # review live just stays at the bottom un-reviewed.
+    if store.is_auto_approve() or gen_job_id:
         try:
             from routes import approve_sing_request, resolve_kj_pick_best
 
@@ -1598,6 +1622,11 @@ def my_requests():
         item = {"request": _public_request_view(req)}
         linked = req.get("linked_entry_id")
         performed = False
+        if req.get("source_type") == "make":
+            entry = None
+            if linked and rotation_mgr is not None:
+                entry = next((e for e in entries if e["id"] == linked), None)
+            item["make"] = _make_progress(req, entry)
         if linked:
             if linked in cancelled_ids:
                 item["removed"] = True
@@ -1620,6 +1649,10 @@ def my_requests():
                     # being sung — the host cancelled or deleted it. Say so
                     # (the phone used to show "Added to the queue." forever).
                     item["removed"] = True
+        # A song still being made can't be sung yet — a queue position would
+        # tell the singer "you're next" for a video that doesn't exist.
+        if item.get("make"):
+            item.pop("estimate", None)
         item["performed"] = performed
         out.append(item)
 
@@ -1826,8 +1859,10 @@ def change_request(req_id):
         return jsonify({"error": "simple_mode_disabled_source"}), 400
     if source_type in {"local", "divebar", "kn", "youtube"} and not source_ref:
         return jsonify({"error": "source_ref is required for this source_type"}), 400
-    if source_type == "make" and not store.is_accepting_make_requests():
-        return jsonify({"error": "make_requests_disabled"}), 400
+    if source_type == "make":
+        # A make-it is a whole flow (email code, audio choice) that starts a
+        # real gen job — swap by cancelling and making a new one instead.
+        return jsonify({"error": "make_not_changeable"}), 400
     if source_type == "kj_pick":
         err = _validate_kj_pick_payload(data)
         if err:
@@ -2266,6 +2301,50 @@ def _now_view(entry):
         "display_name": _display_names(singer),
         "song_artist": entry.get("song_artist") or "",
     }
+
+
+def _make_limit_reached(store, cfg, device_id, exclude_request_id=None):
+    limit = int((cfg or {}).get("sing_make_max_per_device", _MAKE_MAX_PER_DEVICE_DEFAULT))
+    if limit <= 0 or not device_id:
+        return False
+    return store.count_make_requests_for_device(
+        device_id, exclude_request_id=exclude_request_id) >= limit
+
+
+def _make_enabled(store):
+    """Make-it is offered only when the KJ allows it AND gen's singer flow is set up."""
+    import sing_make
+    return store.is_accepting_make_requests() and sing_make.make_flow_ready(
+        current_app._get_current_object())
+
+
+# Rotation gen_status → the singer-facing make phase. "making" = gen is
+# working unattended; "needs_host" = a person has to step in (lyrics review,
+# audio pick, or the job failed). None = nothing to add (ready / not a job).
+_MAKE_PHASE_BY_GEN_STATUS = {
+    "processing": "making",
+    "rendering": "making",
+    "syncing": "making",
+    "awaiting_review": "needs_host",
+    "needs_input": "needs_host",
+    "failed": "needs_host",
+}
+
+
+def _make_progress(req, entry):
+    """Singer-facing phase of a make request's video, or None once ready."""
+    if entry is not None:
+        if entry.get("file_path"):
+            return None
+        phase = _MAKE_PHASE_BY_GEN_STATUS.get(entry.get("gen_status") or "")
+        if phase:
+            return phase
+        # Approved but the job never started (the KJ has to start it from the
+        # rotation row).
+        return "needs_host"
+    if req.get("status") == "pending" and req.get("gen_job_id"):
+        return "making"
+    return None
 
 
 def _public_request_view(req):

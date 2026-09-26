@@ -7,6 +7,7 @@ const SHELL = [
   '/sing/static/sing.css',
   '/sing/static/sing.js',
   '/sing/static/i18n.js',
+  '/sing/static/make.js',
   '/sing/static/messages/en.json',
   '/sing/static/icon-192.png',
   '/sing/static/icon-512.png',

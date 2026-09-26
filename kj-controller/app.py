@@ -20,6 +20,7 @@ from playback import PlaybackCoordinator
 from rotation import RotationManager
 from routes import routes_bp
 from sing import install_host_guard, install_public_host_rewriter, sing_bp
+import sing_make  # noqa: F401 — registers the /sing/make/* routes on sing_bp
 from sing_store import SingStore
 from sms_store import SmsStore
 from sleep_mode import SleepManager
@@ -388,7 +389,7 @@ def create_app(config=None):
     if gen_api_url and gen_api_token:
         from gen_client import GenClient
         from gen_poller import GenPoller
-        flask_app.gen_client = GenClient(gen_api_url, gen_api_token)
+        flask_app.gen_client = GenClient(gen_api_url, gen_api_token, cfg.get('gen_kjbox_secret', ''))
         # Give the media index best-effort LLM access for download-time refine.
         if getattr(flask_app, "media", None) is not None:
             flask_app.media.gen_client = flask_app.gen_client
@@ -598,7 +599,7 @@ def start_app():  # pragma: no cover
     if gen_api_url and gen_api_token:
         from gen_client import GenClient
         from gen_poller import GenPoller
-        flask_app.gen_client = GenClient(gen_api_url, gen_api_token)
+        flask_app.gen_client = GenClient(gen_api_url, gen_api_token, cfg.get('gen_kjbox_secret', ''))
         # Give the media index best-effort LLM access for download-time refine.
         if getattr(flask_app, "media", None) is not None:
             flask_app.media.gen_client = flask_app.gen_client

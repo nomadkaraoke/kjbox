@@ -148,6 +148,10 @@ class TestSearch:
         KJ to make' card without a second round-trip."""
         import karaoke_nerds
         monkeypatch.setattr(karaoke_nerds, "search", lambda *a, **kw: [])
+        # Make-it needs gen's singer flow configured (partner secret).
+        from unittest.mock import MagicMock
+        sing_app.gen_client = MagicMock()
+        sing_app.gen_client.singer_flow_configured.return_value = True
         resp = client.get(f"/sing/search?q=hello&t={token}")
         data = resp.get_json()
         assert data["make_requests_enabled"] is True  # default on
@@ -254,11 +258,18 @@ class TestSubmit:
 
     def test_make_accepted_when_flag_on(self, client, sing_app, token):
         """Regression guard — make submissions still work when flag is on (default)."""
+        from unittest.mock import MagicMock
+        sing_app.gen_client = MagicMock()
+        sing_app.gen_client.singer_flow_configured.return_value = True
+        sing_app.gen_client.create_job_from_search.return_value = {"job_id": "job-1"}
+        sing_app.sing_store.set_gen_account("dev-make", "m@example.com", "sess")
         body = self._body(
             source_type="make",
             song_artist="Radiohead",
             song_title="Creep",
             source_ref=None,
+            device_id="dev-make",
+            source_meta={"search_session_id": "ss", "selection_index": 0},
         )
         resp = client.post(f"/sing/submit?t={token}", json=body)
         assert resp.status_code == 200

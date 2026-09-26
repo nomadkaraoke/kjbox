@@ -423,6 +423,8 @@ class TestApprove:
         entry_id = resp.get_json()["entry_id"]
         entry = admin_app.rotation.store.get_entry(entry_id)
         assert entry["gen_job_id"] == "job_42"
+        # Not singable until the GenPoller links the finished video.
+        assert entry["status"] == "Being Made (!)"
 
     def test_approve_make_gen_failure_keeps_entry_being_made_unlinked(
         self, admin_client, admin_app
@@ -786,13 +788,15 @@ class TestPushHooks:
             "phone": "+61400000099",
             "song_artist": "Queen",
             "song_title": "Radio Ga Ga",
-            "source_type": "make",
+            "source_type": "youtube",
+            "source_ref": "https://youtu.be/pushhook",
         })
         assert resp.status_code == 200
         req_id = resp.get_json()["request"]["id"]
 
         # Approve via admin route
-        resp = client.post(f"/rotation/requests/{req_id}/approve")
+        with patch("routes._download_worker"):
+            resp = client.post(f"/rotation/requests/{req_id}/approve")
         assert resp.status_code == 200, resp.get_data(as_text=True)
 
         dispatcher.notify_request_decision.assert_called_once()
@@ -813,7 +817,8 @@ class TestPushHooks:
             "phone": "+61400000088",
             "song_artist": "Beatles",
             "song_title": "Yesterday",
-            "source_type": "make",
+            "source_type": "youtube",
+            "source_ref": "https://youtu.be/pushhook",
         })
         req_id = resp.get_json()["request"]["id"]
 
@@ -866,10 +871,12 @@ class TestPushHooks:
             "phone": "+61400000077",
             "song_artist": "Pink Floyd",
             "song_title": "Money",
-            "source_type": "make",
+            "source_type": "youtube",
+            "source_ref": "https://youtu.be/pushhook",
         })
         req_id = resp.get_json()["request"]["id"]
-        resp = client.post(f"/rotation/requests/{req_id}/approve")
+        with patch("routes._download_worker"):
+            resp = client.post(f"/rotation/requests/{req_id}/approve")
         # Approve still succeeds despite dispatcher exception
         assert resp.status_code == 200
 
