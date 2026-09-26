@@ -128,6 +128,159 @@ const rotationHistory = {
     },
 };
 
+// --- Singer picker: suggest tonight's singers while typing a name ---
+// Picking a listed singer keeps their exact spelling. That matters beyond
+// tidiness: a singer's phone finds songs the KJ typed in by matching the names
+// that phone has submitted under, so "Ashlee" vs "Ashlee A" would leave the
+// song off their My songs. 📱 marks singers who have the phone app.
+
+const knownSingers = { list: [], fetchedAt: 0, pending: null };
+const KNOWN_SINGERS_TTL_MS = 15000;
+
+function loadKnownSingers() {
+    if (Date.now() - knownSingers.fetchedAt < KNOWN_SINGERS_TTL_MS) {
+        return Promise.resolve(knownSingers.list);
+    }
+    if (!knownSingers.pending) {
+        knownSingers.pending = fetch('/rotation/singers/known')
+            .then(r => (r.ok ? r.json() : { singers: knownSingers.list }))
+            .then(d => {
+                knownSingers.list = d.singers || [];
+                knownSingers.fetchedAt = Date.now();
+                return knownSingers.list;
+            })
+            .catch(() => knownSingers.list)
+            .finally(() => { knownSingers.pending = null; });
+    }
+    return knownSingers.pending;
+}
+
+// Same folding as the server's sing._fold_name: case/accent-insensitive,
+// punctuation treated as spaces.
+function foldSingerName(name) {
+    return (name || '').normalize('NFKD').replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^\p{L}\p{N}\s]/gu, ' ').toLowerCase().split(/\s+/).filter(Boolean).join(' ');
+}
+
+// Rank known singers against what's typed: exact → name prefix → word prefix
+// → substring. `auto` is the index to pre-highlight, set only for a sure match
+// (the exact name, or the first name of exactly one singer — the same
+// conservative rule the phone uses for duet partners), so Tab/Enter on a
+// genuinely new name still adds it as typed.
+function rankSingerSuggestions(typed, list, exclude) {
+    const q = foldSingerName(typed);
+    if (!q) return { items: [], auto: -1 };
+    const excluded = new Set((exclude || []).map(foldSingerName));
+    const scored = [];
+    for (const s of list) {
+        const fold = foldSingerName(s.name);
+        if (!fold || excluded.has(fold)) continue;
+        let score = -1;
+        if (fold === q) score = 0;
+        else if (fold.startsWith(q)) score = 1;
+        else if (fold.split(' ').some(w => w.startsWith(q))) score = 2;
+        else if (fold.includes(q)) score = 3;
+        if (score >= 0) scored.push({ ...s, fold, score });
+    }
+    scored.sort((a, b) => a.score - b.score || a.name.localeCompare(b.name));
+    const items = scored.slice(0, 8);
+    let auto = items.findIndex(s => s.fold === q);
+    if (auto < 0 && !q.includes(' ')) {
+        const firstNameHits = scored.filter(s => s.fold.split(' ')[0] === q);
+        if (firstNameHits.length === 1) auto = items.indexOf(firstNameHits[0]);
+    }
+    return { items, auto };
+}
+
+// Attach the dropdown to a singer <input> inside a .singer-input-container.
+// Must be attached BEFORE the input's own keydown handler: when the dropdown
+// consumes a key it stops the others from seeing it. Enter picks and then
+// lets the form's own Enter handling (jump to the song field) carry on.
+function attachSingerSuggest(input, { onPick, getExcluded }) {
+    const container = input.closest('.singer-input-container') || input.parentNode;
+    const box = document.createElement('div');
+    box.className = 'singer-suggest hidden';
+    container.appendChild(box);
+    let items = [];
+    let active = -1;
+
+    const close = () => { box.classList.add('hidden'); box.innerHTML = ''; items = []; active = -1; };
+    const paint = () => {
+        box.innerHTML = '';
+        if (!items.length) { box.classList.add('hidden'); return; }
+        items.forEach((s, i) => {
+            const row = document.createElement('div');
+            row.className = 'singer-suggest-item' + (i === active ? ' active' : '');
+            row.textContent = s.name;
+            if (s.on_phone) {
+                const phone = document.createElement('span');
+                phone.className = 'singer-suggest-phone';
+                phone.textContent = '📱';
+                phone.title = 'Has the singer app — can manage their own songs';
+                row.appendChild(phone);
+            }
+            // mousedown (not click) so the input keeps focus.
+            row.addEventListener('mousedown', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                pick(i);
+            });
+            box.appendChild(row);
+        });
+        const hint = document.createElement('div');
+        hint.className = 'singer-suggest-hint';
+        hint.textContent = active >= 0
+            ? 'Tab/Enter: use highlighted · Esc: new singer as typed'
+            : '↓ to pick an existing singer · keep typing for a new one';
+        box.appendChild(hint);
+        box.classList.remove('hidden');
+    };
+    const refresh = async () => {
+        const typed = input.value;
+        const list = await loadKnownSingers();
+        if (input.value !== typed) return;   // typed on while loading
+        const ranked = rankSingerSuggestions(typed, list, getExcluded ? getExcluded() : []);
+        items = ranked.items;
+        active = ranked.auto;
+        paint();
+    };
+    const pick = (i) => {
+        const s = items[i];
+        close();
+        if (!s) return;
+        input.value = '';
+        onPick(s.name);
+        input.focus();
+    };
+
+    box.addEventListener('click', (e) => e.stopPropagation());
+    input.addEventListener('input', refresh);
+    input.addEventListener('focus', () => { if (input.value.trim()) refresh(); });
+    input.addEventListener('blur', () => setTimeout(close, 150));
+    input.addEventListener('keydown', (e) => {
+        if (box.classList.contains('hidden') || !items.length) return;
+        if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            const step = e.key === 'ArrowDown' ? 1 : -1;
+            active = (active + step + items.length + 1) % (items.length + 1);
+            if (active === items.length) active = -1;   // wrap through "none"
+            paint();
+        } else if (e.key === 'Escape') {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            close();
+        } else if (active >= 0 && (e.key === 'Tab' || e.key === ',' || e.key === '&')) {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            pick(active);
+        } else if (active >= 0 && e.key === 'Enter') {
+            pick(active);   // then the form's Enter handler moves on
+        }
+    });
+    return { close };
+}
+
 // --- Singer pill input state ---
 const singerPillInput = {
     pills: [],
@@ -4824,6 +4977,10 @@ document.addEventListener('DOMContentLoaded', () => {
     // Singer pill input keydown handlers
     const singerInput = document.getElementById('rotation-singer');
     if (singerInput) {
+        attachSingerSuggest(singerInput, {
+            onPick: (name) => singerPillInput.addPill(name),
+            getExcluded: () => singerPillInput.pills,
+        });
         singerInput.addEventListener('keydown', (e) => {
             const val = singerInput.value;
 
@@ -7357,6 +7514,10 @@ function enterRotationEditMode(row, entry, focusTarget) {
 
     // Clear pre-populated pills, render them inside container
     renderEditPills();
+    attachSingerSuggest(singerInput, {
+        onPick: (name) => { editPills.push(name); renderEditPills(); },
+        getExcluded: () => editPills,
+    });
 
     const songInput = document.createElement('input');
     songInput.type = 'text';

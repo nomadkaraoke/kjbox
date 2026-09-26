@@ -4,10 +4,11 @@ Dated entries, newest first. Each entry notes any required deploy steps.
 
 ---
 
-## 2026-09-24 - Singer self-serve for KJ-added songs + clearer reorder instructions (v0.115.0)
+## 2026-09-25 - KJ existing-singer picker + phone self-serve for KJ-added songs + clearer reorder (v0.115.0)
 
-**Deploy:** backend (`sing.py`) + singer frontend (`sing.js`, `sing.css`, 33 locale files) →
-**requires `systemctl restart kj-controller`** (deploy between songs). No migration.
+**Deploy:** backend (`sing.py`, `sing_store.py`, `routes.py`) + KJ frontend (`app.js`,
+`style.css`) + singer frontend (`sing.js`, `sing.css`, 33 locale files) → **requires
+`systemctl restart kj-controller`** (deploy between songs). No migration.
 
 - **Why:** Ashlee A couldn't move "Sabrina Carpenter - buy me presents" earlier from her
   phone because it wasn't in her My songs at all. The KJ had typed it in the KJ UI (rotation entry
@@ -15,16 +16,27 @@ Dated entries, newest first. Each entry notes any required deploy steps.
   phone had saved in localStorage, so KJ-added songs and duets a partner submitted from their
   own phone never showed. Separately, some singers didn't work out how to use the drag-to-reorder
   view.
-- **What:** `GET /sing/my-requests` takes an optional `name`. Queued rotation entries naming that
-  singer (`singers_json` members, or a KJ-typed "A & B" split on `&`/`+`; compared with the
-  accent/case-folded `_fold_name`) that none of the phone's own requests link to come back as
-  extra items. Each has a synthetic request view (`id: null`, status approved) plus `entry_id`,
-  `added_by_host` and `added_by` (the partner who requested it). The phone shows "Added by the
-  host" / "Added by {name}". `POST /sing/requests/reorder` accepts `{entry_id}` items (with
-  `name`) alongside `{id, edit_token}` items.
-- **Trust model:** name-matched entries are proven by name only, so they can be **reordered** but
-  never cancelled or changed; those still need the edit_token. A reorder only shuffles the
-  singer's songs among the slots they already hold, so nobody can jump ahead of other singers.
+- **KJ existing-singer picker:** the add form's and inline edit's singer field suggests tonight's
+  singers as you type, from `GET /rotation/singers/known` → `[{name, on_phone}]`. 📱 marks
+  singers who have submitted from a phone. Picking one uses their exact spelling, which is what
+  links a KJ-added song to their phone. Only a sure match (the exact name, or the first name of
+  exactly one singer) is pre-highlighted for Tab/Enter; otherwise ↓ picks, and Esc or keep
+  typing adds a new singer as typed. The known-singers list now includes singers who have already
+  sung (`include_done`), as its docstring always claimed.
+- **Phone identity is server-side:** `GET /sing/my-requests` takes the phone's `device_id`. The
+  server derives who that device is from its own records: every name the device has submitted
+  under since the night started (`SingStore.device_singer_names`), plus its rename alias. Queued
+  rotation entries naming one of those names (`singers_json` members, or a KJ-typed "A & B" split
+  on `&`/`+`; case/accent-folded) that the phone's own requests don't link to come back as extra
+  items. Each has a synthetic request view (`id: null`) plus `entry_id`, `added_by_host` and
+  `added_by` (the partner who requested it). The phone shows "Added by the host" / "Added by
+  {name}". `POST /sing/requests/reorder` accepts `{entry_id}` items, checked against the same
+  device identity. A name claimed by the phone is never trusted, so another phone typing
+  "Ashlee A" sees and can move nothing.
+- **Scope:** these songs can be **reordered** only, never cancelled or changed (those still need the
+  edit_token). A reorder only shuffles the singer's songs among the slots they already hold. A
+  singer who has never submitted from their phone tonight has no device identity, so KJ-added
+  songs won't appear for them until they do.
 - **Reorder UX:** there's now an explicit instruction line ("press and hold the ⠿ … drag … or tap
   ▲ / ▼ … then tap Save new order"). Each row has ▲/▼ buttons and a position number, the drag
   handle is bigger, and an auto-approved reorder says "✓ New order saved." instead of "the host

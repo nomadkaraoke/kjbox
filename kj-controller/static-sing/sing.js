@@ -306,7 +306,7 @@ async function changeSong(id, editToken, payload) {
 async function reorderSongs(items) {
   return fetchJson(`${BASE}/requests/reorder`, {
     method: "POST",
-    body: JSON.stringify({ items, device_id: DEVICE_ID, name: _myName() }),
+    body: JSON.stringify({ items, device_id: DEVICE_ID }),
   });
 }
 
@@ -2626,9 +2626,10 @@ function renderConfirm() {
   );
 }
 
-// The singer's name rides along so the server can also return queued songs
-// they're named on but never submitted from this phone (typed in by the KJ, or
-// requested by a duet partner) — those come back with `entry_id` set.
+// The device_id rides along so the server can also return queued songs the
+// singer is on but never submitted from this phone (typed in by the KJ, or
+// requested by a duet partner) — those come back with `entry_id` set. The
+// server works out who this device is from its own records, not a name we send.
 function _myName() {
   return (state.name || LS.get("sing_name") || "").trim();
 }
@@ -2641,7 +2642,7 @@ async function fetchMyRequests(ids) {
   const q = (ids || []).join(",");
   const resp = await fetch(
     `${BASE}/my-requests?ids=${encodeURIComponent(q)}&t=${encodeURIComponent(TOKEN)}`
-      + (name ? `&name=${encodeURIComponent(name)}` : ""),
+      + `&device_id=${encodeURIComponent(DEVICE_ID)}`,
     { credentials: "same-origin" },
   );
   if (!resp.ok) {

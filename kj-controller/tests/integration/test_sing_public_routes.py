@@ -851,26 +851,40 @@ class TestReorder:
         assert resp.status_code == 400
 
 
-class TestNameMatchedSongs:
-    """Songs the singer is named on but never submitted from this phone — typed
-    in by the KJ, or requested by a duet partner — show up in My songs (matched
-    by name) and can be reordered alongside the phone's own songs."""
+class TestIdentityMatchedSongs:
+    """Songs the singer is on but never submitted from this phone — typed in by
+    the KJ, or requested by a duet partner — show up in My songs and can be
+    reordered. "The singer" is whoever this device_id has submitted as
+    tonight (server-side record), never a name the phone claims."""
 
-    def _submit(self, client, sing_app, token, singer, title, partners=None):
+    DEV = "dev-ashlee"
+
+    def _submit(self, client, sing_app, token, singer, title, partners=None, device_id=None):
         sing_app.sing_store.set_auto_approve(True)
         body = {"singer_name": singer, "phone": "", "song_artist": "Q", "song_title": title,
                 "source_type": "local", "source_ref": f"/{title}.mp4"}
         if partners:
             body["additional_singers"] = [{"name": p, "phone": ""} for p in partners]
+        if device_id:
+            body["device_id"] = device_id
         return client.post(f"/sing/submit?t={token}", json=body).get_json()["request"]
 
-    def test_kj_added_entry_listed_by_name(self, client, sing_app, token):
-        own = self._submit(client, sing_app, token, "Ashlee A", "Mine")
+    def _extras(self, client, token, own):
+        """The name/identity-matched items, given the phone's own request."""
+        return [it for it in self._mine(client, token, ids=own["id"]) if it.get("entry_id")]
+
+    def _mine(self, client, token, ids="", device_id=DEV):
+        url = f"/sing/my-requests?ids={ids}&t={token}"
+        if device_id:
+            url += f"&device_id={device_id}"
+        return client.get(url).get_json()["requests"]
+
+    def test_kj_added_entry_listed_for_device(self, client, sing_app, token):
+        own = self._submit(client, sing_app, token, "Ashlee A", "Mine", device_id=self.DEV)
         kj = sing_app.rotation.add_entry("Ashlee A & Chaila R", "buy me presents - Sabrina",
                                          singers=["Ashlee A", "Chaila R"])
         sing_app.rotation.add_entry("Someone Else", "Other - X")
-        resp = client.get(f"/sing/my-requests?ids={own['id']}&name=ashlee%20a&t={token}")
-        items = resp.get_json()["requests"]
+        items = self._mine(client, token, ids=own["id"])
         assert [it["request"]["id"] for it in items] == [own["id"], None]
         extra = items[1]
         assert extra["entry_id"] == kj["id"]
@@ -879,43 +893,61 @@ class TestNameMatchedSongs:
         assert extra["request"]["additional_singers"] == [{"name": "Chaila R"}]
         assert extra["estimate"]["position"] >= 1
 
-    def test_name_only_without_ids(self, client, sing_app, token):
-        sing_app.rotation.add_entry("Ashlee A", "Song - X")
-        resp = client.get(f"/sing/my-requests?ids=&name=Ashlee%20A&t={token}")
-        assert len(resp.get_json()["requests"]) == 1
+    def test_match_ignores_case_and_accents(self, client, sing_app, token):
+        own = self._submit(client, sing_app, token, "José", "Mine", device_id=self.DEV)
+        sing_app.rotation.add_entry("jose", "Host - X")
+        assert len(self._extras(client, token, own)) == 1
 
     def test_kj_typed_duet_name_is_split(self, client, sing_app, token):
+        own = self._submit(client, sing_app, token, "Ashlee A", "Mine", device_id=self.DEV)
         sing_app.rotation.add_entry("Chaila R & Ashlee A", "Duet - X")
-        resp = client.get(f"/sing/my-requests?ids=&name=Ashlee%20A&t={token}")
-        assert len(resp.get_json()["requests"]) == 1
+        assert len(self._extras(client, token, own)) == 1
 
     def test_partner_submitted_duet_names_partner(self, client, sing_app, token):
-        partner = self._submit(client, sing_app, token, "Chaila R", "Party", partners=["Ashlee A"])
-        resp = client.get(f"/sing/my-requests?ids=&name=Ashlee%20A&t={token}")
-        items = resp.get_json()["requests"]
-        assert len(items) == 1
-        assert items[0]["entry_id"] == sing_app.sing_store.get_request(partner["id"])["linked_entry_id"]
-        assert items[0]["added_by_host"] is False
-        assert items[0]["added_by"] == "Chaila R"
+        own = self._submit(client, sing_app, token, "Ashlee A", "Mine", device_id=self.DEV)
+        partner = self._submit(client, sing_app, token, "Chaila R", "Party",
+                               partners=["Ashlee A"], device_id="dev-chaila")
+        extras = self._extras(client, token, own)
+        assert len(extras) == 1
+        assert extras[0]["entry_id"] == sing_app.sing_store.get_request(partner["id"])["linked_entry_id"]
+        assert extras[0]["added_by_host"] is False
+        assert extras[0]["added_by"] == "Chaila R"
 
-    def test_no_name_no_extras(self, client, sing_app, token):
-        sing_app.rotation.add_entry("Ashlee A", "Song - X")
-        resp = client.get(f"/sing/my-requests?ids=&t={token}")
+    def test_unknown_device_gets_no_extras(self, client, sing_app, token):
+        """A phone that has never submitted as Ashlee can't see her songs, and
+        a claimed name in the query is ignored."""
+        self._submit(client, sing_app, token, "Ashlee A", "Mine", device_id=self.DEV)
+        sing_app.rotation.add_entry("Ashlee A", "Host - X")
+        assert self._mine(client, token, device_id="dev-stranger") == []
+        resp = client.get(f"/sing/my-requests?ids=&name=Ashlee%20A&t={token}")
         assert resp.get_json()["requests"] == []
 
+    def test_other_nights_submissions_dont_count(self, client, sing_app, token):
+        self._submit(client, sing_app, token, "Ashlee A", "Mine", device_id=self.DEV)
+        sing_app.sing_store._get_conn().execute(
+            "UPDATE sing_requests SET created_at = '2000-01-01 00:00:00'")
+        sing_app.rotation.add_entry("Ashlee A", "Host - X")
+        assert self._mine(client, token) == []
+
+    def test_rename_alias_counts(self, client, sing_app, token):
+        own = self._submit(client, sing_app, token, "Ash", "Mine", device_id=self.DEV)
+        sing_app.sing_store.set_alias(self.DEV, "Ashlee A")
+        sing_app.rotation.add_entry("Ashlee A", "Host - X")
+        assert len(self._extras(client, token, own)) == 1
+
     def test_done_and_cancelled_entries_excluded(self, client, sing_app, token):
+        own = self._submit(client, sing_app, token, "Ashlee A", "Mine", device_id=self.DEV)
         done = sing_app.rotation.add_entry("Ashlee A", "Sung - X")
         sing_app.rotation.update_status(done["id"], "Done")
         gone = sing_app.rotation.add_entry("Ashlee A", "Gone - X")
         sing_app.rotation.update_status(gone["id"], "Cancelled")
-        resp = client.get(f"/sing/my-requests?ids=&name=Ashlee%20A&t={token}")
-        assert resp.get_json()["requests"] == []
+        assert self._extras(client, token, own) == []
 
     def test_reorder_mixes_own_and_kj_added(self, client, sing_app, token):
-        own = self._submit(client, sing_app, token, "Ashlee A", "Mine")
+        own = self._submit(client, sing_app, token, "Ashlee A", "Mine", device_id=self.DEV)
         kj = sing_app.rotation.add_entry("Ashlee A", "HostAdded - X")
         resp = client.post(f"/sing/requests/reorder?t={token}", json={
-            "name": "Ashlee A", "items": [
+            "device_id": self.DEV, "items": [
                 {"entry_id": kj["id"]},
                 {"id": own["id"], "edit_token": own["edit_token"]}]})
         assert resp.status_code == 200
@@ -924,46 +956,51 @@ class TestNameMatchedSongs:
         assert order.index("HostAdded - X") < order.index("Mine - Q")
 
     def test_reorder_only_kj_added_entries(self, client, sing_app, token):
-        sing_app.sing_store.set_auto_approve(True)
+        own = self._submit(client, sing_app, token, "Ashlee A", "Mine", device_id=self.DEV)
+        sing_app.rotation.update_status(
+            sing_app.sing_store.get_request(own["id"])["linked_entry_id"], "Done")
         a = sing_app.rotation.add_entry("Ashlee A", "First - X")
         sing_app.rotation.add_entry("Bob", "Between - X")
-        b = sing_app.rotation.add_entry("Ashlee A", "Second - X")
+        b = sing_app.rotation.add_entry("ashlee a", "Second - X")
         resp = client.post(f"/sing/requests/reorder?t={token}", json={
-            "name": "Ashlee A", "device_id": "dev1",
-            "items": [{"entry_id": b["id"]}, {"entry_id": a["id"]}]})
+            "device_id": self.DEV, "items": [{"entry_id": b["id"]}, {"entry_id": a["id"]}]})
         assert resp.status_code == 200
         rr = sing_app.sing_store.get_request(resp.get_json()["request"]["id"])
-        assert rr["singer_name"] == "Ashlee A" and rr["device_id"] == "dev1"
+        assert rr["singer_name"] == "ashlee a" and rr["device_id"] == self.DEV
         # Swapped within Ashlee's own two slots; Bob stays in the middle.
         order = [e["song_artist"] for e in sing_app.rotation.get_rotation()]
         assert order == ["Second - X", "Between - X", "First - X"]
 
     def test_reorder_rejects_entry_not_naming_singer(self, client, sing_app, token):
+        self._submit(client, sing_app, token, "Ashlee A", "Mine", device_id=self.DEV)
         mine = sing_app.rotation.add_entry("Ashlee A", "Mine - X")
         theirs = sing_app.rotation.add_entry("Bob", "Bobs - X")
         resp = client.post(f"/sing/requests/reorder?t={token}", json={
-            "name": "Ashlee A", "items": [{"entry_id": theirs["id"]}, {"entry_id": mine["id"]}]})
+            "device_id": self.DEV, "items": [{"entry_id": theirs["id"]}, {"entry_id": mine["id"]}]})
         assert resp.status_code == 403
 
-    def test_reorder_rejects_entry_without_name(self, client, sing_app, token):
+    def test_reorder_rejects_stranger_device_even_with_name(self, client, sing_app, token):
+        self._submit(client, sing_app, token, "Ashlee A", "Mine", device_id=self.DEV)
         a = sing_app.rotation.add_entry("Ashlee A", "A - X")
         b = sing_app.rotation.add_entry("Ashlee A", "B - X")
         resp = client.post(f"/sing/requests/reorder?t={token}", json={
+            "device_id": "dev-stranger", "name": "Ashlee A",
             "items": [{"entry_id": a["id"]}, {"entry_id": b["id"]}]})
         assert resp.status_code == 403
 
     def test_reorder_rejects_duplicate_entry_via_both_forms(self, client, sing_app, token):
-        own = self._submit(client, sing_app, token, "Ashlee A", "Mine")
+        own = self._submit(client, sing_app, token, "Ashlee A", "Mine", device_id=self.DEV)
         eid = sing_app.sing_store.get_request(own["id"])["linked_entry_id"]
         resp = client.post(f"/sing/requests/reorder?t={token}", json={
-            "name": "Ashlee A", "items": [
+            "device_id": self.DEV, "items": [
                 {"entry_id": eid}, {"id": own["id"], "edit_token": own["edit_token"]}]})
         assert resp.status_code == 400
 
     def test_reorder_rejects_done_entry(self, client, sing_app, token):
+        self._submit(client, sing_app, token, "Ashlee A", "Mine", device_id=self.DEV)
         a = sing_app.rotation.add_entry("Ashlee A", "A - X")
         b = sing_app.rotation.add_entry("Ashlee A", "B - X")
         sing_app.rotation.update_status(a["id"], "Done")
         resp = client.post(f"/sing/requests/reorder?t={token}", json={
-            "name": "Ashlee A", "items": [{"entry_id": a["id"]}, {"entry_id": b["id"]}]})
+            "device_id": self.DEV, "items": [{"entry_id": a["id"]}, {"entry_id": b["id"]}]})
         assert resp.status_code == 409

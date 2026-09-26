@@ -509,7 +509,7 @@ class TestChangeReorderControls:
         expect(page.locator(".reorder-row")).to_have_count(0)
 
 
-class TestNameMatchedSongsUI:
+class TestIdentityMatchedSongsUI:
     """KJ-added / partner-requested songs (matched by name, `entry_id` set)
     render in My songs and can be reordered alongside the phone's own songs."""
 
@@ -543,7 +543,9 @@ class TestNameMatchedSongsUI:
         expect(page.locator('[data-testid="added-by-line"]')).to_have_text("Added by the host")
         # Only the phone's own song can be cancelled/changed.
         expect(page.locator('[data-testid="cancel-song"]')).to_have_count(1)
-        assert any("name=Alice" in u for u in urls)
+        # Identity is the device, never a claimed name.
+        assert any("device_id=" in u for u in urls)
+        assert not any("name=" in u for u in urls)
 
     def test_reorder_with_up_button_sends_entry_id_and_name(self, page, live_server, live_token):
         self._seed(page, live_server, live_token, [])
@@ -565,7 +567,7 @@ class TestNameMatchedSongsUI:
             page.locator('[data-testid="reorder-save"]').click()
         body = json.loads(req_info.value.post_data or "{}")
         assert body["items"] == [{"entry_id": 202}, {"id": 11, "edit_token": "tok11"}]
-        assert body["name"] == "Alice"
+        assert body["device_id"] and "name" not in body
         expect(page.locator(".reorder-notice")).to_contain_text("New order saved")
 
 
