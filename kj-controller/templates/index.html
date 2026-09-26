@@ -628,6 +628,7 @@
                 <div class="overlay-form-row overlay-field" data-types="ticker,static_text">
                     <label for="overlay-text">Text</label>
                     <textarea id="overlay-text" rows="2" placeholder="Enter overlay text..."></textarea>
+                    <p class="overlay-form-hint">Tip: <code>{url}</code> shows the singer link, e.g. kjbox.cc/1234 (follows the event code).</p>
                 </div>
 
                 <!-- Ticker (rotation source): prefix / count / separator / empty -->
@@ -710,10 +711,13 @@
                 <div class="overlay-form-row overlay-field" data-types="qr_code">
                     <label for="overlay-qr-url">URL</label>
                     <input type="url" id="overlay-qr-url" placeholder="https://example.com">
+                    <label class="overlay-toggle-label">
+                        <input type="checkbox" id="overlay-qr-follow" onchange="onOverlayQrFollowChange()"> Point at the singer link (follows the event code)
+                    </label>
                 </div>
                 <div class="overlay-form-row overlay-field" data-types="qr_code">
                     <label for="overlay-qr-label">Label</label>
-                    <input type="text" id="overlay-qr-label" placeholder="Scan me!">
+                    <input type="text" id="overlay-qr-label" placeholder="Scan me! ({url} = singer link)">
                 </div>
                 <div class="overlay-form-row overlay-field" data-types="qr_code">
                     <label for="overlay-qr-size">Size (px)</label>

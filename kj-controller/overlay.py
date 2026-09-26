@@ -24,7 +24,7 @@ OVERLAY_PRESETS = {
         'config': {
             'url': '',  # Filled in by sync_event_url_overlays after creation
             'follow_event_url': True,
-            'label': 'Scan to sing',
+            'label': '{url}',  # e.g. kjbox.cc/1234 — for anyone who can't scan
             'size': 110,
             'position': 'top-right',
             'padding': 8,
@@ -183,6 +183,15 @@ class OverlayManager:
         """Update the karaoke_playing state flag."""
         if self._data.get('karaoke_playing') != playing:
             self._data['karaoke_playing'] = playing
+            self._save()
+
+    def set_event_url(self, url):
+        """Persist the display form of the singer link (e.g. ``kjbox.cc/1234``)
+        into overlays.json; the overlay engine substitutes it for ``{url}`` in
+        overlay text. Idempotent: writes only on change."""
+        url = url or ''
+        if self._data.get('event_url') != url:
+            self._data['event_url'] = url
             self._save()
 
     def set_video_top_margin(self, px):

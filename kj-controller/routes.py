@@ -1853,6 +1853,7 @@ def import_overlays():
         return jsonify({"error": "Expected a JSON array of overlays"}), 400
     try:
         imported = current_app.overlay_manager.import_overlays(data)
+        _sync_follow_event_url()
         return jsonify({"success": True, "count": len(imported), "overlays": imported})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -1869,6 +1870,7 @@ def create_overlay():
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
 
+    _sync_follow_event_url()
     overlay = current_app.overlay_manager.get_overlay(overlay['id'])
     return jsonify(overlay), 201
 
@@ -1881,16 +1883,19 @@ def create_overlay_preset(preset_name):
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
 
-    if preset_name == 'scan-to-sing':
-        try:
-            url = _scan_to_sing_url()
-            sync_event_url_overlays(current_app.overlay_manager, url)
-            overlay = current_app.overlay_manager.get_overlay(overlay['id'])
-        except Exception:
-            import logging
-            logging.getLogger(__name__).exception("scan-to-sing url sync failed")
-
+    _sync_follow_event_url()
+    overlay = current_app.overlay_manager.get_overlay(overlay['id'])
     return jsonify(overlay), 201
+
+
+def _sync_follow_event_url():
+    """Fill the current event URL into any follow-event-url QR overlay right
+    away, rather than leaving it blank/stale until the next token change."""
+    try:
+        sync_event_url_overlays(current_app.overlay_manager, _scan_to_sing_url())
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception("event-url overlay sync failed")
 
 
 def _scan_to_sing_url():
@@ -1921,6 +1926,7 @@ def update_overlay(overlay_id):
     if not overlay:
         return jsonify({"error": "Overlay not found"}), 404
 
+    _sync_follow_event_url()
     overlay = current_app.overlay_manager.get_overlay(overlay_id)
     return jsonify(overlay)
 
@@ -6540,7 +6546,8 @@ def sing_qr_svg():
     try:
         import qrcode
         from qrcode.image.svg import SvgPathImage
-        img = qrcode.make(url, image_factory=SvgPathImage, box_size=10, border=2)
+        from sing import qr_data
+        img = qrcode.make(qr_data(url), image_factory=SvgPathImage, box_size=10, border=2)
         from io import BytesIO
         buf = BytesIO()
         img.save(buf)

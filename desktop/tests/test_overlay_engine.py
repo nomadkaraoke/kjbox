@@ -165,3 +165,28 @@ def test_apply_click_through_before_window_realized_is_noop():
 
     fake = types.SimpleNamespace(win=_Win())
     assert eng.OverlayApp._apply_click_through(fake) is False
+
+
+def test_load_config_fills_url_placeholder(tmp_path):
+    """`{url}` in overlay text becomes the singer link kj-controller publishes
+    as top-level `event_url` (e.g. kjbox.cc/1234); other braces are left alone."""
+    path = tmp_path / "overlays.json"
+    path.write_text(json.dumps({"event_url": "kjbox.cc/2121", "overlays": [
+        {"id": "t", "type": "ticker", "config": {"text": "Sing! {url} {not_a_field}"}},
+        {"id": "q", "type": "qr_code", "config": {"url": "http://kjbox.cc/2121", "label": "{url}"}},
+        {"id": "r", "type": "ticker", "config": {"source": "rotation", "empty_text": "Go to {url}"}},
+    ]}))
+    _, overlays = eng.load_config(str(path))
+    cfgs = {o["id"]: o["config"] for o in overlays}
+    assert cfgs["t"]["text"] == "Sing! kjbox.cc/2121 {not_a_field}"
+    assert cfgs["q"]["label"] == "kjbox.cc/2121"
+    assert cfgs["q"]["url"] == "http://kjbox.cc/2121"
+    assert cfgs["r"]["empty_text"] == "Go to kjbox.cc/2121"
+
+
+def test_load_config_url_placeholder_empty_without_event_url(tmp_path):
+    path = tmp_path / "overlays.json"
+    path.write_text(json.dumps({"overlays": [
+        {"id": "s", "type": "static_text", "config": {"text": "Visit {url}"}}]}))
+    _, overlays = eng.load_config(str(path))
+    assert overlays[0]["config"]["text"] == "Visit "

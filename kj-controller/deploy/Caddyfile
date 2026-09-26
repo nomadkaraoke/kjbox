@@ -42,6 +42,21 @@
 	}
 }
 
+# Venue-wifi singer short link (Local QR). Plain HTTP on purpose: phones don't
+# trust the mkcert cert, and this name only resolves to the box's LAN IP (router
+# DNS). More specific than `:80`, so it wins over the HTTPS redirect below.
+# Flask serves the singer UI at the root with no event code on this host.
+http://l.kjbox.cc {
+	encode zstd gzip
+	reverse_proxy 127.0.0.1:5001 {
+		header_up X-Forwarded-Proto http
+		header_up X-Forwarded-Host {host}
+	}
+	header {
+		-Server
+	}
+}
+
 # HTTP → HTTPS redirect.
 :80 {
 	redir https://{host}{uri} permanent
