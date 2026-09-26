@@ -4,7 +4,15 @@ Dated entries, newest first. Each entry notes any required deploy steps.
 
 ---
 
-## 2026-09-26 - Water notice wording (v0.119.2)
+## 2026-09-26 - Cache-bust bump (v0.120.1)
+
+**Deploy:** needs a `systemctl restart kj-controller` (no `.py` change) so `?v=0.120.1` reaches browsers.
+
+- The notice-editor layout fix (#249) and the water wording (#250) were merged with "0.119.x" bumps. Those were no-ops because #247 had already moved `pyproject.toml` to 0.120.0, so `app.js?v=` / `sing.js?v=` / `en.json?v=` stayed `0.120.0` and browsers kept their cached copies. **Always bump from the version currently on `main`.**
+
+---
+
+## 2026-09-26 - Water notice wording (shipped under v0.120.0; cache-busted in v0.120.1)
 
 **Deploy:** singer copy (33 locale files) + KJ `app.js` default text. No `.py` change, so phones pick up the new text after the next kj-controller restart (the `?v=` cache-bust) or a hard refresh.
 
@@ -12,7 +20,7 @@ Dated entries, newest first. Each entry notes any required deploy steps.
 
 ---
 
-## 2026-09-26 - Fix KJ notice editor layout (v0.119.1)
+## 2026-09-26 - Fix KJ notice editor layout (shipped under v0.120.0; cache-busted in v0.120.1)
 
 **Deploy:** KJ frontend CSS only (`style.css`), so there's no kj-controller restart. Hard-refresh the KJ page, or it takes effect on the next restart.
 
