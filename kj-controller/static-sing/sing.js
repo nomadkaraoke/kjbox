@@ -1768,6 +1768,11 @@ function renderSearch() {
   let searchGen = 0;
   const doSearch = (q) => {
     clearTimeout(debounceTimer);
+    // A changed query invalidates any in-flight search/auto-correct at once
+    // (not only when the debounce fires) and drops the old correction.
+    searchGen++;
+    correction = null;
+    resolving = false;
     // 700ms (was 300) to match the KJ side — the shared backend live-scrapes,
     // so a longer debounce just trims wasted scrapes. Correctness comes from
     // the generation guard below, not from the delay.

@@ -85,3 +85,26 @@ def test_commercial_track_never_folds():
     kn = _kn(SC)
     routes._fold_community_into_local(local, kn)
     assert len(kn[0]["tracks"]) == 1
+
+
+def test_curated_row_without_disc_id_still_folds_via_filename_prefix():
+    # _build_local_media_row drops parsed disc ids for curated (media_library) rows.
+    local = [dict(LOCAL, disc_id=None)]
+    kn = _kn(KARAR)
+    routes._fold_community_into_local(local, kn)
+    assert kn == [] and local[0]["is_community"] is True
+
+
+def test_hyphenated_title_is_not_mistaken_for_a_brand():
+    local = [dict(LOCAL, disc_id=None, filename="Jay-Z - Empire State Of Mind.mp4",
+                  artist="Jay-Z", title="Empire State Of Mind")]
+    kn = _kn({**KARAR, "brand_code": "JAY"}, artist="Jay-Z", title="Empire State Of Mind")
+    routes._fold_community_into_local(local, kn)
+    assert len(kn[0]["tracks"]) == 1
+
+
+def test_two_uploads_of_the_same_brand_are_both_kept():
+    local = [dict(LOCAL)]
+    kn = _kn(KARAR, {**KARAR, "youtube_url": "https://youtu.be/other"})
+    routes._fold_community_into_local(local, kn)
+    assert len(kn[0]["tracks"]) == 2 and "is_community" not in local[0]

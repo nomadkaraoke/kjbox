@@ -5039,6 +5039,19 @@ def _suppress_mastered_kn_tracks(local_results, kn_results):
 
 
 _FOLD_VIDEO_EXTS = {"mp4", "mkv", "webm", "mov", "m4v", "avi"}
+# A disc-style brand code at the start of a library filename:
+# "KARAR-093 - The Strokes - …" → KARAR-093. Only this narrow shape — curated
+# rows deliberately drop parsed disc ids because hyphenated titles can fake one.
+_FOLD_DISC_PREFIX_RE = re.compile(r"^([A-Za-z][A-Za-z0-9]{1,11}-\d{1,6})\s+-\s+")
+
+
+def _fold_local_brand(r):
+    disc_id = r.get("disc_id")
+    if not disc_id:
+        m = _FOLD_DISC_PREFIX_RE.match(r.get("filename") or "")
+        disc_id = m.group(1) if m else None
+    return version_priority.canonical_brand_for_match(
+        disc_id=disc_id, filename=r.get("filename"))
 
 
 def _fold_community_into_local(local_results, kn_results):
@@ -5067,31 +5080,37 @@ def _fold_community_into_local(local_results, kn_results):
                .lstrip(".").lower())
         if ext not in _FOLD_VIDEO_EXTS:
             continue
-        brand = version_priority.canonical_brand_for_match(
-            disc_id=r.get("disc_id"), filename=r.get("filename"))
+        brand = _fold_local_brand(r)
         song_key = _normalize_song_key(r.get("artist"), r.get("title"))
         if brand and song_key:
             by_key.setdefault((song_key, brand), []).append(r)
     if not by_key:
         return
+    def foldable(track):
+        _canon, cls = version_priority.resolve_brand(
+            brand_code=track.get("brand_code"),
+            brand_name=track.get("brand_name"),
+            is_community=track.get("is_community"))
+        if cls != "community" or not track.get("youtube_url") \
+                or (track.get("divebar") or {}).get("file_id"):
+            return None
+        return version_priority.canonical_brand_for_match(
+            brand_code=track.get("brand_code"), brand_name=track.get("brand_name")) or None
+
     kept_songs = []
     for song in kn_results or []:
         song_key = _normalize_song_key(song.get("artist"), song.get("title"))
+        tracks = song.get("tracks") or []
+        brands = [foldable(t) for t in tracks]
         kept = []
-        for track in song.get("tracks") or []:
-            _canon, cls = version_priority.resolve_brand(
-                brand_code=track.get("brand_code"),
-                brand_name=track.get("brand_name"),
-                is_community=track.get("is_community"))
-            url = track.get("youtube_url") or ""
-            brand = version_priority.canonical_brand_for_match(
-                brand_code=track.get("brand_code"), brand_name=track.get("brand_name"))
+        for track, brand in zip(tracks, brands):
             matches = by_key.get((song_key, brand)) if brand else None
-            if (cls == "community" and url and not (track.get("divebar") or {}).get("file_id")
-                    and matches and len(matches) == 1):
+            # Unambiguous on BOTH sides: one local file, and one KN upload of
+            # that brand for this song (two uploads can't both be our file).
+            if matches and len(matches) == 1 and brands.count(brand) == 1:
                 local = matches[0]
                 local["is_community"] = True
-                local.setdefault("alt_youtube_url", url)
+                local.setdefault("alt_youtube_url", track.get("youtube_url"))
                 continue
             kept.append(track)
         if kept:

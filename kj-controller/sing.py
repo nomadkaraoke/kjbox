@@ -665,17 +665,29 @@ _resolve_cache = {}
 _resolve_rate_state = defaultdict(deque)
 _RESOLVE_RATE_WINDOW_S = 300
 _RESOLVE_RATE_PER_DEVICE = 20
+# Venue-wide ceiling a phone can't reset by inventing device ids.
+_RESOLVE_RATE_PER_IP = 200
+_resolve_rate_lock = threading.Lock()
 
 
 def _resolve_rate_limited(device_id):
-    key = f"dev:{device_id}" if device_id else f"ip:{_client_ip(request)}"
     now = time.monotonic()
-    q = _resolve_rate_state[key]
-    while q and q[0] < now - _RESOLVE_RATE_WINDOW_S:
-        q.popleft()
-    if len(q) >= _RESOLVE_RATE_PER_DEVICE:
-        return True
-    q.append(now)
+    keys = [(f"ip:{_client_ip(request)}", _RESOLVE_RATE_PER_IP)]
+    if device_id:
+        keys.append((f"dev:{device_id}", _RESOLVE_RATE_PER_DEVICE))
+    with _resolve_rate_lock:
+        # Drop idle identities so made-up device ids can't grow memory.
+        for k in [k for k, q in _resolve_rate_state.items()
+                  if not q or q[-1] < now - _RESOLVE_RATE_WINDOW_S]:
+            del _resolve_rate_state[k]
+        for key, limit in keys:
+            q = _resolve_rate_state[key]
+            while q and q[0] < now - _RESOLVE_RATE_WINDOW_S:
+                q.popleft()
+            if len(q) >= limit:
+                return True
+        for key, _limit in keys:
+            _resolve_rate_state[key].append(now)
     return False
 
 

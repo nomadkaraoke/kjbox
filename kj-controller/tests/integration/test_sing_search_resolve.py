@@ -98,3 +98,12 @@ def test_rate_limited_per_device(client, token, gen, searched, monkeypatch):
 
 def test_needs_token(client, gen):
     assert client.get("/sing/search/resolve?q=abc").status_code in (401, 403)
+
+
+def test_new_device_ids_cannot_bypass_the_venue_ceiling(client, token, gen, searched, monkeypatch):
+    monkeypatch.setattr(sing, "_RESOLVE_RATE_PER_IP", 3)
+    for i in range(3):
+        r = client.get("/sing/search/resolve", query_string={"q": f"q {i}", "t": token, "device_id": f"{i:032d}"})
+        assert r.status_code == 200
+    r = client.get("/sing/search/resolve", query_string={"q": "q x", "t": token, "device_id": "f" * 32})
+    assert r.status_code == 429
