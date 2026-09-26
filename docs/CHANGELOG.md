@@ -23,6 +23,11 @@ card is gone. See [archive/2026-09-24-singer-make-it-auto-flow-plan.md](archive/
   the NEEDS REVIEW badge. Whoever is first wins.
 - **Needs** gen v0.239.0+ (`/api/kjbox/*`) and `gen_kjbox_secret` in config.json. Without them
   the make-it option is simply not offered.
+- **Device change (NomadPC, 2026-09-25 23:45):** `gen_kjbox_secret` added to
+  `/opt/nomad/kjbox/kj-controller/config.json`. Its value is Secret Manager `kjbox-partner-secret`,
+  created 2026-09-26 UTC, and the gen side reads it as `KJBOX_PARTNER_SECRET`. The previous
+  config was backed up to `config.json.bak-20260925-*`. To rotate: add a new secret version,
+  redeploy gen, and update this key.
 
 ## 2026-09-25 - Fix: Real-night edge cases from the 2026-09-24 show (v0.115.0)
 
