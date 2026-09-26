@@ -40,6 +40,11 @@ Dated entries, newest first. Each entry notes any required deploy steps.
   automatically. If they used a different spelling ("Ash"), **Merge singers** (Ash → Ashlee A)
   links the phone: `persist_rename` aliases the device and rewrites its requests to the target
   name, which is what the identity lookup reads.
+- **Merge modal suggests the likely duplicate:** options are ranked by name similarity to the
+  singer being merged (`singerNameSimilarity`: same folded name > same first name "Ashlee" ↔
+  "Ashlee R" > prefix "Ash" ↔ "Ashlee R" > first-name typo "Ashley" ↔ "Ashlee"). Likely matches
+  get a "likely match" badge and sort first; ties fall back to the existing device-first, then
+  name order. Enter in the search box picks the top option, so a typical merge needs no typing.
 - **Reorder UX:** there's now an explicit instruction line ("press and hold the ⠿ … drag … or tap
   ▲ / ▼ … then tap Save new order"). Each row has ▲/▼ buttons and a position number, the drag
   handle is bigger, and an auto-approved reorder says "✓ New order saved." instead of "the host

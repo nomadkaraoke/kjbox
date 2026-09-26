@@ -1708,6 +1708,10 @@ body {
 .merge-badge-duet { background: #3a2f14; color: #f5c869; }
 .merge-badge-kj { background: #2a2a2a; color: #999; }
 .merge-badge-status { background: #2a2540; color: #b3a8e0; }
+.merge-badge-likely { background: #4a3f12; color: #ffdf6b; }
+.merge-option-likely { border-color: #7d6a2e; }
+/* What Enter in the search box picks */
+.merge-option-top { box-shadow: 0 0 0 1px #ffdf6b inset; }
 .merge-hint, .merge-empty {
     padding: 0.6rem 1rem 1rem;
     font-size: 0.78em;

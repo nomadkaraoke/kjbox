@@ -162,6 +162,44 @@ function foldSingerName(name) {
         .replace(/[^\p{L}\p{N}\s]/gu, ' ').toLowerCase().split(/\s+/).filter(Boolean).join(' ');
 }
 
+// How likely two singer names are the same person (0 = unrelated). Used to
+// float probable duplicates to the top of the Merge modal: "Ashlee" ↔
+// "Ashlee R" (same first name), "Ash" ↔ "Ashlee R" (prefix), "Ashley" ↔
+// "Ashlee" (a typo in the first name).
+function singerNameSimilarity(a, b) {
+    const fa = foldSingerName(a);
+    const fb = foldSingerName(b);
+    if (!fa || !fb) return 0;
+    if (fa === fb) return 100;
+    const [firstA] = fa.split(' ');
+    const [firstB] = fb.split(' ');
+    if (firstA === firstB) return 80;
+    const short = fa.length <= fb.length ? fa : fb;
+    const long = short === fa ? fb : fa;
+    if (short.length >= 3 && long.startsWith(short)) return 60;
+    if (firstA.length >= 3 && firstB.length >= 3
+            && (firstA.startsWith(firstB) || firstB.startsWith(firstA))) return 50;
+    const budget = Math.max(firstA.length, firstB.length) >= 7 ? 2 : 1;
+    if (Math.min(firstA.length, firstB.length) >= 4 && firstA[0] === firstB[0]
+            && editDistance(firstA, firstB) <= budget) return 40;
+    return 0;
+}
+
+function editDistance(a, b) {
+    const prev = Array.from({ length: b.length + 1 }, (_, j) => j);
+    for (let i = 1; i <= a.length; i++) {
+        let diag = prev[0];
+        prev[0] = i;
+        for (let j = 1; j <= b.length; j++) {
+            const tmp = prev[j];
+            prev[j] = Math.min(prev[j] + 1, prev[j - 1] + 1,
+                diag + (a[i - 1] === b[j - 1] ? 0 : 1));
+            diag = tmp;
+        }
+    }
+    return prev[b.length];
+}
+
 // Rank known singers against what's typed: exact → name prefix → word prefix
 // → substring. `auto` is the index to pre-highlight, set only for a sure match
 // (the exact name, or the first name of exactly one singer — the same
@@ -7316,22 +7354,31 @@ function renderMergeOptionList() {
     if (!list) return;
 
     const q = st.query.trim().toLowerCase();
+    const sim = (s) => singerNameSimilarity(st.origin, s.name);
     const others = (singerStatsData || [])
         .filter(s => s.name.toLowerCase() !== st.origin.toLowerCase())
         .filter(s => !q || s.name.toLowerCase().includes(q))
-        // Real-device sessions first (most likely merge intent), then by name.
+        // Likely duplicates of this name first ("Ashlee" → "Ashlee R"), then
+        // real-device sessions (most likely merge intent), then by name.
         .sort((a, b) => {
+            const as = sim(a), bs = sim(b);
+            if (as !== bs) return bs - as;
             const ad = (a.session && a.session.has_device) ? 0 : 1;
             const bd = (b.session && b.session.has_device) ? 0 : 1;
             if (ad !== bd) return ad - bd;
             return a.name.localeCompare(b.name);
         });
 
-    list.innerHTML = others.map(s =>
-        '<button class="merge-option" data-name="' + escAttr(s.name) + '">'
-        + '<span class="merge-option-name">' + escHtml(s.name) + '</span>'
-        + '<span class="merge-option-badges">' + singerBadgesHtml(s) + '</span>'
-        + '</button>').join('') || '<div class="merge-empty">No matching singers.</div>';
+    list.innerHTML = others.map((s, i) => {
+        const likely = sim(s) > 0;
+        return '<button class="merge-option' + (likely ? ' merge-option-likely' : '')
+            + (i === 0 ? ' merge-option-top' : '') + '" data-name="' + escAttr(s.name) + '">'
+            + '<span class="merge-option-name">' + escHtml(s.name) + '</span>'
+            + '<span class="merge-option-badges">'
+            + (likely ? '<span class="merge-badge merge-badge-likely">likely match</span> ' : '')
+            + singerBadgesHtml(s) + '</span>'
+            + '</button>';
+    }).join('') || '<div class="merge-empty">No matching singers.</div>';
 
     list.querySelectorAll('.merge-option').forEach(btn => {
         btn.onclick = () => {
@@ -7366,12 +7413,20 @@ function renderMergeModal() {
             + '<div class="merge-modal-sub">' + escHtml(origin.name) + ' ' + singerBadgesHtml(origin) + '</div>'
             + '<input class="merge-search" type="text" placeholder="Search singers…" value="' + escAttr(st.query) + '">'
             + '<div class="merge-option-list"></div>'
-            + '<div class="merge-hint">Pick the singer this person should be combined with. '
+            + '<div class="merge-hint">Pick the singer this person should be combined with '
+            +   '(likely matches are listed first — Enter picks the top one). '
             +   'You’ll confirm which name is kept next.</div>';
 
         modal.querySelector('.merge-modal-close').onclick = closeMergeModal;
         const search = modal.querySelector('.merge-search');
         search.oninput = () => { st.query = search.value; renderMergeOptionList(); };
+        // Enter picks the top option — with a likely match ranked first, that's
+        // usually the whole merge without typing anything.
+        search.onkeydown = (e) => {
+            if (e.key !== 'Enter') return;
+            const top = modal.querySelector('.merge-option');
+            if (top) { e.preventDefault(); top.click(); }
+        };
         renderMergeOptionList();
         search.focus();
         return;
