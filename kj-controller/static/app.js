@@ -10188,7 +10188,7 @@ const SingRequests = (() => {
         ['moreSongs', '📱', 'You can add more songs any time from this page.'],
         ['tipsHelp', '💜', 'Tips help keep the show going — see the Tip tab.'],
         ['wifi', '📶', 'Free wifi — ask the host for the password.'],
-        ['water', '💧', 'Free water for singers at the bar.'],
+        ['water', '💧', 'Free water and ice available near the bar.'],
         ['photos', '📸', 'Photos and videos are welcome.'],
     ];
     const BUILTIN_DEFAULTS = Object.fromEntries(BUILTIN_NOTICES.map(([k, icon, text]) => [k, { icon, text }]));

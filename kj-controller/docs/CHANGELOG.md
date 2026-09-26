@@ -4,6 +4,14 @@ Dated entries, newest first. Each entry notes any required deploy steps.
 
 ---
 
+## 2026-09-26 - Water notice wording (v0.119.2)
+
+**Deploy:** singer copy (33 locale files) + KJ `app.js` default text. No `.py` change, so phones pick up the new text after the next kj-controller restart (the `?v=` cache-bust) or a hard refresh.
+
+- Andrew: the pre-built water notice now reads "💧 Free water and ice available near the bar." (was "Free water for singers at the bar."), retranslated into all locales.
+
+---
+
 ## 2026-09-26 - Fix KJ notice editor layout (v0.119.1)
 
 **Deploy:** KJ frontend CSS only (`style.css`), so there's no kj-controller restart. Hard-refresh the KJ page, or it takes effect on the next restart.

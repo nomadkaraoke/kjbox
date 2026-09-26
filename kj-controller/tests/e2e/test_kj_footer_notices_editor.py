@@ -26,7 +26,7 @@ def test_rows_lay_out_emoji_text_and_buttons_on_one_line(app_page, live_server):
     assert icon["x"] < text["x"] < down["x"]
     assert down["x"] + down["width"] <= rb["x"] + rb["width"] + 1   # nothing overflows the row
     expect(row.locator('[data-role="text"]')).to_have_attribute(
-        "placeholder", "Free water for singers at the bar. (default, translated)")
+        "placeholder", "Free water and ice available near the bar. (default, translated)")
 
 
 def test_edit_add_and_save_notices(app_page, live_server):
