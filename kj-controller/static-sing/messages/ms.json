@@ -86,7 +86,13 @@
     "ideasNone": "Tiada sejarah lagu lagi — malam ini malamnya!",
     "ideasFailed": "Tidak dapat memuatkan sejarah lagu.",
     "plays": "▶ {count}",
-    "makeOffer": "Bukan versi yang anda mahukan? Jana atas permintaan →"
+    "makeOffer": "Bukan versi yang anda mahukan? Jana atas permintaan →",
+    "checkingSpelling": "Menyemak ejaan…",
+    "didYouMean": "Maksud anda…?",
+    "correctedTo": "Dibetulkan kepada {song} — anda menaip “{typed}”.",
+    "usingTyped": "Menggunakan apa yang anda taip: “{typed}”.",
+    "undo": "Buat asal",
+    "useCorrection": "Gunakan pembetulan"
   },
   "versions": {
     "sectionLibrary": "Dalam pustaka kami",
@@ -519,7 +525,11 @@
     "fromHost": "Nota daripada hos anda",
     "followUs": "Ikuti kami",
     "website": "Laman web",
-    "email": "E-mel"
+    "email": "E-mel",
+    "contactUs": "Hubungi kami",
+    "phone": "Mesej atau telefon",
+    "text": "💬 Mesej",
+    "call": "📞 Telefon"
   },
   "photoConsent": {
     "question": "📷 Adakah anda okey jika gambar atau video anda menyanyi malam ini dimuat naik ke media sosial?",

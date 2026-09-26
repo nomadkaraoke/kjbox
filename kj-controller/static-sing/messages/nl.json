@@ -86,7 +86,13 @@
     "ideasNone": "Nog geen nummergeschiedenis — vanavond is de avond!",
     "ideasFailed": "Kon nummergeschiedenis niet laden.",
     "plays": "▶ {count}",
-    "makeOffer": "Niet de versie die je wilde? Genereer hem op aanvraag →"
+    "makeOffer": "Niet de versie die je wilde? Genereer hem op aanvraag →",
+    "checkingSpelling": "Spelling controleren…",
+    "didYouMean": "Bedoelde je…?",
+    "correctedTo": "Gecorrigeerd naar {song} — je typte “{typed}”.",
+    "usingTyped": "We gebruiken wat je typte: “{typed}”.",
+    "undo": "Ongedaan maken",
+    "useCorrection": "Gebruik de correctie"
   },
   "versions": {
     "sectionLibrary": "In onze bibliotheek",
@@ -519,7 +525,11 @@
     "fromHost": "Een bericht van je host",
     "followUs": "Volg ons",
     "website": "Website",
-    "email": "E-mail"
+    "email": "E-mail",
+    "contactUs": "Neem contact op",
+    "phone": "Sms of bel",
+    "text": "💬 Sms",
+    "call": "📞 Bellen"
   },
   "photoConsent": {
     "question": "📷 Vind je het goed als er vanavond foto's of video's van je optreden op social media worden geplaatst?",

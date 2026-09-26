@@ -86,7 +86,13 @@
     "ideasNone": "Ingen låthistorik än — ikväll händer det!",
     "ideasFailed": "Kunde inte ladda låthistorik.",
     "plays": "▶ {count}",
-    "makeOffer": "Inte versionen du ville ha? Generera den på begäran →"
+    "makeOffer": "Inte versionen du ville ha? Generera den på begäran →",
+    "checkingSpelling": "Kontrollerar stavningen…",
+    "didYouMean": "Menade du…?",
+    "correctedTo": "Rättat till {song} — du skrev ”{typed}”.",
+    "usingTyped": "Använder det du skrev: ”{typed}”.",
+    "undo": "Ångra",
+    "useCorrection": "Använd rättningen"
   },
   "versions": {
     "sectionLibrary": "I vårt bibliotek",
@@ -519,7 +525,11 @@
     "fromHost": "Ett meddelande från din värd",
     "followUs": "Följ oss",
     "website": "Hemsida",
-    "email": "E-post"
+    "email": "E-post",
+    "contactUs": "Kontakta oss",
+    "phone": "Sms:a eller ring",
+    "text": "💬 Sms:a",
+    "call": "📞 Ring"
   },
   "photoConsent": {
     "question": "📷 Är det okej om foton eller videor på när du sjunger ikväll läggs upp på sociala medier?",

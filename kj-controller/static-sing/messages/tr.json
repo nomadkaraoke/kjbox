@@ -86,7 +86,13 @@
     "ideasNone": "Henüz şarkı geçmişi yok — bu gece o gece!",
     "ideasFailed": "Şarkı geçmişi yüklenemedi.",
     "plays": "▶ {count}",
-    "makeOffer": "İstediğin versiyon değil mi? İstek üzerine oluştur →"
+    "makeOffer": "İstediğin versiyon değil mi? İstek üzerine oluştur →",
+    "checkingSpelling": "Yazım kontrol ediliyor…",
+    "didYouMean": "Bunu mu demek istedin…?",
+    "correctedTo": "{song} olarak düzeltildi — “{typed}” yazmıştın.",
+    "usingTyped": "Yazdığın gibi kullanılıyor: “{typed}”.",
+    "undo": "Geri al",
+    "useCorrection": "Düzeltmeyi kullan"
   },
   "versions": {
     "sectionLibrary": "Kütüphanemizde",
@@ -519,7 +525,11 @@
     "fromHost": "Sunucundan bir not",
     "followUs": "Bizi takip et",
     "website": "Web sitesi",
-    "email": "E-posta"
+    "email": "E-posta",
+    "contactUs": "Bize ulaş",
+    "phone": "Mesaj at veya ara",
+    "text": "💬 Mesaj at",
+    "call": "📞 Ara"
   },
   "photoConsent": {
     "question": "📷 Bu gece şarkı söylerken çekilen fotoğraf veya videolarının sosyal medyada paylaşılması senin için uygun mu?",

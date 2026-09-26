@@ -4857,8 +4857,13 @@ li.media-no-audio {
   gap: 0.35rem;
   margin: 0.25rem 0 0.5rem;
 }
-.sing-footer-notices label { display: flex; align-items: flex-start; gap: 0.45rem; font-size: 0.9rem; line-height: 1.35; }
-.sing-footer-notices input { margin-top: 0.2rem; flex: 0 0 auto; }
+.sing-footer-notice-row { display: flex; align-items: center; gap: 0.4rem; }
+.sing-footer-notice-row input[type="checkbox"] { flex: 0 0 auto; }
+.sing-footer-notice-icon { width: 3rem; flex: 0 0 auto; text-align: center; font-size: 1rem; }
+.sing-footer-notice-text { flex: 1 1 auto; min-width: 0; font-size: 0.88rem; }
+.sing-footer-notice-btn { flex: 0 0 auto; padding: 0.15rem 0.45rem; font-size: 0.8rem; }
+.sing-footer-add-notice { align-self: flex-start; margin-top: 0.3rem; font-size: 0.85rem; }
+.sing-hint-inline { opacity: 0.65; font-size: 0.8em; }
 .sing-footer-message-label { display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.85rem; }
 .sing-footer-message-label textarea { width: 100%; resize: vertical; font-family: inherit; }
 .sing-footer-social { margin-top: 0.3rem; }

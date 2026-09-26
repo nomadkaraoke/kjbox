@@ -86,7 +86,13 @@
     "ideasNone": "No song history yet — tonight's the night!",
     "ideasFailed": "Couldn't load song history.",
     "plays": "▶ {count}",
-    "makeOffer": "Not the version you wanted? Generate it on demand →"
+    "makeOffer": "Not the version you wanted? Generate it on demand →",
+    "checkingSpelling": "Checking the spelling…",
+    "didYouMean": "Did you mean…?",
+    "correctedTo": "Corrected to {song} — you typed “{typed}”.",
+    "usingTyped": "Using what you typed: “{typed}”.",
+    "undo": "Undo",
+    "useCorrection": "Use the correction"
   },
   "versions": {
     "sectionLibrary": "In our library",
@@ -519,7 +525,11 @@
     "fromHost": "A note from your host",
     "followUs": "Follow us",
     "website": "Website",
-    "email": "Email"
+    "email": "Email",
+    "contactUs": "Contact us",
+    "phone": "Text or call",
+    "text": "💬 Text",
+    "call": "📞 Call"
   },
   "photoConsent": {
     "question": "📷 Is it OK if photos or videos of you singing tonight are posted on social media?",

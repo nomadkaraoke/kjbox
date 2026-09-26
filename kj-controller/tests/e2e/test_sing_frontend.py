@@ -218,7 +218,7 @@ class TestSearchRace:
             status=200, content_type="application/json", body=json.dumps({"songs": []})))
         self._goto_search(page, live_server, live_token)
         page.locator('input[type="search"]').fill("bohemian")
-        expect(page.locator(".results .hint")).to_have_text("Searching…", timeout=400)
+        expect(page.locator('.results [data-testid="search-searching"]')).to_contain_text("Searching…", timeout=400)
 
     def test_pick_is_inert_briefly_after_render(self, page, live_server, live_token):
         """A freshly rendered pick button is inert (anti-mis-tap), then arms."""

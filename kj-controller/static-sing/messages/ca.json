@@ -86,7 +86,13 @@
     "ideasNone": "Encara no hi ha historial de cançons — aquesta és la nit!",
     "ideasFailed": "No s'ha pogut carregar l'historial de cançons.",
     "plays": "▶ {count}",
-    "makeOffer": "No és la versió que volies? Genera-la a petició →"
+    "makeOffer": "No és la versió que volies? Genera-la a petició →",
+    "checkingSpelling": "Comprovant l'ortografia…",
+    "didYouMean": "Volies dir…?",
+    "correctedTo": "Corregit a {song} — has escrit “{typed}”.",
+    "usingTyped": "Utilitzant el que has escrit: “{typed}”.",
+    "undo": "Desfer",
+    "useCorrection": "Utilitza la correcció"
   },
   "versions": {
     "sectionLibrary": "A la nostra biblioteca",
@@ -519,7 +525,11 @@
     "fromHost": "Una nota del teu amfitrió",
     "followUs": "Segueix-nos",
     "website": "Lloc web",
-    "email": "Correu electrònic"
+    "email": "Correu electrònic",
+    "contactUs": "Contacta'ns",
+    "phone": "Envia un missatge o truca",
+    "text": "💬 Missatge",
+    "call": "📞 Truca"
   },
   "photoConsent": {
     "question": "📷 Et sembla bé que es publiquin fotos o vídeos teus cantant aquesta nit a les xarxes socials?",

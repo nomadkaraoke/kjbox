@@ -210,16 +210,16 @@ class TestGroupRelevance:
 class TestFooterSettings:
     def test_store_defaults_and_validation(self, tmp_path):
         store = SingStore(str(tmp_path / "rot.db"))
-        assert store.get_footer_settings() == {"message": "", "notices": [], "social": {}, "ask_photo_consent": False}
+        assert store.get_footer_settings() == {"message": "", "notices": [], "notice_defs": {}, "social": {}, "ask_photo_consent": False}
         saved = store.set_footer_settings({
             "message": "  Kitchen closes at 11  ",
             "notices": ["chargers", "bogus", "wifi", "chargers"],
         })
-        assert saved == {"message": "Kitchen closes at 11", "notices": ["chargers", "wifi"], "social": {}, "ask_photo_consent": False}
+        assert saved == {"message": "Kitchen closes at 11", "notices": ["chargers", "wifi"], "notice_defs": {}, "social": {}, "ask_photo_consent": False}
         assert store.get_footer_settings() == saved
         # Partial update keeps the other half.
         store.set_footer_settings({"notices": []})
-        assert store.get_footer_settings() == {"message": "Kitchen closes at 11", "notices": [], "social": {}, "ask_photo_consent": False}
+        assert store.get_footer_settings() == {"message": "Kitchen closes at 11", "notices": [], "notice_defs": {}, "social": {}, "ask_photo_consent": False}
         with pytest.raises(ValueError):
             store.set_footer_settings({"notices": "chargers"})
         with pytest.raises(ValueError):
@@ -236,15 +236,65 @@ class TestFooterSettings:
         })
         assert resp.status_code == 200
         assert resp.get_json()["changed"]["footer_settings"] == {
-            "message": "Last call 12:30", "notices": ["lyricsScreen"], "social": {}, "ask_photo_consent": False}
+            "message": "Last call 12:30", "notices": ["lyricsScreen"], "notice_defs": {}, "social": {}, "ask_photo_consent": False}
         cfg = flask_test_client.get("/rotation/requests/config").get_json()
-        assert cfg["footer_settings"] == {"message": "Last call 12:30", "notices": ["lyricsScreen"], "social": {}, "ask_photo_consent": False}
+        assert cfg["footer_settings"] == {"message": "Last call 12:30", "notices": ["lyricsScreen"], "notice_defs": {}, "social": {}, "ask_photo_consent": False}
 
         token = flask_app.sing_store.ensure_token()
         info = flask_test_client.get(f"/sing/event-info?t={token}").get_json()
         assert info["footer_message"] == "Last call 12:30"
         assert info["notices"] == ["lyricsScreen"]
         assert "kj_name" in info
+
+    def test_custom_notices_and_reworded_builtins(self, tmp_path):
+        store = SingStore(str(tmp_path / "rot.db"))
+        saved = store.set_footer_settings({
+            "notice_defs": {
+                "water": {"icon": "🥤", "text": "  Free   soda for singers "},   # re-worded pre-built
+                "wifi": {"icon": "", "text": ""},                              # back to the default
+                "c-pizza": {"icon": "🍕", "text": "Pizza at 10!"},
+                "c-empty": {"icon": "🍕", "text": "  "},                       # emptied → deleted
+                "bogus": {"icon": "x", "text": "y"},
+            },
+            "notices": ["c-pizza", "water", "c-empty", "chargers"],
+        })
+        assert saved["notice_defs"] == {"water": {"icon": "🥤", "text": "Free soda for singers"},
+                                        "c-pizza": {"icon": "🍕", "text": "Pizza at 10!"}}
+        assert saved["notices"] == ["c-pizza", "water", "chargers"]   # KJ's order kept
+        # Deleting a custom notice also switches it off.
+        after = store.set_footer_settings({"notice_defs": {"water": saved["notice_defs"]["water"]}})
+        assert after["notices"] == ["water", "chargers"]
+        with pytest.raises(ValueError):
+            store.set_footer_settings({"notice_defs": {"c-x": "nope"}})
+        with pytest.raises(ValueError):
+            store.set_footer_settings({"notice_defs": {
+                f"c-{i}": {"icon": "", "text": "t"} for i in range(SingStore.FOOTER_CUSTOM_NOTICES_MAX + 1)}})
+
+    def test_event_info_sends_defs_only_for_switched_on_notices(self, flask_test_client, flask_app):
+        flask_app.sing_store.set_footer_settings({
+            "notice_defs": {"c-pizza": {"icon": "🍕", "text": "Pizza!"}, "c-off": {"icon": "", "text": "Hidden"}},
+            "notices": ["c-pizza"],
+        })
+        token = flask_app.sing_store.ensure_token()
+        info = flask_test_client.get(f"/sing/event-info?t={token}").get_json()
+        assert info["notices"] == ["c-pizza"]
+        assert info["notice_defs"] == {"c-pizza": {"icon": "🍕", "text": "Pizza!"}}
+
+    @pytest.mark.parametrize("value,expected", [
+        ("+1 (803) 636-3267", "+1 (803) 636-3267"),
+        ("tel:+18036363267", "+18036363267"),
+        ("", None),
+    ])
+    def test_phone_contact_link(self, tmp_path, value, expected):
+        store = SingStore(str(tmp_path / "rot.db"))
+        social = store.set_footer_settings({"social": {"phone": value}})["social"]
+        assert social.get("phone") == expected
+
+    @pytest.mark.parametrize("value", ["call me", "12345", "javascript:alert(1)", "+1 555 1234 5678 9012 34"])
+    def test_bad_phone_rejected(self, tmp_path, value):
+        store = SingStore(str(tmp_path / "rot.db"))
+        with pytest.raises(ValueError):
+            store.set_footer_settings({"social": {"phone": value}})
 
     def test_bad_footer_settings_400(self, flask_test_client):
         resp = flask_test_client.post("/rotation/requests/config",

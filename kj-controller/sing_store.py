@@ -513,8 +513,17 @@ class SingStore:
     # the render order. "email" is an address (rendered as mailto:); the rest
     # are http(s) URLs.
     FOOTER_SOCIAL_KEYS = (
-        "instagram", "facebook", "tiktok", "youtube", "x", "website", "email",
+        "instagram", "facebook", "tiktok", "youtube", "x", "website", "email", "phone",
     )
+    # KJ-authored notices ("c-<id>") and edits to the pre-built ones live in
+    # ``notice_defs`` as {key: {icon, text}}; ``notices`` stays the ordered
+    # list of switched-on keys. A pre-built notice with no text override keeps
+    # its translated copy.
+    FOOTER_CUSTOM_NOTICE_RE = re.compile(r"^c-[a-z0-9]{1,12}$")
+    FOOTER_CUSTOM_NOTICES_MAX = 12
+    FOOTER_NOTICE_TEXT_MAX = 200
+    FOOTER_NOTICE_ICON_MAX = 16
+    _PHONE_RE = re.compile(r"^\+?[0-9 ().-]{7,24}$")
     FOOTER_SOCIAL_MAX = 300
     _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
@@ -530,6 +539,13 @@ class SingStore:
             return ""
         if len(value) > cls.FOOTER_SOCIAL_MAX:
             raise ValueError(f"social.{key} is too long")
+        if key == "phone":
+            if value.lower().startswith("tel:"):
+                value = value[4:].strip()
+            digits = re.sub(r"\D", "", value)
+            if not cls._PHONE_RE.match(value) or not 7 <= len(digits) <= 15:
+                raise ValueError("social.phone must be a phone number")
+            return value
         if key == "email":
             if value.lower().startswith("mailto:"):
                 value = value[7:]
@@ -546,9 +562,45 @@ class SingStore:
             raise ValueError(f"social.{key} must be a web address")
         return value
 
+    @classmethod
+    def _clean_notice_defs(cls, defs):
+        """Validate ``notice_defs``: pre-built keys may override icon/text;
+        custom ``c-<id>`` keys need text. Raises ValueError on bad input."""
+        if defs is None:
+            return {}
+        if not isinstance(defs, dict):
+            raise ValueError("notice_defs must be an object")
+        cleaned = {}
+        customs = 0
+        for key, d in defs.items():
+            custom = isinstance(key, str) and bool(cls.FOOTER_CUSTOM_NOTICE_RE.match(key))
+            if not (custom or key in cls.FOOTER_NOTICE_KEYS):
+                continue
+            if not isinstance(d, dict):
+                raise ValueError(f"notice_defs.{key} must be an object")
+            icon, text = d.get("icon") or "", d.get("text") or ""
+            if not isinstance(icon, str) or not isinstance(text, str):
+                raise ValueError(f"notice_defs.{key} icon/text must be strings")
+            icon = icon.strip()[: cls.FOOTER_NOTICE_ICON_MAX]
+            text = " ".join(text.split())[: cls.FOOTER_NOTICE_TEXT_MAX]
+            if custom:
+                if not text:
+                    continue   # an emptied custom notice is deleted
+                customs += 1
+                if customs > cls.FOOTER_CUSTOM_NOTICES_MAX:
+                    raise ValueError(f"at most {cls.FOOTER_CUSTOM_NOTICES_MAX} custom notices")
+            elif not (icon or text):
+                continue       # back to the translated default
+            cleaned[key] = {"icon": icon, "text": text}
+        return cleaned
+
+    def _notice_known(self, key, defs):
+        return key in self.FOOTER_NOTICE_KEYS or (
+            isinstance(key, str) and self.FOOTER_CUSTOM_NOTICE_RE.match(key) and key in defs)
+
     def get_footer_settings(self):
-        """``{"message", "notices", "social", "ask_photo_consent"}`` — always
-        every key. ``social`` holds only the non-empty links."""
+        """``{"message", "notices", "notice_defs", "social", "ask_photo_consent"}``
+        — always every key. ``social`` holds only the non-empty links."""
         raw = self._get_meta(self.FOOTER_SETTINGS_KEY)
         data = {}
         if raw:
@@ -560,18 +612,23 @@ class SingStore:
         message = data.get("message")
         notices = data.get("notices")
         social = data.get("social") if isinstance(data.get("social"), dict) else {}
+        try:
+            defs = self._clean_notice_defs(data.get("notice_defs"))
+        except ValueError:
+            defs = {}
         return {
             "message": message if isinstance(message, str) else "",
             "notices": [n for n in (notices if isinstance(notices, list) else [])
-                        if n in self.FOOTER_NOTICE_KEYS],
+                        if self._notice_known(n, defs)],
+            "notice_defs": defs,
             "social": {k: social[k] for k in self.FOOTER_SOCIAL_KEYS
                        if isinstance(social.get(k), str) and social[k]},
             "ask_photo_consent": bool(data.get("ask_photo_consent")),
         }
 
     def set_footer_settings(self, settings):
-        """Merge ``settings`` ({message?, notices?, social?, ask_photo_consent?})
-        into the stored blob.
+        """Merge ``settings`` ({message?, notices?, notice_defs?, social?,
+        ask_photo_consent?}) into the stored blob.
 
         ``message`` is trimmed and capped; ``notices`` must be a list of
         known keys (unknown keys are dropped, order preserved); ``social``
@@ -588,6 +645,11 @@ class SingStore:
             if not isinstance(msg, str):
                 raise ValueError("message must be a string")
             current["message"] = msg.strip()[: self.FOOTER_MESSAGE_MAX]
+        if "notice_defs" in settings:
+            current["notice_defs"] = self._clean_notice_defs(settings["notice_defs"])
+            # A deleted custom notice can't stay switched on.
+            current["notices"] = [n for n in current["notices"]
+                                  if self._notice_known(n, current["notice_defs"])]
         if "notices" in settings:
             notices = settings["notices"]
             if notices is None:
@@ -596,7 +658,7 @@ class SingStore:
                 raise ValueError("notices must be a list of strings")
             seen = []
             for n in notices:
-                if n in self.FOOTER_NOTICE_KEYS and n not in seen:
+                if self._notice_known(n, current["notice_defs"]) and n not in seen:
                     seen.append(n)
             current["notices"] = seen
         if "social" in settings:

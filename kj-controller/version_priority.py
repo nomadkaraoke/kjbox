@@ -284,8 +284,13 @@ def _extract_brand_inputs(version):
     src = version.get("source")
     if src == "local":
         local = version.get("local") or {}
-        return {"disc_id": local.get("disc_id"),
-                "filename": local.get("filename")}
+        inputs = {"disc_id": local.get("disc_id"),
+                  "filename": local.get("filename")}
+        # Set when search matched this file to a community brand's release
+        # (routes._fold_community_into_local) — rank it as community.
+        if local.get("is_community") is True:
+            inputs["is_community"] = True
+        return inputs
     if src == "kn":
         kn = version.get("kn") or {}
         return {"brand_code": kn.get("brand_code"),
@@ -297,8 +302,11 @@ def _extract_brand_inputs(version):
                 "is_community": version.get("is_community")}
     # rotation_search shapes have no "source" key — use field presence.
     if version.get("path") or version.get("disc_id"):
-        return {"disc_id": version.get("disc_id"),
-                "filename": version.get("filename")}
+        inputs = {"disc_id": version.get("disc_id"),
+                  "filename": version.get("filename")}
+        if version.get("is_community") is True:
+            inputs["is_community"] = True
+        return inputs
     return {"brand_code": version.get("brand_code"),
             "brand_name": version.get("brand_name"),
             "is_community": version.get("is_community")}
@@ -362,6 +370,8 @@ def annotate_versions(versions, cfg, *, shape="kj_pick"):
         if shape == "rotation_search_local":
             inputs = {"disc_id": v.get("disc_id"),
                       "filename": v.get("filename")}
+            if v.get("is_community") is True:
+                inputs["is_community"] = True
         elif shape in ("rotation_search_kn", "rotation_search_divebar"):
             inputs = {"brand_code": v.get("brand_code"),
                       "brand_name": v.get("brand_name"),

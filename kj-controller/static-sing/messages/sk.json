@@ -86,7 +86,13 @@
     "ideasNone": "Zatiaľ žiadna história piesní — dnes je ten večer!",
     "ideasFailed": "Nepodarilo sa načítať históriu piesní.",
     "plays": "▶ {count}",
-    "makeOffer": "Nie je to verzia, ktorú si chcel? Vygeneruj si ju na požiadanie →"
+    "makeOffer": "Nie je to verzia, ktorú si chcel? Vygeneruj si ju na požiadanie →",
+    "checkingSpelling": "Kontrolujem pravopis…",
+    "didYouMean": "Mal si na mysli…?",
+    "correctedTo": "Opravené na {song} — tvoj text bol „{typed}“.",
+    "usingTyped": "Používam tvoj text: „{typed}“.",
+    "undo": "Vrátiť späť",
+    "useCorrection": "Použiť opravu"
   },
   "versions": {
     "sectionLibrary": "V našej knižnici",
@@ -519,7 +525,11 @@
     "fromHost": "Odkaz od tvojho KJ",
     "followUs": "Sleduj nás",
     "website": "Webstránka",
-    "email": "E-mail"
+    "email": "E-mail",
+    "contactUs": "Kontaktuj nás",
+    "phone": "Napíš alebo zavolaj",
+    "text": "💬 Napísať",
+    "call": "📞 Zavolať"
   },
   "photoConsent": {
     "question": "📷 Je v poriadku, ak sa fotky alebo videá, na ktorých dnes večer spievaš, zverejnia na sociálnych sieťach?",
