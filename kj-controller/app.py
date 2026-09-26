@@ -405,6 +405,8 @@ def create_app(config=None):
     # pass a config and get the sampler object without a live thread.
     _install_perf_monitor(flask_app, cfg, start=(config is None))
     _install_action_recorder(flask_app, cfg, default_enabled=(config is None))
+    # 'New Rotation' starts the kj-night-capture sidecar (night_capture_launcher.py).
+    flask_app.night_capture_enabled = cfg.get('night_capture_enabled', (config is None))
     _install_external_media_monitor(flask_app, cfg, start=(config is None))
 
     flask_app.register_blueprint(routes_bp)
@@ -613,6 +615,8 @@ def start_app():  # pragma: no cover
 
     _install_perf_monitor(flask_app, cfg, start=True)
     _install_action_recorder(flask_app, cfg, default_enabled=True)
+    # 'New Rotation' starts the kj-night-capture sidecar (night_capture_launcher.py).
+    flask_app.night_capture_enabled = cfg.get('night_capture_enabled', True)
     _install_external_media_monitor(flask_app, cfg, start=True)
 
     flask_app.register_blueprint(routes_bp)

@@ -11,7 +11,7 @@ Two complementary recorders:
 | Recorder | Where | Captures | Needs restart? |
 |---|---|---|---|
 | **In-app ActionRecorder** (`kj-controller/action_recorder.py`) | Flask before/after/teardown hooks | Every non-poll HTTP request: actor (kj/singer), method, path, query, **JSON/form body**, **JSON response** (≤64KB, else truncated+sha1), status, duration, client headers (UA, CF-Connecting-IP, Accept-Language, Referer), hashed session cookie | Ships with the app (on by default on the device) |
-| **Sidecar** (`kj-controller/scripts/night_capture.py`) | Separate process, stdlib only | Row-level diffs of every table in `rotation.db` + `media_library.db`, `/status` timeline (playback state, current song, volumes, pitch, downloads), `journalctl -u kj-controller -o json`, periodic gz SQLite snapshots | No — read-only against the running app |
+| **Sidecar** (`kj-controller/scripts/night_capture.py`) | Separate process, stdlib only | Row-level diffs of every table in `rotation.db` + `media_library.db`, `/status` timeline (playback state, current song, volumes, pitch, downloads), `journalctl -u kj-controller -o json`, periodic gz SQLite snapshots | No — read-only against the running app. Auto-started by **New Rotation** for 12h |
 
 Together: the ActionRecorder says **what was asked for**, the sidecar says **what the
 system state became** (including background effects: auto-order, gen poller,
@@ -31,16 +31,39 @@ downloads, SMS delivery receipts, song-end handling).
 - Never breaks a request: hook errors are swallowed.
 - Values are raw (real names, phone numbers). Redaction happens at fixture-build time.
 
-## Sidecar — running it for a night
+## Sidecar — starts automatically on "New Rotation"
+
+Clicking **New Rotation** in the KJ UI (`POST /rotation/archive`) starts the sidecar
+(`night_capture_launcher.py`) as the transient systemd unit `kj-night-capture`:
+
+- Output goes to `~/kjdata/night-captures/<night>/`. `<night>` rolls at noon, so it matches the ActionRecorder file.
+- systemd stops it after **12h** (`RuntimeMaxSec`, config `night_capture_max_hours`).
+  SIGTERM → final snapshot. The unit then shows `failed (Result: timeout)`, which is
+  expected; the next start runs `reset-failed` first.
+- If it's already recording, another New Rotation click leaves it running (one continuous capture per night).
+- It's a separate unit, so kj-controller restarts and auto-deploys don't interrupt it.
+  **A reboot of NomadPC does stop it.** Click New Rotation again (or start it manually) afterwards.
+- It never blocks or fails the archive, and runs in a background thread. The result is logged as
+  `Night capture on New Rotation: {...}` in the kj-controller journal.
+- Disable it with `"night_capture_enabled": false` in config.json.
+
+Manual start/stop if needed:
 
 ```bash
-scp kj-controller/scripts/night_capture.py nomadpc:/home/nomad/kjdata/night-capture/
 ssh nomadpc 'sudo systemd-run --unit=kj-night-capture --uid=nomad --gid=nomad \
-  --property=Nice=10 --property=SupplementaryGroups=systemd-journal \
-  /usr/bin/python3 /home/nomad/kjdata/night-capture/night_capture.py \
+  --property=Nice=10 --property=RuntimeMaxSec=43200 --property=SupplementaryGroups=systemd-journal \
+  /usr/bin/python3 /opt/nomad/kjbox/kj-controller/scripts/night_capture.py \
   --out /home/nomad/kjdata/night-captures/$(date +%F)'
-# after the show (takes a final snapshot):
-ssh nomadpc 'sudo systemctl stop kj-night-capture'
+ssh nomadpc 'sudo systemctl stop kj-night-capture'     # early stop (takes a final snapshot)
+ssh nomadpc 'systemctl status kj-night-capture'        # is it recording?
+```
+
+## After the show — pull, backfill, build a fixture
+
+From home, use `nomadpctunnel` instead of `nomadpc`.
+
+```bash
+N=2026-09-24; D=~/nomad-nights/$N          # private, NOT in the repo
 rsync -a nomadpc:/home/nomad/kjdata/night-captures/$N/ $D/capture/
 rsync -a nomadpc:/home/nomad/kjdata/action-logs/$N.jsonl $D/actions.jsonl
 # Replace the sidecar's journal with the WHOLE night (covers the time before the
@@ -48,7 +71,7 @@ rsync -a nomadpc:/home/nomad/kjdata/action-logs/$N.jsonl $D/actions.jsonl
 ssh nomadpc "journalctl -u kj-controller -o json --since '$N 16:00' --until '$(date -j -v+1d -f %F $N +%F) 12:00' --no-pager" \
   > $D/capture/journal.jsonl
 python3 kj-controller/scripts/night_fixture.py --capture $D/capture --actions $D/actions.jsonl \
-  --out $D/fixture [--pseudonymize-names]
+  --out $D/fixture
 ```
 
 `night_fixture.py` harvests every phone number it can see (phone-ish DB columns and
@@ -58,8 +81,8 @@ bodies, Telnyx webhooks, journal lines, JSON columns) with stable fakes
 endpoint/keys, Telnyx message ids, edit tokens, session hashes → `redacted-<sha>`.
 `redaction.json` holds counts only — the real→fake map is never written.
 Tested in `tests/unit/test_night_fixture.py`; also run a leak check against the raw
-snapshot before publishing (the kjbox repo is **public** — decide on
-`--pseudonymize-names` before committing a fixture).
+snapshot before publishing. The kjbox repo is **public**. Andrew is fine with singers' first
+names being public (they're captured in a public setting), so `--pseudonymize-names` is optional.
 
 ## Mining a night for edge cases
 

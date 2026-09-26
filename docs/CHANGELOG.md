@@ -2,6 +2,15 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-09-25 - Feature: "New Rotation" auto-starts night recording for 12h (v0.116.0)
+
+Clicking **New Rotation** now starts the `kj-night-capture` sidecar (transient systemd unit,
+`RuntimeMaxSec=12h`, final snapshot on stop), so every show is recorded without anyone
+starting it by hand. If it's already running, it's left alone. Failures never affect the archive.
+Config: `night_capture_enabled` (default on), `night_capture_max_hours` (12). Verified on
+NomadPC: start, already-running, timeout → final snapshot, restart after a failed timeout.
+See [NIGHT-RECORDING.md](NIGHT-RECORDING.md).
+
 ## 2026-09-25 - Fix: Real-night edge cases from the 2026-09-24 show (v0.115.0)
 
 Four failures mined from the ActionRecorder log of the 2026-09-24 show
