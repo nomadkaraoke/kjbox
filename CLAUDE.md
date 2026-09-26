@@ -43,10 +43,20 @@ KJ Controller (`kj-controller/`) is a Flask + vanilla JS web app for managing li
 
 **NomadPC is a live production device.** It may be running a karaoke show with singers actively performing. Treat every deployment action as a production deploy.
 
-### NEVER do these without explicit user permission:
-- `git push` to `main` (triggers auto-deploy to devices within ~60s)
-- `ssh nomadpc 'sudo systemctl restart kj-controller'` (kills active VLC playback mid-song)
-- Any SSH command that modifies state on the device
+### Deploying during a live show is safe
+The karaoke players (mpv, VLC filler) run as separate processes (`start_new_session=True`,
+`KillMode=process`) and are re-attached by `try_reconnect` when kj-controller starts, so a
+**kj-controller restart does NOT interrupt playback** — the current song keeps playing. This has
+been true since the zero-downtime deploy work (see `docs/CHANGELOG.md` "Zero-downtime deploys").
+Do not tell Andrew a merge/restart will "cut off" or "interrupt" a singer.
+
+The one real side effect of a restart: in-memory state is lost — the download queue (an
+in-flight YouTube/Divebar download for a rotation entry must be re-triggered), the push debounce
+and the tier-2 playability queue.
+
+### Still ask before:
+- `git push` to `main` (triggers auto-deploy to devices within ~60s) — normal PR/merge flow
+- Any SSH command that modifies state on the device (restarting services, editing config, etc.)
 
 ### Safe actions (no permission needed):
 - `ssh nomadpc 'journalctl -u kj-controller -f'` (read-only log tailing)
@@ -54,20 +64,18 @@ KJ Controller (`kj-controller/`) is a Flask + vanilla JS web app for managing li
 - Running tests locally
 - Committing locally (without push)
 
-### Frontend-only changes (JS/CSS/HTML):
-- Auto-deploy pulls the code but does NOT restart the service
-- Changes take effect on next browser refresh — **no service interruption**
-- Still requires permission to push since auto-deploy runs `git pull`
-
-### Backend changes (Python):
-- Requires service restart to take effect — **will interrupt active playback**
-- Always ask user before pushing AND before restarting
+### How auto-deploy applies changes (`kj-controller/auto-deploy.sh`)
+- Polls `origin/main` every 60s and `git reset --hard`s to it.
+- Any `*.py` change → `systemctl restart kj-controller` (playback continues, see above).
+- Frontend-only (JS/CSS/HTML) → no restart; takes effect on next browser refresh. Bump
+  `pyproject.toml` version so `app.js?v=` / `sing.js?v=` cache-bust (read once at startup, so it
+  needs a `.py` change or restart to take effect).
 
 ```bash
 ssh nomadpc                          # Mini PC (primary device)
 ssh nomadpi                          # Raspberry Pi
 ssh nomadpc 'journalctl -u kj-controller -f'         # tail logs (safe)
-# REQUIRES PERMISSION: ssh nomadpc 'sudo systemctl restart kj-controller'
+# ASK FIRST (state change; playback survives it): ssh nomadpc 'sudo systemctl restart kj-controller'
 ```
 
 Web UI: `http://nomadpc.local` (LAN) or `https://kjbox.nomadkaraoke.com` (tunnel)
