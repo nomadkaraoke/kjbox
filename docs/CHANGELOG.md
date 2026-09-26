@@ -2,7 +2,7 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
-## 2026-09-25 - Feature: Singer "make it" — karaoke-gen job submission inside the singer UI (v0.116.0)
+## 2026-09-25 - Feature: Singer "make it" — karaoke-gen job submission inside the singer UI (v0.117.0)
 
 Singers who can't find a song get **"We'll make it for you"** (in the empty search, and under
 results as "Not the version you wanted?"). The old "make it yourself on gen.nomadkaraoke.com"
@@ -28,6 +28,15 @@ card is gone. See [archive/2026-09-24-singer-make-it-auto-flow-plan.md](archive/
   created 2026-09-26 UTC, and the gen side reads it as `KJBOX_PARTNER_SECRET`. The previous
   config was backed up to `config.json.bak-20260925-*`. To rotate: add a new secret version,
   redeploy gen, and update this key.
+
+## 2026-09-25 - Feature: "New Rotation" auto-starts night recording for 12h (v0.116.0)
+
+Clicking **New Rotation** now starts the `kj-night-capture` sidecar (transient systemd unit,
+`RuntimeMaxSec=12h`, final snapshot on stop), so every show is recorded without anyone
+starting it by hand. If it's already running, it's left alone. Failures never affect the archive.
+Config: `night_capture_enabled` (default on), `night_capture_max_hours` (12). Verified on
+NomadPC: start, already-running, timeout → final snapshot, restart after a failed timeout.
+See [NIGHT-RECORDING.md](NIGHT-RECORDING.md).
 
 ## 2026-09-25 - Fix: Real-night edge cases from the 2026-09-24 show (v0.115.0)
 
