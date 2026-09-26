@@ -4859,8 +4859,10 @@ li.media-no-audio {
 }
 .sing-footer-notice-row { display: flex; align-items: center; gap: 0.4rem; }
 .sing-footer-notice-row input[type="checkbox"] { flex: 0 0 auto; }
-.sing-footer-notice-icon { width: 3rem; flex: 0 0 auto; text-align: center; font-size: 1rem; }
-.sing-footer-notice-text { flex: 1 1 auto; min-width: 0; font-size: 0.88rem; }
+/* Row-qualified so they beat the global `input[type="text"] { width: 100% }`
+   (which made the emoji box fill the row and pushed the text off-screen). */
+.sing-footer-notice-row input.sing-footer-notice-icon { width: 3.2rem; flex: 0 0 3.2rem; padding: 6px 4px; text-align: center; font-size: 1rem; }
+.sing-footer-notice-row input.sing-footer-notice-text { width: auto; flex: 1 1 auto; min-width: 0; padding: 6px 8px; font-size: 0.88rem; }
 .sing-footer-notice-btn { flex: 0 0 auto; padding: 0.15rem 0.45rem; font-size: 0.8rem; }
 .sing-footer-add-notice { align-self: flex-start; margin-top: 0.3rem; font-size: 0.85rem; }
 .sing-hint-inline { opacity: 0.65; font-size: 0.8em; }
