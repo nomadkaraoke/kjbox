@@ -134,7 +134,8 @@ class Redactor:
             return [self.scrub(v, key) for v in obj]
         if not isinstance(obj, str):
             return obj
-        if key in SECRET_KEYS and obj:
+        # 'endpoint' is both a web-push URL (secret) and a Flask route name (keep).
+        if key in SECRET_KEYS and obj and (key != 'endpoint' or obj.startswith('http')):
             self.counts['secrets'] += 1
             return f'redacted-{_h(obj)}'
         if key in IP_KEYS and obj:

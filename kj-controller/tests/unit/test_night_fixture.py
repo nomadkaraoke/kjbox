@@ -34,7 +34,7 @@ def _make_capture(tmp_path):
         '__REALTIME_TIMESTAMP': '1', '_PID': '9', 'MESSAGE': f'SMS sent to {REAL}'}) + '\n')
     actions = tmp_path / 'actions.jsonl'
     actions.write_text(json.dumps({
-        'actor': 'singer', 'path': '/sing/submit',
+        'actor': 'singer', 'path': '/sing/submit', 'endpoint': 'sing.submit',
         'body': {'singer_name': 'Alice', 'phone': '404-555-1234'},
         'client': {'CF-Connecting-IP': '203.0.113.9'}, 'session_id': 'abc'}) + '\n')
     return cap, actions
@@ -56,6 +56,7 @@ def test_build_removes_every_real_phone(tmp_path):
     act = json.loads((out / 'actions.jsonl').read_text())
     assert act['body']['phone'] == '+15550000001'
     assert act['body']['singer_name'] == 'Alice'  # names kept by default
+    assert act['endpoint'] == 'sing.submit'  # Flask route names are not secrets
     assert act['client']['CF-Connecting-IP'].startswith('10.')
     change = json.loads((out / 'db_changes.jsonl').read_text())
     assert change['row']['body'] == 'Hi +15550000001, you are up!'

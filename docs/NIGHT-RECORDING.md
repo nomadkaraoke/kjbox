@@ -106,4 +106,4 @@ and Telnyx payload identifiers before landing in the repo.
 
 | Night | Sidecar | ActionRecorder | Notes |
 |---|---|---|---|
-| 2026-09-24 | from 21:11 | from deploy of v0.113.0 (mid-show) | first capture; earlier part of the night is in journald + DB only. Edge cases found (see TESTING.md § "Edge cases from real nights"): kj_pick >50 versions 400 + rate-limit lockout (fixed v0.114.1); photo-consent 429 via venue-IP budget; push/subscribe 400 with no phone; SSD drop at 22:11 misreported as bad ZIP / bad path on `/play`; ~300 scanner 404s labelled `kj` |
+| 2026-09-24 | 21:11 → stopped 2026-09-25 21:55 | 21:29 → noon (2,378 actions during show, 13 singer devices) | first capture; journal backfilled from 16:00. Raw capture + redacted fixture in `~/nomad-nights/2026-09-24/`. Edge cases found (see TESTING.md § "Edge cases from real nights"): kj_pick >50 versions 400 + rate-limit lockout (fixed v0.114.1); photo-consent 429 via venue-IP budget; push/subscribe 400 with no phone; SSD drop at 22:11 misreported as bad ZIP / bad path on `/play`; ~300 scanner 404s labelled `kj` (all fixed v0.115.0) |
