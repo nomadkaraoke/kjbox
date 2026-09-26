@@ -6,7 +6,7 @@ Dated entries, newest first. Each entry notes any required deploy steps.
 
 ## 2026-09-26 - "Notification / Social media settings" (v0.118.1)
 
-**Deploy:** singer frontend only (`sing.js`, 33 locale files) + version bump for cache-bust.
+**Deploy:** singer frontend only (`sing.js`, 33 locale files). No `.py` change, so auto-deploy does not restart kj-controller; `sing.js?v=0.118.1` cache-busts from the next restart.
 
 - Andrew: the collapsed preference toggles were too big to sit compactly side by side.
   "… preferences" → "… settings", and the ▾ is joined to the last word with a non-breaking
