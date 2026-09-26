@@ -192,8 +192,13 @@ class TestSearchDecisionLayer:
         card = wrap.locator('[data-testid="make-card"]')
         card.locator("input").nth(0).fill("Radiohead")
         card.locator("input").nth(1).fill("Creep")
+        page.route("**/sing/make/account*", lambda r: r.fulfill(
+            status=200, content_type="application/json",
+            body=json.dumps({"ready": True, "email": None})))
         card.locator("button").click()
-        expect(page.locator("h2")).to_have_text("Is this the right song?")
+        # The make wizard starts by verifying the singer's email.
+        expect(page.locator('[data-testid="make-step"] h2')).to_have_text("We'll make it for you")
+        expect(page.locator('[data-testid="make-email"]')).to_be_visible()
 
     def test_make_offer_under_results(self, page, live_server, live_token):
         song = {"key": "g:one", "artist": "Glow", "title": "Dancing Queen",

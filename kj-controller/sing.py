@@ -521,7 +521,7 @@ def landing():
         token=token,
         request_id=request.args.get("r", ""),
         vapid_public_key=cfg.get("vapid_public_key", ""),
-        make_requests_enabled=store.is_accepting_make_requests(),
+        make_requests_enabled=_make_enabled(store),
         simple_mode=store.is_simple_mode(),
         # Venue context for copy: phone-number example + branding strip.
         sms_region=(_safe_call(store.get_sms_default_region) or "US"),
@@ -646,7 +646,7 @@ def search():
     store = current_app.sing_store
     response = {
         "songs": data["songs"],
-        "make_requests_enabled": store.is_accepting_make_requests(),
+        "make_requests_enabled": _make_enabled(store),
         "simple_mode": store.is_simple_mode(),
     }
     if data.get("karaoke_nerds_timeout"):
@@ -1088,6 +1088,18 @@ def submit():
         additional = _canonicalize_partners(
             current_app._get_current_object(), additional, singer_name)
 
+    # Make-it: the singer's own karaoke-gen job is created right now, on their
+    # verified gen account (see sing_make) — before the request row exists, so
+    # a gen refusal (expired sign-in, stale search) leaves nothing behind.
+    gen_job_id = None
+    if source_type == "make":
+        import sing_make
+        gen_job_id, make_err = sing_make.create_job(
+            current_app._get_current_object(), device_id, song_artist, song_title, source_meta)
+        if make_err:
+            _refund_device_rate_slot()
+            return make_err
+
     req = store.create_request(
         singer_name=singer_name,
         phone=phone,
@@ -1102,11 +1114,8 @@ def submit():
         device_id=device_id or None,
     )
 
-    # Make requests start their karaoke-gen job right now, not at approval —
-    # for songs gen can finish unattended, the video may be ready before the
-    # KJ even gets to it. Must run before auto-approve so approval can attach.
-    if source_type == "make":
-        _start_make_job(req["id"])
+    if gen_job_id:
+        req = store.set_request_gen(req["id"], gen_job_id, "submitted")
 
     # Social-media photo consent rides along with each request (the device
     # remembers the singer's choice), recorded against the canonical name so
@@ -1122,7 +1131,10 @@ def submit():
     # the request to its highest-priority version (the same one the admin picker
     # marks ⭐ BEST) so a rotation entry with a real file is created. Any failure
     # to resolve a version keeps the request pending for manual review.
-    if store.is_auto_approve():
+    # Make-its ALWAYS go straight in (as "Being Made (!)"): the job is already
+    # running and there's nothing for the KJ to decide — a song too hard to
+    # review live just stays at the bottom un-reviewed.
+    if store.is_auto_approve() or gen_job_id:
         try:
             from routes import approve_sing_request, resolve_kj_pick_best
 
@@ -1848,13 +1860,9 @@ def change_request(req_id):
     if source_type in {"local", "divebar", "kn", "youtube"} and not source_ref:
         return jsonify({"error": "source_ref is required for this source_type"}), 400
     if source_type == "make":
-        if not store.is_accepting_make_requests():
-            return jsonify({"error": "make_requests_disabled"}), 400
-        if not (song_artist and song_title):
-            return jsonify({"error": "song_artist and song_title are required for make"}), 400
-        if _make_limit_reached(store, current_app.kj_config, req.get("device_id"),
-                               exclude_request_id=req_id):
-            return jsonify({"error": "make_limit"}), 429
+        # A make-it is a whole flow (email code, audio choice) that starts a
+        # real gen job — swap by cancelling and making a new one instead.
+        return jsonify({"error": "make_not_changeable"}), 400
     if source_type == "kj_pick":
         err = _validate_kj_pick_payload(data)
         if err:
@@ -1862,26 +1870,12 @@ def change_request(req_id):
         source_meta = _trim_kj_pick_versions(source_meta, current_app.kj_config or {})
 
     if req["status"] == "pending":
-        same_make = (
-            req["source_type"] == "make" and source_type == "make"
-            and req.get("gen_submit_state")
-            and (req.get("song_artist"), req.get("song_title")) == (song_artist, song_title)
-        )
         # update_request keeps existing values when a field is None, which would
         # preserve a stale source_ref when changing TO a null-ref source (e.g.
         # kj_pick). Set song fields via update_request, then overwrite the
         # source_* fields verbatim (incl. None) via update_request_source.
         store.update_request(req_id, song_artist=song_artist, song_title=song_title)
         updated = store.update_request_source(req_id, source_type, source_ref, source_meta)
-        # A different song (or no longer a make) orphans the early gen job; a
-        # new make song gets its own. Re-submitting the same make keeps it.
-        if not same_make:
-            if req.get("gen_submit_state"):
-                import make_jobs
-                make_jobs.reset(current_app._get_current_object(), req_id)
-            if source_type == "make":
-                _start_make_job(req_id)
-            updated = store.get_request(req_id)
         # edit_token echoed back (owner already holds it) so the device keeps
         # the same self-service capability after the change.
         return jsonify({"success": True, "request": {
@@ -1898,8 +1892,6 @@ def change_request(req_id):
         user_agent=request.headers.get("User-Agent", "")[:500],
         device_id=req.get("device_id"),
     )
-    if source_type == "make":
-        _start_make_job(new_req["id"])
     return jsonify({"success": True, "request": {
         **_public_request_view(new_req), "edit_token": new_req.get("edit_token")}})
 
@@ -2319,13 +2311,11 @@ def _make_limit_reached(store, cfg, device_id, exclude_request_id=None):
         device_id, exclude_request_id=exclude_request_id) >= limit
 
 
-def _start_make_job(request_id):
-    """Best-effort early gen submit; approval falls back if this can't start."""
-    import make_jobs
-    try:
-        make_jobs.submit_early(current_app._get_current_object(), request_id)
-    except Exception:
-        current_app.logger.exception("Make request %s: early gen submit failed", request_id)
+def _make_enabled(store):
+    """Make-it is offered only when the KJ allows it AND gen's singer flow is set up."""
+    import sing_make
+    return store.is_accepting_make_requests() and sing_make.make_flow_ready(
+        current_app._get_current_object())
 
 
 # Rotation gen_status → the singer-facing make phase. "making" = gen is
@@ -2349,10 +2339,10 @@ def _make_progress(req, entry):
         phase = _MAKE_PHASE_BY_GEN_STATUS.get(entry.get("gen_status") or "")
         if phase:
             return phase
-        # Approved but no job attached yet (early submit still running) or the
-        # job never started (the KJ has to start it from the rotation row).
-        return "making" if req.get("gen_submit_state") == "submitting" else "needs_host"
-    if req.get("status") == "pending" and req.get("gen_submit_state") in ("submitting", "submitted"):
+        # Approved but the job never started (the KJ has to start it from the
+        # rotation row).
+        return "needs_host"
+    if req.get("status") == "pending" and req.get("gen_job_id"):
         return "making"
     return None
 

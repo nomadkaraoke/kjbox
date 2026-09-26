@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fail if kj-controller/static-sing/sing.js uses a t()/tn() key that is
+"""Fail if kj-controller/static-sing/*.js uses a t()/tn() key that is
 missing from static-sing/messages/en.json, or the template uses a data-i18n
 key that is missing. Dynamic keys (template literals) are checked by prefix."""
 import json
@@ -8,7 +8,8 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent / "kj-controller"
-JS = (ROOT / "static-sing" / "sing.js").read_text(encoding="utf-8")
+# App modules only (i18n.js itself has t("a.b")-style doc examples).
+JS = "\n".join((ROOT / "static-sing" / f).read_text(encoding="utf-8") for f in ("sing.js", "make.js"))
 HTML = (ROOT / "templates" / "sing.html").read_text(encoding="utf-8")
 EN = json.loads((ROOT / "static-sing" / "messages" / "en.json").read_text(encoding="utf-8"))
 

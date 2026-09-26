@@ -74,17 +74,40 @@ _STATUS_MAP = {
 }
 
 
+class GenApiError(Exception):
+    """A gen API call failed. ``status`` is the HTTP status (0 = no response),
+    ``detail`` gen's error detail (e.g. "invalid_code", "signup_cap")."""
+
+    def __init__(self, status, detail=""):
+        super().__init__(f"gen API {status}: {detail}")
+        self.status = status
+        self.detail = detail
+
+
 def map_gen_status(api_status):
     """Map a gen API job status string to a rotation display status."""
     return _STATUS_MAP.get(api_status, GenStatus.PROCESSING)
 
 
 class GenClient:
-    """HTTP client for the gen API."""
+    """HTTP client for the gen API.
 
-    def __init__(self, api_url, token):
+    Two credentials: the admin ``token`` (KJ-side calls, job polling) and the
+    ``kjbox_secret`` partner secret for the singer make-it flow, whose calls run
+    AS the singer's own gen account (their session token) so the job, the
+    delivery email and the customer relationship are theirs.
+    """
+
+    # Attribution: gen records X-Client-Id into the job's request_metadata and
+    # sends kjbox jobs' review emails with a one-click sign-in link.
+    CLIENT_ID = "kjbox"
+    # gen's audio search fans out to flacfetch/YouTube/Spotify (~15-30s).
+    SEARCH_TIMEOUT = 60
+
+    def __init__(self, api_url, token, kjbox_secret=""):
         self.api_url = api_url.rstrip("/")
         self.token = token
+        self.kjbox_secret = kjbox_secret or ""
 
     def _headers(self):
         return {"X-Admin-Token": self.token, "Content-Type": "application/json"}
@@ -160,3 +183,86 @@ class GenClient:
         except Exception as e:
             logger.error("Failed to get download URL for job %s: %s", job_id, e)
             return None
+
+    # ------------------------------------------------------------------
+    # Singer make-it flow (partner secret + the singer's gen session)
+    # ------------------------------------------------------------------
+
+    def _singer_headers(self, session_token=None, locale=None):
+        headers = {"Content-Type": "application/json", "X-Client-Id": self.CLIENT_ID}
+        if self.kjbox_secret:
+            headers["X-Kjbox-Secret"] = self.kjbox_secret
+        if session_token:
+            headers["Authorization"] = f"Bearer {session_token}"
+        if locale:
+            headers["Accept-Language"] = locale
+        return headers
+
+    def _singer_call(self, method, path, *, session_token=None, locale=None,
+                     json=None, timeout=REQUEST_TIMEOUT):
+        try:
+            resp = requests.request(
+                method, f"{self.api_url}{path}", json=json, timeout=timeout,
+                headers=self._singer_headers(session_token, locale),
+            )
+        except requests.RequestException as exc:
+            raise GenApiError(0, str(exc)) from exc
+        try:
+            data = resp.json()
+        except ValueError:
+            data = {}
+        if resp.status_code >= 400:
+            detail = data.get("detail") if isinstance(data, dict) else ""
+            if isinstance(detail, dict):   # gen's 402 carries a dict detail
+                detail = detail.get("message") or detail.get("detail") or "error"
+            raise GenApiError(resp.status_code, detail or resp.reason)
+        return data
+
+    def singer_flow_configured(self):
+        return bool(self.kjbox_secret)
+
+    def send_login_code(self, email, locale=None, venue=None):
+        return self._singer_call("POST", "/api/kjbox/auth/send-code", locale=locale,
+                                 json={"email": email, "locale": locale, "venue": venue})
+
+    def verify_login_code(self, email, code, locale=None):
+        return self._singer_call("POST", "/api/kjbox/auth/verify-code", locale=locale,
+                                 json={"email": email, "code": code})
+
+    def grant_show_credit(self, session_token, idempotency_key, venue=None):
+        return self._singer_call("POST", "/api/kjbox/credits/show-credit",
+                                 session_token=session_token,
+                                 json={"idempotency_key": idempotency_key, "venue": venue})
+
+    def match_judge(self, session_token, artist, title, stage="fast", audio_confidence_tier=None):
+        body = {"artist": artist, "title": title, "stage": stage}
+        if audio_confidence_tier:
+            body["audio_confidence_tier"] = audio_confidence_tier
+        return self._singer_call("POST", "/api/catalog/match-judge",
+                                 session_token=session_token, json=body)
+
+    def search_audio(self, session_token, artist, title):
+        return self._singer_call("POST", "/api/audio-search/search-standalone",
+                                 session_token=session_token, timeout=self.SEARCH_TIMEOUT,
+                                 json={"artist": artist, "title": title})
+
+    def validate_url(self, session_token, url):
+        return self._singer_call("POST", "/api/jobs/validate-url",
+                                 session_token=session_token, json={"url": url})
+
+    def create_job_from_search(self, session_token, search_session_id, selection_index,
+                               artist, title):
+        """Public, default-branded job — no audio edit, gen's automatic review."""
+        return self._singer_call("POST", "/api/jobs/create-from-search",
+                                 session_token=session_token, timeout=CREATE_JOB_TIMEOUT,
+                                 json={"search_session_id": search_session_id,
+                                       "selection_index": selection_index,
+                                       "artist": artist, "title": title,
+                                       "is_private": False, "requires_audio_edit": False,
+                                       "review_mode": "auto", "backing_preference": "auto"})
+
+    def create_job_from_url(self, session_token, url, artist, title):
+        return self._singer_call("POST", "/api/jobs/create-from-url",
+                                 session_token=session_token, timeout=CREATE_JOB_TIMEOUT,
+                                 json={"url": url, "artist": artist, "title": title,
+                                       "is_private": False, "review_mode": "auto"})

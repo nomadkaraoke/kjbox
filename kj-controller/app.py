@@ -20,6 +20,7 @@ from playback import PlaybackCoordinator
 from rotation import RotationManager
 from routes import routes_bp
 from sing import install_host_guard, install_public_host_rewriter, sing_bp
+import sing_make  # noqa: F401 — registers the /sing/make/* routes on sing_bp
 from sing_store import SingStore
 from sms_store import SmsStore
 from sleep_mode import SleepManager
@@ -388,7 +389,7 @@ def create_app(config=None):
     if gen_api_url and gen_api_token:
         from gen_client import GenClient
         from gen_poller import GenPoller
-        flask_app.gen_client = GenClient(gen_api_url, gen_api_token)
+        flask_app.gen_client = GenClient(gen_api_url, gen_api_token, cfg.get('gen_kjbox_secret', ''))
         # Give the media index best-effort LLM access for download-time refine.
         if getattr(flask_app, "media", None) is not None:
             flask_app.media.gen_client = flask_app.gen_client
@@ -396,12 +397,6 @@ def create_app(config=None):
             flask_app.gen_client, flask_app.rotation,
             flask_app.media, cfg.get('download_folder', ''),
             poll_interval=cfg.get('gen_poll_interval', 60),
-            # Link the NOMAD-#### master pulled by master-sync rather than
-            # downloading a duplicate — only when master-sync is running.
-            master_wait_seconds=(
-                cfg.get('gen_master_wait_seconds', 600)
-                if cfg.get('master_sync_enabled') else 0
-            ),
         )
     else:
         flask_app.gen_client = None
@@ -602,7 +597,7 @@ def start_app():  # pragma: no cover
     if gen_api_url and gen_api_token:
         from gen_client import GenClient
         from gen_poller import GenPoller
-        flask_app.gen_client = GenClient(gen_api_url, gen_api_token)
+        flask_app.gen_client = GenClient(gen_api_url, gen_api_token, cfg.get('gen_kjbox_secret', ''))
         # Give the media index best-effort LLM access for download-time refine.
         if getattr(flask_app, "media", None) is not None:
             flask_app.media.gen_client = flask_app.gen_client
@@ -610,12 +605,6 @@ def start_app():  # pragma: no cover
             flask_app.gen_client, flask_app.rotation,
             flask_app.media, cfg.get('download_folder', ''),
             poll_interval=cfg.get('gen_poll_interval', 60),
-            # Link the NOMAD-#### master pulled by master-sync rather than
-            # downloading a duplicate — only when master-sync is running.
-            master_wait_seconds=(
-                cfg.get('gen_master_wait_seconds', 600)
-                if cfg.get('master_sync_enabled') else 0
-            ),
         )
         flask_app.gen_poller.start()
         log_message("Gen API integration enabled.", cfg)

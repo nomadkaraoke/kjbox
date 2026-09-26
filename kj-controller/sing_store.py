@@ -289,12 +289,18 @@ class SingStore:
             except sqlite3.OperationalError as e:
                 if "duplicate column name" not in str(e).lower():
                     raise
-        # A 'submitting' row at open time belongs to a worker thread that died
-        # with the previous process — it will never finish. Mark it failed so
-        # approval falls back to starting the job itself.
+        # Singer make-it flow (2026-09-25): the singer's verified karaoke-gen
+        # account, per device. The session token never leaves the box — the
+        # singer's browser only ever sees their email.
         conn.execute(
-            "UPDATE sing_requests SET gen_submit_state = 'failed' "
-            "WHERE gen_submit_state = 'submitting'"
+            """
+            CREATE TABLE IF NOT EXISTS sing_gen_accounts (
+                device_id     TEXT PRIMARY KEY,
+                email         TEXT NOT NULL,
+                session_token TEXT NOT NULL,
+                verified_at   TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+            )
+            """
         )
         conn.commit()
 
@@ -1081,6 +1087,31 @@ class SingStore:
         )
         conn.commit()
         return self.get_request(request_id)
+
+    def get_gen_account(self, device_id):
+        if not device_id:
+            return None
+        row = self._get_conn().execute(
+            "SELECT device_id, email, session_token, verified_at "
+            "FROM sing_gen_accounts WHERE device_id = ?", (device_id,),
+        ).fetchone()
+        return dict(row) if row else None
+
+    def set_gen_account(self, device_id, email, session_token):
+        conn = self._get_conn()
+        conn.execute(
+            "INSERT INTO sing_gen_accounts (device_id, email, session_token) VALUES (?, ?, ?) "
+            "ON CONFLICT(device_id) DO UPDATE SET email = excluded.email, "
+            "session_token = excluded.session_token, "
+            "verified_at = datetime('now', 'localtime')",
+            (device_id, email, session_token),
+        )
+        conn.commit()
+
+    def clear_gen_account(self, device_id):
+        conn = self._get_conn()
+        conn.execute("DELETE FROM sing_gen_accounts WHERE device_id = ?", (device_id,))
+        conn.commit()
 
     def set_request_gen(self, request_id, gen_job_id, gen_submit_state):
         """Record the early (submit-time) gen job for a make request."""

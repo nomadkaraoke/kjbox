@@ -8,6 +8,7 @@
 import {
   initI18n, t, tn, getLocale, setLocale, LOCALES, localeName, applyStaticStrings,
 } from "./i18n.js";
+import { createMakeFlow } from "./make.js";
 
 // Blueprint mount point. On the public host (sing.nomadkaraoke.com) the singer
 // UI lives at `/` via a WSGI rewrite; on the admin host it's under `/sing/`.
@@ -427,6 +428,7 @@ const STEP_HASH = {
   done: "#mysongs",
   rotation: "#rotation",
   tip: "#tip",
+  make: "#make",
 };
 
 // The pre-tabs "landing" screen is gone: a fresh visit (no hash) boots
@@ -451,6 +453,7 @@ function _stepFromHash(hash) {
 function _sanitizeStep(step) {
   if (!step) step = _bootStep();
   if (step === "confirm" && !state.selected) step = "search";
+  if (step === "make" && !state.make) step = "search";
   if ((step === "search" || step === "confirm") && !state.name) step = "identity";
   // A stale #name hash (pushed during first-time setup) on a device that
   // already has a good identity — a reload or Back must not strand the
@@ -519,6 +522,7 @@ function render() {
     done: renderDone,
     rotation: renderRotation,
     tip: renderTip,
+    make: () => makeFlow.renderStep(),
   };
   let view = views[state.step];
   if (!view) {
@@ -541,6 +545,14 @@ function render() {
 function back(to) {
   return () => { state.step = to; render(); };
 }
+
+// Singer "make it" wizard (make.js) — karaoke-gen's job submission flow.
+const makeFlow = createMakeFlow({
+  el, fetchJson, state, render, BASE,
+  getDeviceId: () => DEVICE_ID,
+  onPicked: (selected) => { state.selected = selected; state.step = "confirm"; render(); },
+  onBack: () => { state.step = "search"; render(); },
+});
 
 // Enter the identity form in "edit my name" mode: pre-filled with the current
 // name/phone, and on save it persistently renames the singer (keeping their
@@ -1764,16 +1776,9 @@ function renderSearch() {
     state.step = "confirm"; render();
   };
 
-  const pickMake = () => {
-    state.selected = {
-      source_type: "make",
-      source_ref: null,
-      song_artist: state.makeArtist,
-      song_title: state.makeTitle,
-      label: `${state.makeTitle} — ${state.makeArtist}`,
-    };
-    state.step = "confirm"; render();
-  };
+  // Make-it: hand what the singer typed to the make wizard (email code →
+  // corrected artist/title → audio choice), which lands on confirm.
+  const pickMake = () => makeFlow.start(state.makeArtist, state.makeTitle);
 
   const pickYouTube = (url) => {
     state.selected = {
@@ -2066,7 +2071,10 @@ function renderSearch() {
 
     // Numbering + "N ways forward" follow what's actually shown — the make
     // card is hidden when the KJ isn't taking make-requests tonight.
-    const cardCount = state.makeRequestsEnabled ? 2 : 1;
+    // A make-it can't replace an existing song (it's a new gen job), so it's
+    // not offered while the singer is swapping a song.
+    const offerMake = state.makeRequestsEnabled && !state.changeRequestId;
+    const cardCount = offerMake ? 2 : 1;
     let n = 0;
     const stepTitle = (title) => (cardCount > 1 ? t("empty.step", { n: ++n, title }) : title);
 
@@ -2075,7 +2083,7 @@ function renderSearch() {
       el("p", {}, tn("empty.intro", cardCount)),
     ));
 
-    if (state.makeRequestsEnabled) {
+    if (offerMake) {
       wrap.appendChild(renderMakeCard(stepTitle(t("empty.makeTitle"))));
     }
 
@@ -2181,7 +2189,7 @@ function renderSearch() {
     }
 
     if (!loading && songs.length > 0 && state.makeRequestsEnabled && !state.simpleMode
-        && state.query?.trim().length >= 3) {
+        && !state.changeRequestId && state.query?.trim().length >= 3) {
       container.appendChild(renderMakeOffer());
     }
 
@@ -2383,8 +2391,13 @@ function renderConfirm() {
       state._navReplace = true;   // Back shouldn't land on the stale confirm
       render();
     } catch (e) {
-      err = e.data?.error === "make_limit"
-        ? t("confirm.makeLimit")
+      const makeErr = {
+        make_limit: "confirm.makeLimit", signin_required: "make.errSignedOut",
+        search_expired: "make.errSearchExpired", no_credits: "make.errNoCredits",
+        gen_unavailable: "make.errUnavailable",
+      }[e.data?.error];
+      err = makeErr
+        ? t(makeErr)
         : e.status === 429
         ? t("confirm.tooMany")
         : e.data?.error === "simple_mode_disabled_source"
@@ -2614,6 +2627,13 @@ function renderConfirm() {
       el("div", { class: "confirm-title" }, sel.song_title || sel.label || ""),
       sel.song_artist ? el("div", { class: "confirm-artist" }, sel.song_artist) : null,
       el("div", { class: "confirm-source" }, _confirmSourceLine(sel)),
+      sel.source_type === "make" && sel.source_meta?.audio
+        ? el("div", { class: "confirm-make-audio hint" }, t("confirm.makeAudio", { audio: sel.source_meta.audio }))
+        : null,
+      sel.source_type === "make" && state.make?.email
+        ? el("div", { class: "confirm-make-email hint", "data-testid": "confirm-make-email" },
+            t("confirm.makeEmail", { email: state.make.email }))
+        : null,
     ),
     state.query ? el("p", { class: "confirm-searched hint" }, t("confirm.searched", { query: state.query })) : null,
     el("p", { class: "hint" },
@@ -2626,7 +2646,8 @@ function renderConfirm() {
     // Partners belong to the original request — a swap keeps them as they were.
     isChange ? null : renderPartnersSection(),
     el("div", { class: "row confirm-actions" },
-      el("button", { class: "btn ghost", onclick: back("search") }, t("confirm.back")),
+      el("button", { class: "btn ghost", onclick: back(sel.source_type === "make" && state.make ? "make" : "search") },
+        t("confirm.back")),
       el("button", { class: "btn primary submit-btn", onclick: send }, sendLabel()),
     ),
     el("p", { class: "error" }, err),

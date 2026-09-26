@@ -2,24 +2,28 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
-## 2026-09-24 - Feature: Singer "make it" is fully automatic end to end (v0.116.0)
+## 2026-09-25 - Feature: Singer "make it" — karaoke-gen job submission inside the singer UI (v0.116.0)
 
-Singers who can't find a song now get "We'll make it for you" (artist + title) right in the
-singer UI, and under normal results as "Not the version you wanted? We can make it". The old
-external "Make it yourself on gen.nomadkaraoke.com" card is gone. See
-[archive/2026-09-24-singer-make-it-auto-flow-plan.md](archive/2026-09-24-singer-make-it-auto-flow-plan.md).
+Singers who can't find a song get **"We'll make it for you"** (in the empty search, and under
+results as "Not the version you wanted?"). The old "make it yourself on gen.nomadkaraoke.com"
+card is gone. See [archive/2026-09-24-singer-make-it-auto-flow-plan.md](archive/2026-09-24-singer-make-it-auto-flow-plan.md).
 
-- **The gen job starts when the singer submits**, not when the KJ approves (`make_jobs.py`).
-  Approval attaches that job to the new rotation entry, and never creates a duplicate.
-- **Make entries start as `Being Made (!)`**, so Auto Order keeps them below singable songs.
-- **The GenPoller links the NOMAD-#### master** that master-sync pulls within about 60s. The
-  KJ row shows a SYNCING badge while it waits. After `gen_master_wait_seconds` (600) it falls
-  back to a direct 720p download, then flips the entry to **`Waiting`**.
-- **Singer "My songs"** shows "✨ Being made for you" (or "needs a hand from the host") rather
-  than a queue position.
-- **Per-device limit:** 3 make requests per night (`sing_make_max_per_device`).
-- **Gen status mapping** covers gen's newer statuses. There is a new NEEDS INPUT badge for audio
-  pick/trim. `create_job` timeout is now 120s (it was 30s, which could orphan real gen jobs).
+- **Real gen customer:** the singer verifies their email with a 6-digit code. Their job is
+  created on their own karaoke-gen account, so gen's normal delivery emails go to them.
+- **Gen's submission flow, reused:** match-judge fixes lazily typed artist/title ("Corrected to
+  X — undo" / "Did you mean…?"). The lossless-first audio search shows the best pick first,
+  with Spotify/YouTube options one tap away and a YouTube-link fallback. There is no audio
+  edit, private delivery or customisation step.
+- **Free at the show:** kjbox quietly tops up 1 gen credit per make-it. New singers keep gen's
+  welcome credit.
+- **Straight into the rotation** as `Being Made (!)`, with no approval step. When gen finishes,
+  the GenPoller links **only** the synced NOMAD-#### master and flips the entry to `Waiting`.
+  The KJ row shows SYNCING / NEEDS INPUT badges.
+- **Lyrics review:** the singer can review from gen's email (one-click sign-in), or the KJ from
+  the NEEDS REVIEW badge. Whoever is first wins.
+- **Needs** gen v0.239.0+ (`/api/kjbox/*`) and `gen_kjbox_secret` in config.json. Without them
+  the make-it option is simply not offered.
+
 ## 2026-09-25 - Fix: Real-night edge cases from the 2026-09-24 show (v0.115.0)
 
 Four failures mined from the ActionRecorder log of the 2026-09-24 show
