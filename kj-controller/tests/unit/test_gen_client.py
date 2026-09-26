@@ -141,7 +141,9 @@ class TestSingerFlowCalls:
         method, url = req.call_args.args
         headers = req.call_args.kwargs["headers"]
         assert (method, url) == ("POST", "https://api.example.com/api/audio-search/search-standalone")
-        assert headers["X-Kjbox-Secret"] == "partner-secret"
+        # gen stores custom request headers on jobs (readable by the singer) —
+        # the partner secret must only ever go to /api/kjbox/*.
+        assert "X-Kjbox-Secret" not in headers
         assert headers["Authorization"] == "Bearer sess-1"
         assert headers["X-Client-Id"] == "kjbox"
         assert "X-Admin-Token" not in headers          # singer calls never use admin power
@@ -180,3 +182,17 @@ class TestSingerFlowCalls:
         from gen_client import GenClient
         assert GenClient("https://x", "t").singer_flow_configured() is False
         assert self._client().singer_flow_configured() is True
+
+
+class TestPartnerSecretScope:
+    def test_secret_only_on_partner_paths(self):
+        from gen_client import GenClient
+        c = GenClient("https://api.example.com", "admin-tok", "partner-secret")
+        with patch("gen_client.requests.request", return_value=_Resp(200, {})) as req:
+            c.send_login_code("a@b.co")
+            c.grant_show_credit("s", "k" * 64, only_if_empty=True)
+            c.create_job_from_url("s", "https://youtu.be/x", "A", "T")
+        partner1, partner2, job = [call.kwargs["headers"] for call in req.call_args_list]
+        assert partner1["X-Kjbox-Secret"] == partner2["X-Kjbox-Secret"] == "partner-secret"
+        assert "X-Kjbox-Secret" not in job
+        assert req.call_args_list[1].kwargs["json"]["only_if_empty"] is True

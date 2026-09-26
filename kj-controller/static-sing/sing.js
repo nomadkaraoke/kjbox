@@ -168,7 +168,8 @@ function _genDeviceId() {
     return Array.from(a, (b) => b.toString(16).padStart(2, "0")).join("");
   } catch {
     // crypto unavailable (ancient/locked-down browser) — a non-crypto id is
-    // fine here; it only needs to be unique-per-device, not unguessable.
+    // fine for naming/rate limits. It is NOT secret enough to hold a make-it
+    // gen sign-in, so the server refuses make-it for ids this short.
     return "d" + Date.now().toString(36) + Math.random().toString(36).slice(2);
   }
 }

@@ -19,6 +19,7 @@ are ported to ``static-sing/make.js``. Gen routes partner calls through
 per-IP signup cap.
 """
 
+import hashlib
 import re
 import threading
 import time
@@ -37,6 +38,11 @@ _CODE_RE = re.compile(r"^\d{6}$")
 _MAKE_RATE_WINDOW_S = 600
 _MAKE_RATE_PER_DEVICE = 40
 _MAKE_RATE_PER_IP = 400
+# Emailing codes is the abusable bit (inbox spam, gen's signup budget), so it
+# gets a much tighter budget of its own — per device AND per venue IP.
+_CODE_RATE_WINDOW_S = 3600
+_CODE_RATE_PER_DEVICE = 5
+_CODE_RATE_PER_IP = 40
 _lock = threading.Lock()
 
 
@@ -49,6 +55,8 @@ def _state(app):
     return app.extensions.setdefault("sing_make", {
         "rate": defaultdict(deque),
         "credit_keys": defaultdict(set),   # (night, device) -> {song keys}
+        "search_keys": {},                 # gen search_session_id -> credit key
+        "last_key": {},                    # (night, device) -> latest credit key
     })
 
 
@@ -58,16 +66,17 @@ def make_flow_ready(app):
     return bool(gen is not None and gen.singer_flow_configured())
 
 
-def _rate_limited(device_id):
+def _rate_limited(device_id, bucket="make", window=_MAKE_RATE_WINDOW_S,
+                  per_ip=_MAKE_RATE_PER_IP, per_device=_MAKE_RATE_PER_DEVICE):
     now = time.monotonic()
-    keys = [(f"ip:{_client_ip(request)}", _MAKE_RATE_PER_IP)]
+    keys = [(f"{bucket}:ip:{_client_ip(request)}", per_ip)]
     if device_id:
-        keys.append((f"dev:{device_id}", _MAKE_RATE_PER_DEVICE))
+        keys.append((f"{bucket}:dev:{device_id}", per_device))
     rate = _state(current_app._get_current_object())["rate"]
     with _lock:
         for key, limit in keys:
             q = rate[key]
-            while q and q[0] < now - _MAKE_RATE_WINDOW_S:
+            while q and q[0] < now - window:
                 q.popleft()
             if len(q) >= limit:
                 return True
@@ -90,8 +99,10 @@ def _guard(device_id, need_account=True):
         return None, (jsonify({"error": "make_requests_disabled"}), 400)
     if store.is_simple_mode():
         return None, (jsonify({"error": "simple_mode_disabled_source"}), 400)
-    if not device_id:
-        return None, (jsonify({"error": "device_id is required"}), 400)
+    # The device id selects the stored gen sign-in, so it must be the random
+    # 32-hex id (sing.js falls back to a short guessable one without crypto).
+    if not re.fullmatch(r"[0-9a-f]{32}", device_id or ""):
+        return None, (jsonify({"error": "device_unsupported"}), 400)
     if _rate_limited(device_id):
         return None, (jsonify({"error": "rate_limited"}), 429)
     if not need_account:
@@ -112,7 +123,11 @@ def gen_error_response(exc, device_id=None):
     if exc.status == 402:
         return jsonify({"error": "no_credits"}), 402
     if exc.status == 429:
-        return jsonify({"error": exc.detail or "rate_limited"}), 429
+        return jsonify({"error": exc.detail if isinstance(exc.detail, str) and exc.detail
+                        else "rate_limited"}), 429
+    if exc.status in (400, 403, 422):
+        current_app.logger.warning("make: gen rejected the request: %s", exc)
+        return jsonify({"error": "gen_rejected"}), 400
     current_app.logger.warning("make: gen call failed: %s", exc)
     return jsonify({"error": "gen_unavailable"}), 502
 
@@ -143,6 +158,9 @@ def make_send_code():
     email = str(data.get("email") or "").strip().lower()[:254]
     if not _EMAIL_RE.match(email):
         return jsonify({"error": "email_invalid"}), 400
+    if _rate_limited(device_id, bucket="code", window=_CODE_RATE_WINDOW_S,
+                     per_ip=_CODE_RATE_PER_IP, per_device=_CODE_RATE_PER_DEVICE):
+        return jsonify({"error": "too_many_codes"}), 429
     try:
         current_app.gen_client.send_login_code(
             email, locale=_locale(data), venue=current_app.kj_config.get("venue_name"))
@@ -222,21 +240,53 @@ def _song_key(artist, title):
     return f"{norm(artist)}|{norm(title)}"
 
 
-def _show_credit(account, device_id, artist, title):
-    """Top up one credit for this song (idempotent per device/night/song)."""
-    app = current_app._get_current_object()
+def _credit_key(app, device_id, artist, title):
+    """(key, night) for this device's free credit for this song tonight.
+
+    Hashed: gen caps idempotency keys at 128 chars and song names can be long."""
     night = app.sing_store.get_night_started_at() or ""
-    song = _song_key(artist, title)
-    cap = int(app.kj_config.get("sing_make_max_per_device", 3)) * 2
+    raw = f"{device_id}:{night}:{_song_key(artist, title)}"
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest(), night
+
+
+def _show_credit(account, device_id, artist, title):
+    """Search-time top-up: +1 credit only if the singer's balance is empty.
+
+    Free at the show without letting credits pile up: a new singer keeps their
+    welcome credit (the submit-time call then covers the job), and an
+    abandoned search leaves at most one spare credit. Returns False when this
+    device has hit tonight's distinct-song cap."""
+    app = current_app._get_current_object()
+    key, night = _credit_key(app, device_id, artist, title)
+    limit = int(app.kj_config.get("sing_make_max_per_device", 3))
+    st = _state(app)
     with _lock:
-        keys = _state(app)["credit_keys"][(night, device_id)]
-        if song not in keys and len(keys) >= cap:
+        keys = st["credit_keys"][(night, device_id)]
+        if limit > 0 and key not in keys and len(keys) >= limit * 2:
             return False
-        keys.add(song)
+        keys.add(key)
+        st["last_key"][(night, device_id)] = key
     app.gen_client.grant_show_credit(
-        account["session_token"], f"{device_id}:{night}:{song}",
-        venue=app.kj_config.get("venue_name"))
+        account["session_token"], key, venue=app.kj_config.get("venue_name"), only_if_empty=True)
     return True
+
+
+def _submit_credit(app, account, device_id, meta):
+    """Submit-time top-up for the job about to be created (same key as the
+    search, so gen grants it only if the search-time call didn't)."""
+    st = _state(app)
+    night = app.sing_store.get_night_started_at() or ""
+    with _lock:
+        key = (st["search_keys"].get(str(meta.get("search_session_id") or ""))
+               or st["last_key"].get((night, device_id)))
+    if not key:
+        return
+    try:
+        app.gen_client.grant_show_credit(
+            account["session_token"], key, venue=app.kj_config.get("venue_name"))
+    except GenApiError as exc:
+        # Not fatal: the singer may have their own credit; create reports 402 if not.
+        app.logger.warning("make: submit-time show credit not granted: %s", exc)
 
 
 @sing_bp.route("/make/search", methods=["POST"])
@@ -264,6 +314,11 @@ def make_search():
         result = current_app.gen_client.search_audio(account["session_token"], artist, title)
     except GenApiError as exc:
         return gen_error_response(exc, device_id)
+    app = current_app._get_current_object()
+    if result.get("search_session_id"):
+        key, _night = _credit_key(app, device_id, artist, title)
+        with _lock:
+            _state(app)["search_keys"][str(result["search_session_id"])] = key
     return jsonify({
         "search_session_id": result.get("search_session_id"),
         "results": result.get("results") or [],
@@ -297,6 +352,10 @@ def create_job(app, device_id, artist, title, source_meta):
         return None, (jsonify({"error": "signin_required"}), 401)
     meta = source_meta if isinstance(source_meta, dict) else {}
     gen = app.gen_client
+    if not (meta.get("youtube_url")
+            or (meta.get("search_session_id") and isinstance(meta.get("selection_index"), int))):
+        return None, (jsonify({"error": "make requires a chosen audio source"}), 400)
+    _submit_credit(app, account, device_id, meta)
     try:
         if meta.get("youtube_url"):
             result = gen.create_job_from_url(
@@ -308,7 +367,9 @@ def create_job(app, device_id, artist, title, source_meta):
         else:
             return None, (jsonify({"error": "make requires a chosen audio source"}), 400)
     except GenApiError as exc:
-        if exc.status == 404:
+        # 404 = session expired; 403 = it belongs to another gen account (the
+        # singer re-verified with a different email since searching).
+        if exc.status in (403, 404):
             return None, (jsonify({"error": "search_expired"}), 409)
         return None, gen_error_response(exc, device_id)
     job_id = result.get("job_id")

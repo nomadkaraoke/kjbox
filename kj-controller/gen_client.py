@@ -188,9 +188,11 @@ class GenClient:
     # Singer make-it flow (partner secret + the singer's gen session)
     # ------------------------------------------------------------------
 
-    def _singer_headers(self, session_token=None, locale=None):
+    def _singer_headers(self, path, session_token=None, locale=None):
         headers = {"Content-Type": "application/json", "X-Client-Id": self.CLIENT_ID}
-        if self.kjbox_secret:
+        # The partner secret goes ONLY to gen's partner endpoints — gen records
+        # custom request headers on jobs, which the singer can read back.
+        if self.kjbox_secret and path.startswith("/api/kjbox/"):
             headers["X-Kjbox-Secret"] = self.kjbox_secret
         if session_token:
             headers["Authorization"] = f"Bearer {session_token}"
@@ -203,7 +205,7 @@ class GenClient:
         try:
             resp = requests.request(
                 method, f"{self.api_url}{path}", json=json, timeout=timeout,
-                headers=self._singer_headers(session_token, locale),
+                headers=self._singer_headers(path, session_token, locale),
             )
         except requests.RequestException as exc:
             raise GenApiError(0, str(exc)) from exc
@@ -229,10 +231,14 @@ class GenClient:
         return self._singer_call("POST", "/api/kjbox/auth/verify-code", locale=locale,
                                  json={"email": email, "code": code})
 
-    def grant_show_credit(self, session_token, idempotency_key, venue=None):
+    def grant_show_credit(self, session_token, idempotency_key, venue=None, only_if_empty=False):
+        """+1 free "show" credit. ``only_if_empty`` grants only at a 0 balance;
+        gen claims ``idempotency_key`` only when it actually grants, so one key
+        yields at most one credit across the search-time and submit-time calls."""
         return self._singer_call("POST", "/api/kjbox/credits/show-credit",
                                  session_token=session_token,
-                                 json={"idempotency_key": idempotency_key, "venue": venue})
+                                 json={"idempotency_key": idempotency_key, "venue": venue,
+                                       "only_if_empty": only_if_empty})
 
     def match_judge(self, session_token, artist, title, stage="fast", audio_confidence_tier=None):
         body = {"artist": artist, "title": title, "stage": stage}
