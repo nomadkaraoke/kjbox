@@ -530,8 +530,8 @@
     "saveFailed": "Nie udało się zapisać — spróbuj ponownie."
   },
   "prefs": {
-    "notifyTitle": "🔔 Preferencje powiadomień",
-    "socialTitle": "📷 Preferencje mediów społecznościowych",
+    "notifyTitle": "🔔 Ustawienia powiadomień",
+    "socialTitle": "📷 Ustawienia mediów społecznościowych",
     "hide": "Ukryj ▴",
     "notifyBoth": "Powiadomienie + SMS",
     "notifyPush": "Powiadomienie na tym urządzeniu",

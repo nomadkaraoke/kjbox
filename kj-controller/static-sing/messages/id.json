@@ -530,8 +530,8 @@
     "saveFailed": "Gagal menyimpan — silakan coba lagi."
   },
   "prefs": {
-    "notifyTitle": "🔔 Preferensi notifikasi",
-    "socialTitle": "📷 Preferensi media sosial",
+    "notifyTitle": "🔔 Pengaturan notifikasi",
+    "socialTitle": "📷 Pengaturan media sosial",
     "hide": "Sembunyikan ▴",
     "notifyBoth": "Pop-up + SMS",
     "notifyPush": "Pop-up di perangkat ini",

@@ -530,8 +530,8 @@
     "saveFailed": "No se pudo guardar — por favor, inténtalo de nuevo."
   },
   "prefs": {
-    "notifyTitle": "🔔 Preferencias de notificaciones",
-    "socialTitle": "📷 Preferencias de redes sociales",
+    "notifyTitle": "🔔 Configuración de notificaciones",
+    "socialTitle": "📷 Configuración de redes sociales",
     "hide": "Ocultar ▴",
     "notifyBoth": "Notificación + mensaje de texto",
     "notifyPush": "Notificación en este dispositivo",

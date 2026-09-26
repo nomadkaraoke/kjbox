@@ -1352,7 +1352,7 @@ class TestNotificationsSection:
         toggle = section.locator('[data-testid="pref-toggle-notify"]')
         expect(toggle).to_contain_text("Text message", timeout=8000)
         toggle.click()
-        expect(section.locator(".pref-box-title")).to_contain_text("Notification preferences")
+        expect(section.locator(".pref-box-title")).to_contain_text("Notification settings")
         expect(section).to_contain_text("Text message to +1 555 123 4567")
         expect(section.locator(".notify-summary")).to_be_visible()
 

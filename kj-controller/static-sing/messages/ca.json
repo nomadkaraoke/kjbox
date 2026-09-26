@@ -530,8 +530,8 @@
     "saveFailed": "No s'ha pogut desar — si us plau, torna-ho a provar."
   },
   "prefs": {
-    "notifyTitle": "🔔 Preferències de notificació",
-    "socialTitle": "📷 Preferències de xarxes socials",
+    "notifyTitle": "🔔 Configuració de notificacions",
+    "socialTitle": "📷 Configuració de xarxes socials",
     "hide": "Amaga ▴",
     "notifyBoth": "Notificació emergent + missatge",
     "notifyPush": "Notificació emergent en aquest dispositiu",

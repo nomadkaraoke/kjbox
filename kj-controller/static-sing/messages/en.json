@@ -530,8 +530,8 @@
     "saveFailed": "Couldn't save that — please try again."
   },
   "prefs": {
-    "notifyTitle": "🔔 Notification preferences",
-    "socialTitle": "📷 Social media preferences",
+    "notifyTitle": "🔔 Notification settings",
+    "socialTitle": "📷 Social media settings",
     "hide": "Hide ▴",
     "notifyBoth": "Pop-up + text",
     "notifyPush": "Pop-up on this device",

@@ -4,6 +4,16 @@ Dated entries, newest first. Each entry notes any required deploy steps.
 
 ---
 
+## 2026-09-26 - "Notification / Social media settings" (v0.118.1)
+
+**Deploy:** singer frontend only (`sing.js`, 33 locale files) + version bump for cache-bust.
+
+- Andrew: the collapsed preference toggles were too big to sit compactly side by side.
+  "… preferences" → "… settings", and the ▾ is joined to the last word with a non-breaking
+  space so it never wraps onto a line of its own.
+
+---
+
 ## 2026-09-26 - Make-it feedback: gen-style audio pick, clearer phases, "Tap here" review link, collapsible preferences (v0.118.0)
 
 **Deploy:** backend (`gen_client.py`, `gen_poller.py`, `sing.py`, `sing_make.py`) + KJ frontend

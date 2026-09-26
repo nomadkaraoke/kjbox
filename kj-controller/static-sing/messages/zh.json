@@ -530,8 +530,8 @@
     "saveFailed": "保存失败 — 请重试。"
   },
   "prefs": {
-    "notifyTitle": "🔔 通知偏好设置",
-    "socialTitle": "📷 社交媒体偏好设置",
+    "notifyTitle": "🔔 通知设置",
+    "socialTitle": "📷 社交媒体设置",
     "hide": "隐藏 ▴",
     "notifyBoth": "弹窗 + 短信",
     "notifyPush": "在此设备上弹窗",

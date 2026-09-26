@@ -530,8 +530,8 @@
     "saveFailed": "Impossible d'enregistrer — réessaie s'il te plaît."
   },
   "prefs": {
-    "notifyTitle": "🔔 Préférences de notification",
-    "socialTitle": "📷 Préférences pour les réseaux sociaux",
+    "notifyTitle": "🔔 Paramètres de notification",
+    "socialTitle": "📷 Paramètres des réseaux sociaux",
     "hide": "Masquer ▴",
     "notifyBoth": "Pop-up + SMS",
     "notifyPush": "Pop-up sur cet appareil",

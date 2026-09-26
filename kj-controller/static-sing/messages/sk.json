@@ -530,8 +530,8 @@
     "saveFailed": "Nepodarilo sa to uložiť — skús to prosím znova."
   },
   "prefs": {
-    "notifyTitle": "🔔 Predvoľby upozornení",
-    "socialTitle": "📷 Predvoľby sociálnych sietí",
+    "notifyTitle": "🔔 Nastavenia upozornení",
+    "socialTitle": "📷 Nastavenia sociálnych sietí",
     "hide": "Skryť ▴",
     "notifyBoth": "Vyskakovacie okno + SMS",
     "notifyPush": "Vyskakovacie okno na tomto zariadení",

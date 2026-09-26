@@ -530,8 +530,8 @@
     "saveFailed": "Impossibile salvare — riprova."
   },
   "prefs": {
-    "notifyTitle": "🔔 Preferenze notifiche",
-    "socialTitle": "📷 Preferenze social media",
+    "notifyTitle": "🔔 Impostazioni notifiche",
+    "socialTitle": "📷 Impostazioni social",
     "hide": "Nascondi ▴",
     "notifyBoth": "Pop-up + SMS",
     "notifyPush": "Pop-up su questo dispositivo",
