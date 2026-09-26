@@ -43,8 +43,23 @@ def _log(msg):
     print(f"overlay_engine: {msg}", file=sys.stderr, flush=True)
 
 
+# Text fields that may carry the `{url}` placeholder (the singer link, e.g.
+# kjbox.cc/1234 — kj-controller keeps top-level `event_url` current as the event
+# code changes). Plain replace, not str.format: KJ text can contain stray braces.
+_URL_TEXT_FIELDS = ("text", "label", "prefix", "empty_text", "expired_text")
+
+
+def _fill_url_placeholder(cfg, event_url):
+    for key in _URL_TEXT_FIELDS:
+        val = cfg.get(key)
+        if isinstance(val, str) and "{url}" in val:
+            cfg[key] = val.replace("{url}", event_url)
+
+
 def load_config(path):
     """Return (karaoke_playing, [overlay dicts with defaults applied]).
+
+    Fills the `{url}` placeholder in overlay text from top-level `event_url`.
 
     Injects the reserved-strip height (top-level `video_top_margin_px`, written by
     kj-controller) into each top ticker's config as `_strip_h`, so the ticker
@@ -60,8 +75,10 @@ def load_config(path):
         return False, []
     overlays = data.get("overlays", [])
     strip_h = int(data.get("video_top_margin_px", 0) or 0)
+    event_url = data.get("event_url") or ""
     for o in overlays:
         apply_defaults(o)
+        _fill_url_placeholder(o["config"], event_url)
         if o.get("type") == "ticker":
             o["config"]["_strip_h"] = strip_h
     return bool(data.get("karaoke_playing", False)), overlays

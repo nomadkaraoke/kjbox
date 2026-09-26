@@ -3073,6 +3073,8 @@ function showOverlayForm(overlay) {
     document.getElementById('overlay-countdown-label').value = cfg.label || 'Time remaining';
     document.getElementById('overlay-expired-text').value = cfg.expired_text || 'TIME!';
     document.getElementById('overlay-qr-url').value = cfg.url || '';
+    document.getElementById('overlay-qr-follow').checked = !!cfg.follow_event_url;
+    onOverlayQrFollowChange();
     document.getElementById('overlay-qr-label').value = cfg.label || '';
     document.getElementById('overlay-qr-size').value = cfg.size || 180;
 
@@ -3152,12 +3154,22 @@ function buildOverlayConfig() {
     }
     if (type === 'qr_code') {
         config.url = document.getElementById('overlay-qr-url').value;
+        // Must round-trip: the config is rebuilt from the form, and dropping this
+        // flag silently froze the QR on an old event code.
+        config.follow_event_url = document.getElementById('overlay-qr-follow').checked;
         config.label = document.getElementById('overlay-qr-label').value;
         config.size = parseInt(document.getElementById('overlay-qr-size').value) || 180;
         config.padding = 10;
     }
 
     return config;
+}
+
+// A following QR's URL is owned by the server (rewritten on every event-code
+// change), so lock the field rather than let an edit be silently overwritten.
+function onOverlayQrFollowChange() {
+    const follow = document.getElementById('overlay-qr-follow').checked;
+    document.getElementById('overlay-qr-url').readOnly = follow;
 }
 
 async function saveOverlay() {

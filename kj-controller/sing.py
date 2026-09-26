@@ -6,6 +6,7 @@ Serves the QR-reachable request form. The companion admin endpoints at
 Design doc: docs/archive/2026-04-18-public-request-form-design.md
 """
 
+import ipaddress
 import json
 import os
 import re
@@ -189,8 +190,39 @@ def _display_names(singer):
 
 # --- Token gate ----------------------------------------------------------
 
+def _is_private_ip(ip):
+    try:
+        addr = ipaddress.ip_address(ip)
+    except ValueError:
+        return False
+    return addr.is_private and not addr.is_loopback
+
+
+def _is_tokenless_lan_request(req=None):
+    """True for a phone on the KJ box's own wifi hitting the local short host.
+
+    ``l.kjbox.cc`` resolves (router DNS, + a DNS-only Cloudflare record) to the
+    box's LAN IP, so being able to load it at all proves you're at the venue —
+    the 4-digit code adds nothing. Belt and braces: the name never reaches the
+    tunnel (no ingress rule), but a tunnel-borne request (CF-Connecting-IP) or a
+    non-private client address is refused anyway."""
+    req = req or request
+    cfg = getattr(current_app, "kj_config", None) or {}
+    host = (cfg.get("sing_local_short_host") or "").strip().lower()
+    if not host or (req.host or "").split(":")[0].lower() != host:
+        return False
+    if req.headers.get("CF-Connecting-IP") or req.headers.get("CF-Ray"):
+        return False
+    return _is_private_ip(_client_ip(req))
+
+
 def _extract_token():
-    """Pull token from query string, form, JSON body, or session cookie."""
+    """Pull token from query string, form, JSON body, or session cookie.
+
+    On the tokenless LAN host the current token is implied."""
+    if _is_tokenless_lan_request():
+        store = getattr(current_app, "sing_store", None)
+        return store.get_token() if store is not None else None
     t = request.args.get("t")
     if t:
         return t
@@ -277,6 +309,10 @@ def get_event_url(cfg, token, scope="public"):
     ``/sing/`` because the admin device serves its KJ controller at ``/``.
     """
     if scope == "local":
+        # Tokenless LAN short host (l.kjbox.cc): served at the root, no code.
+        short_host = (cfg.get("sing_local_short_host") or "").strip().lower()
+        if short_host:
+            return f"http://{short_host}/"
         base = (cfg.get("sing_local_url_base") or "").rstrip("/")
         if not base:
             # Fall back to the request's host if available (e.g. http://<lan-ip>)
@@ -288,26 +324,66 @@ def get_event_url(cfg, token, scope="public"):
             return f"{base}/sing/"
         return f"{base}/sing/?t={token}"
 
+    # Short-link domain (kjbox.cc): a Cloudflare edge redirect turns
+    # ``kjbox.cc/1234`` into ``<public base>/?t=1234``, so singers still land on
+    # the same origin (localStorage identity, push subs, installed PWA). "" opts
+    # out and emits the full URL.
+    short = (cfg.get("sing_short_url_base") or "").rstrip("/")
+    if short:
+        return f"{short}/{token}" if token else f"{short}/"
     base = cfg.get("sing_public_url_base", "https://sing.nomadkaraoke.com").rstrip("/")
     if not token:
         return f"{base}/"
     return f"{base}/?t={token}"
 
 
-def sync_event_url_overlays(overlay_manager, url):
-    """Update any qr_code overlay with `config.follow_event_url=True` to point at `url`.
+def display_url(url):
+    """Human form of an event URL for on-screen text: no scheme, no bare trailing slash."""
+    s = re.sub(r"^https?://", "", url or "", flags=re.IGNORECASE)
+    return s[:-1] if s.endswith("/") else s
 
-    Returns number of overlays updated. Swallows errors — best-effort.
+
+# QR alphanumeric mode (0-9 A-Z space $%*+-./:) packs 5.5 bits/char vs 8 for
+# byte mode, so "HTTP://KJBOX.CC/1234" fits a 21x21 version-1 code where the
+# lowercase form needs 25x25 — bigger modules, scannable from further away.
+# Mirrored in desktop/overlay_painters.py (separate process, no shared import).
+_QR_ALNUM = set("0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ $%*+-./:")
+
+
+def qr_data(url):
+    """Uppercase ``url`` for a denser QR when that can't change its meaning.
+
+    Scheme and host are case-insensitive; the rest of the URL is not, so we only
+    uppercase when everything after the host has no letters and every character
+    is QR-alphanumeric (e.g. ``http://kjbox.cc/1234``)."""
+    m = re.match(r"^(https?://[^/?#]+)(.*)$", url or "", flags=re.IGNORECASE)
+    if not m:
+        return url
+    head, rest = m.groups()
+    if any(c.isalpha() for c in rest):
+        return url
+    upper = head.upper() + rest
+    return upper if set(upper) <= _QR_ALNUM else url
+
+
+def sync_event_url_overlays(overlay_manager, url):
+    """Update any qr_code overlay with `config.follow_event_url=True` to point at `url`,
+    and publish its display form for the `{url}` text placeholder.
+
+    Returns number of overlays updated (unchanged ones are skipped so a startup
+    sync doesn't churn overlays.json). Swallows errors — best-effort.
     """
     if overlay_manager is None:
         return 0
     updated = 0
     try:
+        # Feeds the `{url}` placeholder in overlay text (ticker, labels, ...).
+        overlay_manager.set_event_url(display_url(url))
         for overlay in overlay_manager.list_overlays():
             if overlay.get("type") != "qr_code":
                 continue
             cfg = overlay.get("config") or {}
-            if not cfg.get("follow_event_url"):
+            if not cfg.get("follow_event_url") or cfg.get("url") == url:
                 continue
             new_cfg = dict(cfg)
             new_cfg["url"] = url
@@ -325,6 +401,10 @@ def _public_hosts(cfg):
     primary = (cfg.get("sing_public_host") or "").strip().lower()
     if primary:
         hosts.add(primary)
+    # The LAN short host gets the same sing-only guard + root mount.
+    local_short = (cfg.get("sing_local_short_host") or "").strip().lower()
+    if local_short:
+        hosts.add(local_short)
     aliases = cfg.get("sing_public_host_aliases") or []
     for h in aliases:
         if h:

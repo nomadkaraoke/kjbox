@@ -19,7 +19,13 @@ from overlay import OverlayManager
 from playback import PlaybackCoordinator
 from rotation import RotationManager
 from routes import routes_bp
-from sing import install_host_guard, install_public_host_rewriter, sing_bp
+from sing import (
+    get_event_url,
+    install_host_guard,
+    install_public_host_rewriter,
+    sing_bp,
+    sync_event_url_overlays,
+)
 import sing_make  # noqa: F401 — registers the /sing/make/* routes on sing_bp
 from sing_store import SingStore
 from sms_store import SmsStore
@@ -256,6 +262,17 @@ def _install_external_media_monitor(flask_app, cfg, start):
             pass
 
 
+def _sync_event_url_overlays(flask_app):
+    """Point follow-event-url QR overlays (and the `{url}` text placeholder) at
+    the current event URL on boot, so a URL-scheme change (e.g. the kjbox.cc
+    short link) reaches the screen without waiting for a token change."""
+    try:
+        url = get_event_url(flask_app.kj_config, flask_app.sing_store.get_token(), scope='public')
+        sync_event_url_overlays(flask_app.overlay_manager, url)
+    except Exception:
+        flask_app.logger.exception("event-url overlay sync failed")
+
+
 def create_app(config=None):
     """Create and configure the Flask application."""
     flask_app = Flask(__name__)
@@ -306,6 +323,7 @@ def create_app(config=None):
     # Guarantee a night_started_at marker exists so the night-scoped phone
     # lookups (SMS + push) work on a device that hasn't run a New Rotation yet.
     flask_app.sing_store.ensure_night_started()
+    _sync_event_url_overlays(flask_app)
     flask_app.sms_store = SmsStore(
         cfg.get('rotation_db_path', os.path.expanduser('~/kjdata/rotation.db'))
     )
@@ -521,6 +539,7 @@ def start_app():  # pragma: no cover
     # Guarantee a night_started_at marker exists so the night-scoped phone
     # lookups (SMS + push) work on a device that hasn't run a New Rotation yet.
     flask_app.sing_store.ensure_night_started()
+    _sync_event_url_overlays(flask_app)
     flask_app.sms_store = SmsStore(
         cfg.get('rotation_db_path', os.path.expanduser('~/kjdata/rotation.db'))
     )

@@ -231,6 +231,23 @@ def test_qr_painter_renders_card_and_qr():
                for y in range(p._y, p._y + p._h))
 
 
+def test_qr_data_uppercases_short_link_only():
+    assert op.qr_data("http://kjbox.cc/2121") == "HTTP://KJBOX.CC/2121"
+    assert op.qr_data("https://sing.nomadkaraoke.com/?t=2121") == "https://sing.nomadkaraoke.com/?t=2121"
+    assert op.qr_data("https://example.com/Path") == "https://example.com/Path"
+    assert op.qr_data("") == ""
+
+
+def test_qr_painter_passes_dense_payload(monkeypatch):
+    """The short link must reach the painter as the dense uppercase payload."""
+    seen = []
+    real = op.qrcode.QRCode.add_data
+    monkeypatch.setattr(op.qrcode.QRCode, "add_data",
+                        lambda self, data, *a, **k: (seen.append(data), real(self, data, *a, **k))[1])
+    op.QRCodePainter("q", {"url": "http://kjbox.cc/2121", "size": 110}, True)
+    assert seen == ["HTTP://KJBOX.CC/2121"]
+
+
 def test_rotation_list_draws_names(tmp_path):
     cache = tmp_path / "rotation_cache.json"
     cache.write_text(json.dumps({

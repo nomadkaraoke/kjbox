@@ -10,6 +10,7 @@ Real per-pixel alpha: bg_opacity is a true alpha channel now (no black pre-blend
 import io
 import math
 import os
+import re
 from datetime import datetime
 
 import cairo
@@ -384,6 +385,26 @@ class ImagePainter(BasePainter):
         cr.paint()
 
 
+# QR alphanumeric mode (0-9 A-Z space $%*+-./:) is far denser than byte mode:
+# "HTTP://KJBOX.CC/1234" fits a 21x21 code where the lowercase URL needs 25x25,
+# so modules are bigger and it scans from further back. Mirror of
+# kj-controller/sing.py:qr_data (separate process, no shared import).
+_QR_ALNUM = set("0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ $%*+-./:")
+
+
+def qr_data(url):
+    """Uppercase scheme+host when nothing after the host has letters (so the
+    URL's meaning can't change) and the result is all QR-alphanumeric."""
+    m = re.match(r"^(https?://[^/?#]+)(.*)$", url or "", flags=re.IGNORECASE)
+    if not m:
+        return url
+    head, rest = m.groups()
+    if any(c.isalpha() for c in rest):
+        return url
+    upper = head.upper() + rest
+    return upper if set(upper) <= _QR_ALNUM else url
+
+
 class QRCodePainter(BasePainter):
     """QR code from a URL with an optional label, on a rounded translucent card."""
 
@@ -403,7 +424,7 @@ class QRCodePainter(BasePainter):
         if not qrcode or not url or not _pil:
             return None
         qr = qrcode.QRCode(box_size=1, border=1)
-        qr.add_data(url)
+        qr.add_data(qr_data(url))
         qr.make(fit=True)
         img = qr.make_image(fill_color="black", back_color="white").convert("RGBA")
         img = img.resize((size, size), Image.NEAREST)

@@ -2,6 +2,63 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-09-26 - Feature: kjbox.cc short links for the singer QR codes (v0.121.0)
+
+The QR codes and on-screen text now use much shorter links, so they scan from further away and
+are easy to type.
+
+- **Public (internet): `kjbox.cc/<code>`**, e.g. `kjbox.cc/2121`. The box no longer serves this
+  name. A Cloudflare edge redirect (302) sends it to `https://sing.nomadkaraoke.com/?t=2121`, so
+  singers stay on the same origin and keep their saved name/device id, push subscriptions and
+  installed PWA. `kjbox.cc/` with no code goes to the code-entry page.
+- **Local (venue wifi, offline): `l.kjbox.cc`**, with no code. This name resolves to the box's
+  LAN IP, so loading it proves the phone is on the "Nomad KJ Box" wifi. The singer UI is served
+  at the root with the current token implied. Anything tunnel-borne (`CF-Connecting-IP`/`CF-Ray`)
+  or from a non-private client IP still needs the code. The host guard makes it sing-only, the
+  same as `sing.nomadkaraoke.com`. It is plain HTTP on purpose: phones reject the mkcert cert, so
+  the old `http://<lan-ip>/sing/` Local URL hit a cert warning after Caddy's `:80` → https
+  redirect.
+- **Denser QR:** the QR payload is uppercased (`HTTP://KJBOX.CC/2121`) so it fits QR
+  alphanumeric mode. That gives a **21×21** code, down from 29×29 for the old URL, so modules
+  are about 38% bigger at the same size. We only uppercase when nothing after the host has
+  letters (`sing.qr_data`, mirrored in `desktop/overlay_painters.py`). The `http://` scheme is
+  deliberate: `https://` would push it to 25×25, and the edge hop lands on https anyway.
+- **`{url}` placeholder** in overlay text (ticker text/prefix/empty text, static text, QR label):
+  the engine substitutes the display form (`kjbox.cc/2121`). kj-controller publishes it as the
+  top-level `event_url` in overlays.json. The Scan-to-Sing preset's label is now `{url}`.
+- **Fixed:** editing a QR overlay silently dropped `follow_event_url`, because the editor
+  rebuilds `config` from the form and had no field for it. This is why the live QR was frozen on
+  a hardcoded URL. There is now a "Point at the singer link" checkbox, which makes the URL field
+  read-only when ticked. Follow-QRs are filled immediately on create/update/import/preset, and
+  on every boot, so a URL-scheme change reaches the screen without a token change.
+- **Config:** `sing_short_url_base` (default `http://kjbox.cc`) and `sing_local_short_host`
+  (default `l.kjbox.cc`). Set either to `""` to go back to the old URLs.
+- **Infra (Cloudflare, zone `kjbox.cc`, Free plan, recorded per standing rule):**
+  - DNS: `kjbox.cc` A `192.0.2.1` **proxied** placeholder; `www` CNAME `kjbox.cc` proxied;
+    `l` A `192.168.8.170` **DNS-only**, TTL 300. The `l` record is a fallback for when the phone
+    has internet but bypasses the router's DNS; offline shows rely on the router.
+  - Redirect rules (phase `http_request_dynamic_redirect`, ruleset
+    `5ca1902e26c049cab9c7f519b022cf66`):
+    - `kjbox_cc_root`: path `/` → `https://sing.nomadkaraoke.com/` (302, keeps the query string).
+    - `kjbox_cc_token`: any other path →
+      `wildcard_replace(http.request.uri.path, r"/*", r"https://sing.nomadkaraoke.com/?t=${1}")`
+      (302).
+  - The tunnel has no `l.kjbox.cc` ingress, and none should be added.
+- **Router ("Nomad KJ Box" wifi, GL.iNet 4.8.1 / OpenWrt 23.05, `192.168.8.1`, 2026-09-26):**
+  - A static DHCP lease already existed: `84:47:09:5A:1D:13` → `192.168.8.170` ("NomadPC
+    Ethernet"). dnsmasq `rebind_protection` is `0`.
+  - Added `uci add_list dhcp.@dnsmasq[0].address='/l.kjbox.cc/192.168.8.170'` and reloaded
+    dnsmasq. The router answers locally with no internet, and returns NODATA for AAAA so
+    offline phones don't wait on a dead upstream. This is not visible in the GL.iNet UI; use
+    LuCI or `uci show dhcp`. **If the box's LAN IP changes, update this, the lease and the
+    Cloudflare `l` record.**
+  - Access: `ssh -J nomadpctunnel root@192.168.8.1`. The Mac's `~/.ssh/id_ed25519` key is in
+    `/etc/dropbear/authorized_keys` (comment `claude-kjbox`). The root password is the router
+    admin password, which is not stored in the repo.
+- **Caddy:** new `http://l.kjbox.cc` site in `kj-controller/deploy/Caddyfile`, which reverse
+  proxies to Flask without the https redirect. The Caddyfile is symlinked from the repo, but it
+  needs `sudo systemctl reload caddy` after deploy.
+
 ## 2026-09-25 - Feature: Singer "make it" — karaoke-gen job submission inside the singer UI (v0.117.0)
 
 Singers who can't find a song get **"We'll make it for you"** (in the empty search, and under

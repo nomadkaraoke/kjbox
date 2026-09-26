@@ -117,8 +117,18 @@ def load_config(config_file=None):
         # the window only when a song plays, so it's positioned per-play with
         # wmctrl (see VlcKaraokePlayer._position_window).
         "sing_public_url_base": "https://sing.nomadkaraoke.com",
+        # Short link used for QR targets + on-screen text: kjbox.cc/<token>.
+        # Cloudflare (zone kjbox.cc, redirect rules) 302s it to
+        # sing_public_url_base/?t=<token>. http:// (not https) + uppercased in
+        # the QR = smallest 21x21 code; the edge hop lands on https. "" = off.
+        "sing_short_url_base": "http://kjbox.cc",
         "sing_public_host": "sing.nomadkaraoke.com",
         "sing_local_url_base": "",
+        # Venue-wifi short host for the Local QR: http://l.kjbox.cc/ with NO
+        # event code (only reachable on the KJ box's LAN). Needs: router DNS
+        # l.kjbox.cc -> box LAN IP + static lease, the Caddy http site, and a
+        # DNS-only Cloudflare record. "" = off (falls back to <lan-ip>/sing/?t=).
+        "sing_local_short_host": "l.kjbox.cc",
         # Singer mutations are budgeted per DEVICE first; per-IP is only the
         # loose backstop against a device_id-minting flood, because every phone
         # on venue wifi shares one IP. (Was 5 — a leftover from the IP-only
