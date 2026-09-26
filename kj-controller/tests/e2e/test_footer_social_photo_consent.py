@@ -63,6 +63,43 @@ class TestFooterSocialLinks:
         expect(social.locator('[data-social="email"]')).to_have_attribute(
             "href", "mailto:andrew@nomadkaraoke.com")
 
+    def test_follow_us_left_contact_us_right_with_text_or_call(self, page, live_server, live_token):
+        _event_info(page, social={
+            "instagram": "https://www.instagram.com/nomadkaraoke",
+            "email": "andrew@nomadkaraoke.com",
+            "phone": "+1 (803) 636-3267",
+        })
+        _login(page, live_server, live_token)
+        page.reload()
+        follow = page.locator('[data-testid="footer-follow"]')
+        contact = page.locator('[data-testid="footer-contact"]')
+        expect(follow).to_contain_text("Follow us")
+        expect(contact).to_contain_text("Contact us")
+        assert follow.bounding_box()["x"] < contact.bounding_box()["x"]   # side by side
+        expect(follow.locator('[data-social="instagram"]')).to_be_visible()
+        expect(contact.locator('[data-social="email"]')).to_be_visible()
+        panel = page.locator('[data-testid="footer-phone-panel"]')
+        expect(panel).to_be_hidden()
+        contact.locator('[data-social="phone"]').click()
+        expect(panel).to_be_visible()
+        expect(panel).to_contain_text("+1 (803) 636-3267")
+        expect(page.locator('[data-testid="footer-phone-text"]')).to_have_attribute("href", "sms:+18036363267")
+        expect(page.locator('[data-testid="footer-phone-call"]')).to_have_attribute("href", "tel:+18036363267")
+
+    def test_custom_and_reworded_notices(self, page, live_server, live_token):
+        _event_info(page, notices=["c-pizza", "water", "wifi"], notice_defs={
+            "c-pizza": {"icon": "🍕", "text": "Pizza at 10!"},
+            "water": {"icon": "", "text": "Water is on the house — ask the bar."},
+            "wifi": {"icon": "🛜", "text": ""},
+        })
+        _login(page, live_server, live_token)
+        page.reload()
+        notices = page.locator(".sing-notice")
+        expect(notices).to_have_count(3)
+        expect(notices.nth(0)).to_have_text("🍕 Pizza at 10!")
+        expect(notices.nth(1)).to_have_text("💧 Water is on the house — ask the bar.")
+        expect(notices.nth(2)).to_have_text("🛜 Free wifi — ask the host for the password.")
+
     def test_footer_shows_with_only_social_links(self, page, live_server, live_token):
         _event_info(page, social={"website": "https://nomadkaraoke.com"})
         _login(page, live_server, live_token)

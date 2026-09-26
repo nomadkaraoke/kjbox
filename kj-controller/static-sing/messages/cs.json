@@ -86,7 +86,13 @@
     "ideasNone": "Zatím žádná historie písní — dnešek to změní!",
     "ideasFailed": "Nepodařilo se načíst historii písní.",
     "plays": "▶ {count}",
-    "makeOffer": "Není to verze, kterou jsi chtěl? Vygeneruj si ji na přání →"
+    "makeOffer": "Není to verze, kterou jsi chtěl? Vygeneruj si ji na přání →",
+    "checkingSpelling": "Kontrola pravopisu…",
+    "didYouMean": "Myslel jsi…?",
+    "correctedTo": "Opraveno na {song} — napsal(a) jsi „{typed}“.",
+    "usingTyped": "Použije se tvůj text: „{typed}“.",
+    "undo": "Zpět",
+    "useCorrection": "Použít opravu"
   },
   "versions": {
     "sectionLibrary": "V naší knihovně",
@@ -519,7 +525,11 @@
     "fromHost": "Vzkaz od tvého KJ",
     "followUs": "Sleduj nás",
     "website": "Web",
-    "email": "E-mail"
+    "email": "E-mail",
+    "contactUs": "Kontaktuj nás",
+    "phone": "Napiš zprávu nebo zavolej",
+    "text": "💬 Napsat zprávu",
+    "call": "📞 Zavolat"
   },
   "photoConsent": {
     "question": "📷 Nevadí ti, když se fotky nebo videa, jak dnes večer zpíváš, zveřejní na sociálních sítích?",

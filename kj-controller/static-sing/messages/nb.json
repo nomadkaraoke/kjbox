@@ -86,7 +86,13 @@
     "ideasNone": "Ingen sanghistorikk ennå — i kveld er kvelden!",
     "ideasFailed": "Kunne ikke laste inn sanghistorikk.",
     "plays": "▶ {count}",
-    "makeOffer": "Ikke versjonen du ønsket? Generer den på forespørsel →"
+    "makeOffer": "Ikke versjonen du ønsket? Generer den på forespørsel →",
+    "checkingSpelling": "Sjekker skrivemåten…",
+    "didYouMean": "Mente du…?",
+    "correctedTo": "Rettet til {song} — du skrev «{typed}».",
+    "usingTyped": "Bruker det du skrev: «{typed}».",
+    "undo": "Angre",
+    "useCorrection": "Bruk rettelsen"
   },
   "versions": {
     "sectionLibrary": "I biblioteket vårt",
@@ -519,7 +525,11 @@
     "fromHost": "En melding fra verten din",
     "followUs": "Følg oss",
     "website": "Nettside",
-    "email": "E-post"
+    "email": "E-post",
+    "contactUs": "Kontakt oss",
+    "phone": "Send SMS eller ring",
+    "text": "💬 SMS",
+    "call": "📞 Ring"
   },
   "photoConsent": {
     "question": "📷 Er det greit om bilder eller videoer av at du synger i kveld legges ut på sosiale medier?",

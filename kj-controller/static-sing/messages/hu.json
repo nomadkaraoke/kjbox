@@ -86,7 +86,13 @@
     "ideasNone": "Még nincsenek dalelőzmények — ma este itt az idő!",
     "ideasFailed": "Nem sikerült betölteni a dalelőzményeket.",
     "plays": "▶ {count}",
-    "makeOffer": "Nem az a verzió, amit szerettél volna? Generáld le kérésre →"
+    "makeOffer": "Nem az a verzió, amit szerettél volna? Generáld le kérésre →",
+    "checkingSpelling": "Helyesírás ellenőrzése…",
+    "didYouMean": "Erre gondoltál…?",
+    "correctedTo": "Javítva erre: {song} — ezt írtad: „{typed}”.",
+    "usingTyped": "Azt használjuk, amit beírtál: „{typed}”.",
+    "undo": "Visszavonás",
+    "useCorrection": "Javítás használata"
   },
   "versions": {
     "sectionLibrary": "A könyvtárunkban",
@@ -519,7 +525,11 @@
     "fromHost": "Üzenet a házigazdától",
     "followUs": "Kövess minket",
     "website": "Weboldal",
-    "email": "E-mail"
+    "email": "E-mail",
+    "contactUs": "Kapcsolat",
+    "phone": "SMS vagy hívás",
+    "text": "💬 SMS",
+    "call": "📞 Hívás"
   },
   "photoConsent": {
     "question": "📷 Rendben van, ha a ma esti éneklésedről készült fotók vagy videók kikerülnek a közösségi médiába?",

@@ -86,7 +86,13 @@
     "ideasNone": "Ancora nessuna cronologia delle canzoni — stasera è la serata giusta!",
     "ideasFailed": "Impossibile caricare la cronologia delle canzoni.",
     "plays": "▶ {count}",
-    "makeOffer": "Non è la versione che volevi? Generala su richiesta →"
+    "makeOffer": "Non è la versione che volevi? Generala su richiesta →",
+    "checkingSpelling": "Controllo l'ortografia…",
+    "didYouMean": "Intendevi…?",
+    "correctedTo": "Corretto in {song} — avevi scritto “{typed}”.",
+    "usingTyped": "Uso quello che hai scritto: “{typed}”.",
+    "undo": "Annulla",
+    "useCorrection": "Usa la correzione"
   },
   "versions": {
     "sectionLibrary": "Nella nostra libreria",
@@ -519,7 +525,11 @@
     "fromHost": "Un messaggio dal tuo host",
     "followUs": "Seguici",
     "website": "Sito web",
-    "email": "Email"
+    "email": "Email",
+    "contactUs": "Contattaci",
+    "phone": "Scrivi o chiama",
+    "text": "💬 Scrivi",
+    "call": "📞 Chiama"
   },
   "photoConsent": {
     "question": "📷 Va bene se foto o video di te che canti stasera vengono pubblicati sui social media?",

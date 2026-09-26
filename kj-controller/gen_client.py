@@ -299,3 +299,12 @@ class GenClient:
         return self._singer_call("POST", f"/api/kjbox/jobs/{job_id}/review-link",
                                  session_token=session_token, locale=locale,
                                  json={"locale": locale})
+
+    RESOLVE_TIMEOUT = 15
+
+    def resolve_search(self, query):
+        """gen's free-text song resolver (split + typo-correct) for the singer
+        search box — partner secret only, no user session. → match-judge
+        verdict + typed_artist/typed_title; raises GenApiError."""
+        return self._singer_call("POST", "/api/kjbox/catalog/resolve",
+                                 timeout=self.RESOLVE_TIMEOUT, json={"query": query})

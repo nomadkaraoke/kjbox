@@ -86,7 +86,13 @@
     "ideasNone": "还没点过歌呢 — 今晚就开个张吧！",
     "ideasFailed": "加载不出点歌记录。",
     "plays": "▶ {count}",
-    "makeOffer": "不是您想要的版本？按需生成 →"
+    "makeOffer": "不是您想要的版本？按需生成 →",
+    "checkingSpelling": "正在检查拼写…",
+    "didYouMean": "您是指…？",
+    "correctedTo": "已更正为 {song} — 您输入的是“{typed}”。",
+    "usingTyped": "使用您输入的：“{typed}”。",
+    "undo": "撤销",
+    "useCorrection": "使用更正结果"
   },
   "versions": {
     "sectionLibrary": "在我们的曲库里",
@@ -519,7 +525,11 @@
     "fromHost": "主持人的留言",
     "followUs": "关注我们",
     "website": "网站",
-    "email": "邮箱"
+    "email": "邮箱",
+    "contactUs": "联系我们",
+    "phone": "发短信或打电话",
+    "text": "💬 发短信",
+    "call": "📞 打电话"
   },
   "photoConsent": {
     "question": "📷 可以把你今晚唱歌的照片或视频发到社交媒体上吗？",

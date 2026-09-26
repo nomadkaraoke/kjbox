@@ -86,7 +86,13 @@
     "ideasNone": "Niciun istoric de piese încă — diseară e seara!",
     "ideasFailed": "Nu s-a putut încărca istoricul pieselor.",
     "plays": "▶ {count}",
-    "makeOffer": "Nu e versiunea pe care o voiai? Genereaz-o la cerere →"
+    "makeOffer": "Nu e versiunea pe care o voiai? Genereaz-o la cerere →",
+    "checkingSpelling": "Verificăm ortografia…",
+    "didYouMean": "Ai vrut să spui…?",
+    "correctedTo": "Corectat în {song} — ai scris „{typed}”.",
+    "usingTyped": "Folosim ce ai scris: „{typed}”.",
+    "undo": "Anulează",
+    "useCorrection": "Folosește corecția"
   },
   "versions": {
     "sectionLibrary": "În biblioteca noastră",
@@ -519,7 +525,11 @@
     "fromHost": "Un mesaj de la gazda ta",
     "followUs": "Urmărește-ne",
     "website": "Website",
-    "email": "Email"
+    "email": "Email",
+    "contactUs": "Contactează-ne",
+    "phone": "Scrie sau sună",
+    "text": "💬 Mesaj",
+    "call": "📞 Sună"
   },
   "photoConsent": {
     "question": "📷 E în regulă dacă pozele sau videoclipurile cu tine cântând în seara asta sunt postate pe rețelele de socializare?",

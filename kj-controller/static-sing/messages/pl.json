@@ -86,7 +86,13 @@
     "ideasNone": "Brak historii piosenek — dzisiaj jest ten wieczór!",
     "ideasFailed": "Nie udało się załadować historii piosenek.",
     "plays": "▶ {count}",
-    "makeOffer": "To nie ta wersja, której szukasz? Wygeneruj ją na życzenie →"
+    "makeOffer": "To nie ta wersja, której szukasz? Wygeneruj ją na życzenie →",
+    "checkingSpelling": "Sprawdzanie pisowni…",
+    "didYouMean": "Czy chodziło ci o…?",
+    "correctedTo": "Poprawiono na {song} — Twój wpis to „{typed}”.",
+    "usingTyped": "Używamy Twojego wpisu: „{typed}”.",
+    "undo": "Cofnij",
+    "useCorrection": "Zastosuj poprawkę"
   },
   "versions": {
     "sectionLibrary": "W naszej bibliotece",
@@ -519,7 +525,11 @@
     "fromHost": "Wiadomość od prowadzącego",
     "followUs": "Obserwuj nas",
     "website": "Strona internetowa",
-    "email": "E-mail"
+    "email": "E-mail",
+    "contactUs": "Skontaktuj się z nami",
+    "phone": "Napisz lub zadzwoń",
+    "text": "💬 Napisz",
+    "call": "📞 Zadzwoń"
   },
   "photoConsent": {
     "question": "📷 Czy zgadzasz się na publikację zdjęć lub filmów z Twoim dzisiejszym występem w mediach społecznościowych?",

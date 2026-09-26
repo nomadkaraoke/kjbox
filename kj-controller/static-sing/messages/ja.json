@@ -86,7 +86,13 @@
     "ideasNone": "まだ曲の履歴がありません — 今夜がその時です！",
     "ideasFailed": "曲の履歴を読み込めませんでした。",
     "plays": "▶ {count}",
-    "makeOffer": "探しているバージョンではありませんか？リクエストに合わせて作成する →"
+    "makeOffer": "探しているバージョンではありませんか？リクエストに合わせて作成する →",
+    "checkingSpelling": "スペルを確認しています…",
+    "didYouMean": "もしかして…？",
+    "correctedTo": "{song} に修正しました（入力内容: 「{typed}」）。",
+    "usingTyped": "入力した内容をそのまま使う: 「{typed}」",
+    "undo": "元に戻す",
+    "useCorrection": "修正案を使う"
   },
   "versions": {
     "sectionLibrary": "ライブラリ内",
@@ -519,7 +525,11 @@
     "fromHost": "ホストからのお知らせ",
     "followUs": "フォローする",
     "website": "ウェブサイト",
-    "email": "メールアドレス"
+    "email": "メールアドレス",
+    "contactUs": "お問い合わせ",
+    "phone": "メッセージまたはお電話",
+    "text": "💬 メッセージ",
+    "call": "📞 電話する"
   },
   "photoConsent": {
     "question": "📷 今夜歌っている時の写真や動画をSNSに投稿してもよろしいですか？",

@@ -86,7 +86,13 @@
     "ideasNone": "Ingen sanghistorik endnu — i aften er aftenen!",
     "ideasFailed": "Kunne ikke indlæse sanghistorik.",
     "plays": "▶ {count}",
-    "makeOffer": "Ikke den version, du ønskede? Generér den på bestilling →"
+    "makeOffer": "Ikke den version, du ønskede? Generér den på bestilling →",
+    "checkingSpelling": "Tjekker stavningen…",
+    "didYouMean": "Mente du…?",
+    "correctedTo": "Rettet til {song} — du skrev “{typed}”.",
+    "usingTyped": "Bruger det, du skrev: “{typed}”.",
+    "undo": "Fortryd",
+    "useCorrection": "Brug rettelsen"
   },
   "versions": {
     "sectionLibrary": "I vores bibliotek",
@@ -519,7 +525,11 @@
     "fromHost": "En besked fra din vært",
     "followUs": "Følg os",
     "website": "Hjemmeside",
-    "email": "E-mail"
+    "email": "E-mail",
+    "contactUs": "Kontakt os",
+    "phone": "Sms eller ring",
+    "text": "💬 Sms",
+    "call": "📞 Ring"
   },
   "photoConsent": {
     "question": "📷 Er det i orden, at billeder eller videoer af dig, der synger i aften, deles på sociale medier?",

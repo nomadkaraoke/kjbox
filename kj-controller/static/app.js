@@ -9921,10 +9921,11 @@ const SingRequests = (() => {
 
         // --- Footer & venue notices section ---
         const fs = config.footer_settings || { message: '', notices: [] };
-        const noticeBoxes = document.querySelectorAll('#sing-footer-notices input[data-notice]');
-        noticeBoxes.forEach((box) => {
-            box.checked = (fs.notices || []).includes(box.dataset.notice);
-        });
+        // Don't clobber the notice editor while the KJ is typing in it.
+        const noticeWrap = document.getElementById('sing-footer-notices');
+        if (noticeWrap && !noticeWrap.contains(document.activeElement)) {
+            renderFooterNotices(fs.notices || [], fs.notice_defs || {});
+        }
         const msgEl = document.getElementById('sing-footer-message');
         if (msgEl && document.activeElement !== msgEl) msgEl.value = fs.message || '';
         const social = fs.social || {};
@@ -10134,9 +10135,107 @@ const SingRequests = (() => {
         if (await postConfig(body)) await fetchConfig();
     }
 
+    // --- Footer notices editor -------------------------------------------
+    // Pre-built notices (translated on the singer page unless re-worded) +
+    // the KJ's own ("c-<id>"), each with an on/off tick, an emoji and text.
+    const BUILTIN_NOTICES = [
+        ['chargers', '🔌', "Phone chargers at the host's table — ask if you're running low."],
+        ['lyricsScreen', '📺', "The lyrics are on the big screen — no need to look at your phone while you sing."],
+        ['duets', '🎤', 'Duets and groups are welcome — add singers when you request a song.'],
+        ['moreSongs', '📱', 'You can add more songs any time from this page.'],
+        ['tipsHelp', '💜', 'Tips help keep the show going — see the Tip tab.'],
+        ['wifi', '📶', 'Free wifi — ask the host for the password.'],
+        ['water', '💧', 'Free water for singers at the bar.'],
+        ['photos', '📸', 'Photos and videos are welcome.'],
+    ];
+    const BUILTIN_DEFAULTS = Object.fromEntries(BUILTIN_NOTICES.map(([k, icon, text]) => [k, { icon, text }]));
+
+    function noticeRow(key, on, icon, text) {
+        const custom = !BUILTIN_DEFAULTS[key];
+        const row = document.createElement('div');
+        row.className = 'sing-footer-notice-row';
+        row.dataset.notice = key;
+        const tick = document.createElement('input');
+        tick.type = 'checkbox';
+        tick.checked = on;
+        tick.title = 'Show this notice tonight';
+        tick.dataset.role = 'on';
+        const iconIn = document.createElement('input');
+        iconIn.type = 'text';
+        iconIn.className = 'sing-footer-notice-icon';
+        iconIn.maxLength = 16;
+        iconIn.value = icon;
+        iconIn.placeholder = custom ? '📣' : BUILTIN_DEFAULTS[key].icon;
+        iconIn.title = 'Emoji icon';
+        iconIn.dataset.role = 'icon';
+        const textIn = document.createElement('input');
+        textIn.type = 'text';
+        textIn.className = 'sing-footer-notice-text';
+        textIn.maxLength = 200;
+        textIn.value = text;
+        textIn.placeholder = custom ? 'Your notice…' : BUILTIN_DEFAULTS[key].text + ' (default, translated)';
+        textIn.dataset.role = 'text';
+        const btn = (label, title, fn) => {
+            const b = document.createElement('button');
+            b.type = 'button';
+            b.className = 'sing-footer-notice-btn';
+            b.textContent = label;
+            b.title = title;
+            b.onclick = fn;
+            return b;
+        };
+        row.append(tick, iconIn, textIn,
+            btn('↑', 'Move up', () => row.previousElementSibling && row.parentNode.insertBefore(row, row.previousElementSibling)),
+            btn('↓', 'Move down', () => row.nextElementSibling && row.parentNode.insertBefore(row.nextElementSibling, row)));
+        if (custom) row.append(btn('✕', 'Delete this notice', () => row.remove()));
+        return row;
+    }
+
+    function renderFooterNotices(notices, defs) {
+        const wrap = document.getElementById('sing-footer-notices');
+        if (!wrap) return;
+        wrap.innerHTML = '';
+        // Switched-on notices first (in their order), then the rest.
+        const keys = [...notices];
+        for (const [k] of BUILTIN_NOTICES) if (!keys.includes(k)) keys.push(k);
+        for (const k of Object.keys(defs)) if (!keys.includes(k)) keys.push(k);
+        for (const k of keys) {
+            const d = defs[k] || {};
+            if (!BUILTIN_DEFAULTS[k] && !d.text) continue;
+            // Pre-built icons show their default until the KJ changes them.
+            const icon = d.icon || (BUILTIN_DEFAULTS[k] ? BUILTIN_DEFAULTS[k].icon : '📣');
+            wrap.appendChild(noticeRow(k, notices.includes(k), icon, d.text || ''));
+        }
+    }
+
+    function addFooterNotice() {
+        const wrap = document.getElementById('sing-footer-notices');
+        if (!wrap) return;
+        const key = 'c-' + Math.random().toString(36).slice(2, 10);
+        const row = noticeRow(key, true, '📣', '');
+        wrap.appendChild(row);
+        row.querySelector('[data-role="text"]').focus();
+    }
+
+    function collectFooterNotices() {
+        const notices = [];
+        const defs = {};
+        document.querySelectorAll('#sing-footer-notices .sing-footer-notice-row').forEach((row) => {
+            const key = row.dataset.notice;
+            const on = row.querySelector('[data-role="on"]').checked;
+            const icon = row.querySelector('[data-role="icon"]').value.trim();
+            const text = row.querySelector('[data-role="text"]').value.trim();
+            const builtin = BUILTIN_DEFAULTS[key];
+            if (!builtin && !text) return;   // an empty custom notice is dropped
+            const iconOverride = builtin && icon === builtin.icon ? '' : icon;
+            if (!builtin || iconOverride || text) defs[key] = { icon: builtin ? iconOverride : (icon || '📣'), text };
+            if (on) notices.push(key);
+        });
+        return { notices, defs };
+    }
+
     async function saveFooterSettings() {
-        const notices = [...document.querySelectorAll('#sing-footer-notices input[data-notice]:checked')]
-            .map((box) => box.dataset.notice);
+        const { notices, defs: noticeDefs } = collectFooterNotices();
         const msgEl = document.getElementById('sing-footer-message');
         const social = {};
         document.querySelectorAll('#sing-footer-social input[data-social]').forEach((inp) => {
@@ -10145,6 +10244,7 @@ const SingRequests = (() => {
         const askEl = document.getElementById('sing-footer-ask-photo-consent');
         const body = { footer_settings: {
             message: msgEl ? msgEl.value.trim() : '',
+            notice_defs: noticeDefs,
             notices,
             social,
             ask_photo_consent: !!(askEl && askEl.checked),
@@ -10152,7 +10252,7 @@ const SingRequests = (() => {
         if (await postConfig(body)) await fetchConfig();
     }
 
-    return { start, openModal, closeModal, toggleEnabled, toggleAutoApprove, toggleAcceptMake, toggleAutoSmsNext, toggleAutoReorder, autoSmsNextEnabled, regenerate, setCustom, saveSmsTemplate, resetSmsTemplate, toggleTipsEnabled, saveTipSettings, saveFooterSettings, copyUrl };
+    return { start, openModal, closeModal, toggleEnabled, toggleAutoApprove, toggleAcceptMake, toggleAutoSmsNext, toggleAutoReorder, autoSmsNextEnabled, regenerate, setCustom, saveSmsTemplate, resetSmsTemplate, toggleTipsEnabled, saveTipSettings, saveFooterSettings, addFooterNotice, copyUrl };
 })();
 
 function openSingRequestsModal()   { SingRequests.openModal(); }
@@ -10169,6 +10269,7 @@ function resetSingSmsTemplate()    { SingRequests.resetSmsTemplate(); }
 function toggleSingTipsEnabled(c)  { SingRequests.toggleTipsEnabled(c); }
 function saveSingTipSettings()     { SingRequests.saveTipSettings(); }
 function saveSingFooterSettings()  { SingRequests.saveFooterSettings(); }
+function addSingFooterNotice()     { SingRequests.addFooterNotice(); }
 function copySingUrl(scope)        { SingRequests.copyUrl(scope); }
 
 window.addEventListener('DOMContentLoaded', () => SingRequests.start());

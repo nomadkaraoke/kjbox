@@ -5038,6 +5038,90 @@ def _suppress_mastered_kn_tracks(local_results, kn_results):
         kn_results[:] = kept_songs
 
 
+_FOLD_VIDEO_EXTS = {"mp4", "mkv", "webm", "mov", "m4v", "avi"}
+# A disc-style brand code at the start of a library filename:
+# "KARAR-093 - The Strokes - …" → KARAR-093. Only this narrow shape — curated
+# rows deliberately drop parsed disc ids because hyphenated titles can fake one.
+_FOLD_DISC_PREFIX_RE = re.compile(r"^([A-Za-z][A-Za-z0-9]{1,11}-\d{1,6})\s+-\s+")
+
+
+def _fold_local_brand(r):
+    disc_id = r.get("disc_id")
+    if not disc_id:
+        m = _FOLD_DISC_PREFIX_RE.match(r.get("filename") or "")
+        disc_id = m.group(1) if m else None
+    return version_priority.canonical_brand_for_match(
+        disc_id=disc_id, filename=r.get("filename"))
+
+
+def _fold_community_into_local(local_results, kn_results):
+    """Drop community YouTube tracks that are the same release as a library file.
+
+    A community brand's videos are often already on the SSD under that brand's
+    code — e.g. KN's KARAR "The Strokes - The Adults Are Talking" (YouTube,
+    channel karaokear) IS ``KARAR-093 - The Strokes - The Adults Are
+    Talking.mp4``. Library files carry no YouTube id, so the id join in
+    ``_attach_local_paths_to_kn`` can't see it; without this the YouTube copy
+    even out-ranked our own file and got re-downloaded (2026-09-26).
+
+    Match = same normalized (artist, title) key AND same canonical brand
+    (``canonical_brand_for_match``: KARAR == KARAR-093), with guards against
+    false positives: the KN track must be community + playable from YouTube
+    (never commercial→community folding, never a mirror row), the local file
+    must be a video (a CDG of the same brand is a different release), and
+    exactly one local file may match. The folded local row is marked
+    ``is_community`` so it ranks as the community release it is, and keeps the
+    YouTube URL as ``alt_youtube_url``. Mutates both lists in place; generalises
+    ``_suppress_mastered_kn_tracks`` (NOMAD-only) to every brand.
+    """
+    by_key = {}
+    for r in local_results or []:
+        ext = (os.path.splitext(r.get("filename") or r.get("path") or "")[1]
+               .lstrip(".").lower())
+        if ext not in _FOLD_VIDEO_EXTS:
+            continue
+        brand = _fold_local_brand(r)
+        song_key = _normalize_song_key(r.get("artist"), r.get("title"))
+        if brand and song_key:
+            by_key.setdefault((song_key, brand), []).append(r)
+    if not by_key:
+        return
+    def foldable(track):
+        _canon, cls = version_priority.resolve_brand(
+            brand_code=track.get("brand_code"),
+            brand_name=track.get("brand_name"),
+            is_community=track.get("is_community"))
+        if cls != "community" or not track.get("youtube_url") \
+                or (track.get("divebar") or {}).get("file_id"):
+            return None
+        return version_priority.canonical_brand_for_match(
+            brand_code=track.get("brand_code"), brand_name=track.get("brand_name")) or None
+
+    kept_songs = []
+    for song in kn_results or []:
+        song_key = _normalize_song_key(song.get("artist"), song.get("title"))
+        tracks = song.get("tracks") or []
+        brands = [foldable(t) for t in tracks]
+        kept = []
+        for track, brand in zip(tracks, brands):
+            matches = by_key.get((song_key, brand)) if brand else None
+            # Unambiguous on BOTH sides: one local file, and one KN upload of
+            # that brand for this song (two uploads can't both be our file).
+            if matches and len(matches) == 1 and brands.count(brand) == 1:
+                local = matches[0]
+                local["is_community"] = True
+                local.setdefault("alt_youtube_url", track.get("youtube_url"))
+                continue
+            kept.append(track)
+        if kept:
+            song["tracks"] = kept
+            kept_songs.append(song)
+        elif not song.get("tracks"):
+            kept_songs.append(song)
+    if kn_results is not None:
+        kn_results[:] = kept_songs
+
+
 def _build_local_media_row(app, path, entry):
     """Build a flat search-result row for a downloaded media-index file.
 
@@ -5288,6 +5372,12 @@ def unified_search(query, app, *, grouped=False, local_only=False,
     # a release we play locally (see _suppress_mastered_kn_tracks).
     try:
         _suppress_mastered_kn_tracks(local_results, kn_results)
+    except Exception:
+        pass  # best-effort; never break search
+    # Same for every other community brand we hold on the SSD (KARAR-093 ==
+    # KN's KARAR YouTube upload) — never suggest re-downloading it.
+    try:
+        _fold_community_into_local(local_results, kn_results)
     except Exception:
         pass  # best-effort; never break search
 
