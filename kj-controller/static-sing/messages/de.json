@@ -310,6 +310,7 @@
     "enable": "🔔 Browser-Benachrichtigungen aktivieren",
     "asking": "Frage an…",
     "blocked": "Browser-Benachrichtigungen sind für diese Seite blockiert.",
+    "browserFailed": "Browser-Benachrichtigungen konnten auf diesem Gerät nicht aktiviert werden.",
     "iosSummary": "📱 iPhone? Aktiviere Pop-up-Benachrichtigungen",
     "ios": "Tippe auf den Teilen-Button, dann auf {addToHome} und öffne es erneut über deinen Home-Bildschirm – von dort aus funktionieren die Benachrichtigungen.",
     "iosStrong": "Zum Startbildschirm hinzufügen",

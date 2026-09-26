@@ -310,6 +310,7 @@
     "enable": "🔔 Tarayıcı bildirimlerini aç",
     "asking": "Soruluyor…",
     "blocked": "Bu site için tarayıcı bildirimleri engellendi.",
+    "browserFailed": "Bu cihazda tarayıcı bildirimleri açılamadı.",
     "iosSummary": "📱 iPhone mu? Açılır bildirimleri etkinleştir",
     "ios": "Paylaş düğmesine dokun, ardından {addToHome} seç, sonra ana ekranından tekrar aç — bildirimler oradan çalışır.",
     "iosStrong": "Ana Ekrana Ekle",

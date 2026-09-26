@@ -310,6 +310,7 @@
     "enable": "🔔 Attiva le notifiche del browser",
     "asking": "Richiesta in corso…",
     "blocked": "Le notifiche del browser sono bloccate per questo sito.",
+    "browserFailed": "Non è stato possibile attivare le notifiche del browser su questo dispositivo.",
     "iosSummary": "📱 iPhone? Attiva le notifiche pop-up",
     "ios": "Tocca il pulsante Condividi, poi {addToHome}, quindi riapri dalla schermata Home — da lì le notifiche funzionano.",
     "iosStrong": "Aggiungi alla schermata Home",

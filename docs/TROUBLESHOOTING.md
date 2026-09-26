@@ -229,6 +229,10 @@ console, `external_media_monitor.py` (added the same day) now polls `external_me
 5s with a plain `os.listdir()` — never smartctl/NVMe passthrough — and surfaces a persistent red
 "SSD disconnected — unplug and replug it now!" banner at the top of the KJ UI as soon as two
 consecutive checks fail. The banner clears itself automatically once the drive responds again.
+Since v0.115.0, a `/play` that fails on a file under the mount checks the drive first. If it's down,
+the KJ gets a "Library drive is offline — replug the SSD" toast (503 `library_drive_offline`)
+instead of "ZIP file does not contain a playable .mp3" / "Invalid or inaccessible file path",
+so don't go trying other versions: replug the drive.
 
 **Fix — only a physical power cycle recovers it:**
 1. Unplug the SSD's USB cable from the NomadPC, wait ~10 seconds, plug it back in.

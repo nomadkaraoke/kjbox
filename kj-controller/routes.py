@@ -29,6 +29,7 @@ import version_priority
 import sing_resolve
 import youtube_health
 import youtube_search
+from external_media_monitor import ExternalMediaMonitor
 from config import APP_DIR, RENDER_MODE_MPV, RENDER_MODES, load_config, save_config_value
 from playback import RendererSwitchRejected
 from sing import get_event_url, sync_event_url_overlays
@@ -973,6 +974,38 @@ def _resolve_vocals_guide(playing_path, cfg):
         return None
 
 
+def _library_drive_offline_response(file_path):
+    """503 ``library_drive_offline`` if ``file_path`` lives on the external
+    media mount and that drive is down; else None.
+
+    The 4TB USB SSD's bridge can drop out mid-show ("Medium not present"). Every
+    read then fails, and without this /play blames the FILE ("Invalid or
+    inaccessible file path", "ZIP file does not contain a playable .mp3") — on
+    2026-09-24 the KJ tried 4 perfectly good versions before realising.
+    """
+    cfg = current_app.kj_config or {}
+    mount = (cfg.get('external_media_mount') or '').rstrip('/')
+    if not mount or not file_path:
+        return None
+    roots = {mount, os.path.realpath(mount)}
+    paths = {file_path, os.path.realpath(file_path)}
+    if not any(p.startswith(r + os.sep) for p in paths for r in roots):
+        return None
+    monitor = getattr(current_app, 'external_media_monitor', None)
+    alert = monitor.alert if monitor else None
+    if not alert:
+        healthy = (monitor or ExternalMediaMonitor(cfg)).probe_now()
+        if healthy:
+            return None
+    label = os.path.basename(mount) or mount
+    return jsonify({
+        "error": "library_drive_offline",
+        "message": (alert or {}).get('message')
+        or f"Library drive ({label}) is offline — unplug and replug the SSD, then try again.",
+        "alert": alert,
+    }), 503
+
+
 @routes_bp.route('/play', methods=['POST'])
 def handle_play():
     """Plays a media file by path (supports local media, external media, and ZIP files)."""
@@ -1002,7 +1035,8 @@ def handle_play():
                     break
 
     if not validated:
-        return jsonify({"error": "Invalid or inaccessible file path"}), 400
+        return (_library_drive_offline_response(file_path)
+                or (jsonify({"error": "Invalid or inaccessible file path"}), 400))
 
     if not vlc.enabled:
         return jsonify({"error": "VLC not available (running in local/dev mode)"}), 503
@@ -1014,7 +1048,8 @@ def handle_play():
         zip_playback = current_app.zip_playback
         mp3_path = zip_playback.extract_and_get_mp3(validated)
         if not mp3_path:
-            return jsonify({"error": "ZIP file does not contain a playable .mp3 file"}), 400
+            return (_library_drive_offline_response(validated)
+                    or (jsonify({"error": "ZIP file does not contain a playable .mp3 file"}), 400))
         actual_play_path = mp3_path
         # mpv renders the CDG graphics only when handed the .cdg directly, with
         # the .mp3 attached as an external audio track. VLC instead auto-

@@ -136,6 +136,27 @@ class ExternalMediaMonitor:
             return False
         return result.get('ok', False)
 
+    def probe_now(self):
+        """One-off bounded health probe for request handlers — True if healthy.
+
+        Used when a library read has just failed, to tell "drive dropped out"
+        from "bad file" without waiting up to FAILURE_THRESHOLD poll cycles for
+        the alert. Runs on its own thread (never the poll loop's
+        ``_probe_thread``, so it can't make a concurrent poll read as failed).
+        """
+        mount = self.config.get('external_media_mount', '')
+        if not mount:
+            return True
+        result = {}
+
+        def _run():
+            result['ok'] = self._probe(mount)
+
+        t = threading.Thread(target=_run, daemon=True)
+        t.start()
+        t.join(self.probe_timeout)
+        return not t.is_alive() and result.get('ok', False)
+
     @staticmethod
     def _probe(mount):
         """Cheap, fast health check. Returns True if the mount looks healthy.

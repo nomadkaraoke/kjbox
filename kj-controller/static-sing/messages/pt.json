@@ -310,6 +310,7 @@
     "enable": "🔔 Ativar notificações do navegador",
     "asking": "Perguntando…",
     "blocked": "As notificações do navegador estão bloqueadas para este site.",
+    "browserFailed": "Não foi possível ativar as notificações do navegador neste dispositivo.",
     "iosSummary": "📱 iPhone? Ativar notificações pop-up",
     "ios": "Toque no botão Compartilhar, depois em {addToHome} e abra novamente pela tela inicial — as notificações funcionam por lá.",
     "iosStrong": "Adicionar à Tela Inicial",

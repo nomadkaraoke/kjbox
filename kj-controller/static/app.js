@@ -228,6 +228,13 @@ async function apiCall(endpoint, body) {
             if (response.status === 422 && data.verdict) {
                 showPlayabilityToast(errorMessage);
             }
+            // The library SSD dropped out — say so loudly, so the KJ replugs
+            // it instead of trying version after version of a "bad" file.
+            if (response.status === 503 && data.error === 'library_drive_offline') {
+                errorMessage = data.message || 'Library drive is offline — replug the SSD';
+                showPlayabilityToast(errorMessage);
+                if (data.alert) updateSsdAlertBanner(data.alert);
+            }
             if (data.vlc_status) {
                 errorMessage += ` | VLC Status: ${JSON.stringify(data.vlc_status)}`;
             }

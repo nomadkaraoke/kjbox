@@ -310,6 +310,7 @@
     "enable": "🔔 Nyalakan notifikasi browser",
     "asking": "Meminta…",
     "blocked": "Notifikasi browser diblokir untuk situs ini.",
+    "browserFailed": "Notifikasi browser tidak bisa diaktifkan di perangkat ini.",
     "iosSummary": "📱 Pakai iPhone? Aktifkan notifikasi pop-up",
     "ios": "Ketuk tombol Bagikan, lalu {addToHome}, terus buka lagi dari layar utama kamu — notifikasi akan berfungsi dari sana.",
     "iosStrong": "Tambahkan ke Layar Utama",

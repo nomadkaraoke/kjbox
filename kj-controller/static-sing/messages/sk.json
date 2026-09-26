@@ -310,6 +310,7 @@
     "enable": "🔔 Zapnúť upozornenia prehliadača",
     "asking": "Pýtam sa…",
     "blocked": "Upozornenia prehliadača sú pre túto stránku zablokované.",
+    "browserFailed": "Upozornenia prehliadača sa na tomto zariadení nepodarilo zapnúť.",
     "iosSummary": "📱 iPhone? Povoľ vyskakovacie upozornenia",
     "ios": "Ťukni na tlačidlo Zdieľať, potom na {addToHome} a znova to otvor z domovskej obrazovky — odtiaľ už budú upozornenia fungovať.",
     "iosStrong": "Pridať na plochu",

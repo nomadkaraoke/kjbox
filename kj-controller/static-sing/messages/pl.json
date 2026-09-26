@@ -310,6 +310,7 @@
     "enable": "🔔 Włącz powiadomienia w przeglądarce",
     "asking": "Pytanie…",
     "blocked": "Powiadomienia w przeglądarce są zablokowane dla tej strony.",
+    "browserFailed": "Nie udało się włączyć powiadomień przeglądarki na tym urządzeniu.",
     "iosSummary": "📱 iPhone? Włącz powiadomienia wyskakujące",
     "ios": "Stuknij przycisk Udostępnij, następnie {addToHome}, a potem otwórz ponownie z ekranu początkowego — stamtąd powiadomienia będą działać.",
     "iosStrong": "Dodaj do ekranu początkowego",

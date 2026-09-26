@@ -310,6 +310,7 @@
     "enable": "🔔 I-on ang browser notifications",
     "asking": "Nagtatanong…",
     "blocked": "Naka-block ang browser notifications para sa site na ito.",
+    "browserFailed": "Hindi ma-turn on ang browser notifications sa device na ito.",
     "iosSummary": "📱 iPhone? I-enable ang pop-up notifications",
     "ios": "I-tap ang Share button, tapos {addToHome}, at buksan ulit mula sa home screen mo — gagana ang mga notification mula roon.",
     "iosStrong": "Add to Home Screen",

@@ -156,8 +156,48 @@ class TestMySongsConsent:
         }""")
         picker.locator('[data-testid="photo-consent-no"]').click()
         expect(picker.locator(".photo-consent-saved")).to_contain_text("Saved")
-        assert posted == {"consent": "no", "items": [{"id": 1, "edit_token": "tok1"}]}
+        device_id = page.evaluate("localStorage.getItem('sing_device_id')")
+        assert device_id
+        assert posted == {"consent": "no", "device_id": device_id,
+                          "items": [{"id": 1, "edit_token": "tok1"}]}
         assert page.evaluate("localStorage.getItem('sing_photo_consent')") == "no"
+
+
+    def test_rapid_taps_send_at_most_one_save(self, page, live_server, live_token):
+        """2026-09-24: a singer tapped the consent buttons 11 times in 10 s,
+        every tap POSTed, and 6 came back 429. While a save is in flight both
+        buttons are disabled, and re-tapping the current answer sends nothing."""
+        _event_info(page, ask_photo_consent=True)
+        posts = []
+
+        def on_consent(route):
+            posts.append(json.loads(route.request.post_data))
+            route.fulfill(status=200, content_type="application/json",
+                          body=json.dumps({"success": True, "updated": 1}))
+        page.route("**/sing/photo-consent*", on_consent)
+        page.route("**/sing/my-requests*", lambda r: r.fulfill(
+            status=200, content_type="application/json", body=json.dumps({
+                "now_playing": {"now_singing": None, "up_next": None, "queued_count": 0},
+                "requests": []})))
+        _login(page, live_server, live_token, consent="yes")
+        page.reload()
+        page.wait_for_function("!!window.__sing_state")
+        page.evaluate("window.__sing_state.step = 'done'; window.__sing_render();")
+        picker = page.locator('#push-optin [data-testid="photo-consent"]')
+        expect(picker).to_be_visible()
+        # Re-tapping the saved answer is a no-op on the wire.
+        picker.locator('[data-testid="photo-consent-yes"]').click()
+        expect(picker.locator(".photo-consent-saved")).to_contain_text("Saved")
+        assert posts == []
+        # A burst of taps in one tick: only the first reaches the server.
+        page.evaluate("""() => {
+            const q = (v) => document.querySelector(
+                `#push-optin [data-testid="photo-consent-${v}"]`);
+            for (let i = 0; i < 5; i++) { q("no").click(); q("yes").click(); }
+        }""")
+        expect(picker.locator('[data-testid="photo-consent-no"]')).to_be_enabled()
+        expect(picker.locator('[data-testid="photo-consent-no"]')).to_have_attribute("aria-pressed", "true")
+        assert [p["consent"] for p in posts] == ["no"]
 
 
 def _entry(eid, singer, consent, singers=None):
@@ -207,3 +247,55 @@ class TestKjRotationMarker:
             {"singer": "Celine", "consent": "yes"},
             {"singer": "Bevbot", "consent": "yes"},
         ]
+
+
+class TestPushSubscribeHonesty:
+    """2026-09-24: a phone-less singer's /push/subscribe got 400 six times, but
+    the client ignored the status and kept saying notifications were on."""
+
+    def _setup(self, page, live_server, live_token, status):
+        # Headless Chromium reports "denied" even after grant_permissions, and
+        # has no push service — stub both so the real client path runs.
+        page.add_init_script("""
+            Object.defineProperty(Notification, 'permission', { get: () => 'granted' });
+            Object.defineProperty(PushManager.prototype, 'getSubscription', {
+              value: async () => ({ toJSON: () => ({
+                endpoint: 'https://push.example/x', keys: { p256dh: 'p', auth: 'a' } }) }),
+            });
+            if (!document.querySelector('meta[name=vapid-public-key]')) {
+              document.addEventListener('DOMContentLoaded', () => {
+                const m = document.createElement('meta');
+                m.name = 'vapid-public-key'; m.content = 'AAAA';
+                document.head.appendChild(m);
+              });
+            }
+        """)
+        posts = []
+
+        def on_sub(route):
+            posts.append(json.loads(route.request.post_data))
+            route.fulfill(status=status, content_type="application/json",
+                          body=json.dumps({"error": "missing fields"}) if status >= 400 else "")
+        page.route("**/sing/push/subscribe*", on_sub)
+        page.route("**/sing/my-requests*", lambda r: r.fulfill(
+            status=200, content_type="application/json", body=json.dumps({
+                "now_playing": {"now_singing": None, "up_next": None, "queued_count": 0},
+                "requests": []})))
+        _login(page, live_server, live_token, name="Jasssss")
+        page.reload()
+        page.wait_for_function("!!window.__sing_state")
+        page.evaluate("window.__sing_state.step = 'done'; window.__sing_render();")
+        return posts
+
+    def test_rejected_subscription_is_not_reported_as_on(self, page, live_server, live_token):
+        posts = self._setup(page, live_server, live_token, status=400)
+        expect(page.locator('[data-testid="notify-browser-failed"]')).to_be_visible()
+        expect(page.locator(".notify-summary")).not_to_contain_text("pop-up on this device")
+        assert posts and posts[0]["phone"] == "" and posts[0]["device_id"]
+
+    def test_accepted_subscription_shows_on(self, page, live_server, live_token):
+        posts = self._setup(page, live_server, live_token, status=204)
+        expect(page.locator("#push-optin .notify-on")).to_be_visible()
+        expect(page.locator(".notify-summary")).to_contain_text("pop-up on this device")
+        expect(page.locator('[data-testid="notify-browser-failed"]')).to_have_count(0)
+        assert posts

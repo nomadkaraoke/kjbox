@@ -310,6 +310,7 @@
     "enable": "🔔 Bật thông báo trình duyệt",
     "asking": "Đang hỏi…",
     "blocked": "Thông báo trình duyệt bị chặn cho trang web này.",
+    "browserFailed": "Không thể bật thông báo trình duyệt trên thiết bị này.",
     "iosSummary": "📱 Dùng iPhone? Bật thông báo pop-up",
     "ios": "Nhấn vào nút Chia sẻ, sau đó chọn {addToHome}, rồi mở lại từ màn hình chính của bạn — lúc này thông báo sẽ hoạt động.",
     "iosStrong": "Thêm vào Màn hình chính",

@@ -1,6 +1,7 @@
 """Playwright e2e test fixtures — starts a live Flask server for browser tests."""
 
 import json
+import os
 import threading
 import time
 import urllib.request
@@ -12,8 +13,10 @@ from app import create_app
 
 @pytest.fixture(scope="session")
 def flask_port():
-    """Fixed port for the test server."""
-    return 5099
+    """Port for the test server (default 5099). Set ``KJ_E2E_PORT`` to run a
+    second worktree's E2E suite in parallel — on a shared port the browser
+    silently talks to the OTHER worktree's server (and its code)."""
+    return int(os.environ.get("KJ_E2E_PORT", "5099"))
 
 
 @pytest.fixture(scope="session")

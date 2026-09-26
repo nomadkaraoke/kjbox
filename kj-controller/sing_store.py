@@ -148,6 +148,7 @@ class SingStore:
                 last_sent_state TEXT,
                 last_seen_at    TEXT,
                 disabled_at     TEXT,
+                device_id       TEXT DEFAULT NULL,
                 UNIQUE(token, endpoint)
             );
             CREATE INDEX IF NOT EXISTS idx_sing_push_token_phone
@@ -244,6 +245,22 @@ class SingStore:
         except sqlite3.OperationalError as e:
             if "duplicate column name" not in str(e).lower():
                 raise
+        # Additive migration — `sing_push_subscriptions.device_id` (2026-09-25).
+        # Phone is optional at signup, so a phone-less singer's subscription is
+        # keyed by the device that made their requests instead (their phone
+        # column holds '' — treated as absent everywhere). Existing rows get
+        # NULL and keep matching by phone exactly as before.
+        try:
+            conn.execute(
+                "ALTER TABLE sing_push_subscriptions ADD COLUMN device_id TEXT DEFAULT NULL"
+            )
+        except sqlite3.OperationalError as e:
+            if "duplicate column name" not in str(e).lower():
+                raise
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_sing_push_token_device "
+            "ON sing_push_subscriptions(token, device_id)"
+        )
         # Additive migration — `singer_aliases.origin` (2026-08-28). Distinguishes
         # KJ-established identities ('kj', from a rename/merge) from a singer's own
         # self-rename ('self'). Only 'kj' unlocks a whole-group rename. Pre-upgrade
@@ -1226,24 +1243,30 @@ class SingStore:
     # ------------------------------------------------------------------
 
     def insert_push_subscription(self, token, phone, singer_name, endpoint,
-                                  p256dh, auth, user_agent=None):
+                                  p256dh, auth, user_agent=None, device_id=None):
         """Insert-or-replace on UNIQUE(token, endpoint).
 
+        ``phone`` may be empty for a singer who signed up without one; the row
+        is then matched by ``device_id``. One row per endpoint, so a singer who
+        later adds a phone updates the same row (no double pushes).
         If a matching row is disabled, re-enable it via disabled_at=NULL.
         Returns the row id.
         """
         conn = self._get_conn()
         conn.execute(
             "INSERT INTO sing_push_subscriptions "
-            "  (token, phone, singer_name, endpoint, p256dh, auth, user_agent, updated_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now', 'localtime')) "
+            "  (token, phone, singer_name, endpoint, p256dh, auth, user_agent, "
+            "   device_id, updated_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now', 'localtime')) "
             "ON CONFLICT(token, endpoint) DO UPDATE SET "
             "  phone=excluded.phone, singer_name=excluded.singer_name, "
             "  p256dh=excluded.p256dh, auth=excluded.auth, "
             "  user_agent=excluded.user_agent, "
+            "  device_id=COALESCE(excluded.device_id, device_id), "
             "  updated_at=datetime('now', 'localtime'), "
             "  disabled_at=NULL",
-            (token, phone, singer_name, endpoint, p256dh, auth, user_agent),
+            (token, phone or "", singer_name, endpoint, p256dh, auth, user_agent,
+             (device_id or None)),
         )
         conn.commit()
         row = conn.execute(
@@ -1318,10 +1341,24 @@ class SingStore:
 
     def find_subs_by_phone(self, token, phone):
         """Return all non-disabled subs matching (token, phone) as dict list."""
+        if not phone:
+            return []   # '' = phone-less subscription; never a match key
         conn = self._get_conn()
         rows = conn.execute(
             "SELECT * FROM sing_push_subscriptions "
             "WHERE token=? AND phone=? AND disabled_at IS NULL",
             (token, phone),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def find_subs_by_device(self, token, device_id):
+        """Return all non-disabled subs matching (token, device_id) as dict list."""
+        if not device_id:
+            return []
+        conn = self._get_conn()
+        rows = conn.execute(
+            "SELECT * FROM sing_push_subscriptions "
+            "WHERE token=? AND device_id=? AND disabled_at IS NULL",
+            (token, device_id),
         ).fetchall()
         return [dict(r) for r in rows]

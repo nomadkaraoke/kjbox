@@ -121,6 +121,32 @@ class TestSingerRateLimit:
         assert flask_test_client.post(f"/sing/submit?t={token}", json=good).status_code == 200
 
 
+    def test_photo_consent_taps_spend_the_device_budget_not_the_venues(
+            self, flask_test_client, flask_app):
+        """2026-09-24: one singer's 11 photo-consent taps (no device_id) 429'd
+        against the venue-wide IP budget. With device_id, a tappy phone hits its
+        OWN limit and every other phone on the same IP can still save."""
+        token = flask_app.sing_store.ensure_token()
+        flask_app.kj_config["sing_rate_limit_per_device"] = 3
+        flask_app.kj_config["sing_rate_limit_per_ip"] = 5
+        tappy = {"consent": "yes", "device_id": "tappy", "items": []}
+        codes = [flask_test_client.post(f"/sing/photo-consent?t={token}", json=tappy).status_code
+                 for _ in range(11)]
+        assert codes[:3] == [200, 200, 200]
+        assert set(codes[3:]) == {429}
+        other = {"consent": "no", "device_id": "neighbour", "items": []}
+        assert flask_test_client.post(f"/sing/photo-consent?t={token}", json=other).status_code == 200
+
+    def test_shipped_defaults_keep_the_per_ip_budget_venue_sized(self, tmp_path):
+        """config.py defaulted sing_rate_limit_per_ip to 5 (from the old
+        IP-only limiter), silently overriding sing's 60 — on venue wifi the 6th
+        singer action in 5 min 429'd everyone (2026-09-24)."""
+        from config import load_config
+        cfg = load_config(str(tmp_path / "absent.json"))
+        assert cfg["sing_rate_limit_per_ip"] == sing._IP_RATE_DEFAULT
+        assert cfg["sing_rate_limit_per_device"] == sing._DEVICE_RATE_DEFAULT
+        assert cfg["sing_rate_limit_per_ip"] >= 5 * cfg["sing_rate_limit_per_device"]
+
 # --- Duet display names ----------------------------------------------------------
 
 class TestDisplayNames:

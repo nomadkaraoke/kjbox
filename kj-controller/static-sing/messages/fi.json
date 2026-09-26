@@ -310,6 +310,7 @@
     "enable": "🔔 Laita selainilmoitukset päälle",
     "asking": "Kysytään…",
     "blocked": "Selaimen ilmoitukset on estetty tällä sivustolla.",
+    "browserFailed": "Selainilmoituksia ei voitu ottaa käyttöön tällä laitteella.",
     "iosSummary": "📱 iPhone? Ota ponnahdusilmoitukset käyttöön",
     "ios": "Napauta Jaa-painiketta, sitten {addToHome} ja avaa sivu uudelleen aloitusnäytöltäsi – ilmoitukset toimivat sitä kautta.",
     "iosStrong": "Lisää Koti-valikkoon",

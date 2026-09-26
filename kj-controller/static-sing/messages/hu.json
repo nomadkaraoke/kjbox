@@ -310,6 +310,7 @@
     "enable": "🔔 Böngésző értesítések bekapcsolása",
     "asking": "Kérdezés…",
     "blocked": "A böngésző értesítései le vannak tiltva ezen az oldalon.",
+    "browserFailed": "Ezen az eszközön nem sikerült bekapcsolni a böngésző értesítéseit.",
     "iosSummary": "📱 iPhone? Engedélyezd a felugró értesítéseket",
     "ios": "Koppints a Megosztás gombra, majd a {addToHome} lehetőségre, aztán nyisd meg újra a kezdőképernyődről — az értesítések onnan már működni fognak.",
     "iosStrong": "Hozzáadás a kezdőképernyőhöz",
