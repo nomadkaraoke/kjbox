@@ -1089,6 +1089,19 @@ body {
 .kn-search-row input { flex: 1; }
 .kn-search-row button { flex-shrink: 0; }
 /* .kn-prefs-btn uses the shared `.header-actions` framework. */
+/* Sort dropdown sits beside Prefs — sized from the header-button tokens so it
+ * lines up with the buttons instead of the full-width form <select>. */
+.header-actions .kn-sort-select {
+    width: auto;
+    font-size: var(--hdr-btn-font-size);
+    font-weight: var(--hdr-btn-font-weight);
+    padding: var(--hdr-btn-pad-y) var(--hdr-btn-pad-x);
+    border-radius: var(--hdr-btn-radius);
+    min-height: var(--hdr-btn-min-h);
+    background-color: #222;
+    border-color: #444;
+    color: #ccc;
+}
 .kn-prefs { padding: 8px; background-color: #0f0f0f; border: 1px solid #2a2a2a; border-radius: 8px; }
 .kn-prefs label { font-size: 0.8em; color: #888; margin-bottom: 4px; display: block; }
 .kn-prefs-row { display: flex; gap: 6px; }

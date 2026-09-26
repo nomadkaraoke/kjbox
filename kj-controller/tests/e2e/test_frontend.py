@@ -245,6 +245,71 @@ class TestKnDiscOnlyRendering:
         assert errors == []
 
 
+class TestKnSortDropdown:
+    """KN panel header "Sort:" dropdown (beside Prefs) re-orders the last
+    result set client-side; 'best' keeps the server's relevance order and
+    every mode falls back to it for ties. Choice persists in localStorage."""
+
+    _SEED = (
+        "() => renderKNResults(["
+        "  { artist: 'Camille', title: 'Rihanna', versions: ["
+        "    { source: 'kn', kn: { brand_code: 'A', youtube_url: null } } ] },"
+        "  { artist: 'Rihanna', title: 'Unfaithful', versions: ["
+        "    { source: 'local', local: { path: '/a.mp4', filename: 'a.mp4' } },"
+        "    { source: 'kn', kn: { brand_code: 'B', youtube_url: null } },"
+        "    { source: 'kn', kn: { brand_code: 'C', youtube_url: null } } ] },"
+        "  { artist: 'Rihanna', title: 'Cry', versions: ["
+        "    { source: 'local', local: { path: '/b.mp4', filename: 'b.mp4' } },"
+        "    { source: 'local', local: { path: '/c.mp4', filename: 'c.mp4' } } ] },"
+        "  { artist: 'Rihanna', title: 'Diamonds', versions: ["
+        "    { source: 'kn', kn: { brand_code: 'D', youtube_url: null } },"
+        "    { source: 'kn', kn: { brand_code: 'E', youtube_url: null } } ] },"
+        "])"
+    )
+
+    def _titles(self, page):
+        return page.locator(".kn-song-title").all_inner_texts()
+
+    def test_sort_modes_reorder_and_persist(self, app_page):
+        errors = []
+        app_page.on("pageerror", lambda e: errors.append(str(e)))
+        sel = app_page.locator("#kn-sort")
+        expect(sel).to_have_value("best")
+        app_page.evaluate(self._SEED)
+        assert self._titles(app_page) == [
+            "Rihanna — Camille", "Unfaithful — Rihanna",
+            "Cry — Rihanna", "Diamonds — Rihanna"]
+
+        sel.select_option("versions")
+        # 3 > 2 = 2 (tie keeps server order: Cry before Diamonds) > 1
+        assert self._titles(app_page) == [
+            "Unfaithful — Rihanna", "Cry — Rihanna",
+            "Diamonds — Rihanna", "Rihanna — Camille"]
+        # Top row of the re-sorted list is the expanded one.
+        expect(app_page.locator("#kn-song-0 .kn-track")).to_have_count(3)
+
+        sel.select_option("library")
+        assert self._titles(app_page)[:2] == [
+            "Cry — Rihanna", "Unfaithful — Rihanna"]
+
+        sel.select_option("title")
+        assert self._titles(app_page) == [
+            "Cry — Rihanna", "Diamonds — Rihanna",
+            "Rihanna — Camille", "Unfaithful — Rihanna"]
+
+        sel.select_option("artist")
+        assert self._titles(app_page)[0] == "Rihanna — Camille"
+
+        sel.select_option("best")
+        assert self._titles(app_page)[0] == "Rihanna — Camille"
+
+        sel.select_option("title")
+        app_page.reload()
+        expect(app_page.locator("#kn-sort")).to_have_value("title")
+        app_page.evaluate("() => localStorage.removeItem('kj-kn-sort')")
+        assert errors == []
+
+
 class TestKnGroupedPanel:
     """KN panel renders the server's song-grouped payload: one collapsible
     row per song holding its library files, KN tracks and GCS-mirror files

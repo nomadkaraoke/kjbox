@@ -3769,6 +3769,7 @@ async function searchKaraokeNerds() {
     // ranked best-first. No client-side matching.
     const groups = data.songs || [];
     if (groups.length === 0) {
+        knLastGroups = [];
         log('No results found on Karaoke Nerds.', 'error');
         document.getElementById('kn-results').innerHTML =
             '<div class="kn-no-results">No results found.</div>';
@@ -3779,13 +3780,55 @@ async function searchKaraokeNerds() {
 }
 
 function clearKNResults() {
+    knLastGroups = [];
     document.getElementById('kn-results').innerHTML = '';
     document.getElementById('kn-query').value = '';
+}
+
+// Client-side re-sort of the last result set (no re-search). 'best' keeps the
+// server's relevance order (_group_relevance: title match → in library →
+// version count capped at 12 → catalog order); every other mode falls back to
+// that order for ties, so equal rows never shuffle.
+const KN_SORT_MODES = ['best', 'versions', 'library', 'title', 'artist'];
+let knSortMode = localStorage.getItem('kj-kn-sort') || 'best';
+if (!KN_SORT_MODES.includes(knSortMode)) knSortMode = 'best';
+let knLastGroups = [];
+document.addEventListener('DOMContentLoaded', () => {
+    const sel = document.getElementById('kn-sort');
+    if (sel) sel.value = knSortMode;
+});
+
+function knLocalCount(group) {
+    return (group.versions || []).filter(v => v.source === 'local').length;
+}
+
+function sortKNGroups(groups, mode) {
+    const text = s => (s || '').toLocaleLowerCase();
+    const cmp = {
+        versions: (a, b) => (b.versions || []).length - (a.versions || []).length,
+        library: (a, b) => knLocalCount(b) - knLocalCount(a)
+            || (b.versions || []).length - (a.versions || []).length,
+        title: (a, b) => text(a.title).localeCompare(text(b.title))
+            || text(a.artist).localeCompare(text(b.artist)),
+        artist: (a, b) => text(a.artist).localeCompare(text(b.artist))
+            || text(a.title).localeCompare(text(b.title)),
+    }[mode];
+    if (!cmp) return groups.slice();
+    // Array.prototype.sort is stable, so ties keep the server's best-match order.
+    return groups.slice().sort(cmp);
+}
+
+function setKNSort(mode) {
+    knSortMode = KN_SORT_MODES.includes(mode) ? mode : 'best';
+    localStorage.setItem('kj-kn-sort', knSortMode);
+    if (knLastGroups.length) renderKNResults(knLastGroups);
 }
 
 function renderKNResults(groups) {
     const container = document.getElementById('kn-results');
     container.innerHTML = '';
+    knLastGroups = groups;
+    groups = sortKNGroups(groups, knSortMode);
 
     groups.forEach((group, idx) => {
         const songId = `kn-song-${idx}`;
