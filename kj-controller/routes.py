@@ -3932,6 +3932,10 @@ def archive_rotation():
         sing_store = getattr(current_app, 'sing_store', None)
         if sing_store is not None:
             sing_store.set_enabled(True)
+        if getattr(current_app, 'night_capture_enabled', False):
+            from night_capture_launcher import start_night_capture_async
+            cfg = current_app.kj_config
+            start_night_capture_async(cfg, log=lambda m: log_message(m, cfg))
         return jsonify({"success": True, "archived": count, "entries": entries})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
