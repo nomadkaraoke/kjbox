@@ -30,27 +30,31 @@ Design, data sources and decisions: [`../SONG-IDENTIFICATION.md`](../SONG-IDENTI
 - [x] Design doc `docs/SONG-IDENTIFICATION.md`.
 - [ ] Andrew reviews the test set labels (the `label` field says Claude set them).
 
-### Phase 1: index export (GCP → GCS)
-- [ ] BigQuery export query that writes songs as `artist, title, popularity, karaoke_flag, source`:
+### Phase 1: index export (GCP → GCS). Code done; **deploy pending (Andrew, GCP write)**
+- [x] Prototype export run locally (111 s, 2.0M rows, 37 MB gz) → `/tmp/song_id/songs.tsv.gz`
+- [x] gen PR #1066: `kn-data-sync` `full` mode `EXPORT DATA` → `song-id/<run>/` + `latest.json` manifest, keeps 3 runs (dry run: 160 MB scanned/day)
+- [ ] Deploy #1066 (`deploy.sh` + `pulumi up`) and trigger one run
+- [x] (original task) BigQuery export query that writes songs as `artist, title, popularity, karaoke_flag, source`:
   - `spotify_tracks_normalized` (popularity cut-off chosen by test set coverage vs size; start ≥ 30)
   - UNION `karaokenerds_raw` (karaoke_flag = 1; artists/titles not in Spotify are added with a neutral popularity)
   - dedupe on normalised artist + title, keeping the best display spelling (highest popularity)
   - optionally MusicBrainz artist aliases for canonical spellings
-- [ ] Decide where the job lives: most likely next to `kn-data-sync` (Cloud Run job + scheduler, weekly), writing
+- [x] Decide where the job lives: inside `kn-data-sync` (Cloud Run job + scheduler, weekly), writing
       `gs://nomadkaraoke-kn-data/song-id/songs-latest.json.gz` (or Parquet) plus a hash.
-- [ ] Measure the export size and the SQLite size once built.
+- [x] Measure: export 37 MB gz; SQLite 322 MB (1.98M songs, 497K words), 65 s build on the Mac.
 
-### Phase 2: on-device index + matcher (kjbox)
-- [ ] `sync_catalogs.py`: new source → `song_id.db` (artists table with popularity + trigram FTS; songs table
+### Phase 2: on-device index + matcher (kjbox). Prototype done; NomadPC latency still to measure
+Results: `docs/SONG-IDENTIFICATION.md` §8 (78% auto / 0 wrong on real queries; 95% on held-out synthetic).
+- [x] `sync_catalogs.py`: new source → `song_id.db` (artists table with popularity + trigram FTS; songs table
       with artist_id, title, popularity, karaoke_flag + title trigram FTS; sound-alike keys). Atomic swap + reload
       as for the mirror.
-- [ ] `song_identify.py`: `identify(query) -> {status: confident|candidates|none, song, candidates, kind}`
+- [x] `song_identify.py`: `identify(query) -> {status: confident|candidates|none, song, candidates, kind}`
       following design §6 (artist sub-spans at any position, title within the artist, title-only path, margin gate).
-- [ ] `scripts/song_id_eval.py`: runs the test set and prints hit rate / wrong auto-applies / none rate by `kind`,
+- [x] `scripts/song_id_eval.py`: runs the test set and prints hit rate / wrong auto-applies / none rate by `kind`,
       plus p50/p95 latency on NomadPC.
-- [ ] Tune until: exact, title-only, artist-fragment and typo cases ≥ 90% hit; wrong auto-apply ≈ 0;
+- [~] Tune until (met on the Mac; p95 on NomadPC unmeasured): exact, title-only, artist-fragment and typo cases ≥ 90% hit; wrong auto-apply ≈ 0;
       p95 < 50 ms on NomadPC.
-- [ ] Unit tests for the matcher (the test set as a regression test, with a threshold).
+- [x] Unit tests for the matcher (the test set as a regression test, with a threshold).
 
 ### Phase 3: singer UI (kjbox)
 - [ ] `/sing/search` returns an `identified` block alongside the karaoke results (or a separate
@@ -69,6 +73,9 @@ Design, data sources and decisions: [`../SONG-IDENTIFICATION.md`](../SONG-IDENTI
 ### Phase 5: ship + observe
 - [ ] Deploy (gen first, then kjbox). Watch the first show: fallback rate, wrong corrections, latency.
 - [ ] Keep growing the test set from real misses (NomadPC journal only keeps about a week, so snapshot it).
+
+### Side-fix
+- [x] kjbox #256: `text_normalize` feat/ft word boundary (NORMALIZER_VERSION 2). Needs reindex + mirror sync on deploy.
 
 ## Status of earlier PRs
 - gen #1065 (Gemini split → `judge_match` catalog tidy) is **held**. Its free-text resolver becomes the Phase 4 fallback.

@@ -29,7 +29,7 @@ from dataclasses import dataclass, field
 from rapidfuzz import fuzz
 from rapidfuzz.distance import Levenshtein
 
-from text_normalize import normalize
+from text_normalize import NORMALIZER_VERSION, normalize  # noqa: F401 (re-exported for the sync)
 
 _INITIALS_RE = re.compile(r"\b(?:[a-z0-9] ){1,}[a-z0-9]\b")
 
@@ -119,21 +119,44 @@ def _word_sim(q, w):
     return max(0.0, 1.0 - d / max(len(q), len(w))) * 0.95
 
 
+def default_db_path(config):
+    """``song_id_db`` config key, else next to the app (like catalog_mirror.db)."""
+    return (config or {}).get("song_id_db") or os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), "song_id.db")
+
+
 class SongIdentifier:
     def __init__(self, db_path):
         self.db_path = db_path
         self._local = threading.local()
+        self._generation = 0
 
     @property
     def available(self):
         return os.path.exists(self.db_path)
 
+    def reload(self):
+        """Reopen after nomad-catalog-sync atomically replaced the file (open
+        connections would keep reading the old, unlinked inode)."""
+        self._generation += 1
+
     def _db(self):
-        db = getattr(self._local, "db", None)
-        if db is None:
+        db, gen = getattr(self._local, "db", None), getattr(self._local, "gen", -1)
+        if db is None or gen != self._generation:
+            if db is not None:
+                db.close()
             db = sqlite3.connect(f"file:{self.db_path}?mode=ro", uri=True, check_same_thread=False)
-            self._local.db = db
+            self._local.db, self._local.gen = db, self._generation
         return db
+
+    def stats(self):
+        out = {"db_path": self.db_path, "available": self.available}
+        if self.available:
+            try:
+                out.update(dict(self._db().execute("SELECT key, value FROM meta").fetchall()))
+            except sqlite3.Error as exc:
+                out["error"] = str(exc)
+        return out
 
     # ---- step 2: word expansion
     def _variants(self, word, is_last):
@@ -299,6 +322,8 @@ class SongIdentifier:
 
     def identify(self, query, limit=5):
         """→ {status: confident|candidates|none, best, candidates[]}."""
+        if not self.available:
+            return {"status": "none", "best": None, "candidates": [], "unavailable": True}
         qnorm = NOISE_PHRASE_RE.sub(" ", song_norm(query or ""))
         words = [w for w in qnorm.split() if w not in NOISE_WORDS]
         if not words or len("".join(words)) < 3:

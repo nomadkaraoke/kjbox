@@ -14,18 +14,20 @@ Output SQLite:
 Duplicates are merged on the space-less normalized artist+title ("u s a" == "usa"),
 keeping the most popular display spelling and OR-ing the karaoke flag.
 
-Usage: python scripts/build_song_id_db.py songs.tsv.gz song_id.db
+Usage: python scripts/build_song_id_db.py songs.tsv.gz [more.tsv.gz ...] song_id.db
 """
 import csv
 import gzip
 import os
 import sqlite3
 import sys
+import time
 from collections import Counter
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from song_identify import song_norm  # noqa: E402
+from text_normalize import NORMALIZER_VERSION  # noqa: E402
 
 SCHEMA_VERSION = 1
 
@@ -34,26 +36,34 @@ def _open(path):
     return gzip.open(path, "rt", encoding="utf-8") if path.endswith(".gz") else open(path, encoding="utf-8")
 
 
-def build(src, dst):
+def _rows(srcs):
+    for src in srcs:
+        with _open(src) as f:
+            yield from csv.reader(f, delimiter="\t")
+
+
+def build(srcs, dst, meta=None):
+    """Build ``dst`` from one or more TSV(.gz) shards; atomic replace."""
+    if isinstance(srcs, str):
+        srcs = [srcs]
     merged = {}
-    with _open(src) as f:
-        for row in csv.reader(f, delimiter="\t"):
-            if len(row) < 4:
-                continue
-            artist, title, pop, karaoke = row[0].strip(), row[1].strip(), row[2], row[3]
-            na, nt = song_norm(artist), song_norm(title)
-            if not na or not nt:
-                continue
-            p = int(pop) if pop.strip() else None
-            k = 1 if karaoke.strip() in ("1", "true", "True") else 0
-            key = (na.replace(" ", ""), nt.replace(" ", ""))
-            cur = merged.get(key)
-            if cur is None:
-                merged[key] = [artist, title, p, k]
-            else:
-                if p is not None and (cur[2] is None or p > cur[2]):
-                    cur[0], cur[1], cur[2] = artist, title, p
-                cur[3] = cur[3] or k
+    for row in _rows(srcs):
+        if len(row) < 4:
+            continue
+        artist, title, pop, karaoke = row[0].strip(), row[1].strip(), row[2], row[3]
+        na, nt = song_norm(artist), song_norm(title)
+        if not na or not nt:
+            continue
+        p = int(pop) if pop.strip() else None
+        k = 1 if karaoke.strip() in ("1", "true", "True") else 0
+        key = (na.replace(" ", ""), nt.replace(" ", ""))
+        cur = merged.get(key)
+        if cur is None:
+            merged[key] = [artist, title, p, k]
+        else:
+            if p is not None and (cur[2] is None or p > cur[2]):
+                cur[0], cur[1], cur[2] = artist, title, p
+            cur[3] = cur[3] or k
 
     tmp = dst + ".new"
     if os.path.exists(tmp):
@@ -93,7 +103,9 @@ def build(src, dst):
     db.execute("INSERT INTO songs_fts(songs_fts) VALUES ('optimize')")
     db.execute("INSERT INTO vocab_tri(vocab_tri) VALUES ('optimize')")
     db.executemany("INSERT INTO meta VALUES (?,?)", [
-        ("schema_version", str(SCHEMA_VERSION)), ("songs", str(len(rows))), ("words", str(len(vocab)))])
+        ("schema_version", str(SCHEMA_VERSION)), ("songs", str(len(rows))), ("words", str(len(vocab))),
+        ("normalizer_version", str(NORMALIZER_VERSION)), ("built_at", str(int(time.time())))]
+        + [(k, str(v)) for k, v in (meta or {}).items()])
     db.commit()
     db.execute("VACUUM")
     db.close()
@@ -101,8 +113,22 @@ def build(src, dst):
     return len(rows), len(vocab)
 
 
+def stored_meta(db_path):
+    """meta table of an existing index ({} if missing/unreadable)."""
+    if not os.path.exists(db_path):
+        return {}
+    try:
+        conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+        try:
+            return dict(conn.execute("SELECT key, value FROM meta").fetchall())
+        finally:
+            conn.close()
+    except sqlite3.Error:
+        return {}
+
+
 if __name__ == "__main__":
-    if len(sys.argv) != 3:
+    if len(sys.argv) < 3:
         sys.exit(__doc__)
-    n, w = build(sys.argv[1], sys.argv[2])
-    print(f"{n} songs, {w} words → {sys.argv[2]} ({os.path.getsize(sys.argv[2]) / 1e6:.0f} MB)")
+    n, w = build(sys.argv[1:-1], sys.argv[-1])
+    print(f"{n} songs, {w} words → {sys.argv[-1]} ({os.path.getsize(sys.argv[-1]) / 1e6:.0f} MB)")

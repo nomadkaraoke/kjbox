@@ -165,3 +165,66 @@ there, keep it on disk (SQLite), not in memory.
 
 Expected outcome by kind: `descriptive` should fall through to Gemini (local `none` is correct
 there). Everything else should be answered locally where the song is in the index.
+
+Run it: `python scripts/song_id_eval.py path/to/song_id.db [--verbose]`.
+`--synthetic N` generates a **held-out** set from N random popular karaoke songs × 6 kinds
+of drunk typing (typos, keyboard slips, doubled or dropped letters, title only, artist
+fragment). The matcher was never tuned on it, so it guards against overfitting the labelled set.
+
+## 8. Implementation & results (2026-09-27 prototype)
+
+Code (kjbox):
+- `kj-controller/song_identify.py`: `SongIdentifier.identify(q)` returns
+  `{status: confident|candidates|none, best, candidates}`. `song_norm()` is `text_normalize`
+  plus single-letter runs joined ("U.S.A." = "usa").
+- `kj-controller/scripts/build_song_id_db.py`: TSV shard(s) → `song_id.db`
+  - `songs` + FTS5 word index
+  - `artists` + FTS5 word index (artist-first path)
+  - `vocab` + trigram index (typo expansion)
+  - merges on space-less normalised artist+title and swaps the file in atomically
+- `kj-controller/scripts/sync_catalogs.py` `run_song_id_sync`: reads gen's manifest
+  `gs://nomadkaraoke-kn-data/song-id/latest.json`, downloads that run's shards, rebuilds,
+  POSTs `/song-id/reload`. Skipped when the run and normaliser are unchanged.
+- Export (gen, `infrastructure/functions/kn_data_sync`): `EXPORT DATA` after the daily KN
+  refresh.
+
+Matching (see the module docstring for detail):
+- **Retrieval:** three routes are pooled.
+  1. FTS OR of each word's spelling variants (trigram vocab lookup; edit budget 1/2/3 by length)
+  2. title phrase runs ("dark on me", "my tears richo*")
+  3. artist-first: any 1–4 word run whose words (variants/prefixes) are all in an artist's
+     name and string-similar to it pulls in that artist's songs ("the stokes", "bob seg",
+     "sabrina")
+- **Scoring:**
+  - q_cov: how much of what was typed the song explains (one-to-one word matching)
+  - title_cov: how much of the title was typed
+  - artist_cov
+  - fuzzy similarity of the whole string, and of the leftover-after-artist to the title
+    ("max picu" ≈ "machu picchu")
+  - popularity and karaoke-availability priors
+  - exact-title bonus
+- **Decision:**
+  - `confident` needs score ≥ 0.80, a margin over the runner-up, q_cov ≥ 0.8, and title
+    evidence. Title evidence means title_cov ≥ 0.8, or artist typed + the title's leading
+    words typed, or whole artist + a close mangled title.
+  - Same title by several artists: the runner-up by popularity must be ≥ 12 points behind.
+  - `candidates` needs score ≥ 0.62 and q_cov ≥ 0.7. Anything else is `none` (→ Gemini).
+  - Descriptions ("that song from titanic") leave most words unexplained, so they're `none`.
+
+Results on this Mac (index: 1.98M songs, 497K words, 322 MB, 65 s build):
+
+| Set | Auto-applied correct | Right song in "Which one?" | none | **Wrong auto-apply** | Latency p50 / p95 |
+|---|---|---|---|---|---|
+| Labelled real queries (97) | 78% | 14% | 5% (4 are descriptions → Gemini) | **0** | 82 / 234 ms |
+| Held-out synthetic (720, seed 7) | 95% | 4% | 0.4% | 1 (same song, differently credited) | 97 / 239 ms |
+| Held-out synthetic (900) | 95% | 5% | 0.2% | 1 (ambiguous: "secen rainbow") | 99 / 251 ms |
+
+Known gaps:
+- Songs newer than the July 2025 Spotify snapshot that also aren't on KaraokeNerds (→ Gemini).
+- Very popular same-title songs where the singer means an obscure version (→ "not it?" list).
+- The NomadPC (N97) will be slower than this Mac: measure before shipping.
+
+**Side-finding (fixed in kjbox #256):** `text_normalize`'s feat/ft regex had no word boundary.
+"Soft Cell" normalised to "so" and "Hayloft II" to "haylo", in every on-device search index.
+The fix bumps `NORMALIZER_VERSION` to 2, so indexes must be rebuilt (deploy steps in the
+CHANGELOG).
