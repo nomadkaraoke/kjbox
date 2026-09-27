@@ -1541,6 +1541,18 @@ button.status-tile:active { transform: scale(0.99); }
 .sing-change-keep { width: 100%; }
 .song-card-replaces { font-size: 0.82em; color: var(--nk-text-dim); margin-top: 3px; }
 
+/* --- Make-it quick (draft) version offer on a My-songs card ------------------ */
+.song-card-quick { font-size: 0.85em; color: var(--nk-text-dim); margin-top: 0.35rem; }
+.song-card-quick-offer {
+  color: var(--nk-text);
+  background: rgba(255, 214, 10, 0.08);
+  border: 1px solid rgba(255, 214, 10, 0.4);
+  border-radius: 10px;
+  padding: 0.55rem 0.7rem;
+}
+.song-card-quick-actions { display: flex; flex-wrap: wrap; gap: 0.45rem; margin-top: 0.5rem; }
+.song-card-quick-actions .song-card-quick-btn { flex: 1 1 9rem; width: auto; min-height: 2.4rem; padding: 0.4rem 0.7rem; }
+
 /* --- Notification block: links keep the accent colour on the "on" line ------- */
 .notify-line a { color: var(--nk-accent); text-decoration: underline; }
 

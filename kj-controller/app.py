@@ -415,6 +415,9 @@ def create_app(config=None):
             flask_app.gen_client, flask_app.rotation,
             flask_app.media, cfg.get('download_folder', ''),
             poll_interval=cfg.get('gen_poll_interval', 60),
+            quick_enabled=bool(cfg.get('make_quick_version_enabled', True)),
+            stats=getattr(flask_app, 'stats', None),
+            sing_store=getattr(flask_app, 'sing_store', None),
         )
     else:
         flask_app.gen_client = None
@@ -626,6 +629,9 @@ def start_app():  # pragma: no cover
             flask_app.gen_client, flask_app.rotation,
             flask_app.media, cfg.get('download_folder', ''),
             poll_interval=cfg.get('gen_poll_interval', 60),
+            quick_enabled=bool(cfg.get('make_quick_version_enabled', True)),
+            stats=getattr(flask_app, 'stats', None),
+            sing_store=getattr(flask_app, 'sing_store', None),
         )
         flask_app.gen_poller.start()
         log_message("Gen API integration enabled.", cfg)

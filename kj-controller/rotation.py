@@ -7,6 +7,7 @@ after every mutation for the conky overlay.
 
 import json
 import os
+import threading
 import time
 
 from rotation_store import RotationStore, diff_entries
@@ -35,6 +36,9 @@ class RotationManager:
         self.sync = None
         self.media = None  # Set by app.py if MediaIndex is available
         self.push_dispatcher = None  # Set by app.py if Web Push is configured
+        # Serialises the gen-file linking paths (GenPoller thread vs a singer's
+        # "Sing it now" request) so neither overwrites the other's link.
+        self._gen_link_lock = threading.RLock()
 
         if sheet_id and credentials_file:
             from rotation_sync import SheetSync
@@ -264,24 +268,80 @@ class RotationManager:
         self.store.update_status(entry_id, self.BEING_MADE_STATUS)
         self._after_mutation()
 
+    # An entry in one of these states is on the mic or finished — never swap its
+    # file out from under it.
+    _NO_SWAP_STATUSES = ("now singing", "done", "left")
+
     def complete_gen_job(self, job_id, file_path):
         """Called by gen poller when a gen job completes and its file is on disk.
 
         Links the file and, if the entry was still "Being Made (!)", makes it
         singable ("Waiting"). Any other status (the KJ moved it on hold, it is
-        already up, …) is the KJ's call and is left alone."""
-        entry = self.store.get_entry_by_gen_job_id(job_id)
-        if entry is None:
-            return None
-        # The KJ may have linked something by hand while gen was still working —
-        # their choice wins.
-        if not entry.get("file_path"):
-            self.store.link_file(entry["id"], file_path, self._lookup_duration(file_path))
-        self.store.set_gen_status(entry["id"], job_id, "complete")
-        if (entry.get("status") or "") == self.BEING_MADE_STATUS:
-            self.store.update_status(entry["id"], "Waiting")
+        already up, …) is the KJ's call and is left alone.
+
+        If the singer chose the job's quick (draft) version and hasn't sung it
+        yet, the full version replaces it (Andrew, 2026-09-26); once they're on
+        the mic or done, the quick version stays and the full one waits in the
+        library for next time."""
+        with self._gen_link_lock:
+            entry = self.store.get_entry_by_gen_job_id(job_id)
+            if entry is None:
+                return None
+            quick = self.store.get_quick_version(job_id)
+            linked = entry.get("file_path")
+            # The KJ may have linked something by hand while gen was still
+            # working — their choice wins. The one exception is the job's own
+            # quick draft (chosen by the singer, or linked by hand from the
+            # library): the full version replaces it unless it's on the mic/done.
+            if not linked:
+                self.store.link_file(entry["id"], file_path, self._lookup_duration(file_path))
+            elif (quick and quick.get("file_path") == linked
+                  and (entry.get("status") or "").lower() not in self._NO_SWAP_STATUSES):
+                self.store.link_file(entry["id"], file_path, self._lookup_duration(file_path))
+                self.store.upsert_quick_version(job_id, status="upgraded")
+            self.store.set_gen_status(entry["id"], job_id, "complete")
+            if (entry.get("status") or "") == self.BEING_MADE_STATUS:
+                self.store.update_status(entry["id"], "Waiting")
+            self._after_mutation()
+            return self.store.get_entry(entry["id"])
+
+    def notify_changed(self):
+        """Bump the revision (KJ + singer UIs re-render) for a change made
+        outside rotation_entries — e.g. a quick version landing on the box."""
         self._after_mutation()
-        return self.store.get_entry(entry["id"])
+
+    def use_quick_version(self, entry_id, label="Use quick version"):
+        """Link a make-it entry's downloaded quick version and make it singable.
+
+        Returns the updated entry. Raises ValueError (unknown entry / no ready
+        quick version) or LookupError (the entry already has a file). Idempotent
+        when the quick version is already the linked file."""
+        with self._gen_link_lock:
+            return self._use_quick_version_locked(entry_id, label)
+
+    def _use_quick_version_locked(self, entry_id, label):
+        entry = self.store.get_entry(entry_id)
+        if entry is None:
+            raise ValueError(f"Entry {entry_id} not found")
+        quick = self.store.get_quick_version(entry.get("gen_job_id"))
+        path = (quick or {}).get("file_path")
+        if not quick or quick.get("status") not in ("ready", "chosen") or not path:
+            raise ValueError("No quick version is ready for this entry")
+        if entry.get("file_path"):
+            if entry["file_path"] == path:
+                return entry
+            raise LookupError("Entry already has a file linked")
+        if not os.path.exists(path):
+            raise ValueError("Quick version file is missing")
+        self._before_mutation(label)
+        self.store.link_file(entry_id, path, self._lookup_duration(path))
+        if (entry.get("status") or "") == self.BEING_MADE_STATUS:
+            self.store.update_status(entry_id, "Waiting")
+        self.store.upsert_quick_version(
+            entry["gen_job_id"], status="chosen",
+            chosen_at=time.strftime("%Y-%m-%d %H:%M:%S"))
+        self._after_mutation()
+        return self.store.get_entry(entry_id)
 
     def archive_rotation(self):
         """Archive all current entries and reset the rotation.

@@ -4,6 +4,17 @@ Dated entries, newest first. Each entry notes any required deploy steps.
 
 ---
 
+## 2026-09-26 - Make-it quick version (v0.122.0)
+
+**Deploy:** `.py` change → auto-deploy restarts kj-controller (playback continues). Needs karaoke-gen ≥ v0.244.0 (gen renders the quick version); with an older gen nothing changes. New optional config key `make_quick_version_enabled` (default `true`).
+
+- Singer make-it jobs now get a rough **scrolling-lyrics draft** within a few minutes (made by gen right after the audio downloads). GenPoller polls every 10 s while one is on its way, downloads it into the library with a `QUICK` label, and sends the singer a "⚡ Quick version ready" push.
+- My songs offers **▶ Preview quick version** / **⚡ Sing it now**. Sing it now links the draft and moves the entry from Being Made to Waiting. If the full NOMAD version lands before they're up, it replaces the draft automatically (never while they're singing or after).
+- KJ rotation: `⚡ QUICK READY` badge (click to link the draft) and `⚡ QUICK` on a linked draft.
+- The make-it confirm screen says a quick version usually arrives within a few minutes. 8 new singer strings, translated into all locales.
+
+---
+
 ## 2026-09-26 - Cache-bust bump (v0.120.1)
 
 **Deploy:** needs a `systemctl restart kj-controller` (no `.py` change) so `?v=0.120.1` reaches browsers.

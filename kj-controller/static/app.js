@@ -5940,6 +5940,28 @@ async function setSingerPhotoConsent(singer, consent) {
     }
 }
 
+// Link a make-it entry's quick (draft) version from the ⚡ QUICK READY badge.
+async function useQuickVersion(entry) {
+    const who = entry.singer || 'this singer';
+    if (!confirm('Link the quick draft version for ' + who + ' now?\n\n'
+        + 'It has scrolling lyrics (no word highlighting). The full NOMAD version will replace it '
+        + 'automatically if it arrives before they sing.')) return;
+    try {
+        const resp = await fetch('/rotation/use-quick', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ id: entry.id }),
+        });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.error || resp.statusText);
+        if (data.entries) { rotationData = data.entries; renderRotation(rotationData); }
+        showRotationIndicator('success');
+    } catch (err) {
+        showRotationIndicator('error');
+        alert('Could not link the quick version: ' + err.message);
+    }
+}
+
 function renderRotation(entries) {
     const list = document.getElementById('rotation-list');
     if (!list) return;
@@ -6213,7 +6235,13 @@ function renderRotation(entries) {
         const prepBadge = document.createElement('span');
         prepBadge.className = 'rotation-prep-badge';
         const effDlStatus = effectiveDownloadStatus(entry);
-        if (entry.file_path) {
+        const quick = entry.quick || null;
+        if (entry.file_path && quick && quick.state === 'chosen') {
+            prepBadge.textContent = '\u26A1 QUICK';
+            prepBadge.classList.add('prep-quick');
+            prepBadge.title = 'Quick draft version linked (scrolling lyrics, no word highlighting). '
+                + 'The full NOMAD version replaces it automatically if it arrives before they sing.';
+        } else if (entry.file_path) {
             prepBadge.textContent = 'READY';
             prepBadge.classList.add('prep-ready');
             prepBadge.title = 'Song file linked and ready to play';
@@ -6302,6 +6330,22 @@ function renderRotation(entries) {
             prepBadge.title = 'No song file linked \u2014 use the link button to search and attach a song';
         }
         info.appendChild(prepBadge);
+        if (!entry.file_path && quick && quick.state === 'ready') {
+            // gen's quick draft is on the box — the KJ can put it in now
+            // (the singer is offered the same choice on their phone).
+            const quickBadge = document.createElement('button');
+            quickBadge.type = 'button';
+            quickBadge.className = 'rotation-prep-badge prep-quick prep-quick-ready';
+            quickBadge.textContent = '\u26A1 QUICK READY';
+            quickBadge.title = 'A quick draft version (scrolling lyrics) is ready \u2014 click to link it now. '
+                + 'The full version still replaces it automatically if it lands before they sing.';
+            quickBadge.style.cursor = 'pointer';
+            quickBadge.onclick = (e) => {
+                e.stopPropagation();
+                useQuickVersion(entry);
+            };
+            info.appendChild(quickBadge);
+        }
 
         const actions = document.createElement('div');
         actions.className = 'rotation-actions';

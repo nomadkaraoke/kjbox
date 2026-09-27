@@ -3587,6 +3587,33 @@ def _add_photo_consent(entries, app=None):
         e["photo_consent"] = out
 
 
+def _add_quick_versions(entries, rotation):
+    """Attach ``quick = {state, lyrics_tier}`` to make-it entries whose gen job
+    has a quick (draft) version on the box (see GenPoller). Best-effort."""
+    job_ids = [e.get("gen_job_id") for e in entries if e.get("gen_job_id")]
+    if not job_ids or rotation is None:
+        return
+    try:
+        quick = rotation.store.get_quick_versions(job_ids)
+    except Exception:
+        return
+    for e in entries:
+        rec = quick.get(e.get("gen_job_id"))
+        if not rec or rec.get("status") not in ("ready", "chosen", "upgraded") or not rec.get("file_path"):
+            continue
+        # By what's actually linked (the KJ may link/unlink the draft by hand).
+        linked = e.get("file_path")
+        if linked and linked == rec["file_path"]:
+            state = "chosen"
+        elif not linked:
+            state = "ready"
+        elif rec["status"] in ("chosen", "upgraded"):
+            state = "upgraded"
+        else:
+            continue
+        e["quick"] = {"state": state, "lyrics_tier": rec.get("lyrics_tier")}
+
+
 def _decorate_rotation_entries(entries, rotation):
     """Attach every frontend-facing computed field to rotation entries.
 
@@ -3609,6 +3636,7 @@ def _decorate_rotation_entries(entries, rotation):
     _add_sms_status(entries)
     _add_media_meta(entries)
     _add_photo_consent(entries)
+    _add_quick_versions(entries, rotation)
 
 
 @routes_bp.route('/rotation', methods=['GET'])
@@ -4088,6 +4116,30 @@ def link_rotation_file():
         return jsonify({"success": True, "entry": entry, "entries": entries})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+@routes_bp.route('/rotation/use-quick', methods=['POST'])
+def use_quick_version():
+    """KJ: link a make-it entry's quick (draft) version so it can be sung now.
+
+    The full NOMAD version still replaces it automatically if it lands before
+    the singer is up (RotationManager.complete_gen_job)."""
+    rotation = getattr(current_app, 'rotation', None)
+    if rotation is None:
+        return jsonify({"error": "Rotation not configured"}), 503
+    data = request.get_json(silent=True) or {}
+    entry_id = data.get('id')
+    if not isinstance(entry_id, int) or isinstance(entry_id, bool) or entry_id < 1:
+        return jsonify({"error": "id must be a positive integer"}), 400
+    try:
+        entry = rotation.use_quick_version(entry_id, label="Use quick version (KJ)")
+    except LookupError as e:
+        return jsonify({"error": str(e)}), 409
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 404
+    entries = rotation.get_rotation()
+    _decorate_rotation_entries(entries, rotation)
+    return jsonify({"success": True, "entry": entry, "entries": entries})
 
 
 @routes_bp.route('/rotation/unlink', methods=['POST'])

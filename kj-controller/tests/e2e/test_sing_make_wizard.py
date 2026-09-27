@@ -216,3 +216,65 @@ class TestMySongsMakePhases:
                 status.locator('[data-testid="make-review-link"]').click()
         expect(status.locator('[data-testid="make-review-link"]')).to_have_text("Tap here")
         assert any("already finished" in m for m in msgs)
+
+
+class TestMySongsQuickVersion:
+    """Make-it quick (draft) version: offer → preview / sing it now → explained."""
+
+    def _open(self, page, live_server, live_token, quick, make="making"):
+        _login(page, live_server, live_token)
+        page.evaluate("(t) => localStorage.setItem('sing_my_request_ids', JSON.stringify("
+                      "{token: t, ids: [31], tokens: {'31': 'tok31'}}))", live_token)
+        state = {"quick": quick, "make": make}
+
+        def my_requests(route):
+            item = {"request": {"id": 31, "singer_name": "Alice", "song_artist": "The Strokes",
+                                "song_title": "Machu Picchu", "source_type": "make",
+                                "status": "approved", "created_at": "now", "linked_entry_id": 9,
+                                "additional_singers": None},
+                    "performed": False, "make": state["make"], "quick": state["quick"]}
+            _json(route, {"now_playing": {"now_singing": None, "up_next": None, "queued_count": 1},
+                          "requests": [item]})
+        page.route("**/sing/my-requests*", my_requests)
+        page.evaluate("window.__sing_state.step = 'done'; window.__sing_render();")
+        return state
+
+    def test_offer_preview_and_sing_now(self, page, live_server, live_token):
+        state = self._open(page, live_server, live_token, "ready")
+        offer = page.locator('[data-testid="quick-offer"]')
+        expect(offer).to_contain_text("A quick version is ready now!")
+        # The card still says the full version is being made.
+        expect(page.locator(".song-card-status").first).to_contain_text("Being made")
+
+        previews = []
+        page.route("**/sing/preview/resolve*", lambda r: (
+            previews.append(json.loads(r.request.post_data)),
+            _json(r, {"mode": "unavailable", "reason": "test"})))
+        with page.expect_response("**/sing/preview/resolve*"):
+            offer.locator('[data-testid="quick-preview"]').click()
+        assert previews and previews[0]["source"] == "entry_quick" and previews[0]["entry_id"] == 9
+        page.keyboard.press("Escape")
+
+        sent = {}
+
+        def use_quick(route):
+            sent.update(json.loads(route.request.post_data))
+            state.update(quick="chosen", make=None)
+            _json(route, {"success": True})
+        page.route("**/sing/make/use-quick/31*", use_quick)
+        page.on("dialog", lambda d: d.accept())
+        offer.locator('[data-testid="quick-sing-now"]').click()
+        expect(page.locator('[data-testid="quick-chosen"]')).to_contain_text(
+            "You're singing the quick version")
+        expect(page.locator('[data-testid="quick-offer"]')).to_have_count(0)
+        assert sent == {"edit_token": "tok31", "device_id": sent["device_id"]} and sent["device_id"]
+
+    def test_upgraded_is_explained(self, page, live_server, live_token):
+        self._open(page, live_server, live_token, "upgraded", make=None)
+        expect(page.locator('[data-testid="quick-upgraded"]')).to_contain_text(
+            "The full version is ready")
+
+    def test_no_offer_without_quick(self, page, live_server, live_token):
+        self._open(page, live_server, live_token, None)
+        expect(page.locator(".song-card-status").first).to_contain_text("Being made")
+        expect(page.locator('[data-testid="quick-offer"]')).to_have_count(0)

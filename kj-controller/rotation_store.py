@@ -213,6 +213,24 @@ class RotationStore:
 
             CREATE INDEX IF NOT EXISTS idx_rotation_history_stack_seq
                 ON rotation_history (stack, seq);
+
+            -- Quick (draft) videos gen renders for make-it jobs, keyed by gen
+            -- job id. Deliberately NOT columns on rotation_entries: undo/redo
+            -- snapshots restore entries wholesale, and this state is fed by gen
+            -- in the background (it must survive an undo).
+            CREATE TABLE IF NOT EXISTS gen_quick_versions (
+                gen_job_id   TEXT PRIMARY KEY,
+                status       TEXT NOT NULL,       -- downloading|ready|chosen|upgraded|failed
+                file_path    TEXT,
+                media_id     TEXT,
+                lyrics_tier  TEXT,
+                error        TEXT,
+                attempts     INTEGER NOT NULL DEFAULT 0,
+                notified_at  TEXT,
+                chosen_at    TEXT,
+                created_at   TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+                updated_at   TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+            );
         """)
 
         # Initialise the monotonic revision counter if absent.
@@ -846,6 +864,58 @@ class RotationStore:
         ).fetchall()
         return [self._row_to_dict(r) for r in rows]
 
+    # ------------------------------------------------------------------
+    # Quick (draft) versions of make-it jobs
+    # ------------------------------------------------------------------
+
+    _QUICK_FIELDS = ("status", "file_path", "media_id", "lyrics_tier", "error",
+                     "attempts", "notified_at", "chosen_at")
+
+    def get_quick_version(self, job_id):
+        """The quick-version row for a gen job, or None."""
+        if not job_id:
+            return None
+        row = self._get_conn().execute(
+            "SELECT * FROM gen_quick_versions WHERE gen_job_id = ?", (job_id,)
+        ).fetchone()
+        return self._row_to_dict(row)
+
+    def get_quick_versions(self, job_ids):
+        """{gen_job_id: row} for the given ids (missing ids omitted)."""
+        ids = [j for j in set(job_ids or []) if j]
+        if not ids:
+            return {}
+        placeholders = ", ".join("?" * len(ids))
+        rows = self._get_conn().execute(
+            f"SELECT * FROM gen_quick_versions WHERE gen_job_id IN ({placeholders})", ids
+        ).fetchall()
+        return {r["gen_job_id"]: self._row_to_dict(r) for r in rows}
+
+    def upsert_quick_version(self, job_id, **fields):
+        """Insert or update a quick-version row; unknown fields are rejected."""
+        bad = set(fields) - set(self._QUICK_FIELDS)
+        if bad:
+            raise ValueError(f"unknown quick-version fields: {sorted(bad)}")
+        conn = self._get_conn()
+        existing = self.get_quick_version(job_id)
+        if existing is None:
+            fields.setdefault("status", "downloading")
+            cols = ["gen_job_id", *fields]
+            conn.execute(
+                f"INSERT INTO gen_quick_versions ({', '.join(cols)}) "
+                f"VALUES ({', '.join('?' * len(cols))})",
+                [job_id, *fields.values()],
+            )
+        elif fields:
+            sets = ", ".join(f"{k} = ?" for k in fields)
+            conn.execute(
+                f"UPDATE gen_quick_versions SET {sets}, "
+                "updated_at = datetime('now', 'localtime') WHERE gen_job_id = ?",
+                [*fields.values(), job_id],
+            )
+        conn.commit()
+        return self.get_quick_version(job_id)
+
     def get_entry_by_gen_job_id(self, job_id):
         """Find a rotation entry by its gen job ID."""
         conn = self._get_conn()
@@ -1341,8 +1411,16 @@ class RotationStore:
                     "playability_warning", "singers_json", "paid",
                     "priority_bias",
                 ]
+                status = e["status"]
+                # The live link is kept but the snapshot predates gen finishing
+                # (e.g. undoing "Use quick version" after the full version
+                # replaced it) — don't resurrect "Being Made" for a song that
+                # is linked and complete.
+                if (preserve_tracking and status == "Being Made (!)"
+                        and track["file_path"] and track["gen_status"] == "complete"):
+                    status = "Waiting"
                 vals = [
-                    e["id"], e["singer"], e["song_artist"], e["status"],
+                    e["id"], e["singer"], e["song_artist"], status,
                     e.get("notes", ""), e["position"],
                     track["file_path"], track["duration"],
                     track["download_source"], track["download_status"],

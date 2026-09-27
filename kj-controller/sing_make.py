@@ -390,6 +390,43 @@ def create_job(app, device_id, artist, title, source_meta):
     return job_id, None
 
 
+@sing_bp.route("/make/use-quick/<int:req_id>", methods=["POST"])
+@require_token
+def make_use_quick(req_id):
+    """"Sing it now" — use the make-it job's quick (draft) version.
+
+    Proven like cancel (the request's edit_token). Links the draft to the
+    singer's rotation entry and makes it singable; the full NOMAD version still
+    replaces it automatically if it lands before they're up. Needs no gen
+    sign-in (nothing is sent to gen)."""
+    from sing import _belongs_to_current_night, _extract_token
+
+    data, device_id = _body()
+    if not (current_app.kj_config or {}).get("make_quick_version_enabled", True):
+        return jsonify({"error": "quick_disabled"}), 400
+    if _rate_limited(device_id):
+        return jsonify({"error": "rate_limited"}), 429
+    store = current_app.sing_store
+    req = store.get_request(req_id)
+    if (req is None or req.get("token") != _extract_token()
+            or not _belongs_to_current_night(store, req)):
+        return jsonify({"error": "not_found"}), 404
+    stored = req.get("edit_token") or ""
+    if not stored or not secrets.compare_digest(str(data.get("edit_token") or ""), str(stored)):
+        return jsonify({"error": "forbidden"}), 403
+    entry_id = req.get("linked_entry_id")
+    rotation = getattr(current_app, "rotation", None)
+    if req.get("source_type") != "make" or not entry_id or rotation is None:
+        return jsonify({"error": "not_found"}), 404
+    try:
+        rotation.use_quick_version(entry_id, label="Use quick version (singer)")
+    except LookupError:
+        return jsonify({"error": "already_ready"}), 409
+    except ValueError:
+        return jsonify({"error": "quick_not_ready"}), 404
+    return jsonify({"success": True})
+
+
 @sing_bp.route("/make/review-link/<int:req_id>", methods=["POST"])
 @require_token
 def make_review_link(req_id):
