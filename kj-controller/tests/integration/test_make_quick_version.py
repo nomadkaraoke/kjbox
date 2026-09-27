@@ -252,6 +252,18 @@ class TestKjUseQuick:
         _rid, entry_id, _edit = made
         assert client.post("/rotation/use-quick", json={"id": entry_id}).status_code == 404
         assert client.post("/rotation/use-quick", json={}).status_code == 400
+        assert client.post("/rotation/use-quick", json={"id": 1.5}).status_code == 400
+        assert client.post("/rotation/use-quick", json={"id": True}).status_code == 400
+
+    def test_undo_after_upgrade_keeps_entry_singable(self, client, sing_app, token, made, poller, gen):
+        rid, entry_id, edit = made
+        gen.get_job_status.return_value = _job()
+        poller.poll_once()
+        _use_quick(client, token, rid, edit)
+        sing_app.rotation.complete_gen_job(JOB, "/m/NOMAD-1 - Radiohead - Creep.mp4")
+        sing_app.rotation.undo()
+        entry = sing_app.rotation.store.get_entry(entry_id)
+        assert entry["file_path"].startswith("/m/NOMAD-1") and entry["status"] == "Waiting"
 
 
 def test_event_info_advertises_quick_version(client, token):

@@ -4128,10 +4128,9 @@ def use_quick_version():
     if rotation is None:
         return jsonify({"error": "Rotation not configured"}), 503
     data = request.get_json(silent=True) or {}
-    try:
-        entry_id = int(data.get('id'))
-    except (TypeError, ValueError):
-        return jsonify({"error": "id is required"}), 400
+    entry_id = data.get('id')
+    if not isinstance(entry_id, int) or isinstance(entry_id, bool) or entry_id < 1:
+        return jsonify({"error": "id must be a positive integer"}), 400
     try:
         entry = rotation.use_quick_version(entry_id, label="Use quick version (KJ)")
     except LookupError as e:

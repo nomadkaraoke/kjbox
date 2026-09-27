@@ -1411,8 +1411,16 @@ class RotationStore:
                     "playability_warning", "singers_json", "paid",
                     "priority_bias",
                 ]
+                status = e["status"]
+                # The live link is kept but the snapshot predates gen finishing
+                # (e.g. undoing "Use quick version" after the full version
+                # replaced it) — don't resurrect "Being Made" for a song that
+                # is linked and complete.
+                if (preserve_tracking and status == "Being Made (!)"
+                        and track["file_path"] and track["gen_status"] == "complete"):
+                    status = "Waiting"
                 vals = [
-                    e["id"], e["singer"], e["song_artist"], e["status"],
+                    e["id"], e["singer"], e["song_artist"], status,
                     e.get("notes", ""), e["position"],
                     track["file_path"], track["duration"],
                     track["download_source"], track["download_status"],

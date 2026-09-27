@@ -2957,8 +2957,12 @@ async function useQuickVersion(reqId, editToken, song, btn) {
       method: "POST",
       body: JSON.stringify({ edit_token: editToken, device_id: DEVICE_ID }),
     });
-  } catch {
-    alert(t("mySongs.quickSingNowFailed", { host: _hostName() }));
+  } catch (e) {
+    // already_ready: the full version landed just before the tap — the song is
+    // singable anyway, the refresh below shows it.
+    if (e?.data?.error !== "already_ready") {
+      alert(t("mySongs.quickSingNowFailed", { host: _hostName() }));
+    }
   } finally {
     btn.disabled = false;
   }

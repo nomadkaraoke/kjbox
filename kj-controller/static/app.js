@@ -6333,7 +6333,8 @@ function renderRotation(entries) {
         if (!entry.file_path && quick && quick.state === 'ready') {
             // gen's quick draft is on the box — the KJ can put it in now
             // (the singer is offered the same choice on their phone).
-            const quickBadge = document.createElement('span');
+            const quickBadge = document.createElement('button');
+            quickBadge.type = 'button';
             quickBadge.className = 'rotation-prep-badge prep-quick prep-quick-ready';
             quickBadge.textContent = '\u26A1 QUICK READY';
             quickBadge.title = 'A quick draft version (scrolling lyrics) is ready \u2014 click to link it now. '
