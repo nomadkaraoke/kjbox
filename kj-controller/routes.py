@@ -3599,12 +3599,19 @@ def _add_quick_versions(entries, rotation):
         return
     for e in entries:
         rec = quick.get(e.get("gen_job_id"))
-        if rec and rec.get("status") in ("ready", "chosen", "upgraded"):
-            state = rec["status"]
-            # "chosen" only while the draft is still the linked file.
-            if state == "chosen" and e.get("file_path") != rec.get("file_path"):
-                state = "upgraded" if e.get("file_path") else "ready"
-            e["quick"] = {"state": state, "lyrics_tier": rec.get("lyrics_tier")}
+        if not rec or rec.get("status") not in ("ready", "chosen", "upgraded") or not rec.get("file_path"):
+            continue
+        # By what's actually linked (the KJ may link/unlink the draft by hand).
+        linked = e.get("file_path")
+        if linked and linked == rec["file_path"]:
+            state = "chosen"
+        elif not linked:
+            state = "ready"
+        elif rec["status"] in ("chosen", "upgraded"):
+            state = "upgraded"
+        else:
+            continue
+        e["quick"] = {"state": state, "lyrics_tier": rec.get("lyrics_tier")}
 
 
 def _decorate_rotation_entries(entries, rotation):

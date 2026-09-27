@@ -2568,13 +2568,16 @@ def _make_quick_state(req, entry, rotation_mgr):
         return None
     status = rec.get("status")
     linked = entry.get("file_path")
-    if status == "ready" and not linked:
-        return "ready"
-    if status in ("chosen", "ready") and linked and linked == rec.get("file_path"):
+    draft = rec.get("file_path")
+    if status not in ("ready", "chosen", "upgraded") or not draft:
+        return None
+    # Judge by what's actually linked, not the stored status: the KJ may have
+    # linked the draft by hand, or unlinked it again.
+    if linked and linked == draft:
         return "chosen"
-    if status == "upgraded" or (status == "chosen" and linked):
-        return "upgraded"
-    return None
+    if not linked:
+        return "ready"
+    return "upgraded" if status in ("chosen", "upgraded") else None
 
 
 def _make_progress(req, entry):

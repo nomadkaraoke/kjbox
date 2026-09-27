@@ -152,6 +152,36 @@ class TestQuickVersionFlow:
         assert sing_app.rotation.store.get_entry(entry_id)["file_path"] == quick_file
         assert sing_app.rotation.store.get_quick_version(JOB)["status"] == "chosen"
 
+    def test_unlinked_draft_is_offered_again(self, client, sing_app, token, made, poller, gen):
+        rid, entry_id, edit = made
+        gen.get_job_status.return_value = _job()
+        poller.poll_once()
+        _use_quick(client, token, rid, edit)
+        sing_app.rotation.store.unlink_file(entry_id)
+        assert _item(client, token, rid)["quick"] == "ready"
+        entry = next(e for e in client.get("/rotation").get_json()["entries"] if e["id"] == entry_id)
+        assert entry["quick"]["state"] == "ready"
+        assert _use_quick(client, token, rid, edit).status_code == 200
+
+    def test_hand_linked_draft_is_still_upgraded(self, client, sing_app, token, made, poller, gen,
+                                                  quick_file):
+        rid, entry_id, _edit = made
+        gen.get_job_status.return_value = _job()
+        poller.poll_once()
+        sing_app.rotation.store.link_file(entry_id, quick_file)   # KJ picked it from the library
+        assert _item(client, token, rid)["quick"] == "chosen"
+        sing_app.rotation.complete_gen_job(JOB, "/m/NOMAD-1 - Radiohead - Creep.mp4")
+        assert sing_app.rotation.store.get_entry(entry_id)["file_path"].startswith("/m/NOMAD-1")
+        assert _item(client, token, rid)["quick"] == "upgraded"
+
+    def test_master_first_then_sing_now_keeps_master(self, client, sing_app, token, made, poller, gen):
+        rid, entry_id, edit = made
+        gen.get_job_status.return_value = _job()
+        poller.poll_once()
+        sing_app.rotation.complete_gen_job(JOB, "/m/NOMAD-1 - Radiohead - Creep.mp4")
+        assert _use_quick(client, token, rid, edit).status_code == 409
+        assert sing_app.rotation.store.get_entry(entry_id)["file_path"].startswith("/m/NOMAD-1")
+
     def test_kj_link_wins_over_quick(self, client, sing_app, token, made, poller, gen):
         rid, entry_id, edit = made
         sing_app.rotation.store.link_file(entry_id, "/kj/picked.mp4")
