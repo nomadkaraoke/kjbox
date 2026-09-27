@@ -91,6 +91,9 @@
     "didYouMean": "您是指…？",
     "correctedTo": "已更正为 {song} — 您输入的是“{typed}”。",
     "usingTyped": "使用您输入的：“{typed}”。",
+    "tidiedTo": "已整理为 {song}",
+    "keepMine": "保留我的输入",
+    "useTidied": "使用整理后的版本",
     "undo": "撤销",
     "useCorrection": "使用更正结果"
   },

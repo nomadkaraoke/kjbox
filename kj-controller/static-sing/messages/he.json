@@ -91,6 +91,9 @@
     "didYouMean": "האם התכוונתם ל…?",
     "correctedTo": "תוקן ל-{song} — הקלדת “{typed}”.",
     "usingTyped": "נשתמש במה שהקלדת: “{typed}”.",
+    "tidiedTo": "סודר ל-{song}",
+    "keepMine": "להשאיר את מה שהקלדתי",
+    "useTidied": "להשתמש בגרסה המסודרת",
     "undo": "ביטול",
     "useCorrection": "להשתמש בתיקון"
   },

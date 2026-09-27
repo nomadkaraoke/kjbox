@@ -91,6 +91,9 @@
     "didYouMean": "Có phải ý bạn là…?",
     "correctedTo": "Đã sửa thành {song} — bạn đã nhập “{typed}”.",
     "usingTyped": "Dùng từ bạn đã nhập: “{typed}”.",
+    "tidiedTo": "Đã chỉnh gọn thành {song}",
+    "keepMine": "giữ nguyên nội dung tôi đã nhập",
+    "useTidied": "sử dụng bản đã tinh chỉnh",
     "undo": "Hoàn tác",
     "useCorrection": "Dùng từ đã sửa"
   },

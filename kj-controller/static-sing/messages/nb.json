@@ -91,6 +91,9 @@
     "didYouMean": "Mente du…?",
     "correctedTo": "Rettet til {song} — du skrev «{typed}».",
     "usingTyped": "Bruker det du skrev: «{typed}».",
+    "tidiedTo": "Justert til {song}",
+    "keepMine": "behold det jeg skrev",
+    "useTidied": "bruk oppryddet versjon",
     "undo": "Angre",
     "useCorrection": "Bruk rettelsen"
   },

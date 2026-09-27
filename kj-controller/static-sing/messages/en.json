@@ -91,6 +91,9 @@
     "didYouMean": "Did you mean…?",
     "correctedTo": "Corrected to {song} — you typed “{typed}”.",
     "usingTyped": "Using what you typed: “{typed}”.",
+    "tidiedTo": "Tidied to {song}",
+    "keepMine": "keep what I typed",
+    "useTidied": "use tidied version",
     "undo": "Undo",
     "useCorrection": "Use the correction"
   },

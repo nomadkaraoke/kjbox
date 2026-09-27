@@ -91,6 +91,9 @@
     "didYouMean": "もしかして…？",
     "correctedTo": "{song} に修正しました（入力内容: 「{typed}」）。",
     "usingTyped": "入力した内容をそのまま使う: 「{typed}」",
+    "tidiedTo": "{song} に整えました",
+    "keepMine": "入力した内容をそのまま使う",
+    "useTidied": "整形版を使用する",
     "undo": "元に戻す",
     "useCorrection": "修正案を使う"
   },

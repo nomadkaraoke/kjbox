@@ -91,6 +91,9 @@
     "didYouMean": "Ai vrut să spui…?",
     "correctedTo": "Corectat în {song} — ai scris „{typed}”.",
     "usingTyped": "Folosim ce ai scris: „{typed}”.",
+    "tidiedTo": "Ajustat în {song}",
+    "keepMine": "păstrează ce am scris",
+    "useTidied": "folosește versiunea curățată",
     "undo": "Anulează",
     "useCorrection": "Folosește corecția"
   },

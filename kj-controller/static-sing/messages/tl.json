@@ -91,6 +91,9 @@
     "didYouMean": "Ibig mo bang sabihin ay…?",
     "correctedTo": "Itinama sa {song} — na-type mo ang “{typed}”.",
     "usingTyped": "Gagamitin ang na-type mo: “{typed}”.",
+    "tidiedTo": "Inayos sa {song}",
+    "keepMine": "panatilihin ang tinype ko",
+    "useTidied": "gamitin ang inayos na bersyon",
     "undo": "I-undo",
     "useCorrection": "Gamitin ang itinama"
   },

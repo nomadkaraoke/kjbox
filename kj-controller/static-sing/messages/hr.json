@@ -91,6 +91,9 @@
     "didYouMean": "Misliš li na…?",
     "correctedTo": "Ispravljeno na {song} — tvoj unos je bio “{typed}”.",
     "usingTyped": "Koristim tvoj unos: “{typed}”.",
+    "tidiedTo": "Uređeno u {song}",
+    "keepMine": "zadrži moj unos",
+    "useTidied": "koristi uređenu verziju",
     "undo": "Poništi",
     "useCorrection": "Koristi ispravak"
   },

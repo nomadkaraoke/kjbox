@@ -91,6 +91,9 @@
     "didYouMean": "Maksud anda…?",
     "correctedTo": "Dibetulkan kepada {song} — anda menaip “{typed}”.",
     "usingTyped": "Menggunakan apa yang anda taip: “{typed}”.",
+    "tidiedTo": "Dikemaskan kepada {song}",
+    "keepMine": "kekalkan apa yang saya taip",
+    "useTidied": "gunakan versi yang dikemaskan",
     "undo": "Buat asal",
     "useCorrection": "Gunakan pembetulan"
   },

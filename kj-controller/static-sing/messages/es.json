@@ -91,6 +91,9 @@
     "didYouMean": "¿Quisiste decir…?",
     "correctedTo": "Corregido a {song} — escribiste “{typed}”.",
     "usingTyped": "Usando lo que escribiste: “{typed}”.",
+    "tidiedTo": "Ajustado a {song}",
+    "keepMine": "mantener lo que escribí",
+    "useTidied": "usar la versión arreglada",
     "undo": "Deshacer",
     "useCorrection": "Usar la corrección"
   },

@@ -204,6 +204,7 @@ const state = {
   query: "",
   selected: null,   // { source_type, source_ref, song_artist, song_title, label }
   makeArtist: "",
+  makePrefill: { artist: "", title: "" },   // last auto-fill of makeArtist/makeTitle (renderSearch)
   makeTitle: "",
   showMakeForm: false,   // "make it" form opened from under non-empty results
   // New: duet partners typed on the confirm screen. Array of
@@ -1743,10 +1744,28 @@ function renderSearch() {
   let results = { songs: [] };
   let loading = false;
   let err = "";
-  // Auto-correct (gen's free-text resolver) for a search that found nothing:
-  // {typed, corrected: {artist, title}, songs, active} or {alternatives}.
+  // Auto-correct (gen's free-text resolver + job-flow tidy) for a search that
+  // found nothing: {typed, kind, corrected: {artist, title}, songs, split,
+  // active}, {alternatives} or {split} (gen only split the query).
   let correction = null;
   let resolving = false;
+  // Pre-fill the make-it form from a correction. state.makePrefill remembers
+  // what we last filled (it outlives this view, like the fields themselves), so
+  // a tidy or its undo only overwrites a field the singer hasn't edited since.
+  function prefillMake(src) {
+    const last = state.makePrefill;
+    for (const [field, key] of [["makeArtist", "artist"], ["makeTitle", "title"]]) {
+      if ((state[field] || "") !== last[key]) continue;   // singer typed their own
+      state[field] = (src && src[key]) || "";
+      last[key] = state[field];
+    }
+  }
+  // The artist/title a make-it should start from, given the current correction.
+  function correctionMakeSource() {
+    if (!correction) return null;
+    if (correction.corrected) return correction.active ? correction.corrected : correction.split;
+    return correction.split || null;
+  }
   // Phase B — group keys the singer has expanded. Persists across re-renders
   // triggered by search keystrokes but resets on back/forward navigation.
   const expandedSongs = new Set();
@@ -1774,6 +1793,7 @@ function renderSearch() {
     searchGen++;
     correction = null;
     resolving = false;
+    prefillMake(null);
     // 700ms (was 300) to match the KJ side — the shared backend live-scrapes,
     // so a longer debounce just trims wasted scrapes. Correctness comes from
     // the generation guard below, not from the delay.
@@ -1807,20 +1827,26 @@ function renderSearch() {
     }, 700);
   };
 
-  // Nothing found → ask gen to split + typo-correct the query ("the strokes
-  // max picu" → The Strokes — Machu Picchu); if the corrected search finds
-  // songs, show them with "Corrected to … — you typed …  Undo" (like gen).
+  // Nothing found → ask gen to split + tidy the query the way its own job
+  // form does ("rihanna push up on me" → Rihanna — Push Up On Me; "the strokes
+  // max picu" → The Strokes — Machu Picchu). Show gen's "Tidied to … / keep
+  // what I typed" (or "Corrected to … Undo"), list any songs the corrected
+  // search finds, and pre-fill the make-it form with the tidied artist/title.
   async function resolveEmptySearch(q, gen) {
     resolving = true; update();
     try {
       const data = await fetchJson(
         `${BASE}/search/resolve?q=${encodeURIComponent(q)}&device_id=${encodeURIComponent(DEVICE_ID)}`);
       if (gen !== searchGen) return;
-      if (data && data.corrected && (data.songs || []).length) {
-        correction = { typed: data.typed || q, corrected: data.corrected, songs: data.songs, active: true };
+      if (data && data.corrected) {
+        correction = { typed: data.typed || q, kind: data.kind, corrected: data.corrected,
+                       songs: data.songs || [], split: data.split || null, active: true };
       } else if (data && (data.alternatives || []).length) {
         correction = { typed: q, alternatives: data.alternatives };
+      } else if (data && data.split) {
+        correction = { typed: q, split: data.split };
       }
+      prefillMake(correctionMakeSource());
     } catch { /* offline / rate-limited: the empty-state triage stays */ }
     if (gen === searchGen) { resolving = false; update(); }
   }
@@ -1843,16 +1869,30 @@ function renderSearch() {
           onclick: (e) => { e.stopPropagation(); useAlternative(a); },
         }, `${a.title} — ${a.artist}`)));
     }
+    if (!correction.corrected) return null;   // split only: nothing to announce
     const song = `${correction.corrected.artist} — ${correction.corrected.title}`;
+    // gen's AudioSourceStep wording: a formatting-only tidy vs a real correction.
+    const tidy = correction.kind === "cosmetic";
+    let label, action;
+    if (correction.active) {
+      label = tidy ? t("search.tidiedTo", { song }) : t("search.correctedTo", { song, typed: correction.typed });
+      action = tidy ? t("search.keepMine") : t("search.undo");
+    } else {
+      label = t("search.usingTyped", { typed: correction.typed });
+      action = tidy ? t("search.useTidied") : t("search.useCorrection");
+    }
     return el("div", { class: "sing-correction", "data-testid": "search-correction" },
-      el("span", {}, correction.active
-        ? t("search.correctedTo", { song, typed: correction.typed })
-        : t("search.usingTyped", { typed: correction.typed })),
+      el("span", {}, label),
       " ",
       el("button", {
         class: "btn link sing-correction-toggle", "data-testid": "search-correction-toggle",
-        onclick: (e) => { e.stopPropagation(); correction.active = !correction.active; update(); },
-      }, correction.active ? t("search.undo") : t("search.useCorrection")));
+        onclick: (e) => {
+          e.stopPropagation();
+          correction.active = !correction.active;
+          prefillMake(correctionMakeSource());
+          update();
+        },
+      }, action));
   }
 
   // Single-version short-circuit — when a group has exactly one version, we
@@ -2267,7 +2307,8 @@ function renderSearch() {
     const notice = !loading ? correctionNotice() : null;
     if (notice) container.appendChild(notice);
 
-    const songs = (correction && correction.active && correction.songs) || results.songs || [];
+    const corrected = correction && correction.active && correction.songs;
+    const songs = (corrected && corrected.length ? corrected : results.songs) || [];
     // Phase C — genuine empty-state (query was long enough to have searched).
     if (!loading && !resolving && !err && state.query?.trim().length >= 3 && songs.length === 0) {
       container.appendChild(renderEmptyStateTriage());
@@ -3271,6 +3312,7 @@ function renderDone() {
         state.selected = null;
         state.makeArtist = "";
         state.makeTitle = "";
+        state.makePrefill = { artist: "", title: "" };
         state.showMakeForm = false;
         state.additional = [];
         state.step = "search";

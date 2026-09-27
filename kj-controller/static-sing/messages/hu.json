@@ -91,6 +91,9 @@
     "didYouMean": "Erre gondoltál…?",
     "correctedTo": "Javítva erre: {song} — ezt írtad: „{typed}”.",
     "usingTyped": "Azt használjuk, amit beírtál: „{typed}”.",
+    "tidiedTo": "Rendezve erre: {song}",
+    "keepMine": "maradjon, amit írtam",
+    "useTidied": "letisztított verzió használata",
     "undo": "Visszavonás",
     "useCorrection": "Javítás használata"
   },

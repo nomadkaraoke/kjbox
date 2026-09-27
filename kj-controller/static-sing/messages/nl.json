@@ -91,6 +91,9 @@
     "didYouMean": "Bedoelde je…?",
     "correctedTo": "Gecorrigeerd naar {song} — je typte “{typed}”.",
     "usingTyped": "We gebruiken wat je typte: “{typed}”.",
+    "tidiedTo": "Opgeschoond naar {song}",
+    "keepMine": "behoud wat ik typte",
+    "useTidied": "gebruik opgeschoonde versie",
     "undo": "Ongedaan maken",
     "useCorrection": "Gebruik de correctie"
   },

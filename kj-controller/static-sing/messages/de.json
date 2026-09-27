@@ -91,6 +91,9 @@
     "didYouMean": "Meintest du…?",
     "correctedTo": "Korrigiert zu {song} – du hast „{typed}“ eingegeben.",
     "usingTyped": "Verwende deine Eingabe: „{typed}“.",
+    "tidiedTo": "Bereinigt zu {song}",
+    "keepMine": "meine Eingabe behalten",
+    "useTidied": "bereinigte Version verwenden",
     "undo": "Rückgängig",
     "useCorrection": "Korrektur verwenden"
   },

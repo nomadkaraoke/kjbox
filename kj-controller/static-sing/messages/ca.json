@@ -91,6 +91,9 @@
     "didYouMean": "Volies dir…?",
     "correctedTo": "Corregit a {song} — has escrit “{typed}”.",
     "usingTyped": "Utilitzant el que has escrit: “{typed}”.",
+    "tidiedTo": "Ajustat a {song}",
+    "keepMine": "mantenir el que he escrit",
+    "useTidied": "utilitza la versió polida",
     "undo": "Desfer",
     "useCorrection": "Utilitza la correcció"
   },

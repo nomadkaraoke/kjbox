@@ -91,6 +91,9 @@
     "didYouMean": "Mal si na mysli…?",
     "correctedTo": "Opravené na {song} — tvoj text bol „{typed}“.",
     "usingTyped": "Používam tvoj text: „{typed}“.",
+    "tidiedTo": "Upravené na {song}",
+    "keepMine": "ponechať môj text",
+    "useTidied": "použiť upravenú verziu",
     "undo": "Vrátiť späť",
     "useCorrection": "Použiť opravu"
   },

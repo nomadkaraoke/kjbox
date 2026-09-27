@@ -4,6 +4,17 @@ Dated entries, newest first. Each entry notes any required deploy steps.
 
 ---
 
+## 2026-09-27 - Singer search: gen's "Tidied to" + make-it pre-fill (v0.123.0)
+
+**Deploy:** `.py` change → auto-deploy restarts kj-controller (playback continues). Best with karaoke-gen ≥ v0.245.1 (gen's resolve then tidies via its job-flow catalog match); with an older gen the Gemini-only verdict is used the same way.
+
+- An empty singer search now gets gen's job-form tidy. For example, "rihanna push up on me" shows "✓ Tidied to Rihanna — Push Up On Me · keep what I typed". A typo still shows "Corrected to … — you typed … · Undo".
+- The tidy is shown **even when the corrected search finds nothing**. Previously it was dropped. Case-only tidies don't re-search.
+- The **Generate on demand** form is pre-filled with the tidied artist/title. "keep what I typed" swaps in the typed split. The singer's own edits are never overwritten. When gen only splits the query (a song it doesn't recognise), the split is still pre-filled.
+- 3 new singer strings (`search.tidiedTo` / `keepMine` / `useTidied`), copied from gen's own translations for all locales.
+
+---
+
 ## 2026-09-26 - Make-it quick version (v0.122.0)
 
 **Deploy:** `.py` change → auto-deploy restarts kj-controller (playback continues). Needs karaoke-gen ≥ v0.244.0 (gen renders the quick version); with an older gen nothing changes. New optional config key `make_quick_version_enabled` (default `true`).

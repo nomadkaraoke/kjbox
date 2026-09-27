@@ -91,6 +91,9 @@
     "didYouMean": "Tarkoititko…?",
     "correctedTo": "Korjattu muotoon {song} — kirjoitit ”{typed}”.",
     "usingTyped": "Käytetään kirjoittamaasi: ”{typed}”.",
+    "tidiedTo": "Siistitty muotoon {song}",
+    "keepMine": "säilytä kirjoittamani",
+    "useTidied": "käytä siistittyä versiota",
     "undo": "Kumoa",
     "useCorrection": "Käytä korjausta"
   },

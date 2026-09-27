@@ -91,6 +91,9 @@
     "didYouMean": "Bunu mu demek istedin…?",
     "correctedTo": "{song} olarak düzeltildi — “{typed}” yazmıştın.",
     "usingTyped": "Yazdığın gibi kullanılıyor: “{typed}”.",
+    "tidiedTo": "{song} olarak düzenlendi",
+    "keepMine": "yazdığım gibi kalsın",
+    "useTidied": "düzenlenmiş sürümü kullan",
     "undo": "Geri al",
     "useCorrection": "Düzeltmeyi kullan"
   },

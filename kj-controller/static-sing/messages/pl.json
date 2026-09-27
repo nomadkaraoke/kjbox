@@ -91,6 +91,9 @@
     "didYouMean": "Czy chodziło ci o…?",
     "correctedTo": "Poprawiono na {song} — Twój wpis to „{typed}”.",
     "usingTyped": "Używamy Twojego wpisu: „{typed}”.",
+    "tidiedTo": "Uporządkowano: {song}",
+    "keepMine": "zachowaj mój wpis",
+    "useTidied": "użyj uporządkowanej wersji",
     "undo": "Cofnij",
     "useCorrection": "Zastosuj poprawkę"
   },

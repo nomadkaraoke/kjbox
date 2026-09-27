@@ -169,6 +169,33 @@ class TestSearchDecisionLayer:
         page.locator('[data-testid="search-correction-toggle"]').click()
         expect(page.locator(".result-row .r-title")).to_have_text("Machu Picchu")
 
+    def test_tidy_with_no_results_prefills_the_make_form(self, page, live_server, live_token):
+        self._search(page, live_server, live_token, [])
+        page.route("**/sing/search/resolve*", lambda r: r.fulfill(
+            status=200, content_type="application/json", body=json.dumps({
+                "corrected": {"artist": "Rihanna", "title": "Push Up On Me"}, "kind": "cosmetic",
+                "typed": "rihanna push up on me", "songs": [],
+                "split": {"artist": "rihanna", "title": "push up on me"}})))
+        page.locator('input[type="search"]').fill("rihanna push up on me")
+        notice = page.locator('[data-testid="search-correction"]')
+        expect(notice).to_contain_text("Tidied to Rihanna — Push Up On Me")
+        toggle = page.locator('[data-testid="search-correction-toggle"]')
+        expect(toggle).to_have_text("keep what I typed")
+        card = page.locator('[data-testid="make-card"]')
+        artist, title = card.locator("input").nth(0), card.locator("input").nth(1)
+        expect(artist).to_have_value("Rihanna")
+        expect(title).to_have_value("Push Up On Me")
+        toggle.click()
+        expect(notice).to_contain_text("Using what you typed")
+        expect(toggle).to_have_text("use tidied version")
+        expect(artist).to_have_value("rihanna")
+        expect(title).to_have_value("push up on me")
+        # A singer's own edit is never overwritten — but the untouched field still follows.
+        title.fill("Push Up On Me (Remix)")
+        toggle.click()
+        expect(artist).to_have_value("Rihanna")
+        expect(title).to_have_value("Push Up On Me (Remix)")
+
     def test_single_version_song_gets_preview_pills_and_brand(self, page, live_server, live_token):
         self._search(page, live_server, live_token, [{
             "key": "g:one", "artist": "Glow", "title": "Dancing Queen",

@@ -795,9 +795,13 @@ def _resolve_query(query):
 def search_resolve():
     """Auto-correct a search that found nothing.
 
-    → ``{corrected: {artist, title}, typed, songs}`` when gen confidently
-    names a song AND our search for it finds something; ``{alternatives:
-    [{artist, title}]}`` for an ambiguous query ("Did you mean…?");
+    → ``{corrected: {artist, title}, kind, typed, songs, split}`` when gen
+    confidently names a song — gen's job-flow tidy ("Tidied to …" for a
+    formatting-only fix, "Corrected to …" for a real one). ``songs`` is our
+    search for the corrected song when its text differs (may be empty: the
+    singer still gets the tidied artist/title pre-filled into the make-it form);
+    ``{alternatives: [{artist, title}]}`` for an ambiguous query ("Did you
+    mean…?"); ``{split: {artist, title}}`` when gen only split the query;
     ``{}`` otherwise (the empty-state triage stays as it is).
     """
     query = (request.args.get("q") or "").strip()[:200]
@@ -807,23 +811,31 @@ def search_resolve():
         return jsonify({"error": "rate_limited"}), 429
     verdict = _resolve_query(query) or {}
     kind = verdict.get("kind")
+    typed_artist = (verdict.get("typed_artist") or "").strip()
+    typed_title = (verdict.get("typed_title") or "").strip()
+    split = {"artist": typed_artist, "title": typed_title} if typed_artist and typed_title else None
     if kind in ("cosmetic", "content") and verdict.get("confident"):
         artist = (verdict.get("canonical_artist") or "").strip()
         title = (verdict.get("canonical_title") or "").strip()
-        corrected_q = f"{artist} {title}".strip()
-        if artist and title and corrected_q.casefold() != query.casefold():
-            from routes import unified_search
-            data = unified_search(
-                corrected_q, current_app._get_current_object(), grouped=True,
-                catalog_limit=_safe_int(current_app.kj_config.get("sing_search_catalog_limit"), 60))
-            if data.get("songs"):
-                return jsonify({"corrected": {"artist": artist, "title": title},
-                                "typed": query, "songs": data["songs"]})
+        if artist and title:
+            songs = []
+            corrected_q = f"{artist} {title}"
+            # A case-only tidy searches the same text we just found nothing for.
+            if " ".join(corrected_q.split()).casefold() != " ".join(query.split()).casefold():
+                from routes import unified_search
+                songs = unified_search(
+                    corrected_q, current_app._get_current_object(), grouped=True,
+                    catalog_limit=_safe_int(current_app.kj_config.get("sing_search_catalog_limit"), 60),
+                ).get("songs") or []
+            return jsonify({"corrected": {"artist": artist, "title": title}, "kind": kind,
+                            "typed": query, "songs": songs, "split": split})
     if kind == "ambiguous":
         alts = [a for a in (verdict.get("alternatives") or [])
                 if isinstance(a, dict) and a.get("artist") and a.get("title")][:4]
         if alts:
             return jsonify({"alternatives": [{"artist": a["artist"], "title": a["title"]} for a in alts]})
+    if split:
+        return jsonify({"split": split})
     return jsonify({})
 
 

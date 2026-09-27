@@ -91,6 +91,9 @@
     "didYouMean": "Voulais-tu dire… ?",
     "correctedTo": "Corrigé en {song} — tu as tapé « {typed} ».",
     "usingTyped": "On utilise ce que tu as tapé : « {typed} ».",
+    "tidiedTo": "Ajusté en {song}",
+    "keepMine": "garder ce que j'ai tapé",
+    "useTidied": "utiliser la version nettoyée",
     "undo": "Annuler",
     "useCorrection": "Utiliser la correction"
   },
