@@ -52,6 +52,15 @@ class TestPunctAndFeat:
     def test_ft_stripped(self):
         assert normalize("Title ft. Someone Else") == "title"
 
+    def test_ft_inside_a_word_is_not_a_feat(self):
+        # Regression: the feat regex had no word boundary, so any "ft" mid-word
+        # truncated the rest of the string ("Soft Cell" -> "so").
+        assert normalize("Soft Cell") == "soft cell"
+        assert normalize("Hayloft II") == "hayloft 2"
+        assert normalize("Left Outside Alone") == "left outside alone"
+        assert normalize("Taylor Swift ft. Drake") == "taylor swift"
+        assert normalize("Craft (feat. X)") == "craft"
+
     def test_featuring_stripped(self):
         assert normalize("Song featuring The Band") == "song"
 

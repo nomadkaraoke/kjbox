@@ -18,7 +18,7 @@ import re
 import unicodedata
 
 # Bump whenever the pipeline or any map changes; gates catalog reindex.
-NORMALIZER_VERSION = 1
+NORMALIZER_VERSION = 2
 
 # Non-decomposable Latin chars that NFD cannot handle.
 LATIN_SPECIAL_MAP = {
@@ -32,8 +32,10 @@ _LATIN_SPECIAL_RE = re.compile(
 
 
 # feat./ft./featuring qualifier; stops at a closing bracket or end of string.
+# \b: only a whole word "ft" — without it "Soft Cell" normalized to "so", "Hayloft II"
+# to "haylo", "Taylor Swift" to "taylor swi" (fixed in NORMALIZER_VERSION 2).
 _FEAT_RE = re.compile(
-    r'\s*[\[(]?\s*(?:feat\.?|ft\.?|featuring)\s+[^\])]+[\])]?',
+    r'\s*[\[(]?\s*\b(?:feat\.?|ft\.?|featuring)\s+[^\])]+[\])]?',
     re.IGNORECASE,
 )
 _SYMBOL_AND_RE = re.compile(r'\s*[&+]\s*')
