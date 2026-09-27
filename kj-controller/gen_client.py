@@ -107,6 +107,23 @@ def map_gen_job(job_data):
     return status
 
 
+def quick_version_info(job_data):
+    """gen's quick (draft) video state for a job: ``{status, ...}`` or ``{}``.
+
+    gen renders it for kjbox make-it jobs a few minutes after the audio lands
+    (``state_data.quick_version``); ``ready`` means ``file_urls.quick.video_mp4``
+    can be downloaded."""
+    job_data = job_data or {}
+    info = (job_data.get("state_data") or {}).get("quick_version") or {}
+    if not isinstance(info, dict) or not info.get("status"):
+        return {}
+    info = dict(info)
+    quick_files = (job_data.get("file_urls") or {}).get("quick") or {}
+    info["available"] = info.get("status") == "ready" and bool(
+        isinstance(quick_files, dict) and quick_files.get("video_mp4"))
+    return info
+
+
 class GenClient:
     """HTTP client for the gen API.
 
@@ -201,6 +218,28 @@ class GenClient:
         except Exception as e:
             logger.error("Failed to get download URL for job %s: %s", job_id, e)
             return None
+
+    QUICK_DOWNLOAD_TIMEOUT = 120
+
+    def download_quick_version(self, job_id, dest_path):
+        """Stream a job's quick (draft) video to ``dest_path``; returns bytes written.
+
+        Raises on any HTTP/network failure (the caller retries next poll)."""
+        with requests.get(
+            f"{self.api_url}/api/jobs/{job_id}/download/quick/video_mp4",
+            headers={"X-Admin-Token": self.token},
+            stream=True, timeout=self.QUICK_DOWNLOAD_TIMEOUT,
+        ) as resp:
+            resp.raise_for_status()
+            written = 0
+            with open(dest_path, "wb") as fh:
+                for chunk in resp.iter_content(chunk_size=1 << 20):
+                    if chunk:
+                        fh.write(chunk)
+                        written += len(chunk)
+        if written == 0:
+            raise GenApiError(0, "empty quick version download")
+        return written
 
     # ------------------------------------------------------------------
     # Singer make-it flow (partner secret + the singer's gen session)

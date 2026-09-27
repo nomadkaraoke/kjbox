@@ -3458,6 +3458,9 @@ body {
 .prep-making { background: #7c3aed33; color: #7c3aed; }
 .prep-review { background: #f59e0b33; color: #f59e0b; }
 .prep-rendering { background: #7c3aed33; color: #7c3aed; }
+.prep-quick { background: #facc1533; color: #ca8a04; }
+.prep-quick-ready { margin-inline-start: 4px; border: 1px solid #ca8a04; }
+.prep-quick-ready:hover { background: #facc1566; }
 
 /* The two compact singer pills on each rotation row: sing count (×N) and wait
    time. Both share this base; colour is applied by a semantic tier class. */

@@ -899,6 +899,27 @@ def _entry_previewable(entry):
         return False
 
 
+def _entry_quick_preview_descriptor(entry_id):
+    """Local preview descriptor for a make-it entry's quick (draft) version."""
+    try:
+        entry_id = int(entry_id)
+    except (TypeError, ValueError):
+        return None
+    rotation_mgr = getattr(current_app, "rotation", None)
+    if rotation_mgr is None:
+        return None
+    entry = rotation_mgr.store.get_entry(entry_id)
+    if not entry or not entry.get("gen_job_id"):
+        return None
+    rec = rotation_mgr.store.get_quick_version(entry["gen_job_id"])
+    path = (rec or {}).get("file_path")
+    if not rec or rec.get("status") not in ("ready", "chosen", "upgraded") or not path:
+        return None
+    if not os.path.exists(path):
+        return None
+    return {"source": "local", "file_path": path, "title": entry.get("song_artist") or ""}
+
+
 def _entry_preview_descriptor(entry_id):
     """Build a local preview descriptor for a rotation entry, or None."""
     try:
@@ -934,8 +955,12 @@ def preview_resolve():
     # "entry" — preview a song already on tonight's rotation by its entry id
     # (My songs / Rotation tab). Resolved server-side so the file path never
     # leaves the box; only entries with a linked, present file qualify.
-    if descriptor.get("source") == "entry":
-        descriptor = _entry_preview_descriptor(descriptor.get("entry_id"))
+    if descriptor.get("source") in ("entry", "entry_quick"):
+        # "entry_quick" — the make-it entry's quick (draft) version, before the
+        # singer decides whether to sing it. Same server-side resolution.
+        build = (_entry_quick_preview_descriptor if descriptor.get("source") == "entry_quick"
+                 else _entry_preview_descriptor)
+        descriptor = build(descriptor.get("entry_id"))
         if descriptor is None:
             return jsonify({"mode": "unavailable",
                             "reason": "Not ready to preview yet"}), 404
@@ -1129,6 +1154,8 @@ def event_info():
                         if k in (footer.get("notices") or [])},
         "social": footer.get("social") or {},
         "ask_photo_consent": bool(footer.get("ask_photo_consent")),
+        # Make-it jobs also get a quick scrolling-lyrics draft within minutes.
+        "make_quick_version": bool((current_app.kj_config or {}).get("make_quick_version_enabled", True)),
     })
 
 
@@ -1805,6 +1832,9 @@ def my_requests():
             if linked and rotation_mgr is not None:
                 entry = next((e for e in entries if e["id"] == linked), None)
             item["make"] = _make_progress(req, entry)
+            quick = _make_quick_state(req, entry, rotation_mgr)
+            if quick:
+                item["quick"] = quick
         if linked:
             if linked in cancelled_ids:
                 item["removed"] = True
@@ -2515,6 +2545,36 @@ _MAKE_PHASE_BY_GEN_STATUS = {
     "needs_input": "needs_host",
     "failed": "needs_host",
 }
+
+
+def _make_quick_state(req, entry, rotation_mgr):
+    """Singer-facing state of a make request's quick (draft) version:
+
+    ``ready``     on the box, not chosen — offer Preview / Sing it now
+    ``chosen``    the singer (or KJ) is singing the draft; the full version may
+                  still replace it before they're up
+    ``upgraded``  the full version replaced the draft
+    None          nothing to show (no draft, feature off, entry gone)."""
+    if entry is None or rotation_mgr is None:
+        return None
+    if not (current_app.kj_config or {}).get("make_quick_version_enabled", True):
+        return None
+    job_id = entry.get("gen_job_id") or req.get("gen_job_id")
+    try:
+        rec = rotation_mgr.store.get_quick_version(job_id)
+    except Exception:
+        return None
+    if not rec:
+        return None
+    status = rec.get("status")
+    linked = entry.get("file_path")
+    if status == "ready" and not linked:
+        return "ready"
+    if status in ("chosen", "ready") and linked and linked == rec.get("file_path"):
+        return "chosen"
+    if status == "upgraded" or (status == "chosen" and linked):
+        return "upgraded"
+    return None
 
 
 def _make_progress(req, entry):

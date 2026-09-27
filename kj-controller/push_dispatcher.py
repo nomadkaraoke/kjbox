@@ -89,6 +89,8 @@ _PAYLOADS = {
     # Auto-fallback outcomes for singer submissions.
     "resolved_alt":  ("You're all set 🎶",     "We queued an alternate version of {song}."),
     "unavailable":   ("The KJ needs a word",   "We couldn't find a playable video for {song} — your KJ has been notified."),
+    # Make-it: gen's rough scrolling-lyrics draft landed on the box.
+    "quick_ready":   ("⚡ Quick version ready",  "{song} — preview it and sing it now, or wait for the full version."),
 }
 
 

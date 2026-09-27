@@ -1569,7 +1569,7 @@ async function openVersionPreview(group, version) {
 // Preview a song that's already on tonight's rotation (My songs card or a
 // Rotation-tab row). The server resolves the entry to its file — the path
 // never reaches the phone.
-async function openEntryPreview(entryId, title) {
+async function openEntryPreview(entryId, title, source = "entry") {
   ensurePreviewModalDom();
   try {
     await ensurePreviewLibs();
@@ -1577,7 +1577,8 @@ async function openEntryPreview(entryId, title) {
     openSingModal(t("versions.previewTitle"), el("p", { class: "error" }, t("versions.previewFailed")));
     return;
   }
-  window.openPreview({ source: "entry", entry_id: entryId, title: title || "" });
+  // source "entry_quick" previews a make-it entry's quick (draft) version.
+  window.openPreview({ source, entry_id: entryId, title: title || "" });
 }
 
 // --- Event footer (KJ message + venue notices) -------------------------------
@@ -2773,6 +2774,10 @@ function renderConfirm() {
         ? el("div", { class: "confirm-make-email hint", "data-testid": "confirm-make-email" },
             t("confirm.makeEmail", { email: state.make.email }))
         : null,
+      sel.source_type === "make" && state.eventInfo && state.eventInfo.make_quick_version
+        ? el("div", { class: "confirm-make-quick hint", "data-testid": "confirm-make-quick" },
+            t("confirm.sourceMakeQuick"))
+        : null,
     ),
     // A make-it already shows the corrected artist/title — the raw search
     // text is just noise there.
@@ -2913,6 +2918,54 @@ async function openMakeReview(reqId, editToken, linkEl) {
   }
 }
 
+// Make-it quick (draft) version: gen's scrolling-lyrics video lands on the box
+// minutes after the request, long before the full version. "ready" offers
+// Preview / Sing it now; "chosen" / "upgraded" just explain what's playing.
+function _quickNode(item, song) {
+  const req = item.request;
+  if (!item.quick || item.performed || item.removed) return null;
+  if (item.quick === "chosen") {
+    return el("div", { class: "song-card-quick", "data-testid": "quick-chosen" }, t("mySongs.quickChosen"));
+  }
+  if (item.quick === "upgraded") {
+    return el("div", { class: "song-card-quick", "data-testid": "quick-upgraded" }, t("mySongs.quickUpgraded"));
+  }
+  if (item.quick !== "ready" || !req.linked_entry_id) return null;
+  const box = el("div", { class: "song-card-quick song-card-quick-offer", "data-testid": "quick-offer" },
+    el("div", { class: "song-card-quick-text" }, t("mySongs.quickReady")));
+  const btns = el("div", { class: "song-card-quick-actions" });
+  btns.appendChild(el("button", {
+    class: "btn ghost song-card-quick-btn", "data-testid": "quick-preview",
+    onclick: (e) => { e.stopPropagation(); openEntryPreview(req.linked_entry_id, song, "entry_quick"); },
+  }, t("mySongs.quickPreview")));
+  const editToken = readEditToken(TOKEN, req.id);
+  if (editToken) {
+    btns.appendChild(el("button", {
+      class: "btn primary song-card-quick-btn", "data-testid": "quick-sing-now",
+      onclick: (e) => { e.stopPropagation(); useQuickVersion(req.id, editToken, song, e.target); },
+    }, t("mySongs.quickSingNow")));
+  }
+  box.appendChild(btns);
+  return box;
+}
+
+async function useQuickVersion(reqId, editToken, song, btn) {
+  if (!confirm(t("mySongs.quickSingNowConfirm", { song }))) return;
+  btn.disabled = true;
+  try {
+    await fetchJson(`${BASE}/make/use-quick/${reqId}`, {
+      method: "POST",
+      body: JSON.stringify({ edit_token: editToken, device_id: DEVICE_ID }),
+    });
+  } catch {
+    alert(t("mySongs.quickSingNowFailed", { host: _hostName() }));
+  } finally {
+    btn.disabled = false;
+  }
+  await refreshMySongs();
+  render();
+}
+
 function _renderSongCard(item, ctx = {}) {
   const req = item.request;
   const song = _songLabel(req);
@@ -2932,6 +2985,8 @@ function _renderSongCard(item, ctx = {}) {
     const names = partners.map((p) => p.name).join(", ");
     main.appendChild(el("div", { class: "song-card-partners" }, t("mySongs.with", { names })));
   }
+  const quick = _quickNode(item, song);
+  if (quick) main.appendChild(quick);
   if (item.entry_id && (item.added_by_host || item.added_by)) {
     main.appendChild(el("div", { class: "song-card-partners", "data-testid": "added-by-line" },
       item.added_by_host ? t("mySongs.addedByHost")

@@ -1185,6 +1185,16 @@ class SingStore:
         conn.commit()
         return self.get_request(request_id)
 
+    def get_request_by_gen_job_id(self, gen_job_id):
+        """The (newest) singer request that created this gen job, or None."""
+        if not gen_job_id:
+            return None
+        row = self._get_conn().execute(
+            "SELECT * FROM sing_requests WHERE gen_job_id = ? ORDER BY id DESC LIMIT 1",
+            (gen_job_id,),
+        ).fetchone()
+        return self._row_to_dict(row)
+
     def count_make_requests_for_device(self, device_id, exclude_request_id=None):
         """Tonight's make requests from one device (cancelled/rejected excluded)."""
         night_started = self.get_night_started_at()
