@@ -290,6 +290,11 @@ Both player processes are launched with `start_new_session=True` and survive kj-
 ### Path Validation
 `MediaIndex.validate_path()` resolves symlinks and verifies files are within configured media folders, preventing directory traversal. `is_in_download_folder()` restricts deletion to downloaded files only. The `/play` route also accepts paths under `external_media_mount` for external catalog files.
 
+### Song Identification (question 1) vs karaoke search (question 2)
+Singer search answers two separate questions: which real song is meant (identification, over all known songs)
+and whether a karaoke version exists (availability, the catalogues below). Design, data sources and decisions:
+[SONG-IDENTIFICATION.md](SONG-IDENTIFICATION.md).
+
 ### External Catalog (SQLite FTS5)
 `ExternalCatalog` provides instant full-text search over ~415K external karaoke files without keeping them in memory. The SQLite database lives on the SD card (`external_media.db`), indexed from a file list (`all-karaoke-files-*.txt`). FTS5 tokenizes artist, title, and disc_id fields. Queries are sanitized to prevent FTS5 syntax errors. If FTS5 returns no results, a LIKE fallback searches with punctuation stripped from both query and data (e.g. "Sheeps" matches "Sheep's"). The catalog is built once via `POST /catalog/build` and persists across restarts.
 
