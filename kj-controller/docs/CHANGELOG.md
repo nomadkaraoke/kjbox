@@ -4,6 +4,7 @@ Dated entries, newest first. Each entry notes any required deploy steps.
 
 ---
 
+<<<<<<< HEAD
 ## 2026-09-27 - Singer search: gen's "Tidied to" + make-it pre-fill (v0.123.0)
 
 **Deploy:** `.py` change → auto-deploy restarts kj-controller (playback continues). Best with karaoke-gen ≥ v0.245.1 (gen's resolve then tidies via its job-flow catalog match); with an older gen the Gemini-only verdict is used the same way.
@@ -12,6 +13,23 @@ Dated entries, newest first. Each entry notes any required deploy steps.
 - The tidy is shown **even when the corrected search finds nothing**. Previously it was dropped. Case-only tidies don't re-search.
 - The **Generate on demand** form is pre-filled with the tidied artist/title. "keep what I typed" swaps in the typed split. The singer's own edits are never overwritten. When gen only splits the query (a song it doesn't recognise), the split is still pre-filled.
 - 3 new singer strings (`search.tidiedTo` / `keepMine` / `useTidied`), copied from gen's own translations for all locales.
+=======
+## 2026-09-27 - Search normalizer: "ft" only as a whole word (v0.122.1)
+
+**Deploy:** `.py` change, so auto-deploy restarts kj-controller (playback continues). **`NORMALIZER_VERSION` 1 → 2, so the on-device indexes must be rebuilt:**
+1. `ssh nomadpc 'cd /opt/nomad/kjbox/kj-controller && sudo -u nomad ./venv/bin/python scripts/reindex_catalog.py'`: HyperMule SSD index. Until this runs, the startup log warns the index is stale and SSD search uses stale tokens.
+2. `ssh nomadpc 'sudo systemctl start nomad-catalog-sync'`: rebuilds the KN/Divebar mirror now. Otherwise the mirror is unusable until the next daily sync, and search falls back to the Cloud Function (slower).
+
+- **Bug:** the feat./ft. stripping regex had no word boundary, so any "ft" inside a word cut off the rest of the string, in both indexes and queries:
+  - "Soft Cell" → "so"
+  - "Left Outside Alone" → "le"
+  - "Hayloft II" → "haylo"
+  - "Taylor Swift ft. Drake" → "taylor swi"
+
+  Search mostly "worked" because the index and the query were broken the same way, but it collapsed distinct songs together and hurt fuzzy matching. Fixed in `text_normalize.py` and its JS mirror `static/text_normalize.js`, which must stay in step (parity test).
+- `sync_catalogs.py` now rebuilds the mirror after a normalizer bump even when the downloaded sources are unchanged. Previously the "sources unchanged" skip could leave an unusable mirror indefinitely.
+- Found while building the song-identification matcher (`docs/SONG-IDENTIFICATION.md`).
+>>>>>>> fix/normalize-feat-word-boundary
 
 ---
 

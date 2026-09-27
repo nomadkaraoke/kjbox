@@ -268,6 +268,16 @@ class TestSyncScript:
         assert second == {"changed": False, "skipped": "sources unchanged",
                           "error": None}
 
+    def test_normalizer_bump_rebuilds_even_with_unchanged_sources(self, tmp_path, monkeypatch):
+        fake_https, fake_gcs = self._fake_downloads(tmp_path)
+        cfg = self._cfg(tmp_path)
+        assert sync_catalogs.run_sync(cfg, requests_lib=None, download_https=fake_https,
+                                      download_gcs=fake_gcs)["changed"] is True
+        monkeypatch.setattr(catalog_mirror, "NORMALIZER_VERSION", catalog_mirror.NORMALIZER_VERSION + 1)
+        again = sync_catalogs.run_sync(cfg, requests_lib=None, download_https=fake_https,
+                                       download_gcs=fake_gcs)
+        assert again["changed"] is True and again["error"] is None
+
     def test_download_failure_is_reported_not_raised(self, tmp_path):
         def bad_https(url, dest, requests_lib=None):
             raise RuntimeError("offline")

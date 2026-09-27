@@ -112,8 +112,12 @@ def run_sync(config, *, gcloud_bin=None, requests_lib=requests,
             return {"changed": False, "error": f"download: {exc}"}
 
         hashes = {name: _sha256(p) for name, p in paths.items()}
+        # Unchanged sources only skip the rebuild if the mirror was also built with
+        # the current normalizer — after a NORMALIZER_VERSION bump the old mirror
+        # is unusable (CatalogMirror.is_usable) and must be rebuilt regardless.
         if os.path.exists(db_path) and \
-                catalog_mirror.stored_source_hashes(db_path) == hashes:
+                catalog_mirror.stored_source_hashes(db_path) == hashes and \
+                catalog_mirror.stored_normalizer_version(db_path) == str(catalog_mirror.NORMALIZER_VERSION):
             return {"changed": False, "skipped": "sources unchanged", "error": None}
 
         try:
