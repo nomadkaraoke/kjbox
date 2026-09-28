@@ -60,6 +60,7 @@ class TestPunctAndFeat:
         assert normalize("Left Outside Alone") == "left outside alone"
         assert normalize("Taylor Swift ft. Drake") == "taylor swift"
         assert normalize("Craft (feat. X)") == "craft"
+        assert normalize("Жft Song") == "жft song"
 
     def test_featuring_stripped(self):
         assert normalize("Song featuring The Band") == "song"
