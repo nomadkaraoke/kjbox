@@ -1898,6 +1898,12 @@ function renderSearch() {
     // against the previous query's rows).
     const shown = early ? [] : (results.songs || []);
     const prev = correction;
+    // The singer already acted on the early card ("not it?", a candidate, keep
+    // what I typed): the typed-text results only refresh "already in the rows".
+    if (!early && prev && prev.userTouched) {
+      if (prev.corrected) prev.inResults = shown.some((g) => sameSong(g, prev.corrected));
+      return true;
+    }
     const inResults = (song) => shown.some((g) => sameSong(g, song));
     if (ident.status === "confident" && ident.song) {
       if (ident.kind === "same") { correction = null; return true; }
@@ -1976,6 +1982,7 @@ function renderSearch() {
                                   of: (prev && (prev.alternatives || prev.candidates) || []).length });
     correction = {
       source: prev && prev.source, typed: (prev && prev.typed) || state.query, kind: "content", picked: true,
+      userTouched: true,
       corrected: { artist: alt.artist, title: alt.title },
       candidates: ((prev && (prev.alternatives || prev.candidates)) || []).filter((c) => !sameSong(c, alt)),
       songs: [], split: null, active: true, inResults: (results.songs || []).some((g) => sameSong(g, alt)),
@@ -1989,7 +1996,8 @@ function renderSearch() {
   function notIt() {
     const c = correction;
     logChoice("not_it", { shown: c && c.corrected ? `${c.corrected.artist} — ${c.corrected.title}` : null });
-    correction = { source: c.source, typed: c.typed, alternatives: (c.candidates || []).slice(0, 4), notIt: true };
+    correction = { source: c.source, typed: c.typed, alternatives: (c.candidates || []).slice(0, 4), notIt: true,
+                   userTouched: true };
     prefillMake(null);
     update();
   }
@@ -2023,6 +2031,7 @@ function renderSearch() {
       onclick: (e) => {
         e.stopPropagation();
         correction.active = !correction.active;
+        correction.userTouched = true;
         logChoice(correction.active ? "reapply_tidy" : "keep_typed", { shown: song });
         prefillMake(correctionMakeSource());
         update();
