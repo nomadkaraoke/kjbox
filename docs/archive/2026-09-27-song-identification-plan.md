@@ -77,6 +77,17 @@ Results: `docs/SONG-IDENTIFICATION.md` §8 (78% auto / 0 wrong on real queries; 
 ### Side-fix
 - [x] kjbox #256: `text_normalize` feat/ft word boundary (NORMALIZER_VERSION 2). Needs reindex + mirror sync on deploy.
 
+### 2026-09-28 progress
+- [x] Andrew reviewed test-set labels: OK. Asked for a persistent choice log → `search_log.py` + `scripts/search_log_report.py` (D11).
+- [x] Freshness: switched the index to a MusicBrainz backbone (D5/D5a). v3 = 5.43M songs; matcher sped up ~2× (see design §8).
+- [x] ListenBrainz import handed off (workspace `docs/archive/2026-09-28-listenbrainz-import-handoff.md` + BACKLOG inbox).
+- [x] kjbox #256 merged + deployed; NomadPC SSD reindex (398K rows) + mirror rebuild done.
+- [x] Phase 3 UI: song card / "Which song do you mean?" / karaoke-for heading / describe link / choice logging; e2e tests.
+- [x] Phase 4: gen #1065 prompt handles descriptions (live-checked: Titanic → My Heart Will Go On; Top Gun → ambiguous list).
+- [ ] Merge gen #1066 + deploy kn-data-sync; first export; NomadPC sync builds song_id.db
+- [ ] Merge gen #1065 (deploys backend) and the kjbox song-id PR
+- [ ] NomadPC latency with the v3 index
+
 ## Status of earlier PRs
 - gen #1065 (Gemini split → `judge_match` catalog tidy) is **held**. Its free-text resolver becomes the Phase 4 fallback.
 - kjbox #255 ("Tidied to" + make-it pre-fill) is **held** and becomes Phase 3's base (notice + per-field pre-fill logic).

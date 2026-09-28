@@ -101,12 +101,15 @@ there, keep it on disk (SQLite), not in memory.
 | D2 | **On-device matcher first; Gemini only when it isn't confident.** | Most real queries are "easy" (exact, one small typo, title only, title plus part of the artist). Answering them locally is free, takes milliseconds and works offline. Andrew is cost-conscious about per-search LLM calls but happy with cheap Flash calls as a fallback. |
 | D3 | **Gemini fallback = gen's model (`gemini-3.8-flash`), via gen**, reusing the free-text resolver from gen #1065 and extending it to return candidates for descriptions. | One place for model choice, caching and rate limits. kjbox holds the partner secret, not a Vertex credential. |
 | D4 | **Support descriptive queries** ("that song from Titanic"). Explicit entry point: "Can't remember the name? Describe it". Also reachable as the automatic fallback for empty searches. | A nice feature for singers who can't remember a song's name. Only an LLM can answer these. An explicit mode makes the intent and the cost visible. |
-| D5 | **Index = popular Spotify tracks plus karaoke catalogues**, with popularity and a karaoke-availability boost, built in GCP and shipped with `nomad-catalog-sync`. | Popularity alone misranks: title-only "machu picchu" would pick Evaluna Montaner (pop 72) over The Strokes (64). "Has a karaoke version" is a strong signal of what singers mean. Karaoke catalogues also cover songs the July 2025 Spotify snapshot lacks. |
+| D5 | **Index = MusicBrainz (the backbone) + the Spotify snapshot + all KaraokeNerds**, with popularity and a karaoke-availability boost, exported daily by gen's `kn-data-sync` and shipped with `nomad-catalog-sync`. *(Revised 2026-09-28.)* | **Freshness is a requirement** (Andrew: "it's not acceptable for the quality of the search / auto-correction to be slowly degrading over time due to stale data"). The first prototype used only the static July 2025 Spotify snapshot, chosen for its popularity scores, and missed newer songs. MusicBrainz is refreshed weekly by karaoke-decide's `mb-refresh` and already has late-2025 songs the snapshot lacks (Breaking Rust — Walk My Walk, Taylor Swift — Elizabeth Taylor, Olivia Dean — Man I Need). KaraokeNerds (daily) covers new songs that have karaoke versions. Popularity alone misranks ("machu picchu" → Evaluna Montaner 72 over The Strokes 64), so "has a karaoke version" also boosts. |
+| D5a | **MusicBrainz rows kept** when Spotify track popularity ≥ 30 (via ISRC), or ≥ 3 recordings, or the artist's Spotify popularity ≥ 50. That's ~4.2M of MB's 30.7M distinct songs. Songs with no track score get **0.8 × artist popularity, capped at 50**. Junk filtered: live/demo/karaoke disambiguations, cover/tribute credits, self-titled rows without karaoke/popularity. | An estimate must never outrank a measured score (it made MusicBrainz's alternate spellings beat the canonical track). The artist rule is what lets a known artist's new single in. A brand-new artist with no Spotify score relies on KaraokeNerds or the Gemini fallback **until ListenBrainz popularity is imported** (handoff: workspace `docs/archive/2026-09-28-listenbrainz-import-handoff.md`). |
 | D6 | **The matcher must handle how singers actually type** (from real NomadPC logs): mostly **title only** ("Espresso", "Dark on me") or **title plus an artist fragment in any order** ("Why I am Dave", "Buy me presents Sabrina", "beer reel big", "day in the life fool sinatra", "Main Street bob seg"), plus typos ("Black eyes pee", "Ella langket", "cheery pie"). | Tokens can belong to the artist or the title in any order, and the artist is often a first name, surname or one word. It is **not** "full artist at the start or end". |
 | D7 | **Scoring: artist-constrained title matching, plus spelling, sound-alike and popularity signals, with a margin gate** (top result must clearly beat the runner-up) before auto-applying. Otherwise show "Which one?" candidates or fall back to Gemini. | A prototype (rapidfuzz WRatio against one artist's titles) got "max picu"→Machu Picchu (70 vs 60), "adults r talkin"→The Adults Are Talking, "last night"→Last Nite. The margin is thin on the worst typos, hence adding a sound-alike score (e.g. Double Metaphone). An exact obscure match ("the stokes" = a real band, The Stokes) must lose to a popular near-match. |
 | D8 | **Measure against a real test set before and while building** (`kj-controller/tests/fixtures/song_id_eval.jsonl`). Headline metrics: local hit rate, wrong-auto-apply rate (must be about 0), and the Gemini-fallback rate (drives cost). | Tune thresholds on data, not intuition. The fallback rate is the cost. |
 | D9 | **Formatting-only tidies** (casing and punctuation of the same song) show gen's wording "Tidied to X · keep what I typed"; real changes show "Corrected to X — you typed … · Undo". Strings reuse gen's translations. | Consistency with gen's job form, which singers may also use. |
 | D10 | **The make-it form is pre-filled from the identified song.** An edited field is never overwritten. | The make-it job then starts with a canonical artist/title (gen's own judge still runs on it). |
+| D11 | **Persistent search log** (`search_log.py` → `search_log.db` on the device): searches, identifications, Gemini answers and every singer choice, tied by a per-search id. Review with `scripts/search_log_report.py`. | Andrew (2026-09-28): collect "what options singers actually choose after the search/auto-correction results land, so after a few live events we can review the results and identify any issues or edge cases". The report flags undone tidies, "not it?", lower candidates picked, edited make-it pre-fills, and make-it/YouTube requests with no identification. |
+| D12 | **ListenBrainz** popularity (per-recording listen counts, fortnightly dumps) is the intended fresh popularity signal, imported by a separate session (karaoke-decide). | MusicBrainz has no popularity. The ListenBrainz API needs a token; bulk data is in the 20 GB statistics dump (`recordings_all_time.jsonl` 21 GB, `recordings_half_yearly.jsonl` 11.7 GB). Too big for this session and useful to karaoke-decide too. |
 
 ## 5. Target UX
 
@@ -211,7 +214,23 @@ Matching (see the module docstring for detail):
   - `candidates` needs score ≥ 0.62 and q_cov ≥ 0.7. Anything else is `none` (→ Gemini).
   - Descriptions ("that song from titanic") leave most words unexplained, so they're `none`.
 
-Results on this Mac (index: 1.98M songs, 497K words, 322 MB, 65 s build):
+**Current index (v3, 2026-09-28, MusicBrainz-based):** 5.43M songs, 974K words, 880 MB. Build: ~3.5 min / 4 GB RAM on the Mac.
+Frozen held-out set (`--frozen`, 900 cases) vs the earlier Spotify-only index, same matcher:
+
+| Index | Auto-applied correct | "Which one?" correct | Wrong auto-apply | none | Mac latency p50 / p95 |
+|---|---|---|---|---|---|
+| Spotify-only (2M songs) | 89% | 8% | 6 | 2% | 23 / 57 ms |
+| **MusicBrainz-based v3 (5.4M)** | **88%** | 9% | 8 | 2% | 37 / 101 ms |
+
+On the labelled real queries v3 gets 76% auto / 12% candidates / 2 "wrong", and both "wrong" ones are the
+same song under an alternate spelling ("Get Your Freak On", "Breaking Dishes").
+Performance work needed for the bigger index:
+- Word-variant lookup: in-memory (first letter, length) buckets + rapidfuzz, instead of a trigram FTS.
+- Candidate retrieval: FTS AND of the distinctive words + leave-one-out queries (instead of a broad bm25 OR).
+- FTS prefix expansion only for 4+ letter non-stop words.
+- A C-speed rapidfuzz pre-filter (top 200) before the Python scoring.
+
+Earlier prototype results (Spotify-only index, 1.98M songs, 322 MB, 65 s build):
 
 | Set | Auto-applied correct | Right song in "Which one?" | none | **Wrong auto-apply** | Latency p50 / p95 |
 |---|---|---|---|---|---|
