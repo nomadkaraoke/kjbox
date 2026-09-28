@@ -132,3 +132,13 @@ def test_new_device_ids_cannot_bypass_the_venue_ceiling(client, token, gen, sear
         assert r.status_code == 200
     r = client.get("/sing/search/resolve", query_string={"q": "q x", "t": token, "device_id": "f" * 32})
     assert r.status_code == 429
+
+
+def test_transient_gen_failure_is_not_cached(client, token, gen, searched):
+    gen.resolve_search.return_value = {"kind": "none", "confident": False, "reason": "unavailable"}
+    assert _get(client, token, "that song from titanic").get_json() == {}
+    gen.resolve_search.return_value = {"kind": "content", "confident": True, "canonical_artist": "Céline Dion",
+                                       "canonical_title": "My Heart Will Go On"}
+    body = _get(client, token, "that song from titanic").get_json()
+    assert body["corrected"] == {"artist": "Céline Dion", "title": "My Heart Will Go On"}
+    assert gen.resolve_search.call_count == 2

@@ -4,6 +4,14 @@ Dated entries, newest first. Each entry notes any required deploy steps.
 
 ---
 
+## 2026-09-28 - Don't cache transient Gemini misses (v0.123.2)
+
+**Deploy:** `.py` change → auto-deploy restarts kj-controller (playback continues).
+
+- Seen live: "Describe it" → "that song from titanic" got nothing because Vertex took 15 s, so gen's 12 s model timeout returned `reason: "unavailable"`. kjbox cached that miss in memory until the next restart. Transient verdicts are no longer cached; gen already skipped caching them.
+
+---
+
 ## 2026-09-28 - Song identification: merge MusicBrainz misspelled duplicates (v0.123.1)
 
 **Deploy:** `.py` change → auto-deploy restarts kj-controller (playback continues). No index rebuild needed.

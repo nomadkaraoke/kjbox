@@ -891,6 +891,10 @@ def _resolve_query(query):
     except Exception as exc:   # offline / gen hiccup: search just stays empty
         current_app.logger.info("search resolve unavailable: %s", exc)
         return None
+    # gen answers reason "unavailable" when Gemini timed out / errored (it doesn't
+    # cache those either) — don't pin a transient miss here until the next restart.
+    if isinstance(verdict, dict) and verdict.get("reason") == "unavailable":
+        return verdict
     if len(_resolve_cache) >= _RESOLVE_CACHE_MAX:
         _resolve_cache.pop(next(iter(_resolve_cache)))
     _resolve_cache[key] = verdict
