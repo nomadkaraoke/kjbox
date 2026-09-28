@@ -423,6 +423,22 @@ def _flush(conn, batch):
     del cur
 
 
+def stored_normalizer_version(db_path):
+    """NORMALIZER_VERSION the mirror was built with (None if unknown)."""
+    if not os.path.exists(db_path):
+        return None
+    try:
+        conn = sqlite3.connect(db_path)
+        try:
+            row = conn.execute(
+                "SELECT value FROM mirror_meta WHERE key='normalizer_version'").fetchone()
+            return row[0] if row else None
+        finally:
+            conn.close()
+    except sqlite3.Error:
+        return None
+
+
 def stored_source_hashes(db_path):
     """Source-file hashes recorded at build time (for the sync's skip check)."""
     if not os.path.exists(db_path):
