@@ -95,7 +95,16 @@
     "keepMine": "yazdığım gibi kalsın",
     "useTidied": "düzenlenmiş sürümü kullan",
     "undo": "Geri al",
-    "useCorrection": "Düzeltmeyi kullan"
+    "useCorrection": "Düzeltmeyi kullan",
+    "songYouMean": "Kastettiğin şarkı",
+    "whichSong": "Hangi şarkıyı kastediyorsun?",
+    "notIt": "bu değil mi?",
+    "youTyped": "“{typed}” yazdın",
+    "karaokeFor": "{song} için karaoke versiyonları",
+    "describeLink": "Adını hatırlayamıyor musun? Tarif et",
+    "describePlaceholder": "örn. Titanic'teki o şarkı",
+    "describeCta": "Bul",
+    "figuringOut": "Hangi şarkıyı kastettiğini anlamaya çalışıyoruz…"
   },
   "versions": {
     "sectionLibrary": "Kütüphanemizde",

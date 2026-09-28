@@ -731,7 +731,94 @@ def search():
     }
     if data.get("karaoke_nerds_timeout"):
         response["karaoke_nerds_timeout"] = True
+    _search_log("search", query, {
+        "songs": len(data["songs"]),
+        "top": [f'{s.get("artist", "")} — {s.get("title", "")}' for s in data["songs"][:3]],
+        "kn_timeout": bool(data.get("karaoke_nerds_timeout")),
+    })
     return jsonify(response)
+
+
+# --- Song identification (question 1 — docs/SONG-IDENTIFICATION.md) --------
+# "Which real song does the singer mean?", answered on-device from song_id.db,
+# separately from karaoke search ("is there a karaoke version?"). The client
+# calls this alongside /sing/search and shows the identified song in its own
+# card, never mixed into the karaoke rows.
+
+def _search_log(type_, query, data):
+    sl = getattr(current_app, "search_log", None)
+    if sl is not None:
+        sl.log(type_, search_id=request.values.get("sid"), device_id=request.values.get("device_id"),
+               query=query, data=data)
+
+
+def _identify_kind(query, artist, title):
+    """How the identified song relates to what was typed.
+
+    ``same``      typed exactly (nothing to announce)
+    ``cosmetic``  the same words, only casing/punctuation/order differ → "Tidied to"
+    ``completed`` the typed words are the title (or part of artist + title) and
+                  identification added what was missing (usually the artist)
+    ``content``   the typed words differ (typos etc.) → "Corrected to"
+    """
+    from song_identify import song_norm
+
+    def compact(s):
+        return song_norm(s).replace(" ", "")
+    typed = compact(query)
+    full = {compact(f"{artist} {title}"), compact(f"{title} {artist}")}
+    if query.strip() in (f"{artist} {title}", f"{title} {artist}", f"{artist} - {title}", f"{title} - {artist}"):
+        return "same"
+    if typed in full:
+        return "cosmetic"
+    words = set(song_norm(query).split())
+    song_words = set(song_norm(f"{artist} {title}").split())
+    if words and words <= song_words:
+        return "completed"
+    return "content"
+
+
+@sing_bp.route("/search/identify", methods=["GET"])
+@require_token
+def search_identify():
+    """→ ``{status: confident|candidates|none, song, kind, candidates, typed}``."""
+    query = (request.args.get("q") or "").strip()[:200]
+    ident = getattr(current_app, "song_identifier", None)
+    if len(query) < 3 or ident is None or not ident.available:
+        return jsonify({"status": "none", "unavailable": ident is None or not ident.available})
+    t0 = time.monotonic()
+    r = ident.identify(query)
+    ms = round((time.monotonic() - t0) * 1000)
+    best = r.get("best")
+    out = {"status": r["status"], "typed": query,
+           "candidates": [{"artist": c["artist"], "title": c["title"], "karaoke": c["karaoke"]}
+                          for c in r.get("candidates", [])[:5]]}
+    if best and r["status"] != "none":
+        out["song"] = {"artist": best["artist"], "title": best["title"], "karaoke": best["karaoke"]}
+        out["kind"] = _identify_kind(query, best["artist"], best["title"])
+    _search_log("identify", query, {
+        "status": r["status"], "ms": ms, "kind": out.get("kind"),
+        "best": out.get("song"), "score": best and best.get("score"),
+        "candidates": [f'{c["artist"]} — {c["title"]}' for c in out["candidates"][:3]],
+    })
+    return jsonify(out)
+
+
+@sing_bp.route("/search/event", methods=["POST"])
+@require_token
+def search_event():
+    """Client-side choice events for the search log (see search_log.CHOICE_ACTIONS)."""
+    from search_log import CHOICE_ACTIONS
+    body = request.get_json(silent=True) or {}
+    action = str(body.get("action") or "")
+    if action not in CHOICE_ACTIONS:
+        return jsonify({"error": "unknown action"}), 400
+    data = body.get("data") if isinstance(body.get("data"), dict) else {}
+    sl = getattr(current_app, "search_log", None)
+    if sl is not None:
+        sl.log("choice", search_id=str(body.get("sid") or ""), device_id=str(body.get("device_id") or ""),
+               query=str(body.get("q") or "")[:300], data={"action": action, **data})
+    return jsonify({"ok": True})
 
 
 # --- Search auto-correct (gen's free-text resolver) -------------------------
@@ -811,6 +898,8 @@ def search_resolve():
         return jsonify({"error": "rate_limited"}), 429
     verdict = _resolve_query(query) or {}
     kind = verdict.get("kind")
+    _search_log("resolve", query, {k: verdict.get(k) for k in (
+        "kind", "confident", "canonical_artist", "canonical_title", "engine", "typed_artist", "typed_title")})
     typed_artist = (verdict.get("typed_artist") or "").strip()
     typed_title = (verdict.get("typed_title") or "").strip()
     split = {"artist": typed_artist, "title": typed_title} if typed_artist and typed_title else None

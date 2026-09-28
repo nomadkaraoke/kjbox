@@ -95,7 +95,16 @@
     "keepMine": "الاحتفاظ بما كتبته",
     "useTidied": "استخدام النسخة المنقحة",
     "undo": "تراجع",
-    "useCorrection": "استخدم التصحيح"
+    "useCorrection": "استخدم التصحيح",
+    "songYouMean": "الأغنية التي تقصدها",
+    "whichSong": "أي أغنية تقصد؟",
+    "notIt": "ليست هذه؟",
+    "youTyped": "كتبت “{typed}”",
+    "karaokeFor": "نسخ كاراوكي لأغنية {song}",
+    "describeLink": "لا تتذكر الاسم؟ صف الأغنية",
+    "describePlaceholder": "مثلاً: أغنية فيلم تيتانيك",
+    "describeCta": "ابحث عنها",
+    "figuringOut": "نحاول معرفة الأغنية التي تقصدها…"
   },
   "versions": {
     "sectionLibrary": "في مكتبتنا",

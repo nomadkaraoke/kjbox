@@ -150,6 +150,7 @@ class TestSearchDecisionLayer:
         expect(ind.locator(".sing-note")).to_have_count(4)
 
     def test_empty_search_is_auto_corrected_with_undo(self, page, live_server, live_token):
+        # Gemini fallback (gen) correction → the "song you mean" card + that song's karaoke rows.
         song = {"key": "g:mp", "artist": "The Strokes", "title": "Machu Picchu", "version_count": 1,
                 "in_library": True, "versions": [{"source": "local", "priority_class": "unknown",
                 "local": {"path": "/m/x.mp4", "filename": "x.mp4", "disc_id": "TOOL-017"}}]}
@@ -160,7 +161,10 @@ class TestSearchDecisionLayer:
                 "typed": "query text", "songs": [song]})))
         page.locator('input[type="search"]').fill("the strokes max picu")
         notice = page.locator('[data-testid="search-correction"]')
-        expect(notice).to_contain_text("Corrected to The Strokes — Machu Picchu — you typed “query text”")
+        expect(notice).to_contain_text("The song you mean")
+        expect(page.locator('[data-testid="song-card-song"]')).to_have_text("Machu Picchu — The Strokes")
+        expect(notice).to_contain_text("you typed “query text”")
+        expect(page.locator('[data-testid="karaoke-for-heading"]')).to_have_text("Karaoke versions of Machu Picchu")
         expect(page.locator(".result-row .r-title")).to_have_text("Machu Picchu")
         page.locator('[data-testid="search-correction-toggle"]').click()
         expect(notice).to_contain_text("Using what you typed")

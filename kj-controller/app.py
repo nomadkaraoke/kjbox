@@ -12,6 +12,7 @@ from flask import Flask, g, request
 from catalog import ExternalCatalog
 from catalog_mirror import CatalogMirror
 from song_identify import SongIdentifier, default_db_path as song_id_default_db_path
+from search_log import SearchLog, default_db_path as search_log_default_db_path
 from config import CONFIG_FILE, is_pi, load_config
 from media import MediaIndex
 from media_library import MediaLibraryStore
@@ -306,6 +307,7 @@ def create_app(config=None):
     flask_app.catalog = ExternalCatalog(cfg)
     flask_app.catalog_mirror = CatalogMirror(cfg)
     flask_app.song_identifier = SongIdentifier(song_id_default_db_path(cfg))
+    flask_app.search_log = SearchLog(search_log_default_db_path(cfg))
     try:
         if flask_app.catalog.is_available() and flask_app.catalog.index_is_stale():
             flask_app.logger.warning(
@@ -529,6 +531,7 @@ def start_app():  # pragma: no cover
     flask_app.catalog = ExternalCatalog(cfg)
     flask_app.catalog_mirror = CatalogMirror(cfg)
     flask_app.song_identifier = SongIdentifier(song_id_default_db_path(cfg))
+    flask_app.search_log = SearchLog(search_log_default_db_path(cfg))
     flask_app.zip_playback = ZipPlayback(cfg)
     flask_app.chromium = ChromiumManager(cfg)
     flask_app.overlay_manager = overlay_mgr

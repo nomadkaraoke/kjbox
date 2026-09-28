@@ -95,7 +95,16 @@
     "keepMine": "입력한 내용 유지",
     "useTidied": "정리된 버전 사용하기",
     "undo": "실행 취소",
-    "useCorrection": "수정된 내용 사용"
+    "useCorrection": "수정된 내용 사용",
+    "songYouMean": "찾으시는 노래",
+    "whichSong": "어떤 노래를 찾으시나요?",
+    "notIt": "이 노래가 아닌가요?",
+    "youTyped": "입력하신 내용: “{typed}”",
+    "karaokeFor": "{song} 노래방 버전",
+    "describeLink": "제목이 기억나지 않나요? 어떤 노래인지 설명해 보세요",
+    "describePlaceholder": "예: 타이타닉에 나온 그 노래",
+    "describeCta": "찾기",
+    "figuringOut": "어떤 노래인지 찾고 있어요…"
   },
   "versions": {
     "sectionLibrary": "라이브러리",

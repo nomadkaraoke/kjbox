@@ -47,6 +47,8 @@ def mock_config(tmp_media_dir):
         "default_filler_track": "",
         "flask_port": 80,
         "external_catalog_db": str(tmp_media_dir / "test_catalog.db"),
+        "song_id_db": str(tmp_media_dir / "song_id.db"),
+        "search_log_db": str(tmp_media_dir / "search_log.db"),
         "external_file_list": "",
         "external_media_mount": "",
         "overlays_path": str(tmp_media_dir / "overlays.json"),

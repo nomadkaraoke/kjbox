@@ -95,7 +95,16 @@
     "keepMine": "keep what I typed",
     "useTidied": "use tidied version",
     "undo": "Undo",
-    "useCorrection": "Use the correction"
+    "useCorrection": "Use the correction",
+    "songYouMean": "The song you mean",
+    "whichSong": "Which song do you mean?",
+    "notIt": "not it?",
+    "youTyped": "you typed “{typed}”",
+    "karaokeFor": "Karaoke versions of {song}",
+    "describeLink": "Can't remember the name? Describe it",
+    "describePlaceholder": "e.g. that song from Titanic",
+    "describeCta": "Find it",
+    "figuringOut": "Figuring out which song you mean…"
   },
   "versions": {
     "sectionLibrary": "In our library",

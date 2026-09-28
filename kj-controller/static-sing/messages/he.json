@@ -95,7 +95,16 @@
     "keepMine": "להשאיר את מה שהקלדתי",
     "useTidied": "להשתמש בגרסה המסודרת",
     "undo": "ביטול",
-    "useCorrection": "להשתמש בתיקון"
+    "useCorrection": "להשתמש בתיקון",
+    "songYouMean": "השיר שהתכוונתם אליו",
+    "whichSong": "לאיזה שיר התכוונתם?",
+    "notIt": "זה לא זה?",
+    "youTyped": "כתבתם “{typed}”",
+    "karaokeFor": "גרסאות קריוקי של {song}",
+    "describeLink": "לא זוכרים את השם? תארו אותו",
+    "describePlaceholder": "למשל, השיר ההוא מטיטאניק",
+    "describeCta": "מצא לי",
+    "figuringOut": "מנסים להבין לאיזה שיר התכוונתם…"
   },
   "versions": {
     "sectionLibrary": "בספרייה שלנו",

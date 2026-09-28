@@ -95,7 +95,16 @@
     "keepMine": "जो मैंने टाइप किया है वही रखो",
     "useTidied": "व्यवस्थित वर्शन का इस्तेमाल करो",
     "undo": "पूर्ववत करो",
-    "useCorrection": "सही स्पेलिंग का इस्तेमाल करो"
+    "useCorrection": "सही स्पेलिंग का इस्तेमाल करो",
+    "songYouMean": "जिस गाने की तुम बात कर रहे हो",
+    "whichSong": "तुम किस गाने की बात कर रहे हो?",
+    "notIt": "ये नहीं है?",
+    "youTyped": "तुमने टाइप किया “{typed}”",
+    "karaokeFor": "{song} के कराओके वर्ज़न",
+    "describeLink": "नाम याद नहीं? उसके बारे में बताओ",
+    "describePlaceholder": "जैसे Titanic का वो गाना",
+    "describeCta": "ढूंढो",
+    "figuringOut": "पता लगा रहे हैं कि तुम किस गाने की बात कर रहे हो…"
   },
   "versions": {
     "sectionLibrary": "हमारी लाइब्रेरी में",

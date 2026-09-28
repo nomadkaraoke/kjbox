@@ -95,7 +95,16 @@
     "keepMine": "garder ce que j'ai tapé",
     "useTidied": "utiliser la version nettoyée",
     "undo": "Annuler",
-    "useCorrection": "Utiliser la correction"
+    "useCorrection": "Utiliser la correction",
+    "songYouMean": "La chanson à laquelle tu penses",
+    "whichSong": "À quelle chanson tu penses ?",
+    "notIt": "ce n'est pas ça ?",
+    "youTyped": "tu as tapé “{typed}”",
+    "karaokeFor": "Versions karaoké de {song}",
+    "describeLink": "Tu ne te souviens plus du titre ? Décris-le",
+    "describePlaceholder": "ex. la chanson de Titanic",
+    "describeCta": "Trouver",
+    "figuringOut": "On cherche à quelle chanson tu penses…"
   },
   "versions": {
     "sectionLibrary": "Dans notre bibliothèque",

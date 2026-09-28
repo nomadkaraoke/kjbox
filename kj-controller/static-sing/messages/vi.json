@@ -95,7 +95,16 @@
     "keepMine": "giữ nguyên nội dung tôi đã nhập",
     "useTidied": "sử dụng bản đã tinh chỉnh",
     "undo": "Hoàn tác",
-    "useCorrection": "Dùng từ đã sửa"
+    "useCorrection": "Dùng từ đã sửa",
+    "songYouMean": "Bài hát bạn muốn tìm",
+    "whichSong": "Ý bạn là bài hát nào?",
+    "notIt": "không phải bài này?",
+    "youTyped": "bạn đã nhập “{typed}”",
+    "karaokeFor": "Các bản karaoke của {song}",
+    "describeLink": "Không nhớ tên bài? Thử mô tả xem",
+    "describePlaceholder": "Ví dụ: bài hát trong phim Titanic",
+    "describeCta": "Tìm ngay",
+    "figuringOut": "Đang tìm xem ý bạn là bài nào…"
   },
   "versions": {
     "sectionLibrary": "Trong thư viện của chúng tôi",

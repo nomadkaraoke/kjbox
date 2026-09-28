@@ -61,6 +61,7 @@ kj-controller/external_media.db
 kj-controller/media_library.db
 kj-controller/catalog_mirror.db*
 kj-controller/song_id.db*
+kj-controller/search_log.db*
 
 # Runtime data (device-specific, must not be overwritten by deploys)
 data/overlays.json

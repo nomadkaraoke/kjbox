@@ -95,7 +95,16 @@
     "keepMine": "mantener lo que escribí",
     "useTidied": "usar la versión arreglada",
     "undo": "Deshacer",
-    "useCorrection": "Usar la corrección"
+    "useCorrection": "Usar la corrección",
+    "songYouMean": "La canción a la que te refieres",
+    "whichSong": "¿A qué canción te refieres?",
+    "notIt": "¿no es esta?",
+    "youTyped": "escribiste “{typed}”",
+    "karaokeFor": "Versiones de karaoke de {song}",
+    "describeLink": "¿No recuerdas el nombre? Descríbela",
+    "describePlaceholder": "ej. esa canción de Titanic",
+    "describeCta": "Encuéntrala",
+    "figuringOut": "Averiguando a qué canción te refieres…"
   },
   "versions": {
     "sectionLibrary": "En nuestra biblioteca",

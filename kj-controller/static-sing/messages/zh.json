@@ -95,7 +95,16 @@
     "keepMine": "保留我的输入",
     "useTidied": "使用整理后的版本",
     "undo": "撤销",
-    "useCorrection": "使用更正结果"
+    "useCorrection": "使用更正结果",
+    "songYouMean": "你想找的歌",
+    "whichSong": "你想找哪首歌？",
+    "notIt": "不是这首？",
+    "youTyped": "你输入的是“{typed}”",
+    "karaokeFor": "{song} 的伴奏版本",
+    "describeLink": "记不清歌名？描述一下",
+    "describePlaceholder": "例如：泰坦尼克号里的那首歌",
+    "describeCta": "帮我找",
+    "figuringOut": "正在识别你想找的是哪首歌…"
   },
   "versions": {
     "sectionLibrary": "在我们的曲库里",

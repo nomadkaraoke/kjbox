@@ -9,7 +9,7 @@ Output SQLite:
   songs(rowid, artist, title, na, nt, pop, karaoke)      display + normalized text
   songs_fts  — FTS5 word index over (na, nt)             candidate retrieval
   artists(na, artist, pop, songs) + artists_fts          artist-first path (word index over names)
-  vocab(word, freq) + vocab_tri — FTS5 trigram index     typo-tolerant word lookup
+  vocab(word, freq, first, len)                          typo lookup: same first letter, similar length
 
 Duplicates are merged on the space-less normalized artist+title ("u s a" == "usa"),
 keeping the most popular display spelling and OR-ing the karaoke flag.
@@ -19,6 +19,7 @@ Usage: python scripts/build_song_id_db.py songs.tsv.gz [more.tsv.gz ...] song_id
 import csv
 import gzip
 import os
+import re
 import sqlite3
 import sys
 import time
@@ -29,7 +30,10 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from song_identify import song_norm  # noqa: E402
 from text_normalize import NORMALIZER_VERSION  # noqa: E402
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
+
+
+_JUNK_CREDIT_RE = re.compile(r"\b(?:cover|covers|covered|tribute|karaoke|in the style of|made famous)\b", re.IGNORECASE)
 
 
 def _open(path):
@@ -56,6 +60,10 @@ def build(srcs, dst, meta=None):
             continue
         p = int(pop) if pop.strip() else None
         k = 1 if karaoke.strip() in ("1", "true", "True") else 0
+        if not k and _JUNK_CREDIT_RE.search(artist):
+            continue    # MusicBrainz cover/tribute uploads ("George Benson (Hscc Cover Ft …)")
+        if na.replace(" ", "") == nt.replace(" ", "") and not k and (p or 0) < 40:
+            continue    # MusicBrainz "self-titled" junk ("Future — Future"); real ones have karaoke/popularity
         key = (na.replace(" ", ""), nt.replace(" ", ""))
         cur = merged.get(key)
         if cur is None:
@@ -78,8 +86,7 @@ def build(srcs, dst, meta=None):
                                                   tokenize='unicode61');
         CREATE TABLE artists(rowid INTEGER PRIMARY KEY, na TEXT UNIQUE, artist TEXT, pop INTEGER, songs INTEGER);
         CREATE VIRTUAL TABLE artists_fts USING fts5(na, content='artists', content_rowid='rowid', tokenize='unicode61');
-        CREATE TABLE vocab(word TEXT PRIMARY KEY, freq INTEGER) WITHOUT ROWID;
-        CREATE VIRTUAL TABLE vocab_tri USING fts5(word, tokenize='trigram');
+        CREATE TABLE vocab(word TEXT PRIMARY KEY, freq INTEGER, first TEXT, len INTEGER) WITHOUT ROWID;
     """)
     vocab = Counter()
     rows = []
@@ -98,10 +105,9 @@ def build(srcs, dst, meta=None):
     db.executemany("INSERT INTO artists(na, artist, pop, songs) VALUES (?,?,?,?)",
                    [(na, a, p, n) for na, (a, p, n) in artists.items()])
     db.execute("INSERT INTO artists_fts(artists_fts) VALUES ('rebuild')")
-    db.executemany("INSERT INTO vocab VALUES (?,?)", vocab.items())
-    db.executemany("INSERT INTO vocab_tri(word) VALUES (?)", [(w,) for w in vocab if len(w) >= 3])
+    db.executemany("INSERT INTO vocab VALUES (?,?,?,?)", [(w, f, w[0], len(w)) for w, f in vocab.items()])
+    db.execute("CREATE INDEX vocab_first_len ON vocab(first, len)")
     db.execute("INSERT INTO songs_fts(songs_fts) VALUES ('optimize')")
-    db.execute("INSERT INTO vocab_tri(vocab_tri) VALUES ('optimize')")
     db.executemany("INSERT INTO meta VALUES (?,?)", [
         ("schema_version", str(SCHEMA_VERSION)), ("songs", str(len(rows))), ("words", str(len(vocab))),
         ("normalizer_version", str(NORMALIZER_VERSION)), ("built_at", str(int(time.time())))]

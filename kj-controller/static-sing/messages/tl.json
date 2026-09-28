@@ -95,7 +95,16 @@
     "keepMine": "panatilihin ang tinype ko",
     "useTidied": "gamitin ang inayos na bersyon",
     "undo": "I-undo",
-    "useCorrection": "Gamitin ang itinama"
+    "useCorrection": "Gamitin ang itinama",
+    "songYouMean": "Ang kantang tinutukoy mo",
+    "whichSong": "Aling kanta ang tinutukoy mo?",
+    "notIt": "hindi ba ito?",
+    "youTyped": "tinype mo ang “{typed}”",
+    "karaokeFor": "Mga Karaoke Version ng {song}",
+    "describeLink": "Hindi matandaan ang pamagat? Ilarawan ito",
+    "describePlaceholder": "hal. 'yung kanta sa Titanic",
+    "describeCta": "Hanapin",
+    "figuringOut": "Inaalam kung aling kanta ang tinutukoy mo…"
   },
   "versions": {
     "sectionLibrary": "Nasa library namin",

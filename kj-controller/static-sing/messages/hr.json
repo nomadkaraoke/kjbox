@@ -95,7 +95,16 @@
     "keepMine": "zadrži moj unos",
     "useTidied": "koristi uređenu verziju",
     "undo": "Poništi",
-    "useCorrection": "Koristi ispravak"
+    "useCorrection": "Koristi ispravak",
+    "songYouMean": "Pjesma na koju misliš",
+    "whichSong": "Na koju pjesmu misliš?",
+    "notIt": "nije ta?",
+    "youTyped": "upisao/la si “{typed}”",
+    "karaokeFor": "Karaoke verzije za {song}",
+    "describeLink": "Ne sjećaš se naslova? Opiši pjesmu",
+    "describePlaceholder": "npr. ona pjesma iz Titanica",
+    "describeCta": "Pronađi",
+    "figuringOut": "Tražimo na koju pjesmu misliš…"
   },
   "versions": {
     "sectionLibrary": "U našoj biblioteci",

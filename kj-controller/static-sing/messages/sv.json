@@ -95,7 +95,16 @@
     "keepMine": "behåll det jag skrev",
     "useTidied": "använd rensad version",
     "undo": "Ångra",
-    "useCorrection": "Använd rättningen"
+    "useCorrection": "Använd rättningen",
+    "songYouMean": "Låten du menar",
+    "whichSong": "Vilken låt menar du?",
+    "notIt": "inte den?",
+    "youTyped": "du skrev ”{typed}”",
+    "karaokeFor": "Karaokeversioner av {song}",
+    "describeLink": "Kommer du inte ihåg vad den heter? Beskriv den",
+    "describePlaceholder": "t.ex. den där låten från Titanic",
+    "describeCta": "Hitta den",
+    "figuringOut": "Listar ut vilken låt du menar…"
   },
   "versions": {
     "sectionLibrary": "I vårt bibliotek",

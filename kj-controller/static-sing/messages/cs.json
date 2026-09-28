@@ -95,7 +95,16 @@
     "keepMine": "ponechat můj text",
     "useTidied": "použít upravenou verzi",
     "undo": "Zpět",
-    "useCorrection": "Použít opravu"
+    "useCorrection": "Použít opravu",
+    "songYouMean": "Písnička, kterou myslíš",
+    "whichSong": "Kterou písničku myslíš?",
+    "notIt": "není to ono?",
+    "youTyped": "napsal jsi „{typed}“",
+    "karaokeFor": "Karaoke verze písničky {song}",
+    "describeLink": "Nepamatuješ si název? Popiš ji",
+    "describePlaceholder": "např. ta písnička z Titanicu",
+    "describeCta": "Najít",
+    "figuringOut": "Zjišťujeme, kterou písničku myslíš…"
   },
   "versions": {
     "sectionLibrary": "V naší knihovně",

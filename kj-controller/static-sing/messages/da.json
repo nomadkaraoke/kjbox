@@ -95,7 +95,16 @@
     "keepMine": "behold det, jeg skrev",
     "useTidied": "brug den tilrettede version",
     "undo": "Fortryd",
-    "useCorrection": "Brug rettelsen"
+    "useCorrection": "Brug rettelsen",
+    "songYouMean": "Sangen du mener",
+    "whichSong": "Hvilken sang mener du?",
+    "notIt": "ikke den?",
+    "youTyped": "du skrev “{typed}”",
+    "karaokeFor": "Karaokeversioner af {song}",
+    "describeLink": "Kan du ikke huske, hvad den hedder? Beskriv den",
+    "describePlaceholder": "f.eks. den sang fra Titanic",
+    "describeCta": "Find den",
+    "figuringOut": "Finder ud af, hvilken sang du mener…"
   },
   "versions": {
     "sectionLibrary": "I vores bibliotek",

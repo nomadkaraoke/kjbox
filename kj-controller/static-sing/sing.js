@@ -289,9 +289,49 @@ async function fetchJson(url, opts = {}) {
   return data;
 }
 
-async function search(query) {
+// sid ties a search to its identification and to what the singer then chose,
+// in the server's persistent search log (search_log.py).
+async function search(query, sid = "") {
   const q = encodeURIComponent(query);
-  return fetchJson(`${BASE}/search?q=${q}`);
+  return fetchJson(`${BASE}/search?q=${q}&sid=${encodeURIComponent(sid)}&device_id=${encodeURIComponent(DEVICE_ID)}`);
+}
+
+// Song identification — "which real song do you mean?" (on-device matcher;
+// docs/SONG-IDENTIFICATION.md). Separate from karaoke search on purpose.
+async function identifySong(query, sid = "") {
+  const q = encodeURIComponent(query);
+  return fetchJson(`${BASE}/search/identify?q=${q}&sid=${encodeURIComponent(sid)}&device_id=${encodeURIComponent(DEVICE_ID)}`);
+}
+
+function newSearchId() {
+  return (window.crypto && crypto.randomUUID) ? crypto.randomUUID()
+    : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+// Fire-and-forget: a lost log line must never get in the singer's way.
+function logSearchChoice(sid, action, query, data = {}) {
+  fetchJson(`${BASE}/search/event`, {
+    method: "POST",
+    body: JSON.stringify({ sid, action, q: query || "", device_id: DEVICE_ID, data }),
+  }).catch(() => {});
+}
+
+// Loose "is this the same song?" check used to avoid repeating what the karaoke
+// results already show: same title (ignoring "(feat …)" / " - Remastered"),
+// and a credited artist in common.
+function _songKey(text) {
+  return String(text || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s*[([].*$|\s+-\s+.*$/, "").replace(/[^a-z0-9]+/g, "");
+}
+function _credits(artist) {
+  return new Set(String(artist || "").toLowerCase().split(/\s*(?:,|&|\+|\/|\bfeaturing\b|\bfeat\.?|\bft\.?|\band\b|\bwith\b)\s*/)
+    .map(_songKey).filter(Boolean));
+}
+function sameSong(a, b) {
+  if (!a || !b || _songKey(a.title) !== _songKey(b.title)) return false;
+  const ca = _credits(a.artist);
+  for (const c of _credits(b.artist)) if (ca.has(c)) return true;
+  return false;
 }
 
 async function submit(payload) {
@@ -1749,6 +1789,17 @@ function renderSearch() {
   // active}, {alternatives} or {split} (gen only split the query).
   let correction = null;
   let resolving = false;
+  // Search-log session id (search_log.py): one per "looking for a song" episode,
+  // renewed after the singer picks something.
+  let sid = newSearchId();
+  const logChoice = (action, data = {}) => logSearchChoice(sid, action, state.query, {
+    identified: correction && correction.corrected ? `${correction.corrected.artist} — ${correction.corrected.title}` : null,
+    identified_kind: correction ? (correction.kind || (correction.alternatives ? "which" : null)) : null,
+    identified_active: correction ? !!correction.active : null,
+    identified_source: correction ? correction.source || null : null,
+    ...data,
+  });
+  const endSearchSession = () => { sid = newSearchId(); };
   // Pre-fill the make-it form from a correction. state.makePrefill remembers
   // what we last filled (it outlives this view, like the fields themselves), so
   // a tidy or its undo only overwrites a field the singer hasn't edited since.
@@ -1806,10 +1857,16 @@ function renderSearch() {
       }
       loading = true; err = ""; correction = null; resolving = false; update();
       try {
-        const data = await search(q.trim());
+        const [data, ident] = await Promise.all([
+          search(q.trim(), sid),
+          identifySong(q.trim(), sid).catch(() => null),   // no index / offline: karaoke search still works
+        ]);
         if (myGen !== searchGen) return;   // superseded — discard stale response
         results = data;
-        if (!(data.songs || []).length) resolveEmptySearch(q.trim(), myGen);
+        const identified = applyIdentification(ident, q.trim(), myGen);
+        // Gemini fallback (gen) only when on-device identification had nothing
+        // and karaoke search found nothing either.
+        if (!identified && !(data.songs || []).length) resolveEmptySearch(q.trim(), myGen);
         // Phase C — mirror the server's current flag so a mid-session KJ
         // toggle takes effect on the next search without a page reload.
         if (typeof data.make_requests_enabled === "boolean") {
@@ -1827,19 +1884,58 @@ function renderSearch() {
     }, 700);
   };
 
+  // On-device song identification → the song card (question 1), kept apart
+  // from the karaoke rows (question 2). Returns true when it had something to say.
+  function applyIdentification(ident, q, gen) {
+    if (!ident || ident.status === "none") return false;
+    const shown = results.songs || [];
+    const inResults = (song) => shown.some((g) => sameSong(g, song));
+    if (ident.status === "confident" && ident.song) {
+      if (ident.kind === "same") return true;
+      correction = {
+        source: "local", typed: q, kind: ident.kind,
+        corrected: { artist: ident.song.artist, title: ident.song.title },
+        candidates: (ident.candidates || []).filter((c) => !sameSong(c, ident.song)),
+        songs: [], split: null, active: true, inResults: inResults(ident.song),
+      };
+      if (ident.kind === "content" && !correction.inResults) fetchKaraokeForCorrection(gen);
+      prefillMake(correctionMakeSource());
+      return true;
+    }
+    const cands = (ident.candidates || []).slice(0, 4);
+    if (ident.status === "candidates" && cands.length && !inResults(cands[0])) {
+      correction = { source: "local", typed: q, alternatives: cands };
+      return true;
+    }
+    return false;
+  }
+
+  // Karaoke search for the identified song (what the singer meant), shown
+  // under its own heading instead of the typed text's results.
+  async function fetchKaraokeForCorrection(gen) {
+    const c = correction;
+    if (!c || !c.corrected) return;
+    try {
+      const data = await search(`${c.corrected.artist} ${c.corrected.title}`, sid);
+      if (gen !== searchGen || correction !== c) return;
+      c.songs = data.songs || [];
+      update();
+    } catch { /* keep the typed-text results */ }
+  }
+
   // Nothing found → ask gen to split + tidy the query the way its own job
   // form does ("rihanna push up on me" → Rihanna — Push Up On Me; "the strokes
   // max picu" → The Strokes — Machu Picchu). Show gen's "Tidied to … / keep
   // what I typed" (or "Corrected to … Undo"), list any songs the corrected
   // search finds, and pre-fill the make-it form with the tidied artist/title.
-  async function resolveEmptySearch(q, gen) {
-    resolving = true; update();
+  async function resolveEmptySearch(q, gen, description = null) {
+    resolving = description ? "describe" : true; update();
     try {
       const data = await fetchJson(
         `${BASE}/search/resolve?q=${encodeURIComponent(q)}&device_id=${encodeURIComponent(DEVICE_ID)}`);
       if (gen !== searchGen) return;
       if (data && data.corrected) {
-        correction = { typed: data.typed || q, kind: data.kind, corrected: data.corrected,
+        correction = { source: "gemini", typed: data.typed || q, kind: data.kind || "content", corrected: data.corrected,
                        songs: data.songs || [], split: data.split || null, active: true };
       } else if (data && (data.alternatives || []).length) {
         correction = { typed: q, alternatives: data.alternatives };
@@ -1851,48 +1947,96 @@ function renderSearch() {
     if (gen === searchGen) { resolving = false; update(); }
   }
 
-  function useAlternative(alt) {
-    const q = `${alt.artist} ${alt.title}`;
-    state.query = q;
-    const input = root.querySelector('input[type="search"]');
-    if (input) input.value = q;
-    doSearch(q);
+  // "Which song do you mean?" → the singer picked one: identify it (no new
+  // search text — they keep what they typed) and fetch its karaoke versions.
+  function useAlternative(alt, idx) {
+    const prev = correction;
+    logChoice("pick_candidate", { picked: `${alt.artist} — ${alt.title}`, index: idx,
+                                  of: (prev && (prev.alternatives || prev.candidates) || []).length });
+    correction = {
+      source: prev && prev.source, typed: (prev && prev.typed) || state.query, kind: "content", picked: true,
+      corrected: { artist: alt.artist, title: alt.title },
+      candidates: ((prev && (prev.alternatives || prev.candidates)) || []).filter((c) => !sameSong(c, alt)),
+      songs: [], split: null, active: true, inResults: (results.songs || []).some((g) => sameSong(g, alt)),
+    };
+    prefillMake(correctionMakeSource());
+    if (!correction.inResults) fetchKaraokeForCorrection(searchGen);
+    update();
   }
 
+  // "not it?" on an identified song → offer the other candidates instead.
+  function notIt() {
+    const c = correction;
+    logChoice("not_it", { shown: c && c.corrected ? `${c.corrected.artist} — ${c.corrected.title}` : null });
+    correction = { source: c.source, typed: c.typed, alternatives: (c.candidates || []).slice(0, 4), notIt: true };
+    prefillMake(null);
+    update();
+  }
+
+  // Question 1's own element ("which song do you mean?") — never mixed into the
+  // karaoke rows. Shapes:
+  //  • alternatives              → "Which song do you mean?" list
+  //  • kind cosmetic (formatting) → gen's small "Tidied to … · keep what I typed"
+  //    line, only when the karaoke rows don't already show that song
+  //  • kind completed / content  → "🎵 The song you mean" card (+ "you typed …",
+  //    keep-what-I-typed toggle, "not it?")
   function correctionNotice() {
     if (!correction) return null;
     if (correction.alternatives) {
-      return el("div", { class: "sing-correction sing-didyoumean", "data-testid": "search-didyoumean" },
-        el("div", { class: "sing-correction-title" }, t("search.didYouMean")),
-        ...correction.alternatives.map((a) => el("button", {
-          class: "btn ghost sing-suggestion",
-          onclick: (e) => { e.stopPropagation(); useAlternative(a); },
+      if (!correction.alternatives.length) {
+        return correction.notIt ? el("div", { class: "sing-songcard sing-didyoumean", "data-testid": "search-didyoumean" },
+          el("div", { class: "sing-correction-title" }, t("search.whichSong")),
+          el("p", { class: "hint" }, t("search.usingTyped", { typed: correction.typed }))) : null;
+      }
+      return el("div", { class: "sing-songcard sing-didyoumean", "data-testid": "search-didyoumean" },
+        el("div", { class: "sing-correction-title" }, t(correction.source === "local" ? "search.whichSong" : "search.didYouMean")),
+        ...correction.alternatives.map((a, i) => el("button", {
+          class: "btn ghost sing-suggestion", "data-testid": "song-candidate",
+          onclick: (e) => { e.stopPropagation(); useAlternative(a, i); },
         }, `${a.title} — ${a.artist}`)));
     }
     if (!correction.corrected) return null;   // split only: nothing to announce
     const song = `${correction.corrected.artist} — ${correction.corrected.title}`;
-    // gen's AudioSourceStep wording: a formatting-only tidy vs a real correction.
-    const tidy = correction.kind === "cosmetic";
-    let label, action;
-    if (correction.active) {
-      label = tidy ? t("search.tidiedTo", { song }) : t("search.correctedTo", { song, typed: correction.typed });
-      action = tidy ? t("search.keepMine") : t("search.undo");
-    } else {
-      label = t("search.usingTyped", { typed: correction.typed });
-      action = tidy ? t("search.useTidied") : t("search.useCorrection");
+    const toggle = () => el("button", {
+      class: "btn link sing-correction-toggle", "data-testid": "search-correction-toggle",
+      onclick: (e) => {
+        e.stopPropagation();
+        correction.active = !correction.active;
+        logChoice(correction.active ? "reapply_tidy" : "keep_typed", { shown: song });
+        prefillMake(correctionMakeSource());
+        update();
+      },
+    }, correction.kind === "cosmetic"
+      ? (correction.active ? t("search.keepMine") : t("search.useTidied"))
+      : (correction.active ? t("search.keepMine") : t("search.useCorrection")));
+
+    // gen's AudioSourceStep wording for a formatting-only tidy.
+    if (correction.kind === "cosmetic") {
+      if (correction.inResults && correction.source === "local") return null;
+      return el("div", { class: "sing-correction", "data-testid": "search-correction" },
+        el("span", {}, correction.active ? t("search.tidiedTo", { song }) : t("search.usingTyped", { typed: correction.typed })),
+        " ", toggle());
     }
-    return el("div", { class: "sing-correction", "data-testid": "search-correction" },
-      el("span", {}, label),
-      " ",
-      el("button", {
-        class: "btn link sing-correction-toggle", "data-testid": "search-correction-toggle",
-        onclick: (e) => {
-          e.stopPropagation();
-          correction.active = !correction.active;
-          prefillMake(correctionMakeSource());
-          update();
-        },
-      }, action));
+    // Title typed, artist filled in — only worth a card if the rows don't show it.
+    if (correction.kind === "completed" && correction.inResults) return null;
+    if (!correction.active) {
+      return el("div", { class: "sing-correction", "data-testid": "search-correction" },
+        el("span", {}, t("search.usingTyped", { typed: correction.typed })), " ", toggle());
+    }
+    const notItBtn = (correction.candidates || []).length
+      ? el("button", { class: "btn link sing-correction-toggle", "data-testid": "song-not-it",
+                       onclick: (e) => { e.stopPropagation(); notIt(); } }, t("search.notIt"))
+      : null;
+    return el("div", { class: "sing-songcard", "data-testid": "search-correction" },
+      el("div", { class: "sing-songcard-label" }, `🎵 ${t("search.songYouMean")}`),
+      el("div", { class: "sing-songcard-song", "data-testid": "song-card-song" },
+        el("span", { class: "sing-songcard-title" }, correction.corrected.title),
+        el("span", { class: "sing-songcard-artist" }, ` — ${correction.corrected.artist}`)),
+      el("div", { class: "sing-songcard-actions" },
+        correction.kind === "content" && !correction.picked
+          ? el("span", { class: "hint" }, t("search.youTyped", { typed: correction.typed }), " · ") : null,
+        correction.kind === "content" ? toggle() : null,
+        notItBtn ? " · " : null, notItBtn));
   }
 
   // Single-version short-circuit — when a group has exactly one version, we
@@ -1906,7 +2050,7 @@ function renderSearch() {
       song_title: localRow.title || "",
       label: `${localRow.title || localRow.filename} — ${localRow.artist || ""}`,
     };
-    state.step = "confirm"; render();
+    logPicked(); state.step = "confirm"; render();
   };
   const pickSingleKN = (group, track) => {
     const hasDivebar = !!(track.divebar && track.divebar.file_id);
@@ -1928,7 +2072,7 @@ function renderSearch() {
           label: `${group.title} — ${group.artist}`,
           source_meta: { brand_code: track.brand_code, disc_id: track.disc_id },
         };
-    state.step = "confirm"; render();
+    logPicked(); state.step = "confirm"; render();
   };
 
   // Multi-version: defer to the KJ. The full versions snapshot rides along
@@ -1947,12 +2091,29 @@ function renderSearch() {
         versions: group.versions,
       },
     };
-    state.step = "confirm"; render();
+    logPicked(); state.step = "confirm"; render();
   };
+
+  // Search log: which karaoke song/version the singer took from the results.
+  function logPicked() {
+    const sel = state.selected || {};
+    if (sel.source_type === "youtube") logChoice("youtube_submit", {});
+    else logChoice("request_song", { song: sel.label || "", source_type: sel.source_type || "" });
+    endSearchSession();
+  }
 
   // Make-it: hand what the singer typed to the make wizard (email code →
   // corrected artist/title → audio choice), which lands on confirm.
-  const pickMake = () => makeFlow.start(state.makeArtist, state.makeTitle);
+  const pickMake = () => {
+    const pre = state.makePrefill || {};
+    logChoice("make_submit", {
+      artist: state.makeArtist, title: state.makeTitle,
+      prefilled: { artist: pre.artist || "", title: pre.title || "" },
+      edited: (state.makeArtist || "") !== (pre.artist || "") || (state.makeTitle || "") !== (pre.title || ""),
+    });
+    endSearchSession();
+    return makeFlow.start(state.makeArtist, state.makeTitle);
+  };
 
   const pickYouTube = (url) => {
     state.selected = {
@@ -1962,7 +2123,7 @@ function renderSearch() {
       song_title: "",
       label: `YouTube: ${url}`,
     };
-    state.step = "confirm"; render();
+    logPicked(); state.step = "confirm"; render();
   };
 
   function update() {
@@ -2019,7 +2180,7 @@ function renderSearch() {
         };
       }
     }
-    state.step = "confirm"; render();
+    logPicked(); state.step = "confirm"; render();
   }
 
   function dismissCcExplainer() {
@@ -2227,6 +2388,32 @@ function renderSearch() {
     );
   }
 
+  // "Can't remember the name? Describe it" — descriptive queries ("that song
+  // from Titanic") need world knowledge, so they go straight to gen's Gemini
+  // fallback; the answer lands in the song card like any other identification.
+  let describeOpen = false;
+  function renderDescribe() {
+    if (!describeOpen) {
+      return el("button", {
+        class: "btn link sing-describe-link", "data-testid": "describe-open",
+        onclick: (e) => { e.stopPropagation(); describeOpen = true; logChoice("describe_open"); update(); },
+      }, t("search.describeLink"));
+    }
+    const input = el("input", { type: "text", class: "sing-empty-input", "data-testid": "describe-input",
+                                placeholder: t("search.describePlaceholder") });
+    const go = () => {
+      const v = (input.value || "").trim();
+      if (v.length < 3) return;
+      logChoice("describe_submit", { description: v });
+      describeOpen = false;
+      resolveEmptySearch(v, searchGen, v);
+    };
+    return el("div", { class: "sing-describe" },
+      input,
+      el("button", { class: "btn primary", "data-testid": "describe-submit",
+                     onclick: (e) => { e.stopPropagation(); go(); } }, t("search.describeCta")));
+  }
+
   function renderEmptyStateTriage() {
     // Phase C — triage cards surface when search returns nothing but the
     // singer has clearly tried (query >= 3 chars): have it made for you
@@ -2256,6 +2443,7 @@ function renderSearch() {
       el("h3", {}, t("empty.title")),
       el("p", {}, tn("empty.intro", cardCount)),
     ));
+    wrap.appendChild(renderDescribe());
 
     if (offerMake) {
       wrap.appendChild(renderMakeCard(stepTitle(t("empty.makeTitle"))));
@@ -2302,13 +2490,20 @@ function renderSearch() {
     const container = el("div", { class: "results" });
     armAt = Date.now() + armMs();   // freshly-built rows are inert briefly (anti-mis-tap)
     if (loading) container.appendChild(searchingIndicator());
-    else if (resolving) container.appendChild(searchingIndicator(t("search.checkingSpelling")));
+    else if (resolving) container.appendChild(searchingIndicator(
+      t(resolving === "describe" ? "search.figuringOut" : "search.checkingSpelling")));
     if (err) container.appendChild(el("p", { class: "error" }, err));
     const notice = !loading ? correctionNotice() : null;
     if (notice) container.appendChild(notice);
 
     const corrected = correction && correction.active && correction.songs;
     const songs = (corrected && corrected.length ? corrected : results.songs) || [];
+    // Karaoke rows for the identified song get their own heading, so the two
+    // questions stay visibly separate.
+    if (!loading && corrected && corrected.length) {
+      container.appendChild(el("h3", { class: "sing-results-heading", "data-testid": "karaoke-for-heading" },
+        t("search.karaokeFor", { song: correction.corrected.title })));
+    }
     // Phase C — genuine empty-state (query was long enough to have searched).
     if (!loading && !resolving && !err && state.query?.trim().length >= 3 && songs.length === 0) {
       container.appendChild(renderEmptyStateTriage());

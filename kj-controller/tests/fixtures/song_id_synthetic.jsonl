@@ -1,0 +1,900 @@
+{"q": "the dope show", "artist": null, "title": "The Dope Show", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "the dope show marilyn manson", "artist": "Marilyn Manson", "title": "The Dope Show", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "marilyn manson the dpe show", "artist": "Marilyn Manson", "title": "The Dope Show", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "marlyn manson the dope show", "artist": "Marilyn Manson", "title": "The Dope Show", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "the dope show marilyn", "artist": "Marilyn Manson", "title": "The Dope Show", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "the doope show marilyn", "artist": "Marilyn Manson", "title": "The Dope Show", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "smokey mountain boy", "artist": null, "title": "Smokey Mountain Boy", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "smokey mountain boy elvis presley", "artist": "Elvis Presley", "title": "Smokey Mountain Boy", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "elvis presley smokey monutain boy", "artist": "Elvis Presley", "title": "Smokey Mountain Boy", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "elvis prelsey smokey mountain boy", "artist": "Elvis Presley", "title": "Smokey Mountain Boy", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "smokey mountain boy presley", "artist": "Elvis Presley", "title": "Smokey Mountain Boy", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "smokey mounain boy presley", "artist": "Elvis Presley", "title": "Smokey Mountain Boy", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "shelter", "artist": null, "title": "Shelter", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "shelter porter robinson & madeon", "artist": "Porter Robinson & Madeon", "title": "Shelter", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "porter robinson & madeon shelyer", "artist": "Porter Robinson & Madeon", "title": "Shelter", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "porter robisnon & madeon shelter", "artist": "Porter Robinson & Madeon", "title": "Shelter", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "shelter porter", "artist": "Porter Robinson & Madeon", "title": "Shelter", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "shhelter porter", "artist": "Porter Robinson & Madeon", "title": "Shelter", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "the way things go", "artist": null, "title": "the way things go", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "the way things go beabadoobee", "artist": "beabadoobee", "title": "the way things go", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "beabadoobee the way thigns go", "artist": "beabadoobee", "title": "the way things go", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "beabadoobbee the way things go", "artist": "beabadoobee", "title": "the way things go", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "the way things go beabadoobee", "artist": "beabadoobee", "title": "the way things go", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "the way thhings go beabadoobee", "artist": "beabadoobee", "title": "the way things go", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "don’t go", "artist": null, "title": "Don’t Go", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "don’t go bring me the horizon", "artist": "Bring Me the Horizon", "title": "Don’t Go", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "bring me the horizon dn’t go", "artist": "Bring Me the Horizon", "title": "Don’t Go", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "bring me the horizno don’t go", "artist": "Bring Me the Horizon", "title": "Don’t Go", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "don’t go the", "artist": "Bring Me the Horizon", "title": "Don’t Go", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "dont go the", "artist": "Bring Me the Horizon", "title": "Don’t Go", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "pierdo la cabeza", "artist": null, "title": "Pierdo la Cabeza", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "pierdo la cabeza zion & lennox", "artist": "Zion & Lennox", "title": "Pierdo la Cabeza", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "zion & lennox piedro la cabeza", "artist": "Zion & Lennox", "title": "Pierdo la Cabeza", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "zion & lennox pierdo la cabeza", "artist": "Zion & Lennox", "title": "Pierdo la Cabeza", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "pierdo la cabeza lennox", "artist": "Zion & Lennox", "title": "Pierdo la Cabeza", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "piredo la cabeza lennox", "artist": "Zion & Lennox", "title": "Pierdo la Cabeza", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "gimme that", "artist": null, "title": "Gimme That", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "gimme that chris brown", "artist": "Chris Brown", "title": "Gimme That", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "chris brown gimmme that", "artist": "Chris Brown", "title": "Gimme That", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "cgris brown gimme that", "artist": "Chris Brown", "title": "Gimme That", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "gimme that chris", "artist": "Chris Brown", "title": "Gimme That", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "gomme that chris", "artist": "Chris Brown", "title": "Gimme That", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "negative creep", "artist": null, "title": "Negative Creep", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "negative creep nirvana", "artist": "Nirvana", "title": "Negative Creep", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "nirvana ngeative creep", "artist": "Nirvana", "title": "Negative Creep", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "nirvnaa negative creep", "artist": "Nirvana", "title": "Negative Creep", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "negative creep nirvana", "artist": "Nirvana", "title": "Negative Creep", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "neagtive creep nirvana", "artist": "Nirvana", "title": "Negative Creep", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "don’t worry baby", "artist": null, "title": "Don’t Worry Baby", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "don’t worry baby billy joel", "artist": "Billy Joel", "title": "Don’t Worry Baby", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "billy joel dont’ worry baby", "artist": "Billy Joel", "title": "Don’t Worry Baby", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "bily joel don’t worry baby", "artist": "Billy Joel", "title": "Don’t Worry Baby", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "don’t worry baby joel", "artist": "Billy Joel", "title": "Don’t Worry Baby", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "dn’t worry baby joel", "artist": "Billy Joel", "title": "Don’t Worry Baby", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "ode to bourbon", "artist": null, "title": "Ode To Bourbon", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "ode to bourbon treaty oak revival", "artist": "Treaty Oak Revival", "title": "Ode To Bourbon", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "treaty oak revival ode to bourbbon", "artist": "Treaty Oak Revival", "title": "Ode To Bourbon", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "treaty oak reviival ode to bourbon", "artist": "Treaty Oak Revival", "title": "Ode To Bourbon", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "ode to bourbon treaty", "artist": "Treaty Oak Revival", "title": "Ode To Bourbon", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "ode to bouron treaty", "artist": "Treaty Oak Revival", "title": "Ode To Bourbon", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "a lua que eu te dei", "artist": null, "title": "A Lua Que Eu Te Dei", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "a lua que eu te dei ivete sangalo", "artist": "Ivete Sangalo", "title": "A Lua Que Eu Te Dei", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "ivete sangalo a lua que eu te dei", "artist": "Ivete Sangalo", "title": "A Lua Que Eu Te Dei", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "ivete sanalo a lua que eu te dei", "artist": "Ivete Sangalo", "title": "A Lua Que Eu Te Dei", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "a lua que eu te dei sangalo", "artist": "Ivete Sangalo", "title": "A Lua Que Eu Te Dei", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "a lua que eu te dei sangalo", "artist": "Ivete Sangalo", "title": "A Lua Que Eu Te Dei", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "vetri neri", "artist": null, "title": "VETRI NERI", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "vetri neri ava, anna, capo plaza", "artist": "Ava, ANNA, Capo Plaza", "title": "VETRI NERI", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "ava, anna, capo plaza vettri neri", "artist": "Ava, ANNA, Capo Plaza", "title": "VETRI NERI", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "ava, annna, capo plaza vetri neri", "artist": "Ava, ANNA, Capo Plaza", "title": "VETRI NERI", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "vetri neri ava,", "artist": "Ava, ANNA, Capo Plaza", "title": "VETRI NERI", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "verti neri ava,", "artist": "Ava, ANNA, Capo Plaza", "title": "VETRI NERI", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "quit", "artist": null, "title": "Quit", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "quit cashmere cat feat. ariana grande", "artist": "Cashmere Cat feat. Ariana Grande", "title": "Quit", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "cashmere cat feat. ariana grande quot", "artist": "Cashmere Cat feat. Ariana Grande", "title": "Quit", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "cashmee cat feat. ariana grande quit", "artist": "Cashmere Cat feat. Ariana Grande", "title": "Quit", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "quit cashmere", "artist": "Cashmere Cat feat. Ariana Grande", "title": "Quit", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "quuit cashmere", "artist": "Cashmere Cat feat. Ariana Grande", "title": "Quit", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "vulnerable", "artist": null, "title": "Vulnerable", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "vulnerable secondhand serenade", "artist": "Secondhand Serenade", "title": "Vulnerable", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "secondhand serenade vuulnerable", "artist": "Secondhand Serenade", "title": "Vulnerable", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "secondhannd serenade vulnerable", "artist": "Secondhand Serenade", "title": "Vulnerable", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "vulnerable secondhand", "artist": "Secondhand Serenade", "title": "Vulnerable", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "vulnerabel secondhand", "artist": "Secondhand Serenade", "title": "Vulnerable", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "jogo de damas", "artist": null, "title": "Jogo de damas", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "jogo de damas roberto carlos", "artist": "Roberto Carlos", "title": "Jogo de damas", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "roberto carlos jogo de damaas", "artist": "Roberto Carlos", "title": "Jogo de damas", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "rberto carlos jogo de damas", "artist": "Roberto Carlos", "title": "Jogo de damas", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "jogo de damas roberto", "artist": "Roberto Carlos", "title": "Jogo de damas", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "jogo de dams roberto", "artist": "Roberto Carlos", "title": "Jogo de damas", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "on bended knee", "artist": null, "title": "On Bended Knee", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "on bended knee boyz ii men", "artist": "Boyz II Men", "title": "On Bended Knee", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "boyz ii men on bebded knee", "artist": "Boyz II Men", "title": "On Bended Knee", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "byz ii men on bended knee", "artist": "Boyz II Men", "title": "On Bended Knee", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "on bended knee men", "artist": "Boyz II Men", "title": "On Bended Knee", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "on bendded knee men", "artist": "Boyz II Men", "title": "On Bended Knee", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "final feliz", "artist": null, "title": "Final Feliz", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "final feliz jorge vercillo", "artist": "Jorge Vercillo", "title": "Final Feliz", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "jorge vercillo finaal feliz", "artist": "Jorge Vercillo", "title": "Final Feliz", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "jorge vercillo final feliz", "artist": "Jorge Vercillo", "title": "Final Feliz", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "final feliz vercillo", "artist": "Jorge Vercillo", "title": "Final Feliz", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "fibal feliz vercillo", "artist": "Jorge Vercillo", "title": "Final Feliz", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "joke's on you", "artist": null, "title": "Joke's On You", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "joke's on you charlotte lawrence", "artist": "Charlotte Lawrence", "title": "Joke's On You", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "charlotte lawrence jokr's on you", "artist": "Charlotte Lawrence", "title": "Joke's On You", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "charlottte lawrence joke's on you", "artist": "Charlotte Lawrence", "title": "Joke's On You", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "joke's on you charlotte", "artist": "Charlotte Lawrence", "title": "Joke's On You", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "joes on you charlotte", "artist": "Charlotte Lawrence", "title": "Joke's On You", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "fly by night", "artist": null, "title": "Fly By Night", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "fly by night rush", "artist": "Rush", "title": "Fly By Night", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "rush fly by nght", "artist": "Rush", "title": "Fly By Night", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "ruush fly by night", "artist": "Rush", "title": "Fly By Night", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "fly by night rush", "artist": "Rush", "title": "Fly By Night", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "fly by nught rush", "artist": "Rush", "title": "Fly By Night", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "landline", "artist": null, "title": "Landline", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "landline binki", "artist": "binki", "title": "Landline", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "binki lansline", "artist": "binki", "title": "Landline", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "bini landline", "artist": "binki", "title": "Landline", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "landline binki", "artist": "binki", "title": "Landline", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "lanndline binki", "artist": "binki", "title": "Landline", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "independent women", "artist": null, "title": "Independent Women", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "independent women destiny’s child", "artist": "Destiny’s Child", "title": "Independent Women", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "destiny’s child idependent women", "artist": "Destiny’s Child", "title": "Independent Women", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "destiby’s child independent women", "artist": "Destiny’s Child", "title": "Independent Women", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "independent women child", "artist": "Destiny’s Child", "title": "Independent Women", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "infependent women child", "artist": "Destiny’s Child", "title": "Independent Women", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "je te donne", "artist": null, "title": "Je te donne", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "je te donne jean-jacques goldman", "artist": "Jean-Jacques Goldman", "title": "Je te donne", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "jean-jacques goldman je te donen", "artist": "Jean-Jacques Goldman", "title": "Je te donne", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "jean-jacwues goldman je te donne", "artist": "Jean-Jacques Goldman", "title": "Je te donne", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "je te donne jean-jacques", "artist": "Jean-Jacques Goldman", "title": "Je te donne", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "je te donen jean-jacques", "artist": "Jean-Jacques Goldman", "title": "Je te donne", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "god gave me you", "artist": null, "title": "God Gave Me You", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "god gave me you blake shelton", "artist": "Blake Shelton", "title": "God Gave Me You", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "blake shelton god gavve me you", "artist": "Blake Shelton", "title": "God Gave Me You", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "blake shelon god gave me you", "artist": "Blake Shelton", "title": "God Gave Me You", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "god gave me you blake", "artist": "Blake Shelton", "title": "God Gave Me You", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "god gabe me you blake", "artist": "Blake Shelton", "title": "God Gave Me You", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "purple medley", "artist": null, "title": "Purple Medley", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "purple medley prince", "artist": "Prince", "title": "Purple Medley", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "prince pueple medley", "artist": "Prince", "title": "Purple Medley", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "prnice purple medley", "artist": "Prince", "title": "Purple Medley", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "purple medley prince", "artist": "Prince", "title": "Purple Medley", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "puurple medley prince", "artist": "Prince", "title": "Purple Medley", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "fulanito", "artist": null, "title": "FULANITO", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "fulanito becky g", "artist": "Becky G", "title": "FULANITO", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "becky g fualnito", "artist": "Becky G", "title": "FULANITO", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "bwcky g fulanito", "artist": "Becky G", "title": "FULANITO", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "fulanito g", "artist": "Becky G", "title": "FULANITO", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "fulanio g", "artist": "Becky G", "title": "FULANITO", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "drinking about you", "artist": null, "title": "Drinking About You", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "drinking about you jason aldean", "artist": "Jason Aldean", "title": "Drinking About You", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "jason aldean drinkking about you", "artist": "Jason Aldean", "title": "Drinking About You", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "jason alddean drinking about you", "artist": "Jason Aldean", "title": "Drinking About You", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "drinking about you aldean", "artist": "Jason Aldean", "title": "Drinking About You", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "drinkimg about you aldean", "artist": "Jason Aldean", "title": "Drinking About You", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "yes, i'm ready", "artist": null, "title": "Yes, I'm Ready", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "yes, i'm ready barbara mason", "artist": "Barbara Mason", "title": "Yes, I'm Ready", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "barbara mason yes, i'm reaady", "artist": "Barbara Mason", "title": "Yes, I'm Ready", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "barabra mason yes, i'm ready", "artist": "Barbara Mason", "title": "Yes, I'm Ready", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "yes, i'm ready mason", "artist": "Barbara Mason", "title": "Yes, I'm Ready", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "yes, im raedy mason", "artist": "Barbara Mason", "title": "Yes, I'm Ready", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "april sun in cuba", "artist": null, "title": "April Sun in Cuba", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "april sun in cuba dragon", "artist": "Dragon", "title": "April Sun in Cuba", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "dragon aptil sun in cuba", "artist": "Dragon", "title": "April Sun in Cuba", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "dtagon april sun in cuba", "artist": "Dragon", "title": "April Sun in Cuba", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "april sun in cuba dragon", "artist": "Dragon", "title": "April Sun in Cuba", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "aprli sun in cuba dragon", "artist": "Dragon", "title": "April Sun in Cuba", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "sharp edges", "artist": null, "title": "Sharp Edges", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "sharp edges linkin park", "artist": "Linkin Park", "title": "Sharp Edges", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "linkin park shharp edges", "artist": "Linkin Park", "title": "Sharp Edges", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "lnkin park sharp edges", "artist": "Linkin Park", "title": "Sharp Edges", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "sharp edges linkin", "artist": "Linkin Park", "title": "Sharp Edges", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "shrap edges linkin", "artist": "Linkin Park", "title": "Sharp Edges", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "quando digo que te amo", "artist": null, "title": "Quando digo que te amo", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "quando digo que te amo roberto carlos", "artist": "Roberto Carlos", "title": "Quando digo que te amo", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "roberto carlos qunado digo que te amo", "artist": "Roberto Carlos", "title": "Quando digo que te amo", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "ronerto carlos quando digo que te amo", "artist": "Roberto Carlos", "title": "Quando digo que te amo", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "quando digo que te amo roberto", "artist": "Roberto Carlos", "title": "Quando digo que te amo", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "quanddo digo que te amo roberto", "artist": "Roberto Carlos", "title": "Quando digo que te amo", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "pump it", "artist": null, "title": "Pump It", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "pump it electric callboy", "artist": "Electric Callboy", "title": "Pump It", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "electric callboy pup it", "artist": "Electric Callboy", "title": "Pump It", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "eletric callboy pump it", "artist": "Electric Callboy", "title": "Pump It", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "pump it callboy", "artist": "Electric Callboy", "title": "Pump It", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "pymp it callboy", "artist": "Electric Callboy", "title": "Pump It", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "a real man", "artist": null, "title": "A Real Man", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "a real man dax", "artist": "Dax", "title": "A Real Man", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "dax a ral man", "artist": "Dax", "title": "A Real Man", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "dax a real man", "artist": "Dax", "title": "A Real Man", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "a real man dax", "artist": "Dax", "title": "A Real Man", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "a rel man dax", "artist": "Dax", "title": "A Real Man", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "el dia que me quieras", "artist": null, "title": "El Dia Que Me Quieras", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "el dia que me quieras luis miguel", "artist": "Luis Miguel", "title": "El Dia Que Me Quieras", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "luis miguel el dia que me qiueras", "artist": "Luis Miguel", "title": "El Dia Que Me Quieras", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "luis muguel el dia que me quieras", "artist": "Luis Miguel", "title": "El Dia Que Me Quieras", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "el dia que me quieras luis", "artist": "Luis Miguel", "title": "El Dia Que Me Quieras", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "el dia que me quirras luis", "artist": "Luis Miguel", "title": "El Dia Que Me Quieras", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "turn your love around", "artist": null, "title": "Turn Your Love Around", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "turn your love around george benson", "artist": "George Benson", "title": "Turn Your Love Around", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "george benson turn your love arround", "artist": "George Benson", "title": "Turn Your Love Around", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "geeorge benson turn your love around", "artist": "George Benson", "title": "Turn Your Love Around", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "turn your love around george", "artist": "George Benson", "title": "Turn Your Love Around", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "turn your love arond george", "artist": "George Benson", "title": "Turn Your Love Around", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "flatliner", "artist": null, "title": "Flatliner", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "flatliner cole swindell feat. dierks bentley", "artist": "Cole Swindell feat. Dierks Bentley", "title": "Flatliner", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "cole swindell feat. dierks bentley fltaliner", "artist": "Cole Swindell feat. Dierks Bentley", "title": "Flatliner", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "cole swindell feat. dierks bentley flatliner", "artist": "Cole Swindell feat. Dierks Bentley", "title": "Flatliner", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "flatliner swindell", "artist": "Cole Swindell feat. Dierks Bentley", "title": "Flatliner", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "flatliiner swindell", "artist": "Cole Swindell feat. Dierks Bentley", "title": "Flatliner", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "tomorrow 2", "artist": null, "title": "Tomorrow 2", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "tomorrow 2 glorilla & cardi b", "artist": "GloRilla & Cardi B", "title": "Tomorrow 2", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "glorilla & cardi b tomorrrow 2", "artist": "GloRilla & Cardi B", "title": "Tomorrow 2", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "gloirlla & cardi b tomorrow 2", "artist": "GloRilla & Cardi B", "title": "Tomorrow 2", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "tomorrow 2 cardi", "artist": "GloRilla & Cardi B", "title": "Tomorrow 2", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "tmoorrow 2 cardi", "artist": "GloRilla & Cardi B", "title": "Tomorrow 2", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "troublemaker (feat. flo rida)", "artist": null, "title": "Troublemaker (feat. Flo Rida)", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "troublemaker (feat. flo rida) olly murs", "artist": "Olly Murs", "title": "Troublemaker (feat. Flo Rida)", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "olly murs toublemaker (feat. flo rida)", "artist": "Olly Murs", "title": "Troublemaker (feat. Flo Rida)", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "okly murs troublemaker (feat. flo rida)", "artist": "Olly Murs", "title": "Troublemaker (feat. Flo Rida)", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "troublemaker (feat. flo rida) olly", "artist": "Olly Murs", "title": "Troublemaker (feat. Flo Rida)", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "troublemker (feat. flo rida) olly", "artist": "Olly Murs", "title": "Troublemaker (feat. Flo Rida)", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "girls just wanna have some", "artist": null, "title": "Girls Just Wanna Have Some", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "girls just wanna have some chromatics", "artist": "Chromatics", "title": "Girls Just Wanna Have Some", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "chromatics girks just wanna have some", "artist": "Chromatics", "title": "Girls Just Wanna Have Some", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "chromaatics girls just wanna have some", "artist": "Chromatics", "title": "Girls Just Wanna Have Some", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "girls just wanna have some chromatics", "artist": "Chromatics", "title": "Girls Just Wanna Have Some", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "grils just wanna have some chromatics", "artist": "Chromatics", "title": "Girls Just Wanna Have Some", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "one more time", "artist": null, "title": "ONE MORE TIME", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "one more time blink-182", "artist": "blink-182", "title": "ONE MORE TIME", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "blink-182 one mpre time", "artist": "blink-182", "title": "ONE MORE TIME", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "bllink-182 one more time", "artist": "blink-182", "title": "ONE MORE TIME", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "one more time blink-182", "artist": "blink-182", "title": "ONE MORE TIME", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "one mre time blink-182", "artist": "blink-182", "title": "ONE MORE TIME", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "big time sensuality", "artist": null, "title": "Big Time Sensuality", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "big time sensuality björk", "artist": "Björk", "title": "Big Time Sensuality", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "björk big time sensualiity", "artist": "Björk", "title": "Big Time Sensuality", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "börk big time sensuality", "artist": "Björk", "title": "Big Time Sensuality", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "big time sensuality björk", "artist": "Björk", "title": "Big Time Sensuality", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "big time sensualtiy björk", "artist": "Björk", "title": "Big Time Sensuality", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "throw your arms around me", "artist": null, "title": "Throw Your Arms Around Me", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "throw your arms around me hunters & collectors", "artist": "Hunters & Collectors", "title": "Throw Your Arms Around Me", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "hunters & collectors throw your arms aruond me", "artist": "Hunters & Collectors", "title": "Throw Your Arms Around Me", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "hunters & cillectors throw your arms around me", "artist": "Hunters & Collectors", "title": "Throw Your Arms Around Me", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "throw your arms around me collectors", "artist": "Hunters & Collectors", "title": "Throw Your Arms Around Me", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "throw your arms aruond me collectors", "artist": "Hunters & Collectors", "title": "Throw Your Arms Around Me", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "será que é amor", "artist": null, "title": "Será que é amor", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "será que é amor thiaguinho", "artist": "Thiaguinho", "title": "Será que é amor", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "thiaguinho sreá que é amor", "artist": "Thiaguinho", "title": "Será que é amor", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "thiaguniho será que é amor", "artist": "Thiaguinho", "title": "Será que é amor", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "será que é amor thiaguinho", "artist": "Thiaguinho", "title": "Será que é amor", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "serrá que é amor thiaguinho", "artist": "Thiaguinho", "title": "Será que é amor", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "amigos no por favor", "artist": null, "title": "Amigos no por favor", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "amigos no por favor yuridia", "artist": "Yuridia", "title": "Amigos no por favor", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "yuridia amiggos no por favor", "artist": "Yuridia", "title": "Amigos no por favor", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "yuriidia amigos no por favor", "artist": "Yuridia", "title": "Amigos no por favor", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "amigos no por favor yuridia", "artist": "Yuridia", "title": "Amigos no por favor", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "aimgos no por favor yuridia", "artist": "Yuridia", "title": "Amigos no por favor", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "deira", "artist": null, "title": "Deira", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "deira saint levant", "artist": "Saint Levant", "title": "Deira", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "saint levant drira", "artist": "Saint Levant", "title": "Deira", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "saint levvant deira", "artist": "Saint Levant", "title": "Deira", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "deira levant", "artist": "Saint Levant", "title": "Deira", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "deia levant", "artist": "Saint Levant", "title": "Deira", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "weekend (feat. miguel)", "artist": null, "title": "Weekend (feat. Miguel)", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "weekend (feat. miguel) mac miller", "artist": "Mac Miller", "title": "Weekend (feat. Miguel)", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "mac miller weeend (feat. miguel)", "artist": "Mac Miller", "title": "Weekend (feat. Miguel)", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "mac mikler weekend (feat. miguel)", "artist": "Mac Miller", "title": "Weekend (feat. Miguel)", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "weekend (feat. miguel) mac", "artist": "Mac Miller", "title": "Weekend (feat. Miguel)", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "weeknd (feat. miguel) mac", "artist": "Mac Miller", "title": "Weekend (feat. Miguel)", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "when we", "artist": null, "title": "When We", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "when we tank", "artist": "Tank", "title": "When We", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "tank wheen we", "artist": "Tank", "title": "When We", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "taank when we", "artist": "Tank", "title": "When We", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "when we tank", "artist": "Tank", "title": "When We", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "whne we tank", "artist": "Tank", "title": "When We", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "call me", "artist": null, "title": "Call Me", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "call me st. paul & the broken bones", "artist": "St. Paul & The Broken Bones", "title": "Call Me", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "st. paul & the broken bones calll me", "artist": "St. Paul & The Broken Bones", "title": "Call Me", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "st. paul & the brokken bones call me", "artist": "St. Paul & The Broken Bones", "title": "Call Me", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "call me bones", "artist": "St. Paul & The Broken Bones", "title": "Call Me", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "csll me bones", "artist": "St. Paul & The Broken Bones", "title": "Call Me", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "heartbreak weather", "artist": null, "title": "Heartbreak Weather", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "heartbreak weather niall horan", "artist": "Niall Horan", "title": "Heartbreak Weather", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "niall horan hearbreak weather", "artist": "Niall Horan", "title": "Heartbreak Weather", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "nall horan heartbreak weather", "artist": "Niall Horan", "title": "Heartbreak Weather", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "heartbreak weather niall", "artist": "Niall Horan", "title": "Heartbreak Weather", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "heatrbreak weather niall", "artist": "Niall Horan", "title": "Heartbreak Weather", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "quien", "artist": null, "title": "Quien", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "quien los strwck", "artist": "Los Strwck", "title": "Quien", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "los strwck quuen", "artist": "Los Strwck", "title": "Quien", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "los sttrwck quien", "artist": "Los Strwck", "title": "Quien", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "quien los", "artist": "Los Strwck", "title": "Quien", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "quein los", "artist": "Los Strwck", "title": "Quien", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "ella", "artist": null, "title": "Ella", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "ella julio iglesias", "artist": "Julio Iglesias", "title": "Ella", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "julio iglesias ela", "artist": "Julio Iglesias", "title": "Ella", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "julio iglesis ella", "artist": "Julio Iglesias", "title": "Ella", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "ella julio", "artist": "Julio Iglesias", "title": "Ella", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "ekla julio", "artist": "Julio Iglesias", "title": "Ella", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "mami wata", "artist": null, "title": "MAMI WATA", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "mami wata gazo & tiakola", "artist": "Gazo & Tiakola", "title": "MAMI WATA", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "gazo & tiakola mammi wata", "artist": "Gazo & Tiakola", "title": "MAMI WATA", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "gazo & tiaakola mami wata", "artist": "Gazo & Tiakola", "title": "MAMI WATA", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "mami wata gazo", "artist": "Gazo & Tiakola", "title": "MAMI WATA", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "mani wata gazo", "artist": "Gazo & Tiakola", "title": "MAMI WATA", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "ases y tercia de reyes", "artist": null, "title": "Ases y tercia de reyes", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "ases y tercia de reyes juan gabriel", "artist": "Juan Gabriel", "title": "Ases y tercia de reyes", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "juan gabriel ases y tercai de reyes", "artist": "Juan Gabriel", "title": "Ases y tercia de reyes", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "juan gaabriel ases y tercia de reyes", "artist": "Juan Gabriel", "title": "Ases y tercia de reyes", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "ases y tercia de reyes juan", "artist": "Juan Gabriel", "title": "Ases y tercia de reyes", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "ases y teercia de reyes juan", "artist": "Juan Gabriel", "title": "Ases y tercia de reyes", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "crown", "artist": null, "title": "Crown", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "crown camila cabello", "artist": "Camila Cabello", "title": "Crown", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "camila cabello crwon", "artist": "Camila Cabello", "title": "Crown", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "camila cabelllo crown", "artist": "Camila Cabello", "title": "Crown", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "crown cabello", "artist": "Camila Cabello", "title": "Crown", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "ceown cabello", "artist": "Camila Cabello", "title": "Crown", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "por que te conocí", "artist": null, "title": "Por Que Te Conocí", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "por que te conocí los temerarios", "artist": "Los Temerarios", "title": "Por Que Te Conocí", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "los temerarios por que te concí", "artist": "Los Temerarios", "title": "Por Que Te Conocí", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "los temetarios por que te conocí", "artist": "Los Temerarios", "title": "Por Que Te Conocí", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "por que te conocí temerarios", "artist": "Los Temerarios", "title": "Por Que Te Conocí", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "por que te conpcí temerarios", "artist": "Los Temerarios", "title": "Por Que Te Conocí", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "this is love", "artist": null, "title": "This Is Love", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "this is love will.i.am feat. eva simons", "artist": "will.i.am feat. Eva Simons", "title": "This Is Love", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "will.i.am feat. eva simons thhis is love", "artist": "will.i.am feat. Eva Simons", "title": "This Is Love", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "wil.i.am feat. eva simons this is love", "artist": "will.i.am feat. Eva Simons", "title": "This Is Love", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "this is love simons", "artist": "will.i.am feat. Eva Simons", "title": "This Is Love", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "ths is love simons", "artist": "will.i.am feat. Eva Simons", "title": "This Is Love", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "the hardest button to button", "artist": null, "title": "The Hardest Button to Button", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "the hardest button to button the white stripes", "artist": "The White Stripes", "title": "The Hardest Button to Button", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "the white stripes the hardst button to button", "artist": "The White Stripes", "title": "The Hardest Button to Button", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "the white striprs the hardest button to button", "artist": "The White Stripes", "title": "The Hardest Button to Button", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "the hardest button to button white", "artist": "The White Stripes", "title": "The Hardest Button to Button", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "the hardeest button to button white", "artist": "The White Stripes", "title": "The Hardest Button to Button", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "last caress", "artist": null, "title": "Last Caress", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "last caress misfits", "artist": "Misfits", "title": "Last Caress", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "misfits last cress", "artist": "Misfits", "title": "Last Caress", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "mifsits last caress", "artist": "Misfits", "title": "Last Caress", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "last caress misfits", "artist": "Misfits", "title": "Last Caress", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "last careess misfits", "artist": "Misfits", "title": "Last Caress", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "sensual seduction", "artist": null, "title": "Sensual Seduction", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "sensual seduction snoop dogg", "artist": "Snoop Dogg", "title": "Sensual Seduction", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "snoop dogg sensual sdeuction", "artist": "Snoop Dogg", "title": "Sensual Seduction", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "smoop dogg sensual seduction", "artist": "Snoop Dogg", "title": "Sensual Seduction", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "sensual seduction dogg", "artist": "Snoop Dogg", "title": "Sensual Seduction", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "sensual sedution dogg", "artist": "Snoop Dogg", "title": "Sensual Seduction", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "bring it back", "artist": null, "title": "Bring It Back", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "bring it back limp bizkit", "artist": "Limp Bizkit", "title": "Bring It Back", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "limp bizkit bting it back", "artist": "Limp Bizkit", "title": "Bring It Back", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "limp bizkti bring it back", "artist": "Limp Bizkit", "title": "Bring It Back", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "bring it back limp", "artist": "Limp Bizkit", "title": "Bring It Back", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "brinng it back limp", "artist": "Limp Bizkit", "title": "Bring It Back", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "im not a girl, not yet a woman", "artist": null, "title": "Im Not a Girl, Not Yet a Woman", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "im not a girl, not yet a woman britney spears", "artist": "Britney Spears", "title": "Im Not a Girl, Not Yet a Woman", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "britney spears im not a gitl, not yet a woman", "artist": "Britney Spears", "title": "Im Not a Girl, Not Yet a Woman", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "birtney spears im not a girl, not yet a woman", "artist": "Britney Spears", "title": "Im Not a Girl, Not Yet a Woman", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "im not a girl, not yet a woman spears", "artist": "Britney Spears", "title": "Im Not a Girl, Not Yet a Woman", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "im not a gril, not yet a woman spears", "artist": "Britney Spears", "title": "Im Not a Girl, Not Yet a Woman", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "close to you", "artist": null, "title": "Close To You", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "close to you dayglow", "artist": "Dayglow", "title": "Close To You", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "dayglow clse to you", "artist": "Dayglow", "title": "Close To You", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "daglow close to you", "artist": "Dayglow", "title": "Close To You", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "close to you dayglow", "artist": "Dayglow", "title": "Close To You", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "cloes to you dayglow", "artist": "Dayglow", "title": "Close To You", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "see you again (feat. kali uchis)", "artist": null, "title": "See You Again (feat. Kali Uchis)", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "see you again (feat. kali uchis) tyler, the creator", "artist": "Tyler, The Creator", "title": "See You Again (feat. Kali Uchis)", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "tyler, the creator see you again (fet. kali uchis)", "artist": "Tyler, The Creator", "title": "See You Again (feat. Kali Uchis)", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "tyler, the crearor see you again (feat. kali uchis)", "artist": "Tyler, The Creator", "title": "See You Again (feat. Kali Uchis)", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "see you again (feat. kali uchis) the", "artist": "Tyler, The Creator", "title": "See You Again (feat. Kali Uchis)", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "see you again (fest. kali uchis) the", "artist": "Tyler, The Creator", "title": "See You Again (feat. Kali Uchis)", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "jesucristo", "artist": null, "title": "Jesucristo", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "jesucristo roberto carlos", "artist": "Roberto Carlos", "title": "Jesucristo", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "roberto carlos jesucisto", "artist": "Roberto Carlos", "title": "Jesucristo", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "rboerto carlos jesucristo", "artist": "Roberto Carlos", "title": "Jesucristo", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "jesucristo roberto", "artist": "Roberto Carlos", "title": "Jesucristo", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "jesuucristo roberto", "artist": "Roberto Carlos", "title": "Jesucristo", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "big girls don’t cry", "artist": null, "title": "Big Girls Don’t Cry", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "big girls don’t cry fergie", "artist": "Fergie", "title": "Big Girls Don’t Cry", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "fergie big gilrs don’t cry", "artist": "Fergie", "title": "Big Girls Don’t Cry", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "fegrie big girls don’t cry", "artist": "Fergie", "title": "Big Girls Don’t Cry", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "big girls don’t cry fergie", "artist": "Fergie", "title": "Big Girls Don’t Cry", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "big gils don’t cry fergie", "artist": "Fergie", "title": "Big Girls Don’t Cry", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "acqua e sale", "artist": null, "title": "Acqua e sale", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "acqua e sale minacelentano", "artist": "MINACELENTANO", "title": "Acqua e sale", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "minacelentano acquua e sale", "artist": "MINACELENTANO", "title": "Acqua e sale", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "miacelentano acqua e sale", "artist": "MINACELENTANO", "title": "Acqua e sale", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "acqua e sale minacelentano", "artist": "MINACELENTANO", "title": "Acqua e sale", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "acqia e sale minacelentano", "artist": "MINACELENTANO", "title": "Acqua e sale", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "from the beginning", "artist": null, "title": "From the Beginning", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "from the beginning emerson, lake & palmer", "artist": "Emerson, Lake & Palmer", "title": "From the Beginning", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "emerson, lake & palmer from the beginnnig", "artist": "Emerson, Lake & Palmer", "title": "From the Beginning", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "emeron, lake & palmer from the beginning", "artist": "Emerson, Lake & Palmer", "title": "From the Beginning", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "from the beginning lake", "artist": "Emerson, Lake & Palmer", "title": "From the Beginning", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "from the beginnning lake", "artist": "Emerson, Lake & Palmer", "title": "From the Beginning", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "its all over now", "artist": null, "title": "Its All Over Now", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "its all over now the rolling stones", "artist": "The Rolling Stones", "title": "Its All Over Now", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "the rolling stones its all ovrr now", "artist": "The Rolling Stones", "title": "Its All Over Now", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "the rolilng stones its all over now", "artist": "The Rolling Stones", "title": "Its All Over Now", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "its all over now the", "artist": "The Rolling Stones", "title": "Its All Over Now", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "its all ovre now the", "artist": "The Rolling Stones", "title": "Its All Over Now", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "propuesta indecente", "artist": null, "title": "Propuesta Indecente", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "propuesta indecente romeo santos", "artist": "Romeo Santos", "title": "Propuesta Indecente", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "romeo santos propuessta indecente", "artist": "Romeo Santos", "title": "Propuesta Indecente", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "romeo sanyos propuesta indecente", "artist": "Romeo Santos", "title": "Propuesta Indecente", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "propuesta indecente santos", "artist": "Romeo Santos", "title": "Propuesta Indecente", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "prropuesta indecente santos", "artist": "Romeo Santos", "title": "Propuesta Indecente", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "anything but ordinary", "artist": null, "title": "Anything but Ordinary", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "anything but ordinary avril lavigne", "artist": "Avril Lavigne", "title": "Anything but Ordinary", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "avril lavigne annything but ordinary", "artist": "Avril Lavigne", "title": "Anything but Ordinary", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "avril lavigbe anything but ordinary", "artist": "Avril Lavigne", "title": "Anything but Ordinary", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "anything but ordinary avril", "artist": "Avril Lavigne", "title": "Anything but Ordinary", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "anytihng but ordinary avril", "artist": "Avril Lavigne", "title": "Anything but Ordinary", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "dos gardenias", "artist": null, "title": "Dos Gardenias", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "dos gardenias buena vista social club", "artist": "Buena Vista Social Club", "title": "Dos Gardenias", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "buena vista social club dos gardeenias", "artist": "Buena Vista Social Club", "title": "Dos Gardenias", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "buena vista soccial club dos gardenias", "artist": "Buena Vista Social Club", "title": "Dos Gardenias", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "dos gardenias club", "artist": "Buena Vista Social Club", "title": "Dos Gardenias", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "dos gaardenias club", "artist": "Buena Vista Social Club", "title": "Dos Gardenias", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "one more love song", "artist": null, "title": "One More Love Song", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "one more love song mac demarco", "artist": "Mac DeMarco", "title": "One More Love Song", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "mac demarco one mroe love song", "artist": "Mac DeMarco", "title": "One More Love Song", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "mac deamrco one more love song", "artist": "Mac DeMarco", "title": "One More Love Song", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "one more love song demarco", "artist": "Mac DeMarco", "title": "One More Love Song", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "one morre love song demarco", "artist": "Mac DeMarco", "title": "One More Love Song", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "need it", "artist": null, "title": "Need It", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "need it migos feat. youngboy never broke again", "artist": "Migos feat. YoungBoy Never Broke Again", "title": "Need It", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "migos feat. youngboy never broke again nerd it", "artist": "Migos feat. YoungBoy Never Broke Again", "title": "Need It", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "migos feat. youngbooy never broke again need it", "artist": "Migos feat. YoungBoy Never Broke Again", "title": "Need It", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "need it migos", "artist": "Migos feat. YoungBoy Never Broke Again", "title": "Need It", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "nede it migos", "artist": "Migos feat. YoungBoy Never Broke Again", "title": "Need It", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "after dark", "artist": null, "title": "After Dark", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "after dark mr.kitty", "artist": "Mr.Kitty", "title": "After Dark", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "mr.kitty agter dark", "artist": "Mr.Kitty", "title": "After Dark", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "mr.kitty after dark", "artist": "Mr.Kitty", "title": "After Dark", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "after dark mr.kitty", "artist": "Mr.Kitty", "title": "After Dark", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "affter dark mr.kitty", "artist": "Mr.Kitty", "title": "After Dark", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "semi-charmed life", "artist": null, "title": "Semi-Charmed Life", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "semi-charmed life third eye blind", "artist": "Third Eye Blind", "title": "Semi-Charmed Life", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "third eye blind semi-ccharmed life", "artist": "Third Eye Blind", "title": "Semi-Charmed Life", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "thord eye blind semi-charmed life", "artist": "Third Eye Blind", "title": "Semi-Charmed Life", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "semi-charmed life third", "artist": "Third Eye Blind", "title": "Semi-Charmed Life", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "semi-chramed life third", "artist": "Third Eye Blind", "title": "Semi-Charmed Life", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "breathe", "artist": null, "title": "Breathe", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "breathe stick figure", "artist": "Stick Figure", "title": "Breathe", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "stick figure brathe", "artist": "Stick Figure", "title": "Breathe", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "stick figute breathe", "artist": "Stick Figure", "title": "Breathe", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "breathe stick", "artist": "Stick Figure", "title": "Breathe", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "beathe stick", "artist": "Stick Figure", "title": "Breathe", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "bruxelles", "artist": null, "title": "Bruxelles", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "bruxelles boulevard des airs", "artist": "Boulevard des Airs", "title": "Bruxelles", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "boulevard des airs bruxellrs", "artist": "Boulevard des Airs", "title": "Bruxelles", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "bolevard des airs bruxelles", "artist": "Boulevard des Airs", "title": "Bruxelles", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "bruxelles des", "artist": "Boulevard des Airs", "title": "Bruxelles", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "bruuxelles des", "artist": "Boulevard des Airs", "title": "Bruxelles", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "morena canela", "artist": null, "title": "Morena Canela", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "morena canela chino pacas", "artist": "Chino Pacas", "title": "Morena Canela", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "chino pacas mirena canela", "artist": "Chino Pacas", "title": "Morena Canela", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "chio pacas morena canela", "artist": "Chino Pacas", "title": "Morena Canela", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "morena canela chino", "artist": "Chino Pacas", "title": "Morena Canela", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "moorena canela chino", "artist": "Chino Pacas", "title": "Morena Canela", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "stars will align", "artist": null, "title": "Stars Will Align", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "stars will align kygo & imagine dragons", "artist": "Kygo & Imagine Dragons", "title": "Stars Will Align", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "kygo & imagine dragons stas will align", "artist": "Kygo & Imagine Dragons", "title": "Stars Will Align", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "kygo & imaggine dragons stars will align", "artist": "Kygo & Imagine Dragons", "title": "Stars Will Align", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "stars will align &", "artist": "Kygo & Imagine Dragons", "title": "Stars Will Align", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "stasr will align &", "artist": "Kygo & Imagine Dragons", "title": "Stars Will Align", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "and i love her", "artist": null, "title": "And I Love Her", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "and i love her the beatles", "artist": "The Beatles", "title": "And I Love Her", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "the beatles and i lve her", "artist": "The Beatles", "title": "And I Love Her", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "the baetles and i love her", "artist": "The Beatles", "title": "And I Love Her", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "and i love her beatles", "artist": "The Beatles", "title": "And I Love Her", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "and i lpve her beatles", "artist": "The Beatles", "title": "And I Love Her", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "the mighty quinn (quinn the eskimo)", "artist": null, "title": "The Mighty Quinn (Quinn the Eskimo)", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "the mighty quinn (quinn the eskimo) bob dylan", "artist": "Bob Dylan", "title": "The Mighty Quinn (Quinn the Eskimo)", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "bob dylan the mighty quinn (quinn the eskim)", "artist": "Bob Dylan", "title": "The Mighty Quinn (Quinn the Eskimo)", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "bob dlyan the mighty quinn (quinn the eskimo)", "artist": "Bob Dylan", "title": "The Mighty Quinn (Quinn the Eskimo)", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "the mighty quinn (quinn the eskimo) bob", "artist": "Bob Dylan", "title": "The Mighty Quinn (Quinn the Eskimo)", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "the mighty quinn (quinn the eskiom) bob", "artist": "Bob Dylan", "title": "The Mighty Quinn (Quinn the Eskimo)", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "neon nights", "artist": null, "title": "Neon Nights", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "neon nights black sabbath", "artist": "Black Sabbath", "title": "Neon Nights", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "black sabbath neon nifhts", "artist": "Black Sabbath", "title": "Neon Nights", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "black sabbatth neon nights", "artist": "Black Sabbath", "title": "Neon Nights", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "neon nights sabbath", "artist": "Black Sabbath", "title": "Neon Nights", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "neon noghts sabbath", "artist": "Black Sabbath", "title": "Neon Nights", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "te necesito", "artist": null, "title": "Te necesito", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "te necesito luis miguel", "artist": "Luis Miguel", "title": "Te necesito", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "luis miguel te neecesito", "artist": "Luis Miguel", "title": "Te necesito", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "luis miguwl te necesito", "artist": "Luis Miguel", "title": "Te necesito", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "te necesito luis", "artist": "Luis Miguel", "title": "Te necesito", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "te neceesito luis", "artist": "Luis Miguel", "title": "Te necesito", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "testing", "artist": null, "title": "Testing", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "testing skusta clee", "artist": "Skusta Clee", "title": "Testing", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "skusta clee testting", "artist": "Skusta Clee", "title": "Testing", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "skusa clee testing", "artist": "Skusta Clee", "title": "Testing", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "testing clee", "artist": "Skusta Clee", "title": "Testing", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "tesying clee", "artist": "Skusta Clee", "title": "Testing", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "lost on you", "artist": null, "title": "Lost On You", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "lost on you lewis capaldi", "artist": "Lewis Capaldi", "title": "Lost On You", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "lewis capaldi lst on you", "artist": "Lewis Capaldi", "title": "Lost On You", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "lewis capldi lost on you", "artist": "Lewis Capaldi", "title": "Lost On You", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "lost on you capaldi", "artist": "Lewis Capaldi", "title": "Lost On You", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "list on you capaldi", "artist": "Lewis Capaldi", "title": "Lost On You", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "chaparrita", "artist": null, "title": "Chaparrita", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "chaparrita pepe aguilar", "artist": "Pepe Aguilar", "title": "Chaparrita", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "pepe aguilar chapaarrita", "artist": "Pepe Aguilar", "title": "Chaparrita", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "pepe aguillar chaparrita", "artist": "Pepe Aguilar", "title": "Chaparrita", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "chaparrita aguilar", "artist": "Pepe Aguilar", "title": "Chaparrita", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "chaparrita aguilar", "artist": "Pepe Aguilar", "title": "Chaparrita", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "hoy empieza mi tristeza", "artist": null, "title": "Hoy Empieza Mi Tristeza", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "hoy empieza mi tristeza montez de durango", "artist": "Montez de Durango", "title": "Hoy Empieza Mi Tristeza", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "montez de durango hoy empieza mi tristwza", "artist": "Montez de Durango", "title": "Hoy Empieza Mi Tristeza", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "montez de dutango hoy empieza mi tristeza", "artist": "Montez de Durango", "title": "Hoy Empieza Mi Tristeza", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "hoy empieza mi tristeza montez", "artist": "Montez de Durango", "title": "Hoy Empieza Mi Tristeza", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "hoy empieza mi tristea montez", "artist": "Montez de Durango", "title": "Hoy Empieza Mi Tristeza", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "you sent me flying", "artist": null, "title": "You Sent Me Flying", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "you sent me flying amy winehouse", "artist": "Amy Winehouse", "title": "You Sent Me Flying", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "amy winehouse you sent me flyig", "artist": "Amy Winehouse", "title": "You Sent Me Flying", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "amy wiehouse you sent me flying", "artist": "Amy Winehouse", "title": "You Sent Me Flying", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "you sent me flying amy", "artist": "Amy Winehouse", "title": "You Sent Me Flying", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "you sent me flting amy", "artist": "Amy Winehouse", "title": "You Sent Me Flying", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "turn the tide", "artist": null, "title": "Turn the Tide", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "turn the tide sylver", "artist": "Sylver", "title": "Turn the Tide", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "sylver tirn the tide", "artist": "Sylver", "title": "Turn the Tide", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "syler turn the tide", "artist": "Sylver", "title": "Turn the Tide", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "turn the tide sylver", "artist": "Sylver", "title": "Turn the Tide", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "tuurn the tide sylver", "artist": "Sylver", "title": "Turn the Tide", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "made you look", "artist": null, "title": "Made You Look", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "made you look nas", "artist": "Nas", "title": "Made You Look", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "nas maade you look", "artist": "Nas", "title": "Made You Look", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "nas made you look", "artist": "Nas", "title": "Made You Look", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "made you look nas", "artist": "Nas", "title": "Made You Look", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "mae you look nas", "artist": "Nas", "title": "Made You Look", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "second hand news", "artist": null, "title": "Second Hand News", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "second hand news fleetwood mac", "artist": "Fleetwood Mac", "title": "Second Hand News", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "fleetwood mac secodn hand news", "artist": "Fleetwood Mac", "title": "Second Hand News", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "flewtwood mac second hand news", "artist": "Fleetwood Mac", "title": "Second Hand News", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "second hand news mac", "artist": "Fleetwood Mac", "title": "Second Hand News", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "scond hand news mac", "artist": "Fleetwood Mac", "title": "Second Hand News", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "who’s that chick?", "artist": null, "title": "Who’s That Chick?", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "who’s that chick? david guetta feat. rihanna", "artist": "David Guetta feat. Rihanna", "title": "Who’s That Chick?", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "david guetta feat. rihanna who’s that chik?", "artist": "David Guetta feat. Rihanna", "title": "Who’s That Chick?", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "david guetta feat. rihsnna who’s that chick?", "artist": "David Guetta feat. Rihanna", "title": "Who’s That Chick?", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "who’s that chick? david", "artist": "David Guetta feat. Rihanna", "title": "Who’s That Chick?", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "who’s that chock? david", "artist": "David Guetta feat. Rihanna", "title": "Who’s That Chick?", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "hell you call a dream", "artist": null, "title": "Hell You Call A Dream", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "hell you call a dream the warning", "artist": "The Warning", "title": "Hell You Call A Dream", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "the warning hell you call a dram", "artist": "The Warning", "title": "Hell You Call A Dream", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "the wsrning hell you call a dream", "artist": "The Warning", "title": "Hell You Call A Dream", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "hell you call a dream warning", "artist": "The Warning", "title": "Hell You Call A Dream", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "hell you call a drwam warning", "artist": "The Warning", "title": "Hell You Call A Dream", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "blink twice", "artist": null, "title": "Blink Twice", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "blink twice bini", "artist": "BINI", "title": "Blink Twice", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "bini blunk twice", "artist": "BINI", "title": "Blink Twice", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "binni blink twice", "artist": "BINI", "title": "Blink Twice", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "blink twice bini", "artist": "BINI", "title": "Blink Twice", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "blibk twice bini", "artist": "BINI", "title": "Blink Twice", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "jax toy", "artist": null, "title": "Jax Toy", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "jax toy jakeneutron", "artist": "Jakeneutron", "title": "Jax Toy", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "jakeneutron jax toy", "artist": "Jakeneutron", "title": "Jax Toy", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "jskeneutron jax toy", "artist": "Jakeneutron", "title": "Jax Toy", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "jax toy jakeneutron", "artist": "Jakeneutron", "title": "Jax Toy", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "jax toy jakeneutron", "artist": "Jakeneutron", "title": "Jax Toy", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "she will", "artist": null, "title": "She Will", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "she will lil wayne feat. drake", "artist": "Lil Wayne feat. Drake", "title": "She Will", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "lil wayne feat. drake she willl", "artist": "Lil Wayne feat. Drake", "title": "She Will", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "lil waye feat. drake she will", "artist": "Lil Wayne feat. Drake", "title": "She Will", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "she will lil", "artist": "Lil Wayne feat. Drake", "title": "She Will", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "she will lil", "artist": "Lil Wayne feat. Drake", "title": "She Will", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "already", "artist": null, "title": "Already", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "already dmx", "artist": "DMX", "title": "Already", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "dmx alrady", "artist": "DMX", "title": "Already", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "dmx already", "artist": "DMX", "title": "Already", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "already dmx", "artist": "DMX", "title": "Already", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "alraedy dmx", "artist": "DMX", "title": "Already", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "peter pan", "artist": null, "title": "Peter Pan", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "peter pan julian sommer", "artist": "Julian Sommer", "title": "Peter Pan", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "julian sommer peer pan", "artist": "Julian Sommer", "title": "Peter Pan", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "jlian sommer peter pan", "artist": "Julian Sommer", "title": "Peter Pan", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "peter pan sommer", "artist": "Julian Sommer", "title": "Peter Pan", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "pter pan sommer", "artist": "Julian Sommer", "title": "Peter Pan", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "narcisista por excelencia", "artist": null, "title": "Narcisista por Excelencia", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "narcisista por excelencia pxndx", "artist": "PXNDX", "title": "Narcisista por Excelencia", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "pxndx narcisisya por excelencia", "artist": "PXNDX", "title": "Narcisista por Excelencia", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "pxbdx narcisista por excelencia", "artist": "PXNDX", "title": "Narcisista por Excelencia", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "narcisista por excelencia pxndx", "artist": "PXNDX", "title": "Narcisista por Excelencia", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "narcisistta por excelencia pxndx", "artist": "PXNDX", "title": "Narcisista por Excelencia", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "empty spaces", "artist": null, "title": "Empty Spaces", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "empty spaces pink floyd", "artist": "Pink Floyd", "title": "Empty Spaces", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "pink floyd empty spacces", "artist": "Pink Floyd", "title": "Empty Spaces", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "pink floyyd empty spaces", "artist": "Pink Floyd", "title": "Empty Spaces", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "empty spaces pink", "artist": "Pink Floyd", "title": "Empty Spaces", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "empty spaecs pink", "artist": "Pink Floyd", "title": "Empty Spaces", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "lebanese blonde", "artist": null, "title": "Lebanese Blonde", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "lebanese blonde thievery corporation", "artist": "Thievery Corporation", "title": "Lebanese Blonde", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "thievery corporation lebnese blonde", "artist": "Thievery Corporation", "title": "Lebanese Blonde", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "thievery corporatioon lebanese blonde", "artist": "Thievery Corporation", "title": "Lebanese Blonde", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "lebanese blonde corporation", "artist": "Thievery Corporation", "title": "Lebanese Blonde", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "lebannese blonde corporation", "artist": "Thievery Corporation", "title": "Lebanese Blonde", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "si seulement je pouvais lui manquer", "artist": null, "title": "Si seulement je pouvais lui manquer", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "si seulement je pouvais lui manquer calogero", "artist": "Calogero", "title": "Si seulement je pouvais lui manquer", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "calogero si seulment je pouvais lui manquer", "artist": "Calogero", "title": "Si seulement je pouvais lui manquer", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "calogeo si seulement je pouvais lui manquer", "artist": "Calogero", "title": "Si seulement je pouvais lui manquer", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "si seulement je pouvais lui manquer calogero", "artist": "Calogero", "title": "Si seulement je pouvais lui manquer", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "si seulmeent je pouvais lui manquer calogero", "artist": "Calogero", "title": "Si seulement je pouvais lui manquer", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "i want you to love me", "artist": null, "title": "I Want You to Love Me", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "i want you to love me fiona apple", "artist": "Fiona Apple", "title": "I Want You to Love Me", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "fiona apple i wat you to love me", "artist": "Fiona Apple", "title": "I Want You to Love Me", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "foina apple i want you to love me", "artist": "Fiona Apple", "title": "I Want You to Love Me", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "i want you to love me fiona", "artist": "Fiona Apple", "title": "I Want You to Love Me", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "i waant you to love me fiona", "artist": "Fiona Apple", "title": "I Want You to Love Me", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "set the fire to the third bar", "artist": null, "title": "Set the Fire to the Third Bar", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "set the fire to the third bar snow patrol feat. martha wainwright", "artist": "Snow Patrol feat. Martha Wainwright", "title": "Set the Fire to the Third Bar", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "snow patrol feat. martha wainwright set the fire to the thord bar", "artist": "Snow Patrol feat. Martha Wainwright", "title": "Set the Fire to the Third Bar", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "snow patrol feat. martha wainnwright set the fire to the third bar", "artist": "Snow Patrol feat. Martha Wainwright", "title": "Set the Fire to the Third Bar", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "set the fire to the third bar snow", "artist": "Snow Patrol feat. Martha Wainwright", "title": "Set the Fire to the Third Bar", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "set the fire to the tjird bar snow", "artist": "Snow Patrol feat. Martha Wainwright", "title": "Set the Fire to the Third Bar", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "the tourist", "artist": null, "title": "The Tourist", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "the tourist radiohead", "artist": "Radiohead", "title": "The Tourist", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "radiohead the tourit", "artist": "Radiohead", "title": "The Tourist", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "radioheda the tourist", "artist": "Radiohead", "title": "The Tourist", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "the tourist radiohead", "artist": "Radiohead", "title": "The Tourist", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "the touirst radiohead", "artist": "Radiohead", "title": "The Tourist", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "big mama", "artist": null, "title": "Big Mama", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "big mama latto", "artist": "Latto", "title": "Big Mama", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "latto big maam", "artist": "Latto", "title": "Big Mama", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "latot big mama", "artist": "Latto", "title": "Big Mama", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "big mama latto", "artist": "Latto", "title": "Big Mama", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "big msma latto", "artist": "Latto", "title": "Big Mama", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "déjame volver contigo", "artist": null, "title": "Déjame Volver Contigo", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "déjame volver contigo dulce", "artist": "Dulce", "title": "Déjame Volver Contigo", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "dulce déjame volver conntigo", "artist": "Dulce", "title": "Déjame Volver Contigo", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "dluce déjame volver contigo", "artist": "Dulce", "title": "Déjame Volver Contigo", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "déjame volver contigo dulce", "artist": "Dulce", "title": "Déjame Volver Contigo", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "déjame volver contiggo dulce", "artist": "Dulce", "title": "Déjame Volver Contigo", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "why don't you and i", "artist": null, "title": "Why Don't You and I", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "why don't you and i santana", "artist": "Santana", "title": "Why Don't You and I", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "santana why dpn't you and i", "artist": "Santana", "title": "Why Don't You and I", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "sanntana why don't you and i", "artist": "Santana", "title": "Why Don't You and I", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "why don't you and i santana", "artist": "Santana", "title": "Why Don't You and I", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "why dont you and i santana", "artist": "Santana", "title": "Why Don't You and I", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "must be love", "artist": null, "title": "Must Be Love", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "must be love laufey", "artist": "Laufey", "title": "Must Be Love", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "laufey mst be love", "artist": "Laufey", "title": "Must Be Love", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "lsufey must be love", "artist": "Laufey", "title": "Must Be Love", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "must be love laufey", "artist": "Laufey", "title": "Must Be Love", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "muts be love laufey", "artist": "Laufey", "title": "Must Be Love", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "desculpe o auê", "artist": null, "title": "Desculpe O Auê", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "desculpe o auê rita lee", "artist": "Rita Lee", "title": "Desculpe O Auê", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "rita lee descculpe o auê", "artist": "Rita Lee", "title": "Desculpe O Auê", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "rta lee desculpe o auê", "artist": "Rita Lee", "title": "Desculpe O Auê", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "desculpe o auê rita", "artist": "Rita Lee", "title": "Desculpe O Auê", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "dessculpe o auê rita", "artist": "Rita Lee", "title": "Desculpe O Auê", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "harvest moon", "artist": null, "title": "Harvest Moon", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "harvest moon neil young", "artist": "Neil Young", "title": "Harvest Moon", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "neil young harvvest moon", "artist": "Neil Young", "title": "Harvest Moon", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "neil yonug harvest moon", "artist": "Neil Young", "title": "Harvest Moon", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "harvest moon neil", "artist": "Neil Young", "title": "Harvest Moon", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "hrvest moon neil", "artist": "Neil Young", "title": "Harvest Moon", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "vice grip", "artist": null, "title": "Vice Grip", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "vice grip parkway drive", "artist": "Parkway Drive", "title": "Vice Grip", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "parkway drive vce grip", "artist": "Parkway Drive", "title": "Vice Grip", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "parwkay drive vice grip", "artist": "Parkway Drive", "title": "Vice Grip", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "vice grip drive", "artist": "Parkway Drive", "title": "Vice Grip", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "vce grip drive", "artist": "Parkway Drive", "title": "Vice Grip", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "cantares", "artist": null, "title": "Cantares", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "cantares joan manuel serrat", "artist": "Joan Manuel Serrat", "title": "Cantares", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "joan manuel serrat canares", "artist": "Joan Manuel Serrat", "title": "Cantares", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "joan mauel serrat cantares", "artist": "Joan Manuel Serrat", "title": "Cantares", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "cantares joan", "artist": "Joan Manuel Serrat", "title": "Cantares", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "canyares joan", "artist": "Joan Manuel Serrat", "title": "Cantares", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "speedway", "artist": null, "title": "Speedway", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "speedway elvis presley", "artist": "Elvis Presley", "title": "Speedway", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "elvis presley speedawy", "artist": "Elvis Presley", "title": "Speedway", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "elvis prresley speedway", "artist": "Elvis Presley", "title": "Speedway", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "speedway elvis", "artist": "Elvis Presley", "title": "Speedway", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "soeedway elvis", "artist": "Elvis Presley", "title": "Speedway", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "neymar", "artist": null, "title": "Neymar", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "neymar capital bra feat. ufo361", "artist": "Capital Bra feat. Ufo361", "title": "Neymar", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "capital bra feat. ufo361 neymr", "artist": "Capital Bra feat. Ufo361", "title": "Neymar", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "capittal bra feat. ufo361 neymar", "artist": "Capital Bra feat. Ufo361", "title": "Neymar", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "neymar capital", "artist": "Capital Bra feat. Ufo361", "title": "Neymar", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "neeymar capital", "artist": "Capital Bra feat. Ufo361", "title": "Neymar", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "take me out", "artist": null, "title": "Take Me Out", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "take me out franz ferdinand", "artist": "Franz Ferdinand", "title": "Take Me Out", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "franz ferdinand tale me out", "artist": "Franz Ferdinand", "title": "Take Me Out", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "franz ferdinnad take me out", "artist": "Franz Ferdinand", "title": "Take Me Out", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "take me out ferdinand", "artist": "Franz Ferdinand", "title": "Take Me Out", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "tae me out ferdinand", "artist": "Franz Ferdinand", "title": "Take Me Out", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "there’s gold in the mountains", "artist": null, "title": "There’s Gold in the Mountains", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "there’s gold in the mountains elvis presley", "artist": "Elvis Presley", "title": "There’s Gold in the Mountains", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "elvis presley there’s gold in the mountanis", "artist": "Elvis Presley", "title": "There’s Gold in the Mountains", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "elvis preskey there’s gold in the mountains", "artist": "Elvis Presley", "title": "There’s Gold in the Mountains", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "there’s gold in the mountains presley", "artist": "Elvis Presley", "title": "There’s Gold in the Mountains", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "there’s gold in the mountaisn presley", "artist": "Elvis Presley", "title": "There’s Gold in the Mountains", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "juanita - flor de walamo", "artist": null, "title": "Juanita - Flor de Walamo", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "juanita - flor de walamo joan sebastian", "artist": "Joan Sebastian", "title": "Juanita - Flor de Walamo", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "joan sebastian juanuta - flor de walamo", "artist": "Joan Sebastian", "title": "Juanita - Flor de Walamo", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "joan swbastian juanita - flor de walamo", "artist": "Joan Sebastian", "title": "Juanita - Flor de Walamo", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "juanita - flor de walamo joan", "artist": "Joan Sebastian", "title": "Juanita - Flor de Walamo", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "juanta - flor de walamo joan", "artist": "Joan Sebastian", "title": "Juanita - Flor de Walamo", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "venderé la marranita", "artist": null, "title": "Venderé la marranita", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "venderé la marranita joan sebastian", "artist": "Joan Sebastian", "title": "Venderé la marranita", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "joan sebastian venderé la marrnaita", "artist": "Joan Sebastian", "title": "Venderé la marranita", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "joan sebasstian venderé la marranita", "artist": "Joan Sebastian", "title": "Venderé la marranita", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "venderé la marranita joan", "artist": "Joan Sebastian", "title": "Venderé la marranita", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "venderé la maranita joan", "artist": "Joan Sebastian", "title": "Venderé la marranita", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "sober up (feat. rivers cuomo)", "artist": null, "title": "Sober Up (feat. Rivers Cuomo)", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "sober up (feat. rivers cuomo) ajr", "artist": "AJR", "title": "Sober Up (feat. Rivers Cuomo)", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "ajr sober up (fwat. rivers cuomo)", "artist": "AJR", "title": "Sober Up (feat. Rivers Cuomo)", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "ajr sober up (feat. rivers cuomo)", "artist": "AJR", "title": "Sober Up (feat. Rivers Cuomo)", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "sober up (feat. rivers cuomo) ajr", "artist": "AJR", "title": "Sober Up (feat. Rivers Cuomo)", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "sober up (feaat. rivers cuomo) ajr", "artist": "AJR", "title": "Sober Up (feat. Rivers Cuomo)", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "sienna", "artist": null, "title": "Sienna", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "sienna the marías", "artist": "The Marías", "title": "Sienna", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "the marías sienna", "artist": "The Marías", "title": "Sienna", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "the marrías sienna", "artist": "The Marías", "title": "Sienna", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "sienna the", "artist": "The Marías", "title": "Sienna", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "senna the", "artist": "The Marías", "title": "Sienna", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "en preparacion", "artist": null, "title": "En Preparacion", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "en preparacion gerardo ortiz", "artist": "Gerardo Ortiz", "title": "En Preparacion", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "gerardo ortiz en preparaciion", "artist": "Gerardo Ortiz", "title": "En Preparacion", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "geraardo ortiz en preparacion", "artist": "Gerardo Ortiz", "title": "En Preparacion", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "en preparacion ortiz", "artist": "Gerardo Ortiz", "title": "En Preparacion", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "en pteparacion ortiz", "artist": "Gerardo Ortiz", "title": "En Preparacion", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "when a child is born", "artist": null, "title": "When a Child Is Born", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "when a child is born kenny rogers", "artist": "Kenny Rogers", "title": "When a Child Is Born", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "kenny rogers when a chikd is born", "artist": "Kenny Rogers", "title": "When a Child Is Born", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "kenny roggers when a child is born", "artist": "Kenny Rogers", "title": "When a Child Is Born", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "when a child is born kenny", "artist": "Kenny Rogers", "title": "When a Child Is Born", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "when a chikd is born kenny", "artist": "Kenny Rogers", "title": "When a Child Is Born", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "parking lot party", "artist": null, "title": "Parking Lot Party", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "parking lot party lee brice", "artist": "Lee Brice", "title": "Parking Lot Party", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "lee brice parrking lot party", "artist": "Lee Brice", "title": "Parking Lot Party", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "lee beice parking lot party", "artist": "Lee Brice", "title": "Parking Lot Party", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "parking lot party brice", "artist": "Lee Brice", "title": "Parking Lot Party", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "parknig lot party brice", "artist": "Lee Brice", "title": "Parking Lot Party", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "it's complicated", "artist": null, "title": "It's Complicated", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "it's complicated a day to remember", "artist": "A Day To Remember", "title": "It's Complicated", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "a day to remember it's compplicated", "artist": "A Day To Remember", "title": "It's Complicated", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "a day to remembeer it's complicated", "artist": "A Day To Remember", "title": "It's Complicated", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "it's complicated a", "artist": "A Day To Remember", "title": "It's Complicated", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "its cmplicated a", "artist": "A Day To Remember", "title": "It's Complicated", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "blue skies", "artist": null, "title": "Blue Skies", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "blue skies ella fitzgerald", "artist": "Ella Fitzgerald", "title": "Blue Skies", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "ella fitzgerald blue slies", "artist": "Ella Fitzgerald", "title": "Blue Skies", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "ella fitzgrrald blue skies", "artist": "Ella Fitzgerald", "title": "Blue Skies", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "blue skies fitzgerald", "artist": "Ella Fitzgerald", "title": "Blue Skies", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "blue skiees fitzgerald", "artist": "Ella Fitzgerald", "title": "Blue Skies", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "paz na terra", "artist": null, "title": "Paz na terra", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "paz na terra roberto carlos", "artist": "Roberto Carlos", "title": "Paz na terra", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "roberto carlos paz na terra", "artist": "Roberto Carlos", "title": "Paz na terra", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "robeeto carlos paz na terra", "artist": "Roberto Carlos", "title": "Paz na terra", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "paz na terra carlos", "artist": "Roberto Carlos", "title": "Paz na terra", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "paz na trra carlos", "artist": "Roberto Carlos", "title": "Paz na terra", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "ain’t my fault", "artist": null, "title": "Ain’t My Fault", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "ain’t my fault zara larsson", "artist": "Zara Larsson", "title": "Ain’t My Fault", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "zara larsson ainn’t my fault", "artist": "Zara Larsson", "title": "Ain’t My Fault", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "zara larsaon ain’t my fault", "artist": "Zara Larsson", "title": "Ain’t My Fault", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "ain’t my fault larsson", "artist": "Zara Larsson", "title": "Ain’t My Fault", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "aib’t my fault larsson", "artist": "Zara Larsson", "title": "Ain’t My Fault", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "don’t look back in anger (acoustic)", "artist": null, "title": "Don’t Look Back in Anger (acoustic)", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "don’t look back in anger (acoustic) oasis", "artist": "Oasis", "title": "Don’t Look Back in Anger (acoustic)", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "oasis don’t look back in anger (acuostic)", "artist": "Oasis", "title": "Don’t Look Back in Anger (acoustic)", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "oaiss don’t look back in anger (acoustic)", "artist": "Oasis", "title": "Don’t Look Back in Anger (acoustic)", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "don’t look back in anger (acoustic) oasis", "artist": "Oasis", "title": "Don’t Look Back in Anger (acoustic)", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "don’t look back in anger (axoustic) oasis", "artist": "Oasis", "title": "Don’t Look Back in Anger (acoustic)", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "a prueba de ti", "artist": null, "title": "A Prueba de Ti", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "a prueba de ti malú", "artist": "Malú", "title": "A Prueba de Ti", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "malú a preba de ti", "artist": "Malú", "title": "A Prueba de Ti", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "maú a prueba de ti", "artist": "Malú", "title": "A Prueba de Ti", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "a prueba de ti malú", "artist": "Malú", "title": "A Prueba de Ti", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "a peueba de ti malú", "artist": "Malú", "title": "A Prueba de Ti", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "das geht ab - wir feiern die ganze nacht", "artist": null, "title": "Das geht ab - Wir feiern die ganze Nacht", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "das geht ab - wir feiern die ganze nacht die atzen", "artist": "Die Atzen", "title": "Das geht ab - Wir feiern die ganze Nacht", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "die atzen das geht ab - wir fiern die ganze nacht", "artist": "Die Atzen", "title": "Das geht ab - Wir feiern die ganze Nacht", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "die attzen das geht ab - wir feiern die ganze nacht", "artist": "Die Atzen", "title": "Das geht ab - Wir feiern die ganze Nacht", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "das geht ab - wir feiern die ganze nacht die", "artist": "Die Atzen", "title": "Das geht ab - Wir feiern die ganze Nacht", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "das geht ab - wir feienr die ganze nacht die", "artist": "Die Atzen", "title": "Das geht ab - Wir feiern die ganze Nacht", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "capricorn", "artist": null, "title": "Capricorn", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "capricorn vampire weekend", "artist": "Vampire Weekend", "title": "Capricorn", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "vampire weekend capricoorn", "artist": "Vampire Weekend", "title": "Capricorn", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "vmapire weekend capricorn", "artist": "Vampire Weekend", "title": "Capricorn", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "capricorn vampire", "artist": "Vampire Weekend", "title": "Capricorn", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "capriocrn vampire", "artist": "Vampire Weekend", "title": "Capricorn", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "hold up", "artist": null, "title": "Hold Up", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "hold up beyoncé", "artist": "Beyoncé", "title": "Hold Up", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "beyoncé hodl up", "artist": "Beyoncé", "title": "Hold Up", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "beyonncé hold up", "artist": "Beyoncé", "title": "Hold Up", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "hold up beyoncé", "artist": "Beyoncé", "title": "Hold Up", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "hokd up beyoncé", "artist": "Beyoncé", "title": "Hold Up", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "childrens crusade", "artist": null, "title": "Childrens Crusade", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "childrens crusade sting", "artist": "Sting", "title": "Childrens Crusade", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "sting childrrens crusade", "artist": "Sting", "title": "Childrens Crusade", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "stnig childrens crusade", "artist": "Sting", "title": "Childrens Crusade", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "childrens crusade sting", "artist": "Sting", "title": "Childrens Crusade", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "chhildrens crusade sting", "artist": "Sting", "title": "Childrens Crusade", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "admirável chip novo", "artist": null, "title": "Admirável Chip Novo", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "admirável chip novo pitty", "artist": "Pitty", "title": "Admirável Chip Novo", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "pitty admirrável chip novo", "artist": "Pitty", "title": "Admirável Chip Novo", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "pityt admirável chip novo", "artist": "Pitty", "title": "Admirável Chip Novo", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "admirável chip novo pitty", "artist": "Pitty", "title": "Admirável Chip Novo", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "admiráevl chip novo pitty", "artist": "Pitty", "title": "Admirável Chip Novo", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "tough", "artist": null, "title": "Tough", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "tough quavo", "artist": "Quavo", "title": "Tough", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "quavo tuogh", "artist": "Quavo", "title": "Tough", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "qavo tough", "artist": "Quavo", "title": "Tough", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "tough quavo", "artist": "Quavo", "title": "Tough", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "touhg quavo", "artist": "Quavo", "title": "Tough", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "first it giveth", "artist": null, "title": "First It Giveth", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "first it giveth queens of the stone age", "artist": "Queens of the Stone Age", "title": "First It Giveth", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "queens of the stone age first it gvieth", "artist": "Queens of the Stone Age", "title": "First It Giveth", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "queesn of the stone age first it giveth", "artist": "Queens of the Stone Age", "title": "First It Giveth", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "first it giveth stone", "artist": "Queens of the Stone Age", "title": "First It Giveth", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "first it givrth stone", "artist": "Queens of the Stone Age", "title": "First It Giveth", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "abc (feat. sophia black)", "artist": null, "title": "ABC (feat. Sophia Black)", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "abc (feat. sophia black) polyphia", "artist": "Polyphia", "title": "ABC (feat. Sophia Black)", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "polyphia abc (feta. sophia black)", "artist": "Polyphia", "title": "ABC (feat. Sophia Black)", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "pilyphia abc (feat. sophia black)", "artist": "Polyphia", "title": "ABC (feat. Sophia Black)", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "abc (feat. sophia black) polyphia", "artist": "Polyphia", "title": "ABC (feat. Sophia Black)", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "abc (fat. sophia black) polyphia", "artist": "Polyphia", "title": "ABC (feat. Sophia Black)", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "la gelosia", "artist": null, "title": "LA GELOSIA", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "la gelosia coma_cose", "artist": "Coma_Cose", "title": "LA GELOSIA", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "coma_cose la gelosai", "artist": "Coma_Cose", "title": "LA GELOSIA", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "com_acose la gelosia", "artist": "Coma_Cose", "title": "LA GELOSIA", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "la gelosia coma_cose", "artist": "Coma_Cose", "title": "LA GELOSIA", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "la glosia coma_cose", "artist": "Coma_Cose", "title": "LA GELOSIA", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "hate to say i told you so", "artist": null, "title": "Hate To Say I Told You So", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "hate to say i told you so the hives", "artist": "The Hives", "title": "Hate To Say I Told You So", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "the hives htae to say i told you so", "artist": "The Hives", "title": "Hate To Say I Told You So", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "the hivrs hate to say i told you so", "artist": "The Hives", "title": "Hate To Say I Told You So", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "hate to say i told you so the", "artist": "The Hives", "title": "Hate To Say I Told You So", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "hae to say i told you so the", "artist": "The Hives", "title": "Hate To Say I Told You So", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "(nice dream)", "artist": null, "title": "(Nice Dream)", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "(nice dream) radiohead", "artist": "Radiohead", "title": "(Nice Dream)", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "radiohead (nice dreamm)", "artist": "Radiohead", "title": "(Nice Dream)", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "radioead (nice dream)", "artist": "Radiohead", "title": "(Nice Dream)", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "(nice dream) radiohead", "artist": "Radiohead", "title": "(Nice Dream)", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "(nice deam) radiohead", "artist": "Radiohead", "title": "(Nice Dream)", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "blu celeste", "artist": null, "title": "Blu Celeste", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "blu celeste blanco", "artist": "BLANCO", "title": "Blu Celeste", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "blanco blu celeset", "artist": "BLANCO", "title": "Blu Celeste", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "blaco blu celeste", "artist": "BLANCO", "title": "Blu Celeste", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "blu celeste blanco", "artist": "BLANCO", "title": "Blu Celeste", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "blu celeset blanco", "artist": "BLANCO", "title": "Blu Celeste", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "us. (feat. taylor swift)", "artist": null, "title": "us. (feat. Taylor Swift)", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "us. (feat. taylor swift) gracie abrams", "artist": "Gracie Abrams", "title": "us. (feat. Taylor Swift)", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "gracie abrams us. (fea.t taylor swift)", "artist": "Gracie Abrams", "title": "us. (feat. Taylor Swift)", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "graacie abrams us. (feat. taylor swift)", "artist": "Gracie Abrams", "title": "us. (feat. Taylor Swift)", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "us. (feat. taylor swift) gracie", "artist": "Gracie Abrams", "title": "us. (feat. Taylor Swift)", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "us. (fest. taylor swift) gracie", "artist": "Gracie Abrams", "title": "us. (feat. Taylor Swift)", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "have a nice day", "artist": null, "title": "Have A Nice Day", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "have a nice day bon jovi", "artist": "Bon Jovi", "title": "Have A Nice Day", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "bon jovi haave a nice day", "artist": "Bon Jovi", "title": "Have A Nice Day", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "bon jivi have a nice day", "artist": "Bon Jovi", "title": "Have A Nice Day", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "have a nice day bon", "artist": "Bon Jovi", "title": "Have A Nice Day", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "haave a nice day bon", "artist": "Bon Jovi", "title": "Have A Nice Day", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "dream", "artist": null, "title": "Dream", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "dream imagine dragons", "artist": "Imagine Dragons", "title": "Dream", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "imagine dragons draem", "artist": "Imagine Dragons", "title": "Dream", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "iagine dragons dream", "artist": "Imagine Dragons", "title": "Dream", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "dream dragons", "artist": "Imagine Dragons", "title": "Dream", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "drema dragons", "artist": "Imagine Dragons", "title": "Dream", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "bands", "artist": null, "title": "Bands", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "bands shoreline mafia", "artist": "Shoreline Mafia", "title": "Bands", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "shoreline mafia banss", "artist": "Shoreline Mafia", "title": "Bands", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "shreline mafia bands", "artist": "Shoreline Mafia", "title": "Bands", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "bands mafia", "artist": "Shoreline Mafia", "title": "Bands", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "bnds mafia", "artist": "Shoreline Mafia", "title": "Bands", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "der kommissar", "artist": null, "title": "Der Kommissar", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "der kommissar falco", "artist": "Falco", "title": "Der Kommissar", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "falco der kommiissar", "artist": "Falco", "title": "Der Kommissar", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "faalco der kommissar", "artist": "Falco", "title": "Der Kommissar", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "der kommissar falco", "artist": "Falco", "title": "Der Kommissar", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "der kmmissar falco", "artist": "Falco", "title": "Der Kommissar", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "time after time", "artist": null, "title": "Time After Time", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "time after time cyndi lauper", "artist": "Cyndi Lauper", "title": "Time After Time", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "cyndi lauper time afteer time", "artist": "Cyndi Lauper", "title": "Time After Time", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "cyndi layper time after time", "artist": "Cyndi Lauper", "title": "Time After Time", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "time after time cyndi", "artist": "Cyndi Lauper", "title": "Time After Time", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "time aftwr time cyndi", "artist": "Cyndi Lauper", "title": "Time After Time", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "slippery (feat. gucci mane)", "artist": null, "title": "Slippery (feat. Gucci Mane)", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "slippery (feat. gucci mane) migos", "artist": "Migos", "title": "Slippery (feat. Gucci Mane)", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "migos silppery (feat. gucci mane)", "artist": "Migos", "title": "Slippery (feat. Gucci Mane)", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "migs slippery (feat. gucci mane)", "artist": "Migos", "title": "Slippery (feat. Gucci Mane)", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "slippery (feat. gucci mane) migos", "artist": "Migos", "title": "Slippery (feat. Gucci Mane)", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "slippeey (feat. gucci mane) migos", "artist": "Migos", "title": "Slippery (feat. Gucci Mane)", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "sorry i'm here for someone else", "artist": null, "title": "Sorry I'm Here For Someone Else", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "sorry i'm here for someone else benson boone", "artist": "Benson Boone", "title": "Sorry I'm Here For Someone Else", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "benson boone sorry i'm here for someine else", "artist": "Benson Boone", "title": "Sorry I'm Here For Someone Else", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "bensoon boone sorry i'm here for someone else", "artist": "Benson Boone", "title": "Sorry I'm Here For Someone Else", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "sorry i'm here for someone else boone", "artist": "Benson Boone", "title": "Sorry I'm Here For Someone Else", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "sorry im here for soeone else boone", "artist": "Benson Boone", "title": "Sorry I'm Here For Someone Else", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "orphans", "artist": null, "title": "Orphans", "kind": "syn-title-only", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "orphans coldplay", "artist": "Coldplay", "title": "Orphans", "kind": "syn-exact", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "coldplay orhans", "artist": "Coldplay", "title": "Orphans", "kind": "syn-typo-title", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "clodplay orphans", "artist": "Coldplay", "title": "Orphans", "kind": "syn-typo-artist", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "orphans coldplay", "artist": "Coldplay", "title": "Orphans", "kind": "syn-artist-fragment", "source": "synthetic", "label": "synthetic-2026-09-28"}
+{"q": "orpans coldplay", "artist": "Coldplay", "title": "Orphans", "kind": "syn-fragment+typo", "source": "synthetic", "label": "synthetic-2026-09-28"}

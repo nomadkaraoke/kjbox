@@ -1858,3 +1858,22 @@ button.sing-social-link { padding: 0; font: inherit; cursor: pointer; }
 .sing-didyoumean { display: flex; flex-direction: column; gap: 0.4rem; }
 .sing-correction-title { font-weight: 700; color: var(--nk-text); }
 .sing-suggestion { text-align: left; }
+
+/* --- Song identification card (question 1: "which song do you mean?") -------
+   Deliberately a different shape from the karaoke result rows (question 2). */
+.sing-songcard {
+  margin: 0.6rem 0 0.9rem;
+  padding: 0.7rem 0.85rem;
+  border: 1px solid var(--nk-accent);
+  border-radius: var(--nk-radius-sm);
+  background: var(--nk-card-2);
+}
+.sing-songcard-label { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--nk-text-dim); }
+.sing-songcard-song { margin: 0.2rem 0 0.35rem; font-size: 1.05rem; }
+.sing-songcard-title { font-weight: 700; color: var(--nk-text); }
+.sing-songcard-artist { color: var(--nk-text-dim); }
+.sing-songcard-actions { font-size: 0.85rem; color: var(--nk-text-dim); }
+.sing-results-heading { margin: 0.4rem 0 0.3rem; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--nk-text-dim); }
+.sing-describe-link { display: block; margin: 0.35rem 0 0.6rem; color: var(--nk-accent); text-decoration: underline; background: none; border: 0; padding: 0; font: inherit; cursor: pointer; }
+.sing-describe { display: flex; gap: 0.5rem; margin: 0.35rem 0 0.8rem; }
+.sing-describe .sing-empty-input { flex: 1; }

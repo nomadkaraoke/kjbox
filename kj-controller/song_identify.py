@@ -26,7 +26,9 @@ import sqlite3
 import threading
 from dataclasses import dataclass, field
 
-from rapidfuzz import fuzz
+from functools import lru_cache
+
+from rapidfuzz import fuzz, process
 from rapidfuzz.distance import Levenshtein
 
 from text_normalize import NORMALIZER_VERSION, normalize  # noqa: F401 (re-exported for the sync)
@@ -44,10 +46,21 @@ def song_norm(text):
 # "song", "feat" can be real title words ("All By Myself", "Eu Feat. Você"), so
 # "song by" is removed only as a phrase.
 NOISE_WORDS = {"karaoke", "lyrics", "instrumental", "official"}
+# In the INDEX, "Song (feat. X)" normalizes to "song" (text_normalize strips the
+# feat clause). In a QUERY the singer's words after "feat." are real ("drake feat
+# rihanna what's my name"), so only the feat word itself is dropped.
+_QUERY_FEAT_RE = re.compile(r"\b(?:featuring|feat|ft)\b\.?", re.IGNORECASE)
+# The featured artist(s) a singer typed ("see you again (feat. kali uchis)"): the
+# index drops "(feat. X)" from titles, so these words are OPTIONAL when scoring.
+_QUERY_FEAT_CLAUSE_RE = re.compile(r"\b(?:featuring|feat|ft)\b\.?\s+([^)\]]*)", re.IGNORECASE)
+FEAT_WORD_WEIGHT = 0.1
 NOISE_PHRASE_RE = re.compile(r"\bsong by\b|\bkaraoke version\b")
 STOP_WORDS = {"the", "a", "an", "of", "on", "in", "to", "and", "i", "me", "my", "you", "is", "it", "for", "be"}
 
-CANDIDATE_LIMIT = 400
+CANDIDATE_LIMIT = 150
+CANDIDATE_LOO_MAX = 6        # leave-one-word-out queries
+DEDUPE_TOP = 30
+LOO_SKIP_IF = 40             # skip leave-one-out when the all-words query found this many              # credit-variant collapsing looks at the best N only
 PHRASE_LIMIT = 100
 MAX_VARIANTS = 8
 ARTIST_SPAN_MAX = 4          # words
@@ -55,6 +68,7 @@ ARTIST_MIN_SIM = 0.80        # fuzzy artist-name similarity to count as a hit
 ARTISTS_PER_SPAN = 3
 ARTIST_LOOKUP_LIMIT = 60
 ARTIST_SONG_LIMIT = 1500
+PRESCORE_KEEP = 200          # C-speed rapidfuzz pre-filter before the detailed Python scoring
 
 # Decision thresholds (tuned on tests/fixtures/song_id_eval.jsonl via scripts/song_id_eval.py).
 CONFIDENT_SCORE = 0.80
@@ -94,8 +108,28 @@ class Match:
                 "popularity": self.pop, "karaoke": self.karaoke}
 
 
+def _prefix_ok(word):
+    """Treat a word as partially typed (FTS prefix query) only if it's long enough
+    to be selective: "me*"/"on*" expand to thousands of index terms."""
+    return len(word) >= 4 and word not in STOP_WORDS
+
+
 def _compact(text):
     return song_norm(text).replace(" ", "")
+
+
+_CREDIT_SPLIT_RE = re.compile(r"\s*(?:,|&|\+|/|\bfeaturing\b|\bfeat\.?|\bft\.?|\bx\b|\band\b|\bwith\b)\s*",
+                              re.IGNORECASE)
+
+
+def _credits(artist):
+    return {c for c in (_compact(p) for p in _CREDIT_SPLIT_RE.split(artist or "")) if c}
+
+
+def _same_song(a, b):
+    """Same base title and a credited artist in common."""
+    return (_compact(_VERSION_SUFFIX_RE.sub("", a.title)) == _compact(_VERSION_SUFFIX_RE.sub("", b.title))
+            and bool(_credits(a.artist) & _credits(b.artist)))
 
 
 def _edit_budget(word):
@@ -113,6 +147,8 @@ def _word_sim(q, w):
         return 1.0
     if len(q) >= 3 and w.startswith(q):
         return 0.9
+    if len(q) >= 4 and len(w) > len(q) and Levenshtein.distance(q, w[:len(q)]) <= 1:
+        return 0.75     # a mistyped start of the word ("richo" → "ricochet")
     d = Levenshtein.distance(q, w)
     if d > _edit_budget(q):
         return 0.0
@@ -130,6 +166,7 @@ class SongIdentifier:
         self.db_path = db_path
         self._local = threading.local()
         self._generation = 0
+        self._buckets, self._bucket_gen = {}, 0
 
     @property
     def available(self):
@@ -159,27 +196,44 @@ class SongIdentifier:
         return out
 
     # ---- step 2: word expansion
-    def _variants(self, word, is_last):
-        db = self._db()
+    def _variants(self, word, is_last=False):
+        """Index words the typed ``word`` might be a typo of → {word: similarity}.
+
+        Candidates share the first letter (typos rarely hit it: "rihana", "cheery",
+        "balck") and are within the edit budget in length; rapidfuzz scores the
+        few thousand in C. Cached per index generation (typing repeats words)."""
+        return dict(self._variants_cached(word, self._generation))
+
+    def _vocab_bucket(self, first, length):
+        """{word: freq} for one (first letter, length) bucket, cached in memory per
+        index generation — fetching ~20K rows from SQLite per lookup dominated."""
+        key = (first, length)
+        if self._bucket_gen != self._generation:
+            self._buckets, self._bucket_gen = {}, self._generation
+        bucket = self._buckets.get(key)
+        if bucket is None:
+            bucket = dict(self._db().execute(
+                "SELECT word, freq FROM vocab WHERE first = ? AND len = ?", key).fetchall())
+            self._buckets[key] = bucket
+        return bucket
+
+    @lru_cache(maxsize=4096)
+    def _variants_cached(self, word, _generation):
         out = {word: 1.0}
-        if len(word) >= 3:
-            grams = [word[i:i + 3] for i in range(len(word) - 2)]
-            match = " OR ".join('"' + g.replace('"', '') + '"' for g in grams)
-            rows = db.execute(
-                "SELECT v.word, v.freq FROM vocab_tri t JOIN vocab v ON v.word = t.word "
-                "WHERE vocab_tri MATCH ? ORDER BY bm25(vocab_tri) LIMIT 300", (match,)).fetchall()
-            scored = []
-            for w, freq in rows:
-                s = _word_sim(word, w)
-                if s > 0 and w != word:
-                    scored.append((s, freq, w))
-            scored.sort(key=lambda x: (-x[0], -x[1]))
-            for s, _f, w in scored[:MAX_VARIANTS]:
+        if len(word) < 3:
+            return tuple(out.items())    # short words: exact only (neighbours are noise)
+        budget = _edit_budget(word)
+        freq = {}
+        for n in range(len(word) - budget, len(word) + budget + 1):
+            freq.update(self._vocab_bucket(word[0], n))
+        near = process.extract(word, list(freq), scorer=Levenshtein.distance,
+                               score_cutoff=budget, limit=MAX_VARIANTS * 4)
+        scored = sorted(((_word_sim(word, w), freq[w], w) for w, _d, _i in near if w != word),
+                        key=lambda x: (-x[0], -x[1]))
+        for s, _f, w in scored[:MAX_VARIANTS]:
+            if s > 0:
                 out[w] = s
-        elif len(word) >= 1:
-            # Short words: exact + one-edit neighbours of the same length are too noisy; exact only.
-            pass
-        return out
+        return tuple(out.items())
 
     # ---- step 3: candidate retrieval
     _COLS = "s.artist, s.title, s.na, s.nt, s.pop, s.karaoke"
@@ -192,7 +246,7 @@ class SongIdentifier:
         for i in range(n):
             for j in range(n, i + 1, -1):
                 phrase = " ".join(w.replace('"', "") for w in words[i:j])
-                q = f'nt : "{phrase}"' + (" *" if j == n else "")
+                q = f'nt : "{phrase}"' + (" *" if j == n and _prefix_ok(words[-1]) else "")
                 out += db.execute(
                     f"SELECT {self._COLS} FROM songs_fts f JOIN songs s ON s.rowid = f.rowid "
                     "WHERE songs_fts MATCH ? ORDER BY s.pop DESC LIMIT ?", (q, PHRASE_LIMIT)).fetchall()
@@ -217,7 +271,7 @@ class SongIdentifier:
                 clauses = []
                 for w in span_words:
                     alts = ['"' + v.replace('"', "") + '"' for v in variants[w]]
-                    if len(w) >= 3:
+                    if len(w) >= 3 and w not in STOP_WORDS:     # "bob seg*" → Seger; never "the*"
                         alts.append('"' + w.replace('"', "") + '"*')
                     clauses.append("(" + " OR ".join(alts) + ")")
                 rows = db.execute(
@@ -231,6 +285,9 @@ class SongIdentifier:
                         scored.append((sim + (pop or 0) / 400, na))
                 for _s, na in sorted(scored, reverse=True)[:ARTISTS_PER_SPAN]:
                     hits[na] = True
+        # All of each hit artist's songs by popularity (indexed, cheap). The C-speed
+        # pre-filter in identify() trims them before Python scoring — an FTS
+        # "artist AND title words" query here was far slower (prefix expansions).
         out = []
         for na in hits:
             out += db.execute(f"SELECT {self._COLS} FROM songs s WHERE s.na = ? ORDER BY s.pop DESC LIMIT ?",
@@ -238,26 +295,40 @@ class SongIdentifier:
         return out
 
     def _candidates(self, words, variants):
+        """Songs containing EVERY typed word (each via any of its spellings; the last
+        word may be partial), plus leave-one-out queries so one stray word ("that",
+        "song", a typo with no close spelling) can't hide the song. Intersections
+        are fast; a broad OR over common words is not."""
         db = self._db()
-        terms = []
-        for w in words:
-            if w in STOP_WORDS and len(words) > 1:
-                continue
-            for v in variants[w]:
-                terms.append('"' + v.replace('"', '') + '"')
-        if words and len(words[-1]) >= 2:
-            terms.append('"' + words[-1].replace('"', '') + '"*')
-        if not terms:
-            return []
-        q = " OR ".join(dict.fromkeys(terms))
-        return db.execute(
-            "SELECT s.artist, s.title, s.na, s.nt, s.pop, s.karaoke FROM songs_fts f "
-            "JOIN songs s ON s.rowid = f.rowid WHERE songs_fts MATCH ? "
-            "ORDER BY bm25(songs_fts) LIMIT ?", (q, CANDIDATE_LIMIT)).fetchall()
+        # Common words ("the", "in", "me") have posting lists covering ~1M songs;
+        # intersecting them is the slow part. With 2+ distinctive words, leave them to
+        # the phrase query and scoring.
+        distinctive = [w for w in words if w not in STOP_WORDS]
+        if len(distinctive) >= 2:
+            words = distinctive
+        groups = []
+        for i, w in enumerate(words):
+            alts = ['"' + v.replace('"', "") + '"' for v in variants[w]]
+            if i == len(words) - 1 and _prefix_ok(w):
+                alts.append('"' + w.replace('"', "") + '"*')
+            groups.append("(" + " OR ".join(dict.fromkeys(alts)) + ")")
+        queries = [groups]
+        if len(groups) > 1:
+            queries += [groups[:i] + groups[i + 1:] for i in range(len(groups))
+                        if not (words[i] in STOP_WORDS and len(groups) > 2)]
+        out = []
+        for n, g in enumerate(queries[:1 + CANDIDATE_LOO_MAX]):
+            if n and len(out) >= LOO_SKIP_IF:
+                break    # every word matched plenty already; leave-one-out only rescues sparse queries
+            out += db.execute(
+                f"SELECT {self._COLS} FROM songs_fts f JOIN songs s ON s.rowid = f.rowid "
+                "WHERE songs_fts MATCH ? ORDER BY rank LIMIT ?",
+                (" AND ".join(g), CANDIDATE_LIMIT)).fetchall()
+        return out
 
     # ---- step 4: rescoring
     @staticmethod
-    def _score(words, qnorm, na, nt, pop, karaoke):
+    def _score(words, qnorm, na, nt, pop, karaoke, optional=frozenset()):
         """→ (score, detail). 0 when nothing of the title was typed."""
         a_toks, t_toks = na.split(), nt.split()
         hay = a_toks + t_toks
@@ -268,6 +339,8 @@ class SongIdentifier:
         weight = 0.0
         for w in words:
             wt = 0.4 if w in STOP_WORDS else min(1.0, 0.4 + 0.15 * len(w))
+            if w in optional:
+                wt = FEAT_WORD_WEIGHT
             weight += wt
             best, best_i = 0.0, None
             for i, h in enumerate(hay):
@@ -324,16 +397,32 @@ class SongIdentifier:
         """→ {status: confident|candidates|none, best, candidates[]}."""
         if not self.available:
             return {"status": "none", "best": None, "candidates": [], "unavailable": True}
-        qnorm = NOISE_PHRASE_RE.sub(" ", song_norm(query or ""))
-        words = [w for w in qnorm.split() if w not in NOISE_WORDS]
+        optional = frozenset(w for m in _QUERY_FEAT_CLAUSE_RE.finditer(query or "")
+                             for w in song_norm(m.group(1)).split())
+        qnorm = NOISE_PHRASE_RE.sub(" ", song_norm(_QUERY_FEAT_RE.sub(" ", query or "")))
+        words = []
+        for w in qnorm.split():
+            if w in NOISE_WORDS:
+                continue
+            # A stray space splitting a word ("mi e" → "mie" ≈ "mine"): glue a lone
+            # letter (other than a/i) onto the word before it.
+            if len(w) == 1 and w not in "ai" and words and len(words[-1]) >= 2:
+                words[-1] += w
+                continue
+            words.append(w)
         if not words or len("".join(words)) < 3:
             return {"status": "none", "best": None, "candidates": []}
         qnorm = " ".join(words)
         variants = {w: self._variants(w, i == len(words) - 1) for i, w in enumerate(words)}
         seen = {}
         pool = self._candidates(words, variants) + self._phrase_candidates(words) + self._artist_candidates(words, variants)
+        pool = list({(r[2], r[3]): r for r in pool}.values())
+        if len(pool) > PRESCORE_KEEP:
+            hay = [f"{r[2]} {r[3]}" for r in pool]
+            keep = process.extract(qnorm, hay, scorer=fuzz.WRatio, limit=PRESCORE_KEEP)
+            pool = [pool[i] for _h, _s, i in keep]
         for artist, title, na, nt, pop, karaoke in pool:
-            s, detail = self._score(words, qnorm, na, nt, pop, karaoke)
+            s, detail = self._score(words, qnorm, na, nt, pop, karaoke, optional)
             if s <= 0:
                 continue
             # One entry per artist + base title: "Feliz Navidad" and "Feliz Navidad -
@@ -344,6 +433,14 @@ class SongIdentifier:
         ranked = sorted(seen.values(), key=lambda m: -m.score)
         if not ranked:
             return {"status": "none", "best": None, "candidates": []}
+        # Credit variants of one song ("Wisin & Yandel" / "Yandel feat. Wisin" —
+        # Adore), common in MusicBrainz, are one answer: drop them so they neither
+        # crowd the "Which one?" list nor make the best answer look like a close call.
+        deduped = []
+        for m in ranked[:DEDUPE_TOP]:
+            if not any(_same_song(m, k) for k in deduped):
+                deduped.append(m)
+        ranked = deduped
         best = ranked[0]
         runner = ranked[1] if len(ranked) > 1 else None
         margin = best.score - (runner.score if runner else 0.0)

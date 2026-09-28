@@ -95,7 +95,16 @@
     "keepMine": "zachowaj mój wpis",
     "useTidied": "użyj uporządkowanej wersji",
     "undo": "Cofnij",
-    "useCorrection": "Zastosuj poprawkę"
+    "useCorrection": "Zastosuj poprawkę",
+    "songYouMean": "Piosenka, o którą ci chodzi",
+    "whichSong": "O którą piosenkę ci chodzi?",
+    "notIt": "to nie to?",
+    "youTyped": "twój tekst: „{typed}”",
+    "karaokeFor": "Wersje karaoke: {song}",
+    "describeLink": "Nie pamiętasz tytułu? Opisz piosenkę",
+    "describePlaceholder": "np. ta piosenka z Titanica",
+    "describeCta": "Znajdź",
+    "figuringOut": "Sprawdzamy, o którą piosenkę ci chodzi…"
   },
   "versions": {
     "sectionLibrary": "W naszej bibliotece",

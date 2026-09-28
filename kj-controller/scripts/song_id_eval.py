@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Score the on-device song identifier against the labelled test set.
 
-Usage: python scripts/song_id_eval.py path/to/song_id.db [--verbose] [--synthetic N]
+Usage: python scripts/song_id_eval.py path/to/song_id.db [--verbose] [--synthetic N | --frozen]
 
 --synthetic N: instead of the labelled set, sample N popular karaoke songs from the
 index and generate "drunk" variants (typos, title only, artist fragment, dropped
@@ -18,6 +18,7 @@ For negatives (no artist/title), "none" or "cand" is fine; confident is WRONG.
 """
 import json
 import os
+import re
 import statistics
 import sys
 import time
@@ -36,12 +37,23 @@ def _key(s):
     return normalize(s).replace(" ", "")
 
 
+_CREDIT_SPLIT_RE = re.compile(r"\s*(?:,|&|\+|/|\bfeaturing\b|\bfeat\.?|\bft\.?|\bx\b|\band\b|\bwith\b)\s*", re.I)
+_VERSION_RE = re.compile(r"\s*[\(\[].*$|\s+-\s+.*$")
+
+
+def _credits(artist):
+    return {_key(p) for p in _CREDIT_SPLIT_RE.split(artist or "") if _key(p)}
+
+
 def _is(case, m):
+    """Same song as a person would judge it: same title (ignoring "(feat. …)" /
+    "- Remastered" suffixes) and at least one credited artist in common
+    ("Cashmere Cat feat. Ariana Grande" ~ "Ariana Grande")."""
     if m is None:
         return False
-    if case["title"] and _key(case["title"]) != _key(m["title"]):
+    if case["title"] and _key(_VERSION_RE.sub("", case["title"])) != _key(_VERSION_RE.sub("", m["title"])):
         return False
-    if case["artist"] and _key(case["artist"]) != _key(m["artist"]):
+    if case["artist"] and not (_credits(case["artist"]) & _credits(m["artist"])):
         return False
     return True
 
@@ -80,8 +92,11 @@ def synthetic_cases(db_path, n, seed=7):
     import sqlite3
     rng = random.Random(seed)
     db = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
-    songs = db.execute("SELECT artist, title FROM songs WHERE karaoke = 1 AND pop >= 55 "
-                       "AND length(title) BETWEEN 4 AND 40 ORDER BY random() LIMIT ?", (n,)).fetchall()
+    # Seeded sample (SQLite's random() ignores the seed): same songs every run for a
+    # given index, so before/after comparisons are like for like.
+    pool = db.execute("SELECT artist, title FROM songs WHERE karaoke = 1 AND pop >= 55 "
+                      "AND length(title) BETWEEN 4 AND 40 ORDER BY lower(artist), lower(title)").fetchall()
+    songs = rng.sample(pool, min(n, len(pool)))
     cases = []
     for artist, title in songs:
         t, a = title.lower(), artist.lower()
@@ -105,6 +120,11 @@ def main():
     ident = SongIdentifier(db)
     if "--synthetic" in sys.argv:
         cases = synthetic_cases(db, int(sys.argv[sys.argv.index("--synthetic") + 1]))
+    elif "--frozen" in sys.argv:
+        # The frozen held-out set (tests/fixtures/song_id_synthetic.jsonl, 900 cases
+        # generated once): compares indexes/matcher versions like for like.
+        cases = [json.loads(line) for line in open(EVAL.replace("song_id_eval", "song_id_synthetic"),
+                                                    encoding="utf-8") if line.strip()]
     else:
         cases = [json.loads(line) for line in open(EVAL, encoding="utf-8") if line.strip()]
     ident.identify("warm up")
