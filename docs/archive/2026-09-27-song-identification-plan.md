@@ -94,6 +94,8 @@ Results: `docs/SONG-IDENTIFICATION.md` §8 (78% auto / 0 wrong on real queries; 
 - Add real misses to `kj-controller/tests/fixtures/song_id_eval.jsonl`; re-tune with `scripts/song_id_eval.py <db> [--frozen]`.
 - When the ListenBrainz import lands (handoff doc), add its popularity to `SONG_ID_SQL` in karaoke-gen `infrastructure/functions/kn_data_sync/main.py`.
 
-## Status of earlier PRs
-- gen #1065 (Gemini split → `judge_match` catalog tidy) is **held**. Its free-text resolver becomes the Phase 4 fallback.
-- kjbox #255 ("Tidied to" + make-it pre-fill) is **held** and becomes Phase 3's base (notice + per-field pre-fill logic).
+## Status of earlier PRs (final, 2026-09-28)
+- gen #1065 (Gemini fallback: free-text split → `judge_match` tidy, descriptive queries): **merged + deployed**.
+- kjbox #255 (song identification, v0.123.0): **merged + deployed**, grown from the original "Tidied to" + pre-fill PR.
+- gen #1066 (daily index export): **merged + deployed**. kjbox #256–#259: **merged + deployed**.
+- Phase checklists above that still show `[ ]`/`[~]` are the 2026-09-27 snapshot; the "2026-09-28 progress" section is the current state.
