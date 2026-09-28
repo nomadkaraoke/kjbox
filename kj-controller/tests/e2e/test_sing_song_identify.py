@@ -117,3 +117,64 @@ def test_describe_goes_to_gemini_fallback(page, live_server, live_token):
     page.wait_for_timeout(300)
     assert calls["resolve"] >= 2       # once for the empty search, once for the description
     assert [e["action"] for e in calls["events"]] == ["describe_open", "describe_submit"]
+
+
+def _slow_typed_search(page, live_server, live_token, typed, ident):
+    """Route setup where the typed-text search is HELD (fulfilled later by the
+    test, never by blocking Playwright's callback thread)."""
+    held = []
+    page.add_init_script("window.__SING_ARM_MS = 0;")
+    _login(page, live_server, live_token)
+
+    def body(q):
+        return json.dumps({"songs": [STROKES] if q == "The Strokes Machu Picchu" else [],
+                           "make_requests_enabled": True, "simple_mode": False})
+
+    def on_search(route):
+        q = urllib.parse.parse_qs(urllib.parse.urlparse(route.request.url).query).get("q", [""])[0]
+        if q == typed:
+            held.append(lambda: route.fulfill(status=200, content_type="application/json", body=body(q)))
+        else:
+            route.fulfill(status=200, content_type="application/json", body=body(q))
+    page.route("**/sing/search?*", on_search)
+    page.route("**/sing/search/identify*", lambda r: r.fulfill(
+        status=200, content_type="application/json", body=json.dumps(ident)))
+    page.route("**/sing/search/event*", lambda r: r.fulfill(status=200, content_type="application/json", body="{}"))
+    page.evaluate("window.__sing_state.step = 'search'; window.__sing_render();")
+    return held
+
+
+_IDENT = {"status": "confident", "kind": "content", "typed": "the stokes max picu",
+          "song": {"artist": "The Strokes", "title": "Machu Picchu", "karaoke": True},
+          "candidates": [{"artist": "Evaluna Montaner", "title": "Machu Picchu", "karaoke": False}]}
+
+
+def _release(page, held):
+    with page.expect_response(lambda r: "the%20stokes%20max%20picu" in r.url or "the+stokes+max+picu" in r.url):
+        while held:
+            held.pop()()
+    expect(page.locator('[data-testid="search-searching"]')).to_have_count(0)
+
+
+def test_song_card_shows_before_slow_karaoke_search(page, live_server, live_token):
+    """Identification (~100 ms) must not wait for karaoke search (can take seconds)."""
+    held = _slow_typed_search(page, live_server, live_token, "the stokes max picu", _IDENT)
+    page.locator('input[type="search"]').fill("the stokes max picu")
+    expect(page.locator('[data-testid="song-card-song"]')).to_have_text("Machu Picchu — The Strokes", timeout=5000)
+    expect(page.locator(".result-row .r-title")).to_have_text("Machu Picchu", timeout=5000)
+    page.wait_for_function("true")
+    assert held, "typed-text search should still be pending"
+    _release(page, held)
+    expect(page.locator('[data-testid="song-card-song"]')).to_have_text("Machu Picchu — The Strokes")
+    expect(page.locator(".result-row .r-title")).to_have_text("Machu Picchu")
+
+
+def test_early_choice_survives_the_slow_typed_results(page, live_server, live_token):
+    held = _slow_typed_search(page, live_server, live_token, "the stokes max picu", _IDENT)
+    page.locator('input[type="search"]').fill("the stokes max picu")
+    page.locator('[data-testid="song-not-it"]').click(timeout=5000)      # before the typed results land
+    expect(page.locator('[data-testid="song-candidate"]')).to_have_text(["Machu Picchu — Evaluna Montaner"])
+    _release(page, held)
+    # The singer's "not it?" stands — the original identification is not re-applied.
+    expect(page.locator('[data-testid="song-candidate"]')).to_have_text(["Machu Picchu — Evaluna Montaner"])
+    expect(page.locator('[data-testid="song-card-song"]')).to_have_count(0)

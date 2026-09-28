@@ -1857,13 +1857,19 @@ function renderSearch() {
       }
       loading = true; err = ""; correction = null; resolving = false; update();
       try {
-        const [data, ident] = await Promise.all([
-          search(q.trim(), sid),
-          identifySong(q.trim(), sid).catch(() => null),   // no index / offline: karaoke search still works
-        ]);
+        // Identification answers in ~100 ms; karaoke search can take seconds (live
+        // catalogue lookups). Show the song card — and start the identified
+        // song's karaoke search — as soon as identification lands, then
+        // reconcile against the typed-text results when they arrive.
+        const identP = identifySong(q.trim(), sid).catch(() => null);   // no index / offline: search still works
+        identP.then((ident) => {
+          if (myGen !== searchGen || !loading) return;
+          if (applyIdentification(ident, q.trim(), myGen, { early: true })) update();
+        });
+        const data = await search(q.trim(), sid);
         if (myGen !== searchGen) return;   // superseded — discard stale response
         results = data;
-        const identified = applyIdentification(ident, q.trim(), myGen);
+        const identified = applyIdentification(await identP, q.trim(), myGen);
         // Gemini fallback (gen) only when on-device identification had nothing
         // and karaoke search found nothing either.
         if (!identified && !(data.songs || []).length) resolveEmptySearch(q.trim(), myGen);
@@ -1886,19 +1892,34 @@ function renderSearch() {
 
   // On-device song identification → the song card (question 1), kept apart
   // from the karaoke rows (question 2). Returns true when it had something to say.
-  function applyIdentification(ident, q, gen) {
+  function applyIdentification(ident, q, gen, { early = false } = {}) {
     if (!ident || ident.status === "none") return false;
-    const shown = results.songs || [];
+    // early: the typed-text karaoke results haven't arrived yet (don't compare
+    // against the previous query's rows).
+    const shown = early ? [] : (results.songs || []);
+    const prev = correction;
+    // The singer already acted on the early card ("not it?", a candidate, keep
+    // what I typed): the typed-text results only refresh "already in the rows".
+    if (!early && prev && prev.userTouched) {
+      if (prev.corrected) prev.inResults = shown.some((g) => sameSong(g, prev.corrected));
+      return true;
+    }
     const inResults = (song) => shown.some((g) => sameSong(g, song));
     if (ident.status === "confident" && ident.song) {
-      if (ident.kind === "same") return true;
+      if (ident.kind === "same") { correction = null; return true; }
+      // Re-applying after the early pass: keep the singer's toggle state and any
+      // karaoke rows already fetched for this song (no second fetch).
+      const again = prev && prev.corrected && prev.source === "local" && sameSong(prev.corrected, ident.song);
       correction = {
         source: "local", typed: q, kind: ident.kind,
         corrected: { artist: ident.song.artist, title: ident.song.title },
         candidates: (ident.candidates || []).filter((c) => !sameSong(c, ident.song)),
-        songs: [], split: null, active: true, inResults: inResults(ident.song),
+        songs: again ? prev.songs : [], split: null, active: again ? prev.active : true,
+        inResults: inResults(ident.song), fetching: again ? prev.fetching : false,
       };
-      if (ident.kind === "content" && !correction.inResults) fetchKaraokeForCorrection(gen);
+      if (ident.kind === "content" && !correction.inResults && !correction.songs.length && !correction.fetching) {
+        fetchKaraokeForCorrection(gen);
+      }
       prefillMake(correctionMakeSource());
       return true;
     }
@@ -1915,12 +1936,18 @@ function renderSearch() {
   async function fetchKaraokeForCorrection(gen) {
     const c = correction;
     if (!c || !c.corrected) return;
+    c.fetching = true;
+    const want = c.corrected;
     try {
-      const data = await search(`${c.corrected.artist} ${c.corrected.title}`, sid);
-      if (gen !== searchGen || correction !== c) return;
-      c.songs = data.songs || [];
+      const data = await search(`${want.artist} ${want.title}`, sid);
+      if (gen !== searchGen) return;
+      // The early card may have been re-applied (new object, same song) meanwhile.
+      const cur = correction;
+      if (!cur || !cur.corrected || !sameSong(cur.corrected, want)) return;
+      cur.songs = data.songs || [];
+      cur.fetching = false;
       update();
-    } catch { /* keep the typed-text results */ }
+    } catch { if (correction) correction.fetching = false; /* keep the typed-text results */ }
   }
 
   // Nothing found → ask gen to split + tidy the query the way its own job
@@ -1955,6 +1982,7 @@ function renderSearch() {
                                   of: (prev && (prev.alternatives || prev.candidates) || []).length });
     correction = {
       source: prev && prev.source, typed: (prev && prev.typed) || state.query, kind: "content", picked: true,
+      userTouched: true,
       corrected: { artist: alt.artist, title: alt.title },
       candidates: ((prev && (prev.alternatives || prev.candidates)) || []).filter((c) => !sameSong(c, alt)),
       songs: [], split: null, active: true, inResults: (results.songs || []).some((g) => sameSong(g, alt)),
@@ -1968,7 +1996,8 @@ function renderSearch() {
   function notIt() {
     const c = correction;
     logChoice("not_it", { shown: c && c.corrected ? `${c.corrected.artist} — ${c.corrected.title}` : null });
-    correction = { source: c.source, typed: c.typed, alternatives: (c.candidates || []).slice(0, 4), notIt: true };
+    correction = { source: c.source, typed: c.typed, alternatives: (c.candidates || []).slice(0, 4), notIt: true,
+                   userTouched: true };
     prefillMake(null);
     update();
   }
@@ -2002,6 +2031,7 @@ function renderSearch() {
       onclick: (e) => {
         e.stopPropagation();
         correction.active = !correction.active;
+        correction.userTouched = true;
         logChoice(correction.active ? "reapply_tidy" : "keep_typed", { shown: song });
         prefillMake(correctionMakeSource());
         update();
@@ -2489,12 +2519,14 @@ function renderSearch() {
   function renderResults() {
     const container = el("div", { class: "results" });
     armAt = Date.now() + armMs();   // freshly-built rows are inert briefly (anti-mis-tap)
+    // The song card first: it can land (early identification) while karaoke
+    // search is still running, and it answers "which song" either way.
+    const notice = correctionNotice();
+    if (notice) container.appendChild(notice);
     if (loading) container.appendChild(searchingIndicator());
     else if (resolving) container.appendChild(searchingIndicator(
       t(resolving === "describe" ? "search.figuringOut" : "search.checkingSpelling")));
     if (err) container.appendChild(el("p", { class: "error" }, err));
-    const notice = !loading ? correctionNotice() : null;
-    if (notice) container.appendChild(notice);
 
     const corrected = correction && correction.active && correction.songs;
     const songs = (corrected && corrected.length ? corrected : results.songs) || [];
