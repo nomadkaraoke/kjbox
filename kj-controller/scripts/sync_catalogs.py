@@ -172,6 +172,29 @@ def _poke(requests_lib, config, path):
         return False
 
 
+def _download_shards(shards, tmp_dir, key, gcloud_bin, download_gcs):
+    """All of a run's shards (~100 files). One wildcard copy of the run folder
+    when they share one (a gcloud start-up per file is slow), else one by one."""
+    folders = {u.rsplit("/", 1)[0] for u in shards}
+    shard_dir = os.path.join(tmp_dir, "shards")
+    os.makedirs(shard_dir, exist_ok=True)
+    if len(folders) == 1:
+        try:
+            download_gcs(f"{folders.pop()}/*.tsv.gz", shard_dir + os.sep, key, gcloud_bin)
+            wanted = {u.rsplit("/", 1)[1] for u in shards}
+            got = sorted(f for f in os.listdir(shard_dir) if f in wanted)
+            if len(got) == len(wanted):
+                return [os.path.join(shard_dir, f) for f in got]
+        except Exception:  # noqa: BLE001 — fall back to per-file downloads
+            pass
+    local = []
+    for i, uri in enumerate(shards):
+        dest = os.path.join(tmp_dir, f"songs-{i:04d}.tsv.gz")
+        download_gcs(uri, dest, key, gcloud_bin)
+        local.append(dest)
+    return local
+
+
 def run_song_id_sync(config, *, gcloud_bin=None, requests_lib=requests,
                      download_gcs=None):
     """gen manifest → download this run's shards → build song_id.db → reload.
@@ -203,11 +226,7 @@ def run_song_id_sync(config, *, gcloud_bin=None, requests_lib=requests,
             return {"changed": False, "skipped": "run unchanged", "run": run, "error": None}
 
         try:
-            local = []
-            for i, uri in enumerate(shards):
-                dest = os.path.join(tmp_dir, f"songs-{i:04d}.tsv.gz")
-                download_gcs(uri, dest, key, gcloud_bin)
-                local.append(dest)
+            local = _download_shards(shards, tmp_dir, key, gcloud_bin, download_gcs)
         except Exception as exc:  # noqa: BLE001
             return {"changed": False, "error": f"download: {exc}"}
 

@@ -1,6 +1,7 @@
 """nomad-catalog-sync's song-identification step (scripts/sync_catalogs.run_song_id_sync)."""
 import gzip
 import json
+import os
 
 import pytest
 
@@ -28,6 +29,12 @@ def gcs(tmp_path):
             with open(dest, "w") as f:
                 json.dump({"run": state["run"], "shards": ["gs://b/song-id/r/a.tsv.gz",
                                                           "gs://b/song-id/r/b.tsv.gz"]}, f)
+        elif uri.endswith("/*.tsv.gz"):
+            if state.get("no_wildcard"):
+                raise RuntimeError("wildcard unsupported")
+            for name in ("a.tsv.gz", "b.tsv.gz"):
+                with open(src / name, "rb") as s, open(os.path.join(dest, name), "wb") as d:
+                    d.write(s.read())
         else:
             with open(src / uri.rsplit("/", 1)[1], "rb") as s, open(dest, "wb") as d:
                 d.write(s.read())
@@ -80,3 +87,15 @@ def test_reload_route_reopens_index(flask_test_client, flask_app, tmp_path, gcs)
     r = flask_test_client.post("/song-id/reload")
     assert r.status_code == 200 and r.get_json()["stats"]["songs"] == "3"
     assert flask_app.song_identifier.identify("the strokes max picu")["best"]["title"] == "Machu Picchu"
+
+
+def test_wildcard_download_is_one_call_with_per_file_fallback(tmp_path, gcs):
+    kw = dict(requests_lib=None, download_gcs=gcs["download"], gcloud_bin="gcloud")
+    sync_catalogs.run_song_id_sync(_cfg(tmp_path), **kw)
+    assert gcs["calls"] == [sync_catalogs.SONG_ID_MANIFEST_URI, "gs://b/song-id/r/*.tsv.gz"]
+    gcs["calls"].clear()
+    gcs["no_wildcard"] = True
+    gcs["run"] = "20260928-000000"
+    r = sync_catalogs.run_song_id_sync(_cfg(tmp_path), **kw)
+    assert r["changed"] is True and r["songs"] == 3
+    assert gcs["calls"][-2:] == ["gs://b/song-id/r/a.tsv.gz", "gs://b/song-id/r/b.tsv.gz"]
