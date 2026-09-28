@@ -84,9 +84,15 @@ Results: `docs/SONG-IDENTIFICATION.md` §8 (78% auto / 0 wrong on real queries; 
 - [x] kjbox #256 merged + deployed; NomadPC SSD reindex (398K rows) + mirror rebuild done.
 - [x] Phase 3 UI: song card / "Which song do you mean?" / karaoke-for heading / describe link / choice logging; e2e tests.
 - [x] Phase 4: gen #1065 prompt handles descriptions (live-checked: Titanic → My Heart Will Go On; Top Gun → ambiguous list).
-- [ ] Merge gen #1066 + deploy kn-data-sync; first export; NomadPC sync builds song_id.db
-- [ ] Merge gen #1065 (deploys backend) and the kjbox song-id PR
-- [ ] NomadPC latency with the v3 index
+- [x] gen #1066 merged; `kn-data-sync` redeployed with `gcloud functions deploy` (the live function isn't tracking Pulumi's source object); first export run `20260928-055228` (111 shards, 126 MB)
+- [x] gen #1065 merged + deployed (backend Cloud Run); kjbox #255 (v0.123.0) merged + deployed; `nomad-catalog-sync` built `song_id.db` on the NomadPC (5,432,020 songs, ~11 min incl. mirror, ~4 GB RAM peak)
+- [x] NomadPC latency: identify ~60–160 ms per call live; test sets p50 ~105 / p95 ~290 ms
+- [x] Follow-ups found live and shipped: #257 (MB misspelled duplicates block confidence, v0.123.1), #258 (don't cache transient Gemini misses, v0.123.2), #259 (song card shows before the slow typed-text karaoke search, v0.123.3; card in ~1.3 s incl. debounce)
+
+## Next (after a few live shows)
+- Run `scripts/search_log_report.py --days 7` on the NomadPC and review the flagged sessions (undone tidies, "not it?", lower candidates, edited make-it pre-fills, make-its with no identification).
+- Add real misses to `kj-controller/tests/fixtures/song_id_eval.jsonl`; re-tune with `scripts/song_id_eval.py <db> [--frozen]`.
+- When the ListenBrainz import lands (handoff doc), add its popularity to `SONG_ID_SQL` in karaoke-gen `infrastructure/functions/kn_data_sync/main.py`.
 
 ## Status of earlier PRs
 - gen #1065 (Gemini split → `judge_match` catalog tidy) is **held**. Its free-text resolver becomes the Phase 4 fallback.
