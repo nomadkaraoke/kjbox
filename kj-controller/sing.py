@@ -822,6 +822,8 @@ def search_event():
     if action not in CHOICE_ACTIONS:
         return jsonify({"error": "unknown action"}), 400
     data = body.get("data") if isinstance(body.get("data"), dict) else {}
+    if len(data) > 30 or len(json.dumps(data, default=str)) > 4000:
+        return jsonify({"error": "payload too large"}), 413   # SearchLog also caps; reject early
     sl = getattr(current_app, "search_log", None)
     if sl is not None:
         sl.log("choice", search_id=str(body.get("sid") or ""), device_id=str(body.get("device_id") or ""),
