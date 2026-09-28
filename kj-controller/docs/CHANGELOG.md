@@ -4,16 +4,23 @@ Dated entries, newest first. Each entry notes any required deploy steps.
 
 ---
 
-<<<<<<< HEAD
-## 2026-09-27 - Singer search: gen's "Tidied to" + make-it pre-fill (v0.123.0)
+## 2026-09-28 - Singer song identification: "the song you mean" + search log (v0.123.0)
 
-**Deploy:** `.py` change → auto-deploy restarts kj-controller (playback continues). Best with karaoke-gen ≥ v0.245.1 (gen's resolve then tidies via its job-flow catalog match); with an older gen the Gemini-only verdict is used the same way.
+**Deploy:** `.py` change → auto-deploy restarts kj-controller (playback continues). **New on-device index `song_id.db` (~0.9 GB):** `nomad-catalog-sync` downloads gen's daily export (`gs://nomadkaraoke-kn-data/song-id/latest.json`, needs karaoke-gen's kn-data-sync export deployed) and builds it (~7 min, ~4 GB RAM peak on the N97). Until it exists, identification quietly returns nothing and search behaves as before. Run once after deploy: `sudo systemctl start nomad-catalog-sync`. Gemini "Describe it" fallback needs karaoke-gen ≥ v0.245.1.
 
-- An empty singer search now gets gen's job-form tidy. For example, "rihanna push up on me" shows "✓ Tidied to Rihanna — Push Up On Me · keep what I typed". A typo still shows "Corrected to … — you typed … · Undo".
-- The tidy is shown **even when the corrected search finds nothing**. Previously it was dropped. Case-only tidies don't re-search.
-- The **Generate on demand** form is pre-filled with the tidied artist/title. "keep what I typed" swaps in the typed split. The singer's own edits are never overwritten. When gen only splits the query (a song it doesn't recognise), the split is still pre-filled.
-- 3 new singer strings (`search.tidiedTo` / `keepMine` / `useTidied`), copied from gen's own translations for all locales.
-=======
+Design, data sources, decisions and results: `docs/SONG-IDENTIFICATION.md`.
+- **Two separate questions:** *which real song does the singer mean* (new, on-device) vs *is there a karaoke version* (existing search). The identified song gets its own **"🎵 The song you mean"** card, a **"Which song do you mean?"** list for close calls, or gen's small **"Tidied to … · keep what I typed"** line for formatting-only fixes. Karaoke rows for the identified song sit under **"Karaoke versions of X"**. Nothing is shown when the karaoke rows already show that song.
+- **On-device matcher** (`song_identify.py`) over about 5.4M songs:
+  - MusicBrainz (refreshed weekly), the Spotify snapshot and KaraokeNerds
+  - handles typos, title-only queries, artist fragments in any order, sound-alike mangling ("the stokes max picu" → Machu Picchu)
+  - about 35 ms typical on the Mac
+- **Gemini fallback** only when the matcher has nothing and karaoke search is empty, or via the new **"Can't remember the name? Describe it"** link ("that song from Titanic").
+- **Generate on demand** is pre-filled from the identified song; edited fields are never overwritten.
+- **Persistent search log** (`search_log.py` → `search_log.db`): searches, identifications, Gemini answers and every singer choice (kept/undid a tidy, "not it?", which candidate, which version, make-it with/without edits). Review with `scripts/search_log_report.py --days 7`.
+- 9 new singer strings in all locales.
+
+---
+
 ## 2026-09-27 - Search normalizer: "ft" only as a whole word (v0.122.1)
 
 **Deploy:** `.py` change, so auto-deploy restarts kj-controller (playback continues). **`NORMALIZER_VERSION` 1 → 2, so the on-device indexes must be rebuilt:**
@@ -29,7 +36,6 @@ Dated entries, newest first. Each entry notes any required deploy steps.
   Search mostly "worked" because the index and the query were broken the same way, but it collapsed distinct songs together and hurt fuzzy matching. Fixed in `text_normalize.py` and its JS mirror `static/text_normalize.js`, which must stay in step (parity test).
 - `sync_catalogs.py` now rebuilds the mirror after a normalizer bump even when the downloaded sources are unchanged. Previously the "sources unchanged" skip could leave an unusable mirror indefinitely.
 - Found while building the song-identification matcher (`docs/SONG-IDENTIFICATION.md`).
->>>>>>> fix/normalize-feat-word-boundary
 
 ---
 

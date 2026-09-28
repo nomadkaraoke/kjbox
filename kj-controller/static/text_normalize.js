@@ -19,7 +19,8 @@
     const latinRe = latinKeys.length
       ? new RegExp('[' + latinKeys.join('').replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ']', 'g')
       : null;
-    const featRe = /\s*[\[(]?\s*\b(?:feat\.?|ft\.?|featuring)\s+[^\])]+[\])]?/ig;  // \b: whole-word ft only
+    // Unicode-aware whole-word boundary (JS \b is ASCII-only: "Жft" would still match).
+    const featRe = /\s*[\[(]?\s*(?<![\p{L}\p{N}_])(?:feat\.?|ft\.?|featuring)\s+[^\])]+[\])]?/igu;
     const symbolAndRe = /\s*[&+]\s*/g;
     const aposRe = /['\u2018\u2019\u02BC`]+/gu;
     // NOTE: JS \w is ASCII-only (unlike Python re.UNICODE), so non-Latin

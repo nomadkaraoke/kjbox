@@ -12,6 +12,7 @@ HERE = os.path.dirname(__file__)
 JS_FILE = os.path.abspath(os.path.join(HERE, "..", "..", "static", "text_normalize.js"))
 
 CASES = [
+    "Soft Cell", "Hayloft II", "Taylor Swift ft. Drake", "Left Outside Alone",
     "Simon & Garfunkel", "Don't Stop Believin'", "Beyoncé", "MØ",
     "Don\u2018t Stop Believin\u2019",
     "Straßenbande", "Twenty One Pilots", "Thirty Seconds To Mars",
