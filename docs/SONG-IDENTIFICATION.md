@@ -174,7 +174,14 @@ Run it: `python scripts/song_id_eval.py path/to/song_id.db [--verbose]`.
 of drunk typing (typos, keyboard slips, doubled or dropped letters, title only, artist
 fragment). The matcher was never tuned on it, so it guards against overfitting the labelled set.
 
-## 8. Implementation & results (2026-09-27 prototype)
+## 8. Implementation & results
+
+**Shipped 2026-09-28** (kjbox v0.123.0–v0.123.3, karaoke-gen #1065/#1066). Operations:
+- **Index freshness:** gen's `kn-data-sync` (daily, after the KN refresh) exports to `gs://nomadkaraoke-kn-data/song-id/<run>/` + `latest.json`. The NomadPC's `nomad-catalog-sync` (daily 12:15 UTC + after boot) rebuilds `kj-controller/song_id.db` when the run id changes (~7 min, ~4 GB RAM). Check it: `journalctl -u nomad-catalog-sync | grep song-id-sync`.
+- **Redeploying the export function:** `infrastructure/functions/kn_data_sync/deploy.sh`, then `gcloud functions deploy kn-data-sync --gen2 --region=us-central1 --project=nomadkaraoke --source=gs://kn-data-sync-source-nomadkaraoke/kn-data-sync-source.zip --runtime=python312 --entry-point=sync_kn_data --quiet`. The live function doesn't follow Pulumi's source object, so `pulumi up` alone won't update the code.
+- **Review what singers did:** `sudo -u nomad ./venv/bin/python scripts/search_log_report.py --days 7` on the NomadPC.
+
+### History (2026-09-27 prototype)
 
 Code (kjbox):
 - `kj-controller/song_identify.py`: `SongIdentifier.identify(q)` returns
