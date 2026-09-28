@@ -45,6 +45,10 @@ CHOICE_ACTIONS = {
     "describe_submit",      # sent a description to the Gemini fallback
 }
 MAX_DATA_BYTES = 4000
+# Retention: a year of shows is plenty for review; the row cap bounds the file
+# (~2 KB/row worst case → ~1 GB) even if something spams the endpoint.
+RETENTION_DAYS = 365
+MAX_ROWS = 500_000
 
 
 def default_db_path(config):
@@ -75,8 +79,17 @@ class SearchLog:
                 CREATE INDEX IF NOT EXISTS search_events_sid ON search_events(search_id);
                 CREATE INDEX IF NOT EXISTS search_events_ts ON search_events(ts);
             """)
+            self._prune(conn)
             self._ready = True
         return conn
+
+    @staticmethod
+    def _prune(conn):
+        """Drop rows past retention, then the oldest beyond MAX_ROWS (on first open)."""
+        conn.execute("DELETE FROM search_events WHERE ts < ?", (time.time() - RETENTION_DAYS * 86400,))
+        conn.execute("DELETE FROM search_events WHERE id <= (SELECT MAX(id) FROM search_events) - ?",
+                     (MAX_ROWS,))
+        conn.commit()
 
     def log(self, type_, *, search_id=None, device_id=None, query=None, data=None):
         """Append one event; never raises."""

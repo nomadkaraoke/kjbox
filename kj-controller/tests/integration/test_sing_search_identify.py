@@ -93,3 +93,37 @@ def test_report_flags_undo_and_missed_identifications(tmp_path, capsys):
     out = capsys.readouterr().out
     assert "undid-tidy" in out and "make-without-identification" in out
     assert "session c" not in out          # a clean request isn't flagged
+
+
+def test_client_cannot_override_validated_action(client, token, wired):
+    client.post(f"/sing/search/event?t={token}", json={
+        "sid": "x", "action": "accept_tidy", "data": {"action": "not_it", "extra": 1}})
+    ev = wired.search_log.events()
+    assert ev[0]["data"] == {"action": "accept_tidy", "extra": 1}
+
+
+def test_event_and_identify_are_rate_limited(client, token, wired, monkeypatch):
+    import sing
+    sing._resolve_rate_state.clear()
+    monkeypatch.setattr(sing, "_EVENT_RATE_PER_DEVICE", 2)
+    monkeypatch.setattr(sing, "_IDENTIFY_RATE_PER_DEVICE", 1)
+    body = {"sid": "x", "action": "keep_typed", "device_id": "d" * 32}
+    codes = [client.post(f"/sing/search/event?t={token}", json=body).status_code for _ in range(3)]
+    assert codes == [200, 200, 429]
+    assert _identify(client, token, "espresso").get("status") == "confident"
+    r = client.get("/sing/search/identify", query_string={"q": "espresso", "t": token, "device_id": "d" * 32})
+    assert r.status_code == 429
+
+
+def test_search_log_prunes_old_and_excess_rows(tmp_path, monkeypatch):
+    import search_log as sl_mod
+    path = str(tmp_path / "log.db")
+    sl = SearchLog(path)
+    for i in range(5):
+        sl.log("search", query=f"q{i}")
+    import sqlite3
+    conn = sqlite3.connect(path)
+    conn.execute("UPDATE search_events SET ts = 0 WHERE query = 'q0'")     # ancient
+    conn.commit(); conn.close()
+    monkeypatch.setattr(sl_mod, "MAX_ROWS", 3)
+    assert [e["query"] for e in SearchLog(path).events()] == ["q2", "q3", "q4"]

@@ -783,6 +783,9 @@ def _identify_kind(query, artist, title):
 def search_identify():
     """→ ``{status: confident|candidates|none, song, kind, candidates, typed}``."""
     query = (request.args.get("q") or "").strip()[:200]
+    if _resolve_rate_limited((request.args.get("device_id") or "").strip()[:64], "identify",
+                             _IDENTIFY_RATE_PER_DEVICE, _IDENTIFY_RATE_PER_IP):
+        return jsonify({"error": "rate_limited"}), 429
     ident = getattr(current_app, "song_identifier", None)
     if len(query) < 3 or ident is None or not ident.available:
         return jsonify({"status": "none", "unavailable": ident is None or not ident.available})
@@ -810,6 +813,9 @@ def search_event():
     """Client-side choice events for the search log (see search_log.CHOICE_ACTIONS)."""
     from search_log import CHOICE_ACTIONS
     body = request.get_json(silent=True) or {}
+    if _resolve_rate_limited(str(body.get("device_id") or "").strip()[:64], "event",
+                             _EVENT_RATE_PER_DEVICE, _EVENT_RATE_PER_IP):
+        return jsonify({"error": "rate_limited"}), 429
     action = str(body.get("action") or "")
     if action not in CHOICE_ACTIONS:
         return jsonify({"error": "unknown action"}), 400
@@ -817,7 +823,7 @@ def search_event():
     sl = getattr(current_app, "search_log", None)
     if sl is not None:
         sl.log("choice", search_id=str(body.get("sid") or ""), device_id=str(body.get("device_id") or ""),
-               query=str(body.get("q") or "")[:300], data={"action": action, **data})
+               query=str(body.get("q") or "")[:300], data={**data, "action": action})
     return jsonify({"ok": True})
 
 
@@ -835,13 +841,23 @@ _RESOLVE_RATE_PER_DEVICE = 20
 # Venue-wide ceiling a phone can't reset by inventing device ids.
 _RESOLVE_RATE_PER_IP = 200
 _resolve_rate_lock = threading.Lock()
+# Identification runs once per (debounced) search; choice events a few per search.
+# Generous for a real singer, but a script can't hammer the matcher or fill the log.
+_IDENTIFY_RATE_PER_DEVICE = 120
+_IDENTIFY_RATE_PER_IP = 1500
+_EVENT_RATE_PER_DEVICE = 120
+_EVENT_RATE_PER_IP = 1500
 
 
-def _resolve_rate_limited(device_id):
+def _resolve_rate_limited(device_id, bucket="resolve", per_device=None, per_ip=None):
+    """Sliding-window limiter per device id AND per IP (the venue ceiling a phone
+    can't reset by inventing device ids). ``bucket`` keeps endpoints' budgets apart."""
     now = time.monotonic()
-    keys = [(f"ip:{_client_ip(request)}", _RESOLVE_RATE_PER_IP)]
+    per_device = per_device or _RESOLVE_RATE_PER_DEVICE
+    per_ip = per_ip or _RESOLVE_RATE_PER_IP
+    keys = [(f"{bucket}:ip:{_client_ip(request)}", per_ip)]
     if device_id:
-        keys.append((f"dev:{device_id}", _RESOLVE_RATE_PER_DEVICE))
+        keys.append((f"{bucket}:dev:{device_id}", per_device))
     with _resolve_rate_lock:
         # Drop idle identities so made-up device ids can't grow memory.
         for k in [k for k, q in _resolve_rate_state.items()
