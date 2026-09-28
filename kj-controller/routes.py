@@ -1357,6 +1357,19 @@ def catalog_mirror_reload():
     return jsonify({"success": True, "stats": stats})
 
 
+@routes_bp.route('/song-id/reload', methods=['POST'])
+def song_id_reload():
+    """Reopen song_id.db after nomad-catalog-sync's atomic swap (docs/SONG-IDENTIFICATION.md)."""
+    ident = getattr(current_app, "song_identifier", None)
+    if ident is None:
+        return jsonify({"error": "song identifier not configured"}), 404
+    ident.reload()
+    stats = ident.stats()
+    log_message(f"Song-id index reloaded: {stats.get('songs')} songs, run {stats.get('source_run')}",
+                current_app.kj_config)
+    return jsonify({"success": True, "stats": stats})
+
+
 @routes_bp.route('/rescan', methods=['POST'])
 def handle_rescan():
     """Reloads config and triggers a full media folder rescan."""

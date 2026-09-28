@@ -91,8 +91,20 @@
     "didYouMean": "Maksud anda…?",
     "correctedTo": "Dibetulkan kepada {song} — anda menaip “{typed}”.",
     "usingTyped": "Menggunakan apa yang anda taip: “{typed}”.",
+    "tidiedTo": "Dikemaskan kepada {song}",
+    "keepMine": "kekalkan apa yang saya taip",
+    "useTidied": "gunakan versi yang dikemaskan",
     "undo": "Buat asal",
-    "useCorrection": "Gunakan pembetulan"
+    "useCorrection": "Gunakan pembetulan",
+    "songYouMean": "Lagu yang anda maksudkan",
+    "whichSong": "Lagu mana yang anda maksudkan?",
+    "notIt": "bukan yang ini?",
+    "youTyped": "anda taip “{typed}”",
+    "karaokeFor": "Versi karaoke untuk {song}",
+    "describeLink": "Tak ingat tajuknya? Cuba terangkan",
+    "describePlaceholder": "cth. lagu dari filem Titanic",
+    "describeCta": "Cari",
+    "figuringOut": "Sedang mencari lagu yang anda maksudkan…"
   },
   "versions": {
     "sectionLibrary": "Dalam pustaka kami",

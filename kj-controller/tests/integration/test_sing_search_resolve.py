@@ -1,5 +1,6 @@
-"""Singer search auto-correct: an empty search asks gen's free-text resolver
-("the strokes max picu" → The Strokes — Machu Picchu) and re-searches."""
+"""Singer search auto-correct: an empty search asks gen's free-text resolver +
+job-flow tidy ("the strokes max picu" → The Strokes — Machu Picchu; "rihanna
+push up on me" → Rihanna — Push Up On Me) and re-searches when the text changed."""
 from unittest.mock import MagicMock
 
 import pytest
@@ -47,7 +48,9 @@ def _get(client, token, q="the strokes max picu"):
 def test_confident_correction_returns_corrected_results(client, token, gen, searched):
     body = _get(client, token).get_json()
     assert body["corrected"] == {"artist": "The Strokes", "title": "Machu Picchu"}
+    assert body["kind"] == "content"
     assert body["typed"] == "the strokes max picu"
+    assert body["split"] == {"artist": "the strokes", "title": "max picu"}
     assert body["songs"][0]["title"] == "Machu Picchu"
     assert searched == ["The Strokes Machu Picchu"]
 
@@ -58,15 +61,37 @@ def test_cached_per_query(client, token, gen, searched):
     assert gen.resolve_search.call_count == 1
 
 
-def test_correction_that_finds_nothing_is_not_offered(client, token, gen, searched):
+def test_correction_that_finds_nothing_is_still_offered_for_the_make_form(client, token, gen, searched):
     gen.resolve_search.return_value = {**gen.resolve_search.return_value,
                                        "canonical_title": "Unknown Song"}
-    assert _get(client, token).get_json() == {}
+    body = _get(client, token).get_json()
+    assert body["corrected"] == {"artist": "The Strokes", "title": "Unknown Song"}
+    assert body["songs"] == []
+
+
+def test_case_only_tidy_skips_the_re_search(client, token, gen, searched):
+    gen.resolve_search.return_value = {
+        "kind": "cosmetic", "confident": True, "canonical_artist": "Rihanna",
+        "canonical_title": "Push Up On Me", "typed_artist": "rihanna", "typed_title": "push up on me"}
+    body = _get(client, token, "rihanna  push up on me").get_json()
+    assert body["kind"] == "cosmetic"
+    assert body["corrected"] == {"artist": "Rihanna", "title": "Push Up On Me"}
+    assert body["songs"] == []
+    assert searched == []                    # same text as the empty search
+
+
+def test_split_only_verdict_returns_the_split(client, token, gen, searched):
+    gen.resolve_search.return_value = {"kind": "none", "confident": False,
+                                       "typed_artist": "some band", "typed_title": "deep cut"}
+    assert _get(client, token, "some band deep cut").get_json() == {
+        "split": {"artist": "some band", "title": "deep cut"}}
+    assert searched == []
 
 
 @pytest.mark.parametrize("verdict", [
     {"kind": "content", "confident": False, "canonical_artist": "The Strokes", "canonical_title": "Machu Picchu"},
     {"kind": "none", "confident": False},
+    {"kind": "none", "confident": False, "typed_title": "just a title"},
 ])
 def test_unsure_verdict_changes_nothing(client, token, gen, searched, verdict):
     gen.resolve_search.return_value = verdict

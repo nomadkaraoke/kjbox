@@ -103,6 +103,19 @@ cd kj-controller && pytest --cov --cov-report=term # with coverage (target: 70%+
 
 See [docs/TESTING.md](docs/TESTING.md) for conventions and fixtures.
 
+## Singer Song Search / Song Identification
+
+Before touching singer song search, "Did you mean", auto-correct/tidy, or the make-it pre-fill, **read
+[docs/SONG-IDENTIFICATION.md](docs/SONG-IDENTIFICATION.md)**. Key points:
+- **Two separate questions:** *which real song does the singer mean* (identification, over every song that exists)
+  vs *is there a karaoke version of it* (availability). Keep them separate in code and UI, and never interleave
+  candidate songs with karaoke rows.
+- **gen's job-form "Tidied/Corrected to" is mostly Gemini** (`gemini-3.8-flash`). Its catalogue pass is exact-match
+  only, and decide's catalogue API is prefix-only (`LIKE 'q%'`), so neither is typo-tolerant.
+- Target: an on-device matcher for the easy majority, with Gemini (via gen) only as a fallback and for
+  descriptive queries ("that song from Titanic").
+- Test set: `kj-controller/tests/fixtures/song_id_eval.jsonl`.
+
 ## HDMI Troubleshooting
 
 If the user reports HDMI video or audio issues on NomadPC, **read [docs/HDMI.md](docs/HDMI.md) first**. It contains:

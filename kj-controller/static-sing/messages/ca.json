@@ -91,8 +91,20 @@
     "didYouMean": "Volies dir…?",
     "correctedTo": "Corregit a {song} — has escrit “{typed}”.",
     "usingTyped": "Utilitzant el que has escrit: “{typed}”.",
+    "tidiedTo": "Ajustat a {song}",
+    "keepMine": "mantenir el que he escrit",
+    "useTidied": "utilitza la versió polida",
     "undo": "Desfer",
-    "useCorrection": "Utilitza la correcció"
+    "useCorrection": "Utilitza la correcció",
+    "songYouMean": "La cançó que vols dir",
+    "whichSong": "Quina cançó vols dir?",
+    "notIt": "no és aquesta?",
+    "youTyped": "has escrit “{typed}”",
+    "karaokeFor": "Versions de karaoke de {song}",
+    "describeLink": "No recordes el nom? Descriu-la",
+    "describePlaceholder": "p. ex. aquella cançó del Titanic",
+    "describeCta": "Troba-la",
+    "figuringOut": "Esbrinant quina cançó vols dir…"
   },
   "versions": {
     "sectionLibrary": "A la nostra biblioteca",

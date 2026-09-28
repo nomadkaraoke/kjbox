@@ -13,6 +13,13 @@ Skip logic: if all three downloaded exports hash identically to what the
 current mirror was built from, the rebuild is skipped (the divebar export
 uses deterministic gzip precisely so this works).
 
+Also refreshes the song-identification index (``song_id.db``, see
+docs/SONG-IDENTIFICATION.md): reads gen's manifest ``song-id/latest.json``,
+downloads that run's TSV shards, rebuilds via scripts/build_song_id_db.py and
+pokes ``/song-id/reload``. Skipped when the manifest's run is the one the
+current index was built from (and the normalizer hasn't changed). Independent
+of the mirror: one failing never blocks the other.
+
 After a rebuild the app is poked at ``/catalog-mirror/reload`` so the live
 process reopens the (atomically replaced) database. Failures are reported,
 never raised — a flaky network must not wedge the systemd timer. Designed
@@ -22,6 +29,7 @@ after the box has been powered off).
 
 import fcntl
 import hashlib
+import json
 import os
 import shutil
 import subprocess
@@ -34,6 +42,8 @@ import requests
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config import load_config  # noqa: E402
 import catalog_mirror  # noqa: E402
+import song_identify  # noqa: E402
+from scripts import build_song_id_db  # noqa: E402
 
 LOCK_PATH = "/tmp/nomad-catalog-sync.lock"
 
@@ -42,6 +52,7 @@ DIVEBAR_EXPORT_URL = (
     "exports/divebar-catalog-latest.json.gz")
 KN_COMMUNITY_URI = "gs://nomadkaraoke-kn-data/community/community-data-latest.json.gz"
 KN_FULL_URI = "gs://nomadkaraoke-kn-data/full/full-data-latest.json.gz"
+SONG_ID_MANIFEST_URI = "gs://nomadkaraoke-kn-data/song-id/latest.json"
 
 
 def _find_gcloud():
@@ -149,6 +160,86 @@ def run_sync(config, *, gcloud_bin=None, requests_lib=requests,
         shutil.rmtree(tmp_dir, ignore_errors=True)
 
 
+def _poke(requests_lib, config, path):
+    """POST the app's INTERNAL bind port; False if the app isn't reachable."""
+    if requests_lib is None:
+        return False
+    url = f"http://127.0.0.1:{config.get('app_bind_port', 5001)}{path}"
+    try:
+        requests_lib.post(url, timeout=30)
+        return True
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _download_shards(shards, tmp_dir, key, gcloud_bin, download_gcs):
+    """All of a run's shards (~100 files). One wildcard copy of the run folder
+    when they share one (a gcloud start-up per file is slow), else one by one."""
+    folders = {u.rsplit("/", 1)[0] for u in shards}
+    shard_dir = os.path.join(tmp_dir, "shards")
+    os.makedirs(shard_dir, exist_ok=True)
+    if len(folders) == 1:
+        try:
+            download_gcs(f"{folders.pop()}/*.tsv.gz", shard_dir + os.sep, key, gcloud_bin)
+            wanted = {u.rsplit("/", 1)[1] for u in shards}
+            got = sorted(f for f in os.listdir(shard_dir) if f in wanted)
+            if len(got) == len(wanted):
+                return [os.path.join(shard_dir, f) for f in got]
+        except Exception:  # noqa: BLE001 — fall back to per-file downloads
+            pass
+    local = []
+    for i, uri in enumerate(shards):
+        dest = os.path.join(tmp_dir, f"songs-{i:04d}.tsv.gz")
+        download_gcs(uri, dest, key, gcloud_bin)
+        local.append(dest)
+    return local
+
+
+def run_song_id_sync(config, *, gcloud_bin=None, requests_lib=requests,
+                     download_gcs=None):
+    """gen manifest → download this run's shards → build song_id.db → reload.
+
+    Returns a result dict; never raises.
+    """
+    if not config.get("song_id_enabled", True):
+        return {"changed": False, "skipped": "disabled", "error": None}
+    db_path = song_identify.default_db_path(config)
+    key = config.get("master_sync_credentials_file", "")
+    gcloud_bin = gcloud_bin or _find_gcloud()
+    download_gcs = download_gcs or _download_gcs
+    tmp_dir = tempfile.mkdtemp(prefix="song-id-sync-")
+    try:
+        try:
+            manifest_path = os.path.join(tmp_dir, "latest.json")
+            download_gcs(SONG_ID_MANIFEST_URI, manifest_path, key, gcloud_bin)
+            with open(manifest_path, encoding="utf-8") as f:
+                manifest = json.load(f)
+            run, shards = str(manifest["run"]), list(manifest["shards"])
+            if not shards:
+                raise ValueError("manifest lists no shards")
+        except Exception as exc:  # noqa: BLE001
+            return {"changed": False, "error": f"manifest: {exc}"}
+
+        meta = build_song_id_db.stored_meta(db_path)
+        if meta.get("source_run") == run and \
+                meta.get("normalizer_version") == str(song_identify.NORMALIZER_VERSION):
+            return {"changed": False, "skipped": "run unchanged", "run": run, "error": None}
+
+        try:
+            local = _download_shards(shards, tmp_dir, key, gcloud_bin, download_gcs)
+        except Exception as exc:  # noqa: BLE001
+            return {"changed": False, "error": f"download: {exc}"}
+
+        try:
+            songs, words = build_song_id_db.build(local, db_path, meta={"source_run": run})
+        except Exception as exc:  # noqa: BLE001
+            return {"changed": False, "error": f"build: {exc}"}
+        return {"changed": True, "run": run, "songs": songs, "words": words,
+                "reloaded": _poke(requests_lib, config, "/song-id/reload"), "error": None}
+    finally:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+
+
 def main():
     lock = open(LOCK_PATH, "w")
     try:
@@ -160,7 +251,9 @@ def main():
         config = load_config()
         result = run_sync(config)
         print(f"catalog-sync: {result}")
-        return 0 if not result.get("error") else 1
+        song_id = run_song_id_sync(config)
+        print(f"song-id-sync: {song_id}")
+        return 0 if not (result.get("error") or song_id.get("error")) else 1
     finally:
         lock.close()
 

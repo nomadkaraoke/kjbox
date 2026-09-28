@@ -91,8 +91,20 @@
     "didYouMean": "Mente du…?",
     "correctedTo": "Rettet til {song} — du skrev «{typed}».",
     "usingTyped": "Bruker det du skrev: «{typed}».",
+    "tidiedTo": "Justert til {song}",
+    "keepMine": "behold det jeg skrev",
+    "useTidied": "bruk oppryddet versjon",
     "undo": "Angre",
-    "useCorrection": "Bruk rettelsen"
+    "useCorrection": "Bruk rettelsen",
+    "songYouMean": "Sangen du mener",
+    "whichSong": "Hvilken sang mener du?",
+    "notIt": "ikke den?",
+    "youTyped": "du skrev “{typed}”",
+    "karaokeFor": "Karaokeversjoner av {song}",
+    "describeLink": "Husker du ikke hva den heter? Beskriv den",
+    "describePlaceholder": "f.eks. den sangen fra Titanic",
+    "describeCta": "Finn den",
+    "figuringOut": "Finner ut hvilken sang du mener…"
   },
   "versions": {
     "sectionLibrary": "I biblioteket vårt",

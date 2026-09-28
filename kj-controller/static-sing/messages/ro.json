@@ -91,8 +91,20 @@
     "didYouMean": "Ai vrut să spui…?",
     "correctedTo": "Corectat în {song} — ai scris „{typed}”.",
     "usingTyped": "Folosim ce ai scris: „{typed}”.",
+    "tidiedTo": "Ajustat în {song}",
+    "keepMine": "păstrează ce am scris",
+    "useTidied": "folosește versiunea curățată",
     "undo": "Anulează",
-    "useCorrection": "Folosește corecția"
+    "useCorrection": "Folosește corecția",
+    "songYouMean": "Piesa la care te referi",
+    "whichSong": "La ce piesă te referi?",
+    "notIt": "nu e asta?",
+    "youTyped": "ai scris „{typed}”",
+    "karaokeFor": "Versiuni karaoke pentru {song}",
+    "describeLink": "Nu-ți amintești cum se cheamă? Descrie-o",
+    "describePlaceholder": "de ex. piesa aia din Titanic",
+    "describeCta": "Găsește-o",
+    "figuringOut": "Încercăm să ne dăm seama la ce piesă te referi…"
   },
   "versions": {
     "sectionLibrary": "În biblioteca noastră",

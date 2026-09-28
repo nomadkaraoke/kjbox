@@ -91,8 +91,20 @@
     "didYouMean": "คุณหมายถึง…?",
     "correctedTo": "แก้ไขเป็น {song} — คุณพิมพ์ว่า “{typed}”",
     "usingTyped": "ใช้คำที่คุณพิมพ์: “{typed}”",
+    "tidiedTo": "จัดรูปแบบเป็น {song}",
+    "keepMine": "ใช้ข้อความที่ฉันพิมพ์",
+    "useTidied": "ใช้เวอร์ชันที่จัดระเบียบแล้ว",
     "undo": "เลิกทำ",
-    "useCorrection": "ใช้คำที่แก้ไข"
+    "useCorrection": "ใช้คำที่แก้ไข",
+    "songYouMean": "เพลงที่คุณหมายถึง",
+    "whichSong": "คุณหมายถึงเพลงไหน?",
+    "notIt": "ไม่ใช่เพลงนี้?",
+    "youTyped": "คุณพิมพ์ว่า “{typed}”",
+    "karaokeFor": "เวอร์ชันคาราโอเกะของ {song}",
+    "describeLink": "จำชื่อเพลงไม่ได้? ลองอธิบายดู",
+    "describePlaceholder": "เช่น เพลงจากเรื่อง Titanic",
+    "describeCta": "ค้นหา",
+    "figuringOut": "กำลังหาว่าคุณหมายถึงเพลงไหน…"
   },
   "versions": {
     "sectionLibrary": "ในคลังข้อมูลของเรา",

@@ -91,8 +91,20 @@
     "didYouMean": "Intendevi…?",
     "correctedTo": "Corretto in {song} — avevi scritto “{typed}”.",
     "usingTyped": "Uso quello che hai scritto: “{typed}”.",
+    "tidiedTo": "Sistemato in {song}",
+    "keepMine": "mantieni quello che ho digitato",
+    "useTidied": "usa la versione ripulita",
     "undo": "Annulla",
-    "useCorrection": "Usa la correzione"
+    "useCorrection": "Usa la correzione",
+    "songYouMean": "La canzone che intendi",
+    "whichSong": "Quale canzone intendi?",
+    "notIt": "non è questa?",
+    "youTyped": "hai scritto “{typed}”",
+    "karaokeFor": "Versioni karaoke di {song}",
+    "describeLink": "Non ricordi il titolo? Descrivila",
+    "describePlaceholder": "es. quella canzone del Titanic",
+    "describeCta": "Trovala",
+    "figuringOut": "Sto cercando di capire quale canzone intendi…"
   },
   "versions": {
     "sectionLibrary": "Nella nostra libreria",

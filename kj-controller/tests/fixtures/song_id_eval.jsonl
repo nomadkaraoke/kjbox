@@ -1,0 +1,97 @@
+{"q": "toto africa", "artist": "Toto", "title": "Africa", "kind": "exact", "source": "kjbox-log", "label": "claude-2026-09-27"}
+{"q": "big green tractor jason aldean", "artist": "Jason Aldean", "title": "Big Green Tractor", "kind": "exact", "source": "kjbox-log", "label": "claude-2026-09-27"}
+{"q": "feliz navidad jose feliciano", "artist": "José Feliciano", "title": "Feliz Navidad", "kind": "exact", "source": "kjbox-log", "label": "claude-2026-09-27"}
+{"q": "bohemian rhapsody queen", "artist": "Queen", "title": "Bohemian Rhapsody", "kind": "exact", "source": "kjbox-log", "label": "claude-2026-09-27"}
+{"q": "adele rolling in the deep", "artist": "Adele", "title": "Rolling in the Deep", "kind": "exact", "source": "kjbox-log", "label": "claude-2026-09-27"}
+{"q": "abba waterloo", "artist": "ABBA", "title": "Waterloo", "kind": "exact", "source": "kjbox-log", "label": "claude-2026-09-27"}
+{"q": "rihanna push up on me", "artist": "Rihanna", "title": "Push Up On Me", "kind": "exact", "source": "kjbox-log", "label": "claude-2026-09-27"}
+{"q": "Just Jack Starz in their Eyes", "artist": "Just Jack", "title": "Starz in Their Eyes", "kind": "exact", "source": "kjbox-log", "label": "claude-2026-09-27"}
+{"q": "Goodbye yellow brick road", "artist": "Elton John", "title": "Goodbye Yellow Brick Road", "kind": "title-only", "source": "kjbox-log", "label": "claude-2026-09-27"}
+{"q": "zedd clarity", "artist": "Zedd", "title": "Clarity", "kind": "exact", "source": "kjbox-log", "label": "claude-2026-09-27"}
+{"q": "paper bag fiona apple", "artist": "Fiona Apple", "title": "Paper Bag", "kind": "exact", "source": "kjbox-log", "label": "claude-2026-09-27"}
+{"q": "cherry pie warrant", "artist": "Warrant", "title": "Cherry Pie", "kind": "exact", "source": "kjbox-log", "label": "claude-2026-09-27"}
+{"q": "Labi Siffre – Bless the Telephone", "artist": "Labi Siffre", "title": "Bless the Telephone", "kind": "exact", "source": "kjbox-log", "label": "claude-2026-09-27"}
+{"q": "the strokes Eternal Summer", "artist": "The Strokes", "title": "Eternal Summer", "kind": "exact", "source": "kjbox-log", "label": "claude-2026-09-27"}
+{"q": "Gordon Lightfoot - If You Could Read My Mind", "artist": "Gordon Lightfoot", "title": "If You Could Read My Mind", "kind": "exact", "source": "kjbox-log", "label": "claude-2026-09-27"}
+{"q": "If You Could Read My Mind Song by Gordon Lightfoot", "artist": "Gordon Lightfoot", "title": "If You Could Read My Mind", "kind": "noise-words", "source": "kjbox-log", "label": "claude-2026-09-27"}
+{"q": "Narrowhead see you around", "artist": "Narrow Head", "title": "See You Around", "kind": "exact", "source": "kjbox-log", "label": "claude-2026-09-27"}
+{"q": "Front Porch Step - Island of the Misfit Boy", "artist": "Front Porch Step", "title": "Island of the Misfit Boy", "kind": "obscure-keep", "source": "kjbox-log", "label": "claude-2026-09-27"}
+{"q": "Tulsa's Last Magician Willi Carlisle", "artist": "Willi Carlisle", "title": "Tulsa's Last Magician", "kind": "swapped", "source": "gen-log", "label": "claude-2026-09-27"}
+{"q": "Espresso", "artist": "Sabrina Carpenter", "title": "Espresso", "kind": "title-only", "source": "kjbox-log", "label": "claude-2026-09-27"}
+{"q": "despacito", "artist": "Luis Fonsi", "title": "Despacito", "kind": "title-only", "source": "kjbox-log", "label": "claude-2026-09-27"}
+{"q": "wonderwall", "artist": "Oasis", "title": "Wonderwall", "kind": "title-only", "source": "kjbox-log", "label": "claude-2026-09-27"}
+{"q": "dancing queen", "artist": "ABBA", "title": "Dancing Queen", "kind": "title-only", "source": "kjbox-log", "label": "claude-2026-09-27"}
+{"q": "Pink pony club", "artist": "Chappell Roan", "title": "Pink Pony Club", "kind": "title-only", "source": "kjbox-log", "label": "claude-2026-09-27"}
+{"q": "Party in the usa", "artist": "Miley Cyrus", "title": "Party in the U.S.A.", "kind": "title-only", "source": "kjbox-log", "label": "claude-2026-09-27"}
+{"q": "Die young", "artist": "Kesha", "title": "Die Young", "kind": "title-only", "source": "kjbox-log", "label": "claude-2026-09-27"}
+{"q": "You belong with me", "artist": "Taylor Swift", "title": "You Belong with Me", "kind": "title-only", "source": "kjbox-log", "label": "claude-2026-09-27"}
+{"q": "My immortal", "artist": "Evanescence", "title": "My Immortal", "kind": "title-only", "source": "kjbox-log", "label": "claude-2026-09-27"}
+{"q": "I want it that way", "artist": "Backstreet Boys", "title": "I Want It That Way", "kind": "title-only", "source": "kjbox-log", "label": "claude-2026-09-27"}
+{"q": "toxicity", "artist": "System of a Down", "title": "Toxicity", "kind": "title-only", "source": "kjbox-log", "label": "claude-2026-09-27"}
+{"q": "Vegas lights", "artist": "Panic! at the Disco", "title": "Vegas Lights", "kind": "title-only", "source": "kjbox-log", "label": "claude-2026-09-27"}
+{"q": "something in the orange", "artist": "Zach Bryan", "title": "Something in the Orange", "kind": "title-only", "source": "kjbox-log", "label": "claude-2026-09-27"}
+{"q": "gives you hell", "artist": "The All-American Rejects", "title": "Gives You Hell", "kind": "title-only", "source": "kjbox-log", "label": "claude-2026-09-27"}
+{"q": "still into you", "artist": "Paramore", "title": "Still into You", "kind": "title-only", "source": "kjbox-log", "label": "claude-2026-09-27"}
+{"q": "aint it fun", "artist": "Paramore", "title": "Ain't It Fun", "kind": "title-only", "source": "kjbox-log", "label": "claude-2026-09-27"}
+{"q": "i hate everything about you", "artist": "Three Days Grace", "title": "I Hate Everything About You", "kind": "title-only", "source": "kjbox-log", "label": "claude-2026-09-27"}
+{"q": "istanbul not constantinople", "artist": "They Might Be Giants", "title": "Istanbul (Not Constantinople)", "kind": "title-only", "source": "kjbox-log", "label": "claude-2026-09-27"}
+{"q": "Forever and ever amen", "artist": "Randy Travis", "title": "Forever and Ever, Amen", "kind": "title-only", "source": "kjbox-log", "label": "claude-2026-09-27"}
+{"q": "Rock that body", "artist": "Black Eyed Peas", "title": "Rock That Body", "kind": "title-only", "source": "kjbox-log", "label": "claude-2026-09-27"}
+{"q": "Sour times", "artist": "Portishead", "title": "Sour Times", "kind": "title-only", "source": "kjbox-log", "label": "claude-2026-09-27"}
+{"q": "Walking on the sun", "artist": "Smash Mouth", "title": "Walkin' on the Sun", "kind": "title-only", "source": "kjbox-log", "label": "claude-2026-09-27"}
+{"q": "Dark on me", "artist": "Starset", "title": "Dark on Me", "kind": "title-only", "source": "kjbox-log", "label": "claude-2026-09-27"}
+{"q": "hallelujah", "artist": null, "title": "Hallelujah", "kind": "title-only-ambiguous", "source": "kjbox-log", "label": "claude-2026-09-27"}
+{"q": "take a hint", "artist": null, "title": "Take a Hint", "kind": "title-only", "source": "kjbox-log", "label": "claude-2026-09-27"}
+{"q": "give it up victorious", "artist": null, "title": "Give It Up", "kind": "title-only", "source": "kjbox-log", "label": "claude-2026-09-27"}
+{"q": "perry firework", "artist": "Katy Perry", "title": "Firework", "kind": "artist-fragment", "source": "kjbox-log", "label": "claude-2026-09-27"}
+{"q": "gaga born", "artist": "Lady Gaga", "title": "Born This Way", "kind": "artist-fragment", "source": "kjbox-log", "label": "claude-2026-09-27"}
+{"q": "Seal kiss", "artist": "Seal", "title": "Kiss from a Rose", "kind": "artist-fragment", "source": "kjbox-log", "label": "claude-2026-09-27"}
+{"q": "Why I am Dave", "artist": "Dave Matthews Band", "title": "Why I Am", "kind": "artist-fragment", "source": "kjbox-log", "label": "claude-2026-09-27"}
+{"q": "Why I am  dave matthews", "artist": "Dave Matthews Band", "title": "Why I Am", "kind": "artist-fragment", "source": "kjbox-log", "label": "claude-2026-09-27"}
+{"q": "Buy me presents Sabrina", "artist": "Sabrina Carpenter", "title": "Buy Me Presents", "kind": "artist-fragment", "source": "kjbox-log", "label": "claude-2026-09-27"}
+{"q": "Just the way you are billy", "artist": "Billy Joel", "title": "Just the Way You Are", "kind": "artist-fragment", "source": "kjbox-log", "label": "claude-2026-09-27"}
+{"q": "day in the life fool sinatra", "artist": "Frank Sinatra", "title": "A Day in the Life of a Fool", "kind": "artist-fragment", "source": "kjbox-log", "label": "claude-2026-09-27"}
+{"q": "Main Street bob seg", "artist": "Bob Seger", "title": "Mainstreet", "kind": "artist-fragment", "source": "kjbox-log", "label": "claude-2026-09-27"}
+{"q": "square one Tom petty", "artist": "Tom Petty", "title": "Square One", "kind": "artist-fragment", "source": "kjbox-log", "label": "claude-2026-09-27"}
+{"q": "Yer so bad", "artist": "Tom Petty", "title": "Yer So Bad", "kind": "title-only", "source": "kjbox-log", "label": "claude-2026-09-27"}
+{"q": "beer reel big", "artist": "Reel Big Fish", "title": "Beer", "kind": "artist-fragment", "source": "kjbox-log", "label": "claude-2026-09-27"}
+{"q": "afraid neighbourhood", "artist": "The Neighbourhood", "title": "Afraid", "kind": "artist-fragment", "source": "kjbox-log", "label": "claude-2026-09-27"}
+{"q": "system hypnotized", "artist": "System of a Down", "title": "Hypnotize", "kind": "artist-fragment", "source": "kjbox-log", "label": "claude-2026-09-27"}
+{"q": "Arctic Monkeys! Fluorescent", "artist": "Arctic Monkeys", "title": "Fluorescent Adolescent", "kind": "artist-fragment", "source": "kjbox-log", "label": "claude-2026-09-27"}
+{"q": "Missy Elliot get your freak on", "artist": "Missy Elliott", "title": "Get Ur Freak On", "kind": "typo", "source": "kjbox-log", "label": "claude-2026-09-27"}
+{"q": "Get ur freak on missy", "artist": "Missy Elliott", "title": "Get Ur Freak On", "kind": "artist-fragment", "source": "kjbox-log", "label": "claude-2026-09-27"}
+{"q": "maximo park books", "artist": "Maxïmo Park", "title": "Books from Boxes", "kind": "partial-title", "source": "kjbox-log", "label": "claude-2026-09-27"}
+{"q": "maximo books", "artist": "Maxïmo Park", "title": "Books from Boxes", "kind": "partial-title", "source": "kjbox-log", "label": "claude-2026-09-27"}
+{"q": "books from boxes", "artist": "Maxïmo Park", "title": "Books from Boxes", "kind": "title-only", "source": "kjbox-log", "label": "claude-2026-09-27"}
+{"q": "fall out boy dance dance", "artist": "Fall Out Boy", "title": "Dance, Dance", "kind": "exact", "source": "kjbox-log", "label": "claude-2026-09-27"}
+{"q": "rihanna breaking", "artist": "Rihanna", "title": "Breakin' Dishes", "kind": "partial-title", "source": "kjbox-log", "label": "claude-2026-09-27"}
+{"q": "the stokes The Adults Are Talking", "artist": "The Strokes", "title": "The Adults Are Talking", "kind": "typo", "source": "kjbox-log", "label": "claude-2026-09-27"}
+{"q": "the stokes bad decisions", "artist": "The Strokes", "title": "Bad Decisions", "kind": "typo", "source": "kjbox-log", "label": "claude-2026-09-27"}
+{"q": "the stokes why are sundays so depressing", "artist": "The Strokes", "title": "Why Are Sundays So Depressing", "kind": "typo", "source": "kjbox-log", "label": "claude-2026-09-27"}
+{"q": "strokes adults are talking", "artist": "The Strokes", "title": "The Adults Are Talking", "kind": "artist-fragment", "source": "kjbox-log", "label": "claude-2026-09-27"}
+{"q": "maximo park boks", "artist": "Maxïmo Park", "title": "Books from Boxes", "kind": "typo", "source": "kjbox-log", "label": "claude-2026-09-27"}
+{"q": "maximo park boxs", "artist": "Maxïmo Park", "title": "Books from Boxes", "kind": "typo", "source": "kjbox-log", "label": "claude-2026-09-27"}
+{"q": "maximo park books from boxs", "artist": "Maxïmo Park", "title": "Books from Boxes", "kind": "typo", "source": "gen-log", "label": "claude-2026-09-27"}
+{"q": "maximo park limasol", "artist": "Maxïmo Park", "title": "Limassol", "kind": "typo", "source": "kjbox-log", "label": "claude-2026-09-27"}
+{"q": "cheery pie", "artist": "Warrant", "title": "Cherry Pie", "kind": "typo", "source": "kjbox-log", "label": "claude-2026-09-27"}
+{"q": "She used to be mi e", "artist": "Sara Bareilles", "title": "She Used to Be Mine", "kind": "typo", "source": "kjbox-log", "label": "claude-2026-09-27"}
+{"q": "The Strokes Machu Pichu", "artist": "The Strokes", "title": "Machu Picchu", "kind": "typo", "source": "kjbox-log", "label": "claude-2026-09-27"}
+{"q": "the strokes max pichu", "artist": "The Strokes", "title": "Machu Picchu", "kind": "typo", "source": "kjbox-log", "label": "claude-2026-09-27"}
+{"q": "the strokes max picu", "artist": "The Strokes", "title": "Machu Picchu", "kind": "typo", "source": "kjbox-log", "label": "claude-2026-09-27"}
+{"q": "the strokes macchu pichu", "artist": "The Strokes", "title": "Machu Picchu", "kind": "typo", "source": "gen-log", "label": "claude-2026-09-27"}
+{"q": "the stokes max picu", "artist": "The Strokes", "title": "Machu Picchu", "kind": "typo", "source": "gen-log", "label": "claude-2026-09-27"}
+{"q": "Blake Sheltom Texas", "artist": "Blake Shelton", "title": "Texas", "kind": "typo", "source": "gen-log", "label": "claude-2026-09-27"}
+{"q": "Breaking Rust LIivn' on Borrowed Time", "artist": "Breaking Rust", "title": "Livin' on Borrowed Time", "kind": "typo", "source": "gen-log", "label": "claude-2026-09-27"}
+{"q": "queen bohemian rapsody", "artist": "Queen", "title": "Bohemian Rhapsody", "kind": "typo", "source": "gen-log", "label": "claude-2026-09-27"}
+{"q": "ok go your so damn hot", "artist": "OK Go", "title": "You're So Damn Hot", "kind": "typo", "source": "gen-log", "label": "claude-2026-09-27"}
+{"q": "Jaden Michaels Momma's Girl", "artist": "Jaden Michaels", "title": "Mama's Girl", "kind": "typo", "source": "gen-log", "label": "claude-2026-09-27"}
+{"q": "huntrix golden", "artist": "Huntrix", "title": "Golden", "kind": "new-release", "source": "gen-log", "label": "claude-2026-09-27"}
+{"q": "my tears richo", "artist": "Taylor Swift", "title": "my tears ricochet", "kind": "partial-title", "source": "kjbox-log", "label": "claude-2026-09-27"}
+{"q": "RONAN KEATING ARTHUR THEME", "artist": "Ronan Keating", "title": null, "kind": "partial-title", "source": "gen-log", "label": "claude-2026-09-27"}
+{"q": "that song from titanic", "artist": "Céline Dion", "title": "My Heart Will Go On", "kind": "descriptive", "source": "manual", "label": "claude-2026-09-27"}
+{"q": "the let it go song from frozen", "artist": "Idina Menzel", "title": "Let It Go", "kind": "descriptive", "source": "manual", "label": "claude-2026-09-27"}
+{"q": "is this the real life is this just fantasy", "artist": "Queen", "title": "Bohemian Rhapsody", "kind": "descriptive", "source": "manual", "label": "claude-2026-09-27"}
+{"q": "sweet caroline ba ba ba", "artist": "Neil Diamond", "title": "Sweet Caroline", "kind": "descriptive", "source": "manual", "label": "claude-2026-09-27"}
+{"q": "dont stop believing journey song", "artist": "Journey", "title": "Don't Stop Believin'", "kind": "typo", "source": "manual", "label": "claude-2026-09-27"}
+{"q": "xqzv blorp wibble", "artist": null, "title": null, "kind": "negative", "source": "kjbox-log", "label": "claude-2026-09-27"}
+{"q": "zzqxnothing", "artist": null, "title": null, "kind": "negative", "source": "kjbox-log", "label": "claude-2026-09-27"}

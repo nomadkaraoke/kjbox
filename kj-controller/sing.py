@@ -731,7 +731,104 @@ def search():
     }
     if data.get("karaoke_nerds_timeout"):
         response["karaoke_nerds_timeout"] = True
+    _search_log("search", query, {
+        "songs": len(data["songs"]),
+        "top": [f'{s.get("artist", "")} — {s.get("title", "")}' for s in data["songs"][:3]],
+        "kn_timeout": bool(data.get("karaoke_nerds_timeout")),
+    })
     return jsonify(response)
+
+
+# --- Song identification (question 1 — docs/SONG-IDENTIFICATION.md) --------
+# "Which real song does the singer mean?", answered on-device from song_id.db,
+# separately from karaoke search ("is there a karaoke version?"). The client
+# calls this alongside /sing/search and shows the identified song in its own
+# card, never mixed into the karaoke rows.
+
+def _search_log(type_, query, data):
+    sl = getattr(current_app, "search_log", None)
+    if sl is not None:
+        sl.log(type_, search_id=request.values.get("sid"), device_id=request.values.get("device_id"),
+               query=query, data=data)
+
+
+def _identify_kind(query, artist, title):
+    """How the identified song relates to what was typed.
+
+    ``same``      typed exactly (nothing to announce)
+    ``cosmetic``  the same words, only casing/punctuation/order differ → "Tidied to"
+    ``completed`` the typed words are the title (or part of artist + title) and
+                  identification added what was missing (usually the artist)
+    ``content``   the typed words differ (typos etc.) → "Corrected to"
+    """
+    from song_identify import song_norm
+
+    def compact(s):
+        return song_norm(s).replace(" ", "")
+    typed = compact(query)
+    full = {compact(f"{artist} {title}"), compact(f"{title} {artist}")}
+    if query.strip() in (f"{artist} {title}", f"{title} {artist}", f"{artist} - {title}", f"{title} - {artist}"):
+        return "same"
+    if typed in full:
+        return "cosmetic"
+    words = set(song_norm(query).split())
+    song_words = set(song_norm(f"{artist} {title}").split())
+    if words and words <= song_words:
+        return "completed"
+    return "content"
+
+
+@sing_bp.route("/search/identify", methods=["GET"])
+@require_token
+def search_identify():
+    """→ ``{status: confident|candidates|none, song, kind, candidates, typed}``."""
+    query = (request.args.get("q") or "").strip()[:200]
+    if _resolve_rate_limited((request.args.get("device_id") or "").strip()[:64], "identify",
+                             _IDENTIFY_RATE_PER_DEVICE, _IDENTIFY_RATE_PER_IP):
+        return jsonify({"error": "rate_limited"}), 429
+    ident = getattr(current_app, "song_identifier", None)
+    if len(query) < 3 or ident is None or not ident.available:
+        return jsonify({"status": "none", "unavailable": ident is None or not ident.available})
+    t0 = time.monotonic()
+    r = ident.identify(query)
+    ms = round((time.monotonic() - t0) * 1000)
+    best = r.get("best")
+    out = {"status": r["status"], "typed": query,
+           "candidates": [{"artist": c["artist"], "title": c["title"], "karaoke": c["karaoke"]}
+                          for c in r.get("candidates", [])[:5]]}
+    if best and r["status"] != "none":
+        out["song"] = {"artist": best["artist"], "title": best["title"], "karaoke": best["karaoke"]}
+        out["kind"] = _identify_kind(query, best["artist"], best["title"])
+    _search_log("identify", query, {
+        "status": r["status"], "ms": ms, "kind": out.get("kind"),
+        "best": out.get("song"), "score": best and best.get("score"),
+        "candidates": [f'{c["artist"]} — {c["title"]}' for c in out["candidates"][:3]],
+    })
+    return jsonify(out)
+
+
+@sing_bp.route("/search/event", methods=["POST"])
+@require_token
+def search_event():
+    """Client-side choice events for the search log (see search_log.CHOICE_ACTIONS)."""
+    from search_log import CHOICE_ACTIONS
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict):
+        return jsonify({"error": "expected a JSON object"}), 400
+    if _resolve_rate_limited(str(body.get("device_id") or "").strip()[:64], "event",
+                             _EVENT_RATE_PER_DEVICE, _EVENT_RATE_PER_IP):
+        return jsonify({"error": "rate_limited"}), 429
+    action = str(body.get("action") or "")
+    if action not in CHOICE_ACTIONS:
+        return jsonify({"error": "unknown action"}), 400
+    data = body.get("data") if isinstance(body.get("data"), dict) else {}
+    if len(data) > 30 or len(json.dumps(data, default=str)) > 4000:
+        return jsonify({"error": "payload too large"}), 413   # SearchLog also caps; reject early
+    sl = getattr(current_app, "search_log", None)
+    if sl is not None:
+        sl.log("choice", search_id=str(body.get("sid") or ""), device_id=str(body.get("device_id") or ""),
+               query=str(body.get("q") or "")[:300], data={**data, "action": action})
+    return jsonify({"ok": True})
 
 
 # --- Search auto-correct (gen's free-text resolver) -------------------------
@@ -748,13 +845,23 @@ _RESOLVE_RATE_PER_DEVICE = 20
 # Venue-wide ceiling a phone can't reset by inventing device ids.
 _RESOLVE_RATE_PER_IP = 200
 _resolve_rate_lock = threading.Lock()
+# Identification runs once per (debounced) search; choice events a few per search.
+# Generous for a real singer, but a script can't hammer the matcher or fill the log.
+_IDENTIFY_RATE_PER_DEVICE = 120
+_IDENTIFY_RATE_PER_IP = 1500
+_EVENT_RATE_PER_DEVICE = 120
+_EVENT_RATE_PER_IP = 1500
 
 
-def _resolve_rate_limited(device_id):
+def _resolve_rate_limited(device_id, bucket="resolve", per_device=None, per_ip=None):
+    """Sliding-window limiter per device id AND per IP (the venue ceiling a phone
+    can't reset by inventing device ids). ``bucket`` keeps endpoints' budgets apart."""
     now = time.monotonic()
-    keys = [(f"ip:{_client_ip(request)}", _RESOLVE_RATE_PER_IP)]
+    per_device = per_device or _RESOLVE_RATE_PER_DEVICE
+    per_ip = per_ip or _RESOLVE_RATE_PER_IP
+    keys = [(f"{bucket}:ip:{_client_ip(request)}", per_ip)]
     if device_id:
-        keys.append((f"dev:{device_id}", _RESOLVE_RATE_PER_DEVICE))
+        keys.append((f"{bucket}:dev:{device_id}", per_device))
     with _resolve_rate_lock:
         # Drop idle identities so made-up device ids can't grow memory.
         for k in [k for k, q in _resolve_rate_state.items()
@@ -795,9 +902,13 @@ def _resolve_query(query):
 def search_resolve():
     """Auto-correct a search that found nothing.
 
-    → ``{corrected: {artist, title}, typed, songs}`` when gen confidently
-    names a song AND our search for it finds something; ``{alternatives:
-    [{artist, title}]}`` for an ambiguous query ("Did you mean…?");
+    → ``{corrected: {artist, title}, kind, typed, songs, split}`` when gen
+    confidently names a song — gen's job-flow tidy ("Tidied to …" for a
+    formatting-only fix, "Corrected to …" for a real one). ``songs`` is our
+    search for the corrected song when its text differs (may be empty: the
+    singer still gets the tidied artist/title pre-filled into the make-it form);
+    ``{alternatives: [{artist, title}]}`` for an ambiguous query ("Did you
+    mean…?"); ``{split: {artist, title}}`` when gen only split the query;
     ``{}`` otherwise (the empty-state triage stays as it is).
     """
     query = (request.args.get("q") or "").strip()[:200]
@@ -807,23 +918,33 @@ def search_resolve():
         return jsonify({"error": "rate_limited"}), 429
     verdict = _resolve_query(query) or {}
     kind = verdict.get("kind")
+    _search_log("resolve", query, {k: verdict.get(k) for k in (
+        "kind", "confident", "canonical_artist", "canonical_title", "engine", "typed_artist", "typed_title")})
+    typed_artist = (verdict.get("typed_artist") or "").strip()
+    typed_title = (verdict.get("typed_title") or "").strip()
+    split = {"artist": typed_artist, "title": typed_title} if typed_artist and typed_title else None
     if kind in ("cosmetic", "content") and verdict.get("confident"):
         artist = (verdict.get("canonical_artist") or "").strip()
         title = (verdict.get("canonical_title") or "").strip()
-        corrected_q = f"{artist} {title}".strip()
-        if artist and title and corrected_q.casefold() != query.casefold():
-            from routes import unified_search
-            data = unified_search(
-                corrected_q, current_app._get_current_object(), grouped=True,
-                catalog_limit=_safe_int(current_app.kj_config.get("sing_search_catalog_limit"), 60))
-            if data.get("songs"):
-                return jsonify({"corrected": {"artist": artist, "title": title},
-                                "typed": query, "songs": data["songs"]})
+        if artist and title:
+            songs = []
+            corrected_q = f"{artist} {title}"
+            # A case-only tidy searches the same text we just found nothing for.
+            if " ".join(corrected_q.split()).casefold() != " ".join(query.split()).casefold():
+                from routes import unified_search
+                songs = unified_search(
+                    corrected_q, current_app._get_current_object(), grouped=True,
+                    catalog_limit=_safe_int(current_app.kj_config.get("sing_search_catalog_limit"), 60),
+                ).get("songs") or []
+            return jsonify({"corrected": {"artist": artist, "title": title}, "kind": kind,
+                            "typed": query, "songs": songs, "split": split})
     if kind == "ambiguous":
         alts = [a for a in (verdict.get("alternatives") or [])
                 if isinstance(a, dict) and a.get("artist") and a.get("title")][:4]
         if alts:
             return jsonify({"alternatives": [{"artist": a["artist"], "title": a["title"]} for a in alts]})
+    if split:
+        return jsonify({"split": split})
     return jsonify({})
 
 

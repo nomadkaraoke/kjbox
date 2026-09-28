@@ -91,8 +91,20 @@
     "didYouMean": "もしかして…？",
     "correctedTo": "{song} に修正しました（入力内容: 「{typed}」）。",
     "usingTyped": "入力した内容をそのまま使う: 「{typed}」",
+    "tidiedTo": "{song} に整えました",
+    "keepMine": "入力した内容をそのまま使う",
+    "useTidied": "整形版を使用する",
     "undo": "元に戻す",
-    "useCorrection": "修正案を使う"
+    "useCorrection": "修正案を使う",
+    "songYouMean": "お探しの曲",
+    "whichSong": "どの曲をお探しですか？",
+    "notIt": "違いますか？",
+    "youTyped": "入力内容：“{typed}”",
+    "karaokeFor": "{song}のカラオケバージョン",
+    "describeLink": "曲名が思い出せない？特徴から探す",
+    "describePlaceholder": "例：タイタニックのあの曲",
+    "describeCta": "探す",
+    "figuringOut": "どの曲か探しています…"
   },
   "versions": {
     "sectionLibrary": "ライブラリ内",

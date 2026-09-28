@@ -91,8 +91,20 @@
     "didYouMean": "Можливо, малось на увазі…?",
     "correctedTo": "Виправлено на {song} — введено “{typed}”.",
     "usingTyped": "Шукаємо як введено: “{typed}”.",
+    "tidiedTo": "Відформатовано як {song}",
+    "keepMine": "залишити мій варіант",
+    "useTidied": "використати впорядковану версію",
     "undo": "Скасувати",
-    "useCorrection": "Використати виправлення"
+    "useCorrection": "Використати виправлення",
+    "songYouMean": "Пісня, яку ти маєш на увазі",
+    "whichSong": "Яку пісню ти маєш на увазі?",
+    "notIt": "не вона?",
+    "youTyped": "ти написав «{typed}»",
+    "karaokeFor": "Караоке-версії {song}",
+    "describeLink": "Не пам'ятаєш назву? Опиши її",
+    "describePlaceholder": "наприклад, та пісня з «Титаніка»",
+    "describeCta": "Знайти",
+    "figuringOut": "З'ясовуємо, яку пісню ти маєш на увазі…"
   },
   "versions": {
     "sectionLibrary": "У нашій бібліотеці",

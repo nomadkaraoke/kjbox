@@ -91,8 +91,20 @@
     "didYouMean": "Tarkoititko…?",
     "correctedTo": "Korjattu muotoon {song} — kirjoitit ”{typed}”.",
     "usingTyped": "Käytetään kirjoittamaasi: ”{typed}”.",
+    "tidiedTo": "Siistitty muotoon {song}",
+    "keepMine": "säilytä kirjoittamani",
+    "useTidied": "käytä siistittyä versiota",
     "undo": "Kumoa",
-    "useCorrection": "Käytä korjausta"
+    "useCorrection": "Käytä korjausta",
+    "songYouMean": "Tarkoittamasi kappale",
+    "whichSong": "Mitä kappaletta tarkoitat?",
+    "notIt": "ei tämä?",
+    "youTyped": "kirjoitit ”{typed}”",
+    "karaokeFor": "Karaokeversiot kappaleesta {song}",
+    "describeLink": "Etkö muista nimeä? Kuvaile sitä",
+    "describePlaceholder": "esim. se kappale Titanicista",
+    "describeCta": "Etsi",
+    "figuringOut": "Selvitetään, mitä kappaletta tarkoitat…"
   },
   "versions": {
     "sectionLibrary": "Kirjastossamme",

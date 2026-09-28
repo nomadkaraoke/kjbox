@@ -91,8 +91,20 @@
     "didYouMean": "Bedoelde je…?",
     "correctedTo": "Gecorrigeerd naar {song} — je typte “{typed}”.",
     "usingTyped": "We gebruiken wat je typte: “{typed}”.",
+    "tidiedTo": "Opgeschoond naar {song}",
+    "keepMine": "behoud wat ik typte",
+    "useTidied": "gebruik opgeschoonde versie",
     "undo": "Ongedaan maken",
-    "useCorrection": "Gebruik de correctie"
+    "useCorrection": "Gebruik de correctie",
+    "songYouMean": "Het liedje dat je bedoelt",
+    "whichSong": "Welk liedje bedoel je?",
+    "notIt": "is dit 'm niet?",
+    "youTyped": "je typte “{typed}”",
+    "karaokeFor": "Karaokeversies van {song}",
+    "describeLink": "Weet je de titel niet meer? Omschrijf het",
+    "describePlaceholder": "bijv. dat liedje uit Titanic",
+    "describeCta": "Vind 'm",
+    "figuringOut": "Even uitzoeken welk liedje je bedoelt…"
   },
   "versions": {
     "sectionLibrary": "In onze bibliotheek",

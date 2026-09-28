@@ -91,8 +91,20 @@
     "didYouMean": "Erre gondoltál…?",
     "correctedTo": "Javítva erre: {song} — ezt írtad: „{typed}”.",
     "usingTyped": "Azt használjuk, amit beírtál: „{typed}”.",
+    "tidiedTo": "Rendezve erre: {song}",
+    "keepMine": "maradjon, amit írtam",
+    "useTidied": "letisztított verzió használata",
     "undo": "Visszavonás",
-    "useCorrection": "Javítás használata"
+    "useCorrection": "Javítás használata",
+    "songYouMean": "A dal, amire gondolsz",
+    "whichSong": "Melyik dalra gondolsz?",
+    "notIt": "nem ez az?",
+    "youTyped": "ezt írtad: “{typed}”",
+    "karaokeFor": "{song} karaoke-verziói",
+    "describeLink": "Nem jut eszedbe a címe? Írd körül",
+    "describePlaceholder": "pl. az a dal a Titanicból",
+    "describeCta": "Keresés",
+    "figuringOut": "Kitaláljuk, melyik dalra gondolsz…"
   },
   "versions": {
     "sectionLibrary": "A könyvtárunkban",
