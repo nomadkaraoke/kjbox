@@ -84,6 +84,13 @@ def test_sequel_is_not_merged_with_the_original(ident):
     assert any(c["title"] == "Hayloft" for c in r["candidates"])
 
 
+def test_roman_numeral_parts_stay_distinct():
+    from song_identify import Match, _same_song
+    part = lambda t: Match("Pink Floyd", t, 1.0, 60, True)   # noqa: E731
+    assert not _same_song(part("Another Brick in the Wall, Pt. II"), part("Another Brick in the Wall, Pt. III"))
+    assert not _same_song(part("Symphony No. 5"), part("Symphony No. 6"))
+
+
 def test_misspelled_duplicate_does_not_block_confidence(ident):
     r = ident.identify("the stokes max picu")
     assert r["status"] == "confident" and r["best"]["title"] == "Machu Picchu"
