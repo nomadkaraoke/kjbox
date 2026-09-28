@@ -109,8 +109,10 @@ def synthetic_cases(db_path, n, seed=7):
             (f"{t} {a_frag}", "syn-artist-fragment"),
             (f"{_typo_longest(t, rng)} {a_frag}".replace("'", ""), "syn-fragment+typo"),
         ]:
-            cases.append({"q": q, "artist": None if kind == "syn-title-only" else artist, "title": title,
-                          "kind": kind, "source": "synthetic"})
+            # Title-only keeps the sampled artist as the expected answer: a confident
+            # answer naming ANOTHER artist's same-title song is wrong for the singer
+            # (it would pre-fill the wrong artist), so it must not score as correct.
+            cases.append({"q": q, "artist": artist, "title": title, "kind": kind, "source": "synthetic"})
     return cases
 
 

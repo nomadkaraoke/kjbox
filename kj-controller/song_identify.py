@@ -92,6 +92,8 @@ _VERSION_SUFFIX_RE = re.compile(r"\s*[\(\[].*$|\s+-\s+.*$")
 # Same title by several artists ("Die Young"): the clearly most popular one is what
 # singers mean — confident when it leads the same-title runner-up by this much.
 SAME_TITLE_POP_LEAD = 12
+GENERIC_TITLE_ARTISTS = 3    # title-only query + this many same-title songs → stricter lead
+GENERIC_TITLE_POP_LEAD = 25
 
 
 @dataclass
@@ -445,10 +447,19 @@ class SongIdentifier:
         runner = ranked[1] if len(ranked) > 1 else None
         margin = best.score - (runner.score if runner else 0.0)
         if runner and _compact(runner.title) == _compact(best.title):
-            # Same title, other artist: popularity decides ("Die Young" → Kesha).
+            # Same title, other artist: popularity decides ("Die Young" → Kesha)…
             lead = (best.pop or 30) - (runner.pop or 30) + (10 if best.karaoke and not runner.karaoke else 0)
-            if lead >= SAME_TITLE_POP_LEAD:
+            need = SAME_TITLE_POP_LEAD
+            # …but a bare, generic title ("baby", "trouble", "rain") shared by several
+            # artists is a real question — the wrong guess pre-fills the wrong artist —
+            # so only auto-pick when the leader is far more popular.
+            same_title = sum(1 for m in ranked if _compact(m.title) == _compact(best.title))
+            if best.detail.get("artist_cov", 0) == 0 and same_title >= GENERIC_TITLE_ARTISTS:
+                need = GENERIC_TITLE_POP_LEAD
+            if lead >= need:
                 margin = max(margin, CONFIDENT_MARGIN)
+            else:
+                margin = min(margin, CONFIDENT_MARGIN - 0.01)
         top = [m.to_dict() for m in ranked[:limit]]
         d = best.detail
         qcov = d.get("q_cov", 0)

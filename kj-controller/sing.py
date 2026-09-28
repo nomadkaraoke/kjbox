@@ -812,7 +812,9 @@ def search_identify():
 def search_event():
     """Client-side choice events for the search log (see search_log.CHOICE_ACTIONS)."""
     from search_log import CHOICE_ACTIONS
-    body = request.get_json(silent=True) or {}
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict):
+        return jsonify({"error": "expected a JSON object"}), 400
     if _resolve_rate_limited(str(body.get("device_id") or "").strip()[:64], "event",
                              _EVENT_RATE_PER_DEVICE, _EVENT_RATE_PER_IP):
         return jsonify({"error": "rate_limited"}), 429

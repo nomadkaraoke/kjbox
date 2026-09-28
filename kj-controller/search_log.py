@@ -49,6 +49,7 @@ MAX_DATA_BYTES = 4000
 # (~2 KB/row worst case → ~1 GB) even if something spams the endpoint.
 RETENTION_DAYS = 365
 MAX_ROWS = 500_000
+PRUNE_EVERY = 1000        # writes between prunes (also pruned on first open)
 
 
 def default_db_path(config):
@@ -61,6 +62,7 @@ class SearchLog:
         self.db_path = db_path
         self._lock = threading.Lock()
         self._ready = False
+        self._writes = 0
 
     def _conn(self):
         conn = sqlite3.connect(self.db_path, timeout=5)
@@ -96,7 +98,9 @@ class SearchLog:
         try:
             blob = json.dumps(data or {}, ensure_ascii=False, default=str)
             if len(blob.encode()) > MAX_DATA_BYTES:
-                blob = json.dumps({"truncated": True, "keys": sorted((data or {}).keys())})
+                # Fixed-size marker (a huge key must not sneak the size back in).
+                keys = sorted(str(k)[:40] for k in (data or {}).keys())[:20]
+                blob = json.dumps({"truncated": True, "keys": keys})
             with self._lock:
                 conn = self._conn()
                 try:
@@ -106,6 +110,9 @@ class SearchLog:
                         (time.time(), type_, (search_id or "")[:64] or None,
                          (device_id or "")[:64] or None, (query or "")[:300] or None, blob))
                     conn.commit()
+                    self._writes += 1
+                    if self._writes % PRUNE_EVERY == 0:    # long-running app: keep both limits
+                        self._prune(conn)
                 finally:
                     conn.close()
         except Exception:  # noqa: BLE001 — logging must never break a search

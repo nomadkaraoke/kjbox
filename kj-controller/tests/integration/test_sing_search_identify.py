@@ -1,5 +1,6 @@
 """Song identification endpoint + the persistent search log (docs/SONG-IDENTIFICATION.md)."""
 import gzip
+import json
 
 import pytest
 
@@ -127,3 +128,15 @@ def test_search_log_prunes_old_and_excess_rows(tmp_path, monkeypatch):
     conn.commit(); conn.close()
     monkeypatch.setattr(sl_mod, "MAX_ROWS", 3)
     assert [e["query"] for e in SearchLog(path).events()] == ["q2", "q3", "q4"]
+
+
+def test_event_rejects_non_object_json(client, token, wired):
+    r = client.post(f"/sing/search/event?t={token}", json=["not", "an", "object"])
+    assert r.status_code == 400
+
+
+def test_truncation_marker_is_bounded(tmp_path):
+    sl = SearchLog(str(tmp_path / "log.db"))
+    sl.log("choice", data={"k" * 10000: 1})
+    ev = sl.events()[0]["data"]
+    assert ev["truncated"] is True and len(json.dumps(ev)) < 500
