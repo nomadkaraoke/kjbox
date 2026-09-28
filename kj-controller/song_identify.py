@@ -60,6 +60,7 @@ STOP_WORDS = {"the", "a", "an", "of", "on", "in", "to", "and", "i", "me", "my", 
 CANDIDATE_LIMIT = 150
 CANDIDATE_LOO_MAX = 6        # leave-one-word-out queries
 DEDUPE_TOP = 30
+NEAR_DUP_TITLE_RATIO = 92    # same artist + this similar a title = the same song (MB misspellings)
 LOO_SKIP_IF = 40             # skip leave-one-out when the all-words query found this many              # credit-variant collapsing looks at the best N only
 PHRASE_LIMIT = 100
 MAX_VARIANTS = 8
@@ -129,9 +130,18 @@ def _credits(artist):
 
 
 def _same_song(a, b):
-    """Same base title and a credited artist in common."""
-    return (_compact(_VERSION_SUFFIX_RE.sub("", a.title)) == _compact(_VERSION_SUFFIX_RE.sub("", b.title))
-            and bool(_credits(a.artist) & _credits(b.artist)))
+    """Same base title — or a near-identical spelling of it by the same artist, as
+    MusicBrainz duplicates often are ("Machu Picchu" / "Machu Piccu") — and a
+    credited artist in common. "Hayloft" vs "Hayloft II" (~82%) stay distinct."""
+    if not (_credits(a.artist) & _credits(b.artist)):
+        return False
+    ta = _compact(_VERSION_SUFFIX_RE.sub("", a.title))
+    tb = _compact(_VERSION_SUFFIX_RE.sub("", b.title))
+    if ta == tb:
+        return True
+    if re.sub(r"\D", "", ta) != re.sub(r"\D", "", tb):
+        return False    # numbers differ: a sequel/part, not a misspelling ("Hayloft" vs "Hayloft II")
+    return min(len(ta), len(tb)) >= 6 and fuzz.ratio(ta, tb) >= NEAR_DUP_TITLE_RATIO
 
 
 def _edit_budget(word):

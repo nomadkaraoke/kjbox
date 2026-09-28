@@ -4,6 +4,15 @@ Dated entries, newest first. Each entry notes any required deploy steps.
 
 ---
 
+## 2026-09-28 - Song identification: merge MusicBrainz misspelled duplicates (v0.123.1)
+
+**Deploy:** `.py` change → auto-deploy restarts kj-controller (playback continues). No index rebuild needed.
+
+- Seen live after v0.123.0: "the stokes max picu" came back as "Which song do you mean?" instead of confident, because MusicBrainz also has "The Strokes — Machu **Piccu**". The same artist with a ≥ 92%-similar title now counts as the same song. Titles whose numbers differ ("Hayloft" vs "Hayloft II") stay distinct.
+- Labelled real queries: auto-identified 68% → 73%, no new wrong answers.
+
+---
+
 ## 2026-09-28 - Singer song identification: "the song you mean" + search log (v0.123.0)
 
 **Deploy:** `.py` change → auto-deploy restarts kj-controller (playback continues). **New on-device index `song_id.db` (~0.9 GB):** `nomad-catalog-sync` downloads gen's daily export (`gs://nomadkaraoke-kn-data/song-id/latest.json`, needs karaoke-gen's kn-data-sync export deployed) and builds it (~7 min, ~4 GB RAM peak on the N97). Until it exists, identification quietly returns nothing and search behaves as before. Run once after deploy: `sudo systemctl start nomad-catalog-sync`. Gemini "Describe it" fallback needs karaoke-gen ≥ v0.245.1.

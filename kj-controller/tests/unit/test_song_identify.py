@@ -13,6 +13,7 @@ from song_identify import SongIdentifier, song_norm
 SONGS = [
     # artist, title, popularity, karaoke
     ("The Strokes", "Machu Picchu", 64, 1),
+    ("The Strokes", "Machu Piccu", 30, 0),           # MusicBrainz misspelled duplicate
     ("The Strokes", "The Adults Are Talking", 70, 1),
     ("The Strokes", "Reptilia", 72, 1),
     ("The Stokes", "Lonely Road", 20, 0),            # real obscure band: must not steal "the stokes"
@@ -75,6 +76,18 @@ def _best(ident, q):
 ])
 def test_confident_identifications(ident, q, want):
     assert _best(ident, q) == ("confident", want)
+
+
+def test_sequel_is_not_merged_with_the_original(ident):
+    r = ident.identify("hayloft ii mother mother")
+    assert (r["best"]["artist"], r["best"]["title"]) == ("Mother Mother", "Hayloft II")
+    assert any(c["title"] == "Hayloft" for c in r["candidates"])
+
+
+def test_misspelled_duplicate_does_not_block_confidence(ident):
+    r = ident.identify("the stokes max picu")
+    assert r["status"] == "confident" and r["best"]["title"] == "Machu Picchu"
+    assert all(c["title"] != "Machu Piccu" for c in r["candidates"])
 
 
 def test_same_title_close_popularity_asks_which_one(ident):
