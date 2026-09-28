@@ -4,6 +4,14 @@ Dated entries, newest first. Each entry notes any required deploy steps.
 
 ---
 
+## 2026-09-28 - Song card shows before slow karaoke search (v0.123.3)
+
+**Deploy:** frontend + version bump; auto-deploy restarts kj-controller (cache-bust).
+
+- Seen live: "the stokes max picu" took 10+ s to show anything, because identification (~100 ms on the NomadPC) waited for the typed-text karaoke search, which live-queries several catalogues and is slow for typos. The "🎵 The song you mean" card now appears as soon as identification lands, and the identified song's own karaoke search starts right away. The typed-text results are reconciled when they arrive, keeping the singer's toggle and any rows already fetched. The card now sits above the "Searching…" indicator.
+
+---
+
 ## 2026-09-28 - Don't cache transient Gemini misses (v0.123.2)
 
 **Deploy:** `.py` change → auto-deploy restarts kj-controller (playback continues).

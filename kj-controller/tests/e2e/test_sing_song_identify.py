@@ -117,3 +117,32 @@ def test_describe_goes_to_gemini_fallback(page, live_server, live_token):
     page.wait_for_timeout(300)
     assert calls["resolve"] >= 2       # once for the empty search, once for the description
     assert [e["action"] for e in calls["events"]] == ["describe_open", "describe_submit"]
+
+
+def test_song_card_shows_before_slow_karaoke_search(page, live_server, live_token):
+    """Identification (~100 ms) must not wait for karaoke search (can take seconds)."""
+    import threading
+    release = threading.Event()
+    page.add_init_script("window.__SING_ARM_MS = 0;")
+    _login(page, live_server, live_token)
+    ident = {"status": "confident", "kind": "content", "typed": "the stokes max picu",
+             "song": {"artist": "The Strokes", "title": "Machu Picchu", "karaoke": True}, "candidates": []}
+
+    def on_search(route):
+        q = urllib.parse.parse_qs(urllib.parse.urlparse(route.request.url).query).get("q", [""])[0]
+        if q == "the stokes max picu":
+            release.wait(timeout=10)          # the typed-text search is slow…
+        route.fulfill(status=200, content_type="application/json", body=json.dumps(
+            {"songs": [STROKES] if q == "The Strokes Machu Picchu" else [],
+             "make_requests_enabled": True, "simple_mode": False}))
+    page.route("**/sing/search?*", on_search)
+    page.route("**/sing/search/identify*", lambda r: r.fulfill(
+        status=200, content_type="application/json", body=json.dumps(ident)))
+    page.route("**/sing/search/event*", lambda r: r.fulfill(status=200, content_type="application/json", body="{}"))
+    page.evaluate("window.__sing_state.step = 'search'; window.__sing_render();")
+    page.locator('input[type="search"]').fill("the stokes max picu")
+    # …but the card and the identified song's karaoke rows are already there.
+    expect(page.locator('[data-testid="song-card-song"]')).to_have_text("Machu Picchu — The Strokes", timeout=5000)
+    expect(page.locator(".result-row .r-title")).to_have_text("Machu Picchu", timeout=5000)
+    release.set()
+    expect(page.locator('[data-testid="song-card-song"]')).to_have_text("Machu Picchu — The Strokes")
