@@ -40,12 +40,13 @@ _JUNK_CREDIT_RE = re.compile(r"\b(?:cover|covers|covered|tribute|karaoke|in the 
 
 
 # Title spelling folds: dropped g ("walkin" = "walking") and text-speak ("ur", "u").
+# Only 6+ letter "-ing" words fold: shorter ones collide with real words ("thing"/"thin").
 _WORD_FOLDS = {"ur": "your", "u": "you"}
 
 
 def _fold_title(nt):
     """Space-less title with spelling variants folded (merge key only, never displayed)."""
-    return "".join(_WORD_FOLDS.get(w, w[:-1] if len(w) >= 5 and w.endswith("ing") else w)
+    return "".join(_WORD_FOLDS.get(w, w[:-1] if len(w) >= 6 and w.endswith("ing") else w)
                    for w in nt.split())
 
 
@@ -91,20 +92,27 @@ def build(srcs, dst, meta=None):
             cur[3] = cur[3] or k
     # Fold spelling variants into one song. Folding is idempotent, so a folded key is
     # either an unfolded song's own key or a new group started by the first variant.
+    # Between spellings: the one with a karaoke version, then the more popular (both
+    # "Get Your Freak On" and "Get Ur Freak On" are on KaraokeNerds) — ranked by the
+    # shown spelling's own popularity, not the group's running max.
+    shown = {}      # folded key → rank of the spelling currently displayed
     for key, fkey in folds.items():
         cur = merged.pop(key)
+        rank = (cur[3], cur[2] if cur[2] is not None else -1)
         target = merged.get(fkey)
         if target is None:
             merged[fkey] = cur
+            shown[fkey] = rank
         else:
-            # Between spellings: the one with a karaoke version, then the more popular
-            # (both "Get Your Freak On" and "Get Ur Freak On" are on KaraokeNerds).
-            if (cur[3], cur[2] or -1) > (target[3], target[2] or -1):
+            if fkey not in shown:
+                shown[fkey] = (target[3], target[2] if target[2] is not None else -1)
+            if rank > shown[fkey]:
                 target[0], target[1] = cur[0], cur[1]
+                shown[fkey] = rank
             if cur[2] is not None and (target[2] is None or cur[2] > target[2]):
                 target[2] = cur[2]
             target[3] = target[3] or cur[3]
-    del folds
+    del folds, shown
 
     tmp = dst + ".new"
     if os.path.exists(tmp):

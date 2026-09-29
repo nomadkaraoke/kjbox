@@ -177,12 +177,22 @@ def test_between_karaoke_spellings_the_more_popular_wins(tmp_path):
     assert rows == [("Missy Elliott", "Get Ur Freak On", 72, 1)]
 
 
+def test_display_spelling_is_ranked_by_its_own_popularity(tmp_path):
+    rows = _build_rows(tmp_path, [
+        ("Band", "Breakin Your Heart", 10, 1),
+        ("Band", "Breaking Your Heart", 100, 0),     # raises the group's popularity only
+        ("Band", "Breakin Ur Heart", 50, 1),         # the more popular karaoke spelling
+    ])
+    assert rows == [("Band", "Breakin Ur Heart", 100, 1)]
+
+
 def test_fold_keeps_different_songs_apart(tmp_path):
     rows = _build_rows(tmp_path, [
-        ("Queen", "Bring", 40, 0),                   # 5 letters, folds to "brin" — nothing to meet
-        ("Queen", "Sing", 40, 0),                    # short words never fold
+        ("Queen", "Thing", 40, 0),                   # 5-letter -ing words never fold
+        ("Queen", "Thin", 40, 0),
+        ("Queen", "Sing", 40, 0),
         ("Queen", "Sin", 40, 0),
         ("Other", "Breakin' Dishes", 30, 0),         # other artist: never merged
         ("Rihanna", "Breaking Dishes", 55, 0),
     ])
-    assert len(rows) == 5
+    assert len(rows) == 6

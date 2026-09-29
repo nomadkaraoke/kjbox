@@ -157,7 +157,7 @@ def _word_sim(q, w):
     """Similarity of a typed word to an index word, 0..1 (prefix typing counts high)."""
     if q == w:
         return 1.0
-    if min(len(q), len(w)) >= 4 and ((q.endswith("ing") and q[:-1] == w) or (w.endswith("ing") and w[:-1] == q)):
+    if min(len(q), len(w)) >= 5 and ((q.endswith("ing") and q[:-1] == w) or (w.endswith("ing") and w[:-1] == q)):
         return 0.95     # dropped g: "breaking" = "breakin'" (the index folds these too)
     if len(q) >= 3 and w.startswith(q):
         return 0.9

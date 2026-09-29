@@ -259,7 +259,7 @@ Earlier prototype results (Spotify-only index, 1.98M songs, 322 MB, 65 s build):
 Known gaps:
 - Songs newer than the July 2025 Spotify snapshot that also aren't on KaraokeNerds (→ Gemini). *Largely fixed 2026-09-29 by ListenBrainz; a release only appears once the next ListenBrainz dump (1st/15th, ~2 days to publish) shows listeners.*
 - Very popular same-title songs where the singer means an obscure version (→ "not it?" list).
-- The NomadPC (N97) will be slower than this Mac: measure before shipping.
+- NomadPC (N97) performance: measured, see the v3/v4 results above (p95 ~250–300 ms).
 
 **Side-finding (fixed in kjbox #256):** `text_normalize`'s feat/ft regex had no word boundary.
 "Soft Cell" normalised to "so" and "Hayloft II" to "haylo", in every on-device search index.
