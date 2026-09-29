@@ -157,14 +157,18 @@ def _word_sim(q, w):
     """Similarity of a typed word to an index word, 0..1 (prefix typing counts high)."""
     if q == w:
         return 1.0
+    if min(len(q), len(w)) >= 5 and ((q.endswith("ing") and q[:-1] == w) or (w.endswith("ing") and w[:-1] == q)):
+        return 0.95     # dropped g: "breaking" = "breakin'" (the index folds these too)
     if len(q) >= 3 and w.startswith(q):
         return 0.9
     if len(q) >= 4 and len(w) > len(q) and Levenshtein.distance(q, w[:len(q)]) <= 1:
-        return 0.75     # a mistyped start of the word ("richo" → "ricochet")
+        return 0.75     # a mistyped start of the word ("ricoc" → "ricochet")
     d = Levenshtein.distance(q, w)
-    if d > _edit_budget(q):
-        return 0.0
-    return max(0.0, 1.0 - d / max(len(q), len(w))) * 0.95
+    sim = 0.0 if d > _edit_budget(q) else max(0.0, 1.0 - d / max(len(q), len(w))) * 0.95
+    if len(q) >= 5 and len(w) > len(q) + 1 and min(
+            Levenshtein.distance(q, w[:n]) for n in (len(q) - 1, len(q), len(q) + 1)) <= 2:
+        return max(sim, 0.6)    # a badly mistyped start ("richo" → "ricochet"): weaker evidence
+    return sim
 
 
 def default_db_path(config):
@@ -259,10 +263,14 @@ class SongIdentifier:
             for j in range(n, i + 1, -1):
                 phrase = " ".join(w.replace('"', "") for w in words[i:j])
                 q = f'nt : "{phrase}"' + (" *" if j == n and _prefix_ok(words[-1]) else "")
-                out += db.execute(
+                rows = db.execute(
                     f"SELECT {self._COLS} FROM songs_fts f JOIN songs s ON s.rowid = f.rowid "
                     "WHERE songs_fts MATCH ? ORDER BY s.pop DESC LIMIT ?", (q, PHRASE_LIMIT)).fetchall()
-                break   # longest run starting at i is enough
+                out += rows
+                if rows or j != n or j - i < 3:
+                    break   # longest run starting at i is enough
+                # Nothing: the half-typed last word may be mistyped too ("my tears richo",
+                # "she used to be mi e") — try the phrase without it; scoring judges the rest.
         return out
 
     def _artist_candidates(self, words, variants):

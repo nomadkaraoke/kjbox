@@ -4,6 +4,17 @@ Dated entries, newest first. Each entry notes any required deploy steps.
 
 ---
 
+## 2026-09-29 - Song identification: ListenBrainz freshness + spelling variants (v0.124.0)
+
+**Deploy:** `.py` change → auto-deploy restarts kj-controller (playback continues). The builder's `SCHEMA_VERSION` is now 3 and `nomad-catalog-sync` rebuilds `song_id.db` when it changes, so the next daily sync (12:15 UTC) rebuilds even for an unchanged export; to do it now: `sudo systemctl start nomad-catalog-sync` (~9 min for song-id, ~4.4 GB RAM peak). The ListenBrainz-based export itself comes from karaoke-gen's `kn-data-sync` (deployed separately); the device picks it up on the same sync.
+
+- **Fresh popularity (karaoke-gen export):** songs are now also scored and included from ListenBrainz listening (karaoke-decide's `lb-refresh`, fortnightly), so 2025–26 releases and brand-new artists are found and rank properly: Olivia Dean "Man I Need", Tame Impala "Dracula" (title-only now beats older same-title songs), Geese, Ninajirachi, CORTIS. Index 5.43M → 5.77M songs (929 MB). See `docs/SONG-IDENTIFICATION.md` D5a/D12/§8.
+- **Spelling variants are one song:** the builder folds the same artist's title spellings ("Breaking Dishes" = "Breakin' Dishes", "Get Your Freak On" = "Get Ur Freak On", "walking" = "walkin'"), showing the spelling with a karaoke version. The matcher treats a dropped g as a near-exact match.
+- **Mistyped half-typed words:** "my tears richo" → Taylor Swift "my tears ricochet" (2 edits into the word now counts, weakly), and when a phrase with a mistyped last word finds nothing it is retried without it ("She used to be mi e" → Sara Bareilles "She Used to Be Mine").
+- **Eval (NomadPC, same export):** labelled real + freshness queries 72% → 80% auto-identified, wrong auto-applies 2 → 0; frozen held-out set unchanged (84%, wrong 8 → 7); p95 ~250–290 ms. 26 new `"source": "freshness"` cases in `tests/fixtures/song_id_eval.jsonl`.
+
+---
+
 ## 2026-09-28 - Song card shows before slow karaoke search (v0.123.3)
 
 **Deploy:** frontend + version bump; auto-deploy restarts kj-controller (cache-bust).

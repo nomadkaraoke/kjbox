@@ -12,7 +12,10 @@ Output SQLite:
   vocab(word, freq, first, len)                          typo lookup: same first letter, similar length
 
 Duplicates are merged on the space-less normalized artist+title ("u s a" == "usa"),
-keeping the most popular display spelling and OR-ing the karaoke flag.
+keeping the most popular display spelling and OR-ing the karaoke flag. Then spelling
+variants of the same artist's title are folded together ("Breaking Dishes" ==
+"Breakin' Dishes", "Get Your Freak On" == "Get Ur Freak On"), showing the spelling
+that has a karaoke version (the name singers will find), else the more popular one.
 
 Usage: python scripts/build_song_id_db.py songs.tsv.gz [more.tsv.gz ...] song_id.db
 """
@@ -30,10 +33,21 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from song_identify import song_norm  # noqa: E402
 from text_normalize import NORMALIZER_VERSION  # noqa: E402
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 
 _JUNK_CREDIT_RE = re.compile(r"\b(?:cover|covers|covered|tribute|karaoke|in the style of|made famous)\b", re.IGNORECASE)
+
+
+# Title spelling folds: dropped g ("walkin" = "walking") and text-speak ("ur", "u").
+# Only 6+ letter "-ing" words fold: shorter ones collide with real words ("thing"/"thin").
+_WORD_FOLDS = {"ur": "your", "u": "you"}
+
+
+def _fold_title(nt):
+    """Space-less title with spelling variants folded (merge key only, never displayed)."""
+    return "".join(_WORD_FOLDS.get(w, w[:-1] if len(w) >= 6 and w.endswith("ing") else w)
+                   for w in nt.split())
 
 
 def _open(path):
@@ -51,6 +65,7 @@ def build(srcs, dst, meta=None):
     if isinstance(srcs, str):
         srcs = [srcs]
     merged = {}
+    folds = {}      # exact key → spelling-folded key, only where they differ
     for row in _rows(srcs):
         if len(row) < 4:
             continue
@@ -68,10 +83,36 @@ def build(srcs, dst, meta=None):
         cur = merged.get(key)
         if cur is None:
             merged[key] = [artist, title, p, k]
+            folded = _fold_title(nt)
+            if folded != key[1]:
+                folds[key] = (key[0], folded)
         else:
             if p is not None and (cur[2] is None or p > cur[2]):
                 cur[0], cur[1], cur[2] = artist, title, p
             cur[3] = cur[3] or k
+    # Fold spelling variants into one song. Folding is idempotent, so a folded key is
+    # either an unfolded song's own key or a new group started by the first variant.
+    # Between spellings: the one with a karaoke version, then the more popular (both
+    # "Get Your Freak On" and "Get Ur Freak On" are on KaraokeNerds) — ranked by the
+    # shown spelling's own popularity, not the group's running max.
+    shown = {}      # folded key → rank of the spelling currently displayed
+    for key, fkey in folds.items():
+        cur = merged.pop(key)
+        rank = (cur[3], cur[2] if cur[2] is not None else -1)
+        target = merged.get(fkey)
+        if target is None:
+            merged[fkey] = cur
+            shown[fkey] = rank
+        else:
+            if fkey not in shown:
+                shown[fkey] = (target[3], target[2] if target[2] is not None else -1)
+            if rank > shown[fkey]:
+                target[0], target[1] = cur[0], cur[1]
+                shown[fkey] = rank
+            if cur[2] is not None and (target[2] is None or cur[2] > target[2]):
+                target[2] = cur[2]
+            target[3] = target[3] or cur[3]
+    del folds, shown
 
     tmp = dst + ".new"
     if os.path.exists(tmp):

@@ -112,8 +112,10 @@ Before touching singer song search, "Did you mean", auto-correct/tidy, or the ma
   candidate songs with karaoke rows.
 - **gen's job-form "Tidied/Corrected to" is mostly Gemini** (`gemini-3.8-flash`). Its catalogue pass is exact-match
   only, and decide's catalogue API is prefix-only (`LIKE 'q%'`), so neither is typo-tolerant.
-- Target: an on-device matcher for the easy majority, with Gemini (via gen) only as a fallback and for
-  descriptive queries ("that song from Titanic").
+- Shipped (v0.123.x–v0.124.0): an on-device matcher (`song_identify.py` over `song_id.db`, built daily from
+  gen's export of MusicBrainz + ListenBrainz + Spotify + KaraokeNerds) for the easy majority, with Gemini (via gen)
+  only as a fallback and for descriptive queries ("that song from Titanic"). Operations, eval workflow and
+  results: design doc §8.
 - Test set: `kj-controller/tests/fixtures/song_id_eval.jsonl`.
 
 ## HDMI Troubleshooting

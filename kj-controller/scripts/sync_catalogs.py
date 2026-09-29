@@ -222,7 +222,8 @@ def run_song_id_sync(config, *, gcloud_bin=None, requests_lib=requests,
 
         meta = build_song_id_db.stored_meta(db_path)
         if meta.get("source_run") == run and \
-                meta.get("normalizer_version") == str(song_identify.NORMALIZER_VERSION):
+                meta.get("normalizer_version") == str(song_identify.NORMALIZER_VERSION) and \
+                meta.get("schema_version") == str(build_song_id_db.SCHEMA_VERSION):
             return {"changed": False, "skipped": "run unchanged", "run": run, "error": None}
 
         try:
