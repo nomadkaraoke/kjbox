@@ -66,6 +66,14 @@ def test_same_run_is_skipped_new_run_rebuilds(tmp_path, gcs):
     assert sync_catalogs.run_song_id_sync(cfg, **kw)["changed"] is True
 
 
+def test_builder_schema_change_rebuilds_same_run(tmp_path, gcs, monkeypatch):
+    cfg = _cfg(tmp_path)
+    kw = dict(requests_lib=None, download_gcs=gcs["download"], gcloud_bin="gcloud")
+    sync_catalogs.run_song_id_sync(cfg, **kw)
+    monkeypatch.setattr(build_song_id_db, "SCHEMA_VERSION", build_song_id_db.SCHEMA_VERSION + 1)
+    assert sync_catalogs.run_song_id_sync(cfg, **kw)["changed"] is True
+
+
 def test_manifest_failure_is_reported_not_raised(tmp_path):
     def boom(*a):
         raise RuntimeError("offline")

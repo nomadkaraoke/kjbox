@@ -89,10 +89,15 @@ Results: `docs/SONG-IDENTIFICATION.md` §8 (78% auto / 0 wrong on real queries; 
 - [x] NomadPC latency: identify ~60–160 ms per call live; test sets p50 ~105 / p95 ~290 ms
 - [x] Follow-ups found live and shipped: #257 (MB misspelled duplicates block confidence, v0.123.1), #258 (don't cache transient Gemini misses, v0.123.2), #259 (song card shows before the slow typed-text karaoke search, v0.123.3; card in ~1.3 s incl. debounce)
 
+### 2026-09-29 progress (kjbox v0.124.0, karaoke-gen kn-data-sync export)
+- [x] ListenBrainz in the index: `SONG_ID_SQL` scores each song from its ListenBrainz listeners (calibrated to Spotify's 0–100 per stats range) and keeps songs with current listening, so new artists get in (+~400K songs → 5.77M, 929 MB, 4.4 GB build peak, ~9 min on the N97). Details: design D5/D5a/D12, §8.
+- [x] 26 `"source": "freshness"` eval cases (2025–26 songs, title-only new hits): 18 → 26 auto-correct.
+- [x] Builder folds title spelling variants ("Breakin'"/"Breaking", "Ur"/"Your"); matcher: dropped-g equivalence, 2-edit mistyped half-typed word ("my tears richo"), phrase retry without a mistyped last word ("She used to be mi e"). `SCHEMA_VERSION` 3; the sync now also rebuilds on a builder schema change.
+- [x] NomadPC eval (same export): labelled 123 → 98 auto / **0 wrong** (was 89 / 2); frozen 900 → 753 auto / 7 wrong (was 756 / 8); p95 ~250–290 ms.
+
 ## Next (after a few live shows)
 - Run `scripts/search_log_report.py --days 7` on the NomadPC and review the flagged sessions (undone tidies, "not it?", lower candidates, edited make-it pre-fills, make-its with no identification).
 - Add real misses to `kj-controller/tests/fixtures/song_id_eval.jsonl`; re-tune with `scripts/song_id_eval.py <db> [--frozen]`.
-- When the ListenBrainz import lands (handoff doc), add its popularity to `SONG_ID_SQL` in karaoke-gen `infrastructure/functions/kn_data_sync/main.py`.
 
 ## Status of earlier PRs (final, 2026-09-28)
 - gen #1065 (Gemini fallback: free-text split → `judge_match` tidy, descriptive queries): **merged + deployed**.

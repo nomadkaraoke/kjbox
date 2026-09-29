@@ -95,3 +95,29 @@
 {"q": "dont stop believing journey song", "artist": "Journey", "title": "Don't Stop Believin'", "kind": "typo", "source": "manual", "label": "claude-2026-09-27"}
 {"q": "xqzv blorp wibble", "artist": null, "title": null, "kind": "negative", "source": "kjbox-log", "label": "claude-2026-09-27"}
 {"q": "zzqxnothing", "artist": null, "title": null, "kind": "negative", "source": "kjbox-log", "label": "claude-2026-09-27"}
+{"q": "dracula tame impala", "artist": "Tame Impala", "title": "Dracula", "kind": "exact", "source": "freshness", "label": "claude-2026-09-29"}
+{"q": "dracula", "artist": "Tame Impala", "title": "Dracula", "kind": "title-only", "source": "freshness", "label": "claude-2026-09-29"}
+{"q": "tame impala dracla", "artist": "Tame Impala", "title": "Dracula", "kind": "typo", "source": "freshness", "label": "claude-2026-09-29"}
+{"q": "drop dead olivia", "artist": "Olivia Rodrigo", "title": "drop dead", "kind": "artist-fragment", "source": "freshness", "label": "claude-2026-09-29"}
+{"q": "drop dead olivia rodrigo", "artist": "Olivia Rodrigo", "title": "drop dead", "kind": "exact", "source": "freshness", "label": "claude-2026-09-29"}
+{"q": "honeybee olivia rodrigo", "artist": "Olivia Rodrigo", "title": "honeybee", "kind": "exact", "source": "freshness", "label": "claude-2026-09-29"}
+{"q": "the cure olivia rodrigo", "artist": "Olivia Rodrigo", "title": "the cure", "kind": "exact", "source": "freshness", "label": "claude-2026-09-29"}
+{"q": "whats wrong with me olivia rodrigo", "artist": "Olivia Rodrigo", "title": "what’s wrong with me", "kind": "exact", "source": "freshness", "label": "claude-2026-09-29"}
+{"q": "man i need olivia dean", "artist": "Olivia Dean", "title": "Man I Need", "kind": "exact", "source": "freshness", "label": "claude-2026-09-29"}
+{"q": "man i need", "artist": "Olivia Dean", "title": "Man I Need", "kind": "title-only", "source": "freshness", "label": "claude-2026-09-29"}
+{"q": "olivia dean man i ned", "artist": "Olivia Dean", "title": "Man I Need", "kind": "typo", "source": "freshness", "label": "claude-2026-09-29"}
+{"q": "the fate of ophelia", "artist": "Taylor Swift", "title": "The Fate of Ophelia", "kind": "title-only", "source": "freshness", "label": "claude-2026-09-29"}
+{"q": "fate of ophelia taylor swfit", "artist": "Taylor Swift", "title": "The Fate of Ophelia", "kind": "typo", "source": "freshness", "label": "claude-2026-09-29"}
+{"q": "elizabeth taylor taylor swift", "artist": "Taylor Swift", "title": "Elizabeth Taylor", "kind": "exact", "source": "freshness", "label": "claude-2026-09-29"}
+{"q": "walk my walk breaking rust", "artist": "Breaking Rust", "title": "Walk My Walk", "kind": "exact", "source": "freshness", "label": "claude-2026-09-29"}
+{"q": "ninajirachi delete", "artist": "Ninajirachi", "title": "Delete", "kind": "exact", "source": "freshness", "label": "claude-2026-09-29"}
+{"q": "getting killed geese", "artist": "Geese", "title": "Getting Killed", "kind": "exact", "source": "freshness", "label": "claude-2026-09-29"}
+{"q": "geese getting kiled", "artist": "Geese", "title": "Getting Killed", "kind": "typo", "source": "freshness", "label": "claude-2026-09-29"}
+{"q": "berghain rosalia", "artist": "ROSALÍA", "title": "Berghain", "kind": "artist-fragment", "source": "freshness", "label": "claude-2026-09-29"}
+{"q": "spaghetti le sserafim", "artist": "LE SSERAFIM", "title": "SPAGHETTI", "kind": "exact", "source": "freshness", "label": "claude-2026-09-29"}
+{"q": "winter ahead", "artist": "V", "title": "Winter Ahead", "kind": "title-only", "source": "freshness", "label": "claude-2026-09-29"}
+{"q": "redred cortis", "artist": "CORTIS", "title": "REDRED", "kind": "exact", "source": "freshness", "label": "claude-2026-09-29"}
+{"q": "body to body bts", "artist": "BTS", "title": "Body to Body", "kind": "exact", "source": "freshness", "label": "claude-2026-09-29"}
+{"q": "the happy dictator gorillaz", "artist": "Gorillaz", "title": "The Happy Dictator", "kind": "exact", "source": "freshness", "label": "claude-2026-09-29"}
+{"q": "birdbrain jamie paige", "artist": "Jamie Paige", "title": "BIRDBRAIN", "kind": "exact", "source": "freshness", "label": "claude-2026-09-29"}
+{"q": "aint in la adela", "artist": "ADÉLA", "title": "Ain’t in LA", "kind": "exact", "source": "freshness", "label": "claude-2026-09-29"}

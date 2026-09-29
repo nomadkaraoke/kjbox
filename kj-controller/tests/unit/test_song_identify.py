@@ -36,6 +36,12 @@ SONGS = [
     ("Jeff Buckley", "Hallelujah", 72, 1),
     ("Maximo Park", "Books From Boxes", 53, 1),
     ("Narrow Head", "See You Around", "", 1),         # karaoke-only row (no Spotify popularity)
+    ("Taylor Swift", "my tears ricochet", 80, 1),
+    ("Charlie Rich", "Too Many Tears", 30, 0),
+    ("Sara Bareilles", "She Used to Be Mine", 68, 1),
+    ("The Used", "Tell Me", 35, 0),
+    ("Rihanna", "Breakin' Dishes", 70, 1),
+    ("Rihanna", "Breaking Dishes (Soul Seekerz club mix)", 50, 0),
 ]
 
 
@@ -73,9 +79,20 @@ def _best(ident, q):
     ("all by myself", ("Eric Carmen", "All By Myself")),                # "by" is a real word
     ("soft cell tainted love", ("Soft Cell", "Tainted Love")),
     ("narrowhead see you around", ("Narrow Head", "See You Around")),   # karaoke-only row
+    ("rihanna breaking dishes", ("Rihanna", "Breakin' Dishes")),        # dropped g
 ])
 def test_confident_identifications(ident, q, want):
     assert _best(ident, q) == ("confident", want)
+
+
+@pytest.mark.parametrize("q,want", [
+    ("my tears richo", ("Taylor Swift", "my tears ricochet")),          # mistyped half-typed last word
+    ("She used to be mi e", ("Sara Bareilles", "She Used to Be Mine")),  # + a stray space
+])
+def test_mistyped_partial_last_word_still_finds_the_title(ident, q, want):
+    r = ident.identify(q)
+    assert r["status"] in ("confident", "candidates")
+    assert (r["candidates"][0]["artist"], r["candidates"][0]["title"]) == want
 
 
 def test_sequel_is_not_merged_with_the_original(ident):
@@ -116,3 +133,56 @@ def test_song_norm_joins_initials_and_keeps_ft_words():
 
 def test_missing_index_is_unavailable(tmp_path):
     assert SongIdentifier(str(tmp_path / "nope.db")).available is False
+
+
+def _build_rows(tmp_path, rows):
+    src = tmp_path / "songs.tsv.gz"
+    with gzip.open(src, "wt", encoding="utf-8") as f:
+        for a, t, p, k in rows:
+            f.write(f"{a}\t{t}\t{p}\t{k}\n")
+    db = str(tmp_path / "song_id.db")
+    build(str(src), db)
+    import sqlite3
+    conn = sqlite3.connect(db)
+    try:
+        return conn.execute("SELECT artist, title, pop, karaoke FROM songs ORDER BY artist, title").fetchall()
+    finally:
+        conn.close()
+
+
+def test_spelling_variants_merge_and_show_the_karaoke_spelling(tmp_path):
+    rows = _build_rows(tmp_path, [
+        ("Rihanna", "Breaking Dishes", 55, 0),       # MusicBrainz variant with an ISRC score
+        ("Rihanna", "Breakin' Dishes", "", 1),       # the KaraokeNerds / canonical spelling
+        ("Smash Mouth", "Walking on the Sun", 40, 0),
+        ("Smash Mouth", "Walkin’ on the Sun", 70, 0),
+        ("Smash Mouth", "Walkin' On The Sun", "", 1),
+        ("Seal", "Kiss From A Rose", "", 1),
+        ("Seal", "Kiss from a Rose", 75, 0),         # same key: the most popular spelling shows
+    ])
+    assert rows == [
+        ("Rihanna", "Breakin' Dishes", 55, 1),
+        ("Seal", "Kiss from a Rose", 75, 1),
+        ("Smash Mouth", "Walkin’ on the Sun", 70, 1),
+    ]
+
+
+def test_between_karaoke_spellings_the_more_popular_wins(tmp_path):
+    rows = _build_rows(tmp_path, [
+        ("Missy Elliott", "Get Your Freak On", 50, 0),
+        ("Missy Elliott", "Get Your Freak On", "", 1),
+        ("Missy Elliott", "Get Ur Freak On", 72, 0),
+        ("Missy Elliott", "Get Ur Freak On", "", 1),
+    ])
+    assert rows == [("Missy Elliott", "Get Ur Freak On", 72, 1)]
+
+
+def test_fold_keeps_different_songs_apart(tmp_path):
+    rows = _build_rows(tmp_path, [
+        ("Queen", "Bring", 40, 0),                   # 5 letters, folds to "brin" — nothing to meet
+        ("Queen", "Sing", 40, 0),                    # short words never fold
+        ("Queen", "Sin", 40, 0),
+        ("Other", "Breakin' Dishes", 30, 0),         # other artist: never merged
+        ("Rihanna", "Breaking Dishes", 55, 0),
+    ])
+    assert len(rows) == 5
