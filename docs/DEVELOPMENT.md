@@ -192,8 +192,10 @@ python scripts/validate-translations.py --messages-dir kj-controller/static-sing
 python scripts/check-i18n-keys.py
 ```
 
-Requires GCP ADC (`gcloud auth application-default login`) for Gemini via Vertex AI and the
-`nomadkaraoke-translation-cache` bucket. The pre-commit hook (`git config core.hooksPath
+Gemini is called via the Developer API: the key comes from `GEMINI_API_KEY`, else Secret Manager
+`gemini-api-key` via your gcloud login (`scripts/gemini_client.py`; exits 2 with a clear message if
+the key's quota/credit is exhausted). GCP ADC (`gcloud auth application-default login`) is still
+needed for the `nomadkaraoke-translation-cache` bucket. The pre-commit hook (`git config core.hooksPath
 .githooks`) re-runs the pipeline automatically when `en.json` is staged; the workspace-level
 `scripts/translate-all.sh` covers this directory too.
 
