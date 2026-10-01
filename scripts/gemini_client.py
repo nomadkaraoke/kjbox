@@ -98,6 +98,10 @@ _QUOTA_PATTERNS = re.compile(
     re.IGNORECASE,
 )
 
+# A 429 that names a per-minute quota / carries a retry delay is an ordinary
+# rate limit (transient — retry with backoff), not exhausted credit.
+_RATE_LIMIT_PATTERNS = re.compile(r"PerMinute|retryDelay|retry in \d", re.IGNORECASE)
+
 
 def is_quota_or_billing_error(exc: BaseException | None) -> bool:
     """True if ``exc`` (or anything in its cause chain) is a Gemini quota,
@@ -106,6 +110,8 @@ def is_quota_or_billing_error(exc: BaseException | None) -> bool:
 
     Matches google-genai ``APIError`` (``.code`` 429 / 403, or 400 with a
     billing/key message) and wrapped/stringified errors from other layers.
+    Per-minute rate limits (429 naming a ``PerMinute`` quota or a retry delay)
+    are NOT matched — those are transient; retry them.
     """
     seen: set[int] = set()
     while exc is not None and id(exc) not in seen:
@@ -117,10 +123,11 @@ def is_quota_or_billing_error(exc: BaseException | None) -> bool:
             code = getattr(exc, "status_code", None)
         status = str(getattr(exc, "status", "") or "")
         if code == 429 or status == "RESOURCE_EXHAUSTED":
-            return True
+            return not _RATE_LIMIT_PATTERNS.search(str(exc))
         if code == 403 or status == "PERMISSION_DENIED":
             return True
-        if _QUOTA_PATTERNS.search(str(exc)):
+        text = str(exc)
+        if _QUOTA_PATTERNS.search(text) and not _RATE_LIMIT_PATTERNS.search(text):
             return True
         exc = exc.__cause__ or exc.__context__
     return False

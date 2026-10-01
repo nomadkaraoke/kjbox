@@ -56,6 +56,13 @@ class TestIsQuotaOrBillingError:
             FakeAPIError(400, "INVALID_ARGUMENT", "Request contains an invalid argument."),
             TimeoutError("timed out"),
             ValueError("bad JSON from model, processed 429 tokens"),
+            FakeAPIError(
+                429,
+                "RESOURCE_EXHAUSTED",
+                "You exceeded your current quota. quotaId: "
+                "GenerateRequestsPerMinutePerProjectPerModel-PaidTier, retryDelay: 7s",
+            ),
+            RuntimeError("429 RESOURCE_EXHAUSTED ... Please retry in 7.2s"),
             None,
         ],
     )
