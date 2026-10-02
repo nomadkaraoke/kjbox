@@ -91,6 +91,44 @@ class TestSelfRename:
         # …and the alias recorded for future submissions.
         assert sing_app.sing_store.get_alias("dev-lyle") == "Lyle"
 
+    def test_rename_never_rewrites_a_song_already_sung(self, client, auto_approve, token):
+        # Real night: Bryan sang a duet with Roy from a shared phone; Roy later
+        # renamed the phone to himself. Bryan's sung song must keep his name,
+        # while the phone's still-queued song follows the rename.
+        sing_app = auto_approve
+        rotation = sing_app.rotation
+        r1 = _submit(client, token, device_id="dev-shared", singer_name="Bryan L")
+        sung = r1.get_json()["request"]
+        rotation.update_entry(sung["linked_entry_id"], singers=["Bryan L", "Roy O"])
+        rotation.update_status(sung["linked_entry_id"], "Done")
+        r2 = _submit(client, token, device_id="dev-shared", singer_name="Bryan L",
+                     title="Another One")
+        queued = r2.get_json()["request"]
+
+        resp = client.post(
+            f"/sing/rename?t={token}",
+            json={"new_name": "Roy O", "device_id": "dev-shared",
+                  "items": [{"id": sung["id"], "edit_token": sung["edit_token"]},
+                            {"id": queued["id"], "edit_token": queued["edit_token"]}]},
+        )
+        assert resp.status_code == 200
+        assert rotation.store.get_entry(sung["linked_entry_id"])["singer"] == "Bryan L & Roy O"
+        assert rotation.store.get_entry(queued["linked_entry_id"])["singer"] == "Roy O"
+
+    def test_rename_into_duet_partner_name_does_not_duplicate(self, client, auto_approve, token):
+        sing_app = auto_approve
+        rotation = sing_app.rotation
+        r = _submit(client, token, device_id="dev-shared", singer_name="Bryan L")
+        req = r.get_json()["request"]
+        rotation.update_entry(req["linked_entry_id"], singers=["Bryan L", "Roy O"])
+
+        client.post(
+            f"/sing/rename?t={token}",
+            json={"new_name": "roy o", "device_id": "dev-shared",
+                  "items": [{"id": req["id"], "edit_token": req["edit_token"]}]},
+        )
+        assert rotation.store.get_entry(req["linked_entry_id"])["singer"] == "Bryan L & Roy O"
+
     def test_future_submission_uses_renamed_identity(self, client, auto_approve, token):
         sing_app = auto_approve
         r = _submit(client, token, device_id="dev-lyle",
