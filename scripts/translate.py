@@ -680,12 +680,11 @@ async def async_main(args):
                     print(f"  {locale}: failed")
     else:
         print()
-    if failed:
-        sys.exit(1)
-
     if any(isinstance(r, BaseException) and is_quota_or_billing_error(r) for r in results):
         print(f"\nError: {quota_exhausted_message()}", file=sys.stderr)
         sys.exit(2)
+    if failed:
+        sys.exit(1)
 
 
 def main():
