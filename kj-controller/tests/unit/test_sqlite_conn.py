@@ -40,21 +40,67 @@ def test_pragmas_and_row_factory_applied(tmp_path):
     assert conn.execute("PRAGMA query_only").fetchone()[0] == 1
 
 
-def test_reset_closes_all_and_threads_reopen(tmp_path):
+def test_reset_closes_own_and_others_reopen_lazily(tmp_path):
     conns = ThreadLocalConnection(_db(tmp_path))
     main = conns.get()
     other = _in_thread(conns.get)
     conns.reset()
     assert conns.current() is None
-    for old in (main, other):
-        try:
-            old.execute("SELECT 1")
-            raise AssertionError("connection should be closed")
-        except sqlite3.ProgrammingError:
-            pass
+    try:
+        main.execute("SELECT 1")
+        raise AssertionError("caller's connection should be closed")
+    except sqlite3.ProgrammingError:
+        pass
+    # Another thread's connection is left for that thread to close (it may be
+    # mid-query), so it still works until that thread's next get().
+    assert other.execute("SELECT 1").fetchone()[0] == 1
     fresh = conns.get()
     assert fresh is not main
     assert fresh.execute("SELECT COUNT(*) FROM media").fetchone()[0] == 50
+
+
+def test_get_after_reset_closes_stale_thread_connection(tmp_path):
+    conns = ThreadLocalConnection(_db(tmp_path))
+    holder = {}
+    ready, go, done = threading.Event(), threading.Event(), threading.Event()
+
+    def worker():
+        holder["old"] = conns.get()
+        ready.set()
+        go.wait()
+        holder["new"] = conns.get()
+        done.set()
+
+    t = threading.Thread(target=worker)
+    t.start()
+    ready.wait()
+    conns.reset()
+    go.set()
+    done.wait()
+    t.join()
+    assert holder["new"] is not holder["old"]
+    try:
+        holder["old"].execute("SELECT 1")
+        raise AssertionError("stale connection should be closed by its thread")
+    except sqlite3.ProgrammingError:
+        pass
+
+
+def test_reset_during_open_does_not_register_stale_connection(tmp_path, monkeypatch):
+    conns = ThreadLocalConnection(_db(tmp_path))
+    real_connect = sqlite3.connect
+    calls = []
+
+    def racing_connect(*a, **kw):
+        calls.append(1)
+        if len(calls) == 1:
+            conns.reset()  # file replaced while this thread was opening
+        return real_connect(*a, **kw)
+
+    monkeypatch.setattr(sqlite3, "connect", racing_connect)
+    conn = conns.get()
+    assert len(calls) == 2
+    assert conns.current() is conn
 
 
 def test_catalog_is_available_under_concurrency(mock_config, tmp_path):
