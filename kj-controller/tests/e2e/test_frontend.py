@@ -499,7 +499,7 @@ class TestLibraryRow:
         # colorised .format-badge.
         row = self._row(app_page)
         badge = row.locator(".format-badge")
-        expect(badge).to_have_text("mp4")
+        expect(badge).to_have_text("MP4")
         expect(row.locator(".media-type-badge")).to_have_count(0)
 
     def test_delete_arms_on_first_click(self, app_page):
@@ -577,7 +577,7 @@ class TestCatalogRowUnified:
     def test_catalog_format_pill_is_clickable_cdg_mp3(self, app_page):
         row = self._row(app_page)
         badge = row.locator(".format-badge")
-        expect(badge).to_have_text("cdg+mp3")
+        expect(badge).to_have_text("CDG")  # formatPillLabel: cdg+mp3 → CDG
         expect(badge).to_have_class(re.compile(r"format-badge-clickable"))
 
 

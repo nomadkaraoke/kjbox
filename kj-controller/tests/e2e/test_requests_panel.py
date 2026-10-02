@@ -163,8 +163,11 @@ class TestQueueGrowth:
         metrics = page.evaluate(
             "() => { const l = document.querySelector('#pending-requests-list');"
             " const cs = getComputedStyle(l);"
+            " const rows = l.children;"
+            " const threeTall = Math.round(rows[2].getBoundingClientRect().bottom"
+            "   - rows[0].getBoundingClientRect().top);"
             " return {overflowY: cs.overflowY, maxHeight: cs.maxHeight,"
-            " client: l.clientHeight,"
+            " client: l.clientHeight, scroll: l.scrollHeight, threeTall,"
             " count: document.querySelector('#pending-requests-count').textContent,"
             " rows: document.querySelectorAll('#pending-requests-list .pending-req-row').length}; }"
         )
@@ -173,9 +176,11 @@ class TestQueueGrowth:
         assert int(metrics["count"]) >= n, metrics
         assert metrics["rows"] == int(metrics["count"]), metrics  # list renders all pending
         # Capped + scrollable → cannot grow unbounded and shove siblings down.
+        # applyRequestsHeightCap() sizes the cap to exactly 3 full cards.
         assert metrics["overflowY"] == "auto", metrics
-        assert metrics["maxHeight"] == "260px", metrics
-        assert metrics["client"] <= 260, metrics
+        assert metrics["maxHeight"] == f"{metrics['threeTall']}px", metrics
+        assert metrics["client"] <= metrics["threeTall"], metrics
+        assert metrics["scroll"] > metrics["client"], metrics  # rest scrolls
 
 
 class TestSimpleModeRail:

@@ -131,6 +131,18 @@ The group **wraps at every width**, so buttons are never clipped in the
 Design rationale + before/after measurements:
 `kj-controller/docs/archive/2026-07-02-header-button-framework-design.md`.
 
+### Mobile overrides must come AFTER the base rules
+
+`style.css` is one long file and the main `/* --- Responsive --- */` block sits
+early (~line 1800), before most component rules. A `@media` rule doesn't add
+specificity, so an override there for a selector the base styles define later
+(e.g. `.rotation-btn { padding }`) is **silently ignored**. Put phone overrides
+for a component in a `@media (max-width: 768px)` block placed *after* that
+component's base rules — the rotation/Singers phone layout lives in its own
+block at the end of the file for this reason. Check at 360px and 390px with
+`tests/e2e/test_kj_mobile_layout.py` (asserts no horizontal overflow or
+clipped buttons).
+
 ## Project Structure
 
 ```

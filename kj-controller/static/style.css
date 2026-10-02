@@ -1870,9 +1870,6 @@ body {
         --hdr-btn-pad-x: 12px;
     }
 
-    /* Rotation entry actions: slightly larger touch targets */
-    .rotation-btn { font-size: 0.7em; padding: 4px 8px; }
-
     /* System buttons: wrap properly */
     .system-subsection-row { gap: 6px; }
     .system-btn { padding: 8px 12px; }
@@ -1902,14 +1899,6 @@ body {
     .rotation-add-form { flex-direction: column; }
     .rotation-add-form input { flex-basis: auto; }
     .rotation-add-form button { width: 100%; }
-
-    /* Rotation entries: tighter layout */
-    .rotation-entry { padding: 6px 6px; }
-    .rotation-info { gap: 3px; }
-    .rotation-name { font-size: 0.8em; }
-    .rotation-song { font-size: 0.7em; }
-    .rotation-actions { gap: 2px; margin-left: 4px; }
-    .rotation-btn { font-size: 0.7em; padding: 5px 8px; }
 
     /* System power buttons: stack */
     .system-subsection-row { flex-direction: column; }
@@ -4506,6 +4495,13 @@ body.simple-mode .system-controls {
     font-size: 0.65em;
     border-radius: 5px;
 }
+/* Playback header right side: sliders toggle + Simple/Advanced pill. */
+.pc-header-right {
+    display: flex;
+    align-items: center;
+    gap: var(--hdr-btn-gap);
+    margin-left: auto;
+}
 
 /* --- Browser preview playback --- */
 .preview-btn {
@@ -4875,3 +4871,95 @@ li.media-no-audio {
 .sing-footer-social { margin-top: 0.3rem; }
 .sing-footer-consent-toggle { display: flex; align-items: flex-start; gap: 0.45rem; font-size: 0.9rem; line-height: 1.35; margin-top: 0.5rem; }
 .sing-footer-consent-toggle input { margin-top: 0.2rem; flex: 0 0 auto; }
+
+/* --- Rotation rows on phones ---
+ * Must stay AFTER the base .rotation-* rules above: these selectors have the
+ * same specificity, so an earlier @media block (like the main Responsive one)
+ * gets silently overridden by the base rules. */
+@media (max-width: 768px) {
+    /* Rotation entries: stack each row so names/songs stay readable. On desktop
+     * the info and the action buttons share one line; on a phone the ~8 action
+     * buttons alone are wider than the screen and squeezed .rotation-info to
+     * zero width. Here:
+     *   line 1: grip · # · singer(s) · pills · badges (wraps as needed)
+     *   line 2: song (full width, wraps instead of ellipsizing)
+     *   line 3: action buttons, stretched across the full row
+     */
+    .rotation-entry { align-items: flex-start; padding: 6px 8px; row-gap: 6px; }
+    .rotation-drag-handle { padding: 6px 7px; }
+    .rotation-info {
+        flex-wrap: wrap;
+        overflow: visible;
+        row-gap: 4px;
+        flex-basis: 0;           /* fill what the grip leaves on the line */
+        padding-top: 3px;
+    }
+    .rotation-name { font-size: 1em; white-space: normal; overflow-wrap: anywhere; }
+    .rotation-singer-pill { font-size: 0.85em; }
+    .rotation-song {
+        order: 10;               /* after the pills/badges → its own line */
+        flex: 1 1 calc(100% - 2em);
+        margin-left: 1.2em;      /* align under the singer name, past the # */
+        font-size: 0.9em;
+        color: #bbb;
+        white-space: normal;
+        overflow-wrap: anywhere;
+    }
+    .rotation-playability-warning { order: 11; }
+    .rotation-actions {
+        flex-basis: 100%;
+        min-width: 0;            /* else it can't shrink below its content */
+        margin-left: 0;
+        gap: 4px;
+    }
+    .rotation-btn {
+        flex: 1 1 auto;          /* "Singing" needs more room than "Done" */
+        min-width: 0;
+        font-size: 0.8em;
+        padding: 8px 4px;
+        text-align: center;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    /* Icon-only buttons stay compact; the word buttons share the remainder. */
+    .rotation-btn-preview, .rotation-btn-play, .rotation-btn-link,
+    .rotation-btn-more, .rotation-btn-edit {
+        flex: 0 0 34px;
+    }
+    .rotation-btn-sms { flex: 0 0 auto; min-width: 4.4rem; padding: 8px 6px; }
+
+    /* Edit mode (reuses .rotation-info / .rotation-actions): full-width inputs */
+    .rotation-entry.rotation-editing .singer-input-container,
+    .rotation-entry.rotation-editing .rotation-edit-singer,
+    .rotation-entry.rotation-editing .rotation-edit-song {
+        flex: 1 1 100%;
+        max-width: none;
+        font-size: 16px;         /* ≥16px stops iOS zooming on focus */
+        padding: 8px;
+    }
+    /* Singers panel rows: same squeeze problem — name/info line, then buttons. */
+    .singer-stats-row { flex-wrap: wrap; row-gap: 6px; }
+    .singer-stats-info { flex: 1 1 100%; flex-wrap: wrap; row-gap: 2px; }
+    .singer-stats-name { font-size: 1em; }
+    .singer-stats-actions { flex: 1 1 100%; min-width: 0; gap: 4px; }
+    .singer-stats-btn {
+        flex: 1 1 auto;
+        min-width: 0;
+        padding: 7px 2px;
+        font-size: 0.75em;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+}
+@media (max-width: 480px) {
+    .rotation-entry { padding: 6px; }
+    .rotation-info { gap: 3px; }
+    .rotation-actions { gap: 3px; }
+}
+@media (max-width: 400px) {
+    .rotation-btn { font-size: 0.75em; padding: 8px 2px; }
+    .rotation-btn-preview, .rotation-btn-play, .rotation-btn-link,
+    .rotation-btn-more, .rotation-btn-edit { flex-basis: 30px; }
+    .rotation-btn-sms { min-width: 3.8rem; padding: 8px 4px; }
+}
