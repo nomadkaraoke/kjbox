@@ -212,7 +212,12 @@ utils.py → (stdlib only)
 | POST | `/rotation/set-paid` | Toggle paid priority flag on a rotation entry (`{id, paid}`) |
 | GET | `/rotation/search` | Unified search: local catalog + Karaoke Nerds + Divebar cross-ref (`?q=query`, min 3 chars) |
 | POST | `/rotation/download-and-link` | Queue download and link to rotation entry (`{id?, singer?, source, file_id/youtube_url}`) |
-| POST | `/rotation/make` | Create gen job and link to rotation entry (`{id?, singer?, artist, title}`) |
+| POST | `/rotation/make` | Legacy: blind gen job (auto-download) linked to a rotation entry (`{id?, singer?, artist, title}`) |
+| GET | `/rotation/gen/resolve?q=` | Gen modal pre-fill: `{artist, title, source}` from the song box (gen resolver, else "Title - Artist" split) |
+| POST | `/rotation/gen/check` | gen match-judge for `{artist, title, stage, tier}` (fails open to `{kind: "none"}`) |
+| POST | `/rotation/gen/search` | gen audio search → `{search_session_id, results}` |
+| POST | `/rotation/gen/validate-url` | gen `validate-url` for the YouTube-link fallback |
+| POST | `/rotation/gen/create` | Create the gen job (admin token), then add/update the entry as Being Made. `{artist, title, search_session_id+selection_index \| youtube_url, singers \| id, replace?}` |
 | GET | `/rotation/gen-status` | Get active gen job statuses for rotation entries |
 | GET | `/rotation/sync-status` | Get Sheet sync status (`{last_sync, is_online, next_sync_in}`) |
 | POST | `/rotation/undo` | Server-side undo. No `confirm` → preview diff (`{removed, added, changed}`) + `rev`, applies nothing. `{confirm: true, expected_rev}` → apply (rejected as `stale` if `expected_rev` is out of date) |

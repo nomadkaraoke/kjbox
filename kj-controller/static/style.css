@@ -2657,6 +2657,82 @@ body {
     flex-shrink: 0;
 }
 
+/* Gen button (beside Add) + Gen modal (kj_make.py). Stays visible in link
+   mode, where it generates for the entry being linked. */
+.rotation-add-form button.rotation-gen-btn {
+    border-color: rgba(255, 91, 184, 0.45);
+    background: rgba(255, 91, 184, 0.14);
+    color: #ff9ad5;
+}
+.rotation-add-form button.rotation-gen-btn:hover { background: rgba(255, 91, 184, 0.28); }
+.gen-modal-content { max-width: 640px; }
+.gen-target { color: #bbb; font-size: 0.88em; margin-bottom: 0.6rem; }
+.gen-target strong { color: #fde68a; }
+.gen-fields { display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 0.6rem; }
+.gen-target label, .gen-fields label {
+    display: flex; flex-direction: column; gap: 4px; flex: 1 1 160px; min-width: 0;
+    color: #999; font-size: 0.78em;
+}
+.gen-target input, .gen-fields input, .gen-fallback input {
+    background: #101010; border: 1px solid #3a3a3a; border-radius: 6px;
+    padding: 7px 10px; color: #eee; font-size: 1.05em; font-family: inherit; min-width: 0;
+}
+.gen-target input:focus, .gen-fields input:focus, .gen-fallback input:focus {
+    outline: none; border-color: rgba(255, 91, 184, 0.6);
+}
+.gen-modal-content button {
+    padding: 7px 14px; border-radius: 6px; cursor: pointer; font-size: 0.85em;
+    border: 1px solid rgba(139, 92, 246, 0.4); background: rgba(139, 92, 246, 0.15); color: #c4b5fd;
+}
+.gen-modal-content button:hover:not(:disabled) { background: rgba(139, 92, 246, 0.3); }
+.gen-modal-content button:disabled { opacity: 0.45; cursor: default; }
+.gen-modal-content button.primary {
+    border-color: rgba(34, 197, 94, 0.5); background: rgba(34, 197, 94, 0.18); color: #86efac;
+}
+.gen-modal-content button.modal-close { border: none; background: none; color: #666; padding: 0 4px; font-size: 1.5em; }
+.gen-modal-content button.gen-link-btn {
+    border: none; background: none; padding: 0; color: #93c5fd; text-decoration: underline;
+}
+.gen-body { display: flex; flex-direction: column; gap: 8px; }
+.gen-hint { color: #999; font-size: 0.85em; display: flex; align-items: center; gap: 8px; }
+.gen-error {
+    color: #fecaca; background: rgba(127, 29, 29, 0.35); border: 1px solid rgba(239, 68, 68, 0.5);
+    border-radius: 6px; padding: 6px 10px; font-size: 0.85em;
+}
+.gen-correction, .gen-didyoumean {
+    font-size: 0.85em; color: #fde68a; background: rgba(251, 191, 36, 0.1);
+    border: 1px solid rgba(251, 191, 36, 0.3); border-radius: 6px; padding: 6px 10px;
+}
+.gen-none { color: #bbb; font-size: 0.88em; }
+.gen-section-title { color: #ff7acc; font-size: 0.8em; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
+.gen-cat-count { color: #777; font-weight: 400; }
+.gen-cat { display: flex; flex-direction: column; gap: 6px; }
+.gen-result {
+    display: flex; align-items: center; gap: 10px; padding: 8px 10px;
+    background: #141414; border: 1px solid #2a2a2a; border-radius: 8px;
+}
+.gen-result-hero { border-color: rgba(34, 197, 94, 0.45); background: rgba(34, 197, 94, 0.06); }
+.gen-result-main { flex: 1; min-width: 0; }
+.gen-result-name { color: #eee; font-size: 0.9em; overflow-wrap: anywhere; }
+.gen-result-file { color: #9ca3af; font-family: ui-monospace, monospace; font-size: 0.78em; overflow-wrap: anywhere; }
+.gen-result-tags { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; margin-top: 3px; }
+.gen-tag {
+    font-size: 0.7em; padding: 1px 6px; border-radius: 4px;
+    background: #262626; color: #bbb; border: 1px solid #333;
+}
+.gen-tag-lossless { color: #86efac; border-color: rgba(34, 197, 94, 0.4); }
+.gen-tag-sp { color: #4ade80; }
+.gen-tag-yt { color: #fca5a5; }
+.gen-tag-warn { color: #fbbf24; border-color: rgba(251, 191, 36, 0.5); }
+.gen-avail-high { color: #86efac; }
+.gen-avail-medium { color: #fde68a; }
+.gen-avail-low { color: #fca5a5; }
+.gen-quality, .gen-meta { color: #888; font-size: 0.75em; }
+.gen-others-toggle { align-self: flex-start; }
+.gen-fallback { display: flex; flex-direction: column; gap: 6px; margin-top: 4px; }
+.gen-fallback-row { display: flex; gap: 6px; }
+.gen-fallback-row input { flex: 1; }
+
 /* "N more commercial versions to download" collapsible (low-quality noise). */
 .rs-collapse-toggle {
     padding: 7px 12px;

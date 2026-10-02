@@ -29,6 +29,7 @@ from sing import (
     sync_event_url_overlays,
 )
 import sing_make  # noqa: F401 — registers the /sing/make/* routes on sing_bp
+import kj_make  # noqa: F401 — registers the /rotation/gen/* routes on routes_bp
 from sing_store import SingStore
 from sms_store import SmsStore
 from sleep_mode import SleepManager
