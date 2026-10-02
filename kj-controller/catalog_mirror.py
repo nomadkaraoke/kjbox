@@ -32,6 +32,7 @@ import sqlite3
 import time
 
 import fuzzy_match
+from sqlite_conn import ThreadLocalConnection
 from text_normalize import (
     normalize as _normalize,
     fts_match_query as _fts5_safe_query,
@@ -67,26 +68,22 @@ class CatalogMirror:
     def __init__(self, config, db_path=None):
         self.config = config or {}
         self.db_path = db_path or _default_db_path(self.config)
-        self._conn = None
+        # Per-thread connections: a shared one is unsafe across Flask threads.
+        self._conns = ThreadLocalConnection(
+            self.db_path, pragmas=("query_only=ON", "cache_size=-8192"))
 
     # ------------------------------------------------------------------ conn
 
+    @property
+    def _conn(self):
+        return self._conns.current()
+
     def _get_conn(self):
-        if self._conn is None:
-            self._conn = sqlite3.connect(self.db_path, check_same_thread=False)
-            self._conn.row_factory = sqlite3.Row
-            self._conn.execute("PRAGMA query_only=ON")
-            self._conn.execute("PRAGMA cache_size=-8192")
-        return self._conn
+        return self._conns.get()
 
     def reload(self):
-        """Drop the connection so the next query reopens the (replaced) file."""
-        if self._conn is not None:
-            try:
-                self._conn.close()
-            except sqlite3.Error:
-                pass
-            self._conn = None
+        """Drop the connections so the next query reopens the (replaced) file."""
+        self._conns.reset()
 
     def close(self):
         self.reload()

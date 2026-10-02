@@ -108,6 +108,7 @@ export function createMakeFlow(deps) {
       too_many_attempts: "make.errTooManyAttempts", too_many_codes: "make.errTooManyCodes",
       signup_cap: "make.errUnavailable", no_credits: "make.errNoCredits", make_limit: "make.errLimit",
       rate_limited: "confirm.tooMany", make_requests_disabled: "confirm.makeDisabled",
+      gen_rejected: "make.errRejected", youtube_blocked: "make.errYoutubeBlocked",
     };
     return t(map[code] || "make.errUnavailable");
   }

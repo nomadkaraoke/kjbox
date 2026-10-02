@@ -295,6 +295,8 @@
     "errSignedOut": "Vahvista sähköpostisi uudelleen.",
     "errSearchExpired": "Tämä audiohaku vanhentui — palaa takaisin ja valitse audio uudelleen.",
     "errUnavailable": "Jotain meni pieleen meidän päässämme — yritä hetken kuluttua uudelleen.",
+    "errRejected": "Tämän kappaleen tekeminen ei onnistunut — valitse kappale listalta tai kysy juontajalta.",
+    "errYoutubeBlocked": "YouTube estää pyynnöt juuri nyt, joten emme voi tehdä tätä kappaletta — valitse kappale listalta tai kysy juontajalta.",
     "losslessTag": "HÄVIÖTÖN",
     "availHighTip": "Hyvin jakajia, latautuu luotettavasti",
     "availMediumTip": "Pitäisi latautua, mutta voi olla hitaampi",

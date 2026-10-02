@@ -2805,7 +2805,8 @@ function renderConfirm() {
       const makeErr = {
         make_limit: "confirm.makeLimit", signin_required: "make.errSignedOut",
         search_expired: "make.errSearchExpired", no_credits: "make.errNoCredits",
-        gen_unavailable: "make.errUnavailable",
+        gen_unavailable: "make.errUnavailable", gen_rejected: "make.errRejected",
+        youtube_blocked: "make.errYoutubeBlocked",
       }[e.data?.error];
       err = makeErr
         ? t(makeErr)

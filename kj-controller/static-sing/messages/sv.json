@@ -295,6 +295,8 @@
     "errSignedOut": "Bekräfta din e-postadress igen.",
     "errSearchExpired": "Ljudsökningen har gått ut — gå tillbaka och välj ljudet igen.",
     "errUnavailable": "Något gick fel på vår sida — försök igen om en stund.",
+    "errRejected": "Vi kunde inte skapa den – välj en låt från katalogen eller fråga din KJ.",
+    "errYoutubeBlocked": "YouTube blockerar oss just nu, så vi kan inte skapa den – välj en låt från katalogen eller fråga din KJ.",
     "losslessTag": "FÖRLUSTFRITT",
     "availHighTip": "Många seeders, laddas ner pålitligt",
     "availMediumTip": "Bör laddas ner men kan vara långsammare",

@@ -295,6 +295,8 @@
     "errSignedOut": "Prosím, potvrď svoj e-mail znova.",
     "errSearchExpired": "Vyhľadávanie zvuku vypršalo — vráť sa späť a vyber zvuk znova.",
     "errUnavailable": "Niečo sa u nás pokazilo — skús to znova o chvíľu.",
+    "errRejected": "Túto pesničku sa nám nepodarilo pripraviť — vyber si pesničku z katalógu alebo sa spýtaj hostiteľa.",
+    "errYoutubeBlocked": "YouTube nás momentálne blokuje, takže túto pesničku nemôžeme pripraviť — vyber si pesničku z katalógu alebo sa spýtaj hostiteľa.",
     "losslessTag": "BEZSTRATOVÉ",
     "availHighTip": "Veľa zdrojov, sťahuje sa spoľahlivo",
     "availMediumTip": "Malo by sa stiahnuť, ale môže to byť pomalšie",

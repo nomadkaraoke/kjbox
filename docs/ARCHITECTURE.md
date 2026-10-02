@@ -66,7 +66,8 @@ KJ Controller is a web-based karaoke show management application. A Flask backen
 | `mpv_manager.py` | ~420 | `MpvKaraokePlayer`: mpv karaoke backend (IPC + rubberband pitch + ALSA-release race fix) |
 | `vlc.py` | ~340 | `VlcKaraokePlayer`: dual-VLC karaoke backend (CDG-compatible) |
 | `chromium.py` | ~160 | `ChromiumManager` class: launch/kill fullscreen Chromium for Browser Mode, PipeWire audio routing |
-| `catalog.py` | ~230 | `ExternalCatalog` class: SQLite FTS5 search over external media |
+| `catalog.py` | ~230 | `ExternalCatalog` class: SQLite FTS5 search over external media (per-thread connections via `sqlite_conn.py`) |
+| `sqlite_conn.py` | ~60 | `ThreadLocalConnection`: one SQLite connection per Flask thread (shared ones raced) |
 | `zip_playback.py` | ~50 | `ZipPlayback` class: CDG+MP3 ZIP extraction for VLC |
 | `frame_analysis.py` | ~80 | Pure Pillow frame math: blank/black detection, frame-diff (motion), `judge_renderer_frames` |
 | `playability.py` | ~360 | `PlayabilityChecker`: ffprobe integrity + ffmpeg decode + CDG sub-pipeline + render verdict + `check()`; per-stage `timings`. Inline gate helper used by routes/media |
@@ -117,7 +118,7 @@ media_library.py → text_normalize.py (stdlib: sqlite3, threading)
 scripts/sync_masters.py → config.py (subprocess `gcloud storage rsync`, requests; run by the nomad-master-sync systemd timer)
 vlc.py → config.py, utils.py
 chromium.py → config.py, utils.py
-catalog.py → (stdlib only: sqlite3, os, re)
+catalog.py → sqlite_conn.py (+ stdlib: sqlite3, os, re)
 zip_playback.py → (stdlib only: zipfile, tempfile, shutil)
 config.py → (stdlib only)
 utils.py → (stdlib only)

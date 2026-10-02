@@ -295,6 +295,8 @@
     "errSignedOut": "Bevestig je e-mailadres opnieuw.",
     "errSearchExpired": "Die audiozoekopdracht is verlopen — ga terug en kies de audio opnieuw.",
     "errUnavailable": "Er is iets misgegaan aan onze kant — probeer het zo nog eens.",
+    "errRejected": "We konden dit nummer niet maken — kies een nummer uit de catalogus of vraag het aan de host.",
+    "errYoutubeBlocked": "YouTube blokkeert ons op dit moment, dus we kunnen dit nummer niet maken — kies een nummer uit de catalogus of vraag het aan de host.",
     "losslessTag": "LOSSLESS",
     "availHighTip": "Veel seeders, downloadt betrouwbaar",
     "availMediumTip": "Downloadt waarschijnlijk wel, maar kan wat trager zijn",

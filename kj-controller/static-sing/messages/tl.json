@@ -295,6 +295,8 @@
     "errSignedOut": "Pakikumpirma ulit ang iyong email.",
     "errSearchExpired": "Expired na ang paghahanap ng audio — bumalik at pumili ulit ng audio.",
     "errUnavailable": "May nangyaring mali sa aming system — subukan ulit mamaya.",
+    "errRejected": "Hindi namin magawa 'yan — pumili ng kanta mula sa catalog, o magtanong sa host.",
+    "errYoutubeBlocked": "Kasalukuyan kaming bina-block ng YouTube, kaya hindi namin magawa 'yan — pumili ng kanta mula sa catalog, o magtanong sa host.",
     "losslessTag": "LOSSLESS",
     "availHighTip": "Maraming seeders, maaasahan ang pag-download",
     "availMediumTip": "Mada-download pero baka mas mabagal",

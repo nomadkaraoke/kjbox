@@ -295,6 +295,8 @@
     "errSignedOut": "Prosím, potvrď svůj e-mail znovu.",
     "errSearchExpired": "Hledání zvuku vypršelo — vrať se zpět a vyber zvuk znovu.",
     "errUnavailable": "Něco se u nás pokazilo — zkus to za chvíli znovu.",
+    "errRejected": "Tuhle písničku se nám nepodařilo vytvořit – vyber si nějakou z katalogu, nebo se zeptej hostitele.",
+    "errYoutubeBlocked": "YouTube nás teď blokuje, takže tuhle písničku nemůžeme vytvořit – vyber si nějakou z katalogu, nebo se zeptej hostitele.",
     "losslessTag": "BEZZTRÁTOVÉ",
     "availHighTip": "Dobře sdílené, stahuje se spolehlivě",
     "availMediumTip": "Mělo by se stáhnout, ale může to být pomalejší",

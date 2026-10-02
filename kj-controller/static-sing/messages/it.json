@@ -295,6 +295,8 @@
     "errSignedOut": "Per favore, conferma di nuovo la tua email.",
     "errSearchExpired": "La ricerca audio è scaduta — torna indietro e scegli di nuovo l'audio.",
     "errUnavailable": "Qualcosa è andato storto da parte nostra — riprova tra un momento.",
+    "errRejected": "Non siamo riusciti a preparare questo brano: scegline uno dal catalogo o chiedi al KJ.",
+    "errYoutubeBlocked": "Al momento YouTube ci sta bloccando, quindi non possiamo preparare questo brano: scegline uno dal catalogo o chiedi al KJ.",
     "losslessTag": "LOSSLESS",
     "availHighTip": "Molti seed, download affidabile",
     "availMediumTip": "Dovrebbe scaricarsi ma potrebbe essere più lento",

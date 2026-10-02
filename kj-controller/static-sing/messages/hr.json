@@ -295,6 +295,8 @@
     "errSignedOut": "Molim te, ponovno potvrdi svoj e-mail.",
     "errSearchExpired": "Ta pretraga zvuka je istekla — vrati se i ponovno odaberi audio.",
     "errUnavailable": "Nešto je pošlo po zlu s naše strane — pokušaj ponovno za trenutak.",
+    "errRejected": "Nismo uspjeli napraviti tu pjesmu — odaberi pjesmu iz kataloga ili pitaj voditelja.",
+    "errYoutubeBlocked": "YouTube nas trenutno blokira pa ne možemo napraviti tu pjesmu — odaberi pjesmu iz kataloga ili pitaj voditelja.",
     "losslessTag": "LOSSLESS",
     "availHighTip": "Puno izvora, pouzdano se preuzima",
     "availMediumTip": "Trebalo bi se preuzeti, ali može biti sporije",
