@@ -5067,6 +5067,8 @@ document.addEventListener('DOMContentLoaded', () => {
     fetchSleepModeStatus();
     log('Nomad KJ Control initialized.');
 
+    if (localStorage.getItem('kj-sliders-hidden') === '1') setSlidersHidden(true);
+
     if (localStorage.getItem('kj-singer-stats-hidden') === '1') {
         const statsList = document.getElementById('singer-stats-list');
         const statsBtn = document.querySelector('.singer-stats-toggle');
@@ -6699,6 +6701,27 @@ function toggleRotationFilePaths() {
         apply();
     }
 })();
+
+// --- Playback sliders show/hide ---
+// Volume/seek sliders are rarely touched mid-show and eat a lot of a phone
+// screen, so the KJ can collapse them. Remembered per device (localStorage).
+
+function setSlidersHidden(hidden) {
+    const sliders = document.getElementById('pc-sliders');
+    const btn = document.getElementById('pc-sliders-toggle');
+    if (!sliders || !btn) return;
+    sliders.classList.toggle('hidden', hidden);
+    btn.textContent = hidden ? 'Show sliders' : 'Hide sliders';
+    btn.setAttribute('aria-expanded', hidden ? 'false' : 'true');
+    if (hidden) localStorage.setItem('kj-sliders-hidden', '1');
+    else localStorage.removeItem('kj-sliders-hidden');
+}
+
+function toggleSliders() {
+    const sliders = document.getElementById('pc-sliders');
+    if (!sliders) return;
+    setSlidersHidden(!sliders.classList.contains('hidden'));
+}
 
 // --- Singer Stats Panel ---
 

@@ -2,6 +2,21 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-10-01 - KJ UI usable on a phone: stacked rotation rows + hideable sliders (v0.125.0)
+
+- **Rotation rows stack on phones (≤768px).** Before, the ~8 action buttons were wider than a
+  phone, so the singer name, song and badges were squeezed to nothing. Each row now has three
+  lines: singer(s) with pills and badges, then the song (wraps instead of being cut off), then the
+  action buttons spread across the full width as bigger touch targets. Edit mode gets
+  full-width 16px inputs, so iOS doesn't zoom in. Rows in the **Singers** panel stack the same
+  way. Desktop is unchanged.
+- **Root cause:** the old phone overrides were in the early Responsive block, so the later
+  base `.rotation-*` rules overrode them. See DEVELOPMENT.md § "Mobile overrides must come AFTER
+  the base rules".
+- **"Hide sliders" toggle** in the Playback Controls header hides Karaoke/Filler/Original-vocals
+  volume and Seek. It's saved per device (`localStorage` `kj-sliders-hidden`), so a phone can
+  keep them collapsed while the NomadPC still shows them.
+
 ## 2026-09-26 - Feature: kjbox.cc short links for the singer QR codes (v0.121.0)
 
 The QR codes and on-screen text now use much shorter links, so they scan from further away and

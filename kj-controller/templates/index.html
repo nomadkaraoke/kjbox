@@ -32,11 +32,16 @@
             <div class="container playback-controls">
                 <div class="header-row">
                     <h2>Playback Controls</h2>
-                    <div class="mode-segmented mode-segmented-compact" id="mode-segmented" role="group" aria-label="KJ mode">
-                        <button type="button" class="mode-seg" id="mode-seg-simple"
-                                onclick="setKjMode('simple')" aria-pressed="false">Simple</button>
-                        <button type="button" class="mode-seg mode-seg-active" id="mode-seg-advanced"
-                                onclick="setKjMode('advanced')" aria-pressed="true">Advanced</button>
+                    <div class="pc-header-right">
+                        <div class="header-actions">
+                            <button type="button" id="pc-sliders-toggle" onclick="toggleSliders()" aria-controls="pc-sliders" aria-expanded="true" title="Show or hide the volume and seek sliders">Hide sliders</button>
+                        </div>
+                        <div class="mode-segmented mode-segmented-compact" id="mode-segmented" role="group" aria-label="KJ mode">
+                            <button type="button" class="mode-seg" id="mode-seg-simple"
+                                    onclick="setKjMode('simple')" aria-pressed="false">Simple</button>
+                            <button type="button" class="mode-seg mode-seg-active" id="mode-seg-advanced"
+                                    onclick="setKjMode('advanced')" aria-pressed="true">Advanced</button>
+                        </div>
                     </div>
                 </div>
                 <div id="np-info" class="np-info">
@@ -80,7 +85,7 @@
                      column (equal width); Seek is the long bar filling the right
                      column. Wrapped in .pc-sliders so this 2-col arrangement is
                      isolated from the button/fade rows above (see style.css). -->
-                <div class="pc-sliders">
+                <div class="pc-sliders" id="pc-sliders">
                     <div class="pc-volumes">
                         <div class="pc-slider-row">
                             <label for="karaoke-volume">Karaoke Volume: <span id="karaoke-volume-label" class="range-label">{{ ((config.get('karaoke_volume', 200) / 256 * 100) | round | int) }}%</span></label>
