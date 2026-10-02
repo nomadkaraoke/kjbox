@@ -68,6 +68,15 @@ class TestCreate:
         resp = _post(client, "/rotation/gen/create", {**PICK, "singers": ["Alice"]})
         assert resp.status_code == 409 and resp.get_json()["error"] == "search_expired"
 
+    def test_rotation_failure_after_job_still_reports_the_job(self, client, gen_app):
+        gen_app.gen_client.kj_create_job_from_search = MagicMock(return_value={"job_id": "job-x"})
+        with patch.object(gen_app.rotation, "set_gen_status", side_effect=RuntimeError("db")):
+            resp = _post(client, "/rotation/gen/create", {**PICK, "singers": ["Eve"]})
+        data = resp.get_json()
+        assert resp.status_code == 200 and data["warning"] == "rotation_update_failed"
+        assert data["job_id"] == "job-x" and data["entry_id"] is not None
+        assert isinstance(data["entries"], list)
+
     def test_existing_entry_link_mode(self, client, gen_app):
         entry = gen_app.rotation.add_entry("Carol", "creep radiohed")
         gen_app.gen_client.kj_create_job_from_search = MagicMock(return_value={"job_id": "job-2"})

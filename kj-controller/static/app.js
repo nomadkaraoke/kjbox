@@ -9362,7 +9362,8 @@ let genState = null;
 function genLoadRank() {
     if (!genRank) {
         const v = encodeURIComponent((window.KJ_CONFIG || {}).appVersion || '');
-        genRank = import('/sing/static/audio_rank.js?v=' + v);
+        // Forget a failed import so the next call retries it.
+        genRank = import('/sing/static/audio_rank.js?v=' + v).catch((e) => { genRank = null; throw e; });
     }
     return genRank;
 }
@@ -9505,9 +9506,12 @@ function genSearch({ judge = true } = {}) {
 
 async function genRunFullJudge(seq) {
     const s = genState;
-    const rank = await genLoadRank();
-    const tier = rank.getSearchConfidence(s.search.results, genFields().title).tier;
     const timer = setTimeout(() => { if (s === genState && seq === s.seq) { s.gate = true; genRender(); } }, GEN_JUDGE_GATE_MS);
+    let tier = GEN_WEAK_TIER;
+    try {
+        const rank = await genLoadRank();
+        tier = rank.getSearchConfidence(s.search.results, genFields().title).tier;
+    } catch (e) { /* ranking script failed to load; genRender reports it */ }
     const fast = await (s.fastJudge || Promise.resolve(null));
     const isCatalogConfident = fast && fast.confident && fast.engine === 'catalog';
     if (!fast || fast.needs_ai || (isCatalogConfident && tier >= GEN_WEAK_TIER)) {
@@ -9586,7 +9590,13 @@ async function genCreate(source) {
     try {
         const data = await genPost('/rotation/gen/create', body);
         if (data.entries) { rotationData = data.entries; renderRotation(rotationData); }
-        log('Gen job ' + data.job_id + ' started: ' + title + ' - ' + artist, 'success');
+        if (data.warning) {
+            log('Gen job ' + data.job_id + ' started (' + title + ' - ' + artist
+                + ') but the rotation update failed — link it to the entry by hand', 'error');
+            alert('The Gen job started, but adding it to the rotation failed. Check the log, and link the song by hand when it is ready.');
+        } else {
+            log('Gen job ' + data.job_id + ' started: ' + title + ' - ' + artist, 'success');
+        }
         closeGenModal();
         if (s.linkId) {
             exitLinkMode();

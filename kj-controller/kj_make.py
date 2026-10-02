@@ -203,6 +203,7 @@ def kj_gen_create():
         return jsonify({"error": "gen_unavailable"}), 502
 
     song_text = _format_song_text(artist, title)
+    entry_id = existing["id"] if existing is not None else None
     # The job is real from here on: never report failure (a retry would start
     # a duplicate job) — log and carry on, like the singer make-it approval.
     try:
@@ -220,7 +221,10 @@ def kj_gen_create():
         rotation.set_gen_status(entry_id, job_id, GenStatus.PROCESSING)
     except Exception:
         current_app.logger.exception("kj gen: job %s created but the rotation update failed", job_id)
-        return jsonify({"success": True, "job_id": job_id, "warning": "rotation_update_failed"})
+        entries = rotation.get_rotation()
+        _decorate_rotation_entries(entries, rotation)
+        return jsonify({"success": True, "job_id": job_id, "entry_id": entry_id,
+                        "entries": entries, "warning": "rotation_update_failed"})
 
     entries = rotation.get_rotation()
     _decorate_rotation_entries(entries, rotation)
