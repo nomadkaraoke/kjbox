@@ -1071,15 +1071,23 @@ class RotationStore:
         whole rotation. Case-insensitive match on ``old_name``; multi-singer
         (singers_json) entries have only the matching name replaced, preserving
         duet partners.
+
+        Songs already sung (Done) are history and are never rewritten — a shared
+        phone renamed by its next user (Bryan's phone → "Roy O") must not erase
+        who actually sang. Likewise an entry whose other singers already include
+        ``new_name`` is skipped rather than turned into "Roy O & Roy O".
         """
         old_key = (old_name or "").strip().lower()
         new_name = (new_name or "").strip()
         if not old_key or not new_name or not entry_ids:
             return
+        new_key = new_name.lower()
         conn = self._get_conn()
         for entry_id in entry_ids:
             entry = self.get_entry(entry_id)
             if entry is None:
+                continue
+            if (entry.get("status") or "").strip().lower() == "done":
                 continue
             if entry.get("singers_json"):
                 try:
@@ -1087,6 +1095,8 @@ class RotationStore:
                 except (ValueError, TypeError):
                     names = [entry["singer"]]
                 if not any((n or "").strip().lower() == old_key for n in names):
+                    continue
+                if any((n or "").strip().lower() == new_key for n in names):
                     continue
                 new_names = [
                     new_name if (n or "").strip().lower() == old_key else n

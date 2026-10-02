@@ -2,6 +2,18 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-10-02 - Singer self-rename no longer rewrites songs already sung (v0.126.1)
+
+- **Bug (real night, 2026-10-01):** Bryan and Roy shared one phone. Bryan entered himself with Roy
+  as duet partner, they sang it, and later Roy renamed the phone to "Roy O" via `/sing/rename`. The
+  rename rewrote the already-Done duet to **"Roy O & Roy O"**, so Bryan's song vanished from the
+  night and his sang-count dropped.
+- **Fix:** `rename_singer_in_entries` (used only by the singer self-rename) now skips **Done**
+  entries, which are history, and skips any entry whose singers already include the new name
+  (no "X & X" duplicates). Queued songs still follow the rename. KJ-side rename/merge is unchanged.
+- Tonight's data was repaired by hand via `/rotation/edit` (#1337 back to "Bryan L & Roy O",
+  #1348 "Bryan" → "Bryan L").
+
 ## 2026-10-01 - Gen button: make a rotation entry's video with karaoke-gen (v0.126.0)
 
 - **"Gen" button beside Add** opens a modal with the same guided flow singers get from make-it:
