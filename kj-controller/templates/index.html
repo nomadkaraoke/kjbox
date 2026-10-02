@@ -141,6 +141,7 @@
                         <button type="button" id="rotation-search-btn" class="rotation-search-btn" onclick="triggerRotationSearchNow()" title="Search now for a matching song link">Search</button>
                     </div>
                     <button id="rotation-add-btn-submit" onclick="addRotationEntry()" title="Add this singer and song to the rotation queue">Add</button>
+                    <button id="rotation-gen-btn" class="rotation-gen-btn" onclick="openGenModal()" title="Make a new karaoke video for this song with Nomad Gen (pick the audio, then it's added as Being Made)">Gen</button>
                 </div>
                 <div id="rotation-search-dropdown" class="rotation-search-dropdown hidden"></div>
                 <div id="rotation-list" class="rotation-list">
@@ -1003,6 +1004,23 @@
         </div>
     </div>
 
+    <!-- Gen modal: make a rotation entry's video with karaoke-gen (kj_make.py) -->
+    <div id="gen-modal" class="modal-backdrop hidden" onclick="if(event.target===this) closeGenModal()">
+        <div class="modal-content gen-modal-content" data-testid="gen-modal">
+            <div class="modal-header">
+                <h3>Generate with Nomad Gen</h3>
+                <button class="modal-close" onclick="closeGenModal()">&times;</button>
+            </div>
+            <div id="gen-target" class="gen-target"></div>
+            <div class="gen-fields">
+                <label>Artist<input type="text" id="gen-artist" autocomplete="off" placeholder="Artist"></label>
+                <label>Title<input type="text" id="gen-title" autocomplete="off" placeholder="Song title"></label>
+                <button id="gen-search-btn" class="gen-search-btn" onclick="genSearch()">Find audio</button>
+            </div>
+            <div id="gen-body" class="gen-body"></div>
+        </div>
+    </div>
+
     <!-- Server-injected config (Jinja2 template variable) -->
     <script src="{{ url_for('static', filename='text_normalize.js') }}"></script>
     <script>
@@ -1013,7 +1031,8 @@
         romanMap: {{ roman_map | tojson }},
         normalizerVersion: {{ normalizer_version | tojson }},
         websockifyPort: {{ config.get('websockify_port', 6080) | tojson }},
-        websockifyHost: {{ config.get('websockify_host', '') | tojson }}
+        websockifyHost: {{ config.get('websockify_host', '') | tojson }},
+        appVersion: {{ app_version | tojson }}
       });
     </script>
     <script src="/static/app.js?v={{ app_version }}"></script>

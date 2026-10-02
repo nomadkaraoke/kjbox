@@ -2,6 +2,27 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-10-01 - Gen button: make a rotation entry's video with karaoke-gen (v0.126.0)
+
+- **"Gen" button beside Add** opens a modal with the same guided flow singers get from make-it:
+  gen's match-judge tidies the artist/title ("Corrected to … / Undo", "Did you mean …"), gen's
+  lossless-first audio search lists sources (best pick first, the rest grouped like gen's Choose
+  Audio step, with filename / availability / wrong-track hints), plus a YouTube-link fallback.
+  Picking one starts the gen job and adds the entry as **Being Made (!)**. The GenPoller links the
+  finished NOMAD master, and ⚡ QUICK READY works as it does for singer make-its.
+- **Existing entries:** click a row's 🔗 link button, then **Gen** (or the dropdown's MAKE row).
+  The job is tied to that entry and its song text is set to the picked title/artist. If the entry
+  already has a gen job in progress, the KJ confirms before a new one replaces it (for stuck jobs).
+- The search dropdown's **MAKE** row now opens this modal instead of starting a blind
+  auto-download job, and it also appears when the search finds nothing.
+- **Gen account:** calls use gen's admin token (`GenClient.kj_*`), so jobs belong to gen's admin
+  account and need no credits or email code. `X-Client-Id: kjbox` keeps them kjbox jobs (quick
+  version). The gen job is created *before* the rotation entry, so a gen failure leaves the
+  rotation untouched and the modal stays open to retry.
+- New routes `/rotation/gen/{resolve,check,search,validate-url,create}` (`kj-controller/kj_make.py`).
+  gen's result ranking moved from `static-sing/make.js` to the shared `static-sing/audio_rank.js`,
+  used by both the singer wizard and the KJ modal.
+
 ## 2026-10-01 - KJ UI usable on a phone: stacked rotation rows + hideable sliders (v0.125.0)
 
 - **Rotation rows stack on phones (≤768px).** Before, the ~8 action buttons were wider than a

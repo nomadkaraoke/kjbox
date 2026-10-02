@@ -8749,6 +8749,27 @@ function updateSearchBtn() {
         : 'Search';
 }
 
+// The dropdown's MAKE row: opens the Gen modal for what was typed. Pushed onto
+// rotSearchResults like any row so selectRotSearchResult can route it.
+function rotMakeRowHtml() {
+    const songInput = document.getElementById('rotation-song');
+    const rawQuery = songInput ? songInput.value.trim() : '';
+    const makeIdx = rotSearchResults.length;
+    rotSearchResults.push({
+        type: 'make', badge: 'MAKE', badgeClass: 'search-badge-make',
+        title: 'Generate with Nomad Gen: ' + rawQuery,
+        meta: 'Pick the audio, then it\u2019s added as Being Made',
+        rawQuery: rawQuery,
+    });
+    return '<div class="rotation-search-result' + (makeIdx === rotSearchSelectedIdx ? ' selected' : '') + '" data-idx="' + makeIdx + '" onclick="selectRotSearchResult(rotSearchResults[' + makeIdx + '])">' +
+        '<span class="search-badge search-badge-make">MAKE</span>' +
+        '<div class="search-info">' +
+            '<div class="search-title">' + escHtml('Generate with Nomad Gen: ' + rawQuery) + '</div>' +
+            '<div class="search-meta">Pick the audio, then it\u2019s added as Being Made</div>' +
+        '</div>' +
+    '</div>';
+}
+
 function renderRotSearchDropdown(data) {
     const dropdown = document.getElementById('rotation-search-dropdown');
     if (!dropdown) return;
@@ -8784,6 +8805,7 @@ function renderRotSearchDropdown(data) {
 
     if (localResults.length === 0 && knSongs.length === 0 && divebarVersions.length === 0) {
         html = '<div class="search-header">No results found</div>';
+        html += rotMakeRowHtml();
         html += '<div class="rotation-search-hint">Click <b>Link</b> / <b>Download</b> to attach \u00B7 Esc to close</div>';
         dropdown.innerHTML = html;
         dropdown.classList.remove('hidden');
@@ -8884,22 +8906,7 @@ function renderRotSearchDropdown(data) {
     flushCollapsed();
 
     // MAKE option always at the bottom
-    const songInput = document.getElementById('rotation-song');
-    const rawQuery = songInput ? songInput.value.trim() : '';
-    const makeIdx = rotSearchResults.length;
-    rotSearchResults.push({
-        type: 'make', badge: 'MAKE', badgeClass: 'search-badge-make',
-        title: 'Create karaoke video for: ' + rawQuery,
-        meta: 'Generate via Nomad Gen \u00B7 Takes ~5 min',
-        rawQuery: rawQuery,
-    });
-    html += '<div class="rotation-search-result' + (makeIdx === rotSearchSelectedIdx ? ' selected' : '') + '" data-idx="' + makeIdx + '" onclick="selectRotSearchResult(rotSearchResults[' + makeIdx + '])">' +
-        '<span class="search-badge search-badge-make">MAKE</span>' +
-        '<div class="search-info">' +
-            '<div class="search-title">' + escHtml('Create karaoke video for: ' + rawQuery) + '</div>' +
-            '<div class="search-meta">Generate via Nomad Gen \u00B7 Takes ~5 min</div>' +
-        '</div>' +
-    '</div>';
+    html += rotMakeRowHtml();
 
     html += '<div class="rotation-search-hint">Click <b>Link</b> / <b>Download</b> to attach \u00B7 Esc to close</div>';
 
@@ -9244,6 +9251,12 @@ async function selectRotSearchResult(result) {
     const form = document.getElementById('rotation-add-form');
     const linkTargetId = form ? form.dataset.linkTargetId : null;
 
+    // MAKE row → the guided Gen modal (pick the audio first).
+    if (result.type === 'make') {
+        openGenModal(result.rawQuery);
+        return;
+    }
+
     // In link mode, we don't need a singer name (already exists)
     if (!linkTargetId) {
         const singers = singerPillInput.getSingers();
@@ -9268,16 +9281,6 @@ async function selectRotSearchResult(result) {
         if (result.type === 'youtube') {
             return { endpoint: '/rotation/download-and-link', body: {
                 ...base, source: 'youtube', youtube_url: result.youtube_url, filename: result.filename,
-            }};
-        }
-        if (result.type === 'make') {
-            // Parse artist/title from query (try "Title - Artist" or "Artist - Title")
-            const query = result.rawQuery || songInput.value.trim();
-            const parts = query.split(/\s*-\s*/);
-            const makeArtist = parts.length >= 2 ? parts[parts.length - 1] : '';
-            const makeTitle = parts.length >= 2 ? parts.slice(0, -1).join(' - ') : query;
-            return { endpoint: '/rotation/make', body: {
-                ...base, song_artist: query, artist: makeArtist, title: makeTitle,
             }};
         }
         return null;
@@ -9329,6 +9332,447 @@ async function selectRotSearchResult(result) {
         if (singerInput) singerInput.focus();
     }
     showRotationIndicator('success');
+}
+
+// --- Gen modal: make a rotation entry's video with karaoke-gen ---
+//
+// The KJ twin of the singer make-it wizard (static-sing/make.js): gen's
+// match-judge tidies the artist/title, gen's audio search finds sources, the KJ
+// picks one (or pastes a YouTube link), and /rotation/gen/create starts the job
+// and adds the entry as "Being Made (!)" (kj_make.py). Result ranking is the
+// shared gen port in /sing/static/audio_rank.js.
+
+const GEN_JUDGE_GATE_MS = 12000;
+const GEN_WEAK_TIER = 3;
+const GEN_CATEGORY_LABEL = {
+    'BEST CHOICE': 'Best choice', 'HI-RES 24-BIT': 'Hi-res 24-bit', 'STUDIO ALBUMS': 'Studio albums',
+    'SINGLES': 'Singles', 'LIVE VERSIONS': 'Live versions', 'COMPILATIONS': 'Compilations',
+    'VINYL RIPS': 'Vinyl rips', 'SPOTIFY': 'Spotify', 'YOUTUBE': 'YouTube', 'OTHER': 'Other',
+};
+const GEN_ERRORS = {
+    gen_auth: "Gen rejected kjbox's admin token — check gen_api_token in config.json.",
+    gen_unavailable: "Couldn't reach Nomad Gen — try again in a moment.",
+    rate_limited: 'Gen is rate-limiting us — wait a few seconds and retry.',
+    search_expired: 'That search expired — searching again…',
+    already_generating: 'This entry already has a Gen job in progress — not replaced.',
+};
+let genRank = null;     // audio_rank.js module (lazy)
+let genState = null;
+
+function genLoadRank() {
+    if (!genRank) {
+        const v = encodeURIComponent((window.KJ_CONFIG || {}).appVersion || '');
+        // Forget a failed import so the next call retries it.
+        genRank = import('/sing/static/audio_rank.js?v=' + v).catch((e) => { genRank = null; throw e; });
+    }
+    return genRank;
+}
+
+async function genPost(endpoint, body) {
+    const resp = await fetch(endpoint, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    });
+    let data = {};
+    try { data = await resp.json(); } catch (e) { /* non-JSON error page */ }
+    if (!resp.ok) {
+        const err = new Error(data.detail || data.error || ('HTTP ' + resp.status));
+        err.code = data.error || '';
+        throw err;
+    }
+    return data;
+}
+
+function genErrText(e) {
+    return GEN_ERRORS[e && e.code] || (e && e.message) || 'Something went wrong.';
+}
+
+async function openGenModal(rawQuery) {
+    const form = document.getElementById('rotation-add-form');
+    const linkId = form && form.dataset.linkTargetId ? parseInt(form.dataset.linkTargetId) : null;
+    const songInput = document.getElementById('rotation-song');
+    const query = (rawQuery != null ? rawQuery : (songInput ? songInput.value : '')).trim();
+    hideRotSearchDropdown();
+    genState = {
+        linkId, seq: 0, search: { status: 'idle', results: [], sessionId: null },
+        verdict: null, appliedFrom: null, correctionActive: false, gate: false,
+        showOthers: false, expanded: new Set(), busy: false, err: '', fastJudge: null,
+    };
+    const entry = linkId ? rotationData.find(e => e.id === linkId) : null;
+    const singers = linkId ? [] : singerPillInput.getSingers();
+    const target = document.getElementById('gen-target');
+    if (linkId) {
+        // Fall back to the link banner if a poll replaced rotationData meanwhile.
+        const banner = document.getElementById('rotation-link-singer-name');
+        target.innerHTML = 'For <strong>' + escHtml(entry ? entry.singer : (banner && banner.textContent) || '#' + linkId) + '</strong>'
+            + (entry && entry.song_artist ? ' — replaces “' + escHtml(entry.song_artist) + '”' : '');
+    } else {
+        target.innerHTML = '<label>Singer<input type="text" id="gen-singer" autocomplete="off" placeholder="Singer name" value="'
+            + escHtml(singers.join(', ')) + '"></label>';
+    }
+    const artistEl = document.getElementById('gen-artist');
+    const titleEl = document.getElementById('gen-title');
+    artistEl.value = '';
+    titleEl.value = query;
+    artistEl.onkeydown = titleEl.onkeydown = (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); genSearch(); }
+        if (e.key === 'Escape') closeGenModal();
+    };
+    document.getElementById('gen-modal').classList.remove('hidden');
+    genLoadRank().catch(() => {});
+    genRender();
+    if (!query) { artistEl.focus(); return; }
+    // Pre-fill artist/title from what was typed (gen's resolver, else a split).
+    genState.prefilling = true;
+    genRender();
+    const state = genState;
+    try {
+        const resp = await fetch('/rotation/gen/resolve?q=' + encodeURIComponent(query));
+        const pre = await resp.json();
+        if (state !== genState) return;
+        if (artistEl.value === '' && titleEl.value === query) {
+            artistEl.value = pre.artist || '';
+            titleEl.value = pre.title || query;
+        }
+    } catch (e) { /* keep the raw text */ }
+    if (state !== genState) return;
+    state.prefilling = false;
+    if (artistEl.value.trim() && titleEl.value.trim()) genSearch();
+    else { genRender(); (artistEl.value.trim() ? titleEl : artistEl).focus(); }
+}
+
+function closeGenModal() {
+    document.getElementById('gen-modal').classList.add('hidden');
+    genState = null;
+}
+
+function genFields() {
+    return {
+        artist: document.getElementById('gen-artist').value.trim(),
+        title: document.getElementById('gen-title').value.trim(),
+    };
+}
+
+function genSetFields(artist, title) {
+    document.getElementById('gen-artist').value = artist;
+    document.getElementById('gen-title').value = title;
+}
+
+// Search + match-judge, like make.js beginSearch(). `seq` drops stale replies.
+function genSearch({ judge = true } = {}) {
+    const s = genState;
+    if (!s) return;
+    const { artist, title } = genFields();
+    if (!artist || !title) {
+        s.err = 'Enter both the artist and the song title.';
+        genRender();
+        return;
+    }
+    s.err = '';
+    s.showOthers = false;
+    s.expanded = new Set();
+    s.search = { status: 'searching', results: [], sessionId: null };
+    const seq = ++s.seq;
+    if (judge) {
+        s.gate = false;
+        s.verdict = null;
+        s.appliedFrom = null;
+        s.correctionActive = false;
+        s.fastJudge = genPost('/rotation/gen/check', { artist, title, stage: 'fast' })
+            .then((v) => {
+                if (seq === s.seq && v.kind === 'cosmetic' && v.confident && !v.needs_ai) {
+                    s.verdict = v;
+                    genApplyCorrection(v.canonical_artist, v.canonical_title, false);
+                }
+                return v;
+            })
+            .catch(() => null);
+    }
+    genPost('/rotation/gen/search', { artist, title })
+        .then((data) => {
+            if (s !== genState || seq !== s.seq) return;
+            s.search = { status: 'done', results: data.results || [], sessionId: data.search_session_id };
+            if (judge) genRunFullJudge(seq); else s.gate = true;
+            genRender();
+        })
+        .catch((e) => {
+            if (s !== genState || seq !== s.seq) return;
+            s.search = { status: 'error', results: [], sessionId: null };
+            s.err = genErrText(e);
+            s.gate = true;
+            genRender();
+        });
+    genRender();
+}
+
+async function genRunFullJudge(seq) {
+    const s = genState;
+    const timer = setTimeout(() => { if (s === genState && seq === s.seq) { s.gate = true; genRender(); } }, GEN_JUDGE_GATE_MS);
+    let tier = GEN_WEAK_TIER;
+    try {
+        const rank = await genLoadRank();
+        tier = rank.getSearchConfidence(s.search.results, genFields().title).tier;
+    } catch (e) { /* ranking script failed to load; genRender reports it */ }
+    const fast = await (s.fastJudge || Promise.resolve(null));
+    const isCatalogConfident = fast && fast.confident && fast.engine === 'catalog';
+    if (!fast || fast.needs_ai || (isCatalogConfident && tier >= GEN_WEAK_TIER)) {
+        try {
+            const { artist, title } = genFields();
+            const v = await genPost('/rotation/gen/check', { artist, title, stage: 'full', tier });
+            if (s === genState && seq === s.seq) {
+                s.verdict = v;
+                if (v.kind === 'cosmetic' && v.confident) genApplyCorrection(v.canonical_artist, v.canonical_title, false);
+                else if (v.kind === 'content' && v.confident) genApplyCorrection(v.canonical_artist, v.canonical_title, tier >= GEN_WEAK_TIER);
+            }
+        } catch (e) { /* matching is a nice-to-have */ }
+    }
+    clearTimeout(timer);
+    if (s === genState && seq === s.seq) { s.gate = true; genRender(); }
+}
+
+function genApplyCorrection(artist, title, reSearch) {
+    const s = genState;
+    const cur = genFields();
+    if (!s || !artist || !title || (artist === cur.artist && title === cur.title)) return;
+    s.appliedFrom = cur;
+    s.correctionActive = true;
+    genSetFields(artist, title);
+    if (reSearch) genSearch({ judge: false });
+    genRender();
+}
+
+function genToggleCorrection() {
+    const s = genState;
+    if (!s || !s.appliedFrom || !s.verdict) return;
+    if (s.correctionActive) genSetFields(s.appliedFrom.artist, s.appliedFrom.title);
+    else genSetFields(s.verdict.canonical_artist, s.verdict.canonical_title);
+    s.correctionActive = !s.correctionActive;
+    genRender();
+}
+
+function genAcceptSuggestion(i) {
+    const s = genState;
+    const alt = s && s.suggestions && s.suggestions[i];
+    if (!alt) return;
+    s.verdict = { kind: 'content', confident: true, canonical_artist: alt.artist,
+                  canonical_title: alt.title, alternatives: [], engine: 'ai' };
+    genApplyCorrection(alt.artist, alt.title, true);
+}
+
+function genToggleOthers() { if (genState) { genState.showOthers = !genState.showOthers; genRender(); } }
+function genToggleCat(cat) {
+    const s = genState;
+    if (!s) return;
+    if (s.expanded.has(cat)) s.expanded.delete(cat); else s.expanded.add(cat);
+    genRender();
+}
+
+async function genCreate(source) {
+    const s = genState;
+    if (!s || s.busy) return;
+    const { artist, title } = genFields();
+    const body = { artist, title, ...source };
+    if (s.linkId) {
+        body.id = s.linkId;
+    } else {
+        const singerEl = document.getElementById('gen-singer');
+        const singers = (singerEl ? singerEl.value : '').split(',').map(x => x.trim()).filter(Boolean);
+        if (!singers.length) {
+            s.err = 'Enter the singer’s name first.';
+            genRender();
+            if (singerEl) singerEl.focus();
+            return;
+        }
+        body.singers = singers;
+    }
+    s.busy = true;
+    s.err = '';
+    genRender();
+    try {
+        const data = await genPost('/rotation/gen/create', body);
+        if (data.entries) { rotationData = data.entries; renderRotation(rotationData); }
+        if (data.warning) {
+            log('Gen job ' + data.job_id + ' started (' + title + ' - ' + artist
+                + ') but the rotation update failed — link it to the entry by hand', 'error');
+            alert('The Gen job started, but adding it to the rotation failed. Check the log, and link the song by hand when it is ready.');
+        } else {
+            log('Gen job ' + data.job_id + ' started: ' + title + ' - ' + artist, 'success');
+        }
+        closeGenModal();
+        if (s.linkId) {
+            exitLinkMode();
+        } else {
+            singerPillInput.clear();
+            document.getElementById('rotation-singer').value = '';
+            document.getElementById('rotation-song').value = '';
+        }
+        showRotationIndicator('success');
+    } catch (e) {
+        if (s !== genState) return;
+        s.busy = false;
+        if (e.code === 'already_generating' && !source.replace
+            && confirm('This entry already has a Gen job in progress. Start a new one anyway?')) {
+            genCreate({ ...source, replace: true });
+            return;
+        }
+        s.err = genErrText(e);
+        if (e.code === 'search_expired') { genSearch({ judge: false }); return; }
+        genRender();
+    }
+}
+
+function genPick(index) {
+    const s = genState;
+    if (!s || !s.gate || !s.search.sessionId) return;
+    genCreate({ search_session_id: s.search.sessionId, selection_index: index });
+}
+
+async function genUseUrl() {
+    const s = genState;
+    const input = document.getElementById('gen-yt-url');
+    const url = input ? input.value.trim() : '';
+    if (!s || !url) return;
+    s.ytUrl = url;
+    s.busy = true; s.err = ''; genRender();
+    try {
+        const v = await genPost('/rotation/gen/validate-url', { url });
+        s.busy = false;
+        if (!v.supported) { s.err = v.detail || "Gen can't use that link."; genRender(); return; }
+    } catch (e) {
+        s.busy = false; s.err = genErrText(e); genRender(); return;
+    }
+    genCreate({ youtube_url: url });
+}
+
+// ---- Rendering ----
+
+function genResultHtml(rank, r, hero) {
+    const s = genState;
+    const title = genFields().title;
+    const prov = (r.provider || '').toLowerCase();
+    const who = (prov === 'youtube' && r.channel) ? r.channel : (r.artist || '');
+    const name = [who, r.title].filter(Boolean).join(' - ');
+    const tags = [];
+    if (r.is_lossless) tags.push('<span class="gen-tag gen-tag-lossless">Lossless</span>');
+    if (prov === 'spotify') tags.push('<span class="gen-tag gen-tag-sp">Spotify</span>');
+    else if (prov === 'youtube') tags.push('<span class="gen-tag gen-tag-yt">YouTube</span>');
+    const q = rank.formatQuality(r);
+    if (q) tags.push('<span class="gen-quality">' + escHtml(q) + '</span>');
+    if (r.seeders != null) {
+        const lvl = r.seeders >= 50 ? 'high' : r.seeders >= 10 ? 'medium' : 'low';
+        tags.push('<span class="gen-tag gen-avail-' + lvl + '" title="' + r.seeders + ' seeders">'
+            + { high: 'High', medium: 'Medium', low: 'Low' }[lvl] + ' avail.</span>');
+    } else if (r.view_count != null) {
+        tags.push('<span class="gen-tag">' + escHtml(rank.formatCount(r.view_count)) + ' views</span>');
+    }
+    const mm = rank.checkFilenameMismatch(title, r);
+    if (mm.filename && mm.isMismatch) {
+        tags.push('<span class="gen-tag gen-tag-warn" title="File looks like: ' + escHtml(mm.filename) + '">Wrong track?</span>');
+    }
+    const meta = rank.formatMetadata(r);
+    const disabled = (s.gate && !s.busy) ? '' : ' disabled';
+    return '<div class="gen-result' + (hero ? ' gen-result-hero' : '') + '" data-testid="gen-result">'
+        + '<div class="gen-result-main">'
+        + '<div class="gen-result-name">' + escHtml(name || '(untitled)') + '</div>'
+        + (r.target_file ? '<div class="gen-result-file" title="File inside the release">' + escHtml(r.target_file) + '</div>' : '')
+        + '<div class="gen-result-tags">' + tags.join('') + (meta ? '<span class="gen-meta">' + escHtml(meta) + '</span>' : '') + '</div>'
+        + '</div>'
+        + '<button class="gen-use-btn' + (hero ? ' primary' : '') + '"' + disabled
+        + ' onclick="genPick(' + Number(r.index) + ')">' + (hero ? 'Use this' : 'Use') + '</button>'
+        + '</div>';
+}
+
+function genCorrectionHtml() {
+    const s = genState;
+    const v = s.verdict;
+    s.suggestions = [];
+    if (!v) return '';
+    const cur = genFields();
+    if (s.appliedFrom && (v.kind === 'cosmetic' || v.kind === 'content') && v.confident) {
+        const other = s.correctionActive ? s.appliedFrom : { artist: v.canonical_artist, title: v.canonical_title };
+        return '<div class="gen-correction" data-testid="gen-correction">'
+            + (s.correctionActive ? 'Corrected to ' : 'Kept as typed: ') + '<strong>' + escHtml(cur.title + ' — ' + cur.artist) + '</strong> '
+            + '<button class="gen-link-btn" onclick="genToggleCorrection()">'
+            + (s.correctionActive ? 'Undo' : 'Use ' + escHtml(other.title + ' — ' + other.artist)) + '</button></div>';
+    }
+    const alts = [];
+    if (v.kind === 'ambiguous' || (v.kind === 'content' && !v.confident)) {
+        if (v.canonical_artist && v.canonical_title) alts.push({ artist: v.canonical_artist, title: v.canonical_title });
+        for (const a of v.alternatives || []) alts.push(a);
+    }
+    s.suggestions = alts.filter((a, i) => a.artist && a.title
+        && alts.findIndex(b => b.artist === a.artist && b.title === a.title) === i
+        && !(a.artist === cur.artist && a.title === cur.title)).slice(0, 4);
+    if (!s.suggestions.length) return '';
+    return '<div class="gen-didyoumean" data-testid="gen-didyoumean">Did you mean: '
+        + s.suggestions.map((a, i) => '<button class="gen-link-btn" onclick="genAcceptSuggestion(' + i + ')">'
+            + escHtml(a.title + ' — ' + a.artist) + '</button>').join(' · ') + '</div>';
+}
+
+function genFallbackHtml() {
+    const s = genState;
+    return '<div class="gen-fallback" data-testid="gen-fallback">'
+        + '<div class="gen-section-title">Or use a YouTube link</div>'
+        + '<div class="gen-fallback-row"><input type="url" id="gen-yt-url" placeholder="https://www.youtube.com/watch?v=…" value="'
+        + escHtml(s.ytUrl || '') + '"><button' + ((s.busy || !s.gate) ? ' disabled' : '')
+        + ' onclick="genUseUrl()">Use link</button></div></div>';
+}
+
+async function genRender() {
+    const s = genState;
+    const body = document.getElementById('gen-body');
+    const btn = document.getElementById('gen-search-btn');
+    if (!s || !body) return;
+    btn.disabled = s.search.status === 'searching' || s.busy || !!s.prefilling;
+    btn.textContent = s.search.status === 'idle' ? 'Find audio' : 'Search again';
+    let html = '';
+    if (s.err) html += '<div class="gen-error" data-testid="gen-error">' + escHtml(s.err) + '</div>';
+    if (s.busy) html += '<div class="gen-hint"><span class="btn-spinner"></span> Starting the Gen job…</div>';
+    if (s.prefilling) {
+        html += '<div class="gen-hint"><span class="btn-spinner"></span> Working out the artist and title…</div>';
+    } else if (s.search.status === 'searching') {
+        html += genCorrectionHtml()
+            + '<div class="gen-hint" data-testid="gen-searching"><span class="btn-spinner"></span> Searching for audio (lossless first; up to ~30s)…</div>';
+    } else if (s.search.status === 'done') {
+        let rank;
+        try { rank = await genLoadRank(); } catch (e) { body.innerHTML = '<div class="gen-error">Could not load the audio ranking script.</div>'; return; }
+        if (s !== genState) return;
+        const results = s.search.results;
+        html += genCorrectionHtml();
+        if (!s.gate && results.length) html += '<div class="gen-hint">Checking the song name…</div>';
+        if (!results.length) {
+            html += '<div class="gen-none">No audio found. Fix the artist/title and search again, or paste a YouTube link.</div>';
+        } else {
+            const conf = rank.getSearchConfidence(results, genFields().title);
+            if (conf.tier !== 3) {
+                html += '<div class="gen-section-title">' + (conf.tier === 1 ? 'Perfect match found' : 'Recommended audio') + '</div>'
+                    + '<div data-testid="gen-pick">' + genResultHtml(rank, conf.best, true) + '</div>';
+            } else {
+                html += '<div class="gen-hint">No clear best match — check the filenames below, or use a YouTube link.</div>';
+            }
+            const showAll = conf.tier === 3;
+            const others = results.filter(r => showAll || r !== conf.best);
+            if (others.length && !showAll) {
+                html += '<button class="gen-link-btn gen-others-toggle" data-testid="gen-others-toggle" onclick="genToggleOthers()">'
+                    + (s.showOthers ? 'Hide other options' : 'See ' + others.length + ' other option' + (others.length === 1 ? '' : 's')) + '</button>';
+            }
+            if (others.length && (showAll || s.showOthers)) {
+                for (const g of rank.groupResults(others)) {
+                    const max = rank.CATEGORY_MAX[g.category] || 3;
+                    const open = s.expanded.has(g.category);
+                    const rows = open ? g.results : g.results.slice(0, max);
+                    html += '<div class="gen-cat"><div class="gen-section-title">' + escHtml(GEN_CATEGORY_LABEL[g.category] || g.category)
+                        + ' <span class="gen-cat-count">(' + g.results.length + ')</span>'
+                        + (g.results.length > max ? ' <button class="gen-link-btn" onclick="genToggleCat(\'' + g.category + '\')">'
+                            + (open ? 'Show less' : '+' + (g.results.length - max) + ' more') + '</button>' : '')
+                        + '</div>' + rows.map(r => genResultHtml(rank, r, false)).join('') + '</div>';
+                }
+            }
+        }
+        html += genFallbackHtml();
+    } else if (s.search.status === 'error') {
+        html += genFallbackHtml();
+    }
+    body.innerHTML = html;
 }
 
 function hideRotSearchDropdown() {

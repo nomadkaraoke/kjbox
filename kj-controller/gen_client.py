@@ -259,10 +259,14 @@ class GenClient:
 
     def _singer_call(self, method, path, *, session_token=None, locale=None,
                      json=None, timeout=REQUEST_TIMEOUT):
+        return self._request(method, path, self._singer_headers(path, session_token, locale),
+                             json=json, timeout=timeout)
+
+    def _request(self, method, path, headers, *, json=None, timeout=REQUEST_TIMEOUT):
+        """JSON call to gen; raises GenApiError (status 0 = no response)."""
         try:
             resp = requests.request(
-                method, f"{self.api_url}{path}", json=json, timeout=timeout,
-                headers=self._singer_headers(path, session_token, locale),
+                method, f"{self.api_url}{path}", json=json, timeout=timeout, headers=headers,
             )
         except requests.RequestException as exc:
             raise GenApiError(0, str(exc)) from exc
@@ -338,6 +342,45 @@ class GenClient:
         return self._singer_call("POST", f"/api/kjbox/jobs/{job_id}/review-link",
                                  session_token=session_token, locale=locale,
                                  json={"locale": locale})
+
+    # ------------------------------------------------------------------
+    # KJ "Gen" flow (kj_make.py) — the same guided job submission as the
+    # singer make-it, but run with the admin token: the job belongs to gen's
+    # admin account, needs no credits, and X-Client-Id still marks it a kjbox
+    # job (quick version, kjbox review emails). gen redacts X-Admin-Token
+    # from request_metadata.
+    # ------------------------------------------------------------------
+
+    def _kj_call(self, method, path, *, json=None, timeout=REQUEST_TIMEOUT):
+        return self._request(method, path, {**self._headers(), "X-Client-Id": self.CLIENT_ID},
+                             json=json, timeout=timeout)
+
+    def kj_match_judge(self, artist, title, stage="fast", audio_confidence_tier=None):
+        body = {"artist": artist, "title": title, "stage": stage}
+        if audio_confidence_tier:
+            body["audio_confidence_tier"] = audio_confidence_tier
+        return self._kj_call("POST", "/api/catalog/match-judge", json=body)
+
+    def kj_search_audio(self, artist, title):
+        return self._kj_call("POST", "/api/audio-search/search-standalone",
+                             timeout=self.SEARCH_TIMEOUT, json={"artist": artist, "title": title})
+
+    def kj_validate_url(self, url):
+        return self._kj_call("POST", "/api/jobs/validate-url", json={"url": url})
+
+    def kj_create_job_from_search(self, search_session_id, selection_index, artist, title):
+        """Public, default-branded job — same options as the singer make-it."""
+        return self._kj_call("POST", "/api/jobs/create-from-search", timeout=CREATE_JOB_TIMEOUT,
+                             json={"search_session_id": search_session_id,
+                                   "selection_index": selection_index,
+                                   "artist": artist, "title": title,
+                                   "is_private": False, "requires_audio_edit": False,
+                                   "review_mode": "auto", "backing_preference": "auto"})
+
+    def kj_create_job_from_url(self, url, artist, title):
+        return self._kj_call("POST", "/api/jobs/create-from-url", timeout=CREATE_JOB_TIMEOUT,
+                             json={"url": url, "artist": artist, "title": title,
+                                   "is_private": False, "review_mode": "auto"})
 
     RESOLVE_TIMEOUT = 15
 

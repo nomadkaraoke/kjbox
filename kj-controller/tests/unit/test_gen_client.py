@@ -211,3 +211,47 @@ class TestPartnerSecretScope:
         assert partner1["X-Kjbox-Secret"] == partner2["X-Kjbox-Secret"] == "partner-secret"
         assert "X-Kjbox-Secret" not in job
         assert req.call_args_list[1].kwargs["json"]["only_if_empty"] is True
+
+
+class TestKjFlowCalls:
+    """KJ Gen modal calls (kj_make.py): admin token, never the partner secret."""
+
+    def _client(self):
+        from gen_client import GenClient
+        return GenClient("https://api.example.com", "admin-tok", "partner-secret")
+
+    def test_admin_headers_and_client_id(self):
+        c = self._client()
+        with patch("gen_client.requests.request", return_value=_Resp(200, {"results": []})) as req:
+            c.kj_search_audio("Radiohead", "Creep")
+            c.kj_match_judge("Radiohead", "Creep", stage="full", audio_confidence_tier=3)
+            c.kj_validate_url("https://youtu.be/x")
+        urls = [call.args[1] for call in req.call_args_list]
+        assert urls == ["https://api.example.com/api/audio-search/search-standalone",
+                        "https://api.example.com/api/catalog/match-judge",
+                        "https://api.example.com/api/jobs/validate-url"]
+        for call in req.call_args_list:
+            headers = call.kwargs["headers"]
+            assert headers["X-Admin-Token"] == "admin-tok"
+            # X-Client-Id makes gen treat it as a kjbox job (quick version).
+            assert headers["X-Client-Id"] == "kjbox"
+            assert "X-Kjbox-Secret" not in headers and "Authorization" not in headers
+        assert req.call_args_list[1].kwargs["json"]["audio_confidence_tier"] == 3
+
+    def test_create_jobs_are_public_auto_review(self):
+        c = self._client()
+        with patch("gen_client.requests.request", return_value=_Resp(200, {"job_id": "j"})) as req:
+            assert c.kj_create_job_from_search("ss", 4, "A", "T")["job_id"] == "j"
+            c.kj_create_job_from_url("https://youtu.be/x", "A", "T")
+        search_body = req.call_args_list[0].kwargs["json"]
+        assert search_body["selection_index"] == 4 and search_body["search_session_id"] == "ss"
+        assert search_body["is_private"] is False and search_body["review_mode"] == "auto"
+        url_body = req.call_args_list[1].kwargs["json"]
+        assert url_body["url"] == "https://youtu.be/x" and url_body["is_private"] is False
+
+    def test_errors_become_gen_api_error(self):
+        from gen_client import GenApiError
+        with patch("gen_client.requests.request", return_value=_Resp(404, {"detail": "gone"})):
+            with pytest.raises(GenApiError) as ei:
+                self._client().kj_create_job_from_search("ss", 0, "A", "T")
+        assert (ei.value.status, ei.value.detail) == (404, "gone")
