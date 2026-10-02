@@ -67,16 +67,16 @@ def test_get_after_reset_closes_stale_thread_connection(tmp_path):
     def worker():
         holder["old"] = conns.get()
         ready.set()
-        go.wait()
+        go.wait(5)
         holder["new"] = conns.get()
         done.set()
 
     t = threading.Thread(target=worker)
     t.start()
-    ready.wait()
+    assert ready.wait(5)
     conns.reset()
     go.set()
-    done.wait()
+    assert done.wait(5)
     t.join()
     assert holder["new"] is not holder["old"]
     try:
