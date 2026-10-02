@@ -2,6 +2,23 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-10-02 - Make-it "YouTube is blocking us" message + catalog search thread-safety (v0.126.2)
+
+- **Bug (real night, 2026-10-01):** a singer's make-it from a YouTube link failed 5 times. gen
+  rejected it (YouTube bot-check on gen's downloader), kjbox replied `gen_rejected`, and the phone
+  had no message for that code, so it showed **"Couldn't send — ask the host if requests are
+  paused"**. Requests weren't paused.
+- **Fix:** gen 400/403/422 rejections whose detail mentions YouTube + bot now return
+  `youtube_blocked` ("YouTube is blocking us right now…"). Other rejections return `gen_rejected`
+  ("We couldn't make that one…"). Both are mapped in `sing.js` and `make.js`, translated to all
+  33 locales.
+- **Bug:** `/sing/search` (and `/catalog/stats`) occasionally 500'd with `TypeError: 'NoneType'
+  object is not subscriptable` in `ExternalCatalog.is_available()`. `ExternalCatalog` and
+  `CatalogMirror` shared one `check_same_thread=False` SQLite connection across Flask's request
+  threads, and concurrent use made `fetchone()` return `None`.
+- **Fix:** new `sqlite_conn.ThreadLocalConnection` gives each thread its own connection.
+  `close()` / `reload()` close all of them and threads reopen lazily.
+
 ## 2026-10-02 - Singer self-rename no longer rewrites songs already sung (v0.126.1)
 
 - **Bug (real night, 2026-10-01):** Bryan and Roy shared one phone. Bryan entered himself with Roy
