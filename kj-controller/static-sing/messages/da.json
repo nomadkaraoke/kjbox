@@ -295,6 +295,8 @@
     "errSignedOut": "Bekræft din e-mail igen.",
     "errSearchExpired": "Lydsøgningen er udløbet — gå tilbage og vælg lyden igen.",
     "errUnavailable": "Noget gik galt på vores side — prøv igen om et øjeblik.",
+    "errRejected": "Vi kunne ikke lave den sang — vælg en fra kataloget, eller spørg værten.",
+    "errYoutubeBlocked": "YouTube blokerer os lige nu, så vi kan ikke lave den sang — vælg en fra kataloget, eller spørg værten.",
     "losslessTag": "TABSFRIT",
     "availHighTip": "Mange seeders, downloades pålideligt",
     "availMediumTip": "Bør kunne downloades, men kan være langsommere",

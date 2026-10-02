@@ -295,6 +295,8 @@
     "errSignedOut": "Kérlek, erősítsd meg újra az e-mail címedet.",
     "errSearchExpired": "A hangkeresés lejárt — menj vissza, és válaszd ki újra a hangot.",
     "errUnavailable": "Valami hiba történt nálunk — próbáld újra egy pillanat múlva.",
+    "errRejected": "Ezt nem tudtuk elkészíteni — válassz egy dalt a katalógusból, vagy kérdezd a műsorvezetőt.",
+    "errYoutubeBlocked": "A YouTube most letiltott minket, így ezt nem tudjuk elkészíteni — válassz egy dalt a katalógusból, vagy kérdezd a műsorvezetőt.",
     "losslessTag": "VESZTESÉGMENTES",
     "availHighTip": "Sok forrás, megbízhatóan letölthető",
     "availMediumTip": "Letölthető, de lassabb lehet",

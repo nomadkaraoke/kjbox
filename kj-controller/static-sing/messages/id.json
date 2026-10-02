@@ -295,6 +295,8 @@
     "errSignedOut": "Silakan konfirmasi emailmu lagi.",
     "errSearchExpired": "Pencarian audio tersebut sudah kedaluwarsa — kembali dan pilih audionya lagi.",
     "errUnavailable": "Ada yang salah dari sistem kami — coba lagi sebentar lagi.",
+    "errRejected": "Lagu tersebut tidak bisa kami buat — silakan pilih lagu dari katalog, atau tanyakan ke host.",
+    "errYoutubeBlocked": "YouTube sedang memblokir kami saat ini, jadi kami tidak bisa membuat lagu tersebut — silakan pilih lagu dari katalog, atau tanyakan ke host.",
     "losslessTag": "LOSSLESS",
     "availHighTip": "Banyak sumber, unduhan lancar",
     "availMediumTip": "Bisa diunduh tapi mungkin lebih lambat",

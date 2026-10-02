@@ -295,6 +295,8 @@
     "errSignedOut": "Confirme à nouveau ton e-mail, s'il te plaît.",
     "errSearchExpired": "Cette recherche audio a expiré — retourne en arrière et choisis à nouveau l'audio.",
     "errUnavailable": "Quelque chose s'est mal passé de notre côté — réessaie dans un instant.",
+    "errRejected": "Impossible de créer ce morceau — choisis une chanson dans le catalogue ou demande à l'animateur.",
+    "errYoutubeBlocked": "YouTube nous bloque pour le moment, nous ne pouvons donc pas créer ce morceau — choisis une chanson dans le catalogue ou demande à l'animateur.",
     "losslessTag": "SANS PERTE",
     "availHighTip": "Très partagé, téléchargement fiable",
     "availMediumTip": "Devrait se télécharger mais peut être plus lent",

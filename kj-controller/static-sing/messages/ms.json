@@ -295,6 +295,8 @@
     "errSignedOut": "Sila sahkan e-mel anda sekali lagi.",
     "errSearchExpired": "Carian audio itu telah luput — kembali dan pilih audio sekali lagi.",
     "errUnavailable": "Ada masalah di pihak kami — cuba lagi sebentar lagi.",
+    "errRejected": "Kami tidak dapat menyediakan lagu tersebut — pilih lagu daripada katalog, atau tanya hos.",
+    "errYoutubeBlocked": "YouTube sedang menyekat kami buat masa ini, jadi kami tidak dapat menyediakan lagu tersebut — pilih lagu daripada katalog, atau tanya hos.",
     "losslessTag": "LOSSLESS",
     "availHighTip": "Sumber yang banyak, muat turun yang lancar",
     "availMediumTip": "Boleh dimuat turun tetapi mungkin lebih perlahan",

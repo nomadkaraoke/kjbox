@@ -295,6 +295,8 @@
     "errSignedOut": "Potwierdź swój e-mail ponownie.",
     "errSearchExpired": "To wyszukiwanie audio wygasło — wróć i wybierz audio ponownie.",
     "errUnavailable": "Coś poszło nie tak po naszej stronie — spróbuj ponownie za chwilę.",
+    "errRejected": "Nie udało się tego przygotować — wybierz piosenkę z katalogu lub zapytaj prowadzącego.",
+    "errYoutubeBlocked": "YouTube nas w tej chwili blokuje, więc nie możemy tego przygotować — wybierz piosenkę z katalogu lub zapytaj prowadzącego.",
     "losslessTag": "BEZSTRATNE",
     "availHighTip": "Dużo źródeł, pobiera się niezawodnie",
     "availMediumTip": "Powinno się pobrać, ale może to potrwać dłużej",

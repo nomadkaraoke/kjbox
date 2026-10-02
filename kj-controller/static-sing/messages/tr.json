@@ -295,6 +295,8 @@
     "errSignedOut": "Lütfen e-posta adresini tekrar onayla.",
     "errSearchExpired": "Bu ses aramasının süresi doldu — geri dön ve sesi tekrar seç.",
     "errUnavailable": "Bizim tarafımızda bir şeyler ters gitti — birazdan tekrar dene.",
+    "errRejected": "Bunu hazırlayamadık; katalogdan bir şarkı seç veya sunucuya danış.",
+    "errYoutubeBlocked": "YouTube şu anda bizi engelliyor, bu yüzden bunu hazırlayamıyoruz; katalogdan bir şarkı seç veya sunucuya danış.",
     "losslessTag": "KAYIPSIZ",
     "availHighTip": "Çok sayıda kaynak var, sorunsuz indirilir",
     "availMediumTip": "İndirilebilir ama biraz yavaş olabilir",

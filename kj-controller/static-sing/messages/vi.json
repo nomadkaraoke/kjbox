@@ -295,6 +295,8 @@
     "errSignedOut": "Vui lòng xác nhận lại email của bạn.",
     "errSearchExpired": "Tìm kiếm âm thanh đó đã hết hạn — hãy quay lại và chọn lại âm thanh.",
     "errUnavailable": "Đã xảy ra lỗi từ phía chúng tôi — hãy thử lại sau chốc lát.",
+    "errRejected": "Không thể tạo bài hát này — bạn hãy chọn một bài từ danh mục hoặc hỏi host nhé.",
+    "errYoutubeBlocked": "YouTube hiện đang chặn yêu cầu nên không thể tạo bài này — bạn hãy chọn một bài từ danh mục hoặc hỏi host nhé.",
     "losslessTag": "LOSSLESS",
     "availHighTip": "Nhiều nguồn chia sẻ, tải xuống ổn định",
     "availMediumTip": "Có thể tải xuống nhưng sẽ chậm hơn một chút",

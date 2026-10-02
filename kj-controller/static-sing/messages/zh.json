@@ -295,6 +295,8 @@
     "errSignedOut": "请再次确认您的邮箱。",
     "errSearchExpired": "音频搜索已过期——请返回并重新选择音频。",
     "errUnavailable": "我们这边出了点问题——请稍后再试。",
+    "errRejected": "这首歌暂时无法制作，请从歌单中挑选一首，或直接咨询主持人。",
+    "errYoutubeBlocked": "YouTube 目前受限，暂时无法制作这首歌。请从歌单中挑选一首，或直接咨询主持人。",
     "losslessTag": "无损",
     "availHighTip": "资源充足，下载稳定",
     "availMediumTip": "可以下载，但可能较慢",

@@ -295,6 +295,8 @@
     "errSignedOut": "Por favor, confirme seu e-mail novamente.",
     "errSearchExpired": "Essa busca de áudio expirou — volte e escolha o áudio novamente.",
     "errUnavailable": "Algo deu errado do nosso lado — tente novamente em um momento.",
+    "errRejected": "Não conseguimos preparar essa — escolha uma música do catálogo ou fale com o apresentador.",
+    "errYoutubeBlocked": "O YouTube está nos bloqueando no momento, então não podemos preparar essa — escolha uma música do catálogo ou fale com o apresentador.",
     "losslessTag": "SEM PERDAS",
     "availHighTip": "Muitas fontes, download confiável",
     "availMediumTip": "Deve baixar, mas pode ser mais lento",

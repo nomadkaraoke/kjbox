@@ -295,6 +295,8 @@
     "errSignedOut": "Bitte bestätige deine E-Mail noch einmal.",
     "errSearchExpired": "Diese Audiosuche ist abgelaufen – geh zurück und wähle das Audio noch einmal aus.",
     "errUnavailable": "Auf unserer Seite ist etwas schiefgelaufen – versuche es gleich noch einmal.",
+    "errRejected": "Das konnten wir leider nicht erstellen – wähle einen Song aus dem Katalog oder frag den Host.",
+    "errYoutubeBlocked": "YouTube blockiert uns gerade, daher können wir das nicht erstellen – wähle einen Song aus dem Katalog oder frag den Host.",
     "losslessTag": "VERLUSTFREI",
     "availHighTip": "Viele Quellen, lädt zuverlässig herunter",
     "availMediumTip": "Sollte funktionieren, könnte aber langsamer laden",

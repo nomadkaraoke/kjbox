@@ -205,6 +205,21 @@ class TestSubmit:
         gen.create_job_from_url.assert_called_once_with("sess-mary", "https://youtu.be/abc",
                                                         "Radiohead", "Creep")
 
+    def test_youtube_bot_check_is_its_own_error(self, client, sing_app, token, gen, signed_in):
+        # Live 2026-10-01: gen's YouTube download was bot-checked and the phone
+        # showed the generic "Couldn't send — ask the host if requests are paused".
+        gen.create_job_from_url.side_effect = GenApiError(
+            400, "We're temporarily unable to access YouTube to download this video — "
+                 "YouTube is asking our server to verify it's not a bot.")
+        resp = _submit(client, token, source_meta={"youtube_url": "https://youtu.be/abc"})
+        assert (resp.status_code, resp.get_json()["error"]) == (400, "youtube_blocked")
+        assert sing_app.sing_store.list_requests() == []
+
+    def test_other_gen_rejection_stays_generic(self, client, token, gen, signed_in):
+        gen.create_job_from_url.side_effect = GenApiError(400, "Video unavailable")
+        resp = _submit(client, token, source_meta={"youtube_url": "https://youtu.be/abc"})
+        assert (resp.status_code, resp.get_json()["error"]) == (400, "gen_rejected")
+
     def test_requires_verified_account(self, client, sing_app, token, gen):
         resp = _submit(client, token)
         assert (resp.status_code, resp.get_json()["error"]) == (401, "signin_required")

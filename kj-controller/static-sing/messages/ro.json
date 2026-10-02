@@ -295,6 +295,8 @@
     "errSignedOut": "Te rugăm să îți confirmi din nou e-mailul.",
     "errSearchExpired": "Căutarea audio a expirat — întoarce-te și alege din nou fișierul audio.",
     "errUnavailable": "Ceva nu a mers bine la noi — încearcă din nou într-o clipă.",
+    "errRejected": "Nu am putut pregăti piesa asta — alege o melodie din catalog sau întreabă gazda.",
+    "errYoutubeBlocked": "YouTube ne blochează momentan, așa că nu putem pregăti piesa asta — alege o melodie din catalog sau întreabă gazda.",
     "losslessTag": "LOSSLESS",
     "availHighTip": "Multe surse, se descarcă sigur",
     "availMediumTip": "Ar trebui să se descarce, dar poate fi mai lent",

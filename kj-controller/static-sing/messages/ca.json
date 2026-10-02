@@ -295,6 +295,8 @@
     "errSignedOut": "Si us plau, torna a confirmar el teu correu electrònic.",
     "errSearchExpired": "Aquesta cerca d'àudio ha caducat — torna enrere i tria l'àudio de nou.",
     "errUnavailable": "Alguna cosa ha anat malament per la nostra banda — torna-ho a provar en un moment.",
+    "errRejected": "No hem pogut crear aquesta cançó; tria'n una del catàleg o parla amb l'amfitrió.",
+    "errYoutubeBlocked": "YouTube ens està bloquejant ara mateix i no podem crear aquesta cançó; tria'n una del catàleg o parla amb l'amfitrió.",
     "losslessTag": "SENSE PÈRDUA",
     "availHighTip": "Bona disponibilitat, es descarrega de manera fiable",
     "availMediumTip": "S'hauria de descarregar però pot ser més lent",

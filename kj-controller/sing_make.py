@@ -128,6 +128,11 @@ def gen_error_response(exc, device_id=None):
                         else "rate_limited"}), 429
     if exc.status in (400, 403, 422):
         current_app.logger.warning("make: gen rejected the request: %s", exc)
+        detail = exc.detail.lower() if isinstance(exc.detail, str) else ""
+        # gen's YouTube download is bot-checked: tell the singer it's YouTube,
+        # not that "requests are paused" (the generic fallback on the phone).
+        if "youtube" in detail and "bot" in detail:
+            return jsonify({"error": "youtube_blocked"}), 400
         return jsonify({"error": "gen_rejected"}), 400
     current_app.logger.warning("make: gen call failed: %s", exc)
     return jsonify({"error": "gen_unavailable"}), 502

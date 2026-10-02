@@ -295,6 +295,8 @@
     "errSignedOut": "이메일을 다시 확인해 주세요.",
     "errSearchExpired": "오디오 검색이 만료되었습니다. 뒤로 돌아가서 오디오를 다시 선택해 주세요.",
     "errUnavailable": "문제가 발생했습니다. 잠시 후 다시 시도해 주세요.",
+    "errRejected": "해당 곡을 만들 수 없습니다. 목록에서 다른 곡을 선택하시거나 호스트에게 문의해 주세요.",
+    "errYoutubeBlocked": "현재 YouTube 연결이 차단되어 해당 곡을 만들 수 없습니다. 목록에서 다른 곡을 선택하시거나 호스트에게 문의해 주세요.",
     "losslessTag": "무손실",
     "availHighTip": "시더가 많아 안정적으로 다운로드됩니다",
     "availMediumTip": "다운로드는 되지만 속도가 느릴 수 있습니다",

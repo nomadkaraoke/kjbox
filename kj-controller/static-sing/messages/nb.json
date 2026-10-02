@@ -295,6 +295,8 @@
     "errSignedOut": "Bekreft e-posten din på nytt.",
     "errSearchExpired": "Lydsøket har utløpt — gå tilbake og velg lyden på nytt.",
     "errUnavailable": "Noe gikk galt på vår side — prøv igjen om et øyeblikk.",
+    "errRejected": "Vi klarte ikke å lage den – velg en sang fra katalogen, eller spør verten.",
+    "errYoutubeBlocked": "YouTube blokkerer oss akkurat nå, så vi kan ikke lage den – velg en sang fra katalogen, eller spør verten.",
     "losslessTag": "TAPSFRITT",
     "availHighTip": "Mange kilder, pålitelig nedlasting",
     "availMediumTip": "Bør gå greit å laste ned, men kan være tregere",

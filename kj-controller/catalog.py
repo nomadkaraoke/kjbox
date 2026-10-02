@@ -6,6 +6,7 @@ import sqlite3
 import unicodedata
 
 import fuzzy_match
+from sqlite_conn import ThreadLocalConnection
 from text_normalize import (
     normalize as _normalize_for_search,
     fts_match_query as _fts5_safe_query,
@@ -68,17 +69,23 @@ class ExternalCatalog:
             'external_catalog_db',
             os.path.join(os.path.dirname(os.path.abspath(__file__)), 'external_media.db')
         )
-        self._conn = None
+        self._conns = None
+
+    @property
+    def _conn(self):
+        """This thread's open connection, or None."""
+        return self._conns.current() if self._conns else None
 
     def _get_conn(self):
-        """Lazy SQLite connection with WAL mode and optimized settings."""
-        if self._conn is None:
-            self._conn = sqlite3.connect(self.db_path, check_same_thread=False)
-            self._conn.row_factory = sqlite3.Row
-            self._conn.execute("PRAGMA journal_mode=WAL")
-            self._conn.execute("PRAGMA cache_size=-8192")  # 8MB
-            self._conn.execute("PRAGMA synchronous=NORMAL")
-        return self._conn
+        """Lazy per-thread SQLite connection with WAL mode and optimized settings.
+
+        Per-thread because Flask serves requests on several threads and a shared
+        connection intermittently returned None from fetchone() under load.
+        """
+        if self._conns is None:
+            self._conns = ThreadLocalConnection(self.db_path, pragmas=(
+                "journal_mode=WAL", "cache_size=-8192", "synchronous=NORMAL"))
+        return self._conns.get()
 
     def is_available(self):
         """Check if database exists and has data."""
@@ -540,7 +547,6 @@ class ExternalCatalog:
         return {'total': total, 'by_format': by_format}
 
     def close(self):
-        """Close the database connection."""
-        if self._conn:
-            self._conn.close()
-            self._conn = None
+        """Close every thread's database connection."""
+        if self._conns:
+            self._conns.reset()

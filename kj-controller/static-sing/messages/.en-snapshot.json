@@ -295,6 +295,8 @@
     "errSignedOut": "Please confirm your email again.",
     "errSearchExpired": "That audio search expired — go back and pick the audio again.",
     "errUnavailable": "Something went wrong on our side — try again in a moment.",
+    "errRejected": "We couldn't make that one — pick a song from the catalogue, or ask the host.",
+    "errYoutubeBlocked": "YouTube is blocking us right now, so we can't make that one — pick a song from the catalogue, or ask the host.",
     "losslessTag": "LOSSLESS",
     "availHighTip": "Well-seeded, downloads reliably",
     "availMediumTip": "Should download but may be slower",
