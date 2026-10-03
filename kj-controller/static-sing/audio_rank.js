@@ -155,7 +155,9 @@ export function getSearchConfidence(results, searchTitle, searchArtist = "") {
   // Spotify is an official release: the right track from it is a good source.
   const spotifyMatch = bestCat === "SPOTIFY" && isConfirmedTitleMatch(searchTitle, best)
     && (!searchArtist || isArtistMatch(searchArtist, best));
-  if (bestCat === "BEST CHOICE" && !mismatch) return { tier: 1, best, bestCat, spotifyMatch };
+  // "Perfect match" also needs the right artist — a well-seeded cover isn't one.
+  const artistOk = !searchArtist || isArtistMatch(searchArtist, best);
+  if (bestCat === "BEST CHOICE" && !mismatch && artistOk) return { tier: 1, best, bestCat, spotifyMatch };
   if (!hasLossless && !spotifyMatch) return { tier: 3, best, bestCat, spotifyMatch };
   if (mismatch && (best.seeders == null || best.seeders < 10)) return { tier: 3, best, bestCat, spotifyMatch };
   return { tier: 2, best, bestCat, spotifyMatch };
