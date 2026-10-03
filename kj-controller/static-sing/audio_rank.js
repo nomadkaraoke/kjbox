@@ -89,6 +89,21 @@ export function checkFilenameMismatch(searchTitle, r) {
   return { isMismatch: true, filename };
 }
 
+// Whole-title core for equality: drops only TRAILING version suffixes —
+// "The Chair (feat. X)", "Hotel California - 2013 Remaster" — so "The Chairman"
+// doesn't match "The Chair" and "(I Can't Get No) Satisfaction" stays intact.
+function titleCore(x) {
+  const norm = (y) => y.toLowerCase().replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
+  let c = x;
+  for (let i = 0; i < 3; i++) {
+    const next = c.replace(/\s*[([][^)\]]*[)\]]\s*$/, "").replace(/\s+-\s+[^-]*$/, "");
+    if (next === c) break;
+    c = next;
+  }
+  const core = norm(c);
+  return core.length >= 3 ? core : norm(x);
+}
+
 // True only when the track filename was actually compared and matched —
 // checkFilenameMismatch says "no mismatch" when it can't compare (no target_file →
 // album title, title < 3 chars, non-Latin filename).
@@ -96,12 +111,11 @@ export function isConfirmedTitleMatch(searchTitle, r) {
   if (!r.target_file) return false;
   const m = checkFilenameMismatch(searchTitle, r);
   if (m.isMismatch || !m.filename || (searchTitle || "").length < 3) return false;
-  // Whole-title equality once version suffixes are dropped: "The Chair (feat. X)"
-  // and "Hotel California - 2013 Remaster" match; "The Chairman" doesn't.
-  const core = (x) => x.replace(/\s*[([].*$/, "").replace(/\s+-\s+.*$/, "")
-    .toLowerCase().replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
-  const want = core(searchTitle);
-  return want.length >= 3 && core(m.filename) === want;
+  const want = titleCore(searchTitle);
+  if (want.length < 3) return false;
+  // Compare with and without the track-number strip ("7 Rings" must keep its 7).
+  const raw = (r.target_file.split("/").pop() || r.target_file).replace(AUDIO_EXT_RE, "");
+  return titleCore(m.filename) === want || titleCore(raw) === want;
 }
 
 export function getSearchConfidence(results, searchTitle) {
