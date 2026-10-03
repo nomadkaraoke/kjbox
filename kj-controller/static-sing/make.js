@@ -18,7 +18,7 @@
 import { t, tn, getLocale } from "./i18n.js";
 import {
   CATEGORY_MAX, categorizeResult, checkFilenameMismatch, formatCount, formatMetadata,
-  formatQuality, getSearchConfidence, groupResults,
+  formatQuality, getSearchConfidence, groupResults, isConfirmedTitleMatch,
 } from "./audio_rank.js";
 
 const CATEGORY_KEY = {
@@ -340,6 +340,7 @@ export function createMakeFlow(deps) {
     const parts = [];
     if (cat === "BEST CHOICE") parts.push(t("make.reasonHighQuality"));
     else if (best.is_lossless) parts.push(t("make.reasonLossless"));
+    else if (cat === "SPOTIFY") parts.push(t("make.reasonSpotify"));
     else if (best.provider === "YouTube") parts.push(t("make.reasonYoutube"));
     else parts.push(t("make.reasonLossy"));
     if (best.title) {
@@ -358,7 +359,8 @@ export function createMakeFlow(deps) {
     const mm = checkFilenameMismatch(m().title, best);
     if (mm.isMismatch) out.push(t("make.fileLooksLike", { file: mm.filename }));
     const hasLossless = results.some((r) => !["YOUTUBE", "SPOTIFY", "VINYL RIPS"].includes(categorizeResult(r)));
-    if (!hasLossless) out.push(t("make.warnNoLossless"));
+    const spotifyMatch = categorizeResult(best) === "SPOTIFY" && isConfirmedTitleMatch(m().title, best);
+    if (!hasLossless && !spotifyMatch) out.push(t("make.warnNoLossless"));
     else if (categorizeResult(best) === "YOUTUBE") out.push(t("make.warnLossy"));
     if (best.seeders != null && best.seeders < 10) out.push(t("make.warnLowAvail"));
     return out;
@@ -549,7 +551,18 @@ export function createMakeFlow(deps) {
     }
     const others = othersSection(conf, grouped);
     if (others) card.appendChild(others);
-    if (conf.tier !== 3) card.appendChild(fallbackSection(false));
+    if (conf.tier !== 3) card.appendChild(collapsedFallback());
+  }
+
+  // With a good pick on screen, YouTube is a last resort: keep the link box
+  // behind a small "Can't find your song?" toggle instead of inviting it.
+  function collapsedFallback() {
+    const s = m();
+    if (s.fallbackOpen || s.ytUrl || s.ytErr) return fallbackSection(false);
+    return el("button", {
+      class: "btn ghost mk-fallback-toggle", "data-testid": "make-fallback-toggle",
+      onclick: () => { s.fallbackOpen = true; rerender(); },
+    }, t("make.fallbackToggle"));
   }
 
   function renderAccount(card) {
