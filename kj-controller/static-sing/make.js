@@ -18,7 +18,7 @@
 import { t, tn, getLocale } from "./i18n.js";
 import {
   CATEGORY_MAX, categorizeResult, checkFilenameMismatch, formatCount, formatMetadata,
-  formatQuality, getSearchConfidence, groupResults,
+  formatQuality, getSearchConfidence, groupResults, isConfirmedTitleMatch,
 } from "./audio_rank.js";
 
 const CATEGORY_KEY = {
@@ -359,7 +359,7 @@ export function createMakeFlow(deps) {
     const mm = checkFilenameMismatch(m().title, best);
     if (mm.isMismatch) out.push(t("make.fileLooksLike", { file: mm.filename }));
     const hasLossless = results.some((r) => !["YOUTUBE", "SPOTIFY", "VINYL RIPS"].includes(categorizeResult(r)));
-    const spotifyMatch = categorizeResult(best) === "SPOTIFY" && !mm.isMismatch;
+    const spotifyMatch = categorizeResult(best) === "SPOTIFY" && isConfirmedTitleMatch(m().title, best);
     if (!hasLossless && !spotifyMatch) out.push(t("make.warnNoLossless"));
     else if (categorizeResult(best) === "YOUTUBE") out.push(t("make.warnLossy"));
     if (best.seeders != null && best.seeders < 10) out.push(t("make.warnLowAvail"));

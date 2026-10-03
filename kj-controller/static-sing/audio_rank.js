@@ -45,7 +45,7 @@ export function getBestResult(results, searchTitle = "") {
   if (!results.length) return null;
   const titleMatches = searchTitle
     ? results.filter((r) => !["YOUTUBE", "VINYL RIPS"].includes(categorizeResult(r))
-        && !checkFilenameMismatch(searchTitle, r).isMismatch)
+        && isConfirmedTitleMatch(searchTitle, r))
     : [];
   const pool = titleMatches.length ? titleMatches : results;
   let best = null;
@@ -86,6 +86,15 @@ export function checkFilenameMismatch(searchTitle, r) {
   return { isMismatch: true, filename };
 }
 
+// True only when the track filename was actually compared and matched —
+// checkFilenameMismatch says "no mismatch" when it can't compare (no target_file →
+// album title, title < 3 chars, non-Latin filename).
+export function isConfirmedTitleMatch(searchTitle, r) {
+  if (!r.target_file) return false;
+  const m = checkFilenameMismatch(searchTitle, r);
+  return !m.isMismatch && m.filename !== "" && (searchTitle || "").length >= 3;
+}
+
 export function getSearchConfidence(results, searchTitle) {
   if (!results.length) return { tier: 3, best: null, bestCat: null };
   const best = getBestResult(results, searchTitle);
@@ -93,7 +102,7 @@ export function getSearchConfidence(results, searchTitle) {
   const mismatch = best ? checkFilenameMismatch(searchTitle, best).isMismatch : false;
   const hasLossless = results.some((r) => !["YOUTUBE", "SPOTIFY", "VINYL RIPS"].includes(categorizeResult(r)));
   // Spotify is an official release: the right track from it is a good source.
-  const spotifyMatch = bestCat === "SPOTIFY" && !mismatch;
+  const spotifyMatch = bestCat === "SPOTIFY" && isConfirmedTitleMatch(searchTitle, best);
   if (bestCat === "BEST CHOICE" && !mismatch) return { tier: 1, best, bestCat, spotifyMatch };
   if (!hasLossless && !spotifyMatch) return { tier: 3, best, bestCat, spotifyMatch };
   if (mismatch && (best.seeders == null || best.seeders < 10)) return { tier: 3, best, bestCat, spotifyMatch };
