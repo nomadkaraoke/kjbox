@@ -61,8 +61,11 @@ export function getBestResult(results, searchTitle = "") {
       if (rs > bs || (rs === bs && (r.view_count ?? 0) > (best.view_count ?? 0))) best = r;
     }
   }
-  return best ?? results[0];
+  return best ?? pool[0];  // all vinyl/live: stay within the title matches
 }
+
+// Only real audio extensions — Spotify track names have none ("Mr. Brightside").
+const AUDIO_EXT_RE = /\.(flac|mp3|m4a|wav|ogg|opus|aac|alac|ape|wv|aiff?|dsf|mp4|webm)$/i;
 
 export function checkFilenameMismatch(searchTitle, r) {
   const none = { isMismatch: false, filename: "" };
@@ -70,7 +73,7 @@ export function checkFilenameMismatch(searchTitle, r) {
   let filename;
   if (r.target_file) {
     const raw = r.target_file.split("/").pop() || r.target_file;
-    filename = raw.replace(/\.[^.]+$/, "").replace(/^\d{1,3}\s*[-.\s]\s*/, "");
+    filename = raw.replace(AUDIO_EXT_RE, "").replace(/^\d{1,3}\s*[-.\s]\s*/, "");
   } else if (r.title) {
     filename = r.title;
   } else {
@@ -92,7 +95,13 @@ export function checkFilenameMismatch(searchTitle, r) {
 export function isConfirmedTitleMatch(searchTitle, r) {
   if (!r.target_file) return false;
   const m = checkFilenameMismatch(searchTitle, r);
-  return !m.isMismatch && m.filename !== "" && (searchTitle || "").length >= 3;
+  if (m.isMismatch || !m.filename || (searchTitle || "").length < 3) return false;
+  // Whole-title equality once version suffixes are dropped: "The Chair (feat. X)"
+  // and "Hotel California - 2013 Remaster" match; "The Chairman" doesn't.
+  const core = (x) => x.replace(/\s*[([].*$/, "").replace(/\s+-\s+.*$/, "")
+    .toLowerCase().replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
+  const want = core(searchTitle);
+  return want.length >= 3 && core(m.filename) === want;
 }
 
 export function getSearchConfidence(results, searchTitle) {
