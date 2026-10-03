@@ -9510,7 +9510,7 @@ async function genRunFullJudge(seq) {
     let tier = GEN_WEAK_TIER;
     try {
         const rank = await genLoadRank();
-        tier = rank.getSearchConfidence(s.search.results, genFields().title).tier;
+        tier = rank.getSearchConfidence(s.search.results, genFields().title, genFields().artist).tier;
     } catch (e) { /* ranking script failed to load; genRender reports it */ }
     const fast = await (s.fastJudge || Promise.resolve(null));
     const isCatalogConfident = fast && fast.confident && fast.engine === 'catalog';
@@ -9742,7 +9742,7 @@ async function genRender() {
         if (!results.length) {
             html += '<div class="gen-none">No audio found. Fix the artist/title and search again, or paste a YouTube link.</div>';
         } else {
-            const conf = rank.getSearchConfidence(results, genFields().title);
+            const conf = rank.getSearchConfidence(results, genFields().title, genFields().artist);
             if (conf.tier !== 3) {
                 html += '<div class="gen-section-title">' + (conf.tier === 1 ? 'Perfect match found' : 'Recommended audio') + '</div>'
                     + '<div data-testid="gen-pick">' + genResultHtml(rank, conf.best, true) + '</div>';

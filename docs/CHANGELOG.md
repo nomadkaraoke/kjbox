@@ -2,6 +2,16 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-10-03 - Make-it best pick also matches the artist (v0.127.1)
+
+- **Bug (found checking v0.127.0 against a real search):** for *Braxton Keith - The Chair*, George
+  Strait's 1985 "The Chair" (Spotify popularity 68) beat Braxton Keith's (65) on the popularity
+  tiebreak. That gave a confident "Recommended" pick of the wrong artist.
+- **Fix:** `getBestResult` / `getSearchConfidence` take the requested artist. Among title matches,
+  those by the requested artist win (`isArtistMatch`: tolerant of "The", featured artists and small
+  typos). A Spotify pick by another artist isn't a confident match (tier 3). Wired into the singer
+  wizard and the KJ Gen modal. In step with karaoke-gen.
+
 ## 2026-10-03 - Make-it: Spotify title match is the recommended pick, YouTube is the last resort (v0.127.0)
 
 - **Bug (real night, 2026-10-01):** Bryan's make-it for *Braxton Keith - The Chair* got 10 Spotify
