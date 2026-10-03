@@ -2,6 +2,22 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-10-03 - Make-it: Spotify title match is the recommended pick, YouTube is the last resort (v0.127.0)
+
+- **Bug (real night, 2026-10-01):** Bryan's make-it for *Braxton Keith - The Chair* got 10 Spotify
+  results and no torrents. `getSearchConfidence` counted Spotify as "not lossless", so it returned
+  tier 3: **"Limited sources found"**, the YouTube link box first, and a wrong-track best pick
+  ("I Own This Bar"). He pasted a YouTube link, which then hit gen's YouTube bot-check.
+- **Fix (`audio_rank.js`, ported in step with karaoke-gen `audio-search-utils.ts`):**
+  `getBestResult(results, searchTitle)` only considers torrent/Spotify results whose track name
+  (`target_file`; for Spotify that's the track title) matches the requested title, when any do.
+  YouTube is never promoted this way. Ties go to seeders, then popularity. A title-matched Spotify
+  best pick is tier 2 ("Recommended audio"), with an "Official release on Spotify" reason and no
+  "no lossless sources" warning.
+- **Singer make-it:** with a tier 1/2 pick, the YouTube box is collapsed behind *"Can't find your
+  song? Use a YouTube link instead"*. Tier 3 (nothing usable) still shows it first. The KJ Gen
+  modal gets the new ranking too.
+
 ## 2026-10-02 - Make-it "YouTube is blocking us" message + catalog search thread-safety (v0.126.2)
 
 - **Bug (real night, 2026-10-01):** a singer's make-it from a YouTube link failed 5 times. gen

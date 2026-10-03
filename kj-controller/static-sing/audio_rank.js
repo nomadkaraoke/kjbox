@@ -37,17 +37,29 @@ export function groupResults(results) {
   return CATEGORY_ORDER.filter((c) => groups[c]?.length).map((c) => ({ category: c, results: groups[c] }));
 }
 
-export function getBestResult(results) {
+// With searchTitle: when any torrent/Spotify result's track name matches it, only
+// those compete (a mismatched file is usually a different song). YouTube is never
+// promoted this way — video titles nearly always "match". Ties: seeders, then
+// popularity (view_count).
+export function getBestResult(results, searchTitle = "") {
   if (!results.length) return null;
+  const titleMatches = searchTitle
+    ? results.filter((r) => !["YOUTUBE", "VINYL RIPS"].includes(categorizeResult(r))
+        && !checkFilenameMismatch(searchTitle, r).isMismatch)
+    : [];
+  const pool = titleMatches.length ? titleMatches : results;
   let best = null;
   let bestPriority = Infinity;
-  for (const r of results) {
+  for (const r of pool) {
     const cat = categorizeResult(r);
     if (cat === "VINYL RIPS") continue;
     const p = BEST_RESULT_PRIORITY.indexOf(cat);
     const eff = p === -1 ? Infinity : p;
     if (eff < bestPriority) { best = r; bestPriority = eff; }
-    else if (eff === bestPriority && best && (r.seeders ?? 0) > (best.seeders ?? 0)) best = r;
+    else if (eff === bestPriority && best) {
+      const rs = r.seeders ?? 0, bs = best.seeders ?? 0;
+      if (rs > bs || (rs === bs && (r.view_count ?? 0) > (best.view_count ?? 0))) best = r;
+    }
   }
   return best ?? results[0];
 }
@@ -76,14 +88,16 @@ export function checkFilenameMismatch(searchTitle, r) {
 
 export function getSearchConfidence(results, searchTitle) {
   if (!results.length) return { tier: 3, best: null, bestCat: null };
-  const best = getBestResult(results);
+  const best = getBestResult(results, searchTitle);
   const bestCat = best ? categorizeResult(best) : null;
   const mismatch = best ? checkFilenameMismatch(searchTitle, best).isMismatch : false;
   const hasLossless = results.some((r) => !["YOUTUBE", "SPOTIFY", "VINYL RIPS"].includes(categorizeResult(r)));
-  if (bestCat === "BEST CHOICE" && !mismatch) return { tier: 1, best, bestCat };
-  if (!hasLossless) return { tier: 3, best, bestCat };
-  if (mismatch && (best.seeders == null || best.seeders < 10)) return { tier: 3, best, bestCat };
-  return { tier: 2, best, bestCat };
+  // Spotify is an official release: the right track from it is a good source.
+  const spotifyMatch = bestCat === "SPOTIFY" && !mismatch;
+  if (bestCat === "BEST CHOICE" && !mismatch) return { tier: 1, best, bestCat, spotifyMatch };
+  if (!hasLossless && !spotifyMatch) return { tier: 3, best, bestCat, spotifyMatch };
+  if (mismatch && (best.seeders == null || best.seeders < 10)) return { tier: 3, best, bestCat, spotifyMatch };
+  return { tier: 2, best, bestCat, spotifyMatch };
 }
 
 export function formatCount(n) {

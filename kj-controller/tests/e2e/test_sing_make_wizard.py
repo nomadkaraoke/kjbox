@@ -131,6 +131,27 @@ class TestMakeWizard:
         expect(page.locator(".mk-fallback-first")).to_be_visible()
         expect(page.locator('[data-testid="make-result"]')).to_have_count(1)
 
+    def test_spotify_title_match_is_recommended_and_youtube_collapsed(self, page, live_server, live_token):
+        # Live 2026-10-01: a Spotify-only search showed "Limited sources found" with a
+        # wrong-track pick and the YouTube box first, so the singer pasted a YouTube link.
+        # Spotify `title` is the album, `target_file` the track.
+        def sp(i, album, track, pop):
+            return {"index": i, "provider": "Spotify", "title": album, "target_file": track,
+                    "artist": "Radiohead", "is_lossless": False, "quality": "FLAC 16bit WEB",
+                    "release_type": "Single", "view_count": pop * 10000}
+        _open_wizard(page, live_server, live_token, email="m@x.co",
+                     results=[sp(0, "Pablo Honey", "Anyone Can Play Guitar", 60),
+                              sp(1, "Creep", "Creep", 80), sp(2, "Hits", "Creep", 30)])
+        pick = page.locator('[data-testid="make-pick"]')
+        expect(pick).to_contain_text("Recommended audio")
+        expect(pick).to_contain_text("Official release on Spotify")
+        expect(pick.locator(".mk-mono")).to_have_text("Creep")
+        expect(pick).not_to_contain_text("No lossless sources")
+        expect(page.locator('[data-testid="make-guidance"]')).to_have_count(0)
+        expect(page.locator('[data-testid="make-fallback"]')).to_have_count(0)
+        page.locator('[data-testid="make-fallback-toggle"]').click()
+        expect(page.locator('[data-testid="make-fallback"]')).to_be_visible()
+
     def test_no_results(self, page, live_server, live_token):
         _open_wizard(page, live_server, live_token, email="m@x.co", results=[])
         expect(page.locator(".mk-none")).to_contain_text("couldn't find any audio")
