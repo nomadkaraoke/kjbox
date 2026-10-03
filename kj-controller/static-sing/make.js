@@ -18,7 +18,7 @@
 import { t, tn, getLocale } from "./i18n.js";
 import {
   CATEGORY_MAX, categorizeResult, checkFilenameMismatch, formatCount, formatMetadata,
-  formatQuality, getSearchConfidence, groupResults, isConfirmedTitleMatch,
+  formatQuality, getSearchConfidence, groupResults, isArtistMatch, isConfirmedTitleMatch,
 } from "./audio_rank.js";
 
 const CATEGORY_KEY = {
@@ -197,7 +197,7 @@ export function createMakeFlow(deps) {
 
   async function runFullJudge(seq) {
     const s = m();
-    const tier = getSearchConfidence(s.search.results, s.title).tier;
+    const tier = getSearchConfidence(s.search.results, s.title, s.artist).tier;
     const timer = setTimeout(() => { if (seq === s.searchSeq) { s.gate = true; rerender(); } }, JUDGE_GATE_TIMEOUT_MS);
     const fast = await (s.fastJudge || Promise.resolve(null));
     const needFull = !fast || fast.needs_ai || (isCatalogConfident(fast) && tier >= WEAK_TIER);
@@ -359,7 +359,8 @@ export function createMakeFlow(deps) {
     const mm = checkFilenameMismatch(m().title, best);
     if (mm.isMismatch) out.push(t("make.fileLooksLike", { file: mm.filename }));
     const hasLossless = results.some((r) => !["YOUTUBE", "SPOTIFY", "VINYL RIPS"].includes(categorizeResult(r)));
-    const spotifyMatch = categorizeResult(best) === "SPOTIFY" && isConfirmedTitleMatch(m().title, best);
+    const spotifyMatch = categorizeResult(best) === "SPOTIFY" && isConfirmedTitleMatch(m().title, best)
+      && isArtistMatch(m().artist, best);
     if (!hasLossless && !spotifyMatch) out.push(t("make.warnNoLossless"));
     else if (categorizeResult(best) === "YOUTUBE") out.push(t("make.warnLossy"));
     if (best.seeders != null && best.seeders < 10) out.push(t("make.warnLowAvail"));
@@ -531,7 +532,7 @@ export function createMakeFlow(deps) {
       return;
     }
     const results = s.search.results;
-    const conf = getSearchConfidence(results, s.title);
+    const conf = getSearchConfidence(results, s.title, s.artist);
     const grouped = groupResults(results);
     if (!s.gate && results.length) card.appendChild(el("p", { class: "hint" }, t("make.checking")));
 

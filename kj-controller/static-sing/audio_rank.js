@@ -41,13 +41,16 @@ export function groupResults(results) {
 // those compete (a mismatched file is usually a different song). YouTube is never
 // promoted this way — video titles nearly always "match". Ties: seeders, then
 // popularity (view_count).
-export function getBestResult(results, searchTitle = "") {
+export function getBestResult(results, searchTitle = "", searchArtist = "") {
   if (!results.length) return null;
   const titleMatches = searchTitle
     ? results.filter((r) => !["YOUTUBE", "VINYL RIPS"].includes(categorizeResult(r))
         && isConfirmedTitleMatch(searchTitle, r))
     : [];
-  const pool = titleMatches.length ? titleMatches : results;
+  // Same title by the requested artist beats a more popular cover/namesake
+  // (George Strait's "The Chair" vs Braxton Keith's).
+  const artistMatches = searchArtist ? titleMatches.filter((r) => isArtistMatch(searchArtist, r)) : [];
+  const pool = artistMatches.length ? artistMatches : titleMatches.length ? titleMatches : results;
   let best = null;
   let bestPriority = Infinity;
   for (const r of pool) {
@@ -89,6 +92,30 @@ export function checkFilenameMismatch(searchTitle, r) {
   return { isMismatch: true, filename };
 }
 
+// Whether the result's artist is the requested artist. Lenient on purpose:
+// "Braxton Keith, Someone" / "The Killers" vs "Killers" still match.
+export function isArtistMatch(searchArtist, r) {
+  const norm = (x) => x.toLowerCase().replace(/^the\s+/, "").replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
+  const want = norm(searchArtist || "");
+  const have = norm(r.artist || "");
+  if (want.length < 2 || !have) return false;
+  if (have === want || ` ${have} `.includes(` ${want} `) || ` ${want} `.includes(` ${have} `)) return true;
+  // Small typos the singer's tidy didn't fix ("radiohed")
+  return editDistance(want, have) <= Math.max(1, Math.floor(want.length / 5));
+}
+
+function editDistance(a, b) {
+  let prev = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    const cur = [i];
+    for (let j = 1; j <= b.length; j++) {
+      cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    }
+    prev = cur;
+  }
+  return prev[b.length];
+}
+
 // Whole-title core for equality: drops only TRAILING version suffixes —
 // "The Chair (feat. X)", "Hotel California - 2013 Remaster" — so "The Chairman"
 // doesn't match "The Chair" and "(I Can't Get No) Satisfaction" stays intact.
@@ -118,14 +145,15 @@ export function isConfirmedTitleMatch(searchTitle, r) {
   return titleCore(m.filename) === want || titleCore(raw) === want;
 }
 
-export function getSearchConfidence(results, searchTitle) {
+export function getSearchConfidence(results, searchTitle, searchArtist = "") {
   if (!results.length) return { tier: 3, best: null, bestCat: null };
-  const best = getBestResult(results, searchTitle);
+  const best = getBestResult(results, searchTitle, searchArtist);
   const bestCat = best ? categorizeResult(best) : null;
   const mismatch = best ? checkFilenameMismatch(searchTitle, best).isMismatch : false;
   const hasLossless = results.some((r) => !["YOUTUBE", "SPOTIFY", "VINYL RIPS"].includes(categorizeResult(r)));
   // Spotify is an official release: the right track from it is a good source.
-  const spotifyMatch = bestCat === "SPOTIFY" && isConfirmedTitleMatch(searchTitle, best);
+  const spotifyMatch = bestCat === "SPOTIFY" && isConfirmedTitleMatch(searchTitle, best)
+    && (!searchArtist || isArtistMatch(searchArtist, best));
   if (bestCat === "BEST CHOICE" && !mismatch) return { tier: 1, best, bestCat, spotifyMatch };
   if (!hasLossless && !spotifyMatch) return { tier: 3, best, bestCat, spotifyMatch };
   if (mismatch && (best.seeders == null || best.seeders < 10)) return { tier: 3, best, bestCat, spotifyMatch };

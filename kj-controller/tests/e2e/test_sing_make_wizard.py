@@ -139,13 +139,15 @@ class TestMakeWizard:
             return {"index": i, "provider": "Spotify", "title": album, "target_file": track,
                     "artist": "Radiohead", "is_lossless": False, "quality": "FLAC 16bit WEB",
                     "release_type": "Single", "view_count": pop * 10000}
+        cover = {**sp(3, "Covers", "Creep", 95), "artist": "Postmodern Jukebox"}  # more popular, wrong artist
         _open_wizard(page, live_server, live_token, email="m@x.co",
-                     results=[sp(0, "Pablo Honey", "Anyone Can Play Guitar", 60),
+                     results=[sp(0, "Pablo Honey", "Anyone Can Play Guitar", 60), cover,
                               sp(1, "Creep", "Creep", 80), sp(2, "Hits", "Creep", 30)])
         pick = page.locator('[data-testid="make-pick"]')
         expect(pick).to_contain_text("Recommended audio")
         expect(pick).to_contain_text("Official release on Spotify")
         expect(pick.locator(".mk-mono")).to_have_text("Creep")
+        expect(pick).to_contain_text("Radiohead - Creep")  # not the Postmodern Jukebox cover
         expect(pick).not_to_contain_text("No lossless sources")
         expect(page.locator('[data-testid="make-guidance"]')).to_have_count(0)
         expect(page.locator('[data-testid="make-fallback"]')).to_have_count(0)
