@@ -576,6 +576,28 @@
                 </div>
                 <div id="statsBody" class="stats-body"></div>
             </div>
+            <div class="container song-stats night-log collapsed" id="night-log">
+                <div class="header-row night-log-header" role="button" tabindex="0"
+                     aria-expanded="false" title="Show/hide the log of past nights">
+                    <h2><span class="stats-caret" aria-hidden="true">&#9656;</span>Night Log</h2>
+                    <div class="header-actions">
+                        <button onclick="refreshNightLog()" title="Reload nights">Refresh</button>
+                    </div>
+                </div>
+                <div class="stats-filters night-log-filters">
+                    <select id="nightLogSelect" title="Pick a night"></select>
+                    <label class="night-log-min" title="Hide nights with fewer songs sung than this (tests, non-events). Set 0 to show every date.">
+                        Min songs
+                        <input type="number" id="nightLogMinSongs" min="0" max="1000" step="1" value="10">
+                    </label>
+                    <label class="night-log-toggle" title="Also list entries that were never sung (left, skipped, still waiting)">
+                        <input type="checkbox" id="nightLogShowUnsung"> Show unsung
+                    </label>
+                    <button id="nightLogCsv" title="Download this night as a CSV file">CSV</button>
+                </div>
+                <div id="nightLogSummary" class="stats-overview"></div>
+                <div id="nightLogBody" class="night-log-body"></div>
+            </div>
             <div class="container browser-mode-panel">
                 <div class="header-row">
                     <h2>Browser Mode</h2>

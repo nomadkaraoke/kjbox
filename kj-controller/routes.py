@@ -7064,3 +7064,37 @@ def stats_most_repeated():
     except (TypeError, ValueError):
         limit = 10
     return jsonify({"repeated": stats.most_repeated(since=since, limit=limit)})
+
+
+# --- Night log: review any past karaoke night (night_log.py) ----------------
+
+def _night_log():
+    from night_log import NightLog
+    rotation = getattr(current_app, 'rotation', None)
+    if not rotation:
+        return None
+    stats = getattr(current_app, 'stats', None)
+    return NightLog(rotation.store, stats._get_conn if stats else None)
+
+
+@routes_bp.route('/history/nights', methods=['GET'])
+def history_nights():
+    log = _night_log()
+    if not log:
+        return jsonify({"nights": []})
+    try:
+        min_songs = max(0, min(int(request.args.get('min_songs', 10)), 1000))
+    except (TypeError, ValueError):
+        min_songs = 10
+    return jsonify({"nights": log.list_nights(min_songs=min_songs), "min_songs": min_songs})
+
+
+@routes_bp.route('/history/night', methods=['GET'])
+def history_night():
+    night = (request.args.get('night') or '').strip()
+    if not re.fullmatch(r'\d{4}-\d{2}-\d{2}', night):
+        return jsonify({"error": "night must be YYYY-MM-DD"}), 400
+    log = _night_log()
+    if not log:
+        return jsonify({"night": night, "entries": []})
+    return jsonify({"night": night, "entries": log.get_night(night)})

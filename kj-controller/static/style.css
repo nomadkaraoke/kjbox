@@ -4895,6 +4895,38 @@ li.media-no-audio {
 .stats-badge-busy { color: #f80; font-size: 0.8em; margin-left: 6px; }
 .stats-muted { color: #777; padding: 8px; }
 
+/* ===== Night Log section (past nights, night_log.py) ===== */
+/* Reuses the .song-stats collapse/caret styling (and its simple-mode hide). */
+.night-log-header { cursor: pointer; }
+.night-log-header:hover h2 { color: #ff8fd0; }
+.night-log-filters select, .night-log-filters input[type="number"] {
+    background: #1a1a1a; border: 1px solid #444; color: #ddd; border-radius: 4px; padding: 4px 8px;
+}
+.night-log-filters select { max-width: 100%; }
+.night-log-filters input[type="number"] { width: 4.5em; margin-left: 4px; }
+.night-log-min, .night-log-toggle { color: #bbb; font-size: 0.85em; display: inline-flex; align-items: center; gap: 4px; }
+.night-log-body { max-height: 60vh; overflow: auto; }
+.nl-row { padding: 6px 4px; border-bottom: 1px solid #2a2a2a; font-size: 0.88em; }
+.nl-row.nl-unsung { opacity: 0.6; }
+.nl-line { display: flex; gap: 8px; align-items: baseline; }
+.nl-num { color: #777; min-width: 1.8em; text-align: right; flex: 0 0 auto; }
+.nl-time { color: #aaa; white-space: nowrap; font-variant-numeric: tabular-nums; flex: 0 0 auto; min-width: 5.2em; }
+.nl-main { color: #ddd; min-width: 0; overflow-wrap: anywhere; }
+.nl-main b { color: #fff; font-weight: 600; }
+.nl-meta, .nl-file { margin: 3px 0 0 calc(1.8em + 5.2em + 16px); display: flex; flex-wrap: wrap; gap: 4px 6px; align-items: center; }
+.nl-file { color: #666; overflow-wrap: anywhere; display: block; }
+.nl-file span { font-size: 0.85em; }
+.nl-sub { color: #888; font-size: 0.9em; }
+@media (max-width: 520px) { .nl-meta, .nl-file { margin-left: calc(1.8em + 8px); } }
+.nl-tag {
+    display: inline-block; padding: 0 6px; border-radius: 9px; font-size: 0.85em;
+    border: 1px solid #444; white-space: nowrap;
+}
+.nl-tag-kj { color: #ccc; }
+.nl-tag-singer { color: #8fd8ff; border-color: #2d5a73; }
+.nl-tag-fetched { color: #ffc46b; border-color: #6b4f1f; }
+.nl-tag-status { color: #f88; border-color: #633; }
+
 
 /* Singer-cancelled rotation entries (soft cancel): a subtle red pulse to flag
    they're going away, then a short fade/collapse (rotation-cancelled-leaving)

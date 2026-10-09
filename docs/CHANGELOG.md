@@ -2,6 +2,20 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-10-09 - Night Log: review any past karaoke night (v0.129.0)
+
+- New **Night Log** section in the KJ UI (below Song Stats, advanced mode). Pick a night to see every
+  song in the order it was sung: time sung / added / wait, singer, whether the KJ or the singer's phone
+  added it (and how: library search, YouTube, KaraokeNerds, Divebar, make-it), and the media source
+  (library, Nomad master, Divebar, YouTube, upload) with a "fetched tonight" flag. Summary cards, a
+  "show unsung" toggle, and CSV download. Nights with fewer than **10** songs sung are hidden by
+  default (the min-songs box is editable; 0 shows every date).
+- `rotation_archive` gains `entry_id`, `done_at`, download/gen, `singers_json`, `paid` and other columns
+  (auto-migrated on startup), filled by **New Rotation** from now on. Older nights are reconstructed
+  from `play_events` and `sing_requests` (on the 2026-10-08 night: 71 of 81 songs timed, 59 linked to
+  singer requests).
+- API: `GET /history/nights?min_songs=`, `GET /history/night?night=YYYY-MM-DD` (`night_log.py`).
+
 ## 2026-10-09 - KJ rotation: "hasn't answered" photo-consent marker no longer looks like "no" (v0.128.2)
 
 - The 📷 marker for a singer who never answered the photo/video question was the same struck-through
