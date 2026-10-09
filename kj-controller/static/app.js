@@ -5901,9 +5901,9 @@ async function autoRemoveCancelledEntry(entryId) {
 }
 
 // Social-media photo/video consent marker beside a singer's name. The singer
-// chooses on their phone (or the KJ sets it here). No answer = NO consent, so
-// unknown looks like "no" (📷 struck through) with a dashed outline to tell it
-// apart from an explicit no. Click toggles OK ⇄ no (unknown → OK).
+// chooses on their phone (or the KJ sets it here). No answer = NO consent, but
+// unknown gets its own look (📷 with an amber "?" badge, no strike) so it can't be
+// mistaken for an explicit no. Click toggles OK ⇄ no (unknown → OK).
 const PHOTO_CONSENT_NEXT = { '': 'yes', yes: 'no', no: 'yes' };
 
 function photoConsentMarker(entry, singerName) {
@@ -5912,7 +5912,7 @@ function photoConsentMarker(entry, singerName) {
     btn.type = 'button';
     btn.className = 'rotation-photo-consent photo-consent-' + (consent || 'unknown');
     btn.dataset.consent = consent || 'unknown';
-    btn.textContent = '\ud83d\udcf7';   // 📷 ('no'/'unknown' are struck through in CSS)
+    btn.textContent = '\ud83d\udcf7';   // 📷 ('no' is struck through, 'unknown' gets a ? badge, in CSS)
     btn.title = consent === 'yes'
         ? singerName + ' is happy to appear in photos/videos on social media (click to change)'
         : consent === 'no'

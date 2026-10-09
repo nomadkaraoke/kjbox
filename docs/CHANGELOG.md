@@ -2,6 +2,14 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-10-09 - KJ rotation: "hasn't answered" photo-consent marker no longer looks like "no" (v0.128.2)
+
+- The 📷 marker for a singer who never answered the photo/video question was the same struck-through
+  red camera as an explicit "no", with only a faint dashed outline, so the KJ couldn't tell them apart.
+  It now shows an un-struck camera with a dashed amber outline and an amber "?" badge. Behaviour is
+  unchanged: unanswered still means assume no photos, and clicking still sets OK.
+  (`static/style.css` `.photo-consent-unknown`, settings legend in `templates/index.html`.)
+
 ## 2026-10-08 - Reused Nomad brand codes no longer keep the old song's name (v0.128.1)
 
 - **Bug (live night, 2026-10-08):** the KJ searched *Amy Macdonald - Poison Prince* and linked the
