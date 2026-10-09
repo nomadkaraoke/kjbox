@@ -3552,7 +3552,8 @@ body {
 }
 /* Social-media photo consent beside a singer's name (photoConsentMarker in
    app.js). OK = camera on green; "no" = camera struck through on red; unknown
-   = treated as no (same struck camera) with a dashed outline. */
+   (never asked/answered) = plain camera, dashed amber outline + amber "?" badge, so it reads
+   as "not asked yet" at a glance instead of looking like an explicit no. */
 .rotation-photo-consent {
     position: relative;
     margin-left: 5px;
@@ -3566,14 +3567,8 @@ body {
     vertical-align: middle;
 }
 .rotation-photo-consent.photo-consent-yes { background: #2d8a4e40; }
-.rotation-photo-consent.photo-consent-no,
-.rotation-photo-consent.photo-consent-unknown { background: #e74c3c40; }
-.rotation-photo-consent.photo-consent-unknown {
-    background: #e74c3c1f;
-    border: 1px dashed #e74c3c99;
-}
-.rotation-photo-consent.photo-consent-no::after,
-.rotation-photo-consent.photo-consent-unknown::after {
+.rotation-photo-consent.photo-consent-no { background: #e74c3c40; }
+.rotation-photo-consent.photo-consent-no::after {
     content: '';
     position: absolute;
     left: 3px;
@@ -3584,6 +3579,24 @@ body {
     background: #ff4d4d;
     transform: rotate(-40deg);
     border-radius: 2px;
+    box-shadow: 0 0 0 1px #1a1a1a;
+}
+.rotation-photo-consent.photo-consent-unknown {
+    background: #f59e0b1f;
+    border: 1px dashed #f59e0b99;
+}
+.rotation-photo-consent.photo-consent-unknown::after {
+    content: '?';
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: #f59e0b;
+    color: #1a1a1a;
+    font: bold 9px/12px sans-serif;
+    text-align: center;
     box-shadow: 0 0 0 1px #1a1a1a;
 }
 /* Semantic happiness tiers — green = good, red = bad, consistently across both

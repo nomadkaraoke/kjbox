@@ -272,8 +272,12 @@ class TestKjRotationMarker:
         expect(rows.nth(3).locator(".rotation-photo-consent")).to_have_count(2)
         assert "does NOT want" in rows.nth(1).locator(".rotation-photo-consent").get_attribute("title")
 
-        # Unknown = no consent: rendered struck-through like "no".
+        # Unknown = no consent, but drawn distinctly: a "?" badge, not the
+        # strike-through that marks an explicit "no".
         assert "assume NO photos" in rows.nth(2).locator(".rotation-photo-consent").get_attribute("title")
+        after = """el => getComputedStyle(el, '::after').content"""
+        assert rows.nth(2).locator(".rotation-photo-consent").evaluate(after) == '"?"'
+        assert rows.nth(1).locator(".rotation-photo-consent").evaluate(after) == '""'
         # Click toggles: yes → no, no → yes, unknown → yes. (The stubbed
         # response carries no entries, so the rows don't re-render between clicks.)
         rows.nth(0).locator(".rotation-photo-consent").click()
