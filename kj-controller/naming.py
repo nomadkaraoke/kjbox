@@ -5,6 +5,7 @@ No I/O except content_hash(path). The LLM refinement layer (Phase 2) upgrades
 low-confidence results; this module never calls the network.
 """
 
+import difflib
 import hashlib
 import os
 import re
@@ -12,6 +13,7 @@ from urllib.parse import urlparse, parse_qs
 
 from utils import parse_youtube_filename, sanitize_filename_part
 from catalog import parse_karaoke_filename
+from text_normalize import normalize as _normalize
 
 SOURCE_YOUTUBE = "youtube"
 SOURCE_COMMUNITY = "community"
@@ -189,6 +191,23 @@ def parse_identity(filename, channel=None):
 
 
 _YT_ID_RE = re.compile(r"[A-Za-z0-9_-]{11}")
+
+
+def song_match(artist_a, title_a, artist_b, title_b):
+    """How two artist/title pairs relate: "same", "corrected" (one field fixed —
+    the same title, or the same artist with a near-identical title), or None (a
+    different song). Used where a Nomad brand code can be recycled for a new song,
+    so "shares a brand code" must not be read as "same song"."""
+    a_artist, a_title = _normalize(artist_a or ""), _normalize(title_a or "")
+    b_artist, b_title = _normalize(artist_b or ""), _normalize(title_b or "")
+    if (a_artist, a_title) == (b_artist, b_title):
+        return "same"
+    if a_title and a_title == b_title:
+        return "corrected"
+    if (a_artist and a_artist == b_artist and a_title and b_title
+            and difflib.SequenceMatcher(None, a_title, b_title).ratio() >= 0.8):
+        return "corrected"
+    return None
 
 
 def youtube_id_from_url(url):

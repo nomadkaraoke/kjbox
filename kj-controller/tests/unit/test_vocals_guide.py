@@ -251,3 +251,75 @@ def test_resolve_guide_missing_dir(guide_tree):
 def test_resolve_guide_none_path():
     from routes import _resolve_vocals_guide
     assert _resolve_vocals_guide(None, {"vocals_guide_dir": "/tmp"}) is None
+
+
+def _guides(tmp_path, *names):
+    masters = tmp_path / "NOMAD-720p"
+    guides = tmp_path / "NOMAD-vocals-padded"
+    masters.mkdir(exist_ok=True)
+    guides.mkdir(exist_ok=True)
+    for n in names:
+        (guides / n).write_bytes(b"x")
+    return masters, str(guides)
+
+
+def test_resolve_guide_recycled_code_picks_same_song(tmp_path):
+    """2026-10-08: NOMAD-1537 held Alma Nocturna's (deleted job) guide beside Luvcat's;
+    the alphabetical first pick sang the wrong song."""
+    from routes import _resolve_vocals_guide
+    masters, guides = _guides(tmp_path, "NOMAD-1537 - Alma Nocturna - Mejor Cállate.flac",
+                              "NOMAD-1537 - Luvcat - Spider.flac")
+    got = _resolve_vocals_guide(str(masters / "NOMAD-1537 - Luvcat - Spider.mp4"),
+                                {"vocals_guide_dir": guides})
+    assert got and got.endswith("NOMAD-1537 - Luvcat - Spider.flac")
+
+
+def test_resolve_guide_only_other_songs_guide_returns_none(tmp_path):
+    """New master's guide not synced yet: never fall back to the old song's vocals."""
+    from routes import _resolve_vocals_guide
+    masters, guides = _guides(tmp_path, "NOMAD-1754 - Eli - The Comeback.flac")
+    got = _resolve_vocals_guide(str(masters / "NOMAD-1754 - Amy Macdonald - Poison Prince.mp4"),
+                                {"vocals_guide_dir": guides})
+    assert got is None
+
+
+def test_resolve_guide_corrected_artist_still_matches(tmp_path):
+    from routes import _resolve_vocals_guide
+    masters, guides = _guides(tmp_path, "NOMAD-1681 - noname - Song.flac")
+    got = _resolve_vocals_guide(str(masters / "NOMAD-1681 - Real Band - Song.mp4"),
+                                {"vocals_guide_dir": guides})
+    assert got and got.endswith("NOMAD-1681 - noname - Song.flac")
+
+
+def test_resolve_guide_normalization_differences_match(tmp_path):
+    """Sanitized/NFD guide names still resolve (the reason matching is by brand)."""
+    import unicodedata
+    from routes import _resolve_vocals_guide
+    masters, guides = _guides(tmp_path, unicodedata.normalize(
+        "NFD", "NOMAD-0042 - Beyoncé - Halo.flac"))
+    got = _resolve_vocals_guide(str(masters / "NOMAD-0042 - Beyoncé - Halo.mp4"),
+                                {"vocals_guide_dir": guides})
+    assert got is not None
+
+
+def test_resolve_guide_same_artist_other_song_returns_none(tmp_path):
+    from routes import _resolve_vocals_guide
+    masters, guides = _guides(tmp_path, "NOMAD-0600 - Eli - The Comeback.flac")
+    got = _resolve_vocals_guide(str(masters / "NOMAD-0600 - Eli - Another Song.mp4"),
+                                {"vocals_guide_dir": guides})
+    assert got is None
+
+
+def test_resolve_guide_same_artist_title_typo_fixed_matches(tmp_path):
+    from routes import _resolve_vocals_guide
+    masters, guides = _guides(tmp_path, "NOMAD-0601 - Eli - The Comebak.flac")
+    got = _resolve_vocals_guide(str(masters / "NOMAD-0601 - Eli - The Comeback.mp4"),
+                                {"vocals_guide_dir": guides})
+    assert got is not None
+
+
+def test_song_match_empty_fields_do_not_match():
+    import naming
+    assert naming.song_match("", "", "", "") == "same"
+    assert naming.song_match("", "X", "", "Y") is None
+    assert naming.song_match("A", "", "A", "Z") is None

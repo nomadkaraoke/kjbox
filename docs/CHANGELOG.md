@@ -2,6 +2,37 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-10-08 - Reused Nomad brand codes no longer keep the old song's name (v0.128.1)
+
+- **Bug (live night, 2026-10-08):** the KJ searched *Amy Macdonald - Poison Prince* and linked the
+  NOMAD-1754 result, but the rotation entry came out as **"Eli - The Comeback"**. gen had recycled
+  NOMAD-1754: the Eli job (8a10a22d) was edited (which recycles its code) and then deleted on
+  2026-10-08 05:06–05:08 UTC, and Poison Prince was given 1754 at 01:24 UTC that night. Master
+  sync removed the Eli file and copied the new one. But the rescan matched the new file to the
+  existing `nomad-1754` `media_library` row and `upsert_scanned` only refreshed `file_path`, so
+  search (and the add-and-link song text) still said Eli. The same stale state was found on
+  NOMAD-1537, NOMAD-1583 (both recycled codes) and NOMAD-1681 (an artist correction that never applied).
+- **Fix (`media.py` `_reconcile_master_row`, `media_library.py` `replace_identity`):** for masters,
+  if the file now under a brand code parses to a different artist/title than the row's
+  `raw_original_name`, the row takes the new identity. Manual edits survive while the filename is
+  unchanged. If it is a different song (`naming.song_match` is None: the title differs, and it isn't
+  the same artist with a near-identical title), the play/preview/version-note rows for that `media_id`
+  are re-keyed to `nomad-####~retired-<timestamp>-<rand>`, so the new track doesn't inherit the old
+  one's "usual"/play counts. If old and new files briefly coexist mid-sync, the newest mtime wins
+  (filename breaks ties), so the row can't flip-flop.
+- **Pre-deploy check:** replaying the logic against a copy of NomadPC's `media_library.db` and its
+  NOMAD-720p listing changes exactly those 4 rows. 1681 keeps its stats; 1754 retires 1 preview row
+  (the night's preview of the new file, logged under the Eli name).
+- **Same root cause, worse symptom: wrong original-vocals guide.** `_resolve_vocals_guide` took the
+  alphabetically first `NOMAD-#### - *` file in `NOMAD-vocals-padded/`, and the vocals sync is
+  additive-only (GCS holds 247 guides, the device 1,710, so deletes can't be turned on). A recycled
+  code keeps the old song's guide, so **NOMAD-1537 Luvcat – Spider played Alma Nocturna's vocals**
+  and **NOMAD-1295 Fox Stevenson – Victory Over Truth played Queen Anne – Let's Dance's**.
+  `_pick_guide_for_master` now prefers the guide with the same artist+title, then a corrected one
+  (same `song_match` rule), and never returns another song's guide. Checked across all 1,760
+  device masters: 1537 and 1681 switch to their own guides, 1295 correctly gets none, and nothing
+  else changes.
+
 ## 2026-10-08 - Singer "song for a friend" + rename guard (v0.128.0)
 
 - **Bug (live, 2026-10-08):** Nats added her song, tapped "Request another song", then tapped

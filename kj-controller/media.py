@@ -5,7 +5,9 @@ import os
 import shutil
 import tempfile
 import unicodedata
+import uuid
 import zipfile
+from datetime import datetime
 
 import requests
 
@@ -14,7 +16,7 @@ from utils import log_message, sanitize_filename_part, parse_youtube_filename
 from naming import (
     parse_identity, extract_media_id, media_id_for, content_hash,
     build_slug_filename, merge_llm_result, strip_media_id_token,
-    youtube_id_from_media_id, SOURCE_UPLOAD, DOWNLOAD_SOURCES,
+    youtube_id_from_media_id, song_match, SOURCE_UPLOAD, SOURCE_MASTER, DOWNLOAD_SOURCES,
 )
 
 # media_id prefix -> canonical source, for identity of brand-new tokened files.
@@ -273,6 +275,7 @@ class MediaIndex:
         non_library_dirnames = set(
             self.config.get('non_library_dirnames', DEFAULT_NON_LIBRARY_DIRNAMES))
         existing = self._load_file()
+        master_records = {}  # media_id -> (mtime, record), reconciled after the walk
 
         for folder in self.config.get('media_folders', []):
             folder = os.path.realpath(folder)
@@ -324,7 +327,7 @@ class MediaIndex:
                         try:
                             media_id, identity = self._resolve_media_id(real_path, fname)
                             entry["media_id"] = media_id
-                            self.media_library.upsert_scanned({
+                            record = {
                                 "media_id": media_id,
                                 "source": identity["source"],
                                 "source_ref": identity["source_ref"],
@@ -336,7 +339,17 @@ class MediaIndex:
                                 "raw_original_name": fname,
                                 "file_path": real_path,
                                 "ext": ext,
-                            })
+                            }
+                            if record["source"] == SOURCE_MASTER:
+                                # Defer: two files can briefly share a brand code
+                                # mid-sync (old + replacement); newest wins below.
+                                # Filename breaks mtime ties so the pick is stable.
+                                key = (stat.st_mtime, fname)
+                                prev = master_records.get(media_id)
+                                if prev is None or key > prev[0]:
+                                    master_records[media_id] = (key, record)
+                            else:
+                                self.media_library.upsert_scanned(record)
                         except Exception as exc:  # never let indexing crash on one file
                             log_message(f"media_library upsert failed for {fname}: {exc}", self.config)
 
@@ -348,6 +361,13 @@ class MediaIndex:
 
                     new_index[real_path] = entry
 
+        for _key, record in master_records.values():
+            try:
+                self._reconcile_master_row(record)
+            except Exception as exc:  # never let indexing crash on one file
+                log_message(f"media_library upsert failed for {record['raw_original_name']}: {exc}",
+                            self.config)
+
         self.index = new_index
         self.save()
         if self.media_library is not None:
@@ -357,6 +377,40 @@ class MediaIndex:
                 log_message(f"media_library prune failed: {exc}", self.config)
         log_message(f"Media scan complete: {len(self.index)} files indexed.", self.config)
         return self.index
+
+    def _reconcile_master_row(self, record):
+        """Upsert a scanned Nomad master, refreshing identity if upstream changed it.
+
+        A master's media_id is just its brand code (nomad-1754), and gen reuses
+        brand codes: deleting or editing a published job recycles its number for
+        the next track. It also renames masters when a title is corrected. So when
+        the file now under a known media_id parses to a different artist/title than
+        the filename the row was built from, the row must follow the file — the
+        plain upsert_scanned path would keep the old song's name on the new file.
+
+        A different song (naming.song_match is None) also has its play/preview/note
+        stats retired off this media_id; a corrected artist or title keeps them.
+        """
+        media_id = record["media_id"]
+        existing = self.media_library.get(media_id)
+        if existing is None:
+            self.media_library.upsert_scanned(record)
+            return
+        raw = existing.get("raw_original_name")
+        old = parse_identity(raw) if raw else existing
+        match = song_match(old.get("artist"), old.get("title"), record["artist"], record["title"])
+        if match == "same":
+            self.media_library.upsert_scanned(record)  # unchanged upstream; keep curated edits
+            return
+        different_song = match is None
+        retired = self.media_library.replace_identity(
+            record, retire_stats=different_song,
+            retired_suffix=f"{datetime.now():%Y%m%d%H%M%S}-{uuid.uuid4().hex[:6]}")
+        log_message(
+            f"Master {media_id} now holds '{record['raw_original_name']}' "
+            f"(was '{raw or (existing.get('artist'), existing.get('title'))}'): identity refreshed"
+            + (f", {retired} stats rows retired (brand code reused)" if different_song else ""),
+            self.config)
 
     def _prune_missing_download_rows(self, new_index):
         """Delete download-source media_library rows whose file vanished.
