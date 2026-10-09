@@ -7091,8 +7091,13 @@ def history_nights():
 
 @routes_bp.route('/history/night', methods=['GET'])
 def history_night():
+    import datetime as _dt
     night = (request.args.get('night') or '').strip()
-    if not re.fullmatch(r'\d{4}-\d{2}-\d{2}', night):
+    try:
+        valid = bool(re.fullmatch(r'\d{4}-\d{2}-\d{2}', night)) and bool(_dt.date.fromisoformat(night))
+    except ValueError:
+        valid = False
+    if not valid:
         return jsonify({"error": "night must be YYYY-MM-DD"}), 400
     log = _night_log()
     if not log:

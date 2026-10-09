@@ -895,7 +895,7 @@ All of these are read-only `GET`s against `StatsStore` (`stats.db`, stats_store.
 | Range buttons All time / This year / Last 30 days / Custom (a date input) | `applyStatsRange` 4516 and the `#statsSince` change listener | Re-fetches the overview and the current view with `since=YYYY-MM-DD` | | |
 | View switch buttons | `switchStatsView` 4326 | as per the view | | |
 
-#### 3B.12a Night Log section (`#night-log`; collapsed by default and hidden in Simple Mode)
+#### 3B.12a Night Log (launcher `#night-log` below Song Stats, hidden in Simple Mode → wide modal `#night-log-modal`)
 
 A timestamped log of any past night (or tonight): who sang what and when, whether the KJ or the
 singer's phone added it (and via which search: library, YouTube, KaraokeNerds, Divebar, make-it), and
@@ -906,13 +906,14 @@ from `rotation_archive` + live `rotation_entries` + `sing_requests` (rotation.db
 
 | Capability (trigger) | app.js fn | HTTP | Backend |
 |---|---|---|---|
+| **Open** button (refetches every time) / × / Esc / backdrop click | `openNightLog` / `closeNightLog` | | |
 | Night picker `#nightLogSelect` (newest first) | `loadNightLogNights` | `GET /history/nights?min_songs=10` → `nights` | `history_nights` → `NightLog.list_nights` |
 | Min-songs filter `#nightLogMinSongs` (default 10, 0 = every date; hides tests / non-events) | change → `loadNightLogNights` | same | same |
-| Timeline + summary cards for one night | `loadNightLogNight` → `renderNightLog` | `GET /history/night?night=YYYY-MM-DD` → `entries` (400 on a bad date) | `history_night` → `NightLog.get_night` |
+| Timeline table + summary cards for one night (stacks into cards under 760px) | `loadNightLogNight` → `renderNightLog` | `GET /history/night?night=YYYY-MM-DD` → `entries` (400 on a bad date) | `history_night` → `NightLog.get_night` |
 | Show unsung toggle `#nightLogShowUnsung` (left / waiting entries) | `renderNightLog` | client-side | |
 | CSV download | `nightLogCsv` | client-side | |
 
-localStorage: `kjbox.nightLogCollapsed`, `kjbox.nightLogMinSongs`, `kjbox.nightLogShowUnsung`.
+localStorage: `kjbox.nightLogMinSongs`, `kjbox.nightLogShowUnsung`.
 
 Archives written since v0.129.0 keep the original entry id, `done_at`, download/gen columns and
 `singers_json` (`RotationStore._ARCHIVE_EXTRA_COLS`), so they link exactly. Older archive rows are

@@ -286,8 +286,12 @@ class NightLog:
                 i += 1
                 if q["id"] in claimed_reqs:
                     continue
+                # Same singer, or (the KJ renamed them since) the same song:
+                # title AND artist both present, so a short title can't match alone.
                 title = _norm(q.get("song_title"))
-                if _norm(q.get("singer_name")) == singer or (title and title in song):
+                artist = _norm(q.get("song_artist"))
+                same_song = bool(title and artist and title in song and artist in song)
+                if _norm(q.get("singer_name")) == singer or same_song:
                     r["_req"] = q
                     claimed_reqs.add(q["id"])
                     break

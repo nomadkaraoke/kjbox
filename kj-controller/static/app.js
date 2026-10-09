@@ -4879,7 +4879,7 @@ function initSongStats() {
 document.addEventListener('DOMContentLoaded', initSongStats);
 
 // ===== Night Log section (review any past night — night_log.py) =====
-const nightLog = { nights: [], night: null, entries: [], loaded: false };
+const nightLog = { nights: [], night: null, entries: [] };
 
 function nlTime(ts) {
     // 'YYYY-MM-DD HH:MM:SS' (device local) -> '9:04 PM'
@@ -4974,36 +4974,33 @@ function renderNightLog() {
     const body = document.getElementById('nightLogBody');
     if (!rows.length) { body.innerHTML = '<div class="stats-muted">Nothing recorded for this night.</div>'; return; }
     let n = 0;
-    body.innerHTML = rows.map(e => {
-        const ab = nlAddedBy(e), md = nlMedia(e);
-        const wait = nlWaitMinutes(e);
-        const singer = (e.singers && e.singers.length > 1) ? e.singers.join(' & ') : (e.singer || '');
-        const asked = e.added_by && e.added_by.requested_as;
-        const meta = [];
-        meta.push('added ' + nlTime(e.added_at));
-        if (ab.detail) meta.push(ab.detail);
-        if (wait !== null) meta.push('waited ' + wait + 'm');
-        if (asked && !nlSameSong(asked, e.song)) meta.push('asked for “' + asked + '”');
-        return '<div class="nl-row' + (e.sung ? '' : ' nl-unsung') + '">' +
-            '<div class="nl-line">' +
-                '<span class="nl-num">' + (e.sung ? ++n : '–') + '</span>' +
-                '<span class="nl-time">' + escHtml(e.sung_at ? nlTime(e.sung_at) : (e.sung ? '' : 'not sung')) + '</span>' +
-                '<span class="nl-main"><b>' + escHtml(singer) + '</b> — ' + escHtml(e.song || '') + '</span>' +
-            '</div>' +
-            '<div class="nl-meta">' +
-                (e.sung ? '' : '<span class="nl-tag nl-tag-status">' + escHtml(e.status || 'not sung') + '</span>') +
-                '<span class="nl-tag ' + (e.added_by && e.added_by.by === 'singer' ? 'nl-tag-singer' : 'nl-tag-kj') + '">' +
-                    escHtml(ab.text) + '</span>' +
-                '<span class="nl-tag' + (e.media && e.media.fetched_tonight ? ' nl-tag-fetched' : '') + '" title="' +
-                    escAttr((e.media && e.media.file_path) || '') + '">' + escHtml(md.text) + '</span>' +
-                (e.paid ? '<span class="nl-tag">paid</span>' : '') +
-                '<span class="nl-sub">' + escHtml(meta.join(' · ')) + '</span>' +
-            '</div>' +
-            (md.detail ? '<div class="nl-file" title="' + escAttr((e.media && e.media.file_path) || '') + '">' +
-                '<span>' + escHtml(md.detail) + '</span></div>' : '') +
-            (e.notes ? '<div class="nl-file"><span>' + escHtml(e.notes) + '</span></div>' : '') +
-            '</div>';
-    }).join('');
+    const tag = (cls, text, title) => '<span class="nl-tag ' + cls + '"' +
+        (title ? ' title="' + escAttr(title) + '"' : '') + '>' + escHtml(text) + '</span>';
+    body.innerHTML = '<table class="nl-table"><thead><tr>' +
+        '<th>#</th><th>Sung</th><th>Added</th><th>Wait</th><th>Singer</th><th>Song</th>' +
+        '<th>Added by</th><th>Media</th><th>File</th>' +
+        '</tr></thead><tbody>' + rows.map(e => {
+            const ab = nlAddedBy(e), md = nlMedia(e), m = e.media || {};
+            const wait = nlWaitMinutes(e);
+            const singer = (e.singers && e.singers.length > 1) ? e.singers.join(' & ') : (e.singer || '');
+            const asked = e.added_by && e.added_by.requested_as;
+            const fromSinger = e.added_by && e.added_by.by === 'singer';
+            return '<tr class="' + (e.sung ? '' : 'nl-unsung') + '">' +
+                '<td class="nl-num">' + (e.sung ? ++n : '') + '</td>' +
+                '<td class="nl-time" data-label="Sung">' + escHtml(e.sung_at ? nlTime(e.sung_at) : (e.sung ? '—' : 'not sung')) + '</td>' +
+                '<td class="nl-time" data-label="Added">' + escHtml(nlTime(e.added_at)) + '</td>' +
+                '<td class="nl-time" data-label="Wait">' + (wait === null ? '' : escHtml(wait + 'm')) + '</td>' +
+                '<td class="nl-singer">' + escHtml(singer) + (e.paid ? ' ' + tag('', 'paid') : '') + '</td>' +
+                '<td>' + escHtml(e.song || '') +
+                    (e.sung ? '' : ' ' + tag('nl-tag-status', e.status || 'not sung')) +
+                    (asked && !nlSameSong(asked, e.song) ? '<span class="nl-sub">asked for “' + escHtml(asked) + '”</span>' : '') +
+                    (e.notes ? '<span class="nl-sub">' + escHtml(e.notes) + '</span>' : '') + '</td>' +
+                '<td>' + tag(fromSinger ? 'nl-tag-singer' : 'nl-tag-kj', ab.text) +
+                    (ab.detail ? '<span class="nl-sub">' + escHtml(ab.detail) + '</span>' : '') + '</td>' +
+                '<td>' + tag(m.fetched_tonight ? 'nl-tag-fetched' : '', md.text) + '</td>' +
+                '<td class="nl-file" title="' + escAttr(m.file_path || '') + '">' + escHtml(md.detail) + '</td>' +
+                '</tr>';
+        }).join('') + '</tbody></table>';
 }
 
 // "Artist - Title" vs "Title - Artist" (or different punctuation) is the same ask.
@@ -5035,46 +5032,23 @@ function nightLogCsv() {
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
 
-function refreshNightLog() {
-    const section = document.getElementById('night-log');
-    if (section && section.classList.contains('collapsed')) setNightLogCollapsed(false);
-    nightLog.loaded = true;
+function openNightLog() {
+    document.getElementById('night-log-modal').classList.remove('hidden');
+    // Always refetch on open: tonight's log changes while the show runs.
     loadNightLogNights();
 }
 
-function setNightLogCollapsed(collapsed) {
-    const section = document.getElementById('night-log');
-    if (!section) return;
-    section.classList.toggle('collapsed', collapsed);
-    const header = section.querySelector('.night-log-header');
-    if (header) header.setAttribute('aria-expanded', String(!collapsed));
-    try { localStorage.setItem('kjbox.nightLogCollapsed', collapsed ? '1' : '0'); } catch (e) { /* private mode */ }
-    if (!collapsed && !nightLog.loaded) { nightLog.loaded = true; loadNightLogNights(); }
+function closeNightLog() {
+    document.getElementById('night-log-modal').classList.add('hidden');
 }
 
 function initNightLog() {
-    const section = document.getElementById('night-log');
-    if (!section) return;
+    if (!document.getElementById('night-log-modal')) return;
     try {
         const min = localStorage.getItem('kjbox.nightLogMinSongs');
         if (min !== null && min !== '') document.getElementById('nightLogMinSongs').value = min;
         document.getElementById('nightLogShowUnsung').checked = localStorage.getItem('kjbox.nightLogShowUnsung') === '1';
     } catch (e) { /* private mode */ }
-    let collapsed = true;
-    try { collapsed = localStorage.getItem('kjbox.nightLogCollapsed') !== '0'; } catch (e) { /* private mode */ }
-    setNightLogCollapsed(collapsed);
-
-    const header = section.querySelector('.night-log-header');
-    header.addEventListener('click', (e) => {
-        if (e.target.closest('.header-actions')) return;
-        setNightLogCollapsed(!section.classList.contains('collapsed'));
-    });
-    header.addEventListener('keydown', (e) => {
-        if (e.key !== 'Enter' && e.key !== ' ') return;
-        if (e.target.closest('.header-actions')) return;
-        e.preventDefault();
-        setNightLogCollapsed(!section.classList.contains('collapsed'));
-    });
     document.getElementById('nightLogSelect').addEventListener('change', (e) => loadNightLogNight(e.target.value));
     document.getElementById('nightLogMinSongs').addEventListener('change', (e) => {
         try { localStorage.setItem('kjbox.nightLogMinSongs', e.target.value); } catch (err) { /* private mode */ }
@@ -5085,6 +5059,9 @@ function initNightLog() {
         renderNightLog();
     });
     document.getElementById('nightLogCsv').addEventListener('click', nightLogCsv);
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && !document.getElementById('night-log-modal').classList.contains('hidden')) closeNightLog();
+    });
 }
 
 document.addEventListener('DOMContentLoaded', initNightLog);

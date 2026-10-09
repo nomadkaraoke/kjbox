@@ -4,8 +4,8 @@ Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](a
 
 ## 2026-10-09 - Night Log: review any past karaoke night (v0.129.0)
 
-- New **Night Log** section in the KJ UI (below Song Stats, advanced mode). Pick a night to see every
-  song in the order it was sung: time sung / added / wait, singer, whether the KJ or the singer's phone
+- New **Night Log** in the KJ UI: an **Open** button below Song Stats (advanced mode) opens a wide modal.
+  Pick a night to see every song in the order it was sung: time sung / added / wait, singer, whether the KJ or the singer's phone
   added it (and how: library search, YouTube, KaraokeNerds, Divebar, make-it), and the media source
   (library, Nomad master, Divebar, YouTube, upload) with a "fetched tonight" flag. Summary cards, a
   "show unsung" toggle, and CSV download. Nights with fewer than **10** songs sung are hidden by

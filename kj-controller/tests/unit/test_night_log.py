@@ -254,6 +254,7 @@ def test_history_routes(flask_test_client, flask_app):
     assert len(r.get_json()["entries"]) == 11
 
     assert flask_test_client.get("/history/night?night=nope").status_code == 400
+    assert flask_test_client.get("/history/night?night=2026-13-45").status_code == 400
 
 
 def test_get_night_orders_by_when_sung_not_when_added(dbs):
@@ -277,3 +278,16 @@ def test_unsung_duplicate_does_not_steal_the_play(dbs):
     assert sung[0]["added_at"] == "2026-10-08 20:57:51"
     unsung = [e for e in entries if not e["sung"]]
     assert unsung[0]["sung_at"] is None
+
+
+def test_request_time_match_needs_singer_or_full_song(dbs):
+    store, _, stats = dbs
+    _legacy_archive(store, "Kim", "Love - Lana Del Rey", None, "2026-10-01 21:00:00")
+    # Different singer, title alone matches: must NOT link.
+    _request(store, "Pat", "Someone Else", "Love", "local", "2026-10-01 21:00:01")
+    [e] = _log(store, stats).get_night("2026-10-01")
+    assert e["added_by"]["by"] == "kj"
+    # Renamed singer but title + artist both match: links.
+    _request(store, "Kimberly", "Lana Del Rey", "Love", "youtube", "2026-10-01 21:00:02")
+    [e] = _log(store, stats).get_night("2026-10-01")
+    assert e["added_by"]["source_type"] == "youtube"
