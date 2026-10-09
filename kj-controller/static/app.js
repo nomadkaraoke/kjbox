@@ -5015,7 +5015,12 @@ function nightLogCsv() {
     const rows = showUnsung ? nightLog.entries : nightLog.entries.filter(e => e.sung);
     const head = ['sung_at', 'added_at', 'status', 'singer', 'song', 'added_by', 'request_source',
                   'requested_at', 'requested_as', 'media', 'fetched_tonight', 'file', 'wait_minutes', 'notes'];
-    const q = v => '"' + String(v === null || v === undefined ? '' : v).replace(/"/g, '""') + '"';
+    // Singer-typed text (names, songs) must not run as a spreadsheet formula.
+    const q = v => {
+        let t = String(v === null || v === undefined ? '' : v);
+        if (/^[=+\-@\t\r]/.test(t)) t = "'" + t;
+        return '"' + t.replace(/"/g, '""') + '"';
+    };
     const lines = [head.join(',')].concat(rows.map(e => {
         const a = e.added_by || {}, m = e.media || {};
         return [e.sung_at, e.added_at, e.status,
