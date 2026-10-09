@@ -983,21 +983,18 @@ def _pick_guide_for_master(master_name, guide_paths):
     """The guide in ``guide_paths`` (all sharing the master's brand code) that is the
     same song as ``master_name``, or None. See _resolve_vocals_guide."""
     import naming as _naming
-    from text_normalize import normalize as _norm
 
-    def _key(name):
-        ident = _naming.parse_identity(name)
-        return _norm(ident.get("artist") or ""), _norm(ident.get("title") or "")
-
-    artist, title = _key(master_name)
-    partial = None
+    master = _naming.parse_identity(master_name)
+    corrected = None
     for path in guide_paths:
-        g_artist, g_title = _key(os.path.basename(path))
-        if (g_artist, g_title) == (artist, title):
+        guide = _naming.parse_identity(os.path.basename(path))
+        match = _naming.song_match(master["artist"], master["title"],
+                                   guide["artist"], guide["title"])
+        if match == "same":
             return path
-        if partial is None and (g_artist == artist or g_title == title):
-            partial = path
-    return partial
+        if match == "corrected" and corrected is None:
+            corrected = path
+    return corrected
 
 
 def _library_drive_offline_response(file_path):

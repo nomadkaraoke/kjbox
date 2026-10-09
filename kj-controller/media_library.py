@@ -7,6 +7,7 @@ shared connection across Flask + background threads caused a prior outage.
 
 import sqlite3
 import threading
+import uuid
 
 from text_normalize import normalize as _normalize
 
@@ -218,31 +219,36 @@ class MediaLibraryStore:
         moved = 0
         conn = self._get_conn()
         with self._lock():
-            conn.execute(
-                """
-                UPDATE media_library
-                SET source=?, source_ref=?, artist=?, title=?, artist_norm=?, title_norm=?,
-                    confidence=?, parse_method=?, needs_review=?, raw_original_name=?,
-                    file_path=?, ext=?, updated_at=datetime('now')
-                WHERE media_id=?
-                """,
-                (record.get("source") or "", record.get("source_ref"), artist, title,
-                 _normalize(artist), _normalize(title), record.get("confidence"),
-                 record.get("parse_method"), int(record.get("needs_review") or 0),
-                 record.get("raw_original_name"), record.get("file_path"),
-                 record.get("ext"), media_id),
-            )
-            if retire_stats:
-                retired_id = f"{media_id}~retired-{retired_suffix or 'old'}"
-                existing = {r[0] for r in conn.execute(
-                    "SELECT name FROM sqlite_master WHERE type='table'")}
-                for table in self._STATS_TABLES:
-                    if table in existing:
-                        cur = conn.execute(
-                            f"UPDATE {table} SET media_id=? WHERE media_id=?",
-                            (retired_id, media_id))
-                        moved += cur.rowcount
-            conn.commit()
+            try:
+                conn.execute(
+                    """
+                    UPDATE media_library
+                    SET source=?, source_ref=?, artist=?, title=?, artist_norm=?, title_norm=?,
+                        confidence=?, parse_method=?, needs_review=?, raw_original_name=?,
+                        file_path=?, ext=?, updated_at=datetime('now')
+                    WHERE media_id=?
+                    """,
+                    (record.get("source") or "", record.get("source_ref"), artist, title,
+                     _normalize(artist), _normalize(title), record.get("confidence"),
+                     record.get("parse_method"), int(record.get("needs_review") or 0),
+                     record.get("raw_original_name"), record.get("file_path"),
+                     record.get("ext"), media_id),
+                )
+                if retire_stats:
+                    retired_id = f"{media_id}~retired-{retired_suffix or uuid.uuid4().hex[:8]}"
+                    existing = {r[0] for r in conn.execute(
+                        "SELECT name FROM sqlite_master WHERE type='table'")}
+                    for table in self._STATS_TABLES:
+                        if table in existing:
+                            cur = conn.execute(
+                                f"UPDATE {table} SET media_id=? WHERE media_id=?",
+                                (retired_id, media_id))
+                            moved += cur.rowcount
+                conn.commit()
+            except Exception:
+                conn.rollback()  # never leave a half-applied identity on this thread's conn
+                raise
+
         return moved
 
     def update_path(self, media_id, file_path):

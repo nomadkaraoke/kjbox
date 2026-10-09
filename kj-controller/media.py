@@ -5,6 +5,7 @@ import os
 import shutil
 import tempfile
 import unicodedata
+import uuid
 import zipfile
 from datetime import datetime
 
@@ -15,9 +16,8 @@ from utils import log_message, sanitize_filename_part, parse_youtube_filename
 from naming import (
     parse_identity, extract_media_id, media_id_for, content_hash,
     build_slug_filename, merge_llm_result, strip_media_id_token,
-    youtube_id_from_media_id, SOURCE_UPLOAD, SOURCE_MASTER, DOWNLOAD_SOURCES,
+    youtube_id_from_media_id, song_match, SOURCE_UPLOAD, SOURCE_MASTER, DOWNLOAD_SOURCES,
 )
-from text_normalize import normalize as _normalize
 
 # media_id prefix -> canonical source, for identity of brand-new tokened files.
 _MEDIA_ID_PREFIX_SOURCE = {
@@ -343,9 +343,11 @@ class MediaIndex:
                             if record["source"] == SOURCE_MASTER:
                                 # Defer: two files can briefly share a brand code
                                 # mid-sync (old + replacement); newest wins below.
+                                # Filename breaks mtime ties so the pick is stable.
+                                key = (stat.st_mtime, fname)
                                 prev = master_records.get(media_id)
-                                if prev is None or stat.st_mtime >= prev[0]:
-                                    master_records[media_id] = (stat.st_mtime, record)
+                                if prev is None or key > prev[0]:
+                                    master_records[media_id] = (key, record)
                             else:
                                 self.media_library.upsert_scanned(record)
                         except Exception as exc:  # never let indexing crash on one file
@@ -359,7 +361,7 @@ class MediaIndex:
 
                     new_index[real_path] = entry
 
-        for _mtime, record in master_records.values():
+        for _key, record in master_records.values():
             try:
                 self._reconcile_master_row(record)
             except Exception as exc:  # never let indexing crash on one file
@@ -386,9 +388,8 @@ class MediaIndex:
         the filename the row was built from, the row must follow the file — the
         plain upsert_scanned path would keep the old song's name on the new file.
 
-        Both artist AND title differing means a different song: its play/preview/
-        note stats are retired off this media_id. One matching (a corrected artist
-        or title) is the same song, so stats stay.
+        A different song (naming.song_match is None) also has its play/preview/note
+        stats retired off this media_id; a corrected artist or title keeps them.
         """
         media_id = record["media_id"]
         existing = self.media_library.get(media_id)
@@ -397,15 +398,14 @@ class MediaIndex:
             return
         raw = existing.get("raw_original_name")
         old = parse_identity(raw) if raw else existing
-        old_artist, old_title = _normalize(old.get("artist") or ""), _normalize(old.get("title") or "")
-        new_artist, new_title = _normalize(record["artist"] or ""), _normalize(record["title"] or "")
-        if (old_artist, old_title) == (new_artist, new_title):
+        match = song_match(old.get("artist"), old.get("title"), record["artist"], record["title"])
+        if match == "same":
             self.media_library.upsert_scanned(record)  # unchanged upstream; keep curated edits
             return
-        different_song = old_artist != new_artist and old_title != new_title
+        different_song = match is None
         retired = self.media_library.replace_identity(
             record, retire_stats=different_song,
-            retired_suffix=datetime.now().strftime("%Y%m%d%H%M%S"))
+            retired_suffix=f"{datetime.now():%Y%m%d%H%M%S}-{uuid.uuid4().hex[:6]}")
         log_message(
             f"Master {media_id} now holds '{record['raw_original_name']}' "
             f"(was '{raw or (existing.get('artist'), existing.get('title'))}'): identity refreshed"

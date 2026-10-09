@@ -109,3 +109,43 @@ def test_replace_identity_without_stats_tables():
                                     "file_path": "/y"}, retire_stats=True, retired_suffix="t")
     assert moved == 0
     assert store.get("nomad-1")["artist"] == "C"
+
+
+def test_recycled_code_same_artist_different_song_retires_stats(tmp_path):
+    masters, store, stats, mi = _setup(tmp_path)
+    _touch(os.path.join(masters, "NOMAD-0500 - Eli - The Comeback.mp4"))
+    mi.scan()
+    stats.record_play("nomad-0500", entry_id=3, singer="Bob", artist="Eli", title="The Comeback")
+    os.remove(os.path.join(masters, "NOMAD-0500 - Eli - The Comeback.mp4"))
+    _touch(os.path.join(masters, "NOMAD-0500 - Eli - Something Else Entirely.mp4"))
+    mi.scan()
+    assert store.get("nomad-0500")["title"] == "Something Else Entirely"
+    n = stats._get_conn().execute(
+        "SELECT COUNT(*) FROM play_events WHERE media_id='nomad-0500'").fetchone()[0]
+    assert n == 0
+
+
+def test_equal_mtime_tie_is_stable(tmp_path):
+    masters, store, stats, mi = _setup(tmp_path)
+    _touch(os.path.join(masters, OLD), mtime=1_000_000)
+    _touch(os.path.join(masters, NEW), mtime=1_000_000)
+    mi.scan()
+    first = store.get("nomad-1754")["title"]
+    mi.scan()
+    assert store.get("nomad-1754")["title"] == first
+
+
+def test_replace_identity_rolls_back_on_failure(monkeypatch):
+    store = MediaLibraryStore(":memory:")
+    store.upsert({"media_id": "nomad-2", "source": "master", "artist": "A", "title": "B",
+                  "raw_original_name": "NOMAD-0002 - A - B.mp4", "file_path": "/x"})
+    conn = store._get_conn()
+    conn.execute("CREATE TABLE play_events (media_id TEXT UNIQUE)")
+    conn.execute("INSERT INTO play_events VALUES ('nomad-2'), ('nomad-2~retired-t')")
+    conn.commit()
+    import pytest
+    with pytest.raises(Exception):
+        store.replace_identity({"media_id": "nomad-2", "source": "master", "artist": "C",
+                                "title": "D", "file_path": "/y"},
+                               retire_stats=True, retired_suffix="t")
+    assert store.get("nomad-2")["artist"] == "A"  # identity update rolled back

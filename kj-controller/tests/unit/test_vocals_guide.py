@@ -300,3 +300,26 @@ def test_resolve_guide_normalization_differences_match(tmp_path):
     got = _resolve_vocals_guide(str(masters / "NOMAD-0042 - Beyoncé - Halo.mp4"),
                                 {"vocals_guide_dir": guides})
     assert got is not None
+
+
+def test_resolve_guide_same_artist_other_song_returns_none(tmp_path):
+    from routes import _resolve_vocals_guide
+    masters, guides = _guides(tmp_path, "NOMAD-0600 - Eli - The Comeback.flac")
+    got = _resolve_vocals_guide(str(masters / "NOMAD-0600 - Eli - Another Song.mp4"),
+                                {"vocals_guide_dir": guides})
+    assert got is None
+
+
+def test_resolve_guide_same_artist_title_typo_fixed_matches(tmp_path):
+    from routes import _resolve_vocals_guide
+    masters, guides = _guides(tmp_path, "NOMAD-0601 - Eli - The Comebak.flac")
+    got = _resolve_vocals_guide(str(masters / "NOMAD-0601 - Eli - The Comeback.mp4"),
+                                {"vocals_guide_dir": guides})
+    assert got is not None
+
+
+def test_song_match_empty_fields_do_not_match():
+    import naming
+    assert naming.song_match("", "", "", "") == "same"
+    assert naming.song_match("", "X", "", "Y") is None
+    assert naming.song_match("A", "", "A", "Z") is None
