@@ -2,6 +2,26 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-10-08 - Reused Nomad brand codes no longer keep the old song's name (v0.128.1)
+
+- **Bug (live night, 2026-10-08):** the KJ searched *Amy Macdonald - Poison Prince* and linked the
+  NOMAD-1754 result, but the rotation entry came out as **"Eli - The Comeback"**. gen had recycled
+  NOMAD-1754: the Eli job (8a10a22d) was edited (which recycles its code) and then deleted on
+  2026-10-08 05:06–05:08 UTC, and Poison Prince was given 1754 at 01:24 UTC that night. Master
+  sync removed the Eli file and copied the new one. But the rescan matched the new file to the
+  existing `nomad-1754` `media_library` row and `upsert_scanned` only refreshed `file_path`, so
+  search (and the add-and-link song text) still said Eli. The same stale state was found on
+  NOMAD-1537, NOMAD-1583 (both recycled codes) and NOMAD-1681 (an artist correction that never applied).
+- **Fix (`media.py` `_reconcile_master_row`, `media_library.py` `replace_identity`):** for masters,
+  if the file now under a brand code parses to a different artist/title than the row's
+  `raw_original_name`, the row takes the new identity. Manual edits survive while the filename is
+  unchanged. If artist **and** title both differ (a different song), the play/preview/version-note
+  rows for that `media_id` are re-keyed to `nomad-####~retired-<timestamp>`, so the new track doesn't
+  inherit the old one's "usual"/play counts. If old and new files briefly coexist mid-sync, the newest
+  mtime wins, so the row can't flip-flop.
+- **Pre-deploy check:** replaying the logic against a copy of NomadPC's `media_library.db` and its
+  NOMAD-720p listing changes exactly those 4 rows. 1681 keeps its stats; 1754 retires 1 preview row
+  (the night's preview of the new file, logged under the Eli name).
 ## 2026-10-08 - Singer "song for a friend" + rename guard (v0.128.0)
 
 - **Bug (live, 2026-10-08):** Nats added her song, tapped "Request another song", then tapped
