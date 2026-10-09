@@ -28,8 +28,8 @@ When you play a file, `routes._resolve_vocals_guide` decides whether a guide is 
 3. Match a guide by **brand prefix** (`NOMAD-#### - *`), so master/guide filename
    normalisation differences don't matter.
 4. Among that brand's guides, pick the **same song** (`_pick_guide_for_master`): same
-   artist+title first, else a corrected one (artist *or* title matches). A guide matching
-   neither is never used. gen recycles brand codes, and the vocals sync is additive-only, so
+   artist+title first, else a corrected one (`naming.song_match`: same title, or same
+   artist with a near-identical title). Any other song's guide is never used. gen recycles brand codes, and the vocals sync is additive-only, so
    a reused code can still hold the old song's guide (e.g. NOMAD-1537, NOMAD-1295).
 
 If a guide is found, mpv loads it as a second audio track and the **Original Vocals**
