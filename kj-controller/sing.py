@@ -1377,7 +1377,10 @@ def submit():
     # device's singer; the typed name (from the device's localStorage) is stale
     # until they refresh, so the canonical name wins. Keeps a renamed singer from
     # re-splitting into their old name every time they add another song.
-    if device_id:
+    # Except a "song for a friend": the typed name is deliberately someone else,
+    # so the phone owner's alias must not overwrite it.
+    for_friend = data.get("for_friend") is True
+    if device_id and not for_friend:
         canonical = store.get_alias(device_id)
         if canonical:
             singer_name = canonical
@@ -1450,7 +1453,8 @@ def submit():
     # Social-media photo consent rides along with each request (the device
     # remembers the singer's choice), recorded against the canonical name so
     # the KJ's rotation shows it. Best-effort — never fail a song request.
-    if photo_consent:
+    # The phone owner's choice is theirs alone — never apply it to a friend.
+    if photo_consent and not for_friend:
         try:
             store.set_photo_consent(singer_name, photo_consent, source="singer")
         except Exception:

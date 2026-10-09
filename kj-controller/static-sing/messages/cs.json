@@ -59,7 +59,18 @@
     "differentPerson": "Někdo jiný?",
     "switchSinger": "Změnit zpěváka",
     "switchHint": "— začneš na tomhle telefonu s čistým štítem.",
-    "renameFailed": "Nepodařilo se uložit tvé nové jméno — zkontroluj připojení a zkus to znovu."
+    "renameFailed": "Nepodařilo se uložit tvé nové jméno — zkontroluj připojení a zkus to znovu.",
+    "editHintSelf": "Uprav si, jak se TVÉ jméno zobrazuje v pořadí. Tvé dnešní písničky se také zobrazí pod novým jménem.",
+    "friendPrompt": "Chceš přidat písničku pro někoho jiného?",
+    "friendTitle": "Písnička pro kamaráda",
+    "friendIntro": "Objednej písničku pro někoho jiného. Na dnešním seznamu se objeví pod jeho jménem a tvé jméno i písničky zůstanou beze změny.",
+    "friendNameLabel": "Jméno kamaráda (křestní jméno + první písmeno příjmení)",
+    "friendPhoneLabel": "Mobilní číslo kamaráda (nepovinné)",
+    "friendPhoneHint": "Až přijde na řadu, pošleme mu jednu SMS. Pokud číslo nevyplníš, moderátor ho jednoduše vyvolá jménem.",
+    "renameConfirmTitle": "Přejmenovat se na {name}?",
+    "renameConfirmBody": "Tvé dnešní písničky budou uvedeny pod jménem {name} místo {old}. Pokud je {name} kamarád, vyber raději písničku pro něj.",
+    "renameConfirmFriend": "🎤 {name} je kamarád: vybrat písničku pro něj",
+    "renameConfirmYes": "Ano, já jsem {name}: přejmenovat mě"
   },
   "search": {
     "title": "Vyber si píseň",
@@ -104,7 +115,12 @@
     "describeLink": "Nepamatuješ si název? Popiš ji",
     "describePlaceholder": "např. ta písnička z Titanicu",
     "describeCta": "Najít",
-    "figuringOut": "Zjišťujeme, kterou písničku myslíš…"
+    "figuringOut": "Zjišťujeme, kterou písničku myslíš…",
+    "editMyName": "✏️ upravit mé jméno",
+    "forFriend": "🎤 písnička pro kamaráda",
+    "friendTitle": "🎤 Vybírá se písnička pro: {name}",
+    "friendHint": "Na dnešním seznamu se objeví pod jménem {name}. Tvé vlastní jméno ani písničky se nezmění.",
+    "friendCancel": "Zrušit — je to pro mě"
   },
   "versions": {
     "sectionLibrary": "V naší knihovně",
@@ -363,7 +379,8 @@
     "failed": "Nepodařilo se odeslat — zeptej se KJ, jestli nejsou žádosti pozastavené.",
     "makeLimit": "Dnes večer už jsi nás požádal o vytvoření několika písniček — vyber si nějakou z katalogu, nebo se zeptej KJ.",
     "makeDisabled": "KJ teď nepřijímá žádosti o vytvoření písniček — vyber si místo toho nějakou z katalogu.",
-    "makeEmail": "Hotový video soubor a odkaz na YouTube ti pošleme i na e-mail ({email})."
+    "makeEmail": "Hotový video soubor a odkaz na YouTube ti pošleme i na e-mail ({email}).",
+    "detailsFriend": "Zpěvák: {name} (vybráno z tvého telefonu)"
   },
   "mySongs": {
     "title": "Tvé dnešní písně",
@@ -439,7 +456,9 @@
     "quickUpgraded": "✨ Plná verze je hotová a nahradila rychlou verzi.",
     "reviewOpening": "Otevírám…",
     "reviewFailed": "Tady se nepodařilo kontrolu otevřít – použij raději odkaz ve svém e-mailu.",
-    "reviewOver": "Tato kontrola je už hotová – není potřeba nic dalšího dělat."
+    "reviewOver": "Tato kontrola je už hotová – není potřeba nic dalšího dělat.",
+    "requestForFriend": "🎤 Vybrat písničku pro kamaráda",
+    "forFriend": "Pro: {name}"
   },
   "notify": {
     "heading": "🔔 Až na tebe přijde řada",

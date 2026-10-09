@@ -59,7 +59,18 @@
     "differentPerson": "Inna osoba?",
     "switchSinger": "Zmień wykonawcę",
     "switchHint": "— zaczyna od nowa na tym telefonie.",
-    "renameFailed": "Nie udało się zapisać twojego nowego imienia — sprawdź połączenie i spróbuj ponownie."
+    "renameFailed": "Nie udało się zapisać twojego nowego imienia — sprawdź połączenie i spróbuj ponownie.",
+    "editHintSelf": "Popraw to, jak TWOJE imię wyświetla się w kolejce. Twoje dzisiejsze piosenki również będą miały nowe imię.",
+    "friendPrompt": "Dodajesz piosenkę dla kogoś innego?",
+    "friendTitle": "Piosenka dla znajomego",
+    "friendIntro": "Zamów piosenkę dla kogoś innego. Pojawi się na dzisiejszej liście pod jego imieniem, a Twoje imię i piosenki pozostaną bez zmian.",
+    "friendNameLabel": "Imię znajomego (imię + pierwsza litera nazwiska)",
+    "friendPhoneLabel": "Numer telefonu znajomego (opcjonalnie)",
+    "friendPhoneHint": "Wyślemy mu jednego SMS-a, gdy nadejdzie jego kolej. Zostaw puste, a prowadzący po prostu wywoła go po imieniu.",
+    "renameConfirmTitle": "Zmienić Twoje imię na {name}?",
+    "renameConfirmBody": "Twoje dzisiejsze piosenki będą widoczne pod imieniem {name} zamiast {old}. Jeśli {name} to Twój znajomy, zamów piosenkę dla niego.",
+    "renameConfirmFriend": "🎤 {name} to znajomy: zamów piosenkę dla niego",
+    "renameConfirmYes": "Tak, to ja ({name}): zmień moje imię"
   },
   "search": {
     "title": "Wybierz swoją piosenkę",
@@ -104,7 +115,12 @@
     "describeLink": "Nie pamiętasz tytułu? Opisz piosenkę",
     "describePlaceholder": "np. ta piosenka z Titanica",
     "describeCta": "Znajdź",
-    "figuringOut": "Sprawdzamy, o którą piosenkę ci chodzi…"
+    "figuringOut": "Sprawdzamy, o którą piosenkę ci chodzi…",
+    "editMyName": "✏️ zmień moje imię",
+    "forFriend": "🎤 piosenka dla znajomego",
+    "friendTitle": "🎤 Wybieranie piosenki dla: {name}",
+    "friendHint": "Trafi na dzisiejszą listę pod imieniem {name}. Twoje własne imię i piosenki się nie zmienią.",
+    "friendCancel": "Anuluj — to dla mnie"
   },
   "versions": {
     "sectionLibrary": "W naszej bibliotece",
@@ -363,7 +379,8 @@
     "failed": "Nie udało się wysłać — zapytaj prowadzącego, czy zamówienia są wstrzymane.",
     "makeLimit": "Masz już dziś na koncie kilka próśb o stworzenie piosenki — wybierz coś z katalogu lub zapytaj KJ-a.",
     "makeDisabled": "KJ nie przyjmuje teraz próśb o stworzenie piosenki — wybierz utwór z katalogu.",
-    "makeEmail": "Wyślemy ci również gotowy plik wideo i link do YouTube na adres e-mail ({email})."
+    "makeEmail": "Wyślemy ci również gotowy plik wideo i link do YouTube na adres e-mail ({email}).",
+    "detailsFriend": "Wokalista: {name} (zamówiono z Twojego telefonu)"
   },
   "mySongs": {
     "title": "Twoje piosenki na dziś",
@@ -439,7 +456,9 @@
     "quickUpgraded": "✨ Pełna wersja jest już gotowa i zastąpiła szybką wersję.",
     "reviewOpening": "Otwieranie…",
     "reviewFailed": "Nie udało się otworzyć sprawdzania tutaj — użyj linku w swoim e-mailu.",
-    "reviewOver": "Sprawdzanie jest już zakończone — nie musisz nic więcej robić."
+    "reviewOver": "Sprawdzanie jest już zakończone — nie musisz nic więcej robić.",
+    "requestForFriend": "🎤 Zamów piosenkę dla znajomego",
+    "forFriend": "Dla: {name}"
   },
   "notify": {
     "heading": "🔔 Kiedy nadejdzie twoja kolej",

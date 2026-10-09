@@ -59,7 +59,18 @@
     "differentPerson": "Andere Person?",
     "switchSinger": "Sänger wechseln",
     "switchHint": "— fängt auf diesem Handy neu an.",
-    "renameFailed": "Konnte deinen neuen Namen nicht speichern — überprüfe deine Verbindung und versuche es noch mal."
+    "renameFailed": "Konnte deinen neuen Namen nicht speichern — überprüfe deine Verbindung und versuche es noch mal.",
+    "editHintSelf": "Passe an, wie DEIN Name in der Warteliste angezeigt wird. Deine Songs von heute Abend werden dann auch unter dem neuen Namen angezeigt.",
+    "friendPrompt": "Möchtest du einen Song für jemand anderen eintragen?",
+    "friendTitle": "Song für eine(n) Freund/in",
+    "friendIntro": "Wünsche einen Song für jemand anderen. Er erscheint heute Abend unter diesem Namen auf der Liste, und dein eigener Name und deine Songs bleiben unverändert.",
+    "friendNameLabel": "Name des Freundes / der Freundin (Vorname + Anfangsbuchstabe des Nachnamens)",
+    "friendPhoneLabel": "Handynummer des Freundes / der Freundin (optional)",
+    "friendPhoneHint": "Wir schicken eine einmalige SMS, wenn die Person an der Reihe ist. Wenn du das Feld leer lässt, ruft der Host einfach den Namen auf.",
+    "renameConfirmTitle": "Dich in {name} umbenennen?",
+    "renameConfirmBody": "Deine Songs von heute Abend werden unter {name} statt unter {old} aufgeführt. Wenn {name} ein/e Freund/in ist, wünsche stattdessen einen Song für die Person.",
+    "renameConfirmFriend": "🎤 {name} ist ein/e Freund/in: Song für sie/ihn wünschen",
+    "renameConfirmYes": "Ja, ich bin {name}: Namen ändern"
   },
   "search": {
     "title": "Wähle deinen Song",
@@ -104,7 +115,12 @@
     "describeLink": "Fällt dir der Name nicht ein? Beschreib den Song",
     "describePlaceholder": "z. B. der Song aus Titanic",
     "describeCta": "Finden",
-    "figuringOut": "Wir finden heraus, welchen Song du meinst…"
+    "figuringOut": "Wir finden heraus, welchen Song du meinst…",
+    "editMyName": "✏️ meinen Namen ändern",
+    "forFriend": "🎤 Song für eine(n) Freund/in",
+    "friendTitle": "🎤 Songauswahl für {name}",
+    "friendHint": "Er erscheint heute Abend unter dem Namen von {name} auf der Liste. Dein eigener Name und deine Songs ändern sich nicht.",
+    "friendCancel": "Abbrechen – er ist für mich"
   },
   "versions": {
     "sectionLibrary": "In unserer Bibliothek",
@@ -363,7 +379,8 @@
     "failed": "Konnte nicht gesendet werden — frag den KJ, ob Anfragen pausiert sind.",
     "makeLimit": "Du hast dir heute Abend schon ein paar Songs erstellen lassen — such dir einen aus dem Katalog aus oder frag den KJ.",
     "makeDisabled": "Der KJ nimmt im Moment keine Anfragen zum Erstellen von Songs an — such dir stattdessen einen Song aus dem Katalog aus.",
-    "makeEmail": "Wir senden dir auch die fertige Videodatei und den YouTube-Link per E-Mail ({email})."
+    "makeEmail": "Wir senden dir auch die fertige Videodatei und den YouTube-Link per E-Mail ({email}).",
+    "detailsFriend": "Sänger/in: {name} (über dein Handy gewünscht)"
   },
   "mySongs": {
     "title": "Deine Songs heute Abend",
@@ -439,7 +456,9 @@
     "quickUpgraded": "✨ Die Vollversion ist fertig und hat die Schnellversion ersetzt.",
     "reviewOpening": "Wird geöffnet…",
     "reviewFailed": "Die Überprüfung konnte hier nicht geöffnet werden – nutze stattdessen den Link in deiner E-Mail.",
-    "reviewOver": "Diese Überprüfung ist bereits abgeschlossen – es gibt nichts mehr zu tun."
+    "reviewOver": "Diese Überprüfung ist bereits abgeschlossen – es gibt nichts mehr zu tun.",
+    "requestForFriend": "🎤 Einen Song für eine(n) Freund/in wünschen",
+    "forFriend": "Für {name}"
   },
   "notify": {
     "heading": "🔔 Wenn du dran bist",

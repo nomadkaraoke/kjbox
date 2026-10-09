@@ -59,7 +59,18 @@
     "differentPerson": "Másik személy?",
     "switchSinger": "Énekes váltása",
     "switchHint": "— tiszta lappal indít ezen a telefonon.",
-    "renameFailed": "Nem sikerült elmenteni az új neved — ellenőrizd a kapcsolatot, és próbáld újra."
+    "renameFailed": "Nem sikerült elmenteni az új neved — ellenőrizd a kapcsolatot, és próbáld újra.",
+    "editHintSelf": "Módosítsd, hogyan jelenjen meg a neved a sorban. A ma esti számaidnál is az új név fog szerepelni.",
+    "friendPrompt": "Valaki másnak kérsz dalt?",
+    "friendTitle": "Dal egy barátnak",
+    "friendIntro": "Kérj egy dalt valaki másnak. A mai listára az ő neve alatt kerül fel, a te neved és a számaid pedig változatlanok maradnak.",
+    "friendNameLabel": "Barátod neve (keresztnév + vezetéknév kezdőbetűje)",
+    "friendPhoneLabel": "Barátod mobilszáma (opcionális)",
+    "friendPhoneHint": "Küldünk neki egy SMS-t, amikor ő következik. Ha üresen hagyod, a műsorvezető egyszerűen bemondja a nevét.",
+    "renameConfirmTitle": "Átnevezed magad a következőre: {name}?",
+    "renameConfirmBody": "A ma esti számaid {name} név alatt fognak megjelenni a(z) {old} helyett. Ha {name} egy barátod, kérj inkább dalt az ő nevében.",
+    "renameConfirmFriend": "🎤 {name} egy barátom: dal kérése neki",
+    "renameConfirmYes": "Igen, én vagyok {name}: átnevezés"
   },
   "search": {
     "title": "Válaszd ki a dalod",
@@ -104,7 +115,12 @@
     "describeLink": "Nem jut eszedbe a címe? Írd körül",
     "describePlaceholder": "pl. az a dal a Titanicból",
     "describeCta": "Keresés",
-    "figuringOut": "Kitaláljuk, melyik dalra gondolsz…"
+    "figuringOut": "Kitaláljuk, melyik dalra gondolsz…",
+    "editMyName": "✏️ nevem módosítása",
+    "forFriend": "🎤 dal egy barátnak",
+    "friendTitle": "🎤 Dalválasztás neki: {name}",
+    "friendHint": "A mai listára {name} neve alatt kerül fel. A te neved és a számaid nem változnak.",
+    "friendCancel": "Mégse — magamnak kérem"
   },
   "versions": {
     "sectionLibrary": "A könyvtárunkban",
@@ -363,7 +379,8 @@
     "failed": "Nem sikerült elküldeni — kérdezd meg a házigazdát, hogy szünetelnek-e a kérések.",
     "makeLimit": "Ma este már kérted tőlünk pár dal elkészítését — válassz egyet a katalógusból, vagy kérdezd a KJ-t.",
     "makeDisabled": "A KJ most nem fogad kéréseket új dalok készítésére — válassz inkább egy dalt a katalógusból.",
-    "makeEmail": "A kész videófájlt és a YouTube linket e-mailben is elküldjük neked ({email})."
+    "makeEmail": "A kész videófájlt és a YouTube linket e-mailben is elküldjük neked ({email}).",
+    "detailsFriend": "Énekes: {name} (a te telefonodról kérve)"
   },
   "mySongs": {
     "title": "A te dalaid ma este",
@@ -439,7 +456,9 @@
     "quickUpgraded": "✨ A teljes verzió elkészült, és felváltotta a gyors verziót.",
     "reviewOpening": "Megnyitás…",
     "reviewFailed": "Itt nem sikerült megnyitni az ellenőrzést — használd inkább az e-mailben kapott linket.",
-    "reviewOver": "Ez az ellenőrzés már befejeződött — nincs más teendő."
+    "reviewOver": "Ez az ellenőrzés már befejeződött — nincs más teendő.",
+    "requestForFriend": "🎤 Dal kérése egy barátnak",
+    "forFriend": "Neki: {name}"
   },
   "notify": {
     "heading": "🔔 Amikor te jössz",

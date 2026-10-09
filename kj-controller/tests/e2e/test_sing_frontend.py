@@ -1377,3 +1377,133 @@ class TestNotificationsSection:
         expect(section).to_contain_text("change number")
         page.locator('[data-testid="notify-change-phone"]').click()
         expect(page.locator('[data-testid="notify-phone"]')).to_have_value("+1 555 123 4567")
+
+
+def _seed_own_request(page, live_server, live_token, name="Nats", friend=None):
+    """Submit a real request as this phone and record it in the device's
+    localStorage request store (optionally as a friend's song)."""
+    did = page.evaluate("localStorage.getItem('sing_device_id')")
+    resp = page.request.post(f"{live_server}/sing/submit?t={live_token}", data={
+        "singer_name": friend or name, "device_id": did, "phone": "",
+        "song_artist": "Red Clay Strays", "song_title": "Wondering Why",
+        "source_type": "local", "source_ref": "/tmp/x.mp4",
+        **({"for_friend": True} if friend else {}),
+    })
+    req = resp.json()["request"]
+    store = {"token": live_token, "ids": [req["id"]],
+             "tokens": {str(req["id"]): req["edit_token"]}}
+    if friend:
+        store["friends"] = {str(req["id"]): friend}
+    page.evaluate("(s) => localStorage.setItem('sing_my_request_ids', JSON.stringify(s))", store)
+    return req
+
+
+class TestSongForAFriend:
+    """Nats tapped "not you?" to add her friend Alex's song and renamed herself.
+    Requesting for a friend is now its own door, and a rename that looks like a
+    different person asks first."""
+
+    def _to_search(self, page):
+        page.evaluate("window.__sing_state.step = 'search'; window.__sing_render();")
+
+    def test_search_offers_edit_name_and_friend_links(self, page, live_server, live_token):
+        _login(page, live_server, live_token, name="Nats")
+        self._to_search(page)
+        expect(page.locator('[data-testid="edit-name"]')).to_be_visible()
+        expect(page.locator('[data-testid="friend-song-link"]')).to_be_visible()
+        expect(page.locator("text=not you?")).to_have_count(0)
+
+    def test_friend_flow_submits_under_friend_name(self, page, live_server, live_token):
+        _login(page, live_server, live_token, name="Nats")
+        captured = {}
+
+        def handle(route):
+            captured["body"] = route.request.post_data_json
+            route.continue_()
+        page.route("**/sing/submit*", handle)
+        self._to_search(page)
+        page.locator('[data-testid="friend-song-link"]').click()
+        expect(page.locator('[data-testid="identity-friend"]')).to_be_visible()
+        page.locator('[data-testid="identity-friend"] input[type="text"]').fill("Alex")
+        page.locator(".identity-save").click()
+        expect(page.locator('[data-testid="friend-banner"]')).to_contain_text("Alex")
+        page.evaluate("""
+            window.__sing_state.selected = { source_type: 'local', source_ref: '/tmp/x.mp4',
+                song_artist: 'Papa Roach', song_title: 'Scars', label: 'Scars' };
+            window.__sing_state.step = 'confirm';
+            window.__sing_render();
+        """)
+        expect(page.locator('[data-testid="confirm-friend"]')).to_contain_text("Alex")
+        page.locator(".submit-btn").click()
+        expect(page.locator('[data-testid="for-friend-line"]')).to_contain_text("Alex", timeout=5000)
+        assert captured["body"]["singer_name"] == "Alex"
+        assert captured["body"]["for_friend"] is True
+        assert "photo_consent" not in captured["body"]
+        # The phone owner is still Nats, and the friend mode is over.
+        assert page.evaluate("localStorage.getItem('sing_name')") == "Nats"
+        assert page.evaluate("window.__sing_state.friend") is None
+
+    def test_cancel_friend_returns_to_own_search(self, page, live_server, live_token):
+        _login(page, live_server, live_token, name="Nats")
+        page.evaluate("window.__sing_state.friend = {name: 'Alex', phone: ''};")
+        self._to_search(page)
+        page.locator('[data-testid="friend-cancel"]').click()
+        expect(page.locator('[data-testid="friend-banner"]')).to_have_count(0)
+        expect(page.locator('[data-testid="friend-song-link"]')).to_be_visible()
+
+    def test_done_screen_offers_friend_request(self, page, live_server, live_token):
+        _login(page, live_server, live_token, name="Nats")
+        page.evaluate("window.__sing_state.step = 'done'; window.__sing_render();")
+        page.locator('[data-testid="request-for-friend"]').click()
+        expect(page.locator('[data-testid="identity-friend"]')).to_be_visible()
+
+    def test_rename_to_different_person_asks_first(self, page, live_server, live_token):
+        _login(page, live_server, live_token, name="Nats")
+        _seed_own_request(page, live_server, live_token)
+        renames = []
+        page.on("request", lambda r: renames.append(r.url) if "/rename" in r.url else None)
+        self._to_search(page)
+        page.locator('[data-testid="edit-name"]').click()
+        expect(page.locator('[data-testid="identity-edit"] .friend-prompt')).to_be_visible()
+        page.locator('[data-testid="identity-edit"] input[type="text"]').fill("Alex")
+        page.locator(".identity-save").click()
+        expect(page.locator('[data-testid="rename-confirm"]')).to_be_visible()
+        assert renames == []
+        # "Alex is a friend" → the friend form, pre-filled.
+        page.locator('[data-testid="rename-confirm-friend"]').click()
+        expect(page.locator('[data-testid="identity-friend"] input[type="text"]')).to_have_value("Alex")
+        assert renames == []
+        assert page.evaluate("localStorage.getItem('sing_name')") == "Nats"
+
+    def test_confirmed_rename_goes_through(self, page, live_server, live_token):
+        _login(page, live_server, live_token, name="Nats")
+        _seed_own_request(page, live_server, live_token)
+        self._to_search(page)
+        page.locator('[data-testid="edit-name"]').click()
+        page.locator('[data-testid="identity-edit"] input[type="text"]').fill("Alex")
+        page.locator(".identity-save").click()
+        with page.expect_request("**/rename*"):
+            page.locator('[data-testid="rename-confirm-yes"]').click()
+        expect(page.locator('[data-testid="identity-edit"]')).to_have_count(0, timeout=5000)
+        assert page.evaluate("localStorage.getItem('sing_name')") == "Alex"
+
+    def test_spelling_fix_renames_without_asking(self, page, live_server, live_token):
+        _login(page, live_server, live_token, name="Nat")
+        _seed_own_request(page, live_server, live_token, name="Nat")
+        self._to_search(page)
+        page.locator('[data-testid="edit-name"]').click()
+        page.locator('[data-testid="identity-edit"] input[type="text"]').fill("Nats B.")
+        with page.expect_request("**/rename*"):
+            page.locator(".identity-save").click()
+        expect(page.locator('[data-testid="rename-confirm"]')).to_have_count(0)
+
+    def test_self_rename_never_sends_friend_songs(self, page, live_server, live_token):
+        _login(page, live_server, live_token, name="Nats")
+        _seed_own_request(page, live_server, live_token, friend="Alex")
+        self._to_search(page)
+        page.locator('[data-testid="edit-name"]').click()
+        page.locator('[data-testid="identity-edit"] input[type="text"]').fill("Natalie")
+        # Only a friend's song on this phone → no own songs at stake, no guard.
+        with page.expect_request("**/rename*") as req_info:
+            page.locator(".identity-save").click()
+        assert req_info.value.post_data_json["items"] == []

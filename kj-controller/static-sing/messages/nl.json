@@ -59,7 +59,18 @@
     "differentPerson": "Iemand anders?",
     "switchSinger": "Wissel van zanger",
     "switchHint": "— begint opnieuw op deze telefoon.",
-    "renameFailed": "Kon je nieuwe naam niet opslaan — controleer je verbinding en probeer het opnieuw."
+    "renameFailed": "Kon je nieuwe naam niet opslaan — controleer je verbinding en probeer het opnieuw.",
+    "editHintSelf": "Pas aan hoe JOUW naam op het scherm verschijnt. Je nummers van vanavond krijgen ook de nieuwe naam.",
+    "friendPrompt": "Een nummer toevoegen voor iemand anders?",
+    "friendTitle": "Nummer voor een vriend(in)",
+    "friendIntro": "Vraag een nummer aan voor iemand anders. Het komt onder hun naam op de lijst van vanavond, en jouw eigen naam en nummers blijven hetzelfde.",
+    "friendNameLabel": "Naam van vriend(in) (voornaam + eerste letter achternaam)",
+    "friendPhoneLabel": "Mobiel nummer van vriend(in) (optioneel)",
+    "friendPhoneHint": "We sturen ze eenmalig een sms als ze aan de beurt zijn. Laat dit leeg als de host gewoon hun naam moet omroepen.",
+    "renameConfirmTitle": "Je naam wijzigen naar {name}?",
+    "renameConfirmBody": "Je nummers van vanavond komen op naam van {name} te staan in plaats van {old}. Als {name} een vriend(in) is, vraag dan een nummer voor hen aan.",
+    "renameConfirmFriend": "🎤 {name} is een vriend(in): vraag een nummer voor hen aan",
+    "renameConfirmYes": "Ja, ik ben {name}: wijzig mijn naam"
   },
   "search": {
     "title": "Kies je nummer",
@@ -104,7 +115,12 @@
     "describeLink": "Weet je de titel niet meer? Omschrijf het",
     "describePlaceholder": "bijv. dat liedje uit Titanic",
     "describeCta": "Vind 'm",
-    "figuringOut": "Even uitzoeken welk liedje je bedoelt…"
+    "figuringOut": "Even uitzoeken welk liedje je bedoelt…",
+    "editMyName": "✏️ wijzig mijn naam",
+    "forFriend": "🎤 nummer voor een vriend(in)",
+    "friendTitle": "🎤 Een nummer kiezen voor {name}",
+    "friendHint": "Dit komt op de lijst van vanavond onder de naam van {name}. Jouw eigen naam en nummers veranderen niet.",
+    "friendCancel": "Annuleren — het is voor mij"
   },
   "versions": {
     "sectionLibrary": "In onze bibliotheek",
@@ -363,7 +379,8 @@
     "failed": "Kon niet verzenden — vraag de host of verzoekjes gepauzeerd zijn.",
     "makeLimit": "Je hebt ons vanavond al gevraagd om een paar nummers te maken — kies er een uit de catalogus, of vraag het aan de host.",
     "makeDisabled": "De host neemt momenteel geen verzoeken aan om nummers te maken — kies in plaats daarvan een nummer uit de catalogus.",
-    "makeEmail": "We mailen je ook het voltooide videobestand en de YouTube-link ({email})."
+    "makeEmail": "We mailen je ook het voltooide videobestand en de YouTube-link ({email}).",
+    "detailsFriend": "Zanger(es): {name} (aangevraagd vanaf jouw telefoon)"
   },
   "mySongs": {
     "title": "Jouw nummers vanavond",
@@ -439,7 +456,9 @@
     "quickUpgraded": "✨ De volledige versie is klaar en heeft de snelle versie vervangen.",
     "reviewOpening": "Openen…",
     "reviewFailed": "Kon de controle hier niet openen — gebruik in plaats daarvan de link in je e-mail.",
-    "reviewOver": "Die controle is al voltooid — je hoeft niets meer te doen."
+    "reviewOver": "Die controle is al voltooid — je hoeft niets meer te doen.",
+    "requestForFriend": "🎤 Vraag een nummer aan voor een vriend(in)",
+    "forFriend": "Voor {name}"
   },
   "notify": {
     "heading": "🔔 Als je aan de beurt bent",

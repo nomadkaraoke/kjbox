@@ -59,7 +59,18 @@
     "differentPerson": "Altă persoană?",
     "switchSinger": "Schimbă cântărețul",
     "switchHint": "— începe de la zero pe acest telefon.",
-    "renameFailed": "Nu am putut salva noul nume — verifică-ți conexiunea și încearcă din nou."
+    "renameFailed": "Nu am putut salva noul nume — verifică-ți conexiunea și încearcă din nou.",
+    "editHintSelf": "Modifică felul în care apare numele TĂU în rotație. Piesele tale din seara asta vor apărea tot sub noul nume.",
+    "friendPrompt": "Adaugi o piesă pentru altcineva?",
+    "friendTitle": "Piesă pentru un prieten",
+    "friendIntro": "Cere o piesă pentru altcineva. Va fi trecută pe lista din seara asta sub numele acelei persoane, iar numele și piesele tale rămân neschimbate.",
+    "friendNameLabel": "Numele prietenului (prenume + inițiala numelui)",
+    "friendPhoneLabel": "Numărul de mobil al prietenului (opțional)",
+    "friendPhoneHint": "Îi vom trimite un SMS când îi vine rândul. Lasă necompletat, iar gazda pur și simplu îi va striga numele.",
+    "renameConfirmTitle": "Îți schimbi numele în {name}?",
+    "renameConfirmBody": "Piesele tale din seara asta vor fi listate sub numele {name} în loc de {old}. Dacă {name} este un prieten, cere mai bine o piesă pentru el.",
+    "renameConfirmFriend": "🎤 {name} este un prieten: cere o piesă pentru el",
+    "renameConfirmYes": "Da, eu sunt {name}: schimbă-mi numele"
   },
   "search": {
     "title": "Alege-ți piesa",
@@ -104,7 +115,12 @@
     "describeLink": "Nu-ți amintești cum se cheamă? Descrie-o",
     "describePlaceholder": "de ex. piesa aia din Titanic",
     "describeCta": "Găsește-o",
-    "figuringOut": "Încercăm să ne dăm seama la ce piesă te referi…"
+    "figuringOut": "Încercăm să ne dăm seama la ce piesă te referi…",
+    "editMyName": "✏️ modifică-mi numele",
+    "forFriend": "🎤 piesă pentru un prieten",
+    "friendTitle": "🎤 Alegi o piesă pentru {name}",
+    "friendHint": "Va apărea pe lista din seara asta sub numele {name}. Numele și piesele tale nu se schimbă.",
+    "friendCancel": "Anulează — e pentru mine"
   },
   "versions": {
     "sectionLibrary": "În biblioteca noastră",
@@ -363,7 +379,8 @@
     "failed": "Nu s-a putut trimite — întreabă gazda dacă cererile sunt pe pauză.",
     "makeLimit": "Ne-ai cerut deja să creăm câteva piese în seara asta — alege una din catalog sau întreabă gazda.",
     "makeDisabled": "Gazda nu acceptă cereri de creare de piese în acest moment — alege o piesă din catalog.",
-    "makeEmail": "Îți vom trimite pe e-mail fișierul video final și linkul de YouTube ({email})."
+    "makeEmail": "Îți vom trimite pe e-mail fișierul video final și linkul de YouTube ({email}).",
+    "detailsFriend": "Cântăreț: {name} (cerut de pe telefonul tău)"
   },
   "mySongs": {
     "title": "Piesele tale de diseară",
@@ -439,7 +456,9 @@
     "quickUpgraded": "✨ Versiunea completă este gata și a înlocuit versiunea rapidă.",
     "reviewOpening": "Se deschide…",
     "reviewFailed": "Nu am putut deschide verificarea aici — folosește linkul din e-mail în schimb.",
-    "reviewOver": "Acea verificare este deja terminată — nu mai ai nimic de făcut."
+    "reviewOver": "Acea verificare este deja terminată — nu mai ai nimic de făcut.",
+    "requestForFriend": "🎤 Cere o piesă pentru un prieten",
+    "forFriend": "Pentru {name}"
   },
   "notify": {
     "heading": "🔔 Când îți vine rândul",

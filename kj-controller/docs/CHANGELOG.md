@@ -4,6 +4,14 @@ Dated entries, newest first. Each entry notes any required deploy steps.
 
 ---
 
+## 2026-10-08 - Song for a friend + rename guard (v0.128.0)
+
+**Deploy:** `.py` change → auto-deploy restarts kj-controller (playback continues).
+
+- Singer UI: "🎤 song for a friend" path (search, My songs, edit-name form) submits under the friend's name with `for_friend: true`. `/sing/submit` skips the device-alias override and photo consent for it. A self-rename to a different first name with songs queued asks first. Root cause and details in `docs/CHANGELOG.md`.
+
+---
+
 ## 2026-09-29 - Song identification: ListenBrainz freshness + spelling variants (v0.124.0)
 
 **Deploy:** `.py` change → auto-deploy restarts kj-controller (playback continues). The builder's `SCHEMA_VERSION` is now 3 and `nomad-catalog-sync` rebuilds `song_id.db` when it changes, so the next daily sync (12:15 UTC) rebuilds even for an unchanged export; to do it now: `sudo systemctl start nomad-catalog-sync` (~9 min for song-id, ~4.4 GB RAM peak). The ListenBrainz-based export itself comes from karaoke-gen's `kn-data-sync` (deployed separately); the device picks it up on the same sync.

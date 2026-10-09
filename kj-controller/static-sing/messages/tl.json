@@ -59,7 +59,18 @@
     "differentPerson": "Ibang tao?",
     "switchSinger": "Magpalit ng kakanta",
     "switchHint": "— magsisimula ulit sa phone na ito.",
-    "renameFailed": "Hindi ma-save ang bago mong pangalan — i-check ang connection mo at subukan ulit."
+    "renameFailed": "Hindi ma-save ang bago mong pangalan — i-check ang connection mo at subukan ulit.",
+    "editHintSelf": "Ayusin kung paano lalabas ang IYONG pangalan sa rotation. Ipapakita rin ang bagong pangalan sa mga kanta mo ngayong gabi.",
+    "friendPrompt": "Magdaragdag ng kanta para sa ibang tao?",
+    "friendTitle": "Kanta para sa isang kaibigan",
+    "friendIntro": "Pumili ng kanta para sa ibang tao. Mapupunta ito sa listahan ngayong gabi sa ilalim ng kanilang pangalan, at mananatili ang sarili mong pangalan at mga kanta.",
+    "friendNameLabel": "Pangalan ng kaibigan (unang pangalan + unang titik ng apelyido)",
+    "friendPhoneLabel": "Mobile number ng kaibigan (opsyonal)",
+    "friendPhoneHint": "Ite-text namin sila nang isang beses kapag oras na nila. Kung iiwanang blangko, tatawagin na lang ng host ang kanilang pangalan.",
+    "renameConfirmTitle": "Palitan ang iyong pangalan sa {name}?",
+    "renameConfirmBody": "Ang mga kanta mo ngayong gabi ay ililista sa ilalim ng {name} sa halip na {old}. Kung si {name} ay isang kaibigan, pumili na lang ng kanta para sa kanila.",
+    "renameConfirmFriend": "🎤 Kaibigan ko si {name}: mag-request ng kanta para sa kanila",
+    "renameConfirmYes": "Oo, ako si {name}: palitan ang pangalan ko"
   },
   "search": {
     "title": "Piliin ang kanta mo",
@@ -104,7 +115,12 @@
     "describeLink": "Hindi matandaan ang pamagat? Ilarawan ito",
     "describePlaceholder": "hal. 'yung kanta sa Titanic",
     "describeCta": "Hanapin",
-    "figuringOut": "Inaalam kung aling kanta ang tinutukoy mo…"
+    "figuringOut": "Inaalam kung aling kanta ang tinutukoy mo…",
+    "editMyName": "✏️ baguhin ang aking pangalan",
+    "forFriend": "🎤 kanta para sa isang kaibigan",
+    "friendTitle": "🎤 Pumipili ng kanta para kay {name}",
+    "friendHint": "Mapupunta ito sa listahan ngayong gabi sa ilalim ng pangalan ni {name}. Hindi magbabago ang sarili mong pangalan at mga kanta.",
+    "friendCancel": "Kanselahin — para sa akin ito"
   },
   "versions": {
     "sectionLibrary": "Nasa library namin",
@@ -363,7 +379,8 @@
     "failed": "Hindi maipadala — tanungin ang host kung naka-pause ang mga request.",
     "makeLimit": "Nakapagpagawa ka na ng ilang kanta ngayong gabi — pumili na lang mula sa catalogue, o magtanong sa host.",
     "makeDisabled": "Hindi tumatanggap ang host ng make-it requests sa ngayon — pumili na lang ng kanta mula sa catalogue.",
-    "makeEmail": "I-e-email din namin sa'yo ang tapos na video file at YouTube link ({email})."
+    "makeEmail": "I-e-email din namin sa'yo ang tapos na video file at YouTube link ({email}).",
+    "detailsFriend": "Kakanta: {name} (hiniling mula sa iyong telepono)"
   },
   "mySongs": {
     "title": "Mga kanta mo ngayong gabi",
@@ -439,7 +456,9 @@
     "quickUpgraded": "✨ Handa na ang full version at pinalitan na nito ang quick version.",
     "reviewOpening": "Binubuksan…",
     "reviewFailed": "Hindi mabuksan ang review dito — gamitin na lang ang link sa email mo.",
-    "reviewOver": "Tapos na ang review na iyon — wala nang kailangang gawin."
+    "reviewOver": "Tapos na ang review na iyon — wala nang kailangang gawin.",
+    "requestForFriend": "🎤 Mag-request ng kanta para sa isang kaibigan",
+    "forFriend": "Para kay {name}"
   },
   "notify": {
     "heading": "🔔 Kapag turn mo na",

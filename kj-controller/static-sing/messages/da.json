@@ -59,7 +59,18 @@
     "differentPerson": "Er du en anden?",
     "switchSinger": "Skift sanger",
     "switchHint": "— starter forfra på denne telefon.",
-    "renameFailed": "Kunne ikke gemme dit nye navn — tjek din forbindelse og prøv igen."
+    "renameFailed": "Kunne ikke gemme dit nye navn — tjek din forbindelse og prøv igen.",
+    "editHintSelf": "Ret hvordan DIT navn vises på listen. Dine sange i aften vil også vise det nye navn.",
+    "friendPrompt": "Vil du tilføje en sang for en anden?",
+    "friendTitle": "Sang for en ven",
+    "friendIntro": "Ønsk en sang for en anden. Den kommer på aftenens liste under deres navn, og dit eget navn og dine sange forbliver uændrede.",
+    "friendNameLabel": "Vens navn (fornavn + forbogstav i efternavn)",
+    "friendPhoneLabel": "Vens mobilnummer (valgfrit)",
+    "friendPhoneHint": "Vi sender dem en enkelt sms, når det er deres tur. Hvis feltet er tomt, råber værten bare deres navn op.",
+    "renameConfirmTitle": "Vil du ændre dit navn til {name}?",
+    "renameConfirmBody": "Dine sange i aften vil blive vist under {name} i stedet for {old}. Hvis {name} er en ven, kan du ønske en sang for dem i stedet.",
+    "renameConfirmFriend": "🎤 {name} er en ven: ønsk en sang for dem",
+    "renameConfirmYes": "Ja, jeg er {name}: ændr mit navn"
   },
   "search": {
     "title": "Vælg din sang",
@@ -104,7 +115,12 @@
     "describeLink": "Kan du ikke huske, hvad den hedder? Beskriv den",
     "describePlaceholder": "f.eks. den sang fra Titanic",
     "describeCta": "Find den",
-    "figuringOut": "Finder ud af, hvilken sang du mener…"
+    "figuringOut": "Finder ud af, hvilken sang du mener…",
+    "editMyName": "✏️ ret mit navn",
+    "forFriend": "🎤 sang for en ven",
+    "friendTitle": "🎤 Vælger en sang for {name}",
+    "friendHint": "Den kommer på aftenens liste under {name}s navn. Dit eget navn og dine sange ændres ikke.",
+    "friendCancel": "Annuller – den er til mig"
   },
   "versions": {
     "sectionLibrary": "I vores bibliotek",
@@ -363,7 +379,8 @@
     "failed": "Kunne ikke sende — spørg værten, om anmodninger er sat på pause.",
     "makeLimit": "Du har allerede bedt os om at lave et par sange i aften — vælg en fra kataloget, eller spørg værten.",
     "makeDisabled": "Værten tager ikke imod ønsker om at få lavet sange lige nu — vælg i stedet en sang fra kataloget.",
-    "makeEmail": "Vi sender dig også den færdige videofil og et YouTube-link på e-mail ({email})."
+    "makeEmail": "Vi sender dig også den færdige videofil og et YouTube-link på e-mail ({email}).",
+    "detailsFriend": "Sanger: {name} (ønsket fra din telefon)"
   },
   "mySongs": {
     "title": "Dine sange i aften",
@@ -439,7 +456,9 @@
     "quickUpgraded": "✨ Den fulde version er klar og har erstattet hurtigversionen.",
     "reviewOpening": "Åbner…",
     "reviewFailed": "Kunne ikke åbne gennemgangen her — brug linket i din e-mail i stedet.",
-    "reviewOver": "Denne gennemgang er allerede færdig — der er ikke mere at gøre."
+    "reviewOver": "Denne gennemgang er allerede færdig — der er ikke mere at gøre.",
+    "requestForFriend": "🎤 Ønsk en sang for en ven",
+    "forFriend": "For {name}"
   },
   "notify": {
     "heading": "🔔 Når det er din tur",

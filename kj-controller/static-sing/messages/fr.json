@@ -59,7 +59,18 @@
     "differentPerson": "Une autre personne ?",
     "switchSinger": "Changer de chanteur",
     "switchHint": "— recommence à zéro sur ce téléphone.",
-    "renameFailed": "Impossible d'enregistrer ton nouveau nom — vérifie ta connexion et réessaie."
+    "renameFailed": "Impossible d'enregistrer ton nouveau nom — vérifie ta connexion et réessaie.",
+    "editHintSelf": "Modifie l'affichage de TON prénom sur la liste. Tes chansons de ce soir afficheront aussi le nouveau prénom.",
+    "friendPrompt": "Tu ajoutes un morceau pour quelqu'un d'autre ?",
+    "friendTitle": "Morceau pour un·e ami·e",
+    "friendIntro": "Choisis un morceau pour quelqu'un d'autre. Il apparaîtra sur la liste de ce soir sous son prénom, sans changer ton prénom ni tes morceaux.",
+    "friendNameLabel": "Prénom de ton ami·e (prénom + initiale du nom)",
+    "friendPhoneLabel": "Numéro de mobile de ton ami·e (facultatif)",
+    "friendPhoneHint": "On lui enverra un SMS quand viendra son tour. Laisse vide et le KJ appellera simplement son prénom.",
+    "renameConfirmTitle": "Changer ton nom pour {name} ?",
+    "renameConfirmBody": "Tes chansons de ce soir seront enregistrées sous le nom de {name} au lieu de {old}. Si {name} est un·e ami·e, choisis plutôt un morceau pour cette personne.",
+    "renameConfirmFriend": "🎤 {name} est un·e ami·e : choisir un morceau pour cette personne",
+    "renameConfirmYes": "Oui, je suis {name} : changer mon nom"
   },
   "search": {
     "title": "Choisis ta chanson",
@@ -104,7 +115,12 @@
     "describeLink": "Tu ne te souviens plus du titre ? Décris-le",
     "describePlaceholder": "ex. la chanson de Titanic",
     "describeCta": "Trouver",
-    "figuringOut": "On cherche à quelle chanson tu penses…"
+    "figuringOut": "On cherche à quelle chanson tu penses…",
+    "editMyName": "✏️ modifier mon nom",
+    "forFriend": "🎤 morceau pour un·e ami·e",
+    "friendTitle": "🎤 Choix d'un morceau pour {name}",
+    "friendHint": "Le morceau sera ajouté sur la liste de ce soir au nom de {name}. Ton nom et tes chansons ne changeront pas.",
+    "friendCancel": "Annuler — c'est pour moi"
   },
   "versions": {
     "sectionLibrary": "Dans notre bibliothèque",
@@ -363,7 +379,8 @@
     "failed": "Envoi impossible — demande au KJ si les demandes sont en pause.",
     "makeLimit": "Tu nous as déjà demandé de créer quelques chansons ce soir — choisis-en une dans le catalogue, ou demande au KJ.",
     "makeDisabled": "Le KJ ne prend pas de demandes de création pour le moment — choisis plutôt une chanson dans le catalogue.",
-    "makeEmail": "Nous t'enverrons aussi le fichier vidéo terminé et le lien YouTube par e-mail ({email})."
+    "makeEmail": "Nous t'enverrons aussi le fichier vidéo terminé et le lien YouTube par e-mail ({email}).",
+    "detailsFriend": "Chanteur·se : {name} (demandé depuis ton téléphone)"
   },
   "mySongs": {
     "title": "Tes chansons de ce soir",
@@ -439,7 +456,9 @@
     "quickUpgraded": "✨ La version complète est prête et a remplacé la version rapide.",
     "reviewOpening": "Ouverture…",
     "reviewFailed": "Impossible d'ouvrir la vérification ici — utilise plutôt le lien dans ton e-mail.",
-    "reviewOver": "Cette vérification est déjà terminée — plus rien à faire."
+    "reviewOver": "Cette vérification est déjà terminée — plus rien à faire.",
+    "requestForFriend": "🎤 Choisir un morceau pour un·e ami·e",
+    "forFriend": "Pour {name}"
   },
   "notify": {
     "heading": "🔔 Quand c'est ton tour",

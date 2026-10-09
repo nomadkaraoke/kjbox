@@ -59,7 +59,18 @@
     "differentPerson": "Ets una altra persona?",
     "switchSinger": "Canvia de cantant",
     "switchHint": "— comença de zero en aquest telèfon.",
-    "renameFailed": "No s'ha pogut desar el teu nou nom — comprova la teva connexió i torna-ho a provar."
+    "renameFailed": "No s'ha pogut desar el teu nou nom — comprova la teva connexió i torna-ho a provar.",
+    "editHintSelf": "Corregeix com es mostra el TEU nom a la llista de torns. Les teves cançons d'avui també mostraran el nou nom.",
+    "friendPrompt": "Vols afegir una cançó per a una altra persona?",
+    "friendTitle": "Cançó per a un amic o amiga",
+    "friendIntro": "Demana una cançó per a una altra persona. S'afegirà a la llista d'avui amb el seu nom, i el teu nom i les teves cançons no canviaran.",
+    "friendNameLabel": "Nom del teu amic o amiga (nom + inicial del cognom)",
+    "friendPhoneLabel": "Mòbil del teu amic o amiga (opcional)",
+    "friendPhoneHint": "Li enviarem un missatge quan sigui el seu torn. Si ho deixes en blanc, el KJ simplement cridarà el seu nom.",
+    "renameConfirmTitle": "Vols canviar el teu nom a {name}?",
+    "renameConfirmBody": "Les teves cançons d'avui apareixeran a nom de {name} en comptes de {old}. Si {name} és un amic o amiga, és millor demanar una cançó per a aquesta persona.",
+    "renameConfirmFriend": "🎤 {name} és un amic/amiga: demana una cançó per a ell/ella",
+    "renameConfirmYes": "Sí, soc {name}: canvia'm el nom"
   },
   "search": {
     "title": "Tria la teva cançó",
@@ -104,7 +115,12 @@
     "describeLink": "No recordes el nom? Descriu-la",
     "describePlaceholder": "p. ex. aquella cançó del Titanic",
     "describeCta": "Troba-la",
-    "figuringOut": "Esbrinant quina cançó vols dir…"
+    "figuringOut": "Esbrinant quina cançó vols dir…",
+    "editMyName": "✏️ canvia el meu nom",
+    "forFriend": "🎤 cançó per a un amic o amiga",
+    "friendTitle": "🎤 Triant una cançó per a {name}",
+    "friendHint": "S'afegirà a la llista d'avui a nom de {name}. El teu nom i les teves cançons no canviaran.",
+    "friendCancel": "Cancel·la — és per a mi"
   },
   "versions": {
     "sectionLibrary": "A la nostra biblioteca",
@@ -363,7 +379,8 @@
     "failed": "No s'ha pogut enviar — pregunta a l'amfitrió si les peticions estan pausades.",
     "makeLimit": "Ja ens has demanat que creem unes quantes cançons aquesta nit — tria'n una del catàleg, o pregunta a l'amfitrió.",
     "makeDisabled": "L'amfitrió no accepta peticions per crear cançons ara mateix — tria una cançó del catàleg.",
-    "makeEmail": "També t'enviarem per correu electrònic el fitxer de vídeo acabat i l'enllaç de YouTube ({email})."
+    "makeEmail": "També t'enviarem per correu electrònic el fitxer de vídeo acabat i l'enllaç de YouTube ({email}).",
+    "detailsFriend": "Cantant: {name} (demanada des del teu telèfon)"
   },
   "mySongs": {
     "title": "Les teves cançons d'aquesta nit",
@@ -439,7 +456,9 @@
     "quickUpgraded": "✨ La versió completa està a punt i ha substituït la versió ràpida.",
     "reviewOpening": "Obrint…",
     "reviewFailed": "No s'ha pogut obrir la revisió aquí — utilitza l'enllaç del teu correu electrònic.",
-    "reviewOver": "Aquesta revisió ja ha acabat — no cal fer res més."
+    "reviewOver": "Aquesta revisió ja ha acabat — no cal fer res més.",
+    "requestForFriend": "🎤 Demana una cançó per a un amic o amiga",
+    "forFriend": "Per a {name}"
   },
   "notify": {
     "heading": "🔔 Quan et toqui",

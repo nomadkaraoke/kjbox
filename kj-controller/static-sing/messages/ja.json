@@ -59,7 +59,18 @@
     "differentPerson": "別の人ですか？",
     "switchSinger": "歌手を切り替える",
     "switchHint": "— このスマホで新しく始めます。",
-    "renameFailed": "新しい名前を保存できませんでした — 接続を確認してもう一度お試しください。"
+    "renameFailed": "新しい名前を保存できませんでした — 接続を確認してもう一度お試しください。",
+    "editHintSelf": "順番待ちリストに表示されるあなたの名前を変更します。今夜リクエストした曲も新しい名前に更新されます。",
+    "friendPrompt": "他の人の曲をリクエストしますか？",
+    "friendTitle": "お友達へのリクエスト",
+    "friendIntro": "お友達の代わりに曲をリクエストします。今夜のリストにはお友達の名前で登録され、あなた自身の名前やリクエスト曲はそのまま残ります。",
+    "friendNameLabel": "お友達の名前（名＋姓のイニシャル）",
+    "friendPhoneLabel": "お友達の携帯電話番号（任意）",
+    "friendPhoneHint": "順番が来たらSMSで一度だけお知らせします。空欄の場合は、ホストがお名前をお呼びします。",
+    "renameConfirmTitle": "名前を {name} に変更しますか？",
+    "renameConfirmBody": "今夜のリクエスト曲の登録名が、{old} から {name} に変更されます。もし {name} さんがお友達の場合は、代わりに「お友達へのリクエスト」を行ってください。",
+    "renameConfirmFriend": "🎤 {name} は友達です：代わりにリクエストする",
+    "renameConfirmYes": "はい、私が {name} です：変更する"
   },
   "search": {
     "title": "曲を選ぶ",
@@ -104,7 +115,12 @@
     "describeLink": "曲名が思い出せない？特徴から探す",
     "describePlaceholder": "例：タイタニックのあの曲",
     "describeCta": "探す",
-    "figuringOut": "どの曲か探しています…"
+    "figuringOut": "どの曲か探しています…",
+    "editMyName": "✏️ 名前を変更する",
+    "forFriend": "🎤 お友達へのリクエスト",
+    "friendTitle": "🎤 {name} さんの曲を選択中",
+    "friendHint": "今夜のリストには {name} さんの名前で登録されます。あなた自身の名前や曲は変更されません。",
+    "friendCancel": "キャンセル — 自分の曲です"
   },
   "versions": {
     "sectionLibrary": "ライブラリ内",
@@ -363,7 +379,8 @@
     "failed": "送信できませんでした — リクエストが一時停止されていないかホストに聞いてみてください。",
     "makeLimit": "今夜はすでにいくつか曲の作成をリクエストしていますね。カタログから選ぶか、ホストに相談してみてください。",
     "makeDisabled": "ただいまホストは曲の作成リクエストを受け付けていません。代わりにカタログから曲を選んでくださいね。",
-    "makeEmail": "完成した動画ファイルとYouTubeのリンクもメールでお送りします（{email}）。"
+    "makeEmail": "完成した動画ファイルとYouTubeのリンクもメールでお送りします（{email}）。",
+    "detailsFriend": "シンガー: {name}（あなたのスマートフォンからリクエスト）"
   },
   "mySongs": {
     "title": "今夜のあなたの曲",
@@ -439,7 +456,9 @@
     "quickUpgraded": "✨ フルバージョンの準備が完了し、クイックバージョンから切り替わりました。",
     "reviewOpening": "開いています…",
     "reviewFailed": "ここでは確認画面を開けませんでした。代わりにメールのリンクからお願いします。",
-    "reviewOver": "その確認はすでに完了しています。これ以上必要な作業はありません。"
+    "reviewOver": "その確認はすでに完了しています。これ以上必要な作業はありません。",
+    "requestForFriend": "🎤 お友達のためにリクエストする",
+    "forFriend": "{name} さんへ"
   },
   "notify": {
     "heading": "🔔 あなたの番になったら",

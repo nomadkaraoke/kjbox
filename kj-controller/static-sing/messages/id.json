@@ -59,7 +59,18 @@
     "differentPerson": "Orang lain?",
     "switchSinger": "Ganti penyanyi",
     "switchHint": "— mulai dari awal di HP ini.",
-    "renameFailed": "Tidak bisa menyimpan nama barumu — cek koneksimu dan coba lagi."
+    "renameFailed": "Tidak bisa menyimpan nama barumu — cek koneksimu dan coba lagi.",
+    "editHintSelf": "Ubah tampilan namamu pada daftar antrean. Lagu-lagumu malam ini juga akan menampilkan nama yang baru.",
+    "friendPrompt": "Menambahkan lagu untuk orang lain?",
+    "friendTitle": "Lagu untuk teman",
+    "friendIntro": "Minta lagu untuk orang lain. Lagu akan masuk ke daftar malam ini atas nama mereka, sementara nama dan lagu-lagumu tetap sama.",
+    "friendNameLabel": "Nama teman (nama depan + inisial nama belakang)",
+    "friendPhoneLabel": "Nomor ponsel teman (opsional)",
+    "friendPhoneHint": "Kami akan mengirim SMS sekali saat giliran mereka tiba. Kosongkan saja jika ingin host memanggil nama mereka secara langsung.",
+    "renameConfirmTitle": "Ubah namamu menjadi {name}?",
+    "renameConfirmBody": "Lagu-lagumu malam ini akan terdaftar atas nama {name}, bukan {old}. Jika {name} adalah temanmu, pilih untuk meminta lagu untuk mereka.",
+    "renameConfirmFriend": "🎤 {name} adalah teman: minta lagu untuknya",
+    "renameConfirmYes": "Ya, saya {name}: ubah nama saya"
   },
   "search": {
     "title": "Pilih lagumu",
@@ -104,7 +115,12 @@
     "describeLink": "Lupa judulnya? Coba jelaskan",
     "describePlaceholder": "mis. lagu dari film Titanic",
     "describeCta": "Temukan",
-    "figuringOut": "Sedang mencari tahu lagu yang kamu maksud…"
+    "figuringOut": "Sedang mencari tahu lagu yang kamu maksud…",
+    "editMyName": "✏️ ubah nama saya",
+    "forFriend": "🎤 lagu untuk teman",
+    "friendTitle": "🎤 Memilih lagu untuk {name}",
+    "friendHint": "Lagu akan masuk ke daftar malam ini atas nama {name}. Nama dan lagu-lagumu tidak akan berubah.",
+    "friendCancel": "Batal — ini untuk saya"
   },
   "versions": {
     "sectionLibrary": "Di pustaka kami",
@@ -363,7 +379,8 @@
     "failed": "Tidak bisa mengirim — tanya host apakah permintaan lagu sedang dijeda.",
     "makeLimit": "Kamu sudah meminta kami membuatkan beberapa lagu malam ini — silakan pilih dari katalog, atau tanya ke host.",
     "makeDisabled": "Host sedang tidak menerima request pembuatan lagu saat ini — silakan pilih lagu dari katalog.",
-    "makeEmail": "Kami juga akan mengirimkan file video yang sudah jadi dan tautan YouTube melalui email ({email})."
+    "makeEmail": "Kami juga akan mengirimkan file video yang sudah jadi dan tautan YouTube melalui email ({email}).",
+    "detailsFriend": "Penyanyi: {name} (diminta dari ponselmu)"
   },
   "mySongs": {
     "title": "Lagumu malam ini",
@@ -439,7 +456,9 @@
     "quickUpgraded": "✨ Versi lengkap sudah siap dan sudah menggantikan versi cepat.",
     "reviewOpening": "Membuka…",
     "reviewFailed": "Tidak bisa membuka ulasan di sini — gunakan tautan di emailmu saja.",
-    "reviewOver": "Ulasan itu sudah selesai — tidak ada lagi yang perlu dilakukan."
+    "reviewOver": "Ulasan itu sudah selesai — tidak ada lagi yang perlu dilakukan.",
+    "requestForFriend": "🎤 Minta lagu untuk teman",
+    "forFriend": "Untuk {name}"
   },
   "notify": {
     "heading": "🔔 Saat giliranmu tiba",

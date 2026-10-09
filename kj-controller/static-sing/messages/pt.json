@@ -59,7 +59,18 @@
     "differentPerson": "Outra pessoa?",
     "switchSinger": "Trocar de cantor",
     "switchHint": "— começa do zero neste telefone.",
-    "renameFailed": "Não foi possível salvar seu novo nome — verifique sua conexão e tente novamente."
+    "renameFailed": "Não foi possível salvar seu novo nome — verifique sua conexão e tente novamente.",
+    "editHintSelf": "Corrija como o SEU nome aparece na fila. Suas músicas de hoje também vão mostrar o novo nome.",
+    "friendPrompt": "Quer pedir uma música para outra pessoa?",
+    "friendTitle": "Música para um(a) amigo(a)",
+    "friendIntro": "Peça uma música para outra pessoa. Ela entra na lista de hoje com o nome dela, e o seu nome e as suas músicas continuam como estão.",
+    "friendNameLabel": "Nome do(a) amigo(a) (primeiro nome + inicial do sobrenome)",
+    "friendPhoneLabel": "Celular do(a) amigo(a) (opcional)",
+    "friendPhoneHint": "Vamos enviar uma mensagem de texto quando chegar a vez da pessoa. Se deixar em branco, o host só vai chamar o nome dela.",
+    "renameConfirmTitle": "Mudar seu nome para {name}?",
+    "renameConfirmBody": "Suas músicas de hoje vão aparecer com o nome {name} em vez de {old}. Se {name} for um(a) amigo(a), peça uma música para ele(a).",
+    "renameConfirmFriend": "🎤 {name} é um(a) amigo(a): pedir uma música para ele(a)",
+    "renameConfirmYes": "Sim, eu sou {name}: mudar meu nome"
   },
   "search": {
     "title": "Escolha sua música",
@@ -104,7 +115,12 @@
     "describeLink": "Não lembra o nome? Descreva",
     "describePlaceholder": "ex.: aquela música do Titanic",
     "describeCta": "Encontrar",
-    "figuringOut": "Descobrindo qual é a música…"
+    "figuringOut": "Descobrindo qual é a música…",
+    "editMyName": "✏️ editar meu nome",
+    "forFriend": "🎤 música para um(a) amigo(a)",
+    "friendTitle": "🎤 Escolhendo uma música para {name}",
+    "friendHint": "A música vai para a lista de hoje com o nome de {name}. O seu nome e as suas músicas não mudam.",
+    "friendCancel": "Cancelar — a música é para mim"
   },
   "versions": {
     "sectionLibrary": "Na nossa biblioteca",
@@ -363,7 +379,8 @@
     "failed": "Não foi possível enviar — pergunte ao anfitrião se os pedidos estão pausados.",
     "makeLimit": "Você já nos pediu para criar algumas músicas esta noite — escolha uma do catálogo ou fale com o anfitrião.",
     "makeDisabled": "O anfitrião não está aceitando pedidos de criação agora — escolha uma música do catálogo.",
-    "makeEmail": "Também enviaremos por e-mail o arquivo de vídeo finalizado e o link do YouTube ({email})."
+    "makeEmail": "Também enviaremos por e-mail o arquivo de vídeo finalizado e o link do YouTube ({email}).",
+    "detailsFriend": "Cantor(a): {name} (pedido pelo seu celular)"
   },
   "mySongs": {
     "title": "Suas músicas de hoje",
@@ -439,7 +456,9 @@
     "quickUpgraded": "✨ A versão completa está pronta e substituiu a versão rápida.",
     "reviewOpening": "Abrindo…",
     "reviewFailed": "Não foi possível abrir a revisão aqui — use o link no seu e-mail.",
-    "reviewOver": "Essa revisão já terminou — não há mais nada a fazer."
+    "reviewOver": "Essa revisão já terminou — não há mais nada a fazer.",
+    "requestForFriend": "🎤 Pedir uma música para um(a) amigo(a)",
+    "forFriend": "Para {name}"
   },
   "notify": {
     "heading": "🔔 Quando for a sua vez",

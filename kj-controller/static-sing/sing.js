@@ -84,7 +84,7 @@ function _readMyRequestStore() {
   } catch { return null; }
 }
 
-function rememberRequestId(token, id, editToken) {
+function rememberRequestId(token, id, editToken, friendName) {
   if (!token || !id) return;
   let store = _readMyRequestStore();
   if (!store || store.token !== token) store = { token, ids: [], tokens: {} };
@@ -92,6 +92,12 @@ function rememberRequestId(token, id, editToken) {
   if (!store.ids.includes(id)) store.ids.push(id);
   // Per-request ownership secret proving this device may cancel/edit it.
   if (editToken) store.tokens[String(id)] = editToken;
+  // A song requested for a friend: remembered so My songs can label it and the
+  // owner's rename / phone / photo-consent changes never rewrite the friend's.
+  if (friendName) {
+    if (!store.friends) store.friends = {};
+    store.friends[String(id)] = friendName;
+  }
   try { localStorage.setItem(MY_REQUESTS_KEY, JSON.stringify(store)); }
   catch { /* private browsing — best-effort */ }
 }
@@ -109,8 +115,32 @@ function forgetRequestId(token, id) {
   if (!store || store.token !== token) return;
   store.ids = store.ids.filter((x) => String(x) !== String(id));
   if (store.tokens) delete store.tokens[String(id)];
+  if (store.friends) delete store.friends[String(id)];
   try { localStorage.setItem(MY_REQUESTS_KEY, JSON.stringify(store)); }
   catch { /* private browsing — best-effort */ }
+}
+
+// The friend's name if this device requested `id` for someone else, else "".
+function readFriendName(token, id) {
+  const store = _readMyRequestStore();
+  if (!store || store.token !== token || !store.friends) return "";
+  return store.friends[String(id)] || "";
+}
+
+// {id, edit_token} for this device's OWN requests tonight — the ownership
+// proof sent with rename / phone / photo-consent changes. Songs requested for a
+// friend are excluded: those changes are the phone owner's, not the friend's.
+function _ownRequestItems() {
+  const items = [];
+  const store = _readMyRequestStore();
+  if (store && store.token === TOKEN && Array.isArray(store.ids)) {
+    for (const id of store.ids) {
+      if (store.friends && store.friends[String(id)]) continue;
+      const tok = store.tokens && store.tokens[String(id)];
+      if (tok) items.push({ id, edit_token: tok });
+    }
+  }
+  return items;
 }
 
 function readEditToken(token, id) {
@@ -144,12 +174,16 @@ function pruneRequestIds(token, queriedIds, returnedIds) {
   });
   if (nextIds.length === store.ids.length) return;   // nothing to prune
   const nextTokens = {};
+  const nextFriends = {};
   for (const id of nextIds) {
     const t = store.tokens && store.tokens[String(id)];
     if (t) nextTokens[String(id)] = t;
+    const f = store.friends && store.friends[String(id)];
+    if (f) nextFriends[String(id)] = f;
   }
   store.ids = nextIds;
   store.tokens = nextTokens;
+  store.friends = nextFriends;
   try { localStorage.setItem(MY_REQUESTS_KEY, JSON.stringify(store)); }
   catch { /* private browsing — best-effort */ }
 }
@@ -210,6 +244,9 @@ const state = {
   // New: duet partners typed on the confirm screen. Array of
   // {name, phone}. Capped at MAX_PARTNERS in the render.
   additional: [],
+  // "Song for a friend": {name, phone} while this phone is requesting a song
+  // under someone else's name (search → confirm). Never touches state.name.
+  friend: null,
   request: null,    // after submit
   // "Change song" mode: when set, the search→confirm flow re-submits to the
   // change endpoint for this owned request instead of creating a new one.
@@ -362,14 +399,7 @@ async function reorderSongs(items) {
 // device owns, and records a device alias so future submissions use the new
 // name too. Safe with no owned songs (just sets the alias for next time).
 async function renameMe(newName) {
-  const items = [];
-  const store = _readMyRequestStore();
-  if (store && store.token === TOKEN && Array.isArray(store.ids)) {
-    for (const id of store.ids) {
-      const tok = store.tokens && store.tokens[String(id)];
-      if (tok) items.push({ id, edit_token: tok });
-    }
-  }
+  const items = _ownRequestItems();
   return fetchJson(`${BASE}/rename`, {
     method: "POST",
     body: JSON.stringify({ new_name: newName, device_id: DEVICE_ID, items }),
@@ -560,6 +590,11 @@ function render() {
     state.changeEditToken = null;
     state.changeSongLabel = "";
   }
+  // A song-for-a-friend only spans the name → search → confirm (→ make) flow;
+  // leaving it (My songs, Rotation, Tip…) drops back to requesting for yourself.
+  if (state.friend && !["identity", "search", "confirm", "make"].includes(state.step)) {
+    state.friend = null;
+  }
   // Reorder mode is a done-screen overlay — any navigation away discards it.
   if (state._reorderMode && state.step !== "done") state._reorderMode = false;
   // Identity edit-mode flags are only meaningful while on the identity step;
@@ -618,6 +653,26 @@ function enterEditName(returnStep) {
   state._identityDraft = { name: state.name, phone: state.phone, err: "" };
   state.step = "identity";
   render();
+}
+
+// Start a "song for a friend": a name form for the friend (optionally pre-filled,
+// e.g. from the rename guard), then the normal search → confirm flow submits
+// under that name. The phone owner's own name, songs and alias are untouched.
+function enterFriend(returnStep, prefillName) {
+  state._identityMode = "friend";
+  state._identityReturnStep = returnStep || "search";
+  state._identityDraft = { name: prefillName || "", phone: "", err: "" };
+  state.step = "identity";
+  render();
+}
+
+function friendLink(returnStep) {
+  return el("a", {
+    href: "#",
+    class: "friend-song-link",
+    "data-testid": "friend-song-link",
+    onclick: (e) => { e.preventDefault(); enterFriend(returnStep); },
+  }, t("search.forFriend"));
 }
 
 // Small "· edit name" affordance shared by the search and done screens so a
@@ -1198,6 +1253,18 @@ function brandHeader() {
   );
 }
 
+// First names that clearly belong to different people ("Nats" → "Alex"), as
+// opposed to a spelling fix or adding a surname ("Nat" → "Nats B."). Folded
+// like the server so accents/punctuation don't count as a different person.
+function _looksLikeDifferentPerson(oldName, newName) {
+  const first = (n) => (n || "").normalize("NFD").replace(/[̀-ͯ]/g, "")
+    .toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, " ").trim().split(/\s+/)[0] || "";
+  const a = first(oldName);
+  const b = first(newName);
+  if (!a || !b) return false;
+  return !(a.startsWith(b) || b.startsWith(a));
+}
+
 function renderIdentity() {
   // Store typed-but-not-yet-submitted values on `state` so a validation-fail
   // rerender preserves them. Fall back to persisted state.name / state.phone
@@ -1207,8 +1274,11 @@ function renderIdentity() {
   }
   const draft = state._identityDraft;
   // "edit" mode = a returning singer fixing their name (keeps their songs);
+  // "friend" mode = the name of someone this phone is requesting a song for
+  // (the owner's identity is untouched);
   // "setup" (default) = first-time / switched-identity name entry.
   const isEdit = state._identityMode === "edit";
+  const isFriend = state._identityMode === "friend";
   const returnStep = state._identityReturnStep || "search";
 
   const leaveIdentity = (to) => {
@@ -1233,11 +1303,31 @@ function renderIdentity() {
     }
     const newName = draft.name.trim();
 
+    if (isFriend) {
+      state.friend = { name: newName, phone: phoneTrimmed };
+      state.selected = null;
+      state.query = "";
+      state.additional = [];
+      leaveIdentity("search");
+      root.querySelector('input[type="search"]')?.focus();
+      return;
+    }
+
+    const oldName = (state.name || "").trim();
     // Edit mode with a genuinely changed name: persist the rename server-side
     // BEFORE committing locally, so the singer's existing songs/entries are
     // rewritten and future submissions stick to the new name. If it fails, keep
     // them on the form with an error rather than silently diverging.
-    if (isEdit && newName !== (state.name || "").trim()) {
+    if (isEdit && newName !== oldName) {
+      // A whole different first name while this phone has songs queued is far
+      // more often "I'm adding my friend" than a rename — ask before rewriting
+      // the singer's songs (Nats typed her friend Alex here and became Alex).
+      if (draft.confirmedName !== newName
+          && _looksLikeDifferentPerson(oldName, newName)
+          && _ownRequestItems().length > 0) {
+        draft.confirmName = newName;
+        rerender(); return;
+      }
       const btn = root.querySelector(".identity-save");
       if (btn) { btn.disabled = true; btn.textContent = t("common.saving"); }
       try {
@@ -1267,29 +1357,62 @@ function renderIdentity() {
     root.appendChild(renderIdentity());
   }
 
-  return el("main", { class: "sing-card" },
-    el("h2", {}, isEdit ? t("identity.editTitle") : t("identity.title")),
-    isEdit ? el("p", { class: "hint" }, t("identity.editHint"))
-      : el("p", {}, t("identity.intro")),
+  // Rename guard: "is this you, or a friend?" — shown instead of the form.
+  if (isEdit && draft.confirmName) {
+    const name = draft.confirmName;
+    return el("main", { class: "sing-card", "data-testid": "rename-confirm" },
+      el("h2", {}, t("identity.renameConfirmTitle", { name })),
+      el("p", {}, t("identity.renameConfirmBody", { name, old: state.name || "" })),
+      el("div", { class: "rename-confirm-actions" },
+        el("button", { type: "button", class: "btn primary", "data-testid": "rename-confirm-friend",
+          onclick: () => enterFriend(returnStep, name) },
+          t("identity.renameConfirmFriend", { name })),
+        el("button", { type: "button", class: "btn ghost", "data-testid": "rename-confirm-yes",
+          onclick: () => {
+            draft.confirmedName = name;
+            draft.confirmName = "";
+            rerender();
+            root.querySelector(".identity-save")?.click();
+          } },
+          t("identity.renameConfirmYes", { name })),
+        el("button", { type: "button", class: "btn ghost", "data-testid": "rename-confirm-back",
+          onclick: () => { draft.confirmName = ""; rerender(); } },
+          t("common.cancel")),
+      ),
+    );
+  }
+
+  const title = isFriend ? t("identity.friendTitle")
+    : isEdit ? t("identity.editTitle") : t("identity.title");
+  const intro = isFriend ? el("p", { class: "hint" }, t("identity.friendIntro"))
+    : isEdit ? el("p", { class: "hint" }, t("identity.editHintSelf"))
+    : el("p", {}, t("identity.intro"));
+  return el("main", { class: "sing-card", "data-testid": `identity-${state._identityMode || "setup"}` },
+    el("h2", {}, title),
+    intro,
+    // Editing your name is the wrong door for "add my friend's song" — point
+    // at the right one before the singer starts typing over their own name.
+    isEdit ? el("p", { class: "hint friend-prompt" },
+      t("identity.friendPrompt"), " ", friendLink(returnStep)) : null,
     el("form", { onsubmit: onSubmit },
-      el("label", {}, t("identity.nameLabel"),
+      el("label", {}, isFriend ? t("identity.friendNameLabel") : t("identity.nameLabel"),
         el("input", {
-          type: "text", autocomplete: "given-name",
+          type: "text", autocomplete: isFriend ? "off" : "given-name",
           value: draft.name, placeholder: t("identity.namePlaceholder"),
           oninput: (e) => { draft.name = e.target.value; },
         }),
       ),
-      el("label", {}, t("identity.phoneLabel"),
+      el("label", {}, isFriend ? t("identity.friendPhoneLabel") : t("identity.phoneLabel"),
         el("input", {
-          type: "tel", autocomplete: "tel",
+          type: "tel", autocomplete: isFriend ? "off" : "tel",
           value: draft.phone, placeholder: phoneExample(),
           oninput: (e) => { draft.phone = e.target.value; },
         }),
-        el("span", { class: "hint" }, t("identity.phoneHint")),
+        el("span", { class: "hint" }, isFriend ? t("identity.friendPhoneHint") : t("identity.phoneHint")),
       ),
       draft.err ? el("p", { class: "error" }, draft.err) : null,
       el("div", { class: "row" },
-        isEdit ? el("button", { type: "button", class: "btn ghost",
+        isEdit || isFriend ? el("button", { type: "button", class: "btn ghost",
           onclick: () => leaveIdentity(returnStep) }, t("common.cancel")) : null,
         el("button", { type: "submit", class: "btn primary identity-save" },
           isEdit ? t("identity.saveName") : t("common.next")),
@@ -2678,14 +2801,31 @@ function renderSearch() {
       )
     : null;
 
+  // Song-for-a-friend banner — whose name this request goes under, and a way
+  // back to requesting for yourself.
+  const friendBanner = state.friend && !state.changeRequestId
+    ? el("div", { class: "sing-change-banner", "data-testid": "friend-banner" },
+        el("div", { class: "sing-change-title" },
+          t("search.friendTitle", { name: state.friend.name })),
+        el("div", { class: "sing-change-hint" },
+          t("search.friendHint", { name: state.friend.name })),
+        el("button", { class: "btn ghost sing-change-keep", "data-testid": "friend-cancel",
+          onclick: () => { state.friend = null; render(); } }, t("search.friendCancel")),
+      )
+    : null;
+
   const firstName = (state.name || "").split(/\s+/)[0];
   const card = el("main", { class: "sing-card" },
     el("h2", {}, t("search.title")),
     changeBanner,
-    el("p", { class: "hint" },
+    friendBanner,
+    friendBanner ? null : el("p", { class: "hint" },
       state.simpleMode ? t("search.hintSimple", { name: firstName })
-                       : t("search.hint", { name: firstName }),
-      " (", editNameLink("search", t("search.notYou")), ")"),
+                       : t("search.hint", { name: firstName })),
+    // Two clearly different doors: fix MY name vs. add a song for someone else
+    // (the old lone "not you?" link was read as the latter but renamed you).
+    friendBanner || state.changeRequestId ? null : el("p", { class: "hint identity-links" },
+      editNameLink("search", t("search.editMyName")), " · ", friendLink("search")),
     el("input", {
       type: "search",
       placeholder: t("search.placeholder"),
@@ -2779,10 +2919,11 @@ function renderConfirm() {
         }
       }
 
+      const friend = state.friend;
       const payload = {
-        singer_name: state.name,
+        singer_name: friend ? friend.name : state.name,
         device_id: DEVICE_ID,
-        phone: state.phone,
+        phone: friend ? friend.phone : state.phone,
         song_artist: state.selected.song_artist || "",
         song_title: state.selected.song_title || "",
         source_type: state.selected.source_type,
@@ -2790,14 +2931,19 @@ function renderConfirm() {
         source_meta: state.selected.source_meta || null,
       };
       if (cleaned.length > 0) payload.additional_singers = cleaned;
-      if (askPhotoConsent() && state.photoConsent) payload.photo_consent = state.photoConsent;
+      // A friend's song goes in under their name as typed — and the phone
+      // owner's photo consent is theirs alone, so it never rides along.
+      if (friend) payload.for_friend = true;
+      else if (askPhotoConsent() && state.photoConsent) payload.photo_consent = state.photoConsent;
 
       const data = await submit(payload);
       state.request = data.request;
       // Remember this request id + its edit_token on this device (per token) so
       // the done screen's "your songs tonight" list survives reloads and can
       // offer self-service cancel.
-      rememberRequestId(TOKEN, data.request.id, data.request.edit_token);
+      rememberRequestId(TOKEN, data.request.id, data.request.edit_token,
+        friend ? data.request.singer_name || friend.name : "");
+      state.friend = null;
       state.step = "done";
       state._navReplace = true;   // Back shouldn't land on the stale confirm
       render();
@@ -3052,12 +3198,15 @@ function renderConfirm() {
     // text is just noise there.
     state.query && sel.source_type !== "make"
       ? el("p", { class: "confirm-searched hint" }, t("confirm.searched", { query: state.query })) : null,
-    el("p", { class: "hint" },
-      state.phone
-        ? t("confirm.detailsWithPhone", { name: state.name, phone: state.phone })
-        : t("confirm.details", { name: state.name })),
+    state.friend && !isChange
+      ? el("p", { class: "hint", "data-testid": "confirm-friend" },
+          t("confirm.detailsFriend", { name: state.friend.name }))
+      : el("p", { class: "hint" },
+          state.phone
+            ? t("confirm.detailsWithPhone", { name: state.name, phone: state.phone })
+            : t("confirm.details", { name: state.name })),
     // Asked once per device (then changeable from My songs); optional.
-    !isChange && askPhotoConsent() && !state.photoConsent
+    !isChange && !state.friend && askPhotoConsent() && !state.photoConsent
       ? photoConsentPicker((v) => { setPhotoConsentLocal(v); }) : null,
     // Partners belong to the original request — a swap keeps them as they were.
     isChange ? null : renderPartnersSection(),
@@ -3253,6 +3402,11 @@ function _renderSongCard(item, ctx = {}) {
       main.appendChild(el("div", { class: "song-card-replaces", "data-testid": "replaces-line" },
         t("mySongs.replacing", { song: old })));
     }
+  }
+  const friendName = req.id ? readFriendName(TOKEN, req.id) : "";
+  if (friendName) {
+    main.appendChild(el("div", { class: "song-card-partners", "data-testid": "for-friend-line" },
+      t("mySongs.forFriend", { name: req.singer_name || friendName })));
   }
   if (partners.length > 0) {
     const names = partners.map((p) => p.name).join(", ");
@@ -3547,6 +3701,11 @@ function renderDone() {
         render();
       },
     }, t("mySongs.requestAnother")),
+    el("button", {
+      class: "btn ghost request-for-friend",
+      "data-testid": "request-for-friend",
+      onclick: () => enterFriend("done"),
+    }, t("mySongs.requestForFriend")),
     el("div", { id: "push-optin", class: "push-optin" }),
     // (The old "Show upcoming singers" expander lived here — the dedicated
     // 📋 Rotation tab replaced it.)
@@ -4074,14 +4233,7 @@ window.addEventListener("beforeinstallprompt", (e) => {
 // resolves it from).
 
 async function _savePhoneNumber(phone) {
-  const items = [];
-  const store = _readMyRequestStore();
-  if (store && store.token === TOKEN && Array.isArray(store.ids)) {
-    for (const id of store.ids) {
-      const tok = store.tokens && store.tokens[String(id)];
-      if (tok) items.push({ id, edit_token: tok });
-    }
-  }
+  const items = _ownRequestItems();
   await fetchJson(`${BASE}/update-phone`, {
     method: "POST",
     body: JSON.stringify({ phone, device_id: DEVICE_ID, items }),
@@ -4286,14 +4438,7 @@ function setPhotoConsentLocal(v) {
 }
 
 async function savePhotoConsent(consent) {
-  const items = [];
-  const store = _readMyRequestStore();
-  if (store && store.token === TOKEN && Array.isArray(store.ids)) {
-    for (const id of store.ids) {
-      const tok = store.tokens && store.tokens[String(id)];
-      if (tok) items.push({ id, edit_token: tok });
-    }
-  }
+  const items = _ownRequestItems();
   await fetchJson(`${BASE}/photo-consent`, {
     method: "POST",
     // device_id → this phone's own rate-limit budget, not the venue's shared IP.
