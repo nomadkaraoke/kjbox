@@ -59,7 +59,18 @@
     "differentPerson": "Người khác?",
     "switchSinger": "Đổi người hát",
     "switchHint": "— bắt đầu lại từ đầu trên điện thoại này.",
-    "renameFailed": "Không lưu được tên mới — bạn kiểm tra mạng rồi thử lại nhé."
+    "renameFailed": "Không lưu được tên mới — bạn kiểm tra mạng rồi thử lại nhé.",
+    "editHintSelf": "Chỉnh sửa cách tên BẠN hiển thị trong danh sách chờ. Các bài hát của bạn tối nay cũng sẽ hiển thị tên mới này.",
+    "friendPrompt": "Bạn muốn thêm bài hát cho người khác?",
+    "friendTitle": "Bài hát tặng bạn bè",
+    "friendIntro": "Yêu cầu bài hát cho người khác. Bài hát sẽ được thêm vào danh sách tối nay dưới tên của họ, còn tên và các bài hát của bạn vẫn giữ nguyên.",
+    "friendNameLabel": "Tên của bạn bè (tên + chữ cái đầu của họ)",
+    "friendPhoneLabel": "Số điện thoại của bạn bè (không bắt buộc)",
+    "friendPhoneHint": "Chúng tôi sẽ nhắn tin cho họ một lần khi đến lượt. Nếu để trống, host sẽ chỉ gọi tên họ.",
+    "renameConfirmTitle": "Đổi tên của bạn thành {name}?",
+    "renameConfirmBody": "Các bài hát của bạn tối nay sẽ được đổi sang tên {name} thay vì {old}. Nếu {name} là một người bạn, hãy chọn yêu cầu bài hát cho họ.",
+    "renameConfirmFriend": "🎤 {name} là bạn của tôi: yêu cầu bài hát cho họ",
+    "renameConfirmYes": "Đúng, tôi là {name}: đổi tên tôi"
   },
   "search": {
     "title": "Chọn bài của bạn",
@@ -104,7 +115,12 @@
     "describeLink": "Không nhớ tên bài? Thử mô tả xem",
     "describePlaceholder": "Ví dụ: bài hát trong phim Titanic",
     "describeCta": "Tìm ngay",
-    "figuringOut": "Đang tìm xem ý bạn là bài nào…"
+    "figuringOut": "Đang tìm xem ý bạn là bài nào…",
+    "editMyName": "✏️ sửa tên tôi",
+    "forFriend": "🎤 bài hát tặng bạn bè",
+    "friendTitle": "🎤 Đang chọn bài hát cho {name}",
+    "friendHint": "Bài hát sẽ vào danh sách tối nay dưới tên của {name}. Tên và các bài hát của bạn sẽ không thay đổi.",
+    "friendCancel": "Hủy — bài hát này cho tôi"
   },
   "versions": {
     "sectionLibrary": "Trong thư viện của chúng tôi",
@@ -363,7 +379,8 @@
     "failed": "Không gửi được — bạn hỏi KJ xem có phải đang tạm dừng nhận bài không nhé.",
     "makeLimit": "Tối nay bạn đã yêu cầu chúng tôi tạo vài bài hát rồi — hãy chọn một bài từ danh sách, hoặc hỏi KJ nhé.",
     "makeDisabled": "KJ hiện không nhận yêu cầu tạo bài hát — thay vào đó, bạn hãy chọn một bài từ danh sách nhé.",
-    "makeEmail": "Chúng mình cũng sẽ gửi qua email cho bạn file video hoàn chỉnh và link YouTube ({email})."
+    "makeEmail": "Chúng mình cũng sẽ gửi qua email cho bạn file video hoàn chỉnh và link YouTube ({email}).",
+    "detailsFriend": "Người hát: {name} (được yêu cầu từ điện thoại của bạn)"
   },
   "mySongs": {
     "title": "Các bài hát của bạn tối nay",
@@ -439,7 +456,9 @@
     "quickUpgraded": "✨ Phiên bản đầy đủ đã sẵn sàng và đã thay thế phiên bản nhanh.",
     "reviewOpening": "Đang mở…",
     "reviewFailed": "Không thể mở phần kiểm tra lời bài hát ở đây — thay vào đó hãy dùng link trong email của bạn nhé.",
-    "reviewOver": "Phần kiểm tra đã hoàn tất — bạn không cần làm gì thêm nữa."
+    "reviewOver": "Phần kiểm tra đã hoàn tất — bạn không cần làm gì thêm nữa.",
+    "requestForFriend": "🎤 Yêu cầu bài hát cho bạn bè",
+    "forFriend": "Dành cho {name}"
   },
   "notify": {
     "heading": "🔔 Khi đến lượt bạn",

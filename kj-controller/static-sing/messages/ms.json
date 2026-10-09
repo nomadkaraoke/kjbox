@@ -59,7 +59,18 @@
     "differentPerson": "Orang lain?",
     "switchSinger": "Tukar penyanyi",
     "switchHint": "— mula baharu pada telefon ini.",
-    "renameFailed": "Tidak dapat menyimpan nama baharu anda — semak sambungan anda dan cuba lagi."
+    "renameFailed": "Tidak dapat menyimpan nama baharu anda — semak sambungan anda dan cuba lagi.",
+    "editHintSelf": "Betulkan paparan nama ANDA dalam giliran. Lagu-lagu anda malam ini juga akan memaparkan nama baharu tersebut.",
+    "friendPrompt": "Ingin menambah lagu untuk orang lain?",
+    "friendTitle": "Lagu untuk rakan",
+    "friendIntro": "Minta lagu untuk orang lain. Lagu ini akan dimasukkan ke dalam senarai malam ini di bawah nama mereka, manakala nama dan lagu anda sendiri kekal seperti biasa.",
+    "friendNameLabel": "Nama rakan (nama pertama + huruf awal nama akhir)",
+    "friendPhoneLabel": "Nombor telefon bimbit rakan (pilihan)",
+    "friendPhoneHint": "Kami akan menghantar SMS sekali sahaja apabila tiba giliran mereka. Biarkan kosong dan hos akan memanggil nama mereka secara terus.",
+    "renameConfirmTitle": "Tukar nama anda kepada {name}?",
+    "renameConfirmBody": "Lagu-lagu anda malam ini akan disenaraikan di bawah {name} dan bukannya {old}. Jika {name} ialah seorang rakan, minta lagu untuk mereka sebagai ganti.",
+    "renameConfirmFriend": "🎤 {name} ialah rakan: minta lagu untuk mereka",
+    "renameConfirmYes": "Ya, saya {name}: tukar nama saya"
   },
   "search": {
     "title": "Pilih lagu anda",
@@ -104,7 +115,12 @@
     "describeLink": "Tak ingat tajuknya? Cuba terangkan",
     "describePlaceholder": "cth. lagu dari filem Titanic",
     "describeCta": "Cari",
-    "figuringOut": "Sedang mencari lagu yang anda maksudkan…"
+    "figuringOut": "Sedang mencari lagu yang anda maksudkan…",
+    "editMyName": "✏️ edit nama saya",
+    "forFriend": "🎤 lagu untuk rakan",
+    "friendTitle": "🎤 Memilih lagu untuk {name}",
+    "friendHint": "Lagu ini akan dimasukkan ke dalam senarai malam ini di bawah nama {name}. Nama dan lagu anda sendiri tidak akan berubah.",
+    "friendCancel": "Batal — ini untuk saya"
   },
   "versions": {
     "sectionLibrary": "Dalam pustaka kami",
@@ -363,7 +379,8 @@
     "failed": "Tidak dapat menghantar — tanya hos jika permintaan dihentikan sementara.",
     "makeLimit": "Anda sudah meminta kami membuat beberapa lagu malam ini — pilih satu dari katalog, atau tanya hos.",
     "makeDisabled": "Hos tidak menerima permintaan buat lagu buat masa ini — sila pilih lagu dari katalog.",
-    "makeEmail": "Kami juga akan e-melkan fail video yang telah siap dan pautan YouTube kepada anda ({email})."
+    "makeEmail": "Kami juga akan e-melkan fail video yang telah siap dan pautan YouTube kepada anda ({email}).",
+    "detailsFriend": "Penyanyi: {name} (diminta dari telefon anda)"
   },
   "mySongs": {
     "title": "Lagu anda malam ini",
@@ -439,7 +456,9 @@
     "quickUpgraded": "✨ Versi penuh sudah siap dan telah menggantikan versi pantas.",
     "reviewOpening": "Membuka…",
     "reviewFailed": "Tidak dapat membuka semakan di sini — sila gunakan pautan dalam e-mel anda.",
-    "reviewOver": "Semakan itu telah selesai — tiada apa-apa lagi yang perlu dilakukan."
+    "reviewOver": "Semakan itu telah selesai — tiada apa-apa lagi yang perlu dilakukan.",
+    "requestForFriend": "🎤 Minta lagu untuk rakan",
+    "forFriend": "Untuk {name}"
   },
   "notify": {
     "heading": "🔔 Apabila tiba giliran anda",

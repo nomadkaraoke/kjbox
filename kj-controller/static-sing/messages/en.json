@@ -59,7 +59,18 @@
     "differentPerson": "Different person?",
     "switchSinger": "Switch singer",
     "switchHint": "— starts fresh on this phone.",
-    "renameFailed": "Couldn't save your new name — check your connection and try again."
+    "renameFailed": "Couldn't save your new name — check your connection and try again.",
+    "editHintSelf": "Fix how YOUR name shows on the rotation. Your songs tonight will show the new name too.",
+    "friendPrompt": "Adding a song for someone else?",
+    "friendTitle": "Song for a friend",
+    "friendIntro": "Request a song for someone else. It goes on tonight's list under their name, and your own name and songs stay as they are.",
+    "friendNameLabel": "Friend's name (first name + last initial)",
+    "friendPhoneLabel": "Friend's mobile number (optional)",
+    "friendPhoneHint": "We'll text them once when it's their turn. Leave it blank and the host will simply call their name.",
+    "renameConfirmTitle": "Rename yourself to {name}?",
+    "renameConfirmBody": "Your songs tonight will be listed under {name} instead of {old}. If {name} is a friend, request a song for them instead.",
+    "renameConfirmFriend": "🎤 {name} is a friend: request a song for them",
+    "renameConfirmYes": "Yes, I'm {name}: rename me"
   },
   "search": {
     "title": "Pick your song",
@@ -104,7 +115,12 @@
     "describeLink": "Can't remember the name? Describe it",
     "describePlaceholder": "e.g. that song from Titanic",
     "describeCta": "Find it",
-    "figuringOut": "Figuring out which song you mean…"
+    "figuringOut": "Figuring out which song you mean…",
+    "editMyName": "✏️ edit my name",
+    "forFriend": "🎤 song for a friend",
+    "friendTitle": "🎤 Picking a song for {name}",
+    "friendHint": "It goes on tonight's list under {name}'s name. Your own name and songs don't change.",
+    "friendCancel": "Cancel — it's for me"
   },
   "versions": {
     "sectionLibrary": "In our library",
@@ -363,7 +379,8 @@
     "failed": "Couldn't send — ask the host if requests are paused.",
     "makeLimit": "You've already asked us to make a few songs tonight — pick one from the catalogue, or ask the host.",
     "makeDisabled": "The host isn't taking make-it requests right now — pick a song from the catalogue instead.",
-    "makeEmail": "We'll also email you the finished video file and YouTube link ({email})."
+    "makeEmail": "We'll also email you the finished video file and YouTube link ({email}).",
+    "detailsFriend": "Singer: {name} (requested from your phone)"
   },
   "mySongs": {
     "title": "Your songs tonight",
@@ -439,7 +456,9 @@
     "quickUpgraded": "✨ The full version is ready and has replaced the quick version.",
     "reviewOpening": "Opening…",
     "reviewFailed": "Couldn't open the review here — use the link in your email instead.",
-    "reviewOver": "That review is already finished — nothing more to do."
+    "reviewOver": "That review is already finished — nothing more to do.",
+    "requestForFriend": "🎤 Request a song for a friend",
+    "forFriend": "For {name}"
   },
   "notify": {
     "heading": "🔔 When you're up",

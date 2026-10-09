@@ -59,7 +59,18 @@
     "differentPerson": "Annan person?",
     "switchSinger": "Byt sångare",
     "switchHint": "— börjar om på nytt på den här telefonen.",
-    "renameFailed": "Kunde inte spara ditt nya namn — kolla din uppkoppling och försök igen."
+    "renameFailed": "Kunde inte spara ditt nya namn — kolla din uppkoppling och försök igen.",
+    "editHintSelf": "Ändra hur DITT namn visas i kön. Dina låtar ikväll kommer också att visa det nya namnet.",
+    "friendPrompt": "Vill du lägga till en låt åt någon annan?",
+    "friendTitle": "Låt till en vän",
+    "friendIntro": "Önska en låt åt någon annan. Den läggs till på kvällens lista under deras namn, och ditt eget namn och dina låtar förblir desamma.",
+    "friendNameLabel": "Vännens namn (förnamn + första bokstaven i efternamnet)",
+    "friendPhoneLabel": "Vännens mobilnummer (valfritt)",
+    "friendPhoneHint": "Vi skickar ett sms när det är deras tur. Lämnar du det tomt ropar värden bara upp deras namn.",
+    "renameConfirmTitle": "Byta namn till {name}?",
+    "renameConfirmBody": "Dina låtar ikväll kommer att listas under {name} istället för {old}. Om {name} är en vän kan du önska en låt åt dem istället.",
+    "renameConfirmFriend": "🎤 {name} är en vän: önska en låt åt dem",
+    "renameConfirmYes": "Ja, jag är {name}: byt mitt namn"
   },
   "search": {
     "title": "Välj din låt",
@@ -104,7 +115,12 @@
     "describeLink": "Kommer du inte ihåg vad den heter? Beskriv den",
     "describePlaceholder": "t.ex. den där låten från Titanic",
     "describeCta": "Hitta den",
-    "figuringOut": "Listar ut vilken låt du menar…"
+    "figuringOut": "Listar ut vilken låt du menar…",
+    "editMyName": "✏️ ändra mitt namn",
+    "forFriend": "🎤 låt till en vän",
+    "friendTitle": "🎤 Väljer en låt åt {name}",
+    "friendHint": "Den läggs till på kvällens lista under namnet {name}. Ditt eget namn och dina låtar ändras inte.",
+    "friendCancel": "Avbryt – den är till mig"
   },
   "versions": {
     "sectionLibrary": "I vårt bibliotek",
@@ -363,7 +379,8 @@
     "failed": "Kunde inte skicka — fråga värden om förfrågningar är pausade.",
     "makeLimit": "Du har redan bett oss skapa några låtar ikväll — välj en från katalogen, eller fråga värden.",
     "makeDisabled": "Värden tar inte emot önskemål om att skapa låtar just nu — välj en låt från katalogen istället.",
-    "makeEmail": "Vi mejlar också den färdiga videofilen och YouTube-länken till dig ({email})."
+    "makeEmail": "Vi mejlar också den färdiga videofilen och YouTube-länken till dig ({email}).",
+    "detailsFriend": "Sångare: {name} (önskad från din telefon)"
   },
   "mySongs": {
     "title": "Dina låtar ikväll",
@@ -439,7 +456,9 @@
     "quickUpgraded": "✨ Den fullständiga versionen är klar och har ersatt snabbversionen.",
     "reviewOpening": "Öppnar…",
     "reviewFailed": "Kunde inte öppna granskningen här – använd länken i ditt mejl istället.",
-    "reviewOver": "Den granskningen är redan klar – inget mer att göra."
+    "reviewOver": "Den granskningen är redan klar – inget mer att göra.",
+    "requestForFriend": "🎤 Önska en låt åt en vän",
+    "forFriend": "För {name}"
   },
   "notify": {
     "heading": "🔔 När det är din tur",

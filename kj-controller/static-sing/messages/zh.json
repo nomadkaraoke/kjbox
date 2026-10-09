@@ -59,7 +59,18 @@
     "differentPerson": "不是本人？",
     "switchSinger": "换个歌手",
     "switchHint": "— 在这部手机上重新开始。",
-    "renameFailed": "新名字没存上 — 检查下网络再试一次吧。"
+    "renameFailed": "新名字没存上 — 检查下网络再试一次吧。",
+    "editHintSelf": "修改您在轮流名单上显示的名字。您今晚点的歌也会显示新名字。",
+    "friendPrompt": "想帮其他人点歌？",
+    "friendTitle": "帮朋友点歌",
+    "friendIntro": "帮其他人点歌。这首歌会以他们的名字加入今晚的歌单，您自己的名字和已点歌曲保持不变。",
+    "friendNameLabel": "朋友的名字（名字 + 姓氏首字母）",
+    "friendPhoneLabel": "朋友的手机号（选填）",
+    "friendPhoneHint": "轮到他们时，我们会发一条短信提醒。如果不填，主持人会直接叫他们的名字。",
+    "renameConfirmTitle": "将您的名字改为 {name}？",
+    "renameConfirmBody": "您今晚点的歌将显示在 {name} 名下，而不是 {old}。如果 {name} 是您的朋友，请改为帮他们点歌。",
+    "renameConfirmFriend": "🎤 {name} 是朋友：帮他们点歌",
+    "renameConfirmYes": "是的，我是 {name}：修改我的名字"
   },
   "search": {
     "title": "选首歌吧",
@@ -104,7 +115,12 @@
     "describeLink": "记不清歌名？描述一下",
     "describePlaceholder": "例如：泰坦尼克号里的那首歌",
     "describeCta": "帮我找",
-    "figuringOut": "正在识别你想找的是哪首歌…"
+    "figuringOut": "正在识别你想找的是哪首歌…",
+    "editMyName": "✏️ 修改我的名字",
+    "forFriend": "🎤 帮朋友点歌",
+    "friendTitle": "🎤 正在为 {name} 选歌",
+    "friendHint": "这首歌将以 {name} 的名字加入今晚的歌单。您自己的名字和已点歌曲不会改变。",
+    "friendCancel": "取消 — 是我自己要唱"
   },
   "versions": {
     "sectionLibrary": "在我们的曲库里",
@@ -363,7 +379,8 @@
     "failed": "发送失败 — 问问主持人是不是暂停点歌了。",
     "makeLimit": "今晚您已经点了几首需要制作的歌 —— 请从曲库中选一首，或者去问问主持人吧。",
     "makeDisabled": "主持人现在不接受制作歌曲的请求 —— 请从曲库中选一首吧。",
-    "makeEmail": "我们还会将制作好的视频文件和 YouTube 链接发送到您的邮箱 ({email})。"
+    "makeEmail": "我们还会将制作好的视频文件和 YouTube 链接发送到您的邮箱 ({email})。",
+    "detailsFriend": "演唱者：{name}（由您的手机点播）"
   },
   "mySongs": {
     "title": "您今晚的歌",
@@ -439,7 +456,9 @@
     "quickUpgraded": "✨ 完整版已准备好，并已替换快速版本。",
     "reviewOpening": "正在打开…",
     "reviewFailed": "无法在此处打开校对页面——请使用您邮箱中的链接。",
-    "reviewOver": "校对已完成——无需其他操作。"
+    "reviewOver": "校对已完成——无需其他操作。",
+    "requestForFriend": "🎤 帮朋友点歌",
+    "forFriend": "给 {name}"
   },
   "notify": {
     "heading": "🔔 快到您的时候",

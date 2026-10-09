@@ -133,6 +133,19 @@ p { margin: 0.5rem 0; }
   padding: 0.15rem 0;
 }
 .done-identity { margin-top: -0.25rem; }
+/* "song for a friend" sits beside "edit my name" — same tappable link style,
+   and any other in-hint link (e.g. "Switch singer") stays readable on dark. */
+.friend-song-link,
+.hint a {
+  color: var(--nk-accent, #ff4dcf);
+  text-decoration: underline;
+  padding: 0.15rem 0;
+}
+.friend-song-link { white-space: nowrap; }
+/* Rename guard: full-width stacked choices, friend first. */
+.rename-confirm-actions { display: flex; flex-direction: column; gap: 0.6rem; margin-top: 1rem; }
+.rename-confirm-actions .btn { width: 100%; }
+.request-for-friend { width: 100%; margin: 0 0 12px; }
 
 label {
   display: block;

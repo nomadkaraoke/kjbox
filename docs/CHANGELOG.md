@@ -2,6 +2,22 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-10-08 - Singer "song for a friend" + rename guard (v0.128.0)
+
+- **Bug (live, 2026-10-08):** Nats added her song, tapped "Request another song", then tapped
+  "(not you?)" on the search screen to add her friend Alex's song. That link opened *Edit your name*,
+  so typing "Alex" renamed **her** song + phone alias to Alex (`/sing/rename` at 01:36:59 UTC).
+- **Fix:** requesting for someone else is now its own path. "🎤 song for a friend" sits on the
+  search screen (beside "✏️ edit my name", which replaces "not you?"), as a My songs button, and
+  on the edit-name form. It asks for the friend's name (+ optional phone), shows a "Picking a song for
+  Alex" banner, and submits with `for_friend: true`. The server then keeps the typed name (no device
+  alias override) and ignores the owner's photo consent. The phone remembers which requests were for a
+  friend (`sing_my_request_ids.friends`), labels them "For Alex", and leaves them out of the
+  owner's rename / phone-number / photo-consent updates.
+- **Rename guard:** a self-rename to a different first name while the phone has its own songs queued
+  asks "Rename yourself to Alex?", with "Alex is a friend: request a song for them" (pre-filled) as
+  the primary choice. Spelling fixes ("Nat" → "Nats B.") rename without asking.
+
 ## 2026-10-03 - Make-it best pick also matches the artist (v0.127.1)
 
 - **Bug (found checking v0.127.0 against a real search):** for *Braxton Keith - The Chair*, George

@@ -59,7 +59,18 @@
     "differentPerson": "Eri henkilö?",
     "switchSinger": "Vaihda laulajaa",
     "switchHint": "— aloittaa alusta tällä puhelimella.",
-    "renameFailed": "Uuden nimen tallennus epäonnistui — tarkista yhteys ja yritä uudelleen."
+    "renameFailed": "Uuden nimen tallennus epäonnistui — tarkista yhteys ja yritä uudelleen.",
+    "editHintSelf": "Muokkaa sitä, miten nimesi näkyy laululistalla. Myös tämänillankappaleesi näkyvät uudella nimellä.",
+    "friendPrompt": "Lisäätkö kappaleen jollekin toiselle?",
+    "friendTitle": "Kappale kaverille",
+    "friendIntro": "Toivo kappale jollekin toiselle. Se lisätään tämän illan listalle hänen nimellään, ja oma nimesi sekä kappaleesi pysyvät ennallaan.",
+    "friendNameLabel": "Kaverin nimi (etunimi + sukunimen ensimmäinen kirjain)",
+    "friendPhoneLabel": "Kaverin puhelinnumero (valinnainen)",
+    "friendPhoneHint": "Lähetämme tekstiviestin, kun hänen vuoronsa tulee. Jos jätät kentän tyhjäksi, juontaja vain huutaa nimen.",
+    "renameConfirmTitle": "Vaihdatko nimeksesi {name}?",
+    "renameConfirmBody": "Tämän illan kappaleesi näkyvät nimellä {name} nimen {old} sijaan. Jos {name} on kaverisi, toivo kappale mieluummin hänelle.",
+    "renameConfirmFriend": "🎤 {name} on kaveri: toivo kappale hänelle",
+    "renameConfirmYes": "Kyllä, olen {name}: vaihda nimeni"
   },
   "search": {
     "title": "Valitse laulusi",
@@ -104,7 +115,12 @@
     "describeLink": "Etkö muista nimeä? Kuvaile sitä",
     "describePlaceholder": "esim. se kappale Titanicista",
     "describeCta": "Etsi",
-    "figuringOut": "Selvitetään, mitä kappaletta tarkoitat…"
+    "figuringOut": "Selvitetään, mitä kappaletta tarkoitat…",
+    "editMyName": "✏️ muokkaa nimeäni",
+    "forFriend": "🎤 kappale kaverille",
+    "friendTitle": "🎤 Valitaan kappaletta kaverille {name}",
+    "friendHint": "Se lisätään tämän illan listalle nimellä {name}. Oma nimesi ja kappaleesi eivät muutu.",
+    "friendCancel": "Peruuta – se on minulle"
   },
   "versions": {
     "sectionLibrary": "Kirjastossamme",
@@ -363,7 +379,8 @@
     "failed": "Lähetys epäonnistui — kysy vetäjältä, onko pyynnöt tauolla.",
     "makeLimit": "Olet jo pyytänyt meitä tekemään muutaman kappaleen tänä iltana — valitse kappale valikoimasta tai kysy vetäjältä.",
     "makeDisabled": "Vetäjä ei juuri nyt ota vastaan pyyntöjä uusien kappaleiden tekemisestä — valitse sen sijaan kappale valikoimasta.",
-    "makeEmail": "Lähetämme sinulle myös valmiin videotiedoston ja YouTube-linkin sähköpostitse ({email})."
+    "makeEmail": "Lähetämme sinulle myös valmiin videotiedoston ja YouTube-linkin sähköpostitse ({email}).",
+    "detailsFriend": "Laulaja: {name} (toivottu puhelimestasi)"
   },
   "mySongs": {
     "title": "Laulusi tänä iltana",
@@ -439,7 +456,9 @@
     "quickUpgraded": "✨ Täysversio on valmis ja se on korvannut pikaversion.",
     "reviewOpening": "Avataan…",
     "reviewFailed": "Tarkistusta ei voitu avata tässä — käytä sen sijaan sähköpostissasi olevaa linkkiä.",
-    "reviewOver": "Tarkistus on jo valmis — ei enää tehtävää."
+    "reviewOver": "Tarkistus on jo valmis — ei enää tehtävää.",
+    "requestForFriend": "🎤 Toivo kappale kaverille",
+    "forFriend": "Kaverille {name}"
   },
   "notify": {
     "heading": "🔔 Kun on vuorosi",

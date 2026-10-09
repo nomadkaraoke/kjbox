@@ -355,3 +355,40 @@ class TestMergedIdentitySelfRename:
         # Device B's genuinely-separate "Mike" entry must NOT have been renamed.
         assert sing_app.rotation.store.get_entry(e_b)["singer"] == "Mike"
         assert sing_app.sing_store.get_alias("dev-beta") is None
+
+
+class TestSongForAFriend:
+    """A phone requesting a song for a friend ("for_friend": true) must submit
+    under the friend's typed name — the owner's rename alias must not hijack it
+    (Nats renamed herself "Alex" trying to add her friend's song)."""
+
+    def _friend_submit(self, client, token, **extra):
+        return client.post(
+            f"/sing/submit?t={token}",
+            json={
+                "singer_name": "Alex", "device_id": "dev-nats", "phone": "",
+                "song_artist": "Papa Roach", "song_title": "Scars",
+                "source_type": "local", "source_ref": "/tmp/scars.mp4",
+                "for_friend": True, **extra,
+            },
+        )
+
+    def test_friend_song_keeps_friend_name_despite_owner_alias(self, client, sing_app, token):
+        sing_app.sing_store.set_alias("dev-nats", "Nats")
+        resp = self._friend_submit(client, token)
+        assert resp.status_code == 200
+        assert resp.get_json()["request"]["singer_name"] == "Alex"
+        # The owner's alias is untouched — her own next song is still hers.
+        assert sing_app.sing_store.get_alias("dev-nats") == "Nats"
+        own = _submit(client, token, device_id="dev-nats", singer_name="Alex")
+        assert own.get_json()["request"]["singer_name"] == "Nats"
+
+    def test_friend_song_never_applies_owner_photo_consent(self, client, sing_app, token):
+        resp = self._friend_submit(client, token, photo_consent="yes")
+        assert resp.status_code == 200
+        assert sing_app.sing_store.get_photo_consent("Alex") in (None, "")
+
+    def test_for_friend_must_be_literal_true(self, client, sing_app, token):
+        sing_app.sing_store.set_alias("dev-nats", "Nats")
+        resp = self._friend_submit(client, token, for_friend="yes")
+        assert resp.get_json()["request"]["singer_name"] == "Nats"

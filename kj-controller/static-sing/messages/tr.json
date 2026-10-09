@@ -59,7 +59,18 @@
     "differentPerson": "Farklı biri misin?",
     "switchSinger": "Şarkıcı değiştir",
     "switchHint": "— bu telefonda sıfırdan başlar.",
-    "renameFailed": "Yeni ismin kaydedilemedi — bağlantını kontrol et ve tekrar dene."
+    "renameFailed": "Yeni ismin kaydedilemedi — bağlantını kontrol et ve tekrar dene.",
+    "editHintSelf": "Sıralamada adının nasıl göründüğünü düzelt. Bu geceki şarkıların da yeni adınla görünecek.",
+    "friendPrompt": "Başka biri için mi şarkı ekliyorsun?",
+    "friendTitle": "Bir arkadaşın için şarkı",
+    "friendIntro": "Başka biri için şarkı iste. Şarkı bu gecenin listesine onun adıyla eklenir, senin adın ve şarkıların ise olduğu gibi kalır.",
+    "friendNameLabel": "Arkadaşının adı (ad + soyadının ilk harfi)",
+    "friendPhoneLabel": "Arkadaşının cep telefonu (isteğe bağlı)",
+    "friendPhoneHint": "Sırası geldiğinde ona bir kez SMS atacağız. Boş bırakırsan sunucu sadece adını anons eder.",
+    "renameConfirmTitle": "Adını {name} olarak değiştirmek istiyor musun?",
+    "renameConfirmBody": "Bu geceki şarkıların {old} yerine {name} adı altında listelenecek. Eğer {name} bir arkadaşınsa, bunun yerine onun için şarkı iste.",
+    "renameConfirmFriend": "🎤 {name} bir arkadaşım: onun için şarkı iste",
+    "renameConfirmYes": "Evet, ben {name}: adımı değiştir"
   },
   "search": {
     "title": "Şarkını seç",
@@ -104,7 +115,12 @@
     "describeLink": "Adını hatırlayamıyor musun? Tarif et",
     "describePlaceholder": "örn. Titanic'teki o şarkı",
     "describeCta": "Bul",
-    "figuringOut": "Hangi şarkıyı kastettiğini anlamaya çalışıyoruz…"
+    "figuringOut": "Hangi şarkıyı kastettiğini anlamaya çalışıyoruz…",
+    "editMyName": "✏️ adımı düzenle",
+    "forFriend": "🎤 bir arkadaş için şarkı",
+    "friendTitle": "🎤 {name} için şarkı seçiliyor",
+    "friendHint": "Bu gecenin listesine {name} adıyla eklenecek. Kendi adın ve şarkıların değişmeyecek.",
+    "friendCancel": "İptal — şarkı benim için"
   },
   "versions": {
     "sectionLibrary": "Kütüphanemizde",
@@ -363,7 +379,8 @@
     "failed": "Gönderilemedi — isteklerin duraklatılıp duraklatılmadığını sunucuya sor.",
     "makeLimit": "Bu gece zaten birkaç şarkı hazırlamamızı istedin — katalogdan birini seç veya KJ'ye sor.",
     "makeDisabled": "KJ şu an yeni şarkı hazırlama isteklerini kabul etmiyor — bunun yerine katalogdan bir şarkı seç.",
-    "makeEmail": "Tamamlanan video dosyasını ve YouTube bağlantısını sana e-posta ile de göndereceğiz ({email})."
+    "makeEmail": "Tamamlanan video dosyasını ve YouTube bağlantısını sana e-posta ile de göndereceğiz ({email}).",
+    "detailsFriend": "Şarkıcı: {name} (senin telefonundan istendi)"
   },
   "mySongs": {
     "title": "Bu geceki şarkıların",
@@ -439,7 +456,9 @@
     "quickUpgraded": "✨ Tam versiyon hazır ve hızlı versiyonun yerini aldı.",
     "reviewOpening": "Açılıyor…",
     "reviewFailed": "İncelemeyi burada açamadık — bunun yerine e-postandaki bağlantıyı kullan.",
-    "reviewOver": "Bu inceleme zaten bitti — yapacak başka bir şey yok."
+    "reviewOver": "Bu inceleme zaten bitti — yapacak başka bir şey yok.",
+    "requestForFriend": "🎤 Bir arkadaşın için şarkı iste",
+    "forFriend": "{name} için"
   },
   "notify": {
     "heading": "🔔 Sıran geldiğinde",

@@ -59,7 +59,18 @@
     "differentPerson": "Druga osoba?",
     "switchSinger": "Promijeni pjevača",
     "switchHint": "— kreće ispočetka na ovom mobitelu.",
-    "renameFailed": "Ne mogu spremiti tvoje novo ime — provjeri vezu i pokušaj ponovno."
+    "renameFailed": "Ne mogu spremiti tvoje novo ime — provjeri vezu i pokušaj ponovno.",
+    "editHintSelf": "Promijeni kako se TVOJE ime prikazuje na rasporedu. Tvoje pjesme večeras također će prikazivati novo ime.",
+    "friendPrompt": "Dodaješ pjesmu za nekog drugog?",
+    "friendTitle": "Pjesma za prijatelja",
+    "friendIntro": "Naruči pjesmu za nekog drugog. Pjesma ide na večerašnji popis pod njihovim imenom, a tvoje ime i pjesme ostaju nepromijenjeni.",
+    "friendNameLabel": "Ime prijatelja (ime + prvo slovo prezimena)",
+    "friendPhoneLabel": "Broj mobitela prijatelja (nije obavezno)",
+    "friendPhoneHint": "Poslat ćemo im SMS poruku kad dođu na red. Ostavi prazno i voditelj će ih jednostavno prozvati.",
+    "renameConfirmTitle": "Promijeniti tvoje ime u {name}?",
+    "renameConfirmBody": "Tvoje pjesme večeras bit će navedene pod imenom {name} umjesto {old}. Ako je {name} tvoj prijatelj, radije naruči pjesmu za njega.",
+    "renameConfirmFriend": "🎤 {name} je prijatelj: naruči pjesmu za njega",
+    "renameConfirmYes": "Da, ja sam {name}: promijeni mi ime"
   },
   "search": {
     "title": "Odaberi svoju pjesmu",
@@ -104,7 +115,12 @@
     "describeLink": "Ne sjećaš se naslova? Opiši pjesmu",
     "describePlaceholder": "npr. ona pjesma iz Titanica",
     "describeCta": "Pronađi",
-    "figuringOut": "Tražimo na koju pjesmu misliš…"
+    "figuringOut": "Tražimo na koju pjesmu misliš…",
+    "editMyName": "✏️ uredi moje ime",
+    "forFriend": "🎤 pjesma za prijatelja",
+    "friendTitle": "🎤 Bira se pjesma za: {name}",
+    "friendHint": "Pjesma ide na večerašnji popis pod imenom: {name}. Tvoje ime i pjesme se ne mijenjaju.",
+    "friendCancel": "Odustani — za mene je"
   },
   "versions": {
     "sectionLibrary": "U našoj biblioteci",
@@ -363,7 +379,8 @@
     "failed": "Ne mogu poslati — pitaj voditelja jesu li prijave pauzirane.",
     "makeLimit": "Već si zatražio/la izradu nekoliko pjesama večeras — odaberi jednu iz kataloga ili pitaj KJ-a.",
     "makeDisabled": "KJ trenutno ne prima zahtjeve za izradu pjesama — umjesto toga odaberi pjesmu iz kataloga.",
-    "makeEmail": "Također ćemo ti poslati gotov video i YouTube link na e-mail ({email})."
+    "makeEmail": "Također ćemo ti poslati gotov video i YouTube link na e-mail ({email}).",
+    "detailsFriend": "Pjevač/ica: {name} (zatraženo s tvog mobitela)"
   },
   "mySongs": {
     "title": "Tvoje pjesme večeras",
@@ -439,7 +456,9 @@
     "quickUpgraded": "✨ Puna verzija je spremna i zamijenila je brzu verziju.",
     "reviewOpening": "Otvaranje…",
     "reviewFailed": "Nismo uspjeli otvoriti pregled ovdje — umjesto toga koristi link u svom e-mailu.",
-    "reviewOver": "Taj pregled je već završen — sve je već riješeno."
+    "reviewOver": "Taj pregled je već završen — sve je već riješeno.",
+    "requestForFriend": "🎤 Naruči pjesmu za prijatelja",
+    "forFriend": "Za: {name}"
   },
   "notify": {
     "heading": "🔔 Kad si na redu",
