@@ -22,6 +22,16 @@ Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](a
 - **Pre-deploy check:** replaying the logic against a copy of NomadPC's `media_library.db` and its
   NOMAD-720p listing changes exactly those 4 rows. 1681 keeps its stats; 1754 retires 1 preview row
   (the night's preview of the new file, logged under the Eli name).
+- **Same root cause, worse symptom: wrong original-vocals guide.** `_resolve_vocals_guide` took the
+  alphabetically first `NOMAD-#### - *` file in `NOMAD-vocals-padded/`, and the vocals sync is
+  additive-only (GCS holds 247 guides, the device 1,710, so deletes can't be turned on). A recycled
+  code keeps the old song's guide, so **NOMAD-1537 Luvcat – Spider played Alma Nocturna's vocals**
+  and **NOMAD-1295 Fox Stevenson – Victory Over Truth played Queen Anne – Let's Dance's**.
+  `_pick_guide_for_master` now prefers the guide with the same artist+title, then a corrected one
+  (artist or title matches), and never returns another song's guide. Checked across all 1,760
+  device masters: 1537 and 1681 switch to their own guides, 1295 correctly gets none, and nothing
+  else changes.
+
 ## 2026-10-08 - Singer "song for a friend" + rename guard (v0.128.0)
 
 - **Bug (live, 2026-10-08):** Nats added her song, tapped "Request another song", then tapped

@@ -955,7 +955,12 @@ def _resolve_vocals_guide(playing_path, cfg):
     directory is ``cfg['vocals_guide_dir']`` if set, else the 'NOMAD-vocals-padded'
     sibling of the playing master's directory (device: /opt/nomad/downloads/…).
     Matched by brand prefix (NOMAD-####) so guide/​master filename normalization
-    differences don't matter."""
+    differences don't matter — but gen recycles brand codes and the vocals sync is
+    additive, so one code can hold guides for several songs (2026-10-08: NOMAD-1537
+    had Alma Nocturna's guide beside Luvcat's, and the alphabetical first pick sang
+    the wrong song). So among the brand's guides, prefer the same artist+title, then
+    a corrected one (artist OR title matches); a guide matching neither is another
+    song and is never returned."""
     try:
         import glob as _glob
         import naming as _naming
@@ -969,9 +974,30 @@ def _resolve_vocals_guide(playing_path, cfg):
             return None
         brand = f"NOMAD-{m.group(1)}"
         matches = sorted(_glob.glob(os.path.join(guide_dir, _glob.escape(brand) + " - *")))
-        return matches[0] if matches else None
+        return _pick_guide_for_master(base, matches)
     except Exception:
         return None
+
+
+def _pick_guide_for_master(master_name, guide_paths):
+    """The guide in ``guide_paths`` (all sharing the master's brand code) that is the
+    same song as ``master_name``, or None. See _resolve_vocals_guide."""
+    import naming as _naming
+    from text_normalize import normalize as _norm
+
+    def _key(name):
+        ident = _naming.parse_identity(name)
+        return _norm(ident.get("artist") or ""), _norm(ident.get("title") or "")
+
+    artist, title = _key(master_name)
+    partial = None
+    for path in guide_paths:
+        g_artist, g_title = _key(os.path.basename(path))
+        if (g_artist, g_title) == (artist, title):
+            return path
+        if partial is None and (g_artist == artist or g_title == title):
+            partial = path
+    return partial
 
 
 def _library_drive_offline_response(file_path):
