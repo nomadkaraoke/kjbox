@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Night clips</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header class="top">
+    <div class="brand"><span class="logo">NOMAD</span> night clips</div>
+    <h1 id="title">Loading…</h1>
+    <div id="source" class="source"></div>
+  </header>
+
+  <div id="banners"></div>
+
+  <main class="layout">
+    <section class="clips-col">
+      <div class="toolbar">
+        <span id="counts"></span>
+        <label class="toggle"><input type="checkbox" id="show-excluded"> Show excluded</label>
+        <label class="toggle"><input type="checkbox" id="selected-only"> Selected only</label>
+      </div>
+      <div id="grid" class="grid"></div>
+    </section>
+
+    <aside class="panel">
+      <div class="panel-block">
+        <h2>Carousel <span id="sel-count" class="pill"></span></h2>
+        <p class="hint">Drag or use ↑ ↓ to reorder. Instagram posts them in this order.</p>
+        <ol id="order" class="order"></ol>
+      </div>
+
+      <div class="panel-block">
+        <h2>Singers not yet covered</h2>
+        <ul id="uncovered" class="uncovered"></ul>
+      </div>
+
+      <div class="panel-block">
+        <h2>Caption <span id="cap-count" class="muted"></span></h2>
+        <textarea id="caption" rows="12" spellcheck="true"></textarea>
+        <div class="row">
+          <button id="regen" class="btn ghost" type="button">Regenerate from template</button>
+        </div>
+      </div>
+
+      <div class="panel-block actions">
+        <button id="save" class="btn" type="button">Save draft</button>
+        <button id="publish" class="btn primary" type="button">Publish to Instagram…</button>
+        <button id="posted" class="btn ghost" type="button">Mark as posted</button>
+        <div id="status" class="status" role="status" aria-live="polite"></div>
+      </div>
+    </aside>
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
