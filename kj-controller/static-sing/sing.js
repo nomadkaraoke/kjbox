@@ -4590,12 +4590,11 @@ function setPhotoConsentLocal(v) {
 
 async function savePhotoConsent(consent) {
   const items = _ownRequestItems();
-  const body = { consent, device_id: DEVICE_ID, items: items.slice(-MY_REQUESTS_MAX) };
-  if (consent === "yes") body.instagram = state.instagram || "";
   await fetchJson(`${BASE}/photo-consent`, {
     method: "POST",
     // device_id → this phone's own rate-limit budget, not the venue's shared IP.
-    body: JSON.stringify(body),
+    body: JSON.stringify({ consent, device_id: DEVICE_ID, items: items.slice(-MY_REQUESTS_MAX),
+      ...(consent === "yes" ? { instagram: state.instagram || "" } : {}) }),
   });
 }
 
