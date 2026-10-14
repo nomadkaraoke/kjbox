@@ -337,6 +337,27 @@ def make_handler(state: ReviewState):
             except (BrokenPipeError, ConnectionResetError):
                 pass
 
+        def _local_hosts(self) -> set[str]:
+            port = self.server.server_address[1]
+            return {f"127.0.0.1:{port}", f"localhost:{port}"}
+
+        def _trusted(self, post: bool) -> str | None:
+            """Why this request must be refused, or None. Blocks DNS rebinding (Host
+            must be our loopback address) and cross-site POSTs from other pages in
+            Andrew's browser (Origin must be ours; JSON content type forces a CORS
+            preflight, which this server never grants)."""
+            if (self.headers.get("Host") or "") not in self._local_hosts():
+                return "unexpected Host"
+            if not post:
+                return None
+            origin = self.headers.get("Origin")
+            if origin is not None and origin not in {f"http://{h}" for h in self._local_hosts()}:
+                return "cross-origin request"
+            ctype = (self.headers.get("Content-Type") or "").split(";", 1)[0].strip().lower()
+            if ctype != "application/json":
+                return "Content-Type must be application/json"
+            return None
+
         def _body(self) -> dict:
             n = int(self.headers.get("Content-Length") or 0)
             if n > MAX_BODY:
@@ -352,6 +373,9 @@ def make_handler(state: ReviewState):
             self.do_GET()
 
         def do_GET(self):
+            why = self._trusted(post=False)
+            if why:
+                return self._error(HTTPStatus.FORBIDDEN, why)
             path = self.path.split("?", 1)[0]
             if path in ("/", "/index.html"):
                 return self._file(STATIC_DIR / "index.html", "text/html; charset=utf-8")
@@ -378,6 +402,9 @@ def make_handler(state: ReviewState):
 
         # -- POST
         def do_POST(self):
+            why = self._trusted(post=True)
+            if why:
+                return self._error(HTTPStatus.FORBIDDEN, why)
             path = self.path.split("?", 1)[0]
             try:
                 body = self._body()

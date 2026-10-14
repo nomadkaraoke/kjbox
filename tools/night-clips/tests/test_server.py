@@ -157,3 +157,28 @@ def test_caption_endpoint(served):
     base, state, *_ = served
     code, res = post(base + "/api/caption", {"selected": state.selected[:1]})
     assert code == 200 and res["caption"].count("\n") == 4  # header, blank, 1 line, blank, footer
+
+
+def _raw(url, body, headers, method="POST"):
+    req = urllib.request.Request(url, data=body, method=method, headers=headers)
+    try:
+        with urllib.request.urlopen(req) as r:
+            return r.status
+    except urllib.error.HTTPError as e:
+        return e.code
+
+
+def test_rejects_cross_site_and_rebinding_requests(served):
+    """A page elsewhere in the browser must not be able to drive /api/publish
+    (simple text/plain POST, foreign Origin) or read clips via DNS rebinding."""
+    base, state, published, _ = served
+    port = base.rsplit(":", 1)[1]
+    body = json.dumps({"clip_ids": [], "allow_unknown": True, "force": True}).encode()
+    assert _raw(base + "/api/publish", body, {"Content-Type": "text/plain"}) == 403
+    assert _raw(base + "/api/publish", body, {"Content-Type": "application/json",
+                                              "Origin": "https://evil.example"}) == 403
+    assert _raw(base + "/api/state", None, {"Host": f"evil.example:{port}"}, method="GET") == 403
+    assert published == []
+    # Our own page (same Origin) still works.
+    assert _raw(base + "/api/caption", json.dumps({"clip_ids": []}).encode(),
+                {"Content-Type": "application/json", "Origin": base}) == 200
