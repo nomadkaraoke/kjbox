@@ -32,7 +32,7 @@ Step-by-step guide to set up the Nomad Karaoke mini PC to run the same karaoke s
 | yt-dlp | 2025.07.21 | Already installed |
 | git | 2.43.0 | Already installed |
 | avahi-daemon | — | Already running, broadcasting `nomadpc.local` |
-| cloudflared | — | Already running, tunnel to `kjbox.nomadkaraoke.com` (web), `kjssh.nomadkaraoke.com` (SSH) |
+| cloudflared | — | `cloudflared-nomad.service`: remote-managed tunnel `nomad-kjbox` to `kjbox`/`sing` (web), `kjvnc` (VNC), `kjssh` (SSH) `.nomadkaraoke.com` — see §2.6 |
 | Tailscale | — | Already installed, IP `100.82.90.111` |
 | PipeWire | 1.0.5 | Audio server (replaces PulseAudio/raw ALSA) |
 
@@ -282,10 +282,15 @@ sudo tailscale up
 
 ### 2.6 Cloudflare Tunnel (CONFIGURED)
 
-A Cloudflare tunnel exposes the KJ Controller web UI, VNC websocket, and SSH remotely:
-- **Tunnel:** `1e86a7f5-04e7-4527-b624-49447450443e` (name: `kjbox`)
-- **Config:** `/etc/cloudflared/config.yml`
-- **Credentials:** `/etc/cloudflared/1e86a7f5-04e7-4527-b624-49447450443e.json`
+A Cloudflare tunnel exposes the KJ Controller web UI, VNC websocket, and SSH remotely.
+Since 2026-10-14 it lives in the dedicated **Nomad Karaoke** Cloudflare account
+(`4585249dcf5d2f9fb4e075c5382cd071`, zone nomadkaraoke.com `2324a342622e93343cf4e08227d82c02`),
+not Andrew's personal account.
+
+- **Tunnel:** `04c88337-f076-45ed-bc19-4ac1222b4228` (name: `nomad-kjbox`), **remote-managed** —
+  ingress lives in the Cloudflare API/dashboard, not in a file on the device
+- **Service:** `cloudflared-nomad.service` (`ExecStart=/usr/bin/cloudflared --no-autoupdate tunnel run`)
+- **Credentials:** `EnvironmentFile=/etc/cloudflared-nomad/env` holding `TUNNEL_TOKEN` (mode 600)
 
 **Hostnames:**
 | Hostname | Service | Purpose |
@@ -295,11 +300,11 @@ A Cloudflare tunnel exposes the KJ Controller web UI, VNC websocket, and SSH rem
 | `kjssh.nomadkaraoke.com` | `ssh://localhost:22` | SSH remote access (Access-gated) |
 | `sing.nomadkaraoke.com` | `https://localhost:443` | **Public** singer request form (no Access) |
 
-**Current config (`/etc/cloudflared/config.yml`):**
+**Current ingress** (remote config; read it with
+`curl -s -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/cfd_tunnel/04c88337-f076-45ed-bc19-4ac1222b4228/configurations" | jq .result.config.ingress`
+after `source .envrc` in the workspace root; to change it, GET → edit one rule with jq → PUT, or use
+dashboard → Zero Trust → Networks → Tunnels → nomad-kjbox):
 ```yaml
-tunnel: 1e86a7f5-04e7-4527-b624-49447450443e
-credentials-file: /etc/cloudflared/1e86a7f5-04e7-4527-b624-49447450443e.json
-
 ingress:
   - hostname: kjssh.nomadkaraoke.com
     service: ssh://localhost:22
@@ -320,18 +325,24 @@ ingress:
 - `noTLSVerify: true` is needed because the origin uses a mkcert certificate (not publicly trusted)
 - The websockify hostname (`kjvnc`) is on a separate ingress because Cloudflare tunnels don't support path-based routing on the same hostname
 - `sing.nomadkaraoke.com` is served by the same Flask app as `kjbox.*`, but a Flask `before_request` guard blocks every route except `/sing/*` when the Host header matches the public hostname — so admin endpoints can never leak via the public tunnel
-- DNS CNAMEs created with: `sudo cloudflared tunnel route dns <tunnel-id> <hostname>`
+- DNS: each hostname is a proxied CNAME to `04c88337-f076-45ed-bc19-4ac1222b4228.cfargotunnel.com` in the Nomad account's nomadkaraoke.com zone
+
+**Legacy tunnel (pending removal):** the old locally-managed `cloudflared.service` (tunnel `kjbox`
+`1e86a7f5-04e7-4527-b624-49447450443e` in the personal account, config `/etc/cloudflared/config.yml`,
+credentials `/etc/cloudflared/1e86a7f5-….json`) still runs on NomadPC but no DNS points at it. It is
+scheduled to be stopped/removed after a soak period; don't edit its config expecting any effect.
 
 ### 2.7 Cloudflare Access (Zero Trust Auth)
 
 Cloudflare Access protects the tunnel endpoints so only authorized users can access the controller remotely. This is configured in the Cloudflare Zero Trust dashboard (not on the device).
 
-**Setup:** https://one.dash.cloudflare.com/ → Access → Applications
-- **Application 1 (KJ):** Self-hosted, covers `kjbox.nomadkaraoke.com`, `kjvnc.nomadkaraoke.com`, `kjssh.nomadkaraoke.com`
-- **Application 2 (Public):** `sing.nomadkaraoke.com` — **NO Access policy**; this is the singer request form and must be reachable by anyone with a QR
-- **Auth method (KJ apps):** Email OTP — user enters email, receives one-time code
-- **Policy (KJ apps):** Allow list of authorized email addresses
-- **Session duration:** 24 hours
+**Setup:** https://one.dash.cloudflare.com/ (Nomad Karaoke account, team domain `nomadkaraoke.cloudflareaccess.com`) → Access → Applications
+- **Application "KJ Controller":** Self-hosted, covers `kjbox.nomadkaraoke.com` only. `kjvnc` and `kjssh` currently have **no** Access application (same as before the account move); SSH still requires key auth
+- **`sing.nomadkaraoke.com`:** **NO Access policy**; this is the singer request form and must be reachable by anyone with a QR
+- **Auth method:** One-time PIN — user enters email, receives one-time code
+- **Policy (allow):** `andrew.d.beveridge@gmail.com`, `david.t.axe@gmail.com`, any `@nomadkaraoke.com`, any `@beveridge.uk`
+- **Service-auth policy:** service token `claude-code-kjbox` for automation (client id/secret in the workspace `.envrc` as `KJBOX_CF_ACCESS_CLIENT_ID`/`KJBOX_CF_ACCESS_CLIENT_SECRET`)
+- **Session duration:** 730 hours
 
 When someone visits `https://kjbox.nomadkaraoke.com`, Cloudflare shows a login page before any traffic reaches the device. Visiting `https://sing.nomadkaraoke.com` connects straight through — the KJ Controller's host guard + event token gate the actual request form.
 
@@ -363,7 +374,7 @@ Host nomadpctunnel
 **Which to use:**
 - On the same LAN: `ssh nomadpc`
 - Remote with Tailscale running: `ssh nomadpcts` (start Tailscale app on Mac first)
-- Remote without Tailscale: `ssh nomadpctunnel` (opens browser auth on first use)
+- Remote without Tailscale: `ssh nomadpctunnel` (via `kjssh.nomadkaraoke.com` on the `nomad-kjbox` tunnel; verified working after the 2026-10-14 account move)
 
 ---
 
@@ -950,7 +961,7 @@ systemctl status kj-autodeploy
 systemctl status rotation-display
 systemctl status overlay-display
 systemctl status avahi-daemon
-systemctl status cloudflared
+systemctl status cloudflared-nomad   # current tunnel (legacy `cloudflared` pending removal)
 ```
 
 ### 7.2 KJ Controller Web UI
@@ -1007,7 +1018,7 @@ The most important test — verify everything comes back after a cold boot:
 sudo reboot
 # Wait for it to come back up (15-30 seconds — SSD is much faster than Pi's SD card)
 # Then verify all services are running:
-ssh nomadpc 'systemctl is-active kj-controller kj-autodeploy rotation-display overlay-display avahi-daemon cloudflared'
+ssh nomadpc 'systemctl is-active kj-controller kj-autodeploy rotation-display overlay-display avahi-daemon cloudflared-nomad'
 curl -sk https://nomadpc.local/status
 ```
 

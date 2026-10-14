@@ -83,7 +83,8 @@ kjupload "some video.mp4" --label FASTGEN      # upload an existing file
 ```
 
 Needs `KJBOX_CF_ACCESS_CLIENT_ID` + `KJBOX_CF_ACCESS_CLIENT_SECRET` (workspace
-`.envrc`) to pass Cloudflare Access. To find/remove drafts later, filter by the
+`.envrc`; the `claude-code-kjbox` service token in the Nomad Karaoke Cloudflare
+account) to pass Cloudflare Access. To find/remove drafts later, filter by the
 `FASTGEN` label in the KJ UI.
 
 Tip: symlink it onto your PATH once — `ln -s "$PWD/fastgen" /usr/local/bin/fastgen`

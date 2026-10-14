@@ -82,7 +82,7 @@ Web UI: `http://nomadpc.local` (LAN) or `https://kjbox.nomadkaraoke.com` (tunnel
 
 ### Reaching the tunnel URL past Cloudflare Access
 
-`https://kjbox.nomadkaraoke.com` is gated by Cloudflare Access (team `beveradb.cloudflareaccess.com`). A **service token** is provisioned so automation/curl can get through without the email login (the human email-login policy is untouched and still applies to browsers).
+`https://kjbox.nomadkaraoke.com` is gated by Cloudflare Access (Nomad Karaoke Cloudflare account, team `nomadkaraoke.cloudflareaccess.com`). A **service token** (`claude-code-kjbox`, recreated in the Nomad account 2026-10-14) is provisioned so automation/curl can get through without the email login (the human email-login policy is untouched and still applies to browsers).
 
 `WebFetch` can't send custom headers, so use `curl` with the service-token headers, sourced from env vars that direnv loads from the workspace `.envrc` (gitignored — secrets are **not** in this repo):
 
