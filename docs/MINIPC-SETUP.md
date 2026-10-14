@@ -296,8 +296,8 @@ not Andrew's personal account.
 | Hostname | Service | Purpose |
 |----------|---------|---------|
 | `kjbox.nomadkaraoke.com` | `https://localhost:443` | KJ Controller web UI (Access-gated) |
-| `kjvnc.nomadkaraoke.com` | `http://localhost:6080` | Websockify (VNC preview WebSocket, Access-gated) |
-| `kjssh.nomadkaraoke.com` | `ssh://localhost:22` | SSH remote access (Access-gated) |
+| `kjvnc.nomadkaraoke.com` | `http://localhost:6080` | Websockify (VNC preview WebSocket; **not** Access-gated, see §2.7) |
+| `kjssh.nomadkaraoke.com` | `ssh://localhost:22` | SSH remote access (**not** Access-gated; sshd key auth) |
 | `sing.nomadkaraoke.com` | `https://localhost:443` | **Public** singer request form (no Access) |
 
 **Current ingress** (remote config; read it with
