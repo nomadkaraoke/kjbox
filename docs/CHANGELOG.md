@@ -9,7 +9,7 @@ Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](a
   when recording started, applies per-singer media consent, pre-selects up to 20 clips (at least
   one per consenting singer) and serves a localhost review page with a caption editor. Publishing
   drives instagram.com through Playwright and stops before Share. See `tools/night-clips/README.md`.
-- It reads `GET /history/night-media` over `ssh nomadpctunnel`. Until that endpoint is deployed, it
+- It reads `GET /history/night-media` (kj-controller v0.131.0) over `ssh nomadpctunnel`. On an older box it
   falls back to `/history/night` with every singer's consent treated as **unknown**, so nothing is
   pre-selected. The tool makes no kj-controller changes and needs no version bump.
 
