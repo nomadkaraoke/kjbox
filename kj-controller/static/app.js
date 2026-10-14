@@ -4878,6 +4878,199 @@ function initSongStats() {
 
 document.addEventListener('DOMContentLoaded', initSongStats);
 
+// ===== Night Log section (review any past night — night_log.py) =====
+const nightLog = { nights: [], night: null, entries: [] };
+
+function nlTime(ts) {
+    // 'YYYY-MM-DD HH:MM:SS' (device local) -> '9:04 PM'
+    const m = /\d{4}-\d{2}-\d{2}[ T](\d{2}):(\d{2})/.exec(ts || '');
+    if (!m) return '';
+    const h = parseInt(m[1], 10);
+    return ((h % 12) || 12) + ':' + m[2] + (h < 12 ? ' AM' : ' PM');
+}
+
+function nlNightLabel(n) {
+    const d = new Date(n.night + 'T12:00:00');
+    const day = isNaN(d) ? n.night
+        : d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+    return day + ' · ' + n.sung + ' sung · ' + n.singers + ' singers' + (n.live ? ' · tonight' : '');
+}
+
+function nlWaitMinutes(e) {
+    if (!e.sung_at || !e.added_at) return null;
+    const a = new Date(e.added_at.replace(' ', 'T')), b = new Date(e.sung_at.replace(' ', 'T'));
+    const mins = Math.round((b - a) / 60000);
+    return (isNaN(mins) || mins < 0) ? null : mins;
+}
+
+function nlAddedBy(e) {
+    const a = e.added_by || {};
+    if (a.by === 'singer') {
+        return { text: 'Singer · ' + (a.source_label || a.source_type || ''),
+                 detail: a.requested_at ? 'requested ' + nlTime(a.requested_at) : '' };
+    }
+    return { text: 'KJ', detail: a.inferred ? 'no singer request found' : '' };
+}
+
+function nlMedia(e) {
+    const m = e.media || {};
+    let text = m.label || m.kind || '';
+    if (m.fetched_tonight) text += m.gen_job_id ? ' · made tonight' : ' · fetched tonight';
+    return { text, detail: m.file || '' };
+}
+
+async function loadNightLogNights() {
+    const min = parseInt(document.getElementById('nightLogMinSongs').value, 10);
+    const data = await statsFetch('/history/nights?min_songs=' + (isNaN(min) ? 10 : Math.max(0, min)));
+    nightLog.nights = (data && data.nights) || [];
+    const sel = document.getElementById('nightLogSelect');
+    sel.innerHTML = nightLog.nights.map(n =>
+        '<option value="' + escAttr(n.night) + '">' + escHtml(nlNightLabel(n)) + '</option>').join('');
+    if (!nightLog.nights.length) {
+        nightLog.night = null; nightLog.entries = [];
+        document.getElementById('nightLogSummary').innerHTML = '';
+        document.getElementById('nightLogBody').innerHTML =
+            '<div class="stats-muted">' + (data ? 'No nights with that many songs sung.' : "Couldn't load nights.") + '</div>';
+        return;
+    }
+    const keep = nightLog.nights.some(n => n.night === nightLog.night);
+    nightLog.night = keep ? nightLog.night : nightLog.nights[0].night;
+    sel.value = nightLog.night;
+    await loadNightLogNight(nightLog.night);
+}
+
+async function loadNightLogNight(night) {
+    nightLog.night = night;
+    const body = document.getElementById('nightLogBody');
+    body.innerHTML = '<div class="stats-muted">Loading&hellip;</div>';
+    const data = await statsFetch('/history/night?night=' + encodeURIComponent(night));
+    if (nightLog.night !== night) return;  // a newer pick won the race
+    nightLog.entries = (data && data.entries) || [];
+    if (!data) body.innerHTML = '<div class="stats-muted">Couldn\'t load that night.</div>';
+    else renderNightLog();
+}
+
+function renderNightLog() {
+    const showUnsung = document.getElementById('nightLogShowUnsung').checked;
+    const all = nightLog.entries;
+    const sung = all.filter(e => e.sung);
+    const rows = showUnsung ? all : sung;
+    const singers = new Set(sung.map(e => (e.singer || '').trim().toLowerCase()));
+    const fromSingers = sung.filter(e => e.added_by && e.added_by.by === 'singer').length;
+    const fetched = sung.filter(e => e.media && e.media.fetched_tonight).length;
+    const times = sung.map(e => e.sung_at).filter(Boolean).sort();
+    const span = times.length ? nlTime(times[0]) + ' – ' + nlTime(times[times.length - 1]) : '—';
+    const waits = sung.map(nlWaitMinutes).filter(w => w !== null).sort((a, b) => a - b);
+    const medianWait = waits.length ? waits[Math.floor(waits.length / 2)] + 'm' : '—';
+    const cards = [
+        ['Sung', sung.length], ['Singers', singers.size], ['From phones', fromSingers],
+        ['KJ added', sung.length - fromSingers], ['Fetched', fetched],
+        ['Not sung', all.length - sung.length], ['Median wait', medianWait], ['Span', span],
+    ];
+    document.getElementById('nightLogSummary').innerHTML = cards.map(([label, val]) =>
+        '<div class="stat-card"><div class="stat-card-val">' + escHtml(String(val)) +
+        '</div><div class="stat-card-label">' + escHtml(label) + '</div></div>').join('');
+
+    const body = document.getElementById('nightLogBody');
+    if (!rows.length) { body.innerHTML = '<div class="stats-muted">Nothing recorded for this night.</div>'; return; }
+    let n = 0;
+    const tag = (cls, text, title) => '<span class="nl-tag ' + cls + '"' +
+        (title ? ' title="' + escAttr(title) + '"' : '') + '>' + escHtml(text) + '</span>';
+    body.innerHTML = '<table class="nl-table"><thead><tr>' +
+        '<th>#</th><th>Sung</th><th>Added</th><th>Wait</th><th>Singer</th><th>Song</th>' +
+        '<th>Added by</th><th>Media</th><th>File</th>' +
+        '</tr></thead><tbody>' + rows.map(e => {
+            const ab = nlAddedBy(e), md = nlMedia(e), m = e.media || {};
+            const wait = nlWaitMinutes(e);
+            const singer = (e.singers && e.singers.length > 1) ? e.singers.join(' & ') : (e.singer || '');
+            const asked = e.added_by && e.added_by.requested_as;
+            const fromSinger = e.added_by && e.added_by.by === 'singer';
+            return '<tr class="' + (e.sung ? '' : 'nl-unsung') + '">' +
+                '<td class="nl-num">' + (e.sung ? ++n : '') + '</td>' +
+                '<td class="nl-time" data-label="Sung">' + escHtml(e.sung_at ? nlTime(e.sung_at) : (e.sung ? '—' : 'not sung')) + '</td>' +
+                '<td class="nl-time" data-label="Added">' + escHtml(nlTime(e.added_at)) + '</td>' +
+                '<td class="nl-time" data-label="Wait">' + (wait === null ? '' : escHtml(wait + 'm')) + '</td>' +
+                '<td class="nl-singer">' + escHtml(singer) + (e.paid ? ' ' + tag('', 'paid') : '') + '</td>' +
+                '<td>' + escHtml(e.song || '') +
+                    (e.sung ? '' : ' ' + tag('nl-tag-status', e.status || 'not sung')) +
+                    (asked && !nlSameSong(asked, e.song) ? '<span class="nl-sub">asked for “' + escHtml(asked) + '”</span>' : '') +
+                    (e.notes ? '<span class="nl-sub">' + escHtml(e.notes) + '</span>' : '') + '</td>' +
+                '<td>' + tag(fromSinger ? 'nl-tag-singer' : 'nl-tag-kj', ab.text) +
+                    (ab.detail ? '<span class="nl-sub">' + escHtml(ab.detail) + '</span>' : '') + '</td>' +
+                '<td>' + tag(m.fetched_tonight ? 'nl-tag-fetched' : '', md.text) + '</td>' +
+                '<td class="nl-file" title="' + escAttr(m.file_path || '') + '">' + escHtml(md.detail) + '</td>' +
+                '</tr>';
+        }).join('') + '</tbody></table>';
+}
+
+// "Artist - Title" vs "Title - Artist" (or different punctuation) is the same ask.
+function nlSameSong(a, b) {
+    const words = x => (x || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().split(' ').filter(Boolean).sort().join(' ');
+    return words(a) === words(b);
+}
+
+function nightLogCsv() {
+    if (!nightLog.entries.length) return;
+    const showUnsung = document.getElementById('nightLogShowUnsung').checked;
+    const rows = showUnsung ? nightLog.entries : nightLog.entries.filter(e => e.sung);
+    const head = ['sung_at', 'added_at', 'status', 'singer', 'song', 'added_by', 'request_source',
+                  'requested_at', 'requested_as', 'media', 'fetched_tonight', 'file', 'wait_minutes', 'notes'];
+    // Singer-typed text (names, songs) must not run as a spreadsheet formula.
+    const q = v => {
+        let t = String(v === null || v === undefined ? '' : v);
+        if (/^[=+\-@\t\r]/.test(t)) t = "'" + t;
+        return '"' + t.replace(/"/g, '""') + '"';
+    };
+    const lines = [head.join(',')].concat(rows.map(e => {
+        const a = e.added_by || {}, m = e.media || {};
+        return [e.sung_at, e.added_at, e.status,
+                (e.singers && e.singers.length > 1) ? e.singers.join(' & ') : e.singer,
+                e.song, a.by, a.source_label || '', a.requested_at || '', a.requested_as || '',
+                m.label, m.fetched_tonight ? 'yes' : 'no', m.file || '', nlWaitMinutes(e), e.notes]
+            .map(q).join(',');
+    }));
+    const blob = new Blob([lines.join('\n') + '\n'], { type: 'text/csv' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'karaoke-night-' + nightLog.night + '.csv';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+function openNightLog() {
+    document.getElementById('night-log-modal').classList.remove('hidden');
+    // Always refetch on open: tonight's log changes while the show runs.
+    loadNightLogNights();
+}
+
+function closeNightLog() {
+    document.getElementById('night-log-modal').classList.add('hidden');
+}
+
+function initNightLog() {
+    if (!document.getElementById('night-log-modal')) return;
+    try {
+        const min = localStorage.getItem('kjbox.nightLogMinSongs');
+        if (min !== null && min !== '') document.getElementById('nightLogMinSongs').value = min;
+        document.getElementById('nightLogShowUnsung').checked = localStorage.getItem('kjbox.nightLogShowUnsung') === '1';
+    } catch (e) { /* private mode */ }
+    document.getElementById('nightLogSelect').addEventListener('change', (e) => loadNightLogNight(e.target.value));
+    document.getElementById('nightLogMinSongs').addEventListener('change', (e) => {
+        try { localStorage.setItem('kjbox.nightLogMinSongs', e.target.value); } catch (err) { /* private mode */ }
+        loadNightLogNights();
+    });
+    document.getElementById('nightLogShowUnsung').addEventListener('change', (e) => {
+        try { localStorage.setItem('kjbox.nightLogShowUnsung', e.target.checked ? '1' : '0'); } catch (err) { /* private mode */ }
+        renderNightLog();
+    });
+    document.getElementById('nightLogCsv').addEventListener('click', nightLogCsv);
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && !document.getElementById('night-log-modal').classList.contains('hidden')) closeNightLog();
+    });
+}
+
+document.addEventListener('DOMContentLoaded', initNightLog);
+
 async function loadDbStatusModal() {
     const data = dbStatusCache || await fetchDbStatus();
     dbStatusCache = data;

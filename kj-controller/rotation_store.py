@@ -92,6 +92,24 @@ class RotationStore:
         "playability_warning",
     )
 
+    # Columns copied from rotation_entries into rotation_archive (beyond the
+    # original set) so past nights can be reviewed in the night log.
+    # entry_id <- rotation_entries.id.
+    _ARCHIVE_EXTRA_COLS = (
+        ("entry_id", "INTEGER DEFAULT NULL"),
+        ("done_at", "TEXT DEFAULT NULL"),
+        ("updated_at", "TEXT DEFAULT NULL"),
+        ("download_source", "TEXT DEFAULT NULL"),
+        ("download_status", "TEXT DEFAULT NULL"),
+        ("url_fallback", "TEXT DEFAULT NULL"),
+        ("gen_job_id", "TEXT DEFAULT NULL"),
+        ("gen_status", "TEXT DEFAULT NULL"),
+        ("singers_json", "TEXT DEFAULT NULL"),
+        ("paid", "INTEGER NOT NULL DEFAULT 0"),
+        ("priority_bias", "INTEGER NOT NULL DEFAULT 0"),
+        ("playability_warning", "TEXT DEFAULT NULL"),
+    )
+
     def __init__(self, db_path):
         self.db_path = db_path
         self._local = threading.local()
@@ -270,6 +288,17 @@ class RotationStore:
                 "UPDATE rotation_entries SET done_at = updated_at "
                 "WHERE LOWER(status) = 'done' AND done_at IS NULL"
             )
+        # rotation_archive keeps what the night log needs to explain a past
+        # night: the original entry id (links sing_requests / play_events),
+        # when it was sung, and where its media came from.
+        archive_cols = {row[1] for row in conn.execute(
+            "PRAGMA table_info(rotation_archive)"
+        ).fetchall()}
+        for col_name, col_type in self._ARCHIVE_EXTRA_COLS:
+            if col_name not in archive_cols:
+                conn.execute(
+                    f"ALTER TABLE rotation_archive ADD COLUMN {col_name} {col_type}"
+                )
         conn.commit()
 
     # ------------------------------------------------------------------
@@ -1333,10 +1362,16 @@ class RotationStore:
         ).fetchone()[0]
 
         # Copy to archive
+        extra = ", ".join(name for name, _ in self._ARCHIVE_EXTRA_COLS)
+        src = ", ".join(
+            "id" if name == "entry_id" else name for name, _ in self._ARCHIVE_EXTRA_COLS
+        )
         conn.execute(
             "INSERT INTO rotation_archive "
-            "    (night_date, singer, song_artist, status, notes, position, file_path, duration, created_at) "
-            "SELECT ?, singer, song_artist, status, notes, position, file_path, duration, created_at "
+            "    (night_date, singer, song_artist, status, notes, position, file_path, duration, created_at, "
+            f"     {extra}) "
+            "SELECT ?, singer, song_artist, status, notes, position, file_path, duration, created_at, "
+            f"     {src} "
             "FROM rotation_entries",
             (night_date,),
         )

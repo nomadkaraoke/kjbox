@@ -4895,6 +4895,56 @@ li.media-no-audio {
 .stats-badge-busy { color: #f80; font-size: 0.8em; margin-left: 6px; }
 .stats-muted { color: #777; padding: 8px; }
 
+/* ===== Night Log (past nights, night_log.py) ===== */
+/* Small launcher in the sidebar; the log itself is a wide modal. */
+body.simple-mode .night-log-launcher { display: none; }
+.night-log-hint { color: #888; font-size: 0.82em; }
+.night-log-modal-content {
+    width: 96vw; max-width: 1400px; height: 90vh; max-height: 90vh;
+    display: flex; flex-direction: column; overflow: hidden;
+}
+.night-log-modal-content .stats-overview { flex: 0 0 auto; }
+.night-log-filters select, .night-log-filters input[type="number"] {
+    background: #1a1a1a; border: 1px solid #444; color: #ddd; border-radius: 4px; padding: 4px 8px;
+}
+.night-log-filters select { max-width: 100%; min-width: 260px; }
+.night-log-filters input[type="number"] { width: 4.5em; margin-left: 4px; }
+.night-log-min, .night-log-toggle { color: #bbb; font-size: 0.85em; display: inline-flex; align-items: center; gap: 4px; }
+.night-log-body { flex: 1 1 auto; min-height: 0; overflow: auto; }
+.nl-table { width: 100%; border-collapse: collapse; font-size: 0.88em; }
+.nl-table th {
+    position: sticky; top: 0; z-index: 1; background: #262626; color: #aaa; font-weight: 500;
+    text-align: left; padding: 6px 8px; border-bottom: 1px solid #444; white-space: nowrap;
+}
+.nl-table td { padding: 6px 8px; border-bottom: 1px solid #2a2a2a; vertical-align: top; color: #ddd; }
+.nl-table tr:hover td { background: rgba(255, 255, 255, 0.03); }
+.nl-table tr.nl-unsung td { opacity: 0.55; }
+.nl-table .nl-num { color: #777; text-align: right; width: 2.5em; }
+.nl-table .nl-time { color: #bbb; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.nl-table .nl-singer { color: #fff; font-weight: 600; }
+.nl-table .nl-file { color: #777; font-size: 0.88em; overflow-wrap: anywhere; max-width: 28em; }
+.nl-sub { display: block; color: #888; font-size: 0.88em; margin-top: 2px; }
+/* Phones: each row becomes a stacked card. */
+@media (max-width: 760px) {
+    .night-log-modal-content { width: 100vw; height: 100vh; max-height: 100vh; border-radius: 0; }
+    .nl-table thead { display: none; }
+    .nl-table, .nl-table tbody, .nl-table tr, .nl-table td { display: block; width: auto; }
+    .nl-table tr { border-bottom: 1px solid #2a2a2a; padding: 6px 0; }
+    .nl-table td { border: 0; padding: 1px 4px; }
+    .nl-table .nl-num { display: none; }
+    .nl-table td[data-label]::before { content: attr(data-label) ": "; color: #777; }
+    .nl-table td.nl-time { display: inline-block; margin-right: 8px; }
+    .nl-table .nl-file { max-width: none; }
+}
+.nl-tag {
+    display: inline-block; padding: 0 6px; border-radius: 9px; font-size: 0.85em;
+    border: 1px solid #444; white-space: nowrap;
+}
+.nl-tag-kj { color: #ccc; }
+.nl-tag-singer { color: #8fd8ff; border-color: #2d5a73; }
+.nl-tag-fetched { color: #ffc46b; border-color: #6b4f1f; }
+.nl-tag-status { color: #f88; border-color: #633; }
+
 
 /* Singer-cancelled rotation entries (soft cancel): a subtle red pulse to flag
    they're going away, then a short fade/collapse (rotation-cancelled-leaving)
