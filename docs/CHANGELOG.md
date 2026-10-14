@@ -2,6 +2,17 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-10-14 - night-clips: Instagram carousel drafts from the night's phone clips (Mac tool)
+
+- New Mac-only tool `tools/night-clips/` (`uv run night-clips [YYYY-MM-DD]`). It finds the
+  night's clips in Dropbox Camera Uploads, matches each one to the singer and song on the kjbox
+  when recording started, applies per-singer media consent, pre-selects up to 20 clips (at least
+  one per consenting singer) and serves a localhost review page with a caption editor. Publishing
+  drives instagram.com through Playwright and stops before Share. See `tools/night-clips/README.md`.
+- It reads `GET /history/night-media` over `ssh nomadpctunnel`. Until that endpoint is deployed, it
+  falls back to `/history/night` with every singer's consent treated as **unknown**, so nothing is
+  pre-selected. The tool makes no kj-controller changes and needs no version bump.
+
 ## 2026-10-14 - Singer search: "No karaoke version yet" make-it card up top + sticky bar (v0.130.0)
 
 - **Problem:** when a singer's song was identified but had no karaoke version, the "Generate it on
