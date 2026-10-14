@@ -29,6 +29,10 @@ IG_URL = "https://www.instagram.com/"
 PROFILE_DIR = HOME / "ig-profile"
 LOGIN_TIMEOUT_S = 15 * 60
 LOGIN_URL = "https://www.instagram.com/accounts/login/"
+EXPECTED_ACCOUNT = "nomadkaraoke"
+# Only an authenticator-app challenge gets a generated code; an emailed/SMS
+# code or anything else is left for Andrew to finish by hand.
+_AUTH_APP_RE = re.compile(r"authenticat(ion|or) app|google authenticator|duo mobile", re.I)
 # Set in the nomadkaraoke workspace .envrc (direnv). Only used when the saved
 # session in PROFILE_DIR has expired; never logged or echoed.
 ENV_USER, ENV_PASS, ENV_2FA = (
@@ -189,6 +193,13 @@ class Publisher:
             if code_box is not None:
                 break
         if code_box is not None:
+            try:
+                page_text = p.locator("body").inner_text(timeout=3000)
+            except Exception:  # noqa: BLE001
+                page_text = ""
+            if not _AUTH_APP_RE.search(page_text):
+                log("Instagram asked for a code that isn't from the authenticator app.")
+                return False
             if seconds_left() < 4:  # don't submit a code that's about to roll over
                 p.wait_for_timeout(int(seconds_left() * 1000) + 500)
             code_box.fill(totp(secret))
@@ -341,8 +352,27 @@ class Publisher:
             raise StepFailed("share: didn't see the 'shared' confirmation; check the window")
         log("Instagram says the post was shared. Click 'Mark as posted' on the review page.")
 
+    def signed_in_as_expected(self) -> bool:
+        """True when the nav's Profile link points at @nomadkaraoke (or the
+        NOMAD_INSTAGRAM_USERNAME account)."""
+        want = ((os.environ.get(ENV_USER) or "").strip().lstrip("@").lower()
+                or EXPECTED_ACCOUNT)
+        p = self.page
+        return self.first_visible([
+            p.locator(f"a[href='/{want}/']"),
+            p.locator(f"a[href='/{want}']"),
+            p.locator(f"a[href*='instagram.com/{want}/']"),
+        ], timeout_ms=4000) is not None
+
     def run(self, files: list[str], caption: str, auto_share: bool) -> None:
         self.ensure_logged_in()
+        if not self.signed_in_as_expected():
+            log("WARNING: couldn't confirm this is the @"
+                + ((os.environ.get(ENV_USER) or "").strip() or EXPECTED_ACCOUNT)
+                + " account. Check who's logged in before you click Share.")
+            if auto_share:
+                log("Not auto-sharing: the account couldn't be confirmed.")
+                auto_share = False
         self.open_new_post()
         self.upload(files)
         self.choose_original_crop()
