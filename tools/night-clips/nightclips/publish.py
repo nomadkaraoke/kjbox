@@ -16,16 +16,29 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sys
 import time
 from pathlib import Path
 
 from .config import HOME
+from .totp import seconds_left, totp
 
 IG_URL = "https://www.instagram.com/"
 PROFILE_DIR = HOME / "ig-profile"
 LOGIN_TIMEOUT_S = 15 * 60
+LOGIN_URL = "https://www.instagram.com/accounts/login/"
+# Set in the nomadkaraoke workspace .envrc (direnv). Only used when the saved
+# session in PROFILE_DIR has expired; never logged or echoed.
+ENV_USER, ENV_PASS, ENV_2FA = (
+    "NOMAD_INSTAGRAM_USERNAME", "NOMAD_INSTAGRAM_PASSWORD", "NOMAD_INSTAGRAM_2FA_SECRET")
+
+
+def login_credentials() -> tuple[str, str, str] | None:
+    """(username, password, totp_secret) from the environment, or None if any is missing."""
+    creds = tuple((os.environ.get(k) or "").strip() for k in (ENV_USER, ENV_PASS, ENV_2FA))
+    return creds if all(creds) else None
 SHORT = 8_000  # ms
 LONG = 120_000  # ms (uploads of 20 videos take a while)
 
@@ -106,6 +119,17 @@ class Publisher:
         if self.is_logged_in():
             log("Logged in to Instagram.")
             return
+        creds = login_credentials()
+        if creds:
+            try:
+                if self.auto_login(*creds):
+                    log("Logged in automatically (saved session had expired).")
+                    return
+                log("Automatic login didn't finish (Instagram may want an extra check).")
+            except Exception as e:  # never let a selector change block the manual path
+                log(f"Automatic login failed at an unexpected step ({type(e).__name__}).")
+        else:
+            log(f"(Set {ENV_USER} / {ENV_PASS} / {ENV_2FA} to log in automatically.)")
         log("NOT logged in. Please log in to @nomadkaraoke in the Chromium window now")
         log(f"(the session is saved in {PROFILE_DIR}, so this is a one-time step).")
         log(f"Waiting up to {timeout_s // 60} minutes...")
@@ -121,6 +145,74 @@ class Publisher:
                     self.dismiss_popups()
                 return
         raise StepFailed("login: timed out waiting for you to log in")
+
+    def code_inputs(self):
+        p = self.page
+        return [
+            p.locator("input[name='verificationCode']"),
+            p.locator("input[autocomplete='one-time-code']"),
+            p.get_by_label(re.compile(r"^code$|security code|confirmation code|6-digit", re.I)),
+            # Meta-style "Go to your authentication app" page (accounts/login/two_step_verification).
+            p.locator("input[type='text'], input[type='tel'], input[inputmode='numeric'], input:not([type])")
+             .filter(has_not=p.locator("[name='username'], [type='password']"))
+            if "two_step" in p.url or "two_factor" in p.url else p.locator("input[name='__none__']"),
+        ]
+
+    def auto_login(self, username: str, password: str, secret: str) -> bool:
+        """Username + password + TOTP login. True once the home feed shows.
+
+        Returns False (leaving the page as-is for a manual finish) on anything
+        unexpected: a suspicious-login checkpoint, captcha, emailed code, etc.
+        """
+        p = self.page
+        log("Saved session expired; logging in automatically...")
+        p.goto(LOGIN_URL, wait_until="domcontentloaded")
+        p.wait_for_timeout(2500)
+        self.dismiss_popups()
+        user = self.first_visible([p.locator("input[name='username']"),
+                                   p.get_by_label(re.compile(r"username|email", re.I))])
+        pw = self.first_visible([p.locator("input[name='password']"),
+                                 p.get_by_label(re.compile(r"^password", re.I))])
+        if user is None or pw is None:
+            return False
+        user.fill(username)
+        pw.fill(password)
+        pw.press("Enter")
+        # Either the feed (no 2FA), the code form, or something we don't handle.
+        code_box = None
+        deadline = time.monotonic() + 30
+        while time.monotonic() < deadline:
+            p.wait_for_timeout(1500)
+            if self.is_logged_in():
+                break
+            code_box = self.first_visible(self.code_inputs(), timeout_ms=500)
+            if code_box is not None:
+                break
+        if code_box is not None:
+            if seconds_left() < 4:  # don't submit a code that's about to roll over
+                p.wait_for_timeout(int(seconds_left() * 1000) + 500)
+            code_box.fill(totp(secret))
+            # Newer Meta 2FA page: "Continue" button (keeps "Trust this device" ticked).
+            if not self.click_any("2fa-submit", [
+                p.get_by_role("button", name=re.compile(r"^(continue|confirm|submit)$", re.I)),
+            ], timeout_ms=2000, required=False):
+                code_box.press("Enter")
+            log("Entered the 2FA code.")
+            deadline = time.monotonic() + 30
+            while time.monotonic() < deadline and not self.is_logged_in():
+                p.wait_for_timeout(1500)
+                # "Save your login info?" -> save, so the session lasts.
+                self.click_any("save-login", [
+                    p.get_by_role("button", name=re.compile(r"^save( info)?$", re.I)),
+                ], timeout_ms=500, required=False)
+                self.dismiss_popups()
+        if not self.is_logged_in():
+            return False
+        if "/accounts/" in p.url:
+            p.goto(IG_URL, wait_until="domcontentloaded")
+            p.wait_for_timeout(2000)
+            self.dismiss_popups()
+        return True
 
     def open_new_post(self) -> None:
         p = self.page

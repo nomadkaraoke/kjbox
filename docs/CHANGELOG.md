@@ -2,6 +2,16 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-10-14 - night-clips: automatic Instagram login when the saved session expires
+
+- When `~/.night-clips/ig-profile` is no longer logged in, the publisher logs in with
+  `NOMAD_INSTAGRAM_USERNAME` / `_PASSWORD` / `_2FA_SECRET` from the workspace `.envrc`. It generates
+  the 6-digit code itself (stdlib RFC 6238, `nightclips/totp.py`) and handles Meta's newer
+  "Go to your authentication app" page (`accounts/login/two_step_verification`, with "Trust this
+  device" left ticked). Anything unexpected falls back to the manual login wait. Tested live with a
+  throwaway profile.
+- `tools/night-clips/.gitignore` now ignores `.venv/`.
+
 ## 2026-10-14 - night-clips: Instagram carousel drafts from the night's phone clips (Mac tool)
 
 - New Mac-only tool `tools/night-clips/` (`uv run night-clips [YYYY-MM-DD]`). It finds the
