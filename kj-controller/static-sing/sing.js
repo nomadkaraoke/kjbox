@@ -2159,9 +2159,12 @@ function renderSearch() {
   // "The Killers"), and "no karaoke version yet" would be a lie.
   function songMissing(rows) {
     const c = correction;
-    return !!(c && c.corrected && c.active && !c.inResults && !(c.songs || []).length && !c.fetching
+    return !!(c && c.corrected && c.active && !rowsHaveSong(c) && !c.fetching
               && c.karaoke !== true && !loading && !resolving && !err && rows.length > 0);
   }
+  // A karaoke row IS the identified song — typed-text rows or the corrected
+  // search's own rows (which can be near-misses too, so check each one).
+  const rowsHaveSong = (c) => !!(c.inResults || (c.songs || []).some((g) => sameSong(g, c.corrected)));
 
   // "🎵 Mr. Brightside — The Killers · No karaoke version yet [Make it]" —
   // above the near-misses, so the singer never has to scroll for make-it.
@@ -2743,7 +2746,7 @@ function renderSearch() {
     if (err) container.appendChild(el("p", { class: "error" }, err));
     // Karaoke rows for the identified song get their own heading, so the two
     // questions stay visibly separate.
-    if (!loading && corrected && corrected.length) {
+    if (!loading && !missing && corrected && corrected.length) {
       container.appendChild(el("h3", { class: "sing-results-heading", "data-testid": "karaoke-for-heading" },
         t("search.karaokeFor", { song: correction.corrected.title })));
     }
@@ -2834,8 +2837,7 @@ function renderSearch() {
       // bar pinned within thumb reach. A confident identification needs none —
       // the song is in the rows, or the top card already offers make-it.
       const c = correction;
-      const settled = missing || (c && c.corrected && c.active
-        && (c.inResults || (c.songs || []).length || c.karaoke !== true));
+      const settled = missing || (c && c.corrected && c.active && (rowsHaveSong(c) || c.karaoke !== true));
       if (!settled && !state.showMakeForm) {
         logOfferShown("sticky_bar");
         container.classList.add("has-make-bar");

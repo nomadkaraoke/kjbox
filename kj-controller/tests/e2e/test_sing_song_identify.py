@@ -294,3 +294,18 @@ def test_index_says_karaoke_exists_never_claims_missing(page, live_server, live_
     expect(page.locator('[data-testid="make-bar"]')).to_be_visible()
     expect(page.locator('[data-testid="song-missing"]')).to_have_count(0)
     expect(page.locator(".result-row")).to_have_count(8)
+
+
+def test_corrected_search_with_only_near_misses_is_still_missing(page, live_server, live_token):
+    """The corrected song's own search can return other songs — they're not
+    "Karaoke versions of" it, and the make-it card must still lead."""
+    _setup(page, live_server, live_token, {
+        "status": "confident", "kind": "content", "typed": "mr brihgtside",
+        "song": {"artist": "The Killers", "title": "Mr. Brightside", "karaoke": False}, "candidates": [],
+    }, lambda q: OTHERS[:5] if q == "The Killers Mr. Brightside" else OTHERS[5:])
+    page.locator('input[type="search"]').fill("mr brihgtside")
+    expect(page.locator('[data-testid="song-missing"]')).to_contain_text("Mr. Brightside")
+    expect(page.locator('[data-testid="karaoke-for-heading"]')).to_have_count(0)
+    expect(page.locator('[data-testid="similar-heading"]')).to_be_visible()
+    expect(page.locator(".result-row")).to_have_count(3)
+    expect(page.locator('[data-testid="make-bar"]')).to_have_count(0)
