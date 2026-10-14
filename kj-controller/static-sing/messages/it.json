@@ -588,7 +588,20 @@
     "no": "🚫 Preferisco di no",
     "hint": "Il KJ vede la tua scelta accanto al tuo nome. Puoi cambiarla in qualsiasi momento da Le mie canzoni.",
     "saved": "✓ Salvato — il KJ può vedere la tua scelta.",
-    "saveFailed": "Impossibile salvare — riprova."
+    "saveFailed": "Impossibile salvare — riprova.",
+    "instagramLabel": "Instagram (facoltativo, per taggarti)",
+    "instagramPlaceholder": "@iltuonome",
+    "instagramInvalid": "Non sembra un nome utente Instagram valido: usa solo lettere, numeri, punti e trattini bassi.",
+    "songOk": "📷 OK pubblicare",
+    "songNo": "📷 Non pubblicare",
+    "songOkTitle": "Foto e video di questa canzone possono essere pubblicati. Tocca se preferisci di no.",
+    "songNoTitle": "Foto e video di questa canzone non saranno pubblicati. Tocca per autorizzarli.",
+    "songOkSaved": "✓ OK, foto e video di quella canzone possono essere pubblicati.",
+    "songNoSaved": "✓ Ricevuto, non pubblicheremo quella canzone.",
+    "scopeQuestion": "Non pubblicare solo una delle tue canzoni o niente di stasera?",
+    "scopeOne": "Solo una canzone",
+    "scopeAll": "Niente di stasera",
+    "scopeOneHint": "Tocca \"📷 OK pubblicare\" sulla canzone che preferisci non pubblichiamo."
   },
   "prefs": {
     "notifyTitle": "🔔 Impostazioni notifiche",

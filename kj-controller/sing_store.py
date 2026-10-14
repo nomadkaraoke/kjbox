@@ -5,6 +5,7 @@ pending-review requests coming in from the public `/sing/` request form and
 provides helpers for the short-lived event token that gates that form.
 """
 
+import datetime
 import json
 import re
 import secrets
@@ -300,6 +301,55 @@ class SingStore:
                 session_token TEXT NOT NULL,
                 verified_at   TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
             )
+            """
+        )
+        # Per-song media consent (2026-10-14). A singer can say "not THIS song"
+        # without revoking consent for the rest of their night:
+        # - sing_requests.media_consent: the requester's own override for the
+        #   song that request created ('yes'|'no'|NULL);
+        # - singer_photo_consent.instagram: optional handle for tagging;
+        # - song_media_consent: KJ overrides, keyed on (entry_id, entry_created_at)
+        #   because rotation entry ids are recycled across nights. name_key '*'
+        #   covers every performer on the song;
+        # - photo_consent_events: append-only log of every consent/handle change,
+        #   so a past night resolves the same after singer_photo_consent rows
+        #   are overwritten on later nights.
+        for ddl in (
+            "ALTER TABLE sing_requests ADD COLUMN media_consent TEXT DEFAULT NULL",
+            "ALTER TABLE singer_photo_consent ADD COLUMN instagram TEXT DEFAULT NULL",
+        ):
+            try:
+                conn.execute(ddl)
+            except sqlite3.OperationalError as e:
+                if "duplicate column name" not in str(e).lower():
+                    raise
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS song_media_consent (
+                entry_id         INTEGER NOT NULL,
+                entry_created_at TEXT NOT NULL DEFAULT '',
+                name_key         TEXT NOT NULL,
+                display_name     TEXT NOT NULL,
+                consent          TEXT NOT NULL,
+                source           TEXT NOT NULL DEFAULT 'kj',
+                updated_at       TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+                PRIMARY KEY (entry_id, entry_created_at, name_key)
+            );
+            CREATE TABLE IF NOT EXISTS photo_consent_events (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                night        TEXT NOT NULL,
+                scope        TEXT NOT NULL,
+                name_key     TEXT NOT NULL,
+                display_name TEXT NOT NULL,
+                entry_id     INTEGER,
+                request_id   INTEGER,
+                consent      TEXT,
+                instagram    TEXT,
+                source       TEXT NOT NULL,
+                created_at   TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+            );
+            CREATE INDEX IF NOT EXISTS idx_photo_consent_events_night
+                ON photo_consent_events (night);
             """
         )
         conn.commit()
@@ -689,33 +739,87 @@ class SingStore:
         """Fold a singer name to its consent key (case/whitespace-insensitive)."""
         return " ".join((name or "").split()).casefold()
 
-    def set_photo_consent(self, name, consent, source="singer"):
+    _UNSET = object()
+    _INSTAGRAM_RE = re.compile(r"^[a-z0-9._]{1,30}$")
+    _INSTAGRAM_URL_RE = re.compile(
+        r"^(?:https?://)?(?:www\.)?instagram\.com/([^/?#]+)/?(?:[?#].*)?$", re.I)
+
+    @classmethod
+    def normalize_instagram(cls, handle):
+        """Fold an Instagram handle ("@Name", "instagram.com/name", "name") to
+        its bare lowercase form; blank → None. Raises ValueError if invalid."""
+        if handle is None:
+            return None
+        if not isinstance(handle, str):
+            raise ValueError("instagram must be a string")
+        h = handle.strip()
+        m = cls._INSTAGRAM_URL_RE.match(h)
+        if m:
+            h = m.group(1)
+        h = h.lstrip("@").strip().lower()
+        if not h:
+            return None
+        if not cls._INSTAGRAM_RE.match(h):
+            raise ValueError("instagram handle must be 1-30 letters, numbers, '.' or '_'")
+        return h
+
+    @staticmethod
+    def _current_night():
+        from night_log import night_of
+        return night_of(datetime.datetime.now())
+
+    def _log_consent_event(self, conn, scope, name, consent, source,
+                           instagram=None, entry_id=None, request_id=None):
+        conn.execute(
+            "INSERT INTO photo_consent_events (night, scope, name_key, display_name, "
+            "entry_id, request_id, consent, instagram, source) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (self._current_night(), scope,
+             "*" if name == "*" else self.photo_consent_key(name),
+             "*" if name == "*" else " ".join((name or "").split()),
+             entry_id, request_id, consent, instagram, source),
+        )
+
+    def set_photo_consent(self, name, consent, source="singer", instagram=_UNSET):
         """Record ``consent`` ('yes'/'no') for ``name``; ``None`` clears it.
 
-        Raises ValueError on an unknown value or blank name.
+        ``instagram`` (optional) sets/clears the singer's handle; omitted keeps
+        the stored one. Every change is also appended to photo_consent_events.
+        Raises ValueError on an unknown value, blank name or bad handle.
         """
         key = self.photo_consent_key(name)
         if not key:
             raise ValueError("singer name is required")
         if consent is not None and consent not in self.PHOTO_CONSENT_VALUES:
             raise ValueError("consent must be 'yes', 'no' or null")
+        handle_given = instagram is not self._UNSET
+        handle = self.normalize_instagram(instagram) if handle_given else None
         conn = self._get_conn()
         if consent is None:
             conn.execute("DELETE FROM singer_photo_consent WHERE name_key = ?", (key,))
         else:
+            if not handle_given:
+                row = conn.execute(
+                    "SELECT instagram FROM singer_photo_consent WHERE name_key = ? "
+                    "AND updated_at >= ?",
+                    (key, self.get_night_started_at() or "9999"),
+                ).fetchone()
+                handle = row[0] if row else None
             conn.execute(
                 "INSERT INTO singer_photo_consent "
-                "(name_key, display_name, consent, source, updated_at) "
-                "VALUES (?, ?, ?, ?, datetime('now', 'localtime')) "
+                "(name_key, display_name, consent, source, instagram, updated_at) "
+                "VALUES (?, ?, ?, ?, ?, datetime('now', 'localtime')) "
                 "ON CONFLICT(name_key) DO UPDATE SET display_name = excluded.display_name, "
                 "consent = excluded.consent, source = excluded.source, "
-                "updated_at = excluded.updated_at",
-                (key, " ".join(name.split()), consent, source),
+                "instagram = excluded.instagram, updated_at = excluded.updated_at",
+                (key, " ".join(name.split()), consent, source, handle),
             )
+        self._log_consent_event(conn, "night", name, consent, source,
+                                instagram=handle if consent else None)
         conn.commit()
 
     def get_photo_consents(self):
-        """``{name_key: {"consent", "source"}}`` for choices made tonight.
+        """``{name_key: {"consent", "source", "instagram"}}`` for choices made tonight.
 
         Fails closed (empty) with no night marker, like phone resolution.
         """
@@ -723,11 +827,11 @@ class SingStore:
         if not night_started:
             return {}
         rows = self._get_conn().execute(
-            "SELECT name_key, consent, source FROM singer_photo_consent "
+            "SELECT name_key, consent, source, instagram FROM singer_photo_consent "
             "WHERE updated_at >= ?",
             (night_started,),
         ).fetchall()
-        return {r[0]: {"consent": r[1], "source": r[2]} for r in rows}
+        return {r[0]: {"consent": r[1], "source": r[2], "instagram": r[3]} for r in rows}
 
     def get_photo_consent(self, name):
         """Tonight's consent for ``name`` ('yes'/'no') or None."""
@@ -737,17 +841,140 @@ class SingStore:
     def carry_photo_consent(self, old_name, new_name):
         """Carry tonight's consent across a rename/merge of ``old_name`` →
         ``new_name``. If both have a choice and they disagree, 'no' wins —
-        never widen permission on a guess. Best-effort; returns the result."""
+        never widen permission on a guess. The Instagram handle and tonight's
+        KJ per-song overrides follow too. Best-effort; returns the result."""
+        self._carry_song_overrides(old_name, new_name)
         consents = self.get_photo_consents()
         old = consents.get(self.photo_consent_key(old_name))
         if not old or not self.photo_consent_key(new_name):
             return None
         new = consents.get(self.photo_consent_key(new_name))
-        if new and new["consent"] == old["consent"]:
+        handle = (new or {}).get("instagram") or old.get("instagram")
+        if new and new["consent"] == old["consent"] and new.get("instagram") == handle:
             return new["consent"]
-        merged = "no" if new else old["consent"]
-        self.set_photo_consent(new_name, merged, source=(old["source"] if not new else "kj"))
+        merged = "no" if new and new["consent"] != old["consent"] else old["consent"]
+        self.set_photo_consent(new_name, merged, source=(old["source"] if not new else "kj"),
+                               instagram=handle)
         return merged
+
+    def _carry_song_overrides(self, old_name, new_name):
+        old_key, new_key = self.photo_consent_key(old_name), self.photo_consent_key(new_name)
+        night_started = self.get_night_started_at()
+        if not old_key or not new_key or old_key == new_key or not night_started:
+            return
+        conn = self._get_conn()
+        rows = conn.execute(
+            "SELECT entry_id, entry_created_at, consent FROM song_media_consent "
+            "WHERE name_key = ? AND updated_at >= ?", (old_key, night_started)).fetchall()
+        for entry_id, created, consent in rows:
+            existing = conn.execute(
+                "SELECT consent FROM song_media_consent WHERE entry_id = ? AND "
+                "entry_created_at = ? AND name_key = ?", (entry_id, created, new_key)).fetchone()
+            merged = "no" if "no" in (consent, existing and existing[0]) else consent
+            self.set_song_media_consent(entry_id, created, new_name, merged)
+            self.set_song_media_consent(entry_id, created, old_name, None)
+
+    # ------------------------------------------------------------------
+    # Per-song media consent
+    # ------------------------------------------------------------------
+
+    def set_request_media_consent(self, request_id, consent):
+        """The requester's own override for the song ``request_id`` created
+        ('yes'/'no'; None clears). Returns the updated request or None."""
+        if consent is not None and consent not in self.PHOTO_CONSENT_VALUES:
+            raise ValueError("consent must be 'yes', 'no' or null")
+        req = self.get_request(request_id)
+        if req is None:
+            return None
+        conn = self._get_conn()
+        conn.execute("UPDATE sing_requests SET media_consent = ? WHERE id = ?",
+                     (consent, request_id))
+        self._log_consent_event(conn, "song", req.get("singer_name") or "", consent, "singer",
+                                entry_id=req.get("linked_entry_id"), request_id=request_id)
+        conn.commit()
+        return self.get_request(request_id)
+
+    def set_song_media_consent(self, entry_id, entry_created_at, name, consent, source="kj"):
+        """KJ override for one performance. ``name`` None/'*' = every performer.
+        ``consent`` None clears it."""
+        if consent is not None and consent not in self.PHOTO_CONSENT_VALUES:
+            raise ValueError("consent must be 'yes', 'no' or null")
+        if not name or name == "*":
+            name, key = "*", "*"
+        else:
+            key = self.photo_consent_key(name)
+            if not key:
+                raise ValueError("singer name is required")
+        created = entry_created_at or ""
+        conn = self._get_conn()
+        if consent is None:
+            conn.execute(
+                "DELETE FROM song_media_consent WHERE entry_id = ? AND entry_created_at = ? "
+                "AND name_key = ?", (entry_id, created, key))
+        else:
+            conn.execute(
+                "INSERT INTO song_media_consent (entry_id, entry_created_at, name_key, "
+                "display_name, consent, source, updated_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, datetime('now', 'localtime')) "
+                "ON CONFLICT(entry_id, entry_created_at, name_key) DO UPDATE SET "
+                "display_name = excluded.display_name, consent = excluded.consent, "
+                "source = excluded.source, updated_at = excluded.updated_at",
+                (entry_id, created, key, name if key == "*" else " ".join(name.split()),
+                 consent, source))
+        self._log_consent_event(conn, "song", name, consent, source, entry_id=entry_id)
+        conn.commit()
+
+    def get_song_media_consents(self):
+        """``{(entry_id, entry_created_at): {name_key: consent}}`` — every KJ
+        per-song override (keys are unique across nights)."""
+        out = {}
+        for entry_id, created, key, consent in self._get_conn().execute(
+                "SELECT entry_id, entry_created_at, name_key, consent FROM song_media_consent"):
+            out.setdefault((entry_id, created), {})[key] = consent
+        return out
+
+    def get_request_media_consents_by_entry(self):
+        """Tonight's singer per-song overrides: ``{entry_id: {name_key: consent}}``."""
+        night_started = self.get_night_started_at()
+        if not night_started:
+            return {}
+        out = {}
+        for entry_id, name, consent in self._get_conn().execute(
+                "SELECT linked_entry_id, singer_name, media_consent FROM sing_requests "
+                "WHERE media_consent IS NOT NULL AND linked_entry_id IS NOT NULL "
+                "AND status = 'approved' AND created_at >= ?", (night_started,)):
+            out.setdefault(entry_id, {})[self.photo_consent_key(name)] = consent
+        return out
+
+    def get_night_consent_defaults(self, night):
+        """Night-default consent per person for a past (or current) night.
+
+        Returns ``(defaults, source)``: ``defaults`` is ``{name_key: {"consent",
+        "instagram"}}`` with the LAST choice made that night; ``source`` is
+        'events' when the consent event log covers the night, else 'legacy'
+        (pre-log nights: singer_photo_consent rows last updated that night).
+        """
+        from night_log import night_of
+        conn = self._get_conn()
+        rows = conn.execute(
+            "SELECT name_key, consent, instagram FROM photo_consent_events "
+            "WHERE night = ? AND scope = 'night' ORDER BY id", (night,)).fetchall()
+        has_log = conn.execute(
+            "SELECT 1 FROM photo_consent_events WHERE night <= ? LIMIT 1", (night,)).fetchone()
+        if has_log:
+            out = {}
+            for key, consent, handle in rows:
+                if consent is None:
+                    out.pop(key, None)
+                else:
+                    out[key] = {"consent": consent, "instagram": handle}
+            return out, "events"
+        out = {}
+        for key, consent, handle, updated in conn.execute(
+                "SELECT name_key, consent, instagram, updated_at FROM singer_photo_consent"):
+            if night_of(updated) == night:
+                out[key] = {"consent": consent, "instagram": handle}
+        return out, "legacy"
 
     def get_tip_settings(self):
         """Return the KJ-saved tip settings dict (may be empty)."""

@@ -588,7 +588,20 @@
     "no": "🚫 Prosím, nie",
     "hint": "Tvoj KJ vidí tvoju voľbu vedľa tvojho mena. Môžeš ju kedykoľvek zmeniť v časti Moje piesne.",
     "saved": "✓ Uložené — tvoj KJ vidí tvoju voľbu.",
-    "saveFailed": "Nepodarilo sa to uložiť — skús to prosím znova."
+    "saveFailed": "Nepodarilo sa to uložiť — skús to prosím znova.",
+    "instagramLabel": "Instagram (nepovinné, aby sme ťa mohli označiť)",
+    "instagramPlaceholder": "@tvojemeno",
+    "instagramInvalid": "Toto nevyzerá ako používateľské meno na Instagrame: používaj iba písmená, čísla, bodky a podčiarkovníky.",
+    "songOk": "📷 Možno zverejniť",
+    "songNo": "📷 Nezverejňovať",
+    "songOkTitle": "Fotky/videá z tejto pesničky môžeme zverejniť. Ťukni, ak si to neželáš.",
+    "songNoTitle": "Fotky/videá z tejto pesničky nezverejníme. Ťuknutím ich povolíš.",
+    "songOkSaved": "✓ V poriadku, fotky/videá z tejto pesničky môžeme zverejniť.",
+    "songNoSaved": "✓ Rozumieme, túto pesničku nezverejníme.",
+    "scopeQuestion": "Nezverejňovať iba jednu z tvojich pesničiek, alebo nič z dnešného večera?",
+    "scopeOne": "Iba jednu pesničku",
+    "scopeAll": "Nič z dnešného večera",
+    "scopeOneHint": "Ťukni na „📷 Možno zverejniť“ pri pesničke, ktorú si neželáš zverejniť."
   },
   "prefs": {
     "notifyTitle": "🔔 Nastavenia upozornení",

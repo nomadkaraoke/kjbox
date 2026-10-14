@@ -1684,6 +1684,20 @@ button.sing-social-link { padding: 0; font: inherit; cursor: pointer; }
 }
 .photo-consent .hint { margin: 0.45rem 0 0; }
 .photo-consent-bare { margin: 0; padding: 0; border: none; background: none; }
+/* Optional Instagram handle under a "yes" (2026-10-14). */
+.photo-consent-handle { display: block; margin-top: 0.6rem; }
+.photo-consent-handle[hidden] { display: none; }
+.photo-consent-handle-label { display: block; font-size: 0.85rem; color: var(--nk-text-dim); margin-bottom: 0.25rem; }
+.photo-consent-handle-input { width: 100%; box-sizing: border-box; }
+.photo-consent-handle-error { color: var(--nk-error); }
+/* "Just one song, or nothing from tonight?" */
+.consent-scope { margin-top: 0.4rem; }
+.consent-scope-question { margin: 0 0 0.4rem; color: var(--nk-text); }
+.consent-scope .row { gap: 0.5rem; flex-wrap: wrap; }
+.consent-scope .btn { flex: 1 1 0; min-width: 0; }
+/* Per-song 📷 toggle on My songs cards. */
+.song-card-action.song-consent-yes { color: var(--nk-text); }
+.song-card-action.song-consent-no { color: var(--nk-error); border-color: var(--nk-error); }
 
 /* My songs: "Notification preferences" / "Social media preferences" — the
    same subtle box as the photo picker; collapsed to side-by-side toggles

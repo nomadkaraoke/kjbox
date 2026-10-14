@@ -588,7 +588,20 @@
     "no": "🚫 Nej tak",
     "hint": "Din vært ser dit valg ved siden af dit navn. Du kan altid ændre det under Mine sange.",
     "saved": "✓ Gemt — din vært kan se dit valg.",
-    "saveFailed": "Kunne ikke gemme — prøv igen."
+    "saveFailed": "Kunne ikke gemme — prøv igen.",
+    "instagramLabel": "Instagram (valgfrit, så vi kan tagge dig)",
+    "instagramPlaceholder": "@ditnavn",
+    "instagramInvalid": "Det ligner ikke et gyldigt Instagram-brugernavn: Brug kun bogstaver, tal, prikker og understregningstegn.",
+    "songOk": "📷 Må gerne deles",
+    "songNo": "📷 Må ikke deles",
+    "songOkTitle": "Billeder/videoer af denne sang må gerne deles. Tryk, hvis du helst vil have, at de ikke bliver det.",
+    "songNoTitle": "Billeder/videoer af denne sang bliver ikke delt. Tryk for at tillade.",
+    "songOkSaved": "✓ Modtaget, billeder/videoer af den sang må gerne deles.",
+    "songNoSaved": "✓ Modtaget, vi deler ikke den sang.",
+    "scopeQuestion": "Gælder det bare én sang, eller må vi slet ikke dele noget fra i aften?",
+    "scopeOne": "Bare én sang",
+    "scopeAll": "Intet fra i aften",
+    "scopeOneHint": "Tryk på \"📷 Må gerne deles\" ved den sang, du helst ikke vil have, at vi deler."
   },
   "prefs": {
     "notifyTitle": "🔔 Notifikationsindstillinger",

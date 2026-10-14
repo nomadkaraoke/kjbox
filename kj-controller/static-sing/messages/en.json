@@ -588,7 +588,20 @@
     "no": "🚫 Please don't",
     "hint": "Your host sees your choice next to your name. You can change it any time from My songs.",
     "saved": "✓ Saved — your host can see your choice.",
-    "saveFailed": "Couldn't save that — please try again."
+    "saveFailed": "Couldn't save that — please try again.",
+    "instagramLabel": "Instagram (optional, so we can tag you)",
+    "instagramPlaceholder": "@yourname",
+    "instagramInvalid": "That doesn't look like an Instagram handle: letters, numbers, dots and underscores only.",
+    "songOk": "📷 OK to post",
+    "songNo": "📷 Don't post",
+    "songOkTitle": "Photos/videos of this song may be posted. Tap if you'd rather they weren't.",
+    "songNoTitle": "Photos/videos of this song won't be posted. Tap to allow them.",
+    "songOkSaved": "✓ OK, photos/videos of that song may be posted.",
+    "songNoSaved": "✓ Got it, we won't post that song.",
+    "scopeQuestion": "Don't post just one of your songs, or nothing from tonight?",
+    "scopeOne": "Just one song",
+    "scopeAll": "Nothing from tonight",
+    "scopeOneHint": "Tap \"📷 OK to post\" on the song you'd rather we didn't post."
   },
   "prefs": {
     "notifyTitle": "🔔 Notification settings",

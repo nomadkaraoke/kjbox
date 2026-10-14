@@ -588,7 +588,20 @@
     "no": "🚫 Proszę nie",
     "hint": "Twój KJ widzi Twój wybór obok Twojego imienia. Możesz go zmienić w dowolnej chwili w sekcji Moje piosenki.",
     "saved": "✓ Zapisano — Twój KJ widzi Twój wybór.",
-    "saveFailed": "Nie udało się zapisać — spróbuj ponownie."
+    "saveFailed": "Nie udało się zapisać — spróbuj ponownie.",
+    "instagramLabel": "Instagram (opcjonalnie, żebyśmy mogli Cię oznaczyć)",
+    "instagramPlaceholder": "@twojanazwa",
+    "instagramInvalid": "To nie wygląda na nazwę użytkownika na Instagramie: dozwolone są tylko litery, cyfry, kropki i podkreślenia.",
+    "songOk": "📷 Można publikować",
+    "songNo": "📷 Nie publikuj",
+    "songOkTitle": "Zdjęcia/filmy z tej piosenki mogą być publikowane. Dotknij, jeśli wolisz, żeby nie były.",
+    "songNoTitle": "Zdjęcia/filmy z tej piosenki nie będą publikowane. Dotknij, aby na to zezwolić.",
+    "songOkSaved": "✓ OK, zdjęcia/filmy z tej piosenki mogą być publikowane.",
+    "songNoSaved": "✓ Jasne, nie opublikujemy tej piosenki.",
+    "scopeQuestion": "Nie publikować tylko jednej z Twoich piosenek, czy niczego z dzisiejszego wieczoru?",
+    "scopeOne": "Tylko jedna piosenka",
+    "scopeAll": "Nic z dzisiejszego wieczoru",
+    "scopeOneHint": "Dotknij „📷 Można publikować” przy piosence, której wolisz, żebyśmy nie publikowali."
   },
   "prefs": {
     "notifyTitle": "🔔 Ustawienia powiadomień",

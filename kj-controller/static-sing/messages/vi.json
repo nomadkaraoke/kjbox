@@ -588,7 +588,20 @@
     "no": "🚫 Xin đừng",
     "hint": "KJ sẽ thấy lựa chọn của bạn bên cạnh tên bạn. Bạn có thể thay đổi bất cứ lúc nào trong phần Bài hát của tôi.",
     "saved": "✓ Đã lưu — KJ có thể thấy lựa chọn của bạn.",
-    "saveFailed": "Không thể lưu — vui lòng thử lại."
+    "saveFailed": "Không thể lưu — vui lòng thử lại.",
+    "instagramLabel": "Instagram (không bắt buộc, để tụi mình gắn thẻ bạn)",
+    "instagramPlaceholder": "@tenban",
+    "instagramInvalid": "Tên tài khoản Instagram không hợp lệ: chỉ gồm chữ cái, số, dấu chấm và dấu gạch dưới.",
+    "songOk": "📷 Được phép đăng",
+    "songNo": "📷 Không đăng",
+    "songOkTitle": "Ảnh/video của bài này có thể được đăng. Nhấn nếu bạn không muốn đăng.",
+    "songNoTitle": "Ảnh/video của bài này sẽ không được đăng. Nhấn để cho phép đăng.",
+    "songOkSaved": "✓ Xong, ảnh/video của bài hát đó có thể được đăng.",
+    "songNoSaved": "✓ Đã hiểu, tụi mình sẽ không đăng bài hát đó.",
+    "scopeQuestion": "Bạn chỉ muốn không đăng một bài, hay không đăng gì cả tối nay?",
+    "scopeOne": "Chỉ một bài hát",
+    "scopeAll": "Không đăng gì cả tối nay",
+    "scopeOneHint": "Nhấn vào \"📷 Được phép đăng\" ở bài hát mà bạn không muốn tụi mình đăng."
   },
   "prefs": {
     "notifyTitle": "🔔 Cài đặt thông báo",

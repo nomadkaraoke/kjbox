@@ -588,7 +588,20 @@
     "no": "🚫 Liever niet",
     "hint": "Je host ziet je keuze naast je naam. Je kunt dit op elk moment wijzigen via Mijn nummers.",
     "saved": "✓ Opgeslagen — je host kan je keuze zien.",
-    "saveFailed": "Opslaan is niet gelukt — probeer het opnieuw."
+    "saveFailed": "Opslaan is niet gelukt — probeer het opnieuw.",
+    "instagramLabel": "Instagram (optioneel, zodat we je kunnen taggen)",
+    "instagramPlaceholder": "@jenaam",
+    "instagramInvalid": "Dat lijkt niet op een Instagram-gebruikersnaam: gebruik alleen letters, cijfers, punten en underscores.",
+    "songOk": "📷 Mag geplaatst worden",
+    "songNo": "📷 Niet plaatsen",
+    "songOkTitle": "Foto's/video's van dit nummer mogen geplaatst worden. Tik als je dit liever niet wilt.",
+    "songNoTitle": "Foto's/video's van dit nummer worden niet geplaatst. Tik om wel toe te staan.",
+    "songOkSaved": "✓ Prima, foto's/video's van dat nummer mogen geplaatst worden.",
+    "songNoSaved": "✓ Begrepen, we plaatsen dat nummer niet.",
+    "scopeQuestion": "Mogen we één specifiek nummer niet plaatsen, of helemaal niets van vanavond?",
+    "scopeOne": "Slechts één nummer",
+    "scopeAll": "Niets van vanavond",
+    "scopeOneHint": "Tik op \"📷 Mag geplaatst worden\" bij het nummer dat we volgens jou niet moeten plaatsen."
   },
   "prefs": {
     "notifyTitle": "🔔 Meldingsinstellingen",

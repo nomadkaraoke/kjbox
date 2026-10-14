@@ -3605,6 +3605,13 @@ def _add_photo_consent(entries, app=None):
             consents = store.get_photo_consents()
         except Exception:
             consents = {}
+    overrides, singer_overrides = {}, {}
+    if store is not None:
+        try:
+            overrides = store.get_song_media_consents()
+            singer_overrides = store.get_request_media_consents_by_entry()
+        except Exception:
+            overrides, singer_overrides = {}, {}
     for e in entries:
         names = None
         if e.get("singers_json"):
@@ -3621,6 +3628,14 @@ def _add_photo_consent(entries, app=None):
             rec = consents.get(" ".join(n.split()).casefold()) if n else None
             out[n] = rec["consent"] if rec else None
         e["photo_consent"] = out
+        # Per-song overrides for THIS performance (KJ's, plus the singer's own
+        # "don't post this one"): {name|'*': 'yes'|'no'}; 'no' wins a clash.
+        song = dict(overrides.get((e.get("id"), e.get("created_at") or "")) or {})
+        for k, v in (singer_overrides.get(e.get("id")) or {}).items():
+            song[k] = "no" if "no" in (v, song.get(k)) else v
+        e["song_consent"] = {("*" if k == "*" else next(
+            (n for n in names if " ".join(n.split()).casefold() == k), k)): v
+            for k, v in song.items()}
 
 
 def _add_quick_versions(entries, rotation):
@@ -4851,6 +4866,34 @@ def singer_photo_consent_route():
     if consent not in ('yes', 'no', None):
         return jsonify({"error": "consent must be 'yes', 'no' or null"}), 400
     store.set_photo_consent(singer, consent, source='kj')
+    return _singer_action_response(rotation)
+
+
+@routes_bp.route('/rotation/entry/media-consent', methods=['POST'])
+def entry_media_consent_route():
+    """KJ sets/clears a per-song media-consent override for one rotation entry.
+
+    Body: ``{entry_id, consent: "yes"|"no"|null, name?}`` — ``name`` omitted
+    (or '*') applies to every performer on the song.
+    """
+    rotation = getattr(current_app, 'rotation', None)
+    store = getattr(current_app, 'sing_store', None)
+    if rotation is None or store is None:
+        return jsonify({"error": "Rotation not configured"}), 503
+    data = request.get_json(force=True, silent=True) or {}
+    consent = data.get('consent')
+    if consent not in ('yes', 'no', None):
+        return jsonify({"error": "consent must be 'yes', 'no' or null"}), 400
+    try:
+        entry_id = int(data.get('entry_id'))
+    except (TypeError, ValueError):
+        return jsonify({"error": "entry_id is required"}), 400
+    entry = rotation.store.get_entry(entry_id)
+    if entry is None:
+        return jsonify({"error": "entry not found"}), 404
+    name = (data.get('name') or '*').strip() or '*'
+    store.set_song_media_consent(entry_id, entry.get('created_at') or '', name, consent,
+                                 source='kj')
     return _singer_action_response(rotation)
 
 
@@ -7103,3 +7146,46 @@ def history_night():
     if not log:
         return jsonify({"night": night, "entries": []})
     return jsonify({"night": night, "entries": log.get_night(night)})
+
+
+@routes_bp.route('/history/night-media', methods=['GET'])
+def history_night_media():
+    """Sung songs of one night with each performer's resolved social-media
+    consent — what the night-clips tool reads to decide which phone clips may
+    be posted. See media_consent.py for the resolution order."""
+    import datetime as _dt
+    from media_consent import resolve_song
+    night = (request.args.get('night') or '').strip()
+    try:
+        valid = bool(re.fullmatch(r'\d{4}-\d{2}-\d{2}', night)) and bool(_dt.date.fromisoformat(night))
+    except ValueError:
+        valid = False
+    if not valid:
+        return jsonify({"error": "night must be YYYY-MM-DD"}), 400
+    log = _night_log()
+    store = getattr(current_app, 'sing_store', None)
+    if not log or store is None:
+        return jsonify({"night": night, "consent_source": "legacy", "songs": []})
+    defaults, source = store.get_night_consent_defaults(night)
+    overrides = store.get_song_media_consents()
+    songs = []
+    for e in log.get_night(night):
+        if not e.get("sung_at"):
+            continue
+        req = None
+        req_id = (e.get("added_by") or {}).get("request_id")
+        if req_id:
+            req = store.get_request(req_id)
+        kj = overrides.get((e.get("entry_id"), e.get("added_at") or "")) or {}
+        performers, postable = resolve_song(e, req, kj, defaults)
+        songs.append({
+            "entry_id": e.get("entry_id"),
+            "song": e.get("song"),
+            "singer": e.get("singer"),
+            "sung_at": e.get("sung_at"),
+            "added_at": e.get("added_at"),
+            "performers": performers,
+            "postable": postable,
+        })
+    songs.sort(key=lambda s: s["sung_at"])
+    return jsonify({"night": night, "consent_source": source, "songs": songs})

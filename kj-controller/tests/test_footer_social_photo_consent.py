@@ -103,7 +103,7 @@ class TestPhotoConsentStore:
         store.set_photo_consent("Lindsay", "yes")
         assert store.get_photo_consent("  lindsay ") == "yes"
         store.set_photo_consent("LINDSAY", "no", source="kj")
-        assert store.get_photo_consents()["lindsay"] == {"consent": "no", "source": "kj"}
+        assert store.get_photo_consents()["lindsay"] == {"consent": "no", "source": "kj", "instagram": None}
         store.set_photo_consent("Lindsay", None)
         assert store.get_photo_consent("Lindsay") is None
 

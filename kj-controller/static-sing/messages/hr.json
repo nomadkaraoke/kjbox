@@ -588,7 +588,20 @@
     "no": "🚫 Molim te, nemoj",
     "hint": "Tvoj voditelj vidi tvoj izbor pored tvog imena. Možeš ga promijeniti u bilo kojem trenutku pod Moje pjesme.",
     "saved": "✓ Spremljeno — tvoj voditelj može vidjeti tvoj izbor.",
-    "saveFailed": "Spremanje nije uspjelo — molim te, pokušaj ponovno."
+    "saveFailed": "Spremanje nije uspjelo — molim te, pokušaj ponovno.",
+    "instagramLabel": "Instagram (neobavezno, kako bismo te mogli označiti)",
+    "instagramPlaceholder": "@tvojeime",
+    "instagramInvalid": "To ne izgleda kao Instagram korisničko ime: dopuštena su samo slova, brojke, točke i donje crte.",
+    "songOk": "📷 Može objava",
+    "songNo": "📷 Ne objavljuj",
+    "songOkTitle": "Fotografije/videozapisi ove pjesme mogu se objaviti. Dodirni ako radije ne želiš objavu.",
+    "songNoTitle": "Fotografije/videozapisi ove pjesme neće se objaviti. Dodirni za dopuštenje.",
+    "songOkSaved": "✓ U redu, fotografije/videozapisi te pjesme mogu se objaviti.",
+    "songNoSaved": "✓ Jasno, nećemo objaviti tu pjesmu.",
+    "scopeQuestion": "Ne želiš objavu samo jedne svoje pjesme ili baš ničega od večeras?",
+    "scopeOne": "Samo jednu pjesmu",
+    "scopeAll": "Ništa od večeras",
+    "scopeOneHint": "Dodirni „📷 Može objava” na pjesmi za koju ne želiš da je objavimo."
   },
   "prefs": {
     "notifyTitle": "🔔 Postavke obavijesti",

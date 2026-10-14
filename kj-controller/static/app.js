@@ -6096,27 +6096,89 @@ async function autoRemoveCancelledEntry(entryId) {
 // Social-media photo/video consent marker beside a singer's name. The singer
 // chooses on their phone (or the KJ sets it here). No answer = NO consent, but
 // unknown gets its own look (📷 with an amber "?" badge, no strike) so it can't be
-// mistaken for an explicit no. Click toggles OK ⇄ no (unknown → OK).
-const PHOTO_CONSENT_NEXT = { '': 'yes', yes: 'no', no: 'yes' };
-
+// mistaken for an explicit no. A per-song override ("not THIS song", from the
+// singer's phone or the KJ) wins over the night choice and adds a ♪ badge.
+// Click opens a menu: night-wide OK/no, or OK/no for this song only.
 function photoConsentMarker(entry, singerName) {
-    const consent = (entry.photo_consent || {})[singerName] || '';
+    const night = (entry.photo_consent || {})[singerName] || '';
+    const songMap = entry.song_consent || {};
+    const songVal = songMap[singerName] || songMap['*'] || '';
+    const consent = songVal || night;
     const btn = document.createElement('button');
     btn.type = 'button';
-    btn.className = 'rotation-photo-consent photo-consent-' + (consent || 'unknown');
+    btn.className = 'rotation-photo-consent photo-consent-' + (consent || 'unknown')
+        + (songVal ? ' photo-consent-song' : '');
     btn.dataset.consent = consent || 'unknown';
     btn.textContent = '\ud83d\udcf7';   // 📷 ('no' is struck through, 'unknown' gets a ? badge, in CSS)
-    btn.title = consent === 'yes'
-        ? singerName + ' is happy to appear in photos/videos on social media (click to change)'
-        : consent === 'no'
-            ? singerName + ' does NOT want photos/videos of them posted on social media (click to change)'
-            : singerName + ' hasn\u2019t given photo/video consent \u2014 assume NO photos (click if they say yes)';
+    btn.title = songVal
+        ? (songVal === 'yes'
+            ? singerName + ' is OK with photos/videos of THIS song being posted (song override; click to change)'
+            : singerName + ' does NOT want photos/videos of THIS song posted (song override; click to change)')
+        : consent === 'yes'
+            ? singerName + ' is happy to appear in photos/videos on social media (click to change)'
+            : consent === 'no'
+                ? singerName + ' does NOT want photos/videos of them posted on social media (click to change)'
+                : singerName + ' hasn\u2019t given photo/video consent \u2014 assume NO photos (click if they say yes)';
     btn.setAttribute('aria-label', btn.title);
     btn.onclick = (ev) => {
         ev.stopPropagation();
-        setSingerPhotoConsent(singerName, PHOTO_CONSENT_NEXT[consent]);
+        openPhotoConsentMenu(btn, entry, singerName, night, songMap[singerName] ? singerName : (songMap['*'] ? '*' : null));
     };
     return btn;
+}
+
+function closePhotoConsentMenu() {
+    document.querySelectorAll('.photo-consent-menu').forEach(m => m.remove());
+    document.removeEventListener('click', closePhotoConsentMenu);
+}
+
+function openPhotoConsentMenu(anchor, entry, singerName, night, songKey) {
+    closePhotoConsentMenu();
+    const menu = document.createElement('div');
+    menu.className = 'photo-consent-menu';
+    menu.setAttribute('role', 'menu');
+    const item = (label, fn, current) => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.setAttribute('role', 'menuitem');
+        b.textContent = (current ? '\u2713 ' : '') + label;
+        b.onclick = (ev) => { ev.stopPropagation(); closePhotoConsentMenu(); fn(); };
+        menu.appendChild(b);
+    };
+    const head = document.createElement('div');
+    head.className = 'photo-consent-menu-head';
+    head.textContent = singerName;
+    menu.appendChild(head);
+    item('OK all night', () => setSingerPhotoConsent(singerName, 'yes'), night === 'yes');
+    item('No photos all night', () => setSingerPhotoConsent(singerName, 'no'), night === 'no');
+    const song = (entry.song_consent || {})[singerName] || '';
+    item('OK for this song only', () => setEntryMediaConsent(entry.id, singerName, 'yes'), song === 'yes');
+    item('Don\u2019t post THIS song', () => setEntryMediaConsent(entry.id, singerName, 'no'), song === 'no');
+    if (songKey) {
+        item('Clear song override', () => setEntryMediaConsent(entry.id, songKey, null), false);
+    }
+    document.body.appendChild(menu);
+    const r = anchor.getBoundingClientRect();
+    menu.style.top = (window.scrollY + r.bottom + 4) + 'px';
+    menu.style.left = Math.max(4, Math.min(window.scrollX + r.left,
+        window.scrollX + document.documentElement.clientWidth - menu.offsetWidth - 4)) + 'px';
+    setTimeout(() => document.addEventListener('click', closePhotoConsentMenu), 0);
+}
+
+async function setEntryMediaConsent(entryId, name, consent) {
+    showRotationIndicator('spin');
+    try {
+        const response = await fetch('/rotation/entry/media-consent', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ entry_id: entryId, name, consent }),
+        });
+        const data = await response.json();
+        if (data.entries) { rotationData = data.entries; renderRotation(rotationData); }
+        showRotationIndicator(response.ok ? 'success' : 'error');
+    } catch (e) {
+        showRotationIndicator('error');
+    }
 }
 
 async function setSingerPhotoConsent(singer, consent) {

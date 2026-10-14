@@ -588,7 +588,20 @@
     "no": "🚫 Kérlek, ne",
     "hint": "A házigazdád látja a választásodat a neved mellett. Bármikor megváltoztathatod a Dalaim menüben.",
     "saved": "✓ Mentve — a házigazdád látja a választásodat.",
-    "saveFailed": "Nem sikerült menteni — kérlek, próbáld újra."
+    "saveFailed": "Nem sikerült menteni — kérlek, próbáld újra.",
+    "instagramLabel": "Instagram (nem kötelező, csak hogy megjelölhessünk)",
+    "instagramPlaceholder": "@neved",
+    "instagramInvalid": "Ez nem tűnik érvényes Instagram-felhasználónévnek: csak betűket, számokat, pontot és aláhúzásjelet tartalmazhat.",
+    "songOk": "📷 Mehet a poszt",
+    "songNo": "📷 Ne tegyétek ki",
+    "songOkTitle": "Erről a dalról posztolhatunk fotót/videót. Koppints ide, ha inkább mégsem szeretnéd.",
+    "songNoTitle": "Erről a dalról nem posztolunk fotót/videót. Koppints ide az engedélyezéshez.",
+    "songOkSaved": "✓ Rendben, erről a dalról posztolhatunk fotót/videót.",
+    "songNoSaved": "✓ Vettük, ezt a dalt nem fogjuk posztolni.",
+    "scopeQuestion": "Csak az egyik dalodat ne tegyük ki, vagy semmit se a mai estéről?",
+    "scopeOne": "Csak egy dalt",
+    "scopeAll": "Semmit a mai estéről",
+    "scopeOneHint": "Koppints a „📷 Mehet a poszt” gombra annál a dalnál, amit inkább ne tegyünk ki."
   },
   "prefs": {
     "notifyTitle": "🔔 Értesítési beállítások",

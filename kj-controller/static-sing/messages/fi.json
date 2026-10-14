@@ -588,7 +588,20 @@
     "no": "🚫 Ei kiitos",
     "hint": "KJ näkee valintasi nimesi vieressä. Voit muuttaa sitä milloin tahansa Omat laulut -osiosta.",
     "saved": "✓ Tallennettu — KJ näkee valintasi.",
-    "saveFailed": "Tallennus epäonnistui — yritä uudelleen."
+    "saveFailed": "Tallennus epäonnistui — yritä uudelleen.",
+    "instagramLabel": "Instagram (valinnainen, jotta voimme tägätä sinut)",
+    "instagramPlaceholder": "@nimesi",
+    "instagramInvalid": "Tuo ei näytä Instagram-käyttäjänimeltä: käytä vain kirjaimia, numeroita, pisteitä ja alaviivoja.",
+    "songOk": "📷 Saa julkaista",
+    "songNo": "📷 Älä julkaise",
+    "songOkTitle": "Kuvia tai videoita tästä biisistä voidaan julkaista. Napauta, jos et halua niitä julkaistavan.",
+    "songNoTitle": "Kuvia tai videoita tästä biisistä ei julkaista. Napauta salliaksesi.",
+    "songOkSaved": "✓ Selvä juttu, kuvia tai videoita tästä biisistä voidaan julkaista.",
+    "songNoSaved": "✓ Selvä juttu, emme julkaise tätä biisiä.",
+    "scopeQuestion": "Haluatko kieltää vain yhden biisin julkaisun vai kaiken tältä illalta?",
+    "scopeOne": "Vain yksi biisi",
+    "scopeAll": "Ei mitään tältä illalta",
+    "scopeOneHint": "Napauta \"📷 Saa julkaista\" sen biisin kohdalla, jota et halua meidän julkaisevan."
   },
   "prefs": {
     "notifyTitle": "🔔 Ilmoitusasetukset",

@@ -588,7 +588,20 @@
     "no": "🚫 Por favor, no",
     "hint": "Tu anfitrión verá tu elección junto a tu nombre. Puedes cambiarla en cualquier momento en Mis canciones.",
     "saved": "✓ Guardado — tu anfitrión puede ver tu elección.",
-    "saveFailed": "No se pudo guardar — por favor, inténtalo de nuevo."
+    "saveFailed": "No se pudo guardar — por favor, inténtalo de nuevo.",
+    "instagramLabel": "Instagram (opcional, para que podamos etiquetarte)",
+    "instagramPlaceholder": "@tunombre",
+    "instagramInvalid": "Eso no parece un usuario de Instagram: usa solo letras, números, puntos y guiones bajos.",
+    "songOk": "📷 Se puede publicar",
+    "songNo": "📷 No publicar",
+    "songOkTitle": "Se podrán publicar fotos o videos de esta canción. Toca si prefieres que no.",
+    "songNoTitle": "No se publicarán fotos ni videos de esta canción. Toca para permitirlo.",
+    "songOkSaved": "✓ De acuerdo, se podrán publicar fotos o videos de esa canción.",
+    "songNoSaved": "✓ Entendido, no publicaremos esa canción.",
+    "scopeQuestion": "¿Prefieres que no publiquemos solo una canción o nada de esta noche?",
+    "scopeOne": "Solo una canción",
+    "scopeAll": "Nada de esta noche",
+    "scopeOneHint": "Toca \"📷 Se puede publicar\" en la canción que prefieras que no publiquemos."
   },
   "prefs": {
     "notifyTitle": "🔔 Configuración de notificaciones",
