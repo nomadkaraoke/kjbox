@@ -57,6 +57,8 @@ kjbox/
     rotation_source.py         # Reads /tmp/rotation_cache.json -> structured rotation data
     rotation_rules_printable.html  # Printable rotation rules (laminate for KJ desk)
     nomad-kjbox-desktop-background-4k.jpg  # 4K source wallpaper (desktop background)
+  tools/
+    night-clips/               # Mac-only: night's phone clips -> reviewed Instagram carousel (see its README)
   kj-controller/               # KJ Remote Controller web app
     app.py                     # App factory (create_app) + entry point
     config.py                  # Constants, platform detection, config loading
