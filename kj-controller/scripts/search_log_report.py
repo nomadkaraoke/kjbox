@@ -99,8 +99,10 @@ def main(argv=None):
     print(f"Search log {db} — last {args.days:g} days: {len(by)} sessions, events {dict(types)}")
     print(f"identification: {dict(ident.most_common())}")
     print(f"choices:        {dict(choices.most_common())}")
-    offers = collections.Counter(f'{e["data"].get("action")[11:]}:{e["data"].get("where")}' for e in events
-                                 if e["type"] == "choice" and e["data"].get("action", "").startswith("make_offer_"))
+    offers = collections.Counter(
+        f'{(e["data"].get("action") or "")[len("make_offer_"):]}:{e["data"].get("where") or "?"}'
+        for e in events
+        if e["type"] == "choice" and (e["data"].get("action") or "").startswith("make_offer_"))
     if offers:
         print(f"make-it offers: {dict(sorted(offers.items()))}")
     fc = collections.Counter(f for fl in flagged.values() for f in fl)
