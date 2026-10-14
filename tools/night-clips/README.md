@@ -92,9 +92,13 @@ you select there is your own call.
 ## Publishing (Playwright)
 
 - The publisher uses a persistent Chromium profile at `~/.night-clips/ig-profile`.
-- **First run:** the window opens instagram.com and the terminal asks you to log in to
-  @nomadkaraoke. Log in by hand, including 2FA. The tool spots the login and carries on (it waits
-  up to 15 minutes). The session is saved in the profile, so you only do this once.
+- **Login:** the saved session in the profile normally means you're already logged in. When it
+  has expired, the tool logs in by itself using `NOMAD_INSTAGRAM_USERNAME`,
+  `NOMAD_INSTAGRAM_PASSWORD` and `NOMAD_INSTAGRAM_2FA_SECRET` (the authenticator-app secret; the
+  6-digit code is generated with `nightclips/totp.py`). These are set in the nomadkaraoke
+  workspace `.envrc` and loaded by direnv. Nothing is ever printed. If they aren't set, or
+  Instagram asks for anything else (a suspicious-login check, a captcha, an emailed code), the
+  terminal asks you to finish logging in by hand and waits up to 15 minutes.
 - **Steps:** Create → Post → upload the selected files in order → "Original" crop → Next → Next →
   caption. It **stops before Share**. Check the order, crop and caption, then click Share
   yourself.
