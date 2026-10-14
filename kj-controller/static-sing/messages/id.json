@@ -588,7 +588,20 @@
     "no": "🚫 Tolong jangan",
     "hint": "Host Anda akan melihat pilihan ini di sebelah nama Anda. Anda bisa mengubahnya kapan saja di menu Lagu saya.",
     "saved": "✓ Tersimpan — host Anda bisa melihat pilihan Anda.",
-    "saveFailed": "Gagal menyimpan — silakan coba lagi."
+    "saveFailed": "Gagal menyimpan — silakan coba lagi.",
+    "instagramLabel": "Instagram (opsional, biar bisa kami tag)",
+    "instagramPlaceholder": "@namakamu",
+    "instagramInvalid": "Format username Instagram kurang pas: hanya huruf, angka, titik, dan garis bawah.",
+    "songOk": "📷 Boleh diunggah",
+    "songNo": "📷 Jangan unggah",
+    "songOkTitle": "Foto/video lagu ini mungkin diunggah. Ketuk jika kamu tidak ingin diunggah.",
+    "songNoTitle": "Foto/video lagu ini tidak akan diunggah. Ketuk untuk mengizinkan.",
+    "songOkSaved": "✓ Sip, foto/video lagu itu boleh diunggah.",
+    "songNoSaved": "✓ Oke, kami tidak akan mengunggah lagu itu.",
+    "scopeQuestion": "Jangan unggah satu lagu saja, atau sama sekali tidak untuk malam ini?",
+    "scopeOne": "Hanya satu lagu",
+    "scopeAll": "Jangan unggah apa pun malam ini",
+    "scopeOneHint": "Ketuk \"📷 Boleh diunggah\" pada lagu yang tidak ingin kamu tampilkan."
   },
   "prefs": {
     "notifyTitle": "🔔 Pengaturan notifikasi",

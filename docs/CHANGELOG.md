@@ -19,6 +19,31 @@ Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](a
 - New search-log choices `make_offer_shown` / `make_offer_tap` (`where`: `top_card`, `sticky_bar`,
   `bottom_link`). `scripts/search_log_report.py` prints a breakdown. Design: `docs/SONG-IDENTIFICATION.md` D13.
 
+## 2026-10-14 - Per-song photo/video consent + Instagram handle (v0.131.0)
+
+- **Why:** a singer flipped their photo consent from yes to no mid-night because ONE song didn't go
+  well. They meant "not that song", but the only control was night-wide.
+- **Singer (`/sing`, My songs):** each of the singer's own songs (queued or sung, not friends' songs)
+  has a 📷 **OK to post / Don't post** toggle. It follows their night choice until tapped, and tapping
+  it back to match the night choice clears the override. Changing the night choice from yes to no
+  after singing asks **"Just one song" or "Nothing from tonight"**. Picking "just one song" opens the
+  sung list and keeps the night choice as yes.
+- **Instagram handle:** optional field under a "yes" ("so we can tag you"). It's stored in
+  `localStorage: sing_instagram`, sent with `/sing/submit` and `/sing/photo-consent`, and kept in
+  `singer_photo_consent.instagram`.
+- **KJ:** the 📷 marker now opens a menu: OK all night, No photos all night, OK for this song only,
+  Don't post THIS song, Clear song override. A song override shows a purple ♪ badge, and the marker
+  shows the effective consent for that performance. A singer's own song "no" also shows here.
+  Merging "no" with anything gives "no".
+- **Storage (auto-migrated):** `sing_requests.media_consent` holds the singer's own override.
+  `song_media_consent` holds KJ overrides keyed by `(entry_id, entry_created_at)`, because entry
+  ids get reused across nights. `photo_consent_events` is an append-only per-night log of every
+  consent and handle change, so past nights resolve correctly after the per-name row is overwritten.
+- **API:** `POST /sing/song-consent`, `POST /rotation/entry/media-consent`, and
+  `GET /history/night-media?night=YYYY-MM-DD`. The last returns each sung song with each performer's
+  resolved consent, the reason and handle, and whether the song is `postable`. It's for the
+  `tools/night-clips` Instagram tool. Resolution logic lives in `media_consent.py`.
+
 ## 2026-10-09 - Night Log: review any past karaoke night (v0.129.0)
 
 - New **Night Log** in the KJ UI: an **Open** button below Song Stats (advanced mode) opens a wide modal.

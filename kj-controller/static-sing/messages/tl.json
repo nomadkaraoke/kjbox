@@ -588,7 +588,20 @@
     "no": "🚫 Huwag po",
     "hint": "Makikita ng host ang pinili mo sa tabi ng pangalan mo. Pwede mo itong baguhin anumang oras sa Mga kanta ko.",
     "saved": "✓ Na-save na — makikita ng host ang pinili mo.",
-    "saveFailed": "Hindi na-save — pakisubukan ulit."
+    "saveFailed": "Hindi na-save — pakisubukan ulit.",
+    "instagramLabel": "Instagram (opsyonal, para ma-tag ka namin)",
+    "instagramPlaceholder": "@iyongpangalan",
+    "instagramInvalid": "Hindi ito mukhang Instagram handle: mga titik, numero, tuldok, at underscore lang.",
+    "songOk": "📷 Pwedeng i-post",
+    "songNo": "📷 Huwag i-post",
+    "songOkTitle": "Maaaring i-post ang mga litrato/video ng kantang ito. Pindutin kung mas gusto mong huwag i-post ang mga ito.",
+    "songNoTitle": "Hindi ipo-post ang mga litrato/video ng kantang ito. Pindutin para payagan.",
+    "songOkSaved": "✓ Sige, maaaring i-post ang mga litrato/video ng kantang 'yan.",
+    "songNoSaved": "✓ Naintindihan, hindi namin ipo-post ang kantang 'yan.",
+    "scopeQuestion": "Huwag i-post ang isa lang sa mga kanta mo, o wala talagang ipo-post mula ngayong gabi?",
+    "scopeOne": "Isang kanta lang",
+    "scopeAll": "Kahit ano mula ngayong gabi",
+    "scopeOneHint": "Pindutin ang \"📷 Pwedeng i-post\" sa kantang mas gusto mong huwag naming i-post."
   },
   "prefs": {
     "notifyTitle": "🔔 Mga setting ng notification",

@@ -588,7 +588,20 @@
     "no": "🚫 Helst inte",
     "hint": "Din värd ser ditt val bredvid ditt namn. Du kan ändra det när som helst under Mina låtar.",
     "saved": "✓ Sparat — din värd kan se ditt val.",
-    "saveFailed": "Det gick inte att spara — försök igen."
+    "saveFailed": "Det gick inte att spara — försök igen.",
+    "instagramLabel": "Instagram (valfritt, så att vi kan tagga dig)",
+    "instagramPlaceholder": "@dittnamn",
+    "instagramInvalid": "Det där ser inte ut som ett Instagram-användarnamn: använd bara bokstäver, siffror, punkter och understreck.",
+    "songOk": "📷 Får publiceras",
+    "songNo": "📷 Publicera inte",
+    "songOkTitle": "Foton/videor från den här låten kan komma att läggas upp. Tryck om du hellre vill att vi låter bli.",
+    "songNoTitle": "Foton/videor från den här låten läggs inte upp. Tryck för att tillåta det.",
+    "songOkSaved": "✓ Okej, foton/videor från den låten kan komma att läggas upp.",
+    "songNoSaved": "✓ Uppfattat, vi lägger inte upp den låten.",
+    "scopeQuestion": "Gäller det bara en av dina låtar, eller vill du inte att vi lägger upp något alls från i kväll?",
+    "scopeOne": "Bara en låt",
+    "scopeAll": "Inget från i kväll",
+    "scopeOneHint": "Tryck på \"📷 Får publiceras\" på låten du helst inte vill att vi lägger upp."
   },
   "prefs": {
     "notifyTitle": "🔔 Aviseringsinställningar",

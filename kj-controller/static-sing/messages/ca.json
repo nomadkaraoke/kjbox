@@ -588,7 +588,20 @@
     "no": "🚫 Prefereixo que no",
     "hint": "L'amfitrió veu la teva elecció al costat del teu nom. Pots canviar-ho en qualsevol moment des de Les meves cançons.",
     "saved": "✓ Desat — l'amfitrió pot veure la teva elecció.",
-    "saveFailed": "No s'ha pogut desar — si us plau, torna-ho a provar."
+    "saveFailed": "No s'ha pogut desar — si us plau, torna-ho a provar.",
+    "instagramLabel": "Instagram (opcional, perquè et puguem etiquetar)",
+    "instagramPlaceholder": "@elteunom",
+    "instagramInvalid": "Això no sembla un nom d'usuari d'Instagram: només lletres, números, punts i guions baixos.",
+    "songOk": "📷 Es pot publicar",
+    "songNo": "📷 No publicar",
+    "songOkTitle": "Es poden publicar fotos o vídeos d'aquesta cançó. Toca si prefereixes que no es publiquin.",
+    "songNoTitle": "No es publicaran fotos ni vídeos d'aquesta cançó. Toca per permetre-ho.",
+    "songOkSaved": "✓ D'acord, es podran publicar fotos o vídeos d'aquesta cançó.",
+    "songNoSaved": "✓ Entesos, no publicarem aquesta cançó.",
+    "scopeQuestion": "Prefereixes que no publiquem només una de les teves cançons o res d'aquesta nit?",
+    "scopeOne": "Només una cançó",
+    "scopeAll": "Res d'aquesta nit",
+    "scopeOneHint": "Toca «📷 Es pot publicar» a la cançó que prefereixes que no publiquem."
   },
   "prefs": {
     "notifyTitle": "🔔 Configuració de notificacions",

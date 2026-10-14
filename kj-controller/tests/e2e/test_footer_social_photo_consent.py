@@ -278,11 +278,14 @@ class TestKjRotationMarker:
         after = """el => getComputedStyle(el, '::after').content"""
         assert rows.nth(2).locator(".rotation-photo-consent").evaluate(after) == '"?"'
         assert rows.nth(1).locator(".rotation-photo-consent").evaluate(after) == '""'
-        # Click toggles: yes → no, no → yes, unknown → yes. (The stubbed
-        # response carries no entries, so the rows don't re-render between clicks.)
-        rows.nth(0).locator(".rotation-photo-consent").click()
-        rows.nth(1).locator(".rotation-photo-consent").click()
-        rows.nth(2).locator(".rotation-photo-consent").click()
+        # Click opens a menu (night-wide OK/no, or this song only).
+        # The stubbed response carries no entries, so rows don't re-render.
+        def pick(row, label):
+            rows.nth(row).locator(".rotation-photo-consent").click()
+            page.locator(".photo-consent-menu button", has_text=label).click()
+        pick(0, "No photos all night")
+        pick(1, "OK all night")
+        pick(2, "OK all night")
         for _ in range(50):
             if len(posted) >= 3:
                 break

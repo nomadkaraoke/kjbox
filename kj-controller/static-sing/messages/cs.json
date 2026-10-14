@@ -588,7 +588,20 @@
     "no": "🚫 Prosím, ne",
     "hint": "Tvůj KJ uvidí tvou volbu vedle tvého jména. Můžeš ji kdykoliv změnit v sekci Moje písně.",
     "saved": "✓ Uloženo — tvůj KJ vidí tvou volbu.",
-    "saveFailed": "Nepodařilo se to uložit — zkus to prosím znovu."
+    "saveFailed": "Nepodařilo se to uložit — zkus to prosím znovu.",
+    "instagramLabel": "Instagram (nepovinné, abychom tě mohli označit)",
+    "instagramPlaceholder": "@tvojejmeno",
+    "instagramInvalid": "Tohle nevypadá jako uživatelské jméno na Instagramu: povolená jsou jen písmena, čísla, tečky a podtržítka.",
+    "songOk": "📷 Lze sdílet",
+    "songNo": "📷 Nesdílet",
+    "songOkTitle": "Fotky a videa z téhle písničky můžeme zveřejnit. Klepni, pokud si to raději nepřeješ.",
+    "songNoTitle": "Fotky ani videa z téhle písničky nebudeme zveřejňovat. Klepnutím to povolíš.",
+    "songOkSaved": "✓ Jasně, fotky a videa z téhle písničky můžeme zveřejnit.",
+    "songNoSaved": "✓ Jasně, tuhle písničku sdílet nebudeme.",
+    "scopeQuestion": "Nechceš zveřejnit jen jednu konkrétní písničku, nebo radši vůbec nic z dneška?",
+    "scopeOne": "Jen jednu písničku",
+    "scopeAll": "Nic z dnešního večera",
+    "scopeOneHint": "Klepni na „📷 Lze sdílet“ u písničky, kterou raději nechceš zveřejnit."
   },
   "prefs": {
     "notifyTitle": "🔔 Nastavení upozornění",

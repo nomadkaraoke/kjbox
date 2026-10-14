@@ -588,7 +588,20 @@
     "no": "🚫 还是不要了",
     "hint": "主持人会在你的名字旁边看到你的选择。你可以随时在“我的歌曲”里修改。",
     "saved": "✓ 已保存 — 主持人能看到你的选择。",
-    "saveFailed": "保存失败 — 请重试。"
+    "saveFailed": "保存失败 — 请重试。",
+    "instagramLabel": "Instagram（选填，方便我们 @ 你）",
+    "instagramPlaceholder": "@yourname",
+    "instagramInvalid": "这看起来不太像 Instagram 账号：只能包含字母、数字、点号和下划线。",
+    "songOk": "📷 可以发布",
+    "songNo": "📷 请勿发布",
+    "songOkTitle": "这首歌的照片/视频可能会发布。如果不想被发，点击可更改。",
+    "songNoTitle": "这首歌的照片/视频不会发布。点击可允许发布。",
+    "songOkSaved": "✓ 好的，这首歌的照片/视频可能会发布。",
+    "songNoSaved": "✓ 收到，我们不会发这首歌的内容。",
+    "scopeQuestion": "是某首歌不想发，还是今晚的所有内容都别发？",
+    "scopeOne": "仅某一首歌",
+    "scopeAll": "今晚的所有内容都别发",
+    "scopeOneHint": "如果有哪首歌不想让我们发，请点击那首歌上的“📷 可以发布”。"
   },
   "prefs": {
     "notifyTitle": "🔔 通知设置",

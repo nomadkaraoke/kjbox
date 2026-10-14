@@ -588,7 +588,20 @@
     "no": "🚫 Lütfen paylaşılmasın",
     "hint": "Sunucun seçimini adının yanında görür. Bunu istediğin zaman Şarkılarım'dan değiştirebilirsin.",
     "saved": "✓ Kaydedildi — sunucun seçimini görebilir.",
-    "saveFailed": "Kaydedilemedi — lütfen tekrar dene."
+    "saveFailed": "Kaydedilemedi — lütfen tekrar dene.",
+    "instagramLabel": "Instagram (isteğe bağlı, seni etiketleyebilmemiz için)",
+    "instagramPlaceholder": "@adin",
+    "instagramInvalid": "Bu geçerli bir Instagram kullanıcı adına benzemiyor: yalnızca harf, rakam, nokta ve alt çizgi kullanabilirsin.",
+    "songOk": "📷 Paylaşılabilir",
+    "songNo": "📷 Paylaşma",
+    "songOkTitle": "Bu şarkının fotoğraf/videoları paylaşılabilir. Paylaşılmasını istemiyorsan dokun.",
+    "songNoTitle": "Bu şarkının fotoğraf/videoları paylaşılmayacak. İzin vermek için dokun.",
+    "songOkSaved": "✓ Tamamdır, bu şarkının fotoğraf/videoları paylaşılabilir.",
+    "songNoSaved": "✓ Anlaşıldı, bu şarkıyı paylaşmayacağız.",
+    "scopeQuestion": "Sadece tek bir şarkın mı, yoksa bu geceden hiçbir şey mi paylaşılmasın?",
+    "scopeOne": "Sadece bir şarkı",
+    "scopeAll": "Bu geceden hiçbir şey paylaşılmasın",
+    "scopeOneHint": "Paylaşılmasını istemediğin şarkının yanındaki \"📷 Paylaşılabilir\" butonuna dokun."
   },
   "prefs": {
     "notifyTitle": "🔔 Bildirim ayarları",

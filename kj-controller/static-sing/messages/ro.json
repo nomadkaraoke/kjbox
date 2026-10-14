@@ -588,7 +588,20 @@
     "no": "🚫 Te rog, nu",
     "hint": "Gazda îți vede alegerea lângă nume. O poți schimba oricând din Melodiile mele.",
     "saved": "✓ Salvat — gazda îți poate vedea alegerea.",
-    "saveFailed": "Nu s-a putut salva — te rog încearcă din nou."
+    "saveFailed": "Nu s-a putut salva — te rog încearcă din nou.",
+    "instagramLabel": "Instagram (opțional, ca să-ți dăm tag)",
+    "instagramPlaceholder": "@numeletau",
+    "instagramInvalid": "Nu pare să fie un cont de Instagram valid: folosește doar litere, cifre, puncte și caractere de subliniere (_).",
+    "songOk": "📷 Permite postarea",
+    "songNo": "📷 Nu posta",
+    "songOkTitle": "Fotografiile/videoclipurile de la această piesă pot fi postate. Apasă dacă preferi să nu le postăm.",
+    "songNoTitle": "Fotografiile/videoclipurile de la această piesă nu vor fi postate. Apasă pentru a le permite.",
+    "songOkSaved": "✓ În regulă, fotografiile/videoclipurile de la piesa respectivă pot fi postate.",
+    "songNoSaved": "✓ Am reținut, nu vom posta piesa respectivă.",
+    "scopeQuestion": "Să nu postăm doar una dintre piese sau nimic din seara asta?",
+    "scopeOne": "Doar o melodie",
+    "scopeAll": "Nimic din seara asta",
+    "scopeOneHint": "Apasă pe „📷 Permite postarea” la piesa pe care preferi să n-o postăm."
   },
   "prefs": {
     "notifyTitle": "🔔 Setări notificări",

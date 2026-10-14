@@ -28,7 +28,10 @@ from flask import (
     session,
     url_for,
 )
+from sing_store import SingStore
 from wait_estimate import compute_all_estimates, compute_estimate
+
+_normalize_instagram = SingStore.normalize_instagram
 
 
 sing_bp = Blueprint(
@@ -1366,6 +1369,12 @@ def submit():
     photo_consent = data.get("photo_consent")
     if photo_consent not in (None, "", "yes", "no"):
         return _reject("photo_consent must be 'yes' or 'no'")
+    instagram = data.get("instagram")
+    if instagram is not None:
+        try:
+            instagram = _normalize_instagram(instagram)
+        except ValueError as e:
+            return _reject(str(e))
     additional_raw = data.get("additional_singers")
     additional, additional_err = _validate_additional_singers(additional_raw)
     if additional_err:
@@ -1456,7 +1465,11 @@ def submit():
     # The phone owner's choice is theirs alone — never apply it to a friend.
     if photo_consent and not for_friend:
         try:
-            store.set_photo_consent(singer_name, photo_consent, source="singer")
+            if photo_consent == "yes" and "instagram" in data:
+                store.set_photo_consent(singer_name, photo_consent, source="singer",
+                                        instagram=instagram)
+            else:
+                store.set_photo_consent(singer_name, photo_consent, source="singer")
         except Exception:
             current_app.logger.exception("submit: photo consent write failed")
 
@@ -2414,6 +2427,12 @@ def photo_consent():
     consent = data.get("consent")
     if consent not in ("yes", "no"):
         return jsonify({"error": "consent must be 'yes' or 'no'"}), 400
+    instagram = None
+    if "instagram" in data:
+        try:
+            instagram = _normalize_instagram(data.get("instagram"))
+        except ValueError as e:
+            return jsonify({"error": str(e)}), 400
     items = data.get("items") or []
     if not isinstance(items, list):
         return jsonify({"error": "items must be a list"}), 400
@@ -2435,8 +2454,44 @@ def photo_consent():
             names.append(req["singer_name"])
 
     for name in names:
-        store.set_photo_consent(name, consent, source="singer")
+        if "instagram" in data and consent == "yes":
+            store.set_photo_consent(name, consent, source="singer", instagram=instagram)
+        else:
+            store.set_photo_consent(name, consent, source="singer")
     return jsonify({"success": True, "updated": len(names)})
+
+
+@sing_bp.route("/song-consent", methods=["POST"])
+def song_consent():
+    """Singer sets/clears media consent for ONE of their songs tonight
+    ("don't post this one") without touching their night-wide choice.
+
+    Ownership is proven with the request's edit_token, like /photo-consent.
+    Body: ``{consent: "yes"|"no"|null, item: {id, edit_token}}``.
+    """
+    store = getattr(current_app, "sing_store", None)
+    if store is None:
+        return jsonify({"error": "not_configured"}), 503
+    if _singer_rate_limited(request):
+        return jsonify({"error": "rate_limited"}), 429
+    token = _extract_token()
+    if not token or not _is_token_valid(store, token):
+        return jsonify({"error": "not_open"}), 403
+    data = request.get_json(silent=True) or {}
+    consent = data.get("consent")
+    if consent not in ("yes", "no", None):
+        return jsonify({"error": "consent must be 'yes', 'no' or null"}), 400
+    item = data.get("item")
+    if not isinstance(item, dict):
+        return jsonify({"error": "item is required"}), 400
+    req = store.get_request(item.get("id"))
+    stored = (req or {}).get("edit_token") or ""
+    if (req is None or req.get("token") != token or not stored
+            or not _belongs_to_current_night(store, req)
+            or not secrets.compare_digest(str(item.get("edit_token") or ""), str(stored))):
+        return jsonify({"error": "not_found"}), 404
+    updated = store.set_request_media_consent(req["id"], consent)
+    return jsonify({"success": True, "request": _public_request_view(updated)})
 
 
 @sing_bp.route("/rename", methods=["POST"])
@@ -2740,6 +2795,8 @@ def _public_request_view(req):
         # A pending "change" names the request it will replace so the singer's
         # list can say "replaces X" instead of showing two unrelated songs.
         "supersedes_request_id": req.get("supersedes_request_id"),
+        # The singer's own per-song media-consent override ('yes'|'no'|None).
+        "media_consent": req.get("media_consent"),
     }
     # Tip claims: surface the claimed amount/method so the Tip tab can show
     # "$25 via Venmo — waiting for KJ" without exposing raw source_meta.

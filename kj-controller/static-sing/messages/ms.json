@@ -588,7 +588,20 @@
     "no": "🚫 Tolong jangan",
     "hint": "Hos anda akan melihat pilihan anda di sebelah nama anda. Anda boleh menukarnya pada bila-bila masa dari Lagu saya.",
     "saved": "✓ Disimpan — hos anda boleh melihat pilihan anda.",
-    "saveFailed": "Tidak dapat disimpan — sila cuba lagi."
+    "saveFailed": "Tidak dapat disimpan — sila cuba lagi.",
+    "instagramLabel": "Instagram (pilihan, supaya kami boleh tag anda)",
+    "instagramPlaceholder": "@namaanda",
+    "instagramInvalid": "Format pemegang Instagram tidak sah: gunakan huruf, nombor, titik dan garis bawah sahaja.",
+    "songOk": "📷 Boleh siarkan",
+    "songNo": "📷 Jangan siarkan",
+    "songOkTitle": "Foto/video untuk lagu ini mungkin disiarkan. Ketik jika anda tidak mahu ia disiarkan.",
+    "songNoTitle": "Foto/video untuk lagu ini tidak akan disiarkan. Ketik untuk membenarkannya.",
+    "songOkSaved": "✓ Baik, foto/video untuk lagu itu boleh disiarkan.",
+    "songNoSaved": "✓ Faham, kami tidak akan siarkan lagu itu.",
+    "scopeQuestion": "Jangan siarkan satu lagu sahaja, atau jangan siarkan apa-apa untuk malam ini?",
+    "scopeOne": "Satu lagu sahaja",
+    "scopeAll": "Jangan siarkan apa-apa untuk malam ini",
+    "scopeOneHint": "Ketik \"📷 Boleh siarkan\" pada lagu yang anda tidak mahu kami siarkan."
   },
   "prefs": {
     "notifyTitle": "🔔 Tetapan pemberitahuan",

@@ -588,7 +588,20 @@
     "no": "🚫 Non merci",
     "hint": "Ton hôte voit ton choix à côté de ton nom. Tu peux le modifier à tout moment depuis Mes chansons.",
     "saved": "✓ Enregistré — ton hôte peut voir ton choix.",
-    "saveFailed": "Impossible d'enregistrer — réessaie s'il te plaît."
+    "saveFailed": "Impossible d'enregistrer — réessaie s'il te plaît.",
+    "instagramLabel": "Instagram (facultatif, pour qu'on puisse t'identifier)",
+    "instagramPlaceholder": "@tonpseudo",
+    "instagramInvalid": "Ça ne ressemble pas à un pseudo Instagram : lettres, chiffres, points et tirets bas uniquement.",
+    "songOk": "📷 OK pour publier",
+    "songNo": "📷 Ne pas publier",
+    "songOkTitle": "Les photos/vidéos de ce morceau peuvent être publiées. Appuie si tu préfères qu'elles ne le soient pas.",
+    "songNoTitle": "Les photos/vidéos de ce morceau ne seront pas publiées. Appuie pour les autoriser.",
+    "songOkSaved": "✓ C'est bon, les photos/vidéos de ce morceau pourront être publiées.",
+    "songNoSaved": "✓ C'est noté, on ne publiera pas ce morceau.",
+    "scopeQuestion": "Ne pas publier juste l'un de tes morceaux, ou rien du tout de la soirée ?",
+    "scopeOne": "Juste un morceau",
+    "scopeAll": "Rien de la soirée",
+    "scopeOneHint": "Appuie sur « 📷 OK pour publier » sur le morceau que tu préfères qu'on ne publie pas."
   },
   "prefs": {
     "notifyTitle": "🔔 Paramètres de notification",

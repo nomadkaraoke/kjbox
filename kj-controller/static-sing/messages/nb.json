@@ -588,7 +588,20 @@
     "no": "🚫 Helst ikke",
     "hint": "Verten din ser valget ditt ved siden av navnet ditt. Du kan endre det når som helst under Mine sanger.",
     "saved": "✓ Lagret — verten din kan se valget ditt.",
-    "saveFailed": "Kunne ikke lagre — prøv igjen."
+    "saveFailed": "Kunne ikke lagre — prøv igjen.",
+    "instagramLabel": "Instagram (valgfritt, så vi kan tagge deg)",
+    "instagramPlaceholder": "@dittnavn",
+    "instagramInvalid": "Det ser ikke ut som et Instagram-brukernavn: kun bokstaver, tall, punktum og understrek.",
+    "songOk": "📷 OK å legge ut",
+    "songNo": "📷 Ikke legg ut",
+    "songOkTitle": "Bilder/videoer av denne sangen kan bli lagt ut. Trykk hvis du helst ikke vil det.",
+    "songNoTitle": "Bilder/videoer av denne sangen blir ikke lagt ut. Trykk for å tillate det.",
+    "songOkSaved": "✓ OK, bilder/videoer av den sangen kan legges ut.",
+    "songNoSaved": "✓ Den er grei, vi legger ikke ut den sangen.",
+    "scopeQuestion": "Vil du ikke at vi skal legge ut én bestemt sang, eller ingenting fra i kveld?",
+    "scopeOne": "Bare én sang",
+    "scopeAll": "Ingenting fra i kveld",
+    "scopeOneHint": "Trykk på «📷 OK å legge ut» på sangen du helst ikke vil at vi skal legge ut."
   },
   "prefs": {
     "notifyTitle": "🔔 Varslingsinnstillinger",

@@ -588,7 +588,20 @@
     "no": "🚫 Bitte nicht",
     "hint": "Dein Host sieht deine Auswahl neben deinem Namen. Du kannst sie jederzeit unter „Meine Songs“ ändern.",
     "saved": "✓ Gespeichert — dein Host kann deine Auswahl sehen.",
-    "saveFailed": "Das konnte nicht gespeichert werden — bitte versuche es noch einmal."
+    "saveFailed": "Das konnte nicht gespeichert werden — bitte versuche es noch einmal.",
+    "instagramLabel": "Instagram (optional, damit wir dich markieren können)",
+    "instagramPlaceholder": "@deinname",
+    "instagramInvalid": "Das sieht nicht nach einem Instagram-Namen aus: Bitte nur Buchstaben, Zahlen, Punkte und Unterstriche verwenden.",
+    "songOk": "📷 Darf gepostet werden",
+    "songNo": "📷 Nicht posten",
+    "songOkTitle": "Fotos/Videos von diesem Song dürfen gepostet werden. Tippe hier, falls du das lieber nicht möchtest.",
+    "songNoTitle": "Fotos/Videos von diesem Song werden nicht gepostet. Tippe hier, um es zu erlauben.",
+    "songOkSaved": "✓ Alles klar, Fotos/Videos von diesem Song dürfen gepostet werden.",
+    "songNoSaved": "✓ Alles klar, wir posten diesen Song nicht.",
+    "scopeQuestion": "Sollen wir nur einen bestimmten Song nicht posten oder gar nichts von heute Abend?",
+    "scopeOne": "Nur einen bestimmten Song nicht",
+    "scopeAll": "Gar nichts von heute Abend",
+    "scopeOneHint": "Tippe bei dem Song, den wir lieber nicht posten sollen, auf „📷 Darf gepostet werden“."
   },
   "prefs": {
     "notifyTitle": "🔔 Benachrichtigungseinstellungen",

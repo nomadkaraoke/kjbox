@@ -588,7 +588,20 @@
     "no": "🚫 Por favor, não",
     "hint": "Seu anfitrião vê sua escolha ao lado do seu nome. Você pode mudar a qualquer momento em Minhas músicas.",
     "saved": "✓ Salvo — seu anfitrião pode ver sua escolha.",
-    "saveFailed": "Não foi possível salvar — por favor, tente de novo."
+    "saveFailed": "Não foi possível salvar — por favor, tente de novo.",
+    "instagramLabel": "Instagram (opcional, para podermos marcar você)",
+    "instagramPlaceholder": "@seunome",
+    "instagramInvalid": "Isso não parece um nome de usuário do Instagram: use apenas letras, números, pontos e sublinhados.",
+    "songOk": "📷 Pode postar",
+    "songNo": "📷 Não postar",
+    "songOkTitle": "Fotos/vídeos desta música podem ser postados. Toque se preferir que não sejam.",
+    "songNoTitle": "Fotos/vídeos desta música não serão postados. Toque para permitir.",
+    "songOkSaved": "✓ Beleza, fotos/vídeos dessa música podem ser postados.",
+    "songNoSaved": "✓ Entendido, não vamos postar essa música.",
+    "scopeQuestion": "Não postar apenas uma das suas músicas ou nada de hoje à noite?",
+    "scopeOne": "Apenas uma música",
+    "scopeAll": "Nada de hoje à noite",
+    "scopeOneHint": "Toque em \"📷 Pode postar\" na música que você prefere que a gente não poste."
   },
   "prefs": {
     "notifyTitle": "🔔 Configurações de notificação",

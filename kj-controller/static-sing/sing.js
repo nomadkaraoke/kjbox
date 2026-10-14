@@ -232,6 +232,8 @@ const state = {
   phone: LS.get("sing_phone"),
   // Social-media photo/video consent: "yes" | "no" | "" (not asked yet).
   photoConsent: LS.get("sing_photo_consent"),
+  // Optional Instagram handle (only sent with a "yes"), so the host can tag them.
+  instagram: LS.get("sing_instagram"),
   // Notification / social-media preference sections: undefined = default
   // (open until set up), true/false = the singer toggled it this page load.
   prefOpen: {},
@@ -1235,8 +1237,9 @@ function renderTip() {
 function switchIdentity() {
   forgetIdentity();
   rotateDeviceId();
-  state.name = state.phone = state.photoConsent = "";
+  state.name = state.phone = state.photoConsent = state.instagram = "";
   LS.set("sing_name", ""); LS.set("sing_phone", ""); LS.set("sing_photo_consent", "");
+  LS.set("sing_instagram", "");
   state._identityDraft = null;
   state._identityMode = "setup";
   state._identityReturnStep = "search";
@@ -3064,7 +3067,10 @@ function renderConfirm() {
       // A friend's song goes in under their name as typed — and the phone
       // owner's photo consent is theirs alone, so it never rides along.
       if (friend) payload.for_friend = true;
-      else if (askPhotoConsent() && state.photoConsent) payload.photo_consent = state.photoConsent;
+      else if (askPhotoConsent() && state.photoConsent) {
+        payload.photo_consent = state.photoConsent;
+        if (state.photoConsent === "yes" && state.instagram) payload.instagram = state.instagram;
+      }
 
       const data = await submit(payload);
       state.request = data.request;
@@ -3563,6 +3569,8 @@ function _renderSongCard(item, ctx = {}) {
       onclick: (e) => { e.stopPropagation(); openEntryPreview(req.linked_entry_id, song); },
     }, t("mySongs.preview")));
   }
+  const songConsent = _songConsentButton(item);
+  if (songConsent) actions.appendChild(songConsent);
   const finish = () => { if (actions.childNodes.length) card.appendChild(actions); return card; };
   // A performed song is read-only — no cancel/change/reorder (the backend would
   // reject them 409 anyway, and there's nothing to change once it's been sung).
@@ -4498,6 +4506,15 @@ function maybeShowPushPrompt() {
       // Re-tapping the current answer changes nothing — don't spend a request
       // on it (2026-09-24: one singer sent 11 identical saves in 10 s → 429s).
       if (v === prev) { status.textContent = t("photoConsent.saved"); return; }
+      // Turning "yes" into "no" after singing often means "not THAT song" —
+      // ask before revoking the whole night (2026-10-14).
+      if (prev === "yes" && v === "no" && _hasSungOwnSong() && !status.dataset.scopeConfirmed) {
+        status.textContent = "";
+        status.appendChild(_consentScopeChooser(status, () => photoBox
+          .querySelector('[data-testid="photo-consent-no"]').click()));
+        return;
+      }
+      delete status.dataset.scopeConfirmed;
       setPhotoConsentLocal(v);
       try {
         await savePhotoConsent(v);
@@ -4506,7 +4523,11 @@ function maybeShowPushPrompt() {
         setPhotoConsentLocal(prev);
         status.textContent = e && e.status === 429 ? t("common.tooManyChanges") : t("photoConsent.saveFailed");
       }
-    }, status, { bare: true });
+    }, status, { bare: true, onHandle: async () => {
+      if (state.photoConsent !== "yes") return;
+      await savePhotoConsent("yes");
+      status.textContent = t("photoConsent.saved");
+    } });
   }
 
   // Both are persistent preferences: open by default until set up (at least
@@ -4572,15 +4593,94 @@ async function savePhotoConsent(consent) {
   await fetchJson(`${BASE}/photo-consent`, {
     method: "POST",
     // device_id → this phone's own rate-limit budget, not the venue's shared IP.
-    body: JSON.stringify({ consent, device_id: DEVICE_ID, items: items.slice(-MY_REQUESTS_MAX) }),
+    body: JSON.stringify({ consent, device_id: DEVICE_ID, items: items.slice(-MY_REQUESTS_MAX),
+      ...(consent === "yes" ? { instagram: state.instagram || "" } : {}) }),
   });
+}
+
+// --- Per-song media consent (2026-10-14) -------------------------------------
+// "Yes for tonight, but not THAT song": each of the singer's own songs gets a
+// 📷 toggle. Unset = follows the night choice; tapping stores an override for
+// just that song (cleared again when it matches the night choice).
+
+function _isOwnRequest(id) {
+  const store = _readMyRequestStore();
+  if (!store || store.token !== TOKEN) return false;
+  if (store.friends && store.friends[String(id)]) return false;
+  return !!(store.tokens && store.tokens[String(id)]);
+}
+
+function _hasSungOwnSong() {
+  return (state.mySongs && state.mySongs.items || [])
+    .some((it) => it.performed && it.request && _isOwnRequest(it.request.id));
+}
+
+function _songConsentButton(item) {
+  const req = item.request;
+  if (!askPhotoConsent() || !req || !_isOwnRequest(req.id)) return null;
+  if (req.status === "rejected" || req.status === "cancelled" || item.removed) return null;
+  const effective = req.media_consent || state.photoConsent || "";
+  const ok = effective === "yes";
+  const btn = el("button", {
+    type: "button",
+    class: "song-card-action song-consent " + (ok ? "song-consent-yes" : "song-consent-no"),
+    "data-testid": "song-consent",
+    "data-consent": effective || "unknown",
+    "aria-pressed": ok ? "true" : "false",
+    title: ok ? t("photoConsent.songOkTitle") : t("photoConsent.songNoTitle"),
+    onclick: async (e) => {
+      e.stopPropagation();
+      const next = ok ? "no" : "yes";
+      // Matching the night choice clears the override instead of pinning it.
+      const value = next === state.photoConsent ? null : next;
+      btn.disabled = true;
+      try {
+        const data = await fetchJson(`${BASE}/song-consent`, {
+          method: "POST",
+          body: JSON.stringify({ consent: value, device_id: DEVICE_ID,
+            item: { id: req.id, edit_token: readEditToken(TOKEN, req.id) } }),
+        });
+        req.media_consent = (data && data.request) ? data.request.media_consent : value;
+        flashMySongsNotice(next === "yes" ? t("photoConsent.songOkSaved")
+          : t("photoConsent.songNoSaved"));
+        if (typeof window.__sing_render === "function") window.__sing_render();
+      } catch (err) {
+        btn.disabled = false;
+        alert(err && err.status === 429 ? t("common.tooManyChanges") : t("photoConsent.saveFailed"));
+      }
+    },
+  }, ok ? t("photoConsent.songOk") : t("photoConsent.songNo"));
+  return btn;
+}
+
+// "Just one song, or everything tonight?" — shown when a singer who already
+// sang flips their night choice from yes to no.
+function _consentScopeChooser(status, proceedEverything) {
+  return el("div", { class: "consent-scope", "data-testid": "consent-scope" },
+    el("p", { class: "consent-scope-question" }, t("photoConsent.scopeQuestion")),
+    el("div", { class: "row" },
+      el("button", { type: "button", class: "btn ghost", "data-testid": "consent-scope-one",
+        onclick: () => {
+          status.textContent = t("photoConsent.scopeOneHint");
+          // Sung songs live in a collapsed <details> — open it to show the toggles.
+          const sung = document.querySelector(".sung-section details");
+          if (sung) sung.open = true;
+          const card = document.querySelector('[data-testid="song-consent"][data-consent="yes"]');
+          if (card && card.scrollIntoView) card.scrollIntoView({ behavior: "smooth", block: "center" });
+        } }, t("photoConsent.scopeOne")),
+      el("button", { type: "button", class: "btn ghost", "data-testid": "consent-scope-all",
+        onclick: () => {
+          status.textContent = "";
+          status.dataset.scopeConfirmed = "1";
+          proceedEverything();
+        } }, t("photoConsent.scopeAll"))));
 }
 
 // Two-button yes/no picker. `onPick(value)` runs on tap; the picker re-marks
 // itself so the choice is visible immediately. `extra` is appended below.
 // If `onPick` returns a promise (a server save), both buttons stay disabled
 // until it settles so rapid taps can't fire a burst of POSTs.
-function photoConsentPicker(onPick, extra, { bare = false } = {}) {
+function photoConsentPicker(onPick, extra, { bare = false, onHandle = null } = {}) {
   // `bare`: no box of its own — it sits inside a preference section box.
   const wrap = el("div", { class: bare ? "photo-consent photo-consent-bare" : "photo-consent",
     "data-testid": "photo-consent" });
@@ -4595,7 +4695,37 @@ function photoConsentPicker(onPick, extra, { bare = false } = {}) {
       b.classList.toggle("selected", on);
       b.setAttribute("aria-pressed", on ? "true" : "false");
     }
+    handleRow.hidden = state.photoConsent !== "yes";
   };
+  // Optional Instagram handle, offered once they've said yes.
+  const handleErr = el("p", { class: "hint photo-consent-handle-error", hidden: "" }, "");
+  const handleInput = el("input", {
+    type: "text", class: "photo-consent-handle-input", "data-testid": "photo-consent-instagram",
+    autocomplete: "off", autocapitalize: "none", spellcheck: "false", maxlength: "64",
+    placeholder: t("photoConsent.instagramPlaceholder"), value: state.instagram || "",
+  });
+  const commitHandle = async () => {
+    const raw = handleInput.value.trim().replace(/^@/, "");
+    if (raw && !/^[A-Za-z0-9._]{1,30}$/.test(raw)) {
+      handleErr.textContent = t("photoConsent.instagramInvalid");
+      handleErr.hidden = false;
+      return;
+    }
+    handleErr.hidden = true;
+    if (raw.toLowerCase() === (state.instagram || "")) return;
+    state.instagram = raw.toLowerCase();
+    LS.set("sing_instagram", state.instagram);
+    if (onHandle) {
+      try { await onHandle(state.instagram); } catch {
+        handleErr.textContent = t("photoConsent.saveFailed");
+        handleErr.hidden = false;
+      }
+    }
+  };
+  handleInput.addEventListener("change", commitHandle);
+  const handleRow = el("label", { class: "photo-consent-handle", hidden: "" },
+    el("span", { class: "photo-consent-handle-label" }, t("photoConsent.instagramLabel")),
+    handleInput, handleErr);
   const btn = (value, label) => el("button", {
     type: "button", class: "btn ghost photo-consent-btn", "data-consent": value,
     "data-testid": `photo-consent-${value}`,
@@ -4613,6 +4743,7 @@ function photoConsentPicker(onPick, extra, { bare = false } = {}) {
     btn("yes", t("photoConsent.yes")),
     btn("no", t("photoConsent.no")),
   ));
+  wrap.appendChild(handleRow);
   wrap.appendChild(el("p", { class: "hint" }, t("photoConsent.hint")));
   if (extra) wrap.appendChild(extra);
   mark();
