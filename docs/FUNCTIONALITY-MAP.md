@@ -1238,7 +1238,7 @@ All paths are relative to `kj-controller/` unless prefixed with `desktop/`, `doc
 | `overlay-display.service` (`desktop/overlay-display.service`) | simple, `Restart=always` (5s) | `desktop/overlay_engine.py`, GTK/Cairo at 30 FPS | polls `overlays.json` mtime every 1s (`overlay_engine.py:34,206,296`); reads `/tmp/rotation_cache.json` (`rotation_source.py`); writes `/tmp/kj-overlay-perf.json` every 1s (`:301`) | Hides or shows overlays depending on `karaoke_playing` (set by `/play`, stop, fadeout and on_karaoke_end). | PerfSampler toggle `apply_toggle('overlay')` (`perf_sampler.py:318-321`) |
 | `rotation-display.service` (`docs/MINIPC-SETUP.md:572-590`) | conky | `desktop/rotation.conkyrc` (**no longer in the repo**, so legacy and likely inactive) | none | none | none |
 | `caddy` (`deploy/Caddyfile`, `deploy/install-caddy.sh`) | always on | TLS on :443 → `127.0.0.1:5001`; serves `/static/*` directly; :80 redirects | none | Static assets are served by Caddy, not Flask. | none |
-| `cloudflared`, `x11vnc`, `avahi-daemon` (`docs/MINIPC-SETUP.md:35,723-742`) | always on | tunnel, VNC, mDNS | none | none | none |
+| `cloudflared-nomad` (legacy `cloudflared` pending removal), `x11vnc`, `avahi-daemon` (`docs/MINIPC-SETUP.md:35,723-742`) | always on | tunnel (remote-managed `nomad-kjbox`, MINIPC-SETUP § 2.6), VNC, mDNS | none | none | none |
 | `playability-batch` / `playability-monitor` (transient `systemd-run`, `scripts/playability-run/start.sh`) | manual | full-library playability batch (`playability_batch.py`), Nice 19, CPU quota 200%, own Xvfb; monitor samples every 5 minutes | JSONL manifest | The operator must pause it before a show (`pause.sh`). | manual |
 | No cron jobs | none | none | none | none | none |
 
