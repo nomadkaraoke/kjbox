@@ -1923,6 +1923,16 @@ function renderSearch() {
     ...data,
   });
   const endSearchSession = () => { sid = newSearchId(); };
+  // Make-it discoverability: "Other songs with similar names" is capped until
+  // the singer asks for the rest; each offer is logged once per query.
+  let showAllSimilar = false;
+  const offersShown = new Set();
+  const logOfferShown = (where) => {
+    const key = `${sid}:${(state.query || "").trim()}:${where}`;   // once per query, not per re-render
+    if (offersShown.has(key)) return;
+    offersShown.add(key);
+    logChoice("make_offer_shown", { where });
+  };
   // Pre-fill the make-it form from a correction. state.makePrefill remembers
   // what we last filled (it outlives this view, like the fields themselves), so
   // a tidy or its undo only overwrites a field the singer hasn't edited since.
@@ -1967,6 +1977,7 @@ function renderSearch() {
     searchGen++;
     correction = null;
     resolving = false;
+    showAllSimilar = false;
     prefillMake(null);
     // 700ms (was 300) to match the KJ side — the shared backend live-scrapes,
     // so a longer debounce just trims wasted scrapes. Correctness comes from
@@ -2029,12 +2040,23 @@ function renderSearch() {
     }
     const inResults = (song) => shown.some((g) => sameSong(g, song));
     if (ident.status === "confident" && ident.song) {
-      if (ident.kind === "same") { correction = null; return true; }
+      // Typed (near enough) exactly: no card while the rows show it — but keep
+      // the identification, so "no karaoke version yet" can be said up top.
+      if (ident.kind === "same") {
+        correction = {
+          source: "local", typed: q, kind: "same", karaoke: ident.song.karaoke,
+          corrected: { artist: ident.song.artist, title: ident.song.title },
+          candidates: (ident.candidates || []).filter((c) => !sameSong(c, ident.song)),
+          songs: [], split: null, active: true, inResults: inResults(ident.song),
+        };
+        prefillMake(correctionMakeSource());
+        return true;
+      }
       // Re-applying after the early pass: keep the singer's toggle state and any
       // karaoke rows already fetched for this song (no second fetch).
       const again = prev && prev.corrected && prev.source === "local" && sameSong(prev.corrected, ident.song);
       correction = {
-        source: "local", typed: q, kind: ident.kind,
+        source: "local", typed: q, kind: ident.kind, karaoke: ident.song.karaoke,
         corrected: { artist: ident.song.artist, title: ident.song.title },
         candidates: (ident.candidates || []).filter((c) => !sameSong(c, ident.song)),
         songs: again ? prev.songs : [], split: null, active: again ? prev.active : true,
@@ -2125,6 +2147,70 @@ function renderSearch() {
     update();
   }
 
+  // Make-it is on offer: KJ is taking make-requests, not Simple Mode, and not
+  // swapping an existing song (a make-it is a new gen job).
+  const offerMake = () => state.makeRequestsEnabled && !state.simpleMode && !state.changeRequestId;
+
+  // We know which song the singer means, and there's no karaoke version of it:
+  // the rows (if any) are only other songs with similar names. Only while the
+  // rows are near-misses — with no rows at all the empty-state triage handles it.
+  // The song index's own "karaoke exists" flag vetoes it: then the rows most
+  // likely do hold the song under a name sameSong() can't match ("Killers" vs
+  // "The Killers"), and "no karaoke version yet" would be a lie.
+  function songMissing(rows) {
+    const c = correction;
+    return !!(c && c.corrected && c.active && !c.inResults && !(c.songs || []).length && !c.fetching
+              && c.karaoke !== true && !loading && !resolving && !err && rows.length > 0);
+  }
+
+  // "🎵 Mr. Brightside — The Killers · No karaoke version yet [Make it]" —
+  // above the near-misses, so the singer never has to scroll for make-it.
+  function renderMissingCard() {
+    const c = correction;
+    const notItBtn = (c.candidates || []).length
+      ? el("button", { class: "btn link sing-correction-toggle", "data-testid": "song-not-it",
+                       onclick: (e) => { e.stopPropagation(); notIt(); } }, t("search.notIt"))
+      : null;
+    const keepMine = c.kind === "content" || c.kind === "cosmetic"
+      ? el("button", { class: "btn link sing-correction-toggle", "data-testid": "search-correction-toggle",
+          onclick: (e) => {
+            e.stopPropagation();
+            c.active = false; c.userTouched = true;
+            logChoice("keep_typed", { shown: `${c.corrected.artist} — ${c.corrected.title}` });
+            prefillMake(correctionMakeSource());
+            update();
+          } }, t("search.keepMine"))
+      : null;
+    let action;
+    if (offerMake()) {
+      logOfferShown("top_card");
+      action = el("button", {
+        class: "btn primary sing-missing-make", "data-testid": "song-missing-make",
+        onclick: (e) => {
+          e.stopPropagation();
+          if (!armed()) return;
+          logChoice("make_offer_tap", { where: "top_card" });
+          // The card names the song, so make exactly that one.
+          state.makeArtist = c.corrected.artist;
+          state.makeTitle = c.corrected.title;
+          pickMake();
+        },
+      }, t("search.missingMakeCta"));
+    } else {
+      action = el("p", { class: "hint sing-missing-ask" }, t("search.missingAskKj"));
+    }
+    return el("div", { class: "sing-songcard sing-songcard-missing", "data-testid": "song-missing" },
+      el("div", { class: "sing-songcard-label" }, `🎵 ${t("search.songYouMean")}`),
+      el("div", { class: "sing-songcard-song", "data-testid": "song-card-song" },
+        el("span", { class: "sing-songcard-title" }, c.corrected.title),
+        el("span", { class: "sing-songcard-artist" }, ` — ${c.corrected.artist}`)),
+      el("div", { class: "sing-missing-status" }, t("search.missingStatus")),
+      offerMake() ? el("p", { class: "sing-missing-desc" }, t("search.missingMakeDesc")) : null,
+      action,
+      (keepMine || notItBtn) ? el("div", { class: "sing-songcard-actions" },
+        keepMine, keepMine && notItBtn ? " · " : null, notItBtn) : null);
+  }
+
   // Question 1's own element ("which song do you mean?") — never mixed into the
   // karaoke rows. Shapes:
   //  • alternatives              → "Which song do you mean?" list
@@ -2132,7 +2218,7 @@ function renderSearch() {
   //    line, only when the karaoke rows don't already show that song
   //  • kind completed / content  → "🎵 The song you mean" card (+ "you typed …",
   //    keep-what-I-typed toggle, "not it?")
-  function correctionNotice() {
+  function correctionNotice(rows) {
     if (!correction) return null;
     if (correction.alternatives) {
       if (!correction.alternatives.length) {
@@ -2148,6 +2234,8 @@ function renderSearch() {
         }, `${a.title} — ${a.artist}`)));
     }
     if (!correction.corrected) return null;   // split only: nothing to announce
+    if (songMissing(rows)) return renderMissingCard();
+    if (correction.kind === "same") return null;   // the rows show it
     const song = `${correction.corrected.artist} — ${correction.corrected.title}`;
     const toggle = () => el("button", {
       class: "btn link sing-correction-toggle", "data-testid": "search-correction-toggle",
@@ -2634,7 +2722,7 @@ function renderSearch() {
       el("button", {
         class: "btn link sing-make-offer-btn",
         "data-testid": "make-offer",
-        onclick: () => { state.showMakeForm = true; update(); },
+        onclick: () => { logChoice("make_offer_tap", { where: "bottom_link" }); state.showMakeForm = true; update(); },
       }, t("search.makeOffer")),
     );
   }
@@ -2642,17 +2730,17 @@ function renderSearch() {
   function renderResults() {
     const container = el("div", { class: "results" });
     armAt = Date.now() + armMs();   // freshly-built rows are inert briefly (anti-mis-tap)
+    const corrected = correction && correction.active && correction.songs;
+    const songs = (corrected && corrected.length ? corrected : results.songs) || [];
     // The song card first: it can land (early identification) while karaoke
     // search is still running, and it answers "which song" either way.
-    const notice = correctionNotice();
+    const notice = correctionNotice(songs);
     if (notice) container.appendChild(notice);
+    const missing = songMissing(songs);
     if (loading) container.appendChild(searchingIndicator());
     else if (resolving) container.appendChild(searchingIndicator(
       t(resolving === "describe" ? "search.figuringOut" : "search.checkingSpelling")));
     if (err) container.appendChild(el("p", { class: "error" }, err));
-
-    const corrected = correction && correction.active && correction.songs;
-    const songs = (corrected && corrected.length ? corrected : results.songs) || [];
     // Karaoke rows for the identified song get their own heading, so the two
     // questions stay visibly separate.
     if (!loading && corrected && corrected.length) {
@@ -2664,7 +2752,17 @@ function renderSearch() {
       container.appendChild(renderEmptyStateTriage());
     }
 
-    for (const group of songs) {
+    // The singer's song has no karaoke version: what's left are near-misses —
+    // say so, and keep them short so they don't bury the make-it card.
+    const SIMILAR_CAP = 3;
+    let shownSongs = songs;
+    if (missing) {
+      container.appendChild(el("h3", { class: "sing-results-heading", "data-testid": "similar-heading" },
+        t("search.similarHeading")));
+      if (!showAllSimilar) shownSongs = songs.slice(0, SIMILAR_CAP);
+    }
+
+    for (const group of shownSongs) {
       const isSingle = group.version_count === 1;
       const isExpanded = expandedSongs.has(group.key);
 
@@ -2722,9 +2820,39 @@ function renderSearch() {
       }, ...children));
     }
 
-    if (!loading && songs.length > 0 && state.makeRequestsEnabled && !state.simpleMode
-        && !state.changeRequestId && state.query?.trim().length >= 3) {
+    if (shownSongs.length < songs.length) {
+      container.appendChild(el("button", {
+        class: "sing-versions-toggle sing-similar-more", "data-testid": "similar-more",
+        onclick: (e) => { e.stopPropagation(); if (!armed()) return; showAllSimilar = true; update(); },
+      }, t("search.similarMore", { count: songs.length - shownSongs.length })));
+    }
+
+    if (!loading && songs.length > 0 && offerMake() && state.query?.trim().length >= 3) {
       container.appendChild(renderMakeOffer());
+      // Not sure which song they mean (or they kept their own typing): the
+      // make-it link is at the bottom of a possibly long list, so keep a slim
+      // bar pinned within thumb reach. A confident identification needs none —
+      // the song is in the rows, or the top card already offers make-it.
+      const c = correction;
+      const settled = missing || (c && c.corrected && c.active
+        && (c.inResults || (c.songs || []).length || c.karaoke !== true));
+      if (!settled && !state.showMakeForm) {
+        logOfferShown("sticky_bar");
+        container.classList.add("has-make-bar");
+        container.appendChild(el("div", { class: "sing-make-bar", "data-testid": "make-bar" },
+          el("span", { class: "sing-make-bar-text" }, t("search.makeBarText")),
+          el("button", {
+            class: "btn primary sing-make-bar-btn", "data-testid": "make-bar-btn",
+            onclick: (e) => {
+              e.stopPropagation();
+              logChoice("make_offer_tap", { where: "sticky_bar" });
+              state.showMakeForm = true;
+              update();
+              const card = root.querySelector('.results [data-testid="make-card"]');
+              if (card) card.scrollIntoView({ behavior: "smooth", block: "center" });
+            },
+          }, t("search.makeBarCta"))));
+      }
     }
 
     return container;

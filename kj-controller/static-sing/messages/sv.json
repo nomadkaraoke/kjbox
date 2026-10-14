@@ -120,7 +120,15 @@
     "forFriend": "🎤 låt till en vän",
     "friendTitle": "🎤 Väljer en låt åt {name}",
     "friendHint": "Den läggs till på kvällens lista under namnet {name}. Ditt eget namn och dina låtar ändras inte.",
-    "friendCancel": "Avbryt – den är till mig"
+    "friendCancel": "Avbryt – den är till mig",
+    "missingStatus": "Ingen karaokeversion än",
+    "missingMakeDesc": "Vi kan skapa en åt dig – gratis ikväll, oftast klar på ca 30 minuter.",
+    "missingMakeCta": "Skapa den direkt →",
+    "missingAskKj": "Fråga värden – hen kanske kan fixa den åt dig.",
+    "similarHeading": "Andra låtar med liknande namn",
+    "similarMore": "Visa {count} till",
+    "makeBarText": "Hittar du inte din låt?",
+    "makeBarCta": "Skapa den"
   },
   "versions": {
     "sectionLibrary": "I vårt bibliotek",

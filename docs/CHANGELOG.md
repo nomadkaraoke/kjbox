@@ -2,6 +2,23 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-10-14 - Singer search: "No karaoke version yet" make-it card up top + sticky bar (v0.130.0)
+
+- **Problem:** when a singer's song was identified but had no karaoke version, the "Generate it on
+  demand" link sat below every fuzzy-match result, often several screens down. Most singers never
+  found it.
+- **Identified song, no karaoke version:** the song card now says "🎵 Title — Artist · No karaoke
+  version yet" with a **Generate it on demand →** button that goes straight into the make wizard
+  with the identified artist and title. The other rows move under "Other songs with similar names",
+  showing 3 with a "Show N more" button. Exact-typed songs (`kind: "same"`) used to drop the
+  identification; they now keep it so this case is caught too.
+- **Not sure which song they mean:** a slim sticky bar ("Not seeing your song? Generate it") stays
+  above the tab bar. It never shows for a confident identification.
+- If make-requests are off, or in Simple Mode or change-song mode, the card tells the singer to ask
+  the host, and no bar is shown.
+- New search-log choices `make_offer_shown` / `make_offer_tap` (`where`: `top_card`, `sticky_bar`,
+  `bottom_link`). `scripts/search_log_report.py` prints a breakdown. Design: `docs/SONG-IDENTIFICATION.md` D13.
+
 ## 2026-10-09 - Night Log: review any past karaoke night (v0.129.0)
 
 - New **Night Log** in the KJ UI: an **Open** button below Song Stats (advanced mode) opens a wide modal.

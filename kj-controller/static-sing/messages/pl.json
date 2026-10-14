@@ -120,7 +120,15 @@
     "forFriend": "🎤 piosenka dla znajomego",
     "friendTitle": "🎤 Wybieranie piosenki dla: {name}",
     "friendHint": "Trafi na dzisiejszą listę pod imieniem {name}. Twoje własne imię i piosenki się nie zmienią.",
-    "friendCancel": "Anuluj — to dla mnie"
+    "friendCancel": "Anuluj — to dla mnie",
+    "missingStatus": "Brak jeszcze wersji karaoke",
+    "missingMakeDesc": "Możemy ją dla Ciebie wygenerować — dziś wieczorem za darmo, zazwyczaj gotowa w ~30 minut.",
+    "missingMakeCta": "Wygeneruj na życzenie →",
+    "missingAskKj": "Zapytaj prowadzącego — może uda mu się ją dla Ciebie zdobyć.",
+    "similarHeading": "Inne piosenki o podobnych tytułach",
+    "similarMore": "Pokaż jeszcze {count}",
+    "makeBarText": "Nie widzisz swojej piosenki?",
+    "makeBarCta": "Wygeneruj"
   },
   "versions": {
     "sectionLibrary": "W naszej bibliotece",

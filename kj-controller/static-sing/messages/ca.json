@@ -120,7 +120,15 @@
     "forFriend": "🎤 cançó per a un amic o amiga",
     "friendTitle": "🎤 Triant una cançó per a {name}",
     "friendHint": "S'afegirà a la llista d'avui a nom de {name}. El teu nom i les teves cançons no canviaran.",
-    "friendCancel": "Cancel·la — és per a mi"
+    "friendCancel": "Cancel·la — és per a mi",
+    "missingStatus": "Encara no hi ha cap versió de karaoke",
+    "missingMakeDesc": "En podem generar una per a tu: aquesta nit és de franc i sol estar a punt en uns 30 minuts.",
+    "missingMakeCta": "Genera-la a la carta →",
+    "missingAskKj": "Pregunta a l'amfitrió; potser te la pot aconseguir.",
+    "similarHeading": "Altres cançons amb títols similars",
+    "similarMore": "Mostra'n {count} més",
+    "makeBarText": "No trobes la teva cançó?",
+    "makeBarCta": "Genera-la"
   },
   "versions": {
     "sectionLibrary": "A la nostra biblioteca",

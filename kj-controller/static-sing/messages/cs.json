@@ -120,7 +120,15 @@
     "forFriend": "🎤 písnička pro kamaráda",
     "friendTitle": "🎤 Vybírá se písnička pro: {name}",
     "friendHint": "Na dnešním seznamu se objeví pod jménem {name}. Tvé vlastní jméno ani písničky se nezmění.",
-    "friendCancel": "Zrušit — je to pro mě"
+    "friendCancel": "Zrušit — je to pro mě",
+    "missingStatus": "Zatím bez karaoke verze",
+    "missingMakeDesc": "Můžeme ti ji vygenerovat — dnes večer zdarma, obvykle bývá hotová za ~30 minut.",
+    "missingMakeCta": "Vygenerovat na počkání →",
+    "missingAskKj": "Zeptej se KJ — možná ji pro tebe dokáže sehnat.",
+    "similarHeading": "Další písničky s podobným názvem",
+    "similarMore": "Zobrazit dalších {count}",
+    "makeBarText": "Nevidíš svoji písničku?",
+    "makeBarCta": "Vygenerovat"
   },
   "versions": {
     "sectionLibrary": "V naší knihovně",

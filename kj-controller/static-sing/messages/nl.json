@@ -120,7 +120,15 @@
     "forFriend": "🎤 nummer voor een vriend(in)",
     "friendTitle": "🎤 Een nummer kiezen voor {name}",
     "friendHint": "Dit komt op de lijst van vanavond onder de naam van {name}. Jouw eigen naam en nummers veranderen niet.",
-    "friendCancel": "Annuleren — het is voor mij"
+    "friendCancel": "Annuleren — het is voor mij",
+    "missingStatus": "Nog geen karaokeversie",
+    "missingMakeDesc": "We kunnen er eentje voor je maken — vanavond gratis, meestal klaar binnen ~30 minuten.",
+    "missingMakeCta": "Direct laten maken →",
+    "missingAskKj": "Vraag het aan de host — misschien kan die het voor je regelen.",
+    "similarHeading": "Andere nummers met vergelijkbare titels",
+    "similarMore": "Toon er nog {count}",
+    "makeBarText": "Staat je nummer er niet tussen?",
+    "makeBarCta": "Laat maken"
   },
   "versions": {
     "sectionLibrary": "In onze bibliotheek",

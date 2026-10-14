@@ -120,7 +120,15 @@
     "forFriend": "🎤 lagu untuk teman",
     "friendTitle": "🎤 Memilih lagu untuk {name}",
     "friendHint": "Lagu akan masuk ke daftar malam ini atas nama {name}. Nama dan lagu-lagumu tidak akan berubah.",
-    "friendCancel": "Batal — ini untuk saya"
+    "friendCancel": "Batal — ini untuk saya",
+    "missingStatus": "Belum ada versi karaoke",
+    "missingMakeDesc": "Kami bisa buatkan untukmu — gratis malam ini, biasanya siap dalam ~30 menit.",
+    "missingMakeCta": "Buat lagu sekarang →",
+    "missingAskKj": "Tanya ke host — mungkin bisa dicarikan untukmu.",
+    "similarHeading": "Lagu lain dengan judul serupa",
+    "similarMore": "Tampilkan {count} lainnya",
+    "makeBarText": "Lagu kamu belum ada?",
+    "makeBarCta": "Buat lagunya"
   },
   "versions": {
     "sectionLibrary": "Di pustaka kami",

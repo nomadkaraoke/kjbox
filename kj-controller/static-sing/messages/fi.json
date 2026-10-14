@@ -120,7 +120,15 @@
     "forFriend": "🎤 kappale kaverille",
     "friendTitle": "🎤 Valitaan kappaletta kaverille {name}",
     "friendHint": "Se lisätään tämän illan listalle nimellä {name}. Oma nimesi ja kappaleesi eivät muutu.",
-    "friendCancel": "Peruuta – se on minulle"
+    "friendCancel": "Peruuta – se on minulle",
+    "missingStatus": "Ei vielä karaokeversiota",
+    "missingMakeDesc": "Voimme luoda sellaisen sinulle – tänä iltana ilmaiseksi, yleensä valmis noin 30 minuutissa.",
+    "missingMakeCta": "Luo se saman tien →",
+    "missingAskKj": "Kysy juontajalta – hän voi ehkä hankkia sen sinulle.",
+    "similarHeading": "Muita samannimisiä kappaleita",
+    "similarMore": "Näytä vielä {count}",
+    "makeBarText": "Etkö löydä kappalettasi?",
+    "makeBarCta": "Luo se"
   },
   "versions": {
     "sectionLibrary": "Kirjastossamme",

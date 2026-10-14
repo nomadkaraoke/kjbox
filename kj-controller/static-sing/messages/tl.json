@@ -120,7 +120,15 @@
     "forFriend": "🎤 kanta para sa isang kaibigan",
     "friendTitle": "🎤 Pumipili ng kanta para kay {name}",
     "friendHint": "Mapupunta ito sa listahan ngayong gabi sa ilalim ng pangalan ni {name}. Hindi magbabago ang sarili mong pangalan at mga kanta.",
-    "friendCancel": "Kanselahin — para sa akin ito"
+    "friendCancel": "Kanselahin — para sa akin ito",
+    "missingStatus": "Wala pang karaoke version",
+    "missingMakeDesc": "Maaari kaming mag-generate para sa 'yo — libre ngayong gabi, karaniwang handa sa loob ng ~30 minuto.",
+    "missingMakeCta": "I-generate agad-agad →",
+    "missingAskKj": "Magtanong sa host — baka mahanap nila ito para sa 'yo.",
+    "similarHeading": "Iba pang kantang may katulad na pamagat",
+    "similarMore": "Ipakita ang {count} pa",
+    "makeBarText": "Hindi makita ang kanta mo?",
+    "makeBarCta": "I-generate ito"
   },
   "versions": {
     "sectionLibrary": "Nasa library namin",

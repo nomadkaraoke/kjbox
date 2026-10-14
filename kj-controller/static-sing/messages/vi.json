@@ -120,7 +120,15 @@
     "forFriend": "🎤 bài hát tặng bạn bè",
     "friendTitle": "🎤 Đang chọn bài hát cho {name}",
     "friendHint": "Bài hát sẽ vào danh sách tối nay dưới tên của {name}. Tên và các bài hát của bạn sẽ không thay đổi.",
-    "friendCancel": "Hủy — bài hát này cho tôi"
+    "friendCancel": "Hủy — bài hát này cho tôi",
+    "missingStatus": "Chưa có bản karaoke",
+    "missingMakeDesc": "Tụi mình có thể tạo bài hát cho bạn — tối nay hoàn toàn miễn phí, thường sẽ có sau khoảng 30 phút.",
+    "missingMakeCta": "Yêu cầu tạo bài hát ngay →",
+    "missingAskKj": "Hãy hỏi host — họ có thể tìm giúp bạn.",
+    "similarHeading": "Các bài hát khác có tên tương tự",
+    "similarMore": "Xem thêm {count} bài",
+    "makeBarText": "Không thấy bài hát bạn cần?",
+    "makeBarCta": "Tạo bài hát"
   },
   "versions": {
     "sectionLibrary": "Trong thư viện của chúng tôi",

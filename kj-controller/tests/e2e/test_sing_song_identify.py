@@ -178,3 +178,119 @@ def test_early_choice_survives_the_slow_typed_results(page, live_server, live_to
     # The singer's "not it?" stands — the original identification is not re-applied.
     expect(page.locator('[data-testid="song-candidate"]')).to_have_text(["Machu Picchu — Evaluna Montaner"])
     expect(page.locator('[data-testid="song-card-song"]')).to_have_count(0)
+
+
+# ── Song identified but no karaoke version: make-it must be findable ──────────
+
+def _other(i):
+    return {"key": f"g:o{i}", "artist": f"Other Artist {i}", "title": f"Brightside Song {i}", "version_count": 1,
+            "in_library": False, "versions": [{"source": "local", "priority_class": "unknown",
+            "local": {"path": f"/m/o{i}.mp4", "filename": f"o{i}.mp4", "disc_id": f"X-{i}"}}]}
+
+
+OTHERS = [_other(i) for i in range(8)]
+_SAME_MISSING = {"status": "confident", "kind": "same", "typed": "mr brightside the killers",
+                 "song": {"artist": "The Killers", "title": "Mr. Brightside", "karaoke": False}, "candidates": []}
+
+
+def _offer_events(calls, action):
+    return [e["data"].get("where") for e in calls["events"] if e["action"] == action]
+
+
+def test_missing_song_gets_top_make_card_and_near_misses_are_capped(page, live_server, live_token):
+    calls = _setup(page, live_server, live_token, _SAME_MISSING, lambda q: OTHERS)
+    page.locator('input[type="search"]').fill("mr brightside the killers")
+    missing = page.locator('[data-testid="song-missing"]')
+    expect(missing).to_contain_text("Mr. Brightside")
+    expect(missing).to_contain_text("No karaoke version yet")
+    # The top card comes BEFORE any result row.
+    assert page.evaluate("""() => {
+        const m = document.querySelector('[data-testid="song-missing"]');
+        const r = document.querySelector('.result-row');
+        return !!(m.compareDocumentPosition(r) & Node.DOCUMENT_POSITION_FOLLOWING);
+    }""")
+    expect(page.locator('[data-testid="similar-heading"]')).to_be_visible()
+    expect(page.locator(".result-row")).to_have_count(3)
+    page.locator('[data-testid="similar-more"]').click()
+    expect(page.locator(".result-row")).to_have_count(8)
+    # Confident identification → no sticky bar.
+    expect(page.locator('[data-testid="make-bar"]')).to_have_count(0)
+    page.locator('[data-testid="song-missing-make"]').click()
+    expect(page.locator('[data-testid="song-missing"]')).to_have_count(0)   # left search for the make wizard
+    page.wait_for_timeout(300)
+    assert "top_card" in _offer_events(calls, "make_offer_shown")
+    assert _offer_events(calls, "make_offer_tap") == ["top_card"]
+    sub = [e for e in calls["events"] if e["action"] == "make_submit"]
+    assert sub and sub[0]["data"]["artist"] == "The Killers" and sub[0]["data"]["title"] == "Mr. Brightside"
+
+
+def test_identified_content_song_without_karaoke_shows_missing_card(page, live_server, live_token):
+    """Corrected song's own karaoke search is empty → the typed-text rows are near-misses."""
+    _setup(page, live_server, live_token, {
+        "status": "confident", "kind": "content", "typed": "mr brihgtside",
+        "song": {"artist": "The Killers", "title": "Mr. Brightside", "karaoke": False}, "candidates": [],
+    }, lambda q: [] if q == "The Killers Mr. Brightside" else OTHERS[:2])
+    page.locator('input[type="search"]').fill("mr brihgtside")
+    expect(page.locator('[data-testid="song-missing"]')).to_contain_text("Mr. Brightside")
+    expect(page.locator('[data-testid="similar-heading"]')).to_be_visible()
+    expect(page.locator(".result-row")).to_have_count(2)
+    expect(page.locator('[data-testid="similar-more"]')).to_have_count(0)
+
+
+def test_same_song_found_shows_no_card_or_bar(page, live_server, live_token):
+    _setup(page, live_server, live_token, {
+        "status": "confident", "kind": "same", "typed": "machu picchu strokes",
+        "song": {"artist": "The Strokes", "title": "Machu Picchu", "karaoke": True}, "candidates": [],
+    }, lambda q: [STROKES] + OTHERS[:5])
+    page.locator('input[type="search"]').fill("machu picchu strokes")
+    expect(page.locator(".result-row")).to_have_count(6)
+    expect(page.locator('[data-testid="search-correction"]')).to_have_count(0)
+    expect(page.locator('[data-testid="song-missing"]')).to_have_count(0)
+    expect(page.locator('[data-testid="similar-heading"]')).to_have_count(0)
+    expect(page.locator('[data-testid="make-bar"]')).to_have_count(0)
+
+
+def test_unidentified_search_shows_sticky_make_bar(page, live_server, live_token):
+    calls = _setup(page, live_server, live_token, {"status": "none"}, lambda q: OTHERS)
+    page.set_viewport_size({"width": 390, "height": 760})
+    page.locator('input[type="search"]').fill("some obscure thing")
+    bar = page.locator('[data-testid="make-bar"]')
+    expect(bar).to_be_visible()
+    expect(page.locator('[data-testid="song-missing"]')).to_have_count(0)
+    # Fixed to the viewport bottom — reachable without scrolling a long list.
+    box = bar.bounding_box()
+    assert box and box["y"] + box["height"] <= 760 and box["y"] > 600, box
+    page.locator('[data-testid="make-bar-btn"]').click()
+    expect(page.locator('[data-testid="make-card"]')).to_be_visible()
+    expect(page.locator('[data-testid="make-card"]')).to_be_in_viewport()
+    expect(bar).to_have_count(0)
+    page.wait_for_timeout(300)
+    assert "sticky_bar" in _offer_events(calls, "make_offer_shown")
+    assert _offer_events(calls, "make_offer_tap") == ["sticky_bar"]
+
+
+def test_no_make_offers_when_make_requests_disabled(page, live_server, live_token):
+    page.add_init_script("window.__SING_ARM_MS = 0;")
+    _login(page, live_server, live_token)
+    page.route("**/sing/search?*", lambda r: r.fulfill(status=200, content_type="application/json", body=json.dumps(
+        {"songs": OTHERS, "make_requests_enabled": False, "simple_mode": False})))
+    page.route("**/sing/search/identify*", lambda r: r.fulfill(
+        status=200, content_type="application/json", body=json.dumps(_SAME_MISSING)))
+    page.route("**/sing/search/event*", lambda r: r.fulfill(status=200, content_type="application/json", body="{}"))
+    page.evaluate("window.__sing_state.step = 'search'; window.__sing_render();")
+    page.locator('input[type="search"]').fill("mr brightside the killers")
+    missing = page.locator('[data-testid="song-missing"]')
+    expect(missing).to_contain_text("No karaoke version yet")
+    expect(page.locator('[data-testid="song-missing-make"]')).to_have_count(0)
+    expect(page.locator('[data-testid="make-bar"]')).to_have_count(0)
+
+
+def test_index_says_karaoke_exists_never_claims_missing(page, live_server, live_token):
+    """Rows may hold the song under a name sameSong() can't match ("Killers" vs
+    "The Killers") — don't say "no karaoke version yet"; fall back to the bar."""
+    _setup(page, live_server, live_token, dict(_SAME_MISSING, song={
+        "artist": "The Killers", "title": "Mr. Brightside", "karaoke": True}), lambda q: OTHERS)
+    page.locator('input[type="search"]').fill("mr brightside the killers")
+    expect(page.locator('[data-testid="make-bar"]')).to_be_visible()
+    expect(page.locator('[data-testid="song-missing"]')).to_have_count(0)
+    expect(page.locator(".result-row")).to_have_count(8)

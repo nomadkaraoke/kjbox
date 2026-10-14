@@ -120,7 +120,15 @@
     "forFriend": "🎤 morceau pour un·e ami·e",
     "friendTitle": "🎤 Choix d'un morceau pour {name}",
     "friendHint": "Le morceau sera ajouté sur la liste de ce soir au nom de {name}. Ton nom et tes chansons ne changeront pas.",
-    "friendCancel": "Annuler — c'est pour moi"
+    "friendCancel": "Annuler — c'est pour moi",
+    "missingStatus": "Aucune version karaoké pour l'instant",
+    "missingMakeDesc": "On peut en générer une pour toi — gratuit ce soir, généralement prête en ~30 minutes.",
+    "missingMakeCta": "Génère-la à la demande →",
+    "missingAskKj": "Demande au KJ — il pourra peut-être te la trouver.",
+    "similarHeading": "Autres chansons au titre similaire",
+    "similarMore": "Afficher {count} de plus",
+    "makeBarText": "Tu ne trouves pas ta chanson ?",
+    "makeBarCta": "Génère-la"
   },
   "versions": {
     "sectionLibrary": "Dans notre bibliothèque",

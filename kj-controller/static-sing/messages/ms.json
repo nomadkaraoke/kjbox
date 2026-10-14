@@ -120,7 +120,15 @@
     "forFriend": "🎤 lagu untuk rakan",
     "friendTitle": "🎤 Memilih lagu untuk {name}",
     "friendHint": "Lagu ini akan dimasukkan ke dalam senarai malam ini di bawah nama {name}. Nama dan lagu anda sendiri tidak akan berubah.",
-    "friendCancel": "Batal — ini untuk saya"
+    "friendCancel": "Batal — ini untuk saya",
+    "missingStatus": "Belum ada versi karaoke",
+    "missingMakeDesc": "Kami boleh hasilkannya untuk anda — percuma malam ini, biasanya siap dalam ~30 minit.",
+    "missingMakeCta": "Hasilkan atas permintaan →",
+    "missingAskKj": "Tanya hos — mereka mungkin boleh dapatkannya untuk anda.",
+    "similarHeading": "Lagu lain dengan tajuk yang serupa",
+    "similarMore": "Tunjukkan {count} lagi",
+    "makeBarText": "Lagu anda tiada dalam senarai?",
+    "makeBarCta": "Hasilkan lagu ini"
   },
   "versions": {
     "sectionLibrary": "Dalam pustaka kami",

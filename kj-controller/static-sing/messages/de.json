@@ -120,7 +120,15 @@
     "forFriend": "🎤 Song für eine(n) Freund/in",
     "friendTitle": "🎤 Songauswahl für {name}",
     "friendHint": "Er erscheint heute Abend unter dem Namen von {name} auf der Liste. Dein eigener Name und deine Songs ändern sich nicht.",
-    "friendCancel": "Abbrechen – er ist für mich"
+    "friendCancel": "Abbrechen – er ist für mich",
+    "missingStatus": "Noch keine Karaoke-Version verfügbar",
+    "missingMakeDesc": "Wir können einen für dich erstellen – heute Abend kostenlos, meist in ca. 30 Minuten fertig.",
+    "missingMakeCta": "Auf Abruf erstellen →",
+    "missingAskKj": "Frag den Host – vielleicht kann er ihn für dich besorgen.",
+    "similarHeading": "Andere Songs mit ähnlichen Titeln",
+    "similarMore": "{count} weitere anzeigen",
+    "makeBarText": "Dein Song ist nicht dabei?",
+    "makeBarCta": "Erstellen"
   },
   "versions": {
     "sectionLibrary": "In unserer Bibliothek",

@@ -120,7 +120,15 @@
     "forFriend": "🎤 帮朋友点歌",
     "friendTitle": "🎤 正在为 {name} 选歌",
     "friendHint": "这首歌将以 {name} 的名字加入今晚的歌单。您自己的名字和已点歌曲不会改变。",
-    "friendCancel": "取消 — 是我自己要唱"
+    "friendCancel": "取消 — 是我自己要唱",
+    "missingStatus": "暂无伴奏版本",
+    "missingMakeDesc": "我们可以为你制作伴奏——今晚免费，通常约30分钟做好。",
+    "missingMakeCta": "按需现场生成 →",
+    "missingAskKj": "问问主持人吧，说不定能帮你搞定。",
+    "similarHeading": "歌名相近的其他歌曲",
+    "similarMore": "展开另外 {count} 首",
+    "makeBarText": "没找到你想唱的歌？",
+    "makeBarCta": "帮我生成"
   },
   "versions": {
     "sectionLibrary": "在我们的曲库里",

@@ -120,7 +120,15 @@
     "forFriend": "🎤 dal egy barátnak",
     "friendTitle": "🎤 Dalválasztás neki: {name}",
     "friendHint": "A mai listára {name} neve alatt kerül fel. A te neved és a számaid nem változnak.",
-    "friendCancel": "Mégse — magamnak kérem"
+    "friendCancel": "Mégse — magamnak kérem",
+    "missingStatus": "Még nincs karaoke verzió",
+    "missingMakeDesc": "El tudjuk készíteni neked – ma este ingyenes, és általában kb. 30 perc alatt elkészül.",
+    "missingMakeCta": "Generáltasd le azonnal →",
+    "missingAskKj": "Kérdezd a műsorvezetőt – lehet, hogy meg tudja szerezni neked.",
+    "similarHeading": "További dalok hasonló címmel",
+    "similarMore": "Még {count} megjelenítése",
+    "makeBarText": "Nem találod a dalodat?",
+    "makeBarCta": "Generáld le"
   },
   "versions": {
     "sectionLibrary": "A könyvtárunkban",

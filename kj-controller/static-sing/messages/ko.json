@@ -120,7 +120,15 @@
     "forFriend": "🎤 친구를 위한 곡",
     "friendTitle": "🎤 {name} 님을 위한 곡 선택 중",
     "friendHint": "오늘 밤 대기 목록에 {name} 님의 이름으로 올라갑니다. 회원님의 이름과 곡 목록은 변경되지 않습니다.",
-    "friendCancel": "취소 — 내가 부를 곡입니다"
+    "friendCancel": "취소 — 내가 부를 곡입니다",
+    "missingStatus": "아직 노래방 버전이 없어요",
+    "missingMakeDesc": "노래를 직접 만들어 드릴 수 있어요. 오늘 밤은 무료이며, 보통 30분 정도 걸려요.",
+    "missingMakeCta": "바로 생성 요청하기 →",
+    "missingAskKj": "호스트에게 문의해 보세요. 준비해 드릴 수도 있어요.",
+    "similarHeading": "제목이 비슷한 다른 노래",
+    "similarMore": "{count}개 더 보기",
+    "makeBarText": "원하는 노래가 없나요?",
+    "makeBarCta": "직접 생성하기"
   },
   "versions": {
     "sectionLibrary": "라이브러리",
