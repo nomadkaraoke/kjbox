@@ -40,6 +40,8 @@ CHOICE_ACTIONS = {
     "not_it",               # opened "not it?" on the identified song
     "request_song",         # requested a karaoke song/version from the results
     "make_submit",          # sent a Generate-on-demand request
+    "make_offer_shown",     # a make-it offer was shown (data.where: top_card | sticky_bar)
+    "make_offer_tap",       # tapped a make-it offer (data.where: top_card | sticky_bar | bottom_link)
     "youtube_submit",       # pasted a YouTube link
     "describe_open",        # opened "Can't remember the name? Describe it"
     "describe_submit",      # sent a description to the Gemini fallback

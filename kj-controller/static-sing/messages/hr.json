@@ -120,7 +120,15 @@
     "forFriend": "🎤 pjesma za prijatelja",
     "friendTitle": "🎤 Bira se pjesma za: {name}",
     "friendHint": "Pjesma ide na večerašnji popis pod imenom: {name}. Tvoje ime i pjesme se ne mijenjaju.",
-    "friendCancel": "Odustani — za mene je"
+    "friendCancel": "Odustani — za mene je",
+    "missingStatus": "Još nema karaoke verzije",
+    "missingMakeDesc": "Možemo je generirati za tebe — večeras besplatno, obično je spremna za ~30 minuta.",
+    "missingMakeCta": "Generiraj na zahtjev →",
+    "missingAskKj": "Pitaj voditelja — možda je može nabaviti za tebe.",
+    "similarHeading": "Druge pjesme sličnog naziva",
+    "similarMore": "Prikaži još {count}",
+    "makeBarText": "Ne vidiš svoju pjesmu?",
+    "makeBarCta": "Generiraj je"
   },
   "versions": {
     "sectionLibrary": "U našoj biblioteci",

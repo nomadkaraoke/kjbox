@@ -72,6 +72,14 @@ def test_unknown_choice_action_rejected(client, token, wired):
     assert wired.search_log.events() == []
 
 
+def test_make_offer_events_are_logged_with_placement(client, token, wired):
+    for action, where in [("make_offer_shown", "top_card"), ("make_offer_tap", "sticky_bar")]:
+        r = client.post(f"/sing/search/event?t={token}", json={"sid": "m", "action": action, "data": {"where": where}})
+        assert r.status_code == 200
+    assert [e["data"] for e in wired.search_log.events()] == [
+        {"action": "make_offer_shown", "where": "top_card"}, {"action": "make_offer_tap", "where": "sticky_bar"}]
+
+
 def test_search_log_never_raises(tmp_path):
     bad = SearchLog(str(tmp_path / "no-such-dir" / "log.db"))
     bad.log("search", query="x")          # unwritable path: swallowed

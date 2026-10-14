@@ -120,7 +120,15 @@
     "forFriend": "🎤 أغنية لصديق",
     "friendTitle": "🎤 اختيار أغنية لـ {name}",
     "friendHint": "ستُضاف إلى قائمة الليلة باسم {name}. لن يتغير اسمك أو أغانيك الخاصة.",
-    "friendCancel": "إلغاء — إنها لي"
+    "friendCancel": "إلغاء — إنها لي",
+    "missingStatus": "لا تتوفر نسخة كاراوكي بعد",
+    "missingMakeDesc": "يمكننا إنشاؤها لك — مجاناً الليلة، وتكون جاهزة عادةً خلال 30 دقيقة تقريباً.",
+    "missingMakeCta": "إنشاء الأغنية عند الطلب ←",
+    "missingAskKj": "اسأل المضيف — قد يتمكن من توفيرها لك.",
+    "similarHeading": "أغانٍ أخرى بأسماء مشابهة",
+    "similarMore": "عرض {count} أخرى",
+    "makeBarText": "ألم تجد أغنيتك؟",
+    "makeBarCta": "إنشاء الأغنية"
   },
   "versions": {
     "sectionLibrary": "في مكتبتنا",

@@ -120,7 +120,15 @@
     "forFriend": "🎤 song for a friend",
     "friendTitle": "🎤 Picking a song for {name}",
     "friendHint": "It goes on tonight's list under {name}'s name. Your own name and songs don't change.",
-    "friendCancel": "Cancel — it's for me"
+    "friendCancel": "Cancel — it's for me",
+    "missingStatus": "No karaoke version yet",
+    "missingMakeDesc": "We can generate one for you — free tonight, typically ready in ~30 minutes.",
+    "missingMakeCta": "Generate it on demand →",
+    "missingAskKj": "Ask the host — they may be able to get it for you.",
+    "similarHeading": "Other songs with similar names",
+    "similarMore": "Show {count} more",
+    "makeBarText": "Not seeing your song?",
+    "makeBarCta": "Generate it"
   },
   "versions": {
     "sectionLibrary": "In our library",

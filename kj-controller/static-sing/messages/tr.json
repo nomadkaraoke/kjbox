@@ -120,7 +120,15 @@
     "forFriend": "🎤 bir arkadaş için şarkı",
     "friendTitle": "🎤 {name} için şarkı seçiliyor",
     "friendHint": "Bu gecenin listesine {name} adıyla eklenecek. Kendi adın ve şarkıların değişmeyecek.",
-    "friendCancel": "İptal — şarkı benim için"
+    "friendCancel": "İptal — şarkı benim için",
+    "missingStatus": "Henüz karaoke versiyonu yok",
+    "missingMakeDesc": "Senin için oluşturabiliriz — bu gece ücretsiz, genellikle ~30 dakikada hazır olur.",
+    "missingMakeCta": "Hemen oluştur →",
+    "missingAskKj": "KJ'e sor — senin için bulabilir.",
+    "similarHeading": "Benzer isimdeki diğer şarkılar",
+    "similarMore": "{count} tane daha göster",
+    "makeBarText": "Şarkını bulamadın mı?",
+    "makeBarCta": "Oluştur"
   },
   "versions": {
     "sectionLibrary": "Kütüphanemizde",

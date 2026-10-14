@@ -120,7 +120,15 @@
     "forFriend": "🎤 piesă pentru un prieten",
     "friendTitle": "🎤 Alegi o piesă pentru {name}",
     "friendHint": "Va apărea pe lista din seara asta sub numele {name}. Numele și piesele tale nu se schimbă.",
-    "friendCancel": "Anulează — e pentru mine"
+    "friendCancel": "Anulează — e pentru mine",
+    "missingStatus": "Nu există încă o versiune karaoke",
+    "missingMakeDesc": "Putem genera una pentru tine — gratuit în seara asta, de obicei gata în ~30 de minute.",
+    "missingMakeCta": "Genereaz-o la cerere →",
+    "missingAskKj": "Întreabă gazda — s-ar putea să o poată face rost pentru tine.",
+    "similarHeading": "Alte piese cu titluri similare",
+    "similarMore": "Arată încă {count}",
+    "makeBarText": "Nu-ți găsești piesa?",
+    "makeBarCta": "Genereaz-o"
   },
   "versions": {
     "sectionLibrary": "În biblioteca noastră",

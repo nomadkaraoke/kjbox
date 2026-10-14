@@ -120,7 +120,15 @@
     "forFriend": "🎤 sang for en venn",
     "friendTitle": "🎤 Velger en sang for {name}",
     "friendHint": "Den legges til på kveldens liste under navnet til {name}. Ditt eget navn og sangene dine endres ikke.",
-    "friendCancel": "Avbryt – den er til meg"
+    "friendCancel": "Avbryt – den er til meg",
+    "missingStatus": "Ingen karaokeversjon ennå",
+    "missingMakeDesc": "Vi kan lage en til deg – gratis i kveld, vanligvis klar på ~30 minutter.",
+    "missingMakeCta": "Lag den på bestilling →",
+    "missingAskKj": "Spør verten – kanskje hen kan skaffe den til deg.",
+    "similarHeading": "Andre sanger med lignende titler",
+    "similarMore": "Vis {count} til",
+    "makeBarText": "Finner du ikke sangen din?",
+    "makeBarCta": "Lag den"
   },
   "versions": {
     "sectionLibrary": "I biblioteket vårt",

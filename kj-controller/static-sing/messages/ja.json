@@ -120,7 +120,15 @@
     "forFriend": "🎤 お友達へのリクエスト",
     "friendTitle": "🎤 {name} さんの曲を選択中",
     "friendHint": "今夜のリストには {name} さんの名前で登録されます。あなた自身の名前や曲は変更されません。",
-    "friendCancel": "キャンセル — 自分の曲です"
+    "friendCancel": "キャンセル — 自分の曲です",
+    "missingStatus": "まだカラオケ音源がありません",
+    "missingMakeDesc": "今夜なら無料で作成できます！通常30分ほどで歌えるようになります。",
+    "missingMakeCta": "オンデマンドで作成する →",
+    "missingAskKj": "ホスト（KJ）に聞いてみてください。用意できるかもしれません！",
+    "similarHeading": "曲名が似ている他の曲",
+    "similarMore": "他{count}件を表示",
+    "makeBarText": "歌いたい曲が見つかりませんか？",
+    "makeBarCta": "曲を作成する"
   },
   "versions": {
     "sectionLibrary": "ライブラリ内",
