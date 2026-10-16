@@ -5930,6 +5930,13 @@ function toggleOverlaysPanel() {
 // --- Rotation (SQLite primary) ---
 
 let rotationData = [];
+// Tonight's Done/Left entries (rotation order) — only fetched while the KJ has
+// the header "Done" toggle on. Mutation responses carry just the live queue, so
+// a render that isn't fed by fetchRotation schedules a quick refetch to pick up
+// whatever just moved in/out of Done.
+let rotationDoneData = [];
+let _rotationDoneFresh = false;
+let _rotationDoneRefreshTimer = null;
 let singerStatsData = [];
 // Map of rotation entry id (as string) → {status, progress, file_path}, mirroring
 // download_queue items that are linked to rotation entries. Refreshed by the
@@ -5972,7 +5979,7 @@ function rotationDownloadsDiffer(a, b) {
 
 async function fetchRotation() {
     try {
-        const response = await fetch('/rotation');
+        const response = await fetch(rotationShowDone() ? '/rotation?include_done=1' : '/rotation');
         if (!response.ok) {
             if (response.status === 503) {
                 const panel = document.querySelector('.rotation-panel');
@@ -5983,7 +5990,9 @@ async function fetchRotation() {
         }
         const data = await response.json();
         rotationData = data.entries || [];
-        renderRotation(rotationData);
+        rotationDoneData = data.done_entries || [];
+        _rotationDoneFresh = true;
+        try { renderRotation(rotationData); } finally { _rotationDoneFresh = false; }
         if (data.singer_stats) { renderSingerStats(data.singer_stats); }
         rotationHistory.updateButtons(data.history);
     } catch (e) {
@@ -6246,12 +6255,16 @@ function renderRotation(entries) {
         }
     }
 
+    if (rotationShowDone() && !_rotationDoneFresh) scheduleRotationDoneRefresh();
+
+    list.innerHTML = '';
+    renderRotationDoneSection(list);
+
     if (!entries.length) {
-        list.innerHTML = '<div class="rotation-empty">No singers in queue</div>';
+        list.insertAdjacentHTML('beforeend', '<div class="rotation-empty">No singers in queue</div>');
         return;
     }
 
-    list.innerHTML = '';
     entries.forEach((entry, idx) => {
         const row = document.createElement('div');
         row.className = 'rotation-entry';
@@ -6950,6 +6963,170 @@ function toggleRotationFilePaths() {
         if (localStorage.getItem('kj-rotation-show-paths') === '1') {
             list.classList.add('show-file-paths');
             if (btn) btn.classList.add('rotation-paths-btn-active');
+        }
+    };
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', apply);
+    } else {
+        apply();
+    }
+})();
+
+// --- Show/hide Done entries ---
+// Header "Done" toggle: lists tonight's completed entries (dimmed, in rotation
+// order) above the live queue so the KJ can re-play one or restore an entry
+// that was marked Done by accident. Remembered per device (localStorage).
+function rotationShowDone() {
+    const list = document.getElementById('rotation-list');
+    return !!(list && list.classList.contains('show-done'));
+}
+
+function toggleRotationShowDone() {
+    const list = document.getElementById('rotation-list');
+    const btn = document.getElementById('rotation-done-btn');
+    if (!list) return;
+    const showing = list.classList.toggle('show-done');
+    if (btn) btn.classList.toggle('rotation-done-toggle-btn-active', showing);
+    try {
+        if (showing) localStorage.setItem('kj-rotation-show-done', '1');
+        else localStorage.removeItem('kj-rotation-show-done');
+    } catch (e) { /* storage unavailable — toggle still works this session */ }
+    if (showing) {
+        fetchRotation();
+    } else {
+        rotationDoneData = [];
+        renderRotation(rotationData);
+    }
+}
+
+function scheduleRotationDoneRefresh() {
+    if (_rotationDoneRefreshTimer) clearTimeout(_rotationDoneRefreshTimer);
+    _rotationDoneRefreshTimer = setTimeout(() => {
+        _rotationDoneRefreshTimer = null;
+        if (rotationShowDone()) fetchRotation();
+    }, 300);
+}
+
+// "9:47 pm" from a SQLite localtime stamp ("2026-10-16 21:47:03"), matching
+// the queue's "~3:13 pm" estimates.
+function formatDoneClock(ts) {
+    const m = /(\d{2}):(\d{2})/.exec(ts || '');
+    if (!m) return '';
+    const h = parseInt(m[1], 10);
+    return ((h % 12) || 12) + ':' + m[2] + (h < 12 ? ' am' : ' pm');
+}
+
+function renderRotationDoneSection(list) {
+    if (!rotationShowDone()) return;
+    const section = document.createElement('div');
+    section.className = 'rotation-done-section';
+
+    const header = document.createElement('div');
+    header.className = 'rotation-done-header';
+    header.textContent = rotationDoneData.length
+        ? 'Done tonight (' + rotationDoneData.length + ')'
+        : 'Nothing marked done yet tonight';
+    section.appendChild(header);
+
+    rotationDoneData.forEach((entry) => {
+        const row = document.createElement('div');
+        row.className = 'rotation-done-entry';
+        row.dataset.doneEntryId = entry.id;
+
+        const info = document.createElement('div');
+        info.className = 'rotation-info';
+
+        const statusLower = (entry.status || '').toLowerCase();
+        const badge = document.createElement('span');
+        badge.className = 'rotation-badge badge-done';
+        badge.textContent = statusLower === 'left' ? 'LEFT' : 'DONE';
+        const clock = formatDoneClock(entry.done_at);
+        badge.title = statusLower === 'left' ? 'Singer left'
+            : (clock ? 'Finished at ' + clock : 'Finished');
+        info.appendChild(badge);
+
+        let singers = null;
+        if (entry.singers_json) {
+            try { singers = JSON.parse(entry.singers_json); } catch (e) { /* ignore */ }
+        }
+        const name = document.createElement('span');
+        name.className = 'rotation-name rotation-copyable';
+        name.textContent = (singers && singers.length > 1) ? singers.join(' & ') : (entry.singer || '');
+        name.title = 'Click to copy';
+        name.onclick = () => copyRotationText(name);
+        info.appendChild(name);
+
+        const song = document.createElement('span');
+        song.className = 'rotation-song rotation-copyable';
+        const mm = entry.media_meta;
+        song.textContent = entry.song_artist
+            || (mm ? [mm.artist, mm.title].filter(Boolean).join(' - ') : '');
+        song.title = 'Click to copy';
+        song.onclick = () => copyRotationText(song);
+        info.appendChild(song);
+
+        if (clock) {
+            const at = document.createElement('span');
+            at.className = 'rotation-done-time';
+            at.textContent = clock;
+            info.appendChild(at);
+        }
+        row.appendChild(info);
+
+        const actions = document.createElement('div');
+        actions.className = 'rotation-actions';
+        if (entry.file_path) {
+            const previewBtn = document.createElement('button');
+            previewBtn.className = 'rotation-btn rotation-btn-preview';
+            previewBtn.textContent = '\u25B6';  // ▶
+            previewBtn.title = 'Preview this song in the browser (does not affect the live screen)';
+            previewBtn.onclick = (e) => {
+                e.stopPropagation();
+                openPreview({ source: 'local', file_path: entry.file_path, title: entry.song_artist || entry.singer });
+            };
+            actions.appendChild(previewBtn);
+
+            const playBtn = document.createElement('button');
+            playBtn.className = 'rotation-btn rotation-btn-play';
+            playBtn.textContent = '\u25B6';  // ▶
+            playBtn.title = 'Play this song again (leaves it marked Done)';
+            playBtn.onclick = () => playMedia(entry.file_path, entry.id);
+            actions.appendChild(playBtn);
+        } else if (entry.url_fallback) {
+            const playBtn = document.createElement('button');
+            playBtn.className = 'rotation-btn rotation-btn-play';
+            playBtn.textContent = '\u25B6';  // ▶
+            playBtn.title = 'Play again via browser mode (leaves it marked Done)';
+            playBtn.onclick = () => enableBrowserMode(entry.url_fallback);
+            actions.appendChild(playBtn);
+        }
+
+        const restoreBtn = document.createElement('button');
+        restoreBtn.className = 'rotation-btn rotation-btn-restore';
+        restoreBtn.textContent = 'Restore';
+        restoreBtn.title = 'Put this entry back in the queue as Waiting, at its original spot in the rotation';
+        restoreBtn.onclick = () => updateRotationStatus(entry.id, 'Waiting');
+        actions.appendChild(restoreBtn);
+
+        row.appendChild(actions);
+        section.appendChild(row);
+    });
+
+    list.appendChild(section);
+}
+
+// Apply persisted show-done toggle state once #rotation-list exists (before the
+// first fetchRotation, so that fetch already asks for done entries).
+(function initRotationShowDoneToggle() {
+    const apply = () => {
+        const list = document.getElementById('rotation-list');
+        const btn = document.getElementById('rotation-done-btn');
+        if (!list) return;
+        let on = false;
+        try { on = localStorage.getItem('kj-rotation-show-done') === '1'; } catch (e) { /* ignore */ }
+        if (on) {
+            list.classList.add('show-done');
+            if (btn) btn.classList.add('rotation-done-toggle-btn-active');
         }
     };
     if (document.readyState === 'loading') {

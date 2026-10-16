@@ -2,6 +2,17 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-10-16 - Rotation "✓ Done" toggle: show, re-play and restore completed entries (v0.134.0)
+
+- New **✓ Done** button in the Rotation header (next to 📁 Paths), remembered per device. When on,
+  tonight's Done/Left entries appear dimmed above the live queue, in rotation order, each with the
+  time it finished.
+- Each done row has **preview / play** buttons (play re-plays the song and leaves it marked Done) and
+  **Restore**, which sets it back to Waiting. Done entries keep their position, so a restored entry
+  goes back to its original spot, which is the top of the queue after an accidental "Done".
+- `GET /rotation?include_done=1` returns `done_entries`. Without the flag the response is unchanged,
+  so other clients and the 2s/10s polls are unaffected.
+
 ## 2026-10-16 - Catalog build waits for the startup reindex; singer song name follows the best version (v0.133.1)
 
 - **Deploy race (seen deploying v0.133.0):** `auto-deploy.sh` POSTs `/catalog/build` 15s after a

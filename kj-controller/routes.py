@@ -3709,12 +3709,19 @@ def get_rotation():
         singer_stats = rotation.get_singer_stats()
         _add_last_sang_to_singer_stats(singer_stats, rotation)
         _add_singer_session_info(singer_stats)
-        return jsonify({
+        payload = {
             "entries": entries,
             "singer_stats": singer_stats,
             "rev": rotation.store.get_rev(),
             "history": rotation.history_status(),
-        })
+        }
+        # Opt-in (KJ "Done" toggle): tonight's completed entries, in rotation
+        # order, kept separate so `entries` stays the live queue everywhere.
+        if request.args.get('include_done') in ('1', 'true'):
+            done_entries = rotation.store.get_completed_entries()
+            _add_media_meta(done_entries)
+            payload["done_entries"] = done_entries
+        return jsonify(payload)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

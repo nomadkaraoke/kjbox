@@ -202,6 +202,25 @@ class TestAddAndGetEntries:
         assert "Alice" in singers
         assert "Bob" in singers
 
+    def test_get_completed_entries_done_and_left_in_position_order(self, store):
+        a = store.add_entry("Alice")
+        store.add_entry("Bob")
+        c = store.add_entry("Carol")
+        store.update_status(c["id"], "Done")
+        store.update_status(a["id"], "Left")
+        done = store.get_completed_entries()
+        assert [e["singer"] for e in done] == ["Alice", "Carol"]
+        assert done[1]["done_at"]  # stamped on the Done transition
+
+    def test_restore_completed_entry_rejoins_queue_at_original_spot(self, store):
+        a = store.add_entry("Alice")
+        store.add_entry("Bob")
+        store.update_status(a["id"], "Done")
+        assert [e["singer"] for e in store.get_entries()] == ["Bob"]
+        store.update_status(a["id"], "Waiting")
+        assert [e["singer"] for e in store.get_entries()] == ["Alice", "Bob"]
+        assert store.get_completed_entries() == []
+
     def test_get_entry_by_id(self, store):
         added = store.add_entry("Dave")
         fetched = store.get_entry(added["id"])

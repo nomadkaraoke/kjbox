@@ -2828,6 +2828,45 @@ body {
     border-color: #3b6a8a;
     color: #fff;
 }
+.rotation-done-toggle-btn-active {
+    background: #2f4a6f;
+    border-color: #3b6a8a;
+    color: #fff;
+}
+
+/* Done entries (header "Done" toggle): dimmed history above the live queue. */
+.rotation-done-section {
+    border-bottom: 1px dashed #444;
+    margin-bottom: 6px;
+    padding-bottom: 4px;
+}
+.rotation-done-header {
+    font-size: 0.75em;
+    color: #888;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 4px 8px;
+}
+.rotation-done-entry {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 4px 8px;
+    border-radius: 4px;
+}
+.rotation-done-entry:hover { background: #222; }
+.rotation-done-entry .rotation-info { opacity: 0.55; }
+.rotation-done-entry:hover .rotation-info { opacity: 0.8; }
+.rotation-done-time {
+    font-size: 0.75em;
+    color: #888;
+    flex-shrink: 0;
+}
+.badge-done {
+    background: rgba(148, 163, 184, 0.2);
+    color: #94a3b8;
+}
 .rotation-entry:hover {
     background: #222;
 }
