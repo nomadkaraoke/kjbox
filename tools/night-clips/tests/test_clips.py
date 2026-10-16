@@ -102,7 +102,45 @@ def test_trim_leaves_short_clips_alone(tmp_path):
     def boom(*a, **k):
         raise AssertionError("ffmpeg must not run for a short clip")
     assert C.trim_for_instagram("/x/a.mp4", 59.0, tmp_path, runner=boom) == "/x/a.mp4"
-    assert C.trim_for_instagram("/x/a.mp4", None, tmp_path, runner=boom) == "/x/a.mp4"
+
+
+
+def test_trim_probes_unknown_duration(tmp_path):
+    import json
+
+    import pytest
+    calls = []
+
+    def fake(cmd, **k):
+        calls.append(cmd[0])
+        if cmd[0] == "ffprobe":
+            return subprocess.CompletedProcess(cmd, 0, json.dumps({"format": {"duration": dur}}), "")
+        (tmp_path / "t" / "a.mp4").write_bytes(b"cut")
+        return subprocess.CompletedProcess(cmd, 0, "", "")
+    src = tmp_path / "a.mp4"
+    src.write_bytes(b"x")
+    dur = "30.0"
+    assert C.trim_for_instagram(str(src), None, tmp_path / "t", runner=fake) == str(src)
+    dur = "75.0"
+    assert C.trim_for_instagram(str(src), None, tmp_path / "t", runner=fake) == str(tmp_path / "t" / "a.mp4")
+    assert calls == ["ffprobe", "ffprobe", "ffmpeg"]
+    dur = None
+    (tmp_path / "t" / "a.mp4").unlink()
+    with pytest.raises(RuntimeError, match="can't read the length"):
+        C.trim_for_instagram(str(src), None, tmp_path / "t", runner=fake)
+
+
+def test_trim_timeout_removes_partial_output(tmp_path):
+    import pytest
+
+    def hang(cmd, **k):
+        (tmp_path / "t" / "a.mp4").write_bytes(b"partial")
+        raise subprocess.TimeoutExpired(cmd, 300)
+    src = tmp_path / "a.mp4"
+    src.write_bytes(b"x")
+    with pytest.raises(RuntimeError, match="trim failed"):
+        C.trim_for_instagram(str(src), 70.0, tmp_path / "t", runner=hang)
+    assert not (tmp_path / "t" / "a.mp4").exists()
 
 
 def test_trim_long_clip_with_real_ffmpeg(tmp_path):

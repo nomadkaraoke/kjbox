@@ -196,19 +196,30 @@ def trim_for_instagram(path: str, duration: float | None, out_dir: Path, runner:
     Stream copy (no re-encode), so it's quick and keeps quality and rotation. The
     original in Camera Uploads is never touched.
     """
-    if not duration or duration <= IG_MAX_S:
+    if not duration:
+        try:
+            duration = probe(path, runner=runner)["duration"]
+        except (RuntimeError, OSError, ValueError, subprocess.TimeoutExpired) as e:
+            raise RuntimeError(f"can't read the length of {Path(path).name}: {e}") from e
+        if not duration:
+            raise RuntimeError(f"can't read the length of {Path(path).name}")
+    if duration <= IG_MAX_S:
         return path
     out = out_dir / Path(path).name
     if out.exists() and out.stat().st_size > 0 and out.stat().st_mtime >= Path(path).stat().st_mtime:
         return str(out)
     out_dir.mkdir(parents=True, exist_ok=True)
-    proc = runner(
-        ["ffmpeg", "-v", "error", "-y", "-i", path, "-t", f"{IG_MAX_S:g}",
-         "-map", "0:v:0", "-map", "0:a?", "-c", "copy", "-movflags", "+faststart", str(out)],
-        capture_output=True,
-        text=True,
-        timeout=300,
-    )
+    try:
+        proc = runner(
+            ["ffmpeg", "-v", "error", "-y", "-i", path, "-t", f"{IG_MAX_S:g}",
+             "-map", "0:v:0", "-map", "0:a?", "-c", "copy", "-movflags", "+faststart", str(out)],
+            capture_output=True,
+            text=True,
+            timeout=300,
+        )
+    except (OSError, subprocess.TimeoutExpired) as e:
+        out.unlink(missing_ok=True)  # never leave a partial file to be reused as a cached cut
+        raise RuntimeError(f"ffmpeg trim failed for {Path(path).name}: {e}") from e
     if proc.returncode != 0 or not out.exists() or out.stat().st_size == 0:
         out.unlink(missing_ok=True)
         raise RuntimeError(f"ffmpeg trim failed for {Path(path).name}: {(proc.stderr or '').strip()[:200]}")
