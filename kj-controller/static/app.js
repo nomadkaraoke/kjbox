@@ -7058,7 +7058,9 @@ function renderRotationDoneSection(list) {
 
         const song = document.createElement('span');
         song.className = 'rotation-song rotation-copyable';
-        song.textContent = entry.song_artist || '';
+        const mm = entry.media_meta;
+        song.textContent = entry.song_artist
+            || (mm ? [mm.artist, mm.title].filter(Boolean).join(' - ') : '');
         song.title = 'Click to copy';
         song.onclick = () => copyRotationText(song);
         info.appendChild(song);
