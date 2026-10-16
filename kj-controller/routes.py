@@ -497,6 +497,13 @@ def _group_search_results(local_results, kn_results, query=None,
         # Playable versions first, then (KN panel only) disc-only info rows.
         versions.sort(key=lambda v: (not _version_is_playable(v),
                                      v.get("priority_rank", 9999)))
+        # Locals win display-name arbitration, but which local was inserted
+        # first is just catalog order — so name the song after the BEST local
+        # version ("(Over)Thinking" MP4, not the "Over, Thinking" CD+G zip).
+        best_local = next((v["local"] for v in versions if v["source"] == "local"), None)
+        if best_local and (best_local.get("artist") or best_local.get("title")):
+            g["artist"] = best_local.get("artist") or g["artist"]
+            g["title"] = best_local.get("title") or g["title"]
         out.append(g)
 
     if query:

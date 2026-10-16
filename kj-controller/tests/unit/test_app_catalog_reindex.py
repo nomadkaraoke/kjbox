@@ -19,7 +19,16 @@ def test_stale_index_rebuilds_in_background():
     t.join(timeout=5)
     assert not t.is_alive() and t.daemon
     cat.init_schema.assert_called_once()
-    cat.rebuild_fts.assert_called_once()
+    cat.rebuild_fts.assert_called_once_with(only_if_stale=True)
+
+
+def test_reindex_skipped_when_build_already_refreshed():
+    cat = MagicMock()
+    cat.index_is_stale.return_value = True
+    cat.rebuild_fts.return_value = None  # a concurrent full build won the lock
+    t = reindex_stale_catalog_async(cat, {})
+    t.join(timeout=5)
+    assert not t.is_alive()
 
 
 def test_rebuild_failure_is_logged_not_raised():

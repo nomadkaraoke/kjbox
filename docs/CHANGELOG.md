@@ -2,6 +2,24 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-10-16 - Catalog build waits for the startup reindex; singer song name follows the best version (v0.133.1)
+
+- **Deploy race (seen deploying v0.133.0):** `auto-deploy.sh` POSTs `/catalog/build` 15s after a
+  restart whenever `catalog.py` changes, which collided with the new background reindex. The build
+  failed with `sqlite3.OperationalError: database is locked` and rolled back, leaving the previous
+  catalog intact. The reindex finished: 398,446 rows in 42s. `ExternalCatalog` now serializes its
+  two whole-index writers with an in-process lock, so the second one waits instead of failing. The
+  startup reindex re-checks staleness once it holds the lock and skips if a full build already
+  refreshed the index.
+- **Singer song card title:** a song group took its display name from whichever local file the
+  catalog returned first, so it showed "Over, Thinking" (the CD+G zip). It now uses the best-ranked
+  local version ("(Over)Thinking", the MP4).
+- **v0.133.0 verified on NomadPC:** catalog stamp `3.1`; "Nia Archives Overthinking" returns all 3
+  NOMAD-0147 files with the MP4s first (rank 40 vs 41 for the zip); "acdc thunderstruck" now returns
+  the AC-DC files (10 local rows, up from 2). A manual `nomad-catalog-sync` run rebuilt the mirror to
+  `3.1` in 51s and the app reloaded it. KN and Divebar now find "(Over)Thinking", and `song_id.db`
+  was left alone ("run unchanged").
+
 ## 2026-10-16 - "overthinking" finds "(Over)Thinking"; MP4 beats CD+G within a brand (v0.133.0)
 
 - **Joined-word search:** typing a run-together word ("Nia Archives Overthinking", "acdc", "blink182")

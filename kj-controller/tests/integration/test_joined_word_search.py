@@ -120,3 +120,17 @@ class TestUnifiedSearch:
             zip_row = next(r for r in local if r["path"] == ZIP)
             assert all(zip_row["priority_rank"] > r["priority_rank"]
                        for r in local if r["path"] != ZIP)
+
+
+class TestGroupedDisplayName:
+    def test_singer_group_named_after_best_local_version(self):
+        """Locals win display-name arbitration; the BEST local (the MP4) names
+        the song, not whichever file the catalog happened to return first."""
+        zip_row = {"path": ZIP, "disc_id": "NOMAD-0147", "artist": "Nia Archives",
+                   "title": "Over, Thinking", "format": "cdg+mp3"}
+        mp4_row = {"path": MP4, "disc_id": "NOMAD-0147", "artist": "Nia Archives",
+                   "title": "(Over)Thinking", "format": "mp4"}
+        groups = routes._group_search_results([zip_row, mp4_row], [], query="overthinking")
+        assert len(groups) == 1
+        assert groups[0]["title"] == "(Over)Thinking"
+        assert groups[0]["versions"][0]["local"]["path"] == MP4
