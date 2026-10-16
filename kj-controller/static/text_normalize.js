@@ -66,7 +66,27 @@
       return n ? n.split(' ') : [];
     }
 
-    return { normalize, tokens };
+    // Mirror of text_normalize.joined_forms / index_text: the INDEXED side of a
+    // search also carries each adjacent token pair joined ("over thinking" ->
+    // "overthinking"). Never apply to the query.
+    function joinedForms(normText) {
+      const toks = normText ? normText.split(' ') : [];
+      const seen = new Set(toks);
+      const out = [];
+      for (let i = 0; i + 1 < toks.length; i++) {
+        const j = toks[i] + toks[i + 1];
+        if (!seen.has(j)) { seen.add(j); out.push(j); }
+      }
+      return out;
+    }
+
+    function indexText(text) {
+      const n = normalize(text);
+      const extra = joinedForms(n);
+      return extra.length ? n + ' ' + extra.join(' ') : n;
+    }
+
+    return { normalize, tokens, joinedForms, indexText };
   }
 
   return { makeNormalizer };

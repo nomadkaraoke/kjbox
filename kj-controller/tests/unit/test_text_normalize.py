@@ -189,3 +189,41 @@ class TestIdempotency:
     def test_normalize_is_idempotent(self, text):
         once = normalize(text)
         assert normalize(once) == once
+
+
+class TestJoinedForms:
+    def test_adjacent_pairs_joined(self):
+        from text_normalize import joined_forms
+        assert joined_forms("over thinking") == ["overthinking"]
+        assert joined_forms("nia archives over thinking") == [
+            "niaarchives", "archivesover", "overthinking"]
+
+    def test_single_token_and_empty(self):
+        from text_normalize import joined_forms
+        assert joined_forms("queen") == []
+        assert joined_forms("") == []
+
+    def test_skips_pairs_equal_to_existing_tokens(self):
+        from text_normalize import joined_forms
+        # "a b ab": the "ab" join already exists as a token → not repeated.
+        assert joined_forms("a b ab") == ["bab"]
+
+    @pytest.mark.parametrize("raw,joined", [
+        ("(Over)Thinking", "overthinking"),
+        ("Over, Thinking", "overthinking"),
+        ("AC/DC", "acdc"),
+        ("Blink 182", "blink182"),
+    ])
+    def test_index_text_contains_plain_and_joined(self, raw, joined):
+        from text_normalize import index_text
+        out = index_text(raw).split()
+        assert normalize(raw).split() == out[:len(normalize(raw).split())]
+        assert joined in out
+
+    def test_index_text_single_word_is_plain(self):
+        from text_normalize import index_text
+        assert index_text("Queen") == "queen"
+
+    def test_search_index_version_extends_normalizer_version(self):
+        from text_normalize import SEARCH_INDEX_VERSION
+        assert SEARCH_INDEX_VERSION.startswith(f"{NORMALIZER_VERSION}.")

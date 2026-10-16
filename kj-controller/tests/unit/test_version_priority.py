@@ -286,6 +286,56 @@ class TestRankVersionSourceTiebreaker:
         assert rank_version(cc_youtube, _cfg()) < rank_version(lc_local, _cfg())
 
 
+class TestRankVersionFormatTiebreaker:
+    """Same brand + source: MP4 beats a CD+G zip (KJ preference)."""
+
+    def test_local_mp4_beats_local_cdg_zip(self):
+        mp4 = {"source": "local", "local": {
+            "disc_id": "NOMAD-0147", "format": "mp4",
+            "filename": "NOMAD-0147 - Nia Archives - (Over)Thinking.mp4"}}
+        cdg = {"source": "local", "local": {
+            "disc_id": "NOMAD-0147", "format": "cdg+mp3",
+            "filename": "NOMAD-0147 - Nia Archives - Over, Thinking.zip"}}
+        assert rank_version(mp4, _cfg()) < rank_version(cdg, _cfg())
+
+    def test_rotation_search_shape_uses_extension_without_format(self):
+        rows = [
+            {"disc_id": "NOMAD-0147", "path": "/m/NOMAD-0147 - A - B.zip"},
+            {"disc_id": "NOMAD-0147", "path": "/m/NOMAD-0147 - A - B.mp4"},
+        ]
+        annotate_versions(rows, _cfg(), shape="rotation_search_local")
+        assert rows[1]["priority_rank"] < rows[0]["priority_rank"]
+
+    def test_divebar_zip_format_demoted(self):
+        rows = [
+            {"source": "divebar", "brand_code": "NOMAD", "format": "zip"},
+            {"source": "divebar", "brand_code": "NOMAD", "format": "mp4"},
+        ]
+        annotate_versions(rows, _cfg(), shape="rotation_search_divebar")
+        assert rows[1]["priority_rank"] < rows[0]["priority_rank"]
+
+    def test_source_still_dominates_format(self):
+        # A local CD+G (instant) still beats a not-yet-downloaded MP4.
+        local_cdg = {"source": "local", "local": {
+            "disc_id": "LEMMY-001", "format": "cdg+mp3"}}
+        divebar_mp4 = {"source": "kn", "kn": {
+            "brand_code": "LC", "is_community": True,
+            "divebar": {"file_id": "abc"}}}
+        assert rank_version(local_cdg, _cfg()) < rank_version(divebar_mp4, _cfg())
+
+    def test_format_does_not_cross_brand_boundary(self):
+        cc_youtube = {"source": "kn", "kn": {"brand_code": "CC", "is_community": True}}
+        lc_local_mp4 = {"source": "local", "local": {
+            "disc_id": "LEMMY-001", "format": "mp4"}}
+        assert rank_version(cc_youtube, _cfg()) < rank_version(lc_local_mp4, _cfg())
+
+    def test_unknown_format_is_not_demoted(self):
+        a = {"source": "local", "local": {"disc_id": "NOMAD-1", "filename": "x.webm"}}
+        b = {"source": "local", "local": {"disc_id": "NOMAD-1", "format": "unknown"}}
+        mp4 = {"source": "local", "local": {"disc_id": "NOMAD-1", "format": "mp4"}}
+        assert rank_version(a, _cfg()) == rank_version(b, _cfg()) == rank_version(mp4, _cfg())
+
+
 class TestRankVersionConfigOverride:
     def test_community_config_reorders(self):
         # Default has CC at 0, LC at 1. Override to put LC first.

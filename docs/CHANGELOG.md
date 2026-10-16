@@ -2,6 +2,23 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-10-16 - "overthinking" finds "(Over)Thinking"; MP4 beats CD+G within a brand (v0.133.0)
+
+- **Joined-word search:** typing a run-together word ("Nia Archives Overthinking", "acdc", "blink182")
+  found nothing when the file splits it ("(Over)Thinking", "Over, Thinking", "AC-DC"). The search
+  indexes now also hold each adjacent word pair joined (`text_normalize.index_text`): external catalog
+  FTS, the KN/Divebar catalog mirror, the downloaded-media scan in `unified_search` (rotation, singer
+  and library search) and the KJ's local-media filter (JS twin, parity-tested).
+- **Index rebuilds happen by themselves:** the indexes stamp the new `SEARCH_INDEX_VERSION` ("3.1").
+  On first start after deploy, kj-controller rebuilds the stale catalog FTS index on a background
+  thread; searches keep using the old index until the rebuild commits. The catalog mirror is unusable
+  (searches fall back to the Divebar Cloud Function) until the next `nomad-catalog-sync` run (daily
+  12:15 UTC, and 10 min after boot) rebuilds it. `song_id.db` is unaffected.
+- **MP4 over CD+G:** same brand and same source tied on `priority_rank`, so whichever file the search
+  returned first was marked Best (NOMAD-0147's CD+G zip, 2026-10-16). Rank now adds a format
+  tiebreaker (`source*3 + format`, CD+G = +1): a video beats a CD+G of the same brand and source,
+  while a local CD+G still beats a not-yet-downloaded MP4.
+
 ## 2026-10-16 - Rotation durations for every song + auto-approve that never needs a blind click (v0.132.0)
 
 - **Durations:** only YouTube downloads showed a song length in the rotation (yt-dlp provides one; library

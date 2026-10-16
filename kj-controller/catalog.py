@@ -9,10 +9,12 @@ import fuzzy_match
 from sqlite_conn import ThreadLocalConnection
 from text_normalize import (
     normalize as _normalize_for_search,
+    index_text as _index_text,
     fts_match_query as _fts5_safe_query,
     tokens as _query_tokens,
     LATIN_SPECIAL_MAP,  # re-export for any external importers
-    NORMALIZER_VERSION,
+    NORMALIZER_VERSION,  # noqa: F401 (re-export for any external importers)
+    SEARCH_INDEX_VERSION,
 )
 
 # Fuzzy fallback tunables live in fuzzy_match (shared with the media-index
@@ -138,7 +140,7 @@ class ExternalCatalog:
 
             -- WARNING: these triggers feed RAW artist/title to media_fts, but the
             -- index actually stores NORMALIZED tokens (see _flush_batch /
-            -- rebuild_fts, which write text_normalize.normalize(...) output and
+            -- rebuild_fts, which write text_normalize.index_text(...) output and
             -- bypass these triggers by dropping them during build). The triggers
             -- exist only so ad-hoc INSERTs stay roughly indexed. Do NOT add a
             -- production path that does individual DELETE/UPDATE on `media`: the
@@ -276,10 +278,10 @@ class ExternalCatalog:
         """)
 
         # Stamp the normalizer version the index was built with, so we can
-        # later detect a stale index after a NORMALIZER_VERSION bump.
+        # later detect a stale index after a SEARCH_INDEX_VERSION bump.
         conn.execute(
             "INSERT OR REPLACE INTO catalog_meta(key, value) VALUES('normalizer_version', ?)",
-            (str(NORMALIZER_VERSION),),
+            (SEARCH_INDEX_VERSION,),
         )
         return total
 
@@ -299,7 +301,9 @@ class ExternalCatalog:
         ).fetchall()
         conn.executemany(
             "INSERT INTO media_fts(rowid, artist, title, disc_id) VALUES (?, ?, ?, ?)",
-            [(r[0], _normalize_for_search(r[1] or ''), _normalize_for_search(r[2] or ''),
+            # artist/title carry index_text (normalized + joined word pairs) so
+            # "overthinking" finds "(Over)Thinking"; disc_id stays plain.
+            [(r[0], _index_text(r[1] or ''), _index_text(r[2] or ''),
               _normalize_for_search(r[3] or '')) for r in rows]
         )
         # Populate the trigram candidate index over normalized "artist title"
@@ -438,23 +442,26 @@ class ExternalCatalog:
         return [c for _, _, c in scored[offset:offset + limit]]
 
     def normalizer_version(self):
-        """Return the NORMALIZER_VERSION the index was built with (or None)."""
+        """Return the SEARCH_INDEX_VERSION string the index was built with
+        (or None). Pre-``index_text`` builds stored a bare NORMALIZER_VERSION
+        ("3"), which never equals the current "3.N" — so they read as stale."""
         conn = self._get_conn()
         try:
             row = conn.execute(
                 "SELECT value FROM catalog_meta WHERE key='normalizer_version'"
             ).fetchone()
-            return int(row[0]) if row else None
+            return str(row[0]) if row else None
         except sqlite3.Error:
             return None
 
     def index_is_stale(self):
-        """True when the FTS index was built with a different normalizer."""
-        return self.normalizer_version() != NORMALIZER_VERSION
+        """True when the FTS index was built with a different normalizer or
+        index-text revision."""
+        return self.normalizer_version() != SEARCH_INDEX_VERSION
 
     def rebuild_fts(self, callback=None, batch_size=5000):
         """Rebuild media_fts + media_trigram from the media table using the
-        current normalizer, then restamp NORMALIZER_VERSION.
+        current normalizer + index_text, then restamp SEARCH_INDEX_VERSION.
 
         Returns the number of media rows reindexed.
 
@@ -478,8 +485,8 @@ class ExternalCatalog:
                 chunk = rows[start:start + batch_size]
                 conn.executemany(
                     "INSERT INTO media_fts(rowid, artist, title, disc_id) VALUES (?,?,?,?)",
-                    [(r[0], _normalize_for_search(r[1] or ''),
-                      _normalize_for_search(r[2] or ''),
+                    [(r[0], _index_text(r[1] or ''),
+                      _index_text(r[2] or ''),
                       _normalize_for_search(r[3] or '')) for r in chunk],
                 )
                 conn.executemany(
@@ -491,7 +498,7 @@ class ExternalCatalog:
                     callback(min(start + batch_size, total), total)
             conn.execute(
                 "INSERT OR REPLACE INTO catalog_meta(key,value) VALUES('normalizer_version', ?)",
-                (str(NORMALIZER_VERSION),),
+                (SEARCH_INDEX_VERSION,),
             )
             conn.commit()
         except BaseException:

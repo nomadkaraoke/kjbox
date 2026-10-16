@@ -29,6 +29,13 @@ import unicodedata
 # Bump whenever the pipeline or any map changes; gates catalog reindex.
 NORMALIZER_VERSION = 3
 
+# Version of the INDEXED search text (``index_text``): NORMALIZER_VERSION plus
+# the index-only augmentation revision. Stamped by the FTS indexes (external
+# catalog, catalog mirror) instead of NORMALIZER_VERSION so an index-side change
+# reindexes them without invalidating song_id.db (which keys off
+# NORMALIZER_VERSION alone). Bump the suffix when ``index_text`` changes.
+SEARCH_INDEX_VERSION = f"{NORMALIZER_VERSION}.1"
+
 # Non-decomposable Latin chars that NFD cannot handle.
 LATIN_SPECIAL_MAP = {
     'ø': 'o', 'Ø': 'o', 'æ': 'ae', 'Æ': 'ae', 'ß': 'ss',
@@ -142,6 +149,37 @@ def _canonicalize_numbers(toks):
         out.append(str(val))
         i += 1
     return out
+
+
+def joined_forms(norm_text):
+    """Adjacent token pairs of already-normalized text, joined into one word.
+
+    Titles like "(Over)Thinking", "Over, Thinking" or "AC/DC" normalize to two
+    tokens, so a singer typing the run-together form ("overthinking", "acdc",
+    "blink182") would miss them. Indexing every adjacent pair as one extra
+    token makes those queries hit. Pairs that already equal a token are skipped.
+    """
+    toks = norm_text.split() if norm_text else []
+    seen = set(toks)
+    out = []
+    for a, b in zip(toks, toks[1:]):
+        j = a + b
+        if j not in seen:
+            seen.add(j)
+            out.append(j)
+    return out
+
+
+def index_text(text):
+    """Canonical text for the INDEXED side of a search (never the query).
+
+    ``normalize(text)`` followed by its ``joined_forms``, so both "over
+    thinking" and "overthinking" find "(Over)Thinking". Queries stay plain
+    ``normalize`` — feeding them through here would AND in the joined tokens.
+    """
+    n = normalize(text)
+    extra = joined_forms(n)
+    return n + ' ' + ' '.join(extra) if extra else n
 
 
 def fts_match_query(text):

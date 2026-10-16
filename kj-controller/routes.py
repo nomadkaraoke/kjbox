@@ -5432,7 +5432,11 @@ def unified_search(query, app, *, grouped=False, local_only=False,
         if path in local_paths:
             continue
         searchable = _normalize_text(entry.get("display_name") or entry.get("filename", ""))
-        if query_terms_clean and all(term in searchable for term in query_terms_clean):
+        # Substring haystack also carries the joined adjacent-word forms
+        # (text_normalize.index_text) so "overthinking" finds "(Over)Thinking";
+        # the fuzzy pass keeps comparing against the plain normalized text.
+        haystack = " ".join([searchable] + text_normalize.joined_forms(searchable))
+        if query_terms_clean and all(term in haystack for term in query_terms_clean):
             local_results.append(_build_local_media_row(app, path, entry))
         else:
             fz = fuzzy_match.score(norm_query, searchable, q_sig=q_sig)
