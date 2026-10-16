@@ -251,16 +251,27 @@ class RotationManager:
             self._ensure_duration_worker()
 
     def _ensure_duration_worker(self):
-        if self._duration_worker is not None and self._duration_worker.is_alive():
-            return
-        self._duration_worker = threading.Thread(
-            target=self._duration_worker_loop, name="rotation-duration-probe", daemon=True)
-        self._duration_worker.start()
+        # Same lock the worker takes to exit, so an item queued while it is
+        # shutting down is never stranded and two workers never start.
+        with self._duration_seen_lock:
+            if self._duration_worker is not None:
+                return
+            self._duration_worker = threading.Thread(
+                target=self._duration_worker_loop, name="rotation-duration-probe", daemon=True)
+            self._duration_worker.start()
 
     # While draining a backlog, UIs are told to re-render at most this often.
     _DURATION_REV_INTERVAL_S = 3.0
 
     def _duration_worker_loop(self):
+        try:
+            self._duration_worker_body()
+        finally:
+            with self._duration_seen_lock:
+                if self._duration_worker is threading.current_thread():
+                    self._duration_worker = None
+
+    def _duration_worker_body(self):
         # Low priority: on Linux a per-thread nice also applies to the ffprobe
         # children this thread spawns, so probing never competes with playback
         # or request handling for CPU.
@@ -278,7 +289,11 @@ class RotationManager:
                     self._bump_rev_for_durations()
                     dirty = False
                     continue
-                return  # idle — get_rotation restarts us when there's work
+                with self._duration_seen_lock:
+                    if self._duration_queue.empty():
+                        self._duration_worker = None
+                        return  # idle — get_rotation restarts us when there's work
+                continue
             try:
                 if self._probe_and_store_duration(entry_id, path, bump=False):
                     dirty = True

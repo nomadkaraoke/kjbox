@@ -1361,11 +1361,12 @@ def _auto_approve_song(store, req):
     a double-add). On failure it stays pending with auto_status='failed' and a
     reason the KJ panel shows. Returns True if approved.
     """
-    from routes import (approve_sing_request, apply_supersede,
+    from routes import (AUTO_APPROVE_STALE_S, approve_sing_request, apply_supersede,
                         maybe_auto_reorder, resolve_kj_pick_best)
 
     app = current_app._get_current_object()
-    store.set_auto_status(req["id"], "in_progress")
+    if not store.claim_approval(req["id"], AUTO_APPROVE_STALE_S):
+        return False   # someone else (KJ click / another change) is approving it
     try:
         to_approve = req
         if req.get("source_type") == "kj_pick":
@@ -2254,7 +2255,7 @@ def change_request(req_id):
         # it predates auto-approve) — the new song gets a fresh try rather than
         # sitting in the KJ's panel.
         auto_approved = False
-        if store.is_auto_approve() and updated.get("auto_status") != "in_progress":
+        if store.is_auto_approve():
             auto_approved = _auto_approve_song(store, updated)
             updated = store.get_request(req_id)
         # edit_token echoed back (owner already holds it) so the device keeps
@@ -2373,8 +2374,8 @@ def reorder_requests():
     # their OWN entries within slots they already hold, so there's nothing for
     # the KJ to vet. Any failure keeps the reorder pending for manual review.
     auto_approved = False
-    if store.is_auto_approve():
-        store.set_auto_status(rr["id"], "in_progress")
+    from routes import AUTO_APPROVE_STALE_S
+    if store.is_auto_approve() and store.claim_approval(rr["id"], AUTO_APPROVE_STALE_S):
         try:
             from routes import apply_reorder_request
 

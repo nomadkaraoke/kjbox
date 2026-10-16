@@ -6699,9 +6699,26 @@ def approve_sing_request_route(req_id):
         return jsonify({"error": "Request not found"}), 404
     if req["status"] != "pending":
         return jsonify({"error": f"Request is already {req['status']}"}), 409
-    if auto_approve_in_progress(req):
+    # Claim the row atomically so an in-flight auto-approve (or a double-click)
+    # can't add the same song twice. Afterwards a still-pending row goes back
+    # to whatever "Needs you" state it showed before the click.
+    prev_status, prev_error = req.get("auto_status"), req.get("auto_error")
+    if prev_status == "in_progress":
+        prev_status, prev_error = None, None   # stale claim being taken over
+    if not store.claim_approval(req_id, AUTO_APPROVE_STALE_S):
         return jsonify({"error": "This request is being added automatically"}), 409
+    try:
+        return _approve_claimed_request(store, req_id, req)
+    finally:
+        after = store.get_request(req_id) or {}
+        if after.get("status") == "pending":
+            store.set_auto_status(req_id, prev_status, prev_error)
+        elif after.get("auto_status") == "in_progress":
+            store.set_auto_status(req_id, None)
 
+
+def _approve_claimed_request(store, req_id, req):
+    """Body of the KJ approve route, run while holding the approval claim."""
     # Tip claim: not a song — confirming means "the money arrived". Hearts the
     # singer's active entries and, at/above the configured threshold, applies
     # the same singer-level +1 bump as the rotation view's bump-up button.
@@ -6793,9 +6810,10 @@ def auto_approve_in_progress(req):
     if (req or {}).get("auto_status") != "in_progress":
         return False
     from datetime import datetime
+    started = req.get("auto_started_at") or req.get("created_at")
     try:
-        age = (datetime.now() - datetime.fromisoformat(req["created_at"])).total_seconds()
-    except (KeyError, TypeError, ValueError):
+        age = (datetime.now() - datetime.fromisoformat(started)).total_seconds()
+    except (TypeError, ValueError):
         return False
     return age < AUTO_APPROVE_STALE_S
 
