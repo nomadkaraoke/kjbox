@@ -9,7 +9,7 @@ import sqlite3
 import threading
 import uuid
 
-from text_normalize import normalize as _normalize
+from text_normalize import identity_normalize as _normalize
 
 
 class MediaLibraryStore:

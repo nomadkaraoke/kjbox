@@ -27,7 +27,7 @@ from collections import Counter, defaultdict
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from song_identify import SongIdentifier  # noqa: E402
-from text_normalize import normalize  # noqa: E402
+from text_normalize import identity_normalize as normalize  # noqa: E402  (song identity)
 
 EVAL = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                     "tests", "fixtures", "song_id_eval.jsonl")

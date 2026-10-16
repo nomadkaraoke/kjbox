@@ -7,7 +7,7 @@ def test_rapidfuzz_importable():
 
 
 from text_normalize import (
-    normalize, tokens, fts_match_query, group_key, result_group_key,
+    normalize, identity_normalize, tokens, fts_match_query, group_key, result_group_key,
     LATIN_SPECIAL_MAP, ABBREV_MAP, NUMBER_WORDS, ROMAN_NUMERALS,
     NORMALIZER_VERSION,
 )
@@ -46,30 +46,57 @@ class TestPunctAndFeat:
     def test_punct_to_space(self):
         assert normalize("Hello, World! (x)") == "hello world x"
 
+    # identity_normalize (grouping / song_key / same-song joins) strips the whole
+    # feat clause; normalize (search) drops only the feat word and keeps names.
     def test_feat_stripped(self):
-        assert normalize("Stay feat. Justin Bieber") == "stay"
+        assert identity_normalize("Stay feat. Justin Bieber") == "stay"
+        assert normalize("Stay feat. Justin Bieber") == "stay justin bieber"
 
     def test_ft_stripped(self):
-        assert normalize("Title ft. Someone Else") == "title"
+        assert identity_normalize("Title ft. Someone Else") == "title"
+        assert normalize("Title ft. Someone Else") == "title someone else"
 
     def test_ft_inside_a_word_is_not_a_feat(self):
         # Regression: the feat regex had no word boundary, so any "ft" mid-word
         # truncated the rest of the string ("Soft Cell" -> "so").
-        assert normalize("Soft Cell") == "soft cell"
-        assert normalize("Hayloft II") == "hayloft 2"
-        assert normalize("Left Outside Alone") == "left outside alone"
-        assert normalize("Taylor Swift ft. Drake") == "taylor swift"
-        assert normalize("Craft (feat. X)") == "craft"
-        assert normalize("Жft Song") == "жft song"
+        for fn in (normalize, identity_normalize):
+            assert fn("Soft Cell") == "soft cell"
+            assert fn("Hayloft II") == "hayloft 2"
+            assert fn("Left Outside Alone") == "left outside alone"
+            assert fn("Жft Song") == "жft song"
+        assert identity_normalize("Taylor Swift ft. Drake") == "taylor swift"
+        assert identity_normalize("Craft (feat. X)") == "craft"
+        assert normalize("Taylor Swift ft. Drake") == "taylor swift drake"
+        assert normalize("Craft (feat. X)") == "craft x"
 
     def test_featuring_stripped(self):
-        assert normalize("Song featuring The Band") == "song"
+        assert identity_normalize("Song featuring The Band") == "song"
+        assert normalize("Song featuring The Band") == "song the band"
 
     def test_feat_with_trailing_paren_behavior(self):
-        # Locks current (intentionally lossy) feat-strip behavior. If this output
-        # ever changes, it's a deliberate decision to revisit feat handling.
-        result = normalize("Stay (Acoustic) feat. Justin Bieber (Live)")
-        assert result == "stay acoustic"
+        # Identity: intentionally lossy (the clause runs to the closing bracket).
+        assert identity_normalize("Stay (Acoustic) feat. Justin Bieber (Live)") == "stay acoustic"
+        assert normalize("Stay (Acoustic) feat. Justin Bieber (Live)") == \
+            "stay acoustic justin bieber live"
+
+    def test_search_keeps_title_after_unbracketed_feat(self):
+        # Regression (v0.131.1): index text is "artist title" concatenated, and the
+        # clause strip ran to END OF STRING — "Zedd feat. Hayley Williams of Paramore
+        # Stay the Night" indexed as just "zedd", so "hayley stay the night" found
+        # neither NOMAD-1567 nor KPARTY-354.
+        text = "Zedd feat. Hayley Williams of Paramore Stay the Night"
+        assert normalize(text) == "zedd hayley williams of paramore stay the night"
+        assert set(tokens("hayley stay the night")) <= set(tokens(text))
+        assert set(tokens("zedd ft hayley stay the night")) <= set(tokens(text))
+
+    def test_feat_word_needs_following_space(self):
+        assert normalize("Feats Of Strength") == "feats of strength"
+        assert normalize("The Feat") == "the feat"
+
+    def test_group_key_still_strips_feat_clause(self):
+        # group_key is the persisted play-stats song_key — must not change.
+        assert group_key("Zedd feat. Hayley Williams", "Stay the Night (feat. X)") == \
+            "zedd|||stay the night"
 
     def test_tokens(self):
         assert tokens("Simon & Garfunkel") == ["simon", "and", "garfunkel"]

@@ -125,3 +125,15 @@ def test_interrupted_rebuild_fts_preserves_search(tmp_path):
     # And a clean retry completes.
     assert cat.rebuild_fts() == 3
     assert len(cat.search("Old Artist Old Song")) == 3
+
+
+def test_featured_artist_file_searchable(tmp_path):
+    # Regression: "Zedd Ft Hayley Williams" normalized to "zedd" (feat clause
+    # stripped to end of string), hiding KPARTY-354 from "hayley stay the night".
+    cat = _cat(tmp_path)
+    cat.build_from_file_list(_write_list(tmp_path, [
+        "KPARTY-354 - Zedd Ft Hayley Williams - Stay The Night.mp4",
+        "OTHER-1 - Someone Else - Another Song.mp4",
+    ]))
+    for q in ("hayley stay the night", "zedd stay the night"):
+        assert [r["disc_id"] for r in cat.search(q)] == ["KPARTY-354"], q

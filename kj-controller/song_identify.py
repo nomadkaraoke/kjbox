@@ -31,7 +31,9 @@ from functools import lru_cache
 from rapidfuzz import fuzz, process
 from rapidfuzz.distance import Levenshtein
 
-from text_normalize import NORMALIZER_VERSION, normalize  # noqa: F401 (re-exported for the sync)
+# identity_normalize: song_id.db's scoring is tuned around "(feat. X)" being
+# stripped from the index (see _QUERY_FEAT_CLAUSE_RE below).
+from text_normalize import NORMALIZER_VERSION, identity_normalize as normalize  # noqa: F401 (re-exported for the sync)
 
 _INITIALS_RE = re.compile(r"\b(?:[a-z0-9] ){1,}[a-z0-9]\b")
 

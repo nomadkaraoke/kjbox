@@ -20,7 +20,9 @@
       ? new RegExp('[' + latinKeys.join('').replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ']', 'g')
       : null;
     // Unicode-aware whole-word boundary (JS \b is ASCII-only: "Жft" would still match).
-    const featRe = /\s*[\[(]?\s*(?<![\p{L}\p{N}_])(?:feat\.?|ft\.?|featuring)\s+[^\])]+[\])]?/igu;
+    // Search flavour of text_normalize.normalize: drop only the feat word, keep
+    // the featured artist (identity_normalize's clause strip is Python-only).
+    const featRe = /(?<![\p{L}\p{N}_])(?:feat\.?|ft\.?|featuring)(?=\s)/igu;
     const symbolAndRe = /\s*[&+]\s*/g;
     const aposRe = /['\u2018\u2019\u02BC`]+/gu;
     // NOTE: JS \w is ASCII-only (unlike Python re.UNICODE), so non-Latin

@@ -4,6 +4,15 @@ Dated entries, newest first. Each entry notes any required deploy steps.
 
 ---
 
+## 2026-10-15 - Search finds featured artists + titles after "feat." (v0.131.1)
+
+**Deploy:** `.py` change → auto-deploy restarts kj-controller (playback continues). `NORMALIZER_VERSION` 2 → 3: the KN/Divebar mirror is unusable (search falls back to the Cloud Function — correct, just slower) until `sudo systemctl start nomad-catalog-sync` rebuilds it (also rebuilds `song_id.db`; content unchanged). Reindex the SSD catalog: `cd /opt/nomad/kjbox/kj-controller && ./venv/bin/python scripts/reindex_catalog.py`.
+
+- Seen live: Rotation "Link song" for "hayley stay the night" missed NOMAD-1567 "Zedd feat. Hayley Williams of Paramore - Stay the Night" (the Divebar panel found it) and the SSD's KPARTY-354 "Zedd Ft Hayley Williams". The feat-clause strip runs to end of string, and index text is `artist + " " + title`, so those rows indexed as just `zedd` (~8.8k mirror rows: 606 Divebar, 955 KN community, 7,250 KN full). Stripping the featured artist also made the name itself unsearchable, so the mirror found less than the Cloud Function it replaced.
+- `text_normalize` now has two flavours: `normalize` (search: drops only the feat word, keeps names — matches the Cloud Function) for every index/query/fuzzy/JS path, and `identity_normalize` (old clause strip) for `group_key` (persisted play-stats `song_key`, unchanged), `media_library`, `naming.song_match`, `song_identify` and the dedup script.
+
+---
+
 ## 2026-10-08 - Song for a friend + rename guard (v0.128.0)
 
 **Deploy:** `.py` change → auto-deploy restarts kj-controller (playback continues).

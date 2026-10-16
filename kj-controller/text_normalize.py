@@ -4,10 +4,19 @@ Pure functions (no Flask / SQLite). The same pipeline is applied to indexed
 catalog text AND to user queries so both meet in one canonical space. A JS twin
 (static/text_normalize.js) mirrors this exactly and is verified by a parity test.
 
+Two flavours, differing only in step 3:
+  * ``normalize`` — SEARCH text (indexes + queries). Drops just the word
+    feat./ft./featuring and KEEPS the featured artist, so "hayley stay the
+    night" finds "Zedd feat. Hayley Williams - Stay the Night" (the remote
+    Divebar/KN Cloud Function matches the same way).
+  * ``identity_normalize`` — SONG IDENTITY (grouping keys, persisted play-stats
+    ``song_key``, same-song joins). Strips the whole feat clause so
+    "Zedd feat. X" and "Zedd" are one song.
+
 Pipeline order (order matters):
   1. Unicode NFD + strip combining marks + Latin special-char fold
   2. lowercase
-  3. strip feat./ft./featuring qualifiers
+  3. feat./ft./featuring: drop the word (search) / the whole clause (identity)
   4. expand symbol conjunctions  &  +  -> " and "
   5. drop apostrophes; replace remaining punctuation with space
   6. token-level word abbreviations (pt->part, vs->versus, ...)
@@ -18,7 +27,7 @@ import re
 import unicodedata
 
 # Bump whenever the pipeline or any map changes; gates catalog reindex.
-NORMALIZER_VERSION = 2
+NORMALIZER_VERSION = 3
 
 # Non-decomposable Latin chars that NFD cannot handle.
 LATIN_SPECIAL_MAP = {
@@ -34,10 +43,15 @@ _LATIN_SPECIAL_RE = re.compile(
 # feat./ft./featuring qualifier; stops at a closing bracket or end of string.
 # \b: only a whole word "ft" — without it "Soft Cell" normalized to "so", "Hayloft II"
 # to "haylo", "Taylor Swift" to "taylor swi" (fixed in NORMALIZER_VERSION 2).
+# Identity only: the clause runs to a closing bracket or END OF STRING, so it must
+# never be applied to search text (it ate "... Hayley Williams Stay the Night" from
+# concatenated "artist title" index text — fixed in NORMALIZER_VERSION 3).
 _FEAT_RE = re.compile(
     r'\s*[\[(]?\s*\b(?:feat\.?|ft\.?|featuring)\s+[^\])]+[\])]?',
     re.IGNORECASE,
 )
+# Search: just the feat word (followed by whitespace), names kept.
+_FEAT_WORD_RE = re.compile(r'\b(?:feat\.?|ft\.?|featuring)(?=\s)', re.IGNORECASE)
 _SYMBOL_AND_RE = re.compile(r'\s*[&+]\s*')
 _APOS_RE = re.compile("[‘’ʼ`']+")
 _PUNCT_RE = re.compile(r'[^\w\s]', re.UNICODE)
@@ -53,12 +67,21 @@ def _strip_accents(text):
 
 
 def normalize(text):
-    """Return the canonical, space-joined token string for `text`."""
+    """Canonical SEARCH text for `text` (featured artists kept)."""
+    return _normalize(text, _FEAT_WORD_RE)
+
+
+def identity_normalize(text):
+    """Canonical SONG-IDENTITY text for `text` (feat clause stripped)."""
+    return _normalize(text, _FEAT_RE)
+
+
+def _normalize(text, feat_re):
     if not text:
         return ""
     s = _strip_accents(text)
     s = s.lower()
-    s = _FEAT_RE.sub(' ', s)
+    s = feat_re.sub(' ', s)
     s = _SYMBOL_AND_RE.sub(' and ', s)
     s = _APOS_RE.sub('', s)
     s = _PUNCT_RE.sub(' ', s)
@@ -141,7 +164,7 @@ def group_key(artist, title):
     without migrating stored keys. Result grouping that should ignore
     file-quality tags uses ``result_group_key``.
     """
-    return f"{normalize(artist)}|||{normalize(title)}"
+    return f"{identity_normalize(artist)}|||{identity_normalize(title)}"
 
 
 # Bracketed file-quality tags that karaoke filenames carry on the artist or

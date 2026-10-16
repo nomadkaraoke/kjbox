@@ -36,7 +36,7 @@ import unicodedata
 
 # kj-controller modules (this script lives in kj-controller/scripts/).
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-from text_normalize import normalize  # noqa: E402
+from text_normalize import identity_normalize as normalize  # noqa: E402  (song identity)
 from catalog import parse_karaoke_filename  # noqa: E402
 from utils import parse_youtube_filename  # noqa: E402
 
