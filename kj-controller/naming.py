@@ -13,7 +13,7 @@ from urllib.parse import urlparse, parse_qs
 
 from utils import parse_youtube_filename, sanitize_filename_part
 from catalog import parse_karaoke_filename
-from text_normalize import normalize as _normalize
+from text_normalize import identity_normalize as _normalize
 
 SOURCE_YOUTUBE = "youtube"
 SOURCE_COMMUNITY = "community"

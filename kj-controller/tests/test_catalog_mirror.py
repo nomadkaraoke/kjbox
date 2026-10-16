@@ -44,6 +44,10 @@ DIVEBAR_ROWS = [
      "artist": "Maxïmo Park", "title": "Books from Boxes",
      "filename": "y.mp4", "format": "mp4", "file_size": 3,
      "drive_path": "NOMAD/y.mp4", "in_gcs": False},
+    {"file_id": "f4", "brand": "Nomad Karaoke", "brand_code": "NOMAD",
+     "artist": "Zedd feat. Hayley Williams of Paramore", "title": "Stay the Night",
+     "filename": "NOMAD-1567.mp4", "format": "mp4", "file_size": 4,
+     "drive_path": "NOMAD/NOMAD-1567.mp4", "in_gcs": True},
 ]
 
 
@@ -76,7 +80,7 @@ class TestBuild:
     def test_builds_all_three_sources(self, mirror):
         stats = mirror.stats()
         assert stats["sources"] == {
-            "kn_community": 2, "kn_full": 2, "divebar": 3}
+            "kn_community": 2, "kn_full": 2, "divebar": 4}
         assert stats["usable"] is True
 
     def test_build_is_atomic_replace(self, tmp_path, mirror):
@@ -87,7 +91,7 @@ class TestBuild:
                 "/nonexistent.gz")
         mirror.reload()
         assert mirror.is_usable()
-        assert mirror.stats()["sources"]["divebar"] == 3
+        assert mirror.stats()["sources"]["divebar"] == 4
 
     def test_stored_source_hashes_round_trip(self, mirror):
         assert catalog_mirror.stored_source_hashes(mirror.db_path) == {"a": "1"}
@@ -117,6 +121,13 @@ class TestSearchSemantics:
     def test_word_order_independent(self, mirror):
         assert len(mirror.divebar_search("books maximo park")) == 1
         assert mirror.kn_search("boxes from books maximo")["community"]
+
+    def test_featured_artist_and_title_searchable(self, mirror):
+        # Regression: an unbracketed "feat." in the artist ate the rest of the
+        # concatenated "artist title" index text (NOMAD-1567 indexed as "zedd").
+        for q in ("hayley stay the night", "stay the night zedd",
+                  "zedd ft hayley stay the night"):
+            assert [r["file_id"] for r in mirror.divebar_search(q)] == ["f4"], q
 
     def test_typo_tolerant_via_fuzzy_ladder(self, mirror):
         rows = mirror.divebar_search("maximo park boks")
@@ -252,7 +263,7 @@ class TestSyncScript:
             download_https=fake_https, download_gcs=fake_gcs)
         assert result["error"] is None
         assert result["changed"] is True
-        assert result["counts"]["divebar"] == 3
+        assert result["counts"]["divebar"] == 4
         assert poked["url"].endswith("/catalog-mirror/reload")
 
     def test_unchanged_sources_skip_rebuild(self, tmp_path):
