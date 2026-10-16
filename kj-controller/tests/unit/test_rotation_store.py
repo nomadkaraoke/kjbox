@@ -1667,3 +1667,22 @@ class TestReorderByIds:
         # 999 doesn't exist; b,a still swap.
         assert store.reorder_by_ids([999, b, a]) is True
         assert [e["id"] for e in store.get_entries()] == [b, a]
+
+
+class TestSetDurationIfMissing:
+    def test_fills_null_duration_for_matching_path(self, tmp_path):
+        from rotation_store import RotationStore
+        store = RotationStore(str(tmp_path / "r.db"))
+        e = store.add_entry("A", "S", file_path="/a.mp4")
+        assert store.set_duration_if_missing(e["id"], "/a.mp4", 200) is True
+        assert store.get_entry(e["id"])["duration"] == 200
+
+    def test_never_overwrites_or_crosses_paths(self, tmp_path):
+        from rotation_store import RotationStore
+        store = RotationStore(str(tmp_path / "r.db"))
+        e = store.add_entry("A", "S", file_path="/a.mp4", duration=150)
+        assert store.set_duration_if_missing(e["id"], "/a.mp4", 200) is False
+        f = store.add_entry("B", "S", file_path="/b.mp4")
+        assert store.set_duration_if_missing(f["id"], "/other.mp4", 200) is False
+        assert store.get_entry(e["id"])["duration"] == 150
+        assert store.get_entry(f["id"])["duration"] is None
