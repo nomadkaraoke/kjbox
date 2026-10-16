@@ -778,13 +778,59 @@ class TestChangeSong:
         sing_app.sing_store.set_auto_approve(True)
         r = client.post(f"/sing/submit?t={token}", json=self._body()).get_json()["request"]
         assert r["status"] == "approved"
+        # With auto-approve off, the swap waits for the KJ.
+        sing_app.sing_store.set_auto_approve(False)
         resp = client.post(f"/sing/requests/{r['id']}/change?t={token}", json={
             "edit_token": r["edit_token"], "source_type": "local", "source_ref": "/new.mp4",
             "song_artist": "ABBA", "song_title": "SOS"})
         assert resp.status_code == 200
+        assert resp.get_json()["auto_approved"] is False
         new = resp.get_json()["request"]
         assert new["status"] == "pending" and new["id"] != r["id"]
         assert sing_app.sing_store.get_request(new["id"])["supersedes_request_id"] == r["id"]
+        assert sing_app.sing_store.get_request(r["id"])["status"] == "approved"
+
+    def test_change_approved_with_auto_approve_swaps_immediately(self, client, sing_app, token):
+        """Auto-approve on → a song change never lands in the KJ's Requests
+        panel: the new song takes the original's slot right away."""
+        sing_app.sing_store.set_auto_approve(True)
+        first = client.post(f"/sing/submit?t={token}", json=self._body()).get_json()["request"]
+        client.post(f"/sing/submit?t={token}", json=self._body(
+            singer_name="Bob", source_ref="/bob.mp4", song_title="Bob Song"))
+        old_entry_id = sing_app.sing_store.get_request(first["id"])["linked_entry_id"]
+        old_pos = sing_app.rotation.store.get_entry(old_entry_id)["position"]
+
+        resp = client.post(f"/sing/requests/{first['id']}/change?t={token}", json={
+            "edit_token": first["edit_token"], "source_type": "local", "source_ref": "/new.mp4",
+            "song_artist": "ABBA", "song_title": "SOS"})
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["auto_approved"] is True
+        new = data["request"]
+        assert new["status"] == "approved" and new["edit_token"]
+        assert sing_app.sing_store.list_requests(status="pending") == []
+        # Original request cancelled, its entry gone, new entry in the old slot.
+        assert sing_app.sing_store.get_request(first["id"])["status"] == "cancelled"
+        assert sing_app.rotation.store.get_entry(old_entry_id) is None
+        new_entry = sing_app.rotation.store.get_entry(
+            sing_app.sing_store.get_request(new["id"])["linked_entry_id"])
+        assert new_entry["position"] == old_pos
+        assert new_entry["file_path"] == "/new.mp4"
+
+    def test_change_auto_approve_failure_keeps_pending(self, client, sing_app, token, monkeypatch):
+        sing_app.sing_store.set_auto_approve(True)
+        r = client.post(f"/sing/submit?t={token}", json=self._body()).get_json()["request"]
+        import routes
+
+        def boom(*a, **k):
+            raise RuntimeError("download backend down")
+        monkeypatch.setattr(routes, "approve_sing_request", boom)
+        resp = client.post(f"/sing/requests/{r['id']}/change?t={token}", json={
+            "edit_token": r["edit_token"], "source_type": "local", "source_ref": "/new.mp4",
+            "song_artist": "ABBA", "song_title": "SOS"})
+        assert resp.status_code == 200
+        assert resp.get_json()["auto_approved"] is False
+        assert resp.get_json()["request"]["status"] == "pending"
         assert sing_app.sing_store.get_request(r["id"])["status"] == "approved"
 
     def test_change_after_sung_is_409(self, client, sing_app, token):

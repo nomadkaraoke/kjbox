@@ -6760,34 +6760,7 @@ def approve_sing_request_route(req_id):
     store.mark_approved(req_id, linked_entry_id=entry_id)
 
     # Supersede: this request replaces an approved one (singer edited the song).
-    # Take over the original entry's slot and remove the original.
-    sup_id = req.get("supersedes_request_id")
-    if sup_id:
-        # Best-effort: the new entry is already added + approved, so a failure
-        # here must not 500 the (successful) approval — log and move on rather
-        # than leave the request half-processed.
-        try:
-            rotation = current_app.rotation
-            orig = store.get_request(sup_id)
-            old_entry_id = (orig or {}).get("linked_entry_id")
-            old_entry = rotation.store.get_entry(old_entry_id) if old_entry_id else None
-            # Only take over a still-active slot. If the original was sung
-            # (Done/Left) or is playing (Now Singing), leave it alone and just
-            # append the new song — never delete a finished record (corrupts
-            # sung-counts) or yank a playing song. change_request already blocks
-            # Done/Left; this guards the race where the original finished after
-            # the change request was made.
-            if old_entry and (old_entry.get("status") or "").lower() not in ("done", "left", "now singing"):
-                old_pos = old_entry["position"]
-                rotation.delete_entry(old_entry_id)      # recompacts positions
-                rotation.move_entry(entry_id, old_pos)   # new song takes the old slot
-            if orig:
-                store.mark_cancelled(sup_id)             # original replaced
-        except Exception:
-            current_app.logger.exception(
-                "supersede takeover failed for request %s (supersedes %s)",
-                req_id, sup_id,
-            )
+    apply_supersede(current_app._get_current_object(), req, entry_id)
 
     # Fire push notification for approval (non-critical — never block on failure)
     dispatcher = getattr(current_app.rotation, "push_dispatcher", None)
@@ -6803,6 +6776,44 @@ def approve_sing_request_route(req_id):
         "request": store.get_request(req_id),
         "entry_id": entry_id,
     })
+
+
+def apply_supersede(app, req, entry_id):
+    """Finish approving a singer's song change: the new entry takes over the
+    original entry's slot, the original entry is removed and its request is
+    cancelled. No-op when ``req`` doesn't supersede anything.
+
+    Best-effort: the new entry is already added + approved, so a failure here
+    must not fail the (successful) approval — log and move on rather than
+    leave the request half-processed. Shared by the KJ approve route and the
+    singer change route's auto-approve path.
+    """
+    sup_id = req.get("supersedes_request_id")
+    if not sup_id:
+        return
+    store = app.sing_store
+    try:
+        rotation = app.rotation
+        orig = store.get_request(sup_id)
+        old_entry_id = (orig or {}).get("linked_entry_id")
+        old_entry = rotation.store.get_entry(old_entry_id) if old_entry_id else None
+        # Only take over a still-active slot. If the original was sung
+        # (Done/Left) or is playing (Now Singing), leave it alone and just
+        # append the new song — never delete a finished record (corrupts
+        # sung-counts) or yank a playing song. change_request already blocks
+        # Done/Left; this guards the race where the original finished after
+        # the change request was made.
+        if old_entry and (old_entry.get("status") or "").lower() not in ("done", "left", "now singing"):
+            old_pos = old_entry["position"]
+            rotation.delete_entry(old_entry_id)      # recompacts positions
+            rotation.move_entry(entry_id, old_pos)   # new song takes the old slot
+        if orig:
+            store.mark_cancelled(sup_id)             # original replaced
+    except Exception:
+        app.logger.exception(
+            "supersede takeover failed for request %s (supersedes %s)",
+            req.get("id"), sup_id,
+        )
 
 
 @routes_bp.route('/rotation/requests/<int:req_id>/edit', methods=['POST'])

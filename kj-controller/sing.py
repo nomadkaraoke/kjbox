@@ -2231,8 +2231,9 @@ def change_request(req_id):
         return jsonify({"success": True, "request": {
             **_public_request_view(updated), "edit_token": updated.get("edit_token")}})
 
-    # Approved → create a superseding pending request the KJ approves. Return
-    # its fresh edit_token so the device can manage the new pending request too.
+    # Approved → create a superseding pending request the KJ approves (or that
+    # auto-approve applies right away). Return its fresh edit_token so the
+    # device can manage the new request too.
     new_req = store.create_request(
         singer_name=req["singer_name"], phone=req.get("phone") or "",
         song_artist=song_artist, song_title=song_title,
@@ -2242,8 +2243,33 @@ def change_request(req_id):
         user_agent=request.headers.get("User-Agent", "")[:500],
         device_id=req.get("device_id"),
     )
-    return jsonify({"success": True, "request": {
-        **_public_request_view(new_req), "edit_token": new_req.get("edit_token")}})
+    edit_token = new_req.get("edit_token")
+
+    # Auto-approve applies the swap immediately, same as a fresh submit: the new
+    # song takes over the original's slot. Without this, every song change sat
+    # in the KJ's Requests panel waiting for a manual approve even with
+    # auto-approve on. Any failure keeps the request pending for manual review.
+    auto_approved = False
+    if store.is_auto_approve():
+        try:
+            from routes import (approve_sing_request, apply_supersede,
+                                maybe_auto_reorder, resolve_kj_pick_best)
+
+            app = current_app._get_current_object()
+            to_approve = new_req
+            if source_type == "kj_pick":
+                to_approve = resolve_kj_pick_best(app, new_req, current_app.kj_config or {})
+            entry_id = approve_sing_request(app, to_approve)
+            store.mark_approved(to_approve["id"], linked_entry_id=entry_id)
+            apply_supersede(app, to_approve, entry_id)
+            new_req = store.get_request(new_req["id"])
+            auto_approved = True
+            maybe_auto_reorder(app)
+        except Exception:
+            current_app.logger.exception("Auto-approve change failed; keeping pending")
+
+    return jsonify({"success": True, "auto_approved": auto_approved, "request": {
+        **_public_request_view(new_req), "edit_token": edit_token}})
 
 
 @sing_bp.route("/requests/reorder", methods=["POST"])

@@ -581,3 +581,22 @@ class TestDurationBackfill:
                     break
                 time.sleep(0.02)
         assert mgr.store.get_entry(entry_id)["duration"] == 243
+
+    def test_worker_coalesces_rev_bumps(self, mgr, tmp_path):
+        """A backlog of probes bumps rev once (each bump makes every UI refetch)."""
+        ids = []
+        for i in range(8):
+            f = tmp_path / f"s{i}.zip"
+            f.write_bytes(b"x")
+            e = mgr.add_entry(f"S{i}", "Song")
+            mgr.link_file(e["id"], str(f))
+            ids.append(e["id"])
+        with patch("mediainfo.probe_media_info", return_value={"ok": True, "duration": 200.0}), \
+                patch.object(mgr.store, "bump_rev", wraps=mgr.store.bump_rev) as bump:
+            mgr.get_rotation()
+            for _ in range(200):
+                if all(mgr.store.get_entry(i)["duration"] for i in ids) and bump.call_count:
+                    break
+                time.sleep(0.02)
+        assert all(mgr.store.get_entry(i)["duration"] == 200 for i in ids)
+        assert 1 <= bump.call_count <= 2
