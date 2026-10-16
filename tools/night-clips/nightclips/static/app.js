@@ -126,7 +126,11 @@
       }
     }
     if (isSel) media.append(h('span', { class: 'order-badge' }, pos + 1));
-    if (c.duration) media.append(h('span', { class: 'dur' }, fmtDur(c.duration)));
+    if (c.duration) {
+      const long = c.duration > S.ig_max_s;
+      media.append(h('span', { class: 'dur', title: long ? `Instagram allows up to a minute per video; the first ${fmtDur(S.ig_max_s)} is posted` : '' },
+        long ? `${fmtDur(c.duration)} → ${fmtDur(S.ig_max_s)}` : fmtDur(c.duration)));
+    }
 
     const info = h('div', { class: 'info' },
       h('div', { class: 'time' }, `${hhmmss(c.start)}`,

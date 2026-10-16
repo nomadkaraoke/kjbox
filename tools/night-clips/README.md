@@ -66,7 +66,10 @@ On the review page:
 - **Singers not yet covered** lists the consenting singers who have a clip but none selected.
 - The **Caption** follows the selection until you edit it by hand. **Regenerate** resets it.
 - **Save draft** writes `~/.night-clips/<night>/draft.json`. A rerun restores it.
-- **Publish to Instagram…** saves the draft and launches the publisher (see below).
+- **Publish to Instagram…** saves the draft and launches the publisher (see below). Instagram
+  refuses a multi-video post if any video is over a minute, so clips longer than 59s are posted as
+  their first 59s. The cut is a stream copy (no re-encode) saved to `~/.night-clips/<night>/trimmed/`,
+  and the original in Camera Uploads is left alone. The page shows these as `1:03 → 0:59`.
 - **Mark as posted** writes `posted.json`. If you then rerun or publish that night again, the tool
   warns you and asks you to confirm.
 
@@ -138,6 +141,7 @@ footer = "#karaoke #nomadkaraoke"
   <night>/
     thumbs/*.jpg
     draft.json                # selection, order, caption, manual reassignments
+    trimmed/*.mp4             # first-59s copies of clips over a minute
     publish_request.json      # what the publisher was asked to upload
     publish-*.png             # screenshots when a publish step fails
     posted.json               # written by "Mark as posted"

@@ -96,3 +96,45 @@ def test_parse_probe_rotation_swaps_dimensions():
     assert C.parse_probe(data) == {"duration": 20.53, "width": 1080, "height": 1920}
     data2 = {"format": {}, "streams": [{"codec_type": "video", "width": 1080, "height": 1920, "duration": "5.0"}]}
     assert C.parse_probe(data2) == {"duration": 5.0, "width": 1080, "height": 1920}
+
+
+def test_trim_leaves_short_clips_alone(tmp_path):
+    def boom(*a, **k):
+        raise AssertionError("ffmpeg must not run for a short clip")
+    assert C.trim_for_instagram("/x/a.mp4", 59.0, tmp_path, runner=boom) == "/x/a.mp4"
+    assert C.trim_for_instagram("/x/a.mp4", None, tmp_path, runner=boom) == "/x/a.mp4"
+
+
+def test_trim_long_clip_with_real_ffmpeg(tmp_path):
+    import json
+    import shutil
+
+    import pytest
+    if not shutil.which("ffmpeg"):
+        pytest.skip("ffmpeg not installed")
+    src = tmp_path / "2026-10-16 00.58.10.mp4"
+    subprocess.run(["ffmpeg", "-v", "error", "-f", "lavfi", "-i", "testsrc=size=64x112:rate=10",
+                    "-f", "lavfi", "-i", "sine", "-t", "63", "-c:v", "libx264", "-g", "10",
+                    "-c:a", "aac", "-shortest", str(src)], check=True)
+    out = C.trim_for_instagram(str(src), 63.0, tmp_path / "trimmed")
+    assert out == str(tmp_path / "trimmed" / src.name)
+    info = json.loads(subprocess.run(
+        ["ffprobe", "-v", "error", "-print_format", "json", "-show_format", "-show_streams", out],
+        capture_output=True, text=True, check=True).stdout)
+    assert float(info["format"]["duration"]) < 60
+    assert {s["codec_type"] for s in info["streams"]} == {"video", "audio"}
+    # cached on the second call
+    def boom(*a, **k):
+        raise AssertionError("should reuse the trimmed copy")
+    assert C.trim_for_instagram(str(src), 63.0, tmp_path / "trimmed", runner=boom) == out
+
+
+def test_trim_failure_raises(tmp_path):
+    import pytest
+
+    def fail(*a, **k):
+        return subprocess.CompletedProcess(a, 1, "", "boom")
+    src = tmp_path / "a.mp4"
+    src.write_bytes(b"x")
+    with pytest.raises(RuntimeError, match="trim failed"):
+        C.trim_for_instagram(str(src), 70.0, tmp_path / "t", runner=fail)
