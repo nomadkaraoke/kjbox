@@ -4094,6 +4094,23 @@ body {
 .pr-badge.pr-divebar { background: #1e7cbf; color: #fff; }
 .pr-badge.pr-local { background: #3a8a3a; color: #fff; }
 
+/* Auto-approve still adding this request — informational, no actions. */
+.pending-req-row.pr-auto-progress { opacity: 0.7; }
+.pr-auto-label { color: #8fbf8f; font-size: 0.8rem; font-style: italic; }
+.pr-auto-spinner { font-size: 0.85rem; }
+
+/* Auto-approve couldn't add it — amber accent + the reason. */
+.pending-req-row.pr-auto-failed {
+    background: rgba(230, 160, 40, 0.07);
+    border-left: 3px solid #e6a028;
+    padding-left: 0.4rem;
+}
+.pr-auto-failed-note {
+    flex-basis: 100%;
+    color: #e6b860;
+    font-size: 0.8rem;
+}
+
 /* Tip claim rows — purple accent so money stands out from song requests. */
 .pending-req-row.pr-tip-row {
     background: rgba(142, 90, 214, 0.08);

@@ -1342,6 +1342,47 @@ def tip_claim():
     })
 
 
+def _auto_approve_failure_reason(req, exc):
+    """KJ-facing one-liner for why auto-approve left ``req`` in the panel."""
+    if req.get("source_type") == "kj_pick":
+        return "No playable version could be picked automatically — choose one below."
+    detail = str(exc).strip() or exc.__class__.__name__
+    return f"Couldn't add automatically: {detail[:160]}"
+
+
+def _auto_approve_song(store, req):
+    """Approve a singer's song request without the KJ — the one path shared by
+    submit, change and edit-while-pending so they all behave the same.
+
+    kj_pick binds to its best version (same pick as the admin picker's ⭐ BEST);
+    a superseding change takes over the original's slot. The request is marked
+    auto_status='in_progress' while this runs so the KJ panel shows "Adding
+    automatically…" instead of an Approve button (and the approve route refuses
+    a double-add). On failure it stays pending with auto_status='failed' and a
+    reason the KJ panel shows. Returns True if approved.
+    """
+    from routes import (approve_sing_request, apply_supersede,
+                        maybe_auto_reorder, resolve_kj_pick_best)
+
+    app = current_app._get_current_object()
+    store.set_auto_status(req["id"], "in_progress")
+    try:
+        to_approve = req
+        if req.get("source_type") == "kj_pick":
+            to_approve = resolve_kj_pick_best(app, req, current_app.kj_config or {})
+        entry_id = approve_sing_request(app, to_approve)
+        store.mark_approved(to_approve["id"], linked_entry_id=entry_id)
+        store.set_auto_status(req["id"], None)
+        apply_supersede(app, to_approve, entry_id)
+    except Exception as exc:
+        current_app.logger.exception("Auto-approve failed for request %s; keeping pending", req["id"])
+        store.set_auto_status(req["id"], "failed", _auto_approve_failure_reason(req, exc))
+        return False
+    # Auto-reorder if the KJ enabled it (best-effort; never fail the request).
+    maybe_auto_reorder(app)
+    return True
+
+
 @sing_bp.route("/submit", methods=["POST"])
 @require_token
 def submit():
@@ -1482,25 +1523,8 @@ def submit():
     # running and there's nothing for the KJ to decide — a song too hard to
     # review live just stays at the bottom un-reviewed.
     if store.is_auto_approve() or gen_job_id:
-        try:
-            from routes import approve_sing_request, resolve_kj_pick_best
-
-            to_approve = req
-            if source_type == "kj_pick":
-                to_approve = resolve_kj_pick_best(
-                    current_app._get_current_object(), req, cfg
-                )
-            entry_id = approve_sing_request(
-                current_app._get_current_object(), to_approve
-            )
-            store.mark_approved(to_approve["id"], linked_entry_id=entry_id)
-            req = store.get_request(req["id"])
-            auto_approved = True
-            # Auto-reorder if the KJ enabled it (best-effort; never fail the submit).
-            from routes import maybe_auto_reorder
-            maybe_auto_reorder(current_app._get_current_object())
-        except Exception:
-            current_app.logger.exception("Auto-approve failed; keeping pending")
+        auto_approved = _auto_approve_song(store, req)
+        req = store.get_request(req["id"])
 
     return jsonify(
         {
@@ -2226,9 +2250,16 @@ def change_request(req_id):
         # source_* fields verbatim (incl. None) via update_request_source.
         store.update_request(req_id, song_artist=song_artist, song_title=song_title)
         updated = store.update_request_source(req_id, source_type, source_ref, source_meta)
+        # Still pending with auto-approve on means the last attempt failed (or
+        # it predates auto-approve) — the new song gets a fresh try rather than
+        # sitting in the KJ's panel.
+        auto_approved = False
+        if store.is_auto_approve() and updated.get("auto_status") != "in_progress":
+            auto_approved = _auto_approve_song(store, updated)
+            updated = store.get_request(req_id)
         # edit_token echoed back (owner already holds it) so the device keeps
         # the same self-service capability after the change.
-        return jsonify({"success": True, "request": {
+        return jsonify({"success": True, "auto_approved": auto_approved, "request": {
             **_public_request_view(updated), "edit_token": updated.get("edit_token")}})
 
     # Approved → create a superseding pending request the KJ approves (or that
@@ -2248,25 +2279,11 @@ def change_request(req_id):
     # Auto-approve applies the swap immediately, same as a fresh submit: the new
     # song takes over the original's slot. Without this, every song change sat
     # in the KJ's Requests panel waiting for a manual approve even with
-    # auto-approve on. Any failure keeps the request pending for manual review.
+    # auto-approve on.
     auto_approved = False
     if store.is_auto_approve():
-        try:
-            from routes import (approve_sing_request, apply_supersede,
-                                maybe_auto_reorder, resolve_kj_pick_best)
-
-            app = current_app._get_current_object()
-            to_approve = new_req
-            if source_type == "kj_pick":
-                to_approve = resolve_kj_pick_best(app, new_req, current_app.kj_config or {})
-            entry_id = approve_sing_request(app, to_approve)
-            store.mark_approved(to_approve["id"], linked_entry_id=entry_id)
-            apply_supersede(app, to_approve, entry_id)
-            new_req = store.get_request(new_req["id"])
-            auto_approved = True
-            maybe_auto_reorder(app)
-        except Exception:
-            current_app.logger.exception("Auto-approve change failed; keeping pending")
+        auto_approved = _auto_approve_song(store, new_req)
+        new_req = store.get_request(new_req["id"])
 
     return jsonify({"success": True, "auto_approved": auto_approved, "request": {
         **_public_request_view(new_req), "edit_token": edit_token}})
@@ -2357,15 +2374,18 @@ def reorder_requests():
     # the KJ to vet. Any failure keeps the reorder pending for manual review.
     auto_approved = False
     if store.is_auto_approve():
+        store.set_auto_status(rr["id"], "in_progress")
         try:
             from routes import apply_reorder_request
 
             apply_reorder_request(current_app._get_current_object(), rr)
             store.mark_approved(rr["id"], linked_entry_id=None)
-            rr = store.get_request(rr["id"])
+            store.set_auto_status(rr["id"], None)
             auto_approved = True
-        except Exception:
+        except Exception as exc:
             current_app.logger.exception("Auto-approve reorder failed; keeping pending")
+            store.set_auto_status(rr["id"], "failed", _auto_approve_failure_reason(rr, exc))
+        rr = store.get_request(rr["id"])
 
     return jsonify({
         "success": True,

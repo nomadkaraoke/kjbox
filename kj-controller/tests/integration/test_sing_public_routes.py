@@ -832,6 +832,53 @@ class TestChangeSong:
         assert resp.get_json()["auto_approved"] is False
         assert resp.get_json()["request"]["status"] == "pending"
         assert sing_app.sing_store.get_request(r["id"])["status"] == "approved"
+        # The KJ panel gets told why this one needs them.
+        new = sing_app.sing_store.get_request(resp.get_json()["request"]["id"])
+        assert new["auto_status"] == "failed"
+        assert "download backend down" in new["auto_error"]
+
+    def test_submit_auto_approve_success_clears_auto_status(self, client, sing_app, token):
+        sing_app.sing_store.set_auto_approve(True)
+        r = client.post(f"/sing/submit?t={token}", json=self._body()).get_json()["request"]
+        row = sing_app.sing_store.get_request(r["id"])
+        assert row["status"] == "approved" and row["auto_status"] is None
+
+    def test_failed_kj_pick_reason_points_at_picker(self, client, sing_app, token, monkeypatch):
+        sing_app.sing_store.set_auto_approve(True)
+        import routes
+
+        def no_version(*a, **k):
+            raise ValueError("nothing resolvable")
+        monkeypatch.setattr(routes, "resolve_kj_pick_best", no_version)
+        r = client.post(f"/sing/submit?t={token}", json=self._body(
+            source_type="kj_pick", source_ref=None,
+            source_meta={"versions": [{"source": "local", "local": {"path": "/v.mp4"}}]}))
+        req = sing_app.sing_store.get_request(r.get_json()["request"]["id"])
+        assert req["status"] == "pending" and req["auto_status"] == "failed"
+        assert "choose one below" in req["auto_error"]
+
+    def test_change_of_failed_pending_retries_auto_approve(self, client, sing_app, token, monkeypatch):
+        """A request left pending by a failed auto-approve gets a fresh try when
+        the singer picks a different song."""
+        sing_app.sing_store.set_auto_approve(True)
+        import routes
+        real = routes.approve_sing_request
+        calls = {"n": 0}
+
+        def flaky(*a, **k):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                raise RuntimeError("first file missing")
+            return real(*a, **k)
+        monkeypatch.setattr(routes, "approve_sing_request", flaky)
+        r = client.post(f"/sing/submit?t={token}", json=self._body()).get_json()["request"]
+        assert r["status"] == "pending"
+        resp = client.post(f"/sing/requests/{r['id']}/change?t={token}", json={
+            "edit_token": r["edit_token"], "source_type": "local", "source_ref": "/new.mp4",
+            "song_artist": "ABBA", "song_title": "SOS"})
+        assert resp.get_json()["auto_approved"] is True
+        row = sing_app.sing_store.get_request(r["id"])
+        assert row["status"] == "approved" and row["auto_status"] is None
 
     def test_change_after_sung_is_409(self, client, sing_app, token):
         sing_app.sing_store.set_auto_approve(True)

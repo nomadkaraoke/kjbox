@@ -222,6 +222,17 @@ class SingStore:
         except sqlite3.OperationalError as e:
             if "duplicate column name" not in str(e).lower():
                 raise
+        # Additive migration — `auto_status`/`auto_error` (2026-10-16): with
+        # auto-approve on, a request is 'in_progress' while the server adds it
+        # (the KJ panel shows "Adding automatically…" and refuses a manual
+        # approve that would double-add) and 'failed' + a reason when it
+        # couldn't — so anything left in the panel says why it needs the KJ.
+        for col in ("auto_status", "auto_error"):
+            try:
+                conn.execute(f"ALTER TABLE sing_requests ADD COLUMN {col} TEXT DEFAULT NULL")
+            except sqlite3.OperationalError as e:
+                if "duplicate column name" not in str(e).lower():
+                    raise
         # Additive migration — `user_agent` (2026-08-13) records the submitting
         # device's User-Agent so the KJ can tell a real singer-UI session apart
         # from a duet-partner label or a KJ-hand-added entry, and eyeball the
@@ -1324,6 +1335,16 @@ class SingStore:
         )
         conn.commit()
         return self.get_request(request_id)
+
+    def set_auto_status(self, request_id, status, error=None):
+        """Record auto-approve progress on a request: 'in_progress', 'failed'
+        (with a KJ-facing ``error``), or None to clear."""
+        conn = self._get_conn()
+        conn.execute(
+            "UPDATE sing_requests SET auto_status = ?, auto_error = ? WHERE id = ?",
+            (status, (error or None) if status == "failed" else None, request_id),
+        )
+        conn.commit()
 
     def mark_approved(self, request_id, linked_entry_id=None):
         """Set status=approved, reviewed_at=now, linked_entry_id if provided."""

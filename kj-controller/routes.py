@@ -6508,7 +6508,9 @@ def list_sing_requests():
     # singer's device only. The admin host is unauthenticated on the LAN
     # (http://nomadpc.local), so it must never appear in this list.
     requests = [
-        {k: v for k, v in r.items() if k != "edit_token"}
+        {**{k: v for k, v in r.items() if k != "edit_token"},
+         # Server-side so the panel and the approve guard agree on staleness.
+         "auto_in_progress": auto_approve_in_progress(r)}
         for r in store.list_requests(status=status, limit=limit)
     ]
     return jsonify({
@@ -6697,6 +6699,8 @@ def approve_sing_request_route(req_id):
         return jsonify({"error": "Request not found"}), 404
     if req["status"] != "pending":
         return jsonify({"error": f"Request is already {req['status']}"}), 409
+    if auto_approve_in_progress(req):
+        return jsonify({"error": "This request is being added automatically"}), 409
 
     # Tip claim: not a song — confirming means "the money arrived". Hearts the
     # singer's active entries and, at/above the configured threshold, applies
@@ -6778,6 +6782,24 @@ def approve_sing_request_route(req_id):
     })
 
 
+# An auto-approve normally finishes in a few seconds (Divebar resolves can take
+# ~10). Past this, assume the worker died mid-approve (e.g. a deploy restart)
+# and hand the request back to the KJ.
+AUTO_APPROVE_STALE_S = 120
+
+
+def auto_approve_in_progress(req):
+    """True while the server is still auto-adding ``req`` (not stale)."""
+    if (req or {}).get("auto_status") != "in_progress":
+        return False
+    from datetime import datetime
+    try:
+        age = (datetime.now() - datetime.fromisoformat(req["created_at"])).total_seconds()
+    except (KeyError, TypeError, ValueError):
+        return False
+    return age < AUTO_APPROVE_STALE_S
+
+
 def apply_supersede(app, req, entry_id):
     """Finish approving a singer's song change: the new entry takes over the
     original entry's slot, the original entry is removed and its request is
@@ -6844,6 +6866,8 @@ def reject_sing_request_route(req_id):
     req = store.get_request(req_id)
     if req is None:
         return jsonify({"error": "Request not found"}), 404
+    if auto_approve_in_progress(req):
+        return jsonify({"error": "This request is being added automatically"}), 409
     data = request.get_json(force=True, silent=True) or {}
     reason = (data.get("reason") or "").strip() or None
     store.mark_rejected(req_id, reason=reason)
