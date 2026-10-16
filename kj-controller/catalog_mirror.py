@@ -35,8 +35,9 @@ import fuzzy_match
 from sqlite_conn import ThreadLocalConnection
 from text_normalize import (
     normalize as _normalize,
+    joined_forms as _joined_forms,
     fts_match_query as _fts5_safe_query,
-    NORMALIZER_VERSION,
+    SEARCH_INDEX_VERSION,
 )
 
 logger = logging.getLogger(__name__)
@@ -122,7 +123,7 @@ class CatalogMirror:
                 "catalog_mirror_max_age_days", DEFAULT_MAX_AGE_DAYS)
         if (time.time() - built) > max_age_days * 86400:
             return False
-        if self._meta("normalizer_version") != str(NORMALIZER_VERSION):
+        if self._meta("normalizer_version") != SEARCH_INDEX_VERSION:
             return False
         return True
 
@@ -317,7 +318,15 @@ def _iter_ndjson_export(path):
 
 
 def _entry_rows(source, rows_iter):
-    """Map raw export rows to (source, artist, title, payload, norm_text).
+    """Map raw export rows to (source, artist, title, payload, norm_text,
+    fts_text).
+
+    ``fts_text`` is what the word index holds: ``norm_text`` plus the joined
+    adjacent-word forms of artist and title (``text_normalize.index_text``,
+    per field so no "artisttitle" junk pair is added), so "overthinking"
+    finds "(Over)Thinking". ``norm_text`` stays plain normalized text — it
+    backs the trigram index and the fuzzy re-rank, which compare against
+    the query.
 
     Payloads use the exact key sets the remote APIs return, so search results
     are drop-in for the CF-backed paths.
@@ -342,7 +351,10 @@ def _entry_rows(source, rows_iter):
         norm_text = _normalize((artist + " " + title).strip())
         if not norm_text:
             continue
-        yield (source, artist, title, json.dumps(payload), norm_text)
+        fts_text = " ".join(
+            [norm_text] + _joined_forms(_normalize(artist))
+            + _joined_forms(_normalize(title)))
+        yield (source, artist, title, json.dumps(payload), norm_text, fts_text)
 
 
 def build_mirror_db(dest_path, community_path, full_path, divebar_path,
@@ -382,7 +394,7 @@ def build_mirror_db(dest_path, community_path, full_path, divebar_path,
 
         meta = {
             "built_at": str(time.time()),
-            "normalizer_version": str(NORMALIZER_VERSION),
+            "normalizer_version": SEARCH_INDEX_VERSION,
             "counts": json.dumps(counts),
         }
         if source_hashes:
@@ -405,23 +417,26 @@ def build_mirror_db(dest_path, community_path, full_path, divebar_path,
 def _flush(conn, batch):
     cur = conn.executemany(
         "INSERT INTO entries(source, artist, title, payload, norm_text) "
-        "VALUES (?, ?, ?, ?, ?)", batch)
+        "VALUES (?, ?, ?, ?, ?)", [row[:5] for row in batch])
     # Backfill both indexes for the rows just inserted (single transaction,
-    # ids are contiguous because nothing else writes to this fresh file).
+    # ids are contiguous because nothing else writes to this fresh file, and
+    # executemany inserts in batch order).
     first_id = conn.execute("SELECT MAX(id) FROM entries").fetchone()[0] - len(batch) + 1
-    rows = conn.execute(
-        "SELECT id, norm_text, source FROM entries WHERE id >= ?",
-        (first_id,)).fetchall()
+    # The FTS index gets fts_text (normalized + joined forms) even though its
+    # external content column (entries.norm_text) holds the plain text: the
+    # mirror is rebuilt from scratch and never row-deleted, so the content
+    # mismatch is never read back.
     conn.executemany(
-        "INSERT INTO entries_fts(rowid, norm_text, source) VALUES (?, ?, ?)", rows)
+        "INSERT INTO entries_fts(rowid, norm_text, source) VALUES (?, ?, ?)",
+        [(first_id + i, row[5], row[0]) for i, row in enumerate(batch)])
     conn.executemany(
         "INSERT INTO entries_trigram(rowid, norm_text, source) VALUES (?, ?, ?)",
-        rows)
+        [(first_id + i, row[4], row[0]) for i, row in enumerate(batch)])
     del cur
 
 
 def stored_normalizer_version(db_path):
-    """NORMALIZER_VERSION the mirror was built with (None if unknown)."""
+    """SEARCH_INDEX_VERSION the mirror was built with (None if unknown)."""
     if not os.path.exists(db_path):
         return None
     try:

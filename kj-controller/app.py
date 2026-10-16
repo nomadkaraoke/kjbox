@@ -276,6 +276,39 @@ def _sync_event_url_overlays(flask_app):
         flask_app.logger.exception("event-url overlay sync failed")
 
 
+def reindex_stale_catalog_async(catalog, cfg):
+    """Rebuild a stale catalog FTS index (normalizer / index_text change) on a
+    background thread so a deploy brings search up to date by itself.
+
+    The rebuild is one WAL transaction: searches keep reading the previous
+    index until it commits (~a minute for the full catalog). Returns the
+    started thread, or None when the index is current.
+    """
+    try:
+        stale = catalog.index_is_stale()
+    except Exception:  # noqa: BLE001
+        return None
+    if not stale:
+        return None
+
+    def _run():
+        log_message("Catalog FTS index is stale (normalizer/index text changed); "
+                    "reindexing in the background...", cfg)
+        try:
+            catalog.init_schema()
+            start = time.time()
+            total = catalog.rebuild_fts()
+            log_message(f"Catalog reindex done: {total} rows in "
+                        f"{time.time() - start:.0f}s.", cfg)
+        except Exception as e:  # noqa: BLE001
+            log_message(f"WARNING: catalog reindex failed ({e}). "
+                        "Run: python scripts/reindex_catalog.py", cfg)
+
+    t = threading.Thread(target=_run, name="catalog-reindex", daemon=True)
+    t.start()
+    return t
+
+
 def create_app(config=None):
     """Create and configure the Flask application."""
     flask_app = Flask(__name__)
@@ -312,8 +345,9 @@ def create_app(config=None):
     try:
         if flask_app.catalog.is_available() and flask_app.catalog.index_is_stale():
             flask_app.logger.warning(
-                "Catalog FTS index is stale (normalizer changed). "
-                "Run: python scripts/reindex_catalog.py"
+                "Catalog FTS index is stale (normalizer/index text changed); "
+                "start_app reindexes it in the background "
+                "(or run: python scripts/reindex_catalog.py)"
             )
     except Exception:
         pass
@@ -660,15 +694,7 @@ def start_app():  # pragma: no cover
     # Log external catalog status
     if flask_app.catalog.is_available():
         log_message(f"External catalog available: {flask_app.catalog.count()} entries.", cfg)
-        try:
-            if flask_app.catalog.index_is_stale():
-                log_message(
-                    "WARNING: Catalog FTS index is stale (normalizer changed). "
-                    "Run: python scripts/reindex_catalog.py",
-                    cfg,
-                )
-        except Exception:
-            pass
+        reindex_stale_catalog_async(flask_app.catalog, cfg)
     else:
         log_message("External catalog not yet built. Use POST /catalog/build to create.", cfg)
 

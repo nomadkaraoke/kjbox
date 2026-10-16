@@ -244,6 +244,18 @@ SOURCE_TIEBREAKER_LOCAL    = 0
 SOURCE_TIEBREAKER_DIVEBAR  = 1
 SOURCE_TIEBREAKER_YOUTUBE  = 2
 
+# Within one brand + source, a video file (MP4 etc.) beats a CD+G zip: the KJ
+# almost always picks the MP4 when both exist (smoother, certainly for NOMAD's
+# own releases). Packed under the source tiebreaker as source*3 + format, so
+# the whole offset stays < 10 (the per-brand spacing) and a local CD+G still
+# beats a not-yet-downloaded MP4 of the same brand.
+FORMAT_TIEBREAKER_VIDEO    = 0
+FORMAT_TIEBREAKER_CDG      = 1
+_SOURCE_STRIDE             = 3
+
+_CDG_FORMATS = {"cdg", "cdg+mp3", "zip", "mp3+g", "mp3g"}
+_CDG_EXTENSIONS = (".zip", ".cdg")
+
 
 def _priority_list(cfg, key, default):
     """Read a priority list from config; fall back to default if missing/empty."""
@@ -277,6 +289,26 @@ def _source_tiebreaker(version):
     if version.get("youtube_url"):
         return SOURCE_TIEBREAKER_YOUTUBE
     return SOURCE_TIEBREAKER_YOUTUBE
+
+
+def _format_tiebreaker(version):
+    """FORMAT_TIEBREAKER_CDG for CD+G versions, else FORMAT_TIEBREAKER_VIDEO.
+
+    Reads an explicit ``format`` (catalog rows: "cdg+mp3"; Divebar rows: "zip"/
+    "cdg"/"mp4") and falls back to the file extension. Anything unrecognised —
+    including every YouTube track — counts as video, so only a positively
+    identified CD+G is demoted.
+    """
+    local = version.get("local") if version.get("source") == "local" else None
+    src = local if isinstance(local, dict) else version
+    fmt = (src.get("format") or "").lower().strip()
+    if fmt in _CDG_FORMATS:
+        return FORMAT_TIEBREAKER_CDG
+    if not fmt or fmt == "unknown":
+        name = (src.get("filename") or src.get("path") or "").lower()
+        if name.endswith(_CDG_EXTENSIONS):
+            return FORMAT_TIEBREAKER_CDG
+    return FORMAT_TIEBREAKER_VIDEO
 
 
 def _extract_brand_inputs(version):
@@ -319,7 +351,8 @@ def rank_version(version, cfg) -> int:
     """
     inputs = _extract_brand_inputs(version)
     canonical, classification = resolve_brand(**inputs)
-    tiebreaker = _source_tiebreaker(version)
+    tiebreaker = (_source_tiebreaker(version) * _SOURCE_STRIDE
+                  + _format_tiebreaker(version))
 
     if classification == "community":
         if canonical is None:

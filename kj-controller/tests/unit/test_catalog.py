@@ -542,11 +542,11 @@ class TestExternalCatalog:
 
 class TestCatalogMeta:
     def test_version_stamped_on_build(self, tmp_path):
-        from text_normalize import NORMALIZER_VERSION
+        from text_normalize import SEARCH_INDEX_VERSION
         cat = _build_tiny_catalog(tmp_path, [
             "/m/KK-1 - Simon & Garfunkel - Sound Of Silence.zip",
         ])
-        assert cat.normalizer_version() == NORMALIZER_VERSION
+        assert cat.normalizer_version() == SEARCH_INDEX_VERSION
 
     def test_is_stale_false_after_build(self, tmp_path):
         cat = _build_tiny_catalog(tmp_path, [

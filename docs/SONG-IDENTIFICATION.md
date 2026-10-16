@@ -266,3 +266,11 @@ Known gaps:
 "Soft Cell" normalised to "so" and "Hayloft II" to "haylo", in every on-device search index.
 The fix bumps `NORMALIZER_VERSION` to 2, so indexes must be rebuilt (deploy steps in the
 CHANGELOG).
+
+**Joined-word index (v0.133.0):** the karaoke-availability indexes (external catalog FTS, catalog
+mirror FTS, the downloaded-media scan, the KJ's local-media filter) store each adjacent word pair
+joined as well (`text_normalize.index_text` / `joined_forms`), so "overthinking" finds
+"(Over)Thinking" and "acdc" finds "AC-DC". Queries are never joined. These indexes stamp
+`SEARCH_INDEX_VERSION` (`"<NORMALIZER_VERSION>.<n>"`) rather than `NORMALIZER_VERSION`, so an
+index-only change rebuilds them without invalidating `song_id.db`. Song identification
+(`song_identify.py`) is unchanged.

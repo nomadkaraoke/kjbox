@@ -47,3 +47,20 @@ def test_js_matches_python():
     js_results = json.loads(out)
     py_results = [tn.normalize(c) for c in CASES]
     assert js_results == py_results
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="node not installed")
+def test_js_index_text_matches_python():
+    cases = CASES + ["(Over)Thinking", "Over, Thinking", "AC/DC", "a b ab"]
+    script = (
+        "const tn=require(process.argv[1]);"
+        "const maps=JSON.parse(process.argv[2]);"
+        "const cases=JSON.parse(process.argv[3]);"
+        "const n=tn.makeNormalizer(maps);"
+        "console.log(JSON.stringify(cases.map(c=>n.indexText(c))));"
+    )
+    out = subprocess.check_output(
+        ["node", "-e", script, JS_FILE, json.dumps(_maps()), json.dumps(cases)],
+        text=True,
+    )
+    assert json.loads(out) == [tn.index_text(c) for c in cases]

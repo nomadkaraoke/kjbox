@@ -2664,7 +2664,9 @@ function normalizeForSearch(str) {
 function filterLocalMedia(query) {
     const terms = normalizeForSearch(query.toLowerCase()).split(/\s+/).filter(t => t);
     return applyMediaFilter(localMediaItems).filter(item => {
-        const text = normalizeForSearch(((item.display_name || '') + ' ' + (item.channel || '')).toLowerCase());
+        // Index-side text: normalized + joined word pairs ("overthinking"
+        // matches "(Over)Thinking"); see text_normalize.index_text.
+        const text = _normalizer.indexText(((item.display_name || '') + ' ' + (item.channel || '')).toLowerCase());
         return terms.every(term => text.includes(term));
     });
 }

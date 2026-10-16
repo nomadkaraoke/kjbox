@@ -284,7 +284,8 @@ class TestSyncScript:
         cfg = self._cfg(tmp_path)
         assert sync_catalogs.run_sync(cfg, requests_lib=None, download_https=fake_https,
                                       download_gcs=fake_gcs)["changed"] is True
-        monkeypatch.setattr(catalog_mirror, "NORMALIZER_VERSION", catalog_mirror.NORMALIZER_VERSION + 1)
+        monkeypatch.setattr(catalog_mirror, "SEARCH_INDEX_VERSION",
+                            catalog_mirror.SEARCH_INDEX_VERSION + "-next")
         again = sync_catalogs.run_sync(cfg, requests_lib=None, download_https=fake_https,
                                        download_gcs=fake_gcs)
         assert again["changed"] is True and again["error"] is None
