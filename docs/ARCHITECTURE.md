@@ -201,7 +201,7 @@ utils.py → (stdlib only)
 | GET | `/system/sleep-mode` | Sleep mode status (active, entering, exiting, state details) |
 | POST | `/system/sleep-mode` | Enter or exit sleep mode (stops services, unmounts SSD, power-saver) |
 | GET | `/system/stats` | System metrics: CPU %, memory, disk usage (requires psutil) |
-| GET | `/rotation` | Get singer rotation queue (non-done entries, with estimated times). Also returns `rev` (monotonic revision) + `history` (`{undo, redo, undo_label, redo_label}`) for the undo/redo buttons |
+| GET | `/rotation` | Get singer rotation queue (non-done entries, with estimated times). Also returns `rev` (monotonic revision) + `history` (`{undo, redo, undo_label, redo_label}`) for the undo/redo buttons. `?include_done=1` adds `done_entries` (tonight's Done/Left entries in rotation order) for the header "✓ Done" toggle |
 | POST | `/rotation/status` | Update a rotation entry's status (`{id, status}`) |
 | POST | `/rotation/edit` | Edit a rotation entry's singer name and/or song (`{id, singer?, song_artist?}`) |
 | POST | `/rotation/delete` | Delete a rotation entry (`{id}`) |

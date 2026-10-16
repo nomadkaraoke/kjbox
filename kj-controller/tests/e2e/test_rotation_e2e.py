@@ -355,6 +355,36 @@ class TestCancelledEntry:
         )
 
 
+class TestShowDoneToggle:
+    def test_toggle_shows_done_entry_and_restore_requeues_it(self, rotation_page):
+        page = rotation_page
+        page.locator('#rotation-singer').fill('DoneToggleSinger')
+        page.locator('#rotation-singer').press('Enter')
+        page.locator('#rotation-song').fill('Done Toggle Song')
+        page.locator('#rotation-add-btn-submit').click()
+        live = page.locator('.rotation-entry', has_text='DoneToggleSinger')
+        live.first.wait_for(state='visible')
+
+        live.first.locator('.rotation-btn-done').click()
+        live.first.wait_for(state='detached')
+
+        done_rows = page.locator('.rotation-done-entry', has_text='DoneToggleSinger')
+        assert done_rows.count() == 0  # hidden until toggled on
+        page.locator('#rotation-done-btn').click()
+        done_rows.first.wait_for(state='visible')
+        assert 'rotation-done-toggle-btn-active' in page.locator('#rotation-done-btn').get_attribute('class')
+        assert done_rows.first.locator('.badge-done').text_content() == 'DONE'
+
+        done_rows.first.locator('.rotation-btn-restore').click()
+        live.first.wait_for(state='visible')
+        done_rows.first.wait_for(state='detached')
+
+        # Toggling off hides the done section entirely.
+        page.locator('#rotation-done-btn').click()
+        assert page.locator('.rotation-done-section').count() == 0
+        page.evaluate("() => localStorage.removeItem('kj-rotation-show-done')")
+
+
 class TestChangeReorderPanel:
     def test_panel_renders_change_and_reorder(self, app_page):
         page = app_page

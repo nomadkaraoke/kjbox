@@ -75,6 +75,23 @@ class TestGetRotation:
         assert len(data['entries']) == 3
         assert data['entries'][0]['singer'] == 'Alice'
 
+    def test_done_entries_omitted_by_default(self, rotation_client, mock_rotation):
+        resp = rotation_client.get('/rotation')
+        assert 'done_entries' not in resp.get_json()
+        mock_rotation.store.get_completed_entries.assert_not_called()
+
+    def test_include_done_returns_done_entries(self, rotation_client, mock_rotation):
+        mock_rotation.store.get_completed_entries.return_value = [
+            {"id": 9, "position": 0, "singer": "Zed", "song_artist": "Hey Jude",
+             "status": "Done", "done_at": "2026-10-16 21:47:03", "file_path": None},
+        ]
+        resp = rotation_client.get('/rotation?include_done=1')
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert [e["singer"] for e in data['done_entries']] == ["Zed"]
+        # The live queue is unchanged — done rows never leak into `entries`.
+        assert len(data['entries']) == 3
+
     def test_entries_have_estimated_time(self, rotation_client):
         resp = rotation_client.get('/rotation')
         assert resp.status_code == 200

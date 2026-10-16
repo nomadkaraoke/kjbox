@@ -355,6 +355,21 @@ class RotationStore:
             ).fetchall()
         return [self._row_to_dict(r) for r in rows]
 
+    def get_completed_entries(self):
+        """Return tonight's 'done'/'left' entries, ordered by position.
+
+        These keep their rotation position when marked done, so position order
+        is the order they were in the rotation. Backs the KJ's "show done"
+        toggle (re-play / restore an accidentally-done entry).
+        """
+        conn = self._get_conn()
+        rows = conn.execute(
+            "SELECT * FROM rotation_entries "
+            "WHERE LOWER(status) IN ('done', 'left') "
+            "ORDER BY position"
+        ).fetchall()
+        return [self._row_to_dict(r) for r in rows]
+
     def get_entry(self, entry_id):
         """Return a single entry by ID, or None if not found."""
         conn = self._get_conn()
