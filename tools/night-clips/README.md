@@ -44,9 +44,13 @@ What it does:
 3. **Downloads only those clips** with `dbx-materialize -j 8 -q`. Any failures are listed and the
    rest carry on. Afterwards, free the space in Finder (Dropbox → Make Online-Only).
 4. **Probes and thumbnails** each clip. Thumbnails go into `~/.night-clips/<night>/thumbs/`.
-5. **Matches each clip** to the song with the greatest `sung_at` ≤ clip start. A clip is flagged
-   **check singer** when it starts within 15s after a song change, or when the song started more than
-   8 minutes before the clip. Clips from before the first song are left unassigned.
+5. **Matches each clip** to the song whose play started most recently before the clip. The start is
+   `started_at`, when the kjbox began playing the song. `sung_at` is when the KJ marked it Done,
+   which is the song's *end*, so it's only used as the start for older nights that have no
+   `started_at`. Songs marked Done without ever being played are ignored. A clip is flagged
+   **check singer** when it starts within 15s after a song change, when the song started more than
+   8 minutes before the clip, or when it starts more than 30s after the song was marked Done
+   (something unlogged was on stage). Clips from before the first song are left unassigned.
 6. **Pre-selects up to 20 clips** in show order. First it takes the earliest unflagged clip for
    each consenting singer, then fills the remaining slots spread across the night (songs not yet
    shown come first).

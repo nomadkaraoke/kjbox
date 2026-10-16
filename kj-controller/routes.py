@@ -7254,6 +7254,7 @@ def history_night_media():
             "song": e.get("song"),
             "singer": e.get("singer"),
             "sung_at": e.get("sung_at"),
+            "started_at": e.get("started_at"),
             "added_at": e.get("added_at"),
             "performers": performers,
             "postable": postable,

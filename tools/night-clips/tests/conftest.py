@@ -73,3 +73,18 @@ def songs_media(night_log) -> list[dict]:
 @pytest.fixture
 def night_media_payload(night_log) -> dict:
     return {"night": NIGHT, "consent_source": "legacy", "songs": synth_consent(kjbox.songs_from_night_log(night_log))}
+
+
+@pytest.fixture
+def night_media_1015() -> dict:
+    """Real 2026-10-15 night with ``started_at`` (play start) and ``sung_at`` (Done time).
+
+    Songs from ``/history/night-media`` with consent blanked; ``started_at`` from the
+    kjbox play_events. Five songs were marked Done without being played (no start).
+    """
+    return json.loads((FIXTURES / "night_media_2026-10-15.json").read_text())
+
+
+@pytest.fixture
+def clip_names_1015() -> list[str]:
+    return [l.strip() for l in (FIXTURES / "clips_2026-10-15.txt").read_text().splitlines() if l.strip()]

@@ -63,6 +63,7 @@
   const FLAGS = {
     near_change: 'clip starts within 15s of a song change',
     stale_song: 'song started over 8 min before the clip',
+    after_song_end: 'clip starts after this song was marked done',
   };
   const STATUS_LABEL = {
     eligible: 'OK to post', unknown: 'Consent unknown', excluded: 'Said no', unassigned: 'No song matched',
@@ -172,7 +173,7 @@
       const s = S.songs[i];
       const who = s.performers.map((p) => p.name).join(' & ');
       sel.append(h('option', { value: String(i), selected: c.song_idx === i },
-        `${hhmm(s.sung_at)} ${who} — ${s.song}${i === c.auto_song_idx ? ' (auto)' : ''}`));
+        `${hhmm(s.start)} ${who} — ${s.song}${i === c.auto_song_idx ? ' (auto)' : ''}`));
     }
     return sel;
   }

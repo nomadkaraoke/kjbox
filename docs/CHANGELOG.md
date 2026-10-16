@@ -2,6 +2,18 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-10-16 - Night clips tagged the previous singer: match on play start, not Done time (v0.134.1)
+
+- The night-clips tool matched each phone clip to the latest `sung_at` before it. Since the Night Log
+  (v0.129.0), `sung_at` is the entry's `done_at`, i.e. when the song *ended*, so every 10-15 clip
+  was tagged with the singer who had just finished. Example: the 22:14:47 clip was Lulu K's "Ana Ng"
+  (played 22:13:31) but was tagged Ashlee A & Jude ("Wonderwall", Done 22:13:13).
+- Night Log entries and `/history/night-media` songs now carry `started_at` (the `play_events` play
+  start, local time). night-clips 0.1.1 matches on it and still falls back to `sung_at` for older
+  nights. It ignores songs ticked Done without being played: three Juan G songs on 10-15 would
+  otherwise have taken a 02:05 clip from "Medicina De Amor". A new `after_song_end` flag marks
+  clips filmed more than 30s after the matched song was Done (e.g. an entry deleted after it played).
+
 ## 2026-10-16 - Rotation "✓ Done" toggle: show, re-play and restore completed entries (v0.134.0)
 
 - New **✓ Done** button in the Rotation header (next to 📁 Paths), remembered per device. When on,

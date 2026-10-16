@@ -2,7 +2,7 @@
 
 Camera Uploads filenames are the phone's local (America/New_York) recording start
 time, e.g. ``2026-10-08 22.13.56.mp4`` (``-1``, ``-2``... when two share a second).
-kjbox ``sung_at`` is the same local wall-clock time, so no timezone maths is needed.
+kjbox ``started_at``/``sung_at`` are the same local wall-clock time, so no timezone maths is needed.
 
 The folder has ~100k files and almost all are Dropbox online-only placeholders
 (0 bytes until downloaded), so we only ``scandir`` names (never ``stat`` every
@@ -75,7 +75,7 @@ def parse_ts(s: str) -> dt.datetime:
 
 
 def night_window(songs: list[dict], pad: dt.timedelta = WINDOW_PAD) -> tuple[dt.datetime, dt.datetime] | None:
-    times = sorted(parse_ts(s["sung_at"]) for s in songs if s.get("sung_at"))
+    times = sorted(parse_ts(s[k]) for s in songs for k in ("started_at", "sung_at") if s.get(k))
     if not times:
         return None
     return times[0] - pad, times[-1] + pad

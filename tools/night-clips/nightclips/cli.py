@@ -40,7 +40,7 @@ def build_state(night: str, cfg: dict, args, out=print) -> ReviewState:
     if not camera.is_dir():
         raise SystemExit(f"ERROR: Camera Uploads folder not found: {camera}")
     clips = clipmod.scan_clips(camera, *window)
-    out(f"{len(songs)} songs sung {songs[0]['sung_at'][11:16]}–{songs[-1]['sung_at'][11:16]}; "
+    out(f"{len(songs)} songs sung {songs[0]['start'][11:16]}–{songs[-1]['sung_at'][11:16]}; "
         f"{len(clips)} clip(s) in window {window[0]:%m-%d %H:%M} → {window[1]:%m-%d %H:%M}.")
 
     if clips and not args.skip_materialize:
