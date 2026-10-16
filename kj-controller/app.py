@@ -297,9 +297,13 @@ def reindex_stale_catalog_async(catalog, cfg):
         try:
             catalog.init_schema()
             start = time.time()
-            total = catalog.rebuild_fts()
-            log_message(f"Catalog reindex done: {total} rows in "
-                        f"{time.time() - start:.0f}s.", cfg)
+            total = catalog.rebuild_fts(only_if_stale=True)
+            if total is None:
+                log_message("Catalog reindex skipped: a full catalog build "
+                            "already refreshed the index.", cfg)
+            else:
+                log_message(f"Catalog reindex done: {total} rows in "
+                            f"{time.time() - start:.0f}s.", cfg)
         except Exception as e:  # noqa: BLE001
             log_message(f"WARNING: catalog reindex failed ({e}). "
                         "Run: python scripts/reindex_catalog.py", cfg)

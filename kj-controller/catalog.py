@@ -3,6 +3,7 @@
 import os
 import re
 import sqlite3
+import threading
 import unicodedata
 
 import fuzzy_match
@@ -72,6 +73,12 @@ class ExternalCatalog:
             os.path.join(os.path.dirname(os.path.abspath(__file__)), 'external_media.db')
         )
         self._conns = None
+        # Serializes the whole-index writers (build_from_file_list,
+        # rebuild_fts). Both run one long write transaction; without this a
+        # second writer fails at once with "database is locked" — as the deploy
+        # hook's POST /catalog/build did while start_app's background reindex
+        # ran (2026-10-16). With it, the second simply waits its turn.
+        self._write_lock = threading.Lock()
 
     @property
     def _conn(self):
@@ -186,15 +193,16 @@ class ExternalCatalog:
         error (explicit rollback below) leaves the PREVIOUS catalog fully
         intact, and concurrent readers see the old data until the commit.
         """
-        conn = self._get_conn()
-        self.init_schema()
-        try:
-            total = self._build_all(conn, path, mount_replace, callback)
-            conn.commit()
-        except BaseException:
-            conn.rollback()
-            raise
-        return total
+        with self._write_lock:
+            conn = self._get_conn()
+            self.init_schema()
+            try:
+                total = self._build_all(conn, path, mount_replace, callback)
+                conn.commit()
+            except BaseException:
+                conn.rollback()
+                raise
+            return total
 
     def _build_all(self, conn, path, mount_replace, callback):
         """All mutating build steps; the caller owns the transaction."""
@@ -459,7 +467,7 @@ class ExternalCatalog:
         index-text revision."""
         return self.normalizer_version() != SEARCH_INDEX_VERSION
 
-    def rebuild_fts(self, callback=None, batch_size=5000):
+    def rebuild_fts(self, callback=None, batch_size=5000, only_if_stale=False):
         """Rebuild media_fts + media_trigram from the media table using the
         current normalizer + index_text, then restamp SEARCH_INDEX_VERSION.
 
@@ -468,7 +476,17 @@ class ExternalCatalog:
         Runs as ONE transaction (same rationale as build_from_file_list): an
         interrupted reindex must leave the previous FTS/trigram index intact,
         not a half-empty one.
+
+        ``only_if_stale``: re-check staleness once the write lock is held and
+        return None if a concurrent full build already brought the index up
+        to date (avoids a redundant reindex right after one).
         """
+        with self._write_lock:
+            if only_if_stale and not self.index_is_stale():
+                return None
+            return self._rebuild_fts_locked(callback, batch_size)
+
+    def _rebuild_fts_locked(self, callback, batch_size):
         conn = self._get_conn()
         try:
             # media_fts is external-content: "DELETE FROM media_fts" is a
