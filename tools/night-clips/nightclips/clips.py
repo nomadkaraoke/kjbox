@@ -206,6 +206,8 @@ def trim_for_instagram(path: str, duration: float | None, out_dir: Path, runner:
     if duration <= IG_MAX_S:
         return path
     out = out_dir / Path(path).name
+    if out.resolve() == Path(path).resolve():
+        raise RuntimeError(f"trim output would overwrite the original {Path(path).name}")
     if out.exists() and out.stat().st_size > 0 and out.stat().st_mtime >= Path(path).stat().st_mtime:
         return str(out)
     out_dir.mkdir(parents=True, exist_ok=True)

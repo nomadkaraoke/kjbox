@@ -152,7 +152,7 @@ def test_trim_long_clip_with_real_ffmpeg(tmp_path):
         pytest.skip("ffmpeg not installed")
     src = tmp_path / "2026-10-16 00.58.10.mp4"
     subprocess.run(["ffmpeg", "-v", "error", "-f", "lavfi", "-i", "testsrc=size=64x112:rate=10",
-                    "-f", "lavfi", "-i", "sine", "-t", "63", "-c:v", "libx264", "-g", "10",
+                    "-f", "lavfi", "-i", "sine", "-t", "63", "-c:v", "mpeg4", "-g", "10",
                     "-c:a", "aac", "-shortest", str(src)], check=True)
     out = C.trim_for_instagram(str(src), 63.0, tmp_path / "trimmed")
     assert out == str(tmp_path / "trimmed" / src.name)
@@ -165,6 +165,15 @@ def test_trim_long_clip_with_real_ffmpeg(tmp_path):
     def boom(*a, **k):
         raise AssertionError("should reuse the trimmed copy")
     assert C.trim_for_instagram(str(src), 63.0, tmp_path / "trimmed", runner=boom) == out
+
+
+def test_trim_never_overwrites_source(tmp_path):
+    import pytest
+    src = tmp_path / "a.mp4"
+    src.write_bytes(b"x")
+    with pytest.raises(RuntimeError, match="overwrite the original"):
+        C.trim_for_instagram(str(src), 70.0, tmp_path)
+    assert src.read_bytes() == b"x"
 
 
 def test_trim_failure_raises(tmp_path):
