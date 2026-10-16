@@ -600,3 +600,8 @@ class TestDurationBackfill:
                 time.sleep(0.02)
         assert all(mgr.store.get_entry(i)["duration"] == 200 for i in ids)
         assert 1 <= bump.call_count <= 2
+
+    def test_backfill_error_never_fails_get_rotation(self, mgr, tmp_path):
+        self._linked(mgr, tmp_path)
+        with patch.object(mgr, "_backfill_durations", side_effect=RuntimeError("boom")):
+            assert len(mgr.get_rotation()) == 1

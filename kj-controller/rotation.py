@@ -73,7 +73,11 @@ class RotationManager:
         """
         entries = self.store.get_entries()
         self._write_display_cache()
-        self._backfill_durations(entries)
+        try:
+            self._backfill_durations(entries)
+        except Exception:
+            # Display-only nicety — must never fail the rotation poll.
+            logging.getLogger(__name__).exception("duration backfill failed")
         return entries
 
     def get_stats(self):
