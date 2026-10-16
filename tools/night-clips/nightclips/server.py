@@ -29,7 +29,7 @@ from pathlib import Path
 from typing import Callable
 
 from . import select as sel
-from .clips import Clip
+from .clips import IG_MAX_S, Clip, trim_for_instagram
 
 STATIC_DIR = Path(__file__).parent / "static"
 MAX_BODY = 1_000_000
@@ -48,6 +48,7 @@ class ReviewState:
         warning: str | None = None,
         publisher: Callable[[list[str], str, bool], dict] | None = None,
         auto_share: bool = False,
+        trim: Callable[[str, float | None, Path], str] = trim_for_instagram,
     ):
         self.night = night
         self.songs = songs
@@ -57,6 +58,7 @@ class ReviewState:
         self.warning = warning
         self.auto_share = auto_share
         self.publisher = publisher or launch_publisher_subprocess(self.work_dir, night, auto_share)
+        self.trim = trim
         self.lock = threading.RLock()
         self.clips = {c.id: c for c in clips}
         self.items: list[dict] = []
@@ -208,7 +210,11 @@ class ReviewState:
         if errors:
             return {"ok": False, "errors": errors}
         self.save_draft(selected, caption)
-        files = [self.clips[c].path for c in selected]
+        try:
+            files = [self.trim(self.clips[c].path, self.clips[c].duration, self.work_dir / "trimmed")
+                     for c in selected]
+        except RuntimeError as e:
+            return {"ok": False, "errors": [str(e)]}
         result = self.publisher(files, caption, self.auto_share) or {}
         return {"ok": True, **result}
 
@@ -233,6 +239,7 @@ class ReviewState:
                 "consent_source": self.consent_source,
                 "warning": self.warning,
                 "max_clips": self.max_clips,
+                "ig_max_s": IG_MAX_S,
                 "auto_share": self.auto_share,
                 "songs": self.songs,
                 "clips": self.items,

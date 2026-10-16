@@ -182,3 +182,28 @@ def test_rejects_cross_site_and_rebinding_requests(served):
     # Our own page (same Origin) still works.
     assert _raw(base + "/api/caption", json.dumps({"clip_ids": []}).encode(),
                 {"Content-Type": "application/json", "Origin": base}) == 200
+
+
+def test_publish_sends_trimmed_copies_of_long_clips(served):
+    base, state, published, work = served
+    first, second = state.selected[:2]
+    state.clips[first].duration = 63.2
+    calls = []
+    state.trim = lambda path, dur, out_dir: (calls.append((path, dur, out_dir)) or
+                                             (str(out_dir / "cut.mp4") if dur > 59 else path))
+    code, res = post(base + "/api/publish", {"selected": [first, second], "caption": "c"})
+    assert code == 200 and res["ok"]
+    files = published[-1][0]
+    assert files == [str(work / "trimmed" / "cut.mp4"), state.clips[second].path]
+    assert calls[0][2] == work / "trimmed"
+
+
+def test_publish_reports_trim_failure(served):
+    base, state, published, _ = served
+
+    def fail(*a):
+        raise RuntimeError("ffmpeg trim failed for x.mp4: boom")
+    state.trim = fail
+    code, res = post(base + "/api/publish", {"selected": state.selected[:1], "caption": "c"})
+    assert code == 400 and "trim failed" in res["errors"][0]
+    assert published == []
