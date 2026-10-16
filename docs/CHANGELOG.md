@@ -2,6 +2,21 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-10-16 - Rotation durations for every song + auto-approve that never needs a blind click (v0.132.0)
+
+- **Durations:** only YouTube downloads showed a song length in the rotation (yt-dlp provides one; library
+  CDG zips/MP4s, Nomad masters and community files had `duration = NULL`, so wait estimates assumed 4 min
+  each). Linked entries missing a duration are now probed in the background (~0.25s/file on NomadPC, nice
+  10, rev bumps coalesced) — no added latency on any rotation action.
+- **Song changes auto-approve:** a singer changing an already-approved song created a request that always
+  waited for the KJ, even with auto-approve on — every request pending >3s on 2026-10-15 was one of these.
+  Changes now auto-approve and take over the original's slot.
+- **Requests panel explains itself:** a request being auto-added (e.g. Divebar resolving, up to ~10s)
+  shows "Adding automatically…" with no buttons (manual approve/reject is refused, closing a double-add
+  race); a failed auto-add shows "⚠ Needs you: <reason>"; the badge counts only rows needing the KJ; the
+  empty state says what can still land there with auto-approve on. New `sing_requests.auto_status` /
+  `auto_error` columns (additive migration).
+
 ## 2026-10-14 - night-clips: automatic Instagram login when the saved session expires
 
 - When `~/.night-clips/ig-profile` is no longer logged in, the publisher logs in with

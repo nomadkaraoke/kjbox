@@ -779,6 +779,20 @@ class RotationStore:
         )
         conn.commit()
 
+    def set_duration_if_missing(self, entry_id, file_path, duration):
+        """Fill in a probed duration for an entry that still has ``file_path``
+        linked and no duration yet. A no-op if the KJ re-linked/unlinked in the
+        meantime or a duration already landed. Returns True if a row changed.
+        """
+        conn = self._get_conn()
+        cur = conn.execute(
+            "UPDATE rotation_entries SET duration = ? "
+            "WHERE id = ? AND file_path = ? AND duration IS NULL",
+            (duration, entry_id, file_path),
+        )
+        conn.commit()
+        return cur.rowcount > 0
+
     def unlink_file(self, entry_id):
         """Reset an entry to a fully-unlinked state.
 

@@ -2,6 +2,7 @@
 
 import json
 import os
+import time
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -490,3 +491,117 @@ class TestReorderByIds:
         before = mgr.history_status()["undo"]
         assert mgr.reorder_by_ids([a, b]) is False
         assert mgr.history_status()["undo"] == before
+
+
+# ---------------------------------------------------------------------------
+# Duration backfill (library / master / community files have no index duration)
+# ---------------------------------------------------------------------------
+
+class TestDurationBackfill:
+    """Linked files without an index duration get one probed in the background."""
+
+    def _linked(self, mgr, tmp_path, name="song.zip"):
+        f = tmp_path / name
+        f.write_bytes(b"x")
+        entry = mgr.add_entry("Alice", "Song - Artist")
+        mgr.link_file(entry["id"], str(f))
+        return entry["id"], str(f)
+
+    def test_probe_fills_missing_duration(self, mgr, tmp_path):
+        entry_id, path = self._linked(mgr, tmp_path)
+        rev_before = mgr.store.get_rev()
+        with patch("mediainfo.probe_media_info", return_value={"ok": True, "duration": 289.6}):
+            assert mgr._probe_and_store_duration(entry_id, path) == 290
+        assert mgr.store.get_entry(entry_id)["duration"] == 290
+        assert mgr.store.get_rev() > rev_before
+
+    def test_probe_caches_into_media_index(self, mgr, tmp_path):
+        mgr.media = MagicMock()
+        mgr.media.index = {}
+        entry_id, path = self._linked(mgr, tmp_path)
+        mgr.media.index[path] = {"path": path}
+        with patch("mediainfo.probe_media_info", return_value={"ok": True, "duration": 200.2}):
+            mgr._probe_and_store_duration(entry_id, path)
+        assert mgr.media.index[path]["duration"] == 200
+
+    def test_index_duration_used_without_probing(self, mgr, tmp_path):
+        entry_id, path = self._linked(mgr, tmp_path)
+        mgr.media = MagicMock()
+        mgr.media.index = {path: {"duration": 180}}
+        with patch("mediainfo.probe_media_info") as probe:
+            mgr._probe_and_store_duration(entry_id, path)
+        probe.assert_not_called()
+        assert mgr.store.get_entry(entry_id)["duration"] == 180
+
+    def test_failed_probe_leaves_duration_none(self, mgr, tmp_path):
+        entry_id, path = self._linked(mgr, tmp_path)
+        with patch("mediainfo.probe_media_info", return_value={"ok": False, "error": "boom"}):
+            assert mgr._probe_and_store_duration(entry_id, path) is None
+        assert mgr.store.get_entry(entry_id)["duration"] is None
+
+    def test_relinked_entry_not_overwritten(self, mgr, tmp_path):
+        entry_id, path = self._linked(mgr, tmp_path)
+        other = tmp_path / "other.mp4"
+        other.write_bytes(b"x")
+        mgr.link_file(entry_id, str(other))  # KJ re-linked while probe was queued
+        with patch("mediainfo.probe_media_info", return_value={"ok": True, "duration": 100}):
+            mgr._probe_and_store_duration(entry_id, path)
+        assert mgr.store.get_entry(entry_id)["duration"] is None
+
+    def test_missing_file_not_probed(self, mgr):
+        entry = mgr.add_entry("Alice", "Song - Artist")
+        mgr.link_file(entry["id"], "/nope/missing.zip")
+        with patch("mediainfo.probe_media_info") as probe:
+            assert mgr._probe_and_store_duration(entry["id"], "/nope/missing.zip") is None
+        probe.assert_not_called()
+
+    def test_get_rotation_queues_each_path_once(self, mgr, tmp_path):
+        entry_id, path = self._linked(mgr, tmp_path)
+        mgr.add_entry("Bob", "No File - Yet")
+        with patch.object(mgr, "_ensure_duration_worker"):
+            mgr.get_rotation()
+            mgr.get_rotation()
+        assert mgr._duration_queue.qsize() == 1
+        assert mgr._duration_queue.get_nowait() == (entry_id, path)
+
+    def test_get_rotation_skips_entries_with_duration(self, mgr, tmp_path):
+        f = tmp_path / "yt.mp4"
+        f.write_bytes(b"x")
+        mgr.add_entry("Alice", "Song", file_path=str(f), duration=200)
+        with patch.object(mgr, "_ensure_duration_worker"):
+            mgr.get_rotation()
+        assert mgr._duration_queue.qsize() == 0
+
+    def test_worker_end_to_end(self, mgr, tmp_path):
+        entry_id, _ = self._linked(mgr, tmp_path)
+        with patch("mediainfo.probe_media_info", return_value={"ok": True, "duration": 243.0}):
+            mgr.get_rotation()
+            for _ in range(100):
+                if mgr.store.get_entry(entry_id)["duration"]:
+                    break
+                time.sleep(0.02)
+        assert mgr.store.get_entry(entry_id)["duration"] == 243
+
+    def test_worker_coalesces_rev_bumps(self, mgr, tmp_path):
+        """A backlog of probes bumps rev once (each bump makes every UI refetch)."""
+        ids = []
+        for i in range(8):
+            f = tmp_path / f"s{i}.zip"
+            f.write_bytes(b"x")
+            e = mgr.add_entry(f"S{i}", "Song")
+            mgr.link_file(e["id"], str(f))
+            ids.append(e["id"])
+        with patch("mediainfo.probe_media_info", return_value={"ok": True, "duration": 200.0}), \
+                patch.object(mgr.store, "bump_rev", wraps=mgr.store.bump_rev) as bump:
+            mgr.get_rotation()
+            for _ in range(200):
+                if all(mgr.store.get_entry(i)["duration"] for i in ids) and bump.call_count:
+                    break
+                time.sleep(0.02)
+        assert all(mgr.store.get_entry(i)["duration"] == 200 for i in ids)
+        assert 1 <= bump.call_count <= 2
+
+    def test_backfill_error_never_fails_get_rotation(self, mgr, tmp_path):
+        self._linked(mgr, tmp_path)
+        with patch.object(mgr, "_backfill_durations", side_effect=RuntimeError("boom")):
+            assert len(mgr.get_rotation()) == 1

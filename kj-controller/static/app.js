@@ -10204,8 +10204,13 @@ const SingRequests = (() => {
             const data = await resp.json();
             pending = data.requests || [];
             renderPanel();
-            updateBadge(pending.length);
         } catch (e) { /* offline is fine */ }
+    }
+
+    // Rows the server is still auto-adding need nothing from the KJ, so they
+    // don't count toward the "needs you" badge.
+    function needsKjCount() {
+        return pending.filter((r) => !r.auto_in_progress).length;
     }
 
     async function fetchConfig() {
@@ -10215,7 +10220,7 @@ const SingRequests = (() => {
             config = await resp.json();
             applyConfigToModal();
             updateStatusDot();
-            updateBadge(config.pending_count || 0);
+            renderPanel();
         } catch (e) { /* offline is fine */ }
     }
 
@@ -10278,8 +10283,15 @@ const SingRequests = (() => {
         const list = document.getElementById('pending-requests-list');
         const empty = document.getElementById('pending-requests-empty');
         if (!list) return;
-        updateBadge(pending.length);
-        if (empty) empty.style.display = pending.length ? 'none' : '';
+        updateBadge(needsKjCount());
+        if (empty) {
+            empty.style.display = pending.length ? 'none' : '';
+            // With auto-approve on, say what CAN still land here so an
+            // occasional row reads as "this one needs you", not a glitch.
+            empty.textContent = config.auto_approve
+                ? 'Auto-approve is on — requests go straight into the rotation. Only tips to confirm and anything the system couldn\'t add on its own show up here.'
+                : 'No pending requests — singers submit via the QR code.';
+        }
         list.innerHTML = '';
         for (const req of pending) {
             list.appendChild(renderRow(req));
@@ -10300,6 +10312,21 @@ const SingRequests = (() => {
     function renderRow(req) {
         const row = document.createElement('div');
         row.className = 'pending-req-row';
+        // Auto-approve is still adding this one (usually a few seconds, e.g. a
+        // Divebar download resolving) — nothing to click, and the server would
+        // refuse a manual approve that double-adds it.
+        if (req.auto_in_progress) {
+            const what = req.source_type === 'reorder'
+                ? `${req.singer_name}'s reorder`
+                : [req.singer_name, [req.song_title, req.song_artist].filter(Boolean).join(' — ')]
+                    .filter(Boolean).join(': ');
+            row.className = 'pending-req-row pr-auto-progress';
+            row.innerHTML = `
+              <div class="pr-main"><span class="pr-auto-spinner" aria-hidden="true">⏳</span>
+                <span class="pr-song">${escapeHtml(what)}</span>
+                <span class="pr-auto-label">Adding automatically…</span></div>`;
+            return row;
+        }
         // Tip claim — not a song. Confirm hearts the singer's entries and
         // (>= threshold) applies the same +1 bump as the rotation bump-up.
         if (req.source_type === 'tip') {
@@ -10332,6 +10359,7 @@ const SingRequests = (() => {
               </div>`;
             row.querySelector('.btn-approve').addEventListener('click', () => approve(req.id));
             row.querySelector('.btn-reject').addEventListener('click', () => reject(req.id));
+            appendAutoFailedNote(row, req);
             return row;
         }
         // Change request (singer edited an approved song) — tag it; it still
@@ -10412,11 +10440,30 @@ const SingRequests = (() => {
             block.appendChild(list);
             row.appendChild(block);
         }
+        appendAutoFailedNote(row, req);
         if (isKjPick) {
             const picker = renderKjPickPicker(req);
             if (picker) row.appendChild(picker);
         }
         return row;
+    }
+
+    // Auto-approve tried and couldn't add this request — say why, so the KJ
+    // knows this row genuinely needs a decision (and what to look at).
+    function appendAutoFailedNote(row, req) {
+        let reason = null;
+        if (req.auto_status === 'failed') {
+            reason = req.auto_error || 'Couldn\'t add automatically.';
+        } else if (req.auto_status === 'in_progress') {
+            // Stale in-progress (server restarted mid-add) — hand it back.
+            reason = 'Automatic add didn\'t finish — approve, edit or reject.';
+        }
+        if (!reason) return;
+        row.classList.add('pr-auto-failed');
+        const note = document.createElement('div');
+        note.className = 'pr-auto-failed-note';
+        note.textContent = '⚠ Needs you: ' + reason;
+        row.appendChild(note);
     }
 
     function renderYouTubePreview(url) {

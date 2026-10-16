@@ -931,3 +931,76 @@ class TestReorderApproval:
         pos = {e["id"]: e["position"] for e in rot.get_rotation()}
         assert pos[b["id"]] < pos[a["id"]]   # B now ahead of A
         assert admin_app.sing_store.get_request(rr["id"])["status"] == "approved"
+
+
+class TestAutoApproveStatus:
+    """Rows the server is auto-adding are not actionable; stale ones come back."""
+
+    def _in_progress(self, app, started_at=None):
+        req = _make_pending(app, source_type="local", source_ref="/x.mp4")
+        assert app.sing_store.claim_approval(req["id"], 120)
+        if started_at:
+            conn = app.sing_store._get_conn()
+            conn.execute("UPDATE sing_requests SET auto_started_at = ? WHERE id = ?",
+                         (started_at, req["id"]))
+            conn.commit()
+        return req
+
+    def test_list_flags_in_progress(self, admin_client, admin_app):
+        req = self._in_progress(admin_app)
+        rows = admin_client.get("/rotation/requests?status=pending").get_json()["requests"]
+        row = next(r for r in rows if r["id"] == req["id"])
+        assert row["auto_in_progress"] is True
+        assert row["auto_status"] == "in_progress"
+
+    def test_approve_and_reject_refused_while_in_progress(self, admin_client, admin_app):
+        req = self._in_progress(admin_app)
+        assert admin_client.post(f"/rotation/requests/{req['id']}/approve").status_code == 409
+        assert admin_client.post(f"/rotation/requests/{req['id']}/reject", json={}).status_code == 409
+        assert admin_app.sing_store.get_request(req["id"])["status"] == "pending"
+
+    def test_stale_in_progress_is_handed_back(self, admin_client, admin_app):
+        req = self._in_progress(admin_app, started_at="2020-01-01 00:00:00")
+        rows = admin_client.get("/rotation/requests?status=pending").get_json()["requests"]
+        assert next(r for r in rows if r["id"] == req["id"])["auto_in_progress"] is False
+        assert admin_client.post(f"/rotation/requests/{req['id']}/approve").status_code == 200
+
+    def test_failed_reason_exposed(self, admin_client, admin_app):
+        req = _make_pending(admin_app, source_type="local", source_ref="/x.mp4")
+        admin_app.sing_store.set_auto_status(req["id"], "failed", "Couldn't add automatically: boom")
+        rows = admin_client.get("/rotation/requests?status=pending").get_json()["requests"]
+        row = next(r for r in rows if r["id"] == req["id"])
+        assert row["auto_status"] == "failed"
+        assert row["auto_error"] == "Couldn't add automatically: boom"
+        assert row["auto_in_progress"] is False
+
+    def test_old_request_retry_is_not_stale(self, admin_client, admin_app):
+        """Staleness runs from when THIS attempt started, not request creation —
+        a retry on an hour-old request must still block a manual double-add."""
+        req = _make_pending(admin_app, source_type="local", source_ref="/x.mp4")
+        conn = admin_app.sing_store._get_conn()
+        conn.execute("UPDATE sing_requests SET created_at = '2020-01-01 00:00:00' WHERE id = ?",
+                     (req["id"],))
+        conn.commit()
+        assert admin_app.sing_store.claim_approval(req["id"], 120)
+        assert admin_client.post(f"/rotation/requests/{req['id']}/approve").status_code == 409
+
+    def test_claim_is_exclusive(self, admin_app):
+        req = _make_pending(admin_app, source_type="local", source_ref="/x.mp4")
+        assert admin_app.sing_store.claim_approval(req["id"], 120) is True
+        assert admin_app.sing_store.claim_approval(req["id"], 120) is False
+
+    def test_failed_manual_approve_restores_needs_you(self, admin_client, admin_app):
+        req = _make_pending(admin_app, source_type="local", source_ref="/x.mp4")
+        admin_app.sing_store.set_auto_status(req["id"], "failed", "Couldn't add automatically: x")
+        with patch("routes.approve_sing_request", side_effect=RuntimeError("disk")):
+            assert admin_client.post(f"/rotation/requests/{req['id']}/approve").status_code == 500
+        row = admin_app.sing_store.get_request(req["id"])
+        assert row["status"] == "pending"
+        assert row["auto_status"] == "failed" and row["auto_error"] == "Couldn't add automatically: x"
+
+    def test_manual_approve_clears_claim(self, admin_client, admin_app):
+        req = _make_pending(admin_app, source_type="local", source_ref="/x.mp4")
+        assert admin_client.post(f"/rotation/requests/{req['id']}/approve").status_code == 200
+        row = admin_app.sing_store.get_request(req["id"])
+        assert row["status"] == "approved" and row["auto_status"] is None

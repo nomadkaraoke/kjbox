@@ -6,7 +6,9 @@ after every mutation for the conky overlay.
 """
 
 import json
+import logging
 import os
+import queue
 import threading
 import time
 
@@ -39,6 +41,14 @@ class RotationManager:
         # Serialises the gen-file linking paths (GenPoller thread vs a singer's
         # "Sing it now" request) so neither overwrites the other's link.
         self._gen_link_lock = threading.RLock()
+        # Background duration probing for linked files the media index has no
+        # duration for (only yt-dlp downloads carry one; SSD library files,
+        # Nomad masters and community downloads don't). One worker so a full
+        # queue of CDG zips never fans out into dozens of ffprobes at once.
+        self._duration_queue = queue.Queue()
+        self._duration_seen = set()  # paths queued/probed this process
+        self._duration_seen_lock = threading.Lock()
+        self._duration_worker = None
 
         if sheet_id and credentials_file:
             from rotation_sync import SheetSync
@@ -63,6 +73,11 @@ class RotationManager:
         """
         entries = self.store.get_entries()
         self._write_display_cache()
+        try:
+            self._backfill_durations(entries)
+        except Exception:
+            # Display-only nicety — must never fail the rotation poll.
+            logging.getLogger(__name__).exception("duration backfill failed")
         return entries
 
     def get_stats(self):
@@ -221,6 +236,112 @@ class RotationManager:
             if media_entry is not None:
                 return media_entry.get("duration")
         return None
+
+    def _backfill_durations(self, entries):
+        """Queue a background probe for linked entries missing a duration.
+
+        Each path is probed at most once per process, so a file ffprobe can't
+        read isn't retried on every 2s poll.
+        """
+        for e in entries:
+            path = e.get("file_path")
+            if not path or e.get("duration"):
+                continue
+            with self._duration_seen_lock:
+                if path in self._duration_seen:
+                    continue
+                self._duration_seen.add(path)
+            self._duration_queue.put((e["id"], path))
+            self._ensure_duration_worker()
+
+    def _ensure_duration_worker(self):
+        # Same lock the worker takes to exit, so an item queued while it is
+        # shutting down is never stranded and two workers never start.
+        with self._duration_seen_lock:
+            if self._duration_worker is not None:
+                return
+            self._duration_worker = threading.Thread(
+                target=self._duration_worker_loop, name="rotation-duration-probe", daemon=True)
+            self._duration_worker.start()
+
+    # While draining a backlog, UIs are told to re-render at most this often.
+    _DURATION_REV_INTERVAL_S = 3.0
+
+    def _duration_worker_loop(self):
+        try:
+            self._duration_worker_body()
+        finally:
+            with self._duration_seen_lock:
+                if self._duration_worker is threading.current_thread():
+                    self._duration_worker = None
+
+    def _duration_worker_body(self):
+        # Low priority: on Linux a per-thread nice also applies to the ffprobe
+        # children this thread spawns, so probing never competes with playback
+        # or request handling for CPU.
+        try:
+            os.setpriority(os.PRIO_PROCESS, threading.get_native_id(), 10)
+        except (AttributeError, OSError):
+            pass
+        dirty = False
+        last_bump = time.monotonic()
+        while True:
+            try:
+                entry_id, path = self._duration_queue.get(timeout=0.5 if dirty else 30)
+            except queue.Empty:
+                if dirty:
+                    self._bump_rev_for_durations()
+                    dirty = False
+                    continue
+                with self._duration_seen_lock:
+                    if self._duration_queue.empty():
+                        self._duration_worker = None
+                        return  # idle — get_rotation restarts us when there's work
+                continue
+            try:
+                if self._probe_and_store_duration(entry_id, path, bump=False):
+                    dirty = True
+            except Exception:
+                logging.getLogger(__name__).exception("duration probe failed for %s", path)
+            # Coalesce: every rev bump makes the KJ page and every singer phone
+            # refetch the rotation, so a 30-song backfill must not cause 30.
+            if dirty and time.monotonic() - last_bump >= self._DURATION_REV_INTERVAL_S:
+                self._bump_rev_for_durations()
+                dirty = False
+                last_bump = time.monotonic()
+
+    def _bump_rev_for_durations(self):
+        """Display-only change: bump rev so UIs re-render, but skip push
+        notifications (no queue position changed)."""
+        try:
+            self.store.bump_rev()
+        except Exception:
+            logging.getLogger(__name__).exception("rev bump failed")
+        self._write_display_cache()
+
+    def _probe_and_store_duration(self, entry_id, path, bump=True):
+        """Resolve ``path``'s duration (media index, else ffprobe) and store it
+        on the entry. Caches a probed value back into the media index so later
+        links of the same file are instant. Returns the duration if it was
+        stored, else None. ``bump=False`` leaves the rev bump to the caller."""
+        duration = self._lookup_duration(path)
+        if not duration:
+            if not os.path.isfile(path):
+                return None
+            from mediainfo import probe_media_info
+            info = probe_media_info(path)
+            raw = info.get("duration") if info.get("ok") else None
+            if not raw or raw <= 0:
+                return None
+            duration = int(round(raw))
+            media_entry = getattr(self.media, "index", {}).get(path) if self.media is not None else None
+            if media_entry is not None:
+                media_entry.setdefault("duration", duration)
+        if not self.store.set_duration_if_missing(entry_id, path, int(duration)):
+            return None
+        if bump:
+            self._bump_rev_for_durations()
+        return duration
 
     def set_gen_status(self, entry_id, job_id, status):
         """Set gen job tracking fields on a rotation entry."""
