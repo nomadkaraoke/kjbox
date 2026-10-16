@@ -1,0 +1,1486 @@
+{
+ "night": "2026-10-15",
+ "consent_source": "events",
+ "songs": [
+  {
+   "entry_id": 1490,
+   "song": "Zedd feat. Hayley Williams of Paramore - Stay the Night",
+   "singer": "Andrew",
+   "sung_at": "2026-10-15 21:05:01",
+   "started_at": "2026-10-15 21:01:13",
+   "added_at": "2026-10-15 20:43:14",
+   "performers": [
+    {
+     "name": "Andrew",
+     "consent": "unknown",
+     "reason": "unknown",
+     "instagram": null
+    }
+   ],
+   "postable": false
+  },
+  {
+   "entry_id": 1491,
+   "song": "Let It Die - Starset",
+   "singer": "Lyle!",
+   "sung_at": "2026-10-15 21:08:59",
+   "started_at": "2026-10-15 21:05:12",
+   "added_at": "2026-10-15 21:03:18",
+   "performers": [
+    {
+     "name": "Lyle!",
+     "consent": "unknown",
+     "reason": "unknown",
+     "instagram": null
+    }
+   ],
+   "postable": false
+  },
+  {
+   "entry_id": 1493,
+   "song": "Desperado - Eagles",
+   "singer": "Alanna M",
+   "sung_at": "2026-10-15 21:13:02",
+   "started_at": "2026-10-15 21:09:16",
+   "added_at": "2026-10-15 21:04:49",
+   "performers": [
+    {
+     "name": "Alanna M",
+     "consent": "unknown",
+     "reason": "unknown",
+     "instagram": null
+    }
+   ],
+   "postable": false
+  },
+  {
+   "entry_id": 1495,
+   "song": "Francis Forever - Mitski",
+   "singer": "Ashlee A",
+   "sung_at": "2026-10-15 21:15:46",
+   "started_at": "2026-10-15 21:13:12",
+   "added_at": "2026-10-15 21:08:37",
+   "performers": [
+    {
+     "name": "Ashlee A",
+     "consent": "unknown",
+     "reason": "unknown",
+     "instagram": null
+    }
+   ],
+   "postable": false
+  },
+  {
+   "entry_id": 1496,
+   "song": "Big Empty - Stone Temple Pilots",
+   "singer": "Jude",
+   "sung_at": "2026-10-15 21:20:51",
+   "started_at": "2026-10-15 21:15:50",
+   "added_at": "2026-10-15 21:08:47",
+   "performers": [
+    {
+     "name": "Jude",
+     "consent": "unknown",
+     "reason": "unknown",
+     "instagram": null
+    }
+   ],
+   "postable": false
+  },
+  {
+   "entry_id": 1500,
+   "song": "Disillusioned - A Perfect Circle",
+   "singer": "Lyle!",
+   "sung_at": "2026-10-15 21:27:08",
+   "started_at": "2026-10-15 21:20:58",
+   "added_at": "2026-10-15 21:11:57",
+   "performers": [
+    {
+     "name": "Lyle!",
+     "consent": "unknown",
+     "reason": "unknown",
+     "instagram": null
+    }
+   ],
+   "postable": false
+  },
+  {
+   "entry_id": 1499,
+   "song": "Blah Blah Blah - KeSha & 3OH!3 (Duet)",
+   "singer": "Ashlee A",
+   "sung_at": "2026-10-15 21:30:32",
+   "started_at": "2026-10-15 21:27:22",
+   "added_at": "2026-10-15 21:09:21",
+   "performers": [
+    {
+     "name": "Ashlee A",
+     "consent": "unknown",
+     "reason": "unknown",
+     "instagram": null
+    }
+   ],
+   "postable": false
+  },
+  {
+   "entry_id": 1494,
+   "song": "My Blood - Twenty One Pilots",
+   "singer": "Alanna M",
+   "sung_at": "2026-10-15 21:34:43",
+   "started_at": "2026-10-15 21:30:40",
+   "added_at": "2026-10-15 21:05:19",
+   "performers": [
+    {
+     "name": "Alanna M",
+     "consent": "unknown",
+     "reason": "unknown",
+     "instagram": null
+    }
+   ],
+   "postable": false
+  },
+  {
+   "entry_id": 1503,
+   "song": "Get Him Back - Olivia Rodrigo",
+   "singer": "Lulu K & Mars",
+   "sung_at": "2026-10-15 21:38:40",
+   "started_at": "2026-10-15 21:34:54",
+   "added_at": "2026-10-15 21:17:47",
+   "performers": [
+    {
+     "name": "Lulu K",
+     "consent": "unknown",
+     "reason": "unknown",
+     "instagram": null
+    },
+    {
+     "name": "Mars",
+     "consent": "unknown",
+     "reason": "unknown",
+     "instagram": null
+    }
+   ],
+   "postable": false
+  },
+  {
+   "entry_id": 1498,
+   "song": "Waiting In Vain - Bob Marley & The Wailers",
+   "singer": "Jude",
+   "sung_at": "2026-10-15 21:43:17",
+   "started_at": "2026-10-15 21:38:51",
+   "added_at": "2026-10-15 21:09:20",
+   "performers": [
+    {
+     "name": "Jude",
+     "consent": "unknown",
+     "reason": "unknown",
+     "instagram": null
+    }
+   ],
+   "postable": false
+  },
+  {
+   "entry_id": 1501,
+   "song": "In The End - Linkin Park",
+   "singer": "Lyle!",
+   "sung_at": "2026-10-15 21:46:53",
+   "started_at": "2026-10-15 21:43:29",
+   "added_at": "2026-10-15 21:12:11",
+   "performers": [
+    {
+     "name": "Lyle!",
+     "consent": "unknown",
+     "reason": "unknown",
+     "instagram": null
+    }
+   ],
+   "postable": false
+  },
+  {
+   "entry_id": 1502,
+   "song": "Rock Me - One Direction",
+   "singer": "Ashlee A",
+   "sung_at": "2026-10-15 21:50:56",
+   "started_at": "2026-10-15 21:47:21",
+   "added_at": "2026-10-15 21:12:14",
+   "performers": [
+    {
+     "name": "Ashlee A",
+     "consent": "unknown",
+     "reason": "unknown",
+     "instagram": null
+    }
+   ],
+   "postable": false
+  },
+  {
+   "entry_id": 1506,
+   "song": "Never Tear Us Apart - INXS",
+   "singer": "Alanna M",
+   "sung_at": "2026-10-15 21:54:21",
+   "started_at": "2026-10-15 21:51:13",
+   "added_at": "2026-10-15 21:26:32",
+   "performers": [
+    {
+     "name": "Alanna M",
+     "consent": "unknown",
+     "reason": "unknown",
+     "instagram": null
+    }
+   ],
+   "postable": false
+  },
+  {
+   "entry_id": 1508,
+   "song": "Unpronounceable - They Might Be Giants",
+   "singer": "Lulu K",
+   "sung_at": "2026-10-15 21:58:11",
+   "started_at": "2026-10-15 21:54:31",
+   "added_at": "2026-10-15 21:31:15",
+   "performers": [
+    {
+     "name": "Lulu K",
+     "consent": "unknown",
+     "reason": "unknown",
+     "instagram": null
+    }
+   ],
+   "postable": false
+  },
+  {
+   "entry_id": 1515,
+   "song": "All-American Bitch - Olivia Rodrigo",
+   "singer": "Mars W",
+   "sung_at": "2026-10-15 22:01:06",
+   "started_at": "2026-10-15 21:58:13",
+   "added_at": "2026-10-15 21:40:14",
+   "performers": [
+    {
+     "name": "Mars W",
+     "consent": "unknown",
+     "reason": "unknown",
+     "instagram": null
+    }
+   ],
+   "postable": false
+  },
+  {
+   "entry_id": 1509,
+   "song": "Cherry Pie - Warrant",
+   "singer": "Jude",
+   "sung_at": "2026-10-15 22:04:44",
+   "started_at": "2026-10-15 22:01:16",
+   "added_at": "2026-10-15 21:32:27",
+   "performers": [
+    {
+     "name": "Jude",
+     "consent": "unknown",
+     "reason": "unknown",
+     "instagram": null
+    }
+   ],
+   "postable": false
+  },
+  {
+   "entry_id": 1510,
+   "song": "This Picture - Placebo",
+   "singer": "Lyle!",
+   "sung_at": "2026-10-15 22:08:35",
+   "started_at": "2026-10-15 22:04:55",
+   "added_at": "2026-10-15 21:35:44",
+   "performers": [
+    {
+     "name": "Lyle!",
+     "consent": "unknown",
+     "reason": "unknown",
+     "instagram": null
+    }
+   ],
+   "postable": false
+  },
+  {
+   "entry_id": 1497,
+   "song": "Wonderwall - Oasis",
+   "singer": "Ashlee A & Jude",
+   "sung_at": "2026-10-15 22:13:13",
+   "started_at": "2026-10-15 22:08:50",
+   "added_at": "2026-10-15 21:09:04",
+   "performers": [
+    {
+     "name": "Ashlee A",
+     "consent": "unknown",
+     "reason": "unknown",
+     "instagram": null
+    },
+    {
+     "name": "Jude",
+     "consent": "unknown",
+     "reason": "unknown",
+     "instagram": null
+    }
+   ],
+   "postable": false
+  },
+  {
+   "entry_id": 1528,
+   "song": "Ana Ng - They Might Be Giants",
+   "singer": "Lulu K",
+   "sung_at": "2026-10-15 22:16:57",
+   "started_at": "2026-10-15 22:13:31",
+   "added_at": "2026-10-15 22:12:48",
+   "performers": [
+    {
+     "name": "Lulu K",
+     "consent": "unknown",
+     "reason": "unknown",
+     "instagram": null
+    }
+   ],
+   "postable": false
+  },
+  {
+   "entry_id": 1523,
+   "song": "The World At Large - Modest Mouse",
+   "singer": "Alanna M",
+   "sung_at": "2026-10-15 22:21:53",
+   "started_at": "2026-10-15 22:17:06",
+   "added_at": "2026-10-15 21:59:09",
+   "performers": [
+    {
+     "name": "Alanna M",
+     "consent": "unknown",
+     "reason": "unknown",
+     "instagram": null
+    }
+   ],
+   "postable": false
+  },
+  {
+   "entry_id": 1520,
+   "song": "Alive - One Direction",
+   "singer": "Mars W",
+   "sung_at": "2026-10-15 22:24:50",
+   "started_at": "2026-10-15 22:21:58",
+   "added_at": "2026-10-15 21:51:57",
+   "performers": [
+    {
+     "name": "Mars W",
+     "consent": "unknown",
+     "reason": "unknown",
+     "instagram": null
+    }
+   ],
+   "postable": false
+  },
+  {
+   "entry_id": 1525,
+   "song": "Ain't It Fun - Paramore",
+   "singer": "Austin O",
+   "sung_at": "2026-10-15 22:28:52",
+   "started_at": "2026-10-15 22:24:59",
+   "added_at": "2026-10-15 22:05:12",
+   "performers": [
+    {
+     "name": "Austin O",
+     "consent": "unknown",
+     "reason": "unknown",
+     "instagram": null
+    }
+   ],
+   "postable": false
+  },
+  {
+   "entry_id": 1527,
+   "song": "Fake Plastic Trees - Radiohead",
+   "singer": "Matthew",
+   "sung_at": "2026-10-15 22:34:17",
+   "started_at": "2026-10-15 22:29:26",
+   "added_at": "2026-10-15 22:06:28",
+   "performers": [
+    {
+     "name": "Matthew",
+     "consent": "unknown",
+     "reason": "unknown",
+     "instagram": null
+    }
+   ],
+   "postable": false
+  },
+  {
+   "entry_id": 1514,
+   "song": "Starlight - Acoustic Version - STARSET",
+   "singer": "Lyle!",
+   "sung_at": "2026-10-15 22:39:20",
+   "started_at": "2026-10-15 22:34:21",
+   "added_at": "2026-10-15 21:38:28",
+   "performers": [
+    {
+     "name": "Lyle!",
+     "consent": "unknown",
+     "reason": "unknown",
+     "instagram": null
+    }
+   ],
+   "postable": false
+  },
+  {
+   "entry_id": 1536,
+   "song": "Grenade - Bruno Mars",
+   "singer": "Wynter",
+   "sung_at": "2026-10-15 22:45:28",
+   "started_at": "2026-10-15 22:41:31",
+   "added_at": "2026-10-15 22:34:48",
+   "performers": [
+    {
+     "name": "Wynter",
+     "consent": "unknown",
+     "reason": "unknown",
+     "instagram": null
+    }
+   ],
+   "postable": false
+  },
+  {
+   "entry_id": 1505,
+   "song": "Snakeskin boots - Miranda lambert and Ella Langley",
+   "singer": "Ashlee A",
+   "sung_at": "2026-10-15 22:49:46",
+   "started_at": "2026-10-15 22:45:41",
+   "added_at": "2026-10-15 21:24:29",
+   "performers": [
+    {
+     "name": "Ashlee A",
+     "consent": "unknown",
+     "reason": "unknown",
+     "instagram": null
+    }
+   ],
+   "postable": false
+  },
+  {
+   "entry_id": 1530,
+   "song": "Panic! At The Disco - There's A Good Reason These Tables Are Numbered Honey, You Just Haven't Thought Of It Yet",
+   "singer": "Andrew",
+   "sung_at": "2026-10-15 22:53:23",
+   "started_at": "2026-10-15 22:49:51",
+   "added_at": "2026-10-15 22:16:47",
+   "performers": [
+    {
+     "name": "Andrew",
+     "consent": "unknown",
+     "reason": "unknown",
+     "instagram": null
+    }
+   ],
+   "postable": false
+  },
+  {
+   "entry_id": 1537,
+   "song": "Jigsaw Falling Into Place - Radiohead",
+   "singer": "Matthew",
+   "sung_at": "2026-10-15 22:57:38",
+   "started_at": "2026-10-15 22:53:27",
+   "added_at": "2026-10-15 22:35:24",
+   "performers": [
+    {
+     "name": "Matthew",
+     "consent": "unknown",
+     "reason": "unknown",
+     "instagram": null
+    }
+   ],
+   "postable": false
+  },
+  {
+   "entry_id": 1540,
+   "song": "Love Is A Long Road - Tom Petty",
+   "singer": "Jude",
+   "sung_at": "2026-10-15 23:01:55",
+   "started_at": "2026-10-15 22:57:48",
+   "added_at": "2026-10-15 22:40:48",
+   "performers": [
+    {
+     "name": "Jude",
+     "consent": "unknown",
+     "reason": "unknown",
+     "instagram": null
+    }
+   ],
+   "postable": false
+  },
+  {
+   "entry_id": 1539,
+   "song": "We Belong Together - Mariah Carey",
+   "singer": "Wynter",
+   "sung_at": "2026-10-15 23:05:29",
+   "started_at": "2026-10-15 23:02:02",
+   "added_at": "2026-10-15 22:39:26",
+   "performers": [
+    {
+     "name": "Wynter",
+     "consent": "unknown",
+     "reason": "unknown",
+     "instagram": null
+    }
+   ],
+   "postable": false
+  },
+  {
+   "entry_id": 1542,
+   "song": "Bulletproof - La Roux",
+   "singer": "Ana",
+   "sung_at": "2026-10-15 23:09:08",
+   "started_at": "2026-10-15 23:05:35",
+   "added_at": "2026-10-15 22:48:25",
+   "performers": [
+    {
+     "name": "Ana",
+     "consent": "unknown",
+     "reason": "unknown",
+     "instagram": null
+    }
+   ],
+   "postable": false
+  },
+  {
+   "entry_id": 1535,
+   "song": "Today - Smashing Pumpkins",
+   "singer": "Alanna M",
+   "sung_at": "2026-10-15 23:12:43",
+   "started_at": "2026-10-15 23:09:15",
+   "added_at": "2026-10-15 22:31:42",
+   "performers": [
+    {
+     "name": "Alanna M",
+     "consent": "unknown",
+     "reason": "unknown",
+     "instagram": null
+    }
+   ],
+   "postable": false
+  },
+  {
+   "entry_id": 1532,
+   "song": "Creep - Radiohead",
+   "singer": "Lyle!",
+   "sung_at": "2026-10-15 23:17:04",
+   "started_at": "2026-10-15 23:12:58",
+   "added_at": "2026-10-15 22:22:20",
+   "performers": [
+    {
+     "name": "Lyle!",
+     "consent": "unknown",
+     "reason": "unknown",
+     "instagram": null
+    }
+   ],
+   "postable": false
+  },
+  {
+   "entry_id": 1522,
+   "song": "Whiskey Glasses - Morgan Wallen",
+   "singer": "Ashlee A",
+   "sung_at": "2026-10-15 23:21:13",
+   "started_at": "2026-10-15 23:17:13",
+   "added_at": "2026-10-15 21:54:48",
+   "performers": [
+    {
+     "name": "Ashlee A",
+     "consent": "unknown",
+     "reason": "unknown",
+     "instagram": null
+    }
+   ],
+   "postable": false
+  },
+  {
+   "entry_id": 1547,
+   "song": "Down Under - Men At Work",
+   "singer": "Bryan",
+   "sung_at": "2026-10-15 23:25:18",
+   "started_at": "2026-10-15 23:21:22",
+   "added_at": "2026-10-15 23:08:28",
+   "performers": [
+    {
+     "name": "Bryan",
+     "consent": "unknown",
+     "reason": "unknown",
+     "instagram": null
+    }
+   ],
+   "postable": false
+  },
+  {
+   "entry_id": 1548,
+   "song": "La Gata Bajo La Lluvia (Latino) - Rocio Durcal",
+   "singer": "Jaime",
+   "sung_at": "2026-10-15 23:28:41",
+   "started_at": "2026-10-15 23:25:24",
+   "added_at": "2026-10-15 23:08:31",
+   "performers": [
+    {
+     "name": "Jaime",
+     "consent": "unknown",
+     "reason": "unknown",
+     "instagram": null
+    }
+   ],
+   "postable": false
+  },
+  {
+   "entry_id": 1521,
+   "song": "Linkin Park - With You",
+   "singer": "Andrew",
+   "sung_at": "2026-10-15 23:32:37",
+   "started_at": "2026-10-15 23:29:06",
+   "added_at": "2026-10-15 21:54:15",
+   "performers": [
+    {
+     "name": "Andrew",
+     "consent": "unknown",
+     "reason": "unknown",
+     "instagram": null
+    }
+   ],
+   "postable": false
+  },
+  {
+   "entry_id": 1544,
+   "song": "I Write Sins Not Tragedies - Panic At The Disco",
+   "singer": "Ana",
+   "sung_at": "2026-10-15 23:35:55",
+   "started_at": "2026-10-15 23:32:43",
+   "added_at": "2026-10-15 22:52:54",
+   "performers": [
+    {
+     "name": "Ana",
+     "consent": "unknown",
+     "reason": "unknown",
+     "instagram": null
+    }
+   ],
+   "postable": false
+  },
+  {
+   "entry_id": 1549,
+   "song": "As - Stevie Wonder",
+   "singer": "Matthew",
+   "sung_at": "2026-10-15 23:39:46",
+   "started_at": "2026-10-15 23:36:01",
+   "added_at": "2026-10-15 23:09:17",
+   "performers": [
+    {
+     "name": "Matthew",
+     "consent": "unknown",
+     "reason": "unknown",
+     "instagram": null
+    }
+   ],
+   "postable": false
+  },
+  {
+   "entry_id": 1555,
+   "song": "Adios Amor - Christian Nodal",
+   "singer": "Juan G",
+   "sung_at": "2026-10-15 23:43:21",
+   "started_at": "2026-10-15 23:39:52",
+   "added_at": "2026-10-15 23:25:40",
+   "performers": [
+    {
+     "name": "Juan G",
+     "consent": "unknown",
+     "reason": "unknown",
+     "instagram": null
+    }
+   ],
+   "postable": false
+  },
+  {
+   "entry_id": 1550,
+   "song": "Empire Cast - Born to Love U (feat. Terrell Carter)",
+   "singer": "Wynter",
+   "sung_at": "2026-10-15 23:47:13",
+   "started_at": "2026-10-15 23:43:27",
+   "added_at": "2026-10-15 23:09:51",
+   "performers": [
+    {
+     "name": "Wynter",
+     "consent": "unknown",
+     "reason": "unknown",
+     "instagram": null
+    }
+   ],
+   "postable": false
+  },
+  {
+   "entry_id": 1551,
+   "song": "Strangers In The Night - Frank Sinatra",
+   "singer": "Jaime",
+   "sung_at": "2026-10-15 23:50:02",
+   "started_at": "2026-10-15 23:47:22",
+   "added_at": "2026-10-15 23:22:17",
+   "performers": [
+    {
+     "name": "Jaime",
+     "consent": "unknown",
+     "reason": "unknown",
+     "instagram": null
+    }
+   ],
+   "postable": false
+  },
+  {
+   "entry_id": 1512,
+   "song": "Dirty Diana - Michael Jackson",
+   "singer": "Alanna M & Jude",
+   "sung_at": "2026-10-15 23:50:19",
+   "started_at": null,
+   "added_at": "2026-10-15 21:36:25",
+   "performers": [
+    {
+     "name": "Alanna M",
+     "consent": "unknown",
+     "reason": "unknown",
+     "instagram": null
+    },
+    {
+     "name": "Jude",
+     "consent": "unknown",
+     "reason": "unknown",
+     "instagram": null
+    }
+   ],
+   "postable": false
+  },
+  {
+   "entry_id": 1517,
+   "song": "Linkin Park - One Step Closer",
+   "singer": "Andrew",
+   "sung_at": "2026-10-15 23:53:10",
+   "started_at": "2026-10-15 23:50:23",
+   "added_at": "2026-10-15 21:44:57",
+   "performers": [
+    {
+     "name": "Andrew",
+     "consent": "unknown",
+     "reason": "unknown",
+     "instagram": null
+    }
+   ],
+   "postable": false
+  },
+  {
+   "entry_id": 1559,
+   "song": "7 Summers - Morgan Wallen",
+   "singer": "Bryan",
+   "sung_at": "2026-10-15 23:56:46",
+   "started_at": "2026-10-15 23:53:14",
+   "added_at": "2026-10-15 23:40:18",
+   "performers": [
+    {
+     "name": "Bryan",
+     "consent": "unknown",
+     "reason": "unknown",
+     "instagram": null
+    }
+   ],
+   "postable": false
+  },
+  {
+   "entry_id": 1552,
+   "song": "Di Que Sí - Grupo Frontera",
+   "singer": "Juan G",
+   "sung_at": "2026-10-16 00:00:08",
+   "started_at": "2026-10-15 23:56:55",
+   "added_at": "2026-10-15 23:22:20",
+   "performers": [
+    {
+     "name": "Juan G",
+     "consent": "unknown",
+     "reason": "unknown",
+     "instagram": null
+    }
+   ],
+   "postable": false
+  },
+  {
+   "entry_id": 1564,
+   "song": "I Want the One I Can't Have - The Smiths",
+   "singer": "Jude G",
+   "sung_at": "2026-10-16 00:03:39",
+   "started_at": "2026-10-16 00:00:21",
+   "added_at": "2026-10-15 23:49:29",
+   "performers": [
+    {
+     "name": "Jude G",
+     "consent": "unknown",
+     "reason": "unknown",
+     "instagram": null
+    }
+   ],
+   "postable": false
+  },
+  {
+   "entry_id": 1558,
+   "song": "Mein Herz Brennt - Rammstein",
+   "singer": "Ana",
+   "sung_at": "2026-10-16 00:08:36",
+   "started_at": "2026-10-16 00:03:48",
+   "added_at": "2026-10-15 23:37:47",
+   "performers": [
+    {
+     "name": "Ana",
+     "consent": "unknown",
+     "reason": "unknown",
+     "instagram": null
+    }
+   ],
+   "postable": false
+  },
+  {
+   "entry_id": 1565,
+   "song": "Nobody - Mitski",
+   "singer": "Jaime",
+   "sung_at": "2026-10-16 00:11:58",
+   "started_at": "2026-10-16 00:08:40",
+   "added_at": "2026-10-15 23:52:48",
+   "performers": [
+    {
+     "name": "Jaime",
+     "consent": "unknown",
+     "reason": "unknown",
+     "instagram": null
+    }
+   ],
+   "postable": false
+  },
+  {
+   "entry_id": 1546,
+   "song": "Just a Boy - The Backseat Lovers",
+   "singer": "Matthew",
+   "sung_at": "2026-10-16 00:16:22",
+   "started_at": "2026-10-16 00:12:07",
+   "added_at": "2026-10-15 22:59:21",
+   "performers": [
+    {
+     "name": "Matthew",
+     "consent": "unknown",
+     "reason": "unknown",
+     "instagram": null
+    }
+   ],
+   "postable": false
+  },
+  {
+   "entry_id": 1553,
+   "song": "COQUETA - Grupo Frontera",
+   "singer": "Juan G",
+   "sung_at": "2026-10-16 00:20:31",
+   "started_at": "2026-10-16 00:16:28",
+   "added_at": "2026-10-15 23:23:57",
+   "performers": [
+    {
+     "name": "Juan G",
+     "consent": "unknown",
+     "reason": "unknown",
+     "instagram": null
+    }
+   ],
+   "postable": false
+  },
+  {
+   "entry_id": 1557,
+   "song": "Frances Limon - Los Enanitos Verdes",
+   "singer": "Bryan",
+   "sung_at": "2026-10-16 00:26:05",
+   "started_at": "2026-10-16 00:20:41",
+   "added_at": "2026-10-15 23:34:16",
+   "performers": [
+    {
+     "name": "Bryan",
+     "consent": "unknown",
+     "reason": "unknown",
+     "instagram": null
+    }
+   ],
+   "postable": false
+  },
+  {
+   "entry_id": 1575,
+   "song": "Monster - Skillet",
+   "singer": "Wynter",
+   "sung_at": "2026-10-16 00:29:19",
+   "started_at": "2026-10-16 00:26:11",
+   "added_at": "2026-10-16 00:06:41",
+   "performers": [
+    {
+     "name": "Wynter",
+     "consent": "unknown",
+     "reason": "unknown",
+     "instagram": null
+    }
+   ],
+   "postable": false
+  },
+  {
+   "entry_id": 1524,
+   "song": "Snow Patrol - Run",
+   "singer": "Andrew",
+   "sung_at": "2026-10-16 00:35:22",
+   "started_at": "2026-10-16 00:29:22",
+   "added_at": "2026-10-15 22:04:39",
+   "performers": [
+    {
+     "name": "Andrew",
+     "consent": "unknown",
+     "reason": "unknown",
+     "instagram": null
+    }
+   ],
+   "postable": false
+  },
+  {
+   "entry_id": 1572,
+   "song": "For the First Time - Mac DeMarco",
+   "singer": "Jaime",
+   "sung_at": "2026-10-16 00:38:40",
+   "started_at": "2026-10-16 00:35:28",
+   "added_at": "2026-10-16 00:03:00",
+   "performers": [
+    {
+     "name": "Jaime",
+     "consent": "unknown",
+     "reason": "unknown",
+     "instagram": null
+    }
+   ],
+   "postable": false
+  },
+  {
+   "entry_id": 1566,
+   "song": "Here I Am (Just When I Thought I Was Over You) - Air Supply",
+   "singer": "Matthew",
+   "sung_at": "2026-10-16 00:43:02",
+   "started_at": "2026-10-16 00:38:46",
+   "added_at": "2026-10-15 23:52:57",
+   "performers": [
+    {
+     "name": "Matthew",
+     "consent": "unknown",
+     "reason": "unknown",
+     "instagram": null
+    }
+   ],
+   "postable": false
+  },
+  {
+   "entry_id": 1563,
+   "song": "Vuelve - Ricky Martin",
+   "singer": "Juan G",
+   "sung_at": "2026-10-16 00:47:35",
+   "started_at": "2026-10-16 00:43:12",
+   "added_at": "2026-10-15 23:49:07",
+   "performers": [
+    {
+     "name": "Juan G",
+     "consent": "unknown",
+     "reason": "unknown",
+     "instagram": null
+    }
+   ],
+   "postable": false
+  },
+  {
+   "entry_id": 1560,
+   "song": "CRY - Hermanos Espinoza",
+   "singer": "Bryan",
+   "sung_at": "2026-10-16 00:51:31",
+   "started_at": "2026-10-16 00:47:42",
+   "added_at": "2026-10-15 23:47:20",
+   "performers": [
+    {
+     "name": "Bryan",
+     "consent": "unknown",
+     "reason": "unknown",
+     "instagram": null
+    }
+   ],
+   "postable": false
+  },
+  {
+   "entry_id": 1568,
+   "song": "Umbrella - Rihanna & Jay-Z (Solo)",
+   "singer": "Wynter",
+   "sung_at": "2026-10-16 00:56:05",
+   "started_at": "2026-10-16 00:51:32",
+   "added_at": "2026-10-15 23:54:50",
+   "performers": [
+    {
+     "name": "Wynter",
+     "consent": "unknown",
+     "reason": "unknown",
+     "instagram": null
+    }
+   ],
+   "postable": false
+  },
+  {
+   "entry_id": 1579,
+   "song": "All's Well That Ends - Rainbow Kitten Surprise",
+   "singer": "Ana",
+   "sung_at": "2026-10-16 00:59:49",
+   "started_at": "2026-10-16 00:56:13",
+   "added_at": "2026-10-16 00:17:35",
+   "performers": [
+    {
+     "name": "Ana",
+     "consent": "unknown",
+     "reason": "unknown",
+     "instagram": null
+    }
+   ],
+   "postable": false
+  },
+  {
+   "entry_id": 1538,
+   "song": "Don't Trust Me - 3OH!3",
+   "singer": "Andrew",
+   "sung_at": "2026-10-16 01:03:21",
+   "started_at": "2026-10-16 00:59:58",
+   "added_at": "2026-10-15 22:35:33",
+   "performers": [
+    {
+     "name": "Andrew",
+     "consent": "unknown",
+     "reason": "unknown",
+     "instagram": null
+    }
+   ],
+   "postable": false
+  },
+  {
+   "entry_id": 1585,
+   "song": "Tal Vez - Ricky Martin",
+   "singer": "Juan G",
+   "sung_at": "2026-10-16 01:09:02",
+   "started_at": "2026-10-16 01:03:23",
+   "added_at": "2026-10-16 00:48:45",
+   "performers": [
+    {
+     "name": "Juan G",
+     "consent": "unknown",
+     "reason": "unknown",
+     "instagram": null
+    }
+   ],
+   "postable": false
+  },
+  {
+   "entry_id": 1583,
+   "song": "Cariño - The Marías",
+   "singer": "Jaime",
+   "sung_at": "2026-10-16 01:13:30",
+   "started_at": "2026-10-16 01:09:10",
+   "added_at": "2026-10-16 00:43:59",
+   "performers": [
+    {
+     "name": "Jaime",
+     "consent": "unknown",
+     "reason": "unknown",
+     "instagram": null
+    }
+   ],
+   "postable": false
+  },
+  {
+   "entry_id": 1584,
+   "song": "Treasure - Bruno Mars",
+   "singer": "Matthew",
+   "sung_at": "2026-10-16 01:16:55",
+   "started_at": "2026-10-16 01:13:40",
+   "added_at": "2026-10-16 00:46:49",
+   "performers": [
+    {
+     "name": "Matthew",
+     "consent": "unknown",
+     "reason": "unknown",
+     "instagram": null
+    }
+   ],
+   "postable": false
+  },
+  {
+   "entry_id": 1582,
+   "song": "Por Qué - Ilan Bar-Lavi",
+   "singer": "Bryan",
+   "sung_at": "2026-10-16 01:20:16",
+   "started_at": "2026-10-16 01:17:05",
+   "added_at": "2026-10-16 00:30:36",
+   "performers": [
+    {
+     "name": "Bryan",
+     "consent": "unknown",
+     "reason": "unknown",
+     "instagram": null
+    }
+   ],
+   "postable": false
+  },
+  {
+   "entry_id": 1569,
+   "song": "Perm - Bruno Mars",
+   "singer": "Wynter",
+   "sung_at": "2026-10-16 01:24:03",
+   "started_at": "2026-10-16 01:20:27",
+   "added_at": "2026-10-15 23:58:45",
+   "performers": [
+    {
+     "name": "Wynter",
+     "consent": "unknown",
+     "reason": "unknown",
+     "instagram": null
+    }
+   ],
+   "postable": false
+  },
+  {
+   "entry_id": 1534,
+   "song": "Radiohead - 2 + 2 = 5",
+   "singer": "Andrew",
+   "sung_at": "2026-10-16 01:27:36",
+   "started_at": "2026-10-16 01:24:06",
+   "added_at": "2026-10-15 22:31:07",
+   "performers": [
+    {
+     "name": "Andrew",
+     "consent": "unknown",
+     "reason": "unknown",
+     "instagram": null
+    }
+   ],
+   "postable": false
+  },
+  {
+   "entry_id": 1581,
+   "song": "All I Ask - Adele",
+   "singer": "Juan G",
+   "sung_at": "2026-10-16 01:32:21",
+   "started_at": "2026-10-16 01:27:39",
+   "added_at": "2026-10-16 00:27:28",
+   "performers": [
+    {
+     "name": "Juan G",
+     "consent": "unknown",
+     "reason": "unknown",
+     "instagram": null
+    }
+   ],
+   "postable": false
+  },
+  {
+   "entry_id": 1586,
+   "song": "Sir Duke - Stevie Wonder",
+   "singer": "Matthew",
+   "sung_at": "2026-10-16 01:36:22",
+   "started_at": "2026-10-16 01:32:25",
+   "added_at": "2026-10-16 00:51:52",
+   "performers": [
+    {
+     "name": "Matthew",
+     "consent": "unknown",
+     "reason": "unknown",
+     "instagram": null
+    }
+   ],
+   "postable": false
+  },
+  {
+   "entry_id": 1593,
+   "song": "Runaway Baby - Bruno Mars",
+   "singer": "Wynter",
+   "sung_at": "2026-10-16 01:39:14",
+   "started_at": "2026-10-16 01:36:30",
+   "added_at": "2026-10-16 01:30:19",
+   "performers": [
+    {
+     "name": "Wynter",
+     "consent": "unknown",
+     "reason": "unknown",
+     "instagram": null
+    }
+   ],
+   "postable": false
+  },
+  {
+   "entry_id": 1591,
+   "song": "Too Little Too Late - Laufey",
+   "singer": "Jaime",
+   "sung_at": "2026-10-16 01:43:38",
+   "started_at": "2026-10-16 01:39:24",
+   "added_at": "2026-10-16 01:24:10",
+   "performers": [
+    {
+     "name": "Jaime",
+     "consent": "unknown",
+     "reason": "unknown",
+     "instagram": null
+    }
+   ],
+   "postable": false
+  },
+  {
+   "entry_id": 1594,
+   "song": "Moonshine - Bruno Mars",
+   "singer": "Wynter",
+   "sung_at": "2026-10-16 01:47:40",
+   "started_at": "2026-10-16 01:43:56",
+   "added_at": "2026-10-16 01:32:19",
+   "performers": [
+    {
+     "name": "Wynter",
+     "consent": "unknown",
+     "reason": "unknown",
+     "instagram": null
+    }
+   ],
+   "postable": false
+  },
+  {
+   "entry_id": 1577,
+   "song": "Disparo Al Corazón - Ricky Martin",
+   "singer": "Juan G",
+   "sung_at": "2026-10-16 01:51:47",
+   "started_at": "2026-10-16 01:47:55",
+   "added_at": "2026-10-16 00:07:49",
+   "performers": [
+    {
+     "name": "Juan G",
+     "consent": "unknown",
+     "reason": "unknown",
+     "instagram": null
+    }
+   ],
+   "postable": false
+  },
+  {
+   "entry_id": 1587,
+   "song": "I Wish - Stevie Wonder",
+   "singer": "Matthew",
+   "sung_at": "2026-10-16 01:55:52",
+   "started_at": "2026-10-16 01:52:02",
+   "added_at": "2026-10-16 00:52:33",
+   "performers": [
+    {
+     "name": "Matthew",
+     "consent": "unknown",
+     "reason": "unknown",
+     "instagram": null
+    }
+   ],
+   "postable": false
+  },
+  {
+   "entry_id": 1596,
+   "song": "Payphone - Maroon 5 & Wiz Khalifa (Solo)",
+   "singer": "Wyatt C",
+   "sung_at": "2026-10-16 02:00:20",
+   "started_at": "2026-10-16 01:56:02",
+   "added_at": "2026-10-16 01:41:19",
+   "performers": [
+    {
+     "name": "Wyatt C",
+     "consent": "unknown",
+     "reason": "unknown",
+     "instagram": null
+    }
+   ],
+   "postable": false
+  },
+  {
+   "entry_id": 1571,
+   "song": "No Se Va - Grupo Frontera",
+   "singer": "Juan G",
+   "sung_at": "2026-10-16 02:02:32",
+   "started_at": null,
+   "added_at": "2026-10-16 00:01:00",
+   "performers": [
+    {
+     "name": "Juan G",
+     "consent": "unknown",
+     "reason": "unknown",
+     "instagram": null
+    }
+   ],
+   "postable": false
+  },
+  {
+   "entry_id": 1595,
+   "song": "Maria - Ricky Martin",
+   "singer": "Juan G",
+   "sung_at": "2026-10-16 02:02:33",
+   "started_at": null,
+   "added_at": "2026-10-16 01:35:35",
+   "performers": [
+    {
+     "name": "Juan G",
+     "consent": "unknown",
+     "reason": "unknown",
+     "instagram": null
+    }
+   ],
+   "postable": false
+  },
+  {
+   "entry_id": 1590,
+   "song": "TE MATA - KALI UCHIS",
+   "singer": "Juan G",
+   "sung_at": "2026-10-16 02:02:35",
+   "started_at": null,
+   "added_at": "2026-10-16 01:12:32",
+   "performers": [
+    {
+     "name": "Juan G",
+     "consent": "unknown",
+     "reason": "unknown",
+     "instagram": null
+    }
+   ],
+   "postable": false
+  },
+  {
+   "entry_id": 1556,
+   "song": "Medicina De Amor - Raulin Rodriguez",
+   "singer": "Juan G",
+   "sung_at": "2026-10-16 02:06:33",
+   "started_at": "2026-10-16 02:00:26",
+   "added_at": "2026-10-15 23:30:07",
+   "performers": [
+    {
+     "name": "Juan G",
+     "consent": "unknown",
+     "reason": "unknown",
+     "instagram": null
+    }
+   ],
+   "postable": false
+  },
+  {
+   "entry_id": 1578,
+   "song": "Treat Me Like Somebody by Tink  |  Karaoke/ Accompaniment   #voicelessons #karaoke",
+   "singer": "Wynter",
+   "sung_at": "2026-10-16 02:10:26",
+   "started_at": "2026-10-16 02:06:35",
+   "added_at": "2026-10-16 00:13:19",
+   "performers": [
+    {
+     "name": "Wynter",
+     "consent": "unknown",
+     "reason": "unknown",
+     "instagram": null
+    }
+   ],
+   "postable": false
+  },
+  {
+   "entry_id": 1599,
+   "song": "I'm Not In Love - 10CC",
+   "singer": "Jaime",
+   "sung_at": "2026-10-16 02:13:48",
+   "started_at": "2026-10-16 02:10:35",
+   "added_at": "2026-10-16 01:54:29",
+   "performers": [
+    {
+     "name": "Jaime",
+     "consent": "unknown",
+     "reason": "unknown",
+     "instagram": null
+    }
+   ],
+   "postable": false
+  },
+  {
+   "entry_id": 1601,
+   "song": "Nobody New - The Marías",
+   "singer": "Matthew",
+   "sung_at": "2026-10-16 02:17:36",
+   "started_at": "2026-10-16 02:14:05",
+   "added_at": "2026-10-16 02:08:47",
+   "performers": [
+    {
+     "name": "Matthew",
+     "consent": "unknown",
+     "reason": "unknown",
+     "instagram": null
+    }
+   ],
+   "postable": false
+  },
+  {
+   "entry_id": 1600,
+   "song": "Down - Jay Sean & Lil' Wayne (Duet)",
+   "singer": "Wyatt C",
+   "sung_at": "2026-10-16 02:25:49",
+   "started_at": "2026-10-16 02:17:50",
+   "added_at": "2026-10-16 02:08:36",
+   "performers": [
+    {
+     "name": "Wyatt C",
+     "consent": "unknown",
+     "reason": "unknown",
+     "instagram": null
+    }
+   ],
+   "postable": false
+  },
+  {
+   "entry_id": 1598,
+   "song": "See You Again - Wiz Khalifa & Charlie Puth (Duet)",
+   "singer": "Wynter",
+   "sung_at": "2026-10-16 02:25:50",
+   "started_at": "2026-10-16 02:21:54",
+   "added_at": "2026-10-16 01:54:24",
+   "performers": [
+    {
+     "name": "Wynter",
+     "consent": "unknown",
+     "reason": "unknown",
+     "instagram": null
+    }
+   ],
+   "postable": false
+  },
+  {
+   "entry_id": 1588,
+   "song": "Ebony Eyes - Stevie Wonder",
+   "singer": "Matthew",
+   "sung_at": "2026-10-16 02:27:29",
+   "started_at": null,
+   "added_at": "2026-10-16 00:53:01",
+   "performers": [
+    {
+     "name": "Matthew",
+     "consent": "unknown",
+     "reason": "unknown",
+     "instagram": null
+    }
+   ],
+   "postable": false
+  },
+  {
+   "entry_id": 1603,
+   "song": "Snow Patrol - Set The Fire To The Third Bar",
+   "singer": "Andrew",
+   "sung_at": "2026-10-16 02:33:51",
+   "started_at": "2026-10-16 02:27:37",
+   "added_at": "2026-10-16 02:23:40",
+   "performers": [
+    {
+     "name": "Andrew",
+     "consent": "unknown",
+     "reason": "unknown",
+     "instagram": null
+    }
+   ],
+   "postable": false
+  }
+ ]
+}

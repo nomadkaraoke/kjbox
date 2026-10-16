@@ -81,6 +81,7 @@ def songs_from_night_log(data: dict) -> list[dict]:
                 "song": e.get("song") or "",
                 "singer": e.get("singer") or "",
                 "sung_at": e["sung_at"],
+                "started_at": e.get("started_at"),
                 "added_at": e.get("added_at"),
                 "performers": [
                     {"name": n, "consent": "unknown", "reason": "unknown", "instagram": None}
@@ -89,7 +90,7 @@ def songs_from_night_log(data: dict) -> list[dict]:
                 "postable": False,
             }
         )
-    songs.sort(key=lambda s: s["sung_at"])
+    songs.sort(key=lambda s: s.get("started_at") or s["sung_at"])
     return songs
 
 
@@ -117,7 +118,7 @@ def normalize_night_media(data: dict) -> list[dict]:
         # Never trust a postable flag that disagrees with the performers: every one must be yes.
         postable = bool(s.get("postable")) and all(p["consent"] == "yes" for p in performers)
         songs.append({**s, "performers": performers, "postable": postable})
-    songs.sort(key=lambda s: s["sung_at"])
+    songs.sort(key=lambda s: s.get("started_at") or s["sung_at"])
     return songs
 
 

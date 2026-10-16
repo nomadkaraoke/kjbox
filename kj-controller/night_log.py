@@ -374,6 +374,9 @@ class NightLog:
             "sung": _is_done(r.get("status")),
             "added_at": r.get("created_at"),
             "sung_at": sung_at,
+            # When playback started (play_events). sung_at is when the KJ marked the
+            # entry Done, i.e. the song's END on nights since the Night Log shipped.
+            "started_at": play.get("played_local"),
             "notes": r.get("notes") or "",
             "paid": bool(r.get("paid")),
             "added_by": added_by,

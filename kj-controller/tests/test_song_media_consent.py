@@ -257,6 +257,7 @@ class TestKjAndNightMedia:
         assert "Nobody" not in by
         assert by["Mija"]["postable"] is True
         assert by["Mija"]["performers"][0]["instagram"] == "mija"
+        assert "started_at" in by["Mija"]  # play start; sung_at is the Done time
         assert by["Katie B"]["postable"] is False
         assert by["Katie B"]["performers"][0]["reason"] == "song_override_kj"
 

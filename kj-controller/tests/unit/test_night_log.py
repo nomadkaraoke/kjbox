@@ -291,3 +291,27 @@ def test_request_time_match_needs_singer_or_full_song(dbs):
     _request(store, "Kimberly", "Lana Del Rey", "Love", "youtube", "2026-10-01 21:00:02")
     [e] = _log(store, stats).get_night("2026-10-01")
     assert e["added_by"]["source_type"] == "youtube"
+
+
+def test_started_at_is_play_start_and_sung_at_is_done_time(dbs):
+    # Since the Night Log shipped, sung_at = done_at = when the KJ marked the entry
+    # Done (the song's END). started_at carries the play_events start so the
+    # night-clips tool can attribute phone clips to the song actually on stage.
+    store, _, stats = dbs
+    e = store.add_entry("Lulu K", song_artist="Ana Ng - They Might Be Giants")
+    _play(stats, "yt-ana", e["id"], "Lulu K", _utc_of_local("2026-10-15 22:13:31"))
+    store.update_status(e["id"], "Done")
+    conn = store._get_conn()
+    conn.execute("UPDATE rotation_entries SET done_at=? WHERE id=?", ("2026-10-15 22:16:57", e["id"]))
+    conn.commit()
+
+    [got] = _log(store, stats).get_night("2026-10-15")
+    assert got["started_at"] == "2026-10-15 22:13:31"
+    assert got["sung_at"] == "2026-10-15 22:16:57"
+
+
+def test_started_at_none_without_play_event(dbs):
+    store, _, stats = dbs
+    _legacy_archive(store, "Jude", "Song - Artist", None, "2026-10-08 20:57:51")
+    [e] = _log(store, stats).get_night("2026-10-08")
+    assert e["started_at"] is None

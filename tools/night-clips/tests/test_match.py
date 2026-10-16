@@ -81,3 +81,45 @@ def test_candidates_are_adjacent_songs():
     assert match.candidate_songs(10, 9) == [7, 8, 9]
     assert match.candidate_songs(10, None) == [0, 1, 2]
     assert match.candidate_songs(0, None) == []
+
+
+# --- 2026-10-15: sung_at is the Done time (song END); started_at is the play start ---
+
+EXPECTED_1015 = {
+    # Filmed during Lulu K's Ana Ng (played 22:13:31), right after Wonderwall was Done
+    # at 22:13:13 — matching on sung_at tagged it Ashlee A & Jude.
+    "2026-10-15 22.14.47.mp4": ("Lulu K", "Ana Ng - They Might Be Giants"),
+    "2026-10-15 21.48.34.mp4": ("Ashlee A", "Rock Me - One Direction"),
+    "2026-10-15 23.06.37.mp4": ("Ana", "Bulletproof - La Roux"),
+    # Medicina De Amor was on stage; three Juan G songs were ticked Done unplayed at 02:02.
+    "2026-10-16 02.05.56.mp4": ("Juan G", "Medicina De Amor - Raulin Rodriguez"),
+}
+
+
+def test_1015_clips_match_song_playing_not_song_just_finished(night_media_1015, clip_names_1015):
+    songs = match.index_songs(night_media_1015["songs"])
+    assert len(songs) == len(night_media_1015["songs"]) - 5  # unplayed Done entries dropped
+    clips = make_clips(clip_names_1015)
+    res = match.match_clips(clips, songs)
+    for c in clips:
+        s = songs[res[c.id]["song_idx"]]
+        assert parse_ts(s["started_at"]) <= c.start, c.filename
+        assert "after_song_end" not in res[c.id]["flags"], c.filename
+    for name, (singer, song) in EXPECTED_1015.items():
+        s = songs[res[clip_id(name)]["song_idx"]]
+        assert (s["singer"], s["song"]) == (singer, song), name
+
+
+def test_sung_at_only_falls_back_to_old_behaviour(songs_unknown):
+    # Old kjbox / reconstructed nights: no started_at anywhere -> nothing dropped.
+    assert match.played_songs(songs_unknown) == songs_unknown
+    assert all(s["start"] == s["sung_at"] for s in songs_unknown)
+
+
+def test_after_song_end_flag():
+    starts = _starts((21, 0, 0), (21, 4, 0))
+    ends = [dt.datetime(2026, 10, 8, 21, 3, 50), dt.datetime(2026, 10, 8, 21, 6, 0)]
+    i, flags = match.match_time(dt.datetime(2026, 10, 8, 21, 6, 31), starts, ends)
+    assert i == 1 and flags == ["after_song_end"]
+    i, flags = match.match_time(dt.datetime(2026, 10, 8, 21, 6, 30), starts, ends)
+    assert flags == []
