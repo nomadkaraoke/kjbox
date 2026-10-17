@@ -327,10 +327,10 @@ ingress:
 - `sing.nomadkaraoke.com` is served by the same Flask app as `kjbox.*`, but a Flask `before_request` guard blocks every route except `/sing/*` when the Host header matches the public hostname — so admin endpoints can never leak via the public tunnel
 - DNS: each hostname is a proxied CNAME to `04c88337-f076-45ed-bc19-4ac1222b4228.cfargotunnel.com` in the Nomad account's nomadkaraoke.com zone
 
-**Legacy tunnel (pending removal):** the old locally-managed `cloudflared.service` (tunnel `kjbox`
-`1e86a7f5-04e7-4527-b624-49447450443e` in the personal account, config `/etc/cloudflared/config.yml`,
-credentials `/etc/cloudflared/1e86a7f5-….json`) still runs on NomadPC but no DNS points at it. It is
-scheduled to be stopped/removed after a soak period; don't edit its config expecting any effect.
+**Legacy tunnel (removed 2026-10-17):** the old locally-managed `cloudflared.service` (tunnel `kjbox`
+`1e86a7f5-04e7-4527-b624-49447450443e` in the personal account) was disabled+stopped on NomadPC and the
+tunnel deleted from the personal account. Its old config/credentials were moved to
+`/etc/cloudflared.legacy-2026-10` as a backup. `cloudflared-nomad` is the only tunnel service.
 
 ### 2.7 Cloudflare Access (Zero Trust Auth)
 
@@ -961,7 +961,7 @@ systemctl status kj-autodeploy
 systemctl status rotation-display
 systemctl status overlay-display
 systemctl status avahi-daemon
-systemctl status cloudflared-nomad   # current tunnel (legacy `cloudflared` pending removal)
+systemctl status cloudflared-nomad   # the only tunnel (legacy `cloudflared` removed 2026-10-17)
 ```
 
 ### 7.2 KJ Controller Web UI
