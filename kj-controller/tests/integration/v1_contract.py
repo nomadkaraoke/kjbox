@@ -10,6 +10,7 @@ Request helpers (``V1``, ``bearer``) live here too; the ``gen_stub`` /
 ``app_token`` fixtures are in ``tests/conftest.py``.
 """
 
+import copy
 import functools
 import json
 import os
@@ -65,15 +66,45 @@ def response_schema(operation_id, status):
     return content["schema"] if content else None
 
 
+def _strict(node):
+    """Add ``unevaluatedProperties: false`` to every object schema in ``node``."""
+    if isinstance(node, dict):
+        for value in node.values():
+            _strict(value)
+        if ("properties" in node or "allOf" in node) and "unevaluatedProperties" not in node:
+            node["unevaluatedProperties"] = False
+    elif isinstance(node, list):
+        for value in node:
+            _strict(value)
+    return node
+
+
+@functools.lru_cache(maxsize=1)
+def strict_components():
+    return _strict(copy.deepcopy(load_contract()["components"]))
+
+
 def validate_body(body, schema):
-    """Validate ``body`` against a contract schema (local ``$ref``s resolve
-    against the contract's ``components``)."""
+    """Validate ``body`` strictly against a contract schema (local ``$ref``s
+    resolve against the contract's ``components``)."""
     root = {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "components": load_contract()["components"],
-        **schema,
+        "components": strict_components(),
+        **_strict(copy.deepcopy(schema)),
     }
     jsonschema.Draft202012Validator(root).validate(body)
+
+
+def assert_v1_error(resp, code, status=None):
+    """For responses with no operation (e.g. an unknown v1 path): JSON body
+    matching the contract's ``Error`` with this error code."""
+    if status is not None:
+        assert resp.status_code == status
+    assert resp.mimetype == "application/json"
+    body = resp.get_json()
+    validate_body(body, {"$ref": "#/components/schemas/Error"})
+    assert body["error"] == code
+    return body
 
 
 def assert_matches_contract(resp, operation_id):

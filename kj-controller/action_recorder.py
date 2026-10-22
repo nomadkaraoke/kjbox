@@ -125,6 +125,9 @@ def _request_body():
     if request.is_json:
         body = request.get_json(silent=True)
         if body is None and request.content_length:
+            if request.path.startswith('/sing/api/v1/'):
+                # The app API carries credentials; never echo raw text.
+                return {'__unparsed_bytes__': request.content_length}
             return {'__unparsed__': request.get_data(as_text=True)[:MAX_BODY_BYTES]}
         return _truncate_json(body, MAX_BODY_BYTES)
     if request.form or request.files:

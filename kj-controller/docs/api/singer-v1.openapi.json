@@ -46,8 +46,14 @@
           "409": {
             "$ref": "#/components/responses/NightChanged"
           },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
           "503": {
             "$ref": "#/components/responses/GenUnavailable"
+          },
+          "default": {
+            "$ref": "#/components/responses/Default"
           }
         }
       }
@@ -98,8 +104,14 @@
           "409": {
             "$ref": "#/components/responses/NightChanged"
           },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
           "503": {
             "$ref": "#/components/responses/GenUnavailable"
+          },
+          "default": {
+            "$ref": "#/components/responses/Default"
           }
         }
       }
@@ -169,13 +181,33 @@
         "content": {
           "application/json": {
             "schema": {
-              "$ref": "#/components/schemas/Error"
+              "$ref": "#/components/schemas/NightChangedError"
             }
           }
         }
       },
       "GenUnavailable": {
         "description": "kjbox couldn't verify the token with gen (error gen_unavailable); retry after retry_after seconds",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "RateLimited": {
+        "description": "Too many wrong event codes or sign-in checks from this network (error rate_limited); retry after retry_after seconds (also the Retry-After header)",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Default": {
+        "description": "Any other error: not_found (unknown v1 path, 404), invalid (wrong method, 405), internal (500)",
         "content": {
           "application/json": {
             "schema": {
@@ -206,7 +238,8 @@
           "gen_rejected",
           "already_generating",
           "busy_retry",
-          "conflict"
+          "conflict",
+          "internal"
         ]
       },
       "Error": {
@@ -233,7 +266,7 @@
           },
           "night_id": {
             "type": "string",
-            "description": "On night_changed: the current night's id"
+            "description": "Only on night_changed (see NightChangedError): the current night's id"
           }
         }
       },
@@ -493,6 +526,20 @@
             "$ref": "#/components/schemas/Me"
           }
         }
+      },
+      "NightChangedError": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Error"
+          },
+          {
+            "type": "object",
+            "required": [
+              "night_id"
+            ]
+          }
+        ],
+        "description": "409 night_changed: the host started a new night; drop the old night's state and use night_id"
       }
     }
   }

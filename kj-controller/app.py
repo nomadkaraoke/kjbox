@@ -30,7 +30,7 @@ from sing import (
 )
 import sing_make  # noqa: F401 — registers the /sing/make/* routes on sing_bp
 from app_identity import GenTokenVerifier
-from sing_api_v1 import app_api_bp
+from sing_api_v1 import app_api_bp, install_v1_error_handlers
 import kj_make  # noqa: F401 — registers the /rotation/gen/* routes on routes_bp
 from sing_store import SingStore
 from sms_store import SmsStore
@@ -483,6 +483,7 @@ def create_app(config=None):
     flask_app.register_blueprint(routes_bp)
     flask_app.register_blueprint(sing_bp)
     flask_app.register_blueprint(app_api_bp)
+    install_v1_error_handlers(flask_app)
     install_host_guard(flask_app)
     install_public_host_rewriter(flask_app)
     return flask_app
@@ -704,6 +705,7 @@ def start_app():  # pragma: no cover
     flask_app.register_blueprint(routes_bp)
     flask_app.register_blueprint(sing_bp)
     flask_app.register_blueprint(app_api_bp)
+    install_v1_error_handlers(flask_app)
     install_host_guard(flask_app)
     install_public_host_rewriter(flask_app)
 

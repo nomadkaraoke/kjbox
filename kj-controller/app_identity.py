@@ -45,6 +45,13 @@ class GenTokenVerifier:
     def __repr__(self):
         return f"<GenTokenVerifier entries={len(self._cache)}>"
 
+    def is_cached(self, token):
+        """True when ``verify(token)`` would answer from the cache (no gen call)."""
+        key = hashlib.sha256((token or "").encode()).hexdigest()
+        with self._lock:
+            hit = self._cache.get(key)
+            return bool(hit and hit[0] > self._clock())
+
     def verify(self, token):
         key = hashlib.sha256((token or "").encode()).hexdigest()
         now = self._clock()

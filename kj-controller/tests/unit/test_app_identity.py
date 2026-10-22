@@ -176,3 +176,13 @@ def test_get_me_sends_bearer_and_client_id(monkeypatch):
     assert seen["method"] == "GET" and seen["url"] == "http://gen/api/users/me"
     assert seen["headers"]["Authorization"] == "Bearer TOK"
     assert "X-Client-Id" in seen["headers"] and "X-Kjbox-Secret" not in seen["headers"]
+
+
+def test_is_cached_tracks_ttl():
+    v, gen, clock = make()
+    assert not v.is_cached(TOKEN)
+    v.verify(TOKEN)
+    assert v.is_cached(TOKEN)
+    clock.t += 61
+    assert not v.is_cached(TOKEN)
+    assert len(gen.calls) == 1

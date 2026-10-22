@@ -121,11 +121,14 @@ def flask_test_client(flask_app):
 @pytest.fixture(autouse=True)
 def _reset_rate_limiter():
     """Each test starts with an empty rate-limit window."""
-    sing._rate_limit_state.clear()
-    sing._validate_rate_limit_state.clear()
+    import sing_api_v1
+    for clear in (sing._rate_limit_state.clear, sing._validate_rate_limit_state.clear,
+                  sing_api_v1.failed_code_limit.clear, sing_api_v1.gen_verify_limit.clear):
+        clear()
     yield
-    sing._rate_limit_state.clear()
-    sing._validate_rate_limit_state.clear()
+    for clear in (sing._rate_limit_state.clear, sing._validate_rate_limit_state.clear,
+                  sing_api_v1.failed_code_limit.clear, sing_api_v1.gen_verify_limit.clear):
+        clear()
 
 
 @pytest.fixture(autouse=True)
@@ -161,14 +164,16 @@ def token(sing_app):
 
 @pytest.fixture
 def gen_stub(sing_app, monkeypatch):
-    """Stub gen's ``GET /api/users/me`` on the app's GenClient.
+    """Stub gen's ``GET /api/users/me`` for the v1 token verifier only.
 
-    ``users`` maps a session token to the user dict gen returns; an unknown
-    token gets gen's 401. Set ``down = True`` to simulate gen being unreachable
-    (GenApiError status 0). ``calls`` records the tokens verified.
+    Installs ``app.gen_verifier = GenTokenVerifier(stub)``; ``app.gen_client``
+    is left alone so make-it paths behave as in any other test (stub it in the
+    test that needs it). ``users`` maps a session token to the user dict gen
+    returns; an unknown token gets gen's 401. ``down = True`` simulates gen
+    being unreachable (GenApiError status 0). ``calls`` records verified tokens.
     """
     from app_identity import GenTokenVerifier
-    from gen_client import GenApiError, GenClient
+    from gen_client import GenApiError
 
     class _GenStub:
         def __init__(self):
@@ -186,12 +191,7 @@ def gen_stub(sing_app, monkeypatch):
             return {"user": dict(user), "has_session": True}
 
     stub = _GenStub()
-    gen = getattr(sing_app, "gen_client", None)
-    if gen is None:
-        gen = GenClient("http://gen.invalid", "test-admin-token", "")
-        monkeypatch.setattr(sing_app, "gen_client", gen, raising=False)
-    monkeypatch.setattr(gen, "get_me", stub.get_me)
-    monkeypatch.setattr(sing_app, "gen_verifier", GenTokenVerifier(gen), raising=False)
+    monkeypatch.setattr(sing_app, "gen_verifier", GenTokenVerifier(stub), raising=False)
     return stub
 
 

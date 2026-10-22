@@ -10,7 +10,9 @@ import re
 import pytest
 
 from app_identity import app_device_id
-from tests.integration.v1_contract import V1, assert_matches_contract, bearer
+from tests.integration.v1_contract import (
+    V1, assert_matches_contract, assert_v1_error, bearer, validate_body,
+)
 
 PUBLIC_HOST = "sing.nomadkaraoke.com"
 
@@ -370,7 +372,7 @@ V1_ERROR_CODES = [
     "unauthenticated", "gen_unavailable", "not_open", "night_changed", "needs_name",
     "not_found", "not_owner", "already_sung", "on_stage", "rate_limited", "invalid",
     "kj_pick_too_large", "make_disabled", "youtube_blocked", "gen_rejected",
-    "already_generating", "busy_retry", "conflict",
+    "already_generating", "busy_retry", "conflict", "internal",
 ]
 
 
@@ -399,3 +401,155 @@ def test_every_v1_route_is_in_the_contract(sing_app):
         assert rel in paths, f"{rule.rule} missing from the contract"
         for method in rule.methods - {"HEAD", "OPTIONS"}:
             assert method.lower() in paths[rel], f"{method} {rule.rule} missing"
+
+
+
+def test_contract_harness_is_strict():
+    import jsonschema
+    ok = {"api_version": "1.0", "me": {"name": "Sam"}}
+    validate_body(ok, {"$ref": "#/components/schemas/JoinResponse"})
+    for bad in ({**ok, "surprise": 1}, {**ok, "me": {"name": "Sam", "surprise": 1}}):
+        with pytest.raises(jsonschema.ValidationError):
+            validate_body(bad, {"$ref": "#/components/schemas/JoinResponse"})
+    # Error declares night_id; NightChangedError requires it.
+    validate_body({"api_version": "1.0", "error": "night_changed", "night_id": "ab"},
+                  {"$ref": "#/components/schemas/NightChangedError"})
+    with pytest.raises(jsonschema.ValidationError):
+        validate_body({"api_version": "1.0", "error": "night_changed"},
+                      {"$ref": "#/components/schemas/NightChangedError"})
+
+
+def test_missing_bearer_with_bad_code_is_401(client, token):
+    resp = client.get(f"{V1}/night", query_string={"t": "0000"})
+    assert resp.status_code == 401
+    assert assert_matches_contract(resp, "getNight")["error"] == "unauthenticated"
+
+
+def test_gen_stub_leaves_gen_client_alone(sing_app, gen_stub):
+    assert sing_app.gen_client is None
+    assert sing_app.gen_verifier is not None
+
+
+# --- JSON errors on v1 paths ---------------------------------------------
+
+def test_v1_unknown_path_404_json(client):
+    assert_v1_error(client.get(f"{V1}/no-such-thing"), "not_found", 404)
+    # Other paths keep Flask's HTML 404.
+    resp = client.get("/no-such-thing")
+    assert resp.status_code == 404 and resp.mimetype != "application/json"
+
+
+def test_v1_wrong_method_405_json(client):
+    assert_v1_error(client.get(f"{V1}/join"), "invalid", 405)
+    assert_v1_error(client.delete(f"{V1}/night"), "invalid", 405)
+
+
+def test_v1_unknown_path_on_public_host_is_json(public_app):
+    with public_app.test_client() as c:
+        assert_v1_error(c.get("/api/v1/nope", headers={"Host": PUBLIC_HOST}), "not_found", 404)
+        assert_v1_error(c.get("/sing/api/v1/nope", headers={"Host": PUBLIC_HOST}),
+                        "not_found", 404)
+        # Non-v1 guard 404s on the public host are unchanged.
+        resp = c.get("/rotation/requests", headers={"Host": PUBLIC_HOST})
+        assert resp.status_code == 404 and resp.mimetype != "application/json"
+
+
+def test_v1_unhandled_exception_500_internal(client, token, app_token, monkeypatch, caplog):
+    import logging
+
+    import sing_api_v1
+
+    def boom(user):
+        raise RuntimeError("kaboom")
+
+    monkeypatch.setattr(sing_api_v1, "suggested_name", boom)
+    tok = app_token()
+    with caplog.at_level(logging.ERROR, logger="sing_api_v1"):
+        resp = _night(client, tok, token)
+    assert resp.status_code == 500
+    body = assert_matches_contract(resp, "getNight")
+    assert body["error"] == "internal"
+    errors = [r for r in caplog.records if r.levelno == logging.ERROR]
+    assert errors and errors[0].exc_info and "kaboom" in caplog.text
+    assert tok not in caplog.text
+    assert "Authorization" not in caplog.text
+
+
+# --- per-IP limits (A3-R5) ----------------------------------------------
+
+def _from(ip):
+    return {"environ_base": {"REMOTE_ADDR": ip}}
+
+
+def test_failed_event_codes_rate_limited_per_ip(client, token, app_token):
+    tok = app_token()
+    for _ in range(10):
+        resp = client.post(f"{V1}/join", json={"t": "0000", "name": "Sam"},
+                           headers=bearer(tok), **_from("198.51.100.7"))
+        assert resp.status_code == 403
+    # Over the limit even the right code is refused (no oracle), on any endpoint.
+    resp = client.post(f"{V1}/join", json={"t": token, "name": "Sam"},
+                       headers=bearer(tok), **_from("198.51.100.7"))
+    assert resp.status_code == 429
+    body = assert_matches_contract(resp, "joinNight")
+    assert body["error"] == "rate_limited"
+    assert 1 <= body["retry_after"] <= 300
+    assert resp.headers["Retry-After"] == str(body["retry_after"])
+    resp = client.get(f"{V1}/night", query_string={"t": token}, headers=bearer(tok),
+                      **_from("198.51.100.7"))
+    assert resp.status_code == 429
+    assert assert_matches_contract(resp, "getNight")["error"] == "rate_limited"
+    # Another IP is unaffected; successful codes never count.
+    for _ in range(12):
+        resp = client.get(f"{V1}/night", query_string={"t": token}, headers=bearer(tok),
+                          **_from("198.51.100.8"))
+        assert resp.status_code == 200
+
+
+def test_gen_verification_misses_rate_limited_per_ip(client, token, app_token, gen_stub):
+    good = app_token()
+    ip = _from("198.51.100.9")
+    assert _night(client, good, token, **{}).status_code == 200  # other IP; warms cache
+    for i in range(30):
+        resp = client.get(f"{V1}/night", query_string={"t": token},
+                          headers=bearer(f"junk-{i}"), **ip)
+        assert resp.status_code == 401
+    calls = len(gen_stub.calls)
+    resp = client.get(f"{V1}/night", query_string={"t": token},
+                      headers=bearer("junk-new"), **ip)
+    assert resp.status_code == 429
+    body = assert_matches_contract(resp, "getNight")
+    assert body["error"] == "rate_limited" and 1 <= body["retry_after"] <= 60
+    assert len(gen_stub.calls) == calls  # gen wasn't asked
+    # A token already in the verifier cache still works from that IP.
+    resp = client.get(f"{V1}/night", query_string={"t": token}, headers=bearer(good), **ip)
+    assert resp.status_code == 200
+
+
+def test_sliding_window_expires():
+    import sing_api_v1
+    now = [100.0]
+    w = sing_api_v1.SlidingWindow(2, 60, clock=lambda: now[0])
+    w.hit("a")
+    w.hit("a")
+    assert w.retry_after("a") == 60
+    assert w.retry_after("b") is None
+    now[0] += 59.5
+    assert w.retry_after("a") == 1
+    now[0] += 0.5
+    assert w.retry_after("a") is None
+
+
+def test_malformed_v1_body_recorded_as_length_only(rec_app):
+    token = rec_app.sing_store.ensure_token()
+    secret = "SUPER-SECRET-IN-BROKEN-JSON"
+    raw = '{"t": "%s", "session_token": "%s"' % (token, secret)  # no closing brace
+    with rec_app.test_client() as c:
+        c.post(f"{V1}/join", data=raw, content_type="application/json",
+               headers=bearer("x"))
+    with open(rec_app.action_recorder.path_for()) as fh:
+        text = fh.read()
+    assert secret not in text
+    (rec,) = [json.loads(line) for line in text.splitlines()
+              if json.loads(line)["path"] == f"{V1}/join"]
+    assert rec["body"] == {"__unparsed_bytes__": len(raw)}
