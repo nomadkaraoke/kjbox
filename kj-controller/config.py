@@ -140,6 +140,13 @@ def load_config(config_file=None):
         "sing_estimate_transition_s": 30,
         "sing_estimate_default_song_s": 240,
         "sing_estimate_min_spread_s": 120,
+        # App-facing singer API (v1). box_id scopes night_id/history_id hashes;
+        # decide_* is where the history outbox pushes sung songs (secret is
+        # per-box, from config.json only).
+        "box_id": "nomadpc",
+        "decide_api_url": "",
+        "decide_kjbox_secret": "",
+        "history_outbox_interval_s": 20,
         # Browser preview playback (audition files in the KJ browser; never the
         # device A/V output). Cache transcodes once, ever.
         "preview_cache_dir": "",  # "" -> resolve_preview_cache_dir(): sibling "preview-cache" of download_folder
