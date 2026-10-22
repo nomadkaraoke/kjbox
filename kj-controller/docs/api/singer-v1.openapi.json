@@ -447,6 +447,107 @@
           }
         }
       }
+    },
+    "/me": {
+      "get": {
+        "operationId": "getMe",
+        "summary": "Your songs, your next turn and what you've sung tonight",
+        "description": "Built server-side from every request the account's devices (the app plus web pages linked tonight) made tonight, plus queued entries naming the singer that the host or a duet partner added. Never takes request ids from the client. Poll every 15 s while visible.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/EventCode"
+          },
+          {
+            "$ref": "#/components/parameters/NightId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Tonight for this singer",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeResult"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/NotOpen"
+          },
+          "409": {
+            "$ref": "#/components/responses/NightChanged"
+          },
+          "429": {
+            "$ref": "#/components/responses/RequestRateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/GenUnavailable"
+          },
+          "default": {
+            "$ref": "#/components/responses/Default"
+          }
+        }
+      },
+      "put": {
+        "operationId": "updateMe",
+        "summary": "Change name, phone or photo consent",
+        "description": "Applies to every song the account owns tonight except friend songs; a rename never rewrites sung (Done) songs. Renaming to a different first name while own songs are queued needs confirm_rename: true (else 409 conflict, reason rename_guard).",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/EventCode"
+          },
+          {
+            "$ref": "#/components/parameters/NightId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateMeRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpdateMeResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/RequestInvalid"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/NotOpen"
+          },
+          "409": {
+            "$ref": "#/components/responses/RenameGuard"
+          },
+          "429": {
+            "$ref": "#/components/responses/RequestRateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/GenUnavailable"
+          },
+          "default": {
+            "$ref": "#/components/responses/Default"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -597,6 +698,23 @@
             }
           }
         }
+      },
+      "RenameGuard": {
+        "description": "night_changed (with night_id, see NightChangedError) or conflict with reason rename_guard (see RenameGuardError)",
+        "content": {
+          "application/json": {
+            "schema": {
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/RenameGuardError"
+                },
+                {
+                  "$ref": "#/components/schemas/NightChangedError"
+                }
+              ]
+            }
+          }
+        }
       }
     },
     "schemas": {
@@ -649,6 +767,21 @@
           "night_id": {
             "type": "string",
             "description": "Only on night_changed (see NightChangedError): the current night's id"
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "rename_guard"
+            ],
+            "description": "Only on PUT /me's 409 conflict (see RenameGuardError): why it was refused"
+          },
+          "from": {
+            "type": "string",
+            "description": "Only with reason rename_guard: the current name"
+          },
+          "to": {
+            "type": "string",
+            "description": "Only with reason rename_guard: the name asked for"
           }
         }
       },
@@ -1287,6 +1420,429 @@
           },
           "night_id": {
             "type": "string"
+          }
+        }
+      },
+      "RenameGuardError": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Error"
+          },
+          {
+            "type": "object",
+            "required": [
+              "reason",
+              "from",
+              "to"
+            ]
+          }
+        ],
+        "description": "409 conflict from PUT /me: the first name changes while the singer has their own songs queued. Ask \"Rename yourself to {to}?\" (or \"{to} is a friend: request a song for them\") and resend with confirm_rename: true."
+      },
+      "SongItemRequest": {
+        "type": "object",
+        "description": "The request behind a Your-songs row: the account's own request (SongRequest), or, for a host- or partner-added entry, a synthetic view with id null, source_type 'rotation' and the entry's one 'Title - Artist' string in song_title.",
+        "required": [
+          "id",
+          "singer_name",
+          "song_artist",
+          "song_title",
+          "source_type",
+          "status",
+          "created_at",
+          "linked_entry_id",
+          "additional_singers",
+          "supersedes_request_id",
+          "media_consent",
+          "for_friend"
+        ],
+        "properties": {
+          "id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "null for host- or partner-added entries (use the Song's entry_id)"
+          },
+          "singer_name": {
+            "type": "string"
+          },
+          "song_artist": {
+            "type": "string"
+          },
+          "song_title": {
+            "type": "string"
+          },
+          "source_type": {
+            "type": "string",
+            "enum": [
+              "local",
+              "divebar",
+              "kn",
+              "youtube",
+              "make",
+              "kj_pick",
+              "reorder",
+              "tip",
+              "rotation"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "description": "pending | approved | rejected | cancelled"
+          },
+          "created_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "linked_entry_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "The rotation entry once approved"
+          },
+          "additional_singers": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/AdditionalSinger"
+            }
+          },
+          "supersedes_request_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "On a song change: the request this one replaces"
+          },
+          "media_consent": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "yes",
+              "no",
+              null
+            ]
+          },
+          "for_friend": {
+            "type": "boolean",
+            "description": "Requested by this account for someone else (singer_name is the friend)"
+          },
+          "tip_amount": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "tip_method": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "Estimate": {
+        "type": "object",
+        "description": "Wait estimate for a queued song (kjbox wait_estimate.compute_estimate)",
+        "required": [
+          "position",
+          "expected_s",
+          "range_low_s",
+          "range_high_s",
+          "spread_source",
+          "close_to_front",
+          "now_singing"
+        ],
+        "properties": {
+          "position": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "1-based place in the active queue"
+          },
+          "expected_s": {
+            "type": "integer"
+          },
+          "range_low_s": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "range_high_s": {
+            "type": "integer"
+          },
+          "spread_source": {
+            "type": "string",
+            "enum": [
+              "tonight",
+              "fallback"
+            ]
+          },
+          "close_to_front": {
+            "type": "boolean"
+          },
+          "now_singing": {
+            "type": "boolean"
+          }
+        }
+      },
+      "Song": {
+        "type": "object",
+        "description": "One row of Your songs: the web /my-requests item plus owner (and history_id once sung).",
+        "required": [
+          "request",
+          "owner",
+          "performed"
+        ],
+        "properties": {
+          "request": {
+            "$ref": "#/components/schemas/SongItemRequest"
+          },
+          "owner": {
+            "type": "string",
+            "enum": [
+              "me",
+              "friend",
+              "host",
+              "partner"
+            ],
+            "description": "me: the account's own request; friend: requested by the account for someone else; host: the host typed it in; partner: another singer's request naming this singer (a duet, or the singer's own unlinked web page). host and partner rows can only be reordered (by entry_id)."
+          },
+          "performed": {
+            "type": "boolean",
+            "description": "Sung (Done) or the singer left: listed in sung_tonight"
+          },
+          "estimate": {
+            "$ref": "#/components/schemas/Estimate"
+          },
+          "previewable": {
+            "type": "boolean",
+            "description": "The entry's file is on the box (▶ Preview)"
+          },
+          "removed": {
+            "type": "boolean",
+            "description": "The host took it off the list: show honest copy and Dismiss"
+          },
+          "make": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "making",
+              "rendering",
+              "review",
+              "review_self",
+              "review_host",
+              "needs_host",
+              null
+            ],
+            "description": "Make-it phase, null once the video is ready"
+          },
+          "quick": {
+            "type": "string",
+            "enum": [
+              "ready",
+              "chosen",
+              "upgraded"
+            ],
+            "description": "Make-it quick (draft) version state"
+          },
+          "entry_id": {
+            "type": "integer",
+            "description": "Host- and partner-added rows: the rotation entry"
+          },
+          "added_by_host": {
+            "type": "boolean"
+          },
+          "added_by": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "partner rows: who requested it"
+          },
+          "history_id": {
+            "type": "string",
+            "pattern": "^kj_[0-9a-f]{24}$",
+            "description": "Only on performed songs: \"kj_\" + sha256(box_id:entry_id:email)[:24], the id decide's karaoke log uses for this performance"
+          }
+        }
+      },
+      "MeProfile": {
+        "type": "object",
+        "required": [
+          "name",
+          "phone",
+          "photo_consent",
+          "instagram"
+        ],
+        "properties": {
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "null until POST /join (or PUT /me with a name)"
+          },
+          "phone": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Newest number on the account's own requests tonight"
+          },
+          "photo_consent": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "yes",
+              "no",
+              null
+            ]
+          },
+          "instagram": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "NextTurn": {
+        "type": "object",
+        "description": "The singer's next queued song (own, host- or partner-added; never a friend's)",
+        "required": [
+          "entry_id",
+          "position",
+          "eta_s",
+          "range_low_s",
+          "range_high_s"
+        ],
+        "properties": {
+          "entry_id": {
+            "type": "integer"
+          },
+          "position": {
+            "type": "integer"
+          },
+          "eta_s": {
+            "type": "integer"
+          },
+          "range_low_s": {
+            "type": "integer"
+          },
+          "range_high_s": {
+            "type": "integer"
+          }
+        }
+      },
+      "MeResult": {
+        "type": "object",
+        "required": [
+          "api_version",
+          "me",
+          "songs",
+          "next",
+          "sung_tonight",
+          "unlinked_identity_entries"
+        ],
+        "properties": {
+          "api_version": {
+            "type": "string"
+          },
+          "me": {
+            "$ref": "#/components/schemas/MeProfile"
+          },
+          "songs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Song"
+            },
+            "description": "Not yet sung, in queue order (on stage, position, approved without estimate, pending, rejected/removed)"
+          },
+          "next": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/NextTurn"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sung_tonight": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Song"
+            }
+          },
+          "unlinked_identity_entries": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Live requests naming the singer from a device not linked to any account: show \"Requested songs on the web page too? Open it and tap Save tonight's songs\" when > 0"
+          }
+        }
+      },
+      "UpdateMeRequest": {
+        "type": "object",
+        "properties": {
+          "t": {
+            "type": "string"
+          },
+          "night_id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "phone": {
+            "type": "string"
+          },
+          "photo_consent": {
+            "type": "string",
+            "enum": [
+              "yes",
+              "no"
+            ]
+          },
+          "instagram": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Kept only with photo_consent yes"
+          },
+          "confirm_rename": {
+            "type": "boolean",
+            "description": "The singer confirmed the rename guard"
+          }
+        }
+      },
+      "UpdateMeResult": {
+        "type": "object",
+        "required": [
+          "api_version",
+          "me"
+        ],
+        "properties": {
+          "api_version": {
+            "type": "string"
+          },
+          "me": {
+            "$ref": "#/components/schemas/MeProfile"
           }
         }
       }

@@ -38,6 +38,7 @@ from werkzeug.exceptions import HTTPException
 
 import sing
 from app_identity import AppAuthError, suggested_name
+from history_ids import history_id_for
 
 API_VERSION = "1.0"
 DEFAULT_BOX_ID = "nomadpc"
@@ -726,6 +727,301 @@ def _account_identity_folds(store):
         if alias:
             names.append(alias)
     return {f for f in (sing._fold_name(n) for n in names) if f}
+
+
+# --- GET /me -------------------------------------------------------------------
+#
+# "Your songs": the account's own requests tonight (from every linked device,
+# never ids the client sends), the web's /my-requests view of each, plus queued
+# entries naming the singer that the host typed in or a duet partner requested.
+
+# Request kinds that ride the request table but aren't songs.
+_NOT_SONGS = ("reorder", "tip")
+
+
+def _owned_rows(store):
+    """Tonight's song requests from the account's devices, oldest first."""
+    rows = store.account_requests(g.account_devices, g.night_started_at, store.get_token())
+    return [r for r in rows if r.get("source_type") not in _NOT_SONGS]
+
+
+def _active_sort_key(item):
+    """The web's ``_activeSortKey`` (A.49): on stage, then queue position, then
+    approved without an estimate, then pending, then rejected or removed."""
+    est = item.get("estimate") or {}
+    if est.get("now_singing"):
+        return -1
+    if isinstance(est.get("position"), int):
+        return est["position"]
+    status = (item.get("request") or {}).get("status")
+    if status == "pending":
+        return 1e6
+    if status == "rejected" or item.get("removed"):
+        return 2e6
+    return 1.5e6
+
+
+def _web_my_request_items(ids):
+    """The web /my-requests items for ``ids``, called in chunks of at most
+    ``sing._MY_REQUESTS_MAX_IDS`` (the web's own cap). Only the items for those
+    ids: identity matching is done here against the account, not the device."""
+    chunk = sing._MY_REQUESTS_MAX_IDS
+    items = []
+    for i in range(0, len(ids), chunk):
+        part = ids[i:i + chunk]
+        body, status = delegate(sing.my_requests, method="GET", path="/sing/my-requests",
+                                args={"ids": ",".join(str(x) for x in part)})
+        if status != 200:
+            return None, map_web_error(body, status)
+        items.extend(it for it in body.get("requests") or []
+                     if (it.get("request") or {}).get("id") is not None)
+    return items, None
+
+
+def _identity_items(store, identity, already_linked):
+    """Queued entries naming the singer (account identity, A5-R1) that none of
+    the account's requests created."""
+    rotation = getattr(current_app, "rotation", None)
+    if rotation is None or not identity:
+        return []
+    entries, _active, _now = sing._build_now_playing(rotation)
+    if not entries:
+        return []
+    items = sing._identity_matched_items(store, entries, identity, store.get_token(),
+                                         already_linked=already_linked)
+    for it in items:
+        it["request"].setdefault("media_consent", None)
+        it["request"]["for_friend"] = False
+        it["owner"] = "host" if it.get("added_by_host") else "partner"
+    return items
+
+
+def _unlinked_identity_count(store, identity):
+    """Tonight's live requests naming the singer from a device that isn't
+    linked to any account (typically the singer's own web page before "Save
+    tonight's songs"): drives the app's "open the web page" hint."""
+    if not identity:
+        return 0
+    night = g.night_started_at
+    linked = {}
+    count = 0
+    for req in store.list_requests(token=store.get_token()):
+        device = req.get("device_id")
+        if not device or device in g.account_devices:
+            continue
+        if req.get("source_type") in _NOT_SONGS or req.get("status") in ("cancelled", "rejected"):
+            continue
+        if not sing._belongs_to_current_night(store, req):
+            continue
+        if sing._fold_name(req.get("singer_name")) not in identity:
+            continue
+        if device not in linked:
+            linked[device] = store.account_for_device(device, night) is not None
+        if not linked[device]:
+            count += 1
+    return count
+
+
+def _me_profile(store, rows=None, friend_ids=None):
+    name = store.get_alias(g.app_user.device_id)
+    if rows is None:
+        rows = _owned_rows(store)
+        friend_ids = store.friend_request_ids([r["id"] for r in rows])
+    phone = None
+    for r in reversed(rows):
+        if r["id"] not in friend_ids and (r.get("phone") or "").strip():
+            phone = r["phone"].strip()
+            break
+    consent = {}
+    if name:
+        consent = store.get_photo_consents().get(store.photo_consent_key(name)) or {}
+    return {"name": name or None, "phone": phone,
+            "photo_consent": consent.get("consent"),
+            "instagram": consent.get("instagram")}
+
+
+def _next_turn(active):
+    """The singer's next turn: the first own, host- or partner-added song with
+    a queue estimate. Friend songs are the friend's turn (A.13)."""
+    for it in active:
+        est = it.get("estimate")
+        if it["owner"] == "friend" or it.get("removed") or not est:
+            continue
+        if it["request"].get("status") in ("cancelled", "rejected"):
+            continue
+        if not isinstance(est.get("position"), int):
+            continue
+        return {"entry_id": it["request"].get("linked_entry_id") or it.get("entry_id"),
+                "position": est["position"],
+                "eta_s": int(est.get("expected_s") or 0),
+                "range_low_s": int(est.get("range_low_s") or 0),
+                "range_high_s": int(est.get("range_high_s") or 0)}
+    return None
+
+
+@app_api_bp.route("/me", methods=["GET"])
+@app_auth
+def get_me():
+    store = current_app.sing_store
+    rows = _owned_rows(store)
+    friend_ids = store.friend_request_ids([r["id"] for r in rows])
+    items, error = _web_my_request_items(
+        [r["id"] for r in rows if r.get("status") != "cancelled"])
+    if error is not None:
+        return error
+    for it in items:
+        friend = it["request"]["id"] in friend_ids
+        it["request"] = _request_view(it["request"], friend)
+        it["owner"] = "friend" if friend else "me"
+
+    identity = _account_identity_folds(store)
+    already = {r.get("linked_entry_id") for r in rows if r.get("linked_entry_id")}
+    items.extend(_identity_items(store, identity, already))
+
+    box_id = (current_app.kj_config or {}).get("box_id") or DEFAULT_BOX_ID
+    active, sung = [], []
+    for it in items:
+        if it.get("performed"):
+            entry_id = it["request"].get("linked_entry_id") or it.get("entry_id")
+            it["history_id"] = history_id_for(box_id, entry_id, g.app_user.email)
+            sung.append(it)
+        else:
+            active.append(it)
+    active.sort(key=_active_sort_key)
+    return v1_json({
+        "me": _me_profile(store, rows, friend_ids),
+        "songs": active,
+        "next": _next_turn(active),
+        "sung_tonight": sung,
+        "unlinked_identity_entries": _unlinked_identity_count(store, identity),
+    })
+
+
+# --- PUT /me -------------------------------------------------------------------
+
+def _first_name_fold(name):
+    parts = (name or "").split()
+    return sing._fold_name(parts[0]) if parts else ""
+
+
+def _delegate_chunks(view, path, payload, items):
+    """Run a web view that takes ``items: [{id, edit_token}]`` (capped at the
+    web's id limit) over ``items`` in chunks; the summed ``updated``, or an
+    error response."""
+    chunk = sing._MY_REQUESTS_MAX_IDS
+    updated = 0
+    for i in range(0, len(items), chunk):
+        body, status = delegate(view, method="POST", path=path,
+                                json={**payload, "items": items[i:i + chunk]})
+        if status != 200:
+            return None, map_web_error(body, status, g.app_user.device_id)
+        updated += int(body.get("updated") or 0)
+    return updated, None
+
+
+@app_api_bp.route("/me", methods=["PUT"])
+@app_auth
+def update_me():
+    """Name (with the rename guard, A.6–A.11), phone and photo consent, applied
+    to every song the account owns tonight except friend songs (A.13)."""
+    store = current_app.sing_store
+    body = _json_body()
+    if not any(k in body for k in ("name", "phone", "photo_consent", "instagram")):
+        return v1_error("invalid", 400, "nothing to change")
+    confirm = body.get("confirm_rename", False)
+    if not isinstance(confirm, bool):
+        return v1_error("invalid", 400, "confirm_rename must be a boolean")
+
+    name = None
+    if "name" in body:
+        name = _clean_name(body["name"])
+        if not name:
+            return v1_error("invalid", 400, "name is required")
+        if len(name) > sing._MAX_SINGER_NAME_LEN:
+            return v1_error("invalid", 400, "name is too long")
+    phone = None
+    if "phone" in body:
+        phone = body["phone"].strip() if isinstance(body["phone"], str) else ""
+        if not sing._PHONE_RE.match(phone):
+            return v1_error("invalid", 400, "phone format invalid")
+    consent = body.get("photo_consent")
+    if "photo_consent" in body and consent not in ("yes", "no"):
+        return v1_error("invalid", 400, "photo_consent must be 'yes' or 'no'")
+    instagram = None
+    if "instagram" in body:
+        if body["instagram"] is not None and not isinstance(body["instagram"], str):
+            return v1_error("invalid", 400, "instagram must be a string")
+        try:
+            instagram = store.normalize_instagram(body["instagram"])
+        except ValueError as exc:
+            return v1_error("invalid", 400, str(exc))
+
+    device = g.app_user.device_id
+    current = store.get_alias(device)
+    if not current and not name:
+        return v1_error("needs_name", 400)
+    if "instagram" in body and consent is None:
+        # A handle only means something with a "yes" (the web drops it otherwise).
+        known = store.get_photo_consent(current) if current else None
+        if known != "yes":
+            return v1_error("invalid", 400, "instagram needs photo_consent 'yes'")
+        consent = "yes"
+
+    rows = _owned_rows(store)
+    friend_ids = store.friend_request_ids([r["id"] for r in rows])
+    own = [r for r in rows if r["id"] not in friend_ids and r.get("status") != "cancelled"]
+    # Done/Left songs are history: a rename never rewrites them (A.7).
+    unsung = [r for r in own if _linked_entry_status(r) not in ("done", "left")]
+
+    if name and name != current:
+        queued = [r for r in unsung if r.get("status") in ("pending", "approved")
+                  and _linked_entry_status(r) != "cancelled"]
+        if (current and queued and not confirm
+                and _first_name_fold(name) != _first_name_fold(current)):
+            return v1_error("conflict", 409, "rename yourself, or request for a friend?",
+                            reason="rename_guard", **{"from": current, "to": name})
+        # One web rename per linked device: it rewrites that device's songs
+        # (server-side edit_tokens) and its alias, so every device the account
+        # sings from tonight resolves to the new name.
+        devices = [device] + [d for d in g.account_devices if d != device]
+        for dev in devices:
+            dev_items = [{"id": r["id"], "edit_token": r.get("edit_token")}
+                         for r in unsung if r.get("device_id") == dev]
+            if dev != device and not dev_items and not store.get_alias(dev):
+                continue
+            result, status = delegate(sing.rename_me, method="POST", path="/sing/rename",
+                                      json={"new_name": name, "items": dev_items},
+                                      device_id=dev)
+            if status != 200:
+                return map_web_error(result, status, dev)
+        rows = _owned_rows(store)
+        own = [r for r in rows if r["id"] not in friend_ids and r.get("status") != "cancelled"]
+
+    items = [{"id": r["id"], "edit_token": r.get("edit_token")} for r in own]
+    if phone is not None and items:
+        _n, error = _delegate_chunks(sing.update_phone, "/sing/update-phone",
+                                     {"phone": phone}, items)
+        if error is not None:
+            return error
+    if consent is not None:
+        payload = {"consent": consent}
+        if "instagram" in body:
+            payload["instagram"] = instagram
+        updated, error = _delegate_chunks(sing.photo_consent, "/sing/photo-consent",
+                                          payload, items)
+        if error is not None:
+            return error
+        alias = store.get_alias(device)
+        if not updated and alias:
+            # No songs yet: record the choice for the name now rather than
+            # waiting for the first request (the web sends it with /submit).
+            kwargs = {"instagram": instagram} if "instagram" in body and consent == "yes" else {}
+            store.set_photo_consent(alias, consent, source="singer", **kwargs)
+
+    profile = _me_profile(store)
+    if phone is not None and not items:
+        profile["phone"] = phone   # nothing to store it on yet; the app sends it on submit
+    return v1_json({"me": profile})
 
 
 # --- PUT /requests/<id>/consent ----------------------------------------------

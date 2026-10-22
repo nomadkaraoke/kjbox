@@ -2040,6 +2040,21 @@ class SingStore:
         ).fetchall()
         return [r[0] for r in rows]
 
+    def account_requests(self, device_ids, since, token):
+        """Every request from ``device_ids`` under event code ``token`` since
+        ``since`` (the night marker), oldest first: the rows an app account
+        owns tonight. Empty without devices, marker or token."""
+        device_ids = [d for d in device_ids if d]
+        if not device_ids or not since or not token:
+            return []
+        marks = ",".join("?" * len(device_ids))
+        rows = self._get_conn().execute(
+            f"SELECT * FROM sing_requests WHERE device_id IN ({marks}) "
+            "AND token = ? AND created_at >= ? ORDER BY id",
+            (*device_ids, token, since),
+        ).fetchall()
+        return [self._row_to_dict(r) for r in rows]
+
     def is_friend_request(self, request_id):
         return bool(self.friend_request_ids([request_id]))
 
