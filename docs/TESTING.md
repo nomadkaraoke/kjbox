@@ -103,6 +103,91 @@ the "Test" column, and the future E2E night-replay suite must include the scenar
   downloads should simulate a missing mount (`ENOENT`/`EIO`) and assert an
   "offline" error, not "bad file".
 
+## Local stack (mobile E2E) and the night replay
+
+The mobile app's Maestro flows drive a **real kjbox process** next to gen's local stack
+(`:8010`) and decide's (`:8030`). Spec: mobile Phase 5 "Tonight" §8.1.
+
+```bash
+cd kj-controller
+scripts/local-stack.sh up       # 127.0.0.1:8040, waits until GET /sing/api/v1/night?t=2121 → 401
+scripts/local-stack.sh status   # JSON: running, ready, test_api, gen/decide reachable, data dir
+scripts/local-stack.sh reset    # stop, wipe ~/kjdata-localstack, start with the fixture night again
+scripts/local-stack.sh down
+scripts/local-stack.sh serve    # same, in the foreground
+```
+
+It runs `dev_server.py --db ~/kjdata-localstack/rotation.db --port 8040 --host 127.0.0.1
+--no-player --fixture tests/fixtures/localstack/night.json` with `KJBOX_TEST_API=1` and
+`KJ_CONFIG_OVERRIDES` pointing gen at `http://127.0.0.1:8010` and decide at
+`http://127.0.0.1:8030`, both with the partner secret `local-stack-secret` (gen's admin
+token `local-stack-admin`). `KJ_CONFIG_OVERRIDES` set in your shell is merged on top, but
+may only set `gen_api_url`, `gen_api_token`, `gen_kjbox_secret`, `decide_api_url`,
+`decide_kjbox_secret` and `sing_rate_limit_per_device|per_ip|window_s` (anything else is
+refused); the data paths and hermetic switches are re-asserted after it.
+
+- **Never the real box.** Everything lives in `~/kjdata-localstack/` (`KJBOX_LOCALSTACK_DIR`).
+  The dir's name must contain `localstack` (never `$HOME`, `/` or `~/kjdata`), and both the
+  script and `dev_server.py --fixture` refuse a non-empty dir without the
+  `.kjbox-localstack` marker they write on first use, so `reset` can only ever wipe a
+  local-stack dir. The Werkzeug debugger is only on for a loopback `--host`. The repo's `config.json` is not read. `localstack.make_hermetic`
+  cuts every outbound side effect: the download queue never starts a worker (entries stay
+  "download queued"), Divebar download URLs are faked, Telnyx is unconfigured, and Web Push /
+  Expo sends are captured (`state.pushes`), never sent. No player, overlay or sheet sync starts.
+- **Auth like prod.** App bearers are verified against gen's local stack
+  (`POST :8010/api/test/scenario {"name":"user","email":…}` gives a `session_token`).
+- **Event code `2121`.** The fixture night is seeded on first start; a restart keeps the
+  night (so "kjbox restart mid-flow" can be tested). `POST /sing/api/test/reset` starts a
+  new night (new `night_id`).
+- **Catalog.** Built from the fixture on every start: the external catalog (local library
+  files), the catalog mirror (KN community + full + Divebar) and `song_id.db`. The fixture's
+  `search_cases` list what each app search finds: "hello" → Adele "Hello" (local video +
+  community), "starlite muse" → identified as Muse "Starlight" (then Community + Commercial
+  versions), "machu picchu strokes" → identified, no karaoke version, "i want it that way"
+  → 60+ versions (kj_pick trim), "join us for a bite" → KN-only.
+
+### Test API (`/sing/api/test/*`)
+
+Mounted only when `KJBOX_TEST_API=1` **and** the bind host is loopback
+(`sing_test_api.install_test_api`); otherwise every path 404s, and the public sing host
+404s it too, as does any request carrying `X-Forwarded-For` / `CF-Connecting-IP` (proxied).
+`/reset` reloads the fixture file the server was started with. JSON in and out; errors are `{"error": "invalid"|"not_found", "message"?}`.
+
+| Endpoint | Does |
+|---|---|
+| `POST /reset {fixture?: "default"\|"empty"}` | wipe tonight, new night under 2121, fixture settings + start rotation (`default`) or nothing (`empty`) → `{ok, entries, state}` |
+| `POST /seed {singers: [{name, email?, device_id?, songs: [{artist, title, source_type?}]}]}` | add entries; `email` = app user (v1 device id, linked tonight), `device_id` = web phone; each song gets an approved request → `{ok, singers: [{name, email, device_id, entries: [{entry_id, request_id, artist, title}]}]}` |
+| `POST /advance` | the singer on stage → Done, next singable → Now Singing (play event recorded), the one after → Up Next → `{ok, done, now_singing, up_next}` |
+| `POST /done {entry_id?}` | that entry (default: the one on stage) → Done → `{ok, entry}`; 404 when nobody is on stage |
+| `POST /undone {entry_id}` | → Waiting (the outbox retracts its record) → `{ok, entry}` |
+| `POST /flags {make?, simple_mode?, ask_photo_consent?, open?, auto_approve?, auto_reorder?}` | booleans → `{ok, flags}` (all six) |
+| `POST /host-add {name, artist?, title}` | host-typed entry "Title - Artist" (the box's rotation text order) → `{ok, entry}` |
+| `POST /host-remove {entry_id, delete?}` | host cancels it (stays on the KJ list as Cancelled; the app shows it removed), or deletes it with `delete: true` → `{ok, deleted, entry \| entry_id}` |
+| `POST /rate-limits {per_device?, per_ip?}` | singer budgets per 5 min; always clears the windows → `{ok, rate_limits}` |
+| `POST /outbox/drain` | scan + deliver everything due to decide now → `{ok, sent}` |
+| `GET /state` | `{event_code, night_started_at, night_id, rev, flags, rotation[], requests[], outbox[], pushes}` |
+
+### The fixture night and the replay test
+
+`tests/fixtures/localstack/night.json` is built by `scripts/build_localstack_fixture.py`
+from the redacted 2026-09-24 recording (`~/nomad-nights/2026-09-24/`, via
+`night_fixture.py`). Rebuild it after changing the builder or the replay rules (the
+expected snapshot is recomputed); `--check` compares without writing. The builder
+pseudonymises singer names (each real first name maps to a stable fake one and each surname
+initial to a fake initial, consistently across devices, rotation, host actions, duet labels
+and the expected snapshot), drops phones, emails, tokens, notes and device ids (devices
+become `d01`…), and refuses to write if any of the recording's names is left in a name
+field or `localstack.pii_hits` finds anything; `test_fixture_has_no_pii` and
+`test_committed_fixture_uses_only_fake_names` check the committed file.
+
+`tests/integration/test_night_replay.py` replays the night's 35 singer submits (one
+singer's 60-version kj_pick as one request retried six times with the same
+`client_request_id`), a singer's cancel, the host's 131 rotation actions and play starts through v1 with stubbed
+gen identities, and compares the final rotation, request counts and history outbox with the
+fixture's expected snapshot, plus independent invariants (one record per singer per Done
+entry, only Done entries recorded). Not replayed: singer reorders, photo consent, the one
+change of a request made before the recording started, and Auto Order runs (time-dependent).
+
 ## VLC Testing Strategy
 
 VLC code is testable at three levels:

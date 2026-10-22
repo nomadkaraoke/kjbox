@@ -63,6 +63,7 @@ const isCatalogConfident = (v) => v && v.confident && v.engine === "catalog";
 
 export function createMakeFlow(deps) {
   const { el, fetchJson, state, render, BASE, getDeviceId, onPicked, onBack } = deps;
+  const { onAccount, onSignedIn, onSignedOut, saveSongsSlot } = deps;
 
   const m = () => state.make;
 
@@ -94,6 +95,7 @@ export function createMakeFlow(deps) {
     try {
       const acct = await fetchJson(`${BASE}/make/account?device_id=${encodeURIComponent(getDeviceId())}`);
       m().email = acct.email || "";
+      onAccount?.(acct);
       if (acct.email) beginSearch(); else m().stage = "account";
     } catch {
       m().stage = "account";
@@ -142,8 +144,9 @@ export function createMakeFlow(deps) {
     if (!/^\d{6}$/.test(code)) { s.err = t("make.errCode"); return rerender(); }
     s.busy = true; s.err = ""; rerender();
     try {
-      await api("verify-code", { email: s.email.trim(), code });
+      const d = await api("verify-code", { email: s.email.trim(), code });
       s.busy = false;
+      onSignedIn?.((d && d.email) || s.email.trim());
       beginSearch();
     } catch (e) {
       Object.assign(s, { busy: false, err: errText(e) });
@@ -153,6 +156,7 @@ export function createMakeFlow(deps) {
 
   async function signOut() {
     try { await api("sign-out", {}); } catch { /* best effort */ }
+    onSignedOut?.();
     Object.assign(m(), { stage: "account", email: "", err: "" });
     rerender();
   }
@@ -621,6 +625,8 @@ export function createMakeFlow(deps) {
         el("button", { class: "btn link", onclick: signOut }, t("make.notYou"))));
     }
     card.appendChild(foot);
+    // Just signed in: offer "Save tonight's songs" with one tap (never automatic).
+    if (s.email && s.stage === "audio" && saveSongsSlot) card.appendChild(saveSongsSlot("offer"));
     return card;
   }
 

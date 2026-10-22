@@ -11,7 +11,9 @@ import re
 import secrets
 import sqlite3
 import threading
+import time
 
+from singer_names import fold_name
 
 # Meta keys stored in rotation_meta (same table RotationStore uses)
 TOKEN_KEY = "request_token"
@@ -363,6 +365,65 @@ class SingStore:
                 ON photo_consent_events (night);
             """
         )
+        # App-facing singer API storage (2026-10-21). All additive/idempotent.
+        # - sing_push_subscriptions.kind/expo_token: Expo push rows share the table
+        #   with web-push rows (kind 'webpush' default keeps old rows unchanged).
+        for ddl in (
+            "ALTER TABLE sing_push_subscriptions ADD COLUMN kind TEXT DEFAULT 'webpush'",
+            "ALTER TABLE sing_push_subscriptions ADD COLUMN expo_token TEXT DEFAULT NULL",
+        ):
+            try:
+                conn.execute(ddl)
+            except sqlite3.OperationalError as e:
+                if "duplicate column name" not in str(e).lower():
+                    raise
+        conn.executescript(
+            """
+            -- Device -> gen account link, NIGHT-SCOPED (a new night starts empty).
+            CREATE TABLE IF NOT EXISTS singer_accounts (
+                device_id        TEXT NOT NULL,
+                gen_email        TEXT NOT NULL,
+                origin           TEXT NOT NULL,
+                night_started_at TEXT NOT NULL,
+                linked_at        TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+                PRIMARY KEY (device_id, night_started_at)
+            );
+            CREATE INDEX IF NOT EXISTS idx_singer_accounts_email
+                ON singer_accounts (gen_email, night_started_at);
+
+            CREATE TABLE IF NOT EXISTS app_idempotency (
+                key           TEXT PRIMARY KEY,
+                response_json TEXT NOT NULL,
+                expires_at    REAL NOT NULL
+            );
+
+            -- Requests the app submitted as "song for a friend" (singer_name is
+            -- the friend; device_id stays the requester's). Kept out of
+            -- sing_requests so admin/web row shapes are unchanged.
+            CREATE TABLE IF NOT EXISTS app_friend_requests (
+                request_id  INTEGER PRIMARY KEY,
+                friend_name TEXT NOT NULL,
+                created_at  TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+            );
+
+            -- Pending pushes of sung-song history to decide. One row per
+            -- history_id: the latest op (put/delete) wins.
+            CREATE TABLE IF NOT EXISTS history_outbox (
+                history_id       TEXT PRIMARY KEY,
+                op               TEXT NOT NULL,
+                payload_json     TEXT NOT NULL,
+                state            TEXT NOT NULL DEFAULT 'pending',
+                attempts         INTEGER NOT NULL DEFAULT 0,
+                next_attempt_at  TEXT NOT NULL,
+                last_error       TEXT,
+                night_started_at TEXT NOT NULL,
+                created_at       TEXT NOT NULL,
+                updated_at       TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_history_outbox_due
+                ON history_outbox (state, next_attempt_at);
+            """
+        )
         conn.commit()
 
     # ------------------------------------------------------------------
@@ -390,6 +451,20 @@ class SingStore:
             "SELECT value FROM rotation_meta WHERE key = ?", (key,)
         ).fetchone()
         return row[0] if row else default
+
+    _APP_IDENTITY_SECRET_KEY = "app_identity_secret"
+
+    def app_identity_secret(self):
+        """The box's app identity secret (32 random bytes, hex), generated on
+        first use and kept in rotation_meta so app device ids survive restarts.
+        Never log or expose it."""
+        conn = self._get_conn()
+        conn.execute(
+            "INSERT OR IGNORE INTO rotation_meta (key, value) VALUES (?, ?)",
+            (self._APP_IDENTITY_SECRET_KEY, secrets.token_hex(32)),
+        )
+        conn.commit()
+        return self._get_meta(self._APP_IDENTITY_SECRET_KEY)
 
     def _set_meta(self, key, value):
         conn = self._get_conn()
@@ -1539,6 +1614,47 @@ class SingStore:
         )
         conn.commit()
 
+    def host_alias_tonight(self, device_id, since):
+        """True when the host (a KJ rename or merge) set this device's alias
+        since ``since`` (the night marker). Aliases outlive the night, so an
+        older KJ alias doesn't count."""
+        device_id = (device_id or "").strip()
+        if not device_id or not since:
+            return False
+        row = self._get_conn().execute(
+            "SELECT origin, updated_at FROM singer_aliases WHERE device_id = ?",
+            (device_id,),
+        ).fetchone()
+        return bool(row and row["origin"] == "kj" and (row["updated_at"] or "") >= since)
+
+    def name_claimed_by_others(self, folded_name, account_devices, night_started_at):
+        """True when someone other than the account ``account_devices`` might
+        be ``folded_name`` tonight: a device outside the account submitted
+        under that (folded) name since ``night_started_at``, or has an alias
+        to it set since then. Fails closed (True) without a name or night
+        marker. Attribution by name (a host-added entry, a duet) is only safe
+        when this is False; the history outbox uses the same rule. An app
+        "song for a friend" names someone else, so it isn't a claim by the
+        requesting device (the friend may well be the account's singer)."""
+        if not folded_name or not night_started_at:
+            return True
+        devices = {d for d in account_devices or () if d}
+        conn = self._get_conn()
+        rows = conn.execute(
+            "SELECT DISTINCT r.device_id, r.singer_name AS name FROM sing_requests r "
+            "LEFT JOIN app_friend_requests f ON f.request_id = r.id "
+            "WHERE r.created_at >= ? AND r.device_id IS NOT NULL AND r.device_id != '' "
+            "AND f.request_id IS NULL",
+            (night_started_at,),
+        ).fetchall()
+        rows += conn.execute(
+            "SELECT device_id, canonical_name AS name FROM singer_aliases "
+            "WHERE updated_at >= ?",
+            (night_started_at,),
+        ).fetchall()
+        return any(r["device_id"] not in devices and fold_name(r["name"]) == folded_name
+                   for r in rows)
+
     def clear_alias(self, device_id):
         """Drop a device's alias (used when a device declares a new identity)."""
         device_id = (device_id or "").strip()
@@ -1776,7 +1892,7 @@ class SingStore:
         conn = self._get_conn()
         conn.execute(
             "DELETE FROM sing_push_subscriptions "
-            "WHERE token != ? "
+            "WHERE token != ? AND COALESCE(kind, 'webpush') = 'webpush' "
             "  AND updated_at < datetime('now', '-7 days', 'localtime')",
             (current_token,),
         )
@@ -1805,3 +1921,358 @@ class SingStore:
             (token, device_id),
         ).fetchall()
         return [dict(r) for r in rows]
+
+    # ------------------------------------------------------------------
+    # Expo push (mobile app)
+    # ------------------------------------------------------------------
+
+    EXPO_TOKEN_KEY = "expo"  # sentinel in the NOT NULL `token` column
+
+    def add_expo_subscription(self, device_id, expo_token, platform):
+        """Upsert an Expo push token for a device. Idempotent per token.
+
+        Reuses sing_push_subscriptions (web-push NOT NULL columns get ''); the
+        UNIQUE(token, endpoint) key is ('expo', <expo_token>). `platform`
+        ('ios'|'android') is kept in user_agent.
+        """
+        conn = self._get_conn()
+        conn.execute(
+            "INSERT INTO sing_push_subscriptions "
+            "  (token, phone, singer_name, endpoint, p256dh, auth, user_agent, "
+            "   device_id, kind, expo_token, updated_at) "
+            "VALUES (?, '', '', ?, '', '', ?, ?, 'expo', ?, datetime('now', 'localtime')) "
+            "ON CONFLICT(token, endpoint) DO UPDATE SET "
+            "  device_id=excluded.device_id, user_agent=excluded.user_agent, "
+            "  updated_at=datetime('now', 'localtime'), disabled_at=NULL",
+            (self.EXPO_TOKEN_KEY, expo_token, platform, device_id or None, expo_token),
+        )
+        conn.commit()
+
+    def list_active_expo_subscriptions(self):
+        """Non-disabled Expo rows (the web-push queries never return them)."""
+        conn = self._get_conn()
+        rows = conn.execute(
+            "SELECT * FROM sing_push_subscriptions "
+            "WHERE kind='expo' AND disabled_at IS NULL ORDER BY id"
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def find_expo_subs_by_device(self, device_id):
+        if not device_id:
+            return []
+        conn = self._get_conn()
+        rows = conn.execute(
+            "SELECT * FROM sing_push_subscriptions "
+            "WHERE kind='expo' AND device_id=? AND disabled_at IS NULL",
+            (device_id,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    # ------------------------------------------------------------------
+    # App accounts (night-scoped device -> gen email links)
+    # ------------------------------------------------------------------
+
+    def link_account(self, device_id, gen_email, origin, night_started_at):
+        conn = self._get_conn()
+        conn.execute(
+            "INSERT INTO singer_accounts "
+            "  (device_id, gen_email, origin, night_started_at, linked_at) "
+            "VALUES (?, ?, ?, ?, datetime('now', 'localtime')) "
+            "ON CONFLICT(device_id, night_started_at) DO UPDATE SET "
+            "  gen_email=excluded.gen_email, origin=excluded.origin, "
+            "  linked_at=excluded.linked_at",
+            (device_id, gen_email, origin, night_started_at),
+        )
+        conn.commit()
+
+    def unlink_account(self, device_id, night_started_at):
+        conn = self._get_conn()
+        conn.execute(
+            "DELETE FROM singer_accounts WHERE device_id=? AND night_started_at=?",
+            (device_id, night_started_at),
+        )
+        conn.commit()
+
+    def account_devices(self, gen_email, night_started_at):
+        rows = self._get_conn().execute(
+            "SELECT device_id FROM singer_accounts "
+            "WHERE gen_email=? AND night_started_at=? ORDER BY linked_at, device_id",
+            (gen_email, night_started_at),
+        ).fetchall()
+        return [r["device_id"] for r in rows]
+
+    def night_accounts(self, night_started_at):
+        """{gen_email: [device_id, ...]} for every account linked tonight."""
+        out = {}
+        for r in self._get_conn().execute(
+                "SELECT device_id, gen_email FROM singer_accounts "
+                "WHERE night_started_at=? ORDER BY linked_at, device_id",
+                (night_started_at,)).fetchall():
+            out.setdefault(r["gen_email"], []).append(r["device_id"])
+        return out
+
+    def is_app_device(self, device_id):
+        """True when ``singer_accounts`` has ever recorded ``device_id`` as an
+        app device (origin 'app', any night). Web claims refuse such ids."""
+        row = self._get_conn().execute(
+            "SELECT 1 FROM singer_accounts WHERE device_id=? AND origin='app' LIMIT 1",
+            (device_id,),
+        ).fetchone()
+        return row is not None
+
+    def account_for_device(self, device_id, night_started_at):
+        row = self._get_conn().execute(
+            "SELECT gen_email FROM singer_accounts "
+            "WHERE device_id=? AND night_started_at=?",
+            (device_id, night_started_at),
+        ).fetchone()
+        return row["gen_email"] if row else None
+
+    # ------------------------------------------------------------------
+    # Idempotency cache
+    # ------------------------------------------------------------------
+
+    # A claim is a placeholder row written before the work starts, so two
+    # simultaneous retries with one key can't both do it. Its short TTL means a
+    # claim abandoned by a crash frees the key again.
+    _IDEMPOTENT_PENDING = '{"__pending__": true}'
+
+    def idempotent_get(self, key):
+        """The stored response for ``key``; None when absent, expired or still
+        only claimed (see ``idempotent_pending``)."""
+        row = self._get_conn().execute(
+            "SELECT response_json FROM app_idempotency "
+            "WHERE key=? AND expires_at > ?",
+            (key, time.time()),
+        ).fetchone()
+        if row is None or row["response_json"] == self._IDEMPOTENT_PENDING:
+            return None
+        return json.loads(row["response_json"])
+
+    def idempotent_pending(self, key):
+        """True while ``key`` is claimed and has no response yet."""
+        row = self._get_conn().execute(
+            "SELECT 1 FROM app_idempotency "
+            "WHERE key=? AND expires_at > ? AND response_json=?",
+            (key, time.time(), self._IDEMPOTENT_PENDING),
+        ).fetchone()
+        return row is not None
+
+    def idempotent_claim(self, key, ttl_s=300):
+        """Atomically claim ``key``. True when this caller owns it (then call
+        ``idempotent_put`` on success or ``idempotent_release`` on failure);
+        False when another claim or a stored response already holds it."""
+        now = time.time()
+        conn = self._get_conn()
+        conn.execute("DELETE FROM app_idempotency WHERE expires_at <= ?", (now,))
+        cur = conn.execute(
+            "INSERT OR IGNORE INTO app_idempotency (key, response_json, expires_at) "
+            "VALUES (?, ?, ?)",
+            (key, self._IDEMPOTENT_PENDING, now + ttl_s),
+        )
+        conn.commit()
+        return cur.rowcount == 1
+
+    def idempotent_release(self, key):
+        """Drop a pending claim (never a stored response) so a retry can run."""
+        conn = self._get_conn()
+        conn.execute(
+            "DELETE FROM app_idempotency WHERE key=? AND response_json=?",
+            (key, self._IDEMPOTENT_PENDING),
+        )
+        conn.commit()
+
+    def idempotent_put(self, key, response, ttl_s=86400):
+        now = time.time()
+        conn = self._get_conn()
+        conn.execute("DELETE FROM app_idempotency WHERE expires_at <= ?", (now,))
+        conn.execute(
+            "INSERT OR REPLACE INTO app_idempotency (key, response_json, expires_at) "
+            "VALUES (?, ?, ?)",
+            (key, json.dumps(response), now + ttl_s),
+        )
+        conn.commit()
+
+    # ------------------------------------------------------------------
+    # App "song for a friend" markers
+    # ------------------------------------------------------------------
+
+    def mark_friend_request(self, request_id, friend_name):
+        conn = self._get_conn()
+        conn.execute(
+            "INSERT OR IGNORE INTO app_friend_requests (request_id, friend_name) "
+            "VALUES (?, ?)",
+            (int(request_id), friend_name or ""),
+        )
+        conn.commit()
+
+    def friend_request_ids(self, request_ids):
+        ids = [int(i) for i in request_ids if i is not None]
+        if not ids:
+            return set()
+        marks = ",".join("?" * len(ids))
+        rows = self._get_conn().execute(
+            f"SELECT request_id FROM app_friend_requests WHERE request_id IN ({marks})",
+            ids,
+        ).fetchall()
+        return {r[0] for r in rows}
+
+    def account_request_names(self, device_ids, since):
+        """Distinct singer names on requests from ``device_ids`` since ``since``
+        (the night marker), leaving out "song for a friend" requests and
+        cancelled/rejected ones: the names those devices sing under."""
+        device_ids = [d for d in device_ids if d]
+        if not device_ids or not since:
+            return []
+        marks = ",".join("?" * len(device_ids))
+        rows = self._get_conn().execute(
+            "SELECT DISTINCT r.singer_name FROM sing_requests r "
+            "LEFT JOIN app_friend_requests f ON f.request_id = r.id "
+            f"WHERE r.device_id IN ({marks}) AND r.created_at >= ? "
+            "AND r.singer_name != '' AND f.request_id IS NULL "
+            "AND r.status NOT IN ('cancelled', 'rejected')",
+            (*device_ids, since),
+        ).fetchall()
+        return [r[0] for r in rows]
+
+    def account_requests(self, device_ids, since, token):
+        """Every request from ``device_ids`` under event code ``token`` since
+        ``since`` (the night marker), oldest first: the rows an app account
+        owns tonight. Empty without devices, marker or token."""
+        device_ids = [d for d in device_ids if d]
+        if not device_ids or not since or not token:
+            return []
+        marks = ",".join("?" * len(device_ids))
+        rows = self._get_conn().execute(
+            f"SELECT * FROM sing_requests WHERE device_id IN ({marks}) "
+            "AND token = ? AND created_at >= ? ORDER BY id",
+            (*device_ids, token, since),
+        ).fetchall()
+        return [self._row_to_dict(r) for r in rows]
+
+    def night_requests(self, token, since):
+        """Every request under event code ``token`` created since ``since``
+        (the night marker), oldest first. The event code is reused across
+        nights, so this is the night-scoped read (cost tracks tonight only)."""
+        if not token or not since:
+            return []
+        rows = self._get_conn().execute(
+            "SELECT * FROM sing_requests WHERE token = ? AND created_at >= ? ORDER BY id",
+            (token, since),
+        ).fetchall()
+        return [self._row_to_dict(r) for r in rows]
+
+    def requests_linked_to_entries(self, entry_ids, since):
+        """Full rows of requests created since ``since`` (the night marker) that
+        are linked to any of ``entry_ids``, oldest first. Night-scoped so a
+        reused entry id never matches a past night's request (A.15)."""
+        ids = [int(e) for e in (entry_ids or []) if e is not None]
+        if not ids or not since:
+            return []
+        marks = ",".join("?" * len(ids))
+        rows = self._get_conn().execute(
+            f"SELECT * FROM sing_requests WHERE linked_entry_id IN ({marks}) "
+            "AND created_at >= ? ORDER BY id",
+            (*ids, since),
+        ).fetchall()
+        return [self._row_to_dict(r) for r in rows]
+
+    def is_friend_request(self, request_id):
+        return bool(self.friend_request_ids([request_id]))
+
+    # ------------------------------------------------------------------
+    # History outbox (sung songs -> decide)
+    # ------------------------------------------------------------------
+    # Timestamps are stored as 'YYYY-MM-DD HH:MM:SS' strings. Aware datetimes
+    # are converted to UTC; naive datetimes are used as given, so callers must
+    # consistently pass naive-UTC (or all aware) values.
+
+    @staticmethod
+    def _ts(dt):
+        if dt.tzinfo is not None:
+            dt = dt.astimezone(datetime.timezone.utc).replace(tzinfo=None)
+        return dt.strftime("%Y-%m-%d %H:%M:%S")
+
+    def outbox_enqueue(self, history_id, op, payload, night_started_at, now=None):
+        """Queue a put/delete for history_id. Returns True if the row changed.
+
+        A different op than the current row (or a row from another night: a
+        reused id, A.15) replaces it, resetting it to pending; the same op is
+        a no-op. One atomic upsert, so concurrent scans from several request
+        threads can't both write it.
+        """
+        now_s = self._ts(now or datetime.datetime.now(datetime.timezone.utc))
+        conn = self._get_conn()
+        cur = conn.execute(
+            "INSERT INTO history_outbox "
+            "  (history_id, op, payload_json, state, attempts, next_attempt_at, "
+            "   last_error, night_started_at, created_at, updated_at) "
+            "VALUES (?, ?, ?, 'pending', 0, ?, NULL, ?, ?, ?) "
+            "ON CONFLICT(history_id) DO UPDATE SET "
+            "  op=excluded.op, payload_json=excluded.payload_json, state='pending', "
+            "  attempts=0, next_attempt_at=excluded.next_attempt_at, last_error=NULL, "
+            "  night_started_at=excluded.night_started_at, "
+            "  created_at=excluded.created_at, updated_at=excluded.updated_at "
+            "WHERE history_outbox.op != excluded.op "
+            "   OR history_outbox.night_started_at != excluded.night_started_at",
+            (history_id, op, json.dumps(payload), now_s, night_started_at,
+             now_s, now_s),
+        )
+        conn.commit()
+        return cur.rowcount == 1
+
+    def outbox_rows_for_night(self, night_started_at):
+        """{history_id: {op, state, payload}} for every outbox row of a night."""
+        rows = self._get_conn().execute(
+            "SELECT history_id, op, state, payload_json FROM history_outbox "
+            "WHERE night_started_at=?",
+            (night_started_at,),
+        ).fetchall()
+        return {r["history_id"]: {"op": r["op"], "state": r["state"],
+                                  "payload": json.loads(r["payload_json"])}
+                for r in rows}
+
+    def outbox_due(self, now, limit=20):
+        rows = self._get_conn().execute(
+            "SELECT * FROM history_outbox "
+            "WHERE state='pending' AND next_attempt_at <= ? "
+            "ORDER BY next_attempt_at, created_at LIMIT ?",
+            (self._ts(now), limit),
+        ).fetchall()
+        out = []
+        for r in rows:
+            d = dict(r)
+            d["payload"] = json.loads(d.pop("payload_json"))
+            out.append(d)
+        return out
+
+    def outbox_mark_sent(self, history_id, op=None):
+        """Mark delivered. With ``op``, only while the row still holds that op:
+        a scan that swapped put<->delete mid-delivery keeps the new op pending."""
+        conn = self._get_conn()
+        conn.execute(
+            "UPDATE history_outbox SET state='sent', last_error=NULL, "
+            "updated_at=datetime('now') WHERE history_id=? AND (? IS NULL OR op=?)",
+            (history_id, op, op),
+        )
+        conn.commit()
+
+    def outbox_mark_failed(self, history_id, error, next_attempt_at, permanent, op=None):
+        conn = self._get_conn()
+        conn.execute(
+            "UPDATE history_outbox SET attempts=attempts+1, last_error=?, "
+            "state=?, next_attempt_at=?, updated_at=datetime('now') "
+            "WHERE history_id=? AND (? IS NULL OR op=?)",
+            (error, "failed" if permanent else "pending",
+             self._ts(next_attempt_at), history_id, op, op),
+        )
+        conn.commit()
+
+    def outbox_sent_ids_for_night(self, night_started_at):
+        """history_ids whose current op is 'put' and not failed (pending or sent)."""
+        rows = self._get_conn().execute(
+            "SELECT history_id FROM history_outbox "
+            "WHERE night_started_at=? AND op='put' AND state IN ('pending','sent')",
+            (night_started_at,),
+        ).fetchall()
+        return {r["history_id"] for r in rows}

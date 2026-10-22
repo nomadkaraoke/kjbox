@@ -138,6 +138,9 @@ class GenClient:
     CLIENT_ID = "kjbox"
     # gen's audio search fans out to flacfetch/YouTube/Spotify (~15-30s).
     SEARCH_TIMEOUT = 60
+    # /api/users/me is cheap and sits on the v1 auth hot path (every uncached
+    # app call waits on it in a Flask worker thread), so fail fast.
+    ME_TIMEOUT = 5
 
     def __init__(self, api_url, token, kjbox_secret=""):
         self.api_url = api_url.rstrip("/")
@@ -280,6 +283,11 @@ class GenClient:
                 detail = detail.get("message") or detail.get("detail") or "error"
             raise GenApiError(resp.status_code, detail or resp.reason)
         return data
+
+    def get_me(self, session_token):
+        """GET /api/users/me with the singer's session token (raises GenApiError)."""
+        return self._singer_call("GET", "/api/users/me", session_token=session_token,
+                                 timeout=self.ME_TIMEOUT)
 
     def singer_flow_configured(self):
         return bool(self.kjbox_secret)

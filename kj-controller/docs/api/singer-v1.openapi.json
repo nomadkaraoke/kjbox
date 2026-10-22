@@ -1,0 +1,3789 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "kjbox singer API",
+    "version": "1.0",
+    "description": "App-facing singer API served by a kjbox (KJ controller) at a Nomad Karaoke night. Hand-maintained; kjbox's integration tests validate every v1 response against this file (kj-controller/tests/integration/v1_contract.py). Additive changes only within v1; every response carries api_version \"1.N\". Every call needs the bearer gen session token and the night's event code t (query string or JSON body). Errors are {error, message?, retry_after?} with the HTTP status; error codes are the closed ErrorCode enum. Every read and write is scoped to the current night: send the night_id you last saw and a 409 night_changed (carrying the new night_id) tells you the host started a new night."
+  },
+  "servers": [
+    {
+      "url": "https://sing.nomadkaraoke.com/api/v1"
+    }
+  ],
+  "security": [
+    {
+      "genSession": []
+    }
+  ],
+  "paths": {
+    "/night": {
+      "get": {
+        "operationId": "getNight",
+        "summary": "Tonight's venue info, feature flags and whether the singer still needs a name",
+        "description": "Returns 200 {open: false} (not 403) when requests are closed, the event code is wrong or no night has started, so the app can show the closed state with the host's message.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/EventCode"
+          },
+          {
+            "$ref": "#/components/parameters/NightId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Tonight (open) or the closed state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Night"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "409": {
+            "$ref": "#/components/responses/NightChanged"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/GenUnavailable"
+          },
+          "default": {
+            "$ref": "#/components/responses/Default"
+          }
+        }
+      }
+    },
+    "/join": {
+      "post": {
+        "operationId": "joinNight",
+        "summary": "Set the singer's name for tonight",
+        "description": "Sets the account's singer name (device alias, origin self). The app device is linked to the gen account for tonight on any v1 call.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/EventCode"
+          },
+          {
+            "$ref": "#/components/parameters/NightId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JoinRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Name set",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JoinResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Invalid"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/NotOpen"
+          },
+          "409": {
+            "$ref": "#/components/responses/NightChanged"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/GenUnavailable"
+          },
+          "default": {
+            "$ref": "#/components/responses/Default"
+          }
+        }
+      }
+    },
+    "/requests": {
+      "post": {
+        "operationId": "createRequest",
+        "summary": "Request a song",
+        "description": "Same rules as the web's /sing/submit. The singer name is the account's name for tonight (POST /join; 400 needs_name before that) or friend_name for a song for a friend; the request belongs to the app device. Idempotent on client_request_id: a retry returns the first response; while the first attempt is still running a retry gets 409 busy_retry (retry_after 2); a failed attempt can be retried with the same id. A make-it (source_type make, source_meta {search_session_id, selection_index} from POST /make/search or {youtube_url}) creates the gen job on the app user's own gen account first, then goes straight into the rotation as Being Made (auto_approved true). Make-it errors: make_disabled (off, Simple Mode, or tonight's per-device make-it limit), youtube_blocked, gen_rejected, 409 conflict with message search_expired (search again), 401 unauthenticated when gen refuses the session. A make-it's first attempt may take several minutes (gen's create-job), and retries get busy_retry until it finishes.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/EventCode"
+          },
+          {
+            "$ref": "#/components/parameters/NightId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SubmitRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Request created (or the stored response for this client_request_id)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RequestResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/RequestInvalid"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/RequestConflict"
+          },
+          "429": {
+            "$ref": "#/components/responses/RequestRateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/GenUnavailable"
+          },
+          "default": {
+            "$ref": "#/components/responses/Default"
+          }
+        }
+      }
+    },
+    "/requests/{id}/cancel": {
+      "post": {
+        "operationId": "cancelRequest",
+        "summary": "Cancel one of the account's songs",
+        "description": "Pending: cancelled. Approved: the rotation entry is marked Cancelled for the host. Sung (Done/Left): 409 already_sung. On stage: 409 on_stage. Cancelling an already cancelled request returns it again. The request must belong to one of the account's devices tonight (403 not_owner).",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "Request id"
+          },
+          {
+            "$ref": "#/components/parameters/EventCode"
+          },
+          {
+            "$ref": "#/components/parameters/NightId"
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CancelRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Done",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RequestResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/RequestInvalid"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/RequestConflict"
+          },
+          "429": {
+            "$ref": "#/components/responses/RequestRateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/GenUnavailable"
+          },
+          "default": {
+            "$ref": "#/components/responses/Default"
+          }
+        }
+      }
+    },
+    "/requests/{id}/change": {
+      "post": {
+        "operationId": "changeRequest",
+        "summary": "Change the song of one of the account's requests",
+        "description": "Keeps the queue slot: a pending request is updated in place; an approved one gets a new request that supersedes it (auto-approved when the host has auto-approve on, taking over the old slot). A replay (same client_request_id on the same request) returns the new (superseding) request; `request.id` may differ from the path id. Can't change into a make-it (400 make_disabled), once sung (409 already_sung) or while on stage (409 on_stage).",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "Request id"
+          },
+          {
+            "$ref": "#/components/parameters/EventCode"
+          },
+          {
+            "$ref": "#/components/parameters/NightId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangeSongRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Done",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RequestResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/RequestInvalid"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/RequestConflict"
+          },
+          "429": {
+            "$ref": "#/components/responses/RequestRateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/GenUnavailable"
+          },
+          "default": {
+            "$ref": "#/components/responses/Default"
+          }
+        }
+      }
+    },
+    "/requests/reorder": {
+      "post": {
+        "operationId": "reorderRequests",
+        "summary": "Reorder the singer's own songs",
+        "description": "Swaps only within the singer's own slots. Every item must be the account's request or an entry naming the singer (403 not_owner otherwise). Applies at once when the host has auto-approve on.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/EventCode"
+          },
+          {
+            "$ref": "#/components/parameters/NightId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReorderRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The reorder meta-request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RequestResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/RequestInvalid"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/RequestConflict"
+          },
+          "429": {
+            "$ref": "#/components/responses/RequestRateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/GenUnavailable"
+          },
+          "default": {
+            "$ref": "#/components/responses/Default"
+          }
+        }
+      }
+    },
+    "/requests/{id}/consent": {
+      "put": {
+        "operationId": "setRequestConsent",
+        "summary": "Per-song photo/clip consent",
+        "description": "Sets or clears the consent for one of the account's own songs (not a friend's: 400 invalid). Unknown consent means no.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "Request id"
+          },
+          {
+            "$ref": "#/components/parameters/EventCode"
+          },
+          {
+            "$ref": "#/components/parameters/NightId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SongConsentRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Done",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RequestResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/RequestInvalid"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/RequestConflict"
+          },
+          "429": {
+            "$ref": "#/components/responses/RequestRateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/GenUnavailable"
+          },
+          "default": {
+            "$ref": "#/components/responses/Default"
+          }
+        }
+      }
+    },
+    "/me": {
+      "get": {
+        "operationId": "getMe",
+        "summary": "Your songs, your next turn and what you've sung tonight",
+        "description": "Built server-side from every request the account's devices (the app plus web pages linked tonight) made tonight, plus queued entries naming the singer that the host or a duet partner added. Never takes request ids from the client. Poll every 15 s while visible.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/EventCode"
+          },
+          {
+            "$ref": "#/components/parameters/NightId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Tonight for this singer",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeResult"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/NotOpen"
+          },
+          "409": {
+            "$ref": "#/components/responses/NightChanged"
+          },
+          "429": {
+            "$ref": "#/components/responses/RequestRateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/GenUnavailable"
+          },
+          "default": {
+            "$ref": "#/components/responses/Default"
+          }
+        }
+      },
+      "put": {
+        "operationId": "updateMe",
+        "summary": "Change name, phone or photo consent",
+        "description": "Applies to every song the account owns tonight except friend songs; a rename never rewrites sung (Done) songs. Renaming to a different first name while own songs are queued needs confirm_rename: true (else 409 conflict, reason rename_guard). Fields apply in order (name, then phone, then photo consent) with no rollback across them: if a later one fails, the earlier ones stay applied. A name the host set or merged can't be changed here (409 conflict, reason host_named).",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/EventCode"
+          },
+          {
+            "$ref": "#/components/parameters/NightId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateMeRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpdateMeResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/RequestInvalid"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/NotOpen"
+          },
+          "409": {
+            "$ref": "#/components/responses/RenameGuard"
+          },
+          "429": {
+            "$ref": "#/components/responses/RequestRateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/GenUnavailable"
+          },
+          "default": {
+            "$ref": "#/components/responses/Default"
+          }
+        }
+      }
+    },
+    "/search": {
+      "get": {
+        "operationId": "searchSongs",
+        "summary": "Karaoke search: one entry per song with every version",
+        "description": "Delegates to the web search. A query under 3 characters is 400 invalid.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/EventCode"
+          },
+          {
+            "$ref": "#/components/parameters/NightId"
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "The typed query (3+ characters for search)"
+          },
+          {
+            "name": "sid",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Client search id, groups the search log"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/RequestInvalid"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/NightChanged"
+          },
+          "429": {
+            "$ref": "#/components/responses/RequestRateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/GenUnavailable"
+          },
+          "default": {
+            "$ref": "#/components/responses/Default"
+          }
+        }
+      }
+    },
+    "/search/identify": {
+      "get": {
+        "operationId": "identifySong",
+        "summary": "Which real song the text means",
+        "description": "Rate limited per device (429 rate_limited).",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/EventCode"
+          },
+          {
+            "$ref": "#/components/parameters/NightId"
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "The typed query (3+ characters for search)"
+          },
+          {
+            "name": "sid",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Client search id, groups the search log"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentifyResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/RequestInvalid"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/NightChanged"
+          },
+          "429": {
+            "$ref": "#/components/responses/RequestRateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/GenUnavailable"
+          },
+          "default": {
+            "$ref": "#/components/responses/Default"
+          }
+        }
+      }
+    },
+    "/search/resolve": {
+      "get": {
+        "operationId": "resolveSearch",
+        "summary": "Auto-correct a search that found nothing",
+        "description": "Rate limited per device (20 per 5 minutes by default).",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/EventCode"
+          },
+          {
+            "$ref": "#/components/parameters/NightId"
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "The typed query (3+ characters for search)"
+          },
+          {
+            "name": "sid",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Client search id, groups the search log"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResolveResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/RequestInvalid"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/NightChanged"
+          },
+          "429": {
+            "$ref": "#/components/responses/RequestRateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/GenUnavailable"
+          },
+          "default": {
+            "$ref": "#/components/responses/Default"
+          }
+        }
+      }
+    },
+    "/search/event": {
+      "post": {
+        "operationId": "logSearchEvent",
+        "summary": "Log a search choice (analytics)",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SearchEventRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OkResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/RequestInvalid"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/NightChanged"
+          },
+          "429": {
+            "$ref": "#/components/responses/RequestRateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/GenUnavailable"
+          },
+          "default": {
+            "$ref": "#/components/responses/Default"
+          }
+        }
+      }
+    },
+    "/singers": {
+      "get": {
+        "operationId": "listSingers",
+        "summary": "Tonight's singer names for duet partners",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/EventCode"
+          },
+          {
+            "$ref": "#/components/parameters/NightId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SingersResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/RequestInvalid"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/NightChanged"
+          },
+          "429": {
+            "$ref": "#/components/responses/RequestRateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/GenUnavailable"
+          },
+          "default": {
+            "$ref": "#/components/responses/Default"
+          }
+        }
+      }
+    },
+    "/now": {
+      "get": {
+        "operationId": "getNow",
+        "summary": "Now on stage and up next",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/EventCode"
+          },
+          {
+            "$ref": "#/components/parameters/NightId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NowResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/RequestInvalid"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/NightChanged"
+          },
+          "429": {
+            "$ref": "#/components/responses/RequestRateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/GenUnavailable"
+          },
+          "default": {
+            "$ref": "#/components/responses/Default"
+          }
+        }
+      }
+    },
+    "/rotation": {
+      "get": {
+        "operationId": "getRotation",
+        "summary": "The active rotation with wait estimates",
+        "description": "ETag is \"<rotation_rev>\". Authentication still applies to a 304. The wait estimates (expected_s, range_*) are relative to the response that carried them: a 304 keeps the earlier ones, so the app counts down locally from when it received them.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/EventCode"
+          },
+          {
+            "$ref": "#/components/parameters/NightId"
+          },
+          {
+            "name": "If-None-Match",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "The last ETag; equal (quotes ignored) gives 304 with no body"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RotationResult"
+                }
+              }
+            },
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "\"<rev>\" (the rotation revision, quoted)"
+              }
+            }
+          },
+          "304": {
+            "description": "Unchanged since the If-None-Match revision; empty body, ETag header still sent",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "\"<rev>\""
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/RequestInvalid"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/NightChanged"
+          },
+          "429": {
+            "$ref": "#/components/responses/RequestRateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/GenUnavailable"
+          },
+          "default": {
+            "$ref": "#/components/responses/Default"
+          }
+        }
+      }
+    },
+    "/preview/resolve": {
+      "post": {
+        "operationId": "resolvePreview",
+        "summary": "Resolve a song version to a playable preview",
+        "description": "Rate limited per network (12 per minute by default, 429 with retry_after). 404 not_found when an entry has nothing to preview yet. mode unavailable (200) when this version can't be previewed.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PreviewRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreviewResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/RequestInvalid"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/NightChanged"
+          },
+          "429": {
+            "$ref": "#/components/responses/RequestRateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/GenUnavailable"
+          },
+          "default": {
+            "$ref": "#/components/responses/Default"
+          }
+        }
+      }
+    },
+    "/preview/close": {
+      "post": {
+        "operationId": "closePreview",
+        "summary": "Release a preview token",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PreviewCloseRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OkResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/RequestInvalid"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/NightChanged"
+          },
+          "429": {
+            "$ref": "#/components/responses/RequestRateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/GenUnavailable"
+          },
+          "default": {
+            "$ref": "#/components/responses/Default"
+          }
+        }
+      }
+    },
+    "/tips": {
+      "get": {
+        "operationId": "getTips",
+        "summary": "Tip methods and settings",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/EventCode"
+          },
+          {
+            "$ref": "#/components/parameters/NightId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TipsResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/RequestInvalid"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/NightChanged"
+          },
+          "429": {
+            "$ref": "#/components/responses/RequestRateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/GenUnavailable"
+          },
+          "default": {
+            "$ref": "#/components/responses/Default"
+          }
+        }
+      }
+    },
+    "/tips/claim": {
+      "post": {
+        "operationId": "claimTip",
+        "summary": "Tell the host a tip was sent",
+        "description": "The singer name is the device's name (400 needs_name with none). client_request_id (UUID) is required and makes the claim idempotent. Rate limited (5 per 10 minutes, 429). 400 invalid with message tips_disabled when the host turned tips off.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TipClaimRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TipClaimResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/RequestInvalid"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/RequestConflict"
+          },
+          "429": {
+            "$ref": "#/components/responses/RequestRateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/GenUnavailable"
+          },
+          "default": {
+            "$ref": "#/components/responses/Default"
+          }
+        }
+      }
+    },
+    "/my-stats": {
+      "get": {
+        "operationId": "getMyStats",
+        "summary": "Tonight's crowd favourites",
+        "description": "Top songs only; the web's per-name history lookup is not exposed, and any name parameter is ignored.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/EventCode"
+          },
+          {
+            "$ref": "#/components/parameters/NightId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MyStatsResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/RequestInvalid"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/NightChanged"
+          },
+          "429": {
+            "$ref": "#/components/responses/RequestRateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/GenUnavailable"
+          },
+          "default": {
+            "$ref": "#/components/responses/Default"
+          }
+        }
+      }
+    },
+    "/make/check": {
+      "post": {
+        "operationId": "checkMake",
+        "summary": "Check the artist and title (gen's match judge)",
+        "description": "Runs as the app user's own gen account (the bearer is forwarded to gen for this call and never stored), so jobs land in that account. 400 make_disabled when make-it is off tonight, in Simple Mode, or the box has no gen partner set-up (GET /night features.make is false then). Fails open: a gen failure returns kind none, except a rejected session (401 unauthenticated).",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/EventCode"
+          },
+          {
+            "$ref": "#/components/parameters/NightId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MakeCheckRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MakeCheckResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/RequestInvalid"
+          },
+          "401": {
+            "description": "Missing or rejected gen session token, including gen refusing it during this make-it call (error unauthenticated). Does not by itself mean the app should sign out: check the session with gen first.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/RequestConflict"
+          },
+          "429": {
+            "$ref": "#/components/responses/MakeRateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/GenUnavailable"
+          },
+          "default": {
+            "$ref": "#/components/responses/Default"
+          }
+        }
+      }
+    },
+    "/make/search": {
+      "post": {
+        "operationId": "makeSearch",
+        "summary": "Search for audio to make the song from",
+        "description": "Runs as the app user's own gen account (the bearer is forwarded to gen for this call and never stored), so jobs land in that account. 400 make_disabled when make-it is off tonight, in Simple Mode, or the box has no gen partner set-up (GET /night features.make is false then). First tops up a free show credit when the account's balance is empty (one per song per night; the submit uses the same key, so a song costs the singer nothing and gen grants at most one credit for it). 400 make_disabled also when this account has searched for too many different songs tonight. 400 youtube_blocked when gen's YouTube access is being bot-checked, gen_rejected when gen refuses (e.g. no credits).",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/EventCode"
+          },
+          {
+            "$ref": "#/components/parameters/NightId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MakeSongRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MakeSearchResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/RequestInvalid"
+          },
+          "401": {
+            "description": "Missing or rejected gen session token, including gen refusing it during this make-it call (error unauthenticated). Does not by itself mean the app should sign out: check the session with gen first.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/RequestConflict"
+          },
+          "429": {
+            "$ref": "#/components/responses/MakeRateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/GenUnavailable"
+          },
+          "default": {
+            "$ref": "#/components/responses/Default"
+          }
+        }
+      }
+    },
+    "/make/validate-url": {
+      "post": {
+        "operationId": "validateMakeUrl",
+        "summary": "Check a link to make the song from (gen's URL fallback)",
+        "description": "Runs as the app user's own gen account (the bearer is forwarded to gen for this call and never stored), so jobs land in that account. 400 make_disabled when make-it is off tonight, in Simple Mode, or the box has no gen partner set-up (GET /night features.make is false then).",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/EventCode"
+          },
+          {
+            "$ref": "#/components/parameters/NightId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MakeUrlRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MakeUrlResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/RequestInvalid"
+          },
+          "401": {
+            "description": "Missing or rejected gen session token, including gen refusing it during this make-it call (error unauthenticated). Does not by itself mean the app should sign out: check the session with gen first.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/RequestConflict"
+          },
+          "429": {
+            "$ref": "#/components/responses/MakeRateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/GenUnavailable"
+          },
+          "default": {
+            "$ref": "#/components/responses/Default"
+          }
+        }
+      }
+    },
+    "/make/use-quick/{id}": {
+      "post": {
+        "operationId": "useQuickVersion",
+        "summary": "Sing the quick version now",
+        "description": "Links the make-it job's quick (scrolling-lyrics draft) version to the singer's rotation entry so it can be sung now; the full version still replaces it if it lands before their turn. The request must belong to one of the account's devices tonight (403 not_owner). 404 not_found (message quick_not_ready) until the quick version is ready, or when the request is not a make-it; 409 conflict (message already_ready) when the entry already has its video; 400 make_disabled when the host turned quick versions off.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "Request id"
+          },
+          {
+            "$ref": "#/components/parameters/EventCode"
+          },
+          {
+            "$ref": "#/components/parameters/NightId"
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UseQuickRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OkResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/RequestInvalid"
+          },
+          "401": {
+            "description": "Missing or rejected gen session token, including gen refusing it during this make-it call (error unauthenticated). Does not by itself mean the app should sign out: check the session with gen first.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/RequestConflict"
+          },
+          "429": {
+            "$ref": "#/components/responses/MakeRateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/GenUnavailable"
+          },
+          "default": {
+            "$ref": "#/components/responses/Default"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/push-token": {
+      "post": {
+        "operationId": "registerPushToken",
+        "summary": "Register this device's Expo push token",
+        "description": "Idempotent per token. Tonight's updates (approved, up in 2, up next, now singing, sung) go to the token; Expo reports a dead token and kjbox then stops sending to it.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/EventCode"
+          },
+          {
+            "$ref": "#/components/parameters/NightId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PushTokenRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Registered",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OkResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Invalid"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/NotOpen"
+          },
+          "409": {
+            "$ref": "#/components/responses/NightChanged"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/GenUnavailable"
+          },
+          "default": {
+            "$ref": "#/components/responses/Default"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "genSession": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "The singer's Nomad Karaoke (gen) session token. kjbox verifies it with gen's GET /api/users/me."
+      }
+    },
+    "parameters": {
+      "EventCode": {
+        "name": "t",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "string"
+        },
+        "description": "The night's event code. Required on every call, here or as JSON body field t."
+      },
+      "NightId": {
+        "name": "night_id",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "string"
+        },
+        "description": "The night_id the app last saw (also accepted as JSON body field night_id). A mismatch returns 409 night_changed."
+      }
+    },
+    "responses": {
+      "Invalid": {
+        "description": "Bad request body (error invalid)",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Unauthenticated": {
+        "description": "Missing or rejected gen session token (error unauthenticated). Does not by itself mean the app should sign out.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "NotOpen": {
+        "description": "Requests are closed, the event code is wrong, or no night has started (error not_open)",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "NightChanged": {
+        "description": "The host started a new night (error night_changed); night_id is the new one",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/NightChangedError"
+            }
+          }
+        }
+      },
+      "GenUnavailable": {
+        "description": "kjbox couldn't verify the token with gen (error gen_unavailable); retry after retry_after seconds",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "RateLimited": {
+        "description": "Too many wrong event codes from this account's device (10 per 5 min) or from this network (100 per 5 min across all devices), or too many sign-in checks from this network (error rate_limited); retry after retry_after seconds (also the Retry-After header). The bearer is checked before the event code, so a missing or rejected token is always 401 and a wrong code on one phone doesn't lock out others on the same wifi.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Default": {
+        "description": "Any other error: not_found (unknown v1 path, 404), invalid (wrong method, 405), internal (500)",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Forbidden": {
+        "description": "not_open (requests closed, wrong event code or no night) or not_owner (the request isn't one of this account's devices' tonight)",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "NotFound": {
+        "description": "not_found: no such request tonight under this event code (a previous night's request looks the same)",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "RequestConflict": {
+        "description": "night_changed (with night_id, see NightChangedError), already_sung, on_stage, busy_retry (retry after retry_after seconds), already_generating, or conflict",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "RequestRateLimited": {
+        "description": "rate_limited: this account's device (8 per 5 min by default) or this network is over the singer mutation budget, or too many wrong event codes (this device: 10 per 5 min; this network: 100 per 5 min) / sign-in checks; retry after retry_after seconds (also the Retry-After header)",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "RequestInvalid": {
+        "description": "invalid (message says why), needs_name (POST /join first), kj_pick_too_large (over 1000 versions), make_disabled, youtube_blocked or gen_rejected",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "RenameGuard": {
+        "description": "night_changed (with night_id, see NightChangedError) or conflict with reason rename_guard (see RenameGuardError)",
+        "content": {
+          "application/json": {
+            "schema": {
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/RenameGuardError"
+                },
+                {
+                  "$ref": "#/components/schemas/NightChangedError"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "MakeRateLimited": {
+        "description": "rate_limited: this account's make-it budget (40 calls per 10 minutes per device, 400 per network) is used up, or gen is limiting it; retry after retry_after seconds (also the Retry-After header)",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "ErrorCode": {
+        "type": "string",
+        "enum": [
+          "unauthenticated",
+          "gen_unavailable",
+          "not_open",
+          "night_changed",
+          "needs_name",
+          "not_found",
+          "not_owner",
+          "already_sung",
+          "on_stage",
+          "rate_limited",
+          "invalid",
+          "kj_pick_too_large",
+          "make_disabled",
+          "youtube_blocked",
+          "gen_rejected",
+          "already_generating",
+          "busy_retry",
+          "conflict",
+          "internal"
+        ]
+      },
+      "Error": {
+        "type": "object",
+        "required": [
+          "api_version",
+          "error"
+        ],
+        "properties": {
+          "api_version": {
+            "type": "string"
+          },
+          "error": {
+            "$ref": "#/components/schemas/ErrorCode"
+          },
+          "message": {
+            "type": "string",
+            "description": "English detail for logs; the app shows its own translated copy per error code"
+          },
+          "retry_after": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Seconds to wait before retrying"
+          },
+          "night_id": {
+            "type": "string",
+            "description": "Only on night_changed (see NightChangedError): the current night's id"
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "rename_guard",
+              "host_named"
+            ],
+            "description": "Only on PUT /me's 409 conflict (see RenameGuardError): why it was refused"
+          },
+          "from": {
+            "type": "string",
+            "description": "Only with reason rename_guard or host_named: the current name"
+          },
+          "to": {
+            "type": "string",
+            "description": "Only with reason rename_guard or host_named: the name asked for"
+          }
+        }
+      },
+      "Night": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/NightOpen"
+          },
+          {
+            "$ref": "#/components/schemas/NightClosed"
+          }
+        ]
+      },
+      "NightClosed": {
+        "type": "object",
+        "required": [
+          "api_version",
+          "open",
+          "error",
+          "reason"
+        ],
+        "properties": {
+          "api_version": {
+            "type": "string"
+          },
+          "open": {
+            "type": "boolean",
+            "const": false
+          },
+          "error": {
+            "type": "string",
+            "const": "not_open"
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "closed",
+              "bad_code",
+              "no_night"
+            ],
+            "description": "closed: the host has requests switched off; bad_code: the event code doesn't match tonight's; no_night: the box has no current night"
+          },
+          "kj_name": {
+            "type": "string",
+            "description": "Only when reason is closed"
+          },
+          "footer_message": {
+            "type": "string",
+            "description": "The host's message; only when reason is closed"
+          }
+        }
+      },
+      "NightOpen": {
+        "type": "object",
+        "required": [
+          "api_version",
+          "open",
+          "night_id",
+          "kj_name",
+          "footer_message",
+          "notices",
+          "notice_defs",
+          "social",
+          "contact",
+          "features",
+          "rev",
+          "needs_name"
+        ],
+        "properties": {
+          "api_version": {
+            "type": "string"
+          },
+          "open": {
+            "type": "boolean",
+            "const": true
+          },
+          "night_id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{16}$"
+          },
+          "kj_name": {
+            "type": "string",
+            "description": "The host's name ('' when unset)"
+          },
+          "footer_message": {
+            "type": "string"
+          },
+          "notices": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Switched-on venue notices, in order: pre-built keys (chargers, lyricsScreen, duets, moreSongs, tipsHelp, wifi, water, photos; the app owns their copy) or host-written c-<id> keys (see notice_defs)"
+          },
+          "notice_defs": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/NoticeDef"
+            },
+            "description": "Icon/text for host-written notices and host edits to pre-built ones (switched-on keys only)"
+          },
+          "social": {
+            "$ref": "#/components/schemas/Social"
+          },
+          "contact": {
+            "$ref": "#/components/schemas/Contact"
+          },
+          "features": {
+            "$ref": "#/components/schemas/Features"
+          },
+          "rev": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Rotation revision; changes whenever the queue changes"
+          },
+          "needs_name": {
+            "type": "boolean",
+            "description": "True until the singer has a name (POST /join)"
+          },
+          "suggested_name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Present when needs_name: a prefill from the gen account, or null for no prefill"
+          },
+          "me": {
+            "$ref": "#/components/schemas/Me"
+          }
+        }
+      },
+      "NoticeDef": {
+        "type": "object",
+        "required": [
+          "icon",
+          "text"
+        ],
+        "properties": {
+          "icon": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          }
+        }
+      },
+      "Social": {
+        "type": "object",
+        "description": "The host's social links (https URLs); only set ones are present",
+        "properties": {
+          "instagram": {
+            "type": "string"
+          },
+          "facebook": {
+            "type": "string"
+          },
+          "tiktok": {
+            "type": "string"
+          },
+          "youtube": {
+            "type": "string"
+          },
+          "x": {
+            "type": "string"
+          },
+          "website": {
+            "type": "string"
+          }
+        }
+      },
+      "Contact": {
+        "type": "object",
+        "description": "Ways to reach the host; only set ones are present",
+        "properties": {
+          "email": {
+            "type": "string"
+          },
+          "phone": {
+            "type": "string"
+          }
+        }
+      },
+      "Features": {
+        "type": "object",
+        "required": [
+          "make",
+          "simple_mode",
+          "ask_photo_consent",
+          "quick_version",
+          "tips"
+        ],
+        "properties": {
+          "make": {
+            "type": "boolean",
+            "description": "Make-it (generate a missing song) is offered tonight"
+          },
+          "simple_mode": {
+            "type": "boolean",
+            "description": "Only on-the-box/cloud-mirror/KaraokeNerds sources may be requested"
+          },
+          "ask_photo_consent": {
+            "type": "boolean",
+            "description": "Ask singers for photo/video consent"
+          },
+          "quick_version": {
+            "type": "boolean",
+            "description": "Make-it jobs also get a quick scrolling-lyrics draft"
+          },
+          "tips": {
+            "type": "boolean",
+            "description": "Tipping is enabled"
+          }
+        }
+      },
+      "Me": {
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "JoinRequest": {
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "t": {
+            "type": "string",
+            "description": "Event code (or the t query parameter)"
+          },
+          "night_id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          }
+        }
+      },
+      "JoinResponse": {
+        "type": "object",
+        "required": [
+          "api_version",
+          "me"
+        ],
+        "properties": {
+          "api_version": {
+            "type": "string"
+          },
+          "me": {
+            "$ref": "#/components/schemas/Me"
+          }
+        }
+      },
+      "NightChangedError": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Error"
+          },
+          {
+            "type": "object",
+            "required": [
+              "night_id"
+            ]
+          }
+        ],
+        "description": "409 night_changed: the host started a new night; drop the old night's state and use night_id"
+      },
+      "AdditionalSinger": {
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "phone": {
+            "type": "string"
+          }
+        }
+      },
+      "SongRequest": {
+        "type": "object",
+        "description": "A singer request as the app sees it (the web's public request view, never the edit_token).",
+        "required": [
+          "id",
+          "singer_name",
+          "song_artist",
+          "song_title",
+          "source_type",
+          "status",
+          "created_at",
+          "linked_entry_id",
+          "additional_singers",
+          "supersedes_request_id",
+          "media_consent",
+          "for_friend"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "singer_name": {
+            "type": "string"
+          },
+          "song_artist": {
+            "type": "string"
+          },
+          "song_title": {
+            "type": "string"
+          },
+          "source_type": {
+            "type": "string",
+            "enum": [
+              "local",
+              "divebar",
+              "kn",
+              "youtube",
+              "make",
+              "kj_pick",
+              "reorder",
+              "tip"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "description": "pending | approved | rejected | cancelled"
+          },
+          "created_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "linked_entry_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "The rotation entry once approved"
+          },
+          "additional_singers": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/AdditionalSinger"
+            }
+          },
+          "supersedes_request_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "On a song change: the request this one replaces"
+          },
+          "media_consent": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "yes",
+              "no",
+              null
+            ]
+          },
+          "for_friend": {
+            "type": "boolean",
+            "description": "Requested by this account for someone else (singer_name is the friend)"
+          },
+          "tip_amount": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "tip_method": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "RequestResult": {
+        "type": "object",
+        "required": [
+          "api_version",
+          "request"
+        ],
+        "properties": {
+          "api_version": {
+            "type": "string"
+          },
+          "request": {
+            "$ref": "#/components/schemas/SongRequest"
+          },
+          "auto_approved": {
+            "type": "boolean",
+            "description": "True when it went straight into the rotation without the host"
+          }
+        }
+      },
+      "SubmitRequest": {
+        "type": "object",
+        "required": [
+          "client_request_id",
+          "source_type"
+        ],
+        "properties": {
+          "t": {
+            "type": "string"
+          },
+          "night_id": {
+            "type": "string"
+          },
+          "client_request_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Idempotency key (24 h): a retry with the same id returns the first response and never makes a second request"
+          },
+          "song_artist": {
+            "type": "string"
+          },
+          "song_title": {
+            "type": "string"
+          },
+          "source_type": {
+            "type": "string",
+            "enum": [
+              "local",
+              "divebar",
+              "kn",
+              "youtube",
+              "make",
+              "kj_pick"
+            ]
+          },
+          "source_ref": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Required for local, divebar, kn and youtube"
+          },
+          "source_meta": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "description": "kj_pick: {versions: [...]} (send them all; the box keeps the best 50 and refuses only over 1000); make: the chosen audio"
+          },
+          "phone": {
+            "type": "string"
+          },
+          "notes": {
+            "type": "string"
+          },
+          "additional_singers": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "maxItems": 3,
+            "items": {
+              "$ref": "#/components/schemas/AdditionalSinger"
+            }
+          },
+          "photo_consent": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "yes",
+              "no",
+              "",
+              null
+            ]
+          },
+          "instagram": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "for_friend": {
+            "type": "boolean",
+            "description": "A song for someone else: singer_name is friend_name, not the account's name; photo consent is ignored"
+          },
+          "friend_name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "description": "Required when for_friend is true"
+          }
+        }
+      },
+      "ChangeSongRequest": {
+        "type": "object",
+        "required": [
+          "client_request_id",
+          "source_type"
+        ],
+        "properties": {
+          "t": {
+            "type": "string"
+          },
+          "night_id": {
+            "type": "string"
+          },
+          "client_request_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Idempotency key: a retry with the same id returns the first response (even though the original request is now superseded) and never makes a second change"
+          },
+          "song_artist": {
+            "type": "string"
+          },
+          "song_title": {
+            "type": "string"
+          },
+          "source_type": {
+            "type": "string",
+            "enum": [
+              "local",
+              "divebar",
+              "kn",
+              "youtube",
+              "make",
+              "kj_pick"
+            ]
+          },
+          "source_ref": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Required for local, divebar, kn and youtube"
+          },
+          "source_meta": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "description": "kj_pick: {versions: [...]} (send them all; the box keeps the best 50 and refuses only over 1000); make: the chosen audio"
+          }
+        }
+      },
+      "ReorderItem": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "type": "integer",
+                "description": "A request this account owns"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "entry_id"
+            ],
+            "properties": {
+              "entry_id": {
+                "type": "integer",
+                "description": "A queued rotation entry naming this singer (host-added, or a partner's duet)"
+              }
+            }
+          }
+        ]
+      },
+      "ReorderRequest": {
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "t": {
+            "type": "string"
+          },
+          "night_id": {
+            "type": "string"
+          },
+          "items": {
+            "type": "array",
+            "minItems": 2,
+            "items": {
+              "$ref": "#/components/schemas/ReorderItem"
+            },
+            "description": "The singer's queued songs in the new order"
+          }
+        }
+      },
+      "SongConsentRequest": {
+        "type": "object",
+        "required": [
+          "consent"
+        ],
+        "properties": {
+          "t": {
+            "type": "string"
+          },
+          "night_id": {
+            "type": "string"
+          },
+          "consent": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "yes",
+              "no",
+              null
+            ],
+            "description": "null clears the per-song choice (the night-wide one applies)"
+          }
+        }
+      },
+      "CancelRequest": {
+        "type": "object",
+        "properties": {
+          "t": {
+            "type": "string"
+          },
+          "night_id": {
+            "type": "string"
+          }
+        }
+      },
+      "RenameGuardError": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Error"
+          },
+          {
+            "type": "object",
+            "required": [
+              "reason",
+              "from",
+              "to"
+            ]
+          }
+        ],
+        "description": "409 conflict from PUT /me. reason rename_guard: the first name changes while the singer has their own songs queued; ask \"Rename yourself to {to}?\" (or \"{to} is a friend: request a song for them\") and resend with confirm_rename: true. reason host_named: the host set or merged this singer's name, so only the host can change it (confirm_rename doesn't help); tell the singer to ask the host."
+      },
+      "SongItemRequest": {
+        "type": "object",
+        "description": "The request behind a Your-songs row: the account's own request (SongRequest), or, for a host- or partner-added entry, a synthetic view with id null, source_type 'rotation' and the entry's one 'Title - Artist' string in song_title.",
+        "required": [
+          "id",
+          "singer_name",
+          "song_artist",
+          "song_title",
+          "source_type",
+          "status",
+          "created_at",
+          "linked_entry_id",
+          "additional_singers",
+          "supersedes_request_id",
+          "media_consent",
+          "for_friend"
+        ],
+        "properties": {
+          "id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "null for host- or partner-added entries (use the Song's entry_id)"
+          },
+          "singer_name": {
+            "type": "string"
+          },
+          "song_artist": {
+            "type": "string"
+          },
+          "song_title": {
+            "type": "string"
+          },
+          "source_type": {
+            "type": "string",
+            "enum": [
+              "local",
+              "divebar",
+              "kn",
+              "youtube",
+              "make",
+              "kj_pick",
+              "reorder",
+              "tip",
+              "rotation"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "description": "pending | approved | rejected | cancelled"
+          },
+          "created_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "linked_entry_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "The rotation entry once approved"
+          },
+          "additional_singers": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/AdditionalSinger"
+            }
+          },
+          "supersedes_request_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "On a song change: the request this one replaces"
+          },
+          "media_consent": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "yes",
+              "no",
+              null
+            ]
+          },
+          "for_friend": {
+            "type": "boolean",
+            "description": "Requested by this account for someone else (singer_name is the friend)"
+          },
+          "tip_amount": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "tip_method": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "Estimate": {
+        "type": "object",
+        "description": "Wait estimate for a queued song (kjbox wait_estimate.compute_estimate)",
+        "required": [
+          "position",
+          "expected_s",
+          "range_low_s",
+          "range_high_s",
+          "spread_source",
+          "close_to_front",
+          "now_singing"
+        ],
+        "properties": {
+          "position": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "1-based place in the active queue"
+          },
+          "expected_s": {
+            "type": "integer"
+          },
+          "range_low_s": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "range_high_s": {
+            "type": "integer"
+          },
+          "spread_source": {
+            "type": "string",
+            "enum": [
+              "tonight",
+              "fallback"
+            ]
+          },
+          "close_to_front": {
+            "type": "boolean"
+          },
+          "now_singing": {
+            "type": "boolean"
+          }
+        }
+      },
+      "Song": {
+        "type": "object",
+        "description": "One row of Your songs: the web /my-requests item plus owner (and history_id once sung).",
+        "required": [
+          "request",
+          "owner",
+          "performed"
+        ],
+        "properties": {
+          "request": {
+            "$ref": "#/components/schemas/SongItemRequest"
+          },
+          "owner": {
+            "type": "string",
+            "enum": [
+              "me",
+              "friend",
+              "host",
+              "partner",
+              "web"
+            ],
+            "description": "me: the account's own request; friend: requested by the account for someone else; host: the host typed it in; partner: another singer's request naming this singer (a duet; added_by says who); web: the singer's own request from a web page not linked to the account yet (see unlinked_identity_entries). host, partner and web rows can only be reordered (by entry_id)."
+          },
+          "performed": {
+            "type": "boolean",
+            "description": "Sung (Done) or the singer left: listed in sung_tonight"
+          },
+          "estimate": {
+            "$ref": "#/components/schemas/Estimate"
+          },
+          "previewable": {
+            "type": "boolean",
+            "description": "The entry's file is on the box (▶ Preview)"
+          },
+          "removed": {
+            "type": "boolean",
+            "description": "The host took it off the list: show honest copy and Dismiss"
+          },
+          "make": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "making",
+              "rendering",
+              "review",
+              "review_self",
+              "review_host",
+              "needs_host",
+              null
+            ],
+            "description": "Make-it phase, null once the video is ready"
+          },
+          "quick": {
+            "type": "string",
+            "enum": [
+              "ready",
+              "chosen",
+              "upgraded"
+            ],
+            "description": "Make-it quick (draft) version state"
+          },
+          "gen_job_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Make-it songs of owner me or friend only: the karaoke-gen job id of the account's own job (the app opens its native review with it); null until gen has created the job. Absent on every other song."
+          },
+          "entry_id": {
+            "type": "integer",
+            "description": "Host- and partner-added rows: the rotation entry"
+          },
+          "added_by_host": {
+            "type": "boolean"
+          },
+          "added_by": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "partner rows: who requested it"
+          },
+          "history_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^kj_[0-9a-f]{24}$",
+            "description": "Only on performed songs that aren't a friend's: \"kj_\" + sha256(box_id:entry_id:email)[:24], the id decide's karaoke log uses for this performance. null on a host-, partner- or web-added song matched to the singer by name when someone else may have that name tonight (another device submitted under it or is aliased to it): it's listed, but not recorded as this singer's."
+          }
+        }
+      },
+      "MeProfile": {
+        "type": "object",
+        "required": [
+          "name",
+          "phone",
+          "photo_consent",
+          "instagram"
+        ],
+        "properties": {
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "null until POST /join (or PUT /me with a name)"
+          },
+          "phone": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Newest number on the account's own requests tonight"
+          },
+          "photo_consent": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "yes",
+              "no",
+              null
+            ]
+          },
+          "instagram": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "NextTurn": {
+        "type": "object",
+        "description": "The singer's next queued song (own, host- or partner-added; never a friend's)",
+        "required": [
+          "entry_id",
+          "position",
+          "eta_s",
+          "range_low_s",
+          "range_high_s"
+        ],
+        "properties": {
+          "entry_id": {
+            "type": "integer"
+          },
+          "position": {
+            "type": "integer"
+          },
+          "eta_s": {
+            "type": "integer"
+          },
+          "range_low_s": {
+            "type": "integer"
+          },
+          "range_high_s": {
+            "type": "integer"
+          }
+        }
+      },
+      "MeResult": {
+        "type": "object",
+        "required": [
+          "api_version",
+          "me",
+          "songs",
+          "next",
+          "sung_tonight",
+          "unlinked_identity_entries"
+        ],
+        "properties": {
+          "api_version": {
+            "type": "string"
+          },
+          "me": {
+            "$ref": "#/components/schemas/MeProfile"
+          },
+          "songs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Song"
+            },
+            "description": "Not yet sung, in queue order (on stage, position, approved without estimate, pending, rejected/removed)"
+          },
+          "next": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/NextTurn"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sung_tonight": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Song"
+            },
+            "description": "Sung tonight: the account's own and friend requests, plus host-, partner- and web-added entries naming the singer that were marked Done"
+          },
+          "unlinked_identity_entries": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Live requests naming the singer from a device not linked to any account: show \"Requested songs on the web page too? Open it and tap Save tonight's songs\" when > 0"
+          }
+        }
+      },
+      "UpdateMeRequest": {
+        "type": "object",
+        "properties": {
+          "t": {
+            "type": "string"
+          },
+          "night_id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "phone": {
+            "type": "string"
+          },
+          "photo_consent": {
+            "type": "string",
+            "enum": [
+              "yes",
+              "no"
+            ]
+          },
+          "instagram": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Kept only with photo_consent yes"
+          },
+          "confirm_rename": {
+            "type": "boolean",
+            "description": "The singer confirmed the rename guard"
+          }
+        }
+      },
+      "UpdateMeResult": {
+        "type": "object",
+        "required": [
+          "api_version",
+          "me"
+        ],
+        "properties": {
+          "api_version": {
+            "type": "string"
+          },
+          "me": {
+            "$ref": "#/components/schemas/MeProfile"
+          }
+        }
+      },
+      "OkResult": {
+        "type": "object",
+        "required": [
+          "api_version",
+          "ok"
+        ],
+        "properties": {
+          "api_version": {
+            "type": "string"
+          },
+          "ok": {
+            "type": "boolean",
+            "const": true
+          }
+        }
+      },
+      "SearchSong": {
+        "type": "object",
+        "description": "One song with every available karaoke version, exactly as the web search groups them. The per-version objects (source local|kn|..., with the matching local/kn payload) are the web's own shape and are passed through; the app reads source, artist, title, version_count and versions[].",
+        "required": [
+          "artist",
+          "title",
+          "versions"
+        ],
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "artist": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "version_count": {
+            "type": "integer"
+          },
+          "versions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SearchVersion"
+            }
+          }
+        },
+        "additionalProperties": true
+      },
+      "SearchResult": {
+        "type": "object",
+        "required": [
+          "api_version",
+          "songs",
+          "make_requests_enabled",
+          "simple_mode"
+        ],
+        "properties": {
+          "api_version": {
+            "type": "string"
+          },
+          "songs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SearchSong"
+            }
+          },
+          "make_requests_enabled": {
+            "type": "boolean"
+          },
+          "simple_mode": {
+            "type": "boolean"
+          },
+          "karaoke_nerds_timeout": {
+            "type": "boolean",
+            "description": "Present (true) when the community-catalogue lookup timed out"
+          }
+        }
+      },
+      "IdentifiedSong": {
+        "type": "object",
+        "required": [
+          "artist",
+          "title",
+          "karaoke"
+        ],
+        "properties": {
+          "artist": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "karaoke": {
+            "type": "boolean"
+          }
+        }
+      },
+      "IdentifyResult": {
+        "type": "object",
+        "required": [
+          "api_version",
+          "status"
+        ],
+        "properties": {
+          "api_version": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "confident",
+              "candidates",
+              "none"
+            ]
+          },
+          "typed": {
+            "type": "string"
+          },
+          "candidates": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/IdentifiedSong"
+            }
+          },
+          "song": {
+            "$ref": "#/components/schemas/IdentifiedSong"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "same",
+              "cosmetic",
+              "completed",
+              "content"
+            ]
+          },
+          "unavailable": {
+            "type": "boolean",
+            "description": "With status none: the on-box song index isn't available"
+          }
+        },
+        "description": "Which real song the typed text means (separate from whether a karaoke version exists)."
+      },
+      "ArtistTitle": {
+        "type": "object",
+        "required": [
+          "artist",
+          "title"
+        ],
+        "properties": {
+          "artist": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        }
+      },
+      "ResolveResult": {
+        "type": "object",
+        "required": [
+          "api_version"
+        ],
+        "properties": {
+          "api_version": {
+            "type": "string"
+          },
+          "corrected": {
+            "$ref": "#/components/schemas/ArtistTitle"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "cosmetic",
+              "content"
+            ]
+          },
+          "typed": {
+            "type": "string"
+          },
+          "songs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SearchSong"
+            }
+          },
+          "split": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ArtistTitle"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "alternatives": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ArtistTitle"
+            }
+          }
+        },
+        "description": "Auto-correct for a search that found nothing. Only the keys that apply are present: corrected+kind+typed+songs+split, or alternatives, or split alone, or none of them."
+      },
+      "SearchEventRequest": {
+        "type": "object",
+        "required": [
+          "action"
+        ],
+        "properties": {
+          "t": {
+            "type": "string"
+          },
+          "night_id": {
+            "type": "string"
+          },
+          "sid": {
+            "type": "string",
+            "description": "The search id the events belong to"
+          },
+          "action": {
+            "type": "string",
+            "description": "A search_log choice action (unknown ones are 400 invalid)"
+          },
+          "q": {
+            "type": "string"
+          },
+          "data": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      },
+      "SingersResult": {
+        "type": "object",
+        "required": [
+          "api_version",
+          "singers"
+        ],
+        "properties": {
+          "api_version": {
+            "type": "string"
+          },
+          "singers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "description": "Tonight's singer names, for duet partner chips"
+      },
+      "NowEntry": {
+        "type": "object",
+        "required": [
+          "first_name",
+          "display_name",
+          "song_artist"
+        ],
+        "properties": {
+          "first_name": {
+            "type": "string"
+          },
+          "display_name": {
+            "type": "string"
+          },
+          "song_artist": {
+            "type": "string"
+          }
+        }
+      },
+      "NowResult": {
+        "type": "object",
+        "required": [
+          "api_version",
+          "now_singing",
+          "up_next",
+          "queued_count"
+        ],
+        "properties": {
+          "api_version": {
+            "type": "string"
+          },
+          "now_singing": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/NowEntry"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "up_next": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/NowEntry"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "queued_count": {
+            "type": "integer"
+          }
+        },
+        "description": "Cancelled, Done and Left entries are excluded"
+      },
+      "RotationEntry": {
+        "type": "object",
+        "required": [
+          "position",
+          "first_name",
+          "display_name",
+          "song_artist",
+          "status",
+          "entry_id",
+          "previewable",
+          "now_singing",
+          "expected_s",
+          "range_low_s",
+          "range_high_s"
+        ],
+        "properties": {
+          "position": {
+            "type": "integer"
+          },
+          "first_name": {
+            "type": "string"
+          },
+          "display_name": {
+            "type": "string"
+          },
+          "song_artist": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "entry_id": {
+            "type": "integer"
+          },
+          "previewable": {
+            "type": "boolean"
+          },
+          "now_singing": {
+            "type": "boolean"
+          },
+          "expected_s": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "range_low_s": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "range_high_s": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        }
+      },
+      "RotationResult": {
+        "type": "object",
+        "required": [
+          "api_version",
+          "entries",
+          "spread_source",
+          "rev"
+        ],
+        "properties": {
+          "api_version": {
+            "type": "string"
+          },
+          "entries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RotationEntry"
+            }
+          },
+          "spread_source": {
+            "type": "string"
+          },
+          "rev": {
+            "type": "integer",
+            "description": "The rotation revision; also the ETag (quoted)"
+          }
+        },
+        "description": "Active rotation (Cancelled, Done and Left excluded) with wait estimates"
+      },
+      "PreviewRequest": {
+        "type": "object",
+        "description": "The web's preview descriptor: source local|divebar|youtube with that source's fields as the search result gave them, or source entry|entry_quick with entry_id.",
+        "required": [
+          "source"
+        ],
+        "properties": {
+          "t": {
+            "type": "string"
+          },
+          "night_id": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "local",
+              "divebar",
+              "youtube",
+              "entry",
+              "entry_quick"
+            ]
+          },
+          "entry_id": {
+            "type": "integer"
+          }
+        },
+        "additionalProperties": true
+      },
+      "PreviewResult": {
+        "type": "object",
+        "required": [
+          "api_version",
+          "mode",
+          "title"
+        ],
+        "properties": {
+          "api_version": {
+            "type": "string"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "native_video",
+              "native_audio",
+              "hls",
+              "cdg",
+              "youtube",
+              "unavailable"
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string",
+            "description": "With mode unavailable: why (English, for logs)"
+          },
+          "token": {
+            "type": "string",
+            "description": "Pass to POST /preview/close when done"
+          },
+          "format": {
+            "type": "string"
+          },
+          "ext": {
+            "type": "string"
+          },
+          "youtube_url": {
+            "type": "string"
+          },
+          "stream_url": {
+            "type": "string",
+            "format": "uri",
+            "description": "native_video / native_audio: absolute URL on the request's host (supports Range)"
+          },
+          "hls_url": {
+            "type": "string",
+            "format": "uri",
+            "description": "hls: absolute URL of index.m3u8"
+          },
+          "cdg_audio_url": {
+            "type": "string",
+            "format": "uri",
+            "description": "cdg: absolute audio URL"
+          },
+          "cdg_graphics_url": {
+            "type": "string",
+            "format": "uri",
+            "description": "cdg: absolute .cdg graphics URL"
+          }
+        },
+        "description": "Returned URLs are absolute on the host the request came in on (no /sing prefix on the public host, /sing on the admin host) and carry ?t=<event code>."
+      },
+      "PreviewCloseRequest": {
+        "type": "object",
+        "required": [],
+        "properties": {
+          "t": {
+            "type": "string"
+          },
+          "night_id": {
+            "type": "string"
+          },
+          "token": {
+            "type": "string"
+          }
+        }
+      },
+      "TipMethod": {
+        "type": "object",
+        "required": [
+          "key",
+          "label",
+          "amount_style"
+        ],
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          },
+          "amount_style": {
+            "type": "string",
+            "enum": [
+              "path",
+              "venmo",
+              "copy",
+              "none"
+            ]
+          }
+        }
+      },
+      "TipsResult": {
+        "type": "object",
+        "required": [
+          "api_version",
+          "enabled",
+          "threshold",
+          "kj_name",
+          "methods"
+        ],
+        "properties": {
+          "api_version": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "threshold": {
+            "type": "number"
+          },
+          "kj_name": {
+            "type": "string"
+          },
+          "methods": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TipMethod"
+            }
+          }
+        }
+      },
+      "TipClaimRequest": {
+        "type": "object",
+        "required": [
+          "client_request_id",
+          "amount"
+        ],
+        "properties": {
+          "t": {
+            "type": "string"
+          },
+          "night_id": {
+            "type": "string"
+          },
+          "amount": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          },
+          "method": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "phone": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "client_request_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Generated once per tip; a retry with the same id never creates a second tip request"
+          }
+        },
+        "description": "The name is always the device's name (needs_name when none). client_request_id makes the claim idempotent (the first response is replayed; 409 busy_retry while the first attempt is still running)."
+      },
+      "TipClaimResult": {
+        "type": "object",
+        "required": [
+          "api_version",
+          "request"
+        ],
+        "properties": {
+          "api_version": {
+            "type": "string"
+          },
+          "request": {
+            "$ref": "#/components/schemas/SongRequest"
+          }
+        }
+      },
+      "TopSong": {
+        "type": "object",
+        "required": [
+          "artist",
+          "title",
+          "plays"
+        ],
+        "properties": {
+          "artist": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "plays": {
+            "type": "integer"
+          }
+        }
+      },
+      "MyStatsResult": {
+        "type": "object",
+        "required": [
+          "api_version",
+          "top_songs"
+        ],
+        "properties": {
+          "api_version": {
+            "type": "string"
+          },
+          "top_songs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TopSong"
+            }
+          }
+        },
+        "description": "Tonight's crowd favourites only: never a per-person lookup"
+      },
+      "SearchVersion": {
+        "type": "object",
+        "description": "One karaoke version of a song, the web's own shape (passed through, so further keys may appear). The fields the web reads are listed.",
+        "required": [
+          "source"
+        ],
+        "properties": {
+          "source": {
+            "type": "string",
+            "description": "local (a file on the box) or kn (community/commercial catalogue row)"
+          },
+          "local": {
+            "type": "object",
+            "description": "With source local: path, artist, title, format",
+            "additionalProperties": true
+          },
+          "kn": {
+            "type": "object",
+            "description": "With source kn: brand_code, brand_name, is_community, youtube_url, mirror_only, divebar (mirror file info)",
+            "additionalProperties": true
+          },
+          "priority_stated": {},
+          "priority_display": {
+            "type": "string"
+          },
+          "priority_class": {
+            "type": "string",
+            "description": "community | commercial"
+          },
+          "priority_brand": {}
+        },
+        "additionalProperties": true
+      },
+      "MakeSongRequest": {
+        "type": "object",
+        "required": [
+          "artist",
+          "title"
+        ],
+        "description": "What the singer typed (or the corrected names).",
+        "properties": {
+          "t": {
+            "type": "string"
+          },
+          "night_id": {
+            "type": "string"
+          },
+          "artist": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          }
+        }
+      },
+      "MakeCheckRequest": {
+        "type": "object",
+        "required": [
+          "artist",
+          "title"
+        ],
+        "properties": {
+          "t": {
+            "type": "string"
+          },
+          "night_id": {
+            "type": "string"
+          },
+          "artist": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "stage": {
+            "type": "string",
+            "enum": [
+              "fast",
+              "full"
+            ],
+            "description": "fast (default) or full (after the audio search)"
+          },
+          "tier": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "enum": [
+              1,
+              2,
+              3,
+              null
+            ],
+            "description": "The audio search's confidence tier, for the full stage"
+          }
+        }
+      },
+      "MakeCheckResult": {
+        "type": "object",
+        "required": [
+          "api_version",
+          "kind"
+        ],
+        "description": "gen's match judge verdict, passed through (further keys may appear). On a gen failure other than a rejected session the box fails open with kind none.",
+        "properties": {
+          "api_version": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "description": "none, cosmetic, correction, ... (gen's verdict kinds)"
+          },
+          "confident": {
+            "type": "boolean"
+          },
+          "canonical_artist": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "canonical_title": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "MakeAudioResult": {
+        "type": "object",
+        "description": "One audio source from gen's search, gen's own shape (passed through; further keys may appear). Rank them with the app's audio-search ranking (mirrors gen's).",
+        "properties": {
+          "index": {
+            "type": "integer",
+            "description": "selection_index for the submit"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "is_lossless": {
+            "type": "boolean"
+          },
+          "seeders": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "MakeSearchResult": {
+        "type": "object",
+        "required": [
+          "api_version",
+          "results"
+        ],
+        "properties": {
+          "api_version": {
+            "type": "string"
+          },
+          "search_session_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Send it back in the submit's source_meta with the chosen result's index"
+          },
+          "results": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MakeAudioResult"
+            }
+          }
+        }
+      },
+      "MakeUrlRequest": {
+        "type": "object",
+        "required": [
+          "url"
+        ],
+        "properties": {
+          "t": {
+            "type": "string"
+          },
+          "night_id": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string",
+            "maxLength": 2000
+          }
+        }
+      },
+      "MakeUrlResult": {
+        "type": "object",
+        "required": [
+          "api_version",
+          "supported"
+        ],
+        "description": "gen's URL check, passed through (further keys may appear)",
+        "properties": {
+          "api_version": {
+            "type": "string"
+          },
+          "supported": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": true
+      },
+      "UseQuickRequest": {
+        "type": "object",
+        "properties": {
+          "t": {
+            "type": "string"
+          },
+          "night_id": {
+            "type": "string"
+          }
+        }
+      },
+      "PushTokenRequest": {
+        "type": "object",
+        "required": [
+          "expo_push_token",
+          "platform"
+        ],
+        "properties": {
+          "t": {
+            "type": "string",
+            "description": "Event code (or the t query parameter)"
+          },
+          "night_id": {
+            "type": "string"
+          },
+          "expo_push_token": {
+            "type": "string",
+            "pattern": "^Expo(nent)?PushToken\\[[^\\[\\]\\s]{1,200}\\]$"
+          },
+          "platform": {
+            "type": "string",
+            "enum": [
+              "ios",
+              "android"
+            ]
+          }
+        }
+      }
+    }
+  }
+}

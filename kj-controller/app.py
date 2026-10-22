@@ -29,6 +29,8 @@ from sing import (
     sync_event_url_overlays,
 )
 import sing_make  # noqa: F401 — registers the /sing/make/* routes on sing_bp
+from app_identity import GenTokenVerifier
+from sing_api_v1 import app_api_bp, install_v1_error_handlers
 import kj_make  # noqa: F401 — registers the /rotation/gen/* routes on routes_bp
 from sing_store import SingStore
 from sms_store import SmsStore
@@ -197,6 +199,23 @@ def _make_on_karaoke_end(overlay_mgr, coordinator):
         except Exception:
             pass
     return _on_end
+
+
+def _install_history_outbox(flask_app, cfg, start):
+    """Sung songs of linked app/web singers -> decide's karaoke log (spec 5.5).
+
+    Rotation mutations trigger a cheap scan; the daemon thread delivers. Inert
+    (rows stay queued) until decide_api_url + decide_kjbox_secret are set."""
+    from history_outbox import HistoryOutbox
+    outbox = HistoryOutbox(
+        flask_app.rotation.store, flask_app.sing_store,
+        getattr(flask_app, 'stats', None), cfg,
+    )
+    flask_app.history_outbox = outbox
+    flask_app.rotation.history_outbox = outbox
+    if start:
+        outbox.start()
+    return outbox
 
 
 def _install_perf_monitor(flask_app, cfg, start):
@@ -428,6 +447,19 @@ def create_app(config=None):
         ).fetchone()
         return row["device_id"] if row else None
 
+    def _request_id_for_rotation_entry(entry):
+        """id of the sing_request linked to this entry tonight (Expo payload data)."""
+        entry_id = entry.get("id")
+        if entry_id is None:
+            return None
+        row = flask_app.sing_store._get_conn().execute(
+            "SELECT id FROM sing_requests "
+            "WHERE linked_entry_id = ? AND created_at >= ? "
+            "ORDER BY created_at DESC LIMIT 1",
+            (entry_id, flask_app.sing_store.get_night_started_at()),
+        ).fetchone()
+        return row["id"] if row else None
+
     flask_app.rotation.push_dispatcher = PushDispatcher(
         store=flask_app.sing_store,
         rotation=flask_app.rotation,
@@ -435,7 +467,11 @@ def create_app(config=None):
         get_current_token=lambda: flask_app.sing_store.get_token(),
         get_linked_phone_for_entry=_phone_for_rotation_entry,
         get_linked_device_for_entry=_device_for_rotation_entry,
+        get_linked_request_id_for_entry=_request_id_for_rotation_entry,
     )
+
+    # Thread only in start_app (really serving), never in create_app (tests).
+    _install_history_outbox(flask_app, cfg, start=False)
 
     flask_app.sleep_manager = SleepManager()
     flask_app.download_queue = {'items': [], 'worker_running': False}
@@ -465,6 +501,12 @@ def create_app(config=None):
     else:
         flask_app.gen_client = None
         flask_app.gen_poller = None
+    # App API (v1) bearer-token verification against gen's /api/users/me.
+    flask_app.app_identity_secret = flask_app.sing_store.app_identity_secret()
+    flask_app.gen_verifier = (
+        GenTokenVerifier(flask_app.gen_client, secret=flask_app.app_identity_secret)
+        if flask_app.gen_client else None
+    )
 
     # Start the background sampler only on a real device (config is None); tests
     # pass a config and get the sampler object without a live thread.
@@ -476,6 +518,8 @@ def create_app(config=None):
 
     flask_app.register_blueprint(routes_bp)
     flask_app.register_blueprint(sing_bp)
+    flask_app.register_blueprint(app_api_bp)
+    install_v1_error_handlers(flask_app)
     install_host_guard(flask_app)
     install_public_host_rewriter(flask_app)
     return flask_app
@@ -644,6 +688,19 @@ def start_app():  # pragma: no cover
         ).fetchone()
         return row["device_id"] if row else None
 
+    def _request_id_for_rotation_entry(entry):
+        """id of the sing_request linked to this entry tonight (Expo payload data)."""
+        entry_id = entry.get("id")
+        if entry_id is None:
+            return None
+        row = flask_app.sing_store._get_conn().execute(
+            "SELECT id FROM sing_requests "
+            "WHERE linked_entry_id = ? AND created_at >= ? "
+            "ORDER BY created_at DESC LIMIT 1",
+            (entry_id, flask_app.sing_store.get_night_started_at()),
+        ).fetchone()
+        return row["id"] if row else None
+
     flask_app.rotation.push_dispatcher = PushDispatcher(
         store=flask_app.sing_store,
         rotation=flask_app.rotation,
@@ -651,8 +708,11 @@ def start_app():  # pragma: no cover
         get_current_token=lambda: flask_app.sing_store.get_token(),
         get_linked_phone_for_entry=_phone_for_rotation_entry,
         get_linked_device_for_entry=_device_for_rotation_entry,
+        get_linked_request_id_for_entry=_request_id_for_rotation_entry,
     )
     log_message("Push dispatcher ready (Web Push).", cfg)
+
+    _install_history_outbox(flask_app, cfg, start=True)
 
     flask_app.sleep_manager = SleepManager()
     if flask_app.sleep_manager.is_sleeping():
@@ -683,6 +743,12 @@ def start_app():  # pragma: no cover
     else:
         flask_app.gen_client = None
         flask_app.gen_poller = None
+    # App API (v1) bearer-token verification against gen's /api/users/me.
+    flask_app.app_identity_secret = flask_app.sing_store.app_identity_secret()
+    flask_app.gen_verifier = (
+        GenTokenVerifier(flask_app.gen_client, secret=flask_app.app_identity_secret)
+        if flask_app.gen_client else None
+    )
 
     _install_perf_monitor(flask_app, cfg, start=True)
     _install_action_recorder(flask_app, cfg, default_enabled=True)
@@ -692,6 +758,8 @@ def start_app():  # pragma: no cover
 
     flask_app.register_blueprint(routes_bp)
     flask_app.register_blueprint(sing_bp)
+    flask_app.register_blueprint(app_api_bp)
+    install_v1_error_handlers(flask_app)
     install_host_guard(flask_app)
     install_public_host_rewriter(flask_app)
 

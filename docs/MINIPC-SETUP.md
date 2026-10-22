@@ -460,6 +460,18 @@ EOF
 
 **Audio note:** This mini PC has PipeWire installed, but VLC bypasses it and uses ALSA directly for HDMI audio. PipeWire's HDMI routing doesn't reliably produce sound on this hardware. The `hdmiout` ALSA device (defined in `/etc/asound.conf`) maps directly to `hw:0,7`. See [AUDIO.md](AUDIO.md) for the full NomadPC audio setup and troubleshooting.
 
+#### 3.4.1 History sync to decide (app singers' karaoke log)
+
+Songs sung by singers who linked their Nomad Karaoke account are pushed to decide. It stays inert until both keys are set in `config.json`:
+
+```json
+"decide_api_url": "https://<decide API base URL>",
+"decide_kjbox_secret": "<value of Secret Manager secret decide-kjbox-secret>",
+"box_id": "nomadpc"
+```
+
+Get the secret with `gcloud secrets versions access latest --secret=decide-kjbox-secret` (needs Andrew's `gcloud auth login`) and paste it on the box only; never commit it or write it into docs. `box_id` scopes night and history ids, so keep it stable. Restart `kj-controller` after editing (or wait for the next auto-deploy). Check delivery in the log for `history_outbox` lines.
+
 ### 3.5 Create Data Directories
 
 ```bash

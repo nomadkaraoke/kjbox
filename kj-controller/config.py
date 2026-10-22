@@ -140,6 +140,20 @@ def load_config(config_file=None):
         "sing_estimate_transition_s": 30,
         "sing_estimate_default_song_s": 240,
         "sing_estimate_min_spread_s": 120,
+        # App-facing singer API (v1). box_id scopes night_id/history_id hashes;
+        # decide_* is where the history outbox pushes sung songs (secret is
+        # per-box, from config.json only).
+        "box_id": "nomadpc",
+        "decide_api_url": "",
+        "decide_kjbox_secret": "",
+        "history_outbox_interval_s": 20,
+        # App links (served under /.well-known on the public sing host).
+        # Android: SHA-256 cert fingerprints allowed to open sing links; EMPTY
+        # until the mobile task fills in the real keystore fingerprint (then
+        # assetlinks.json is just `[]`). iOS: team id + bundle id for the AASA.
+        "app_android_sha256_fingerprints": [],
+        "app_ios_team_id": "55B76HN73D",
+        "app_bundle_id": "com.nomadkaraoke.mobile",
         # Browser preview playback (audition files in the KJ browser; never the
         # device A/V output). Cache transcodes once, ever.
         "preview_cache_dir": "",  # "" -> resolve_preview_cache_dir(): sibling "preview-cache" of download_folder

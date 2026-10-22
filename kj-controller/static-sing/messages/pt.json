@@ -614,5 +614,12 @@
     "socialYes": "Fotos permitidas",
     "socialNo": "Sem fotos, por favor",
     "socialUnset": "Ainda não respondido"
+  },
+  "saveSongs": {
+    "link": "Salvar as músicas de hoje na sua conta do Nomad Karaoke",
+    "explainer": "Vamos salvar as músicas que você cantar hoje na sua conta do Nomad Karaoke, para que o aplicativo possa mostrar seu histórico e recomendar músicas.",
+    "saving": "Salvando as músicas de hoje em {email}",
+    "stop": "Parar de salvar",
+    "failed": "Não conseguimos salvar suas músicas agora. Por favor, tente novamente."
   }
 }

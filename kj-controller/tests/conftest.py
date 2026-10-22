@@ -121,11 +121,16 @@ def flask_test_client(flask_app):
 @pytest.fixture(autouse=True)
 def _reset_rate_limiter():
     """Each test starts with an empty rate-limit window."""
-    sing._rate_limit_state.clear()
-    sing._validate_rate_limit_state.clear()
+    import sing_api_v1
+    for clear in (sing._rate_limit_state.clear, sing._validate_rate_limit_state.clear,
+                  sing_api_v1.failed_code_limit.clear, sing_api_v1.failed_code_ip_limit.clear,
+                  sing_api_v1.gen_verify_limit.clear):
+        clear()
     yield
-    sing._rate_limit_state.clear()
-    sing._validate_rate_limit_state.clear()
+    for clear in (sing._rate_limit_state.clear, sing._validate_rate_limit_state.clear,
+                  sing_api_v1.failed_code_limit.clear, sing_api_v1.failed_code_ip_limit.clear,
+                  sing_api_v1.gen_verify_limit.clear):
+        clear()
 
 
 @pytest.fixture(autouse=True)
@@ -155,3 +160,56 @@ def client(sing_app):
 @pytest.fixture
 def token(sing_app):
     return sing_app.sing_store.ensure_token()
+
+
+# --- App-facing singer API v1 fixtures (tests/integration/v1_contract.py) --
+
+@pytest.fixture
+def gen_stub(sing_app, monkeypatch):
+    """Stub gen's ``GET /api/users/me`` for the v1 token verifier only.
+
+    Installs ``app.gen_verifier = GenTokenVerifier(stub, secret=app.app_identity_secret)``; ``app.gen_client``
+    is left alone so make-it paths behave as in any other test (stub it in the
+    test that needs it). ``users`` maps a session token to the user dict gen
+    returns; an unknown token gets gen's 401. ``down = True`` simulates gen
+    being unreachable (GenApiError status 0). ``calls`` records verified tokens.
+    """
+    from app_identity import GenTokenVerifier
+    from gen_client import GenApiError
+
+    class _GenStub:
+        def __init__(self):
+            self.users = {}
+            self.down = False
+            self.calls = []
+
+        def get_me(self, session_token):
+            self.calls.append(session_token)
+            if self.down:
+                raise GenApiError(0, "connection refused")
+            user = self.users.get(session_token)
+            if user is None:
+                raise GenApiError(401, "Invalid session")
+            return {"user": dict(user), "has_session": True}
+
+    stub = _GenStub()
+    verifier = GenTokenVerifier(stub, secret=sing_app.app_identity_secret)
+    monkeypatch.setattr(sing_app, "gen_verifier", verifier, raising=False)
+    return stub
+
+
+@pytest.fixture
+def app_token(gen_stub):
+    """Factory: ``app_token(email=..., display_name=...)`` → a bearer token gen
+    (stubbed) accepts for that user. Pass ``display_name=None`` for a user
+    without one."""
+    counter = iter(range(1, 10_000))
+
+    def make(email="sam.singer@example.com", display_name="Sam Singer"):
+        tok = f"gen-session-{next(counter)}-{email}"
+        gen_stub.users[tok] = {
+            "email": email, "display_name": display_name, "tenant_id": None,
+        }
+        return tok
+
+    return make

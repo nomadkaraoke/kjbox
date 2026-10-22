@@ -614,5 +614,12 @@
     "socialYes": "Photos OK",
     "socialNo": "Pas de photos, s'il te plaît",
     "socialUnset": "Pas encore répondu"
+  },
+  "saveSongs": {
+    "link": "Enregistrer les morceaux de ce soir sur ton compte Nomad Karaoke",
+    "explainer": "On enregistrera les morceaux que tu chantes ce soir sur ton compte Nomad Karaoke pour que l'appli puisse afficher ton historique et te recommander des chansons.",
+    "saving": "Enregistrement des morceaux de ce soir sur {email}",
+    "stop": "Ne plus enregistrer",
+    "failed": "Impossible d'enregistrer tes morceaux pour le moment. Merci de réessayer."
   }
 }

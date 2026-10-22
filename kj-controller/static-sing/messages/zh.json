@@ -614,5 +614,12 @@
     "socialYes": "可以拍照",
     "socialNo": "请勿拍照",
     "socialUnset": "尚未回答"
+  },
+  "saveSongs": {
+    "link": "将今晚唱过的歌保存到你的 Nomad Karaoke 账户",
+    "explainer": "我们会将你今晚演唱的歌曲保存到你的 Nomad Karaoke 账户，方便你查看历史记录和获取推荐歌曲。",
+    "saving": "正在保存今晚的歌曲到 {email}",
+    "stop": "停止保存",
+    "failed": "刚才未能保存你的歌曲，请重试。"
   }
 }

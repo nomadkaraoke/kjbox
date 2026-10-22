@@ -614,5 +614,12 @@
     "socialYes": "Kuvat OK",
     "socialNo": "Ei kuvia, kiitos",
     "socialUnset": "Ei vielä vastattu"
+  },
+  "saveSongs": {
+    "link": "Tallenna tämän illan kappaleet Nomad Karaoke -tilillesi",
+    "explainer": "Tallennamme tänä iltana laulamasi kappaleet Nomad Karaoke -tilillesi, jotta sovellus voi näyttää historiasi ja suositella kappaleita.",
+    "saving": "Tallennetaan tämän illan kappaleita tilille {email}",
+    "stop": "Lopeta tallentaminen",
+    "failed": "Kappaleiden tallentaminen ei juuri nyt onnistunut. Yritä uudelleen."
   }
 }

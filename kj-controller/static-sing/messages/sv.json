@@ -614,5 +614,12 @@
     "socialYes": "Foton OK",
     "socialNo": "Inga foton, tack",
     "socialUnset": "Inte besvarat ännu"
+  },
+  "saveSongs": {
+    "link": "Spara kvällens låtar på ditt Nomad Karaoke-konto",
+    "explainer": "Vi sparar låtarna du sjunger ikväll på ditt Nomad Karaoke-konto, så att appen kan visa din historik och rekommendera låtar.",
+    "saving": "Sparar kvällens låtar till {email}",
+    "stop": "Sluta spara",
+    "failed": "Det gick inte att spara dina låtar just nu. Försök igen."
   }
 }

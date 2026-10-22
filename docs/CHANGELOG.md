@@ -2,6 +2,22 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-10-22 - App API v1, history outbox, web "Save tonight's songs", local stack (v0.135.0)
+
+- **`/sing/api/v1/*`** for the Nomad Karaoke app: gen-token auth (verified via gen, cached), server-side
+  ownership across linked devices, idempotent submits/changes/tip claims, closed JSON error enum, ETag
+  rotation, previews, make-it with the app user's gen account, `/me` with linked-device songs, rename guard.
+  Strict contract in `kj-controller/docs/api/singer-v1.openapi.json`. Existing `/sing/*` is unchanged.
+- **History outbox:** songs marked Done for linked singers go to decide's karaoke log
+  (`PUT/DELETE /api/partner/kjbox/karaoke-log/{history_id}`); undo retracts. Inert until `decide_api_url` and
+  `decide_kjbox_secret` are set (see MINIPC-SETUP 3.4.1).
+- **Web:** "Save tonight's songs to your Nomad Karaoke account" (`/sing/account/link|unlink`; sign-in works
+  with make-it off). `/sing/forget` now requires the event code.
+- **Expo push** channel (`POST /push-token`, new `sung` step); `/.well-known/assetlinks.json` and
+  `apple-app-site-association` (Android fingerprints from `app_android_sha256_fingerprints`).
+- **Local stack** (`kj-controller/scripts/local-stack.sh`, port 8040), loopback-only test API and a night-replay
+  test; see TESTING.md.
+
 ## 2026-10-16 - Night clips tagged the previous singer: match on play start, not Done time (v0.134.1)
 
 - The night-clips tool matched each phone clip to the latest `sung_at` before it. Since the Night Log

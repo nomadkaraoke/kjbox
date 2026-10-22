@@ -222,6 +222,7 @@ let DEVICE_ID = getDeviceId();
 function rotateDeviceId() {
   DEVICE_ID = _genDeviceId();
   LS.set(DEVICE_ID_KEY, DEVICE_ID);
+  state.account = _freshAccount();
 }
 
 const PHONE_RE = /^\+?[0-9 \-()]{7,20}$/;
@@ -276,7 +277,15 @@ const state = {
   // Tip config ({enabled, threshold, methods}) — fetched once at boot; the
   // 💜 Tip tab only renders when the KJ has payment handles configured.
   tipInfo: null,
+  // "Save tonight's songs to your Nomad Karaoke account" (spec 5.6) — see
+  // saveSongsSlot(). Reset when a different person takes over the phone.
+  account: _freshAccount(),
 };
+
+function _freshAccount() {
+  return { loaded: false, ready: false, email: null, linked: false, busy: false,
+           err: "", stage: "idle", emailInput: "", code: "", offer: false };
+}
 
 const MAX_PARTNERS = 3;
 const KNOWN_SINGERS_TTL_MS = 60000;   // Existing-singer picker list cache
@@ -643,6 +652,20 @@ const makeFlow = createMakeFlow({
   getDeviceId: () => DEVICE_ID,
   onPicked: (selected) => { state.selected = selected; state.step = "confirm"; render(); },
   onBack: () => { state.step = "search"; render(); },
+  // A make-it sign-in offers "Save tonight's songs" with one tap (A9-R1):
+  // signing in never links by itself.
+  onAccount: (acct) => {
+    Object.assign(state.account, {
+      loaded: true, ready: true, email: acct.email || null, linked: !!acct.linked,
+    });
+  },
+  onSignedIn: (email) => {
+    Object.assign(state.account, {
+      loaded: true, ready: true, email, linked: false, offer: true, err: "", stage: "idle",
+    });
+  },
+  onSignedOut: () => { state.account = { ..._freshAccount(), loaded: true, ready: true }; },
+  saveSongsSlot: (variant) => saveSongsSlot(variant),
 });
 
 // Enter the identity form in "edit my name" mode: pre-filled with the current
@@ -3814,6 +3837,9 @@ function renderDone() {
     state.name ? el("p", { class: "hint done-identity" },
       t("mySongs.singingAs"), " ", el("strong", {}, state.name), " · ",
       editNameLink("done")) : null,
+    // "Save tonight's songs to your Nomad Karaoke account" — sits with the
+    // identity line it extends; hidden until /make/account answers.
+    saveSongsSlot("main"),
     // "↕ Reorder songs" toggle (+ post-save notice) — filled by the poll.
     el("div", { class: "reorder-controls" }),
     state._reorderMode
@@ -3855,7 +3881,209 @@ function renderDone() {
   // refresh inside it is still async.
   setTimeout(maybeShowPushPrompt, 0);
   pollMyRequests(card);
+  loadSaveSongs();
   return card;
+}
+
+// --- "Save tonight's songs to your Nomad Karaoke account" (spec 5.6) -------
+//
+// A web singer signs in with the make-it email code and links this device to
+// their Nomad Karaoke account for tonight; kjbox then sends the songs they sing
+// to decide, as it does for app users. Linking is always an explicit tap.
+// Slots: "main" (Your songs, once, under the name line, with the sign-in form;
+// A9-R5) and "offer" (right after a make-it sign-in). The save sign-in sends
+// purpose "save", so it works even when the host has make-it off.
+
+const _webDeviceOk = () => /^[0-9a-f]{32}$/.test(DEVICE_ID || "");
+
+async function loadSaveSongs() {
+  if (!_webDeviceOk()) return;
+  try {
+    const d = await fetchJson(`${BASE}/make/account?device_id=${encodeURIComponent(DEVICE_ID)}`);
+    Object.assign(state.account, {
+      loaded: true, ready: !!d.ready, email: d.email || null, linked: !!d.linked,
+    });
+  } catch {
+    return;   // offline / old server: keep whatever we showed
+  }
+  paintSaveSongs();
+}
+
+function paintSaveSongs() {
+  document.querySelectorAll(".save-songs-slot").forEach((slot) => {
+    slot.replaceWith(saveSongsSlot(slot.dataset.variant));
+  });
+}
+
+function _saveSongsErr(e) {
+  const code = e?.data?.error;
+  const map = {
+    email_invalid: "make.errEmail", invalid_code: "make.errCode", expired: "make.errCodeExpired",
+    too_many_attempts: "make.errTooManyAttempts", too_many_codes: "make.errTooManyCodes",
+    rate_limited: "confirm.tooMany", signin_required: "make.errSignedOut",
+  };
+  return t(map[code] || "saveSongs.failed");
+}
+
+async function _saveSongsPost(path, body) {
+  return fetchJson(`${BASE}/${path}`, {
+    method: "POST",
+    body: JSON.stringify({ device_id: DEVICE_ID, locale: getLocale(), ...body }),
+  });
+}
+
+async function saveSongsLink() {
+  const a = state.account;
+  if (a.busy) return;
+  if (!a.email) {
+    // Not signed in on this phone yet: the email code comes first.
+    Object.assign(a, { stage: "email", err: "" });
+    paintSaveSongs();
+    const input = document.querySelector('[data-testid="save-songs-email"]');
+    if (input) { input.scrollIntoView({ block: "center" }); input.focus(); }
+    return;
+  }
+  Object.assign(a, { busy: true, err: "" });
+  paintSaveSongs();
+  try {
+    const d = await _saveSongsPost("account/link", {});
+    Object.assign(a, { busy: false, linked: true, email: d.email || a.email, stage: "idle" });
+  } catch (e) {
+    const signedOut = e?.data?.error === "signin_required";
+    Object.assign(a, { busy: false, err: _saveSongsErr(e) },
+      signedOut ? { email: null, stage: "email" } : {});
+  }
+  paintSaveSongs();
+}
+
+async function saveSongsStop() {
+  const a = state.account;
+  if (a.busy) return;
+  Object.assign(a, { busy: true, err: "" });
+  paintSaveSongs();
+  try {
+    await _saveSongsPost("account/unlink", {});
+    Object.assign(a, { busy: false, linked: false, offer: false });
+  } catch (e) {
+    Object.assign(a, { busy: false, err: _saveSongsErr(e) });
+  }
+  paintSaveSongs();
+}
+
+async function saveSongsSendCode() {
+  const a = state.account;
+  const email = (a.emailInput || "").trim();
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { a.err = t("make.errEmail"); return paintSaveSongs(); }
+  Object.assign(a, { busy: true, err: "" });
+  paintSaveSongs();
+  try {
+    await _saveSongsPost("make/send-code", { email, purpose: "save" });
+    Object.assign(a, { busy: false, stage: "code", code: "" });
+  } catch (e) {
+    Object.assign(a, { busy: false, err: _saveSongsErr(e) });
+  }
+  paintSaveSongs();
+  document.querySelector('[data-testid="save-songs-code"]')?.focus();
+}
+
+async function saveSongsVerify() {
+  const a = state.account;
+  const code = (a.code || "").replace(/\s+/g, "");
+  if (a.busy) return;
+  if (!/^\d{6}$/.test(code)) { a.err = t("make.errCode"); return paintSaveSongs(); }
+  Object.assign(a, { busy: true, err: "" });
+  paintSaveSongs();
+  try {
+    const d = await _saveSongsPost("make/verify-code",
+      { email: a.emailInput.trim(), code, purpose: "save" });
+    Object.assign(a, { busy: false, email: d.email, stage: "idle", code: "" });
+    // Same gen sign-in as make-it: the wizard mustn't ask for it again.
+    if (state.make) state.make.email = d.email;
+  } catch (e) {
+    Object.assign(a, { busy: false, err: _saveSongsErr(e) });
+    return paintSaveSongs();
+  }
+  // The singer tapped "Save tonight's songs" to get here: link now.
+  await saveSongsLink();
+}
+
+function _saveSongsForm(a) {
+  if (a.stage === "code") {
+    return el("div", { class: "save-songs-form" },
+      el("p", { class: "hint" }, t("make.codeSent", { email: a.emailInput.trim() })),
+      el("input", {
+        type: "text", class: "sing-empty-input", inputmode: "numeric",
+        autocomplete: "one-time-code", maxlength: "6", placeholder: "123456",
+        value: a.code, "data-testid": "save-songs-code",
+        oninput: (e) => { a.code = e.target.value; if (/^\d{6}$/.test(a.code.trim())) saveSongsVerify(); },
+      }),
+      el("button", {
+        class: "btn primary", "data-testid": "save-songs-verify",
+        disabled: a.busy ? "disabled" : null, onclick: saveSongsVerify,
+      }, a.busy ? t("common.sending") : t("make.verify")),
+      el("div", { class: "save-songs-actions" },
+        el("button", { class: "btn link", onclick: saveSongsSendCode }, t("make.resend")),
+        el("button", {
+          class: "btn link",
+          onclick: () => { Object.assign(a, { stage: "email", err: "" }); paintSaveSongs(); },
+        }, t("make.differentEmail"))));
+  }
+  return el("div", { class: "save-songs-form" },
+    el("label", { class: "sing-empty-label" }, t("make.emailLabel"),
+      el("input", {
+        type: "email", class: "sing-empty-input", autocomplete: "email", inputmode: "email",
+        placeholder: "you@example.com", value: a.emailInput, "data-testid": "save-songs-email",
+        oninput: (e) => { a.emailInput = e.target.value; },
+        onkeydown: (e) => { if (e.key === "Enter") saveSongsSendCode(); },
+      })),
+    el("button", {
+      class: "btn primary", "data-testid": "save-songs-send-code",
+      disabled: a.busy ? "disabled" : null, onclick: saveSongsSendCode,
+    }, a.busy ? t("common.sending") : t("make.sendCode")),
+    el("div", { class: "save-songs-actions" },
+      el("button", {
+        class: "btn link", "data-testid": "save-songs-cancel",
+        onclick: () => { Object.assign(a, { stage: "idle", err: "" }); paintSaveSongs(); },
+      }, t("common.cancel"))));
+}
+
+// One slot of the save-songs UI. Returns an empty (hidden) slot until we know
+// the device can sign in, so nothing flashes on a box without make-it.
+function saveSongsSlot(variant = "main") {
+  const a = state.account;
+  const slot = el("div", {
+    class: `save-songs-slot save-songs-${variant}`, "data-variant": variant,
+    "data-testid": `save-songs-${variant}`,
+  });
+  const usable = _webDeviceOk() && a.loaded && (a.email || a.ready);
+  // The make-it offer shows only right after that sign-in (or once linked from it).
+  if (!usable || (variant === "offer" && !a.offer)) {
+    slot.setAttribute("hidden", "");
+    return slot;
+  }
+  if (a.linked) {
+    slot.appendChild(el("p", { class: "hint save-songs-status", "data-testid": "save-songs-status" },
+      t("saveSongs.saving", { email: a.email }), " ",
+      el("button", {
+        class: "btn link", "data-testid": "save-songs-stop",
+        disabled: a.busy ? "disabled" : null, onclick: saveSongsStop,
+      }, t("saveSongs.stop"))));
+  } else {
+    const showForm = variant === "main" && !a.email && a.stage !== "idle";
+    if (!showForm) {
+      slot.appendChild(el("button", {
+        class: "btn link save-songs-link", "data-testid": "save-songs-link",
+        disabled: a.busy ? "disabled" : null, onclick: saveSongsLink,
+      }, t("saveSongs.link")));
+    }
+    slot.appendChild(el("p", { class: "hint save-songs-explainer", "data-testid": "save-songs-explainer" },
+      t("saveSongs.explainer")));
+    if (showForm) slot.appendChild(_saveSongsForm(a));
+  }
+  if (a.err) {
+    slot.appendChild(el("p", { class: "error", "data-testid": "save-songs-error" }, a.err));
+  }
+  return slot;
 }
 
 async function pollMyRequests(card) {

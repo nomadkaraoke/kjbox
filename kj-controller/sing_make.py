@@ -26,9 +26,10 @@ import threading
 import time
 from collections import defaultdict, deque
 
-from flask import current_app, jsonify, request
+from flask import current_app, g, has_request_context, jsonify, request
 
-from gen_client import GenApiError
+from gen_client import CREATE_JOB_TIMEOUT, REQUEST_TIMEOUT, GenApiError
+from app_identity import app_device_id
 from sing import _client_ip, require_token, sing_bp
 
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
@@ -44,7 +45,16 @@ _MAKE_RATE_PER_IP = 400
 _CODE_RATE_WINDOW_S = 3600
 _CODE_RATE_PER_DEVICE = 5
 _CODE_RATE_PER_IP = 40
+# Save tonight's songs (link / unlink): its own budget, apart from song requests.
+_CLAIM_RATE_WINDOW_S = 600
+_CLAIM_RATE_PER_DEVICE = 20
+_CLAIM_RATE_PER_IP = 300
 _lock = threading.Lock()
+# Worst-case wall time of a make-it submit: the submit-time show credit (up to
+# two attempts) then gen's create-job. ``requests`` applies a timeout to the
+# connect and to each read separately, so each call can take up to twice its
+# timeout. The v1 submit's idempotency claim must outlive this (A7-R2).
+MAKE_SUBMIT_BUDGET_S = 2 * (2 * REQUEST_TIMEOUT) + 2 * CREATE_JOB_TIMEOUT
 
 
 def _state(app):
@@ -65,6 +75,42 @@ def make_flow_ready(app):
     """True when the singer make-it flow can run (gen + partner secret set)."""
     gen = getattr(app, "gen_client", None)
     return bool(gen is not None and gen.singer_flow_configured())
+
+
+def _app_device(device_id):
+    """The app user's request (``/sing/api/v1``) for this device, if any."""
+    if not (device_id and has_request_context()):
+        return False
+    user = g.get("app_user")
+    return bool(user is not None and g.get("app_gen_account")
+                and device_id == user.device_id)
+
+
+def _gen_account(store, device_id):
+    """The gen sign-in to act as for ``device_id``: the app's own gen session
+    (the v1 bearer, request-only, never stored) when this is the app user's
+    device on a v1 call, else the device's stored web sign-in."""
+    if _app_device(device_id):
+        return dict(g.app_gen_account)
+    return store.get_gen_account(device_id) if device_id else None
+
+
+def rate_retry_after(device_id, bucket="make", window=_MAKE_RATE_WINDOW_S,
+                     per_ip=_MAKE_RATE_PER_IP, per_device=_MAKE_RATE_PER_DEVICE):
+    """Whole seconds until the device's (or this IP's) make budget frees a
+    slot; None when neither budget is used up."""
+    now = time.monotonic()
+    keys = [(f"{bucket}:ip:{_client_ip(request)}", per_ip)]
+    if device_id:
+        keys.append((f"{bucket}:dev:{device_id}", per_device))
+    rate = _state(current_app._get_current_object())["rate"]
+    waits = []
+    with _lock:
+        for key, limit in keys:
+            live = [ts for ts in rate.get(key, ()) if ts >= now - window]
+            if limit > 0 and len(live) >= limit:
+                waits.append(live[len(live) - limit] + window - now)
+    return max(1, int(max(waits)) + 1) if waits else None
 
 
 def _rate_limited(device_id, bucket="make", window=_MAKE_RATE_WINDOW_S,
@@ -92,14 +138,21 @@ def _body():
     return data, device_id
 
 
-def _guard(device_id, need_account=True):
-    """Common checks. Returns (account, error_response)."""
+def _guard(device_id, need_account=True, purpose="make"):
+    """Common checks. Returns (account, error_response).
+
+    ``purpose="save"`` (the "Save tonight's songs" sign-in, spec 5.6) skips
+    only the host's make-it toggle and simple mode: saving songs works on any
+    night gen + the partner secret are configured. Rate limits stay."""
     app = current_app._get_current_object()
     store = app.sing_store
-    if not (store.is_accepting_make_requests() and make_flow_ready(app)):
+    if not make_flow_ready(app):
         return None, (jsonify({"error": "make_requests_disabled"}), 400)
-    if store.is_simple_mode():
-        return None, (jsonify({"error": "simple_mode_disabled_source"}), 400)
+    if purpose != "save":
+        if not store.is_accepting_make_requests():
+            return None, (jsonify({"error": "make_requests_disabled"}), 400)
+        if store.is_simple_mode():
+            return None, (jsonify({"error": "simple_mode_disabled_source"}), 400)
     # The device id selects the stored gen sign-in, so it must be the random
     # 32-hex id (sing.js falls back to a short guessable one without crypto).
     if not re.fullmatch(r"[0-9a-f]{32}", device_id or ""):
@@ -108,7 +161,7 @@ def _guard(device_id, need_account=True):
         return None, (jsonify({"error": "rate_limited"}), 429)
     if not need_account:
         return None, None
-    account = store.get_gen_account(device_id)
+    account = _gen_account(store, device_id)
     if not account:
         return None, (jsonify({"error": "signin_required"}), 401)
     return account, None
@@ -117,6 +170,14 @@ def _guard(device_id, need_account=True):
 def gen_error_response(exc, device_id=None):
     """Translate a GenApiError from a singer-session call into a JSON reply."""
     if exc.status == 401:
+        if _app_device(device_id):
+            # The app's own gen session was refused: nothing is stored to
+            # forget, and the app's session check decides (v1 401). Drop the
+            # verifier's cached "valid" so the next v1 call re-checks with gen.
+            verifier = getattr(current_app, "gen_verifier", None)
+            if verifier is not None:
+                verifier.invalidate(g.app_gen_account.get("session_token"))
+            return jsonify({"error": "gen_unauthenticated"}), 401
         # Session expired/revoked on gen — forget it; the singer re-verifies.
         if device_id:
             current_app.sing_store.clear_gen_account(device_id)
@@ -138,6 +199,10 @@ def gen_error_response(exc, device_id=None):
     return jsonify({"error": "gen_unavailable"}), 502
 
 
+def _purpose(data):
+    return "save" if str(data.get("purpose") or "") == "save" else "make"
+
+
 def _locale(data):
     loc = str(data.get("locale") or "").strip()[:12]
     return loc or None
@@ -147,18 +212,40 @@ def _locale(data):
 @require_token
 def make_account():
     device_id = str(request.args.get("device_id") or "").strip()[:64]
-    account = current_app.sing_store.get_gen_account(device_id) if device_id else None
+    store = current_app.sing_store
+    account = _gen_account(store, device_id)
     return jsonify({
         "ready": make_flow_ready(current_app._get_current_object()),
         "email": account["email"] if account else None,
+        "linked": _linked_tonight(store, device_id, account),
     })
+
+
+def _linked_tonight(store, device_id, account):
+    """True when this device is saving tonight's songs to its signed-in account."""
+    night = store.get_night_started_at()
+    if not (account and device_id and night):
+        return False
+    return store.account_for_device(device_id, night) == account["email"]
+
+
+def _unlink_if_other(store, device_id, email):
+    """Drop tonight's link when this device is now signed in as someone else
+    (or signed out): another person on the phone never saves to the old
+    account. Re-verifying the same email keeps it."""
+    night = store.get_night_started_at()
+    if not (device_id and night) or store.is_app_device(device_id):
+        return
+    linked = store.account_for_device(device_id, night)
+    if linked and linked != email:
+        store.unlink_account(device_id, night)
 
 
 @sing_bp.route("/make/send-code", methods=["POST"])
 @require_token
 def make_send_code():
     data, device_id = _body()
-    _, err = _guard(device_id, need_account=False)
+    _, err = _guard(device_id, need_account=False, purpose=_purpose(data))
     if err:
         return err
     email = str(data.get("email") or "").strip().lower()[:254]
@@ -184,7 +271,7 @@ def make_send_code():
 @require_token
 def make_verify_code():
     data, device_id = _body()
-    _, err = _guard(device_id, need_account=False)
+    _, err = _guard(device_id, need_account=False, purpose=_purpose(data))
     if err:
         return err
     email = str(data.get("email") or "").strip().lower()[:254]
@@ -204,6 +291,8 @@ def make_verify_code():
     if not token:
         return jsonify({"error": "gen_unavailable"}), 502
     current_app.sing_store.set_gen_account(device_id, email, token)
+    # A9-R1: verifying never links; it only ends a link to a different account.
+    _unlink_if_other(current_app.sing_store, device_id, email)
     return jsonify({"email": email})
 
 
@@ -213,7 +302,61 @@ def make_sign_out():
     _data, device_id = _body()
     if device_id:
         current_app.sing_store.clear_gen_account(device_id)
+        _unlink_if_other(current_app.sing_store, device_id, None)
     return jsonify({"status": "ok"})
+
+
+# --- "Save tonight's songs to your Nomad Karaoke account" (spec 5.6) --------
+
+def _claim_guard():
+    """Checks shared by link/unlink. Returns (store, device_id, account, night,
+    error_response)."""
+    _data, device_id = _body()
+    store = current_app.sing_store
+    # Own budget (not the song-request one): a singer toggling Save/Stop must
+    # never cost them a song request.
+    if _rate_limited(device_id, bucket="claim", window=_CLAIM_RATE_WINDOW_S,
+                     per_ip=_CLAIM_RATE_PER_IP, per_device=_CLAIM_RATE_PER_DEVICE):
+        return None, None, None, None, (jsonify({"error": "rate_limited"}), 429)
+    # A web device id (the singer UI's random 32 hex) that isn't the app's own:
+    # the app links its device itself, and a web claim must never rewrite it.
+    if not re.fullmatch(r"[0-9a-f]{32}", device_id) or store.is_app_device(device_id):
+        return None, None, None, None, (jsonify({"error": "invalid"}), 400)
+    account = store.get_gen_account(device_id)
+    if not account:
+        return None, None, None, None, (jsonify({"error": "signin_required"}), 400)
+    if device_id == app_device_id(account["email"], store.app_identity_secret()):
+        return None, None, None, None, (jsonify({"error": "invalid"}), 400)
+    return store, device_id, account, store.get_night_started_at(), None
+
+
+@sing_bp.route("/account/link", methods=["POST"])
+@require_token
+def account_link():
+    """Link this web device to its signed-in gen account for tonight; the
+    history outbox then sends tonight's sung songs (already sung ones too)."""
+    store, device_id, account, night, err = _claim_guard()
+    if err:
+        return err
+    night = night or store.ensure_night_started()
+    store.link_account(device_id, account["email"], "web", night)
+    outbox = getattr(current_app, "history_outbox", None)
+    if outbox is not None:
+        outbox.scan(force=True)   # never raises; the worker also catches up
+    return jsonify({"linked": True, "email": account["email"]})
+
+
+@sing_bp.route("/account/unlink", methods=["POST"])
+@require_token
+def account_unlink():
+    """Stop saving: future songs tonight aren't sent. Songs already saved stay."""
+    store, device_id, _account, night, err = _claim_guard()
+    if err:
+        return err
+    if not night:
+        return ("", 204)   # no night yet: nothing can be linked; don't start one
+    store.unlink_account(device_id, night)
+    return jsonify({"linked": False})
 
 
 @sing_bp.route("/make/check", methods=["POST"])
@@ -364,7 +507,7 @@ def create_job(app, device_id, artist, title, source_meta):
     ``source_meta`` is either {search_session_id, selection_index} (a result the
     singer picked) or {youtube_url} (gen's URL fallback).
     """
-    account = app.sing_store.get_gen_account(device_id) if device_id else None
+    account = _gen_account(app.sing_store, device_id)
     if not account:
         return None, (jsonify({"error": "signin_required"}), 401)
     meta = source_meta if isinstance(source_meta, dict) else {}
@@ -449,7 +592,7 @@ def make_review_link(req_id):
     if _rate_limited(device_id):
         return jsonify({"error": "rate_limited"}), 429
     store = current_app.sing_store
-    account = store.get_gen_account(device_id) if device_id else None
+    account = _gen_account(store, device_id)
     if not account:
         return jsonify({"error": "signin_required"}), 401
     req = store.get_request(req_id)

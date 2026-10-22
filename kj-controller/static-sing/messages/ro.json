@@ -614,5 +614,12 @@
     "socialYes": "Pozele sunt OK",
     "socialNo": "Fără poze, te rog",
     "socialUnset": "Fără răspuns încă"
+  },
+  "saveSongs": {
+    "link": "Salvează melodiile din această seară în contul tău Nomad Karaoke",
+    "explainer": "Vom salva melodiile pe care le cânți în această seară în contul tău Nomad Karaoke, astfel încât aplicația să-ți poată arăta istoricul și să-ți recomande melodii.",
+    "saving": "Se salvează melodiile din această seară în contul {email}",
+    "stop": "Nu mai salva",
+    "failed": "Nu am putut salva melodiile chiar acum. Te rugăm să încerci din nou."
   }
 }

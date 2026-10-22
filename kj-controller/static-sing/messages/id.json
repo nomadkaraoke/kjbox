@@ -614,5 +614,12 @@
     "socialYes": "Boleh difoto",
     "socialNo": "Tolong jangan difoto",
     "socialUnset": "Belum dijawab"
+  },
+  "saveSongs": {
+    "link": "Simpan lagu malam ini ke akun Nomad Karaoke kamu",
+    "explainer": "Kami akan menyimpan lagu-lagu yang kamu nyanyikan malam ini ke akun Nomad Karaoke kamu, agar aplikasi bisa menampilkan riwayat bernyanyimu dan merekomendasikan lagu.",
+    "saving": "Menyimpan lagu malam ini ke {email}",
+    "stop": "Berhenti menyimpan",
+    "failed": "Kami belum bisa menyimpan lagumu tadi. Silakan coba lagi."
   }
 }

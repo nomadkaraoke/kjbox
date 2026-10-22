@@ -6,6 +6,7 @@ Serves the QR-reachable request form. The companion admin endpoints at
 Design doc: docs/archive/2026-04-18-public-request-form-design.md
 """
 
+from urllib.parse import quote
 import ipaddress
 import json
 import os
@@ -28,6 +29,7 @@ from flask import (
     session,
     url_for,
 )
+from singer_names import fold_name
 from sing_store import SingStore
 from wait_estimate import compute_all_estimates, compute_estimate
 
@@ -415,6 +417,11 @@ def _public_hosts(cfg):
     return hosts
 
 
+# Paths outside the sing blueprint that the public host still serves: the
+# app-facing API (sing_api_v1, its own blueprint) and well-known files.
+_PUBLIC_HOST_PATH_PREFIXES = ("/sing/api/v1/", "/sing/.well-known/")
+
+
 def install_host_guard(flask_app):
     """Register a before_request hook that blocks non-`sing.*` endpoints on the public host."""
 
@@ -429,6 +436,8 @@ def install_host_guard(flask_app):
             return None
         endpoint = request.endpoint or ""
         if endpoint.startswith("sing."):
+            return None
+        if request.endpoint and request.path.startswith(_PUBLIC_HOST_PATH_PREFIXES):
             return None
         abort(404)
 
@@ -674,6 +683,47 @@ def manifest():
             },
         ],
     })
+
+
+def _well_known_response(payload):
+    resp = current_app.response_class(
+        json.dumps(payload, separators=(",", ":")), mimetype="application/json")
+    resp.headers["Cache-Control"] = "max-age=3600"
+    return resp
+
+
+@sing_bp.route("/.well-known/assetlinks.json", methods=["GET"])
+def assetlinks():
+    """Android App Links: which app (package + signing cert) may open sing links.
+
+    Public, unauthenticated, no event code. With no fingerprints configured the
+    answer is a valid empty list.
+    """
+    cfg = getattr(current_app, "kj_config", None) or {}
+    prints = [str(p).strip().upper() for p in (cfg.get("app_android_sha256_fingerprints") or []) if p]
+    if not prints:
+        return _well_known_response([])
+    return _well_known_response([{
+        "relation": ["delegate_permission/common.handle_all_urls"],
+        "target": {
+            "namespace": "android_app",
+            "package_name": cfg.get("app_bundle_id") or "com.nomadkaraoke.mobile",
+            "sha256_cert_fingerprints": prints,
+        },
+    }])
+
+
+@sing_bp.route("/.well-known/apple-app-site-association", methods=["GET"])
+def apple_app_site_association():
+    """iOS Universal Links. Served as application/json with no extension."""
+    cfg = getattr(current_app, "kj_config", None) or {}
+    app_id = f"{cfg.get('app_ios_team_id') or '55B76HN73D'}.{cfg.get('app_bundle_id') or 'com.nomadkaraoke.mobile'}"
+    return _well_known_response({"applinks": {"details": [{
+        "appIDs": [app_id],
+        # `/` with a ?t= event code (the QR/landing link); `/*` covers the
+        # kjbox.cc-style short paths.
+        "components": [{"/": "/", "?": {"t": "?*"}}, {"/": "/*"}],
+    }]}})
 
 
 @sing_bp.route("/sw.js", methods=["GET"])
@@ -1128,7 +1178,25 @@ def preview_cdg(tok, part):
 @require_token
 def preview_hls(tok, name):
     from routes import preview_hls as _impl
-    return _impl(tok, name)
+    resp = current_app.make_response(_impl(tok, name))
+    t = request.args.get("t")
+    if t and name.endswith(".m3u8") and resp.status_code == 200:
+        # Native players (AVPlayer/ExoPlayer) fetch the relative segment URLs
+        # without our session cookie or the playlist's query, so carry the
+        # event code on every segment line. Requests without ?t= (the web
+        # player, which has the cookie) get the playlist untouched.
+        resp.direct_passthrough = False
+        suffix = "t=" + quote(t, safe="")
+        lines = []
+        for line in resp.get_data(as_text=True).splitlines():
+            if line.strip() and not line.startswith("#"):
+                line += ("&" if "?" in line else "?") + suffix
+            lines.append(line)
+        resp.set_data("\n".join(lines) + "\n")
+        resp.headers.pop("Content-Length", None)
+        resp.headers.pop("ETag", None)
+        resp.headers.pop("Last-Modified", None)
+    return resp
 
 
 # --- Tipping (tip-for-heart priority) --------------------------------------
@@ -1760,11 +1828,7 @@ def _split_duet_name(name):
 
 def _fold_name(name):
     """Casefolded, accent-stripped, alnum+space form for name comparison."""
-    import unicodedata
-    decomposed = unicodedata.normalize("NFKD", name or "")
-    stripped = "".join(c for c in decomposed if not unicodedata.combining(c))
-    cleaned = "".join(c if (c.isalnum() or c.isspace()) else " " for c in stripped)
-    return " ".join(cleaned.casefold().split())
+    return fold_name(name)
 
 
 def match_known_singer(typed, known_names, exclude=None):
@@ -1939,36 +2003,11 @@ def status(request_id):
 _MY_REQUESTS_MAX_IDS = 20
 
 
-@sing_bp.route("/my-requests", methods=["GET"])
-@require_token
-def my_requests():
-    """Multi-id status feed for the singer's 'your night' done screen.
-
-    Returns the requested ids in order, dropping unknown ids, ids whose stored
-    token differs from the current event token, AND prior-night ids (the token
-    is reused across nights, so token-match alone leaks yesterday's songs into
-    "tonight" — see _belongs_to_current_night). Matches /sing/status.
-    `now_playing` is included once at the top level so the done screen doesn't
-    need a second round trip to populate the header.
-    """
-    store = current_app.sing_store
-    raw = request.args.get("ids", "") or ""
-    pieces = [p for p in raw.split(",") if p.strip()]
-    if len(pieces) > _MY_REQUESTS_MAX_IDS:
-        return jsonify({"error": f"max {_MY_REQUESTS_MAX_IDS} ids per call"}), 400
-    try:
-        ids = [int(p) for p in pieces]
-    except ValueError:
-        return jsonify({"error": "ids must be integers"}), 400
-
-    token = _extract_token()
-    rotation_mgr = getattr(current_app, "rotation", None)
-
-    entries = []
-    now_playing_dict = {"now_singing": None, "up_next": None, "queued_count": 0}
-    if rotation_mgr is not None:
-        entries, _active, now_playing_dict = _build_now_playing(rotation_mgr)
-
+def _my_request_items(store, ids, token, rotation_mgr, entries):
+    """The /my-requests item for each of ``ids`` (in order) that exists, carries
+    event code ``token`` and belongs to tonight. ``entries`` is the rotation as
+    ``_build_now_playing`` returns it (the active queue). Shared with the app
+    API's ``GET /sing/api/v1/me``."""
     # A sing_request stays 'approved' even after its rotation entry has been
     # sung, so the done screen needs to know which songs are already performed
     # (Done/Left) to move them out of the active list. `entries` is the ACTIVE
@@ -2030,6 +2069,40 @@ def my_requests():
             item.pop("estimate", None)
         item["performed"] = performed
         out.append(item)
+    return out
+
+
+@sing_bp.route("/my-requests", methods=["GET"])
+@require_token
+def my_requests():
+    """Multi-id status feed for the singer's 'your night' done screen.
+
+    Returns the requested ids in order, dropping unknown ids, ids whose stored
+    token differs from the current event token, AND prior-night ids (the token
+    is reused across nights, so token-match alone leaks yesterday's songs into
+    "tonight" — see _belongs_to_current_night). Matches /sing/status.
+    `now_playing` is included once at the top level so the done screen doesn't
+    need a second round trip to populate the header.
+    """
+    store = current_app.sing_store
+    raw = request.args.get("ids", "") or ""
+    pieces = [p for p in raw.split(",") if p.strip()]
+    if len(pieces) > _MY_REQUESTS_MAX_IDS:
+        return jsonify({"error": f"max {_MY_REQUESTS_MAX_IDS} ids per call"}), 400
+    try:
+        ids = [int(p) for p in pieces]
+    except ValueError:
+        return jsonify({"error": "ids must be integers"}), 400
+
+    token = _extract_token()
+    rotation_mgr = getattr(current_app, "rotation", None)
+
+    entries = []
+    now_playing_dict = {"now_singing": None, "up_next": None, "queued_count": 0}
+    if rotation_mgr is not None:
+        entries, _active, now_playing_dict = _build_now_playing(rotation_mgr)
+
+    out = _my_request_items(store, ids, token, rotation_mgr, entries)
 
     # Songs this device never submitted but the singer IS in — the KJ typed
     # them in from the KJ UI (picking the singer from tonight's list keeps the
@@ -2075,20 +2148,23 @@ def _device_identity_folds(store, device_id):
     return {f for f in (_fold_name(n) for n in names) if f}
 
 
-def _identity_matched_items(store, entries, identity, token, already_linked):
+def _identity_matched_items(store, entries, identity, token, already_linked,
+                            requester_by_entry=None):
     """My-songs items for queued rotation entries naming this singer that no
     request of theirs links to. Each carries a synthetic request view (id None,
     status approved) so the phone renders it like any queued song, plus
     ``entry_id`` for reordering, ``added_by_host`` and ``added_by`` (the
-    partner who requested it)."""
-    requester_by_entry = {}
-    try:
-        for req in store.list_requests(status="approved"):
-            if (req.get("linked_entry_id") and req.get("token") == token
-                    and _belongs_to_current_night(store, req)):
-                requester_by_entry[req["linked_entry_id"]] = req.get("singer_name")
-    except Exception:
-        current_app.logger.exception("my-requests: requester lookup failed")
+    partner who requested it). ``requester_by_entry`` ({entry_id: requester
+    singer_name} for tonight's approved requests) is looked up when not given."""
+    if requester_by_entry is None:
+        requester_by_entry = {}
+        try:
+            for req in store.list_requests(status="approved"):
+                if (req.get("linked_entry_id") and req.get("token") == token
+                        and _belongs_to_current_night(store, req)):
+                    requester_by_entry[req["linked_entry_id"]] = req.get("singer_name")
+        except Exception:
+            current_app.logger.exception("my-requests: requester lookup failed")
     items = []
     for entry in entries:
         eid = entry.get("id")
@@ -2679,6 +2755,7 @@ def rename_me():
 
 
 @sing_bp.route("/forget", methods=["POST"])
+@require_token
 def forget_me():
     """Drop this device's canonical-name alias.
 
