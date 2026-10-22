@@ -272,13 +272,13 @@ def test_rename_guard_conflict_then_confirm(client, token, sam, sing_app):
     body = _expect(_put_me(client, sam, token, name="Alex B"), "updateMe", 409, "conflict")
     assert body["reason"] == "rename_guard"
     assert body["from"] == "Sam S" and body["to"] == "Alex B"
-    assert sing_app.sing_store.get_alias(app_device_id(EMAIL)) == "Sam S"
+    assert sing_app.sing_store.get_alias(app_device_id(EMAIL, sing_app.app_identity_secret)) == "Sam S"
     assert sing_app.rotation.store.get_entry(entry_id)["singer"] == "Sam S"
 
     body = _expect(_put_me(client, sam, token, name="Alex B", confirm_rename=True),
                    "updateMe", 200)
     assert body["me"]["name"] == "Alex B"
-    assert sing_app.sing_store.get_alias(app_device_id(EMAIL)) == "Alex B"
+    assert sing_app.sing_store.get_alias(app_device_id(EMAIL, sing_app.app_identity_secret)) == "Alex B"
     assert sing_app.rotation.store.get_entry(entry_id)["singer"] == "Alex B"
     assert sing_app.sing_store.get_request(req["id"])["singer_name"] == "Alex B"
 
@@ -292,7 +292,7 @@ def test_rename_spelling_fix_and_no_songs_go_straight_through(client, token, sam
     # Same first name: a spelling fix, no guard.
     body = _expect(_put_me(client, sam, token, name="alex  Bee"), "updateMe", 200)
     assert body["me"]["name"] == "alex Bee"
-    assert sing_app.sing_store.get_alias(app_device_id(EMAIL)) == "alex Bee"
+    assert sing_app.sing_store.get_alias(app_device_id(EMAIL, sing_app.app_identity_secret)) == "alex Bee"
     assert sing_app.sing_store.get_request(req["id"])["singer_name"] == "alex Bee"
 
 
@@ -441,12 +441,12 @@ def test_same_name_walk_in_blocks_history_id(client, token, sam, sing_app):
     assert by_entry[own_entry]["history_id"] == history_id_for("nomadpc", own_entry, EMAIL)
     # An alias tonight claims the name too (no request needed).
     store = sing_app.sing_store
-    assert store.name_claimed_by_others("sam s", [app_device_id(EMAIL)],
+    assert store.name_claimed_by_others("sam s", [app_device_id(EMAIL, sing_app.app_identity_secret)],
                                         store.get_night_started_at())
-    assert not store.name_claimed_by_others("nobody", [app_device_id(EMAIL)],
+    assert not store.name_claimed_by_others("nobody", [app_device_id(EMAIL, sing_app.app_identity_secret)],
                                             store.get_night_started_at())
     store.set_alias("alias-only", "Zed Z")
-    assert store.name_claimed_by_others("zed z", [app_device_id(EMAIL)],
+    assert store.name_claimed_by_others("zed z", [app_device_id(EMAIL, sing_app.app_identity_secret)],
                                         store.get_night_started_at())
     assert not store.name_claimed_by_others("zed z", ["alias-only"],
                                             store.get_night_started_at())
@@ -476,7 +476,7 @@ def test_me_cost_tracks_tonight_not_past_nights(client, token, sam, sing_app):
 
     store = sing_app.sing_store
     for i in range(150):
-        for dev, name in ((app_device_id(EMAIL), "Sam S"), ("web-sam", "Sam S"),
+        for dev, name in ((app_device_id(EMAIL, sing_app.app_identity_secret), "Sam S"), ("web-sam", "Sam S"),
                           ("web-old", "Old Timer")):
             row = store.create_request(name, "", "Old", f"Song {i}", token=token,
                                        device_id=dev)
@@ -499,13 +499,13 @@ def test_me_cost_tracks_tonight_not_past_nights(client, token, sam, sing_app):
 
 def test_rename_refused_when_host_named(client, token, sam, sing_app):
     store = sing_app.sing_store
-    store.set_alias(app_device_id(EMAIL), "Sam S", origin="kj")
+    store.set_alias(app_device_id(EMAIL, sing_app.app_identity_secret), "Sam S", origin="kj")
     for name in ("Alex B", "Sam Smith"):
         body = _expect(_put_me(client, sam, token, name=name, confirm_rename=True),
                        "updateMe", 409, "conflict")
         assert body["reason"] == "host_named"
         assert body["from"] == "Sam S" and body["to"] == name
-    assert store.get_alias(app_device_id(EMAIL)) == "Sam S"
+    assert store.get_alias(app_device_id(EMAIL, sing_app.app_identity_secret)) == "Sam S"
     # Phone and consent still work for a host-named singer.
     _expect(_put_me(client, sam, token, photo_consent="yes"), "updateMe", 200)
 
@@ -533,7 +533,7 @@ def test_old_host_alias_does_not_block_rename(client, token, sam, sing_app):
     """Aliases outlive the night: a host spelling fix on a past night mustn't
     lock the singer out of renaming forever."""
     store = sing_app.sing_store
-    store.set_alias(app_device_id(EMAIL), "Sam S", origin="kj")
+    store.set_alias(app_device_id(EMAIL, sing_app.app_identity_secret), "Sam S", origin="kj")
     conn = store._get_conn()
     conn.execute("UPDATE singer_aliases SET updated_at='2000-01-01 00:00:00'")
     conn.commit()
@@ -548,6 +548,6 @@ def test_host_named_alias_alone_or_case_only_change_is_allowed(client, token, sa
     store.set_alias("web-merged", "Sam S", origin="kj")
     _expect(_put_me(client, sam, token, name="Sam Smith"), "updateMe", 200)
     # A host alias tonight: a case-only change is still fine.
-    store.set_alias(app_device_id(EMAIL), "Sam Smith", origin="kj")
+    store.set_alias(app_device_id(EMAIL, sing_app.app_identity_secret), "Sam Smith", origin="kj")
     body = _expect(_put_me(client, sam, token, name="sam smith"), "updateMe", 200)
     assert body["me"]["name"] == "sam smith"

@@ -111,7 +111,7 @@ def test_make_search_forwards_bearer_not_stored(client, token, sam, gen, sing_ap
     assert url["supported"] is True
     gen.validate_url.assert_called_once_with(sam, "https://youtu.be/abc")
 
-    assert sing_app.sing_store.get_gen_account(app_device_id(EMAIL)) is None
+    assert sing_app.sing_store.get_gen_account(app_device_id(EMAIL, sing_app.app_identity_secret)) is None
     assert _gen_account_rows(sing_app) == 0
 
 
@@ -122,7 +122,7 @@ def test_make_needs_artist_and_title(client, token, sam):
 
 def test_gen_account_prefers_bearer_only_for_the_app_device(sing_app):
     store = sing_app.sing_store
-    app_dev = app_device_id(EMAIL)
+    app_dev = app_device_id(EMAIL, sing_app.app_identity_secret)
     web_dev = "0123456789abcdef" * 2
     store.set_gen_account(web_dev, "mary@example.com", "sess-mary")
     with sing_app.test_request_context("/sing/api/v1/make/search"):
@@ -163,7 +163,7 @@ def test_make_submit_creates_being_made_entry(client, token, sam, gen, sing_app)
     assert entry["gen_job_id"] == "job-sam"
     row = sing_app.sing_store.get_request(req["id"])
     assert row["gen_job_id"] == "job-sam"
-    assert row["device_id"] == app_device_id(EMAIL)
+    assert row["device_id"] == app_device_id(EMAIL, sing_app.app_identity_secret)
 
     # A retry after a timeout: same request, no second gen job or entry.
     again = _expect(_submit_make(client, sam, token, cid=cid), "createRequest", 200)
@@ -178,7 +178,7 @@ def test_make_submit_claim_outlives_gen_create_timeout(client, token, sam, gen, 
     the job, or a retry would create a second job."""
     store = sing_app.sing_store
     cid = str(uuid.uuid4())
-    key = f"{app_device_id(EMAIL)}:{cid}"
+    key = f"{app_device_id(EMAIL, sing_app.app_identity_secret)}:{cid}"
     seen = {}
 
     def create(*_a, **_k):
@@ -316,7 +316,7 @@ def test_make_rate_limited_per_device(client, token, sam, olive, gen, sing_app):
     """A7-R4: the web's make bucket, per device (40 calls per 10 minutes)."""
     rate = sing_make._state(sing_app)["rate"]
     now = time.monotonic()
-    rate[f"make:dev:{app_device_id(EMAIL)}"].extend(
+    rate[f"make:dev:{app_device_id(EMAIL, sing_app.app_identity_secret)}"].extend(
         [now] * (sing_make._MAKE_RATE_PER_DEVICE - 2))
     for _ in range(2):
         _expect(_make(client, sam, token, "check", artist="a", title="b"), "checkMake", 200)
@@ -375,3 +375,90 @@ def test_make_endpoints_need_auth(client, token, gen):
     for path in ("check", "search", "validate-url", "use-quick/1"):
         resp = client.post(f"{V1}/make/{path}", json={"t": token})
         assert resp.status_code == 401
+
+
+# --- A7-R5 ---------------------------------------------------------------
+
+def test_app_identity_secret_persists_across_restart(mock_config, tmp_path):
+    from app import create_app
+    mock_config["rotation_db_path"] = str(tmp_path / "rotation.db")   # a real data dir
+    first = create_app(config=mock_config)
+    secret = first.app_identity_secret
+    first.catalog.close()
+    second = create_app(config=mock_config)
+    try:
+        assert len(bytes.fromhex(secret)) == 32
+        assert second.app_identity_secret == secret
+        assert app_device_id(EMAIL, second.app_identity_secret) == \
+            app_device_id(EMAIL, secret)
+    finally:
+        second.catalog.close()
+
+
+def test_forget_needs_the_event_code(client, token, sing_app):
+    store = sing_app.sing_store
+    store.set_alias("dev-forget", "Sam S", origin="self")
+    assert client.post("/sing/forget", json={"device_id": "dev-forget"}).status_code == 403
+    assert client.post("/sing/forget?t=0000",
+                       json={"device_id": "dev-forget"}).status_code == 403
+    assert store.get_alias("dev-forget") == "Sam S"
+    # The web page's call (code in the query string, as sing.js sends it) works.
+    assert client.post(f"/sing/forget?t={token}",
+                       json={"device_id": "dev-forget"}).status_code == 204
+    assert store.get_alias("dev-forget") is None
+
+
+def test_gen_401_during_make_drops_the_cached_token(client, token, sam, gen, gen_stub):
+    _expect(_make(client, sam, token, "check", artist="a", title="b"), "checkMake", 200)
+    before = gen_stub.calls.count(sam)
+    gen.search_audio.side_effect = GenApiError(401, "Invalid session")
+    _expect(_make(client, sam, token, "search", artist="Radiohead", title="Creep"),
+            "makeSearch", 401, "unauthenticated")
+    assert not client.application.gen_verifier.is_cached(sam)
+    # gen revoked it: the next v1 call re-verifies and is refused.
+    del gen_stub.users[sam]
+    _expect(_make(client, sam, token, "check", artist="a", title="b"),
+            "checkMake", 401, "unauthenticated")
+    assert gen_stub.calls.count(sam) == before + 1
+
+
+def test_action_log_of_a_make_call_has_no_bearer(mock_config, tmp_path):
+    import json
+
+    import app_identity
+    from app import create_app
+    mock_config["action_log_dir"] = str(tmp_path / "action-logs")
+    mock_config["action_log_enabled"] = True
+    app = create_app(config=mock_config)
+    app.config["TESTING"] = True
+    try:
+        bearer_tok = "SUPER-SECRET-GEN-SESSION-make-123"
+
+        class _Gen:
+            def get_me(self, session_token):
+                return {"has_session": True, "user": {
+                    "email": EMAIL, "display_name": "Sam", "tenant_id": None}}
+
+        app.gen_verifier = app_identity.GenTokenVerifier(
+            _Gen(), secret=app.app_identity_secret)
+        gen_client = MagicMock()
+        gen_client.singer_flow_configured.return_value = True
+        gen_client.search_audio.return_value = {"search_session_id": "ss-1", "results": []}
+        app.gen_client = gen_client
+        t = app.sing_store.ensure_token()
+        with app.test_client() as c:
+            resp = c.post(f"{V1}/make/search",
+                          json={"t": t, "artist": "Radiohead", "title": "Creep"},
+                          headers=bearer(bearer_tok))
+            assert resp.status_code == 200, resp.get_json()
+        gen_client.search_audio.assert_called_once_with(bearer_tok, "Radiohead", "Creep")
+        with open(app.action_recorder.path_for()) as fh:
+            raw = fh.read()
+        assert bearer_tok not in raw
+        recs = [json.loads(line) for line in raw.splitlines()]
+        made = [r for r in recs if r["path"] == f"{V1}/make/search"]
+        assert len(made) == 1
+        assert made[0]["client"]["Authorization"] == "[redacted]"
+        assert app.app_identity_secret not in raw
+    finally:
+        app.catalog.close()

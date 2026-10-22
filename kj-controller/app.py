@@ -468,8 +468,10 @@ def create_app(config=None):
         flask_app.gen_client = None
         flask_app.gen_poller = None
     # App API (v1) bearer-token verification against gen's /api/users/me.
+    flask_app.app_identity_secret = flask_app.sing_store.app_identity_secret()
     flask_app.gen_verifier = (
-        GenTokenVerifier(flask_app.gen_client) if flask_app.gen_client else None
+        GenTokenVerifier(flask_app.gen_client, secret=flask_app.app_identity_secret)
+        if flask_app.gen_client else None
     )
 
     # Start the background sampler only on a real device (config is None); tests
@@ -692,8 +694,10 @@ def start_app():  # pragma: no cover
         flask_app.gen_client = None
         flask_app.gen_poller = None
     # App API (v1) bearer-token verification against gen's /api/users/me.
+    flask_app.app_identity_secret = flask_app.sing_store.app_identity_secret()
     flask_app.gen_verifier = (
-        GenTokenVerifier(flask_app.gen_client) if flask_app.gen_client else None
+        GenTokenVerifier(flask_app.gen_client, secret=flask_app.app_identity_secret)
+        if flask_app.gen_client else None
     )
 
     _install_perf_monitor(flask_app, cfg, start=True)

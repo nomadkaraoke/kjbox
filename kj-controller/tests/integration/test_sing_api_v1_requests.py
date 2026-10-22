@@ -84,7 +84,7 @@ def test_submit_uses_alias_and_app_device(client, token, sam, sing_app):
     assert body["auto_approved"] is False
     row = sing_app.sing_store.get_request(req["id"])
     assert row["singer_name"] == "Sam S"
-    assert row["device_id"] == app_device_id(EMAIL)
+    assert row["device_id"] == app_device_id(EMAIL, sing_app.app_identity_secret)
     assert "Set-Cookie" not in resp.headers
 
 
@@ -133,7 +133,7 @@ def test_submit_idempotent_on_client_request_id(client, token, sam, sing_app):
 
 def test_submit_concurrent_retry_gets_busy_retry(client, token, sam, sing_app):
     cid = str(uuid.uuid4())
-    key = f"{app_device_id(EMAIL)}:{cid}"
+    key = f"{app_device_id(EMAIL, sing_app.app_identity_secret)}:{cid}"
     assert sing_app.sing_store.idempotent_claim(key)  # the first attempt is in flight
     resp = _submit(client, sam, token, cid=cid, **_song())
     assert resp.status_code == 409
@@ -237,8 +237,8 @@ def test_friend_song_keeps_owner_device_and_friend_name(client, token, sam, sing
     assert req["singer_name"] == "Nats"
     assert req["for_friend"] is True
     row = sing_app.sing_store.get_request(req["id"])
-    assert row["device_id"] == app_device_id(EMAIL)
-    assert sing_app.sing_store.get_alias(app_device_id(EMAIL)) == "Sam S"
+    assert row["device_id"] == app_device_id(EMAIL, sing_app.app_identity_secret)
+    assert sing_app.sing_store.get_alias(app_device_id(EMAIL, sing_app.app_identity_secret)) == "Sam S"
     assert sing_app.sing_store.is_friend_request(req["id"])
     # The owner manages it like their own song.
     _expect(_cancel(client, sam, token, req["id"]), "cancelRequest", 200)
@@ -349,7 +349,7 @@ def test_change_keeps_slot(client, token, sam, sing_app):
     assert new["id"] != mine["id"] and new["supersedes_request_id"] == mine["id"]
     assert "edit_token" not in new
     new_row = sing_app.sing_store.get_request(new["id"])
-    assert new_row["device_id"] == app_device_id(EMAIL)
+    assert new_row["device_id"] == app_device_id(EMAIL, sing_app.app_identity_secret)
     entry = sing_app.rotation.store.get_entry(new_row["linked_entry_id"])
     assert entry["position"] == old_pos and entry["file_path"] == "/SOS.mp4"
     assert sing_app.sing_store.get_request(mine["id"])["status"] == "cancelled"
@@ -543,7 +543,8 @@ def _install_gen_stub(app, monkeypatch, tok):
             return {"user": {"email": EMAIL, "display_name": "Sam", "tenant_id": None},
                     "has_session": True}
 
-    monkeypatch.setattr(app, "gen_verifier", GenTokenVerifier(_Stub()), raising=False)
+    verifier = GenTokenVerifier(_Stub(), secret=app.app_identity_secret)
+    monkeypatch.setattr(app, "gen_verifier", verifier, raising=False)
 
 
 def test_delegated_submit_recorded_once(rec_app, monkeypatch):

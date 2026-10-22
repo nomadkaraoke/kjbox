@@ -160,7 +160,11 @@ def gen_error_response(exc, device_id=None):
     if exc.status == 401:
         if _app_device(device_id):
             # The app's own gen session was refused: nothing is stored to
-            # forget, and the app's session check decides (v1 401).
+            # forget, and the app's session check decides (v1 401). Drop the
+            # verifier's cached "valid" so the next v1 call re-checks with gen.
+            verifier = getattr(current_app, "gen_verifier", None)
+            if verifier is not None:
+                verifier.invalidate(g.app_gen_account.get("session_token"))
             return jsonify({"error": "gen_unauthenticated"}), 401
         # Session expired/revoked on gen — forget it; the singer re-verifies.
         if device_id:

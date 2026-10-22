@@ -452,6 +452,20 @@ class SingStore:
         ).fetchone()
         return row[0] if row else default
 
+    _APP_IDENTITY_SECRET_KEY = "app_identity_secret"
+
+    def app_identity_secret(self):
+        """The box's app identity secret (32 random bytes, hex), generated on
+        first use and kept in rotation_meta so app device ids survive restarts.
+        Never log or expose it."""
+        conn = self._get_conn()
+        conn.execute(
+            "INSERT OR IGNORE INTO rotation_meta (key, value) VALUES (?, ?)",
+            (self._APP_IDENTITY_SECRET_KEY, secrets.token_hex(32)),
+        )
+        conn.commit()
+        return self._get_meta(self._APP_IDENTITY_SECRET_KEY)
+
     def _set_meta(self, key, value):
         conn = self._get_conn()
         conn.execute(

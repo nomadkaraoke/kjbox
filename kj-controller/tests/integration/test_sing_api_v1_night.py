@@ -178,7 +178,7 @@ def test_v1_night_changed_returns_409(client, token, app_token, sing_app):
     assert resp.status_code == 409
     assert assert_matches_contract(resp, "joinNight")["error"] == "night_changed"
     # Nothing was written for the stale night.
-    assert sing_app.sing_store.get_alias(app_device_id("sam.singer@example.com")) is None
+    assert sing_app.sing_store.get_alias(app_device_id("sam.singer@example.com", sing_app.app_identity_secret)) is None
 
 
 # --- POST /join / needs_name --------------------------------------------
@@ -216,7 +216,7 @@ def test_join_sets_alias_and_links_account(client, token, app_token, sing_app):
     assert resp.status_code == 200
     body = assert_matches_contract(resp, "joinNight")
     assert body == {"api_version": "1.0", "me": {"name": "Sam"}}
-    dev = app_device_id("sam.singer@example.com")
+    dev = app_device_id("sam.singer@example.com", sing_app.app_identity_secret)
     assert store.get_alias(dev) == "Sam"
     row = store._get_conn().execute(
         "SELECT origin FROM singer_aliases WHERE device_id = ?", (dev,)).fetchone()
@@ -247,7 +247,7 @@ def test_any_v1_call_links_account_once(client, token, app_token, sing_app, monk
     _night(client, tok, token)
     _night(client, tok, token)
     assert len(calls) == 1
-    dev = app_device_id("sam.singer@example.com")
+    dev = app_device_id("sam.singer@example.com", sing_app.app_identity_secret)
     assert store.account_for_device(dev, store.get_night_started_at()) == "sam.singer@example.com"
 
 
@@ -272,7 +272,7 @@ def test_app_auth_sets_request_context(sing_app, token, app_token):
             f"{V1}/night?t={token}", headers=bearer(tok)):
         probe()
     store = sing_app.sing_store
-    dev = app_device_id("sam.singer@example.com")
+    dev = app_device_id("sam.singer@example.com", sing_app.app_identity_secret)
     assert seen["user"].device_id == dev
     assert seen["night"] == store.get_night_started_at()
     assert seen["night_id"] == sing_api_v1.night_id_for(store, sing_app.kj_config)
@@ -308,7 +308,8 @@ def test_v1_reachable_on_public_host(public_app, monkeypatch):
             return {"has_session": True,
                     "user": {"email": "pub@example.com", "display_name": "Pub", "tenant_id": None}}
 
-    public_app.gen_verifier = app_identity.GenTokenVerifier(_Gen())
+    public_app.gen_verifier = app_identity.GenTokenVerifier(
+        _Gen(), secret=public_app.app_identity_secret)
     token = public_app.sing_store.ensure_token()
     with public_app.test_client() as c:
         resp = c.get(f"/api/v1/night?t={token}", headers={"Host": PUBLIC_HOST, **bearer("x")})
@@ -341,7 +342,8 @@ def test_authorization_header_redacted_in_action_log(rec_app):
             return {"has_session": True,
                     "user": {"email": "rec@example.com", "display_name": "Rec", "tenant_id": None}}
 
-    rec_app.gen_verifier = app_identity.GenTokenVerifier(_Gen())
+    rec_app.gen_verifier = app_identity.GenTokenVerifier(
+        _Gen(), secret=rec_app.app_identity_secret)
     token = rec_app.sing_store.ensure_token()
     secret = "SUPER-SECRET-GEN-SESSION-abc123"
     with rec_app.test_client() as c:

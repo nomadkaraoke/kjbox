@@ -166,7 +166,7 @@ def token(sing_app):
 def gen_stub(sing_app, monkeypatch):
     """Stub gen's ``GET /api/users/me`` for the v1 token verifier only.
 
-    Installs ``app.gen_verifier = GenTokenVerifier(stub)``; ``app.gen_client``
+    Installs ``app.gen_verifier = GenTokenVerifier(stub, secret=app.app_identity_secret)``; ``app.gen_client``
     is left alone so make-it paths behave as in any other test (stub it in the
     test that needs it). ``users`` maps a session token to the user dict gen
     returns; an unknown token gets gen's 401. ``down = True`` simulates gen
@@ -191,7 +191,8 @@ def gen_stub(sing_app, monkeypatch):
             return {"user": dict(user), "has_session": True}
 
     stub = _GenStub()
-    monkeypatch.setattr(sing_app, "gen_verifier", GenTokenVerifier(stub), raising=False)
+    verifier = GenTokenVerifier(stub, secret=sing_app.app_identity_secret)
+    monkeypatch.setattr(sing_app, "gen_verifier", verifier, raising=False)
     return stub
 
 

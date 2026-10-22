@@ -1,7 +1,12 @@
 """Identity for the app-facing singer API: verify a gen session token and
 derive the stable app device id. The raw token is never stored or logged;
-cache keys are sha256(token)."""
+cache keys are sha256(token).
+
+The app device id is an HMAC of the email under the box's secret
+(``app_identity_secret``, 32 random bytes persisted by SingStore), so it can't
+be derived from an email and passed as ``device_id`` to the web endpoints."""
 import hashlib
+import hmac
 import logging
 import threading
 import time
@@ -31,19 +36,38 @@ class AppUser:
     device_id: str
 
 
-def app_device_id(email):
-    return hashlib.sha256(("app:" + email.strip().lower()).encode()).hexdigest()[:32]
+def app_device_id(email, secret):
+    """32-hex app device id for ``email`` under the box's identity ``secret``."""
+    if not secret:
+        raise ValueError("app_device_id needs the box's app identity secret")
+    key = secret if isinstance(secret, bytes) else bytes.fromhex(secret)
+    msg = ("app:" + email.strip().lower()).encode()
+    return hmac.new(key, msg, hashlib.sha256).hexdigest()[:32]
 
 
 class GenTokenVerifier:
-    def __init__(self, gen_client, clock=time.monotonic):
+    def __init__(self, gen_client, clock=time.monotonic, *, secret):
+        if not secret:
+            raise ValueError("GenTokenVerifier needs the box's app identity secret")
         self._gen = gen_client
+        self._secret = secret
         self._clock = clock
         self._cache = OrderedDict()  # sha256(token) -> (expires_at, AppUser | None)
         self._lock = threading.Lock()
 
     def __repr__(self):
         return f"<GenTokenVerifier entries={len(self._cache)}>"
+
+    def device_id_for(self, email):
+        """The app device id for ``email`` on this box."""
+        return app_device_id(email, self._secret)
+
+    def invalidate(self, token):
+        """Forget a cached verdict for ``token`` (gen refused it elsewhere), so
+        the next call re-verifies instead of trusting the cache window."""
+        key = hashlib.sha256((token or "").encode()).hexdigest()
+        with self._lock:
+            self._cache.pop(key, None)
 
     def is_cached(self, token):
         """True when ``verify(token)`` would answer from the cache (no gen call)."""
@@ -78,8 +102,7 @@ class GenTokenVerifier:
             raise AppAuthError("unauthenticated")
         return user
 
-    @staticmethod
-    def _parse(me):
+    def _parse(self, me):
         if not isinstance(me, dict) or not me.get("has_session"):
             return None
         u = me.get("user")
@@ -89,7 +112,7 @@ class GenTokenVerifier:
         if not email:
             return None
         name = (u.get("display_name") or "").strip() or None
-        return AppUser(email=email, display_name=name, device_id=app_device_id(email))
+        return AppUser(email=email, display_name=name, device_id=app_device_id(email, self._secret))
 
     def _store(self, key, ttl, user):
         with self._lock:

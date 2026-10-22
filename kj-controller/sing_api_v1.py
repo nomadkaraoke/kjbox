@@ -1424,12 +1424,19 @@ def get_my_stats():
 _MAKE_ERROR_OVERRIDES = {"simple_mode_disabled_source": ("make_disabled", 400)}
 
 
+_GEN_RATE_RETRY_S = 60
+
+
+def _make_rate_limited(device):
+    """429 for the make bucket, or gen's own limit (no timing given: a minute)."""
+    retry = sing_make.rate_retry_after(device) or _GEN_RATE_RETRY_S
+    return v1_error("rate_limited", 429, retry_after=retry)
+
+
 def _make_error(body, status):
     device = g.app_user.device_id
     if status == 429 and (body or {}).get("error") != "make_limit":
-        # Our make budget, or gen's own limit (no timing given: a minute).
-        retry = sing_make.rate_retry_after(device) or 60
-        return v1_error("rate_limited", 429, retry_after=retry)
+        return _make_rate_limited(device)
     return map_web_error(body, status, device, overrides=_MAKE_ERROR_OVERRIDES)
 
 
@@ -1473,8 +1480,7 @@ def use_quick_version(id):  # noqa: A002 — the contract's path parameter is {i
         view_args={"req_id": req_id})
     if status != 200:
         if status == 429:
-            return v1_error("rate_limited", 429, retry_after=sing_make.rate_retry_after(
-                req["device_id"]) or sing_make._MAKE_RATE_WINDOW_S)
+            return _make_rate_limited(req["device_id"])
         return map_web_error(result, status, req["device_id"])
     return v1_json({"ok": True})
 

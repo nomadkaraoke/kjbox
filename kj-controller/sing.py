@@ -2714,6 +2714,7 @@ def rename_me():
 
 
 @sing_bp.route("/forget", methods=["POST"])
+@require_token
 def forget_me():
     """Drop this device's canonical-name alias.
 

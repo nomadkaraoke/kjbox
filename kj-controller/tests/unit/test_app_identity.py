@@ -8,6 +8,7 @@ from app_identity import (
 from gen_client import GenApiError
 
 TOKEN = "tok-SECRET-123"
+SECRET = "ab" * 32
 
 
 class FakeClock:
@@ -37,20 +38,20 @@ class FakeGen:
 def make(gen=None):
     clock = FakeClock()
     gen = gen or FakeGen()
-    return GenTokenVerifier(gen, clock=clock), gen, clock
+    return GenTokenVerifier(gen, clock=clock, secret=SECRET), gen, clock
 
 
 def test_device_id_is_32_hex_and_case_insensitive():
-    a = app_device_id("Jane@X.com ")
+    a = app_device_id("Jane@X.com ", SECRET)
     assert len(a) == 32 and int(a, 16) >= 0
-    assert a == app_device_id("jane@x.com")
+    assert a == app_device_id("jane@x.com", SECRET)
 
 
 def test_verify_returns_user():
     v, _, _ = make()
     u = v.verify(TOKEN)
     assert u == AppUser(email="jane.doe@x.com", display_name="Jane Doe",
-                        device_id=app_device_id("jane.doe@x.com"))
+                        device_id=app_device_id("jane.doe@x.com", SECRET))
 
 
 def test_verify_caches_positive_60s():
@@ -186,3 +187,35 @@ def test_is_cached_tracks_ttl():
     clock.t += 61
     assert not v.is_cached(TOKEN)
     assert len(gen.calls) == 1
+
+
+# --- A7-R5: unguessable app device ids --------------------------------------
+
+def test_device_id_is_keyed_by_the_box_secret():
+    import hashlib
+    other = "cd" * 32
+    a1 = GenTokenVerifier(FakeGen(), secret=SECRET).device_id_for("jane@x.com")
+    a2 = GenTokenVerifier(FakeGen(), secret=SECRET).device_id_for("Jane@X.com")
+    assert a1 == a2 == app_device_id("jane@x.com", SECRET)
+    assert app_device_id("jane@x.com", other) != a1
+    assert a1 != hashlib.sha256(b"app:jane@x.com").hexdigest()[:32]
+    assert app_device_id("jane@x.com", bytes.fromhex(SECRET)) == a1
+
+
+def test_secret_is_required():
+    import pytest
+    with pytest.raises(ValueError):
+        app_device_id("jane@x.com", "")
+    with pytest.raises(ValueError):
+        GenTokenVerifier(FakeGen(), secret=None)
+
+
+def test_invalidate_drops_the_cached_verdict():
+    v, gen, _ = make()
+    v.verify(TOKEN)
+    assert v.is_cached(TOKEN)
+    v.invalidate(TOKEN)
+    assert not v.is_cached(TOKEN)
+    v.verify(TOKEN)
+    assert len(gen.calls) == 2
+    v.invalidate("never-seen")   # no-op
