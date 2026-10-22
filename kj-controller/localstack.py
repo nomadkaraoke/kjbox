@@ -86,6 +86,60 @@ def _ensure_vapid(cfg, config_path):
     _bootstrap_vapid_keys(cfg, config_path)
 
 
+MARKER = ".kjbox-localstack"
+
+# KJ_CONFIG_OVERRIDES may only point the stack at other gen/decide stacks and
+# tune singer rate limits; everything else stays hermetic.
+OVERRIDE_KEYS = frozenset({
+    "gen_api_url", "gen_api_token", "gen_kjbox_secret",
+    "decide_api_url", "decide_kjbox_secret",
+    "sing_rate_limit_per_device", "sing_rate_limit_per_ip", "sing_rate_limit_window_s",
+})
+
+# Re-asserted after overrides, whatever the stack's own config.json says.
+_HERMETIC = {
+    "enable_vlc": False,
+    "websockify_enabled": False,
+    "night_capture_enabled": False,
+    "master_sync_enabled": False,
+    "vocals_sync_enabled": False,
+    "divebar_api_url": "",
+    "catalog_mirror_enabled": True,
+    "catalog_mirror_max_age_days": 3650,
+    "sing_public_url_base": "http://127.0.0.1:8040/sing",
+    "sing_short_url_base": "",
+    "sing_local_short_host": "",
+    "sing_local_url_base": "",
+    "history_outbox_interval_s": 5,
+    "gen_poll_interval": 5,
+    "app_android_sha256_fingerprints": [],
+}
+
+
+def claim_data_dir(d):
+    """Refuse any data dir that isn't clearly the local stack's, then mark it.
+
+    The name must contain "localstack"; ``$HOME``, ``/`` and ``~/kjdata`` are
+    never accepted; an existing non-empty dir must already carry the
+    ``.kjbox-localstack`` marker (written here on first use). Raises ValueError.
+    """
+    if not d:
+        raise ValueError("the local-stack data dir is empty")
+    real = os.path.realpath(os.path.expanduser(d))
+    home = os.path.realpath(os.path.expanduser("~"))
+    kjdata = os.path.realpath(os.path.expanduser("~/kjdata"))
+    if (real in (home, "/", kjdata) or real.startswith(kjdata + os.sep)
+            or "localstack" not in os.path.basename(real)):
+        raise ValueError(f"{d} is not a local-stack dir (its name must contain 'localstack')")
+    marker = os.path.join(real, MARKER)
+    if os.path.isdir(real) and os.listdir(real) and not os.path.exists(marker):
+        raise ValueError(f"{d} is not empty and has no {MARKER} marker")
+    os.makedirs(real, exist_ok=True)
+    with open(marker, "a", encoding="utf-8"):
+        pass
+    return real
+
+
 def hermetic_config(d, overrides=None, *, gen=True, decide=True, action_log=True):
     """Config for a local-stack process rooted at ``d``.
 
@@ -93,33 +147,19 @@ def hermetic_config(d, overrides=None, *, gen=True, decide=True, action_log=True
     config.json), points every path into ``d``, turns off everything that
     reaches real hardware or real services, and wires gen (8010) and decide
     (8030) local stacks with the shared local partner secret. ``overrides``
-    (e.g. ``KJ_CONFIG_OVERRIDES``) win last.
+    (e.g. ``KJ_CONFIG_OVERRIDES``) may only touch ``OVERRIDE_KEYS``; the
+    paths and hermetic switches are re-asserted after them.
     """
     from config import load_config
+    overrides = dict(overrides or {})
+    bad = sorted(set(overrides) - OVERRIDE_KEYS)
+    if bad:
+        raise ValueError(f"config overrides not allowed for the local stack: {bad}")
     os.makedirs(d, exist_ok=True)
     config_path = os.path.join(d, "config.json")
     cfg = load_config(config_file=config_path)
-    cfg.update(_paths(d))
-    os.makedirs(cfg["download_folder"], exist_ok=True)
     cfg.pop("rotation_sheet_id", None)
-    cfg.update({
-        "enable_vlc": False,
-        "websockify_enabled": False,
-        "night_capture_enabled": False,
-        "action_log_enabled": bool(action_log),
-        "master_sync_enabled": False,
-        "vocals_sync_enabled": False,
-        "divebar_api_url": "",
-        "catalog_mirror_enabled": True,
-        "catalog_mirror_max_age_days": 3650,
-        "sing_public_url_base": "http://127.0.0.1:8040/sing",
-        "sing_short_url_base": "",
-        "sing_local_short_host": "",
-        "sing_local_url_base": "",
-        "history_outbox_interval_s": 5,
-        "gen_poll_interval": 5,
-        "app_android_sha256_fingerprints": [],
-    })
+    cfg["action_log_enabled"] = bool(action_log)
     if gen:
         cfg.update({"gen_api_url": GEN_URL, "gen_api_token": GEN_ADMIN_TOKEN,
                     "gen_kjbox_secret": LOCAL_SECRET})
@@ -129,7 +169,10 @@ def hermetic_config(d, overrides=None, *, gen=True, decide=True, action_log=True
         cfg.update({"decide_api_url": DECIDE_URL, "decide_kjbox_secret": LOCAL_SECRET})
     else:
         cfg.update({"decide_api_url": "", "decide_kjbox_secret": ""})
-    cfg.update(overrides or {})
+    cfg.update(overrides)
+    cfg.update(_paths(d))
+    cfg.update(_HERMETIC)
+    os.makedirs(cfg["download_folder"], exist_ok=True)
     _ensure_vapid(cfg, config_path)
     return cfg
 
@@ -141,14 +184,18 @@ def replay_config(d):
     return hermetic_config(d, gen=False, decide=False, action_log=False)
 
 
-def config_overrides_from_env(environ=None):
-    """``KJ_CONFIG_OVERRIDES`` as a dict ({} when unset). Bad JSON is an error."""
+def config_overrides_from_env(environ=None, allowed=None):
+    """``KJ_CONFIG_OVERRIDES`` as a dict ({} when unset). Bad JSON, a non-object
+    or a key outside ``allowed`` (default ``OVERRIDE_KEYS``) is a ValueError."""
     raw = (environ if environ is not None else os.environ).get("KJ_CONFIG_OVERRIDES")
     if not raw:
         return {}
     data = json.loads(raw)
     if not isinstance(data, dict):
         raise ValueError("KJ_CONFIG_OVERRIDES must be a JSON object")
+    bad = sorted(set(data) - (OVERRIDE_KEYS if allowed is None else set(allowed)))
+    if bad:
+        raise ValueError(f"KJ_CONFIG_OVERRIDES keys not allowed: {bad}")
     return data
 
 
@@ -205,6 +252,10 @@ _PII_PATTERNS = (
     ("phone", re.compile(r"\(\d{3}\)\s*\d{3}[\s.-]?\d{4}")),
     ("phone", re.compile(r"(?<![\w-])\d{3}[\s.]\d{3}[\s.-]\d{4}(?![\w-])")),
     ("phone", re.compile(r"(?<![\w.-])1?\d{10}(?![\w.-])")),
+    ("phone", re.compile(r"(?<![\w.:/-])\d{3}[\s.-]\d{4}(?![\w.:/-])")),
+    ("token", re.compile(
+        r"(?i)(?<![0-9a-f])[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+        r"(?![0-9a-f])")),
     ("token", re.compile(r"eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}")),
     ("token", re.compile(r"(?<![0-9a-fA-F])[0-9a-fA-F]{32,}(?![0-9a-fA-F])")),
     ("token", re.compile(r"(?i)\bbearer\s+[A-Za-z0-9._~+/-]{8,}")),

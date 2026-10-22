@@ -35,15 +35,37 @@ GEN_URL="http://127.0.0.1:8010"
 DECIDE_URL="http://127.0.0.1:8030"
 SECRET="local-stack-secret"
 
+MARKER=".kjbox-localstack"
+
+# The data dir must look like ours before anything writes or wipes it: its name
+# contains "localstack", it is not $HOME, / or ~/kjdata, and it is either
+# missing/empty or already carries the marker file written on first use.
 guard_data_dir() {
-    local real_data real_kj
-    real_data="$(cd "$DATA_DIR" 2>/dev/null && pwd -P || echo "$DATA_DIR")"
-    real_kj="$(cd "$HOME/kjdata" 2>/dev/null && pwd -P || echo "$HOME/kjdata")"
-    if [[ -z "$DATA_DIR" || "$real_data" == "$HOME" || "$real_data" == "/" \
-          || "$real_data" == "$real_kj" || "$real_data" == "$real_kj"/* ]]; then
-        echo "refusing: KJBOX_LOCALSTACK_DIR=$DATA_DIR is not a local-stack dir" >&2
+    local real_data real_kj base
+    if [[ -z "$DATA_DIR" ]]; then
+        echo "refusing: KJBOX_LOCALSTACK_DIR is empty" >&2
         exit 1
     fi
+    real_data="$(cd "$DATA_DIR" 2>/dev/null && pwd -P || echo "$DATA_DIR")"
+    real_kj="$(cd "$HOME/kjdata" 2>/dev/null && pwd -P || echo "$HOME/kjdata")"
+    base="$(basename "$real_data")"
+    if [[ "$real_data" == "$HOME" || "$real_data" == "/" || "$real_data" == "$real_kj" \
+          || "$real_data" == "$real_kj"/* || "$base" != *localstack* ]]; then
+        echo "refusing: KJBOX_LOCALSTACK_DIR=$DATA_DIR is not a local-stack dir" \
+             "(its name must contain 'localstack')" >&2
+        exit 1
+    fi
+    if [[ -d "$DATA_DIR" && ! -f "$DATA_DIR/$MARKER" ]] \
+          && [[ -n "$(ls -A "$DATA_DIR" 2>/dev/null)" ]]; then
+        echo "refusing: $DATA_DIR is not empty and has no $MARKER marker" >&2
+        exit 1
+    fi
+}
+
+claim_data_dir() {
+    guard_data_dir
+    mkdir -p "$DATA_DIR"
+    touch "$DATA_DIR/$MARKER"
 }
 
 overrides() {
@@ -73,8 +95,7 @@ night_code() {
 }
 
 cmd_up() {
-    guard_data_dir
-    mkdir -p "$DATA_DIR"
+    claim_data_dir
     if is_running; then
         echo "kjbox local stack already running (pid $(cat "$PIDFILE")) at $BASE"
     else
@@ -129,7 +150,8 @@ cmd_reset() {
     guard_data_dir
     cmd_down
     if [[ -d "$DATA_DIR" ]]; then
-        find "$DATA_DIR" -mindepth 1 -maxdepth 1 ! -name 'server.log' -exec rm -rf {} +
+        find "$DATA_DIR" -mindepth 1 -maxdepth 1 ! -name 'server.log' ! -name "$MARKER" \
+            -exec rm -rf {} +
     fi
     cmd_up
 }
@@ -166,8 +188,7 @@ EOF
 }
 
 cmd_serve() {
-    guard_data_dir
-    mkdir -p "$DATA_DIR"
+    claim_data_dir
     cd "$KJ_DIR"
     exec env KJBOX_TEST_API=1 KJBOX_LOCALSTACK_DIR="$DATA_DIR" \
         KJ_CONFIG_OVERRIDES="$(overrides)" \

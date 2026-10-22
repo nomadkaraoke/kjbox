@@ -4,6 +4,8 @@ It must only exist when KJBOX_TEST_API=1 AND the server binds a loopback host
 (A12-R2); everywhere else every path under it is a 404.
 """
 
+import json
+
 import pytest
 
 import localstack
@@ -75,6 +77,25 @@ def test_test_api_mounts_on_loopback(mock_config, monkeypatch, host):
     with app.test_client() as c:
         assert c.get(f"{TEST}/state").status_code == 200
     app.catalog.close()
+
+
+@pytest.mark.parametrize("header", ["X-Forwarded-For", "CF-Connecting-IP"])
+def test_test_api_refuses_proxied_requests(tc, header):
+    assert tc.get(f"{TEST}/state").status_code == 200
+    resp = tc.get(f"{TEST}/state", headers={header: "203.0.113.9"})
+    assert resp.status_code == 404
+    assert tc.post(f"{TEST}/reset", json={}, headers={header: "127.0.0.1"}).status_code == 404
+
+
+def test_reset_reloads_the_servers_fixture(tc, test_api_app, tmp_path):
+    fx = localstack.load_fixture()
+    fx["start_rotation"] = fx["start_rotation"][:2]
+    path = tmp_path / "night.json"
+    path.write_text(json.dumps(fx))
+    test_api_app.localstack_fixture_path = str(path)
+    state = tc.post(f"{TEST}/reset", json={}).get_json()["state"]
+    assert [e["singer"] for e in state["rotation"]] == [
+        e["singer"] for e in fx["start_rotation"]]
 
 
 def test_test_api_never_answers_the_public_host(tc, test_api_app):

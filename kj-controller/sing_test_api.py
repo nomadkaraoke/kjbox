@@ -52,10 +52,17 @@ def install_test_api(app, bind_host, environ=None):
     return True
 
 
+_PROXY_HEADERS = ("X-Forwarded-For", "CF-Connecting-IP", "X-Real-IP", "Forwarded")
+
+
 @sing_test_api_bp.before_request
 def _loopback_clients_only():
-    # Defence in depth: the bind is loopback, so every client is too.
+    # Defence in depth: the bind is loopback, so every client is too, and a
+    # request that came through a proxy or tunnel (it carries a forwarding
+    # header) is never served, even if the proxy itself is local.
     if not is_loopback(request.remote_addr or "127.0.0.1"):
+        return _err("not_found", 404)
+    if any(h in request.headers for h in _PROXY_HEADERS):
         return _err("not_found", 404)
     return None
 
@@ -91,7 +98,8 @@ def reset():
     ``default`` seeds the fixture night's start rotation and settings."""
     name = _body().get("fixture", "default")
     if name == "default":
-        fixture = localstack.load_fixture()
+        # The fixture the server was started with (dev_server --fixture).
+        fixture = localstack.load_fixture(getattr(_app(), "localstack_fixture_path", None))
     elif name == "empty":
         fixture = None
     else:

@@ -353,7 +353,14 @@ def main():
     print()
     # No reloader: it re-executes main() in a child process, which would
     # re-restore --night with fresh entry ids and orphan the ?r= links.
-    app.run(host=args.host, port=args.port, debug=True, use_reloader=False)
+    # The Werkzeug debugger is a remote shell: only ever on a loopback bind.
+    app.run(host=args.host, port=args.port, debug=_is_loopback(args.host),
+            use_reloader=False)
+
+
+def _is_loopback(host):
+    from sing_test_api import is_loopback
+    return is_loopback(host)
 
 
 def _url_host(host):
@@ -365,7 +372,7 @@ def _config_overrides():
     try:
         return localstack.config_overrides_from_env()
     except (ValueError, TypeError) as e:
-        raise SystemExit(f"KJ_CONFIG_OVERRIDES is not a JSON object: {e}")
+        raise SystemExit(f"bad KJ_CONFIG_OVERRIDES: {e}")
 
 
 LOCALSTACK_SEEDED_KEY = "localstack_seeded_fixture"
@@ -379,20 +386,20 @@ def run_localstack(args):
 
     db_path = os.path.abspath(os.path.expanduser(
         args.db or os.path.join(localstack.data_dir(), "rotation.db")))
-    data_dir = os.path.dirname(db_path)
-    real = os.path.realpath(os.path.expanduser("~/kjdata"))
-    if os.path.realpath(data_dir) == real or os.path.realpath(data_dir).startswith(real + os.sep):
-        raise SystemExit("refusing to run the local stack inside ~/kjdata")
     if args.fetch_real or args.night:
         raise SystemExit("--fixture can't be combined with --fetch-real/--night")
-
-    cfg = localstack.hermetic_config(data_dir, _config_overrides())
-    cfg["rotation_db_path"] = db_path
-    cfg["enable_vlc"] = False
-    fixture = localstack.load_fixture(os.path.abspath(args.fixture))
+    try:
+        data_dir = localstack.claim_data_dir(os.path.dirname(db_path))
+        cfg = localstack.hermetic_config(data_dir, _config_overrides())
+    except ValueError as e:
+        raise SystemExit(f"refusing to start the local stack: {e}")
+    cfg["rotation_db_path"] = os.path.join(data_dir, os.path.basename(db_path))
+    fixture_path = os.path.abspath(args.fixture)
+    fixture = localstack.load_fixture(fixture_path)
     counts = localstack.build_catalogs(data_dir, fixture)
 
     app = create_app(config=cfg)
+    app.localstack_fixture_path = fixture_path   # /sing/api/test/reset reloads it
     localstack.make_hermetic(app)
     test_api = install_test_api(app, args.host)
 

@@ -121,10 +121,16 @@ It runs `dev_server.py --db ~/kjdata-localstack/rotation.db --port 8040 --host 1
 --no-player --fixture tests/fixtures/localstack/night.json` with `KJBOX_TEST_API=1` and
 `KJ_CONFIG_OVERRIDES` pointing gen at `http://127.0.0.1:8010` and decide at
 `http://127.0.0.1:8030`, both with the partner secret `local-stack-secret` (gen's admin
-token `local-stack-admin`). `KJ_CONFIG_OVERRIDES` set in your shell is merged on top.
+token `local-stack-admin`). `KJ_CONFIG_OVERRIDES` set in your shell is merged on top, but
+may only set `gen_api_url`, `gen_api_token`, `gen_kjbox_secret`, `decide_api_url`,
+`decide_kjbox_secret` and `sing_rate_limit_per_device|per_ip|window_s` (anything else is
+refused); the data paths and hermetic switches are re-asserted after it.
 
-- **Never the real box.** Everything lives in `~/kjdata-localstack/` (`KJBOX_LOCALSTACK_DIR`;
-  the script refuses `~/kjdata`). The repo's `config.json` is not read. `localstack.make_hermetic`
+- **Never the real box.** Everything lives in `~/kjdata-localstack/` (`KJBOX_LOCALSTACK_DIR`).
+  The dir's name must contain `localstack` (never `$HOME`, `/` or `~/kjdata`), and both the
+  script and `dev_server.py --fixture` refuse a non-empty dir without the
+  `.kjbox-localstack` marker they write on first use, so `reset` can only ever wipe a
+  local-stack dir. The Werkzeug debugger is only on for a loopback `--host`. The repo's `config.json` is not read. `localstack.make_hermetic`
   cuts every outbound side effect: the download queue never starts a worker (entries stay
   "download queued"), Divebar download URLs are faked, Telnyx is unconfigured, and Web Push /
   Expo sends are captured (`state.pushes`), never sent. No player, overlay or sheet sync starts.
@@ -144,7 +150,8 @@ token `local-stack-admin`). `KJ_CONFIG_OVERRIDES` set in your shell is merged on
 
 Mounted only when `KJBOX_TEST_API=1` **and** the bind host is loopback
 (`sing_test_api.install_test_api`); otherwise every path 404s, and the public sing host
-404s it too. JSON in and out; errors are `{"error": "invalid"|"not_found", "message"?}`.
+404s it too, as does any request carrying `X-Forwarded-For` / `CF-Connecting-IP` (proxied).
+`/reset` reloads the fixture file the server was started with. JSON in and out; errors are `{"error": "invalid"|"not_found", "message"?}`.
 
 | Endpoint | Does |
 |---|---|

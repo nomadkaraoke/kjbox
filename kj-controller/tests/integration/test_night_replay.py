@@ -40,6 +40,10 @@ def test_fixture_has_no_pii():
     "bae1ddb8443702bcdb98db740b30fb77",
     "Authorization: Bearer abcdefghijkl",
     "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.sig",
+    "ring 555-0123 after the show",
+    "555 0123",
+    "6f1c3f0e-2a4d-4e7b-9c51-5a0d2e9f7c99",
+    "6F1C3F0E-2A4D-4E7B-9C51-5A0D2E9F7C99",
 ])
 def test_pii_guard_catches(bad):
     assert localstack.pii_hits(json.dumps({"x": bad})), bad
@@ -52,6 +56,8 @@ def test_pii_guard_catches(bad):
     "2026-09-24 21:30:41",
     "NOMAD-1709 - Indigo De Souza - Sleep Talking.mp4",
     '"file_size": 1665216',
+    "SF250-05 - Muse - Starlight.zip",
+    "KVD-33000/KVD-33622",
 ])
 def test_pii_guard_allows_catalog_text(ok):
     assert localstack.pii_hits(json.dumps({"x": ok})) == []
@@ -103,8 +109,15 @@ def test_night_replay_through_v1(sing_app, gen_stub):
     #    retries with the same client_request_id made ONE request.
     assert all(s[1] == 200 for s in snap["submits"])
     owen = next(a for a in fx["actions"] if a["op"] == "submit" and a.get("attempts", 1) > 1)
-    owen_rows = [r for r in snap["rotation"] if r[0].startswith(owen["name"])]
-    assert len([r for r in owen_rows if "I Want It That Way" in r[1]]) >= 1
+    title = owen["body"]["song_title"]
+    state = localstack.night_state(sing_app)
+    owen_reqs = [r for r in state["requests"]
+                 if r["singer_name"] == owen["name"] and r["song_title"] == title]
+    assert len(owen_reqs) == 1, owen_reqs
+    owen_entries = [e for e in state["rotation"]
+                    if e["singer"] == owen["name"] and title in (e["song_artist"] or "")]
+    assert len(owen_entries) == 1, owen_entries
+    assert owen_reqs[0]["linked_entry_id"] == owen_entries[0]["id"]
     # 2. One outbox put per (linked singer, Done entry); nothing for entries
     #    that weren't sung.
     rows = localstack.night_state(sing_app)["outbox"]
