@@ -249,6 +249,21 @@ utils.py → (stdlib only)
 | POST | `/browser-mode/enable` | Enable Browser Mode: stop VLC, launch fullscreen Chromium at URL |
 | POST | `/browser-mode/disable` | Disable Browser Mode: kill Chromium, restart VLC |
 
+## App API v1 (`/sing/api/v1`)
+
+A JSON API for the mobile app, in `sing_api_v1.py` (blueprint `app_api_bp`, registered in `app.py`). It is a thin layer: **handlers delegate to the existing `/sing` web views and `SingStore` logic** so both clients share rules (rate limits, rename guard, auto-approve, kj_pick cap, make-it) and only differ in auth and envelope.
+
+- **Auth.** `Authorization: Bearer <gen token>` is verified against gen `/api/users/me` (`gen_client.py`) and cached in memory by `sha256(token)` (60 s positive, 10 s negative). The raw token is never stored, logged or written by the ActionRecorder (`Authorization` is redacted). Gen down -> `gen_unavailable`.
+- **Identity.** `app_device_id = sha256("app:" + email.strip().lower())[:32]` (`app_identity.py`). The email is the gen-verified one. The HMAC secret `app_identity_secret` is generated once into `rotation_meta`. Ownership checks cover every device linked to the account.
+- **Night scope.** `night_id = sha256(f"{box_id}:{night_started_at}")[:16]`. Mutating calls carry it; a stale id returns 409 `night_changed`. Submits, changes and tip claims dedupe on `client_request_id`. `GET /night` and rotation reads use ETags that rotate with the rotation rev.
+- **Errors.** `{"error": <code>, "message"?, "retry_after"?}` with the closed enum in the contract (`unauthenticated, gen_unavailable, not_open, night_changed, needs_name, not_found, not_owner, already_sung, on_stage, rate_limited, invalid, kj_pick_too_large, make_disabled, youtube_blocked, gen_rejected, already_generating, busy_retry, conflict, internal`). Failed event-code attempts and gen verification failures are rate limited.
+- **Contract.** `docs/api/singer-v1.openapi.json` (in `kj-controller/`) is strict (`additionalProperties: false`); tests validate every v1 response against it. HLS preview segments carry `?t=`.
+- **Make-it** runs with the app user's own gen account (not the box's partner token).
+- **History outbox** (`history_outbox.py`, table `history_outbox` in `rotation.db`). `RotationManager._after_mutation` wakes a daemon thread that coalesces for ~1 s, scans tonight's Done entries, queues one row per linked singer (`history_id = "kj_" + sha256(f"{box_id}:{entry_id}:{email}")[:24]`), and delivers to decide `PUT/DELETE /api/partner/kjbox/karaoke-log/{history_id}` with `X-Kjbox-Secret`. Retries survive restarts; the whole thing is inert unless `decide_api_url` and `decide_kjbox_secret` are set.
+- **Expo push.** `push_dispatcher.py` sends `kind='expo'` subscriptions via the Expo push API alongside web push.
+- **Config keys:** `box_id` (default `nomadpc`), `decide_api_url`, `decide_kjbox_secret`, `app_android_sha256_fingerprints`.
+- **Local stack and test API** (loopback only, `KJBOX_TEST_API=1`): see [TESTING.md](TESTING.md#local-stack-mobile-e2e-and-the-night-replay).
+
 ## Key Design Decisions
 
 ### App Factory Pattern

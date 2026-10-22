@@ -1175,6 +1175,19 @@ Related rotation-entry side: the singer can only move an entry to `Cancelled` (v
 9. The auto-approve path on `/submit` does not send the "You're in!" decision push, which the KJ manual approve does (`routes.py:6487`). Only ladder pushes fire.
 10. The KJ reject route (`routes.py:6519`) has no pending-only guard. Contrast with approve, which returns 409.
 
+### 4.9 App API v1, web claim and history outbox (v0.135.0)
+
+The Nomad Karaoke mobile app and the "Save tonight's songs" web claim reuse the singer flows above; they add no new night logic.
+
+| Capability | Code | Behaviour |
+|---|---|---|
+| **App API `/sing/api/v1/*`** | `sing_api_v1.py` (`app_api_bp`); contract `docs/api/singer-v1.openapi.json` (in `kj-controller/`) | Gen bearer token auth (verified via gen `/api/users/me`, cached 60 s / 10 s negative). Routes: `night`, `join`, `requests` (+ `cancel`, `change`, `reorder`, `consent`), `me` (GET/PUT, includes linked-device songs and `history_id`s), `search` (+ `identify`, `resolve`, `event`), `singers`, `now`, `rotation`, `preview/resolve|close`, `tips` (+ `claim`), `my-stats`, `push-token`, `make/check|search|validate-url|use-quick/<id>`. Every response has `api_version`; errors are `{error, message?, retry_after?}` with a closed enum. Submits, changes and tip claims are idempotent on `client_request_id`. `night_id` changes with each night (409 `night_changed`). Ownership is server-side across all devices linked to the account. |
+| **App identity** | `app_identity.py`, `SingStore.app_identity_secret` | `app_device_id = sha256("app:" + email)[:32]` is derived from the gen-verified email; the HMAC secret lives in `rotation_meta` (`app_identity_secret`). |
+| **Web claim** | `sing_make.py` `POST /sing/account/link`, `/sing/account/unlink` | Signed-in web singers can link this phone to their gen account so tonight's songs reach their Nomad Karaoke log. The sign-in (`purpose=save`) works even when make-it is off. `/sing/forget` now requires the event code. |
+| **History outbox** | `history_outbox.py`, table `history_outbox` | When a linked singer's entry is Done, a record is queued and delivered to decide `PUT /api/partner/kjbox/karaoke-log/{history_id}` (`X-Kjbox-Secret`). Undo (no longer Done) sends `DELETE` for the same id. `sung_at` = first play start; artist/title from the request, else the media library play event. Duets credit each unambiguously named linked singer; a "song for a friend" credits only the friend. Inert until `decide_api_url` and `decide_kjbox_secret` are set. |
+| **Expo push** | `push_dispatcher.py`, `sing_push_subscriptions.kind='expo'` | `POST /push-token` registers a device; the same steps as web push plus a new `sung` step. |
+| **App links** | `sing.py` `/.well-known/assetlinks.json`, `/.well-known/apple-app-site-association` | Android fingerprints come from `app_android_sha256_fingerprints` (default empty). |
+
 ## 5. Background / automatic behaviours
 
 All paths are relative to `kj-controller/` unless prefixed with `desktop/`, `docs/` or `deploy/`. `app.py` line numbers are from committed HEAD (5cd00eb). The uncommitted `action_recorder.py` / `_install_action_recorder` work in this worktree is **not** mapped here.

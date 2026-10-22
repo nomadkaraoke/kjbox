@@ -118,6 +118,15 @@ Before touching singer song search, "Did you mean", auto-correct/tidy, or the ma
   results: design doc §8.
 - Test set: `kj-controller/tests/fixtures/song_id_eval.jsonl`.
 
+## App API v1 (`/sing/api/v1`)
+
+The mobile app's API (`kj-controller/sing_api_v1.py`, contract `kj-controller/docs/api/singer-v1.openapi.json`). Rules:
+- **Delegate to the existing web views/store logic**; don't fork singer rules into v1. Existing `/sing/*` responses stay byte-compatible.
+- **Never store or log gen tokens** (cache by `sha256(token)` only; ActionRecorder redacts `Authorization`).
+- **Every v1 route goes in the OpenAPI contract with strict tests** (`additionalProperties: false`, closed error enum, `api_version` on every response).
+- **App device ids are HMACs** of the verified email under the box secret (`app_identity.py`); never derive them from client input.
+- History outbox -> decide is inert unless `decide_api_url`/`decide_kjbox_secret` are set (see docs/MINIPC-SETUP.md 3.4.1). Local E2E stack: `kj-controller/scripts/local-stack.sh` (port 8040; see docs/TESTING.md).
+
 ## HDMI Troubleshooting
 
 If the user reports HDMI video or audio issues on NomadPC, **read [docs/HDMI.md](docs/HDMI.md) first**. It contains:
