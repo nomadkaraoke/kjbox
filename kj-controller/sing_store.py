@@ -13,6 +13,7 @@ import sqlite3
 import threading
 import time
 
+from singer_names import fold_name
 
 # Meta keys stored in rotation_meta (same table RotationStore uses)
 TOKEN_KEY = "request_token"
@@ -1599,15 +1600,42 @@ class SingStore:
         )
         conn.commit()
 
-    def get_alias_origin(self, device_id):
-        """'kj' or 'self' for a device's alias, or None when it has none."""
+    def host_alias_tonight(self, device_id, since):
+        """True when the host (a KJ rename or merge) set this device's alias
+        since ``since`` (the night marker). Aliases outlive the night, so an
+        older KJ alias doesn't count."""
         device_id = (device_id or "").strip()
-        if not device_id:
-            return None
+        if not device_id or not since:
+            return False
         row = self._get_conn().execute(
-            "SELECT origin FROM singer_aliases WHERE device_id = ?", (device_id,),
+            "SELECT origin, updated_at FROM singer_aliases WHERE device_id = ?",
+            (device_id,),
         ).fetchone()
-        return row[0] if row else None
+        return bool(row and row["origin"] == "kj" and (row["updated_at"] or "") >= since)
+
+    def name_claimed_by_others(self, folded_name, account_devices, night_started_at):
+        """True when someone other than the account ``account_devices`` might
+        be ``folded_name`` tonight: a device outside the account submitted
+        under that (folded) name since ``night_started_at``, or has an alias
+        to it set since then. Fails closed (True) without a name or night
+        marker. Attribution by name (a host-added entry, a duet) is only safe
+        when this is False; the history outbox uses the same rule."""
+        if not folded_name or not night_started_at:
+            return True
+        devices = {d for d in account_devices or () if d}
+        conn = self._get_conn()
+        rows = conn.execute(
+            "SELECT DISTINCT device_id, singer_name AS name FROM sing_requests "
+            "WHERE created_at >= ? AND device_id IS NOT NULL AND device_id != ''",
+            (night_started_at,),
+        ).fetchall()
+        rows += conn.execute(
+            "SELECT device_id, canonical_name AS name FROM singer_aliases "
+            "WHERE updated_at >= ?",
+            (night_started_at,),
+        ).fetchall()
+        return any(r["device_id"] not in devices and fold_name(r["name"]) == folded_name
+                   for r in rows)
 
     def clear_alias(self, device_id):
         """Drop a device's alias (used when a device declares a new identity)."""

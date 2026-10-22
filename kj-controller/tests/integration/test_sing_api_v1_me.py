@@ -387,29 +387,70 @@ def test_sung_friend_song_has_no_history_id(client, token, sam, sing_app):
     assert "history_id" not in item
 
 
-def test_sung_host_partner_and_web_entries_reach_sung_tonight(client, token, sam, sing_app):
+def test_sung_host_and_partner_entries_reach_sung_tonight(client, token, sam, sing_app):
     sing_app.sing_store.set_auto_approve(True)
     host = sing_app.rotation.add_entry("Sam S", "Host Pick - H")
     duet = _web_submit(client, token, "web-bob", singer="Bob", title="Duet",
                        additional_singers=[{"name": "Sam S"}])
-    web = _web_submit(client, token, "web-sam", singer="Sam S", title="From Web")
     stranger = sing_app.rotation.add_entry("Someone Else", "Stranger - S")
-    store = sing_app.sing_store
-    duet_entry = store.get_request(duet["id"])["linked_entry_id"]
-    web_entry = store.get_request(web["id"])["linked_entry_id"]
-    for eid in (host["id"], duet_entry, web_entry, stranger["id"]):
+    duet_entry = sing_app.sing_store.get_request(duet["id"])["linked_entry_id"]
+    for eid in (host["id"], duet_entry, stranger["id"]):
         sing_app.rotation.update_status(eid, "Done")
     body = _me(client, sam, token)
     assert body["songs"] == []
     by_entry = {s["entry_id"]: s for s in body["sung_tonight"]}
-    assert set(by_entry) == {host["id"], duet_entry, web_entry}
+    assert set(by_entry) == {host["id"], duet_entry}
     assert by_entry[host["id"]]["owner"] == "host"
     assert by_entry[duet_entry]["owner"] == "partner"
     assert by_entry[duet_entry]["added_by"] == "Bob"
-    assert by_entry[web_entry]["owner"] == "web"
     for eid, item in by_entry.items():
         assert item["performed"] is True
         assert item["history_id"] == history_id_for("nomadpc", eid, EMAIL)
+
+
+def test_sung_unlinked_web_entry_listed_without_history_id(client, token, sam, sing_app):
+    """The unlinked web page claims the name too, so the song isn't proven to
+    be this account's until the page is linked."""
+    sing_app.sing_store.set_auto_approve(True)
+    web = _web_submit(client, token, "web-sam", singer="Sam S", title="From Web")
+    web_entry = sing_app.sing_store.get_request(web["id"])["linked_entry_id"]
+    sing_app.rotation.update_status(web_entry, "Done")
+    [item] = _me(client, sam, token)["sung_tonight"]
+    assert item["owner"] == "web" and item["entry_id"] == web_entry
+    assert item["history_id"] is None
+    _link(sing_app, "web-sam")
+    [item] = _me(client, sam, token)["sung_tonight"]
+    assert item["owner"] == "me"
+    assert item["history_id"] == history_id_for("nomadpc", web_entry, EMAIL)
+
+
+def test_same_name_walk_in_blocks_history_id(client, token, sam, sing_app):
+    """Two phones are "Sam S" tonight: a host-added Sam S song that was sung
+    can't be attributed to either by name (A5-R10)."""
+    sing_app.sing_store.set_auto_approve(True)
+    own = _submit(client, sam, token, **_song("Mine"))
+    _web_submit(client, token, "walk-in", singer="Sam S", title="Theirs")
+    host = sing_app.rotation.add_entry("Sam S", "Host Pick - H")
+    sing_app.rotation.update_status(host["id"], "Done")
+    own_entry = sing_app.sing_store.get_request(own["id"])["linked_entry_id"]
+    sing_app.rotation.update_status(own_entry, "Done")
+    by_entry = {s["request"]["linked_entry_id"]: s for s in _me(client, sam, token)["sung_tonight"]}
+    assert by_entry[host["id"]]["owner"] == "host"
+    assert by_entry[host["id"]]["history_id"] is None
+    # The account's own request is still its own.
+    assert by_entry[own_entry]["history_id"] == history_id_for("nomadpc", own_entry, EMAIL)
+    # An alias tonight claims the name too (no request needed).
+    store = sing_app.sing_store
+    assert store.name_claimed_by_others("sam s", [app_device_id(EMAIL)],
+                                        store.get_night_started_at())
+    assert not store.name_claimed_by_others("nobody", [app_device_id(EMAIL)],
+                                            store.get_night_started_at())
+    store.set_alias("alias-only", "Zed Z")
+    assert store.name_claimed_by_others("zed z", [app_device_id(EMAIL)],
+                                        store.get_night_started_at())
+    assert not store.name_claimed_by_others("zed z", ["alias-only"],
+                                            store.get_night_started_at())
+    assert store.name_claimed_by_others("zed z", [], None)   # fails closed
 
 
 def _traced_statements(sing_app, fn):
@@ -486,3 +527,27 @@ def test_rename_with_no_songs_keeps_photo_consent(client, token, sam, sing_app):
     assert body["me"]["photo_consent"] == "yes"
     assert body["me"]["instagram"] == "sam.sings"
     assert sing_app.sing_store.get_photo_consent("Alex B") == "yes"
+
+
+def test_old_host_alias_does_not_block_rename(client, token, sam, sing_app):
+    """Aliases outlive the night: a host spelling fix on a past night mustn't
+    lock the singer out of renaming forever."""
+    store = sing_app.sing_store
+    store.set_alias(app_device_id(EMAIL), "Sam S", origin="kj")
+    conn = store._get_conn()
+    conn.execute("UPDATE singer_aliases SET updated_at='2000-01-01 00:00:00'")
+    conn.commit()
+    body = _expect(_put_me(client, sam, token, name="Alex B"), "updateMe", 200)
+    assert body["me"]["name"] == "Alex B"
+
+
+def test_host_named_alias_alone_or_case_only_change_is_allowed(client, token, sam, sing_app):
+    store = sing_app.sing_store
+    # A KJ-established "Sam S" (another phone merged) with no songs of ours
+    # tonight: the web rename would rewrite nothing, so it goes through.
+    store.set_alias("web-merged", "Sam S", origin="kj")
+    _expect(_put_me(client, sam, token, name="Sam Smith"), "updateMe", 200)
+    # A host alias tonight: a case-only change is still fine.
+    store.set_alias(app_device_id(EMAIL), "Sam Smith", origin="kj")
+    body = _expect(_put_me(client, sam, token, name="sam smith"), "updateMe", 200)
+    assert body["me"]["name"] == "sam smith"

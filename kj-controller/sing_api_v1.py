@@ -792,6 +792,22 @@ def _identity_items(store, entries, identity, already_linked, requesters):
     return items
 
 
+_IDENTITY_OWNERS = ("host", "partner", "web")
+
+
+def _attributable(store, item, identity):
+    """True when an entry matched to the singer by name can safely count as
+    theirs: no device outside the account claims any of the matching names
+    tonight (A5-R10; ``SingStore.name_claimed_by_others``)."""
+    entry_id = item.get("entry_id")
+    rotation = getattr(current_app, "rotation", None)
+    entry = rotation.store.get_entry(entry_id) if rotation is not None else None
+    matched = {sing._fold_name(m) for m in sing._entry_members(entry or {})} & identity
+    return bool(matched) and not any(
+        store.name_claimed_by_others(f, g.account_devices, g.night_started_at)
+        for f in matched)
+
+
 def _sung_identity_items(identity, already_linked, requesters):
     """Tonight's Done entries naming the singer that none of the account's
     requests created (host- or partner-added songs the singer sang), as
@@ -934,6 +950,10 @@ def get_me():
             if it["owner"] != "friend":
                 entry_id = it["request"].get("linked_entry_id") or it.get("entry_id")
                 it["history_id"] = history_id_for(box_id, entry_id, g.app_user.email)
+                if it["owner"] in _IDENTITY_OWNERS and not _attributable(store, it, identity):
+                    # Matched by name only, and someone else may have that name
+                    # tonight: listed, but never recorded as this account's (A5-R10).
+                    it["history_id"] = None
             sung.append(it)
         else:
             active.append(it)
@@ -1024,15 +1044,23 @@ def update_me():
     unsung = [r for r in own if _linked_entry_status(r) not in ("done", "left")]
 
     if name and name != current:
-        # A name the host set or merged (a 'kj' alias, or any KJ-established
-        # identity among the names being renamed) makes the web rename a
-        # whole-group rename, which would rewrite sung (Done) songs and other
-        # devices' songs. Only the host can change it (A5-R8).
-        old_names = {n for n in [current] + [r.get("singer_name") for r in unsung] if n}
-        if (any(store.get_alias_origin(d) == "kj" for d in g.account_devices)
-                or any(store.is_canonical_identity(n) for n in old_names)):
-            return v1_error("conflict", 409, "the host set this name; ask the host to change it",
-                            reason="host_named", **{"from": current or "", "to": name})
+        # Renaming a name the host set or merged is the host's call (A5-R8),
+        # because the web rename would widen to a whole-group rename that
+        # rewrites sung (Done) songs and other devices' songs. Refused only
+        # when that could actually happen: a KJ alias set on one of the
+        # account's devices tonight (aliases outlive the night), or a
+        # KJ-established identity among the names the web rename would rewrite
+        # (exactly its own escalation test). A case-only change rewrites
+        # nothing and always goes through.
+        if name.lower() != (current or "").lower():
+            old_names = {r.get("singer_name").strip() for r in unsung
+                         if (r.get("singer_name") or "").strip()
+                         and r["singer_name"].strip().lower() != name.lower()}
+            if (any(store.host_alias_tonight(d, g.night_started_at) for d in g.account_devices)
+                    or any(store.is_canonical_identity(n) for n in old_names)):
+                return v1_error("conflict", 409,
+                                "the host set this name; ask the host to change it",
+                                reason="host_named", **{"from": current or "", "to": name})
         queued = [r for r in unsung if r.get("status") in ("pending", "approved")
                   and _linked_entry_status(r) != "cancelled"]
         if (current and queued and not confirm

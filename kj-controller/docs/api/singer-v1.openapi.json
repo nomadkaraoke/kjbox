@@ -1673,9 +1673,12 @@
             "description": "partner rows: who requested it"
           },
           "history_id": {
-            "type": "string",
+            "type": [
+              "string",
+              "null"
+            ],
             "pattern": "^kj_[0-9a-f]{24}$",
-            "description": "Only on performed songs that aren't a friend's: \"kj_\" + sha256(box_id:entry_id:email)[:24], the id decide's karaoke log uses for this performance"
+            "description": "Only on performed songs that aren't a friend's: \"kj_\" + sha256(box_id:entry_id:email)[:24], the id decide's karaoke log uses for this performance. null on a host-, partner- or web-added song matched to the singer by name when someone else may have that name tonight (another device submitted under it or is aliased to it): it's listed, but not recorded as this singer's."
           }
         }
       },

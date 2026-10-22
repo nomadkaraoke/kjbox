@@ -28,6 +28,7 @@ from flask import (
     session,
     url_for,
 )
+from singer_names import fold_name
 from sing_store import SingStore
 from wait_estimate import compute_all_estimates, compute_estimate
 
@@ -1767,11 +1768,7 @@ def _split_duet_name(name):
 
 def _fold_name(name):
     """Casefolded, accent-stripped, alnum+space form for name comparison."""
-    import unicodedata
-    decomposed = unicodedata.normalize("NFKD", name or "")
-    stripped = "".join(c for c in decomposed if not unicodedata.combining(c))
-    cleaned = "".join(c if (c.isalnum() or c.isspace()) else " " for c in stripped)
-    return " ".join(cleaned.casefold().split())
+    return fold_name(name)
 
 
 def match_known_singer(typed, known_names, exclude=None):
