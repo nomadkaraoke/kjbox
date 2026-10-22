@@ -30,7 +30,7 @@ from flask import current_app, g, has_request_context, jsonify, request
 
 from gen_client import CREATE_JOB_TIMEOUT, REQUEST_TIMEOUT, GenApiError
 from app_identity import app_device_id
-from sing import _client_ip, _singer_rate_limited, require_token, sing_bp
+from sing import _client_ip, require_token, sing_bp
 
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 _CODE_RE = re.compile(r"^\d{6}$")
@@ -45,6 +45,10 @@ _MAKE_RATE_PER_IP = 400
 _CODE_RATE_WINDOW_S = 3600
 _CODE_RATE_PER_DEVICE = 5
 _CODE_RATE_PER_IP = 40
+# Save tonight's songs (link / unlink): its own budget, apart from song requests.
+_CLAIM_RATE_WINDOW_S = 600
+_CLAIM_RATE_PER_DEVICE = 20
+_CLAIM_RATE_PER_IP = 300
 _lock = threading.Lock()
 # Worst-case wall time of a make-it submit: the submit-time show credit (up to
 # two attempts) then gen's create-job. ``requests`` applies a timeout to the
@@ -134,14 +138,21 @@ def _body():
     return data, device_id
 
 
-def _guard(device_id, need_account=True):
-    """Common checks. Returns (account, error_response)."""
+def _guard(device_id, need_account=True, purpose="make"):
+    """Common checks. Returns (account, error_response).
+
+    ``purpose="save"`` (the "Save tonight's songs" sign-in, spec 5.6) skips
+    only the host's make-it toggle and simple mode: saving songs works on any
+    night gen + the partner secret are configured. Rate limits stay."""
     app = current_app._get_current_object()
     store = app.sing_store
-    if not (store.is_accepting_make_requests() and make_flow_ready(app)):
+    if not make_flow_ready(app):
         return None, (jsonify({"error": "make_requests_disabled"}), 400)
-    if store.is_simple_mode():
-        return None, (jsonify({"error": "simple_mode_disabled_source"}), 400)
+    if purpose != "save":
+        if not store.is_accepting_make_requests():
+            return None, (jsonify({"error": "make_requests_disabled"}), 400)
+        if store.is_simple_mode():
+            return None, (jsonify({"error": "simple_mode_disabled_source"}), 400)
     # The device id selects the stored gen sign-in, so it must be the random
     # 32-hex id (sing.js falls back to a short guessable one without crypto).
     if not re.fullmatch(r"[0-9a-f]{32}", device_id or ""):
@@ -188,6 +199,10 @@ def gen_error_response(exc, device_id=None):
     return jsonify({"error": "gen_unavailable"}), 502
 
 
+def _purpose(data):
+    return "save" if str(data.get("purpose") or "") == "save" else "make"
+
+
 def _locale(data):
     loc = str(data.get("locale") or "").strip()[:12]
     return loc or None
@@ -230,7 +245,7 @@ def _unlink_if_other(store, device_id, email):
 @require_token
 def make_send_code():
     data, device_id = _body()
-    _, err = _guard(device_id, need_account=False)
+    _, err = _guard(device_id, need_account=False, purpose=_purpose(data))
     if err:
         return err
     email = str(data.get("email") or "").strip().lower()[:254]
@@ -256,7 +271,7 @@ def make_send_code():
 @require_token
 def make_verify_code():
     data, device_id = _body()
-    _, err = _guard(device_id, need_account=False)
+    _, err = _guard(device_id, need_account=False, purpose=_purpose(data))
     if err:
         return err
     email = str(data.get("email") or "").strip().lower()[:254]
@@ -296,9 +311,12 @@ def make_sign_out():
 def _claim_guard():
     """Checks shared by link/unlink. Returns (store, device_id, account, night,
     error_response)."""
-    data, device_id = _body()
+    _data, device_id = _body()
     store = current_app.sing_store
-    if _singer_rate_limited(request, data):
+    # Own budget (not the song-request one): a singer toggling Save/Stop must
+    # never cost them a song request.
+    if _rate_limited(device_id, bucket="claim", window=_CLAIM_RATE_WINDOW_S,
+                     per_ip=_CLAIM_RATE_PER_IP, per_device=_CLAIM_RATE_PER_DEVICE):
         return None, None, None, None, (jsonify({"error": "rate_limited"}), 429)
     # A web device id (the singer UI's random 32 hex) that isn't the app's own:
     # the app links its device itself, and a web claim must never rewrite it.
@@ -309,8 +327,7 @@ def _claim_guard():
         return None, None, None, None, (jsonify({"error": "signin_required"}), 400)
     if device_id == app_device_id(account["email"], store.app_identity_secret()):
         return None, None, None, None, (jsonify({"error": "invalid"}), 400)
-    night = store.get_night_started_at() or store.ensure_night_started()
-    return store, device_id, account, night, None
+    return store, device_id, account, store.get_night_started_at(), None
 
 
 @sing_bp.route("/account/link", methods=["POST"])
@@ -321,6 +338,7 @@ def account_link():
     store, device_id, account, night, err = _claim_guard()
     if err:
         return err
+    night = night or store.ensure_night_started()
     store.link_account(device_id, account["email"], "web", night)
     outbox = getattr(current_app, "history_outbox", None)
     if outbox is not None:
@@ -335,6 +353,8 @@ def account_unlink():
     store, device_id, _account, night, err = _claim_guard()
     if err:
         return err
+    if not night:
+        return ("", 204)   # no night yet: nothing can be linked; don't start one
     store.unlink_account(device_id, night)
     return jsonify({"linked": False})
 

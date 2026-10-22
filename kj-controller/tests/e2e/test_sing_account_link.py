@@ -89,12 +89,15 @@ class TestSaveTonightsSongs:
         main = page.locator('[data-testid="save-songs-main"]')
         expect(main.locator('[data-testid="save-songs-link"]')).to_have_text(LINK)
         expect(main.locator('[data-testid="save-songs-explainer"]')).to_have_text(EXPLAINER)
-        # Sung tonight carries the same one-line link.
+        # The line shows once, under the name line, never again in Sung tonight (A9-R5).
         page.locator(".sung-section summary").click()
-        expect(page.locator('[data-testid="save-songs-sung"] [data-testid="save-songs-link"]')
-               ).to_have_text(LINK)
+        expect(page.locator('[data-testid="sung-section"]')).to_be_visible()
+        expect(page.locator('[data-testid="save-songs-sung"]')).to_have_count(0)
+        expect(page.locator('[data-testid="save-songs-link"]')).to_have_count(1)
         _shot(page, "a9-1-your-songs-link")
 
+        # A make-it wizard opened earlier, still at its email step.
+        page.evaluate("window.__sing_state.make = {stage: 'account', email: ''}")
         # Not signed in on this phone: the email code comes first.
         main.locator('[data-testid="save-songs-link"]').click()
         main.locator('[data-testid="save-songs-cancel"]').click()     # changed their mind
@@ -111,10 +114,13 @@ class TestSaveTonightsSongs:
 
         status = main.locator('[data-testid="save-songs-status"]')
         expect(status).to_contain_text(f"Saving tonight's songs to {EMAIL}")
-        expect(page.locator('[data-testid="save-songs-sung"] [data-testid="save-songs-status"]')
-               ).to_contain_text(f"Saving tonight's songs to {EMAIL}")
+        expect(page.locator('[data-testid="save-songs-status"]')).to_have_count(1)
+        expect(page.locator('[data-testid="save-songs-sung"]')).to_have_count(0)
         _shot(page, "a9-4-linked")
         assert calls["send"][0]["email"] == EMAIL
+        assert calls["send"][0]["purpose"] == "save" and calls["verify"][0]["purpose"] == "save"
+        # The wizard knows about the sign-in, so it won't ask for the email again.
+        assert page.evaluate("window.__sing_state.make.email") == EMAIL
         assert calls["verify"][0]["code"] == "123456"
         device = calls["verify"][0]["device_id"]
         assert len(device) == 32 and calls["link"][0]["device_id"] == device
@@ -161,3 +167,46 @@ class TestSaveTonightsSongs:
         _open_wizard(page, live_server, live_token, email=EMAIL)
         expect(page.locator('[data-testid="make-pick"]')).to_be_visible()
         expect(page.locator('[data-testid="save-songs-offer"]')).to_be_hidden()
+
+
+class TestSaveWithMakeItOff:
+    """Make-it switched off (or simple mode): the save sign-in still works,
+    end to end through the real kjbox routes with only gen faked."""
+
+    def test_make_off_signed_out_link_code_linked(self, page, live_server, live_token, live_app):
+        app = live_app
+        store = app.sing_store
+        gen = _FakeGen()
+        old_gen = getattr(app, "gen_client", None)
+        app.gen_client = gen
+        store.set_accepting_make_requests(False)
+        try:
+            _open_your_songs(page, live_server, live_token)
+            main = page.locator('[data-testid="save-songs-main"]')
+            main.locator('[data-testid="save-songs-link"]').click()
+            main.locator('[data-testid="save-songs-email"]').fill(EMAIL)
+            main.locator('[data-testid="save-songs-send-code"]').click()
+            main.locator('[data-testid="save-songs-code"]').fill("123456")
+            expect(main.locator('[data-testid="save-songs-status"]')).to_contain_text(
+                f"Saving tonight's songs to {EMAIL}")
+            _shot(page, "a9-7-make-off-linked")
+            device = page.evaluate("localStorage.getItem('sing_device_id')")
+            assert store.account_for_device(device, store.get_night_started_at()) == EMAIL
+            assert gen.sent == [EMAIL]
+        finally:
+            store.set_accepting_make_requests(True)
+            app.gen_client = old_gen
+
+
+class _FakeGen:
+    def __init__(self):
+        self.sent = []
+
+    def singer_flow_configured(self):
+        return True
+
+    def send_login_code(self, email, locale=None, venue=None):
+        self.sent.append(email)
+
+    def verify_login_code(self, email, code, locale=None):
+        return {"session_token": "sess-e2e", "user": {}}

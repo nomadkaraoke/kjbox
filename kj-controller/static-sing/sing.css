@@ -1950,5 +1950,4 @@ body:has(#sing-tabs:not([hidden])) .sing-make-bar {
 .save-songs-explainer, .save-songs-status { margin: 0.35rem 0 0; }
 .save-songs-form { display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.5rem; }
 .save-songs-actions { display: flex; gap: 1rem; flex-wrap: wrap; }
-.save-songs-sung { margin: 0.25rem 0 0.5rem; font-size: 0.9rem; }
 .save-songs-offer { border-top: 1px solid var(--nk-border); padding-top: 0.75rem; }

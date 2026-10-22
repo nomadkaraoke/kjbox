@@ -19,6 +19,16 @@ def flask_port():
     return int(os.environ.get("KJ_E2E_PORT", "5099"))
 
 
+_LIVE = {}
+
+
+@pytest.fixture(scope="session")
+def live_app(live_server):
+    """The live server's Flask app, for tests that drive real routes with a
+    faked dependency (e.g. ``app.gen_client``). Restore anything you change."""
+    return _LIVE["app"]
+
+
 @pytest.fixture(scope="session")
 def live_server(tmp_path_factory, flask_port):
     """Start a live Flask server in a background thread for Playwright tests."""
@@ -54,6 +64,7 @@ def live_server(tmp_path_factory, flask_port):
 
     app = create_app(config=config)
     app.config["TESTING"] = True
+    _LIVE["app"] = app
 
     server_thread = threading.Thread(
         target=lambda: app.run(

@@ -3890,8 +3890,9 @@ function renderDone() {
 // A web singer signs in with the make-it email code and links this device to
 // their Nomad Karaoke account for tonight; kjbox then sends the songs they sing
 // to decide, as it does for app users. Linking is always an explicit tap.
-// Slots: "main" (Your songs, with the sign-in form), "sung" (a one-line link in
-// Sung tonight) and "offer" (right after a make-it sign-in).
+// Slots: "main" (Your songs, once, under the name line, with the sign-in form;
+// A9-R5) and "offer" (right after a make-it sign-in). The save sign-in sends
+// purpose "save", so it works even when the host has make-it off.
 
 const _webDeviceOk = () => /^[0-9a-f]{32}$/.test(DEVICE_ID || "");
 
@@ -3976,7 +3977,7 @@ async function saveSongsSendCode() {
   Object.assign(a, { busy: true, err: "" });
   paintSaveSongs();
   try {
-    await _saveSongsPost("make/send-code", { email });
+    await _saveSongsPost("make/send-code", { email, purpose: "save" });
     Object.assign(a, { busy: false, stage: "code", code: "" });
   } catch (e) {
     Object.assign(a, { busy: false, err: _saveSongsErr(e) });
@@ -3993,8 +3994,11 @@ async function saveSongsVerify() {
   Object.assign(a, { busy: true, err: "" });
   paintSaveSongs();
   try {
-    const d = await _saveSongsPost("make/verify-code", { email: a.emailInput.trim(), code });
+    const d = await _saveSongsPost("make/verify-code",
+      { email: a.emailInput.trim(), code, purpose: "save" });
     Object.assign(a, { busy: false, email: d.email, stage: "idle", code: "" });
+    // Same gen sign-in as make-it: the wizard mustn't ask for it again.
+    if (state.make) state.make.email = d.email;
   } catch (e) {
     Object.assign(a, { busy: false, err: _saveSongsErr(e) });
     return paintSaveSongs();
@@ -4072,13 +4076,11 @@ function saveSongsSlot(variant = "main") {
         disabled: a.busy ? "disabled" : null, onclick: saveSongsLink,
       }, t("saveSongs.link")));
     }
-    if (variant !== "sung") {
-      slot.appendChild(el("p", { class: "hint save-songs-explainer", "data-testid": "save-songs-explainer" },
-        t("saveSongs.explainer")));
-    }
+    slot.appendChild(el("p", { class: "hint save-songs-explainer", "data-testid": "save-songs-explainer" },
+      t("saveSongs.explainer")));
     if (showForm) slot.appendChild(_saveSongsForm(a));
   }
-  if (a.err && variant !== "sung") {
+  if (a.err) {
     slot.appendChild(el("p", { class: "error", "data-testid": "save-songs-error" }, a.err));
   }
   return slot;
@@ -4266,7 +4268,6 @@ function _renderSungSection(container, performed) {
     el("summary", {}, t("mySongs.sungSection", { count: performed.length })),
     el("div", { class: "sung-list" },
       performed.map((item) => _renderSongCard(item))),
-    saveSongsSlot("sung"),
   );
   if (wasOpen) next.open = true;
   container.appendChild(next);

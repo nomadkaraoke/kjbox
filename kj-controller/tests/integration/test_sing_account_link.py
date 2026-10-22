@@ -163,11 +163,57 @@ def test_refuses_a_malformed_device_id(client, token, gen, night):
     assert (resp.status_code, resp.get_json()["error"]) == (400, "invalid")
 
 
-def test_link_is_rate_limited(client, sing_app, token, signed_in, night):
-    sing_app.kj_config["sing_rate_limit_per_device"] = 2
+def test_link_is_rate_limited_on_its_own_budget(client, sing_app, token, signed_in, night,
+                                                monkeypatch):
+    import sing_make
+    monkeypatch.setattr(sing_make, "_CLAIM_RATE_PER_DEVICE", 2)
+    sing_app.kj_config["sing_rate_limit_per_device"] = 1
     codes = [_link(client, token).status_code for _ in range(3)]
     assert codes == [200, 200, 429]
     assert _link(client, token).get_json()["error"] == "rate_limited"
+    # The song-request budget is untouched by Save/Stop taps.
+    sub = client.post(f"/sing/submit?t={token}", json={
+        "singer_name": "Mary", "device_id": DEVICE, "song_artist": "Nova Lane",
+        "song_title": "Golden Hour", "source_type": "local"})
+    assert sub.status_code != 429
+
+
+@pytest.mark.parametrize("night_off", ["make_off", "simple_mode"])
+def test_save_sign_in_works_when_make_it_is_off(client, sing_app, token, gen, night, night_off):
+    store = sing_app.sing_store
+    if night_off == "make_off":
+        store.set_accepting_make_requests(False)
+    else:
+        store.set_simple_mode(True)
+    body = {"device_id": DEVICE, "email": EMAIL}
+    # The make-it wizard's sign-in stays closed...
+    assert client.post(f"/sing/make/send-code?t={token}", json=body).status_code == 400
+    # ...but the save sign-in works: link → code → linked.
+    assert _account(client, token) == {"ready": True, "email": None, "linked": False}
+    save = {**body, "purpose": "save"}
+    assert client.post(f"/sing/make/send-code?t={token}", json=save).status_code == 200
+    ok = client.post(f"/sing/make/verify-code?t={token}", json={**save, "code": "123456"})
+    assert ok.get_json() == {"email": EMAIL}
+    assert _link(client, token).get_json() == {"linked": True, "email": EMAIL}
+    assert store.account_for_device(DEVICE, night) == EMAIL
+
+
+def test_save_sign_in_needs_the_partner_secret(client, sing_app, token, gen, night):
+    gen.singer_flow_configured.return_value = False
+    body = {"device_id": DEVICE, "email": EMAIL, "purpose": "save"}
+    resp = client.post(f"/sing/make/send-code?t={token}", json=body)
+    assert (resp.status_code, resp.get_json()["error"]) == (400, "make_requests_disabled")
+    assert _account(client, token)["ready"] is False
+
+
+def test_unlink_without_a_night_is_a_no_op(client, sing_app, token, signed_in):
+    store = sing_app.sing_store
+    conn = store._get_conn()
+    conn.execute("DELETE FROM rotation_meta WHERE key='night_started_at'")
+    conn.commit()
+    resp = _link(client, token, path="unlink")
+    assert resp.status_code == 204
+    assert store.get_night_started_at() is None
 
 
 def test_sign_out_and_new_email_end_the_link(client, sing_app, token, gen, signed_in, night):
