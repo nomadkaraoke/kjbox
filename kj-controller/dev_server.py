@@ -17,12 +17,30 @@ Usage:
                                        # ~/kjdata-dev/real-night.db (read-only
                                        # copy of the box; never writes back)
                                        # and run against it
+  python dev_server.py --port 8040 --host 127.0.0.1 --no-player \
+      --db ~/kjdata-localstack/rotation.db \
+      --fixture tests/fixtures/localstack/night.json
+                                       # LOCAL-STACK mode (what
+                                       # scripts/local-stack.sh up runs): a
+                                       # hermetic box for the mobile E2E —
+                                       # see localstack.py
 
-Opens at http://localhost:5555 (KJ UI) — the singer UI URL (with the event
-token) is printed at startup.
+Opens at http://localhost:5555 (KJ UI) by default (--host/--port change it) —
+the singer UI URL (with the event token) is printed at startup.
+
+KJ_CONFIG_OVERRIDES (env, a JSON object) is applied on top of the config in
+every mode, e.g. '{"gen_api_url": "http://127.0.0.1:8010"}'.
+
+Local-stack mode (--fixture PATH) never touches the real box or ~/kjdata: the
+data dir is the --db file's directory (default ~/kjdata-localstack, env
+KJBOX_LOCALSTACK_DIR), the catalog is built from the fixture, the fixture
+night is seeded on first start (a restart keeps the night), downloads / SMS /
+push are cut off, and the /sing/api/test/* API is mounted when
+KJBOX_TEST_API=1 and --host is loopback (sing_test_api.py).
 """
 
 import argparse
+import json
 import os
 import subprocess
 import sys
@@ -248,7 +266,19 @@ def main():
                              "review URLs — comma-separated (default: Andrew)")
     parser.add_argument("--no-seed", action="store_true",
                         help="skip seeding even if the rotation is empty")
+    parser.add_argument("--port", type=int, default=5555, help="port (default 5555)")
+    parser.add_argument("--host", default="127.0.0.1",
+                        help="bind address (default 127.0.0.1)")
+    parser.add_argument("--no-player", action="store_true",
+                        help="never start a player (VLC/mpv); explicit for the "
+                             "local stack — a dev config never starts one anyway")
+    parser.add_argument("--fixture", metavar="PATH",
+                        help="local-stack mode: hermetic box seeded from this "
+                             "fixture night (tests/fixtures/localstack/night.json)")
     args = parser.parse_args()
+
+    if args.fixture:
+        return run_localstack(args)
 
     if args.fetch_real:
         db_path = fetch_real_db()
@@ -292,6 +322,9 @@ def main():
     cfg["media_folders"] = [media_dir]
     # Never sync a dev rotation to the real Google Sheet.
     cfg.pop("rotation_sheet_id", None)
+    if args.no_player:
+        cfg["enable_vlc"] = False
+    cfg.update(_config_overrides())
 
     app = create_app(config=cfg)
 
@@ -301,8 +334,9 @@ def main():
 
     token = app.sing_store.ensure_token()
     print(f"\nDB:        {db_path}")
-    print("KJ UI:     http://localhost:5555")
-    print(f"Singer UI: http://localhost:5555/sing/?t={token}")
+    base = f"http://{_url_host(args.host)}:{args.port}"
+    print(f"KJ UI:     {base}")
+    print(f"Singer UI: {base}/sing/?t={token}")
     # Attribute a singer's entries to a review browser: "My songs" runs off
     # request ids stored on the singer's own phone, so hand the reviewer a
     # ?r= URL carrying freshly-linked ids for their entries.
@@ -313,13 +347,77 @@ def main():
             # (cancel / change / reorder), exactly like the singer's own phone.
             r = ",".join(f"{i}:{tok}" if tok else str(i) for i, tok in req_ids)
             print(f"Singer UI as {singer} ({len(req_ids)} songs attributed): "
-                  f"http://localhost:5555/sing/?t={token}&r={r}")
+                  f"{base}/sing/?t={token}&r={r}")
         else:
             print(f"Singer UI as {singer}: no rotation entries found for that name")
     print()
     # No reloader: it re-executes main() in a child process, which would
     # re-restore --night with fresh entry ids and orphan the ?r= links.
-    app.run(host="127.0.0.1", port=5555, debug=True, use_reloader=False)
+    app.run(host=args.host, port=args.port, debug=True, use_reloader=False)
+
+
+def _url_host(host):
+    return "localhost" if host in ("127.0.0.1", "0.0.0.0", "") else host
+
+
+def _config_overrides():
+    import localstack
+    try:
+        return localstack.config_overrides_from_env()
+    except (ValueError, TypeError) as e:
+        raise SystemExit(f"KJ_CONFIG_OVERRIDES is not a JSON object: {e}")
+
+
+LOCALSTACK_SEEDED_KEY = "localstack_seeded_fixture"
+
+
+def run_localstack(args):
+    """Local-stack mode: the real Flask app, hermetic, on --host:--port."""
+    import localstack
+    from app import create_app
+    from sing_test_api import install_test_api
+
+    db_path = os.path.abspath(os.path.expanduser(
+        args.db or os.path.join(localstack.data_dir(), "rotation.db")))
+    data_dir = os.path.dirname(db_path)
+    real = os.path.realpath(os.path.expanduser("~/kjdata"))
+    if os.path.realpath(data_dir) == real or os.path.realpath(data_dir).startswith(real + os.sep):
+        raise SystemExit("refusing to run the local stack inside ~/kjdata")
+    if args.fetch_real or args.night:
+        raise SystemExit("--fixture can't be combined with --fetch-real/--night")
+
+    cfg = localstack.hermetic_config(data_dir, _config_overrides())
+    cfg["rotation_db_path"] = db_path
+    cfg["enable_vlc"] = False
+    fixture = localstack.load_fixture(os.path.abspath(args.fixture))
+    counts = localstack.build_catalogs(data_dir, fixture)
+
+    app = create_app(config=cfg)
+    localstack.make_hermetic(app)
+    test_api = install_test_api(app, args.host)
+
+    store = app.sing_store
+    if store._get_meta(LOCALSTACK_SEEDED_KEY) is None:
+        localstack.reset_night(app, fixture)
+        store._set_meta(LOCALSTACK_SEEDED_KEY, os.path.basename(args.fixture))
+        seeded = "seeded the fixture night"
+    else:
+        store.set_token(localstack.EVENT_CODE)
+        seeded = "kept the existing night (restart)"
+
+    app.history_outbox.start()
+    if getattr(app, "gen_poller", None) is not None:
+        app.gen_poller.start()
+
+    base = f"http://{_url_host(args.host)}:{args.port}"
+    print(json.dumps({
+        "kjbox_local_stack": base, "data_dir": data_dir, "event_code": store.get_token(),
+        "night": seeded, "catalog": counts, "test_api": test_api,
+        "gen_api_url": cfg.get("gen_api_url"), "decide_api_url": cfg.get("decide_api_url"),
+        "box_id": cfg.get("box_id"),
+    }), flush=True)
+    print(f"Singer UI: {base}/sing/?t={store.get_token()}", flush=True)
+    app.run(host=args.host, port=args.port, debug=False, use_reloader=False, threaded=True)
 
 
 if __name__ == "__main__":
