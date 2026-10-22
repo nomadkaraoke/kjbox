@@ -383,10 +383,22 @@ def test_change_idempotent_on_client_request_id(client, token, sam, sing_app):
     assert other.get_json() != first.get_json()
 
 
+def test_change_key_is_scoped_to_the_request(client, token, sam, sing_app):
+    a = _approved_request(client, token, sam, sing_app)
+    b = _ok_submit(client, sam, token, **_song("Second"))
+    cid = str(uuid.uuid4())
+    first = _change(client, sam, token, a["id"], cid=cid, **_song("SOS"))
+    _expect(first, "changeRequest", 200)
+    second = _change(client, sam, token, b["id"], cid=cid, **_song("Other"))
+    body = _expect(second, "changeRequest", 200)
+    assert body != first.get_json()
+    assert body["request"]["supersedes_request_id"] == b["id"]
+
+
 def test_change_concurrent_retry_gets_busy_retry(client, token, sam, sing_app):
     mine = _approved_request(client, token, sam, sing_app)
     cid = str(uuid.uuid4())
-    key = f"change:{app_device_id(EMAIL, sing_app.app_identity_secret)}:{cid}"
+    key = f"change:{app_device_id(EMAIL, sing_app.app_identity_secret)}:{mine['id']}:{cid}"
     assert sing_app.sing_store.idempotent_claim(key)  # the first attempt is in flight
     body = _expect(_change(client, sam, token, mine["id"], cid=cid, **_song("SOS")),
                    "changeRequest", 409, "busy_retry")

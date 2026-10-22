@@ -251,7 +251,7 @@
       "post": {
         "operationId": "changeRequest",
         "summary": "Change the song of one of the account's requests",
-        "description": "Keeps the queue slot: a pending request is updated in place; an approved one gets a new request that supersedes it (auto-approved when the host has auto-approve on, taking over the old slot). Can't change into a make-it (400 make_disabled), once sung (409 already_sung) or while on stage (409 on_stage).",
+        "description": "Keeps the queue slot: a pending request is updated in place; an approved one gets a new request that supersedes it (auto-approved when the host has auto-approve on, taking over the old slot). A replay (same client_request_id on the same request) returns the new (superseding) request; `request.id` may differ from the path id. Can't change into a make-it (400 make_disabled), once sung (409 already_sung) or while on stage (409 on_stage).",
         "parameters": [
           {
             "name": "id",

@@ -684,7 +684,7 @@ def change_request(id):  # noqa: A002 — the contract's path parameter is {id}
     # A retry after the change took effect finds the original already
     # superseded, so the replay (inside idempotent_call) comes before any check
     # on the request's current state.
-    key = f"change:{g.app_user.device_id}:{cid}"
+    key = f"change:{g.app_user.device_id}:{req_id}:{cid}"
 
     def work():
         req = owned_request_or_error(req_id)
