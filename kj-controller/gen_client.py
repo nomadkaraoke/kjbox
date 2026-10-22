@@ -281,6 +281,10 @@ class GenClient:
             raise GenApiError(resp.status_code, detail or resp.reason)
         return data
 
+    def get_me(self, session_token):
+        """GET /api/users/me with the singer's session token (raises GenApiError)."""
+        return self._singer_call("GET", "/api/users/me", session_token=session_token)
+
     def singer_flow_configured(self):
         return bool(self.kjbox_secret)
 
