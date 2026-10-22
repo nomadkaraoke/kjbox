@@ -2659,6 +2659,13 @@
             ],
             "description": "Make-it quick (draft) version state"
           },
+          "gen_job_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Make-it songs of owner me or friend only: the karaoke-gen job id of the account's own job (the app opens its native review with it); null until gen has created the job. Absent on every other song."
+          },
           "entry_id": {
             "type": "integer",
             "description": "Host- and partner-added rows: the rotation entry"

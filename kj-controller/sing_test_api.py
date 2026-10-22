@@ -169,7 +169,7 @@ def host_add():
     artist = (body.get("artist") or "").strip()
     if not name or not title:
         return _err("invalid", 400, "name and title are required")
-    entry = current_app.rotation.add_entry(name, f"{artist} - {title}" if artist else title)
+    entry = current_app.rotation.add_entry(name, localstack.song_text(artist, title))
     return jsonify({"ok": True, "entry": entry})
 
 

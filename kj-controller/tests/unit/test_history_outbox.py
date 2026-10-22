@@ -606,3 +606,73 @@ def test_ended_at_never_before_sung_at(env):
     p = env.due()[0]["payload"]
     assert p["sung_at"] == late_start.strftime("%Y-%m-%dT%H:%M:%SZ")
     assert p["ended_at"] == p["sung_at"]
+
+
+# --- A-R10: unlinked entries take artist/title from the first live play ------------
+
+def _play(env, entry_id, artist, title, minutes_ago=3):
+    started = (datetime.now(timezone.utc).replace(tzinfo=None, microsecond=0)
+               - timedelta(minutes=minutes_ago))
+    env.stats.record_play(f"m-{entry_id}", entry_id=entry_id, artist=artist, title=title,
+                          played_at=_local(started))
+
+
+def test_host_typed_artist_first_entry_uses_the_play_events_identity(env):
+    env.link("dev-a", "a@x.com", alias="Alice")
+    # The host typed "Artist - Title" (the opposite of the box's order).
+    e = env.rs.add_entry("Alice", "The Lanterns - Midnight Ferris Wheel")
+    _play(env, e["id"], "The Lanterns", "Midnight Ferris Wheel")
+    env.done(e["id"])
+    env.outbox().scan()
+    p = env.due()[0]["payload"]
+    assert (p["artist"], p["title"]) == ("The Lanterns", "Midnight Ferris Wheel")
+    assert p["state"] == "sung"
+
+
+def test_without_a_play_event_the_title_artist_split_is_the_fallback(env):
+    env.link("dev-a", "a@x.com", alias="Alice")
+    swapped = env.rs.add_entry("Alice", "The Lanterns - Midnight Ferris Wheel")
+    usual = env.rs.add_entry("Alice", "Second Wind - Kite Season")
+    blank = env.rs.add_entry("Alice", "Paper Moons - Harbor Lights")
+    _play(env, blank["id"], "", "")          # a play with no identity: still the split
+    for e in (swapped, usual, blank):
+        env.done(e["id"])
+    env.outbox().scan()
+    got = {r["payload"]["entry_id"]: (r["payload"]["artist"], r["payload"]["title"])
+           for r in env.due()}
+    # "Title - Artist" (_format_song_text order): right for the box's own text,
+    # still swapped for host-typed "Artist - Title" with no play to correct it.
+    assert got[str(usual["id"])] == ("Kite Season", "Second Wind")
+    assert got[str(swapped["id"])] == ("Midnight Ferris Wheel", "The Lanterns")
+    assert got[str(blank["id"])] == ("Harbor Lights", "Paper Moons")
+
+
+def test_linked_request_identity_beats_the_play_event(env):
+    env.link("dev-a", "a@x.com", alias="Alice")
+    e = env.entry("Alice")
+    env.request("dev-a", "Alice", e["id"], artist="Nova Lane", title="Golden Hour")
+    _play(env, e["id"], "Some Other Band", "Some Other Song")
+    env.done(e["id"])
+    env.outbox().scan()
+    p = env.due()[0]["payload"]
+    assert (p["artist"], p["title"]) == ("Nova Lane", "Golden Hour")
+
+
+def test_a_past_nights_play_never_names_tonights_entry(env):
+    env.link("dev-a", "a@x.com", alias="Alice")
+    e = env.rs.add_entry("Alice", "Second Wind - Kite Season")
+    _play(env, e["id"], "Old Band", "Old Song", minutes_ago=24 * 60)
+    env.done(e["id"])
+    env.outbox().scan()
+    p = env.due()[0]["payload"]
+    assert (p["artist"], p["title"]) == ("Kite Season", "Second Wind")
+    assert p["state"] == "sung_unplayed"
+
+
+def test_first_play(env):
+    st = env.stats
+    st.record_play("a", entry_id=7, artist="A", title="T", played_at="2026-10-21 20:15:00")
+    assert st.first_play(7) == {"played_at": "2026-10-21T20:15:00Z", "artist": "A",
+                                "title": "T"}
+    assert st.first_play(7, not_before="2026-10-21 21:00:00") is None
+    assert st.first_play(8) is None

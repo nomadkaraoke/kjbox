@@ -461,7 +461,7 @@ def seed_singers(app, singers):
             if not title:
                 raise ValueError("each song needs a title")
             source_type = song.get("source_type") or "local"
-            text = f"{artist} - {title}" if artist else title
+            text = song_text(artist, title)
             entry = app.rotation.add_entry(name, text)
             req_id = None
             if device:
@@ -495,12 +495,41 @@ def current_entry(app):
                                                         "singing")), None)
 
 
-def record_play(app, entry_id):
-    """A play start for ``entry_id`` now (what /play records on the box)."""
+def song_text(artist, title):
+    """The box's rotation text for a song: "Title - Artist" (routes._format_song_text)."""
+    artist, title = (artist or "").strip(), (title or "").strip()
+    return f"{title} - {artist}" if artist and title else (title or artist)
+
+
+def _play_identity(app, entry):
+    """What /play would record as artist/title: the media library's identity
+    for the file. Here: the linked request's song, else the entry's file name
+    ("DISC - Artist - Title.ext"), else nothing."""
+    store = app.sing_store
+    night = store.get_night_started_at()
+    for r in store.requests_linked_to_entries([entry["id"]], night) if night else []:
+        if r.get("song_artist") and r.get("song_title"):
+            return r["song_artist"], r["song_title"]
+    path = entry.get("file_path") or ""
+    if path:
+        from catalog import parse_karaoke_filename
+        from naming import strip_media_id_token
+        _disc, artist, title = parse_karaoke_filename(
+            strip_media_id_token(os.path.basename(path)))
+        if artist and title:
+            return artist, title
+    return None, None
+
+
+def record_play(app, entry_id, artist=None, title=None):
+    """A play start for ``entry_id`` now (what /play records on the box),
+    with the media library's artist/title (given, or derived)."""
     entry = app.rotation.store.get_entry(entry_id) or {}
+    if not (artist and title) and entry:
+        artist, title = _play_identity(app, entry)
     return app.stats.record_play(
         f"localstack-{entry_id}", entry_id=entry_id, singer=entry.get("singer"),
-        title=entry.get("song_artist"))
+        artist=artist or None, title=title or None)
 
 
 def advance(app):
@@ -697,7 +726,7 @@ def replay_night(app, client, fixture, token_for):
                     requests[act["request"]] = new["id"]
         elif op == "play":
             if act["entry"] in entries:
-                record_play(app, entries[act["entry"]])
+                record_play(app, entries[act["entry"]], act.get("artist"), act.get("title"))
         elif op == "host":
             body = _map_host_body(act.get("body") or {}, entries)
             if body is None:

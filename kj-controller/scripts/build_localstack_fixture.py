@@ -223,6 +223,26 @@ def start_rotation(redacted):
     return out
 
 
+def recorded_plays(redacted):
+    """{entry_id: (artist, title)} of each entry's first live play, from the
+    recording's final media DB (what /play recorded from the media library)."""
+    path = os.path.join(redacted, "snapshots", "final-media.db")
+    if not os.path.isfile(path):
+        return {}
+    conn = sqlite3.connect(path)
+    try:
+        rows = conn.execute(
+            "SELECT entry_id, artist, title FROM play_events WHERE source='live' "
+            "AND entry_id IS NOT NULL ORDER BY played_at, id").fetchall()
+    finally:
+        conn.close()
+    out = {}
+    for entry_id, artist, title in rows:
+        if entry_id not in out and artist and title:
+            out[entry_id] = (artist, title)
+    return out
+
+
 def _host_body(path, body, known):
     """Recorded KJ body -> fixture body with entry refs; None to skip."""
     b = json.loads(json.dumps(body or {}))
@@ -306,6 +326,7 @@ def build(night):
         recorded = [json.loads(line) for line in f if line.strip()]
     recorded.sort(key=lambda a: (a.get("ts") or "", a.get("seq") or 0))
 
+    plays = recorded_plays(redacted)
     last_failed = {}   # device -> index of a submit action still collecting retries
     for a in recorded:
         ep = a.get("endpoint") or ""
@@ -377,7 +398,12 @@ def build(night):
         elif ep == "routes.handle_play" and status == 200:
             ref = f"e{body.get('entry_id')}"
             if ref in known:
-                actions.append({"op": "play", "entry": ref})
+                act = {"op": "play", "entry": ref}
+                # What the box's /play recorded: the media library's identity.
+                ident = plays.get(body.get("entry_id"))
+                if ident:
+                    act["artist"], act["title"] = ident
+                actions.append(act)
                 if body.get("file_path"):
                     catalog["library"].add(body["file_path"])
 

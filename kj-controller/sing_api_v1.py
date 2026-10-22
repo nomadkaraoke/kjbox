@@ -978,10 +978,15 @@ def get_me():
     items = sing._my_request_items(
         store, [r["id"] for r in rows if r.get("status") != "cancelled"], token,
         rotation, entries)
+    gen_jobs = {r["id"]: r.get("gen_job_id") for r in rows}
     for it in items:
         friend = it["request"]["id"] in friend_ids
         it["request"] = _request_view(it["request"], friend)
         it["owner"] = "friend" if friend else "me"
+        if "make" in it:
+            # A-R9: the app opens its native review of the account's own job.
+            job = gen_jobs.get(it["request"]["id"])
+            it["gen_job_id"] = str(job) if job else None
 
     identity = _account_identity_folds(store)
     already = {r.get("linked_entry_id") for r in rows if r.get("linked_entry_id")}

@@ -126,6 +126,13 @@ def test_night_replay_through_v1(sing_app, gen_stub):
     entries = {e["id"]: e for e in localstack.night_state(sing_app)["rotation"]}
     assert all(entries[int(r["entry_id"])]["status"] == "Done" for r in rows)
     assert all(o[1] == "put" for o in snap["outbox"])
+    # A-R10: host-typed "Artist - Title" entries take the played file's
+    # media-library identity, never the swapped text split.
+    pairs = {(o[0], o[3], o[4]) for o in snap["outbox"]}
+    for rec in [("d02", "Sabrina Carpenter", "buy me presents"),
+                ("d05", "Narrow Head", "See You Around"),
+                ("d06", "Tom Petty", "This Old Town")]:
+        assert rec in pairs, rec
     assert {o[2] for o in snap["outbox"]} <= {"sung", "sung_unplayed"}
     done_songs = {r[1] for r in snap["rotation"] if r[2] == "Done"}
     assert snap["outbox"], "the night must produce outbox records"

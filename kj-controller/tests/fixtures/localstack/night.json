@@ -639,7 +639,9 @@
   },
   {
    "op": "play",
-   "entry": "e1225"
+   "entry": "e1225",
+   "artist": "JT Music feat. Andrea Storm Kaden",
+   "title": "Join Us for a Bite"
   },
   {
    "op": "host",
@@ -974,7 +976,9 @@
   },
   {
    "op": "play",
-   "entry": "e1229"
+   "entry": "e1229",
+   "artist": "Starset",
+   "title": "Dark On Me"
   },
   {
    "op": "host",
@@ -998,7 +1002,9 @@
   },
   {
    "op": "play",
-   "entry": "e1232"
+   "entry": "e1232",
+   "artist": "Portishead",
+   "title": "Sour Times"
   },
   {
    "op": "submit",
@@ -1580,7 +1586,9 @@
   },
   {
    "op": "play",
-   "entry": "e1228"
+   "entry": "e1228",
+   "artist": "Sabrina Carpenter",
+   "title": "Espresso"
   },
   {
    "op": "host",
@@ -1624,7 +1632,9 @@
   },
   {
    "op": "play",
-   "entry": "e1235"
+   "entry": "e1235",
+   "artist": "Tom Petty & The Heartbreakers",
+   "title": "Yer So Bad"
   },
   {
    "op": "host",
@@ -1668,7 +1678,9 @@
   },
   {
    "op": "play",
-   "entry": "e1230"
+   "entry": "e1230",
+   "artist": "Lady Antebellum",
+   "title": "Downtown"
   },
   {
    "op": "host",
@@ -1720,7 +1732,9 @@
   },
   {
    "op": "play",
-   "entry": "e1227"
+   "entry": "e1227",
+   "artist": "Indigo De Souza",
+   "title": "Sleep Talking"
   },
   {
    "op": "submit",
@@ -1932,7 +1946,9 @@
   },
   {
    "op": "play",
-   "entry": "e1238"
+   "entry": "e1238",
+   "artist": "Black Eyed Peas",
+   "title": "Rock That Body"
   },
   {
    "op": "host",
@@ -1977,7 +1993,9 @@
   },
   {
    "op": "play",
-   "entry": "e1241"
+   "entry": "e1241",
+   "artist": "INOHA",
+   "title": "The Biggest Salmon"
   },
   {
    "op": "host",
@@ -2038,7 +2056,9 @@
   },
   {
    "op": "play",
-   "entry": "e1234"
+   "entry": "e1234",
+   "artist": "Narrow Head",
+   "title": "See You Around"
   },
   {
    "op": "host",
@@ -2210,7 +2230,9 @@
   },
   {
    "op": "play",
-   "entry": "e1247"
+   "entry": "e1247",
+   "artist": "Rio Romeo",
+   "title": "Butch 4 Butch"
   },
   {
    "op": "host",
@@ -2234,7 +2256,9 @@
   },
   {
    "op": "play",
-   "entry": "e1243"
+   "entry": "e1243",
+   "artist": "Missy Elliott",
+   "title": "Get Ur Freak On"
   },
   {
    "op": "host",
@@ -3340,7 +3364,9 @@
   },
   {
    "op": "play",
-   "entry": "e1240"
+   "entry": "e1240",
+   "artist": "Carrie Underwood",
+   "title": "Good Girl"
   },
   {
    "op": "host",
@@ -3384,7 +3410,9 @@
   },
   {
    "op": "play",
-   "entry": "e1242"
+   "entry": "e1242",
+   "artist": "Harrison Gordon",
+   "title": "Kirby Down B"
   },
   {
    "op": "host",
@@ -3446,7 +3474,9 @@
   },
   {
    "op": "play",
-   "entry": "e1249"
+   "entry": "e1249",
+   "artist": "They Might Be Giants",
+   "title": "Istanbul (Not Constantinople)"
   },
   {
    "op": "host",
@@ -3622,7 +3652,9 @@
   },
   {
    "op": "play",
-   "entry": "e1248"
+   "entry": "e1248",
+   "artist": "Dead Poet Society",
+   "title": "Uto"
   },
   {
    "op": "submit",
@@ -4270,7 +4302,9 @@
   },
   {
    "op": "play",
-   "entry": "e1251"
+   "entry": "e1251",
+   "artist": "Warrant",
+   "title": "Cherry Pie"
   },
   {
    "op": "host",
@@ -4282,7 +4316,9 @@
   },
   {
    "op": "play",
-   "entry": "e1231"
+   "entry": "e1231",
+   "artist": "Tom Petty",
+   "title": "This Old Town"
   },
   {
    "op": "host",
@@ -4318,7 +4354,9 @@
   },
   {
    "op": "play",
-   "entry": "e1246"
+   "entry": "e1246",
+   "artist": "Lynyrd Skynyrd",
+   "title": "Simple Man"
   },
   {
    "op": "host",
@@ -4362,7 +4400,9 @@
   },
   {
    "op": "play",
-   "entry": "e1258"
+   "entry": "e1258",
+   "artist": "Metric",
+   "title": "Black Sheep"
   },
   {
    "op": "host",
@@ -4402,7 +4442,9 @@
   },
   {
    "op": "play",
-   "entry": "e1254"
+   "entry": "e1254",
+   "artist": "Fiona Apple",
+   "title": "Paper Bag"
   },
   {
    "op": "host",
@@ -4414,7 +4456,9 @@
   },
   {
    "op": "play",
-   "entry": "e1239"
+   "entry": "e1239",
+   "artist": "Sabrina Carpenter",
+   "title": "buy me presents"
   },
   {
    "op": "host",
@@ -4474,7 +4518,9 @@
   },
   {
    "op": "play",
-   "entry": "e1236"
+   "entry": "e1236",
+   "artist": "Taylor Swift",
+   "title": "You Belong With Me"
   },
   {
    "op": "host",
@@ -5000,7 +5046,9 @@
   },
   {
    "op": "play",
-   "entry": "e1252"
+   "entry": "e1252",
+   "artist": "Three Days Grace",
+   "title": "I Hate Everything About You"
   },
   {
    "op": "host",
@@ -6093,7 +6141,9 @@
   },
   {
    "op": "play",
-   "entry": "e1260"
+   "entry": "e1260",
+   "artist": "Frank Sinatra",
+   "title": "My Way"
   },
   {
    "op": "host",
@@ -6121,7 +6171,9 @@
   },
   {
    "op": "play",
-   "entry": "e1252"
+   "entry": "e1252",
+   "artist": "Three Days Grace",
+   "title": "I Hate Everything About You"
   },
   {
    "op": "host",
@@ -6266,7 +6318,9 @@
   },
   {
    "op": "play",
-   "entry": "e1257"
+   "entry": "e1257",
+   "artist": "The Long Faces",
+   "title": "Jane"
   },
   {
    "op": "host",
@@ -6290,7 +6344,9 @@
   },
   {
    "op": "play",
-   "entry": "e1255"
+   "entry": "e1255",
+   "artist": "Sabrina Carpenter",
+   "title": "Go Go Juice"
   },
   {
    "op": "host",
@@ -6330,7 +6386,9 @@
   },
   {
    "op": "play",
-   "entry": "e1266"
+   "entry": "e1266",
+   "artist": "Sara Bareilles",
+   "title": "She Used To Be Mine"
   },
   {
    "op": "host",
@@ -6832,7 +6890,9 @@
   },
   {
    "op": "play",
-   "entry": "e1273"
+   "entry": "e1273",
+   "artist": "All-American Rejects",
+   "title": "Gives You Hell"
   },
   {
    "op": "host",
@@ -6892,7 +6952,9 @@
   },
   {
    "op": "play",
-   "entry": "e1274"
+   "entry": "e1274",
+   "artist": "Chappell Roan",
+   "title": "The Subway"
   },
   {
    "op": "host",
@@ -7463,7 +7525,9 @@
   },
   {
    "op": "play",
-   "entry": "e1279"
+   "entry": "e1279",
+   "artist": "Paramore",
+   "title": "Still Into You"
   },
   {
    "op": "host",
@@ -8946,21 +9010,21 @@
     "d02",
     "put",
     "sung",
-    "Taylor Swift",
-    "You Belong With Me",
+    "Sabrina Carpenter",
+    "buy me presents",
     [
-     "Ashlee A"
+     "Ashlee A",
+     "Chaila R"
     ]
    ],
    [
     "d02",
     "put",
     "sung",
-    "buy me presents",
-    "Sabrina Carpenter",
+    "Taylor Swift",
+    "You Belong With Me",
     [
-     "Ashlee A",
-     "Chaila R"
+     "Ashlee A"
     ]
    ],
    [
@@ -9027,8 +9091,8 @@
     "d05",
     "put",
     "sung",
-    "See You Around",
     "Narrow Head",
+    "See You Around",
     [
      "Jon W"
     ]
@@ -9047,8 +9111,8 @@
     "d06",
     "put",
     "sung",
-    "This Old Town",
     "Tom Petty",
+    "This Old Town",
     [
      "Jude"
     ]

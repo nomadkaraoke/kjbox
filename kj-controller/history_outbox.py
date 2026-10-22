@@ -11,7 +11,8 @@ decide's partner API, so a record survives restarts and is never counted twice:
   entry, a friend song for them) when that name is unambiguous tonight (A5-R10,
   ``SingStore.name_claimed_by_others``). The same rule ``GET /me`` uses to hand
   out ``history_id``s, so the app and decide agree.
-- **What.** Artist/title from the linked request, else the rotation text split
+- **What.** Artist/title from the linked request, else the first live play's
+  (the media library's identity for the file), else the rotation text split
   the way the KJ Gen modal does; a brand code is media, never identity (A.16).
 - **When.** ``sung_at`` is the first live play start (A.96); ``ended_at`` is
   ``done_at``. Done without a play is ``sung_unplayed`` with ``sung_at`` null
@@ -217,16 +218,26 @@ class HistoryOutbox:
         """The spec 5.5 record minus ``history_id``/``gen_email``. Scalars are
         strings or None (decide's model doesn't coerce: an int ``entry_id`` is
         a 400)."""
+        night_utc = _local_to_utc(night)
+        play = self.stats_store.first_play(
+            entry["id"], not_before=night_utc.strftime(_TS_FMT) if night_utc else None
+        ) if self.stats_store is not None else None
+        sung_at = (play or {}).get("played_at")
         artist = ((req or {}).get("song_artist") or "").strip()
         title = ((req or {}).get("song_title") or "").strip()
         if not (artist and title):
-            from kj_make import _naive_split  # the KJ's "Title - Artist" split
-            split = _naive_split(entry.get("song_artist") or "")
-            artist, title = split["artist"], split["title"]
-        night_utc = _local_to_utc(night)
-        sung_at = self.stats_store.first_play_started_at(
-            entry["id"], not_before=night_utc.strftime(_TS_FMT) if night_utc else None
-        ) if self.stats_store is not None else None
+            # No request carries the song: the first play's media-library
+            # identity (A-R10), else the box's "Title - Artist" text split
+            # (_format_song_text order). Host-typed "Artist - Title" text with
+            # no play stays swapped: nothing better is known.
+            p_artist = ((play or {}).get("artist") or "").strip()
+            p_title = ((play or {}).get("title") or "").strip()
+            if p_artist and p_title:
+                artist, title = p_artist, p_title
+            else:
+                from kj_make import _naive_split
+                split = _naive_split(entry.get("song_artist") or "")
+                artist, title = split["artist"], split["title"]
         done_at = entry.get("done_at")
         ended_at = _iso_z(_local_to_utc(done_at))
         if sung_at and ended_at and ended_at < sung_at:

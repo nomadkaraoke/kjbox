@@ -247,7 +247,7 @@ def test_host_add_and_remove(tc, test_api_app):
     tc.post(f"{TEST}/reset", json={"fixture": "empty"})
     added = tc.post(f"{TEST}/host-add", json={
         "name": "Sam", "artist": "Adele", "title": "Hello"}).get_json()["entry"]
-    assert added["singer"] == "Sam" and added["song_artist"] == "Adele - Hello"
+    assert added["singer"] == "Sam" and added["song_artist"] == "Hello - Adele"
     removed = tc.post(f"{TEST}/host-remove",
                       json={"entry_id": added["id"]}).get_json()["entry"]
     assert removed["status"] == "Cancelled"

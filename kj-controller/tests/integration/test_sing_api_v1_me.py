@@ -551,3 +551,39 @@ def test_host_named_alias_alone_or_case_only_change_is_allowed(client, token, sa
     store.set_alias(app_device_id(EMAIL, sing_app.app_identity_secret), "Sam Smith", origin="kj")
     body = _expect(_put_me(client, sam, token, name="sam smith"), "updateMe", 200)
     assert body["me"]["name"] == "sam smith"
+
+
+# --- A-R9: make songs expose their gen job id (the app opens its native review) ----
+
+def test_me_make_songs_carry_gen_job_id(client, token, sam, sing_app):
+    store = sing_app.sing_store
+    device = app_device_id(EMAIL, sing_app.app_identity_secret)
+
+    def make_req(name, title, job=None, friend=False):
+        entry = sing_app.rotation.add_entry(name, f"{title} - Nova Lane")
+        sing_app.rotation.mark_being_made(entry["id"])
+        req = store.create_request(name, "", song_artist="Nova Lane", song_title=title,
+                                   source_type="make", device_id=device)
+        if job:
+            store.set_request_gen(req["id"], job, "submitted")
+        store.mark_approved(req["id"], linked_entry_id=entry["id"])
+        if friend:
+            store.mark_friend_request(req["id"], name)
+        return req
+
+    make_req("Sam S", "Made Tonight", job="job-mine-1")
+    make_req("Kim", "Made For Kim", job="job-friend-2", friend=True)
+    make_req("Sam S", "Not Started Yet")
+    sing_app.sing_store.set_auto_approve(True)
+    _submit(client, sam, token, **_song("Plain Song"))
+    sing_app.rotation.add_entry("Sam S", "Host Pick - H")
+
+    by_title = {s["request"]["song_title"]: s for s in _me(client, sam, token)["songs"]}
+    assert by_title["Made Tonight"]["owner"] == "me"
+    assert by_title["Made Tonight"]["gen_job_id"] == "job-mine-1"
+    assert by_title["Made For Kim"]["owner"] == "friend"
+    assert by_title["Made For Kim"]["gen_job_id"] == "job-friend-2"
+    assert by_title["Not Started Yet"]["gen_job_id"] is None
+    assert "gen_job_id" not in by_title["Plain Song"]
+    host = next(s for s in by_title.values() if s["owner"] == "host")
+    assert "gen_job_id" not in host

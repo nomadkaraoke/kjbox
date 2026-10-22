@@ -161,7 +161,7 @@ Mounted only when `KJBOX_TEST_API=1` **and** the bind host is loopback
 | `POST /done {entry_id?}` | that entry (default: the one on stage) → Done → `{ok, entry}`; 404 when nobody is on stage |
 | `POST /undone {entry_id}` | → Waiting (the outbox retracts its record) → `{ok, entry}` |
 | `POST /flags {make?, simple_mode?, ask_photo_consent?, open?, auto_approve?, auto_reorder?}` | booleans → `{ok, flags}` (all six) |
-| `POST /host-add {name, artist?, title}` | host-typed entry "Artist - Title" → `{ok, entry}` |
+| `POST /host-add {name, artist?, title}` | host-typed entry "Title - Artist" (the box's rotation text order) → `{ok, entry}` |
 | `POST /host-remove {entry_id, delete?}` | host cancels it (stays on the KJ list as Cancelled; the app shows it removed), or deletes it with `delete: true` → `{ok, deleted, entry \| entry_id}` |
 | `POST /rate-limits {per_device?, per_ip?}` | singer budgets per 5 min; always clears the windows → `{ok, rate_limits}` |
 | `POST /outbox/drain` | scan + deliver everything due to decide now → `{ok, sent}` |
