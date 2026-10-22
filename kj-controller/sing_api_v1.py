@@ -521,6 +521,47 @@ def _replay(stored):
     return v1_json(stored["body"], stored.get("status", 200))
 
 
+def idempotent_call(store, key, work):
+    """Run ``work()`` at most once per idempotency ``key`` (A4-R1 claim).
+
+    ``work`` returns an error ``Response`` (the claim is released so a retry can
+    run) or ``(payload, after)``: the success payload, stored as the replayable
+    200 response, and an optional ``after()`` run once it is stored. A stored
+    response is replayed; a claim held by another attempt gives 409 busy_retry.
+    Once ``work`` succeeds the claim is never released, so a failure in the
+    bookkeeping can't let a retry duplicate the effect.
+    """
+    stored = store.idempotent_get(key)
+    if stored is not None:
+        return _replay(stored)
+    if not store.idempotent_claim(key):
+        stored = store.idempotent_get(key)
+        if stored is not None:
+            return _replay(stored)
+        return v1_error("busy_retry", 409, "this request is still being sent",
+                        retry_after=_BUSY_RETRY_AFTER_S)
+    done = False
+    try:
+        out = work()
+        if isinstance(out, Response):
+            return out
+        done = True
+        payload, after = out
+        try:
+            store.idempotent_put(key, {"status": 200, "body": payload})
+        except Exception:
+            logger.exception("v1: storing the idempotent response failed")
+        if after is not None:
+            try:
+                after()
+            except Exception:
+                logger.exception("v1: post-processing after an idempotent call failed")
+        return v1_json(payload)
+    finally:
+        if not done:
+            store.idempotent_release(key)   # a failed attempt mustn't block the retry
+
+
 @app_api_bp.route("/requests", methods=["POST"])
 @app_auth
 def create_request():
@@ -551,43 +592,23 @@ def create_request():
         if not singer_name:
             return v1_error("needs_name", 400)
 
-    if not store.idempotent_claim(key):
-        stored = store.idempotent_get(key)
-        if stored is not None:
-            return _replay(stored)
-        return v1_error("busy_retry", 409, "this request is still being sent",
-                        retry_after=_BUSY_RETRY_AFTER_S)
-
-    done = False
-    try:
+    def work():
         fields = {k: body[k] for k in _SUBMIT_FIELDS if k in body}
         fields.update(singer_name=singer_name, for_friend=for_friend)
         result, status = delegate(sing.submit, method="POST", path="/sing/submit",
                                   json=fields)
         if status != 200 or not isinstance(result.get("request"), dict):
             return map_web_error(result, status, device)
-        # The request exists now: from here on the claim must never be
-        # released, or a retry would create a second one. If storing the
-        # response fails, the claim stays pending until its TTL (retries get
-        # busy_retry meanwhile) rather than duplicating the song.
-        done = True
         req = result["request"]
         payload = {"request": _request_view(req, for_friend),
                    "auto_approved": bool(result.get("auto_approved"))}
-        try:
-            store.idempotent_put(key, {"status": 200, "body": payload})
-        except Exception:
-            logger.exception("v1 submit: storing the idempotent response failed")
-        if for_friend:
-            try:
+
+        def after():
+            if for_friend:
                 store.mark_friend_request(req["id"], singer_name)
-            except Exception:
-                logger.exception("v1 submit: marking request %s as a friend song failed",
-                                 req["id"])
-        return v1_json(payload)
-    finally:
-        if not done:
-            store.idempotent_release(key)   # a failed attempt mustn't block the retry
+        return payload, after
+
+    return idempotent_call(store, key, work)
 
 
 # --- POST /requests/<id>/cancel ----------------------------------------------
@@ -1259,7 +1280,9 @@ def _preview_base():
     tunnel hop's scheme so the app is handed https."""
     cfg = current_app.kj_config or {}
     on_public = (request.host or "").split(":")[0].lower() in sing._public_hosts(cfg)
-    proto = (request.headers.get("X-Forwarded-Proto") or "").split(",")[0].strip().lower()
+    proto = ""
+    if (request.remote_addr or "") in sing._TRUSTED_PROXIES:   # as _client_ip
+        proto = (request.headers.get("X-Forwarded-Proto") or "").split(",")[0].strip().lower()
     base = request.host_url.rstrip("/")
     if proto in ("http", "https") and not base.startswith(proto + "://"):
         base = proto + base[base.index("://"):]
@@ -1323,17 +1346,35 @@ def get_tips():
 @app_api_bp.route("/tips/claim", methods=["POST"])
 @app_auth
 def claim_tip():
+    store = current_app.sing_store
     body = _json_body()
-    alias = current_app.sing_store.get_alias(g.app_user.device_id)
+    raw_cid = body.get("client_request_id")
+    try:
+        cid = str(uuid.UUID(raw_cid)) if isinstance(raw_cid, str) else None
+    except ValueError:
+        cid = None
+    if not cid:
+        return v1_error("invalid", 400, "client_request_id (a UUID) is required")
+    device = g.app_user.device_id
+    key = f"tip:{device}:{cid}"
+    stored = store.idempotent_get(key)
+    if stored is not None:
+        return _replay(stored)
+    alias = store.get_alias(device)
     if not alias:
         return v1_error("needs_name", 400, "join with a name before claiming a tip")
     # The name is always the device alias; the device id is injected by delegate.
     payload = {"singer_name": alias, "amount": body.get("amount"),
                "method": body.get("method"), "phone": body.get("phone")}
-    result, status = delegate(sing.tip_claim, method="POST", path="/sing/tip-claim", json=payload)
-    if status != 200 or not isinstance(result.get("request"), dict):
-        return _read_error(result, status, _TIP_WINDOW_S)
-    return v1_json({"request": _request_view(result["request"], False)})
+
+    def work():
+        result, status = delegate(sing.tip_claim, method="POST", path="/sing/tip-claim",
+                                  json=payload)
+        if status != 200 or not isinstance(result.get("request"), dict):
+            return _read_error(result, status, _TIP_WINDOW_S)
+        return {"request": _request_view(result["request"], False)}, None
+
+    return idempotent_call(store, key, work)
 
 
 @app_api_bp.route("/my-stats", methods=["GET"])

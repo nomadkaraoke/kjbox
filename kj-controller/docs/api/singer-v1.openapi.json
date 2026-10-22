@@ -894,7 +894,7 @@
       "get": {
         "operationId": "getRotation",
         "summary": "The active rotation with wait estimates",
-        "description": "ETag is \"<rotation_rev>\". Authentication still applies to a 304.",
+        "description": "ETag is \"<rotation_rev>\". Authentication still applies to a 304. The wait estimates (expected_s, range_*) are relative to the response that carried them: a 304 keeps the earlier ones, so the app counts down locally from when it received them.",
         "parameters": [
           {
             "$ref": "#/components/parameters/EventCode"
@@ -1116,7 +1116,7 @@
       "post": {
         "operationId": "claimTip",
         "summary": "Tell the host a tip was sent",
-        "description": "The singer name is the device's name (400 needs_name with none). Rate limited (5 per 10 minutes, 429). 400 invalid with message tips_disabled when the host turned tips off.",
+        "description": "The singer name is the device's name (400 needs_name with none). client_request_id (UUID) is required and makes the claim idempotent. Rate limited (5 per 10 minutes, 429). 400 invalid with message tips_disabled when the host turned tips off.",
         "requestBody": {
           "required": true,
           "content": {
@@ -1148,7 +1148,7 @@
             "$ref": "#/components/responses/Forbidden"
           },
           "409": {
-            "$ref": "#/components/responses/NightChanged"
+            "$ref": "#/components/responses/RequestConflict"
           },
           "429": {
             "$ref": "#/components/responses/RequestRateLimited"
@@ -2553,8 +2553,7 @@
           "versions": {
             "type": "array",
             "items": {
-              "type": "object",
-              "additionalProperties": true
+              "$ref": "#/components/schemas/SearchVersion"
             }
           }
         },
@@ -3083,6 +3082,7 @@
       "TipClaimRequest": {
         "type": "object",
         "required": [
+          "client_request_id",
           "amount"
         ],
         "properties": {
@@ -3107,9 +3107,14 @@
               "string",
               "null"
             ]
+          },
+          "client_request_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Generated once per tip; a retry with the same id never creates a second tip request"
           }
         },
-        "description": "The name is always the device's name (needs_name when none)."
+        "description": "The name is always the device's name (needs_name when none). client_request_id makes the claim idempotent (the first response is replayed; 409 busy_retry while the first attempt is still running)."
       },
       "TipClaimResult": {
         "type": "object",
@@ -3163,6 +3168,39 @@
           }
         },
         "description": "Tonight's crowd favourites only: never a per-person lookup"
+      },
+      "SearchVersion": {
+        "type": "object",
+        "description": "One karaoke version of a song, the web's own shape (passed through, so further keys may appear). The fields the web reads are listed.",
+        "required": [
+          "source"
+        ],
+        "properties": {
+          "source": {
+            "type": "string",
+            "description": "local (a file on the box) or kn (community/commercial catalogue row)"
+          },
+          "local": {
+            "type": "object",
+            "description": "With source local: path, artist, title, format",
+            "additionalProperties": true
+          },
+          "kn": {
+            "type": "object",
+            "description": "With source kn: brand_code, brand_name, is_community, youtube_url, mirror_only, divebar (mirror file info)",
+            "additionalProperties": true
+          },
+          "priority_stated": {},
+          "priority_display": {
+            "type": "string"
+          },
+          "priority_class": {
+            "type": "string",
+            "description": "community | commercial"
+          },
+          "priority_brand": {}
+        },
+        "additionalProperties": true
       }
     }
   }

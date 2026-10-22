@@ -2,6 +2,8 @@
 event, singers, rotation (ETag), now, preview, tips and my-stats. Every response
 is checked against docs/api/singer-v1.openapi.json."""
 
+import uuid
+
 import pytest
 
 import routes
@@ -40,6 +42,10 @@ def _fresh_limits():
 
 def _get(client, tok, path, op, status=200, **q):
     return _expect(client.get(f"{V1}{path}", query_string=q, headers=bearer(tok)), op, status)
+
+
+def _tip(**body):
+    return {"client_request_id": str(uuid.uuid4()), **body}
 
 
 def _post(client, tok, path, op, body, status=200):
@@ -333,8 +339,7 @@ def test_tips_contract(client, token, sam, sing_app):
 
 def test_tip_claim_uses_alias_and_hides_edit_token(client, token, sam, sing_app):
     body = _post(client, sam, "/tips/claim", "claimTip",
-                 {"t": token, "amount": 5, "method": "venmo", "phone": "5551234567",
-                  "singer_name": "Spoof"})
+                 _tip(t=token, amount=5, method="venmo", phone="5551234567", singer_name="Spoof"))
     req = body["request"]
     assert req["singer_name"] == "Sam S" and req["tip_amount"] == 5.0 and "edit_token" not in req
     row = sing_app.sing_store.get_request(req["id"])
@@ -343,21 +348,21 @@ def test_tip_claim_uses_alias_and_hides_edit_token(client, token, sam, sing_app)
 
 def test_tip_claim_needs_name(client, token, app_token):
     tok = app_token("new.person@example.com", "New Person")
-    _expect(client.post(f"{V1}/tips/claim", json={"t": token, "amount": 5}, headers=bearer(tok)),
+    _expect(client.post(f"{V1}/tips/claim", json=_tip(t=token, amount=5), headers=bearer(tok)),
             "claimTip", 400, "needs_name")
 
 
 def test_tip_claim_bad_amount_and_rate_limit(client, token, sam):
-    _post(client, sam, "/tips/claim", "claimTip", {"t": token, "amount": "x"}, status=400)
+    _post(client, sam, "/tips/claim", "claimTip", _tip(t=token, amount="x"), status=400)
     for _ in range(4):   # the bad-amount attempt above used 1 of the 5
-        _post(client, sam, "/tips/claim", "claimTip", {"t": token, "amount": 1})
-    body = _post(client, sam, "/tips/claim", "claimTip", {"t": token, "amount": 1}, status=429)
+        _post(client, sam, "/tips/claim", "claimTip", _tip(t=token, amount=1))
+    body = _post(client, sam, "/tips/claim", "claimTip", _tip(t=token, amount=1), status=429)
     assert body["error"] == "rate_limited" and body["retry_after"] > 0
 
 
 def test_tip_claim_disabled(client, token, sam, sing_app):
     sing_app.sing_store.set_tip_settings({"enabled": False})
-    _post(client, sam, "/tips/claim", "claimTip", {"t": token, "amount": 5}, status=400)
+    _post(client, sam, "/tips/claim", "claimTip", _tip(t=token, amount=5), status=400)
 
 
 # --- my-stats -------------------------------------------------------------------
@@ -388,3 +393,88 @@ def test_read_endpoints_need_auth(client, token):
                  "/tips", "/my-stats"):
         resp = client.get(f"{V1}{path}", query_string={"t": token, "q": "queen"})
         assert resp.status_code == 401, path
+
+
+# --- fix round 1 ---------------------------------------------------------------
+
+def test_tip_claim_is_idempotent(client, token, sam, sing_app):
+    body = _tip(t=token, amount=5, method="venmo")
+    first = _post(client, sam, "/tips/claim", "claimTip", body)
+    again = _post(client, sam, "/tips/claim", "claimTip", body)
+    assert again["request"]["id"] == first["request"]["id"]
+    rows = [r for r in sing_app.sing_store.list_requests() if r["source_type"] == "tip"]
+    assert len(rows) == 1
+
+
+def test_tip_claim_failed_attempt_can_retry(client, token, sam):
+    body = _tip(t=token, amount="x")
+    _post(client, sam, "/tips/claim", "claimTip", body, status=400)
+    body["amount"] = 5
+    _post(client, sam, "/tips/claim", "claimTip", body)
+
+
+def test_tip_claim_requires_client_request_id(client, token, sam):
+    _expect(client.post(f"{V1}/tips/claim", json={"t": token, "amount": 5}, headers=bearer(sam)),
+            "claimTip", 400, "invalid")
+    _expect(client.post(f"{V1}/tips/claim", json={"t": token, "amount": 5,
+                                                  "client_request_id": "nope"}, headers=bearer(sam)),
+            "claimTip", 400, "invalid")
+
+
+class HlsPreview(FakePreview):
+    def __init__(self, directory):
+        super().__init__({"mode": "hls", "token": "tok1", "title": "T"})
+        self.dir = directory
+
+    def hls_path(self, token, name):
+        return str(self.dir / name)
+
+
+def test_hls_preview_plays_without_cookies(client, token, sam, sing_app, tmp_path):
+    (tmp_path / "index.m3u8").write_text(
+        "#EXTM3U\n#EXT-X-VERSION:3\n#EXTINF:4.0,\nseg0.ts\n#EXTINF:4.0,\nseg1.ts\n#EXT-X-ENDLIST\n")
+    (tmp_path / "seg0.ts").write_bytes(b"\x47" * 188)
+    (tmp_path / "seg1.ts").write_bytes(b"\x47" * 188)
+    sing_app.preview = HlsPreview(tmp_path)
+    url = _expect(_preview(client, sam, token), "resolvePreview", 200)["hls_url"]
+    with sing_app.test_client() as fresh:   # no cookie jar from the v1 calls
+        playlist = fresh.get(url)
+        assert playlist.status_code == 200
+        lines = playlist.get_data(as_text=True).splitlines()
+        segs = [ln for ln in lines if ln and not ln.startswith("#")]
+        assert segs == [f"seg0.ts?t={token}", f"seg1.ts?t={token}"]
+        assert [ln for ln in lines if ln.startswith("#")][0] == "#EXTM3U"
+        base = url.split("index.m3u8")[0]
+        for seg in segs:
+            assert fresh.get(base + seg).status_code == 200
+    # the web player (cookie session, no ?t=) gets the playlist untouched
+    with sing_app.test_client() as web:
+        web.get(f"/sing/validate?t={token}")
+        with web.session_transaction() as sess:
+            sess["sing_token"] = token
+        raw = web.get("/sing/preview/hls/tok1/index.m3u8").get_data(as_text=True)
+        assert "seg0.ts\n" in raw and "t=" not in raw
+
+
+def test_forwarded_proto_trusted_only_from_proxy(client, token, sam, sing_app):
+    sing_app.preview = FakePreview({"mode": "native_audio", "token": "tok1", "title": ""})
+    hdrs = {**bearer(sam), "X-Forwarded-Proto": "https"}
+    body = {"t": token, "source": "local", "file_path": "/a.mp3"}
+    trusted = _expect(client.post(f"{V1}/preview/resolve", json=body, headers=hdrs),
+                      "resolvePreview", 200)
+    assert trusted["stream_url"].startswith("https://localhost/sing/preview/stream/")
+    untrusted = _expect(client.post(f"{V1}/preview/resolve", json=body, headers=hdrs,
+                                    environ_overrides={"REMOTE_ADDR": "203.0.113.9"}),
+                        "resolvePreview", 200)
+    assert untrusted["stream_url"].startswith("http://localhost/sing/preview/stream/")
+
+
+def test_entry_preview_resolves_for_linked_entry(client, token, sam, sing_app, tmp_path):
+    f = tmp_path / "song.mp4"
+    f.write_bytes(b"x")
+    entry = sing_app.rotation.add_entry("Sara B", "Queen - Radio", file_path=str(f))
+    sing_app.preview = FakePreview({"mode": "native_video", "token": "tok1", "title": "Queen - Radio"})
+    body = _expect(_preview(client, sam, token, source="entry", entry_id=entry["id"]),
+                   "resolvePreview", 200)
+    assert body["mode"] == "native_video" and "stream_url" in body
+    assert sing_app.preview.descriptors[0]["file_path"] == str(f)

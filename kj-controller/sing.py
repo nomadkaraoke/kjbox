@@ -6,6 +6,7 @@ Serves the QR-reachable request form. The companion admin endpoints at
 Design doc: docs/archive/2026-04-18-public-request-form-design.md
 """
 
+from urllib.parse import quote
 import ipaddress
 import json
 import os
@@ -1136,7 +1137,25 @@ def preview_cdg(tok, part):
 @require_token
 def preview_hls(tok, name):
     from routes import preview_hls as _impl
-    return _impl(tok, name)
+    resp = current_app.make_response(_impl(tok, name))
+    t = request.args.get("t")
+    if t and name.endswith(".m3u8") and resp.status_code == 200:
+        # Native players (AVPlayer/ExoPlayer) fetch the relative segment URLs
+        # without our session cookie or the playlist's query, so carry the
+        # event code on every segment line. Requests without ?t= (the web
+        # player, which has the cookie) get the playlist untouched.
+        resp.direct_passthrough = False
+        suffix = "t=" + quote(t, safe="")
+        lines = []
+        for line in resp.get_data(as_text=True).splitlines():
+            if line.strip() and not line.startswith("#"):
+                line += ("&" if "?" in line else "?") + suffix
+            lines.append(line)
+        resp.set_data("\n".join(lines) + "\n")
+        resp.headers.pop("Content-Length", None)
+        resp.headers.pop("ETag", None)
+        resp.headers.pop("Last-Modified", None)
+    return resp
 
 
 # --- Tipping (tip-for-heart priority) --------------------------------------
