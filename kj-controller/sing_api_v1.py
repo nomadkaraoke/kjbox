@@ -38,6 +38,7 @@ from flask import Blueprint, Response, current_app, g, jsonify, request
 from werkzeug.exceptions import HTTPException
 
 import sing
+import sing_make
 from app_identity import AppAuthError, suggested_name
 from history_ids import history_id_for
 
@@ -299,7 +300,9 @@ def get_night():
         "social": {k: v for k, v in social.items() if k not in _CONTACT_KEYS},
         "contact": {k: v for k, v in social.items() if k in _CONTACT_KEYS},
         "features": {
-            "make": bool(sing._safe_call(lambda: sing._make_enabled(store), False)),
+            # Simple Mode refuses make-its too, so the app hides make (A.78).
+            "make": bool(not store.is_simple_mode() and sing._safe_call(
+                lambda: sing._make_enabled(store), False)),
             "simple_mode": bool(store.is_simple_mode()),
             "ask_photo_consent": bool(footer.get("ask_photo_consent")),
             "quick_version": bool(cfg.get("make_quick_version_enabled", True)),
@@ -421,17 +424,23 @@ _WEB_ERROR_MAP = {
     # v1 callers always carry a verified gen account, so this is never "your
     # session expired" (which the app would treat as a sign-out signal).
     "signin_required": ("invalid", 400),
+    # gen refused the app's own session during a make-it call (A7-R3). The
+    # app's session check decides whether that means signing out.
+    "gen_unauthenticated": ("unauthenticated", 401),
+    "quick_disabled": ("make_disabled", 400),
     "gen_unavailable": ("gen_unavailable", 503),
 }
 _STATUS_FALLBACK = {401: "unauthenticated", 404: "not_found", 409: "conflict",
                     429: "rate_limited"}
 
 
-def map_web_error(body, status, device_id=None):
-    """A v1 error response for a web view's error ``(body, status)``."""
+def map_web_error(body, status, device_id=None, overrides=None):
+    """A v1 error response for a web view's error ``(body, status)``.
+    ``overrides`` (web error -> (code, status)) take precedence over the table,
+    for a caller whose context makes an error more specific."""
     err = body.get("error") if isinstance(body, dict) else None
     err = err if isinstance(err, str) else ""
-    mapped = _WEB_ERROR_MAP.get(err)
+    mapped = (overrides or {}).get(err) or _WEB_ERROR_MAP.get(err)
     if mapped is None:
         for key, value in _WEB_ERROR_MAP.items():
             if key.endswith("*") and err.startswith(key[:-1]):
@@ -521,7 +530,7 @@ def _replay(stored):
     return v1_json(stored["body"], stored.get("status", 200))
 
 
-def idempotent_call(store, key, work):
+def idempotent_call(store, key, work, ttl_s=None):
     """Run ``work()`` at most once per idempotency ``key`` (A4-R1 claim).
 
     ``work`` returns an error ``Response`` (the claim is released so a retry can
@@ -531,11 +540,15 @@ def idempotent_call(store, key, work):
     ``build``/``after`` run, so a failure there can never release the claim and
     let a retry duplicate the effect; the claim then stays pending until its
     TTL (retries get busy_retry) and this call answers 500 internal.
+    ``ttl_s`` overrides the claim's TTL (the store's 300 s default); it bounds
+    how long ``work`` may run before a retry could start a second attempt.
     """
     stored = store.idempotent_get(key)
     if stored is not None:
         return _replay(stored)
-    if not store.idempotent_claim(key):
+    claimed = (store.idempotent_claim(key) if ttl_s is None
+               else store.idempotent_claim(key, ttl_s=ttl_s))
+    if not claimed:
         stored = store.idempotent_get(key)
         if stored is not None:
             return _replay(stored)
@@ -597,13 +610,16 @@ def create_request():
         if not singer_name:
             return v1_error("needs_name", 400)
 
+    is_make = body.get("source_type") == "make"
+
     def work():
         fields = {k: body[k] for k in _SUBMIT_FIELDS if k in body}
         fields.update(singer_name=singer_name, for_friend=for_friend)
         result, status = delegate(sing.submit, method="POST", path="/sing/submit",
                                   json=fields)
         if status != 200 or not isinstance(result.get("request"), dict):
-            return map_web_error(result, status, device)
+            return map_web_error(result, status, device,
+                                 overrides=_MAKE_ERROR_OVERRIDES if is_make else None)
         req = result["request"]
 
         def build():
@@ -615,7 +631,10 @@ def create_request():
                 store.mark_friend_request(req["id"], singer_name)
         return build, after
 
-    return idempotent_call(store, key, work)
+    # A make-it submit waits on gen's create-job: the claim must outlive it, or
+    # a retry after the claim expired would create a second gen job (A7-R2).
+    ttl = sing_make.MAKE_SUBMIT_BUDGET_S + 60 if is_make else None
+    return idempotent_call(store, key, work, ttl_s=ttl)
 
 
 # --- POST /requests/<id>/cancel ----------------------------------------------
@@ -1390,6 +1409,74 @@ def get_my_stats():
     # Crowd favourites only. No `name` is forwarded, so the web view never
     # does a name-based history lookup, whatever the caller sent.
     return _read(sing.my_stats, "/sing/my-stats", keep={"top_songs"})
+
+
+# --- Make on the spot (A7) ------------------------------------------------
+#
+# The web make-it views run with the app device; sing_make._gen_account then
+# acts as the app's own gen session (the v1 bearer), never a stored sign-in,
+# so the job lands in the app user's gen account. The web views keep their
+# rate limit (the make bucket, per device and per IP), the show-credit top-up
+# and its per-device cap.
+
+# Simple Mode refuses make-its: for a make call that's "make is off", not the
+# generic source refusal it is for other sources.
+_MAKE_ERROR_OVERRIDES = {"simple_mode_disabled_source": ("make_disabled", 400)}
+
+
+def _make_error(body, status):
+    device = g.app_user.device_id
+    if status == 429 and (body or {}).get("error") != "make_limit":
+        # Our make budget, or gen's own limit (no timing given: a minute).
+        retry = sing_make.rate_retry_after(device) or 60
+        return v1_error("rate_limited", 429, retry_after=retry)
+    return map_web_error(body, status, device, overrides=_MAKE_ERROR_OVERRIDES)
+
+
+def _make_call(view, path, fields):
+    body = _json_body()
+    payload = {k: body[k] for k in fields if k in body}
+    result, status = delegate(view, method="POST", path=f"/sing/make/{path}", json=payload)
+    if status != 200:
+        return _make_error(result, status)
+    return v1_json(result)
+
+
+@app_api_bp.route("/make/check", methods=["POST"])
+@app_auth
+def check_make():
+    return _make_call(sing_make.make_check, "check", ("artist", "title", "stage", "tier"))
+
+
+@app_api_bp.route("/make/search", methods=["POST"])
+@app_auth
+def make_search():
+    return _make_call(sing_make.make_search, "search", ("artist", "title"))
+
+
+@app_api_bp.route("/make/validate-url", methods=["POST"])
+@app_auth
+def validate_make_url():
+    return _make_call(sing_make.make_validate_url, "validate-url", ("url",))
+
+
+@app_api_bp.route("/make/use-quick/<int:id>", methods=["POST"])
+@app_auth
+def use_quick_version(id):  # noqa: A002 — the contract's path parameter is {id}
+    req_id = id
+    req = owned_request_or_error(req_id)
+    if isinstance(req, Response):
+        return req
+    result, status = delegate(
+        sing_make.make_use_quick, method="POST", path=f"/sing/make/use-quick/{req_id}",
+        json={"edit_token": req.get("edit_token")}, device_id=req["device_id"],
+        view_args={"req_id": req_id})
+    if status != 200:
+        if status == 429:
+            return v1_error("rate_limited", 429, retry_after=sing_make.rate_retry_after(
+                req["device_id"]) or sing_make._MAKE_RATE_WINDOW_S)
+        return map_web_error(result, status, req["device_id"])
+    return v1_json({"ok": True})
 
 
 # --- JSON errors for every /sing/api/v1/ path ------------------------------

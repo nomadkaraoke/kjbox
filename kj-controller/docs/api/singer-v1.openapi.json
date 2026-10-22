@@ -120,7 +120,7 @@
       "post": {
         "operationId": "createRequest",
         "summary": "Request a song",
-        "description": "Same rules as the web's /sing/submit. The singer name is the account's name for tonight (POST /join; 400 needs_name before that) or friend_name for a song for a friend; the request belongs to the app device. Idempotent on client_request_id: a retry returns the first response; while the first attempt is still running a retry gets 409 busy_retry (retry_after 2); a failed attempt can be retried with the same id.",
+        "description": "Same rules as the web's /sing/submit. The singer name is the account's name for tonight (POST /join; 400 needs_name before that) or friend_name for a song for a friend; the request belongs to the app device. Idempotent on client_request_id: a retry returns the first response; while the first attempt is still running a retry gets 409 busy_retry (retry_after 2); a failed attempt can be retried with the same id. A make-it (source_type make, source_meta {search_session_id, selection_index} from POST /make/search or {youtube_url}) creates the gen job on the app user's own gen account first, then goes straight into the rotation as Being Made (auto_approved true). Make-it errors: make_disabled (off, Simple Mode, or tonight's per-device make-it limit), youtube_blocked, gen_rejected, 409 conflict with message search_expired (search again), 401 unauthenticated when gen refuses the session. A make-it's first attempt may take several minutes (gen's create-job), and retries get busy_retry until it finishes.",
         "parameters": [
           {
             "$ref": "#/components/parameters/EventCode"
@@ -1209,6 +1209,278 @@
           }
         }
       }
+    },
+    "/make/check": {
+      "post": {
+        "operationId": "checkMake",
+        "summary": "Check the artist and title (gen's match judge)",
+        "description": "Runs as the app user's own gen account (the bearer is forwarded to gen for this call and never stored), so jobs land in that account. 400 make_disabled when make-it is off tonight, in Simple Mode, or the box has no gen partner set-up (GET /night features.make is false then). Fails open: a gen failure returns kind none, except a rejected session (401 unauthenticated).",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/EventCode"
+          },
+          {
+            "$ref": "#/components/parameters/NightId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MakeCheckRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MakeCheckResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/RequestInvalid"
+          },
+          "401": {
+            "description": "Missing or rejected gen session token, including gen refusing it during this make-it call (error unauthenticated). Does not by itself mean the app should sign out: check the session with gen first.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/RequestConflict"
+          },
+          "429": {
+            "$ref": "#/components/responses/MakeRateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/GenUnavailable"
+          },
+          "default": {
+            "$ref": "#/components/responses/Default"
+          }
+        }
+      }
+    },
+    "/make/search": {
+      "post": {
+        "operationId": "makeSearch",
+        "summary": "Search for audio to make the song from",
+        "description": "Runs as the app user's own gen account (the bearer is forwarded to gen for this call and never stored), so jobs land in that account. 400 make_disabled when make-it is off tonight, in Simple Mode, or the box has no gen partner set-up (GET /night features.make is false then). First tops up a free show credit when the account's balance is empty (one per song per night; the submit uses the same key, so a song costs the singer nothing and gen grants at most one credit for it). 400 make_disabled also when this account has searched for too many different songs tonight. 400 youtube_blocked when gen's YouTube access is being bot-checked, gen_rejected when gen refuses (e.g. no credits).",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/EventCode"
+          },
+          {
+            "$ref": "#/components/parameters/NightId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MakeSongRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MakeSearchResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/RequestInvalid"
+          },
+          "401": {
+            "description": "Missing or rejected gen session token, including gen refusing it during this make-it call (error unauthenticated). Does not by itself mean the app should sign out: check the session with gen first.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/RequestConflict"
+          },
+          "429": {
+            "$ref": "#/components/responses/MakeRateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/GenUnavailable"
+          },
+          "default": {
+            "$ref": "#/components/responses/Default"
+          }
+        }
+      }
+    },
+    "/make/validate-url": {
+      "post": {
+        "operationId": "validateMakeUrl",
+        "summary": "Check a link to make the song from (gen's URL fallback)",
+        "description": "Runs as the app user's own gen account (the bearer is forwarded to gen for this call and never stored), so jobs land in that account. 400 make_disabled when make-it is off tonight, in Simple Mode, or the box has no gen partner set-up (GET /night features.make is false then).",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/EventCode"
+          },
+          {
+            "$ref": "#/components/parameters/NightId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MakeUrlRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MakeUrlResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/RequestInvalid"
+          },
+          "401": {
+            "description": "Missing or rejected gen session token, including gen refusing it during this make-it call (error unauthenticated). Does not by itself mean the app should sign out: check the session with gen first.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/RequestConflict"
+          },
+          "429": {
+            "$ref": "#/components/responses/MakeRateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/GenUnavailable"
+          },
+          "default": {
+            "$ref": "#/components/responses/Default"
+          }
+        }
+      }
+    },
+    "/make/use-quick/{id}": {
+      "post": {
+        "operationId": "useQuickVersion",
+        "summary": "Sing the quick version now",
+        "description": "Links the make-it job's quick (scrolling-lyrics draft) version to the singer's rotation entry so it can be sung now; the full version still replaces it if it lands before their turn. The request must belong to one of the account's devices tonight (403 not_owner). 404 not_found (message quick_not_ready) until the quick version is ready, or when the request is not a make-it; 409 conflict (message already_ready) when the entry already has its video; 400 make_disabled when the host turned quick versions off.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "Request id"
+          },
+          {
+            "$ref": "#/components/parameters/EventCode"
+          },
+          {
+            "$ref": "#/components/parameters/NightId"
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UseQuickRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OkResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/RequestInvalid"
+          },
+          "401": {
+            "description": "Missing or rejected gen session token, including gen refusing it during this make-it call (error unauthenticated). Does not by itself mean the app should sign out: check the session with gen first.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/RequestConflict"
+          },
+          "429": {
+            "$ref": "#/components/responses/MakeRateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/GenUnavailable"
+          },
+          "default": {
+            "$ref": "#/components/responses/Default"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1373,6 +1645,16 @@
                   "$ref": "#/components/schemas/NightChangedError"
                 }
               ]
+            }
+          }
+        }
+      },
+      "MakeRateLimited": {
+        "description": "rate_limited: this account's make-it budget (40 calls per 10 minutes per device, 400 per network) is used up, or gen is limiting it; retry after retry_after seconds (also the Retry-After header)",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
             }
           }
         }
@@ -3201,6 +3483,208 @@
           "priority_brand": {}
         },
         "additionalProperties": true
+      },
+      "MakeSongRequest": {
+        "type": "object",
+        "required": [
+          "artist",
+          "title"
+        ],
+        "description": "What the singer typed (or the corrected names).",
+        "properties": {
+          "t": {
+            "type": "string"
+          },
+          "night_id": {
+            "type": "string"
+          },
+          "artist": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          }
+        }
+      },
+      "MakeCheckRequest": {
+        "type": "object",
+        "required": [
+          "artist",
+          "title"
+        ],
+        "properties": {
+          "t": {
+            "type": "string"
+          },
+          "night_id": {
+            "type": "string"
+          },
+          "artist": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "stage": {
+            "type": "string",
+            "enum": [
+              "fast",
+              "full"
+            ],
+            "description": "fast (default) or full (after the audio search)"
+          },
+          "tier": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "enum": [
+              1,
+              2,
+              3,
+              null
+            ],
+            "description": "The audio search's confidence tier, for the full stage"
+          }
+        }
+      },
+      "MakeCheckResult": {
+        "type": "object",
+        "required": [
+          "api_version",
+          "kind"
+        ],
+        "description": "gen's match judge verdict, passed through (further keys may appear). On a gen failure other than a rejected session the box fails open with kind none.",
+        "properties": {
+          "api_version": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "description": "none, cosmetic, correction, ... (gen's verdict kinds)"
+          },
+          "confident": {
+            "type": "boolean"
+          },
+          "canonical_artist": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "canonical_title": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "MakeAudioResult": {
+        "type": "object",
+        "description": "One audio source from gen's search, gen's own shape (passed through; further keys may appear). Rank them with the app's audio-search ranking (mirrors gen's).",
+        "properties": {
+          "index": {
+            "type": "integer",
+            "description": "selection_index for the submit"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "is_lossless": {
+            "type": "boolean"
+          },
+          "seeders": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "MakeSearchResult": {
+        "type": "object",
+        "required": [
+          "api_version",
+          "results"
+        ],
+        "properties": {
+          "api_version": {
+            "type": "string"
+          },
+          "search_session_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Send it back in the submit's source_meta with the chosen result's index"
+          },
+          "results": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MakeAudioResult"
+            }
+          }
+        }
+      },
+      "MakeUrlRequest": {
+        "type": "object",
+        "required": [
+          "url"
+        ],
+        "properties": {
+          "t": {
+            "type": "string"
+          },
+          "night_id": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string",
+            "maxLength": 2000
+          }
+        }
+      },
+      "MakeUrlResult": {
+        "type": "object",
+        "required": [
+          "api_version",
+          "supported"
+        ],
+        "description": "gen's URL check, passed through (further keys may appear)",
+        "properties": {
+          "api_version": {
+            "type": "string"
+          },
+          "supported": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": true
+      },
+      "UseQuickRequest": {
+        "type": "object",
+        "properties": {
+          "t": {
+            "type": "string"
+          },
+          "night_id": {
+            "type": "string"
+          }
+        }
       }
     }
   }

@@ -26,9 +26,9 @@ import threading
 import time
 from collections import defaultdict, deque
 
-from flask import current_app, jsonify, request
+from flask import current_app, g, has_request_context, jsonify, request
 
-from gen_client import GenApiError
+from gen_client import CREATE_JOB_TIMEOUT, REQUEST_TIMEOUT, GenApiError
 from sing import _client_ip, require_token, sing_bp
 
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
@@ -45,6 +45,11 @@ _CODE_RATE_WINDOW_S = 3600
 _CODE_RATE_PER_DEVICE = 5
 _CODE_RATE_PER_IP = 40
 _lock = threading.Lock()
+# Worst-case wall time of a make-it submit: the submit-time show credit (up to
+# two attempts) then gen's create-job. ``requests`` applies a timeout to the
+# connect and to each read separately, so each call can take up to twice its
+# timeout. The v1 submit's idempotency claim must outlive this (A7-R2).
+MAKE_SUBMIT_BUDGET_S = 2 * (2 * REQUEST_TIMEOUT) + 2 * CREATE_JOB_TIMEOUT
 
 
 def _state(app):
@@ -65,6 +70,42 @@ def make_flow_ready(app):
     """True when the singer make-it flow can run (gen + partner secret set)."""
     gen = getattr(app, "gen_client", None)
     return bool(gen is not None and gen.singer_flow_configured())
+
+
+def _app_device(device_id):
+    """The app user's request (``/sing/api/v1``) for this device, if any."""
+    if not (device_id and has_request_context()):
+        return False
+    user = g.get("app_user")
+    return bool(user is not None and g.get("app_gen_account")
+                and device_id == user.device_id)
+
+
+def _gen_account(store, device_id):
+    """The gen sign-in to act as for ``device_id``: the app's own gen session
+    (the v1 bearer, request-only, never stored) when this is the app user's
+    device on a v1 call, else the device's stored web sign-in."""
+    if _app_device(device_id):
+        return dict(g.app_gen_account)
+    return store.get_gen_account(device_id) if device_id else None
+
+
+def rate_retry_after(device_id, bucket="make", window=_MAKE_RATE_WINDOW_S,
+                     per_ip=_MAKE_RATE_PER_IP, per_device=_MAKE_RATE_PER_DEVICE):
+    """Whole seconds until the device's (or this IP's) make budget frees a
+    slot; None when neither budget is used up."""
+    now = time.monotonic()
+    keys = [(f"{bucket}:ip:{_client_ip(request)}", per_ip)]
+    if device_id:
+        keys.append((f"{bucket}:dev:{device_id}", per_device))
+    rate = _state(current_app._get_current_object())["rate"]
+    waits = []
+    with _lock:
+        for key, limit in keys:
+            live = [ts for ts in rate.get(key, ()) if ts >= now - window]
+            if limit > 0 and len(live) >= limit:
+                waits.append(live[len(live) - limit] + window - now)
+    return max(1, int(max(waits)) + 1) if waits else None
 
 
 def _rate_limited(device_id, bucket="make", window=_MAKE_RATE_WINDOW_S,
@@ -108,7 +149,7 @@ def _guard(device_id, need_account=True):
         return None, (jsonify({"error": "rate_limited"}), 429)
     if not need_account:
         return None, None
-    account = store.get_gen_account(device_id)
+    account = _gen_account(store, device_id)
     if not account:
         return None, (jsonify({"error": "signin_required"}), 401)
     return account, None
@@ -117,6 +158,10 @@ def _guard(device_id, need_account=True):
 def gen_error_response(exc, device_id=None):
     """Translate a GenApiError from a singer-session call into a JSON reply."""
     if exc.status == 401:
+        if _app_device(device_id):
+            # The app's own gen session was refused: nothing is stored to
+            # forget, and the app's session check decides (v1 401).
+            return jsonify({"error": "gen_unauthenticated"}), 401
         # Session expired/revoked on gen — forget it; the singer re-verifies.
         if device_id:
             current_app.sing_store.clear_gen_account(device_id)
@@ -147,7 +192,7 @@ def _locale(data):
 @require_token
 def make_account():
     device_id = str(request.args.get("device_id") or "").strip()[:64]
-    account = current_app.sing_store.get_gen_account(device_id) if device_id else None
+    account = _gen_account(current_app.sing_store, device_id)
     return jsonify({
         "ready": make_flow_ready(current_app._get_current_object()),
         "email": account["email"] if account else None,
@@ -364,7 +409,7 @@ def create_job(app, device_id, artist, title, source_meta):
     ``source_meta`` is either {search_session_id, selection_index} (a result the
     singer picked) or {youtube_url} (gen's URL fallback).
     """
-    account = app.sing_store.get_gen_account(device_id) if device_id else None
+    account = _gen_account(app.sing_store, device_id)
     if not account:
         return None, (jsonify({"error": "signin_required"}), 401)
     meta = source_meta if isinstance(source_meta, dict) else {}
@@ -449,7 +494,7 @@ def make_review_link(req_id):
     if _rate_limited(device_id):
         return jsonify({"error": "rate_limited"}), 429
     store = current_app.sing_store
-    account = store.get_gen_account(device_id) if device_id else None
+    account = _gen_account(store, device_id)
     if not account:
         return jsonify({"error": "signin_required"}), 401
     req = store.get_request(req_id)
