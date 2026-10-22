@@ -416,7 +416,9 @@ _WEB_ERROR_MAP = {
     "no_credits": ("gen_rejected", 400),
     "already_generating": ("already_generating", 409),
     "busy_retry": ("busy_retry", 409),
-    "signin_required": ("unauthenticated", 401),
+    # v1 callers always carry a verified gen account, so this is never "your
+    # session expired" (which the app would treat as a sign-out signal).
+    "signin_required": ("invalid", 400),
     "gen_unavailable": ("gen_unavailable", 503),
 }
 _STATUS_FALLBACK = {401: "unauthenticated", 404: "not_found", 409: "conflict",
@@ -562,13 +564,24 @@ def create_request():
                                   json=fields)
         if status != 200 or not isinstance(result.get("request"), dict):
             return map_web_error(result, status, device)
+        # The request exists now: from here on the claim must never be
+        # released, or a retry would create a second one. If storing the
+        # response fails, the claim stays pending until its TTL (retries get
+        # busy_retry meanwhile) rather than duplicating the song.
+        done = True
         req = result["request"]
-        if for_friend:
-            store.mark_friend_request(req["id"], singer_name)
         payload = {"request": _request_view(req, for_friend),
                    "auto_approved": bool(result.get("auto_approved"))}
-        store.idempotent_put(key, {"status": 200, "body": payload})
-        done = True
+        try:
+            store.idempotent_put(key, {"status": 200, "body": payload})
+        except Exception:
+            logger.exception("v1 submit: storing the idempotent response failed")
+        if for_friend:
+            try:
+                store.mark_friend_request(req["id"], singer_name)
+            except Exception:
+                logger.exception("v1 submit: marking request %s as a friend song failed",
+                                 req["id"])
         return v1_json(payload)
     finally:
         if not done:
@@ -671,11 +684,19 @@ def reorder_requests():
         entry_members.append([sing._fold_name(m) for m in sing._entry_members(entry)])
         web_items.append({"entry_id": eid})
 
-    # The web view proves {entry_id} items against ONE device's identity (the
-    # names it submitted under tonight + its alias): use the first of the
-    # account's devices (app device first) whose identity covers them all.
+    # {entry_id} items must name the singer. v1 proves that against the
+    # account's own identity: its devices' aliases plus the names on its live,
+    # non-friend requests tonight. The web's device identity also counts
+    # friend-song and cancelled names, so a "song for Bob" (even cancelled)
+    # would otherwise grant reorder rights over Bob's entries.
     device = g.app_user.device_id
     if entry_members:
+        identity = _account_identity_folds(store)
+        if not all(any(m in identity for m in members) for members in entry_members):
+            return v1_error("not_owner", 403)
+        # The web view then re-proves the items against ONE device's identity:
+        # use the first of the account's devices (app device first) whose web
+        # identity covers them all.
         devices = [device] + [d for d in g.account_devices if d != device]
         device = None
         for d in devices:
@@ -693,6 +714,18 @@ def reorder_requests():
         return map_web_error(result, status, device)
     return v1_json({"request": _request_view(result["request"], False),
                     "auto_approved": bool(result.get("auto_approved"))})
+
+
+def _account_identity_folds(store):
+    """Folded names the caller's account is known as tonight: every account
+    device's alias plus the singer names on its requests tonight that are
+    neither friend songs nor cancelled/rejected."""
+    names = list(store.account_request_names(g.account_devices, g.night_started_at))
+    for d in g.account_devices:
+        alias = sing._safe_call(lambda d=d: store.get_alias(d))
+        if alias:
+            names.append(alias)
+    return {f for f in (sing._fold_name(n) for n in names) if f}
 
 
 # --- PUT /requests/<id>/consent ----------------------------------------------

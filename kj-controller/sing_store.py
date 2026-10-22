@@ -2022,6 +2022,24 @@ class SingStore:
         ).fetchall()
         return {r[0] for r in rows}
 
+    def account_request_names(self, device_ids, since):
+        """Distinct singer names on requests from ``device_ids`` since ``since``
+        (the night marker), leaving out "song for a friend" requests and
+        cancelled/rejected ones: the names those devices sing under."""
+        device_ids = [d for d in device_ids if d]
+        if not device_ids or not since:
+            return []
+        marks = ",".join("?" * len(device_ids))
+        rows = self._get_conn().execute(
+            "SELECT DISTINCT r.singer_name FROM sing_requests r "
+            "LEFT JOIN app_friend_requests f ON f.request_id = r.id "
+            f"WHERE r.device_id IN ({marks}) AND r.created_at >= ? "
+            "AND r.singer_name != '' AND f.request_id IS NULL "
+            "AND r.status NOT IN ('cancelled', 'rejected')",
+            (*device_ids, since),
+        ).fetchall()
+        return [r[0] for r in rows]
+
     def is_friend_request(self, request_id):
         return bool(self.friend_request_ids([request_id]))
 

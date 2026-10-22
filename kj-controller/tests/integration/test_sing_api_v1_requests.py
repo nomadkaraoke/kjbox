@@ -23,6 +23,7 @@ OTHER = "olive.other@example.com"
 def _join(client, tok, t, name="Sam S"):
     resp = client.post(f"{V1}/join", json={"t": t, "name": name}, headers=bearer(tok))
     assert resp.status_code == 200, resp.get_json()
+    assert_matches_contract(resp, "joinNight")
 
 
 def _song(title="Bo Rhap", **o):
@@ -35,6 +36,15 @@ def _song(title="Bo Rhap", **o):
 def _submit(client, tok, t, cid=None, **body):
     payload = {"t": t, "client_request_id": cid or str(uuid.uuid4()), **(body or _song())}
     return client.post(f"{V1}/requests", json=payload, headers=bearer(tok))
+
+
+def _expect(resp, op, status, error=None):
+    """Status + strict contract shape (+ the v1 error code) of a response."""
+    assert resp.status_code == status, resp.get_json()
+    body = assert_matches_contract(resp, op)
+    if error is not None:
+        assert body["error"] == error
+    return body
 
 
 def _ok_submit(client, tok, t, **body):
@@ -90,21 +100,21 @@ def test_submit_requires_client_request_id(client, token, sam):
     resp = client.post(f"{V1}/requests", json={"t": token, **_song()}, headers=bearer(sam))
     assert resp.status_code == 400
     assert assert_matches_contract(resp, "createRequest")["error"] == "invalid"
-    resp = _submit(client, sam, token, cid="not-a-uuid", **_song())
-    assert resp.status_code == 400
+    _expect(_submit(client, sam, token, cid="not-a-uuid", **_song()),
+            "createRequest", 400, "invalid")
 
 
 def test_submit_idempotent_on_client_request_id(client, token, sam, sing_app):
     cid = str(uuid.uuid4())
     first = _submit(client, sam, token, cid=cid, **_song())
-    assert first.status_code == 200
+    _expect(first, "createRequest", 200)
     again = _submit(client, sam, token, cid=cid, **_song())
-    assert again.status_code == 200
-    assert_matches_contract(again, "createRequest")
+    _expect(again, "createRequest", 200)
     assert again.get_json()["request"]["id"] == first.get_json()["request"]["id"]
     # A restart clears the in-memory rate-limit state; the key lives in SQLite.
     sing._rate_limit_state.clear()
     third = _submit(client, sam, token, cid=cid, **_song())
+    _expect(third, "createRequest", 200)
     assert third.get_json()["request"]["id"] == first.get_json()["request"]["id"]
     assert len(sing_app.sing_store.list_requests()) == 1
     # Exactly one rotation entry too, with auto-approve on.
@@ -112,6 +122,8 @@ def test_submit_idempotent_on_client_request_id(client, token, sam, sing_app):
     cid2 = str(uuid.uuid4())
     a = _submit(client, sam, token, cid=cid2, **_song("Other"))
     b = _submit(client, sam, token, cid=cid2, **_song("Other"))
+    _expect(a, "createRequest", 200)
+    _expect(b, "createRequest", 200)
     assert a.get_json() == b.get_json()
     assert [e["song_artist"] for e in sing_app.rotation.get_rotation()].count("Other - Queen") == 1
     # A new key is a new request.
@@ -159,6 +171,10 @@ def test_submit_simultaneous_retries_create_one_request(mock_config, tmp_path, m
         assert len(results) == 4
         assert all(r.status_code in (200, 409) for r in results), \
             [(r.status_code, r.get_json()) for r in results]
+        for r in results:
+            body = assert_matches_contract(r, "createRequest")
+            if r.status_code == 409:
+                assert body["error"] == "busy_retry"
         ids = {r.get_json()["request"]["id"] for r in results if r.status_code == 200}
         assert len(ids) == 1
         assert len(app.sing_store.list_requests()) == 1
@@ -171,8 +187,7 @@ def test_failed_submit_releases_the_key(client, token, sam, sing_app):
     bad = _submit(client, sam, token, cid=cid, **_song(source_type="nope"))
     assert bad.status_code == 400
     assert assert_matches_contract(bad, "createRequest")["error"] == "invalid"
-    ok = _submit(client, sam, token, cid=cid, **_song())
-    assert ok.status_code == 200
+    _expect(_submit(client, sam, token, cid=cid, **_song()), "createRequest", 200)
     assert len(sing_app.sing_store.list_requests()) == 1
 
 
@@ -180,14 +195,14 @@ def test_400_refunds_device_slot(client, token, sam, sing_app):
     sing_app.kj_config["sing_rate_limit_per_device"] = 3
     sing_app.kj_config["sing_rate_limit_per_ip"] = 100  # the IP slot is kept (flood backstop)
     for _ in range(6):
-        resp = _submit(client, sam, token, **_song(source_type="nope"))
-        assert resp.status_code == 400
-    assert _submit(client, sam, token, **_song()).status_code == 200
+        _expect(_submit(client, sam, token, **_song(source_type="nope")),
+                "createRequest", 400, "invalid")
+    _expect(_submit(client, sam, token, **_song()), "createRequest", 200)
 
 
 def test_rate_limited_maps_with_retry_after(client, token, sam, sing_app):
     sing_app.kj_config["sing_rate_limit_per_device"] = 1
-    assert _submit(client, sam, token, **_song()).status_code == 200
+    _expect(_submit(client, sam, token, **_song()), "createRequest", 200)
     resp = _submit(client, sam, token, **_song("Two"))
     assert resp.status_code == 429
     body = assert_matches_contract(resp, "createRequest")
@@ -226,14 +241,13 @@ def test_friend_song_keeps_owner_device_and_friend_name(client, token, sam, sing
     assert sing_app.sing_store.get_alias(app_device_id(EMAIL)) == "Sam S"
     assert sing_app.sing_store.is_friend_request(req["id"])
     # The owner manages it like their own song.
-    resp = _cancel(client, sam, token, req["id"])
-    assert resp.status_code == 200
+    _expect(_cancel(client, sam, token, req["id"]), "cancelRequest", 200)
 
     resp = _submit(client, sam, token, **_song(), for_friend=True)
     assert resp.status_code == 400
     assert assert_matches_contract(resp, "createRequest")["error"] == "invalid"
-    resp = _submit(client, sam, token, **_song(), for_friend=True, friend_name="x" * 101)
-    assert resp.status_code == 400
+    _expect(_submit(client, sam, token, **_song(), for_friend=True, friend_name="x" * 101),
+            "createRequest", 400, "invalid")
 
 
 def test_friend_song_ignores_photo_consent(client, token, sam, sing_app):
@@ -267,7 +281,7 @@ def test_cancel_other_device_403_not_owner(client, token, sam, app_token, sing_a
     assert sing_app.sing_store.get_request(theirs["id"])["status"] == "pending"
     # A web singer's request on an unlinked device is not Sam's either.
     web = _web_submit(client, token, "web-dev-x", singer="Sam S")
-    assert _cancel(client, sam, token, web["id"]).status_code == 403
+    _expect(_cancel(client, sam, token, web["id"]), "cancelRequest", 403, "not_owner")
 
 
 def test_cancel_missing_or_previous_night_404(client, token, sam, sing_app):
@@ -279,7 +293,7 @@ def test_cancel_missing_or_previous_night_404(client, token, sam, sing_app):
     conn.execute("UPDATE sing_requests SET created_at='2000-01-01 00:00:00' WHERE id=?",
                  (req["id"],))
     conn.commit()
-    assert _cancel(client, sam, token, req["id"]).status_code == 404
+    _expect(_cancel(client, sam, token, req["id"]), "cancelRequest", 404, "not_found")
 
 
 def test_cancel_linked_web_device_request_allowed(client, token, sam, sing_app):
@@ -413,6 +427,51 @@ def test_reorder_rejects_unowned(client, token, sam, sing_app):
     assert assert_matches_contract(resp, "reorderRequests")["error"] == "invalid"
 
 
+def test_reorder_friend_name_grants_no_rights(client, token, sam, sing_app):
+    """A song for "Bob" (even cancelled) mustn't let Sam move Bob's songs."""
+    sing_app.sing_store.set_auto_approve(True)
+    own = _ok_submit(client, sam, token, **_song())
+    friend = _ok_submit(client, sam, token, **_song("For Bob"), for_friend=True, friend_name="Bob")
+    _expect(_cancel(client, sam, token, friend["id"]), "cancelRequest", 200)
+    bobs = sing_app.rotation.add_entry("Bob", "Bob Song - B")
+    order_before = [e["id"] for e in sing_app.rotation.get_rotation()]
+    resp = client.post(f"{V1}/requests/reorder",
+                       json={"t": token, "items": [{"entry_id": bobs["id"]}, {"id": own["id"]}]},
+                       headers=bearer(sam))
+    _expect(resp, "reorderRequests", 403, "not_owner")
+    assert [e["id"] for e in sing_app.rotation.get_rotation()] == order_before
+    # Not cancelled either: a live friend song grants nothing.
+    _ok_submit(client, sam, token, **_song("For Bob 2"), for_friend=True, friend_name="Bob")
+    resp = client.post(f"{V1}/requests/reorder",
+                       json={"t": token, "items": [{"entry_id": bobs["id"]}, {"id": own["id"]}]},
+                       headers=bearer(sam))
+    _expect(resp, "reorderRequests", 403, "not_owner")
+
+
+def test_submit_survives_post_processing_failure(client, token, sam, sing_app, monkeypatch):
+    """Once the web made the request, a failure storing the response or the
+    friend marker must not release the claim (a retry would duplicate it)."""
+    def boom(*a, **k):
+        raise RuntimeError("disk full")
+    monkeypatch.setattr(sing_app.sing_store, "idempotent_put", boom)
+    monkeypatch.setattr(sing_app.sing_store, "mark_friend_request", boom)
+    cid = str(uuid.uuid4())
+    _expect(_submit(client, sam, token, cid=cid, **_song(), for_friend=True, friend_name="Nats"),
+            "createRequest", 200)
+    _expect(_submit(client, sam, token, cid=cid, **_song(), for_friend=True, friend_name="Nats"),
+            "createRequest", 409, "busy_retry")
+    assert len(sing_app.sing_store.list_requests()) == 1
+
+
+def test_signin_required_is_not_unauthenticated(client, token, sam):
+    import sing_api_v1
+    with client.application.test_request_context("/sing/api/v1/requests"):
+        resp = sing_api_v1.map_web_error({"error": "signin_required"}, 401)
+        assert resp.status_code == 400
+        assert resp.get_json()["error"] == "invalid"
+        assert resp.get_json()["message"] == "signin_required"
+
+
 # --- per-song consent ------------------------------------------------------
 
 def test_song_consent_set_and_clear(client, token, sam, sing_app):
@@ -479,7 +538,7 @@ def test_delegated_submit_recorded_once(rec_app, monkeypatch):
     with rec_app.test_client() as c:
         _join(c, "tok", t)
         resp = _submit(c, "tok", t, **_song())
-        assert resp.status_code == 200
+        _expect(resp, "createRequest", 200)
         assert "Set-Cookie" not in resp.headers
     paths = [r["path"] for r in _records(rec_app)]
     assert paths.count(f"{V1}/requests") == 1
@@ -496,8 +555,7 @@ def test_delegated_exception_recorded_once_on_v1_path(rec_app, monkeypatch):
         _join(c, "tok", t)
         monkeypatch.setattr(rec_app.sing_store, "create_request", boom)
         resp = _submit(c, "tok", t, **_song())
-        assert resp.status_code == 500
-        assert resp.get_json()["error"] == "internal"
+        _expect(resp, "createRequest", 500, "internal")
     recs = [r for r in _records(rec_app) if r["path"] in (f"{V1}/requests", "/sing/submit")]
     assert [(r["path"], r["status"]) for r in recs] == [(f"{V1}/requests", 500)]
 
@@ -516,5 +574,5 @@ def test_delegate_carries_client_ip_and_language(client, token, sam, sing_app, m
                        headers={**bearer(sam), "CF-Connecting-IP": "203.0.113.7",
                                 "Accept-Language": "es-MX"},
                        environ_base={"REMOTE_ADDR": "127.0.0.1"})
-    assert resp.status_code == 200
+    _expect(resp, "createRequest", 200)
     assert seen == {"ip": "203.0.113.7", "lang": "es-MX"}

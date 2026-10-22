@@ -211,3 +211,18 @@ def test_friend_requests_marked(store):
     assert store.is_friend_request(5) is True
     assert store.is_friend_request(6) is False
     assert store.friend_request_ids([]) == set()
+
+
+def test_account_request_names_skip_friend_and_cancelled(store):
+    since = "2000-01-01 00:00:00"
+    own = store.create_request(singer_name="Sam S", phone="", device_id="app")
+    friend = store.create_request(singer_name="Bob", phone="", device_id="app")
+    store.mark_friend_request(friend["id"], "Bob")
+    gone = store.create_request(singer_name="Old Name", phone="", device_id="app")
+    store.mark_cancelled(gone["id"])
+    store.create_request(singer_name="Web Me", phone="", device_id="web")
+    store.create_request(singer_name="Stranger", phone="", device_id="other")
+    assert own["status"] == "pending"
+    assert sorted(store.account_request_names(["app", "web"], since)) == ["Sam S", "Web Me"]
+    assert store.account_request_names([], since) == []
+    assert store.account_request_names(["app"], "2999-01-01 00:00:00") == []
