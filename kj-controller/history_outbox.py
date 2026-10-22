@@ -20,10 +20,11 @@ decide's partner API, so a record survives restarts and is never counted twice:
   tonight's rows and entries are compared (A.15), so a New Rotation never
   retracts last night's songs.
 
-``scan()`` runs from ``RotationManager._after_mutation``: cheap (tonight only,
-read-only in steady state), debounced to once a second, and it never raises.
-The delivery thread does all HTTP and rescans each tick to catch anything a
-debounce skipped. Delivery is inert while decide isn't configured.
+``RotationManager._after_mutation`` only wakes the delivery thread
+(``notify_rotation_changed``); the thread coalesces a burst for about a second,
+then runs ``scan()`` (tonight only, builds nothing in steady state, never
+raises) and delivers. It also rescans every tick, so device links and restarts
+are caught up. Delivery is inert while decide isn't configured.
 """
 
 import datetime as dt
@@ -126,7 +127,8 @@ class HistoryOutbox:
         """``http_post`` sends the upsert (an HTTP PUT; ``requests.put`` by
         default) and ``http_delete`` the retraction; both take
         ``(url, ..., headers=, timeout=)`` and return a response with
-        ``status_code``. ``clock`` returns naive UTC."""
+        ``status_code``. ``clock`` returns naive UTC. ``debounce_s`` is how
+        long the thread waits after a wake-up to coalesce a burst of mutations."""
         self.rotation_store = rotation_store
         self.sing_store = sing_store
         self.stats_store = stats_store
@@ -140,8 +142,6 @@ class HistoryOutbox:
         self._clock = clock or _utc_now
         self._debounce_s = debounce_s
         self._scan_lock = threading.Lock()
-        self._last_scan = None
-        self._dirty = False
         self._wake = threading.Event()
         self._thread = None
         self._inert_logged = False
@@ -173,12 +173,24 @@ class HistoryOutbox:
             accounts = self.sing_store.night_accounts(night_started_at)
             ctx = _NightContext(self.sing_store, night_started_at, accounts, [entry])
             venue_name = self._venue_name()
-        if not ctx.accounts:
+        emails, members, song_req = self._attribution(entry, ctx)
+        if not emails:
             return []
+        base = self._payload(entry, night_started_at, song_req, members, venue_name)
+        out = []
+        for email in emails:
+            hid = history_id_for(self.box_id, entry["id"], email)
+            out.append((hid, {"history_id": hid, "gen_email": email, **base}))
+        return out
+
+    def _attribution(self, entry, ctx):
+        """``(emails, members, song_request)``: the linked singers an entry is
+        recorded for, its member names, and the request that carries the song."""
+        if not ctx.accounts:
+            return [], [], None
         import sing  # _entry_members: the web's duet split (singers_json or "A & B")
 
-        eid = entry["id"]
-        reqs = ctx.requests.get(eid, [])
+        reqs = ctx.requests.get(entry["id"], [])
         owners, friend_owners = [], set()
         for r in reqs:
             email = ctx.email_of.get(r.get("device_id"))
@@ -197,19 +209,14 @@ class HistoryOutbox:
             matched = folds & ctx.identity.get(email, set())
             if matched and not any(ctx.claimed(f, email) for f in matched):
                 emails.append(email)
-        if not emails:
-            return []
-
         song_req = next((r for r in reversed(reqs) if r["id"] not in ctx.friend_ids),
                         reqs[-1] if reqs else None)
-        base = self._payload(entry, night_started_at, song_req, members, venue_name)
-        out = []
-        for email in emails:
-            hid = history_id_for(self.box_id, eid, email)
-            out.append((hid, {"history_id": hid, "gen_email": email, **base}))
-        return out
+        return emails, members, song_req
 
     def _payload(self, entry, night, req, members, venue_name):
+        """The spec 5.5 record minus ``history_id``/``gen_email``. Scalars are
+        strings or None (decide's model doesn't coerce: an int ``entry_id`` is
+        a 400)."""
         artist = ((req or {}).get("song_artist") or "").strip()
         title = ((req or {}).get("song_title") or "").strip()
         if not (artist and title):
@@ -221,54 +228,59 @@ class HistoryOutbox:
             entry["id"], not_before=night_utc.strftime(_TS_FMT) if night_utc else None
         ) if self.stats_store is not None else None
         done_at = entry.get("done_at")
-        media = {"source_type": (req or {}).get("source_type") or "rotation"}
+        ended_at = _iso_z(_local_to_utc(done_at))
+        if sung_at and ended_at and ended_at < sung_at:
+            # done_at is box-local: in the DST fall-back hour it converts an hour
+            # early. A song can't end before it started.
+            ended_at = sung_at
+        media = {"source_type": str((req or {}).get("source_type") or "rotation")}
         brand = _brand_code(entry.get("file_path"))
         if brand:
             media["brand_code"] = brand
         if entry.get("gen_job_id"):
-            media["gen_job_id"] = entry["gen_job_id"]
+            media["gen_job_id"] = str(entry["gen_job_id"])
         from night_log import night_of
         return {
             "source": "kjbox",
-            "box_id": self.box_id,
+            "box_id": str(self.box_id),
             "night_id": night_id_for_marker(self.box_id, night),
             "night_date": night_of(done_at) or night_of(night),
-            "entry_id": entry["id"],
+            "entry_id": str(entry["id"]),
             "artist": artist,
             "title": title,
             "sung_at": sung_at,
-            "ended_at": _iso_z(_local_to_utc(done_at)),
+            "ended_at": ended_at,
             "state": "sung" if sung_at else "sung_unplayed",
-            "singers": [m[:_MAX_SINGER_LEN] for m in members][:_MAX_SINGERS],
+            "singers": [str(m)[:_MAX_SINGER_LEN] for m in members][:_MAX_SINGERS],
             "venue": {"kind": "nomad", "name": venue_name},
             "media": media,
         }
 
     # -- scan -----------------------------------------------------------------------
 
+    def notify_rotation_changed(self):
+        """Called from ``RotationManager._after_mutation``: only wakes the
+        delivery thread, which scans and delivers within about a second.
+        Never blocks a rotation op."""
+        self._wake.set()
+
     def scan(self, force=False):
         """Queue puts for tonight's Done entries and deletes for un-done ones.
-        Returns how many rows changed. Never raises; debounced unless ``force``
-        (a skipped scan is picked up by the delivery thread)."""
+        Returns how many rows changed. Never raises. Runs on the delivery
+        thread; also callable directly (e.g. right after a device links).
+        ``force`` is accepted for callers; a scan already running on another
+        thread makes this one a no-op that the thread catches up on."""
         try:
-            if not force and self._last_scan is not None \
-                    and time.monotonic() - self._last_scan < self._debounce_s:
-                self._dirty = True
-                self._wake.set()
-                return 0
             if not self._scan_lock.acquire(blocking=False):
-                self._dirty = True
                 self._wake.set()
                 return 0
             try:
-                self._last_scan = time.monotonic()
-                self._dirty = False
                 return self._scan()
             finally:
                 self._scan_lock.release()
         except Exception:
             logger.warning("history outbox scan failed", exc_info=True)
-            self._dirty = True
+            self._wake.set()
             return 0
 
     def _scan(self):
@@ -284,30 +296,38 @@ class HistoryOutbox:
         if store.get_night_started_at() != night:
             # A New Rotation landed mid-scan: tonight's entries are gone, so
             # comparing them with the old night's rows would retract them all.
-            self._dirty = True
+            self._wake.set()
             return 0
         now = self._clock()
         changed = 0
         wanted = set()
         if accounts and done:
             ctx = _NightContext(store, night, accounts, done)
-            venue = self._venue_name()
+            venue = None
             for entry in done:
-                for hid, payload in self.build_records(entry, night, ctx, venue):
-                    wanted.add(hid)
+                emails, members, song_req = self._attribution(entry, ctx)
+                hids = {history_id_for(self.box_id, entry["id"], e): e for e in emails}
+                wanted.update(hids)
+                if all((rows.get(h) or {}).get("op") == "put" for h in hids):
+                    continue  # already queued/sent: steady state builds nothing
+                if venue is None:
+                    venue = self._venue_name() or ""
+                base = self._payload(entry, night, song_req, members, venue or None)
+                for hid, email in hids.items():
                     if (rows.get(hid) or {}).get("op") == "put":
-                        continue  # already queued/sent: steady state is read-only
+                        continue
+                    payload = {"history_id": hid, "gen_email": email, **base}
                     if store.outbox_enqueue(hid, "put", payload, night_started_at=night, now=now):
                         changed += 1
-        done_ids = {e["id"] for e in done}
+        done_ids = {str(e["id"]) for e in done}
         for hid, row in rows.items():
             if row["op"] != "put" or hid in wanted:
                 continue
             payload = row["payload"] or {}
-            if payload.get("entry_id") in done_ids:
+            if str(payload.get("entry_id")) in done_ids:
                 continue  # still Done: attribution changes never retract a sent song
             gone = {"history_id": hid, "gen_email": payload.get("gen_email"),
-                    "entry_id": payload.get("entry_id")}
+                    "entry_id": str(payload.get("entry_id"))}
             if store.outbox_enqueue(hid, "delete", gone, night_started_at=night, now=now):
                 changed += 1
         return changed
@@ -367,8 +387,8 @@ class HistoryOutbox:
     # -- thread ---------------------------------------------------------------------
 
     def run_once(self):
-        """One delivery-thread tick: rescan (catches debounced scans, links and
-        restarts), then deliver what's due."""
+        """One delivery-thread tick: scan (rotation changes, links, restarts),
+        then deliver what's due."""
         self.scan(force=True)
         try:
             return self.deliver_due()

@@ -145,7 +145,7 @@ def test_done_enqueues_one_record_per_linked_singer(env):
     assert p["source"] == "kjbox"
     assert p["box_id"] == BOX
     assert p["night_id"] == night_id_for_marker(BOX, env.night)
-    assert p["entry_id"] == ea["id"]
+    assert p["entry_id"] == str(ea["id"])
     assert (p["artist"], p["title"]) == ("Nova Lane", "Golden Hour")
     assert p["singers"] == ["Alice"]
     assert p["venue"] == {"kind": "nomad", "name": "Nomad Andrew"}
@@ -201,9 +201,9 @@ def test_duet_and_friend_attribution(env):
     ob = env.outbox()
     ob.scan()
     got = {(r["payload"]["entry_id"], r["payload"]["gen_email"]) for r in env.due()}
-    assert got == {(duet["id"], "a@x.com"), (duet["id"], "b@x.com"),
-                   (for_bob["id"], "b@x.com")}
-    duet_rec = next(r for r in env.due() if r["payload"]["entry_id"] == duet["id"])
+    assert got == {(str(duet["id"]), "a@x.com"), (str(duet["id"]), "b@x.com"),
+                   (str(for_bob["id"]), "b@x.com")}
+    duet_rec = next(r for r in env.due() if r["payload"]["entry_id"] == str(duet["id"]))
     assert duet_rec["payload"]["singers"] == ["Alice", "Bob"]
 
 
@@ -223,7 +223,7 @@ def test_name_match_needs_an_unambiguous_name(env):
     env.request("dev-b", "Bob", own["id"])
     env.done(own["id"])
     assert ob.scan() == 1
-    assert env.due()[0]["payload"]["entry_id"] == own["id"]
+    assert env.due()[0]["payload"]["entry_id"] == str(own["id"])
 
 
 # --- times -------------------------------------------------------------------------
@@ -275,18 +275,19 @@ def test_first_play_started_at(tmp_path):
 def test_done_undo_redo_single_record(env):
     env.link("dev-a", "a@x.com", alias="Alice")
     ob = env.outbox()
-    env.rotation.history_outbox = ob  # _after_mutation scans
+    env.rotation.history_outbox = ob  # _after_mutation wakes the thread
     e = env.rotation.add_entry("Alice", "Golden Hour - Nova Lane")
     env.request("dev-a", "Alice", e["id"])
     hid = history_id_for(BOX, e["id"], "a@x.com")
 
     env.rotation.update_status(e["id"], "Done")
-    assert ob.deliver_due() == 1
+    assert ob._wake.is_set()
+    assert ob.run_once() == 1                 # the thread's tick: scan + deliver
     env.rotation.undo()                       # host un-does Done
-    assert ob.deliver_due() == 1
+    assert ob.run_once() == 1
     env.rotation.redo()                       # ...and marks it Done again
-    assert ob.deliver_due() == 1
-    assert ob.deliver_due() == 0
+    assert ob.run_once() == 1
+    assert ob.run_once() == 0
 
     methods = [(c[0], c[1].rsplit("/", 1)[1]) for c in env.http.calls]
     assert methods == [("PUT", hid), ("DELETE", hid), ("PUT", hid)]
@@ -304,8 +305,9 @@ def test_undo_before_delivery_sends_only_the_delete(env):
     e = env.rotation.add_entry("Alice", "Golden Hour - Nova Lane")
     env.request("dev-a", "Alice", e["id"])
     env.rotation.update_status(e["id"], "Done")
+    ob.scan()
     env.rotation.undo()
-    ob.deliver_due()
+    ob.run_once()
     assert [c[0] for c in env.http.calls] == ["DELETE"]
 
 
@@ -470,22 +472,30 @@ def test_reused_history_id_from_another_night_is_requeued(env):
 # --- scan cost and safety ------------------------------------------------------------
 
 
-def test_scan_is_debounced_and_caught_up_by_the_worker(env):
+def test_after_mutation_only_wakes_the_thread(env):
     env.link("dev-a", "a@x.com", alias="Alice")
-    ob = env.outbox(debounce_s=60)
-    assert ob.scan() == 0          # first scan runs (nothing yet)
-    e = env.entry("Alice")
+    ob = env.outbox()
+    env.rotation.history_outbox = ob
+    e = env.rotation.add_entry("Alice", "Golden Hour - Nova Lane")
     env.request("dev-a", "Alice", e["id"])
-    env.done(e["id"])
-    assert ob.scan() == 0          # debounced
-    assert env.due() == []
-    ob.run_once()                  # the delivery thread scans + delivers
+    env.rotation.update_status(e["id"], "Done")
+    assert ob._wake.is_set()
+    assert env.due() == []          # nothing built on the rotation op's path
+    ob.run_once()                   # the delivery thread scans + delivers
     assert [c[0] for c in env.http.calls] == ["PUT"]
+
+
+def test_steady_state_scan_builds_no_payloads(env, monkeypatch):
+    ob, _ = _one_pending(env)
+    calls = []
+    monkeypatch.setattr(ob, "_payload", lambda *a, **k: calls.append(1) or {})
+    assert ob.scan() == 0
+    assert calls == []
 
 
 def test_rotation_ops_survive_a_broken_outbox(env):
     class Broken:
-        def scan(self):
+        def notify_rotation_changed(self):
             raise RuntimeError("boom")
 
     env.rotation.history_outbox = Broken()
@@ -498,9 +508,8 @@ def test_rotation_manager_accepts_history_outbox(tmp_path):
     calls = []
 
     class Spy:
-        def scan(self):
+        def notify_rotation_changed(self):
             calls.append(1)
-            return 0
 
     rm = RotationManager(str(tmp_path / "r.db"), history_outbox=Spy())
     rm.add_entry("Alice", "Song - Artist")
@@ -528,3 +537,72 @@ def test_create_app_wires_the_outbox_without_a_thread(mock_config, tmp_path):
         assert flask_app.history_outbox._thread is None
     finally:
         flask_app.catalog.close()
+
+
+# --- decide contract -----------------------------------------------------------------
+
+# decide's partner model (karaoke-log PUT), encoded here rather than imported:
+# pydantic doesn't coerce, so every scalar must already be a str (or None).
+_REQUIRED = {"history_id", "gen_email", "source", "box_id", "night_id", "night_date",
+             "entry_id", "artist", "title", "sung_at", "ended_at", "state", "singers",
+             "venue", "media"}
+
+
+def _assert_decide_contract(p):
+    assert _REQUIRED <= set(p), _REQUIRED - set(p)
+    for key, value in p.items():
+        if key == "singers":
+            assert isinstance(value, list) and len(value) <= 6
+            assert all(isinstance(s, str) and len(s) <= 100 for s in value)
+        elif key in ("venue", "media"):
+            assert isinstance(value, dict)
+            assert all(v is None or isinstance(v, str) for v in value.values()), value
+        else:
+            assert value is None or isinstance(value, str), (key, value)
+    assert p["state"] in ("sung", "sung_unplayed")
+    assert p["source"] == "kjbox"
+    assert p["history_id"].startswith("kj_")
+
+
+def test_payload_matches_decide_contract(env):
+    env.link("dev-a", "a@x.com", alias="Alice")
+    long_names = [f"Singer {i} " + "x" * 120 for i in range(8)]
+    e = env.rs.add_entry("Alice", "Golden Hour - Nova Lane",
+                         file_path="/media/NOMAD-0042 - Nova Lane - Golden Hour.mp4",
+                         singers=["Alice"] + long_names)
+    env.rs.set_gen_status(e["id"], "job123", "complete")
+    env.request("dev-a", "Alice", e["id"], source_type="make")
+    env.stats.record_play("gen-1", entry_id=e["id"], played_at=_local(
+        datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(minutes=3)))
+    env.done(e["id"])
+    played = env.entry("Alice", "Unplayed - Someone")
+    env.done(played["id"])
+    env.cfg["sing_tip_kj_name"] = ""
+    ob = env.outbox()
+    ob.scan()
+    rows = env.due()
+    assert len(rows) == 2
+    for r in rows:
+        _assert_decide_contract(r["payload"])
+    assert {r["payload"]["state"] for r in rows} == {"sung", "sung_unplayed"}
+    # Retractions carry string ids too and still match the entry.
+    env.rs.update_status(e["id"], "Waiting")
+    ob.scan()
+    dels = [r for r in env.due() if r["op"] == "delete"]
+    assert len(dels) == 1 and dels[0]["payload"]["entry_id"] == str(e["id"])
+
+
+def test_ended_at_never_before_sung_at(env):
+    # DST fall-back: the local done_at converts an hour early, before the start.
+    env.link("dev-a", "a@x.com", alias="Alice")
+    e = env.entry("Alice")
+    env.request("dev-a", "Alice", e["id"])
+    env.done(e["id"])
+    done_utc = (datetime.strptime(env.rs.get_entry(e["id"])["done_at"], "%Y-%m-%d %H:%M:%S")
+                .astimezone().astimezone(timezone.utc).replace(tzinfo=None))
+    late_start = done_utc + timedelta(minutes=30)
+    env.stats.record_play("yt-x", entry_id=e["id"], played_at=_local(late_start))
+    env.outbox().scan()
+    p = env.due()[0]["payload"]
+    assert p["sung_at"] == late_start.strftime("%Y-%m-%dT%H:%M:%SZ")
+    assert p["ended_at"] == p["sung_at"]

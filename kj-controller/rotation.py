@@ -619,13 +619,13 @@ class RotationManager:
                 logging.getLogger(__name__).exception("push dispatch notify failed")
         if self.history_outbox is not None:
             try:
-                # Cheap + debounced; the outbox's own thread does the HTTP.
-                self.history_outbox.scan()
+                # Only wakes the outbox thread; it scans + delivers off this path.
+                self.history_outbox.notify_rotation_changed()
             except Exception:
                 # Never let history sync block rotation ops (and it's not page-worthy).
                 import logging
                 logging.getLogger(__name__).warning(
-                    "history outbox scan failed", exc_info=True)
+                    "history outbox notify failed", exc_info=True)
         if self.sync is not None:
             # Fire-and-forget: sync runs in its own daemon thread already.
             # Calling sync_now() here would block; instead, the background

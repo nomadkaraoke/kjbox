@@ -456,7 +456,8 @@ def create_app(config=None):
         get_linked_device_for_entry=_device_for_rotation_entry,
     )
 
-    _install_history_outbox(flask_app, cfg, start=(config is None))
+    # Thread only in start_app (really serving), never in create_app (tests).
+    _install_history_outbox(flask_app, cfg, start=False)
 
     flask_app.sleep_manager = SleepManager()
     flask_app.download_queue = {'items': [], 'worker_running': False}
