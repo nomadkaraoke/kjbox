@@ -29,6 +29,7 @@ import logging
 import math
 import threading
 import time
+import urllib.parse
 import uuid
 from collections import defaultdict, deque
 from functools import wraps
@@ -1142,6 +1143,205 @@ def set_request_consent(id):  # noqa: A002 — the contract's path parameter is 
     if status != 200 or not isinstance(result.get("request"), dict):
         return map_web_error(result, status, req["device_id"])
     return v1_json({"request": _request_view(result["request"], False)})
+
+
+# --- Read endpoints: search, singers, rotation, now, preview, tips, stats ----
+# Each one delegates to the web view (same logic, same rate limits) with the
+# app device injected, then reshapes the answer into the v1 envelope.
+
+# Windows of the web limiters the read endpoints sit behind, for retry_after
+# (the web's 429 body carries no timing).
+_RESOLVE_WINDOW_S = 300
+_TIP_WINDOW_S = 600
+
+
+def _read_error(body, status, retry_s=None, device_id=None):
+    if status == 429:
+        return v1_error("rate_limited", 429, retry_after=retry_s or 60)
+    if not isinstance(body, dict) or "error" not in body:
+        reason = body.get("reason") if isinstance(body, dict) else None
+        body = {"error": reason} if reason else {}
+    return map_web_error(body, status, device_id)
+
+
+def _read(view, path, args=None, *, retry_s=None, json=None, method="GET", keep=None):
+    """Delegate; on 200 return ``v1_json`` of the body (limited to ``keep`` keys
+    when given), else the mapped v1 error."""
+    body, status = delegate(view, method=method, path=path, args=args, json=json)
+    if status != 200:
+        return _read_error(body, status, retry_s)
+    if keep is not None:
+        body = {k: v for k, v in body.items() if k in keep}
+    return v1_json(body)
+
+
+@app_api_bp.route("/search", methods=["GET"])
+@app_auth
+def search_songs():
+    args = {"q": request.args.get("q", ""), "sid": request.args.get("sid", "")}
+    return _read(sing.search, "/sing/search", args)
+
+
+@app_api_bp.route("/search/identify", methods=["GET"])
+@app_auth
+def identify_song():
+    args = {"q": request.args.get("q", ""), "sid": request.args.get("sid", "")}
+    return _read(sing.search_identify, "/sing/search/identify", args, retry_s=60)
+
+
+@app_api_bp.route("/search/resolve", methods=["GET"])
+@app_auth
+def resolve_search():
+    args = {"q": request.args.get("q", ""), "sid": request.args.get("sid", "")}
+    return _read(sing.search_resolve, "/sing/search/resolve", args, retry_s=_RESOLVE_WINDOW_S)
+
+
+@app_api_bp.route("/search/event", methods=["POST"])
+@app_auth
+def log_search_event():
+    body = _json_body()
+    payload = {k: v for k, v in body.items() if k in ("sid", "action", "q", "data")}
+    return _read(sing.search_event, "/sing/search/event", json=payload, method="POST",
+                 retry_s=_RESOLVE_WINDOW_S, keep={"ok"})
+
+
+@app_api_bp.route("/singers", methods=["GET"])
+@app_auth
+def list_singers():
+    return _read(sing.known_singers, "/sing/singers")
+
+
+@app_api_bp.route("/now", methods=["GET"])
+@app_auth
+def get_now():
+    return _read(sing.now_playing, "/sing/now")
+
+
+def _etag_matches(header, etag_value):
+    """``If-None-Match`` against ``"<rev>"``, compared with the quotes (and any
+    weak prefix) stripped; ``*`` matches anything."""
+    for raw in (header or "").split(","):
+        candidate = raw.strip()
+        if candidate == "*":
+            return True
+        if candidate.startswith("W/"):
+            candidate = candidate[2:]
+        if candidate.strip('"') == etag_value:
+            return True
+    return False
+
+
+@app_api_bp.route("/rotation", methods=["GET"])
+@app_auth
+def get_rotation():
+    # The rev is read BEFORE the body is built: a change in between can only
+    # make the ETag older than the body (an extra refetch), never newer.
+    rev = _rotation_rev()
+    etag = f'"{rev}"'
+    if _etag_matches(request.headers.get("If-None-Match"), str(rev)):
+        resp = Response(status=304)
+        resp.headers["ETag"] = etag
+        resp.headers["Cache-Control"] = "no-store"
+        return resp
+    body, status = delegate(sing.rotation, method="GET", path="/sing/rotation")
+    if status != 200:
+        return _read_error(body, status)
+    resp = v1_json({"entries": body.get("entries", []),
+                    "spread_source": body.get("spread_source", "fallback"), "rev": rev})
+    resp.headers["ETag"] = etag
+    return resp
+
+
+def _preview_base():
+    """Absolute base for the media URLs: the request's public host. On the
+    public host the WSGI rewriter adds ``/sing``, so it is dropped there; on
+    the admin host it stays. ``X-Forwarded-Proto`` wins over the (plain-HTTP)
+    tunnel hop's scheme so the app is handed https."""
+    cfg = current_app.kj_config or {}
+    on_public = (request.host or "").split(":")[0].lower() in sing._public_hosts(cfg)
+    proto = (request.headers.get("X-Forwarded-Proto") or "").split(",")[0].strip().lower()
+    base = request.host_url.rstrip("/")
+    if proto in ("http", "https") and not base.startswith(proto + "://"):
+        base = proto + base[base.index("://"):]
+    return base + ("" if on_public else "/sing")
+
+
+def _preview_payload(result):
+    out = {"mode": result.get("mode") or "unavailable", "title": result.get("title") or ""}
+    for key in ("reason", "format", "ext", "youtube_url"):
+        if result.get(key) is not None:
+            out[key] = result[key]
+    tok = result.get("token")
+    if tok and out["mode"] != "unavailable":
+        out["token"] = tok
+        base = _preview_base()
+        q = "?t=" + urllib.parse.quote(_param("t") or "", safe="")
+        if out["mode"] in ("native_video", "native_audio"):
+            out["stream_url"] = f"{base}/preview/stream/{tok}{q}"
+        elif out["mode"] == "hls":
+            out["hls_url"] = f"{base}/preview/hls/{tok}/index.m3u8{q}"
+        elif out["mode"] == "cdg":
+            out["cdg_audio_url"] = f"{base}/preview/cdg/{tok}/audio{q}"
+            out["cdg_graphics_url"] = f"{base}/preview/cdg/{tok}/graphics{q}"
+    return out
+
+
+@app_api_bp.route("/preview/resolve", methods=["POST"])
+@app_auth
+def resolve_preview():
+    descriptor = {k: v for k, v in _json_body().items() if k not in ("t", "night_id", "device_id")}
+    cfg = current_app.kj_config or {}
+    window = sing._safe_int(cfg.get("sing_preview_rate_window_s"), 60)
+    body, status = delegate(sing.preview_resolve, method="POST", path="/sing/preview/resolve",
+                            json=descriptor)
+    if status == 503:   # no preview service on this box: a normal "can't preview"
+        return v1_json(_preview_payload({"mode": "unavailable", "reason": body.get("reason")}))
+    if status != 200:
+        return _read_error(body, status, window)
+    return v1_json(_preview_payload(body))
+
+
+@app_api_bp.route("/preview/close", methods=["POST"])
+@app_auth
+def close_preview():
+    tok = _json_body().get("token")
+    payload = {"token": tok} if isinstance(tok, str) else {}
+    return _read(_preview_close_view, "/sing/preview/close", json=payload, method="POST",
+                 keep={"ok"})
+
+
+def _preview_close_view():
+    return sing.preview_close()
+
+
+@app_api_bp.route("/tips", methods=["GET"])
+@app_auth
+def get_tips():
+    return _read(sing.tip_info, "/sing/tip-info")
+
+
+@app_api_bp.route("/tips/claim", methods=["POST"])
+@app_auth
+def claim_tip():
+    body = _json_body()
+    alias = current_app.sing_store.get_alias(g.app_user.device_id)
+    if not alias:
+        return v1_error("needs_name", 400, "join with a name before claiming a tip")
+    # The name is always the device alias; the device id is injected by delegate.
+    payload = {"singer_name": alias, "amount": body.get("amount"),
+               "method": body.get("method"), "phone": body.get("phone")}
+    result, status = delegate(sing.tip_claim, method="POST", path="/sing/tip-claim", json=payload)
+    if status != 200 or not isinstance(result.get("request"), dict):
+        return _read_error(result, status, _TIP_WINDOW_S)
+    return v1_json({"request": _request_view(result["request"], False)})
+
+
+@app_api_bp.route("/my-stats", methods=["GET"])
+@app_auth
+def get_my_stats():
+    # Crowd favourites only. No `name` is forwarded, so the web view never
+    # does a name-based history lookup, whatever the caller sent.
+    return _read(sing.my_stats, "/sing/my-stats", keep={"top_songs"})
 
 
 # --- JSON errors for every /sing/api/v1/ path ------------------------------

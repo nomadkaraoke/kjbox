@@ -548,6 +548,667 @@
           }
         }
       }
+    },
+    "/search": {
+      "get": {
+        "operationId": "searchSongs",
+        "summary": "Karaoke search: one entry per song with every version",
+        "description": "Delegates to the web search. A query under 3 characters is 400 invalid.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/EventCode"
+          },
+          {
+            "$ref": "#/components/parameters/NightId"
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "The typed query (3+ characters for search)"
+          },
+          {
+            "name": "sid",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Client search id, groups the search log"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/RequestInvalid"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/NightChanged"
+          },
+          "429": {
+            "$ref": "#/components/responses/RequestRateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/GenUnavailable"
+          },
+          "default": {
+            "$ref": "#/components/responses/Default"
+          }
+        }
+      }
+    },
+    "/search/identify": {
+      "get": {
+        "operationId": "identifySong",
+        "summary": "Which real song the text means",
+        "description": "Rate limited per device (429 rate_limited).",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/EventCode"
+          },
+          {
+            "$ref": "#/components/parameters/NightId"
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "The typed query (3+ characters for search)"
+          },
+          {
+            "name": "sid",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Client search id, groups the search log"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentifyResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/RequestInvalid"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/NightChanged"
+          },
+          "429": {
+            "$ref": "#/components/responses/RequestRateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/GenUnavailable"
+          },
+          "default": {
+            "$ref": "#/components/responses/Default"
+          }
+        }
+      }
+    },
+    "/search/resolve": {
+      "get": {
+        "operationId": "resolveSearch",
+        "summary": "Auto-correct a search that found nothing",
+        "description": "Rate limited per device (20 per 5 minutes by default).",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/EventCode"
+          },
+          {
+            "$ref": "#/components/parameters/NightId"
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "The typed query (3+ characters for search)"
+          },
+          {
+            "name": "sid",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Client search id, groups the search log"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResolveResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/RequestInvalid"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/NightChanged"
+          },
+          "429": {
+            "$ref": "#/components/responses/RequestRateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/GenUnavailable"
+          },
+          "default": {
+            "$ref": "#/components/responses/Default"
+          }
+        }
+      }
+    },
+    "/search/event": {
+      "post": {
+        "operationId": "logSearchEvent",
+        "summary": "Log a search choice (analytics)",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SearchEventRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OkResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/RequestInvalid"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/NightChanged"
+          },
+          "429": {
+            "$ref": "#/components/responses/RequestRateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/GenUnavailable"
+          },
+          "default": {
+            "$ref": "#/components/responses/Default"
+          }
+        }
+      }
+    },
+    "/singers": {
+      "get": {
+        "operationId": "listSingers",
+        "summary": "Tonight's singer names for duet partners",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/EventCode"
+          },
+          {
+            "$ref": "#/components/parameters/NightId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SingersResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/RequestInvalid"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/NightChanged"
+          },
+          "429": {
+            "$ref": "#/components/responses/RequestRateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/GenUnavailable"
+          },
+          "default": {
+            "$ref": "#/components/responses/Default"
+          }
+        }
+      }
+    },
+    "/now": {
+      "get": {
+        "operationId": "getNow",
+        "summary": "Now on stage and up next",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/EventCode"
+          },
+          {
+            "$ref": "#/components/parameters/NightId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NowResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/RequestInvalid"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/NightChanged"
+          },
+          "429": {
+            "$ref": "#/components/responses/RequestRateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/GenUnavailable"
+          },
+          "default": {
+            "$ref": "#/components/responses/Default"
+          }
+        }
+      }
+    },
+    "/rotation": {
+      "get": {
+        "operationId": "getRotation",
+        "summary": "The active rotation with wait estimates",
+        "description": "ETag is \"<rotation_rev>\". Authentication still applies to a 304.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/EventCode"
+          },
+          {
+            "$ref": "#/components/parameters/NightId"
+          },
+          {
+            "name": "If-None-Match",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "The last ETag; equal (quotes ignored) gives 304 with no body"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RotationResult"
+                }
+              }
+            },
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "\"<rev>\" (the rotation revision, quoted)"
+              }
+            }
+          },
+          "304": {
+            "description": "Unchanged since the If-None-Match revision; empty body, ETag header still sent",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "\"<rev>\""
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/RequestInvalid"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/NightChanged"
+          },
+          "429": {
+            "$ref": "#/components/responses/RequestRateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/GenUnavailable"
+          },
+          "default": {
+            "$ref": "#/components/responses/Default"
+          }
+        }
+      }
+    },
+    "/preview/resolve": {
+      "post": {
+        "operationId": "resolvePreview",
+        "summary": "Resolve a song version to a playable preview",
+        "description": "Rate limited per network (12 per minute by default, 429 with retry_after). 404 not_found when an entry has nothing to preview yet. mode unavailable (200) when this version can't be previewed.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PreviewRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreviewResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/RequestInvalid"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/NightChanged"
+          },
+          "429": {
+            "$ref": "#/components/responses/RequestRateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/GenUnavailable"
+          },
+          "default": {
+            "$ref": "#/components/responses/Default"
+          }
+        }
+      }
+    },
+    "/preview/close": {
+      "post": {
+        "operationId": "closePreview",
+        "summary": "Release a preview token",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PreviewCloseRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OkResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/RequestInvalid"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/NightChanged"
+          },
+          "429": {
+            "$ref": "#/components/responses/RequestRateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/GenUnavailable"
+          },
+          "default": {
+            "$ref": "#/components/responses/Default"
+          }
+        }
+      }
+    },
+    "/tips": {
+      "get": {
+        "operationId": "getTips",
+        "summary": "Tip methods and settings",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/EventCode"
+          },
+          {
+            "$ref": "#/components/parameters/NightId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TipsResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/RequestInvalid"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/NightChanged"
+          },
+          "429": {
+            "$ref": "#/components/responses/RequestRateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/GenUnavailable"
+          },
+          "default": {
+            "$ref": "#/components/responses/Default"
+          }
+        }
+      }
+    },
+    "/tips/claim": {
+      "post": {
+        "operationId": "claimTip",
+        "summary": "Tell the host a tip was sent",
+        "description": "The singer name is the device's name (400 needs_name with none). Rate limited (5 per 10 minutes, 429). 400 invalid with message tips_disabled when the host turned tips off.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TipClaimRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TipClaimResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/RequestInvalid"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/NightChanged"
+          },
+          "429": {
+            "$ref": "#/components/responses/RequestRateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/GenUnavailable"
+          },
+          "default": {
+            "$ref": "#/components/responses/Default"
+          }
+        }
+      }
+    },
+    "/my-stats": {
+      "get": {
+        "operationId": "getMyStats",
+        "summary": "Tonight's crowd favourites",
+        "description": "Top songs only; the web's per-name history lookup is not exposed, and any name parameter is ignored.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/EventCode"
+          },
+          {
+            "$ref": "#/components/parameters/NightId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MyStatsResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/RequestInvalid"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/NightChanged"
+          },
+          "429": {
+            "$ref": "#/components/responses/RequestRateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/GenUnavailable"
+          },
+          "default": {
+            "$ref": "#/components/responses/Default"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1851,6 +2512,657 @@
             "$ref": "#/components/schemas/MeProfile"
           }
         }
+      },
+      "OkResult": {
+        "type": "object",
+        "required": [
+          "api_version",
+          "ok"
+        ],
+        "properties": {
+          "api_version": {
+            "type": "string"
+          },
+          "ok": {
+            "type": "boolean",
+            "const": true
+          }
+        }
+      },
+      "SearchSong": {
+        "type": "object",
+        "description": "One song with every available karaoke version, exactly as the web search groups them. The per-version objects (source local|kn|..., with the matching local/kn payload) are the web's own shape and are passed through; the app reads source, artist, title, version_count and versions[].",
+        "required": [
+          "artist",
+          "title",
+          "versions"
+        ],
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "artist": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "version_count": {
+            "type": "integer"
+          },
+          "versions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          }
+        },
+        "additionalProperties": true
+      },
+      "SearchResult": {
+        "type": "object",
+        "required": [
+          "api_version",
+          "songs",
+          "make_requests_enabled",
+          "simple_mode"
+        ],
+        "properties": {
+          "api_version": {
+            "type": "string"
+          },
+          "songs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SearchSong"
+            }
+          },
+          "make_requests_enabled": {
+            "type": "boolean"
+          },
+          "simple_mode": {
+            "type": "boolean"
+          },
+          "karaoke_nerds_timeout": {
+            "type": "boolean",
+            "description": "Present (true) when the community-catalogue lookup timed out"
+          }
+        }
+      },
+      "IdentifiedSong": {
+        "type": "object",
+        "required": [
+          "artist",
+          "title",
+          "karaoke"
+        ],
+        "properties": {
+          "artist": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "karaoke": {
+            "type": "boolean"
+          }
+        }
+      },
+      "IdentifyResult": {
+        "type": "object",
+        "required": [
+          "api_version",
+          "status"
+        ],
+        "properties": {
+          "api_version": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "confident",
+              "candidates",
+              "none"
+            ]
+          },
+          "typed": {
+            "type": "string"
+          },
+          "candidates": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/IdentifiedSong"
+            }
+          },
+          "song": {
+            "$ref": "#/components/schemas/IdentifiedSong"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "same",
+              "cosmetic",
+              "completed",
+              "content"
+            ]
+          },
+          "unavailable": {
+            "type": "boolean",
+            "description": "With status none: the on-box song index isn't available"
+          }
+        },
+        "description": "Which real song the typed text means (separate from whether a karaoke version exists)."
+      },
+      "ArtistTitle": {
+        "type": "object",
+        "required": [
+          "artist",
+          "title"
+        ],
+        "properties": {
+          "artist": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        }
+      },
+      "ResolveResult": {
+        "type": "object",
+        "required": [
+          "api_version"
+        ],
+        "properties": {
+          "api_version": {
+            "type": "string"
+          },
+          "corrected": {
+            "$ref": "#/components/schemas/ArtistTitle"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "cosmetic",
+              "content"
+            ]
+          },
+          "typed": {
+            "type": "string"
+          },
+          "songs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SearchSong"
+            }
+          },
+          "split": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ArtistTitle"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "alternatives": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ArtistTitle"
+            }
+          }
+        },
+        "description": "Auto-correct for a search that found nothing. Only the keys that apply are present: corrected+kind+typed+songs+split, or alternatives, or split alone, or none of them."
+      },
+      "SearchEventRequest": {
+        "type": "object",
+        "required": [
+          "action"
+        ],
+        "properties": {
+          "t": {
+            "type": "string"
+          },
+          "night_id": {
+            "type": "string"
+          },
+          "sid": {
+            "type": "string",
+            "description": "The search id the events belong to"
+          },
+          "action": {
+            "type": "string",
+            "description": "A search_log choice action (unknown ones are 400 invalid)"
+          },
+          "q": {
+            "type": "string"
+          },
+          "data": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      },
+      "SingersResult": {
+        "type": "object",
+        "required": [
+          "api_version",
+          "singers"
+        ],
+        "properties": {
+          "api_version": {
+            "type": "string"
+          },
+          "singers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "description": "Tonight's singer names, for duet partner chips"
+      },
+      "NowEntry": {
+        "type": "object",
+        "required": [
+          "first_name",
+          "display_name",
+          "song_artist"
+        ],
+        "properties": {
+          "first_name": {
+            "type": "string"
+          },
+          "display_name": {
+            "type": "string"
+          },
+          "song_artist": {
+            "type": "string"
+          }
+        }
+      },
+      "NowResult": {
+        "type": "object",
+        "required": [
+          "api_version",
+          "now_singing",
+          "up_next",
+          "queued_count"
+        ],
+        "properties": {
+          "api_version": {
+            "type": "string"
+          },
+          "now_singing": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/NowEntry"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "up_next": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/NowEntry"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "queued_count": {
+            "type": "integer"
+          }
+        },
+        "description": "Cancelled, Done and Left entries are excluded"
+      },
+      "RotationEntry": {
+        "type": "object",
+        "required": [
+          "position",
+          "first_name",
+          "display_name",
+          "song_artist",
+          "status",
+          "entry_id",
+          "previewable",
+          "now_singing",
+          "expected_s",
+          "range_low_s",
+          "range_high_s"
+        ],
+        "properties": {
+          "position": {
+            "type": "integer"
+          },
+          "first_name": {
+            "type": "string"
+          },
+          "display_name": {
+            "type": "string"
+          },
+          "song_artist": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "entry_id": {
+            "type": "integer"
+          },
+          "previewable": {
+            "type": "boolean"
+          },
+          "now_singing": {
+            "type": "boolean"
+          },
+          "expected_s": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "range_low_s": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "range_high_s": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        }
+      },
+      "RotationResult": {
+        "type": "object",
+        "required": [
+          "api_version",
+          "entries",
+          "spread_source",
+          "rev"
+        ],
+        "properties": {
+          "api_version": {
+            "type": "string"
+          },
+          "entries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RotationEntry"
+            }
+          },
+          "spread_source": {
+            "type": "string"
+          },
+          "rev": {
+            "type": "integer",
+            "description": "The rotation revision; also the ETag (quoted)"
+          }
+        },
+        "description": "Active rotation (Cancelled, Done and Left excluded) with wait estimates"
+      },
+      "PreviewRequest": {
+        "type": "object",
+        "description": "The web's preview descriptor: source local|divebar|youtube with that source's fields as the search result gave them, or source entry|entry_quick with entry_id.",
+        "required": [
+          "source"
+        ],
+        "properties": {
+          "t": {
+            "type": "string"
+          },
+          "night_id": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "local",
+              "divebar",
+              "youtube",
+              "entry",
+              "entry_quick"
+            ]
+          },
+          "entry_id": {
+            "type": "integer"
+          }
+        },
+        "additionalProperties": true
+      },
+      "PreviewResult": {
+        "type": "object",
+        "required": [
+          "api_version",
+          "mode",
+          "title"
+        ],
+        "properties": {
+          "api_version": {
+            "type": "string"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "native_video",
+              "native_audio",
+              "hls",
+              "cdg",
+              "youtube",
+              "unavailable"
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string",
+            "description": "With mode unavailable: why (English, for logs)"
+          },
+          "token": {
+            "type": "string",
+            "description": "Pass to POST /preview/close when done"
+          },
+          "format": {
+            "type": "string"
+          },
+          "ext": {
+            "type": "string"
+          },
+          "youtube_url": {
+            "type": "string"
+          },
+          "stream_url": {
+            "type": "string",
+            "format": "uri",
+            "description": "native_video / native_audio: absolute URL on the request's host (supports Range)"
+          },
+          "hls_url": {
+            "type": "string",
+            "format": "uri",
+            "description": "hls: absolute URL of index.m3u8"
+          },
+          "cdg_audio_url": {
+            "type": "string",
+            "format": "uri",
+            "description": "cdg: absolute audio URL"
+          },
+          "cdg_graphics_url": {
+            "type": "string",
+            "format": "uri",
+            "description": "cdg: absolute .cdg graphics URL"
+          }
+        },
+        "description": "Returned URLs are absolute on the host the request came in on (no /sing prefix on the public host, /sing on the admin host) and carry ?t=<event code>."
+      },
+      "PreviewCloseRequest": {
+        "type": "object",
+        "required": [],
+        "properties": {
+          "t": {
+            "type": "string"
+          },
+          "night_id": {
+            "type": "string"
+          },
+          "token": {
+            "type": "string"
+          }
+        }
+      },
+      "TipMethod": {
+        "type": "object",
+        "required": [
+          "key",
+          "label",
+          "amount_style"
+        ],
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          },
+          "amount_style": {
+            "type": "string",
+            "enum": [
+              "path",
+              "venmo",
+              "copy",
+              "none"
+            ]
+          }
+        }
+      },
+      "TipsResult": {
+        "type": "object",
+        "required": [
+          "api_version",
+          "enabled",
+          "threshold",
+          "kj_name",
+          "methods"
+        ],
+        "properties": {
+          "api_version": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "threshold": {
+            "type": "number"
+          },
+          "kj_name": {
+            "type": "string"
+          },
+          "methods": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TipMethod"
+            }
+          }
+        }
+      },
+      "TipClaimRequest": {
+        "type": "object",
+        "required": [
+          "amount"
+        ],
+        "properties": {
+          "t": {
+            "type": "string"
+          },
+          "night_id": {
+            "type": "string"
+          },
+          "amount": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          },
+          "method": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "phone": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "description": "The name is always the device's name (needs_name when none)."
+      },
+      "TipClaimResult": {
+        "type": "object",
+        "required": [
+          "api_version",
+          "request"
+        ],
+        "properties": {
+          "api_version": {
+            "type": "string"
+          },
+          "request": {
+            "$ref": "#/components/schemas/SongRequest"
+          }
+        }
+      },
+      "TopSong": {
+        "type": "object",
+        "required": [
+          "artist",
+          "title",
+          "plays"
+        ],
+        "properties": {
+          "artist": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "plays": {
+            "type": "integer"
+          }
+        }
+      },
+      "MyStatsResult": {
+        "type": "object",
+        "required": [
+          "api_version",
+          "top_songs"
+        ],
+        "properties": {
+          "api_version": {
+            "type": "string"
+          },
+          "top_songs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TopSong"
+            }
+          }
+        },
+        "description": "Tonight's crowd favourites only: never a per-person lookup"
       }
     }
   }
