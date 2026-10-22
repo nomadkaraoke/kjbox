@@ -1938,3 +1938,17 @@ body:has(#sing-tabs:not([hidden])) .sing-make-bar {
 }
 .sing-make-bar-text { color: var(--nk-text); font-weight: 600; font-size: 0.92rem; }
 .sing-make-bar-btn { flex: none; padding: 0.5rem 1.1rem; }
+
+/* "Save tonight's songs to your Nomad Karaoke account" (spec 5.6) */
+.save-songs-slot[hidden] { display: none; }
+.save-songs-slot { margin: 0.75rem 0; }
+.save-songs-slot .btn.link {
+  background: none; border: none; color: var(--nk-accent); padding: 0; cursor: pointer; font: inherit;
+  text-decoration: underline; text-align: left;
+}
+.save-songs-slot .btn.link[disabled] { opacity: 0.5; cursor: default; }
+.save-songs-explainer, .save-songs-status { margin: 0.35rem 0 0; }
+.save-songs-form { display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.5rem; }
+.save-songs-actions { display: flex; gap: 1rem; flex-wrap: wrap; }
+.save-songs-sung { margin: 0.25rem 0 0.5rem; font-size: 0.9rem; }
+.save-songs-offer { border-top: 1px solid var(--nk-border); padding-top: 0.75rem; }

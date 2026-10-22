@@ -614,5 +614,12 @@
     "socialYes": "Može fotografije",
     "socialNo": "Bez fotografija, molim",
     "socialUnset": "Još nije odgovoreno"
+  },
+  "saveSongs": {
+    "link": "Spremi večerašnje pjesme na svoj Nomad Karaoke račun",
+    "explainer": "Spremit ćemo pjesme koje večeras pjevaš na tvoj Nomad Karaoke račun kako bi ti aplikacija mogla prikazati povijest pjevanja i preporučiti pjesme.",
+    "saving": "Spremanje večerašnjih pjesama na {email}",
+    "stop": "Prekini spremanje",
+    "failed": "Pjesme trenutno nismo mogli spremiti. Pokušaj ponovno."
   }
 }

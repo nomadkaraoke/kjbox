@@ -614,5 +614,12 @@
     "socialYes": "Bilder OK",
     "socialNo": "Ingen bilder, takk",
     "socialUnset": "Ikke svart ennå"
+  },
+  "saveSongs": {
+    "link": "Lagre kveldens sanger på Nomad Karaoke-kontoen din",
+    "explainer": "Vi lagrer sangene du synger i kveld på Nomad Karaoke-kontoen din, slik at appen kan vise historikken din og anbefale sanger.",
+    "saving": "Lagrer kveldens sanger til {email}",
+    "stop": "Stopp lagring",
+    "failed": "Vi klarte ikke å lagre sangene dine akkurat nå. Prøv igjen."
   }
 }

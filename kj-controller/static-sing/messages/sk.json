@@ -614,5 +614,12 @@
     "socialYes": "Fotky sú OK",
     "socialNo": "Prosím, bez fotiek",
     "socialUnset": "Zatiaľ nezodpovedané"
+  },
+  "saveSongs": {
+    "link": "Uložiť dnešné piesne do účtu Nomad Karaoke",
+    "explainer": "Piesne, ktoré dnes zaspievaš, uložíme do tvojho účtu Nomad Karaoke, aby ti aplikácia mohla zobraziť históriu a odporúčať ďalšie skladby.",
+    "saving": "Ukladám dnešné piesne do účtu {email}",
+    "stop": "Zastaviť ukladanie",
+    "failed": "Tvoje piesne sa teraz nepodarilo uložiť. Skús to znova, prosím."
   }
 }

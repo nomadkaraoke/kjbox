@@ -29,7 +29,8 @@ from collections import defaultdict, deque
 from flask import current_app, g, has_request_context, jsonify, request
 
 from gen_client import CREATE_JOB_TIMEOUT, REQUEST_TIMEOUT, GenApiError
-from sing import _client_ip, require_token, sing_bp
+from app_identity import app_device_id
+from sing import _client_ip, _singer_rate_limited, require_token, sing_bp
 
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 _CODE_RE = re.compile(r"^\d{6}$")
@@ -196,11 +197,33 @@ def _locale(data):
 @require_token
 def make_account():
     device_id = str(request.args.get("device_id") or "").strip()[:64]
-    account = _gen_account(current_app.sing_store, device_id)
+    store = current_app.sing_store
+    account = _gen_account(store, device_id)
     return jsonify({
         "ready": make_flow_ready(current_app._get_current_object()),
         "email": account["email"] if account else None,
+        "linked": _linked_tonight(store, device_id, account),
     })
+
+
+def _linked_tonight(store, device_id, account):
+    """True when this device is saving tonight's songs to its signed-in account."""
+    night = store.get_night_started_at()
+    if not (account and device_id and night):
+        return False
+    return store.account_for_device(device_id, night) == account["email"]
+
+
+def _unlink_if_other(store, device_id, email):
+    """Drop tonight's link when this device is now signed in as someone else
+    (or signed out): another person on the phone never saves to the old
+    account. Re-verifying the same email keeps it."""
+    night = store.get_night_started_at()
+    if not (device_id and night) or store.is_app_device(device_id):
+        return
+    linked = store.account_for_device(device_id, night)
+    if linked and linked != email:
+        store.unlink_account(device_id, night)
 
 
 @sing_bp.route("/make/send-code", methods=["POST"])
@@ -253,6 +276,8 @@ def make_verify_code():
     if not token:
         return jsonify({"error": "gen_unavailable"}), 502
     current_app.sing_store.set_gen_account(device_id, email, token)
+    # A9-R1: verifying never links; it only ends a link to a different account.
+    _unlink_if_other(current_app.sing_store, device_id, email)
     return jsonify({"email": email})
 
 
@@ -262,7 +287,56 @@ def make_sign_out():
     _data, device_id = _body()
     if device_id:
         current_app.sing_store.clear_gen_account(device_id)
+        _unlink_if_other(current_app.sing_store, device_id, None)
     return jsonify({"status": "ok"})
+
+
+# --- "Save tonight's songs to your Nomad Karaoke account" (spec 5.6) --------
+
+def _claim_guard():
+    """Checks shared by link/unlink. Returns (store, device_id, account, night,
+    error_response)."""
+    data, device_id = _body()
+    store = current_app.sing_store
+    if _singer_rate_limited(request, data):
+        return None, None, None, None, (jsonify({"error": "rate_limited"}), 429)
+    # A web device id (the singer UI's random 32 hex) that isn't the app's own:
+    # the app links its device itself, and a web claim must never rewrite it.
+    if not re.fullmatch(r"[0-9a-f]{32}", device_id) or store.is_app_device(device_id):
+        return None, None, None, None, (jsonify({"error": "invalid"}), 400)
+    account = store.get_gen_account(device_id)
+    if not account:
+        return None, None, None, None, (jsonify({"error": "signin_required"}), 400)
+    if device_id == app_device_id(account["email"], store.app_identity_secret()):
+        return None, None, None, None, (jsonify({"error": "invalid"}), 400)
+    night = store.get_night_started_at() or store.ensure_night_started()
+    return store, device_id, account, night, None
+
+
+@sing_bp.route("/account/link", methods=["POST"])
+@require_token
+def account_link():
+    """Link this web device to its signed-in gen account for tonight; the
+    history outbox then sends tonight's sung songs (already sung ones too)."""
+    store, device_id, account, night, err = _claim_guard()
+    if err:
+        return err
+    store.link_account(device_id, account["email"], "web", night)
+    outbox = getattr(current_app, "history_outbox", None)
+    if outbox is not None:
+        outbox.scan(force=True)   # never raises; the worker also catches up
+    return jsonify({"linked": True, "email": account["email"]})
+
+
+@sing_bp.route("/account/unlink", methods=["POST"])
+@require_token
+def account_unlink():
+    """Stop saving: future songs tonight aren't sent. Songs already saved stay."""
+    store, device_id, _account, night, err = _claim_guard()
+    if err:
+        return err
+    store.unlink_account(device_id, night)
+    return jsonify({"linked": False})
 
 
 @sing_bp.route("/make/check", methods=["POST"])

@@ -614,5 +614,12 @@
     "socialYes": "OK ang photos",
     "socialNo": "Walang photos, please",
     "socialUnset": "Hindi pa nasasagutan"
+  },
+  "saveSongs": {
+    "link": "I-save ang mga kanta ngayong gabi sa iyong Nomad Karaoke account",
+    "explainer": "Ise-save namin ang mga kantang kakantahin mo ngayong gabi sa iyong Nomad Karaoke account, para maipakita ng app ang history mo at makapag-rekomenda ng mga kanta.",
+    "saving": "Sine-save ang mga kanta ngayong gabi sa {email}",
+    "stop": "Itigil ang pag-save",
+    "failed": "Hindi namin ma-save ang mga kanta mo ngayon. Pakisubukang muli."
   }
 }

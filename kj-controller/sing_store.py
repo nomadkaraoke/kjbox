@@ -1991,6 +1991,15 @@ class SingStore:
             out.setdefault(r["gen_email"], []).append(r["device_id"])
         return out
 
+    def is_app_device(self, device_id):
+        """True when ``singer_accounts`` has ever recorded ``device_id`` as an
+        app device (origin 'app', any night). Web claims refuse such ids."""
+        row = self._get_conn().execute(
+            "SELECT 1 FROM singer_accounts WHERE device_id=? AND origin='app' LIMIT 1",
+            (device_id,),
+        ).fetchone()
+        return row is not None
+
     def account_for_device(self, device_id, night_started_at):
         row = self._get_conn().execute(
             "SELECT gen_email FROM singer_accounts "

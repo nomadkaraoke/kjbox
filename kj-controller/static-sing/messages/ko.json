@@ -614,5 +614,12 @@
     "socialYes": "사진 촬영 괜찮아요",
     "socialNo": "사진 촬영은 피해주세요",
     "socialUnset": "아직 답변 안 함"
+  },
+  "saveSongs": {
+    "link": "오늘 부른 곡을 Nomad Karaoke 계정에 저장하기",
+    "explainer": "오늘 부른 곡들을 Nomad Karaoke 계정에 저장해 드려요. 지난 노래 기록을 확인하고 어울리는 곡도 추천받을 수 있어요.",
+    "saving": "오늘 부른 곡을 {email} 계정에 저장하는 중...",
+    "stop": "저장 취소",
+    "failed": "방금 노래를 저장하지 못했어요. 다시 시도해 주세요."
   }
 }

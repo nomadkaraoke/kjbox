@@ -614,5 +614,12 @@
     "socialYes": "Zdjęcia są OK",
     "socialNo": "Proszę bez zdjęć",
     "socialUnset": "Jeszcze nie wybrano"
+  },
+  "saveSongs": {
+    "link": "Zapisz dzisiejsze piosenki na koncie Nomad Karaoke",
+    "explainer": "Zapiszemy piosenki, które dziś zaśpiewasz, na Twoim koncie Nomad Karaoke, żeby aplikacja mogła pokazywać Twoją historię i polecać piosenki.",
+    "saving": "Zapisywanie dzisiejszych piosenek na koncie {email}",
+    "stop": "Nie zapisuj",
+    "failed": "Nie udało się teraz zapisać Twoich piosenek. Spróbuj ponownie za chwilę."
   }
 }

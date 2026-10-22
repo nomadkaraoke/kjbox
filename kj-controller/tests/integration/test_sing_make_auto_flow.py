@@ -56,7 +56,7 @@ class TestAccount:
     def test_not_ready_without_partner_secret(self, client, sing_app, token):
         sing_app.gen_client = None
         resp = client.get(f"/sing/make/account?device_id={DEVICE}&t={token}")
-        assert resp.get_json() == {"ready": False, "email": None}
+        assert resp.get_json() == {"ready": False, "email": None, "linked": False}
         assert _post(client, token, "send-code", email="a@b.co").status_code == 400
 
     def test_make_flag_needs_flow_ready(self, client, sing_app, token, gen):

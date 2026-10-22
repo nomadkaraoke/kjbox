@@ -614,5 +614,12 @@
     "socialYes": "Fotók jöhetnek",
     "socialNo": "Kérlek, ne fotózzatok",
     "socialUnset": "Még nincs megválaszolva"
+  },
+  "saveSongs": {
+    "link": "Mentsd el a ma esti dalokat a Nomad Karaoke fiókodba",
+    "explainer": "Elmentjük a ma este énekelt dalaidat a Nomad Karaoke fiókodba, így az app mutatni tudja az előzményeidet, és dalokat is ajánlhat neked.",
+    "saving": "Ma esti dalok mentése ide: {email}",
+    "stop": "Mentés leállítása",
+    "failed": "Most nem sikerült elmenteni a dalaidat. Kérjük, próbáld újra!"
   }
 }

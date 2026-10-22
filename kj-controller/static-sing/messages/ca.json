@@ -614,5 +614,12 @@
     "socialYes": "Fotos OK",
     "socialNo": "Sense fotos, si us plau",
     "socialUnset": "Encara no s'ha respost"
+  },
+  "saveSongs": {
+    "link": "Desa les cançons d'aquesta nit al teu compte de Nomad Karaoke",
+    "explainer": "Desarem les cançons que cantis aquesta nit al teu compte de Nomad Karaoke, perquè l'aplicació pugui mostrar el teu historial i recomanar-te cançons.",
+    "saving": "Desant les cançons d'aquesta nit a {email}",
+    "stop": "Deixa de desar",
+    "failed": "No hem pogut desar les teves cançons ara mateix. Torna-ho a provar."
   }
 }

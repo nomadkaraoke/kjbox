@@ -614,5 +614,12 @@
     "socialYes": "Foto's zijn oké",
     "socialNo": "Liever geen foto's",
     "socialUnset": "Nog niet beantwoord"
+  },
+  "saveSongs": {
+    "link": "Sla de nummers van vanavond op in je Nomad Karaoke-account",
+    "explainer": "We slaan de nummers die je vanavond zingt op in je Nomad Karaoke-account, zodat de app je geschiedenis kan tonen en nummers kan aanbevelen.",
+    "saving": "Nummers van vanavond worden opgeslagen op {email}",
+    "stop": "Stoppen met opslaan",
+    "failed": "Het is niet gelukt om je nummers op te slaan. Probeer het opnieuw."
   }
 }

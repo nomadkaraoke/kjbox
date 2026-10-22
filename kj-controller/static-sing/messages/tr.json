@@ -614,5 +614,12 @@
     "socialYes": "Fotoğraf çekilebilir",
     "socialNo": "Fotoğraf olmasın lütfen",
     "socialUnset": "Henüz yanıtlanmadı"
+  },
+  "saveSongs": {
+    "link": "Bu gece söylediğin şarkıları Nomad Karaoke hesabına kaydet",
+    "explainer": "Bu gece söylediğin şarkıları Nomad Karaoke hesabına kaydedeceğiz; böylece uygulama geçmişini gösterebilir ve sana şarkı önerebilir.",
+    "saving": "Bu gecenin şarkıları {email} hesabına kaydediliyor",
+    "stop": "Kaydetmeyi durdur",
+    "failed": "Şarkılarını şu anda kaydedemedik. Lütfen tekrar dene."
   }
 }

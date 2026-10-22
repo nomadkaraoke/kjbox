@@ -614,5 +614,12 @@
     "socialYes": "Có thể chụp ảnh",
     "socialNo": "Vui lòng không chụp ảnh",
     "socialUnset": "Chưa chọn"
+  },
+  "saveSongs": {
+    "link": "Lưu các bài hát tối nay vào tài khoản Nomad Karaoke của bạn",
+    "explainer": "Tụi mình sẽ lưu những bài bạn hát tối nay vào tài khoản Nomad Karaoke để ứng dụng có thể hiển thị lịch sử và gợi ý bài hát cho bạn.",
+    "saving": "Đang lưu các bài hát tối nay vào {email}",
+    "stop": "Dừng lưu",
+    "failed": "Vừa rồi chưa lưu được bài hát của bạn. Vui lòng thử lại nhé."
   }
 }
