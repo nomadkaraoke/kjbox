@@ -1,0 +1,499 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "kjbox singer API",
+    "version": "1.0",
+    "description": "App-facing singer API served by a kjbox (KJ controller) at a Nomad Karaoke night. Hand-maintained; kjbox's integration tests validate every v1 response against this file (kj-controller/tests/integration/v1_contract.py). Additive changes only within v1; every response carries api_version \"1.N\". Every call needs the bearer gen session token and the night's event code t (query string or JSON body). Errors are {error, message?, retry_after?} with the HTTP status; error codes are the closed ErrorCode enum. Every read and write is scoped to the current night: send the night_id you last saw and a 409 night_changed (carrying the new night_id) tells you the host started a new night."
+  },
+  "servers": [
+    {
+      "url": "https://sing.nomadkaraoke.com/api/v1"
+    }
+  ],
+  "security": [
+    {
+      "genSession": []
+    }
+  ],
+  "paths": {
+    "/night": {
+      "get": {
+        "operationId": "getNight",
+        "summary": "Tonight's venue info, feature flags and whether the singer still needs a name",
+        "description": "Returns 200 {open: false} (not 403) when requests are closed, the event code is wrong or no night has started, so the app can show the closed state with the host's message.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/EventCode"
+          },
+          {
+            "$ref": "#/components/parameters/NightId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Tonight (open) or the closed state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Night"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "409": {
+            "$ref": "#/components/responses/NightChanged"
+          },
+          "503": {
+            "$ref": "#/components/responses/GenUnavailable"
+          }
+        }
+      }
+    },
+    "/join": {
+      "post": {
+        "operationId": "joinNight",
+        "summary": "Set the singer's name for tonight",
+        "description": "Sets the account's singer name (device alias, origin self). The app device is linked to the gen account for tonight on any v1 call.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/EventCode"
+          },
+          {
+            "$ref": "#/components/parameters/NightId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JoinRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Name set",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JoinResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Invalid"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/NotOpen"
+          },
+          "409": {
+            "$ref": "#/components/responses/NightChanged"
+          },
+          "503": {
+            "$ref": "#/components/responses/GenUnavailable"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "genSession": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "The singer's Nomad Karaoke (gen) session token. kjbox verifies it with gen's GET /api/users/me."
+      }
+    },
+    "parameters": {
+      "EventCode": {
+        "name": "t",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "string"
+        },
+        "description": "The night's event code. Required on every call, here or as JSON body field t."
+      },
+      "NightId": {
+        "name": "night_id",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "string"
+        },
+        "description": "The night_id the app last saw (also accepted as JSON body field night_id). A mismatch returns 409 night_changed."
+      }
+    },
+    "responses": {
+      "Invalid": {
+        "description": "Bad request body (error invalid)",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Unauthenticated": {
+        "description": "Missing or rejected gen session token (error unauthenticated). Does not by itself mean the app should sign out.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "NotOpen": {
+        "description": "Requests are closed, the event code is wrong, or no night has started (error not_open)",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "NightChanged": {
+        "description": "The host started a new night (error night_changed); night_id is the new one",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "GenUnavailable": {
+        "description": "kjbox couldn't verify the token with gen (error gen_unavailable); retry after retry_after seconds",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "ErrorCode": {
+        "type": "string",
+        "enum": [
+          "unauthenticated",
+          "gen_unavailable",
+          "not_open",
+          "night_changed",
+          "needs_name",
+          "not_found",
+          "not_owner",
+          "already_sung",
+          "on_stage",
+          "rate_limited",
+          "invalid",
+          "kj_pick_too_large",
+          "make_disabled",
+          "youtube_blocked",
+          "gen_rejected",
+          "already_generating",
+          "busy_retry",
+          "conflict"
+        ]
+      },
+      "Error": {
+        "type": "object",
+        "required": [
+          "api_version",
+          "error"
+        ],
+        "properties": {
+          "api_version": {
+            "type": "string"
+          },
+          "error": {
+            "$ref": "#/components/schemas/ErrorCode"
+          },
+          "message": {
+            "type": "string",
+            "description": "English detail for logs; the app shows its own translated copy per error code"
+          },
+          "retry_after": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Seconds to wait before retrying"
+          },
+          "night_id": {
+            "type": "string",
+            "description": "On night_changed: the current night's id"
+          }
+        }
+      },
+      "Night": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/NightOpen"
+          },
+          {
+            "$ref": "#/components/schemas/NightClosed"
+          }
+        ]
+      },
+      "NightClosed": {
+        "type": "object",
+        "required": [
+          "api_version",
+          "open",
+          "error",
+          "reason"
+        ],
+        "properties": {
+          "api_version": {
+            "type": "string"
+          },
+          "open": {
+            "type": "boolean",
+            "const": false
+          },
+          "error": {
+            "type": "string",
+            "const": "not_open"
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "closed",
+              "bad_code",
+              "no_night"
+            ],
+            "description": "closed: the host has requests switched off; bad_code: the event code doesn't match tonight's; no_night: the box has no current night"
+          },
+          "kj_name": {
+            "type": "string",
+            "description": "Only when reason is closed"
+          },
+          "footer_message": {
+            "type": "string",
+            "description": "The host's message; only when reason is closed"
+          }
+        }
+      },
+      "NightOpen": {
+        "type": "object",
+        "required": [
+          "api_version",
+          "open",
+          "night_id",
+          "kj_name",
+          "footer_message",
+          "notices",
+          "notice_defs",
+          "social",
+          "contact",
+          "features",
+          "rev",
+          "needs_name"
+        ],
+        "properties": {
+          "api_version": {
+            "type": "string"
+          },
+          "open": {
+            "type": "boolean",
+            "const": true
+          },
+          "night_id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{16}$"
+          },
+          "kj_name": {
+            "type": "string",
+            "description": "The host's name ('' when unset)"
+          },
+          "footer_message": {
+            "type": "string"
+          },
+          "notices": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Switched-on venue notices, in order: pre-built keys (chargers, lyricsScreen, duets, moreSongs, tipsHelp, wifi, water, photos; the app owns their copy) or host-written c-<id> keys (see notice_defs)"
+          },
+          "notice_defs": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/NoticeDef"
+            },
+            "description": "Icon/text for host-written notices and host edits to pre-built ones (switched-on keys only)"
+          },
+          "social": {
+            "$ref": "#/components/schemas/Social"
+          },
+          "contact": {
+            "$ref": "#/components/schemas/Contact"
+          },
+          "features": {
+            "$ref": "#/components/schemas/Features"
+          },
+          "rev": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Rotation revision; changes whenever the queue changes"
+          },
+          "needs_name": {
+            "type": "boolean",
+            "description": "True until the singer has a name (POST /join)"
+          },
+          "suggested_name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Present when needs_name: a prefill from the gen account, or null for no prefill"
+          },
+          "me": {
+            "$ref": "#/components/schemas/Me"
+          }
+        }
+      },
+      "NoticeDef": {
+        "type": "object",
+        "required": [
+          "icon",
+          "text"
+        ],
+        "properties": {
+          "icon": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          }
+        }
+      },
+      "Social": {
+        "type": "object",
+        "description": "The host's social links (https URLs); only set ones are present",
+        "properties": {
+          "instagram": {
+            "type": "string"
+          },
+          "facebook": {
+            "type": "string"
+          },
+          "tiktok": {
+            "type": "string"
+          },
+          "youtube": {
+            "type": "string"
+          },
+          "x": {
+            "type": "string"
+          },
+          "website": {
+            "type": "string"
+          }
+        }
+      },
+      "Contact": {
+        "type": "object",
+        "description": "Ways to reach the host; only set ones are present",
+        "properties": {
+          "email": {
+            "type": "string"
+          },
+          "phone": {
+            "type": "string"
+          }
+        }
+      },
+      "Features": {
+        "type": "object",
+        "required": [
+          "make",
+          "simple_mode",
+          "ask_photo_consent",
+          "quick_version",
+          "tips"
+        ],
+        "properties": {
+          "make": {
+            "type": "boolean",
+            "description": "Make-it (generate a missing song) is offered tonight"
+          },
+          "simple_mode": {
+            "type": "boolean",
+            "description": "Only on-the-box/cloud-mirror/KaraokeNerds sources may be requested"
+          },
+          "ask_photo_consent": {
+            "type": "boolean",
+            "description": "Ask singers for photo/video consent"
+          },
+          "quick_version": {
+            "type": "boolean",
+            "description": "Make-it jobs also get a quick scrolling-lyrics draft"
+          },
+          "tips": {
+            "type": "boolean",
+            "description": "Tipping is enabled"
+          }
+        }
+      },
+      "Me": {
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "JoinRequest": {
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "t": {
+            "type": "string",
+            "description": "Event code (or the t query parameter)"
+          },
+          "night_id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          }
+        }
+      },
+      "JoinResponse": {
+        "type": "object",
+        "required": [
+          "api_version",
+          "me"
+        ],
+        "properties": {
+          "api_version": {
+            "type": "string"
+          },
+          "me": {
+            "$ref": "#/components/schemas/Me"
+          }
+        }
+      }
+    }
+  }
+}

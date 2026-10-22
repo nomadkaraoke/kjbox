@@ -155,3 +155,58 @@ def client(sing_app):
 @pytest.fixture
 def token(sing_app):
     return sing_app.sing_store.ensure_token()
+
+
+# --- App-facing singer API v1 fixtures (tests/integration/v1_contract.py) --
+
+@pytest.fixture
+def gen_stub(sing_app, monkeypatch):
+    """Stub gen's ``GET /api/users/me`` on the app's GenClient.
+
+    ``users`` maps a session token to the user dict gen returns; an unknown
+    token gets gen's 401. Set ``down = True`` to simulate gen being unreachable
+    (GenApiError status 0). ``calls`` records the tokens verified.
+    """
+    from app_identity import GenTokenVerifier
+    from gen_client import GenApiError, GenClient
+
+    class _GenStub:
+        def __init__(self):
+            self.users = {}
+            self.down = False
+            self.calls = []
+
+        def get_me(self, session_token):
+            self.calls.append(session_token)
+            if self.down:
+                raise GenApiError(0, "connection refused")
+            user = self.users.get(session_token)
+            if user is None:
+                raise GenApiError(401, "Invalid session")
+            return {"user": dict(user), "has_session": True}
+
+    stub = _GenStub()
+    gen = getattr(sing_app, "gen_client", None)
+    if gen is None:
+        gen = GenClient("http://gen.invalid", "test-admin-token", "")
+        monkeypatch.setattr(sing_app, "gen_client", gen, raising=False)
+    monkeypatch.setattr(gen, "get_me", stub.get_me)
+    monkeypatch.setattr(sing_app, "gen_verifier", GenTokenVerifier(gen), raising=False)
+    return stub
+
+
+@pytest.fixture
+def app_token(gen_stub):
+    """Factory: ``app_token(email=..., display_name=...)`` → a bearer token gen
+    (stubbed) accepts for that user. Pass ``display_name=None`` for a user
+    without one."""
+    counter = iter(range(1, 10_000))
+
+    def make(email="sam.singer@example.com", display_name="Sam Singer"):
+        tok = f"gen-session-{next(counter)}-{email}"
+        gen_stub.users[tok] = {
+            "email": email, "display_name": display_name, "tenant_id": None,
+        }
+        return tok
+
+    return make

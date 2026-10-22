@@ -29,6 +29,8 @@ from sing import (
     sync_event_url_overlays,
 )
 import sing_make  # noqa: F401 — registers the /sing/make/* routes on sing_bp
+from app_identity import GenTokenVerifier
+from sing_api_v1 import app_api_bp
 import kj_make  # noqa: F401 — registers the /rotation/gen/* routes on routes_bp
 from sing_store import SingStore
 from sms_store import SmsStore
@@ -465,6 +467,10 @@ def create_app(config=None):
     else:
         flask_app.gen_client = None
         flask_app.gen_poller = None
+    # App API (v1) bearer-token verification against gen's /api/users/me.
+    flask_app.gen_verifier = (
+        GenTokenVerifier(flask_app.gen_client) if flask_app.gen_client else None
+    )
 
     # Start the background sampler only on a real device (config is None); tests
     # pass a config and get the sampler object without a live thread.
@@ -476,6 +482,7 @@ def create_app(config=None):
 
     flask_app.register_blueprint(routes_bp)
     flask_app.register_blueprint(sing_bp)
+    flask_app.register_blueprint(app_api_bp)
     install_host_guard(flask_app)
     install_public_host_rewriter(flask_app)
     return flask_app
@@ -683,6 +690,10 @@ def start_app():  # pragma: no cover
     else:
         flask_app.gen_client = None
         flask_app.gen_poller = None
+    # App API (v1) bearer-token verification against gen's /api/users/me.
+    flask_app.gen_verifier = (
+        GenTokenVerifier(flask_app.gen_client) if flask_app.gen_client else None
+    )
 
     _install_perf_monitor(flask_app, cfg, start=True)
     _install_action_recorder(flask_app, cfg, default_enabled=True)
@@ -692,6 +703,7 @@ def start_app():  # pragma: no cover
 
     flask_app.register_blueprint(routes_bp)
     flask_app.register_blueprint(sing_bp)
+    flask_app.register_blueprint(app_api_bp)
     install_host_guard(flask_app)
     install_public_host_rewriter(flask_app)
 

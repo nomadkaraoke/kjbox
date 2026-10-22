@@ -415,6 +415,11 @@ def _public_hosts(cfg):
     return hosts
 
 
+# Paths outside the sing blueprint that the public host still serves: the
+# app-facing API (sing_api_v1, its own blueprint) and well-known files.
+_PUBLIC_HOST_PATH_PREFIXES = ("/sing/api/v1/", "/sing/.well-known/")
+
+
 def install_host_guard(flask_app):
     """Register a before_request hook that blocks non-`sing.*` endpoints on the public host."""
 
@@ -429,6 +434,8 @@ def install_host_guard(flask_app):
             return None
         endpoint = request.endpoint or ""
         if endpoint.startswith("sing."):
+            return None
+        if request.endpoint and request.path.startswith(_PUBLIC_HOST_PATH_PREFIXES):
             return None
         abort(404)
 

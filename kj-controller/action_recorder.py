@@ -10,6 +10,9 @@ Design rules:
   ``scripts/night_capture.py`` already records the state they return.
 - Record raw values (real names / phones). Redaction happens when fixtures are
   built, never on the device, so nothing is lost at capture time.
+- Exception: credentials. The app API's ``Authorization: Bearer <gen session
+  token>`` (and any body/query/response field named like a token, see
+  ``_SECRET_KEYS``) is replaced with ``[redacted]`` before anything is written.
 """
 
 import datetime as dt
@@ -42,6 +45,30 @@ DEFAULT_SKIP_PREFIXES = ('/static/', '/sing/static/', '/sing/lib/', '/vnc', '/we
 # need to keep verbatim.
 _CLIENT_HEADERS = ('CF-Connecting-IP', 'X-Forwarded-For', 'User-Agent',
                    'Accept-Language', 'Referer')
+# Credentials: recorded only as present/absent, never by value.
+_REDACTED = '[redacted]'
+_SECRET_HEADERS = ('Authorization',)
+_SECRET_KEYS = frozenset({'authorization', 'session_token', 'access_token',
+                          'refresh_token', 'bearer'})
+
+
+def _redact(value):
+    """Copy of a JSON-ish value with every ``_SECRET_KEYS`` field redacted."""
+    if isinstance(value, dict):
+        return {k: (_REDACTED if isinstance(k, str) and k.lower() in _SECRET_KEYS
+                    else _redact(v)) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_redact(v) for v in value]
+    return value
+
+
+def _client_headers():
+    headers = {h: request.headers.get(h) for h in _CLIENT_HEADERS
+               if request.headers.get(h)}
+    for h in _SECRET_HEADERS:
+        if request.headers.get(h):
+            headers[h] = _REDACTED
+    return headers
 
 
 def night_date(now=None):
@@ -51,6 +78,7 @@ def night_date(now=None):
 
 
 def _truncate_json(value, limit):
+    value = _redact(value)
     raw = json.dumps(value, default=str, ensure_ascii=False)
     if len(raw) <= limit:
         return value
@@ -125,7 +153,8 @@ def _response_body(resp):
 
 
 def _actor(endpoint, path):
-    """Who made the request: ``singer`` (sing blueprint), ``kj`` (KJ routes),
+    """Who made the request: ``singer`` (sing blueprint), ``app`` (the app API,
+    sing_api_v1), ``kj`` (KJ routes),
     or ``anonymous`` for an unmatched path under ``/sing``.
 
     Every public-host request is rewritten under ``/sing`` (see
@@ -136,6 +165,8 @@ def _actor(endpoint, path):
     KJ host (e.g. a 405 from the KJ UI) stay ``kj``.
     """
     if endpoint:
+        if endpoint.startswith('app_api.'):
+            return 'app'
         return 'singer' if endpoint.startswith('sing.') else 'kj'
     if path == '/sing' or path.startswith('/sing/'):
         return 'anonymous'
@@ -159,8 +190,6 @@ def install_action_recorder(flask_app, log_dir):
             g._action_rec = False
 
     def _base_record():
-        headers = {h: request.headers.get(h) for h in _CLIENT_HEADERS
-                   if request.headers.get(h)}
         return {
             'ts': g._action_rec_ts,
             'actor': _actor(request.endpoint, request.path),
@@ -169,9 +198,9 @@ def install_action_recorder(flask_app, log_dir):
             'path': request.path,
             'endpoint': request.endpoint,
             'view_args': request.view_args or None,
-            'query': request.args.to_dict(flat=False) or None,
+            'query': _redact(request.args.to_dict(flat=False)) or None,
             'body': _request_body(),
-            'client': headers,
+            'client': _client_headers(),
             'session_id': _short_hash(request.cookies.get('session', '')),
         }
 
