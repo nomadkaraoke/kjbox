@@ -2,6 +2,15 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-10-22 - NomadPC config: history sync to decide + Android app-link fingerprint
+
+- `kj-controller/config.json` on NomadPC gained `decide_api_url` (`https://decide.nomadkaraoke.com`),
+  `decide_kjbox_secret` (value from Secret Manager `decide-kjbox-secret`, never committed), `box_id`
+  (`nomadpc`) and `app_android_sha256_fingerprints` (the app's debug keystore SHA-256
+  `FA:C6:…:03:3B:9C`; add the release key's in Phase 6). Backup: `config.json.bak-20261022-phase5`.
+  `kj-controller` restarted (playback unaffected). The history outbox is now live; Google Digital Asset
+  Links reports `linked=true` for sing.nomadkaraoke.com (kjbox.cc served by the Cloudflare Worker).
+
 ## 2026-10-22 - App API v1, history outbox, web "Save tonight's songs", local stack (v0.135.0)
 
 - **`/sing/api/v1/*`** for the Nomad Karaoke app: gen-token auth (verified via gen, cached), server-side
