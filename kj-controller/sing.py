@@ -1946,36 +1946,11 @@ def status(request_id):
 _MY_REQUESTS_MAX_IDS = 20
 
 
-@sing_bp.route("/my-requests", methods=["GET"])
-@require_token
-def my_requests():
-    """Multi-id status feed for the singer's 'your night' done screen.
-
-    Returns the requested ids in order, dropping unknown ids, ids whose stored
-    token differs from the current event token, AND prior-night ids (the token
-    is reused across nights, so token-match alone leaks yesterday's songs into
-    "tonight" — see _belongs_to_current_night). Matches /sing/status.
-    `now_playing` is included once at the top level so the done screen doesn't
-    need a second round trip to populate the header.
-    """
-    store = current_app.sing_store
-    raw = request.args.get("ids", "") or ""
-    pieces = [p for p in raw.split(",") if p.strip()]
-    if len(pieces) > _MY_REQUESTS_MAX_IDS:
-        return jsonify({"error": f"max {_MY_REQUESTS_MAX_IDS} ids per call"}), 400
-    try:
-        ids = [int(p) for p in pieces]
-    except ValueError:
-        return jsonify({"error": "ids must be integers"}), 400
-
-    token = _extract_token()
-    rotation_mgr = getattr(current_app, "rotation", None)
-
-    entries = []
-    now_playing_dict = {"now_singing": None, "up_next": None, "queued_count": 0}
-    if rotation_mgr is not None:
-        entries, _active, now_playing_dict = _build_now_playing(rotation_mgr)
-
+def _my_request_items(store, ids, token, rotation_mgr, entries):
+    """The /my-requests item for each of ``ids`` (in order) that exists, carries
+    event code ``token`` and belongs to tonight. ``entries`` is the rotation as
+    ``_build_now_playing`` returns it (the active queue). Shared with the app
+    API's ``GET /sing/api/v1/me``."""
     # A sing_request stays 'approved' even after its rotation entry has been
     # sung, so the done screen needs to know which songs are already performed
     # (Done/Left) to move them out of the active list. `entries` is the ACTIVE
@@ -2037,6 +2012,40 @@ def my_requests():
             item.pop("estimate", None)
         item["performed"] = performed
         out.append(item)
+    return out
+
+
+@sing_bp.route("/my-requests", methods=["GET"])
+@require_token
+def my_requests():
+    """Multi-id status feed for the singer's 'your night' done screen.
+
+    Returns the requested ids in order, dropping unknown ids, ids whose stored
+    token differs from the current event token, AND prior-night ids (the token
+    is reused across nights, so token-match alone leaks yesterday's songs into
+    "tonight" — see _belongs_to_current_night). Matches /sing/status.
+    `now_playing` is included once at the top level so the done screen doesn't
+    need a second round trip to populate the header.
+    """
+    store = current_app.sing_store
+    raw = request.args.get("ids", "") or ""
+    pieces = [p for p in raw.split(",") if p.strip()]
+    if len(pieces) > _MY_REQUESTS_MAX_IDS:
+        return jsonify({"error": f"max {_MY_REQUESTS_MAX_IDS} ids per call"}), 400
+    try:
+        ids = [int(p) for p in pieces]
+    except ValueError:
+        return jsonify({"error": "ids must be integers"}), 400
+
+    token = _extract_token()
+    rotation_mgr = getattr(current_app, "rotation", None)
+
+    entries = []
+    now_playing_dict = {"now_singing": None, "up_next": None, "queued_count": 0}
+    if rotation_mgr is not None:
+        entries, _active, now_playing_dict = _build_now_playing(rotation_mgr)
+
+    out = _my_request_items(store, ids, token, rotation_mgr, entries)
 
     # Songs this device never submitted but the singer IS in — the KJ typed
     # them in from the KJ UI (picking the singer from tonight's list keeps the
@@ -2082,20 +2091,23 @@ def _device_identity_folds(store, device_id):
     return {f for f in (_fold_name(n) for n in names) if f}
 
 
-def _identity_matched_items(store, entries, identity, token, already_linked):
+def _identity_matched_items(store, entries, identity, token, already_linked,
+                            requester_by_entry=None):
     """My-songs items for queued rotation entries naming this singer that no
     request of theirs links to. Each carries a synthetic request view (id None,
     status approved) so the phone renders it like any queued song, plus
     ``entry_id`` for reordering, ``added_by_host`` and ``added_by`` (the
-    partner who requested it)."""
-    requester_by_entry = {}
-    try:
-        for req in store.list_requests(status="approved"):
-            if (req.get("linked_entry_id") and req.get("token") == token
-                    and _belongs_to_current_night(store, req)):
-                requester_by_entry[req["linked_entry_id"]] = req.get("singer_name")
-    except Exception:
-        current_app.logger.exception("my-requests: requester lookup failed")
+    partner who requested it). ``requester_by_entry`` ({entry_id: requester
+    singer_name} for tonight's approved requests) is looked up when not given."""
+    if requester_by_entry is None:
+        requester_by_entry = {}
+        try:
+            for req in store.list_requests(status="approved"):
+                if (req.get("linked_entry_id") and req.get("token") == token
+                        and _belongs_to_current_night(store, req)):
+                    requester_by_entry[req["linked_entry_id"]] = req.get("singer_name")
+        except Exception:
+            current_app.logger.exception("my-requests: requester lookup failed")
     items = []
     for entry in entries:
         eid = entry.get("id")

@@ -761,62 +761,100 @@ def _active_sort_key(item):
     return 1.5e6
 
 
-def _web_my_request_items(ids):
-    """The web /my-requests items for ``ids``, called in chunks of at most
-    ``sing._MY_REQUESTS_MAX_IDS`` (the web's own cap). Only the items for those
-    ids: identity matching is done here against the account, not the device."""
-    chunk = sing._MY_REQUESTS_MAX_IDS
-    items = []
-    for i in range(0, len(ids), chunk):
-        part = ids[i:i + chunk]
-        body, status = delegate(sing.my_requests, method="GET", path="/sing/my-requests",
-                                args={"ids": ",".join(str(x) for x in part)})
-        if status != 200:
-            return None, map_web_error(body, status)
-        items.extend(it for it in body.get("requests") or []
-                     if (it.get("request") or {}).get("id") is not None)
-    return items, None
+def _requester_by_entry(night_rows):
+    """{entry_id: requester singer_name} for tonight's approved requests."""
+    return {r["linked_entry_id"]: r.get("singer_name") for r in night_rows
+            if r.get("status") == "approved" and r.get("linked_entry_id")}
 
 
-def _identity_items(store, identity, already_linked):
+def _identity_owner(item):
+    """Who put a song naming the singer on the list that no request of the
+    account created: the host typed it in, another singer requested it (a
+    duet), or the singer's own request from a device not linked to the
+    account (the requester's name is the singer's own)."""
+    if item.get("added_by_host"):
+        return "host"
+    return "partner" if item.get("added_by") else "web"
+
+
+def _identity_items(store, entries, identity, already_linked, requesters):
     """Queued entries naming the singer (account identity, A5-R1) that none of
     the account's requests created."""
-    rotation = getattr(current_app, "rotation", None)
-    if rotation is None or not identity:
-        return []
-    entries, _active, _now = sing._build_now_playing(rotation)
-    if not entries:
+    if not identity or not entries:
         return []
     items = sing._identity_matched_items(store, entries, identity, store.get_token(),
-                                         already_linked=already_linked)
+                                         already_linked=already_linked,
+                                         requester_by_entry=requesters)
     for it in items:
         it["request"].setdefault("media_consent", None)
         it["request"]["for_friend"] = False
-        it["owner"] = "host" if it.get("added_by_host") else "partner"
+        it["owner"] = _identity_owner(it)
     return items
 
 
-def _unlinked_identity_count(store, identity):
+def _sung_identity_items(identity, already_linked, requesters):
+    """Tonight's Done entries naming the singer that none of the account's
+    requests created (host- or partner-added songs the singer sang), as
+    performed Your-songs items. Rotation entries are tonight's: a New Rotation
+    archives the previous night's."""
+    rotation = getattr(current_app, "rotation", None)
+    if rotation is None or not identity:
+        return []
+    items = []
+    for entry in rotation.store.get_completed_entries():
+        eid = entry.get("id")
+        if eid in already_linked or (entry.get("status") or "").lower() != "done":
+            continue
+        members = sing._entry_members(entry)
+        if not any(sing._fold_name(m) in identity for m in members):
+            continue
+        requester = requesters.get(eid)
+        item = {
+            "request": {
+                "id": None,
+                "singer_name": entry.get("singer") or "",
+                "song_artist": "",
+                "song_title": entry.get("song_artist") or "",
+                "source_type": "rotation",
+                "status": "approved",
+                "created_at": entry.get("created_at"),
+                "linked_entry_id": eid,
+                "additional_singers": [
+                    {"name": m} for m in members if sing._fold_name(m) not in identity
+                ] or None,
+                "supersedes_request_id": None,
+                "media_consent": None,
+                "for_friend": False,
+            },
+            "entry_id": eid,
+            "added_by_host": eid not in requesters,
+            "added_by": (requester if requester
+                         and sing._fold_name(requester) not in identity else None),
+            "performed": True,
+        }
+        item["owner"] = _identity_owner(item)
+        items.append(item)
+    return items
+
+
+def _unlinked_identity_count(store, identity, night_rows):
     """Tonight's live requests naming the singer from a device that isn't
     linked to any account (typically the singer's own web page before "Save
     tonight's songs"): drives the app's "open the web page" hint."""
     if not identity:
         return 0
-    night = g.night_started_at
     linked = {}
     count = 0
-    for req in store.list_requests(token=store.get_token()):
+    for req in night_rows:
         device = req.get("device_id")
         if not device or device in g.account_devices:
             continue
         if req.get("source_type") in _NOT_SONGS or req.get("status") in ("cancelled", "rejected"):
             continue
-        if not sing._belongs_to_current_night(store, req):
-            continue
         if sing._fold_name(req.get("singer_name")) not in identity:
             continue
         if device not in linked:
-            linked[device] = store.account_for_device(device, night) is not None
+            linked[device] = store.account_for_device(device, g.night_started_at) is not None
         if not linked[device]:
             count += 1
     return count
@@ -863,12 +901,20 @@ def _next_turn(active):
 @app_auth
 def get_me():
     store = current_app.sing_store
-    rows = _owned_rows(store)
+    token = store.get_token()
+    # Everything below reads tonight only (night-scoped SQL), so the cost of a
+    # 15 s poll doesn't grow with past nights under the reused event code.
+    night_rows = store.night_requests(token, g.night_started_at)
+    devices = set(g.account_devices)
+    rows = [r for r in night_rows
+            if r.get("device_id") in devices and r.get("source_type") not in _NOT_SONGS]
     friend_ids = store.friend_request_ids([r["id"] for r in rows])
-    items, error = _web_my_request_items(
-        [r["id"] for r in rows if r.get("status") != "cancelled"])
-    if error is not None:
-        return error
+
+    rotation = getattr(current_app, "rotation", None)
+    entries = sing._build_now_playing(rotation)[0] if rotation is not None else []
+    items = sing._my_request_items(
+        store, [r["id"] for r in rows if r.get("status") != "cancelled"], token,
+        rotation, entries)
     for it in items:
         friend = it["request"]["id"] in friend_ids
         it["request"] = _request_view(it["request"], friend)
@@ -876,14 +922,18 @@ def get_me():
 
     identity = _account_identity_folds(store)
     already = {r.get("linked_entry_id") for r in rows if r.get("linked_entry_id")}
-    items.extend(_identity_items(store, identity, already))
+    requesters = _requester_by_entry(night_rows)
+    items.extend(_identity_items(store, entries, identity, already, requesters))
+    items.extend(_sung_identity_items(identity, already, requesters))
 
     box_id = (current_app.kj_config or {}).get("box_id") or DEFAULT_BOX_ID
     active, sung = [], []
     for it in items:
         if it.get("performed"):
-            entry_id = it["request"].get("linked_entry_id") or it.get("entry_id")
-            it["history_id"] = history_id_for(box_id, entry_id, g.app_user.email)
+            # A friend's song is the friend's performance, not this account's.
+            if it["owner"] != "friend":
+                entry_id = it["request"].get("linked_entry_id") or it.get("entry_id")
+                it["history_id"] = history_id_for(box_id, entry_id, g.app_user.email)
             sung.append(it)
         else:
             active.append(it)
@@ -893,7 +943,7 @@ def get_me():
         "songs": active,
         "next": _next_turn(active),
         "sung_tonight": sung,
-        "unlinked_identity_entries": _unlinked_identity_count(store, identity),
+        "unlinked_identity_entries": _unlinked_identity_count(store, identity, night_rows),
     })
 
 
@@ -974,6 +1024,15 @@ def update_me():
     unsung = [r for r in own if _linked_entry_status(r) not in ("done", "left")]
 
     if name and name != current:
+        # A name the host set or merged (a 'kj' alias, or any KJ-established
+        # identity among the names being renamed) makes the web rename a
+        # whole-group rename, which would rewrite sung (Done) songs and other
+        # devices' songs. Only the host can change it (A5-R8).
+        old_names = {n for n in [current] + [r.get("singer_name") for r in unsung] if n}
+        if (any(store.get_alias_origin(d) == "kj" for d in g.account_devices)
+                or any(store.is_canonical_identity(n) for n in old_names)):
+            return v1_error("conflict", 409, "the host set this name; ask the host to change it",
+                            reason="host_named", **{"from": current or "", "to": name})
         queued = [r for r in unsung if r.get("status") in ("pending", "approved")
                   and _linked_entry_status(r) != "cancelled"]
         if (current and queued and not confirm
@@ -994,6 +1053,13 @@ def update_me():
                                       device_id=dev)
             if status != 200:
                 return map_web_error(result, status, dev)
+        if current:
+            # The web rename carries photo consent only for names on the songs
+            # it rewrote; with no songs the choice must still follow the name.
+            try:
+                store.carry_photo_consent(current, name)
+            except Exception:
+                logger.exception("v1 rename: carrying photo consent failed")
         rows = _owned_rows(store)
         own = [r for r in rows if r["id"] not in friend_ids and r.get("status") != "cancelled"]
 

@@ -495,7 +495,7 @@
       "put": {
         "operationId": "updateMe",
         "summary": "Change name, phone or photo consent",
-        "description": "Applies to every song the account owns tonight except friend songs; a rename never rewrites sung (Done) songs. Renaming to a different first name while own songs are queued needs confirm_rename: true (else 409 conflict, reason rename_guard).",
+        "description": "Applies to every song the account owns tonight except friend songs; a rename never rewrites sung (Done) songs. Renaming to a different first name while own songs are queued needs confirm_rename: true (else 409 conflict, reason rename_guard). Fields apply in order (name, then phone, then photo consent) with no rollback across them: if a later one fails, the earlier ones stay applied. A name the host set or merged can't be changed here (409 conflict, reason host_named).",
         "parameters": [
           {
             "$ref": "#/components/parameters/EventCode"
@@ -771,17 +771,18 @@
           "reason": {
             "type": "string",
             "enum": [
-              "rename_guard"
+              "rename_guard",
+              "host_named"
             ],
             "description": "Only on PUT /me's 409 conflict (see RenameGuardError): why it was refused"
           },
           "from": {
             "type": "string",
-            "description": "Only with reason rename_guard: the current name"
+            "description": "Only with reason rename_guard or host_named: the current name"
           },
           "to": {
             "type": "string",
-            "description": "Only with reason rename_guard: the name asked for"
+            "description": "Only with reason rename_guard or host_named: the name asked for"
           }
         }
       },
@@ -1437,7 +1438,7 @@
             ]
           }
         ],
-        "description": "409 conflict from PUT /me: the first name changes while the singer has their own songs queued. Ask \"Rename yourself to {to}?\" (or \"{to} is a friend: request a song for them\") and resend with confirm_rename: true."
+        "description": "409 conflict from PUT /me. reason rename_guard: the first name changes while the singer has their own songs queued; ask \"Rename yourself to {to}?\" (or \"{to} is a friend: request a song for them\") and resend with confirm_rename: true. reason host_named: the host set or merged this singer's name, so only the host can change it (confirm_rename doesn't help); tell the singer to ask the host."
       },
       "SongItemRequest": {
         "type": "object",
@@ -1612,9 +1613,10 @@
               "me",
               "friend",
               "host",
-              "partner"
+              "partner",
+              "web"
             ],
-            "description": "me: the account's own request; friend: requested by the account for someone else; host: the host typed it in; partner: another singer's request naming this singer (a duet, or the singer's own unlinked web page). host and partner rows can only be reordered (by entry_id)."
+            "description": "me: the account's own request; friend: requested by the account for someone else; host: the host typed it in; partner: another singer's request naming this singer (a duet; added_by says who); web: the singer's own request from a web page not linked to the account yet (see unlinked_identity_entries). host, partner and web rows can only be reordered (by entry_id)."
           },
           "performed": {
             "type": "boolean",
@@ -1673,7 +1675,7 @@
           "history_id": {
             "type": "string",
             "pattern": "^kj_[0-9a-f]{24}$",
-            "description": "Only on performed songs: \"kj_\" + sha256(box_id:entry_id:email)[:24], the id decide's karaoke log uses for this performance"
+            "description": "Only on performed songs that aren't a friend's: \"kj_\" + sha256(box_id:entry_id:email)[:24], the id decide's karaoke log uses for this performance"
           }
         }
       },
@@ -1785,7 +1787,8 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/Song"
-            }
+            },
+            "description": "Sung tonight: the account's own and friend requests, plus host-, partner- and web-added entries naming the singer that were marked Done"
           },
           "unlinked_identity_entries": {
             "type": "integer",

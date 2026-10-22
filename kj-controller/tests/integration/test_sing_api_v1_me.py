@@ -127,13 +127,14 @@ def test_me_lists_owned_host_and_partner_songs(client, token, sam, sing_app):
     assert body["next"]["position"] == positions[0]
 
 
-def test_me_merges_more_than_one_chunk_of_ids(client, token, sam, sing_app, monkeypatch):
-    monkeypatch.setattr(sing, "_MY_REQUESTS_MAX_IDS", 2)
-    for i in range(5):
-        _submit(client, sam, token, **_song(f"Song {i}"))
+def test_me_lists_more_than_the_web_id_cap(client, token, sam):
+    """The web /my-requests takes at most 20 ids; /me has no such cap."""
+    n = sing._MY_REQUESTS_MAX_IDS + 2
+    for i in range(n):
+        _submit(client, sam, token, **_song(f"Song {i:02d}"))
         sing._rate_limit_state.clear()
     body = _me(client, sam, token)
-    assert sorted(_titles(body["songs"])) == [f"Song {i}" for i in range(5)]
+    assert sorted(_titles(body["songs"])) == [f"Song {i:02d}" for i in range(n)]
 
 
 def test_me_never_lists_other_devices_songs(client, token, sam, app_token, sing_app):
@@ -243,6 +244,16 @@ def test_unlinked_identity_entries_counted(client, token, sam, sing_app):
     assert body["unlinked_identity_entries"] == 0
     by_title = {s["request"]["song_title"]: s for s in body["songs"]}
     assert by_title["From Web"]["owner"] == "me"
+
+
+def test_unlinked_own_web_request_is_owner_web(client, token, sam, sing_app):
+    sing_app.sing_store.set_auto_approve(True)
+    _web_submit(client, token, "web-sam", singer="Sam S", title="From Web")
+    body = _me(client, sam, token)
+    [item] = body["songs"]
+    assert item["owner"] == "web"
+    assert item["request"]["id"] is None and item["added_by"] is None
+    assert item["added_by_host"] is False
 
 
 def test_me_closed_and_unauthenticated(client, token, sam, sing_app):
@@ -363,3 +374,115 @@ def test_put_me_validates(client, token, sam, app_token):
     # A name sets it for someone who never joined.
     body = _expect(_put_me(client, newbie, token, name="New P"), "updateMe", 200)
     assert body["me"]["name"] == "New P"
+
+
+def test_sung_friend_song_has_no_history_id(client, token, sam, sing_app):
+    sing_app.sing_store.set_auto_approve(True)
+    friend = _submit(client, sam, token, **_song("For Nats"), for_friend=True,
+                     friend_name="Nats")
+    entry_id = sing_app.sing_store.get_request(friend["id"])["linked_entry_id"]
+    sing_app.rotation.update_status(entry_id, "Done")
+    [item] = _me(client, sam, token)["sung_tonight"]
+    assert item["owner"] == "friend" and item["performed"] is True
+    assert "history_id" not in item
+
+
+def test_sung_host_partner_and_web_entries_reach_sung_tonight(client, token, sam, sing_app):
+    sing_app.sing_store.set_auto_approve(True)
+    host = sing_app.rotation.add_entry("Sam S", "Host Pick - H")
+    duet = _web_submit(client, token, "web-bob", singer="Bob", title="Duet",
+                       additional_singers=[{"name": "Sam S"}])
+    web = _web_submit(client, token, "web-sam", singer="Sam S", title="From Web")
+    stranger = sing_app.rotation.add_entry("Someone Else", "Stranger - S")
+    store = sing_app.sing_store
+    duet_entry = store.get_request(duet["id"])["linked_entry_id"]
+    web_entry = store.get_request(web["id"])["linked_entry_id"]
+    for eid in (host["id"], duet_entry, web_entry, stranger["id"]):
+        sing_app.rotation.update_status(eid, "Done")
+    body = _me(client, sam, token)
+    assert body["songs"] == []
+    by_entry = {s["entry_id"]: s for s in body["sung_tonight"]}
+    assert set(by_entry) == {host["id"], duet_entry, web_entry}
+    assert by_entry[host["id"]]["owner"] == "host"
+    assert by_entry[duet_entry]["owner"] == "partner"
+    assert by_entry[duet_entry]["added_by"] == "Bob"
+    assert by_entry[web_entry]["owner"] == "web"
+    for eid, item in by_entry.items():
+        assert item["performed"] is True
+        assert item["history_id"] == history_id_for("nomadpc", eid, EMAIL)
+
+
+def _traced_statements(sing_app, fn):
+    """SQL statements run on the request store while ``fn`` runs."""
+    seen = []
+    conn = sing_app.sing_store._get_conn()
+    conn.set_trace_callback(seen.append)
+    try:
+        fn()
+    finally:
+        conn.set_trace_callback(None)
+    return seen
+
+
+def test_me_cost_tracks_tonight_not_past_nights(client, token, sam, sing_app):
+    """The event code is reused across nights: /me must not read (or loop
+    over) every past request under it on each 15 s poll."""
+    sing_app.sing_store.set_auto_approve(True)
+    _submit(client, sam, token, **_song("Mine"))
+    _web_submit(client, token, "web-sam", singer="Sam S", title="From Web")
+    sing_app.rotation.add_entry("Sam S", "Host Pick - H")
+    before = _traced_statements(sing_app, lambda: _me(client, sam, token))
+
+    store = sing_app.sing_store
+    for i in range(150):
+        for dev, name in ((app_device_id(EMAIL), "Sam S"), ("web-sam", "Sam S"),
+                          ("web-old", "Old Timer")):
+            row = store.create_request(name, "", "Old", f"Song {i}", token=token,
+                                       device_id=dev)
+            store.mark_approved(row["id"], linked_entry_id=None)
+    conn = store._get_conn()
+    conn.execute("UPDATE sing_requests SET created_at='2000-01-01 00:00:00' "
+                 "WHERE song_artist='Old'")
+    conn.commit()
+    after = _traced_statements(sing_app, lambda: _me(client, sam, token))
+
+    assert len(after) == len(before)
+    body = _me(client, sam, token)
+    assert "Song 1" not in _titles(body["songs"])
+    # No read of the request table that isn't keyed by id or night-scoped.
+    for sql in after:
+        if "FROM sing_requests" in sql and sql.lstrip().upper().startswith("SELECT"):
+            assert ("created_at >=" in sql or "WHERE id" in sql
+                    or "r.created_at >=" in sql), sql
+
+
+def test_rename_refused_when_host_named(client, token, sam, sing_app):
+    store = sing_app.sing_store
+    store.set_alias(app_device_id(EMAIL), "Sam S", origin="kj")
+    for name in ("Alex B", "Sam Smith"):
+        body = _expect(_put_me(client, sam, token, name=name, confirm_rename=True),
+                       "updateMe", 409, "conflict")
+        assert body["reason"] == "host_named"
+        assert body["from"] == "Sam S" and body["to"] == name
+    assert store.get_alias(app_device_id(EMAIL)) == "Sam S"
+    # Phone and consent still work for a host-named singer.
+    _expect(_put_me(client, sam, token, photo_consent="yes"), "updateMe", 200)
+
+
+def test_rename_refused_when_another_device_is_host_merged(client, token, sam, sing_app):
+    sing_app.sing_store.set_auto_approve(True)
+    _submit(client, sam, token, **_song("Mine"))
+    # The host merged some other phone into "Sam S": a KJ-established identity.
+    sing_app.sing_store.set_alias("web-merged", "Sam S", origin="kj")
+    body = _expect(_put_me(client, sam, token, name="Alex B", confirm_rename=True),
+                   "updateMe", 409, "conflict")
+    assert body["reason"] == "host_named"
+
+
+def test_rename_with_no_songs_keeps_photo_consent(client, token, sam, sing_app):
+    _expect(_put_me(client, sam, token, photo_consent="yes", instagram="sam.sings"),
+            "updateMe", 200)
+    body = _expect(_put_me(client, sam, token, name="Alex B"), "updateMe", 200)
+    assert body["me"]["photo_consent"] == "yes"
+    assert body["me"]["instagram"] == "sam.sings"
+    assert sing_app.sing_store.get_photo_consent("Alex B") == "yes"

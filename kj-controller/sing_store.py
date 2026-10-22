@@ -1599,6 +1599,16 @@ class SingStore:
         )
         conn.commit()
 
+    def get_alias_origin(self, device_id):
+        """'kj' or 'self' for a device's alias, or None when it has none."""
+        device_id = (device_id or "").strip()
+        if not device_id:
+            return None
+        row = self._get_conn().execute(
+            "SELECT origin FROM singer_aliases WHERE device_id = ?", (device_id,),
+        ).fetchone()
+        return row[0] if row else None
+
     def clear_alias(self, device_id):
         """Drop a device's alias (used when a device declares a new identity)."""
         device_id = (device_id or "").strip()
@@ -2052,6 +2062,18 @@ class SingStore:
             f"SELECT * FROM sing_requests WHERE device_id IN ({marks}) "
             "AND token = ? AND created_at >= ? ORDER BY id",
             (*device_ids, token, since),
+        ).fetchall()
+        return [self._row_to_dict(r) for r in rows]
+
+    def night_requests(self, token, since):
+        """Every request under event code ``token`` created since ``since``
+        (the night marker), oldest first. The event code is reused across
+        nights, so this is the night-scoped read (cost tracks tonight only)."""
+        if not token or not since:
+            return []
+        rows = self._get_conn().execute(
+            "SELECT * FROM sing_requests WHERE token = ? AND created_at >= ? ORDER BY id",
+            (token, since),
         ).fetchall()
         return [self._row_to_dict(r) for r in rows]
 
