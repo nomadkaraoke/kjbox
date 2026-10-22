@@ -24,6 +24,7 @@ The bearer token only ever lives on ``g`` for the request; it's never stored,
 logged, or recorded (the ActionRecorder redacts ``Authorization``).
 """
 
+import re
 import logging
 import math
 import threading
@@ -1407,6 +1408,25 @@ def get_my_stats():
     # Crowd favourites only. No `name` is forwarded, so the web view never
     # does a name-based history lookup, whatever the caller sent.
     return _read(sing.my_stats, "/sing/my-stats", keep={"top_songs"})
+
+
+# --- POST /push-token (A10) ---------------------------------------------------
+
+_EXPO_TOKEN_RE = re.compile(r"^Expo(?:nent)?PushToken\[[^\[\]\s]{1,200}\]$")
+
+
+@app_api_bp.route("/push-token", methods=["POST"])
+@app_auth
+def register_push_token():
+    body = _json_body()
+    token = body.get("expo_push_token")
+    platform = body.get("platform")
+    if not isinstance(token, str) or not _EXPO_TOKEN_RE.match(token):
+        return v1_error("invalid", 400, "expo_push_token is not an Expo push token")
+    if platform not in ("ios", "android"):
+        return v1_error("invalid", 400, "platform must be 'ios' or 'android'")
+    current_app.sing_store.add_expo_subscription(g.app_user.device_id, token, platform)
+    return v1_json({"ok": True})
 
 
 # --- Make on the spot (A7) ------------------------------------------------

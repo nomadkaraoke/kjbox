@@ -1481,6 +1481,64 @@
           }
         }
       }
+    },
+    "/push-token": {
+      "post": {
+        "operationId": "registerPushToken",
+        "summary": "Register this device's Expo push token",
+        "description": "Idempotent per token. Tonight's updates (approved, up in 2, up next, now singing, sung) go to the token; Expo reports a dead token and kjbox then stops sending to it.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/EventCode"
+          },
+          {
+            "$ref": "#/components/parameters/NightId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PushTokenRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Registered",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OkResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Invalid"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/NotOpen"
+          },
+          "409": {
+            "$ref": "#/components/responses/NightChanged"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/GenUnavailable"
+          },
+          "default": {
+            "$ref": "#/components/responses/Default"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -3683,6 +3741,33 @@
           },
           "night_id": {
             "type": "string"
+          }
+        }
+      },
+      "PushTokenRequest": {
+        "type": "object",
+        "required": [
+          "expo_push_token",
+          "platform"
+        ],
+        "properties": {
+          "t": {
+            "type": "string",
+            "description": "Event code (or the t query parameter)"
+          },
+          "night_id": {
+            "type": "string"
+          },
+          "expo_push_token": {
+            "type": "string",
+            "pattern": "^Expo(nent)?PushToken\\[[^\\[\\]\\s]{1,200}\\]$"
+          },
+          "platform": {
+            "type": "string",
+            "enum": [
+              "ios",
+              "android"
+            ]
           }
         }
       }

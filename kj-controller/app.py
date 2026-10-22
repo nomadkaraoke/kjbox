@@ -447,6 +447,19 @@ def create_app(config=None):
         ).fetchone()
         return row["device_id"] if row else None
 
+    def _request_id_for_rotation_entry(entry):
+        """id of the sing_request linked to this entry tonight (Expo payload data)."""
+        entry_id = entry.get("id")
+        if entry_id is None:
+            return None
+        row = flask_app.sing_store._get_conn().execute(
+            "SELECT id FROM sing_requests "
+            "WHERE linked_entry_id = ? AND created_at >= ? "
+            "ORDER BY created_at DESC LIMIT 1",
+            (entry_id, flask_app.sing_store.get_night_started_at()),
+        ).fetchone()
+        return row["id"] if row else None
+
     flask_app.rotation.push_dispatcher = PushDispatcher(
         store=flask_app.sing_store,
         rotation=flask_app.rotation,
@@ -454,6 +467,7 @@ def create_app(config=None):
         get_current_token=lambda: flask_app.sing_store.get_token(),
         get_linked_phone_for_entry=_phone_for_rotation_entry,
         get_linked_device_for_entry=_device_for_rotation_entry,
+        get_linked_request_id_for_entry=_request_id_for_rotation_entry,
     )
 
     # Thread only in start_app (really serving), never in create_app (tests).
@@ -674,6 +688,19 @@ def start_app():  # pragma: no cover
         ).fetchone()
         return row["device_id"] if row else None
 
+    def _request_id_for_rotation_entry(entry):
+        """id of the sing_request linked to this entry tonight (Expo payload data)."""
+        entry_id = entry.get("id")
+        if entry_id is None:
+            return None
+        row = flask_app.sing_store._get_conn().execute(
+            "SELECT id FROM sing_requests "
+            "WHERE linked_entry_id = ? AND created_at >= ? "
+            "ORDER BY created_at DESC LIMIT 1",
+            (entry_id, flask_app.sing_store.get_night_started_at()),
+        ).fetchone()
+        return row["id"] if row else None
+
     flask_app.rotation.push_dispatcher = PushDispatcher(
         store=flask_app.sing_store,
         rotation=flask_app.rotation,
@@ -681,6 +708,7 @@ def start_app():  # pragma: no cover
         get_current_token=lambda: flask_app.sing_store.get_token(),
         get_linked_phone_for_entry=_phone_for_rotation_entry,
         get_linked_device_for_entry=_device_for_rotation_entry,
+        get_linked_request_id_for_entry=_request_id_for_rotation_entry,
     )
     log_message("Push dispatcher ready (Web Push).", cfg)
 

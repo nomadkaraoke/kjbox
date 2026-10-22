@@ -16,6 +16,7 @@ import logging
 import threading
 from concurrent.futures import ThreadPoolExecutor
 
+import requests
 from pywebpush import WebPushException, webpush
 
 
@@ -94,6 +95,40 @@ _PAYLOADS = {
 }
 
 
+# Expo (mobile app) copy. Singer-facing text says "host", never "KJ", and has
+# no emoji; the app shows these as-is, so they stay short whole sentences.
+EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send"
+EXPO_TIMEOUT_S = 10
+
+_EXPO_PAYLOADS = {
+    "approved":    ("You're in", "The host added you: {song}."),
+    "rejected":    ("The host needs a word", "Come to the host about: {song}."),
+    "up_in_2":     ("You're up in 2", "{song}: head back to the venue."),
+    "up_next":     ("You're up next", "{song}: stand by the mic."),
+    "now_singing": ("You're singing now", "{song}: you're up."),
+    "resolved_alt": ("You're all set", "We queued an alternate version of {song}."),
+    "unavailable": ("The host needs a word",
+                    "We couldn't find a playable video for {song}. Your host has been told."),
+    "quick_ready": ("Quick version ready",
+                    "{song}: preview it and sing it now, or wait for the full version."),
+    "sung":        ("Nice one", "{song} is in your history."),
+}
+
+
+def render_expo_message(token, step, entry, request_id=None, night_id=None):
+    """Build one Expo push message for `step`."""
+    song = (entry.get("song_artist") or "your song") if entry else "your song"
+    title, body_tpl = _EXPO_PAYLOADS.get(step) or _EXPO_PAYLOADS["rejected"]
+    return {
+        "to": token,
+        "title": title,
+        "body": body_tpl.format(song=song),
+        "sound": "default",
+        "priority": "high",
+        "data": {"step": step, "request_id": request_id, "night_id": night_id},
+    }
+
+
 def render_payload(step, entry, request_id=None):
     """Build the JSON payload that the SW receives on 'push'."""
     song = (entry.get("song_artist") or "your song") if entry else "your song"
@@ -128,7 +163,8 @@ class PushDispatcher:
 
     def __init__(self, store, rotation, cfg,
                  get_current_token, get_linked_phone_for_entry,
-                 get_linked_device_for_entry=None):
+                 get_linked_device_for_entry=None,
+                 get_linked_request_id_for_entry=None):
         """
         store: SingStore instance (with list_active_push_subscriptions,
             find_subs_by_phone, update_push_sent_state, disable_push_subscription).
@@ -147,6 +183,12 @@ class PushDispatcher:
         self.get_current_token = get_current_token
         self.get_linked_phone_for_entry = get_linked_phone_for_entry
         self.get_linked_device_for_entry = get_linked_device_for_entry
+        self.get_linked_request_id_for_entry = get_linked_request_id_for_entry
+        # Entries seen active (not Done/Left) this night: an Expo "sung" push
+        # fires only on that transition, never for rows already Done when a
+        # token registered. In memory; a restart can miss one best-effort push.
+        self._seen_active = set()
+        self._seen_night = None
         self.executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="push-")
         self._debounce_timer = None
         self._debounce_lock = threading.Lock()
@@ -179,7 +221,8 @@ class PushDispatcher:
         for s in self.store.find_subs_by_device(token, device_id):
             subs.setdefault(s["id"], s)
         subs = list(subs.values())
-        if not subs:
+        expo_subs = self._expo_subs_for_device(device_id)
+        if not subs and not expo_subs:
             return
         # approve/reject plus the auto-fallback outcomes carry their own copy;
         # anything unrecognised falls back to the neutral "rejected" template.
@@ -190,6 +233,12 @@ class PushDispatcher:
         for sub in subs:
             proposed_state = {"entry_id": request_id, "ladder_step": step}
             self.executor.submit(self._send, sub, payload, proposed_state)
+        if expo_subs:
+            night_id = self._night_id()
+            for sub in expo_subs:
+                msg = render_expo_message(sub["expo_token"], step, fake_entry,
+                                          request_id=request_id, night_id=night_id)
+                self.executor.submit(self._send_expo, sub, msg)
 
     # ------------------------------------------------------------------
     # Internals
@@ -205,6 +254,11 @@ class PushDispatcher:
             log.exception("Rotation fetch failed during push dispatch")
             return
         subs = self.store.list_active_push_subscriptions(token)
+        try:
+            expo_subs = list(self.store.list_active_expo_subscriptions())
+        except Exception:
+            log.warning("expo subscription lookup failed", exc_info=True)
+            expo_subs = []
         # Each lookup is a DB query; memoise per dispatch since every sub scans
         # the same entries.
         phones, devices = {}, {}
@@ -247,6 +301,132 @@ class PushDispatcher:
             sub["last_sent_state"] = json.dumps(proposed)  # keep in-memory view consistent too
             payload = render_payload(step, target, request_id=None)
             self.executor.submit(self._send, sub, payload, proposed)
+
+        if expo_subs:
+            try:
+                self._dispatch_expo(expo_subs, entries, linked_device)
+            except Exception:
+                log.warning("expo push dispatch failed", exc_info=True)
+
+    # ------------------------------------------------------------------
+    # Expo (mobile app) channel
+    # ------------------------------------------------------------------
+
+    def _night_id(self):
+        try:
+            from sing_api_v1 import night_id_for
+            return night_id_for(self.store, self.cfg)
+        except Exception:
+            return None
+
+    def _expo_subs_for_device(self, device_id):
+        if not device_id:
+            return []
+        try:
+            return list(self.store.find_expo_subs_by_device(device_id))
+        except Exception:
+            log.warning("expo subscription lookup failed", exc_info=True)
+            return []
+
+    @staticmethod
+    def _load_state(sub):
+        if sub.get("last_sent_state"):
+            try:
+                state = json.loads(sub["last_sent_state"])
+                if isinstance(state, dict):
+                    return state
+            except Exception:
+                pass
+        return {}
+
+    def _reserve_expo_state(self, sub, state):
+        self.store.update_push_sent_state(sub["id"], state)
+        sub["last_sent_state"] = json.dumps(state)
+
+    def _dispatch_expo(self, expo_subs, entries, linked_device):
+        """Ladder steps (same rules and dedup as web) plus `sung` for app rows."""
+        if linked_device is None:
+            return
+        night_id = self._night_id()
+        if night_id != self._seen_night:
+            self._seen_active = set()
+            self._seen_night = night_id
+        done = [e for e in entries if (e.get("status") or "").lower() == "done"]
+        previously_seen = set(self._seen_active)
+        for e in entries:
+            if (e.get("status") or "").lower() not in ("done", "left"):
+                self._seen_active.add(e.get("id"))
+
+        for sub in expo_subs:
+            device = sub.get("device_id")
+            if not device:
+                continue
+            last = self._load_state(sub)
+            sung_keys = list(last.get("sung") or [])
+
+            # sung: an entry of this app user's went Done since we last looked.
+            if night_id:
+                for e in done:
+                    key = f"{night_id}:{e.get('id')}"
+                    if (e.get("id") in previously_seen and key not in sung_keys
+                            and linked_device(e) == device):
+                        sung_keys.append(key)
+                        state = dict(last)
+                        state["sung"] = sung_keys[-50:]
+                        self._reserve_expo_state(sub, state)
+                        last = state
+                        msg = render_expo_message(
+                            sub["expo_token"], "sung", e,
+                            request_id=self._request_id(e), night_id=night_id)
+                        self.executor.submit(self._send_expo, sub, msg)
+
+            target = next_entry_for_sub(entries, {"device_id": device}, lambda _e: None,
+                                        linked_device)
+            if target is None:
+                continue
+            step = decide_ladder_step(target, entries)
+            if step is None:
+                continue
+            if (last.get("entry_id") == target["id"]
+                    and last.get("ladder_step") == step):
+                continue
+            state = {"entry_id": target["id"], "ladder_step": step}
+            if sung_keys:
+                state["sung"] = sung_keys[-50:]
+            self._reserve_expo_state(sub, state)
+            msg = render_expo_message(
+                sub["expo_token"], step, target,
+                request_id=self._request_id(target), night_id=night_id)
+            self.executor.submit(self._send_expo, sub, msg)
+
+    def _request_id(self, entry):
+        if self.get_linked_request_id_for_entry is None:
+            return None
+        try:
+            return self.get_linked_request_id_for_entry(entry)
+        except Exception:
+            return None
+
+    def _send_expo(self, sub, message):
+        """POST one message to Expo. Best effort: failures log at WARNING."""
+        try:
+            resp = requests.post(
+                EXPO_PUSH_URL, json=message, timeout=EXPO_TIMEOUT_S,
+                headers={"Accept": "application/json"},
+            )
+            if resp.status_code != 200:
+                log.warning("expo push http %s sub=%s", resp.status_code, sub.get("id"))
+                return
+            data = (resp.json() or {}).get("data")
+            ticket = data[0] if isinstance(data, list) and data else data
+            if isinstance(ticket, dict) and ticket.get("status") == "error":
+                err = (ticket.get("details") or {}).get("error")
+                if err == "DeviceNotRegistered":
+                    self.store.disable_push_subscription(sub["id"])
+                else:
+                    log.warning("expo push rejected sub=%s error=%s", sub.get("id"), err)
+        except Exception as e:
+            log.warning("expo push send error sub=%s: %s", sub.get("id"), e)
 
     def _send(self, sub, payload, proposed_state):
         try:

@@ -1948,6 +1948,26 @@ class SingStore:
         )
         conn.commit()
 
+    def list_active_expo_subscriptions(self):
+        """Non-disabled Expo rows (the web-push queries never return them)."""
+        conn = self._get_conn()
+        rows = conn.execute(
+            "SELECT * FROM sing_push_subscriptions "
+            "WHERE kind='expo' AND disabled_at IS NULL ORDER BY id"
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def find_expo_subs_by_device(self, device_id):
+        if not device_id:
+            return []
+        conn = self._get_conn()
+        rows = conn.execute(
+            "SELECT * FROM sing_push_subscriptions "
+            "WHERE kind='expo' AND device_id=? AND disabled_at IS NULL",
+            (device_id,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
     # ------------------------------------------------------------------
     # App accounts (night-scoped device -> gen email links)
     # ------------------------------------------------------------------
