@@ -685,6 +685,47 @@ def manifest():
     })
 
 
+def _well_known_response(payload):
+    resp = current_app.response_class(
+        json.dumps(payload, separators=(",", ":")), mimetype="application/json")
+    resp.headers["Cache-Control"] = "max-age=3600"
+    return resp
+
+
+@sing_bp.route("/.well-known/assetlinks.json", methods=["GET"])
+def assetlinks():
+    """Android App Links: which app (package + signing cert) may open sing links.
+
+    Public, unauthenticated, no event code. With no fingerprints configured the
+    answer is a valid empty list.
+    """
+    cfg = getattr(current_app, "kj_config", None) or {}
+    prints = [str(p).strip().upper() for p in (cfg.get("app_android_sha256_fingerprints") or []) if p]
+    if not prints:
+        return _well_known_response([])
+    return _well_known_response([{
+        "relation": ["delegate_permission/common.handle_all_urls"],
+        "target": {
+            "namespace": "android_app",
+            "package_name": cfg.get("app_bundle_id") or "com.nomadkaraoke.mobile",
+            "sha256_cert_fingerprints": prints,
+        },
+    }])
+
+
+@sing_bp.route("/.well-known/apple-app-site-association", methods=["GET"])
+def apple_app_site_association():
+    """iOS Universal Links. Served as application/json with no extension."""
+    cfg = getattr(current_app, "kj_config", None) or {}
+    app_id = f"{cfg.get('app_ios_team_id') or '55B76HN73D'}.{cfg.get('app_bundle_id') or 'com.nomadkaraoke.mobile'}"
+    return _well_known_response({"applinks": {"details": [{
+        "appIDs": [app_id],
+        # `/` with a ?t= event code (the QR/landing link); `/*` covers the
+        # kjbox.cc-style short paths.
+        "components": [{"/": "/", "?": {"t": "?*"}}, {"/": "/*"}],
+    }]}})
+
+
 @sing_bp.route("/sw.js", methods=["GET"])
 def service_worker():
     """Serve sw.js with the app version injected as the cache key.
