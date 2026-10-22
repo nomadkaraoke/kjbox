@@ -396,6 +396,15 @@ class SingStore:
                 expires_at    REAL NOT NULL
             );
 
+            -- Requests the app submitted as "song for a friend" (singer_name is
+            -- the friend; device_id stays the requester's). Kept out of
+            -- sing_requests so admin/web row shapes are unchanged.
+            CREATE TABLE IF NOT EXISTS app_friend_requests (
+                request_id  INTEGER PRIMARY KEY,
+                friend_name TEXT NOT NULL,
+                created_at  TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+            );
+
             -- Pending pushes of sung-song history to decide. One row per
             -- history_id: the latest op (put/delete) wins.
             CREATE TABLE IF NOT EXISTS history_outbox (
@@ -1928,13 +1937,55 @@ class SingStore:
     # Idempotency cache
     # ------------------------------------------------------------------
 
+    # A claim is a placeholder row written before the work starts, so two
+    # simultaneous retries with one key can't both do it. Its short TTL means a
+    # claim abandoned by a crash frees the key again.
+    _IDEMPOTENT_PENDING = '{"__pending__": true}'
+
     def idempotent_get(self, key):
+        """The stored response for ``key``; None when absent, expired or still
+        only claimed (see ``idempotent_pending``)."""
         row = self._get_conn().execute(
             "SELECT response_json FROM app_idempotency "
             "WHERE key=? AND expires_at > ?",
             (key, time.time()),
         ).fetchone()
-        return json.loads(row["response_json"]) if row else None
+        if row is None or row["response_json"] == self._IDEMPOTENT_PENDING:
+            return None
+        return json.loads(row["response_json"])
+
+    def idempotent_pending(self, key):
+        """True while ``key`` is claimed and has no response yet."""
+        row = self._get_conn().execute(
+            "SELECT 1 FROM app_idempotency "
+            "WHERE key=? AND expires_at > ? AND response_json=?",
+            (key, time.time(), self._IDEMPOTENT_PENDING),
+        ).fetchone()
+        return row is not None
+
+    def idempotent_claim(self, key, ttl_s=300):
+        """Atomically claim ``key``. True when this caller owns it (then call
+        ``idempotent_put`` on success or ``idempotent_release`` on failure);
+        False when another claim or a stored response already holds it."""
+        now = time.time()
+        conn = self._get_conn()
+        conn.execute("DELETE FROM app_idempotency WHERE expires_at <= ?", (now,))
+        cur = conn.execute(
+            "INSERT OR IGNORE INTO app_idempotency (key, response_json, expires_at) "
+            "VALUES (?, ?, ?)",
+            (key, self._IDEMPOTENT_PENDING, now + ttl_s),
+        )
+        conn.commit()
+        return cur.rowcount == 1
+
+    def idempotent_release(self, key):
+        """Drop a pending claim (never a stored response) so a retry can run."""
+        conn = self._get_conn()
+        conn.execute(
+            "DELETE FROM app_idempotency WHERE key=? AND response_json=?",
+            (key, self._IDEMPOTENT_PENDING),
+        )
+        conn.commit()
 
     def idempotent_put(self, key, response, ttl_s=86400):
         now = time.time()
@@ -1946,6 +1997,33 @@ class SingStore:
             (key, json.dumps(response), now + ttl_s),
         )
         conn.commit()
+
+    # ------------------------------------------------------------------
+    # App "song for a friend" markers
+    # ------------------------------------------------------------------
+
+    def mark_friend_request(self, request_id, friend_name):
+        conn = self._get_conn()
+        conn.execute(
+            "INSERT OR IGNORE INTO app_friend_requests (request_id, friend_name) "
+            "VALUES (?, ?)",
+            (int(request_id), friend_name or ""),
+        )
+        conn.commit()
+
+    def friend_request_ids(self, request_ids):
+        ids = [int(i) for i in request_ids if i is not None]
+        if not ids:
+            return set()
+        marks = ",".join("?" * len(ids))
+        rows = self._get_conn().execute(
+            f"SELECT request_id FROM app_friend_requests WHERE request_id IN ({marks})",
+            ids,
+        ).fetchall()
+        return {r[0] for r in rows}
+
+    def is_friend_request(self, request_id):
+        return bool(self.friend_request_ids([request_id]))
 
     # ------------------------------------------------------------------
     # History outbox (sung songs -> decide)

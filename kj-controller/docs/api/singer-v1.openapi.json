@@ -115,6 +115,338 @@
           }
         }
       }
+    },
+    "/requests": {
+      "post": {
+        "operationId": "createRequest",
+        "summary": "Request a song",
+        "description": "Same rules as the web's /sing/submit. The singer name is the account's name for tonight (POST /join; 400 needs_name before that) or friend_name for a song for a friend; the request belongs to the app device. Idempotent on client_request_id: a retry returns the first response; while the first attempt is still running a retry gets 409 busy_retry (retry_after 2); a failed attempt can be retried with the same id.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/EventCode"
+          },
+          {
+            "$ref": "#/components/parameters/NightId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SubmitRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Request created (or the stored response for this client_request_id)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RequestResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/RequestInvalid"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/RequestConflict"
+          },
+          "429": {
+            "$ref": "#/components/responses/RequestRateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/GenUnavailable"
+          },
+          "default": {
+            "$ref": "#/components/responses/Default"
+          }
+        }
+      }
+    },
+    "/requests/{id}/cancel": {
+      "post": {
+        "operationId": "cancelRequest",
+        "summary": "Cancel one of the account's songs",
+        "description": "Pending: cancelled. Approved: the rotation entry is marked Cancelled for the host. Sung (Done/Left): 409 already_sung. On stage: 409 on_stage. Cancelling an already cancelled request returns it again. The request must belong to one of the account's devices tonight (403 not_owner).",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "Request id"
+          },
+          {
+            "$ref": "#/components/parameters/EventCode"
+          },
+          {
+            "$ref": "#/components/parameters/NightId"
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CancelRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Done",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RequestResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/RequestInvalid"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/RequestConflict"
+          },
+          "429": {
+            "$ref": "#/components/responses/RequestRateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/GenUnavailable"
+          },
+          "default": {
+            "$ref": "#/components/responses/Default"
+          }
+        }
+      }
+    },
+    "/requests/{id}/change": {
+      "post": {
+        "operationId": "changeRequest",
+        "summary": "Change the song of one of the account's requests",
+        "description": "Keeps the queue slot: a pending request is updated in place; an approved one gets a new request that supersedes it (auto-approved when the host has auto-approve on, taking over the old slot). Can't change into a make-it (400 make_disabled), once sung (409 already_sung) or while on stage (409 on_stage).",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "Request id"
+          },
+          {
+            "$ref": "#/components/parameters/EventCode"
+          },
+          {
+            "$ref": "#/components/parameters/NightId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangeSongRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Done",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RequestResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/RequestInvalid"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/RequestConflict"
+          },
+          "429": {
+            "$ref": "#/components/responses/RequestRateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/GenUnavailable"
+          },
+          "default": {
+            "$ref": "#/components/responses/Default"
+          }
+        }
+      }
+    },
+    "/requests/reorder": {
+      "post": {
+        "operationId": "reorderRequests",
+        "summary": "Reorder the singer's own songs",
+        "description": "Swaps only within the singer's own slots. Every item must be the account's request or an entry naming the singer (403 not_owner otherwise). Applies at once when the host has auto-approve on.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/EventCode"
+          },
+          {
+            "$ref": "#/components/parameters/NightId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReorderRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The reorder meta-request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RequestResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/RequestInvalid"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/RequestConflict"
+          },
+          "429": {
+            "$ref": "#/components/responses/RequestRateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/GenUnavailable"
+          },
+          "default": {
+            "$ref": "#/components/responses/Default"
+          }
+        }
+      }
+    },
+    "/requests/{id}/consent": {
+      "put": {
+        "operationId": "setRequestConsent",
+        "summary": "Per-song photo/clip consent",
+        "description": "Sets or clears the consent for one of the account's own songs (not a friend's: 400 invalid). Unknown consent means no.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "Request id"
+          },
+          {
+            "$ref": "#/components/parameters/EventCode"
+          },
+          {
+            "$ref": "#/components/parameters/NightId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SongConsentRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Done",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RequestResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/RequestInvalid"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/RequestConflict"
+          },
+          "429": {
+            "$ref": "#/components/responses/RequestRateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/GenUnavailable"
+          },
+          "default": {
+            "$ref": "#/components/responses/Default"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -208,6 +540,56 @@
       },
       "Default": {
         "description": "Any other error: not_found (unknown v1 path, 404), invalid (wrong method, 405), internal (500)",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Forbidden": {
+        "description": "not_open (requests closed, wrong event code or no night) or not_owner (the request isn't one of this account's devices' tonight)",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "NotFound": {
+        "description": "not_found: no such request tonight under this event code (a previous night's request looks the same)",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "RequestConflict": {
+        "description": "night_changed (with night_id, see NightChangedError), already_sung, on_stage, busy_retry (retry after retry_after seconds), already_generating, or conflict",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "RequestRateLimited": {
+        "description": "rate_limited: this account's device (8 per 5 min by default) or this network is over the singer mutation budget, or too many wrong event codes / sign-in checks; retry after retry_after seconds (also the Retry-After header)",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "RequestInvalid": {
+        "description": "invalid (message says why), needs_name (POST /join first), kj_pick_too_large (over 1000 versions), make_disabled, youtube_blocked or gen_rejected",
         "content": {
           "application/json": {
             "schema": {
@@ -540,6 +922,373 @@
           }
         ],
         "description": "409 night_changed: the host started a new night; drop the old night's state and use night_id"
+      },
+      "AdditionalSinger": {
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "phone": {
+            "type": "string"
+          }
+        }
+      },
+      "SongRequest": {
+        "type": "object",
+        "description": "A singer request as the app sees it (the web's public request view, never the edit_token).",
+        "required": [
+          "id",
+          "singer_name",
+          "song_artist",
+          "song_title",
+          "source_type",
+          "status",
+          "created_at",
+          "linked_entry_id",
+          "additional_singers",
+          "supersedes_request_id",
+          "media_consent",
+          "for_friend"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "singer_name": {
+            "type": "string"
+          },
+          "song_artist": {
+            "type": "string"
+          },
+          "song_title": {
+            "type": "string"
+          },
+          "source_type": {
+            "type": "string",
+            "enum": [
+              "local",
+              "divebar",
+              "kn",
+              "youtube",
+              "make",
+              "kj_pick",
+              "reorder",
+              "tip"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "description": "pending | approved | rejected | cancelled"
+          },
+          "created_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "linked_entry_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "The rotation entry once approved"
+          },
+          "additional_singers": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/AdditionalSinger"
+            }
+          },
+          "supersedes_request_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "On a song change: the request this one replaces"
+          },
+          "media_consent": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "yes",
+              "no",
+              null
+            ]
+          },
+          "for_friend": {
+            "type": "boolean",
+            "description": "Requested by this account for someone else (singer_name is the friend)"
+          },
+          "tip_amount": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "tip_method": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "RequestResult": {
+        "type": "object",
+        "required": [
+          "api_version",
+          "request"
+        ],
+        "properties": {
+          "api_version": {
+            "type": "string"
+          },
+          "request": {
+            "$ref": "#/components/schemas/SongRequest"
+          },
+          "auto_approved": {
+            "type": "boolean",
+            "description": "True when it went straight into the rotation without the host"
+          }
+        }
+      },
+      "SubmitRequest": {
+        "type": "object",
+        "required": [
+          "client_request_id",
+          "source_type"
+        ],
+        "properties": {
+          "t": {
+            "type": "string"
+          },
+          "night_id": {
+            "type": "string"
+          },
+          "client_request_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Idempotency key (24 h): a retry with the same id returns the first response and never makes a second request"
+          },
+          "song_artist": {
+            "type": "string"
+          },
+          "song_title": {
+            "type": "string"
+          },
+          "source_type": {
+            "type": "string",
+            "enum": [
+              "local",
+              "divebar",
+              "kn",
+              "youtube",
+              "make",
+              "kj_pick"
+            ]
+          },
+          "source_ref": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Required for local, divebar, kn and youtube"
+          },
+          "source_meta": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "description": "kj_pick: {versions: [...]} (send them all; the box keeps the best 50 and refuses only over 1000); make: the chosen audio"
+          },
+          "phone": {
+            "type": "string"
+          },
+          "notes": {
+            "type": "string"
+          },
+          "additional_singers": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "maxItems": 3,
+            "items": {
+              "$ref": "#/components/schemas/AdditionalSinger"
+            }
+          },
+          "photo_consent": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "yes",
+              "no",
+              "",
+              null
+            ]
+          },
+          "instagram": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "for_friend": {
+            "type": "boolean",
+            "description": "A song for someone else: singer_name is friend_name, not the account's name; photo consent is ignored"
+          },
+          "friend_name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "description": "Required when for_friend is true"
+          }
+        }
+      },
+      "ChangeSongRequest": {
+        "type": "object",
+        "required": [
+          "source_type"
+        ],
+        "properties": {
+          "t": {
+            "type": "string"
+          },
+          "night_id": {
+            "type": "string"
+          },
+          "song_artist": {
+            "type": "string"
+          },
+          "song_title": {
+            "type": "string"
+          },
+          "source_type": {
+            "type": "string",
+            "enum": [
+              "local",
+              "divebar",
+              "kn",
+              "youtube",
+              "make",
+              "kj_pick"
+            ]
+          },
+          "source_ref": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Required for local, divebar, kn and youtube"
+          },
+          "source_meta": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "description": "kj_pick: {versions: [...]} (send them all; the box keeps the best 50 and refuses only over 1000); make: the chosen audio"
+          }
+        }
+      },
+      "ReorderItem": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "type": "integer",
+                "description": "A request this account owns"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "entry_id"
+            ],
+            "properties": {
+              "entry_id": {
+                "type": "integer",
+                "description": "A queued rotation entry naming this singer (host-added, or a partner's duet)"
+              }
+            }
+          }
+        ]
+      },
+      "ReorderRequest": {
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "t": {
+            "type": "string"
+          },
+          "night_id": {
+            "type": "string"
+          },
+          "items": {
+            "type": "array",
+            "minItems": 2,
+            "items": {
+              "$ref": "#/components/schemas/ReorderItem"
+            },
+            "description": "The singer's queued songs in the new order"
+          }
+        }
+      },
+      "SongConsentRequest": {
+        "type": "object",
+        "required": [
+          "consent"
+        ],
+        "properties": {
+          "t": {
+            "type": "string"
+          },
+          "night_id": {
+            "type": "string"
+          },
+          "consent": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "yes",
+              "no",
+              null
+            ],
+            "description": "null clears the per-song choice (the night-wide one applies)"
+          }
+        }
+      },
+      "CancelRequest": {
+        "type": "object",
+        "properties": {
+          "t": {
+            "type": "string"
+          },
+          "night_id": {
+            "type": "string"
+          }
+        }
       }
     }
   }

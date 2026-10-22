@@ -175,3 +175,39 @@ def test_config_defaults(tmp_path):
     assert cfg["decide_api_url"] == ""
     assert cfg["decide_kjbox_secret"] == ""
     assert cfg["history_outbox_interval_s"] == 20
+
+
+def test_idempotent_claim_is_exclusive_until_completed_or_released(store):
+    assert store.idempotent_claim("k") is True
+    # A second caller loses the claim, and a pending claim reads as "no response yet".
+    assert store.idempotent_claim("k") is False
+    assert store.idempotent_get("k") is None
+    assert store.idempotent_pending("k") is True
+    # Completing overwrites the claim with the response.
+    store.idempotent_put("k", {"status": 200, "body": {"id": 1}})
+    assert store.idempotent_pending("k") is False
+    assert store.idempotent_get("k") == {"status": 200, "body": {"id": 1}}
+    assert store.idempotent_claim("k") is False
+    # Releasing a pending claim lets a retry claim it again; release never
+    # deletes a completed response.
+    assert store.idempotent_claim("k2") is True
+    store.idempotent_release("k2")
+    assert store.idempotent_pending("k2") is False
+    assert store.idempotent_claim("k2") is True
+    store.idempotent_release("k")
+    assert store.idempotent_get("k") == {"status": 200, "body": {"id": 1}}
+
+
+def test_idempotent_claim_expires(store):
+    assert store.idempotent_claim("k", ttl_s=-1) is True
+    # An abandoned (crashed) claim doesn't wedge the key forever.
+    assert store.idempotent_claim("k") is True
+
+
+def test_friend_requests_marked(store):
+    store.mark_friend_request(5, "Nats")
+    store.mark_friend_request(5, "Nats")  # idempotent
+    assert store.friend_request_ids([5, 6]) == {5}
+    assert store.is_friend_request(5) is True
+    assert store.is_friend_request(6) is False
+    assert store.friend_request_ids([]) == set()
