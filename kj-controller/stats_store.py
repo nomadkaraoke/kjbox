@@ -148,6 +148,31 @@ class StatsStore:
             conn.commit()
             return cur.rowcount > 0
 
+    def first_play_started_at(self, entry_id, not_before=None):
+        """When rotation entry ``entry_id`` first started playing live, as UTC
+        ISO-8601 (``2026-10-21T20:15:00Z``), or None with no live play event.
+
+        ``played_at`` is stored in UTC. ``not_before`` (UTC 'YYYY-MM-DD
+        HH:MM:SS') ignores older plays, so a reused entry id never picks up a
+        past night's play (A.15). This is the time the song was on stage
+        (A.96); ``done_at`` is when it ended.
+        """
+        if entry_id is None:
+            return None
+        sql = ("SELECT MIN(played_at) FROM play_events "
+               "WHERE entry_id=? AND source='live'")
+        params = [int(entry_id)]
+        if not_before:
+            sql += " AND played_at >= ?"
+            params.append(not_before)
+        conn = self._get_conn()
+        with self._lock():
+            row = conn.execute(sql, params).fetchone()
+        ts = row[0] if row else None
+        if not ts:
+            return None
+        return ts[:19].replace(" ", "T") + "Z"
+
     def record_preview(self, media_id, *, artist=None, title=None,
                        song_key=None, source="live"):
         if not media_id:

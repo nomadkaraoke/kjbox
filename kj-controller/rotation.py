@@ -33,11 +33,14 @@ class RotationManager:
         media: MediaIndex instance (set by app.py), used for duration lookup.
     """
 
-    def __init__(self, db_path, sheet_id=None, credentials_file=None, sync_interval=30):
+    def __init__(self, db_path, sheet_id=None, credentials_file=None, sync_interval=30,
+                 history_outbox=None):
         self.store = RotationStore(db_path)
         self.sync = None
         self.media = None  # Set by app.py if MediaIndex is available
         self.push_dispatcher = None  # Set by app.py if Web Push is configured
+        # HistoryOutbox (sung songs -> decide); set by app.py.
+        self.history_outbox = history_outbox
         # Serialises the gen-file linking paths (GenPoller thread vs a singer's
         # "Sing it now" request) so neither overwrites the other's link.
         self._gen_link_lock = threading.RLock()
@@ -614,6 +617,15 @@ class RotationManager:
                 # Push is non-critical — never let a dispatcher bug block rotation ops.
                 import logging
                 logging.getLogger(__name__).exception("push dispatch notify failed")
+        if self.history_outbox is not None:
+            try:
+                # Cheap + debounced; the outbox's own thread does the HTTP.
+                self.history_outbox.scan()
+            except Exception:
+                # Never let history sync block rotation ops (and it's not page-worthy).
+                import logging
+                logging.getLogger(__name__).warning(
+                    "history outbox scan failed", exc_info=True)
         if self.sync is not None:
             # Fire-and-forget: sync runs in its own daemon thread already.
             # Calling sync_now() here would block; instead, the background

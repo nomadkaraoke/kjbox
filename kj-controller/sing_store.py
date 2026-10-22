@@ -1633,14 +1633,18 @@ class SingStore:
         under that (folded) name since ``night_started_at``, or has an alias
         to it set since then. Fails closed (True) without a name or night
         marker. Attribution by name (a host-added entry, a duet) is only safe
-        when this is False; the history outbox uses the same rule."""
+        when this is False; the history outbox uses the same rule. An app
+        "song for a friend" names someone else, so it isn't a claim by the
+        requesting device (the friend may well be the account's singer)."""
         if not folded_name or not night_started_at:
             return True
         devices = {d for d in account_devices or () if d}
         conn = self._get_conn()
         rows = conn.execute(
-            "SELECT DISTINCT device_id, singer_name AS name FROM sing_requests "
-            "WHERE created_at >= ? AND device_id IS NOT NULL AND device_id != ''",
+            "SELECT DISTINCT r.device_id, r.singer_name AS name FROM sing_requests r "
+            "LEFT JOIN app_friend_requests f ON f.request_id = r.id "
+            "WHERE r.created_at >= ? AND r.device_id IS NOT NULL AND r.device_id != '' "
+            "AND f.request_id IS NULL",
             (night_started_at,),
         ).fetchall()
         rows += conn.execute(
@@ -1977,6 +1981,16 @@ class SingStore:
         ).fetchall()
         return [r["device_id"] for r in rows]
 
+    def night_accounts(self, night_started_at):
+        """{gen_email: [device_id, ...]} for every account linked tonight."""
+        out = {}
+        for r in self._get_conn().execute(
+                "SELECT device_id, gen_email FROM singer_accounts "
+                "WHERE night_started_at=? ORDER BY linked_at, device_id",
+                (night_started_at,)).fetchall():
+            out.setdefault(r["gen_email"], []).append(r["device_id"])
+        return out
+
     def account_for_device(self, device_id, night_started_at):
         row = self._get_conn().execute(
             "SELECT gen_email FROM singer_accounts "
@@ -2119,6 +2133,21 @@ class SingStore:
         ).fetchall()
         return [self._row_to_dict(r) for r in rows]
 
+    def requests_linked_to_entries(self, entry_ids, since):
+        """Full rows of requests created since ``since`` (the night marker) that
+        are linked to any of ``entry_ids``, oldest first. Night-scoped so a
+        reused entry id never matches a past night's request (A.15)."""
+        ids = [int(e) for e in (entry_ids or []) if e is not None]
+        if not ids or not since:
+            return []
+        marks = ",".join("?" * len(ids))
+        rows = self._get_conn().execute(
+            f"SELECT * FROM sing_requests WHERE linked_entry_id IN ({marks}) "
+            "AND created_at >= ? ORDER BY id",
+            (*ids, since),
+        ).fetchall()
+        return [self._row_to_dict(r) for r in rows]
+
     def is_friend_request(self, request_id):
         return bool(self.friend_request_ids([request_id]))
 
@@ -2138,26 +2167,41 @@ class SingStore:
     def outbox_enqueue(self, history_id, op, payload, night_started_at, now=None):
         """Queue a put/delete for history_id. Returns True if the row changed.
 
-        A different op than the current row replaces it (resetting to pending);
-        the same op is a no-op.
+        A different op than the current row (or a row from another night: a
+        reused id, A.15) replaces it, resetting it to pending; the same op is
+        a no-op. One atomic upsert, so concurrent scans from several request
+        threads can't both write it.
         """
         now_s = self._ts(now or datetime.datetime.now(datetime.timezone.utc))
         conn = self._get_conn()
-        row = conn.execute(
-            "SELECT op FROM history_outbox WHERE history_id=?", (history_id,)
-        ).fetchone()
-        if row is not None and row["op"] == op:
-            return False
-        conn.execute(
-            "INSERT OR REPLACE INTO history_outbox "
+        cur = conn.execute(
+            "INSERT INTO history_outbox "
             "  (history_id, op, payload_json, state, attempts, next_attempt_at, "
             "   last_error, night_started_at, created_at, updated_at) "
-            "VALUES (?, ?, ?, 'pending', 0, ?, NULL, ?, ?, ?)",
+            "VALUES (?, ?, ?, 'pending', 0, ?, NULL, ?, ?, ?) "
+            "ON CONFLICT(history_id) DO UPDATE SET "
+            "  op=excluded.op, payload_json=excluded.payload_json, state='pending', "
+            "  attempts=0, next_attempt_at=excluded.next_attempt_at, last_error=NULL, "
+            "  night_started_at=excluded.night_started_at, "
+            "  created_at=excluded.created_at, updated_at=excluded.updated_at "
+            "WHERE history_outbox.op != excluded.op "
+            "   OR history_outbox.night_started_at != excluded.night_started_at",
             (history_id, op, json.dumps(payload), now_s, night_started_at,
              now_s, now_s),
         )
         conn.commit()
-        return True
+        return cur.rowcount == 1
+
+    def outbox_rows_for_night(self, night_started_at):
+        """{history_id: {op, state, payload}} for every outbox row of a night."""
+        rows = self._get_conn().execute(
+            "SELECT history_id, op, state, payload_json FROM history_outbox "
+            "WHERE night_started_at=?",
+            (night_started_at,),
+        ).fetchall()
+        return {r["history_id"]: {"op": r["op"], "state": r["state"],
+                                  "payload": json.loads(r["payload_json"])}
+                for r in rows}
 
     def outbox_due(self, now, limit=20):
         rows = self._get_conn().execute(
@@ -2173,23 +2217,25 @@ class SingStore:
             out.append(d)
         return out
 
-    def outbox_mark_sent(self, history_id):
+    def outbox_mark_sent(self, history_id, op=None):
+        """Mark delivered. With ``op``, only while the row still holds that op:
+        a scan that swapped put<->delete mid-delivery keeps the new op pending."""
         conn = self._get_conn()
         conn.execute(
             "UPDATE history_outbox SET state='sent', last_error=NULL, "
-            "updated_at=datetime('now') WHERE history_id=?",
-            (history_id,),
+            "updated_at=datetime('now') WHERE history_id=? AND (? IS NULL OR op=?)",
+            (history_id, op, op),
         )
         conn.commit()
 
-    def outbox_mark_failed(self, history_id, error, next_attempt_at, permanent):
+    def outbox_mark_failed(self, history_id, error, next_attempt_at, permanent, op=None):
         conn = self._get_conn()
         conn.execute(
             "UPDATE history_outbox SET attempts=attempts+1, last_error=?, "
             "state=?, next_attempt_at=?, updated_at=datetime('now') "
-            "WHERE history_id=?",
+            "WHERE history_id=? AND (? IS NULL OR op=?)",
             (error, "failed" if permanent else "pending",
-             self._ts(next_attempt_at), history_id),
+             self._ts(next_attempt_at), history_id, op, op),
         )
         conn.commit()
 

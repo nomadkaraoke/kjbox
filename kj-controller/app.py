@@ -201,6 +201,23 @@ def _make_on_karaoke_end(overlay_mgr, coordinator):
     return _on_end
 
 
+def _install_history_outbox(flask_app, cfg, start):
+    """Sung songs of linked app/web singers -> decide's karaoke log (spec 5.5).
+
+    Rotation mutations trigger a cheap scan; the daemon thread delivers. Inert
+    (rows stay queued) until decide_api_url + decide_kjbox_secret are set."""
+    from history_outbox import HistoryOutbox
+    outbox = HistoryOutbox(
+        flask_app.rotation.store, flask_app.sing_store,
+        getattr(flask_app, 'stats', None), cfg,
+    )
+    flask_app.history_outbox = outbox
+    flask_app.rotation.history_outbox = outbox
+    if start:
+        outbox.start()
+    return outbox
+
+
 def _install_perf_monitor(flask_app, cfg, start):
     """Attach the PerfSampler and wire the /status latency timing hook.
 
@@ -439,6 +456,8 @@ def create_app(config=None):
         get_linked_device_for_entry=_device_for_rotation_entry,
     )
 
+    _install_history_outbox(flask_app, cfg, start=(config is None))
+
     flask_app.sleep_manager = SleepManager()
     flask_app.download_queue = {'items': [], 'worker_running': False}
     flask_app._download_lock = threading.Lock()
@@ -663,6 +682,8 @@ def start_app():  # pragma: no cover
         get_linked_device_for_entry=_device_for_rotation_entry,
     )
     log_message("Push dispatcher ready (Web Push).", cfg)
+
+    _install_history_outbox(flask_app, cfg, start=True)
 
     flask_app.sleep_manager = SleepManager()
     if flask_app.sleep_manager.is_sleeping():

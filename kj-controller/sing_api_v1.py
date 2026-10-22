@@ -24,7 +24,6 @@ The bearer token only ever lives on ``g`` for the request; it's never stored,
 logged, or recorded (the ActionRecorder redacts ``Authorization``).
 """
 
-import hashlib
 import logging
 import math
 import threading
@@ -40,10 +39,9 @@ from werkzeug.exceptions import HTTPException
 import sing
 import sing_make
 from app_identity import AppAuthError, suggested_name
-from history_ids import history_id_for
+from history_ids import DEFAULT_BOX_ID, history_id_for, night_id_for_marker
 
 API_VERSION = "1.0"
-DEFAULT_BOX_ID = "nomadpc"
 # Footer "social" keys that are ways to reach the host rather than links to follow.
 _CONTACT_KEYS = ("email", "phone")
 
@@ -137,7 +135,7 @@ def night_id_for(store, cfg):
     if not night:
         return None
     box_id = (cfg or {}).get("box_id") or DEFAULT_BOX_ID
-    return hashlib.sha256(f"{box_id}:{night}".encode()).hexdigest()[:16]
+    return night_id_for_marker(box_id, night)
 
 
 # --- Request parsing -----------------------------------------------------
