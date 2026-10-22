@@ -1621,7 +1621,7 @@
         }
       },
       "RateLimited": {
-        "description": "Too many wrong event codes or sign-in checks from this network (error rate_limited); retry after retry_after seconds (also the Retry-After header)",
+        "description": "Too many wrong event codes from this account's device (10 per 5 min) or from this network (100 per 5 min across all devices), or too many sign-in checks from this network (error rate_limited); retry after retry_after seconds (also the Retry-After header). The bearer is checked before the event code, so a missing or rejected token is always 401 and a wrong code on one phone doesn't lock out others on the same wifi.",
         "content": {
           "application/json": {
             "schema": {
@@ -1671,7 +1671,7 @@
         }
       },
       "RequestRateLimited": {
-        "description": "rate_limited: this account's device (8 per 5 min by default) or this network is over the singer mutation budget, or too many wrong event codes / sign-in checks; retry after retry_after seconds (also the Retry-After header)",
+        "description": "rate_limited: this account's device (8 per 5 min by default) or this network is over the singer mutation budget, or too many wrong event codes (this device: 10 per 5 min; this network: 100 per 5 min) / sign-in checks; retry after retry_after seconds (also the Retry-After header)",
         "content": {
           "application/json": {
             "schema": {

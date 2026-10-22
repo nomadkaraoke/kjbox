@@ -377,7 +377,10 @@ class HistoryOutbox:
         except Exception as e:
             status, detail = None, f"{type(e).__name__}: {e}"[:300]
         now = self._clock()
-        if status is not None and 200 <= status < 300:
+        # A retraction decide never stored (404) or already removed (410) is
+        # the end state we want: deletes are idempotent.
+        if status is not None and (200 <= status < 300
+                                   or (op == "delete" and status in (404, 410))):
             self.sing_store.outbox_mark_sent(hid, op=op)
             return True
         if status is not None and 400 <= status < 500 and status != 429:

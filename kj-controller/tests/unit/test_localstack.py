@@ -130,3 +130,64 @@ def test_hermetic_config_rejects_and_reasserts(tmp_path):
 def test_dev_server_debug_only_on_loopback(host, debug):
     import dev_server
     assert dev_server._is_loopback(host) is debug
+
+
+# --- fixture builder: pseudonymised names ----------------------------------------
+
+def _builder():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "build_localstack_fixture", os.path.join(APP_DIR, "scripts", "build_localstack_fixture.py"))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_pseudonymiser_is_stable_and_keeps_name_shape():
+    b = _builder()
+    p = b.Pseudonymiser()
+    for raw in ("Robin Quill", "robin", "Robin!", "Sasha Q.", "Robin Q & Sasha Q."):
+        p.note_raw(raw)
+    one = p.name(b.short_name("Robin Quill"))
+    first, initial = one.split()
+    assert first in b.FAKE_FIRST_NAMES and len(initial) == 1
+    assert p.name("Robin Q") == one                       # same person, same fake
+    assert p.name("robin") == first.lower()               # case kept
+    assert p.name("Robin!") == first + "!"                # punctuation kept
+    sasha = p.name("Sasha Q.")
+    assert sasha.endswith(f" {initial}.") and not sasha.startswith(first)
+    assert p.name("Robin Q & Sasha Q.") == f"{one} & {sasha}"   # duet labels agree
+    assert {"robin", "quill", "sasha"} <= p.real_words
+
+
+def test_pseudonymiser_never_hands_out_a_real_name():
+    b = _builder()
+    p = b.Pseudonymiser()
+    p.note_raw(b.FAKE_FIRST_NAMES[0])
+    assert p.name("Zed") != b.FAKE_FIRST_NAMES[0]
+
+
+def test_leak_check_flags_real_names_in_name_fields_only():
+    b = _builder()
+    fx = {"devices": [{"ref": "d01", "name": "Avery K"}],
+          "start_rotation": [{"singer": "Avery K", "song_artist": "Hey Robin - Band"}],
+          "actions": [], "catalog": {"library": ["/x/Robin - Song.mp4"]},
+          "expected": {"rotation": [["Avery K", "Hey Robin - Band", "Done"]],
+                       "outbox": [["d01", "put", "sung", "Robin", "Song", ["Avery K"]]]}}
+    assert b.real_name_hits(fx, {"robin"}) == []
+    fx["expected"]["outbox"][0][5] = ["Robin"]
+    assert b.real_name_hits(fx, {"robin"}) == ["robin"]
+
+
+def test_committed_fixture_uses_only_fake_names():
+    b = _builder()
+    fx = localstack.load_fixture()
+    fakes = set(b.FAKE_FIRST_NAMES)
+    names = [d["name"] for d in fx["devices"]]
+    names += [e["singer"] for e in fx["start_rotation"]]
+    names += [a["name"] for a in fx["actions"] if a.get("name")]
+    names += [r[0] for r in fx["expected"]["rotation"]]
+    for name in names:
+        for part in name.split(" & "):
+            first = part.split()[0].rstrip("!.")
+            assert first.capitalize() in fakes, name

@@ -172,14 +172,17 @@ Mounted only when `KJBOX_TEST_API=1` **and** the bind host is loopback
 `tests/fixtures/localstack/night.json` is built by `scripts/build_localstack_fixture.py`
 from the redacted 2026-09-24 recording (`~/nomad-nights/2026-09-24/`, via
 `night_fixture.py`). Rebuild it after changing the builder or the replay rules (the
-expected snapshot is recomputed); `--check` compares without writing. The builder keeps
-first names (surnames cut to an initial), drops phones, emails, tokens, notes and device
-ids (devices become `d01`…), and refuses to write if `localstack.pii_hits` finds anything;
-`test_fixture_has_no_pii` checks the committed file the same way.
+expected snapshot is recomputed); `--check` compares without writing. The builder
+pseudonymises singer names (each real first name maps to a stable fake one and each surname
+initial to a fake initial, consistently across devices, rotation, host actions, duet labels
+and the expected snapshot), drops phones, emails, tokens, notes and device ids (devices
+become `d01`…), and refuses to write if any of the recording's names is left in a name
+field or `localstack.pii_hits` finds anything; `test_fixture_has_no_pii` and
+`test_committed_fixture_uses_only_fake_names` check the committed file.
 
-`tests/integration/test_night_replay.py` replays the night's 35 singer submits (Owen's
-60-version kj_pick as one request retried six times with the same `client_request_id`),
-Anya's cancel, the host's 131 rotation actions and play starts through v1 with stubbed
+`tests/integration/test_night_replay.py` replays the night's 35 singer submits (one
+singer's 60-version kj_pick as one request retried six times with the same
+`client_request_id`), a singer's cancel, the host's 131 rotation actions and play starts through v1 with stubbed
 gen identities, and compares the final rotation, request counts and history outbox with the
 fixture's expected snapshot, plus independent invariants (one record per singer per Done
 entry, only Done entries recorded). Not replayed: singer reorders, photo consent, the one

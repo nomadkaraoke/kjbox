@@ -22,11 +22,16 @@ What goes in (and nothing else):
   expected        the replay snapshot (localstack.replay_night with stub gen
                   identities), so the night-replay test can compare.
 
-Names: real first names stay (the night-recording record allows publishing
-them); a full surname is cut to its initial ("Owen Gallagher" -> "Owen G").
-Phones, emails, tokens, notes and device ids are dropped, YouTube share
-parameters are stripped, and the output is checked with
-``localstack.pii_hits`` before it is written (refuses to write on a hit).
+Names are pseudonymised: every distinct first name in the recording maps to
+a stable fake first name and every surname initial to a fake initial, word by
+word ("<first> <initial>" -> e.g. "Avery K"), keeping case, trailing
+punctuation and duet labels ("A & B") consistent so the replay behaves like
+the night did. ``expected`` is computed from the pseudonymised data. The
+builder refuses to write if any of the recording's names (first names or
+surnames) is left in a name field. Phones, emails, tokens, notes and device
+ids are dropped, YouTube share parameters are stripped, and the output is
+checked with ``localstack.pii_hits`` before it is written (refuses to write on
+a hit).
 
 Usage:
   python scripts/build_localstack_fixture.py [--night DIR] [--out PATH] [--check]
@@ -35,6 +40,7 @@ Usage:
 import argparse
 import json
 import os
+import re
 import sqlite3
 import subprocess
 import sys
@@ -125,6 +131,118 @@ def short_name(name):
     return " & ".join(out)
 
 
+# Fake first names, assigned in order of first appearance. Any that matches a
+# real name in the recording is skipped.
+FAKE_FIRST_NAMES = [
+    "Avery", "Blake", "Casey", "Dana", "Ellis", "Finley", "Gray", "Harper", "Ivy",
+    "Jules", "Kit", "Logan", "Morgan", "Noel", "Oakley", "Parker", "Quinn", "Reese",
+    "Sage", "Tatum", "Umi", "Vale", "Wren", "Xavi", "Yael", "Zion", "Arden", "Bryn",
+    "Cleo", "Drew", "Emery", "Flynn", "Hollis", "Ira", "Jody", "Kai", "Lane", "Milo",
+]
+# Fake initials, assigned in order of first appearance.
+FAKE_INITIALS = "KTMBPLDSNFGHWJCRVZQXYEAOIU"
+_WORD = re.compile(r"^(.*?)([^\w]*)$", re.UNICODE)
+
+
+class Pseudonymiser:
+    """Real name -> stable fake name, word by word (see the module docstring).
+
+    ``name()`` takes a name already shortened by ``short_name``; ``raw`` names
+    seen (before shortening) and every real word are kept for the leak check.
+    """
+
+    def __init__(self):
+        self.first = {}      # casefolded real word -> fake first name
+        self.initial = {}    # upper-case real initial -> fake initial
+        self.real_words = set()
+
+    def _fake_first(self, key):
+        if key not in self.first:
+            used = set(self.first.values())
+            for fake in FAKE_FIRST_NAMES:
+                if fake not in used and fake.casefold() not in self.real_words:
+                    self.first[key] = fake
+                    break
+            else:
+                self.first[key] = f"Singer{len(self.first) + 1}"
+        return self.first[key]
+
+    def _fake_initial(self, letter):
+        letter = letter.upper()
+        if letter not in self.initial:
+            self.initial[letter] = FAKE_INITIALS[len(self.initial) % len(FAKE_INITIALS)]
+        return self.initial[letter]
+
+    def note_raw(self, name):
+        """Remember every word of a raw (unshortened) name for the leak check."""
+        if isinstance(name, str):
+            for word in re.split(r"[\s&+,/]+", name):
+                core = _WORD.match(word).group(1).strip("'\".()")
+                if len(core) >= 2:
+                    self.real_words.add(core.casefold())
+
+    def _word(self, word, position):
+        core, tail = _WORD.match(word).groups()
+        if not core:
+            return word
+        if position > 0 and len(core) <= 2 and core.isalpha():
+            fake = self._fake_initial(core[0])
+            return (fake.lower() if core.islower() else fake) + tail
+        fake = self._fake_first(core.casefold())
+        if core.islower():
+            fake = fake.lower()
+        elif core.isupper() and len(core) > 1:
+            fake = fake.upper()
+        return fake + tail
+
+    def name(self, name):
+        if not isinstance(name, str) or not name.strip():
+            return name
+        parts = []
+        for part in name.split(" & "):
+            parts.append(" ".join(self._word(w, i) for i, w in enumerate(part.split())))
+        return " & ".join(parts)
+
+
+_PSEUDO = Pseudonymiser()
+
+
+def person(name):
+    """A recorded singer name as it goes into the fixture: shortened, then
+    pseudonymised."""
+    _PSEUDO.note_raw(name)
+    return _PSEUDO.name(short_name(name))
+
+
+def _people_text(fixture):
+    """Every string in the fixture that can hold a person's name: the fixture
+    minus catalog, search cases and song fields."""
+    song_keys = {"song_artist", "song_title", "source_ref", "source_meta", "file_path",
+                 "artist", "title", "catalog", "search_cases", "settings", "about",
+                 "source", "event_code"}
+
+    def strip(node):
+        if isinstance(node, dict):
+            return {k: strip(v) for k, v in node.items() if k not in song_keys}
+        if isinstance(node, list):
+            return [strip(v) for v in node]
+        return node
+
+    people = strip(fixture)
+    exp = people.get("expected") or {}
+    # Positional song fields in the snapshot rows.
+    exp["rotation"] = [[r[0], r[2]] for r in exp.get("rotation") or []]
+    exp["outbox"] = [[r[0], r[1], r[2], r[5]] for r in exp.get("outbox") or []]
+    return json.dumps(people, ensure_ascii=False)
+
+
+def real_name_hits(fixture, real_words):
+    """Real name words from the recording still present in a name field."""
+    text = _people_text(fixture)
+    return sorted(w for w in real_words
+                  if re.search(r"(?<!\w)" + re.escape(w) + r"(?!\w)", text, re.IGNORECASE))
+
+
 def clean_url(url):
     """YouTube URLs keep only the video id (drop share/tracking params)."""
     if not isinstance(url, str) or "youtu" not in url:
@@ -178,8 +296,8 @@ def clean_submit_body(b):
         else:
             body.pop("source_meta", None)
     if "friend_name" in body:
-        body["friend_name"] = short_name(body["friend_name"])
-    partners = [short_name(p.get("name")) for p in b.get("additional_singers") or []
+        body["friend_name"] = person(body["friend_name"])
+    partners = [person(p.get("name")) for p in b.get("additional_singers") or []
                 if isinstance(p, dict) and p.get("name")]
     if partners:
         body["additional_singers"] = [{"name": n} for n in partners]
@@ -214,8 +332,8 @@ def start_rotation(redacted):
         singers = json.loads(r["singers_json"]) if r["singers_json"] else None
         out.append({
             "ref": f"e{r['id']}",
-            "singer": short_name(r["singer"]),
-            "singers": [short_name(s) for s in singers] if singers else None,
+            "singer": person(r["singer"]),
+            "singers": [person(s) for s in singers] if singers else None,
             "song_artist": r["song_artist"] or "",
             "status": r["status"],
             "file_path": r["file_path"],
@@ -248,9 +366,9 @@ def _host_body(path, body, known):
     b = json.loads(json.dumps(body or {}))
     for k in NAME_FIELDS:
         if k in b:
-            b[k] = short_name(b[k])
+            b[k] = person(b[k])
     if "singers" in b and isinstance(b["singers"], list):
-        b["singers"] = [short_name(s) for s in b["singers"]]
+        b["singers"] = [person(s) for s in b["singers"]]
     if path == "/rotation/status":
         if "updates" in b:
             ups = [{"id": f"e{u['id']}", "status": u["status"]}
@@ -276,8 +394,38 @@ def _host_body(path, body, known):
     return {k: b[k] for k in keep if k in b}
 
 
+def _note_recorded_names(redacted, recorded):
+    """Pre-pass: every raw name in the recording, so no fake name is one of
+    them and the leak check knows them all."""
+    path = os.path.join(redacted, "snapshots", "start-rotation.db")
+    conn = sqlite3.connect(path)
+    try:
+        for singer, singers_json in conn.execute(
+                "SELECT singer, singers_json FROM rotation_entries"):
+            _PSEUDO.note_raw(singer)
+            for name in (json.loads(singers_json) if singers_json else None) or []:
+                _PSEUDO.note_raw(name)
+    finally:
+        conn.close()
+    for a in recorded:
+        body = a.get("body") if isinstance(a.get("body"), dict) else {}
+        for k in ("singer_name", "friend_name") + NAME_FIELDS:
+            _PSEUDO.note_raw(body.get(k))
+        for name in body.get("singers") or []:
+            _PSEUDO.note_raw(name)
+        for p in body.get("additional_singers") or []:
+            if isinstance(p, dict):
+                _PSEUDO.note_raw(p.get("name"))
+
+
 def build(night):
+    global _PSEUDO
+    _PSEUDO = Pseudonymiser()
     redacted = ensure_redacted(night)
+    with open(os.path.join(redacted, "actions.jsonl"), encoding="utf-8") as f:
+        recorded = [json.loads(line) for line in f if line.strip()]
+    recorded.sort(key=lambda a: (a.get("ts") or "", a.get("seq") or 0))
+    _note_recorded_names(redacted, recorded)
     start = start_rotation(redacted)
     known = {e["ref"] for e in start}
     devices, dev_names = {}, {}
@@ -287,7 +435,7 @@ def build(night):
     def dev_ref(device_id, name):
         if device_id not in devices:
             devices[device_id] = f"d{len(devices) + 1:02d}"
-            dev_names[devices[device_id]] = short_name(name) or devices[device_id]
+            dev_names[devices[device_id]] = person(name) or devices[device_id]
         return devices[device_id]
 
     def add_catalog(body):
@@ -322,10 +470,6 @@ def build(night):
                         dvb, artist=a, title=t,
                         filename=os.path.basename(dvb.get("drive_path") or "") or None)
 
-    with open(os.path.join(redacted, "actions.jsonl"), encoding="utf-8") as f:
-        recorded = [json.loads(line) for line in f if line.strip()]
-    recorded.sort(key=lambda a: (a.get("ts") or "", a.get("seq") or 0))
-
     plays = recorded_plays(redacted)
     last_failed = {}   # device -> index of a submit action still collecting retries
     for a in recorded:
@@ -348,7 +492,7 @@ def build(night):
                     last_failed.pop(dev, None)
                 continue
             act = {"op": "submit", "device": dev,
-                   "name": short_name(body.get("singer_name")) or dev_names[dev],
+                   "name": person(body.get("singer_name")) or dev_names[dev],
                    "body": clean}
             req = resp.get("request") or {}
             if status == 200 and req.get("id"):
@@ -442,6 +586,9 @@ def build(night):
         "search_cases": SEARCH_CASES,
     }
     fixture["expected"] = expected_snapshot(fixture)
+    hits = real_name_hits(fixture, _PSEUDO.real_words)
+    if hits:
+        raise SystemExit(f"refusing to write: real singer names left in the fixture {hits}")
     return fixture
 
 
@@ -518,7 +665,8 @@ def main():
     n = {k: len(v) for k, v in fixture["catalog"].items()}
     print(f"wrote {args.out}: {len(fixture['devices'])} devices, "
           f"{len(fixture['start_rotation'])} start entries, {len(fixture['actions'])} actions, "
-          f"catalog {n}, {len(fixture['expected']['outbox'])} outbox records")
+          f"catalog {n}, {len(fixture['expected']['outbox'])} outbox records, "
+          f"{len(_PSEUDO.first)} names pseudonymised")
 
 
 if __name__ == "__main__":

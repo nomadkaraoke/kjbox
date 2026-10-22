@@ -5,7 +5,7 @@ The committed fixture (``tests/fixtures/localstack/night.json``, built by
 night's start rotation, every singer submit / cancel / change and every host
 rotation action, plus the expected final rotation and history outbox. Every
 singer device becomes an app user (stubbed gen identities), so this drives the
-v1 request path, idempotent retries (Owen's 60-version kj_pick, retried six
+v1 request path, idempotent retries (a singer's 60-version kj_pick, retried six
 times), the host's Done/Left marks and the outbox attribution end to end.
 """
 
@@ -69,10 +69,10 @@ def test_fixture_shape():
     assert fx["start_rotation"] and fx["actions"] and fx["devices"]
     ops = {a["op"] for a in fx["actions"]}
     assert {"submit", "cancel", "host", "play"} <= ops
-    # Owen's kj_pick: more than 50 versions, retried as one idempotent action.
-    owen = [a for a in fx["actions"] if a["op"] == "submit"
+    # One singer's kj_pick: more than 50 versions, retried as one idempotent action.
+    retried = [a for a in fx["actions"] if a["op"] == "submit"
             and len((a["body"].get("source_meta") or {}).get("versions") or []) > 50]
-    assert owen and owen[0].get("attempts", 1) > 1
+    assert retried and retried[0].get("attempts", 1) > 1
     # Device ids from the recording never reach the fixture.
     assert all(re.fullmatch(r"d\d\d", d["ref"]) for d in fx["devices"])
 
@@ -105,19 +105,19 @@ def test_night_replay_through_v1(sing_app, gen_stub):
     assert snap["outbox"] == expected["outbox"]
 
     # Independent invariants (not just "same as last time"):
-    # 1. Every submit went through (v1 trims Owen's 60 versions to 50) and
+    # 1. Every submit went through (v1 trims one singer's 60 versions to 50) and
     #    retries with the same client_request_id made ONE request.
     assert all(s[1] == 200 for s in snap["submits"])
-    owen = next(a for a in fx["actions"] if a["op"] == "submit" and a.get("attempts", 1) > 1)
-    title = owen["body"]["song_title"]
+    retried = next(a for a in fx["actions"] if a["op"] == "submit" and a.get("attempts", 1) > 1)
+    title = retried["body"]["song_title"]
     state = localstack.night_state(sing_app)
-    owen_reqs = [r for r in state["requests"]
-                 if r["singer_name"] == owen["name"] and r["song_title"] == title]
-    assert len(owen_reqs) == 1, owen_reqs
-    owen_entries = [e for e in state["rotation"]
-                    if e["singer"] == owen["name"] and title in (e["song_artist"] or "")]
-    assert len(owen_entries) == 1, owen_entries
-    assert owen_reqs[0]["linked_entry_id"] == owen_entries[0]["id"]
+    retried_reqs = [r for r in state["requests"]
+                 if r["singer_name"] == retried["name"] and r["song_title"] == title]
+    assert len(retried_reqs) == 1, retried_reqs
+    retried_entries = [e for e in state["rotation"]
+                    if e["singer"] == retried["name"] and title in (e["song_artist"] or "")]
+    assert len(retried_entries) == 1, retried_entries
+    assert retried_reqs[0]["linked_entry_id"] == retried_entries[0]["id"]
     # 2. One outbox put per (linked singer, Done entry); nothing for entries
     #    that weren't sung.
     rows = localstack.night_state(sing_app)["outbox"]

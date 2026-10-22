@@ -327,7 +327,8 @@ def _clear_rate_limits():
     import sing
     import sing_api_v1
     for clear in (sing._rate_limit_state.clear, sing._validate_rate_limit_state.clear,
-                  sing_api_v1.failed_code_limit.clear, sing_api_v1.gen_verify_limit.clear):
+                  sing_api_v1.failed_code_limit.clear, sing_api_v1.failed_code_ip_limit.clear,
+                  sing_api_v1.gen_verify_limit.clear):
         clear()
 
 

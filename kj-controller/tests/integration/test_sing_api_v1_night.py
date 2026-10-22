@@ -63,8 +63,8 @@ def test_v1_bad_event_code_403_not_open(client, token, app_token, gen_stub):
     resp = client.post(f"{V1}/join", json={"t": "0000", "name": "Sam"}, headers=bearer(tok))
     assert resp.status_code == 403
     assert assert_matches_contract(resp, "joinNight")["error"] == "not_open"
-    # The code is checked before gen is asked about the token.
-    assert gen_stub.calls == []
+    # The bearer is verified first (so code failures can be keyed per device).
+    assert gen_stub.calls == [tok]
 
     # GET /night shows the closed state instead of an error.
     resp = _night(client, tok, "0000")
@@ -483,7 +483,7 @@ def _from(ip):
     return {"environ_base": {"REMOTE_ADDR": ip}}
 
 
-def test_failed_event_codes_rate_limited_per_ip(client, token, app_token):
+def test_failed_event_codes_rate_limited_per_device(client, token, app_token):
     tok = app_token()
     for _ in range(10):
         resp = client.post(f"{V1}/join", json={"t": "0000", "name": "Sam"},
@@ -501,11 +501,83 @@ def test_failed_event_codes_rate_limited_per_ip(client, token, app_token):
                       **_from("198.51.100.7"))
     assert resp.status_code == 429
     assert assert_matches_contract(resp, "getNight")["error"] == "rate_limited"
-    # Another IP is unaffected; successful codes never count.
+    # Another device behind the same IP is unaffected...
+    other = app_token(email="other@example.com")
+    resp = client.get(f"{V1}/night", query_string={"t": token}, headers=bearer(other),
+                      **_from("198.51.100.7"))
+    assert resp.status_code == 200
+    # ...as is the same device from another IP; successful codes never count.
     for _ in range(12):
         resp = client.get(f"{V1}/night", query_string={"t": token}, headers=bearer(tok),
                           **_from("198.51.100.8"))
         assert resp.status_code == 200
+
+
+def test_bad_code_on_night_is_200_until_device_limit(client, token, app_token):
+    tok = app_token()
+    ip = _from("198.51.100.10")
+    for _ in range(10):
+        resp = client.get(f"{V1}/night", query_string={"t": "0000"}, headers=bearer(tok), **ip)
+        assert resp.status_code == 200
+        body = assert_matches_contract(resp, "getNight")
+        assert body["open"] is False and body["reason"] == "bad_code"
+    # GET /night bad codes count too, so it isn't an unlimited oracle.
+    resp = client.get(f"{V1}/night", query_string={"t": "0000"}, headers=bearer(tok), **ip)
+    assert resp.status_code == 429
+    assert assert_matches_contract(resp, "getNight")["error"] == "rate_limited"
+
+
+def test_stale_codes_from_many_devices_dont_lock_out_venue(client, token, app_token, gen_stub):
+    """Host regenerated the code: 20 phones behind the venue NAT keep polling
+    with the old one. A phone with the new code still gets in."""
+    venue = _from("203.0.113.50")
+    stale = [app_token(email=f"phone{i}@example.com") for i in range(20)]
+    for _ in range(4):  # 80 stale polls: well past the old per-IP 10
+        for tok in stale:
+            resp = client.get(f"{V1}/me", query_string={"t": "0000"},
+                              headers=bearer(tok), **venue)
+            assert resp.status_code == 403
+            assert assert_matches_contract(resp, "getMe")["error"] == "not_open"
+    fresh = app_token(email="fresh@example.com")
+    resp = client.get(f"{V1}/night", query_string={"t": token}, headers=bearer(fresh), **venue)
+    assert resp.status_code == 200
+    assert assert_matches_contract(resp, "getNight")["open"] is True
+    # A stale phone that picks up the new code gets in too.
+    resp = client.get(f"{V1}/night", query_string={"t": token}, headers=bearer(stale[0]),
+                      **venue)
+    assert resp.status_code == 200
+
+
+def test_failed_event_codes_per_ip_ceiling(client, token, app_token):
+    """100 failed codes from one IP across many accounts trips the IP ceiling."""
+    ip = _from("198.51.100.20")
+    toks = [app_token(email=f"brute{i}@example.com") for i in range(20)]
+    for i in range(100):
+        resp = client.post(f"{V1}/join", json={"t": f"{i:04d}x", "name": "Sam"},
+                           headers=bearer(toks[i % 20]), **ip)
+        assert resp.status_code == 403, i
+    fresh = app_token(email="fresh@example.com")
+    resp = client.post(f"{V1}/join", json={"t": token, "name": "Sam"},
+                       headers=bearer(fresh), **ip)
+    assert resp.status_code == 429
+    body = assert_matches_contract(resp, "joinNight")
+    assert body["error"] == "rate_limited" and 1 <= body["retry_after"] <= 300
+    # Another IP is unaffected.
+    resp = client.post(f"{V1}/join", json={"t": token, "name": "Sam"},
+                       headers=bearer(fresh), **_from("198.51.100.21"))
+    assert resp.status_code == 200
+
+
+def test_missing_bearer_is_401_even_when_rate_limited(client, token, app_token, gen_stub):
+    tok = app_token()
+    ip = _from("198.51.100.30")
+    for _ in range(10):
+        client.post(f"{V1}/join", json={"t": "0000", "name": "Sam"}, headers=bearer(tok), **ip)
+    calls = len(gen_stub.calls)
+    resp = client.get(f"{V1}/night", query_string={"t": "0000"}, **ip)
+    assert resp.status_code == 401
+    assert assert_matches_contract(resp, "getNight")["error"] == "unauthenticated"
+    assert len(gen_stub.calls) == calls  # gen wasn't asked
 
 
 def test_gen_verification_misses_rate_limited_per_ip(client, token, app_token, gen_stub):

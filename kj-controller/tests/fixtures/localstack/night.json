@@ -14,57 +14,57 @@
  "devices": [
   {
    "ref": "d01",
-   "name": "Harly V"
+   "name": "Finley M"
   },
   {
    "ref": "d02",
-   "name": "Ashlee A"
+   "name": "Dana T"
   },
   {
    "ref": "d03",
-   "name": "Lyle!"
+   "name": "Harper!"
   },
   {
    "ref": "d04",
-   "name": "Alanna"
+   "name": "Avery"
   },
   {
    "ref": "d05",
-   "name": "Jon W"
+   "name": "Jules B"
   },
   {
    "ref": "d06",
-   "name": "Jude"
+   "name": "Ivy"
   },
   {
    "ref": "d07",
-   "name": "Kang"
+   "name": "Kit"
   },
   {
    "ref": "d08",
-   "name": "Jasssss"
+   "name": "Logan"
   },
   {
    "ref": "d09",
-   "name": "Anya"
+   "name": "Morgan"
   },
   {
    "ref": "d10",
-   "name": "Shylo R."
+   "name": "Noel K."
   },
   {
    "ref": "d11",
-   "name": "Alanna C"
+   "name": "Avery P"
   },
   {
    "ref": "d12",
-   "name": "Owen G"
+   "name": "Parker L"
   }
  ],
  "start_rotation": [
   {
    "ref": "e1204",
-   "singer": "Alanna",
+   "singer": "Avery",
    "singers": null,
    "song_artist": "Desperado - Eagles",
    "status": "Done",
@@ -72,7 +72,7 @@
   },
   {
    "ref": "e1206",
-   "singer": "Chaila R",
+   "singer": "Blake K",
    "singers": null,
    "song_artist": "Take a Hint - Victorious Cast",
    "status": "Now Singing",
@@ -80,9 +80,9 @@
   },
   {
    "ref": "e1203",
-   "singer": "Andrew",
+   "singer": "Casey",
    "singers": [
-    "Andrew"
+    "Casey"
    ],
    "song_artist": "Just Jack - Starz in Their Eyes",
    "status": "Up Next",
@@ -90,10 +90,10 @@
   },
   {
    "ref": "e1207",
-   "singer": "Ashlee A & Chaila R",
+   "singer": "Dana T & Blake K",
    "singers": [
-    "Ashlee A",
-    "Chaila R"
+    "Dana T",
+    "Blake K"
    ],
    "song_artist": "Milkshake - Kelis",
    "status": "Waiting",
@@ -101,7 +101,7 @@
   },
   {
    "ref": "e1205",
-   "singer": "Alanna",
+   "singer": "Avery",
    "singers": null,
    "song_artist": "Walking On The Sun - Smash Mouth",
    "status": "Waiting",
@@ -109,10 +109,10 @@
   },
   {
    "ref": "e1208",
-   "singer": "Chaila R & Ashlee A",
+   "singer": "Blake K & Dana T",
    "singers": [
-    "Chaila R",
-    "Ashlee A"
+    "Blake K",
+    "Dana T"
    ],
    "song_artist": "Party In The USA - Miley Cyrus",
    "status": "Waiting",
@@ -120,10 +120,10 @@
   },
   {
    "ref": "e1209",
-   "singer": "Ashlee A & Chaila R",
+   "singer": "Dana T & Blake K",
    "singers": [
-    "Ashlee A",
-    "Chaila R"
+    "Dana T",
+    "Blake K"
    ],
    "song_artist": "Who Says - Selena Gomez & The Scene",
    "status": "Waiting",
@@ -131,10 +131,10 @@
   },
   {
    "ref": "e1210",
-   "singer": "Chaila R & Ashlee A",
+   "singer": "Blake K & Dana T",
    "singers": [
-    "Chaila R",
-    "Ashlee A"
+    "Blake K",
+    "Dana T"
    ],
    "song_artist": "Die Young - Kesha",
    "status": "Waiting",
@@ -142,10 +142,10 @@
   },
   {
    "ref": "e1211",
-   "singer": "Ashlee A & Chaila R",
+   "singer": "Dana T & Blake K",
    "singers": [
-    "Ashlee A",
-    "Chaila R"
+    "Dana T",
+    "Blake K"
    ],
    "song_artist": "Pink Pony Club - Chappell Roan",
    "status": "Waiting",
@@ -153,10 +153,10 @@
   },
   {
    "ref": "e1212",
-   "singer": "Ashlee A & Chaila R",
+   "singer": "Dana T & Blake K",
    "singers": [
-    "Ashlee A",
-    "Chaila R"
+    "Dana T",
+    "Blake K"
    ],
    "song_artist": "Give It Up - Elizabeth Gillies & Ariana Grande",
    "status": "Waiting",
@@ -167,7 +167,7 @@
   {
    "op": "submit",
    "device": "d01",
-   "name": "Harly V",
+   "name": "Finley M",
    "body": {
     "song_artist": "Jt Music Ft. Andrea Storm Kaden",
     "song_title": "Join Us For A Bite",
@@ -178,7 +178,7 @@
     },
     "additional_singers": [
      {
-      "name": "catherine"
+      "name": "ellis"
      }
     ]
    },
@@ -190,7 +190,7 @@
    "path": "/rotation/add",
    "body": {
     "singers": [
-     "Jasmine"
+     "Gray"
     ],
     "song_artist": "Sleep Talking Indigo De Souza"
    },
@@ -199,7 +199,7 @@
   {
    "op": "submit",
    "device": "d02",
-   "name": "Ashlee A",
+   "name": "Dana T",
    "body": {
     "song_artist": "Sabrina Carpenter",
     "song_title": "Espresso",
@@ -341,7 +341,7 @@
   {
    "op": "submit",
    "device": "d03",
-   "name": "Lyle!",
+   "name": "Harper!",
    "body": {
     "song_artist": "Starset",
     "song_title": "Dark On Me",
@@ -354,7 +354,7 @@
   {
    "op": "submit",
    "device": "d01",
-   "name": "Harly V",
+   "name": "Finley M",
    "body": {
     "song_artist": "Lady Antebellum",
     "song_title": "Downtown",
@@ -476,7 +476,7 @@
    "path": "/rotation/add",
    "body": {
     "singers": [
-     "Jude"
+     "Ivy"
     ],
     "song_artist": "Tom Petty Sleep Talking"
    },
@@ -501,7 +501,7 @@
   {
    "op": "submit",
    "device": "d04",
-   "name": "Alanna",
+   "name": "Avery",
    "body": {
     "song_artist": "Portishead",
     "song_title": "Sour Times",
@@ -601,7 +601,7 @@
    "body": {
     "id": "e1231",
     "singers": [
-     "Jude"
+     "Ivy"
     ],
     "song_artist": "Tom Petty This Old Town"
    }
@@ -609,7 +609,7 @@
   {
    "op": "submit",
    "device": "d05",
-   "name": "Jon W",
+   "name": "Jules B",
    "body": {
     "source_type": "youtube",
     "source_ref": "https://www.youtube.com/watch?v=8aVVCMAInH0"
@@ -662,7 +662,7 @@
   {
    "op": "submit",
    "device": "d06",
-   "name": "Jude",
+   "name": "Ivy",
    "body": {
     "song_artist": "Tom Petty & The Heartbreakers",
     "song_title": "Yer So Bad",
@@ -714,7 +714,7 @@
   {
    "op": "submit",
    "device": "d02",
-   "name": "Ashlee A",
+   "name": "Dana T",
    "body": {
     "song_artist": "Taylor Swift",
     "song_title": "You Belong With Me",
@@ -1009,7 +1009,7 @@
   {
    "op": "submit",
    "device": "d07",
-   "name": "Kang",
+   "name": "Kit",
    "body": {
     "song_artist": "Black Eyed Peas",
     "song_title": "Rock That Body",
@@ -1024,8 +1024,8 @@
    "path": "/rotation/add",
    "body": {
     "singers": [
-     "Ashlee A",
-     "Chaila R"
+     "Dana T",
+     "Blake K"
     ],
     "song_artist": "Sabrina Carpenter - buy me presents"
    },
@@ -1058,7 +1058,7 @@
   {
    "op": "submit",
    "device": "d02",
-   "name": "Ashlee A",
+   "name": "Dana T",
    "body": {
     "song_artist": "Carrie Underwood",
     "song_title": "Good Girl",
@@ -1198,7 +1198,7 @@
   {
    "op": "submit",
    "device": "d03",
-   "name": "Lyle!",
+   "name": "Harper!",
    "body": {
     "song_artist": "INOHA",
     "song_title": "The Biggest Salmon",
@@ -1227,7 +1227,7 @@
   {
    "op": "submit",
    "device": "d03",
-   "name": "Lyle!",
+   "name": "Harper!",
    "body": {
     "song_artist": "Harrison Gordon",
     "song_title": "Kirby Down B",
@@ -1279,7 +1279,7 @@
   {
    "op": "submit",
    "device": "d06",
-   "name": "Jude",
+   "name": "Ivy",
    "body": {
     "song_artist": "Missy Elliott",
     "song_title": "Get Ur Freak On",
@@ -1415,7 +1415,7 @@
   {
    "op": "submit",
    "device": "d04",
-   "name": "Alanna",
+   "name": "Avery",
    "body": {
     "song_artist": "Panic! At The Disco",
     "song_title": "Build God, Then We'll Talk",
@@ -1571,7 +1571,7 @@
    "body": {
     "id": "e1234",
     "singers": [
-     "Jon W"
+     "Jules B"
     ],
     "song_artist": "Narrow Head - See You Around"
    }
@@ -1739,7 +1739,7 @@
   {
    "op": "submit",
    "device": "d04",
-   "name": "Alanna",
+   "name": "Avery",
    "body": {
     "song_artist": "Lynyrd Skynyrd",
     "song_title": "Simple Man",
@@ -1961,7 +1961,7 @@
   {
    "op": "submit",
    "device": "d08",
-   "name": "Jasssss",
+   "name": "Logan",
    "body": {
     "song_artist": "Rio Romeo",
     "song_title": "Butch 4 Butch",
@@ -2016,7 +2016,7 @@
   {
    "op": "submit",
    "device": "d07",
-   "name": "Kang",
+   "name": "Kit",
    "body": {
     "song_artist": "Dead Poet Society",
     "song_title": "Uto",
@@ -2027,7 +2027,7 @@
     },
     "additional_singers": [
      {
-      "name": "Chaila R"
+      "name": "Blake K"
      }
     ]
    },
@@ -2071,7 +2071,7 @@
   {
    "op": "submit",
    "device": "d08",
-   "name": "Jasssss",
+   "name": "Logan",
    "body": {
     "song_artist": "They Might Be Giants",
     "song_title": "Istanbul (Not Constantinople)",
@@ -2212,8 +2212,8 @@
    "op": "host",
    "path": "/rotation/singer/merge",
    "body": {
-    "source_name": "Jasmine",
-    "target_name": "Jasmine!"
+    "source_name": "Gray",
+    "target_name": "Gray!"
    }
   },
   {
@@ -2265,7 +2265,7 @@
    "path": "/rotation/add",
    "body": {
     "singers": [
-     "Lyle"
+     "Harper"
     ],
     "song_artist": "Holding Absence - Wilt"
    },
@@ -2290,7 +2290,7 @@
   {
    "op": "submit",
    "device": "d09",
-   "name": "Anya",
+   "name": "Morgan",
    "body": {
     "song_artist": "Warrant",
     "song_title": "Cherry Pie",
@@ -2547,7 +2547,7 @@
   {
    "op": "submit",
    "device": "d09",
-   "name": "Anya",
+   "name": "Morgan",
    "body": {
     "song_artist": "Three Days Grace",
     "song_title": "I Hate Everything About You",
@@ -2870,7 +2870,7 @@
   {
    "op": "submit",
    "device": "d09",
-   "name": "Anya",
+   "name": "Morgan",
    "body": {
     "song_artist": "Three Days Grace",
     "song_title": "I Hate Everything About You",
@@ -3193,7 +3193,7 @@
   {
    "op": "submit",
    "device": "d08",
-   "name": "Jasssss",
+   "name": "Logan",
    "body": {
     "song_artist": "Fiona Apple",
     "song_title": "Paper Bag",
@@ -3314,7 +3314,7 @@
   {
    "op": "submit",
    "device": "d09",
-   "name": "Anya",
+   "name": "Morgan",
    "body": {
     "song_artist": "Sabrina Carpenter",
     "song_title": "Go Go Juice",
@@ -3425,7 +3425,7 @@
   {
    "op": "submit",
    "device": "d10",
-   "name": "Shylo R.",
+   "name": "Noel K.",
    "body": {
     "song_artist": "The Long Faces",
     "song_title": "Jane",
@@ -3497,7 +3497,7 @@
   {
    "op": "submit",
    "device": "d10",
-   "name": "Shylo R.",
+   "name": "Noel K.",
    "body": {
     "song_artist": "Metric",
     "song_title": "Black Sheep",
@@ -3659,7 +3659,7 @@
   {
    "op": "submit",
    "device": "d04",
-   "name": "Alanna",
+   "name": "Avery",
    "body": {
     "song_artist": "Evanescence",
     "song_title": "My Immortal",
@@ -4273,7 +4273,7 @@
    "op": "host",
    "path": "/rotation/singer/remove",
    "body": {
-    "name": "Paul"
+    "name": "Oakley"
    }
   },
   {
@@ -4550,20 +4550,20 @@
    "op": "host",
    "path": "/rotation/singer/remove",
    "body": {
-    "name": "Alanna"
+    "name": "Avery"
    }
   },
   {
    "op": "host",
    "path": "/rotation/singer/remove",
    "body": {
-    "name": "Chaila R"
+    "name": "Blake K"
    }
   },
   {
    "op": "submit",
    "device": "d11",
-   "name": "Alanna C",
+   "name": "Avery P",
    "body": {
     "song_artist": "Frank Sinatra",
     "song_title": "My Way",
@@ -5054,14 +5054,14 @@
    "op": "host",
    "path": "/rotation/singer/remove",
    "body": {
-    "name": "Shylo R."
+    "name": "Noel K."
    }
   },
   {
    "op": "host",
    "path": "/rotation/singer/restore",
    "body": {
-    "name": "Shylo R."
+    "name": "Noel K."
    }
   },
   {
@@ -5095,7 +5095,7 @@
   {
    "op": "submit",
    "device": "d12",
-   "name": "Owen G",
+   "name": "Parker L",
    "body": {
     "song_artist": "Backstreet Boys",
     "song_title": "I Want It That Way",
@@ -6210,7 +6210,7 @@
   {
    "op": "submit",
    "device": "d11",
-   "name": "Alanna C",
+   "name": "Avery P",
    "body": {
     "song_artist": "Sara Bareilles",
     "song_title": "She Used To Be Mine",
@@ -6403,7 +6403,7 @@
    "path": "/rotation/add",
    "body": {
     "singers": [
-     "Andrew"
+     "Casey"
     ],
     "song_artist": "nia archives"
    },
@@ -6415,7 +6415,7 @@
    "body": {
     "id": "e1270",
     "singers": [
-     "Andrew"
+     "Casey"
     ],
     "song_artist": "nia archives (over)thinking"
    }
@@ -6451,7 +6451,7 @@
   {
    "op": "submit",
    "device": "d09",
-   "name": "Anya",
+   "name": "Morgan",
    "body": {
     "song_artist": "All-American Rejects",
     "song_title": "Gives You Hell",
@@ -6673,7 +6673,7 @@
   {
    "op": "submit",
    "device": "d09",
-   "name": "Anya",
+   "name": "Morgan",
    "body": {
     "song_artist": "Chappell Roan",
     "song_title": "The Subway",
@@ -6788,7 +6788,7 @@
   {
    "op": "submit",
    "device": "d09",
-   "name": "Anya",
+   "name": "Morgan",
    "body": {
     "song_artist": "Chappell Roan",
     "song_title": "The Subway",
@@ -6985,7 +6985,7 @@
    "path": "/rotation/add",
    "body": {
     "singers": [
-     "Natalie"
+     "Quinn"
     ],
     "song_artist": "island of a misfit boy"
    },
@@ -6997,7 +6997,7 @@
    "body": {
     "id": "e1278",
     "singers": [
-     "Natalie"
+     "Quinn"
     ],
     "song_artist": "Front Porch Step - Island of the Misfit Boy"
    }
@@ -7033,7 +7033,7 @@
   {
    "op": "submit",
    "device": "d09",
-   "name": "Anya",
+   "name": "Morgan",
    "body": {
     "song_artist": "Paramore",
     "song_title": "Still Into You",
@@ -7272,7 +7272,7 @@
   {
    "op": "submit",
    "device": "d09",
-   "name": "Anya",
+   "name": "Morgan",
    "body": {
     "song_artist": "Free Throw",
     "song_title": "Two Beers In",
@@ -7381,7 +7381,7 @@
   {
    "op": "submit",
    "device": "d09",
-   "name": "Anya",
+   "name": "Morgan",
    "body": {
     "song_artist": "Free Throw",
     "song_title": "Two Beers In",
@@ -8715,247 +8715,247 @@
   ],
   "rotation": [
    [
-    "Alanna",
+    "Avery",
     "Desperado - Eagles",
     "Done"
    ],
    [
-    "Chaila R",
+    "Blake K",
     "Take a Hint - Victorious Cast",
     "Left"
    ],
    [
-    "Andrew",
+    "Casey",
     "Just Jack - Starz in Their Eyes",
     "Waiting"
    ],
    [
-    "Ashlee A & Chaila R",
+    "Dana T & Blake K",
     "Milkshake - Kelis",
     "Left"
    ],
    [
-    "Alanna",
+    "Avery",
     "Walking On The Sun - Smash Mouth",
     "Left"
    ],
    [
-    "Chaila R & Ashlee A",
+    "Blake K & Dana T",
     "Party In The USA - Miley Cyrus",
     "Left"
    ],
    [
-    "Ashlee A & Chaila R",
+    "Dana T & Blake K",
     "Who Says - Selena Gomez & The Scene",
     "Left"
    ],
    [
-    "Chaila R & Ashlee A",
+    "Blake K & Dana T",
     "Die Young - Kesha",
     "Left"
    ],
    [
-    "Ashlee A & Chaila R",
+    "Dana T & Blake K",
     "Pink Pony Club - Chappell Roan",
     "Left"
    ],
    [
-    "Ashlee A & Chaila R",
+    "Dana T & Blake K",
     "Give It Up - Elizabeth Gillies & Ariana Grande",
     "Left"
    ],
    [
-    "Harly V & catherine",
+    "Finley M & ellis",
     "Join Us For A Bite - Jt Music Ft. Andrea Storm Kaden",
     "Done"
    ],
    [
-    "Jasmine!",
+    "Gray!",
     "Indigo De Souza - Sleep Talking",
     "Done"
    ],
    [
-    "Ashlee A",
+    "Dana T",
     "Espresso - Sabrina Carpenter",
     "Done"
    ],
    [
-    "Lyle!",
+    "Harper!",
     "Dark On Me - Starset",
     "Done"
    ],
    [
-    "Harly V",
+    "Finley M",
     "Downtown - Lady Antebellum",
     "Done"
    ],
    [
-    "Jude",
+    "Ivy",
     "Tom Petty - This Old Town",
     "Done"
    ],
    [
-    "Alanna",
+    "Avery",
     "Sour Times - Portishead",
     "Done"
    ],
    [
-    "Jon W",
+    "Jules B",
     "Narrow Head - See You Around",
     "Done"
    ],
    [
-    "Jude",
+    "Ivy",
     "Yer So Bad - Tom Petty & The Heartbreakers",
     "Done"
    ],
    [
-    "Kang",
+    "Kit",
     "Rock That Body - Black Eyed Peas",
     "Done"
    ],
    [
-    "Lyle!",
+    "Harper!",
     "The Biggest Salmon - INOHA",
     "Done"
    ],
    [
-    "Ashlee A",
+    "Dana T",
     "You Belong With Me - Taylor Swift",
     "Done"
    ],
    [
-    "Ashlee A",
+    "Dana T",
     "Good Girl - Carrie Underwood",
     "Done"
    ],
    [
-    "Lyle!",
+    "Harper!",
     "Kirby Down B - Harrison Gordon",
     "Done"
    ],
    [
-    "Jude",
+    "Ivy",
     "Get Ur Freak On - Missy Elliott",
     "Done"
    ],
    [
-    "Alanna",
+    "Avery",
     "Build God, Then We'll Talk - Panic! At The Disco",
     "Left"
    ],
    [
-    "Alanna",
+    "Avery",
     "Simple Man - Lynyrd Skynyrd",
     "Done"
    ],
    [
-    "Jasssss",
+    "Logan",
     "Butch 4 Butch - Rio Romeo",
     "Done"
    ],
    [
-    "Kang & Chaila R",
+    "Kit & Blake K",
     "Uto - Dead Poet Society",
     "Done"
    ],
    [
-    "Jasssss",
+    "Logan",
     "Istanbul (Not Constantinople) - They Might Be Giants",
     "Done"
    ],
    [
-    "Anya",
+    "Morgan",
     "Cherry Pie - Warrant",
     "Done"
    ],
    [
-    "Jasssss",
+    "Logan",
     "Paper Bag - Fiona Apple",
     "Done"
    ],
    [
-    "Shylo R.",
+    "Noel K.",
     "Black Sheep - Metric",
     "Done"
    ],
    [
-    "Anya",
+    "Morgan",
     "Go Go Juice - Sabrina Carpenter",
     "Done"
    ],
    [
-    "Alanna",
+    "Avery",
     "My Immortal - Evanescence",
     "Left"
    ],
    [
-    "Ashlee A & Chaila R",
+    "Dana T & Blake K",
     "Sabrina Carpenter - buy me presents",
     "Done"
    ],
    [
-    "Anya",
+    "Morgan",
     "I Hate Everything About You - Three Days Grace",
     "Done"
    ],
    [
-    "Shylo R.",
+    "Noel K.",
     "Jane - The Long Faces",
     "Done"
    ],
    [
-    "Alanna C",
+    "Avery P",
     "My Way - Frank Sinatra",
     "Done"
    ],
    [
-    "Owen G",
+    "Parker L",
     "I Want It That Way - Backstreet Boys",
     "Waiting"
    ],
    [
-    "Alanna C",
+    "Avery P",
     "She Used To Be Mine - Sara Bareilles",
     "Done"
    ],
    [
-    "Andrew",
+    "Casey",
     "Nia Archives - (Over)Thinking",
     "Done"
    ],
    [
-    "Anya",
+    "Morgan",
     "The Subway - Chappell Roan",
     "Done"
    ],
    [
-    "Anya",
+    "Morgan",
     "The Subway - Chappell Roan",
     "Done"
    ],
    [
-    "Anya",
+    "Morgan",
     "Gives You Hell - All-American Rejects",
     "Done"
    ],
    [
-    "Natalie",
+    "Quinn",
     "Front Porch Step - Island of the Misfit Boy",
     "Done"
    ],
    [
-    "Anya",
+    "Morgan",
     "Still Into You - Paramore",
     "Done"
    ],
    [
-    "Anya",
+    "Morgan",
     "Two Beers In - Free Throw",
     "Done"
    ],
    [
-    "Anya",
+    "Morgan",
     "Two Beers In - Free Throw",
     "Up Next"
    ]
@@ -8972,8 +8972,8 @@
     "Jt Music Ft. Andrea Storm Kaden",
     "Join Us For A Bite",
     [
-     "Harly V",
-     "catherine"
+     "Finley M",
+     "ellis"
     ]
    ],
    [
@@ -8983,7 +8983,7 @@
     "Lady Antebellum",
     "Downtown",
     [
-     "Harly V"
+     "Finley M"
     ]
    ],
    [
@@ -8993,7 +8993,7 @@
     "Carrie Underwood",
     "Good Girl",
     [
-     "Ashlee A"
+     "Dana T"
     ]
    ],
    [
@@ -9003,7 +9003,7 @@
     "Sabrina Carpenter",
     "Espresso",
     [
-     "Ashlee A"
+     "Dana T"
     ]
    ],
    [
@@ -9013,8 +9013,8 @@
     "Sabrina Carpenter",
     "buy me presents",
     [
-     "Ashlee A",
-     "Chaila R"
+     "Dana T",
+     "Blake K"
     ]
    ],
    [
@@ -9024,7 +9024,7 @@
     "Taylor Swift",
     "You Belong With Me",
     [
-     "Ashlee A"
+     "Dana T"
     ]
    ],
    [
@@ -9034,7 +9034,7 @@
     "Harrison Gordon",
     "Kirby Down B",
     [
-     "Lyle!"
+     "Harper!"
     ]
    ],
    [
@@ -9044,7 +9044,7 @@
     "INOHA",
     "The Biggest Salmon",
     [
-     "Lyle!"
+     "Harper!"
     ]
    ],
    [
@@ -9054,7 +9054,7 @@
     "Starset",
     "Dark On Me",
     [
-     "Lyle!"
+     "Harper!"
     ]
    ],
    [
@@ -9064,7 +9064,7 @@
     "Lynyrd Skynyrd",
     "Simple Man",
     [
-     "Alanna"
+     "Avery"
     ]
    ],
    [
@@ -9074,7 +9074,7 @@
     "Portishead",
     "Sour Times",
     [
-     "Alanna"
+     "Avery"
     ]
    ],
    [
@@ -9084,7 +9084,7 @@
     "Eagles",
     "Desperado",
     [
-     "Alanna"
+     "Avery"
     ]
    ],
    [
@@ -9094,7 +9094,7 @@
     "Narrow Head",
     "See You Around",
     [
-     "Jon W"
+     "Jules B"
     ]
    ],
    [
@@ -9104,7 +9104,7 @@
     "Missy Elliott",
     "Get Ur Freak On",
     [
-     "Jude"
+     "Ivy"
     ]
    ],
    [
@@ -9114,7 +9114,7 @@
     "Tom Petty",
     "This Old Town",
     [
-     "Jude"
+     "Ivy"
     ]
    ],
    [
@@ -9124,7 +9124,7 @@
     "Tom Petty & The Heartbreakers",
     "Yer So Bad",
     [
-     "Jude"
+     "Ivy"
     ]
    ],
    [
@@ -9134,7 +9134,7 @@
     "Black Eyed Peas",
     "Rock That Body",
     [
-     "Kang"
+     "Kit"
     ]
    ],
    [
@@ -9144,8 +9144,8 @@
     "Dead Poet Society",
     "Uto",
     [
-     "Kang",
-     "Chaila R"
+     "Kit",
+     "Blake K"
     ]
    ],
    [
@@ -9155,7 +9155,7 @@
     "Fiona Apple",
     "Paper Bag",
     [
-     "Jasssss"
+     "Logan"
     ]
    ],
    [
@@ -9165,7 +9165,7 @@
     "Rio Romeo",
     "Butch 4 Butch",
     [
-     "Jasssss"
+     "Logan"
     ]
    ],
    [
@@ -9175,7 +9175,7 @@
     "They Might Be Giants",
     "Istanbul (Not Constantinople)",
     [
-     "Jasssss"
+     "Logan"
     ]
    ],
    [
@@ -9185,7 +9185,7 @@
     "All-American Rejects",
     "Gives You Hell",
     [
-     "Anya"
+     "Morgan"
     ]
    ],
    [
@@ -9195,7 +9195,7 @@
     "Chappell Roan",
     "The Subway",
     [
-     "Anya"
+     "Morgan"
     ]
    ],
    [
@@ -9205,7 +9205,7 @@
     "Paramore",
     "Still Into You",
     [
-     "Anya"
+     "Morgan"
     ]
    ],
    [
@@ -9215,7 +9215,7 @@
     "Sabrina Carpenter",
     "Go Go Juice",
     [
-     "Anya"
+     "Morgan"
     ]
    ],
    [
@@ -9225,7 +9225,7 @@
     "Three Days Grace",
     "I Hate Everything About You",
     [
-     "Anya"
+     "Morgan"
     ]
    ],
    [
@@ -9235,7 +9235,7 @@
     "Warrant",
     "Cherry Pie",
     [
-     "Anya"
+     "Morgan"
     ]
    ],
    [
@@ -9245,7 +9245,7 @@
     "Chappell Roan",
     "The Subway",
     [
-     "Anya"
+     "Morgan"
     ]
    ],
    [
@@ -9255,7 +9255,7 @@
     "Free Throw",
     "Two Beers In",
     [
-     "Anya"
+     "Morgan"
     ]
    ],
    [
@@ -9265,7 +9265,7 @@
     "Metric",
     "Black Sheep",
     [
-     "Shylo R."
+     "Noel K."
     ]
    ],
    [
@@ -9275,7 +9275,7 @@
     "The Long Faces",
     "Jane",
     [
-     "Shylo R."
+     "Noel K."
     ]
    ],
    [
@@ -9285,7 +9285,7 @@
     "Frank Sinatra",
     "My Way",
     [
-     "Alanna C"
+     "Avery P"
     ]
    ],
    [
@@ -9295,7 +9295,7 @@
     "Sara Bareilles",
     "She Used To Be Mine",
     [
-     "Alanna C"
+     "Avery P"
     ]
    ]
   ]

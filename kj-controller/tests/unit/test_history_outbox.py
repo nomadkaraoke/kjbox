@@ -386,6 +386,39 @@ def test_delivery_backoff_and_permanent_failure(env, caplog):
     assert any(rec.levelno == logging.WARNING for rec in caplog.records)
 
 
+@pytest.mark.parametrize("status", [404, 410])
+def test_delete_of_absent_record_counts_as_delivered(env, caplog, status):
+    """The PUT never reached decide, then the host un-did Done: decide answers
+    the retraction with 404/410, which is the state we want."""
+    caplog.set_level(logging.INFO)
+    env.cfg = {k: v for k, v in env.cfg.items() if k != "decide_api_url"}
+    env.link("dev-a", "a@x.com", alias="Alice")
+    ob = env.outbox()
+    env.rotation.history_outbox = ob
+    e = env.rotation.add_entry("Alice", "Golden Hour - Nova Lane")
+    env.request("dev-a", "Alice", e["id"])
+    hid = history_id_for(BOX, e["id"], "a@x.com")
+    env.rotation.update_status(e["id"], "Done")
+    ob.run_once()                       # inert: the PUT stays queued
+    env.rotation.undo()
+    ob.scan(force=True)                 # replaced by a delete
+    env.cfg["decide_api_url"] = CFG["decide_api_url"]
+    env.http.answers = [status]
+    assert ob.deliver_due() == 1
+    assert [c[0] for c in env.http.calls] == ["DELETE"]
+    assert _row(env, hid)["state"] == "sent"
+    assert not [r for r in caplog.records if r.levelno >= logging.WARNING]
+    assert ob.deliver_due() == 0
+
+
+@pytest.mark.parametrize("status", [404, 410])
+def test_put_404_is_still_refused(env, status):
+    ob, hid = _one_pending(env)
+    env.http.answers = [status]
+    assert ob.deliver_due() == 0
+    assert _row(env, hid)["state"] == "pending"
+
+
 def test_inert_without_config(env, caplog):
     caplog.set_level(logging.INFO)
     env.cfg["decide_kjbox_secret"] = ""

@@ -8,17 +8,25 @@ it (tests/integration/v1_contract.py enforces that in the integration suite).
 Every endpoint is wrapped in ``@app_auth``, which checks, in order:
 
 1. ``Authorization: Bearer <gen session token>`` is present  → 401 unauthenticated
-   (then: an IP with 10 failed event codes in 5 min           → 429 rate_limited)
-2. the event code ``t`` (query string or JSON body only; v1 never reads or
-   sets the Flask session cookie) is valid and requests are enabled
-                                                               → 403 not_open
-3. gen accepts the token (GenTokenVerifier, cached)            → 401 / 503
+2. gen accepts the token (GenTokenVerifier, cached)            → 401 / 503
    (an IP with 30 cache-missing verifications in 1 min        → 429 rate_limited)
-4. the night marker is set (fail closed)                       → 403 not_open
-5. a ``night_id`` the client sends (query or JSON) is tonight's → 409 night_changed
+3. wrong-event-code limits: the verified device (keyed
+   ``"<ip>:<app device id>"``) with 10 failed codes in 5 min, or
+   the IP with 100 failed codes in 5 min across all devices  → 429 rate_limited
+4. requests are enabled and the event code ``t`` (query string or JSON body
+   only; v1 never reads or sets the Flask session cookie) is valid
+                                                               → 403 not_open
+5. the night marker is set (fail closed)                       → 403 not_open
+6. a ``night_id`` the client sends (query or JSON) is tonight's → 409 night_changed
 
-``GET /night`` turns the "not open" outcomes (2 and 4) into a 200
-``{open: false}`` so the app can show the closed state with the host's message.
+The bearer is verified before the code so code failures can be counted per
+device: every phone on venue wifi shares one IP, and a few phones still
+polling with a stale code must not lock the whole venue out.
+
+``GET /night`` turns the "not open" outcomes (4 and 5) into a 200
+``{open: false, reason}`` (``closed`` | ``bad_code`` | ``no_night``) so the app
+can show the right state with the host's message. A bad code there still
+counts toward the limits in 3.
 
 The bearer token only ever lives on ``g`` for the request; it's never stored,
 logged, or recorded (the ActionRecorder redacts ``Authorization``).
@@ -95,9 +103,14 @@ class SlidingWindow:
 
 
 # Event-code guessing: only FAILED codes count (same 10 / 5 min as
-# /sing/validate, separate bucket). Once over, every v1 call from the IP gets
-# 429 — even with the right code — so the limit can't be used as an oracle.
+# /sing/validate, separate bucket), keyed by "<ip>:<app device id>" so phones
+# behind one venue NAT don't share a bucket. Once over, every v1 call from that
+# device gets 429 — even with the right code — so the limit can't be used as
+# an oracle.
 failed_code_limit = SlidingWindow(10, 300)
+# A much looser per-IP ceiling on failed codes across all devices, against
+# brute force spread over many gen accounts.
+failed_code_ip_limit = SlidingWindow(100, 300)
 # gen token checks that miss the verifier cache, per IP.
 gen_verify_limit = SlidingWindow(30, 60)
 
@@ -196,17 +209,6 @@ def app_auth(view=None, *, on_closed=None):
                 return v1_error("unauthenticated", 401)
 
             ip = sing._client_ip(request)
-            wait = failed_code_limit.retry_after(ip)
-            if wait is not None:
-                return v1_error("rate_limited", 429, "too many wrong event codes",
-                                retry_after=wait)
-            if not store.is_enabled():
-                return _not_open(on_closed, "closed")
-            code = _param("t")
-            if not code or not sing._is_token_valid(store, code):
-                failed_code_limit.hit(ip)
-                return _not_open(on_closed, "bad_code")
-
             verifier = getattr(current_app, "gen_verifier", None)
             if verifier is None:
                 return v1_error("gen_unavailable", 503, "gen is not configured")
@@ -222,6 +224,20 @@ def app_auth(view=None, *, on_closed=None):
                 if exc.code == "gen_unavailable":
                     return v1_error("gen_unavailable", 503, retry_after=5)
                 return v1_error("unauthenticated", 401)
+
+            code_key = f"{ip}:{user.device_id}"
+            waits = [w for w in (failed_code_limit.retry_after(code_key),
+                                 failed_code_ip_limit.retry_after(ip)) if w is not None]
+            if waits:
+                return v1_error("rate_limited", 429, "too many wrong event codes",
+                                retry_after=max(waits))
+            if not store.is_enabled():
+                return _not_open(on_closed, "closed")
+            code = _param("t")
+            if not code or not sing._is_token_valid(store, code):
+                failed_code_limit.hit(code_key)
+                failed_code_ip_limit.hit(ip)
+                return _not_open(on_closed, "bad_code")
 
             night = store.get_night_started_at()
             if not night:

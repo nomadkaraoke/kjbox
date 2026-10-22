@@ -167,7 +167,7 @@ def test_get_me_sends_bearer_and_client_id(monkeypatch):
             return {"user": {}, "has_session": True}
 
     def fake(method, url, json=None, timeout=None, headers=None):
-        seen.update(method=method, url=url, headers=headers)
+        seen.update(method=method, url=url, headers=headers, timeout=timeout)
         return R()
 
     monkeypatch.setattr(gen_client.requests, "request", fake)
@@ -177,6 +177,8 @@ def test_get_me_sends_bearer_and_client_id(monkeypatch):
     assert seen["method"] == "GET" and seen["url"] == "http://gen/api/users/me"
     assert seen["headers"]["Authorization"] == "Bearer TOK"
     assert "X-Client-Id" in seen["headers"] and "X-Kjbox-Secret" not in seen["headers"]
+    # Short timeout: get_me is on the v1 auth hot path.
+    assert seen["timeout"] == gen_client.GenClient.ME_TIMEOUT == 5
 
 
 def test_is_cached_tracks_ttl():
