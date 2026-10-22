@@ -2296,6 +2296,7 @@
       "ChangeSongRequest": {
         "type": "object",
         "required": [
+          "client_request_id",
           "source_type"
         ],
         "properties": {
@@ -2304,6 +2305,11 @@
           },
           "night_id": {
             "type": "string"
+          },
+          "client_request_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Idempotency key: a retry with the same id returns the first response (even though the original request is now superseded) and never makes a second change"
           },
           "song_artist": {
             "type": "string"

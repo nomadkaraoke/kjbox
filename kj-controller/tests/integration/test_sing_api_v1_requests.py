@@ -53,6 +53,11 @@ def _ok_submit(client, tok, t, **body):
     return assert_matches_contract(resp, "createRequest")["request"]
 
 
+def _change(client, tok, t, rid, cid=None, **body):
+    payload = {"t": t, "client_request_id": cid or str(uuid.uuid4()), **body}
+    return client.post(f"{V1}/requests/{rid}/change", json=payload, headers=bearer(tok))
+
+
 def _cancel(client, tok, t, rid):
     return client.post(f"{V1}/requests/{rid}/cancel", json={"t": t}, headers=bearer(tok))
 
@@ -325,7 +330,7 @@ def test_cancel_or_change_on_stage_409(client, token, sam, sing_app):
     assert resp.status_code == 409
     assert assert_matches_contract(resp, "cancelRequest")["error"] == "on_stage"
     resp = client.post(f"{V1}/requests/{req['id']}/change",
-                       json={"t": token, **_song("New")}, headers=bearer(sam))
+                       json={"t": token, "client_request_id": str(uuid.uuid4()), **_song("New")}, headers=bearer(sam))
     assert resp.status_code == 409
     assert assert_matches_contract(resp, "changeRequest")["error"] == "on_stage"
     assert sing_app.rotation.store.get_entry(entry_id)["status"] == "Now Singing"
@@ -340,7 +345,7 @@ def test_change_keeps_slot(client, token, sam, sing_app):
     old_entry = sing_app.sing_store.get_request(mine["id"])["linked_entry_id"]
     old_pos = sing_app.rotation.store.get_entry(old_entry)["position"]
     resp = client.post(f"{V1}/requests/{mine['id']}/change",
-                       json={"t": token, **_song("SOS", song_artist="ABBA")},
+                       json={"t": token, "client_request_id": str(uuid.uuid4()), **_song("SOS", song_artist="ABBA")},
                        headers=bearer(sam))
     assert resp.status_code == 200
     body = assert_matches_contract(resp, "changeRequest")
@@ -355,11 +360,78 @@ def test_change_keeps_slot(client, token, sam, sing_app):
     assert sing_app.sing_store.get_request(mine["id"])["status"] == "cancelled"
 
 
+def _approved_request(client, token, sam, sing_app):
+    sing_app.sing_store.set_auto_approve(True)
+    return _ok_submit(client, sam, token, **_song())
+
+
+def test_change_idempotent_on_client_request_id(client, token, sam, sing_app):
+    mine = _approved_request(client, token, sam, sing_app)
+    cid = str(uuid.uuid4())
+    first = _change(client, sam, token, mine["id"], cid=cid, **_song("SOS", song_artist="ABBA"))
+    _expect(first, "changeRequest", 200)
+    # The original is now superseded; the retry still gets the first response.
+    again = _change(client, sam, token, mine["id"], cid=cid, **_song("SOS", song_artist="ABBA"))
+    _expect(again, "changeRequest", 200)
+    assert again.get_json() == first.get_json()
+    live = [r for r in sing_app.sing_store.list_requests()
+            if r.get("supersedes_request_id") == mine["id"]]
+    assert len(live) == 1
+    assert len(sing_app.sing_store.list_requests()) == 2
+    # A new key on the superseded request is a fresh attempt, not a replay.
+    other = _change(client, sam, token, mine["id"], **_song("Other"))
+    assert other.get_json() != first.get_json()
+
+
+def test_change_concurrent_retry_gets_busy_retry(client, token, sam, sing_app):
+    mine = _approved_request(client, token, sam, sing_app)
+    cid = str(uuid.uuid4())
+    key = f"change:{app_device_id(EMAIL, sing_app.app_identity_secret)}:{cid}"
+    assert sing_app.sing_store.idempotent_claim(key)  # the first attempt is in flight
+    body = _expect(_change(client, sam, token, mine["id"], cid=cid, **_song("SOS")),
+                   "changeRequest", 409, "busy_retry")
+    assert body["retry_after"] == 2
+    assert len(sing_app.sing_store.list_requests()) == 1
+
+
+def test_change_requires_client_request_id(client, token, sam, sing_app):
+    mine = _approved_request(client, token, sam, sing_app)
+    resp = client.post(f"{V1}/requests/{mine['id']}/change",
+                       json={"t": token, **_song("SOS")}, headers=bearer(sam))
+    _expect(resp, "changeRequest", 400, "invalid")
+    _expect(_change(client, sam, token, mine["id"], cid="not-a-uuid", **_song("SOS")),
+            "changeRequest", 400, "invalid")
+    assert len(sing_app.sing_store.list_requests()) == 1
+
+
+def test_change_failed_attempt_releases_the_key(client, token, sam, sing_app):
+    mine = _approved_request(client, token, sam, sing_app)
+    cid = str(uuid.uuid4())
+    _expect(_change(client, sam, token, mine["id"], cid=cid, **_song("Made", source_type="make")),
+            "changeRequest", 400, "make_disabled")
+    _expect(_change(client, sam, token, mine["id"], cid=cid, **_song("SOS")), "changeRequest", 200)
+
+
+def test_change_payload_build_failure_keeps_claim(client, token, sam, sing_app, monkeypatch):
+    import sing_api_v1
+    mine = _approved_request(client, token, sam, sing_app)
+
+    def boom(*a, **k):
+        raise RuntimeError("shape failed")
+    monkeypatch.setattr(sing_api_v1, "_request_view", boom)
+    cid = str(uuid.uuid4())
+    _expect(_change(client, sam, token, mine["id"], cid=cid, **_song("SOS")),
+            "changeRequest", 500, "internal")
+    _expect(_change(client, sam, token, mine["id"], cid=cid, **_song("SOS")),
+            "changeRequest", 409, "busy_retry")
+    assert len(sing_app.sing_store.list_requests()) == 2   # original + one superseding
+
+
 def test_change_friend_song_stays_friend(client, token, sam, sing_app):
     sing_app.sing_store.set_auto_approve(True)
     req = _ok_submit(client, sam, token, **_song(), for_friend=True, friend_name="Nats")
     resp = client.post(f"{V1}/requests/{req['id']}/change",
-                       json={"t": token, **_song("SOS")}, headers=bearer(sam))
+                       json={"t": token, "client_request_id": str(uuid.uuid4()), **_song("SOS")}, headers=bearer(sam))
     new = assert_matches_contract(resp, "changeRequest")["request"]
     assert new["for_friend"] is True and new["singer_name"] == "Nats"
 
@@ -367,7 +439,7 @@ def test_change_friend_song_stays_friend(client, token, sam, sing_app):
 def test_change_into_make_rejected(client, token, sam, sing_app):
     req = _ok_submit(client, sam, token, **_song())
     resp = client.post(f"{V1}/requests/{req['id']}/change",
-                       json={"t": token, **_song("New", source_type="make", source_ref=None)},
+                       json={"t": token, "client_request_id": str(uuid.uuid4()), **_song("New", source_type="make", source_ref=None)},
                        headers=bearer(sam))
     assert resp.status_code == 400
     assert assert_matches_contract(resp, "changeRequest")["error"] == "make_disabled"
@@ -377,7 +449,7 @@ def test_change_into_make_rejected(client, token, sam, sing_app):
 def test_change_other_device_403(client, token, sam, sing_app):
     web = _web_submit(client, token, "web-dev-x")
     resp = client.post(f"{V1}/requests/{web['id']}/change",
-                       json={"t": token, **_song("New")}, headers=bearer(sam))
+                       json={"t": token, "client_request_id": str(uuid.uuid4()), **_song("New")}, headers=bearer(sam))
     assert resp.status_code == 403
     assert assert_matches_contract(resp, "changeRequest")["error"] == "not_owner"
 

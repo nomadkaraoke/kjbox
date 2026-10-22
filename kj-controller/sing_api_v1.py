@@ -673,28 +673,48 @@ _CHANGE_FIELDS = ("source_type", "source_ref", "source_meta", "song_artist", "so
 def change_request(id):  # noqa: A002 — the contract's path parameter is {id}
     req_id = id
     store = current_app.sing_store
-    req = owned_request_or_error(req_id)
-    if isinstance(req, Response):
-        return req
-    entry_status = _linked_entry_status(req)
-    if entry_status in ("done", "left"):
-        return v1_error("already_sung", 409)
-    if entry_status == "now singing":
-        return v1_error("on_stage", 409)
     body = _json_body()
-    fields = {k: body[k] for k in _CHANGE_FIELDS if k in body}
-    fields["edit_token"] = req.get("edit_token")
-    result, status = delegate(
-        sing.change_request, method="POST", path=f"/sing/requests/{req_id}/change",
-        json=fields, device_id=req["device_id"], view_args={"req_id": req_id})
-    if status != 200 or not isinstance(result.get("request"), dict):
-        return map_web_error(result, status, req["device_id"])
-    new = result["request"]
-    friend = store.is_friend_request(req_id)
-    if friend and new.get("id") != req_id:
-        store.mark_friend_request(new["id"], new.get("singer_name") or "")
-    return v1_json({"request": _request_view(new, friend),
-                    "auto_approved": bool(result.get("auto_approved"))})
+    raw_cid = body.get("client_request_id")
+    try:
+        cid = str(uuid.UUID(raw_cid)) if isinstance(raw_cid, str) else None
+    except ValueError:
+        cid = None
+    if not cid:
+        return v1_error("invalid", 400, "client_request_id (a UUID) is required")
+    # A retry after the change took effect finds the original already
+    # superseded, so the replay (inside idempotent_call) comes before any check
+    # on the request's current state.
+    key = f"change:{g.app_user.device_id}:{cid}"
+
+    def work():
+        req = owned_request_or_error(req_id)
+        if isinstance(req, Response):
+            return req
+        entry_status = _linked_entry_status(req)
+        if entry_status in ("done", "left"):
+            return v1_error("already_sung", 409)
+        if entry_status == "now singing":
+            return v1_error("on_stage", 409)
+        fields = {k: body[k] for k in _CHANGE_FIELDS if k in body}
+        fields["edit_token"] = req.get("edit_token")
+        result, status = delegate(
+            sing.change_request, method="POST", path=f"/sing/requests/{req_id}/change",
+            json=fields, device_id=req["device_id"], view_args={"req_id": req_id})
+        if status != 200 or not isinstance(result.get("request"), dict):
+            return map_web_error(result, status, req["device_id"])
+        new = result["request"]
+        friend = store.is_friend_request(req_id)
+
+        def build():
+            return {"request": _request_view(new, friend),
+                    "auto_approved": bool(result.get("auto_approved"))}
+
+        def after():
+            if friend and new.get("id") != req_id:
+                store.mark_friend_request(new["id"], new.get("singer_name") or "")
+        return build, after
+
+    return idempotent_call(store, key, work)
 
 
 # --- POST /requests/reorder --------------------------------------------------
