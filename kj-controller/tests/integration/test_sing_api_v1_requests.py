@@ -463,6 +463,20 @@ def test_submit_survives_post_processing_failure(client, token, sam, sing_app, m
     assert len(sing_app.sing_store.list_requests()) == 1
 
 
+def test_submit_payload_build_failure_keeps_claim(client, token, sam, sing_app, monkeypatch):
+    """If shaping the response raises after the web created the request, the
+    claim stays pending: the retry is busy_retry and exactly one request exists."""
+    import sing_api_v1
+
+    def boom(*a, **k):
+        raise RuntimeError("shape failed")
+    monkeypatch.setattr(sing_api_v1, "_request_view", boom)
+    cid = str(uuid.uuid4())
+    _expect(_submit(client, sam, token, cid=cid, **_song()), "createRequest", 500, "internal")
+    _expect(_submit(client, sam, token, cid=cid, **_song()), "createRequest", 409, "busy_retry")
+    assert len(sing_app.sing_store.list_requests()) == 1
+
+
 def test_signin_required_is_not_unauthenticated(client, token, sam):
     import sing_api_v1
     with client.application.test_request_context("/sing/api/v1/requests"):

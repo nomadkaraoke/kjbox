@@ -478,3 +478,15 @@ def test_entry_preview_resolves_for_linked_entry(client, token, sam, sing_app, t
                    "resolvePreview", 200)
     assert body["mode"] == "native_video" and "stream_url" in body
     assert sing_app.preview.descriptors[0]["file_path"] == str(f)
+
+
+def test_tip_payload_build_failure_keeps_claim(client, token, sam, sing_app, monkeypatch):
+    import sing_api_v1
+
+    def boom(*a, **k):
+        raise RuntimeError("shape failed")
+    monkeypatch.setattr(sing_api_v1, "_request_view", boom)
+    body = _tip(t=token, amount=5)
+    _post(client, sam, "/tips/claim", "claimTip", body, status=500)
+    _post(client, sam, "/tips/claim", "claimTip", body, status=409)
+    assert len([r for r in sing_app.sing_store.list_requests() if r["source_type"] == "tip"]) == 1

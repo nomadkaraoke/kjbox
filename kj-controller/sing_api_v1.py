@@ -525,11 +525,12 @@ def idempotent_call(store, key, work):
     """Run ``work()`` at most once per idempotency ``key`` (A4-R1 claim).
 
     ``work`` returns an error ``Response`` (the claim is released so a retry can
-    run) or ``(payload, after)``: the success payload, stored as the replayable
-    200 response, and an optional ``after()`` run once it is stored. A stored
-    response is replayed; a claim held by another attempt gives 409 busy_retry.
-    Once ``work`` succeeds the claim is never released, so a failure in the
-    bookkeeping can't let a retry duplicate the effect.
+    run) or ``(build, after)``: ``build()`` makes the success payload, stored as
+    the replayable 200 response, and ``after()`` is optional bookkeeping. The
+    claim is marked done as soon as ``work`` returns (the effect exists), BEFORE
+    ``build``/``after`` run, so a failure there can never release the claim and
+    let a retry duplicate the effect; the claim then stays pending until its
+    TTL (retries get busy_retry) and this call answers 500 internal.
     """
     stored = store.idempotent_get(key)
     if stored is not None:
@@ -546,16 +547,20 @@ def idempotent_call(store, key, work):
         if isinstance(out, Response):
             return out
         done = True
-        payload, after = out
+        build, after = out
+        payload = None
         try:
+            payload = build()
             store.idempotent_put(key, {"status": 200, "body": payload})
         except Exception:
-            logger.exception("v1: storing the idempotent response failed")
+            logger.exception("v1: building or storing the idempotent response failed")
         if after is not None:
             try:
                 after()
             except Exception:
                 logger.exception("v1: post-processing after an idempotent call failed")
+        if payload is None:
+            return v1_error("internal", 500)
         return v1_json(payload)
     finally:
         if not done:
@@ -600,13 +605,15 @@ def create_request():
         if status != 200 or not isinstance(result.get("request"), dict):
             return map_web_error(result, status, device)
         req = result["request"]
-        payload = {"request": _request_view(req, for_friend),
-                   "auto_approved": bool(result.get("auto_approved"))}
+
+        def build():
+            return {"request": _request_view(req, for_friend),
+                    "auto_approved": bool(result.get("auto_approved"))}
 
         def after():
             if for_friend:
                 store.mark_friend_request(req["id"], singer_name)
-        return payload, after
+        return build, after
 
     return idempotent_call(store, key, work)
 
@@ -1372,7 +1379,7 @@ def claim_tip():
                                   json=payload)
         if status != 200 or not isinstance(result.get("request"), dict):
             return _read_error(result, status, _TIP_WINDOW_S)
-        return {"request": _request_view(result["request"], False)}, None
+        return (lambda: {"request": _request_view(result["request"], False)}), None
 
     return idempotent_call(store, key, work)
 
