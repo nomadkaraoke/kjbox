@@ -7,6 +7,7 @@ def test_rapidfuzz_importable():
 
 
 from text_normalize import (
+    fts_skeleton_query, is_vowel_dropped, skeleton_alternative, tokens_match_skeleton,
     normalize, identity_normalize, tokens, fts_match_query, group_key, result_group_key,
     LATIN_SPECIAL_MAP, ABBREV_MAP, NUMBER_WORDS, ROMAN_NUMERALS,
     NORMALIZER_VERSION,
@@ -155,6 +156,21 @@ class TestQueryAndGroupKey:
         assert group_key("Simon & Garfunkel", "The Sound of Silence") == \
             "simon and garfunkel|||the sound of silence"
 
+    def test_fts_skeleton_query(self):
+        # Each word as typed OR vowel-dropped; run as a filtered supplement.
+        assert fts_skeleton_query("thanks for the memories") == (
+            '("thanks" OR "thnks") AND ("for" OR "fr") AND ("the" OR "th") '
+            'AND ("memories"* OR "mmrs"*)')
+        # A 2-letter dropped form is never a prefix.
+        assert fts_skeleton_query("crazy little love") == (
+            '("crazy" OR "crzy") AND ("little" OR "lttl") AND ("love"* OR "lv")')
+
+    def test_fts_skeleton_query_needs_two_strong_words(self):
+        # Real singer queries that a looser per-word expansion turned into noise.
+        for q in ("the marias", "the world", "mac dem", "ken ash",
+                  "may king cole", "love", "Thnks fr th Mmrs"):
+            assert fts_skeleton_query(q) == "", q
+
     def test_fts_single_token_prefix(self):
         assert fts_match_query("jovi") == '"jovi"*'
 
@@ -227,3 +243,23 @@ class TestJoinedForms:
     def test_search_index_version_extends_normalizer_version(self):
         from text_normalize import SEARCH_INDEX_VERSION
         assert SEARCH_INDEX_VERSION.startswith(f"{NORMALIZER_VERSION}.")
+
+
+class TestVowelDropped:
+    def test_skeleton_alternative(self):
+        assert skeleton_alternative("memories") == "mmrs"
+        assert skeleton_alternative("mmrs") is None   # already bare
+        assert skeleton_alternative("you") is None    # 1 letter left
+        assert skeleton_alternative("21") is None
+
+    def test_is_vowel_dropped(self):
+        assert is_vowel_dropped("thnks fr th mmrs")
+        assert not is_vowel_dropped("thanks for the memories")
+        assert not is_vowel_dropped("my way")        # y counts as a vowel here
+        assert not is_vowel_dropped("mmrs")          # one word: no signal
+
+    def test_tokens_match_skeleton(self):
+        q = ["fall", "out", "boy", "thanks", "for", "the", "memor"]
+        sk = ["fll", "out", "by", "thnks", "fr", "th", "mmr"]
+        assert tokens_match_skeleton(q, sk, "fall out boy thnks fr th mmrs".split())
+        assert not tokens_match_skeleton(q, sk, "fall out boy thnks fr th".split())

@@ -37,6 +37,8 @@ from text_normalize import (
     normalize as _normalize,
     joined_forms as _joined_forms,
     fts_match_query as _fts5_safe_query,
+    fts_skeleton_query as _fts5_skeleton_query,
+    is_vowel_dropped as _is_vowel_dropped,
     SEARCH_INDEX_VERSION,
 )
 
@@ -184,20 +186,34 @@ class CatalogMirror:
             return []
         conn = self._get_conn()
 
+        # Source filter INSIDE the MATCH (column filter) — see schema note.
+        # `source` values tokenize to a phrase ("kn_full" -> "kn full").
+        sql = ("SELECT e.id, e.payload FROM entries_fts f "
+               "JOIN entries e ON f.rowid = e.id "
+               "WHERE entries_fts MATCH ? "
+               "ORDER BY rank LIMIT ?")
         try:
-            # Source filter INSIDE the MATCH (column filter) — see schema note.
-            # `source` values tokenize to a phrase ("kn_full" -> "kn full").
             rows = conn.execute(
-                "SELECT e.payload FROM entries_fts f "
-                "JOIN entries e ON f.rowid = e.id "
-                "WHERE entries_fts MATCH ? "
-                "ORDER BY rank LIMIT ?",
-                (f'({fts_query}) AND source: "{source}"', limit),
-            ).fetchall()
-            if rows:
-                return [json.loads(r["payload"]) for r in rows]
+                sql, (f'({fts_query}) AND source: "{source}"', limit)).fetchall()
         except sqlite3.Error:
             return []
+        # Vowel-dropped titles ("Thnks Fr Th Mmrs") come after the ordinary
+        # matches — same supplement as ExternalCatalog.search.
+        skel_query = _fts5_skeleton_query(normalized)
+        if skel_query:
+            seen = {r["id"] for r in rows}
+            try:
+                for r in conn.execute(
+                        sql, (f'({skel_query}) AND source: "{source}"', limit)).fetchall():
+                    if r["id"] in seen:
+                        continue
+                    title = (json.loads(r["payload"]).get("title") or "")
+                    if _is_vowel_dropped(_normalize(title)):
+                        rows.append(r)
+            except sqlite3.Error:
+                pass
+        if rows:
+            return [json.loads(r["payload"]) for r in rows]
 
         # No general LIKE stage here (unlike ExternalCatalog.search): there
         # LIKE catches raw-text punctuation divergence, but this table's

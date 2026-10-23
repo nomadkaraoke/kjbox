@@ -12,6 +12,8 @@ from text_normalize import (
     normalize as _normalize_for_search,
     index_text as _index_text,
     fts_match_query as _fts5_safe_query,
+    fts_skeleton_query as _fts5_skeleton_query,
+    is_vowel_dropped as _is_vowel_dropped,
     tokens as _query_tokens,
     LATIN_SPECIAL_MAP,  # re-export for any external importers
     NORMALIZER_VERSION,  # noqa: F401 (re-export for any external importers)
@@ -364,20 +366,30 @@ class ExternalCatalog:
             return []
 
         conn = self._get_conn()
+        sql = ("SELECT m.path, m.filename, m.folder, m.disc_id, m.artist, m.title, m.format "
+               "FROM media_fts f "
+               "JOIN media m ON f.rowid = m.id "
+               "WHERE media_fts MATCH ? "
+               "ORDER BY rank "
+               "LIMIT ? OFFSET ?")
         try:
-            rows = conn.execute(
-                "SELECT m.path, m.filename, m.folder, m.disc_id, m.artist, m.title, m.format "
-                "FROM media_fts f "
-                "JOIN media m ON f.rowid = m.id "
-                "WHERE media_fts MATCH ? "
-                "ORDER BY rank "
-                "LIMIT ? OFFSET ?",
-                (fts_query, limit, offset)
-            ).fetchall()
-            if rows:
-                return [dict(row) for row in rows]
+            rows = [dict(r) for r in conn.execute(sql, (fts_query, limit, offset)).fetchall()]
         except sqlite3.OperationalError:
-            pass
+            rows = []
+        # Vowel-dropped titles ("Thnks Fr Th Mmrs" for "thanks for the
+        # memories") come AFTER the ordinary matches (first page only), so
+        # they can't push those out of the limit.
+        skel_query = _fts5_skeleton_query(normalized) if offset == 0 else ""
+        if skel_query:
+            seen = {r["path"] for r in rows}
+            try:
+                rows += [dict(r) for r in conn.execute(sql, (skel_query, limit, 0)).fetchall()
+                         if r["path"] not in seen
+                         and _is_vowel_dropped(_normalize_for_search(r["title"] or ""))]
+            except sqlite3.OperationalError:
+                pass
+        if rows:
+            return rows
 
         # LIKE fallback: strip punctuation from query terms and match against
         # artist/title with punctuation stripped. Handles cases like

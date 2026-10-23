@@ -348,6 +348,42 @@ def _group_relevance(group, query_key):
     )
 
 
+def _merge_spelling_variants(groups):
+    """Fold groups that are one song under two spellings by the same artist.
+
+    Catalogues disagree on how a title is written: "Pawn Shop Blues" vs
+    "Pawnshop Blues", or Fall Out Boy's stylised "Thnks fr th Mmrs" vs
+    "Thanks For The Memories". Left as separate groups, a singer picks one and
+    gets only its versions — a bare instrumental, or the weakest brands —
+    while the good versions sit in the other group. Two groups merge when the
+    artist matches and the titles are equal ignoring spaces, or when one
+    title is vowel-dropped and both reduce to the same consonants. The first
+    group keeps its key; versions are re-ranked by the caller.
+    """
+    merged = {}     # key -> group, in first-seen order
+    by_spaced = {}  # (artist, spaceless title) -> key
+    by_skel = {}    # (artist, consonant skeleton) -> [(key, vowel_dropped)]
+    for key, g in groups.items():
+        artist_key, _, title_key = key.partition("|||")
+        artist_key = artist_key.replace(" ", "")
+        spaceless = title_key.replace(" ", "")
+        skel = text_normalize.consonant_skeleton(spaceless)
+        dropped = text_normalize.is_vowel_dropped(title_key)
+        target = by_spaced.get((artist_key, spaceless))
+        if target is None and skel:
+            target = next(
+                (k for k, other_dropped in by_skel.get((artist_key, skel), ())
+                 if dropped or other_dropped), None)
+        if target is not None:
+            merged[target]["versions"].extend(g["versions"])
+            continue
+        merged[key] = g
+        by_spaced[(artist_key, spaceless)] = key
+        if skel:
+            by_skel.setdefault((artist_key, skel), []).append((key, dropped))
+    return merged
+
+
 def _group_search_results(local_results, kn_results, query=None,
                           divebar_rows=None, include_disc_only=False):
     """Collapse local + KN results into one group per normalized (artist, title).
@@ -454,6 +490,8 @@ def _group_search_results(local_results, kn_results, query=None,
                 "song_title": title,
             },
         })
+
+    groups = _merge_spelling_variants(groups)
 
     try:
         cfg = current_app.kj_config
@@ -5439,6 +5477,9 @@ def unified_search(query, app, *, grouped=False, local_only=False,
     query_terms_clean = _tokens(query)
     norm_query = _normalize_text(query)
     q_sig = fuzzy_match.significant_tokens(norm_query)
+    # Vowel-dropped titles ("thanks for the memories" -> "Thnks fr th Mmrs"),
+    # the same supplement the catalog FTS search runs (text_normalize.fts_skeleton_query).
+    skeleton_toks = text_normalize.skeleton_query_tokens(query_terms_clean)
     fuzzy_hits = []  # (overlap, score, path, entry) for the typo-tolerant pass
     # list(): download-worker threads insert/delete index entries concurrently;
     # iterating the live dict can raise "dictionary changed size" mid-search.
@@ -5451,6 +5492,12 @@ def unified_search(query, app, *, grouped=False, local_only=False,
         # the fuzzy pass keeps comparing against the plain normalized text.
         haystack = " ".join([searchable] + text_normalize.joined_forms(searchable))
         if query_terms_clean and all(term in haystack for term in query_terms_clean):
+            local_results.append(_build_local_media_row(app, path, entry))
+        elif (skeleton_toks
+              and text_normalize.is_vowel_dropped(
+                  _normalize_text(entry.get("title") or searchable))
+              and text_normalize.tokens_match_skeleton(
+                  query_terms_clean, skeleton_toks, haystack.split())):
             local_results.append(_build_local_media_row(app, path, entry))
         else:
             fz = fuzzy_match.score(norm_query, searchable, q_sig=q_sig)

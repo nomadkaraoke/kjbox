@@ -182,6 +182,77 @@ def index_text(text):
     return n + ' ' + ' '.join(extra) if extra else n
 
 
+_VOWEL_RE = re.compile('[aeiou]')
+_VOWEL_Y_RE = re.compile('[aeiouy]')
+
+
+def consonant_skeleton(token):
+    """``token`` with its vowels (a/e/i/o/u) dropped: "memories" -> "mmrs"."""
+    return _VOWEL_RE.sub('', token)
+
+
+def skeleton_alternative(token):
+    """The vowel-dropped spelling a title might use for ``token``, or None.
+
+    Some real titles are stylised without vowels — Fall Out Boy's "Thnks fr
+    th Mmrs" — so a singer typing "thanks for the memories" must also match
+    "thnks fr th mmrs". None when dropping vowels changes nothing or leaves
+    fewer than 2 letters (too little signal to search on).
+    """
+    s = consonant_skeleton(token)
+    if len(s) < 2 or s == token:
+        return None
+    return s
+
+
+# A vowel-dropped query needs this many words that drop to 3+ letters: fewer
+# turns ordinary queries into noise ("the marias" -> "th mrs" ~ "Mrs. O").
+_SKELETON_MIN_WORDS = 2
+
+
+def skeleton_query_tokens(toks):
+    """Each query word's vowel-dropped form, or None when the query is not
+    worth a vowel-dropped search.
+
+    "thanks for the memories" -> ["thnks", "fr", "th", "mmrs"]. At least
+    ``_SKELETON_MIN_WORDS`` words must drop to 3+ letters, so short or
+    ordinary queries never expand. Matching accepts each word as typed OR
+    dropped (artists aren't stylised: "fall out boy thnks fr th mmrs").
+    """
+    sk = [skeleton_alternative(t) or t for t in toks]
+    strong = sum(1 for t, s in zip(toks, sk) if s != t and len(s) >= 3)
+    if strong < _SKELETON_MIN_WORDS:
+        return None
+    return sk
+
+
+def tokens_match_skeleton(toks, skel_toks, hay_tokens):
+    """True when every query word is in ``hay_tokens`` as typed or
+    vowel-dropped (the last word may be a typed-so-far prefix; a dropped form
+    only when it has 3+ letters)."""
+    last = len(toks) - 1
+    for i, (t, s) in enumerate(zip(toks, skel_toks)):
+        if i == last:
+            forms = [t] + ([s] if s != t and len(s) >= 3 else [])
+            ok = any(w.startswith(f) for f in forms for w in hay_tokens) \
+                or s in hay_tokens
+        else:
+            ok = t in hay_tokens or s in hay_tokens
+        if not ok:
+            return False
+    return True
+
+
+def is_vowel_dropped(norm_text):
+    """True when most words of ``norm_text`` have no vowels at all
+    ("thnks fr th mmrs") — a stylised spelling, not ordinary words."""
+    words = [w for w in norm_text.split() if len(w) >= 2 and w.isalpha()]
+    if len(words) < 2:
+        return False
+    bare = sum(1 for w in words if not _VOWEL_Y_RE.search(w))
+    return bare * 2 > len(words)
+
+
 def fts_match_query(text):
     """Build an FTS5-safe MATCH string from canonical tokens.
 
@@ -193,6 +264,31 @@ def fts_match_query(text):
     quoted = [f'"{t}"' for t in toks[:-1]]
     quoted.append(f'"{toks[-1]}"*')
     return ' '.join(quoted)
+
+
+def fts_skeleton_query(text):
+    """FTS5 MATCH string for ``text`` with vowel-dropped word forms, or "".
+
+    Run as a SUPPLEMENTARY search after ``fts_match_query``, keeping only rows
+    whose title ``is_vowel_dropped``: a stylised title (Fall Out Boy's "Thnks
+    fr th Mmrs") is found from the ordinary spelling, and ordinary titles that
+    merely share a dropped form ("mrs") never sneak in or reorder the results.
+    """
+    toks = tokens(text)
+    sk = skeleton_query_tokens(toks)
+    if not sk:
+        return ""
+    last = len(toks) - 1
+    terms = []
+    for i, (t, s) in enumerate(zip(toks, sk)):
+        star = '*' if i == last else ''
+        term = f'"{t}"{star}'
+        if s != t:
+            # A 2-letter dropped form as a prefix ("lv"*) matches too much.
+            term = f'({term} OR "{s}"{star if len(s) >= 3 else ""})'
+        terms.append(term)
+    # FTS5 only implies AND between bare phrases, not around an OR group.
+    return ' AND '.join(terms)
 
 
 def group_key(artist, title):

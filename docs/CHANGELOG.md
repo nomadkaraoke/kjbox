@@ -2,6 +2,26 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-10-22 - Search finds both spellings of a title and offers them as one song (v0.135.1)
+
+- Two songs at tonight's show went wrong because catalogues spell their titles two ways.
+  - **Fall Out Boy "Thnks fr th Mmrs".** "thanks for the memories" found only the NM/SD discs. The SF,
+    ASK, Zoom, Sound Choice and Sing King versions are all titled without vowels, so the KJ pick played a
+    poor version.
+  - **Lana Del Rey "Pawn Shop Blues".** "Pawn Shop Blues" and "Pawnshop Blues" were two separate songs.
+    The singer picked the first, which held only a bare instrumental (no lyrics). The lyric video was in
+    the other one.
+- **Search:** after the normal search, a multi-word query runs a supplementary search where each word may
+  also appear without its vowels (`text_normalize.fts_skeleton_query`). This covers the catalog FTS, the
+  mirror FTS and the downloads scan. The supplement only keeps rows whose own title is vowel-dropped
+  (`is_vowel_dropped`), and it is appended after the normal results, so normal ranking is unchanged. It
+  needs at least 2 words that drop to 3+ letters. A looser per-word version was replayed against 600 real
+  singer queries on the NomadPC and rejected: "The Marias" matched "Mrs.", "Mariah Carey" matched "Cry"
+  and "Mac Dem" matched Run-D.M.C.
+- **Grouping:** `routes._merge_spelling_variants` folds groups by the same artist into one song when the titles
+  are equal ignoring spaces, or when one title is vowel-dropped and both have the same consonants. The best
+  version of the merged song is then picked across both spellings.
+
 ## 2026-10-22 - NomadPC config: history sync to decide + Android app-link fingerprint
 
 - `kj-controller/config.json` on NomadPC gained `decide_api_url` (`https://decide.nomadkaraoke.com`),
