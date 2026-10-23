@@ -3453,9 +3453,19 @@ function initColumnResizer() {
     const resizer = document.getElementById('column-resizer');
     if (!layout || !resizer) return;
 
-    let saved = null;
-    try { saved = parseFloat(localStorage.getItem('kj-col1-share')); } catch (e) { /* private mode */ }
-    if (saved > 0 && saved < 1) applyColShare(saved);
+    // The saved preference is kept as-is; what's applied is re-clamped to the
+    // current width (on load and on window resize) so neither column drops
+    // below its minimum when the window narrows.
+    let preferred = null;
+    try { preferred = parseFloat(localStorage.getItem('kj-col1-share')); } catch (e) { /* private mode */ }
+    if (!(preferred > 0 && preferred < 1)) preferred = null;
+    const applyPreferred = () => {
+        if (preferred == null) return;
+        const total = columnsWidth();
+        if (total > 0) applyColShare(clampColShare(preferred, total));
+    };
+    applyPreferred();
+    window.addEventListener('resize', applyPreferred);
 
     resizer.addEventListener('pointerdown', (e) => {
         if (e.button !== 0) return;
@@ -3476,7 +3486,7 @@ function initColumnResizer() {
             resizer.removeEventListener('pointerup', onUp);
             resizer.removeEventListener('pointercancel', onUp);
             document.body.classList.remove('col-resizing');
-            if (share != null) saveColShare(share);
+            if (share != null) { preferred = share; saveColShare(share); }
         };
         resizer.addEventListener('pointermove', onMove);
         resizer.addEventListener('pointerup', onUp);
@@ -3484,6 +3494,7 @@ function initColumnResizer() {
     });
 
     resizer.addEventListener('dblclick', () => {
+        preferred = null;
         applyColShare(null);
         saveColShare(null);
     });
@@ -3495,6 +3506,7 @@ function initColumnResizer() {
         const current = parseFloat(resizer.getAttribute('aria-valuenow')) / 100 || COL_SHARE_DEFAULT;
         const share = clampColShare(current + (e.key === 'ArrowRight' ? 0.02 : -0.02), total);
         applyColShare(share);
+        preferred = share;
         saveColShare(share);
     });
 }

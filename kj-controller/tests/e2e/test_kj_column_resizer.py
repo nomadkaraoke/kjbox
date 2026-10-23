@@ -55,6 +55,18 @@ class TestColumnResizer:
         _, col2 = _col_widths(page)
         assert col2 >= 255
 
+    def test_saved_split_is_reclamped_when_window_narrows(self, desktop_page):
+        page = desktop_page
+        page.evaluate("localStorage.setItem('kj-col1-share', '0.8')")
+        page.reload()
+        page.wait_for_load_state("networkidle")
+        page.set_viewport_size({"width": 900, "height": 900})
+        page.wait_for_timeout(100)
+        _, col2 = _col_widths(page)
+        assert col2 >= 255
+        # The preference itself is kept for when the window widens again.
+        assert page.evaluate("localStorage.getItem('kj-col1-share')") == '0.8'
+
     def test_double_click_resets(self, desktop_page):
         page = desktop_page
         box = page.locator('#column-resizer').bounding_box()
