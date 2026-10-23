@@ -2366,6 +2366,75 @@ def change_request(req_id):
         **_public_request_view(new_req), "edit_token": edit_token}})
 
 
+@sing_bp.route("/requests/<int:req_id>/singers", methods=["POST"])
+def edit_request_singers(req_id):
+    """Singer adds/removes duet partners on their own request (edit_token-gated).
+
+    Body: ``{edit_token, additional_singers: [{name, phone?}, ...]}`` — the
+    full new partner list (``[]`` = solo). Pending → stored on the request.
+    Approved → also rewrites the queued rotation entry's singers in place, so
+    the song keeps its slot (no KJ approval: who sings it is the singer's call,
+    and the KJ sees the change on the rotation row and can undo it)."""
+    store = getattr(current_app, "sing_store", None)
+    if store is None:
+        return jsonify({"error": "not_configured"}), 503
+    if _singer_rate_limited(request):
+        return jsonify({"error": "rate_limited"}), 429
+    token = _extract_token()
+    if not token or not _is_token_valid(store, token):
+        return jsonify({"error": "not_open"}), 403
+    req = store.get_request(req_id)
+    if req is None or req.get("token") != token or not _belongs_to_current_night(store, req):
+        return jsonify({"error": "not_found"}), 404
+    data = request.get_json(silent=True) or {}
+    stored = req.get("edit_token") or ""
+    if not stored or not secrets.compare_digest(str(data.get("edit_token") or ""), str(stored)):
+        return jsonify({"error": "forbidden"}), 403
+    if req["status"] not in ("pending", "approved"):
+        return jsonify({"error": f"cannot change a {req['status']} request"}), 409
+    if req["source_type"] == "reorder":
+        return jsonify({"error": "not a song request"}), 400
+    if "additional_singers" not in data:
+        return jsonify({"error": "additional_singers is required"}), 400
+    partners, err = _validate_additional_singers(data.get("additional_singers"))
+    if err:
+        return jsonify({"error": err}), 400
+    partners = partners or []
+
+    entry = None
+    rotation = getattr(current_app, "rotation", None)
+    if req["status"] == "approved" and req.get("linked_entry_id") and rotation is not None:
+        entry = rotation.store.get_entry(req["linked_entry_id"])
+        # Same guards as cancel/change: a performed song is history, and
+        # rewriting who sang it would corrupt tonight's sung-counts.
+        if entry and (entry.get("status") or "").lower() in ("done", "left"):
+            return jsonify({"error": "already_sung"}), 409
+
+    # The entry's own primary wins over the request's: the KJ may have
+    # renamed the singer since the request went in.
+    members = _entry_members(entry) if entry else []
+    primary = members[0] if members else req["singer_name"]
+    partners = _canonicalize_partners(current_app._get_current_object(), partners, primary)
+    # Drop the singer themselves and repeats — a duet with yourself is a typo.
+    seen = {_fold_name(primary)}
+    deduped = []
+    for p in partners:
+        key = _fold_name(p["name"])
+        if key and key not in seen:
+            seen.add(key)
+            deduped.append(p)
+
+    # Rotation first: if that fails, the request still matches what the KJ sees.
+    if entry is not None:
+        try:
+            rotation.update_entry(entry["id"], singers=[primary] + [p["name"] for p in deduped])
+        except Exception:
+            current_app.logger.exception("edit-singers: rotation entry update failed")
+            return jsonify({"error": "update_failed"}), 500
+    updated = store.update_request(req_id, additional_singers=deduped)
+    return jsonify({"success": True, "request": _public_request_view(updated)})
+
+
 @sing_bp.route("/requests/reorder", methods=["POST"])
 def reorder_requests():
     """Singer reorders their OWN approved songs. Creates a pending 'reorder'

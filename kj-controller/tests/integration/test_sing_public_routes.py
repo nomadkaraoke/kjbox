@@ -904,6 +904,99 @@ class TestChangeSong:
         assert len(stored["versions"]) == 50
 
 
+class TestEditSingers:
+    def _body(self, **o):
+        b = {"singer_name": "Martina", "phone": "", "song_artist": "Rihanna",
+             "song_title": "Stay", "source_type": "local", "source_ref": "/x.mp4"}
+        b.update(o); return b
+
+    def _edit(self, client, token, r, partners, edit_token=None):
+        return client.post(f"/sing/requests/{r['id']}/singers?t={token}", json={
+            "edit_token": edit_token if edit_token is not None else r["edit_token"],
+            "additional_singers": partners})
+
+    def test_requires_edit_token(self, client, sing_app, token):
+        r = client.post(f"/sing/submit?t={token}", json=self._body()).get_json()["request"]
+        assert self._edit(client, token, r, [{"name": "Spider S"}], edit_token="nope").status_code == 403
+        assert sing_app.sing_store.get_request(r["id"])["additional_singers"] is None
+
+    def test_pending_adds_partner(self, client, sing_app, token):
+        r = client.post(f"/sing/submit?t={token}", json=self._body()).get_json()["request"]
+        resp = self._edit(client, token, r, [{"name": "Spider S"}])
+        assert resp.status_code == 200
+        assert [p["name"] for p in resp.get_json()["request"]["additional_singers"]] == ["Spider S"]
+        got = sing_app.sing_store.get_request(r["id"])
+        assert got["status"] == "pending"
+        assert [p["name"] for p in got["additional_singers"]] == ["Spider S"]
+
+    def test_approved_rewrites_rotation_entry_in_place(self, client, sing_app, token):
+        sing_app.sing_store.set_auto_approve(True)
+        r = client.post(f"/sing/submit?t={token}", json=self._body()).get_json()["request"]
+        client.post(f"/sing/submit?t={token}", json=self._body(singer_name="Bob", source_ref="/b.mp4"))
+        entry_id = sing_app.sing_store.get_request(r["id"])["linked_entry_id"]
+        before = sing_app.rotation.store.get_entry(entry_id)
+        assert self._edit(client, token, r, [{"name": "Spider S"}]).status_code == 200
+        entry = sing_app.rotation.store.get_entry(entry_id)
+        assert entry["singer"] == "Martina & Spider S"
+        assert json.loads(entry["singers_json"]) == ["Martina", "Spider S"]
+        assert entry["position"] == before["position"]  # keeps its slot
+        assert sing_app.sing_store.get_request(r["id"])["status"] == "approved"
+
+    def test_remove_all_partners_makes_it_solo(self, client, sing_app, token):
+        sing_app.sing_store.set_auto_approve(True)
+        r = client.post(f"/sing/submit?t={token}", json=self._body(
+            additional_singers=[{"name": "Spider S"}])).get_json()["request"]
+        entry_id = sing_app.sing_store.get_request(r["id"])["linked_entry_id"]
+        assert sing_app.rotation.store.get_entry(entry_id)["singer"] == "Martina & Spider S"
+        assert self._edit(client, token, r, []).status_code == 200
+        assert sing_app.rotation.store.get_entry(entry_id)["singer"] == "Martina"
+        assert sing_app.sing_store.get_request(r["id"])["additional_singers"] == []
+
+    def test_uses_kj_renamed_primary(self, client, sing_app, token):
+        sing_app.sing_store.set_auto_approve(True)
+        r = client.post(f"/sing/submit?t={token}", json=self._body()).get_json()["request"]
+        entry_id = sing_app.sing_store.get_request(r["id"])["linked_entry_id"]
+        sing_app.rotation.update_entry(entry_id, singer="Martina G")
+        self._edit(client, token, r, [{"name": "Spider S"}])
+        assert sing_app.rotation.store.get_entry(entry_id)["singer"] == "Martina G & Spider S"
+
+    def test_drops_self_and_duplicates(self, client, sing_app, token):
+        r = client.post(f"/sing/submit?t={token}", json=self._body()).get_json()["request"]
+        resp = self._edit(client, token, r, [{"name": "martina"}, {"name": "Spider S"}, {"name": "spider s"}])
+        assert [p["name"] for p in resp.get_json()["request"]["additional_singers"]] == ["Spider S"]
+
+    def test_canonicalizes_to_known_singer(self, client, sing_app, token):
+        client.post(f"/sing/submit?t={token}", json=self._body(singer_name="Sarah B.", source_ref="/s.mp4"))
+        r = client.post(f"/sing/submit?t={token}", json=self._body()).get_json()["request"]
+        resp = self._edit(client, token, r, [{"name": "sarah"}])
+        assert [p["name"] for p in resp.get_json()["request"]["additional_singers"]] == ["Sarah B."]
+
+    def test_validation_errors(self, client, token):
+        r = client.post(f"/sing/submit?t={token}", json=self._body()).get_json()["request"]
+        assert client.post(f"/sing/requests/{r['id']}/singers?t={token}",
+                           json={"edit_token": r["edit_token"]}).status_code == 400
+        assert self._edit(client, token, r, "Spider").status_code == 400
+        assert self._edit(client, token, r, [{"name": f"P{i}"} for i in range(4)]).status_code == 400
+
+    def test_after_sung_is_409(self, client, sing_app, token):
+        sing_app.sing_store.set_auto_approve(True)
+        r = client.post(f"/sing/submit?t={token}", json=self._body()).get_json()["request"]
+        entry_id = sing_app.sing_store.get_request(r["id"])["linked_entry_id"]
+        sing_app.rotation.update_status(entry_id, "Done")
+        assert self._edit(client, token, r, [{"name": "Spider S"}]).status_code == 409
+        assert sing_app.rotation.store.get_entry(entry_id)["singer"] == "Martina"
+
+    def test_cancelled_is_409(self, client, token):
+        r = client.post(f"/sing/submit?t={token}", json=self._body()).get_json()["request"]
+        client.post(f"/sing/requests/{r['id']}/cancel?t={token}", json={"edit_token": r["edit_token"]})
+        assert self._edit(client, token, r, [{"name": "Spider S"}]).status_code == 409
+
+    def test_unknown_id_404(self, client, token):
+        resp = client.post(f"/sing/requests/999999/singers?t={token}",
+                           json={"edit_token": "x", "additional_singers": []})
+        assert resp.status_code == 404
+
+
 class TestReorder:
     def _approved(self, client, sing_app, token, title):
         sing_app.sing_store.set_auto_approve(True)
