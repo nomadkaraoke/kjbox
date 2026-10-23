@@ -2,6 +2,15 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-10-22 - KJ UI: drag-resizable columns + wrapping rotation song titles (v0.136.0)
+
+- The line between the two KJ columns is now a drag handle (`#column-resizer`): drag to widen the
+  left/main column, double-click to reset to 2:1, arrow keys nudge it when focused. The split is
+  saved per browser (`localStorage` `kj-col1-share`); the left column keeps at least 520px and the
+  right at least 260px. Hidden on mobile (single-column layout).
+- Rotation song titles wrap instead of being cut off with "…". When the left column is narrow, the
+  action buttons wrap below the singer/song info, and the song drops to its own line inside it.
+
 ## 2026-10-22 - NomadPC config: history sync to decide + Android app-link fingerprint
 
 - `kj-controller/config.json` on NomadPC gained `decide_api_url` (`https://decide.nomadkaraoke.com`),
