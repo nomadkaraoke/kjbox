@@ -12,6 +12,9 @@ from text_normalize import (
     normalize as _normalize_for_search,
     index_text as _index_text,
     fts_match_query as _fts5_safe_query,
+    fts_supplement_queries as _fts5_supplement_queries,
+    SUPPLEMENT_WINDOW as _SUPPLEMENT_WINDOW,
+    supplement_row_ok as _supplement_row_ok,
     tokens as _query_tokens,
     LATIN_SPECIAL_MAP,  # re-export for any external importers
     NORMALIZER_VERSION,  # noqa: F401 (re-export for any external importers)
@@ -364,20 +367,40 @@ class ExternalCatalog:
             return []
 
         conn = self._get_conn()
+        sql = ("SELECT m.path, m.filename, m.folder, m.disc_id, m.artist, m.title, m.format "
+               "FROM media_fts f "
+               "JOIN media m ON f.rowid = m.id "
+               "WHERE media_fts MATCH ? "
+               "ORDER BY rank "
+               "LIMIT ? OFFSET ?")
         try:
-            rows = conn.execute(
-                "SELECT m.path, m.filename, m.folder, m.disc_id, m.artist, m.title, m.format "
-                "FROM media_fts f "
-                "JOIN media m ON f.rowid = m.id "
-                "WHERE media_fts MATCH ? "
-                "ORDER BY rank "
-                "LIMIT ? OFFSET ?",
-                (fts_query, limit, offset)
-            ).fetchall()
-            if rows:
-                return [dict(row) for row in rows]
+            rows = [dict(r) for r in conn.execute(sql, (fts_query, limit, offset)).fetchall()]
         except sqlite3.OperationalError:
-            pass
+            rows = []
+        # Other spellings of the title — vowel-dropped ("Thnks Fr Th Mmrs" for
+        # "thanks for the memories") or joined ("Pawnshop" for "pawn shop") —
+        # come AFTER the ordinary matches (first page only), so they can't
+        # push those out of the limit.
+        if offset == 0:
+            seen = {r["path"] for r in rows}
+            for match, dropped_only in _fts5_supplement_queries(normalized):
+                added = 0
+                try:
+                    # Over-fetch: the title filter runs after the SQL LIMIT.
+                    cands = conn.execute(sql, (match, max(limit * 5, _SUPPLEMENT_WINDOW), 0)).fetchall()
+                except sqlite3.OperationalError:
+                    continue
+                for r in cands:
+                    if added >= limit:
+                        break
+                    if r["path"] in seen or not _supplement_row_ok(
+                            normalized, r["artist"], r["title"], dropped_only):
+                        continue
+                    seen.add(r["path"])
+                    rows.append(dict(r))
+                    added += 1
+        if rows:
+            return rows
 
         # LIKE fallback: strip punctuation from query terms and match against
         # artist/title with punctuation stripped. Handles cases like

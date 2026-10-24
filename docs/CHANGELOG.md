@@ -2,6 +2,32 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-10-22 - Search finds both spellings of a title and offers them as one song (v0.135.1)
+
+- Two songs at tonight's show went wrong because catalogues spell their titles two ways.
+  - **Fall Out Boy "Thnks fr th Mmrs".** "thanks for the memories" found only the NM/SD discs. The SF,
+    ASK, Zoom, Sound Choice and Sing King versions are all titled without vowels, so the KJ pick played a
+    poor version.
+  - **Lana Del Rey "Pawn Shop Blues".** "Pawn Shop Blues" and "Pawnshop Blues" were two separate songs.
+    The singer picked the first, which held only a bare instrumental (no lyrics). The lyric video was in
+    the other one.
+- **Search:** after the normal search, the catalog FTS, the mirror FTS and the downloads scan run
+  supplementary searches for other spellings of the title (`text_normalize.fts_supplement_queries`):
+  - **vowel-dropped:** each word may appear without its vowels. Kept only when the row's own title is
+    vowel-dropped, and only for queries with 2+ words that drop to 3+ letters.
+  - **joined words:** any one adjacent pair may be a single word ("pawn shop" finds "Pawnshop", "la roux"
+    finds "Laroux"). A joined last word is never prefix-matched.
+- Supplement rows are kept only when the ordinary query could not have matched them
+  (`supplement_row_ok`). They are appended after the normal results, so normal ranking is unchanged.
+- Looser versions were replayed against 600 real singer queries on the NomadPC and rejected:
+  - per-word vowel dropping: "The Marias" matched "Mrs.", "Mariah Carey" matched "Cry" and "Mac Dem"
+    matched Run-D.M.C.
+  - an unfiltered joined-word search re-added rows past the limit in 136 queries, and "Rock me" matched
+    "Rockmelons".
+- **Grouping:** `routes._merge_spelling_variants` folds groups by the same artist into one song when the titles
+  are equal ignoring spaces, or when one title is vowel-dropped and both have the same consonants. The best
+  version of the merged song is then picked across both spellings.
+
 ## 2026-10-22 - NomadPC config: history sync to decide + Android app-link fingerprint
 
 - `kj-controller/config.json` on NomadPC gained `decide_api_url` (`https://decide.nomadkaraoke.com`),

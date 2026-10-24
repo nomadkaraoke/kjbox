@@ -182,6 +182,77 @@ def index_text(text):
     return n + ' ' + ' '.join(extra) if extra else n
 
 
+_VOWEL_RE = re.compile('[aeiou]')
+_VOWEL_Y_RE = re.compile('[aeiouy]')
+
+
+def consonant_skeleton(token):
+    """``token`` with its vowels (a/e/i/o/u) dropped: "memories" -> "mmrs"."""
+    return _VOWEL_RE.sub('', token)
+
+
+def skeleton_alternative(token):
+    """The vowel-dropped spelling a title might use for ``token``, or None.
+
+    Some real titles are stylised without vowels — Fall Out Boy's "Thnks fr
+    th Mmrs" — so a singer typing "thanks for the memories" must also match
+    "thnks fr th mmrs". None when dropping vowels changes nothing or leaves
+    fewer than 2 letters (too little signal to search on).
+    """
+    s = consonant_skeleton(token)
+    if len(s) < 2 or s == token:
+        return None
+    return s
+
+
+# A vowel-dropped query needs this many words that drop to 3+ letters: fewer
+# turns ordinary queries into noise ("the marias" -> "th mrs" ~ "Mrs. O").
+_SKELETON_MIN_WORDS = 2
+
+
+def skeleton_query_tokens(toks):
+    """Each query word's vowel-dropped form, or None when the query is not
+    worth a vowel-dropped search.
+
+    "thanks for the memories" -> ["thnks", "fr", "th", "mmrs"]. At least
+    ``_SKELETON_MIN_WORDS`` words must drop to 3+ letters, so short or
+    ordinary queries never expand. Matching accepts each word as typed OR
+    dropped (artists aren't stylised: "fall out boy thnks fr th mmrs").
+    """
+    sk = [skeleton_alternative(t) or t for t in toks]
+    strong = sum(1 for t, s in zip(toks, sk) if s != t and len(s) >= 3)
+    if strong < _SKELETON_MIN_WORDS:
+        return None
+    return sk
+
+
+def tokens_match_skeleton(toks, skel_toks, hay_tokens):
+    """True when every query word is in ``hay_tokens`` as typed or
+    vowel-dropped (the last word may be a typed-so-far prefix; a dropped form
+    only when it has 3+ letters)."""
+    last = len(toks) - 1
+    for i, (t, s) in enumerate(zip(toks, skel_toks)):
+        if i == last:
+            forms = [t] + ([s] if s != t and len(s) >= 3 else [])
+            ok = any(w.startswith(f) for f in forms for w in hay_tokens) \
+                or s in hay_tokens
+        else:
+            ok = t in hay_tokens or s in hay_tokens
+        if not ok:
+            return False
+    return True
+
+
+def is_vowel_dropped(norm_text):
+    """True when most words of ``norm_text`` have no vowels at all
+    ("thnks fr th mmrs") — a stylised spelling, not ordinary words."""
+    words = [w for w in norm_text.split() if len(w) >= 2 and w.isalpha()]
+    if len(words) < 2:
+        return False
+    bare = sum(1 for w in words if not _VOWEL_Y_RE.search(w))
+    return bare * 2 > len(words)
+
+
 def fts_match_query(text):
     """Build an FTS5-safe MATCH string from canonical tokens.
 
@@ -193,6 +264,104 @@ def fts_match_query(text):
     quoted = [f'"{t}"' for t in toks[:-1]]
     quoted.append(f'"{toks[-1]}"*')
     return ' '.join(quoted)
+
+
+def fts_skeleton_query(text):
+    """FTS5 MATCH string for ``text`` with vowel-dropped word forms, or "".
+
+    Run as a SUPPLEMENTARY search after ``fts_match_query``, keeping only rows
+    whose title ``is_vowel_dropped``: a stylised title (Fall Out Boy's "Thnks
+    fr th Mmrs") is found from the ordinary spelling, and ordinary titles that
+    merely share a dropped form ("mrs") never sneak in or reorder the results.
+    """
+    toks = tokens(text)
+    sk = skeleton_query_tokens(toks)
+    if not sk:
+        return ""
+    last = len(toks) - 1
+    terms = []
+    for i, (t, s) in enumerate(zip(toks, sk)):
+        star = '*' if i == last else ''
+        term = f'"{t}"{star}'
+        if s != t:
+            # A 2-letter dropped form as a prefix ("lv"*) matches too much.
+            term = f'({term} OR "{s}"{star if len(s) >= 3 else ""})'
+        terms.append(term)
+    # FTS5 only implies AND between bare phrases, not around an OR group.
+    return ' AND '.join(terms)
+
+
+# A joined-pair supplement only joins pairs at least this long ("pawnshop"),
+# so short pairs ("aha"*) can't pull in noise.
+_JOINED_MIN_LEN = 5
+# Queries longer than this skip the joined-pair supplement (one OR branch
+# per adjacent pair).
+_JOINED_MAX_WORDS = 6
+
+
+def fts_joined_query(text):
+    """FTS5 MATCH string accepting any one adjacent word pair of ``text``
+    written as one word, or "".
+
+    The index already holds every title's joined pairs (``index_text``), so
+    "pawnshop blues" finds "Pawn Shop Blues"; this is the other direction:
+    "pawn shop blues" finds a title written "Pawnshop Blues".
+    """
+    toks = tokens(text)
+    if not 2 <= len(toks) <= _JOINED_MAX_WORDS:
+        return ""
+    branches = []
+    for i in range(len(toks) - 1):
+        joined = toks[i] + toks[i + 1]
+        if len(joined) < _JOINED_MIN_LEN:
+            continue
+        vt = toks[:i] + [joined] + toks[i + 2:]
+        # A joined LAST word is never a prefix: "rock me" -> "rockme"* would
+        # match "Rockmelons".
+        star = '' if i == len(toks) - 2 else '*'
+        quoted = [f'"{t}"' for t in vt[:-1]] + [f'"{vt[-1]}"{star}']
+        branches.append('(' + ' AND '.join(quoted) + ')')
+    return ' OR '.join(branches)
+
+
+# Candidates a caller reads per supplementary query before applying its title
+# filter: far above any real song's version count, and cheap because the
+# supplement's MATCH terms are specific.
+SUPPLEMENT_WINDOW = 50
+
+
+def fts_supplement_queries(text):
+    """Supplementary FTS searches run after the ordinary ``fts_match_query``:
+    a list of ``(match, vowel_dropped_only)``; filter their rows with
+    ``supplement_row_ok``."""
+    toks = tokens(text)
+    # Still typing a short last word ("i'm the p"): too little to search other
+    # spellings on, and a 1-2 letter prefix matches disc ids.
+    if not toks or len(toks[-1]) < 3:
+        return []
+    out = []
+    skel = fts_skeleton_query(text)
+    if skel:
+        out.append((skel, True))
+    joined = fts_joined_query(text)
+    if joined:
+        out.append((joined, False))
+    return out
+
+
+def supplement_row_ok(query, artist, title, vowel_dropped_only):
+    """Keep a supplementary-search row only when it is a genuinely different
+    spelling: the ORDINARY query can't match it (else it's just a row past
+    the ordinary search's limit, re-added), and for the vowel-dropped search
+    its title is itself vowel-dropped."""
+    if vowel_dropped_only and not is_vowel_dropped(normalize(title or "")):
+        return False
+    q = tokens(query)
+    hay = normalize(f"{artist or ''} {title or ''}").split()
+    if not q:
+        return True
+    plain = all(t in hay for t in q[:-1]) and any(w.startswith(q[-1]) for w in hay)
+    return not plain
 
 
 def group_key(artist, title):

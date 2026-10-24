@@ -37,6 +37,9 @@ from text_normalize import (
     normalize as _normalize,
     joined_forms as _joined_forms,
     fts_match_query as _fts5_safe_query,
+    fts_supplement_queries as _fts5_supplement_queries,
+    SUPPLEMENT_WINDOW as _SUPPLEMENT_WINDOW,
+    supplement_row_ok as _supplement_row_ok,
     SEARCH_INDEX_VERSION,
 )
 
@@ -184,20 +187,43 @@ class CatalogMirror:
             return []
         conn = self._get_conn()
 
+        # Source filter INSIDE the MATCH (column filter) — see schema note.
+        # `source` values tokenize to a phrase ("kn_full" -> "kn full").
+        sql = ("SELECT e.id, e.payload FROM entries_fts f "
+               "JOIN entries e ON f.rowid = e.id "
+               "WHERE entries_fts MATCH ? "
+               "ORDER BY rank LIMIT ?")
         try:
-            # Source filter INSIDE the MATCH (column filter) — see schema note.
-            # `source` values tokenize to a phrase ("kn_full" -> "kn full").
             rows = conn.execute(
-                "SELECT e.payload FROM entries_fts f "
-                "JOIN entries e ON f.rowid = e.id "
-                "WHERE entries_fts MATCH ? "
-                "ORDER BY rank LIMIT ?",
-                (f'({fts_query}) AND source: "{source}"', limit),
-            ).fetchall()
-            if rows:
-                return [json.loads(r["payload"]) for r in rows]
+                sql, (f'({fts_query}) AND source: "{source}"', limit)).fetchall()
         except sqlite3.Error:
             return []
+        # Other spellings of the title (vowel-dropped, joined words) come after
+        # the ordinary matches — same supplement as ExternalCatalog.search.
+        seen = {r["id"] for r in rows}
+        for match, dropped_only in _fts5_supplement_queries(normalized):
+            added = 0
+            try:
+                # Over-fetch: the title filter runs after the SQL LIMIT.
+                cands = conn.execute(
+                    sql, (f'({match}) AND source: "{source}"',
+                          max(limit * 5, _SUPPLEMENT_WINDOW))).fetchall()
+            except sqlite3.Error:
+                continue
+            for r in cands:
+                if added >= limit:
+                    break
+                if r["id"] in seen:
+                    continue
+                payload = json.loads(r["payload"])
+                if not _supplement_row_ok(normalized, payload.get("artist"),
+                                          payload.get("title"), dropped_only):
+                    continue
+                seen.add(r["id"])
+                rows.append(r)
+                added += 1
+        if rows:
+            return [json.loads(r["payload"]) for r in rows]
 
         # No general LIKE stage here (unlike ExternalCatalog.search): there
         # LIKE catches raw-text punctuation divergence, but this table's
