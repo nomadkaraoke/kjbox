@@ -327,13 +327,18 @@ def fts_joined_query(text):
 # Candidates a caller reads per supplementary query before applying its title
 # filter: far above any real song's version count, and cheap because the
 # supplement's MATCH terms are specific.
-SUPPLEMENT_WINDOW = 200
+SUPPLEMENT_WINDOW = 50
 
 
 def fts_supplement_queries(text):
     """Supplementary FTS searches run after the ordinary ``fts_match_query``:
     a list of ``(match, vowel_dropped_only)``; filter their rows with
     ``supplement_row_ok``."""
+    toks = tokens(text)
+    # Still typing a short last word ("i'm the p"): too little to search other
+    # spellings on, and a 1-2 letter prefix matches disc ids.
+    if not toks or len(toks[-1]) < 3:
+        return []
     out = []
     skel = fts_skeleton_query(text)
     if skel:

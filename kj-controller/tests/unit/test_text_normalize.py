@@ -7,7 +7,7 @@ def test_rapidfuzz_importable():
 
 
 from text_normalize import (
-    fts_joined_query, fts_skeleton_query, is_vowel_dropped, supplement_row_ok, skeleton_alternative, tokens_match_skeleton,
+    fts_joined_query, fts_skeleton_query, fts_supplement_queries, is_vowel_dropped, supplement_row_ok, skeleton_alternative, tokens_match_skeleton,
     normalize, identity_normalize, tokens, fts_match_query, group_key, result_group_key,
     LATIN_SPECIAL_MAP, ABBREV_MAP, NUMBER_WORDS, ROMAN_NUMERALS,
     NORMALIZER_VERSION,
@@ -286,3 +286,8 @@ class TestSupplementRowOk:
     def test_vowel_dropped_search_needs_a_stylised_title(self):
         assert not supplement_row_ok("thanks for the memories", "Someone",
                                      "Thnks For The Memories", True)
+
+
+def test_no_supplements_while_last_word_is_short():
+    assert fts_supplement_queries("im the p") == []
+    assert fts_supplement_queries("pawn shop blues")
