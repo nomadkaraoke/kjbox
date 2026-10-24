@@ -54,6 +54,20 @@ class TestCatalogVowelDropped:
         assert {SF, ASK, NM} <= paths, q
         assert OTHER not in paths
 
+    def test_stylised_rows_survive_a_small_limit(self, tmp_path):
+        # The vowel-dropped filter runs before the supplement's limit, so
+        # ordinary rows matching the looser query can't crowd it out.
+        cat = _catalog(tmp_path, [NM, HOPE, SF,
+                                  "/m/Y/Y-01 - Bing - Thanks For The Memories.zip"])
+        paths = [r["path"] for r in cat.search("thanks for the memories", limit=1)]
+        assert SF in paths
+
+    def test_spaced_query_finds_joined_title(self, tmp_path):
+        joined = "/m/Z/Z-01 - Lana Del Rey - Pawnshop Blues.zip"
+        cat = _catalog(tmp_path, ["/m/Z/Z-02 - Lana Del Rey - Pawn Shop Blues.zip",
+                                  joined, OTHER])
+        assert joined in {r["path"] for r in cat.search("pawn shop blues")}
+
     def test_single_word_query_not_expanded(self, tmp_path):
         cat = _catalog(tmp_path, ["/m/A-1 - Someone - Lv.zip",
                                   "/m/A-2 - Someone - Love.zip"])
@@ -90,6 +104,15 @@ class TestUnifiedSearch:
         result = routes.unified_search("thanks for the memories", app, grouped=False)
         assert [r["path"] for r in result["local"]] == [dl]
 
+    def test_long_artist_does_not_hide_stylised_title(self, tmp_path):
+        # The vowel-dropped check is on the parsed title, not "artist - title".
+        dl = "/downloads/Earth Wind and Fire - Thnks Fr Th Mmrs [yt-x].mp4"
+        app = types.SimpleNamespace(
+            catalog=_catalog(tmp_path, []), kj_config={},
+            media=types.SimpleNamespace(index={dl: {"filename": dl.rsplit("/", 1)[1]}}))
+        result = routes.unified_search("thanks for the memories", app, grouped=False)
+        assert [r["path"] for r in result["local"]] == [dl]
+
 
 def _local(path, artist, title):
     return {"path": path, "filename": path.rsplit("/", 1)[1],
@@ -109,6 +132,15 @@ class TestGroupMerge:
         fob = next(g for g in groups if "Fall Out Boy" in g["artist"])
         assert {v["local"]["path"] for v in fob["versions"]} == {NM, SF, ASK}
         assert {v["local"]["path"] for v in by_artist["Bob Hope"]["versions"]} == {HOPE}
+
+    def test_merged_group_ranks_as_exact_title(self):
+        # Named after its best (stylised) version, the merged song still
+        # counts as an exact match for the ordinary spelling.
+        groups = routes._group_search_results(
+            [_local(NM, "Fall Out Boy", "Thanks For The Memories"),
+             _local(SF, "Fall Out Boy", "Thnks Fr Th Mmrs")], [])
+        q = routes._normalize_song_key("", "thanks for the memories")
+        assert routes._group_relevance(groups[0], q)[0] == 2
 
     def test_spacing_variant_joins_its_song(self):
         a = "/dl/Lana Del Rey - Pawn Shop Blues [yt-a].mp4"

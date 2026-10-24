@@ -317,6 +317,13 @@ def _version_brand_keys(version):
     return keys
 
 
+def _version_title(v):
+    """The title a grouped version was listed under (local file or KN song)."""
+    if v.get("source") == "local":
+        return (v.get("local") or {}).get("title")
+    return (v.get("kn") or {}).get("song_title")
+
+
 def _group_relevance(group, query_key):
     """Sort key for singer-facing groups — higher is better.
 
@@ -331,14 +338,19 @@ def _group_relevance(group, query_key):
     version count (capped so one brand-farm song can't dominate), then
     alphabetical artist as a stable tie-break.
     """
-    title_key = _normalize_song_key("", group.get("title")) or ""
     q = query_key or ""
-    if q and title_key == q:
-        title_score = 2
-    elif q and (title_key.startswith(q) or q.startswith(title_key)):
-        title_score = 1
-    else:
-        title_score = 0
+    # A merged group (``_merge_spelling_variants``) is named after its best
+    # version, which may be the stylised spelling ("Thnks Fr Th Mmrs"); score
+    # every spelling it holds so "thanks for the memories" still counts exact.
+    titles = {group.get("title")} | {_version_title(v) for v in group.get("versions") or ()}
+    title_score = 0
+    for t in titles:
+        title_key = _normalize_song_key("", t) or ""
+        if q and title_key == q:
+            title_score = 2
+            break
+        if q and title_key and (title_key.startswith(q) or q.startswith(title_key)):
+            title_score = 1
     return (
         title_score,
         1 if group.get("in_library") else 0,
@@ -5493,12 +5505,13 @@ def unified_search(query, app, *, grouped=False, local_only=False,
         haystack = " ".join([searchable] + text_normalize.joined_forms(searchable))
         if query_terms_clean and all(term in haystack for term in query_terms_clean):
             local_results.append(_build_local_media_row(app, path, entry))
-        elif (skeleton_toks
-              and text_normalize.is_vowel_dropped(
-                  _normalize_text(entry.get("title") or searchable))
-              and text_normalize.tokens_match_skeleton(
-                  query_terms_clean, skeleton_toks, haystack.split())):
-            local_results.append(_build_local_media_row(app, path, entry))
+        elif skeleton_toks and text_normalize.tokens_match_skeleton(
+                query_terms_clean, skeleton_toks, haystack.split()):
+            # Only a stylised TITLE qualifies; check the parsed/curated title,
+            # not "artist - title" (ordinary artist words would dilute it).
+            row = _build_local_media_row(app, path, entry)
+            if text_normalize.is_vowel_dropped(_normalize_text(row.get("title") or "")):
+                local_results.append(row)
         else:
             fz = fuzzy_match.score(norm_query, searchable, q_sig=q_sig)
             if fz is not None:

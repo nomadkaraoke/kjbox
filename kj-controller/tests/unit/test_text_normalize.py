@@ -7,7 +7,7 @@ def test_rapidfuzz_importable():
 
 
 from text_normalize import (
-    fts_skeleton_query, is_vowel_dropped, skeleton_alternative, tokens_match_skeleton,
+    fts_joined_query, fts_skeleton_query, is_vowel_dropped, skeleton_alternative, tokens_match_skeleton,
     normalize, identity_normalize, tokens, fts_match_query, group_key, result_group_key,
     LATIN_SPECIAL_MAP, ABBREV_MAP, NUMBER_WORDS, ROMAN_NUMERALS,
     NORMALIZER_VERSION,
@@ -170,6 +170,12 @@ class TestQueryAndGroupKey:
         for q in ("the marias", "the world", "mac dem", "ken ash",
                   "may king cole", "love", "Thnks fr th Mmrs"):
             assert fts_skeleton_query(q) == "", q
+
+    def test_fts_joined_query(self):
+        assert fts_joined_query("pawn shop blues") == \
+            '("pawnshop" AND "blues"*) OR ("pawn" AND "shopblues"*)'
+        assert fts_joined_query("a ha") == ""       # joined pair too short
+        assert fts_joined_query("pawnshop") == ""   # one word
 
     def test_fts_single_token_prefix(self):
         assert fts_match_query("jovi") == '"jovi"*'

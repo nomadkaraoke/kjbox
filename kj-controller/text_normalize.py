@@ -291,6 +291,50 @@ def fts_skeleton_query(text):
     return ' AND '.join(terms)
 
 
+# A joined-pair supplement only joins pairs at least this long ("pawnshop"),
+# so short pairs ("aha"*) can't pull in noise.
+_JOINED_MIN_LEN = 5
+# Queries longer than this skip the joined-pair supplement (one OR branch
+# per adjacent pair).
+_JOINED_MAX_WORDS = 6
+
+
+def fts_joined_query(text):
+    """FTS5 MATCH string accepting any one adjacent word pair of ``text``
+    written as one word, or "".
+
+    The index already holds every title's joined pairs (``index_text``), so
+    "pawnshop blues" finds "Pawn Shop Blues"; this is the other direction:
+    "pawn shop blues" finds a title written "Pawnshop Blues".
+    """
+    toks = tokens(text)
+    if not 2 <= len(toks) <= _JOINED_MAX_WORDS:
+        return ""
+    branches = []
+    for i in range(len(toks) - 1):
+        joined = toks[i] + toks[i + 1]
+        if len(joined) < _JOINED_MIN_LEN:
+            continue
+        vt = toks[:i] + [joined] + toks[i + 2:]
+        quoted = [f'"{t}"' for t in vt[:-1]] + [f'"{vt[-1]}"*']
+        branches.append('(' + ' AND '.join(quoted) + ')')
+    return ' OR '.join(branches)
+
+
+def fts_supplement_queries(text):
+    """Supplementary FTS searches run after the ordinary ``fts_match_query``:
+    a list of ``(match, vowel_dropped_only)``. When ``vowel_dropped_only`` is
+    set, keep only rows whose title ``is_vowel_dropped``."""
+    out = []
+    skel = fts_skeleton_query(text)
+    if skel:
+        out.append((skel, True))
+    joined = fts_joined_query(text)
+    if joined:
+        out.append((joined, False))
+    return out
+
+
 def group_key(artist, title):
     """Deterministic (artist, title) -> collapse key for grouping results.
 

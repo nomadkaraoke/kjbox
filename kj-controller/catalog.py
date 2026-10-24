@@ -12,7 +12,7 @@ from text_normalize import (
     normalize as _normalize_for_search,
     index_text as _index_text,
     fts_match_query as _fts5_safe_query,
-    fts_skeleton_query as _fts5_skeleton_query,
+    fts_supplement_queries as _fts5_supplement_queries,
     is_vowel_dropped as _is_vowel_dropped,
     tokens as _query_tokens,
     LATIN_SPECIAL_MAP,  # re-export for any external importers
@@ -376,18 +376,28 @@ class ExternalCatalog:
             rows = [dict(r) for r in conn.execute(sql, (fts_query, limit, offset)).fetchall()]
         except sqlite3.OperationalError:
             rows = []
-        # Vowel-dropped titles ("Thnks Fr Th Mmrs" for "thanks for the
-        # memories") come AFTER the ordinary matches (first page only), so
-        # they can't push those out of the limit.
-        skel_query = _fts5_skeleton_query(normalized) if offset == 0 else ""
-        if skel_query:
+        # Other spellings of the title — vowel-dropped ("Thnks Fr Th Mmrs" for
+        # "thanks for the memories") or joined ("Pawnshop" for "pawn shop") —
+        # come AFTER the ordinary matches (first page only), so they can't
+        # push those out of the limit.
+        if offset == 0:
             seen = {r["path"] for r in rows}
-            try:
-                rows += [dict(r) for r in conn.execute(sql, (skel_query, limit, 0)).fetchall()
-                         if r["path"] not in seen
-                         and _is_vowel_dropped(_normalize_for_search(r["title"] or ""))]
-            except sqlite3.OperationalError:
-                pass
+            for match, dropped_only in _fts5_supplement_queries(normalized):
+                added = 0
+                try:
+                    # Over-fetch: the title filter runs after the SQL LIMIT.
+                    cands = conn.execute(sql, (match, limit * 5, 0)).fetchall()
+                except sqlite3.OperationalError:
+                    continue
+                for r in cands:
+                    if added >= limit:
+                        break
+                    if r["path"] in seen or (dropped_only and not _is_vowel_dropped(
+                            _normalize_for_search(r["title"] or ""))):
+                        continue
+                    seen.add(r["path"])
+                    rows.append(dict(r))
+                    added += 1
         if rows:
             return rows
 

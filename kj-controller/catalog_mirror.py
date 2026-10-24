@@ -37,7 +37,7 @@ from text_normalize import (
     normalize as _normalize,
     joined_forms as _joined_forms,
     fts_match_query as _fts5_safe_query,
-    fts_skeleton_query as _fts5_skeleton_query,
+    fts_supplement_queries as _fts5_supplement_queries,
     is_vowel_dropped as _is_vowel_dropped,
     SEARCH_INDEX_VERSION,
 )
@@ -197,21 +197,28 @@ class CatalogMirror:
                 sql, (f'({fts_query}) AND source: "{source}"', limit)).fetchall()
         except sqlite3.Error:
             return []
-        # Vowel-dropped titles ("Thnks Fr Th Mmrs") come after the ordinary
-        # matches — same supplement as ExternalCatalog.search.
-        skel_query = _fts5_skeleton_query(normalized)
-        if skel_query:
-            seen = {r["id"] for r in rows}
+        # Other spellings of the title (vowel-dropped, joined words) come after
+        # the ordinary matches — same supplement as ExternalCatalog.search.
+        seen = {r["id"] for r in rows}
+        for match, dropped_only in _fts5_supplement_queries(normalized):
+            added = 0
             try:
-                for r in conn.execute(
-                        sql, (f'({skel_query}) AND source: "{source}"', limit)).fetchall():
-                    if r["id"] in seen:
-                        continue
-                    title = (json.loads(r["payload"]).get("title") or "")
-                    if _is_vowel_dropped(_normalize(title)):
-                        rows.append(r)
+                # Over-fetch: the title filter runs after the SQL LIMIT.
+                cands = conn.execute(
+                    sql, (f'({match}) AND source: "{source}"', limit * 5)).fetchall()
             except sqlite3.Error:
-                pass
+                continue
+            for r in cands:
+                if added >= limit:
+                    break
+                if r["id"] in seen:
+                    continue
+                if dropped_only and not _is_vowel_dropped(
+                        _normalize(json.loads(r["payload"]).get("title") or "")):
+                    continue
+                seen.add(r["id"])
+                rows.append(r)
+                added += 1
         if rows:
             return [json.loads(r["payload"]) for r in rows]
 
