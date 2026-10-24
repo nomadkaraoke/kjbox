@@ -11,13 +11,19 @@ Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](a
   - **Lana Del Rey "Pawn Shop Blues".** "Pawn Shop Blues" and "Pawnshop Blues" were two separate songs.
     The singer picked the first, which held only a bare instrumental (no lyrics). The lyric video was in
     the other one.
-- **Search:** after the normal search, a multi-word query runs a supplementary search where each word may
-  also appear without its vowels (`text_normalize.fts_skeleton_query`). This covers the catalog FTS, the
-  mirror FTS and the downloads scan. The supplement only keeps rows whose own title is vowel-dropped
-  (`is_vowel_dropped`), and it is appended after the normal results, so normal ranking is unchanged. It
-  needs at least 2 words that drop to 3+ letters. A looser per-word version was replayed against 600 real
-  singer queries on the NomadPC and rejected: "The Marias" matched "Mrs.", "Mariah Carey" matched "Cry"
-  and "Mac Dem" matched Run-D.M.C.
+- **Search:** after the normal search, the catalog FTS, the mirror FTS and the downloads scan run
+  supplementary searches for other spellings of the title (`text_normalize.fts_supplement_queries`):
+  - **vowel-dropped:** each word may appear without its vowels. Kept only when the row's own title is
+    vowel-dropped, and only for queries with 2+ words that drop to 3+ letters.
+  - **joined words:** any one adjacent pair may be a single word ("pawn shop" finds "Pawnshop", "la roux"
+    finds "Laroux"). A joined last word is never prefix-matched.
+- Supplement rows are kept only when the ordinary query could not have matched them
+  (`supplement_row_ok`). They are appended after the normal results, so normal ranking is unchanged.
+- Looser versions were replayed against 600 real singer queries on the NomadPC and rejected:
+  - per-word vowel dropping: "The Marias" matched "Mrs.", "Mariah Carey" matched "Cry" and "Mac Dem"
+    matched Run-D.M.C.
+  - an unfiltered joined-word search re-added rows past the limit in 136 queries, and "Rock me" matched
+    "Rockmelons".
 - **Grouping:** `routes._merge_spelling_variants` folds groups by the same artist into one song when the titles
   are equal ignoring spaces, or when one title is vowel-dropped and both have the same consonants. The best
   version of the merged song is then picked across both spellings.
