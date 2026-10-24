@@ -7,7 +7,7 @@ def test_rapidfuzz_importable():
 
 
 from text_normalize import (
-    fts_joined_query, fts_skeleton_query, is_vowel_dropped, skeleton_alternative, tokens_match_skeleton,
+    fts_joined_query, fts_skeleton_query, is_vowel_dropped, supplement_row_ok, skeleton_alternative, tokens_match_skeleton,
     normalize, identity_normalize, tokens, fts_match_query, group_key, result_group_key,
     LATIN_SPECIAL_MAP, ABBREV_MAP, NUMBER_WORDS, ROMAN_NUMERALS,
     NORMALIZER_VERSION,
@@ -173,7 +173,7 @@ class TestQueryAndGroupKey:
 
     def test_fts_joined_query(self):
         assert fts_joined_query("pawn shop blues") == \
-            '("pawnshop" AND "blues"*) OR ("pawn" AND "shopblues"*)'
+            '("pawnshop" AND "blues"*) OR ("pawn" AND "shopblues")'
         assert fts_joined_query("a ha") == ""       # joined pair too short
         assert fts_joined_query("pawnshop") == ""   # one word
 
@@ -269,3 +269,20 @@ class TestVowelDropped:
         sk = ["fll", "out", "by", "thnks", "fr", "th", "mmr"]
         assert tokens_match_skeleton(q, sk, "fall out boy thnks fr th mmrs".split())
         assert not tokens_match_skeleton(q, sk, "fall out boy thnks fr th".split())
+
+
+class TestSupplementRowOk:
+    # Cases from replaying 600 real singer queries on the NomadPC.
+    def test_new_spelling_kept(self):
+        assert supplement_row_ok("pawn shop blues", "Lana Del Rey", "Pawnshop Blues", False)
+        assert supplement_row_ok("la roux", "Laroux", "Bulletproof", False)
+        assert supplement_row_ok("thanks for the memories", "Fall Out Boy",
+                                 "Thnks Fr Th Mmrs", True)
+
+    def test_row_the_ordinary_query_matches_is_dropped(self):
+        # Just a row past the ordinary search's limit, not a new spelling.
+        assert not supplement_row_ok("in the end", "Linkin Park", "In The End", False)
+
+    def test_vowel_dropped_search_needs_a_stylised_title(self):
+        assert not supplement_row_ok("thanks for the memories", "Someone",
+                                     "Thnks For The Memories", True)

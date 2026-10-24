@@ -38,7 +38,8 @@ from text_normalize import (
     joined_forms as _joined_forms,
     fts_match_query as _fts5_safe_query,
     fts_supplement_queries as _fts5_supplement_queries,
-    is_vowel_dropped as _is_vowel_dropped,
+    SUPPLEMENT_WINDOW as _SUPPLEMENT_WINDOW,
+    supplement_row_ok as _supplement_row_ok,
     SEARCH_INDEX_VERSION,
 )
 
@@ -205,7 +206,8 @@ class CatalogMirror:
             try:
                 # Over-fetch: the title filter runs after the SQL LIMIT.
                 cands = conn.execute(
-                    sql, (f'({match}) AND source: "{source}"', limit * 5)).fetchall()
+                    sql, (f'({match}) AND source: "{source}"',
+                          max(limit * 5, _SUPPLEMENT_WINDOW))).fetchall()
             except sqlite3.Error:
                 continue
             for r in cands:
@@ -213,8 +215,9 @@ class CatalogMirror:
                     break
                 if r["id"] in seen:
                     continue
-                if dropped_only and not _is_vowel_dropped(
-                        _normalize(json.loads(r["payload"]).get("title") or "")):
+                payload = json.loads(r["payload"])
+                if not _supplement_row_ok(normalized, payload.get("artist"),
+                                          payload.get("title"), dropped_only):
                     continue
                 seen.add(r["id"])
                 rows.append(r)

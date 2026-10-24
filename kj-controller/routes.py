@@ -5505,14 +5505,16 @@ def unified_search(query, app, *, grouped=False, local_only=False,
         haystack = " ".join([searchable] + text_normalize.joined_forms(searchable))
         if query_terms_clean and all(term in haystack for term in query_terms_clean):
             local_results.append(_build_local_media_row(app, path, entry))
-        elif skeleton_toks and text_normalize.tokens_match_skeleton(
-                query_terms_clean, skeleton_toks, haystack.split()):
-            # Only a stylised TITLE qualifies; check the parsed/curated title,
-            # not "artist - title" (ordinary artist words would dilute it).
-            row = _build_local_media_row(app, path, entry)
-            if text_normalize.is_vowel_dropped(_normalize_text(row.get("title") or "")):
-                local_results.append(row)
         else:
+            if skeleton_toks and text_normalize.tokens_match_skeleton(
+                    query_terms_clean, skeleton_toks, haystack.split()):
+                # Only a stylised TITLE qualifies; check the parsed/curated
+                # title, not "artist - title" (ordinary artist words would
+                # dilute it). A rejected row still gets the fuzzy pass below.
+                row = _build_local_media_row(app, path, entry)
+                if text_normalize.is_vowel_dropped(_normalize_text(row.get("title") or "")):
+                    local_results.append(row)
+                    continue
             fz = fuzzy_match.score(norm_query, searchable, q_sig=q_sig)
             if fz is not None:
                 fuzzy_hits.append((fz[0], fz[1], path, entry))

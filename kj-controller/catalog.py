@@ -13,7 +13,8 @@ from text_normalize import (
     index_text as _index_text,
     fts_match_query as _fts5_safe_query,
     fts_supplement_queries as _fts5_supplement_queries,
-    is_vowel_dropped as _is_vowel_dropped,
+    SUPPLEMENT_WINDOW as _SUPPLEMENT_WINDOW,
+    supplement_row_ok as _supplement_row_ok,
     tokens as _query_tokens,
     LATIN_SPECIAL_MAP,  # re-export for any external importers
     NORMALIZER_VERSION,  # noqa: F401 (re-export for any external importers)
@@ -386,14 +387,14 @@ class ExternalCatalog:
                 added = 0
                 try:
                     # Over-fetch: the title filter runs after the SQL LIMIT.
-                    cands = conn.execute(sql, (match, limit * 5, 0)).fetchall()
+                    cands = conn.execute(sql, (match, max(limit * 5, _SUPPLEMENT_WINDOW), 0)).fetchall()
                 except sqlite3.OperationalError:
                     continue
                 for r in cands:
                     if added >= limit:
                         break
-                    if r["path"] in seen or (dropped_only and not _is_vowel_dropped(
-                            _normalize_for_search(r["title"] or ""))):
+                    if r["path"] in seen or not _supplement_row_ok(
+                            normalized, r["artist"], r["title"], dropped_only):
                         continue
                     seen.add(r["path"])
                     rows.append(dict(r))

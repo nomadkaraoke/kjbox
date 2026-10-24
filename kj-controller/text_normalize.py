@@ -316,15 +316,24 @@ def fts_joined_query(text):
         if len(joined) < _JOINED_MIN_LEN:
             continue
         vt = toks[:i] + [joined] + toks[i + 2:]
-        quoted = [f'"{t}"' for t in vt[:-1]] + [f'"{vt[-1]}"*']
+        # A joined LAST word is never a prefix: "rock me" -> "rockme"* would
+        # match "Rockmelons".
+        star = '' if i == len(toks) - 2 else '*'
+        quoted = [f'"{t}"' for t in vt[:-1]] + [f'"{vt[-1]}"{star}']
         branches.append('(' + ' AND '.join(quoted) + ')')
     return ' OR '.join(branches)
 
 
+# Candidates a caller reads per supplementary query before applying its title
+# filter: far above any real song's version count, and cheap because the
+# supplement's MATCH terms are specific.
+SUPPLEMENT_WINDOW = 200
+
+
 def fts_supplement_queries(text):
     """Supplementary FTS searches run after the ordinary ``fts_match_query``:
-    a list of ``(match, vowel_dropped_only)``. When ``vowel_dropped_only`` is
-    set, keep only rows whose title ``is_vowel_dropped``."""
+    a list of ``(match, vowel_dropped_only)``; filter their rows with
+    ``supplement_row_ok``."""
     out = []
     skel = fts_skeleton_query(text)
     if skel:
@@ -333,6 +342,21 @@ def fts_supplement_queries(text):
     if joined:
         out.append((joined, False))
     return out
+
+
+def supplement_row_ok(query, artist, title, vowel_dropped_only):
+    """Keep a supplementary-search row only when it is a genuinely different
+    spelling: the ORDINARY query can't match it (else it's just a row past
+    the ordinary search's limit, re-added), and for the vowel-dropped search
+    its title is itself vowel-dropped."""
+    if vowel_dropped_only and not is_vowel_dropped(normalize(title or "")):
+        return False
+    q = tokens(query)
+    hay = normalize(f"{artist or ''} {title or ''}").split()
+    if not q:
+        return True
+    plain = all(t in hay for t in q[:-1]) and any(w.startswith(q[-1]) for w in hay)
+    return not plain
 
 
 def group_key(artist, title):
