@@ -286,3 +286,24 @@ def test_push_sends_are_captured_never_sent(test_api_app):
     disp._send({"id": 2, "endpoint": "https://push.example/x"}, {"a": 1}, {})
     assert [p["kind"] for p in test_api_app.localstack_pushes] == ["expo", "web"]
     assert test_api_app.sms_config["api_key"] is None
+
+
+def test_push_outbox_get_and_delete(test_api_app, tc):
+    disp = test_api_app.rotation.push_dispatcher
+    assert tc.get(f"{TEST}/push-outbox").get_json() == {"pushes": []}
+    disp._send_expo({"id": 1}, {"to": "ExponentPushToken[x]", "data": {"step": "up_next"}})
+    pushes = tc.get(f"{TEST}/push-outbox").get_json()["pushes"]
+    assert [p["kind"] for p in pushes] == ["expo"]
+    assert pushes[0]["message"]["data"]["step"] == "up_next"
+    assert tc.delete(f"{TEST}/push-outbox").get_json() == {"ok": True}
+    assert tc.get(f"{TEST}/push-outbox").get_json() == {"pushes": []}
+
+
+def test_push_outbox_absent_without_test_api(mock_config, monkeypatch):
+    monkeypatch.delenv("KJBOX_TEST_API", raising=False)
+    app = _app(mock_config)
+    sing_test_api.install_test_api(app, "127.0.0.1")
+    with app.test_client() as c:
+        assert c.get(f"{TEST}/push-outbox").status_code == 404
+        assert c.delete(f"{TEST}/push-outbox").status_code == 404
+    app.catalog.close()

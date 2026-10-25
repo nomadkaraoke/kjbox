@@ -49,8 +49,8 @@ def _run(d):
 
 def test_expo_payload_shape(store):
     store.add_expo_subscription(DEV, TOKEN, "ios")
-    entries = [_entry(1, device="other"), _entry(2, device="other"),
-               _entry(3, device=DEV, song="Mr Brightside — The Killers")]
+    entries = [_entry(1, device="other"),
+               _entry(2, device=DEV, song="Mr Brightside — The Killers")]
     d = _dispatcher(store, entries)
     with patch("push_dispatcher.requests.post", return_value=_ok()) as post, \
          patch("push_dispatcher.webpush") as wp:
@@ -67,7 +67,8 @@ def test_expo_payload_shape(store):
     assert "KJ" not in msg["title"] + msg["body"]
     night_id = d._night_id()
     assert night_id
-    assert msg["data"] == {"step": "up_in_2", "request_id": 703, "night_id": night_id}
+    assert msg["data"] == {"step": "up_next", "request_id": 702, "night_id": night_id,
+                           "url": "/tonight"}
 
 
 def test_expo_and_webpush_dedup_per_step(store):
@@ -84,7 +85,8 @@ def test_expo_and_webpush_dedup_per_step(store):
         d._dispatch_now()
         d._dispatch_now()          # same step again: both channels dedup
         d.executor.shutdown(wait=True)
-        assert post.call_count == 1 and wp.call_count == 1
+        # up_in_2: web only (the app is told at up_next and now_singing)
+        assert post.call_count == 0 and wp.call_count == 1
     # a new step fires on both again
     entries.pop(0)
     d2 = _dispatcher(store, entries)
@@ -117,40 +119,3 @@ def test_expo_failures_never_raise_or_log_error(store, caplog):
         _run(d)
     assert [r for r in caplog.records if r.levelname == "ERROR"] == []
     assert len(store.list_active_expo_subscriptions()) == 1   # not disabled on a network error
-
-
-def test_sung_fires_once_when_app_entry_becomes_done(store):
-    store.add_expo_subscription(DEV, TOKEN, "ios")
-    entries = [_entry(1, status="Now Singing", device=DEV), _entry(2, device="o")]
-    d = _dispatcher(store, entries)
-    sent = []
-    with patch("push_dispatcher.requests.post",
-               side_effect=lambda url, **kw: (sent.append(kw["json"]), _ok())[1]):
-        d._dispatch_now()
-        entries[0]["status"] = "Done"
-        d._dispatch_now()
-        d._dispatch_now()          # dedup: no second sung
-        entries.append(_entry(3, device=DEV))
-        d._dispatch_now()          # a new entry; entry 1 stays sung-once
-        d.executor.shutdown(wait=True)
-    steps = [m["data"]["step"] for m in sent]
-    assert steps.count("sung") == 1
-    assert steps[0] == "now_singing"
-
-
-def test_sung_not_sent_for_rows_already_done_at_registration(store):
-    store.add_expo_subscription(DEV, TOKEN, "ios")
-    d = _dispatcher(store, [_entry(1, status="Done", device=DEV)])
-    with patch("push_dispatcher.requests.post", return_value=_ok()) as post:
-        _run(d)
-    post.assert_not_called()
-
-
-def test_decision_push_reaches_expo(store):
-    store.add_expo_subscription(DEV, TOKEN, "ios")
-    d = _dispatcher(store, [])
-    with patch("push_dispatcher.requests.post", return_value=_ok()) as post:
-        d.notify_request_decision(55, "approved", {"device_id": DEV, "song_title": "X", "song_artist": "Y"})
-        d.executor.shutdown(wait=True)
-    assert post.call_args.kwargs["json"]["data"]["step"] == "approved"
-    assert post.call_args.kwargs["json"]["data"]["request_id"] == 55

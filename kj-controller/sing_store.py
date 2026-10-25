@@ -1948,6 +1948,23 @@ class SingStore:
         )
         conn.commit()
 
+    def remove_expo_subscription(self, device_id, expo_token):
+        """Delete this device's row for an Expo token. Idempotent.
+
+        Scoped to the caller's device so one app user can't unregister
+        another's token. Returns the number of rows removed.
+        """
+        if not device_id:
+            return 0
+        conn = self._get_conn()
+        cur = conn.execute(
+            "DELETE FROM sing_push_subscriptions "
+            "WHERE kind='expo' AND device_id=? AND expo_token=?",
+            (device_id, expo_token),
+        )
+        conn.commit()
+        return cur.rowcount
+
     def list_active_expo_subscriptions(self):
         """Non-disabled Expo rows (the web-push queries never return them)."""
         conn = self._get_conn()

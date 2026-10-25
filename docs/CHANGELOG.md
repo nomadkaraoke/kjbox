@@ -2,6 +2,17 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-10-25 - App pushes only at up next and your turn; unregister endpoint (v0.136.0)
+
+- **App (Expo) pushes** are now sent only for `up_next` ("You're up next") and `now_singing` ("It's your
+  turn"). Approved, rejected, up in 2, alternate-version, unavailable, quick-ready and `sung` no longer
+  buzz the app; the Tonight tab already shows them. Every app push carries `data.url = "/tonight"`.
+  **Web push is unchanged** and still gets every step.
+- **`DELETE /sing/api/v1/push-token {expo_push_token}`** removes the caller's own token row (idempotent;
+  another account's token is never touched). Added to the OpenAPI contract as `unregisterPushToken`.
+- **Test API:** `GET` / `DELETE /sing/api/test/push-outbox` read and clear the captured pushes (only when
+  `KJBOX_TEST_API=1`).
+
 ## 2026-10-22 - Search finds both spellings of a title and offers them as one song (v0.135.1)
 
 - Two songs at tonight's show went wrong because catalogues spell their titles two ways.

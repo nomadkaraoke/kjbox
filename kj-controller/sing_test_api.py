@@ -221,3 +221,17 @@ def outbox_drain():
 @sing_test_api_bp.route("/state", methods=["GET"])
 def state():
     return jsonify(localstack.night_state(_app()))
+
+
+@sing_test_api_bp.route("/push-outbox", methods=["GET"])
+def push_outbox():
+    """Pushes the dispatcher would have sent (Expo and web), oldest first."""
+    return jsonify({"pushes": list(getattr(_app(), "localstack_pushes", []) or [])})
+
+
+@sing_test_api_bp.route("/push-outbox", methods=["DELETE"])
+def push_outbox_clear():
+    pushes = getattr(_app(), "localstack_pushes", None)
+    if pushes is not None:
+        pushes.clear()
+    return jsonify({"ok": True})

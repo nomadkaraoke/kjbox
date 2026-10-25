@@ -166,6 +166,7 @@ Mounted only when `KJBOX_TEST_API=1` **and** the bind host is loopback
 | `POST /rate-limits {per_device?, per_ip?}` | singer budgets per 5 min; always clears the windows → `{ok, rate_limits}` |
 | `POST /outbox/drain` | scan + deliver everything due to decide now → `{ok, sent}` |
 | `GET /state` | `{event_code, night_started_at, night_id, rev, flags, rotation[], requests[], outbox[], pushes}` |
+| `GET /push-outbox`, `DELETE /push-outbox` | `{pushes[]}` of the Expo and web pushes captured instead of sent (`{kind, sub, message or payload}`); DELETE clears them |
 
 ### The fixture night and the replay test
 
