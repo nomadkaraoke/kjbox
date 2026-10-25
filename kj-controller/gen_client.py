@@ -1,6 +1,7 @@
 """GenClient: HTTP client for the gen API (karaoke video generation)."""
 
 import logging
+import urllib.parse
 
 import requests
 
@@ -283,6 +284,20 @@ class GenClient:
                 detail = detail.get("message") or detail.get("detail") or "error"
             raise GenApiError(resp.status_code, detail or resp.reason)
         return data
+
+    def list_account_deletions(self, since=None):
+        """Pending account deletions for this box (partner secret).
+
+        Returns ``[{"id", "email_hash", "created_at"}]``; raises GenApiError."""
+        path = "/api/kjbox/account-deletions"
+        if since:
+            path += "?" + urllib.parse.urlencode({"since": since})
+        data = self._singer_call("GET", path)
+        return (data or {}).get("deletions") or []
+
+    def ack_account_deletion(self, deletion_id):
+        """Tell gen this box has erased the deletion (204, no body)."""
+        self._singer_call("POST", f"/api/kjbox/account-deletions/{deletion_id}/ack")
 
     def get_me(self, session_token):
         """GET /api/users/me with the singer's session token (raises GenApiError)."""

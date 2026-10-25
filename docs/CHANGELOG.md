@@ -2,6 +2,19 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-10-25 - Deleted Nomad accounts are erased from the box (v0.137.0)
+
+- **Account-deletion poller** (`account_deletions.py`): once at start, then every 600 s
+  (`account_deletion_poll_interval`), asks gen `GET /api/kjbox/account-deletions?since=` (partner
+  secret) and, per entry, calls `SingStore.forget_gen_account(email_hash)` (matches
+  `sha256(lower(gen_email))`) **before** `POST .../{id}/ack`. Only runs when `gen_kjbox_secret` is set.
+- **Erased:** `singer_accounts`, `sing_gen_accounts`, those devices' push subscriptions, aliases and
+  request phone numbers (cleared, the requests stay), `app_friend_requests`, `singer_photo_consent` and
+  `song_media_consent` for the names those devices sang under, and pending/failed `history_outbox`
+  rows. `photo_consent_events` is append-only: rows stay, with `request_id` and `instagram` nulled.
+- gen unreachable is a WARNING and a retry next tick; the cursor (`account_deletions_since` in
+  `rotation_meta`) never passes an entry whose local erase failed. Re-processing is harmless.
+
 ## 2026-10-25 - App pushes only at up next and your turn; unregister endpoint (v0.136.0)
 
 - **App (Expo) pushes** are now sent only for `up_next` ("You're up next") and `now_singing` ("It's your

@@ -739,6 +739,13 @@ def start_app():  # pragma: no cover
             sing_store=getattr(flask_app, 'sing_store', None),
         )
         flask_app.gen_poller.start()
+        # Partner-secret endpoint: only when the singer make-it secret is set.
+        if flask_app.gen_client.singer_flow_configured():
+            from account_deletions import AccountDeletionPoller
+            flask_app.account_deletion_poller = AccountDeletionPoller(
+                flask_app.gen_client, flask_app.sing_store,
+                interval=cfg.get('account_deletion_poll_interval', 600))
+            flask_app.account_deletion_poller.start()
         log_message("Gen API integration enabled.", cfg)
     else:
         flask_app.gen_client = None
