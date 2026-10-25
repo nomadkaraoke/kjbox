@@ -125,6 +125,7 @@ def test_payload_has_tonight_url():
         msg = render_expo_message(TOKEN, step, _entry(1), request_id=7, night_id="n1")
         assert msg["data"] == {"step": step, "request_id": 7, "night_id": "n1",
                                "url": "/tonight"}
+        assert msg["channelId"] == "tonight"
 
 
 def test_remove_expo_subscription_scoped_to_device(store):

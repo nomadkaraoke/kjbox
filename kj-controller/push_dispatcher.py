@@ -131,6 +131,7 @@ def render_expo_message(token, step, entry, request_id=None, night_id=None):
         "body": body_tpl.format(song=song),
         "sound": "default",
         "priority": "high",
+        "channelId": "tonight",  # Android channel the app creates; ignored on iOS
         "data": {"step": step, "request_id": request_id, "night_id": night_id,
                  "url": "/tonight"},
     }
