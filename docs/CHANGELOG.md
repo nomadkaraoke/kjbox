@@ -2,6 +2,12 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-10-25 - App pushes use the Android "tonight" channel (v0.137.1)
+
+- Expo messages to app subscriptions now carry `channelId: "tonight"`, the notification channel the
+  mobile app creates, so Android applies its importance/sound settings. iOS ignores the field. Web push
+  and the `data` payload are unchanged.
+
 ## 2026-10-25 - Deleted Nomad accounts are erased from the box (v0.137.0)
 
 - **Account-deletion poller** (`account_deletions.py`): once at start, then every 600 s
