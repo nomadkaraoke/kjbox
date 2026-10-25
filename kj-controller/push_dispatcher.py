@@ -113,19 +113,26 @@ _EXPO_PAYLOADS = {
                     "{song}: preview it and sing it now, or wait for the full version."),
     "sung":        ("Nice one", "{song} is in your history."),
 }
+# The app only buzzes at the moments a singer must act. Everything else is
+# already visible in the Tonight tab; web push keeps the full ladder.
+_EXPO_APP_STEPS = frozenset({"up_next", "now_singing"})
+# Per-step title overrides on top of _EXPO_PAYLOADS.
+_EXPO_TITLES = {"now_singing": "It's your turn"}
 
 
 def render_expo_message(token, step, entry, request_id=None, night_id=None):
     """Build one Expo push message for `step`."""
     song = (entry.get("song_artist") or "your song") if entry else "your song"
     title, body_tpl = _EXPO_PAYLOADS.get(step) or _EXPO_PAYLOADS["rejected"]
+    title = _EXPO_TITLES.get(step, title)
     return {
         "to": token,
         "title": title,
         "body": body_tpl.format(song=song),
         "sound": "default",
         "priority": "high",
-        "data": {"step": step, "request_id": request_id, "night_id": night_id},
+        "data": {"step": step, "request_id": request_id, "night_id": night_id,
+                 "url": "/tonight"},
     }
 
 
@@ -233,7 +240,7 @@ class PushDispatcher:
         for sub in subs:
             proposed_state = {"entry_id": request_id, "ladder_step": step}
             self.executor.submit(self._send, sub, payload, proposed_state)
-        if expo_subs:
+        if expo_subs and step in _EXPO_APP_STEPS:
             night_id = self._night_id()
             for sub in expo_subs:
                 msg = render_expo_message(sub["expo_token"], step, fake_entry,
@@ -344,7 +351,7 @@ class PushDispatcher:
         sub["last_sent_state"] = json.dumps(state)
 
     def _dispatch_expo(self, expo_subs, entries, linked_device):
-        """Ladder steps (same rules and dedup as web) plus `sung` for app rows."""
+        """Ladder steps (same rules and dedup as web), but only `_EXPO_APP_STEPS` are sent."""
         if linked_device is None:
             return
         night_id = self._night_id()
@@ -362,23 +369,6 @@ class PushDispatcher:
             if not device:
                 continue
             last = self._load_state(sub)
-            sung_keys = list(last.get("sung") or [])
-
-            # sung: an entry of this app user's went Done since we last looked.
-            if night_id:
-                for e in done:
-                    key = f"{night_id}:{e.get('id')}"
-                    if (e.get("id") in previously_seen and key not in sung_keys
-                            and linked_device(e) == device):
-                        sung_keys.append(key)
-                        state = dict(last)
-                        state["sung"] = sung_keys[-50:]
-                        self._reserve_expo_state(sub, state)
-                        last = state
-                        msg = render_expo_message(
-                            sub["expo_token"], "sung", e,
-                            request_id=self._request_id(e), night_id=night_id)
-                        self.executor.submit(self._send_expo, sub, msg)
 
             target = next_entry_for_sub(entries, {"device_id": device}, lambda _e: None,
                                         linked_device)
@@ -391,9 +381,9 @@ class PushDispatcher:
                     and last.get("ladder_step") == step):
                 continue
             state = {"entry_id": target["id"], "ladder_step": step}
-            if sung_keys:
-                state["sung"] = sung_keys[-50:]
             self._reserve_expo_state(sub, state)
+            if step not in _EXPO_APP_STEPS:
+                continue
             msg = render_expo_message(
                 sub["expo_token"], step, target,
                 request_id=self._request_id(target), night_id=night_id)

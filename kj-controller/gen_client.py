@@ -284,6 +284,17 @@ class GenClient:
             raise GenApiError(resp.status_code, detail or resp.reason)
         return data
 
+    def list_account_deletions(self):
+        """Pending account deletions for this box (partner secret).
+
+        Returns ``[{"id", "email_hash", "created_at"}]``; raises GenApiError."""
+        data = self._singer_call("GET", "/api/kjbox/account-deletions")
+        return (data or {}).get("deletions") or []
+
+    def ack_account_deletion(self, deletion_id):
+        """Tell gen this box has erased the deletion (204, no body)."""
+        self._singer_call("POST", f"/api/kjbox/account-deletions/{deletion_id}/ack")
+
     def get_me(self, session_token):
         """GET /api/users/me with the singer's session token (raises GenApiError)."""
         return self._singer_call("GET", "/api/users/me", session_token=session_token,

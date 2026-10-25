@@ -1,4 +1,4 @@
-"""POST /sing/api/v1/push-token — contract-checked."""
+"""POST/DELETE /sing/api/v1/push-token — contract-checked."""
 
 import pytest
 
@@ -52,4 +52,37 @@ def test_push_token_rejects_bad_input(client, token, sam, body):
 
 def test_push_token_needs_auth(client, token):
     resp = client.post(f"{V1}/push-token", json={"t": token, "expo_push_token": TOK, "platform": "ios"})
+    assert resp.status_code == 401
+
+
+def _delete(client, token, tok, body, status=200):
+    resp = client.delete(f"{V1}/push-token", json={"t": token, **body}, headers=bearer(tok))
+    assert resp.status_code == status, resp.get_json()
+    return assert_matches_contract(resp, "unregisterPushToken")
+
+
+def test_delete_push_token(client, token, sam, sing_app):
+    store = sing_app.sing_store
+    _post(client, token, sam, {"expo_push_token": TOK, "platform": "ios"})
+    body = _delete(client, token, sam, {"expo_push_token": TOK})
+    assert body == {"api_version": "1.0", "ok": True}
+    assert store.list_active_expo_subscriptions() == []
+    _delete(client, token, sam, {"expo_push_token": TOK})   # idempotent
+
+
+def test_delete_push_token_only_touches_own_device(client, token, sam, app_token, sing_app):
+    store = sing_app.sing_store
+    _post(client, token, sam, {"expo_push_token": TOK, "platform": "ios"})
+    other = app_token("alex.other@example.com", "Alex Other")
+    _delete(client, token, other, {"expo_push_token": TOK})
+    assert len(store.list_active_expo_subscriptions()) == 1
+
+
+def test_delete_push_token_rejects_bad_input(client, token, sam):
+    assert _delete(client, token, sam, {"expo_push_token": "nope"}, status=400)["error"] == "invalid"
+    assert _delete(client, token, sam, {}, status=400)["error"] == "invalid"
+
+
+def test_delete_push_token_needs_auth(client, token):
+    resp = client.delete(f"{V1}/push-token", json={"t": token, "expo_push_token": TOK})
     assert resp.status_code == 401

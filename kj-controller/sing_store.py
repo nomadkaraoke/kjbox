@@ -6,6 +6,7 @@ provides helpers for the short-lived event token that gates that form.
 """
 
 import datetime
+import hashlib
 import json
 import re
 import secrets
@@ -1948,6 +1949,23 @@ class SingStore:
         )
         conn.commit()
 
+    def remove_expo_subscription(self, device_id, expo_token):
+        """Delete this device's row for an Expo token. Idempotent.
+
+        Scoped to the caller's device so one app user can't unregister
+        another's token. Returns the number of rows removed.
+        """
+        if not device_id:
+            return 0
+        conn = self._get_conn()
+        cur = conn.execute(
+            "DELETE FROM sing_push_subscriptions "
+            "WHERE kind='expo' AND device_id=? AND expo_token=?",
+            (device_id, expo_token),
+        )
+        conn.commit()
+        return cur.rowcount
+
     def list_active_expo_subscriptions(self):
         """Non-disabled Expo rows (the web-push queries never return them)."""
         conn = self._get_conn()
@@ -2276,3 +2294,141 @@ class SingStore:
             (night_started_at,),
         ).fetchall()
         return {r["history_id"] for r in rows}
+
+    # ------------------------------------------------------------------
+    # Account deletion (gen account removed -> erase this person's links)
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def email_hash(email):
+        """sha256 hex of the lowercased email: the id gen uses for a deletion."""
+        return hashlib.sha256((email or "").lower().encode("utf-8")).hexdigest()
+
+    def forget_gen_account(self, email_hash):
+        """Erase every local link to the gen account whose email hashes to
+        ``email_hash``. Idempotent; one transaction (all or nothing).
+
+        Removes the device links (``singer_accounts``, ``sing_gen_accounts``),
+        those devices' push subscriptions, aliases and request phone numbers,
+        the app's friend-request markers, pending/failed ``history_outbox``
+        rows for the email, and the photo/song media consent rows keyed on the
+        names those devices sang under. ``photo_consent_events`` is an
+        append-only log, so its rows stay with the link (``request_id``) and
+        Instagram handle cleared. Returns counts per kind (all zero when
+        nothing matched).
+        """
+        want = (email_hash or "").lower()
+        counts = {k: 0 for k in (
+            "singer_accounts", "sing_gen_accounts", "push_subscriptions",
+            "phones_cleared", "aliases", "app_friend_requests",
+            "singer_photo_consent", "song_media_consent",
+            "photo_consent_events_unlinked", "history_outbox")}
+        if not want:
+            return counts
+        conn = self._get_conn()
+        matches = lambda e: self.email_hash(e) == want  # noqa: E731
+        # Ownership. sing_gen_accounts is one row per device (device_id PRIMARY
+        # KEY, upserted), but singer_accounts is one row per (device, night), so a
+        # device that switched person A -> B can still carry an old row for A.
+        # A device is A's only if A is its MOST RECENT link across both tables;
+        # device-wide data (push, alias, phones, requests) is erased only then.
+        # A's own link rows are erased wherever they sit.
+        latest = {}  # device_id -> (timestamp, email)
+        a_rows = []  # singer_accounts keys that are A's
+        for r in conn.execute("SELECT device_id, gen_email, night_started_at, linked_at "
+                              "FROM singer_accounts"):
+            cand = (r["linked_at"] or "", r["gen_email"])
+            if r["device_id"] not in latest or cand[0] >= latest[r["device_id"]][0]:
+                latest[r["device_id"]] = cand
+            if matches(r["gen_email"]):
+                a_rows.append((r["device_id"], r["night_started_at"]))
+        gen_dev = []
+        for r in conn.execute("SELECT device_id, email, verified_at FROM sing_gen_accounts"):
+            cand = (r["verified_at"] or "", r["email"])
+            if r["device_id"] not in latest or cand[0] >= latest[r["device_id"]][0]:
+                latest[r["device_id"]] = cand
+            if matches(r["email"]):
+                gen_dev.append(r["device_id"])
+        devices = {d for d, (_, e) in latest.items() if matches(e)}
+        outbox_ids = []
+        for r in conn.execute(
+                "SELECT history_id, payload_json FROM history_outbox "
+                "WHERE state IN ('pending','failed')"):
+            try:
+                email = (json.loads(r["payload_json"]) or {}).get("gen_email")
+            except (TypeError, ValueError):
+                continue
+            if email and matches(email):
+                outbox_ids.append(r["history_id"])
+        if not devices and not outbox_ids and not a_rows and not gen_dev:
+            return counts
+
+        def marks(items):
+            return ",".join("?" * len(items))
+
+        def run(key, sql, params):
+            counts[key] += conn.execute(sql, params).rowcount
+
+        dev = sorted(devices)
+        try:
+            if dev:
+                friend_ids = {r[0] for r in conn.execute(
+                    "SELECT request_id FROM app_friend_requests")}
+                request_ids, names = [], set()
+                for r in conn.execute(
+                        f"SELECT id, singer_name FROM sing_requests "
+                        f"WHERE device_id IN ({marks(dev)})", dev):
+                    request_ids.append(r["id"])
+                    if r["id"] not in friend_ids:  # a friend request names someone else
+                        names.add(fold_name(r["singer_name"]))
+                for r in conn.execute(
+                        f"SELECT canonical_name FROM singer_aliases "
+                        f"WHERE device_id IN ({marks(dev)})", dev):
+                    names.add(fold_name(r["canonical_name"]))
+                names.discard("")
+
+                run("push_subscriptions",
+                    f"DELETE FROM sing_push_subscriptions WHERE device_id IN ({marks(dev)})", dev)
+                run("aliases",
+                    f"DELETE FROM singer_aliases WHERE device_id IN ({marks(dev)})", dev)
+                run("phones_cleared",
+                    f"UPDATE sing_requests SET phone='' WHERE phone != '' "
+                    f"AND device_id IN ({marks(dev)})", dev)
+                if request_ids:
+                    run("app_friend_requests",
+                        f"DELETE FROM app_friend_requests WHERE request_id IN ({marks(request_ids)})",
+                        request_ids)
+                    run("photo_consent_events_unlinked",
+                        f"UPDATE photo_consent_events SET request_id=NULL, instagram=NULL "
+                        f"WHERE request_id IN ({marks(request_ids)})", request_ids)
+                if names:
+                    # Keep consent for names another (not-forgotten) device still uses.
+                    shared = set()
+                    for r in conn.execute("SELECT singer_name FROM sing_requests "
+                                          f"WHERE device_id NOT IN ({marks(dev)})", dev):
+                        shared.add(fold_name(r["singer_name"]))
+                    for r in conn.execute("SELECT canonical_name FROM singer_aliases "
+                                          f"WHERE device_id NOT IN ({marks(dev)})", dev):
+                        shared.add(fold_name(r["canonical_name"]))
+                    keys = sorted(names - shared)
+                if names and keys:
+                    run("singer_photo_consent",
+                        f"DELETE FROM singer_photo_consent WHERE name_key IN ({marks(keys)})", keys)
+                    run("song_media_consent",
+                        f"DELETE FROM song_media_consent WHERE name_key IN ({marks(keys)})", keys)
+            for d, n in a_rows:
+                run("singer_accounts",
+                    "DELETE FROM singer_accounts WHERE device_id=? AND night_started_at=?",
+                    (d, n))
+            for d in gen_dev:
+                run("sing_gen_accounts", "DELETE FROM sing_gen_accounts WHERE device_id=?", (d,))
+            if outbox_ids:
+                run("history_outbox",
+                    f"DELETE FROM history_outbox WHERE history_id IN ({marks(outbox_ids)})",
+                    outbox_ids)
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        return counts
+

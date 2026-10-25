@@ -1470,6 +1470,18 @@ def register_push_token():
     return v1_json({"ok": True})
 
 
+@app_api_bp.route("/push-token", methods=["DELETE"])
+@app_auth
+def unregister_push_token():
+    """Stop pushing to this device's token (app: night alerts off / sign-out)."""
+    body = _json_body()
+    token = body.get("expo_push_token")
+    if not isinstance(token, str) or not _EXPO_TOKEN_RE.match(token):
+        return v1_error("invalid", 400, "expo_push_token is not an Expo push token")
+    current_app.sing_store.remove_expo_subscription(g.app_user.device_id, token)
+    return v1_json({"ok": True})
+
+
 # --- Make on the spot (A7) ------------------------------------------------
 #
 # The web make-it views run with the app device; sing_make._gen_account then
