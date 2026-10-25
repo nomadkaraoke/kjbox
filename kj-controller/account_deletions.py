@@ -4,11 +4,11 @@ When someone deletes their Nomad account, gen queues a deletion for this box.
 The box (often offline, a home PC) polls ``GET /api/kjbox/account-deletions``,
 erases that person's rows (``SingStore.forget_gen_account``), and only then
 acks, which is what removes the entry from gen's pending list. Re-processing
-is harmless: the erase is idempotent and an unacked entry just comes back.
+is harmless: the erase is idempotent.
 
-``since`` (the newest ``created_at`` handled) is kept in the store as a
-cursor. It never moves past an entry whose local delete failed. An unreachable
-gen is an expected condition on an offline box: logged at WARNING, retried on
+There is no ``since`` cursor: gen lists only pending entries, so every poll
+fetches them all and an entry that failed to erase or ack is simply seen again.
+An unreachable gen is an expected condition on an offline box: logged at WARNING, retried on
 the next tick, never raised.
 """
 
@@ -39,13 +39,12 @@ class AccountDeletionPoller:
     def _poll(self):
         store = self.sing_store
         try:
-            deletions = self.gen_client.list_account_deletions(store.get_deletions_cursor())
+            deletions = self.gen_client.list_account_deletions()
         except Exception as exc:  # gen down / offline / not deployed yet
             logger.warning("Account-deletion poll: gen unreachable (%s)", exc)
             return 0
         done = 0
-        cursor = None
-        for item in sorted(deletions, key=lambda d: d.get("created_at") or ""):
+        for item in deletions:
             deletion_id = item.get("id")
             email_hash = item.get("email_hash") or deletion_id
             if not deletion_id or not email_hash:
@@ -55,18 +54,15 @@ class AccountDeletionPoller:
             except Exception as exc:
                 logger.warning("Account deletion %s: local erase failed, will retry (%s)",
                                str(deletion_id)[:12], exc)
-                break  # keep the cursor before this entry
+                continue  # not acked, so gen lists it again
             done += 1
             logger.info("Account deletion %s erased: %s", str(deletion_id)[:12],
                         {k: v for k, v in counts.items() if v})
-            cursor = item.get("created_at") or cursor
             try:
                 self.gen_client.ack_account_deletion(deletion_id)
             except Exception as exc:
                 logger.warning("Account deletion %s: ack failed, gen will resend (%s)",
                                str(deletion_id)[:12], exc)
-        if cursor:
-            store.set_deletions_cursor(cursor)
         return done
 
     def start(self):

@@ -148,9 +148,6 @@ def test_poller_acks_after_delete(store):
         ("ack", i, _count(store, "singer_accounts")))
     assert poller.poll_once() == 1
     assert order == [("ack", h("ann@example.com"), 0)]  # rows already gone at ack time
-    assert store.get_deletions_cursor() == "2026-10-25T12:00:00Z"
-    poller.poll_once()
-    assert gen.list_account_deletions.call_args[0][0] == "2026-10-25T12:00:00Z"
 
 
 def test_poller_does_not_ack_when_erase_fails(store, monkeypatch):
@@ -158,7 +155,6 @@ def test_poller_does_not_ack_when_erase_fails(store, monkeypatch):
     monkeypatch.setattr(store, "forget_gen_account", MagicMock(side_effect=RuntimeError("db")))
     assert poller.poll_once() == 0
     gen.ack_account_deletion.assert_not_called()
-    assert store.get_deletions_cursor() is None
 
 
 def test_poller_survives_gen_down(store, caplog):
@@ -178,10 +174,48 @@ def test_poller_survives_ack_failure_and_keeps_going(store):
     ], ack_exc=GenApiError(0, "down"))
     assert poller.poll_once() == 2
     assert _count(store, "singer_accounts") == 0
-    assert store.get_deletions_cursor() == "t2"
 
 
-def test_gen_client_sends_partner_secret_and_since(monkeypatch):
+def test_unacked_entry_is_processed_again_next_poll(store):
+    _seed(store, "dev-a", "ann@example.com", "Ann")
+    item = {"id": h("ann@example.com"), "email_hash": h("ann@example.com"), "created_at": "t1"}
+    poller, gen = _poller(store, [item], ack_exc=GenApiError(0, "down"))
+    poller.poll_once()
+    gen.ack_account_deletion.side_effect = None
+    assert poller.poll_once() == 1  # same entry, still listed by gen, erased again (no-op) and acked
+    assert gen.list_account_deletions.call_args_list[1].args == ()
+    gen.ack_account_deletion.assert_called_with(item["id"])
+    assert gen.ack_account_deletion.call_count == 2
+
+
+def test_device_switched_to_other_person_keeps_their_data(store):
+    store.link_account("dev-1", "ann@example.com", "app", "2026-10-24 20:00:00")
+    store.set_gen_account("dev-1", "ann@example.com", "tok-a")
+    _req(store, "dev-1", "Ann", phone="5550001")
+    conn = store._get_conn()
+    conn.execute("UPDATE singer_accounts SET linked_at='2026-10-24 20:00:00'")
+    conn.execute("UPDATE sing_gen_accounts SET verified_at='2026-10-24 20:00:00'")
+    conn.commit()
+    # Same device, later night: Bob signs in on it.
+    store.link_account("dev-1", "bob@example.com", "app", "2026-10-25 20:00:00")
+    store.set_gen_account("dev-1", "bob@example.com", "tok-b")
+    store.add_expo_subscription("dev-1", "ExponentPushToken[b]", "ios")
+    store.set_alias("dev-1", "Bob")
+    _req(store, "dev-1", "Bob", phone="5550002")
+
+    counts = store.forget_gen_account(h("ann@example.com"))
+
+    assert counts["singer_accounts"] == 1  # Ann's old night row only
+    assert store.get_gen_account("dev-1")["email"] == "bob@example.com"
+    assert [r["gen_email"] for r in conn.execute("SELECT gen_email FROM singer_accounts")] == [
+        "bob@example.com"]
+    assert store.get_alias("dev-1") == "Bob"
+    assert len(store.list_active_expo_subscriptions()) == 1
+    assert sorted(r["phone"] for r in conn.execute("SELECT phone FROM sing_requests")) == [
+        "5550001", "5550002"]
+
+
+def test_gen_client_sends_partner_secret(monkeypatch):
     from gen_client import GenClient
     seen = []
 
@@ -200,9 +234,9 @@ def test_gen_client_sends_partner_secret_and_since(monkeypatch):
 
     monkeypatch.setattr("gen_client.requests.request", fake)
     gc = GenClient("https://gen.test", "tok", "sekret")
-    assert gc.list_account_deletions("2026-10-25T12:00:00Z") == [{"id": "a"}]
+    assert gc.list_account_deletions() == [{"id": "a"}]
     gc.ack_account_deletion("a")
     assert seen[0][0] == "GET"
-    assert seen[0][1] == "https://gen.test/api/kjbox/account-deletions?since=2026-10-25T12%3A00%3A00Z"
+    assert seen[0][1] == "https://gen.test/api/kjbox/account-deletions"
     assert seen[1][1] == "https://gen.test/api/kjbox/account-deletions/a/ack"
     assert all(s[2]["X-Kjbox-Secret"] == "sekret" for s in seen)

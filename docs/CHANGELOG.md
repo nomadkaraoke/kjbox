@@ -5,15 +5,17 @@ Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](a
 ## 2026-10-25 - Deleted Nomad accounts are erased from the box (v0.137.0)
 
 - **Account-deletion poller** (`account_deletions.py`): once at start, then every 600 s
-  (`account_deletion_poll_interval`), asks gen `GET /api/kjbox/account-deletions?since=` (partner
+  (`account_deletion_poll_interval`), asks gen `GET /api/kjbox/account-deletions` (all pending; partner
   secret) and, per entry, calls `SingStore.forget_gen_account(email_hash)` (matches
   `sha256(lower(gen_email))`) **before** `POST .../{id}/ack`. Only runs when `gen_kjbox_secret` is set.
 - **Erased:** `singer_accounts`, `sing_gen_accounts`, those devices' push subscriptions, aliases and
   request phone numbers (cleared, the requests stay), `app_friend_requests`, `singer_photo_consent` and
   `song_media_consent` for the names those devices sang under, and pending/failed `history_outbox`
   rows. `photo_consent_events` is append-only: rows stay, with `request_id` and `instagram` nulled.
-- gen unreachable is a WARNING and a retry next tick; the cursor (`account_deletions_since` in
-  `rotation_meta`) never passes an entry whose local erase failed. Re-processing is harmless.
+- gen unreachable is a WARNING and a retry next tick. No `since` cursor: an entry whose erase or ack
+  failed is listed again and re-processed (the erase is idempotent).
+- A device is erased only if the deleted account is its most recent link; a device since taken over
+  by someone else keeps its data (only the deleted person's own link rows go).
 
 ## 2026-10-25 - App pushes only at up next and your turn; unregister endpoint (v0.136.0)
 

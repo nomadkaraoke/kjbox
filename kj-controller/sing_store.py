@@ -2327,13 +2327,29 @@ class SingStore:
             return counts
         conn = self._get_conn()
         matches = lambda e: self.email_hash(e) == want  # noqa: E731
-        devices = set()
-        for r in conn.execute("SELECT device_id, gen_email FROM singer_accounts"):
+        # Ownership. sing_gen_accounts is one row per device (device_id PRIMARY
+        # KEY, upserted), but singer_accounts is one row per (device, night), so a
+        # device that switched person A -> B can still carry an old row for A.
+        # A device is A's only if A is its MOST RECENT link across both tables;
+        # device-wide data (push, alias, phones, requests) is erased only then.
+        # A's own link rows are erased wherever they sit.
+        latest = {}  # device_id -> (timestamp, email)
+        a_rows = []  # singer_accounts keys that are A's
+        for r in conn.execute("SELECT device_id, gen_email, night_started_at, linked_at "
+                              "FROM singer_accounts"):
+            cand = (r["linked_at"] or "", r["gen_email"])
+            if r["device_id"] not in latest or cand[0] >= latest[r["device_id"]][0]:
+                latest[r["device_id"]] = cand
             if matches(r["gen_email"]):
-                devices.add(r["device_id"])
-        for r in conn.execute("SELECT device_id, email FROM sing_gen_accounts"):
+                a_rows.append((r["device_id"], r["night_started_at"]))
+        gen_dev = []
+        for r in conn.execute("SELECT device_id, email, verified_at FROM sing_gen_accounts"):
+            cand = (r["verified_at"] or "", r["email"])
+            if r["device_id"] not in latest or cand[0] >= latest[r["device_id"]][0]:
+                latest[r["device_id"]] = cand
             if matches(r["email"]):
-                devices.add(r["device_id"])
+                gen_dev.append(r["device_id"])
+        devices = {d for d, (_, e) in latest.items() if matches(e)}
         outbox_ids = []
         for r in conn.execute(
                 "SELECT history_id, payload_json FROM history_outbox "
@@ -2344,7 +2360,7 @@ class SingStore:
                 continue
             if email and matches(email):
                 outbox_ids.append(r["history_id"])
-        if not devices and not outbox_ids:
+        if not devices and not outbox_ids and not a_rows and not gen_dev:
             return counts
 
         def marks(items):
@@ -2371,10 +2387,6 @@ class SingStore:
                     names.add(fold_name(r["canonical_name"]))
                 names.discard("")
 
-                run("singer_accounts",
-                    f"DELETE FROM singer_accounts WHERE device_id IN ({marks(dev)})", dev)
-                run("sing_gen_accounts",
-                    f"DELETE FROM sing_gen_accounts WHERE device_id IN ({marks(dev)})", dev)
                 run("push_subscriptions",
                     f"DELETE FROM sing_push_subscriptions WHERE device_id IN ({marks(dev)})", dev)
                 run("aliases",
@@ -2395,6 +2407,12 @@ class SingStore:
                         f"DELETE FROM singer_photo_consent WHERE name_key IN ({marks(keys)})", keys)
                     run("song_media_consent",
                         f"DELETE FROM song_media_consent WHERE name_key IN ({marks(keys)})", keys)
+            for d, n in a_rows:
+                run("singer_accounts",
+                    "DELETE FROM singer_accounts WHERE device_id=? AND night_started_at=?",
+                    (d, n))
+            for d in gen_dev:
+                run("sing_gen_accounts", "DELETE FROM sing_gen_accounts WHERE device_id=?", (d,))
             if outbox_ids:
                 run("history_outbox",
                     f"DELETE FROM history_outbox WHERE history_id IN ({marks(outbox_ids)})",
@@ -2405,10 +2423,3 @@ class SingStore:
             raise
         return counts
 
-    DELETIONS_CURSOR_KEY = "account_deletions_since"
-
-    def get_deletions_cursor(self):
-        return self._get_meta(self.DELETIONS_CURSOR_KEY)
-
-    def set_deletions_cursor(self, value):
-        self._set_meta(self.DELETIONS_CURSOR_KEY, value)
