@@ -2402,7 +2402,16 @@ class SingStore:
                         f"UPDATE photo_consent_events SET request_id=NULL, instagram=NULL "
                         f"WHERE request_id IN ({marks(request_ids)})", request_ids)
                 if names:
-                    keys = sorted(names)
+                    # Keep consent for names another (not-forgotten) device still uses.
+                    shared = set()
+                    for r in conn.execute("SELECT singer_name FROM sing_requests "
+                                          f"WHERE device_id NOT IN ({marks(dev)})", dev):
+                        shared.add(fold_name(r["singer_name"]))
+                    for r in conn.execute("SELECT canonical_name FROM singer_aliases "
+                                          f"WHERE device_id NOT IN ({marks(dev)})", dev):
+                        shared.add(fold_name(r["canonical_name"]))
+                    keys = sorted(names - shared)
+                if names and keys:
                     run("singer_photo_consent",
                         f"DELETE FROM singer_photo_consent WHERE name_key IN ({marks(keys)})", keys)
                     run("song_media_consent",

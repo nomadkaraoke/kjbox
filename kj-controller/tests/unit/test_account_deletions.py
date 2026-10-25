@@ -87,6 +87,18 @@ def test_forget_removes_linked_rows_only(store):
                         (friend["id"],)).fetchone()[0] == 0
 
 
+def test_forget_keeps_consent_for_name_shared_with_other_device(store):
+    _seed(store, "dev-a", "ann@example.com", "Sam")  # owns the consent rows
+    store.link_account("dev-b", "bob@example.com", "app", NIGHT)
+    _req(store, "dev-b", "Sam")  # another person singing under the same name
+
+    counts = store.forget_gen_account(h("ann@example.com"))
+
+    assert counts["singer_photo_consent"] == 0 and counts["song_media_consent"] == 0
+    assert _count(store, "singer_photo_consent") == 1
+    assert _count(store, "song_media_consent") == 1
+
+
 def test_forget_leaves_sent_history_rows(store):
     _seed(store, "dev-a", "ann@example.com", "Ann")
     store.outbox_mark_sent("hid-dev-a")
