@@ -127,6 +127,7 @@ may only set `gen_api_url`, `gen_api_token`, `gen_kjbox_secret`, `decide_api_url
 refused); the data paths and hermetic switches are re-asserted after it.
 
 - **Never the real box.** Everything lives in `~/kjdata-localstack/` (`KJBOX_LOCALSTACK_DIR`).
+- **Several stacks on one machine** (the mobile app's parallel E2E lanes): each gets its own `KJBOX_LOCALSTACK_PORT`, `KJBOX_LOCALSTACK_DIR` and `KJBOX_LOCALSTACK_GEN_URL` / `KJBOX_LOCALSTACK_DECIDE_URL` (default `http://127.0.0.1:8010` / `:8030`) pointing at its lane's gen and decide stacks.
   The dir's name must contain `localstack` (never `$HOME`, `/` or `~/kjdata`), and both the
   script and `dev_server.py --fixture` refuse a non-empty dir without the
   `.kjbox-localstack` marker they write on first use, so `reset` can only ever wipe a

@@ -16,6 +16,8 @@
 #   scripts/local-stack.sh serve     run in the FOREGROUND (CI / debugging)
 #
 # Env: KJBOX_LOCALSTACK_DIR (default ~/kjdata-localstack), KJBOX_LOCALSTACK_PORT (8040),
+#      KJBOX_LOCALSTACK_GEN_URL / KJBOX_LOCALSTACK_DECIDE_URL (http://127.0.0.1:8010 / :8030: the gen and decide
+#      local stacks it talks to; the mobile app's parallel E2E lanes run several stacks on other ports),
 #      PYTHON (python3), KJ_CONFIG_OVERRIDES (extra JSON config, merged over the
 #      stack's gen/decide settings). See docs/TESTING.md § "Local stack".
 
@@ -31,8 +33,8 @@ PIDFILE="$DATA_DIR/server.pid"
 LOG="$DATA_DIR/server.log"
 FIXTURE="$KJ_DIR/tests/fixtures/localstack/night.json"
 BASE="http://$HOST:$PORT"
-GEN_URL="http://127.0.0.1:8010"
-DECIDE_URL="http://127.0.0.1:8030"
+GEN_URL="${KJBOX_LOCALSTACK_GEN_URL:-http://127.0.0.1:8010}"
+DECIDE_URL="${KJBOX_LOCALSTACK_DECIDE_URL:-http://127.0.0.1:8030}"
 SECRET="local-stack-secret"
 
 MARKER=".kjbox-localstack"
@@ -166,9 +168,9 @@ cmd_status() {
     test_api="$(http_code "$BASE/sing/api/test/state")"
     gen="$(http_code "$GEN_URL/")"
     decide="$(http_code "$DECIDE_URL/")"
-    "$PY" - "$running" "$pid" "$night" "$test_api" "$gen" "$decide" "$BASE" "$DATA_DIR" "$LOG" <<'EOF'
+    "$PY" - "$running" "$pid" "$night" "$test_api" "$gen" "$decide" "$BASE" "$DATA_DIR" "$LOG" "$GEN_URL" "$DECIDE_URL" <<'EOF'
 import json, sys
-running, pid, night, test_api, gen, decide, base, data_dir, log = sys.argv[1:10]
+running, pid, night, test_api, gen, decide, base, data_dir, log, gen_url, decide_url = sys.argv[1:12]
 up = lambda code: code not in ("", "000")
 print(json.dumps({
     "service": "kjbox",
@@ -179,8 +181,8 @@ print(json.dumps({
     "night_status": int(night) if night.isdigit() and night != "000" else None,
     "test_api": test_api == "200",
     "event_code": "2121",
-    "gen": {"url": "http://127.0.0.1:8010", "reachable": up(gen)},
-    "decide": {"url": "http://127.0.0.1:8030", "reachable": up(decide)},
+    "gen": {"url": gen_url, "reachable": up(gen)},
+    "decide": {"url": decide_url, "reachable": up(decide)},
     "data_dir": data_dir,
     "log": log,
 }))
