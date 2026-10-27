@@ -523,9 +523,43 @@ body {
 }
 .main-layout {
     display: grid;
-    grid-template-columns: 2fr 1fr;
-    gap: 0.75rem;
+    /* col1 · drag handle · col2. The handle column IS the gutter (no column
+     * gap); --kj-col1/--kj-col2 are set by initColumnResizer (app.js). */
+    grid-template-columns:
+        minmax(0, var(--kj-col1, 2fr)) var(--col-gutter, 0.75rem) minmax(0, var(--kj-col2, 1fr));
+    gap: 0;
     align-items: start;
+}
+/* Draggable separator between the two columns. Spans the full layout height
+ * (align-self: stretch) so it can be grabbed anywhere down the page. */
+.column-resizer {
+    align-self: stretch;
+    position: relative;
+    cursor: col-resize;
+    touch-action: none;
+}
+.column-resizer::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 50%;
+    width: 2px;
+    transform: translateX(-50%);
+    border-radius: 1px;
+    background: #262626;
+    transition: background 0.15s, width 0.15s;
+}
+.column-resizer:hover::before,
+.column-resizer:focus-visible::before,
+body.col-resizing .column-resizer::before {
+    width: 4px;
+    background: rgba(255, 91, 184, 0.6);
+}
+.column-resizer:focus-visible { outline: none; }
+body.col-resizing {
+    cursor: col-resize;
+    user-select: none;
 }
 .column {
     display: flex;
@@ -1799,7 +1833,7 @@ body {
 
 @media (max-width: 1024px) {
     body { padding: 0.75rem; margin: 0.5rem auto; }
-    .main-layout { gap: 0.5rem; }
+    .main-layout { --col-gutter: 0.5rem; }
     .column { gap: 0.5rem; }
     .container { padding: 0.75rem; }
 }
@@ -1813,6 +1847,7 @@ body {
         gap: 0.5rem;
     }
     #col1, #col2 { display: contents; }
+    .column-resizer { display: none; }
     /* Ensure all sections fill full width when columns are unwrapped */
     .container { width: 100%; }
     .playback-controls  { order: 1; }
@@ -2920,11 +2955,15 @@ body {
     border-top: 2px solid #ffdf6b;
     margin-top: -2px;
 }
+/* Basis 22rem: when #col1 is narrowed (column resizer / small window) the
+ * action buttons wrap to their own line instead of squeezing the singer +
+ * song info to nothing. */
 .rotation-info {
     display: flex;
     align-items: center;
+    flex-wrap: wrap;
     gap: 4px;
-    flex: 1;
+    flex: 1 1 22rem;
     min-width: 0;
     overflow: hidden;
 }
@@ -2939,12 +2978,16 @@ body {
     font-size: 0.85em;
     white-space: nowrap;
 }
+/* Wraps rather than ellipsizing: the KJ needs the full title. Widen #col1
+ * with the column resizer to get it back onto one line. Basis 8rem: when
+ * the info line is too tight (narrow #col1) the song drops to its own line inside
+ * .rotation-info rather than wrapping one word per line. */
 .rotation-song {
     color: #999;
     font-size: 0.75em;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    flex: 1 1 8rem;
     min-width: 0;
 }
 .rotation-copyable { cursor: pointer; }

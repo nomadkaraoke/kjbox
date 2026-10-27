@@ -3403,6 +3403,116 @@ function setVncSize(size) {
     localStorage.setItem('kj-vnc-size', size);
 }
 
+// --- Column resizer (drag the line between #col1 and #col2) ---
+// The KJ widens the left/main column to read long song titles in the rotation.
+// Stored as col1's share of the two columns (0..1) so it scales with the window;
+// applied through --kj-col1 / --kj-col2 fr values on .main-layout.
+
+const COL_SHARE_DEFAULT = 2 / 3;
+const COL1_MIN_PX = 520;
+const COL2_MIN_PX = 260;
+
+function clampColShare(share, total) {
+    const lo = total > 0 ? COL1_MIN_PX / total : 0.3;
+    const hi = total > 0 ? 1 - COL2_MIN_PX / total : 0.85;
+    if (lo >= hi) return COL_SHARE_DEFAULT;
+    return Math.min(hi, Math.max(lo, share));
+}
+
+function applyColShare(share) {
+    const layout = document.querySelector('.main-layout');
+    const resizer = document.getElementById('column-resizer');
+    if (!layout) return;
+    if (share == null) {
+        layout.style.removeProperty('--kj-col1');
+        layout.style.removeProperty('--kj-col2');
+        share = COL_SHARE_DEFAULT;
+    } else {
+        layout.style.setProperty('--kj-col1', share.toFixed(4) + 'fr');
+        layout.style.setProperty('--kj-col2', (1 - share).toFixed(4) + 'fr');
+    }
+    if (resizer) resizer.setAttribute('aria-valuenow', String(Math.round(share * 100)));
+}
+
+function columnsWidth() {
+    const layout = document.querySelector('.main-layout');
+    const resizer = document.getElementById('column-resizer');
+    if (!layout || !resizer) return 0;
+    return layout.getBoundingClientRect().width - resizer.getBoundingClientRect().width;
+}
+
+function saveColShare(share) {
+    try {
+        if (share == null) localStorage.removeItem('kj-col1-share');
+        else localStorage.setItem('kj-col1-share', share.toFixed(4));
+    } catch (e) { /* private mode */ }
+}
+
+function initColumnResizer() {
+    const layout = document.querySelector('.main-layout');
+    const resizer = document.getElementById('column-resizer');
+    if (!layout || !resizer) return;
+
+    // The saved preference is kept as-is; what's applied is re-clamped to the
+    // current width (on load and on window resize) so neither column drops
+    // below its minimum when the window narrows.
+    let preferred = null;
+    try { preferred = parseFloat(localStorage.getItem('kj-col1-share')); } catch (e) { /* private mode */ }
+    if (!(preferred > 0 && preferred < 1)) preferred = null;
+    const applyPreferred = () => {
+        if (preferred == null) return;
+        const total = columnsWidth();
+        if (total > 0) applyColShare(clampColShare(preferred, total));
+    };
+    applyPreferred();
+    window.addEventListener('resize', applyPreferred);
+
+    resizer.addEventListener('pointerdown', (e) => {
+        if (e.button !== 0) return;
+        e.preventDefault();
+        resizer.setPointerCapture(e.pointerId);
+        document.body.classList.add('col-resizing');
+        const left = layout.getBoundingClientRect().left;
+        const half = resizer.getBoundingClientRect().width / 2;
+        let share = null;
+        const onMove = (ev) => {
+            const total = columnsWidth();
+            if (total <= 0) return;
+            share = clampColShare((ev.clientX - left - half) / total, total);
+            applyColShare(share);
+        };
+        const onUp = () => {
+            resizer.removeEventListener('pointermove', onMove);
+            resizer.removeEventListener('pointerup', onUp);
+            resizer.removeEventListener('pointercancel', onUp);
+            document.body.classList.remove('col-resizing');
+            if (share != null) { preferred = share; saveColShare(share); }
+        };
+        resizer.addEventListener('pointermove', onMove);
+        resizer.addEventListener('pointerup', onUp);
+        resizer.addEventListener('pointercancel', onUp);
+    });
+
+    resizer.addEventListener('dblclick', () => {
+        preferred = null;
+        applyColShare(null);
+        saveColShare(null);
+    });
+
+    resizer.addEventListener('keydown', (e) => {
+        if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+        e.preventDefault();
+        const total = columnsWidth();
+        const current = parseFloat(resizer.getAttribute('aria-valuenow')) / 100 || COL_SHARE_DEFAULT;
+        const share = clampColShare(current + (e.key === 'ArrowRight' ? 0.02 : -0.02), total);
+        applyColShare(share);
+        preferred = share;
+        saveColShare(share);
+    });
+}
+
+document.addEventListener('DOMContentLoaded', initColumnResizer);
+
 // --- System Control (#4 dangerous action protection) ---
 
 function showSystemOverlay(msg) {
