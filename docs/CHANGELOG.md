@@ -10,6 +10,7 @@ Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](a
   right at least 260px. Hidden on mobile (single-column layout).
 - Rotation song titles wrap instead of being cut off with "…". When the left column is narrow, the
   action buttons wrap below the singer/song info, and the song drops to its own line inside it.
+
 ## 2026-10-27 - Singers can add/remove duet partners on a song already sent (v0.138.0)
 
 - A singer asked at the desk to turn their queued song into a duet with a friend; partners could only be
