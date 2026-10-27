@@ -1085,6 +1085,17 @@ class TestEditSingers:
         expect(page.locator(".sing-modal")).to_have_count(0)
         assert sent[-1]["additional_singers"] == []
 
+    def test_backing_out_of_picker_keeps_the_draft(self, page, live_server, live_token):
+        self._done(page, live_server, live_token)
+        page.locator('[data-testid="edit-singers"]').click()
+        page.locator('.sing-modal [data-testid="add-singer"]').click()
+        page.locator('[data-testid="partner-name-0"]').fill("Priya K.")
+        page.locator('.sing-modal [data-testid="add-existing-singer"]').click()
+        expect(page.locator('[data-testid="partner-picker-filter"]')).to_be_visible()
+        page.keyboard.press("Escape")
+        expect(page.locator('[data-testid="edit-singers-save"]')).to_be_visible()
+        expect(page.locator('[data-testid="partner-name-0"]')).to_have_value("Priya K.")
+
     def test_new_singer_typed_in(self, page, live_server, live_token):
         sent = self._done(page, live_server, live_token)
         page.locator('[data-testid="edit-singers"]').click()

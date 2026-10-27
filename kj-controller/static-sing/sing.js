@@ -1497,29 +1497,37 @@ function _versionSection(version) {
 // explainer, brand info, technical details, language picker). Closes on ×,
 // backdrop tap, Esc.
 
+// Run when the singer dismisses the modal (×, backdrop, Esc), not when code
+// closes it. Lets a stacked flow (the partner picker over the singers editor)
+// return to where it came from.
+let _singModalOnDismiss = null;
+
 function openSingModal(title, ...children) {
   closeSingModal();
   const dialog = el("div", { class: "sing-modal", role: "dialog", "aria-modal": "true" },
     el("div", { class: "sing-modal-head" },
       el("h3", { class: "sing-modal-title" }, title),
       el("button", { class: "sing-modal-close", "aria-label": t("common.close"),
-        onclick: () => closeSingModal() }, "×"),
+        onclick: () => closeSingModal(true) }, "×"),
     ),
     el("div", { class: "sing-modal-body" }, ...children),
   );
   const backdrop = el("div", { id: "sing-modal-backdrop", class: "sing-modal-backdrop" }, dialog);
-  backdrop.addEventListener("click", (e) => { if (e.target === backdrop) closeSingModal(); });
+  backdrop.addEventListener("click", (e) => { if (e.target === backdrop) closeSingModal(true); });
   document.body.appendChild(backdrop);
   return dialog;
 }
 
-function closeSingModal() {
+function closeSingModal(dismissed = false) {
   const existing = document.getElementById("sing-modal-backdrop");
   if (existing) existing.remove();
+  const onDismiss = dismissed && existing ? _singModalOnDismiss : null;
+  _singModalOnDismiss = null;
+  if (onDismiss) onDismiss();
 }
 
 document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape") closeSingModal();
+  if (e.key === "Escape") closeSingModal(true);
 });
 
 // --- Community vs Commercial explainer (tappable class pill) ---------------
@@ -3053,7 +3061,7 @@ async function loadKnownSingers() {
 // a busy night): a filter box pinned at the top, A–Z list with letter
 // headers, big full-width tap rows, and a "not here? add as new" escape
 // hatch when the filter finds nobody.
-function openPartnerPicker(selfName, partners, onPick) {
+function openPartnerPicker(selfName, partners, onPick, onDismiss = null) {
   const filter = el("input", {
     type: "search",
     class: "partner-picker-filter",
@@ -3069,6 +3077,7 @@ function openPartnerPicker(selfName, partners, onPick) {
     el("p", { class: "sing-modal-hint partner-picker-hint" }, t("confirm.pickerHint")),
     filter, list);
   dialog.classList.add("partner-picker");
+  _singModalOnDismiss = onDismiss;
 
   let names = null;
   const draw = () => {
@@ -3138,7 +3147,7 @@ function openPartnerPicker(selfName, partners, onPick) {
 
 // `partners` is edited in place; `onChange` re-draws after a remove/add and
 // `onPick` receives a singer chosen in the picker (or typed as new there).
-function renderPartnersEditor(partners, { selfName, title, onChange, onPick }) {
+function renderPartnersEditor(partners, { selfName, title, onChange, onPick, onPickerDismiss = null }) {
   const wrap = el("div", { class: "partners-section" },
     el("div", { class: "partners-title" }, title),
   );
@@ -3191,7 +3200,7 @@ function renderPartnersEditor(partners, { selfName, title, onChange, onPick }) {
         type: "button",
         class: "partners-add",
         "data-testid": "add-existing-singer",
-        onclick: () => openPartnerPicker(selfName, partners, onPick),
+        onclick: () => openPartnerPicker(selfName, partners, onPick, onPickerDismiss),
       }, t("confirm.existingSinger")),
       el("button", {
         type: "button",
@@ -3748,6 +3757,8 @@ function openEditSingers(req, editToken, song, draft = null) {
       title: t("mySongs.singersYou", { name: req.singer_name }),
       onChange: reopen,
       onPick: (p) => { if (partners.length < MAX_PARTNERS) partners.push(p); reopen(); },
+      // Backing out of the picker returns to the editor, draft intact.
+      onPickerDismiss: reopen,
     }),
     errEl,
     el("div", { class: "row confirm-actions" },
