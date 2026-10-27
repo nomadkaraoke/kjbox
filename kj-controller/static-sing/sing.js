@@ -398,6 +398,14 @@ async function changeSong(id, editToken, payload) {
   });
 }
 
+// Replace the duet partners on a request this device owns ([] = solo).
+async function editRequestSingers(id, editToken, partners) {
+  return fetchJson(`${BASE}/requests/${id}/singers`, {
+    method: "POST",
+    body: JSON.stringify({ edit_token: editToken, device_id: DEVICE_ID, additional_singers: partners }),
+  });
+}
+
 async function reorderSongs(items) {
   return fetchJson(`${BASE}/requests/reorder`, {
     method: "POST",
@@ -1489,29 +1497,37 @@ function _versionSection(version) {
 // explainer, brand info, technical details, language picker). Closes on ×,
 // backdrop tap, Esc.
 
+// Run when the singer dismisses the modal (×, backdrop, Esc), not when code
+// closes it. Lets a stacked flow (the partner picker over the singers editor)
+// return to where it came from.
+let _singModalOnDismiss = null;
+
 function openSingModal(title, ...children) {
   closeSingModal();
   const dialog = el("div", { class: "sing-modal", role: "dialog", "aria-modal": "true" },
     el("div", { class: "sing-modal-head" },
       el("h3", { class: "sing-modal-title" }, title),
       el("button", { class: "sing-modal-close", "aria-label": t("common.close"),
-        onclick: () => closeSingModal() }, "×"),
+        onclick: () => closeSingModal(true) }, "×"),
     ),
     el("div", { class: "sing-modal-body" }, ...children),
   );
   const backdrop = el("div", { id: "sing-modal-backdrop", class: "sing-modal-backdrop" }, dialog);
-  backdrop.addEventListener("click", (e) => { if (e.target === backdrop) closeSingModal(); });
+  backdrop.addEventListener("click", (e) => { if (e.target === backdrop) closeSingModal(true); });
   document.body.appendChild(backdrop);
   return dialog;
 }
 
-function closeSingModal() {
+function closeSingModal(dismissed = false) {
   const existing = document.getElementById("sing-modal-backdrop");
   if (existing) existing.remove();
+  const onDismiss = dismissed && existing ? _singModalOnDismiss : null;
+  _singModalOnDismiss = null;
+  if (onDismiss) onDismiss();
 }
 
 document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape") closeSingModal();
+  if (e.key === "Escape") closeSingModal(true);
 });
 
 // --- Community vs Commercial explainer (tappable class pill) ---------------
@@ -3010,6 +3026,201 @@ function renderSearch() {
   return card;
 }
 
+// --- Duet partners ----------------------------------------------------------
+// Shared by the confirm screen (partners on a new request) and My songs'
+// singers editor (add/remove partners on a song already sent).
+
+// Fold a name like the server does (casefold + accents stripped +
+// punctuation → space) so picker filtering agrees with backend dedup.
+function foldName(n) {
+  return (n || "")
+    .normalize("NFD").replace(/[̀-ͯ]/g, "")
+    // Unicode-aware so non-Latin names (José, 김민수, Анна) aren't folded away.
+    .toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, " ").trim().replace(/\s+/g, " ");
+}
+
+// Tonight's known singers (rotation, any status + pending requests) for
+// the "Existing singer" picker. Short-lived cache — new singers sign up
+// all night; a failed fetch falls back to a stale list if we have one,
+// else the picker offers "add as a new singer".
+async function loadKnownSingers() {
+  const fresh = Array.isArray(state._knownSingers)
+    && Date.now() - (state._knownSingersAt || 0) < KNOWN_SINGERS_TTL_MS;
+  if (fresh) return state._knownSingers;
+  try {
+    const data = await fetchJson(`${BASE}/singers`);
+    state._knownSingersAt = Date.now();
+    return (state._knownSingers = data.singers || []);
+  } catch (e) {
+    if (Array.isArray(state._knownSingers)) return state._knownSingers;
+    throw e;
+  }
+}
+
+// "Existing singer" → a modal picker built for a long list (50+ names on
+// a busy night): a filter box pinned at the top, A–Z list with letter
+// headers, big full-width tap rows, and a "not here? add as new" escape
+// hatch when the filter finds nobody.
+function openPartnerPicker(selfName, partners, onPick, onDismiss = null) {
+  const filter = el("input", {
+    type: "search",
+    class: "partner-picker-filter",
+    "data-testid": "partner-picker-filter",
+    placeholder: t("confirm.pickerFilter"),
+    autocomplete: "off",
+    autocapitalize: "words",
+    "aria-label": t("confirm.pickerFilter"),
+  });
+  const list = el("div", { class: "partner-picker-list", "data-testid": "partner-picker-list", role: "listbox" },
+    el("p", { class: "hint" }, t("common.loading")));
+  const dialog = openSingModal(t("confirm.pickerTitle"),
+    el("p", { class: "sing-modal-hint partner-picker-hint" }, t("confirm.pickerHint")),
+    filter, list);
+  dialog.classList.add("partner-picker");
+  _singModalOnDismiss = onDismiss;
+
+  let names = null;
+  const draw = () => {
+    list.innerHTML = "";
+    if (names === null) return;
+    const self = foldName(selfName);
+    const added = new Set(partners.map((p) => foldName(p.name)));
+    const q = foldName(filter.value);
+    const pool = names
+      .filter((n) => foldName(n) && foldName(n) !== self)
+      .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
+    const shown = q ? pool.filter((n) => foldName(n).includes(q)) : pool;
+    if (!shown.length) {
+      list.appendChild(el("p", { class: "hint partner-picker-empty" },
+        q ? t("confirm.pickerNoMatch", { query: filter.value.trim() })
+          : t("confirm.pickerEmpty")));
+      const typed = filter.value.trim();
+      list.appendChild(el("button", {
+        type: "button",
+        class: "btn ghost partner-picker-new",
+        "data-testid": "partner-picker-new",
+        onclick: () => { closeSingModal(); onPick({ name: typed, phone: "" }); },
+      }, typed ? t("confirm.pickerAddNew", { name: typed }) : t("confirm.newSinger")));
+      return;
+    }
+    // Letter headers only help when scanning a long, unfiltered list.
+    const withHeaders = !q && shown.length > 12;
+    let letter = null;
+    for (const n of shown) {
+      const first = (foldName(n)[0] || "#").toUpperCase();
+      if (withHeaders && first !== letter) {
+        letter = first;
+        list.appendChild(el("div", { class: "partner-picker-letter", "aria-hidden": "true" }, letter));
+      }
+      const isAdded = added.has(foldName(n));
+      list.appendChild(el("button", {
+        type: "button",
+        class: "partner-picker-row" + (isAdded ? " added" : ""),
+        "data-testid": "partner-picker-row",
+        role: "option",
+        disabled: isAdded ? "" : null,
+        onclick: () => { closeSingModal(); onPick({ name: n, phone: "", existing: true }); },
+      },
+        el("span", { class: "partner-picker-name" }, n),
+        isAdded ? el("span", { class: "partner-picker-added" }, t("confirm.pickerAdded")) : null,
+      ));
+    }
+  };
+  filter.addEventListener("input", draw);
+  // Keyboard straight into the filter on desktop; on touch the keyboard
+  // would cover half the list, so let them scroll first.
+  if (window.matchMedia && window.matchMedia("(pointer: fine)").matches) filter.focus();
+
+  loadKnownSingers()
+    .then((n) => { names = n; if (list.isConnected) draw(); })
+    .catch(() => {
+      names = [];
+      if (!list.isConnected) return;
+      list.innerHTML = "";
+      list.appendChild(el("p", { class: "hint" }, t("confirm.pickerFailed")));
+      list.appendChild(el("button", {
+        type: "button", class: "btn ghost partner-picker-new", "data-testid": "partner-picker-new",
+        onclick: () => { closeSingModal(); onPick({ name: "", phone: "" }); },
+      }, t("confirm.newSinger")));
+    });
+}
+
+// `partners` is edited in place; `onChange` re-draws after a remove/add and
+// `onPick` receives a singer chosen in the picker (or typed as new there).
+function renderPartnersEditor(partners, { selfName, title, onChange, onPick, onPickerDismiss = null }) {
+  const wrap = el("div", { class: "partners-section" },
+    el("div", { class: "partners-title" }, title),
+  );
+  partners.forEach((p, i) => {
+    const remove = el("button", {
+      type: "button",
+      class: "partner-remove",
+      "aria-label": t("confirm.removePartner"),
+      onclick: () => { partners.splice(i, 1); onChange(); },
+    }, "×");
+    if (p.existing) {
+      // Picked from tonight's list — the host already knows them, so no
+      // name/phone fields to fill (or mistype).
+      wrap.appendChild(el("div", {
+        class: "partner-row partner-row-existing",
+        "data-testid": "partner-row",
+      },
+        el("div", { class: "partner-existing" },
+          el("span", { class: "partner-existing-name", "data-testid": `partner-existing-${i}` }, p.name),
+          el("span", { class: "partner-existing-note" }, t("confirm.partnerOnList")),
+        ),
+        remove,
+      ));
+      return;
+    }
+    wrap.appendChild(el("div", {
+      class: "partner-row",
+      "data-testid": "partner-row",
+    },
+      el("input", {
+        type: "text",
+        placeholder: t("confirm.partnerName"),
+        value: p.name || "",
+        "data-testid": `partner-name-${i}`,
+        oninput: (e) => { partners[i].name = e.target.value; },
+      }),
+      el("input", {
+        type: "tel",
+        placeholder: t("confirm.partnerPhone"),
+        value: p.phone || "",
+        "data-testid": `partner-phone-${i}`,
+        oninput: (e) => { partners[i].phone = e.target.value; },
+      }),
+      remove,
+    ));
+  });
+  if (partners.length < MAX_PARTNERS) {
+    wrap.appendChild(el("div", { class: "partners-add-row" },
+      el("button", {
+        type: "button",
+        class: "partners-add",
+        "data-testid": "add-existing-singer",
+        onclick: () => openPartnerPicker(selfName, partners, onPick, onPickerDismiss),
+      }, t("confirm.existingSinger")),
+      el("button", {
+        type: "button",
+        class: "partners-add",
+        "data-testid": "add-singer",
+        onclick: () => {
+          partners.push({ name: "", phone: "" });
+          onChange();
+          // Straight into the new name field.
+          document.querySelector(`[data-testid="partner-name-${partners.length - 1}"]`)?.focus();
+        },
+      }, t("confirm.newSinger")),
+    ));
+  } else {
+    wrap.appendChild(el("div", { class: "partners-cap-hint" },
+      t("confirm.maxSingers", { count: MAX_PARTNERS + 1 })));
+  }
+  return wrap;
+}
+
 function renderConfirm() {
   let submitting = false;
   let err = "";
@@ -3132,197 +3343,17 @@ function renderConfirm() {
     }
   };
 
-  // Fold a name like the server does (casefold + accents stripped +
-  // punctuation → space) so picker filtering agrees with backend dedup.
-  const foldName = (n) => (n || "")
-    .normalize("NFD").replace(/[̀-ͯ]/g, "")
-    // Unicode-aware so non-Latin names (José, 김민수, Анна) aren't folded away.
-    .toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, " ").trim().replace(/\s+/g, " ");
-
-  // Tonight's known singers (rotation, any status + pending requests) for
-  // the "Existing singer" picker. Short-lived cache — new singers sign up
-  // all night; a failed fetch falls back to a stale list if we have one,
-  // else the picker offers "add as a new singer".
-  async function loadKnownSingers() {
-    const fresh = Array.isArray(state._knownSingers)
-      && Date.now() - (state._knownSingersAt || 0) < KNOWN_SINGERS_TTL_MS;
-    if (fresh) return state._knownSingers;
-    try {
-      const data = await fetchJson(`${BASE}/singers`);
-      state._knownSingersAt = Date.now();
-      return (state._knownSingers = data.singers || []);
-    } catch (e) {
-      if (Array.isArray(state._knownSingers)) return state._knownSingers;
-      throw e;
-    }
-  }
-
-  function addPartner(p) {
+  const addPartner = (p) => {
     if (state.additional.length >= MAX_PARTNERS) return;
     state.additional.push(p);
     rerender();
-  }
-
-  // "Existing singer" → a modal picker built for a long list (50+ names on
-  // a busy night): a filter box pinned at the top, A–Z list with letter
-  // headers, big full-width tap rows, and a "not here? add as new" escape
-  // hatch when the filter finds nobody.
-  function openExistingPicker() {
-    const filter = el("input", {
-      type: "search",
-      class: "partner-picker-filter",
-      "data-testid": "partner-picker-filter",
-      placeholder: t("confirm.pickerFilter"),
-      autocomplete: "off",
-      autocapitalize: "words",
-      "aria-label": t("confirm.pickerFilter"),
-    });
-    const list = el("div", { class: "partner-picker-list", "data-testid": "partner-picker-list", role: "listbox" },
-      el("p", { class: "hint" }, t("common.loading")));
-    const dialog = openSingModal(t("confirm.pickerTitle"),
-      el("p", { class: "sing-modal-hint partner-picker-hint" }, t("confirm.pickerHint")),
-      filter, list);
-    dialog.classList.add("partner-picker");
-
-    let names = null;
-    const draw = () => {
-      list.innerHTML = "";
-      if (names === null) return;
-      const self = foldName(state.name);
-      const added = new Set(state.additional.map((p) => foldName(p.name)));
-      const q = foldName(filter.value);
-      const pool = names
-        .filter((n) => foldName(n) && foldName(n) !== self)
-        .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
-      const shown = q ? pool.filter((n) => foldName(n).includes(q)) : pool;
-      if (!shown.length) {
-        list.appendChild(el("p", { class: "hint partner-picker-empty" },
-          q ? t("confirm.pickerNoMatch", { query: filter.value.trim() })
-            : t("confirm.pickerEmpty")));
-        const typed = filter.value.trim();
-        list.appendChild(el("button", {
-          type: "button",
-          class: "btn ghost partner-picker-new",
-          "data-testid": "partner-picker-new",
-          onclick: () => { closeSingModal(); addPartner({ name: typed, phone: "" }); },
-        }, typed ? t("confirm.pickerAddNew", { name: typed }) : t("confirm.newSinger")));
-        return;
-      }
-      // Letter headers only help when scanning a long, unfiltered list.
-      const withHeaders = !q && shown.length > 12;
-      let letter = null;
-      for (const n of shown) {
-        const first = (foldName(n)[0] || "#").toUpperCase();
-        if (withHeaders && first !== letter) {
-          letter = first;
-          list.appendChild(el("div", { class: "partner-picker-letter", "aria-hidden": "true" }, letter));
-        }
-        const isAdded = added.has(foldName(n));
-        list.appendChild(el("button", {
-          type: "button",
-          class: "partner-picker-row" + (isAdded ? " added" : ""),
-          "data-testid": "partner-picker-row",
-          role: "option",
-          disabled: isAdded ? "" : null,
-          onclick: () => { closeSingModal(); addPartner({ name: n, phone: "", existing: true }); },
-        },
-          el("span", { class: "partner-picker-name" }, n),
-          isAdded ? el("span", { class: "partner-picker-added" }, t("confirm.pickerAdded")) : null,
-        ));
-      }
-    };
-    filter.addEventListener("input", draw);
-    // Keyboard straight into the filter on desktop; on touch the keyboard
-    // would cover half the list, so let them scroll first.
-    if (window.matchMedia && window.matchMedia("(pointer: fine)").matches) filter.focus();
-
-    loadKnownSingers()
-      .then((n) => { names = n; if (list.isConnected) draw(); })
-      .catch(() => {
-        names = [];
-        if (!list.isConnected) return;
-        list.innerHTML = "";
-        list.appendChild(el("p", { class: "hint" }, t("confirm.pickerFailed")));
-        list.appendChild(el("button", {
-          type: "button", class: "btn ghost partner-picker-new", "data-testid": "partner-picker-new",
-          onclick: () => { closeSingModal(); addPartner({ name: "", phone: "" }); },
-        }, t("confirm.newSinger")));
-      });
-  }
-
-  function renderPartnersSection() {
-    const wrap = el("div", { class: "partners-section" },
-      el("div", { class: "partners-title" }, t("confirm.partnersTitle")),
-    );
-    state.additional.forEach((p, i) => {
-      const remove = el("button", {
-        type: "button",
-        class: "partner-remove",
-        "aria-label": t("confirm.removePartner"),
-        onclick: () => { state.additional.splice(i, 1); rerender(); },
-      }, "×");
-      if (p.existing) {
-        // Picked from tonight's list — the host already knows them, so no
-        // name/phone fields to fill (or mistype).
-        wrap.appendChild(el("div", {
-          class: "partner-row partner-row-existing",
-          "data-testid": "partner-row",
-        },
-          el("div", { class: "partner-existing" },
-            el("span", { class: "partner-existing-name", "data-testid": `partner-existing-${i}` }, p.name),
-            el("span", { class: "partner-existing-note" }, t("confirm.partnerOnList")),
-          ),
-          remove,
-        ));
-        return;
-      }
-      wrap.appendChild(el("div", {
-        class: "partner-row",
-        "data-testid": "partner-row",
-      },
-        el("input", {
-          type: "text",
-          placeholder: t("confirm.partnerName"),
-          value: p.name || "",
-          "data-testid": `partner-name-${i}`,
-          oninput: (e) => { state.additional[i].name = e.target.value; },
-        }),
-        el("input", {
-          type: "tel",
-          placeholder: t("confirm.partnerPhone"),
-          value: p.phone || "",
-          "data-testid": `partner-phone-${i}`,
-          oninput: (e) => { state.additional[i].phone = e.target.value; },
-        }),
-        remove,
-      ));
-    });
-    if (state.additional.length < MAX_PARTNERS) {
-      wrap.appendChild(el("div", { class: "partners-add-row" },
-        el("button", {
-          type: "button",
-          class: "partners-add",
-          "data-testid": "add-existing-singer",
-          onclick: openExistingPicker,
-        }, t("confirm.existingSinger")),
-        el("button", {
-          type: "button",
-          class: "partners-add",
-          "data-testid": "add-singer",
-          onclick: () => {
-            state.additional.push({ name: "", phone: "" });
-            rerender();
-            // Straight into the new name field.
-            root.querySelector(`[data-testid="partner-name-${state.additional.length - 1}"]`)?.focus();
-          },
-        }, t("confirm.newSinger")),
-      ));
-    } else {
-      wrap.appendChild(el("div", { class: "partners-cap-hint" },
-        t("confirm.maxSingers", { count: MAX_PARTNERS + 1 })));
-    }
-    return wrap;
-  }
+  };
+  const renderPartnersSection = () => renderPartnersEditor(state.additional, {
+    selfName: state.name,
+    title: t("confirm.partnersTitle"),
+    onChange: rerender,
+    onPick: addPartner,
+  });
 
   const sel = state.selected || {};
   const _confirmSourceLine = (s) => {
@@ -3671,10 +3702,69 @@ function _renderSongCard(item, ctx = {}) {
         if (typeof window.__sing_render === "function") window.__sing_render();
       },
     }, t("mySongs.cancel"));
+    const singersBtn = el("button", {
+      class: "song-card-action",
+      "data-testid": "edit-singers",
+      title: t("mySongs.singersTitle"),
+      onclick: (e) => { e.stopPropagation(); openEditSingers(req, editToken, song); },
+    }, t("mySongs.singers"));
     actions.appendChild(changeBtn);
+    actions.appendChild(singersBtn);
     actions.appendChild(cancelBtn);
   }
   return finish();
+}
+
+// "👥 Singers" on a My-songs card: add or remove the friends singing a song
+// that's already been sent. Same partner editor as the confirm screen, in a
+// modal; the picker shares the one modal slot, so picking a name re-opens
+// the editor with the draft intact.
+function openEditSingers(req, editToken, song, draft = null) {
+  const partners = draft || (req.additional_singers || []).map((p) => ({
+    name: p.name || "", phone: p.phone || "", existing: true,
+  }));
+  const reopen = () => openEditSingers(req, editToken, song, partners);
+  const errEl = el("p", { class: "error", "data-testid": "edit-singers-error" });
+  const save = el("button", {
+    class: "btn primary",
+    "data-testid": "edit-singers-save",
+    onclick: async () => {
+      const cleaned = partners
+        .map((p) => ({ name: (p.name || "").trim(), phone: (p.phone || "").trim() }))
+        .filter((p) => p.name);
+      const bad = cleaned.findIndex((p) => p.phone && !PHONE_RE.test(p.phone));
+      if (bad >= 0) { errEl.textContent = t("confirm.partnerPhoneInvalid", { n: bad + 1 }); return; }
+      save.disabled = true;
+      errEl.textContent = "";
+      try {
+        const resp = await editRequestSingers(req.id, editToken, cleaned);
+        for (const it of state.mySongs.items || []) {
+          if (it.request.id === req.id) it.request.additional_singers = resp.request.additional_singers;
+        }
+        closeSingModal();
+        flashMySongsNotice(t("mySongs.singersSaved", { song }));
+        if (typeof window.__sing_render === "function") window.__sing_render();
+      } catch (e) {
+        save.disabled = false;
+        errEl.textContent = e.status === 429 ? t("common.tooManyChanges") : t("mySongs.singersFailed");
+      }
+    },
+  }, t("mySongs.singersSave"));
+  openSingModal(t("mySongs.singersTitle"),
+    el("p", { class: "sing-modal-hint" }, t("mySongs.singersHint", { song })),
+    renderPartnersEditor(partners, {
+      selfName: req.singer_name,
+      title: t("mySongs.singersYou", { name: req.singer_name }),
+      onChange: reopen,
+      onPick: (p) => { if (partners.length < MAX_PARTNERS) partners.push(p); reopen(); },
+      // Backing out of the picker returns to the editor, draft intact.
+      onPickerDismiss: reopen,
+    }),
+    errEl,
+    el("div", { class: "row confirm-actions" },
+      el("button", { class: "btn ghost", onclick: () => closeSingModal() }, t("common.cancel")),
+      save),
+  ).classList.add("edit-singers");
 }
 
 // The device's reorderable songs, in current sing order: approved requests it

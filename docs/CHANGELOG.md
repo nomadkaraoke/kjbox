@@ -2,6 +2,17 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-10-27 - Singers can add/remove duet partners on a song already sent (v0.138.0)
+
+- A singer asked at the desk to turn their queued song into a duet with a friend; partners could only be
+  set at submit time. My songs cards now have **👥 Singers**: the confirm screen's partner editor
+  (existing-singer picker / new singer) in a modal.
+- **`POST /sing/requests/<id>/singers`** `{edit_token, device_id, additional_singers}` (full list, `[]` =
+  solo). Owner-gated like cancel/change. Pending → stored on the request. Approved → also rewrites the
+  queued rotation entry's `singer`/`singers_json` in place (keeps its slot, undoable "Edit entry", no KJ
+  approval). Partner names fold onto tonight's known singers; self/duplicates dropped; the entry's own
+  primary (KJ rename) wins. Done/Left → 409. Not yet in the app API v1.
+
 ## 2026-10-25 - App pushes use the Android "tonight" channel (v0.137.1)
 
 - Expo messages to app subscriptions now carry `channelId: "tonight"`, the notification channel the

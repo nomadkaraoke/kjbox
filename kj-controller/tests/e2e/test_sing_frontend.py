@@ -1026,6 +1026,86 @@ class TestHouseRulesCollapsed:
         expect(page.locator(".rules-footer summary")).to_have_count(1)
 
 
+class TestEditSingers:
+    """My songs → 👥 Singers: add/remove partners on a song already sent."""
+
+    def _done(self, page, live_server, live_token, partners=None):
+        _login(page, live_server, live_token)   # identity = "Alice"
+        page.evaluate("""(t) => {
+            localStorage.setItem('sing_my_request_ids',
+              JSON.stringify({token: t, ids: [4242], tokens: {'4242': 'secret-xyz'}}));
+        }""", live_token)
+        page.route("**/sing/singers*", lambda r: r.fulfill(
+            status=200, content_type="application/json",
+            body=json.dumps({"singers": ["Alice", "Spider S", "Bob"]})))
+        current = {"partners": partners}   # what the server holds; saves update it
+        page.route("**/sing/my-requests*", lambda route: route.fulfill(
+            status=200, content_type="application/json", body=json.dumps({
+                "now_playing": {"now_singing": None, "up_next": None, "queued_count": 0},
+                "requests": [{"request": {"id": 4242, "singer_name": "Alice",
+                    "song_artist": "Rihanna", "song_title": "Stay",
+                    "source_type": "local", "status": "approved",
+                    "created_at": "now", "linked_entry_id": 7,
+                    "additional_singers": current["partners"]}}]})))
+        sent = []
+
+        def handle(route):
+            body = json.loads(route.request.post_data or "{}")
+            sent.append(body)
+            current["partners"] = body["additional_singers"]
+            route.fulfill(status=200, content_type="application/json", body=json.dumps({
+                "success": True, "request": {"id": 4242, "status": "approved",
+                    "additional_singers": body["additional_singers"]}}))
+        page.route("**/sing/requests/4242/singers*", handle)
+        page.evaluate("window.__sing_state._knownSingers = undefined; "
+                      "window.__sing_state.step = 'done'; window.__sing_render();")
+        return sent
+
+    def test_add_existing_singer_to_sent_song(self, page, live_server, live_token):
+        sent = self._done(page, live_server, live_token)
+        page.locator('[data-testid="edit-singers"]').click()
+        page.locator('.sing-modal [data-testid="add-existing-singer"]').click()
+        page.locator('[data-testid="partner-picker-row"]', has_text="Spider S").click()
+        # Picking re-opens the editor with the pick in the draft.
+        expect(page.locator('[data-testid="partner-existing-0"]')).to_have_text("Spider S")
+        page.locator('[data-testid="edit-singers-save"]').click()
+        expect(page.locator(".sing-modal")).to_have_count(0)
+        assert sent[-1]["edit_token"] == "secret-xyz"
+        assert sent[-1]["device_id"]
+        assert [p["name"] for p in sent[-1]["additional_singers"]] == ["Spider S"]
+        expect(page.locator(".song-card", has_text="Stay")).to_contain_text("Spider S")
+
+    def test_remove_partner_makes_it_solo(self, page, live_server, live_token):
+        sent = self._done(page, live_server, live_token, partners=[{"name": "Spider S", "phone": ""}])
+        page.locator('[data-testid="edit-singers"]').click()
+        expect(page.locator('[data-testid="partner-row"]')).to_have_count(1)
+        page.locator('.sing-modal .partner-remove').click()
+        expect(page.locator('[data-testid="partner-row"]')).to_have_count(0)
+        page.locator('[data-testid="edit-singers-save"]').click()
+        expect(page.locator(".sing-modal")).to_have_count(0)
+        assert sent[-1]["additional_singers"] == []
+
+    def test_backing_out_of_picker_keeps_the_draft(self, page, live_server, live_token):
+        self._done(page, live_server, live_token)
+        page.locator('[data-testid="edit-singers"]').click()
+        page.locator('.sing-modal [data-testid="add-singer"]').click()
+        page.locator('[data-testid="partner-name-0"]').fill("Priya K.")
+        page.locator('.sing-modal [data-testid="add-existing-singer"]').click()
+        expect(page.locator('[data-testid="partner-picker-filter"]')).to_be_visible()
+        page.keyboard.press("Escape")
+        expect(page.locator('[data-testid="edit-singers-save"]')).to_be_visible()
+        expect(page.locator('[data-testid="partner-name-0"]')).to_have_value("Priya K.")
+
+    def test_new_singer_typed_in(self, page, live_server, live_token):
+        sent = self._done(page, live_server, live_token)
+        page.locator('[data-testid="edit-singers"]').click()
+        page.locator('.sing-modal [data-testid="add-singer"]').click()
+        page.locator('[data-testid="partner-name-0"]').fill("Priya K.")
+        page.locator('[data-testid="edit-singers-save"]').click()
+        expect(page.locator(".sing-modal")).to_have_count(0)
+        assert [p["name"] for p in sent[-1]["additional_singers"]] == ["Priya K."]
+
+
 class TestExistingSingerPicker:
     """Confirm screen: "Existing singer" / "New singer" instead of an
     always-visible wall of everyone's names."""
