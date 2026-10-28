@@ -6,9 +6,11 @@ Routes:
   GET  /media/<clip_id>     the clip (HTTP Range supported, for seeking)
   GET  /thumbs/<clip_id>    jpg thumbnail
   POST /api/reassign        {clip_id, song_idx|null}
+  POST /api/note            {clip_id, note}            label for an "Other" clip (becomes a caption line)
+  POST /api/trim            {clip_id, start}           where the <=59s cut of a long clip begins
   POST /api/caption         {selected:[ids]} -> {caption} (regenerated from the template)
   POST /api/draft           {selected, caption}            -> saves draft.json
-  POST /api/publish         {selected, caption, allow_unknown} -> saves + starts publisher
+  POST /api/publish         {selected, caption, allow_unknown, facebook?} -> saves + starts publisher(s)
   POST /api/posted          {}                             -> writes posted.json
 
 Only binds 127.0.0.1.
@@ -33,6 +35,7 @@ from .clips import IG_MAX_S, Clip, trim_for_instagram
 
 STATIC_DIR = Path(__file__).parent / "static"
 MAX_BODY = 1_000_000
+CUSTOM_IDX = -1  # reassign target meaning "Other (labelled by hand)"
 
 
 class ReviewState:
@@ -48,7 +51,8 @@ class ReviewState:
         warning: str | None = None,
         publisher: Callable[[list[str], str, bool], dict] | None = None,
         auto_share: bool = False,
-        trim: Callable[[str, float | None, Path], str] = trim_for_instagram,
+        trim: Callable[..., str] = trim_for_instagram,
+        facebook_publisher: Callable[[list[str], str], dict] | None = None,
     ):
         self.night = night
         self.songs = songs
@@ -59,6 +63,8 @@ class ReviewState:
         self.auto_share = auto_share
         self.publisher = publisher or launch_publisher_subprocess(self.work_dir, night, auto_share)
         self.trim = trim
+        self.facebook_publisher = facebook_publisher or launch_facebook_subprocess(
+            self.work_dir, night, cfg.get("facebook_location") or None, auto_share)
         self.lock = threading.RLock()
         self.clips = {c.id: c for c in clips}
         self.items: list[dict] = []
@@ -82,6 +88,9 @@ class ReviewState:
                     "offset_s": m["offset_s"],
                     "candidates": list(m["candidates"]),
                     "reviewed": False,
+                    "custom": False,
+                    "note": "",
+                    "trim_start": 0.0,
                 }
             )
             self._restatus(self.items[-1])
@@ -105,7 +114,7 @@ class ReviewState:
 
     def _restatus(self, item: dict) -> None:
         idx = item["song_idx"]
-        item["status"] = sel.song_status(None if idx is None else self.songs[idx])
+        item["status"] = sel.song_status(None if idx is None else self.songs[idx], item.get("custom", False))
 
     def default_caption(self, selected: list[str]) -> str:
         items = [self.by_id[i] for i in selected if i in self.by_id] if hasattr(self, "by_id") else []
@@ -132,7 +141,13 @@ class ReviewState:
                 if idx is None or (isinstance(idx, int) and 0 <= idx < len(self.songs)):
                     it["song_idx"] = idx
                     it["reviewed"] = bool(a.get("reviewed"))
+                    it["custom"] = bool(a.get("custom")) and idx is None
+                    it["note"] = str(a.get("note") or "")
                     self._restatus(it)
+                try:
+                    it["trim_start"] = self._clamp_start(it, float(a.get("trim_start") or 0.0))
+                except (TypeError, ValueError):
+                    pass
             self.selected = [
                 cid for cid in d.get("selected") or []
                 if cid in self.by_id and sel.is_selectable(self.by_id[cid], allow_unknown=True)
@@ -156,9 +171,11 @@ class ReviewState:
                 "files": [self.clips[c].path for c in self.selected if c in self.clips],
                 "caption": self.caption,
                 "assignments": {
-                    i["id"]: {"song_idx": i["song_idx"], "reviewed": i["reviewed"]}
+                    i["id"]: {"song_idx": i["song_idx"], "reviewed": i["reviewed"],
+                              "custom": i["custom"], "note": i["note"], "trim_start": i["trim_start"]}
                     for i in self.items
-                    if i["song_idx"] != i["auto_song_idx"] or i["reviewed"]
+                    if i["song_idx"] != i["auto_song_idx"] or i["reviewed"] or i["custom"] or i["note"]
+                    or i["trim_start"]
                 },
             }
             tmp = self.draft_path.with_suffix(".tmp")
@@ -172,13 +189,36 @@ class ReviewState:
             it = self.by_id.get(clip_id)
             if not it:
                 raise ValueError("unknown clip")
-            if song_idx is not None and song_idx not in it["candidates"]:
-                raise ValueError("song is not adjacent to this clip")
-            it["song_idx"] = song_idx
+            if song_idx == CUSTOM_IDX:  # "Other": not one of the logged songs, labelled by hand
+                it["song_idx"], it["custom"] = None, True
+            else:
+                if song_idx is not None and song_idx not in it["candidates"]:
+                    raise ValueError("song is not adjacent to this clip")
+                it["song_idx"], it["custom"] = song_idx, False
             it["reviewed"] = True
             self._restatus(it)
             if clip_id in self.selected and not sel.is_selectable(it, allow_unknown=True):
                 self.selected.remove(clip_id)
+            return it
+
+    def set_note(self, clip_id: str, note: str) -> dict:
+        with self.lock:
+            it = self.by_id.get(clip_id)
+            if not it:
+                raise ValueError("unknown clip")
+            it["note"] = " ".join(note.split())[:200]
+            return it
+
+    def _clamp_start(self, it: dict, start: float) -> float:
+        dur = it.get("duration") or 0.0
+        return round(min(max(0.0, start), max(0.0, dur - IG_MAX_S)), 1)
+
+    def set_trim_start(self, clip_id: str, start: float) -> dict:
+        with self.lock:
+            it = self.by_id.get(clip_id)
+            if not it:
+                raise ValueError("unknown clip")
+            it["trim_start"] = self._clamp_start(it, start)
             return it
 
     def validate_selection(self, selected: list[str], allow_unknown: bool) -> list[str]:
@@ -199,11 +239,14 @@ class ReviewState:
                 errors.append(f"{it['filename']}: a performer said NO to posting this song.")
             elif it["status"] == sel.UNASSIGNED:
                 errors.append(f"{it['filename']}: not matched to a song.")
+            elif it["custom"] and not it["note"]:
+                errors.append(f"{it['filename']}: custom clip needs a label (or mark it unassigned).")
             elif it["status"] == sel.UNKNOWN and not allow_unknown:
                 errors.append(f"{it['filename']}: consent unknown (confirm to include).")
         return errors
 
-    def publish(self, selected: list[str], caption: str, allow_unknown: bool, force: bool = False) -> dict:
+    def publish(self, selected: list[str], caption: str, allow_unknown: bool, force: bool = False,
+                facebook: bool = False) -> dict:
         errors = self.validate_selection(selected, allow_unknown)
         if self.posted() and not force:
             errors.append("This night is already marked as posted (posted.json). Confirm to post again.")
@@ -211,11 +254,17 @@ class ReviewState:
             return {"ok": False, "errors": errors}
         self.save_draft(selected, caption)
         try:
-            files = [self.trim(self.clips[c].path, self.clips[c].duration, self.work_dir / "trimmed")
+            files = [self.trim(self.clips[c].path, self.clips[c].duration, self.work_dir / "trimmed",
+                               start=self.by_id[c]["trim_start"])
                      for c in selected]
         except RuntimeError as e:
             return {"ok": False, "errors": [str(e)]}
         result = self.publisher(files, caption, self.auto_share) or {}
+        if facebook:
+            try:
+                result["facebook"] = self.facebook_publisher(files, caption) or {}
+            except Exception as e:  # noqa: BLE001 — Instagram already launched; never make the caller retry it
+                result["facebook"] = {"started": False, "error": f"Facebook publisher didn't start: {e}"}
         return {"ok": True, **result}
 
     def mark_posted(self) -> dict:
@@ -241,6 +290,7 @@ class ReviewState:
                 "max_clips": self.max_clips,
                 "ig_max_s": IG_MAX_S,
                 "auto_share": self.auto_share,
+                "facebook_location": self.cfg.get("facebook_location") or "",
                 "songs": self.songs,
                 "clips": self.items,
                 "selected": self.selected,
@@ -424,6 +474,12 @@ def make_handler(state: ReviewState):
                         raise ValueError("song_idx must be an integer or null")
                     state.reassign(str(body.get("clip_id")), idx)
                     return self._json({"ok": True, "state": state.to_json()})
+                if path == "/api/note":
+                    state.set_note(str(body.get("clip_id")), str(body.get("note") or ""))
+                    return self._json({"ok": True, "state": state.to_json()})
+                if path == "/api/trim":
+                    state.set_trim_start(str(body.get("clip_id")), float(body.get("start") or 0))
+                    return self._json({"ok": True, "state": state.to_json()})
                 if path == "/api/caption":
                     return self._json({"ok": True, "caption": state.default_caption(_ids(body))})
                 if path == "/api/draft":
@@ -436,7 +492,8 @@ def make_handler(state: ReviewState):
                     return self._json({"ok": True, "path": str(p)})
                 if path == "/api/publish":
                     res = state.publish(_ids(body), str(body.get("caption") or ""),
-                                        bool(body.get("allow_unknown")), bool(body.get("force")))
+                                        bool(body.get("allow_unknown")), bool(body.get("force")),
+                                        bool(body.get("facebook")))
                     return self._json(res, HTTPStatus.OK if res.get("ok") else HTTPStatus.BAD_REQUEST)
                 if path == "/api/posted":
                     return self._json({"ok": True, "posted": state.mark_posted()})
@@ -466,3 +523,20 @@ def make_server(state: ReviewState, port: int = 8765, tries: int = 20) -> Thread
         except OSError as e:
             last = e
     raise OSError(f"no free port from {port}: {last}")
+
+
+def launch_facebook_subprocess(work_dir: Path, night: str, location: str | None, auto_share: bool):
+    """Run the Facebook publisher in its own process/browser, same files and caption as Instagram."""
+
+    def run(files: list[str], caption: str) -> dict:
+        req = Path(work_dir) / "facebook_request.json"
+        req.write_text(json.dumps({"night": night, "files": files, "caption": caption,
+                                   "location": location}, ensure_ascii=False))
+        cmd = [sys.executable, "-m", "nightclips.facebook", "--request", str(req), "--work-dir", str(work_dir)]
+        if auto_share:
+            cmd.append("--auto-share")
+        proc = subprocess.Popen(cmd)
+        return {"started": True, "pid": proc.pid,
+                "message": "Facebook publisher started — watch its Chromium window."}
+
+    return run
