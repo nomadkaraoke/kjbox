@@ -116,9 +116,14 @@ Build it for real and run it on the local stack **on the build host** (`ssh andr
 Helluva Boss and Catfish sessions plus a tier-3 case, at phone width. Send Andrew the screenshots and a short screen
 recording. Merge only after he signs off.
 
-## Open questions for Andrew
+## Andrew's answers (2026-10-28, verbatim)
 
-1. Sign-in button order: Apple first on iPhone and Google first everywhere else (my default), or always Google first?
-2. Partner-session lifetime: should gen keep kjbox sign-ins alive longer (e.g. 30 days of inactivity) so weekly
-   regulars stay signed in? With one-tap Google/Apple re-sign-in this matters less; it's mainly for the email path.
-3. "Step 2 of 2 · Not sent yet" wording, or no step counter at all? (screenshots will help)
+> 1: yes that sounds reasonable whatever will be most intuitive for users. see mobbin MCP for UX inspiration / to try and model it based on other commonly used apps/best practices though.
+> 2: we should change that to 30 days globally tbh, but agreed that one-tap sign in makes this low friction once we get apple/google working anyway
+> 3: not sure what this means if we make it a single screen page but let's build first and I can decide later
+
+So:
+- **Button order and layout:** model them on common apps, using Mobbin (sign-in sheets, checkout one-pagers). Research
+  this before building C.
+- **gen sessions:** change `SESSION_EXPIRY_DAYS` (inactivity) from 7 to **30 days globally**, in PR B.
+- **Step counter:** build C without one; Andrew decides from the screenshots.
