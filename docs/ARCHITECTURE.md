@@ -63,6 +63,7 @@ KJ Controller is a web-based karaoke show management application. A Flask backen
 | `playback.py` | ~290 | `PlaybackCoordinator`: owns filler + one karaoke player, runtime `switch_renderer()`, facade for routes.py |
 | `karaoke_player.py` | ~90 | `KaraokePlayer` Protocol: contract both renderer backends implement |
 | `filler.py` | ~290 | `FillerVLC`: shared filler-music VLC instance, fade, auto-heal on broken aout |
+| `filler_library.py` | ~500 | Filler library behind the "Manage Filler Music" modal: labels sidecar, upload/YouTube import (ffmpeg, clip, loudnorm), loop smoothing, one-at-a-time background jobs |
 | `mpv_manager.py` | ~420 | `MpvKaraokePlayer`: mpv karaoke backend (IPC + rubberband pitch + ALSA-release race fix) |
 | `vlc.py` | ~340 | `VlcKaraokePlayer`: dual-VLC karaoke backend (CDG-compatible) |
 | `chromium.py` | ~160 | `ChromiumManager` class: launch/kill fullscreen Chromium for Browser Mode, PipeWire audio routing |
@@ -166,6 +167,15 @@ utils.py → (stdlib only)
 | POST | `/rescan` | Reload config and rescan media folders (curation-preserving upsert — refined/edited names survive) |
 | GET | `/filler_music` | List available filler music files |
 | POST | `/filler_music` | Change active filler music track |
+| GET | `/filler_music/library` | Tracks with labels, size, duration, current + free disk |
+| GET | `/filler_music/file/<name>` | Stream a track (browser preview) |
+| POST | `/filler_music/rename` | Set a track's display label |
+| POST | `/filler_music/delete` | Delete a track (409 if it is the one playing) |
+| POST | `/filler_music/youtube-info` | Title/length for a YouTube link |
+| POST | `/filler_music/import` | Start YouTube -> MP3 job (url, label, start, duration, normalize, smooth_loop) |
+| POST | `/filler_music/upload` | Multipart upload -> MP3 job (<=100 MB) |
+| POST | `/filler_music/smooth` | Save a loop-smoothed `(loop)` copy of a track |
+| GET | `/filler_music/jobs/<id>` | Poll an import/smooth job |
 | GET | `/status` | Get player state, current track, timing. Also surfaces the `download_queue` (all queue items, with `source`/`source_detail`) and per-rotation `rotation_downloads` map (`status`/`progress`/`file_path`/`source`/`source_detail`) so the UI can show GCS-vs-Drive-vs-YouTube on download badges in real time. Also carries `simple_mode` so the KJ UI applies the `body.simple-mode` CSS class on every 2s poll. |
 | POST | `/fix_audio` | Emergency: restart VLC instances |
 | GET | `/audio_device` | Get current and available audio devices |
