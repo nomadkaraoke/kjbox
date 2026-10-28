@@ -1694,10 +1694,13 @@ def filler_music_upload():
             request.form.get('start'), request.form.get('duration'),
             request.form.get('normalize') in ('1', 'true', 'on'),
             request.form.get('smooth_loop') in ('1', 'true', 'on'))
-    except filler_library.FillerError as e:
+    except Exception as e:
+        # Includes disk-full mid-save; the job owns the file only once started.
         if os.path.exists(tmp_path):
             os.remove(tmp_path)
-        return _filler_error(e, 409 if 'still running' in str(e) else 400)
+        if isinstance(e, filler_library.FillerError):
+            return _filler_error(e, 409 if 'still running' in str(e) else 400)
+        raise
     return jsonify({"job_id": job_id})
 
 
