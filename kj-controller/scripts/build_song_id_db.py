@@ -44,6 +44,23 @@ _JUNK_CREDIT_RE = re.compile(r"\b(?:cover|covers|covered|tribute|karaoke|in the 
 _WORD_FOLDS = {"ur": "your", "u": "you"}
 
 
+# "(feat. X & Y)" / "ft. X" in a title — the featured names.
+_TITLE_FEAT_RE = re.compile(r"\b(?:feat\.?|ft\.?|featuring)\s+([^\])\]]+)", re.IGNORECASE)
+_NAME_SPLIT_RE = re.compile(r"\s*(?:,|&|\band\b|\bwith\b|\bx\b)\s*", re.IGNORECASE)
+
+
+def _credits_featured_artist(artist, title):
+    """True for an export row credited to its own FEATURED artist: "Tomorrow Never
+    Came (feat. Sean Ono Lennon)" by "Sean Ono Lennon" is Lana Del Rey's song, and
+    identifying it as Sean Ono Lennon's sent the singer's audio search nowhere (live
+    2026-10-22). ~17K such rows; the real artist's row is usually there too."""
+    na = song_norm(artist)
+    for m in _TITLE_FEAT_RE.finditer(title):
+        if any(song_norm(n) == na for n in _NAME_SPLIT_RE.split(m.group(1)) if n.strip()):
+            return True
+    return False
+
+
 def _fold_title(nt):
     """Space-less title with spelling variants folded (merge key only, never displayed)."""
     return "".join(_WORD_FOLDS.get(w, w[:-1] if len(w) >= 6 and w.endswith("ing") else w)
@@ -77,6 +94,8 @@ def build(srcs, dst, meta=None):
         k = 1 if karaoke.strip() in ("1", "true", "True") else 0
         if not k and _JUNK_CREDIT_RE.search(artist):
             continue    # MusicBrainz cover/tribute uploads ("George Benson (Hscc Cover Ft …)")
+        if not k and _credits_featured_artist(artist, title):
+            continue    # the primary artist is lost; a karaoke row's credit is KaraokeNerds' own
         if na.replace(" ", "") == nt.replace(" ", "") and not k and (p or 0) < 40:
             continue    # MusicBrainz "self-titled" junk ("Future — Future"); real ones have karaoke/popularity
         key = (na.replace(" ", ""), nt.replace(" ", ""))

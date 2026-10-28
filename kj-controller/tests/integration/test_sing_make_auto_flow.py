@@ -236,11 +236,90 @@ class TestSubmit:
         assert (resp.status_code, resp.get_json()["error"]) == (409, "search_expired")
         assert sing_app.sing_store.list_requests() == []
 
+    def test_repeat_submit_of_the_same_search_returns_the_first_request(
+            self, client, sing_app, token, gen, signed_in):
+        # Live 2026-10-22: a second, identical submit 4 s after a successful one
+        # hit gen again (the search session is single-use) → 409 search_expired,
+        # and the singer searched for the song twice more thinking it had failed.
+        first = _submit(client, token)
+        assert first.status_code == 200
+        again = _submit(client, token)
+        assert again.status_code == 200
+        body = again.get_json()
+        assert body["request"]["id"] == first.get_json()["request"]["id"]
+        assert body["request"]["edit_token"] == first.get_json()["request"]["edit_token"]
+        assert body["auto_approved"] is True
+        gen.create_job_from_search.assert_called_once()
+        assert len(sing_app.sing_store.list_requests()) == 1
+
+    def test_repeat_submit_is_not_shared_across_devices(self, client, sing_app, token, gen, signed_in):
+        assert _submit(client, token).status_code == 200
+        other = "fedcba9876543210" * 2
+        sing_app.sing_store.set_gen_account(other, "joe@example.com", "sess-joe")
+        resp = _submit(client, token, device_id=other, singer_name="Joe")
+        # Not the first device's request: gen is asked (and here refuses the reused session).
+        assert gen.create_job_from_search.call_count == 2
+        assert resp.get_json().get("request", {}).get("singer_name") != "Mary"
+
+    def test_cancelled_make_can_be_resubmitted_fresh(self, client, sing_app, token, gen, signed_in):
+        first = _submit(client, token).get_json()["request"]
+        sing_app.sing_store.mark_cancelled(first["id"])
+        gen.create_job_from_search.return_value = {"job_id": "job-2", "status": "pending"}
+        resp = _submit(client, token)
+        assert resp.status_code == 200
+        assert resp.get_json()["request"]["id"] != first["id"]
+
+    def test_repeat_youtube_link_submit_returns_the_first_request(
+            self, client, sing_app, token, gen, signed_in):
+        meta = {"youtube_url": "https://youtu.be/abc"}
+        first = _submit(client, token, source_meta=meta).get_json()["request"]
+        again = _submit(client, token, source_meta=meta)
+        assert again.get_json()["request"]["id"] == first["id"]
+        gen.create_job_from_url.assert_called_once()
+
+    def test_same_youtube_link_for_a_different_song_is_a_new_make(
+            self, client, sing_app, token, gen, signed_in):
+        meta = {"youtube_url": "https://youtu.be/abc"}
+        first = _submit(client, token, source_meta=meta).get_json()["request"]
+        gen.create_job_from_url.return_value = {"job_id": "job-2", "status": "pending"}
+        second = _submit(client, token, source_meta=meta, song_title="Karma Police")
+        assert second.status_code == 200
+        assert second.get_json()["request"]["id"] != first["id"]
+        assert gen.create_job_from_url.call_count == 2
+
+    def test_same_search_with_another_pick_goes_to_gen(self, client, sing_app, token, gen, signed_in):
+        assert _submit(client, token).status_code == 200
+        gen.create_job_from_search.side_effect = GenApiError(404, "Search expired")
+        resp = _submit(client, token, source_meta={"search_session_id": "ss-1", "selection_index": 1})
+        assert (resp.status_code, resp.get_json()["error"]) == (409, "search_expired")
+        assert gen.create_job_from_search.call_count == 2
+
+    def test_request_under_a_rotated_event_token_is_not_returned(
+            self, client, sing_app, token, gen, signed_in):
+        assert _submit(client, token).status_code == 200
+        new_token = sing_app.sing_store.regenerate_token()
+        gen.create_job_from_search.return_value = {"job_id": "job-2", "status": "pending"}
+        resp = _submit(client, new_token)
+        assert resp.status_code == 200
+        assert gen.create_job_from_search.call_count == 2
+
+    def test_same_make_after_signing_in_as_someone_else_is_theirs(
+            self, client, sing_app, token, gen, signed_in):
+        meta = {"youtube_url": "https://youtu.be/abc"}
+        first = _submit(client, token, source_meta=meta).get_json()["request"]
+        sing_app.sing_store.set_gen_account(DEVICE, "joe@example.com", "sess-joe")   # "not you?"
+        gen.create_job_from_url.return_value = {"job_id": "job-joe", "status": "pending"}
+        second = _submit(client, token, source_meta=meta)
+        assert second.status_code == 200
+        assert second.get_json()["request"]["id"] != first["id"]
+        assert gen.create_job_from_url.call_args.args[0] == "sess-joe"
+
     def test_per_device_night_cap(self, client, sing_app, token, gen, signed_in):
         sing_app.kj_config["sing_make_max_per_device"] = 1
         sing_app.kj_config["sing_rate_limit_per_device"] = 100
         assert _submit(client, token).status_code == 200
-        resp = _submit(client, token, song_title="Karma Police")
+        resp = _submit(client, token, song_title="Karma Police",
+                       source_meta={"search_session_id": "ss-2", "selection_index": 0})
         assert (resp.status_code, resp.get_json()["error"]) == (429, "make_limit")
         assert gen.create_job_from_search.call_count == 1
 

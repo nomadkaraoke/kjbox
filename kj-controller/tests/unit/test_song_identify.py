@@ -150,6 +150,23 @@ def _build_rows(tmp_path, rows):
         conn.close()
 
 
+def test_rows_credited_to_their_own_featured_artist_are_dropped(tmp_path):
+    # Live 2026-10-22: "tomorrow never came" identified Sean Ono Lennon as the artist
+    # of Lana Del Rey's song, and the make-it audio search found nothing usable.
+    rows = _build_rows(tmp_path, [
+        ("Sean Ono Lennon", "Tomorrow Never Came (feat. Sean Ono Lennon)", 63, 0),
+        ("Lana Del Rey ft. Sean Ono Lennon", "Tomorrow Never Came", 63, 0),
+        ("Ashland Craft", "I Smoke Weed (feat. Ashland Craft & Brothers Osborne)", 30, 0),
+        ("Korn", "Children of the Korn (feat. Ice Cube)", 40, 0),   # feat. someone else: kept
+        ("Bill Withers", "Just the Two of Us (feat. Bill Withers)", "", 1),  # KaraokeNerds' credit: kept
+    ])
+    assert rows == [
+        ("Bill Withers", "Just the Two of Us (feat. Bill Withers)", None, 1),
+        ("Korn", "Children of the Korn (feat. Ice Cube)", 40, 0),
+        ("Lana Del Rey ft. Sean Ono Lennon", "Tomorrow Never Came", 63, 0),
+    ]
+
+
 def test_spelling_variants_merge_and_show_the_karaoke_spelling(tmp_path):
     rows = _build_rows(tmp_path, [
         ("Rihanna", "Breaking Dishes", 55, 0),       # MusicBrainz variant with an ISRC score

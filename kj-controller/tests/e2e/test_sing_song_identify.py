@@ -59,7 +59,8 @@ def test_identified_song_card_and_its_karaoke_rows(page, live_server, live_token
     page.locator('[data-testid="song-not-it"]').click()
     expect(page.locator('[data-testid="search-didyoumean"]')).to_contain_text("Which song do you mean?")
     expect(page.locator('[data-testid="song-candidate"]')).to_have_text(["Machu Picchu — Evaluna Montaner"])
-    actions = [e["action"] for e in calls["events"]]
+    # make-it offers are logged too (empty-state card); this test is about not_it.
+    actions = [e["action"] for e in calls["events"] if not e["action"].startswith("make_offer")]
     assert actions == ["not_it"]
     assert calls["events"][0]["sid"] in calls["identify_sids"]
 
@@ -116,7 +117,8 @@ def test_describe_goes_to_gemini_fallback(page, live_server, live_token):
     page.locator('[data-testid="describe-submit"]').click()
     page.wait_for_timeout(300)
     assert calls["resolve"] >= 2       # once for the empty search, once for the description
-    assert [e["action"] for e in calls["events"]] == ["describe_open", "describe_submit"]
+    assert [e["action"] for e in calls["events"]
+            if not e["action"].startswith("make_offer")] == ["describe_open", "describe_submit"]
 
 
 def _slow_typed_search(page, live_server, live_token, typed, ident):

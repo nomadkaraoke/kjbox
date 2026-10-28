@@ -1553,6 +1553,40 @@ class SingStore:
         ).fetchone()
         return row[0]
 
+    def find_make_request(self, device_id, singer_name, song_artist, song_title, source_meta):
+        """Tonight's live make request (under the current event token) that this
+        exact submission already created: same device, singer, song and audio
+        choice (gen search session + picked result, or YouTube link) and gen
+        account (``source_meta.gen_account``, set by submit). A repeat
+        submit returns it instead of asking gen again: a search session is
+        single-use there. Anything that differs is a new submission."""
+        meta = source_meta if isinstance(source_meta, dict) else {}
+        account = meta.get("gen_account")
+        if meta.get("search_session_id"):
+            same_audio = lambda m: (m.get("search_session_id") == meta["search_session_id"]
+                                    and m.get("selection_index") == meta.get("selection_index"))
+        elif meta.get("youtube_url"):
+            same_audio = lambda m: m.get("youtube_url") == meta["youtube_url"]
+        else:
+            return None
+        night_started = self.get_night_started_at()
+        if not (device_id and night_started):
+            return None
+        rows = self._get_conn().execute(
+            "SELECT * FROM sing_requests WHERE source_type = 'make' AND device_id = ? AND token = ? "
+            "AND created_at >= ? AND status IN ('pending', 'approved') "
+            "AND singer_name = ? AND song_artist = ? AND song_title = ? ORDER BY id DESC",
+            (device_id, self.get_token() or "", night_started, singer_name, song_artist, song_title),
+        ).fetchall()
+        for row in rows:
+            try:
+                stored = json.loads(row["source_meta"] or "{}")
+            except (TypeError, ValueError):
+                continue
+            if isinstance(stored, dict) and same_audio(stored) and stored.get("gen_account") == account:
+                return self._row_to_dict(row)
+        return None
+
     def set_linked_entry(self, request_id, linked_entry_id):
         """Update the linked rotation entry id without changing status."""
         if self.get_request(request_id) is None:

@@ -121,3 +121,5 @@
 {"q": "the happy dictator gorillaz", "artist": "Gorillaz", "title": "The Happy Dictator", "kind": "exact", "source": "freshness", "label": "claude-2026-09-29"}
 {"q": "birdbrain jamie paige", "artist": "Jamie Paige", "title": "BIRDBRAIN", "kind": "exact", "source": "freshness", "label": "claude-2026-09-29"}
 {"q": "aint in la adela", "artist": "ADÉLA", "title": "Ain’t in LA", "kind": "exact", "source": "freshness", "label": "claude-2026-09-29"}
+{"q": "i will be okay helluva boss", "artist": "Helluva Boss", "title": "I Will Be Okay", "kind": "exact", "source": "kjbox-log", "label": "claude-2026-10-28"}
+{"q": "tomorrow never came", "artist": "Lana Del Rey", "title": "Tomorrow Never Came", "kind": "title-only", "source": "kjbox-log", "label": "claude-2026-10-28"}

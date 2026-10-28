@@ -8,7 +8,7 @@
 import {
   initI18n, t, tn, getLocale, setLocale, LOCALES, localeName, applyStaticStrings,
 } from "./i18n.js";
-import { createMakeFlow } from "./make.js";
+import { createMakeFlow, forgetMakeEmail } from "./make.js";
 
 // Blueprint mount point. On the public host (sing.nomadkaraoke.com) the singer
 // UI lives at `/` via a WSGI rewrite; on the admin host it's under `/sing/`.
@@ -1268,6 +1268,7 @@ function renderTip() {
 function switchIdentity() {
   forgetIdentity();
   rotateDeviceId();
+  forgetMakeEmail();
   state.name = state.phone = state.photoConsent = state.instagram = "";
   LS.set("sing_name", ""); LS.set("sing_phone", ""); LS.set("sing_photo_consent", "");
   LS.set("sing_instagram", "");
@@ -2398,8 +2399,16 @@ function renderSearch() {
       edited: (state.makeArtist || "") !== (pre.artist || "") || (state.makeTitle || "") !== (pre.title || ""),
     });
     endSearchSession();
-    return makeFlow.start(state.makeArtist, state.makeTitle);
+    return makeFlow.start(state.makeArtist, state.makeTitle, { trusted: makeIsIdentified() });
   };
+
+  // The make form still holds exactly the song we identified on the device
+  // (or the candidate the singer tapped): gen's AI judge mustn't overrule it.
+  function makeIsIdentified() {
+    const c = correction;
+    if (!c || !c.corrected || !c.active || !(c.source === "local" || c.picked)) return false;
+    return (state.makeArtist || "") === c.corrected.artist && (state.makeTitle || "") === c.corrected.title;
+  }
 
   const pickYouTube = (url) => {
     state.selected = {
@@ -2639,7 +2648,10 @@ function renderSearch() {
   // "Make it" — a karaoke-gen job starts the moment the singer sends the
   // request; the host only approves the queue slot. Shared by the empty-search
   // triage and the "can't find the right one?" link under real results.
-  function renderMakeCard(heading) {
+  // `where` (search-log offer placement) is set when this card is itself the
+  // offer, i.e. the empty-search triage; the "bottom_link" offer logs its own tap.
+  function renderMakeCard(heading, where = null) {
+    if (where) logOfferShown(where);
     const mkArtist = el("input", {
       type: "text", placeholder: t("empty.artist"),
       class: "sing-empty-input",
@@ -2668,6 +2680,7 @@ function renderSearch() {
             missing.hidden = false;
             return;
           }
+          if (where) logChoice("make_offer_tap", { where });
           pickMake();
         },
       }, t("empty.makeCta")),
@@ -2732,7 +2745,7 @@ function renderSearch() {
     wrap.appendChild(renderDescribe());
 
     if (offerMake) {
-      wrap.appendChild(renderMakeCard(stepTitle(t("empty.makeTitle"))));
+      wrap.appendChild(renderMakeCard(stepTitle(t("empty.makeTitle")), "empty_state"));
     }
 
     // Paste a YouTube link.
