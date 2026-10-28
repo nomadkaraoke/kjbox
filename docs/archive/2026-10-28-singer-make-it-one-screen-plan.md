@@ -127,3 +127,22 @@ So:
   this before building C.
 - **gen sessions:** change `SESSION_EXPIRY_DAYS` (inactivity) from 7 to **30 days globally**, in PR B.
 - **Step counter:** build C without one; Andrew decides from the screenshots.
+
+## Mobbin research (2026-10-28) → PR C design
+
+**1. Checkout one-pagers** ([talabat](https://mobbin.com/screens/4918cd52-367d-4da3-9ad9-e381ddeba895), [Deliveroo](https://mobbin.com/screens/6dec1d5e-be7a-49b3-9667-d4b775ad04b0), [Uber Eats](https://mobbin.com/screens/e9d30576-6c0d-4213-b4b1-689a38c6760e), [Subway](https://mobbin.com/screens/cacb0514-5d2f-4d3e-a425-a14439e11b20)).
+One scrolling page of summary rows. Each row is **pre-filled with a sensible default** plus a small "Change" link. A **single full-width primary button is pinned to the bottom** and names the outcome ("Place order"). Nothing else on the page looks like a primary button.
+→ The make screen copies this. Each row is filled in with a "Change" link:
+- **Song:** "I Will Be Okay — Helluva Boss"
+- **Audio:** "✓ Official soundtrack · Spotify", picked automatically
+- **Send your video to:** the sign-in
+
+A sticky **"🎤 Make it & add me to the list"** button is the only primary button. While something is missing it is disabled and says what ("Sign in above first", "Finding the audio…"). Our current wizard instead has a primary button on every step ("Email me a code", "Use this audio", "Yes — send it in"), and each one feels like the last.
+
+**2. Sign-in blocks** ([Grubhub](https://mobbin.com/screens/42d69905-f312-4d5a-bc3d-dc7f308ed080), [monday.com](https://mobbin.com/screens/e8db9e52-9383-4a53-ab24-6b7ccedaa136), [Dropbox](https://mobbin.com/screens/bdf5e75d-87e2-46ae-bb1c-fb44d71d4841), [Monarch](https://mobbin.com/screens/7a7fa802-5ee6-4eff-95e6-50d508b02444), [Withings](https://mobbin.com/screens/ac8a2c06-98ae-4fec-9558-8ad3b1da79b7)).
+Social buttons come first. They are full-width and stacked, each with the provider's logo and "Continue with …". Below an "or" divider sit one email field and "Continue". Cross-platform apps put Google first (Grubhub, monday, Dropbox); Apple-centric apps put Apple first (Monarch, Withings).
+→ Apple first on iOS, Google first elsewhere. The email path stays inline on the same card: Continue sends the code and the code box appears in place. The email field sits in a real `<form>` with `autocomplete="email"` so browser autofill offers it.
+
+**3. Order-placed screens** ([Panera](https://mobbin.com/screens/68fbc9be-b216-4d7f-a7d9-2b0cd7cf7c76), [Wonder](https://mobbin.com/screens/60bb3c66-d321-4667-b815-b576ea5f22d2), [On](https://mobbin.com/screens/e3b8cd54-6440-4689-9d33-8514ee78c65a)).
+These have a past-tense headline ("Order received"), a horizontal step tracker (Received → Preparing → Ready) and "we've emailed you".
+→ The done screen gets "You're on the list! 🎤", a tracker reading Sent ✓ → Being made (~30 min) → Ready to sing, and "We'll email the video to anya@…". It is never confusable with the make screen, and there's no ambiguity about whether it was sent.
