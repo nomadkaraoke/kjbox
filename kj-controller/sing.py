@@ -1559,7 +1559,8 @@ def submit():
     gen_job_id = None
     with _make_submit_lock(device_id) if source_type == "make" else _NO_LOCK:
         if source_type == "make":
-            existing = store.find_make_request(device_id, source_meta)
+            existing = store.find_make_request(device_id, singer_name, song_artist, song_title,
+                                               source_meta)
             if existing:
                 _refund_device_rate_slot()
                 return jsonify({

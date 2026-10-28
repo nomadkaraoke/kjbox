@@ -277,6 +277,32 @@ class TestSubmit:
         assert again.get_json()["request"]["id"] == first["id"]
         gen.create_job_from_url.assert_called_once()
 
+    def test_same_youtube_link_for_a_different_song_is_a_new_make(
+            self, client, sing_app, token, gen, signed_in):
+        meta = {"youtube_url": "https://youtu.be/abc"}
+        first = _submit(client, token, source_meta=meta).get_json()["request"]
+        gen.create_job_from_url.return_value = {"job_id": "job-2", "status": "pending"}
+        second = _submit(client, token, source_meta=meta, song_title="Karma Police")
+        assert second.status_code == 200
+        assert second.get_json()["request"]["id"] != first["id"]
+        assert gen.create_job_from_url.call_count == 2
+
+    def test_same_search_with_another_pick_goes_to_gen(self, client, sing_app, token, gen, signed_in):
+        assert _submit(client, token).status_code == 200
+        gen.create_job_from_search.side_effect = GenApiError(404, "Search expired")
+        resp = _submit(client, token, source_meta={"search_session_id": "ss-1", "selection_index": 1})
+        assert (resp.status_code, resp.get_json()["error"]) == (409, "search_expired")
+        assert gen.create_job_from_search.call_count == 2
+
+    def test_request_under_a_rotated_event_token_is_not_returned(
+            self, client, sing_app, token, gen, signed_in):
+        assert _submit(client, token).status_code == 200
+        new_token = sing_app.sing_store.regenerate_token()
+        gen.create_job_from_search.return_value = {"job_id": "job-2", "status": "pending"}
+        resp = _submit(client, new_token)
+        assert resp.status_code == 200
+        assert gen.create_job_from_search.call_count == 2
+
     def test_per_device_night_cap(self, client, sing_app, token, gen, signed_in):
         sing_app.kj_config["sing_make_max_per_device"] = 1
         sing_app.kj_config["sing_rate_limit_per_device"] = 100

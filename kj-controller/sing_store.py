@@ -1553,27 +1553,35 @@ class SingStore:
         ).fetchone()
         return row[0]
 
-    def find_make_request(self, device_id, source_meta):
-        """Tonight's live make request from this device for the same audio choice
-        (gen search session, or YouTube link), or None. A repeat submit returns it
-        instead of asking gen again: a search session is single-use there."""
+    def find_make_request(self, device_id, singer_name, song_artist, song_title, source_meta):
+        """Tonight's live make request (under the current event token) that this
+        exact submission already created: same device, singer, song and audio
+        choice (gen search session + picked result, or YouTube link). A repeat
+        submit returns it instead of asking gen again: a search session is
+        single-use there. Anything that differs is a new submission."""
         meta = source_meta if isinstance(source_meta, dict) else {}
-        key = ("search_session_id", meta.get("search_session_id")) if meta.get("search_session_id") \
-            else ("youtube_url", meta.get("youtube_url"))
+        if meta.get("search_session_id"):
+            same_audio = lambda m: (m.get("search_session_id") == meta["search_session_id"]
+                                    and m.get("selection_index") == meta.get("selection_index"))
+        elif meta.get("youtube_url"):
+            same_audio = lambda m: m.get("youtube_url") == meta["youtube_url"]
+        else:
+            return None
         night_started = self.get_night_started_at()
-        if not (device_id and key[1] and night_started):
+        if not (device_id and night_started):
             return None
         rows = self._get_conn().execute(
-            "SELECT * FROM sing_requests WHERE source_type = 'make' AND device_id = ? "
-            "AND created_at >= ? AND status IN ('pending', 'approved') ORDER BY id DESC",
-            (device_id, night_started),
+            "SELECT * FROM sing_requests WHERE source_type = 'make' AND device_id = ? AND token = ? "
+            "AND created_at >= ? AND status IN ('pending', 'approved') "
+            "AND singer_name = ? AND song_artist = ? AND song_title = ? ORDER BY id DESC",
+            (device_id, self.get_token() or "", night_started, singer_name, song_artist, song_title),
         ).fetchall()
         for row in rows:
             try:
                 stored = json.loads(row["source_meta"] or "{}")
             except (TypeError, ValueError):
                 continue
-            if isinstance(stored, dict) and stored.get(key[0]) == key[1]:
+            if isinstance(stored, dict) and same_audio(stored):
                 return self._row_to_dict(row)
         return None
 

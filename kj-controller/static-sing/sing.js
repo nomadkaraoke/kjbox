@@ -8,7 +8,7 @@
 import {
   initI18n, t, tn, getLocale, setLocale, LOCALES, localeName, applyStaticStrings,
 } from "./i18n.js";
-import { createMakeFlow } from "./make.js";
+import { createMakeFlow, forgetMakeEmail } from "./make.js";
 
 // Blueprint mount point. On the public host (sing.nomadkaraoke.com) the singer
 // UI lives at `/` via a WSGI rewrite; on the admin host it's under `/sing/`.
@@ -1268,6 +1268,7 @@ function renderTip() {
 function switchIdentity() {
   forgetIdentity();
   rotateDeviceId();
+  forgetMakeEmail();
   state.name = state.phone = state.photoConsent = state.instagram = "";
   LS.set("sing_name", ""); LS.set("sing_phone", ""); LS.set("sing_photo_consent", "");
   LS.set("sing_instagram", "");

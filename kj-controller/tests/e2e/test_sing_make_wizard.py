@@ -420,6 +420,16 @@ class TestRememberedEmail:
         assert page.evaluate("localStorage.getItem('nk_make_email')") is None
 
 
+    def test_switch_singer_forgets_the_email(self, page, live_server, live_token):
+        page.add_init_script("localStorage.setItem('nk_make_email', 'anya@example.com');")
+        page.add_init_script("window.__SING_ARM_MS = 0;")
+        _login(page, live_server, live_token)
+        page.evaluate("window.__sing_state.step = 'search'; window.__sing_render();")
+        page.locator('[data-testid="edit-name"]').click()
+        page.locator('[data-testid="switch-identity"]').click()
+        assert page.evaluate("localStorage.getItem('nk_make_email')") is None
+
+
 class TestEmptyStateOfferLogged:
     def test_shown_and_tap_are_logged(self, page, live_server, live_token):
         events = []

@@ -69,6 +69,8 @@ const rememberedEmail = () => { try { return localStorage.getItem(EMAIL_KEY) || 
 const rememberEmail = (email) => {
   try { if (email) localStorage.setItem(EMAIL_KEY, email); else localStorage.removeItem(EMAIL_KEY); } catch { /* private mode */ }
 };
+// "Switch singer" hands the phone to someone else: never offer them this email.
+export const forgetMakeEmail = () => rememberEmail("");
 
 // --- Wizard ------------------------------------------------------------------
 
