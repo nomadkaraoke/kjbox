@@ -5240,3 +5240,33 @@ body.simple-mode .night-log-launcher { display: none; }
     .rotation-btn-more, .rotation-btn-edit { flex-basis: 30px; }
     .rotation-btn-sms { min-width: 3.8rem; padding: 8px 4px; }
 }
+
+/* --- Manage Filler Music modal --- */
+.filler-select-row { display: flex; gap: 0.5rem; align-items: stretch; margin-top: 4px; }
+.filler-select-row select { flex: 1; min-width: 0; margin-top: 0; }
+.filler-modal-content { max-width: 620px; }
+.filler-muted { color: #777; font-size: 0.85em; font-weight: normal; }
+.filler-section-label { margin: 12px 0 6px; font-size: 0.75em; letter-spacing: 0.08em; text-transform: uppercase; color: #888; }
+.filler-track-list { display: flex; flex-direction: column; gap: 4px; max-height: 260px; overflow-y: auto; }
+.filler-track { display: flex; align-items: center; gap: 8px; padding: 6px 8px; background: #141414; border: 1px solid #2a2a2a; border-radius: 8px; }
+.filler-track.current { border-color: #ff7acc; }
+.filler-track-main { flex: 1; min-width: 0; }
+.filler-track-label { width: 100%; background: transparent; border: 1px solid transparent; color: #ddd; padding: 2px 4px; border-radius: 4px; font: inherit; }
+.filler-track-label:hover, .filler-track-label:focus { border-color: #444; background: #0f0f0f; }
+.filler-track-meta { padding: 0 4px; color: #777; font-size: 0.75em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.filler-track button { padding: 4px 9px; font-size: 0.8em; }
+.filler-track .filler-now { color: #ff7acc; font-size: 0.75em; white-space: nowrap; }
+.filler-source-tabs { display: flex; gap: 6px; margin-bottom: 8px; }
+.filler-tab { background: #1a1a1a; color: #aaa; border: 1px solid #333; box-shadow: none; font-size: 0.8em; padding: 5px 12px; }
+.filler-tab.active { color: #fff; border-color: #ff7acc; }
+.filler-clip-row { display: flex; gap: 0.75rem; }
+.filler-clip-row .overlay-form-row { flex: 1; }
+.filler-check { display: block; margin: 4px 0 8px; font-size: 0.85em; }
+.filler-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.filler-job { margin-top: 10px; }
+.filler-job-stage { font-size: 0.85em; color: #bbb; margin-bottom: 4px; }
+.filler-job-bar { height: 6px; background: #222; border-radius: 3px; overflow: hidden; }
+.filler-job-fill { height: 100%; width: 0; background: #ff7acc; transition: width 0.4s; }
+.filler-status { margin-top: 8px; font-size: 0.85em; }
+.filler-status.error { color: #f44336; }
+.filler-status.ok { color: #4caf50; }

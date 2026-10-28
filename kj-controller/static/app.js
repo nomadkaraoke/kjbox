@@ -1079,16 +1079,26 @@ async function setFillerMusic(trackName) {
 
 async function updateFillerMusicList() {
     try {
-        const response = await fetch('/filler_music');
-        const tracks = await response.json();
         const selector = document.getElementById('filler-selector');
+        const previous = selector.value;
+        let tracks;
+        try {
+            const lib = await (await fetch('/filler_music/library')).json();
+            tracks = lib.tracks.map(t => ({ name: t.name, label: t.label }));
+            if (lib.current && !previous) selector.dataset.current = lib.current;
+        } catch (e) {
+            // Older backend without the library endpoint: plain filenames.
+            tracks = (await (await fetch('/filler_music')).json()).map(n => ({ name: n, label: n }));
+        }
         selector.innerHTML = '';
         tracks.forEach(track => {
             const option = document.createElement('option');
-            option.value = track;
-            option.textContent = track;
+            option.value = track.name;
+            option.textContent = track.label;
             selector.appendChild(option);
         });
+        const want = previous || selector.dataset.current;
+        if (want && tracks.some(t => t.name === want)) selector.value = want;
     } catch (error) {
         log('Could not update filler music list.', 'error');
     }
@@ -3232,6 +3242,273 @@ async function deleteOverlay(id, name) {
 async function toggleOverlayEnabled(id) {
     await apiCall(`/overlays/${id}/toggle`, {});
     await loadOverlays();
+}
+
+// --- Manage Filler Music modal ---
+
+let fillerSource = 'youtube';
+let fillerPollTimer = null;
+let fillerPreviewName = null;
+
+function fillerStatus(msg, kind) {
+    const el = document.getElementById('filler-status');
+    el.textContent = msg || '';
+    el.className = 'filler-status' + (kind ? ' ' + kind : '');
+}
+
+function fillerFmtSize(bytes) {
+    return bytes >= 1048576 ? (bytes / 1048576).toFixed(1) + ' MB' : Math.round(bytes / 1024) + ' KB';
+}
+
+function fillerFmtDur(sec) {
+    if (sec == null) return '?';
+    sec = Math.round(sec);
+    const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
+    return h ? `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}` : `${m}:${String(s).padStart(2, '0')}`;
+}
+
+function openFillerModal() {
+    document.getElementById('filler-modal').classList.remove('hidden');
+    fillerStatus('');
+    loadFillerLibrary();
+}
+
+function closeFillerModal() {
+    document.getElementById('filler-preview-audio').pause();
+    fillerPreviewName = null;
+    document.getElementById('filler-modal').classList.add('hidden');
+    updateFillerMusicList();
+}
+
+async function loadFillerLibrary() {
+    const list = document.getElementById('filler-track-list');
+    try {
+        const lib = await (await fetch('/filler_music/library')).json();
+        list.innerHTML = '';
+        if (!lib.tracks.length) {
+            list.innerHTML = '<div class="filler-muted">No filler tracks yet - add one below.</div>';
+        }
+        lib.tracks.forEach(t => list.appendChild(fillerTrackRow(t)));
+        const free = document.getElementById('filler-free-space');
+        free.textContent = lib.free_bytes != null ? `· ${(lib.free_bytes / 1073741824).toFixed(1)} GB free` : '';
+    } catch (e) {
+        list.textContent = 'Could not load filler music.';
+    }
+}
+
+function fillerTrackRow(t) {
+    const row = document.createElement('div');
+    row.className = 'filler-track' + (t.current ? ' current' : '');
+
+    const preview = document.createElement('button');
+    preview.className = 'system-btn';
+    preview.textContent = fillerPreviewName === t.name ? '■' : '▶';
+    preview.title = 'Preview in this browser (does not touch the venue speakers)';
+    preview.onclick = () => fillerTogglePreview(t.name);
+
+    const main = document.createElement('div');
+    main.className = 'filler-track-main';
+    const label = document.createElement('input');
+    label.className = 'filler-track-label';
+    label.value = t.label;
+    label.maxLength = 120;
+    label.title = 'Click to rename';
+    label.onchange = () => fillerRename(t.name, label.value);
+    label.onkeydown = e => { if (e.key === 'Enter') label.blur(); };
+    const meta = document.createElement('div');
+    meta.className = 'filler-track-meta';
+    meta.textContent = `${fillerFmtDur(t.duration)} · ${fillerFmtSize(t.size)} · ${t.name}`;
+    main.append(label, meta);
+
+    row.append(preview, main);
+
+    if (t.current) {
+        const now = document.createElement('span');
+        now.className = 'filler-now';
+        now.textContent = '♪ Playing';
+        row.appendChild(now);
+    } else {
+        const use = document.createElement('button');
+        use.className = 'system-btn';
+        use.textContent = 'Use';
+        use.title = 'Make this the filler music';
+        use.onclick = async () => {
+            const data = await apiCall('/filler_music', { track_name: t.name });
+            if (data) {
+                document.getElementById('filler-selector').value = t.name;
+                loadFillerLibrary();
+            }
+        };
+        const del = document.createElement('button');
+        del.className = 'system-btn system-btn-danger';
+        del.textContent = '✕';
+        del.title = 'Delete this track';
+        del.onclick = () => fillerDelete(t);
+        row.append(use, del);
+    }
+    const smooth = document.createElement('button');
+    smooth.className = 'system-btn';
+    smooth.textContent = 'Smooth loop';
+    smooth.title = 'Save a copy whose end crossfades into its start, so it loops without a hard stop';
+    smooth.onclick = async () => {
+        const r = await fillerPost('/filler_music/smooth', { name: t.name });
+        if (!r.ok) { fillerStatus(r.data.error || 'Failed', 'error'); return; }
+        document.getElementById('filler-add-btn').disabled = true;
+        fillerShowJob('Smoothing the loop', 0.2);
+        fillerPollJob(r.data.job_id);
+    };
+    row.insertBefore(smooth, main.nextSibling);
+    return row;
+}
+
+function fillerTogglePreview(name) {
+    const audio = document.getElementById('filler-preview-audio');
+    if (fillerPreviewName === name) {
+        audio.pause();
+        fillerPreviewName = null;
+    } else {
+        audio.src = '/filler_music/file/' + encodeURIComponent(name);
+        audio.onended = () => { fillerPreviewName = null; loadFillerLibrary(); };
+        audio.play().catch(() => fillerStatus('Could not play that preview.', 'error'));
+        fillerPreviewName = name;
+    }
+    loadFillerLibrary();
+}
+
+async function fillerPost(url, body) {
+    const resp = await fetch(url, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+    });
+    return { ok: resp.ok, data: await resp.json() };
+}
+
+async function fillerRename(name, label) {
+    const r = await fillerPost('/filler_music/rename', { name, label });
+    if (!r.ok) fillerStatus(r.data.error || 'Rename failed', 'error');
+    await loadFillerLibrary();
+    updateFillerMusicList();
+}
+
+async function fillerDelete(t) {
+    if (!confirm(`Delete "${t.label}"? This can't be undone.`)) return;
+    const r = await fillerPost('/filler_music/delete', { name: t.name });
+    fillerStatus(r.ok ? 'Deleted.' : r.data.error, r.ok ? 'ok' : 'error');
+    loadFillerLibrary();
+    updateFillerMusicList();
+}
+
+function fillerSetSource(source) {
+    fillerSource = source;
+    document.getElementById('filler-tab-youtube').classList.toggle('active', source === 'youtube');
+    document.getElementById('filler-tab-file').classList.toggle('active', source === 'file');
+    document.getElementById('filler-youtube-row').classList.toggle('hidden', source !== 'youtube');
+    document.getElementById('filler-file-row').classList.toggle('hidden', source !== 'file');
+    // YouTube defaults to the first 5 minutes; uploads default to the whole file.
+    document.getElementById('filler-clip-length').placeholder = source === 'youtube' ? '5:00' : 'whole file';
+}
+
+async function fillerFetchInfo() {
+    const url = document.getElementById('filler-yt-url').value.trim();
+    const info = document.getElementById('filler-yt-info');
+    if (!url) { info.textContent = ''; return; }
+    info.textContent = 'Looking up video...';
+    try {
+        const r = await fillerPost('/filler_music/youtube-info', { url });
+        if (!r.ok) { info.textContent = r.data.error; return; }
+        info.textContent = `${r.data.title} (${fillerFmtDur(r.data.duration)})`;
+        const name = document.getElementById('filler-new-label');
+        if (!name.value) name.value = r.data.title;
+    } catch (e) {
+        info.textContent = 'Could not look up that video.';
+    }
+}
+
+function fillerFileChosen(input) {
+    const f = input.files[0];
+    const name = document.getElementById('filler-new-label');
+    if (f && !name.value) name.value = f.name.replace(/\.[^.]+$/, '');
+}
+
+async function fillerAdd() {
+    const btn = document.getElementById('filler-add-btn');
+    const label = document.getElementById('filler-new-label').value.trim();
+    const start = document.getElementById('filler-clip-start').value.trim();
+    const duration = document.getElementById('filler-clip-length').value.trim();
+    const normalize = document.getElementById('filler-normalize').checked;
+    const smoothLoop = document.getElementById('filler-smooth-loop').checked;
+    fillerStatus('');
+    btn.disabled = true;
+    try {
+        let resp;
+        if (fillerSource === 'youtube') {
+            const url = document.getElementById('filler-yt-url').value.trim();
+            if (!url) { fillerStatus('Paste a YouTube link first.', 'error'); btn.disabled = false; return; }
+            resp = await fetch('/filler_music/import', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ url, label, start, duration, normalize, smooth_loop: smoothLoop })
+            });
+        } else {
+            const file = document.getElementById('filler-file').files[0];
+            if (!file) { fillerStatus('Choose a file first.', 'error'); btn.disabled = false; return; }
+            const form = new FormData();
+            form.append('file', file);
+            form.append('label', label);
+            form.append('start', start);
+            form.append('duration', duration);
+            form.append('normalize', normalize ? '1' : '');
+            form.append('smooth_loop', smoothLoop ? '1' : '');
+            fillerShowJob('Uploading...', 0.05);
+            resp = await fetch('/filler_music/upload', { method: 'POST', body: form });
+        }
+        const data = await resp.json();
+        if (!resp.ok) { fillerStatus(data.error || 'Failed', 'error'); fillerHideJob(); btn.disabled = false; return; }
+        fillerPollJob(data.job_id);
+    } catch (e) {
+        fillerStatus('Request failed - is the connection OK?', 'error');
+        fillerHideJob();
+        btn.disabled = false;
+    }
+}
+
+function fillerShowJob(stage, progress) {
+    document.getElementById('filler-job').classList.remove('hidden');
+    document.getElementById('filler-job-stage').textContent = stage;
+    document.getElementById('filler-job-fill').style.width = Math.round(progress * 100) + '%';
+}
+
+function fillerHideJob() {
+    document.getElementById('filler-job').classList.add('hidden');
+}
+
+function fillerPollJob(jobId) {
+    clearTimeout(fillerPollTimer);
+    const btn = document.getElementById('filler-add-btn');
+    const tick = async () => {
+        try {
+            const job = await (await fetch('/filler_music/jobs/' + jobId)).json();
+            if (job.state === 'running') {
+                fillerShowJob(job.stage, job.progress);
+                fillerPollTimer = setTimeout(tick, 1000);
+                return;
+            }
+            fillerHideJob();
+            btn.disabled = false;
+            if (job.state === 'done') {
+                fillerStatus('Added "' + job.name + '".', 'ok');
+                ['filler-yt-url', 'filler-new-label', 'filler-clip-start', 'filler-clip-length', 'filler-file']
+                    .forEach(id => { document.getElementById(id).value = ''; });
+                document.getElementById('filler-yt-info').textContent = '';
+                loadFillerLibrary();
+                updateFillerMusicList();
+            } else {
+                fillerStatus(job.error || 'Import failed', 'error');
+            }
+        } catch (e) {
+            fillerPollTimer = setTimeout(tick, 2000);  // transient (e.g. restart): keep trying
+        }
+    };
+    tick();
 }
 
 // --- Wallpaper ---

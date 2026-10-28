@@ -14,9 +14,10 @@ import threading
 import time
 import unicodedata
 
-from flask import Blueprint, Response, current_app, jsonify, render_template, request, send_file
+from flask import Blueprint, Response, current_app, jsonify, render_template, request, send_file, send_from_directory
 
 import divebar
+import filler_library
 import fuzzy_match
 import karaoke_nerds
 import library_media
@@ -1587,6 +1588,136 @@ def set_filler_music():
     vlc.send_command(filler_port, filler_pw, f"volume&val={vlc.filler_volume}")
 
     return jsonify({"success": True})
+
+
+# --- Filler music library (Manage filler music modal; see filler_library.py) ---
+
+def _filler_error(e, status=400):
+    return jsonify({"error": str(e)}), status
+
+
+def _current_filler_track():
+    return getattr(current_app.vlc, 'current_filler_track', None)
+
+
+@routes_bp.route('/filler_music/library', methods=['GET'])
+def filler_library_list():
+    """Tracks with display labels, sizes and durations, plus free disk space."""
+    cfg = current_app.kj_config
+    directory = filler_library.filler_dir(cfg)
+    current = _current_filler_track()
+    return jsonify({
+        "tracks": filler_library.list_tracks(cfg, current),
+        "current": current,
+        "free_bytes": filler_library.free_bytes(directory) if directory else None,
+        "max_upload_bytes": filler_library.MAX_UPLOAD_BYTES,
+        "default_clip_s": filler_library.DEFAULT_CLIP_S,
+    })
+
+
+@routes_bp.route('/filler_music/file/<path:name>', methods=['GET'])
+def filler_music_file(name):
+    """Serve a filler track so the modal can preview it in the browser (range-capable)."""
+    directory = filler_library.filler_dir(current_app.kj_config)
+    if not filler_library.track_path(directory, name):
+        return jsonify({"error": "Track not found"}), 404
+    return send_from_directory(directory, name, conditional=True)
+
+
+@routes_bp.route('/filler_music/rename', methods=['POST'])
+def filler_music_rename():
+    """Change a track's display name (the file on disk keeps its name)."""
+    data = request.get_json(silent=True) or {}
+    cfg = current_app.kj_config
+    directory = filler_library.filler_dir(cfg)
+    name = data.get('name')
+    if not filler_library.track_path(directory, name):
+        return jsonify({"error": "Track not found"}), 404
+    filler_library.set_label(directory, name, data.get('label'))
+    return jsonify({"success": True})
+
+
+@routes_bp.route('/filler_music/delete', methods=['POST'])
+def filler_music_delete():
+    data = request.get_json(silent=True) or {}
+    try:
+        filler_library.delete_track(current_app.kj_config, data.get('name'), _current_filler_track())
+    except filler_library.FillerError as e:
+        return _filler_error(e, 409 if 'playing now' in str(e) else 404)
+    return jsonify({"success": True})
+
+
+@routes_bp.route('/filler_music/youtube-info', methods=['POST'])
+def filler_music_youtube_info():
+    """Title/length of a pasted YouTube link, to pre-fill the add form."""
+    url = (request.get_json(silent=True) or {}).get('url')
+    try:
+        return jsonify(filler_library.youtube_info(current_app.kj_config, url))
+    except filler_library.FillerError as e:
+        return _filler_error(e)
+
+
+@routes_bp.route('/filler_music/import', methods=['POST'])
+def filler_music_import():
+    """Start a background YouTube -> MP3 import. Poll /filler_music/jobs/<id>."""
+    data = request.get_json(silent=True) or {}
+    try:
+        job_id = filler_library.start_youtube_import(
+            current_app.kj_config, data.get('url'), data.get('label'),
+            data.get('start'), data.get('duration'), bool(data.get('normalize')),
+            bool(data.get('smooth_loop')))
+    except filler_library.FillerError as e:
+        return _filler_error(e, 409 if 'still running' in str(e) else 400)
+    return jsonify({"job_id": job_id})
+
+
+@routes_bp.route('/filler_music/upload', methods=['POST'])
+def filler_music_upload():
+    """Upload an audio/video file; it is converted to MP3 (optionally clipped) in the background."""
+    cfg = current_app.kj_config
+    directory = filler_library.filler_dir(cfg)
+    if not directory:
+        return jsonify({"error": "No filler music folder is configured"}), 400
+    if (request.content_length or 0) > filler_library.MAX_UPLOAD_BYTES + 1024 * 1024:
+        mb = filler_library.MAX_UPLOAD_BYTES // (1024 * 1024)
+        return jsonify({"error": f"File is too large (limit {mb} MB)"}), 413
+    file = request.files.get('file')
+    if not file or not file.filename:
+        return jsonify({"error": "No file provided"}), 400
+    os.makedirs(directory, exist_ok=True)
+    fd, tmp_path = tempfile.mkstemp(dir=directory, prefix='.upload-')
+    os.close(fd)
+    try:
+        file.save(tmp_path)
+        job_id = filler_library.start_file_import(
+            cfg, tmp_path, file.filename, request.form.get('label'),
+            request.form.get('start'), request.form.get('duration'),
+            request.form.get('normalize') in ('1', 'true', 'on'),
+            request.form.get('smooth_loop') in ('1', 'true', 'on'))
+    except filler_library.FillerError as e:
+        if os.path.exists(tmp_path):
+            os.remove(tmp_path)
+        return _filler_error(e, 409 if 'still running' in str(e) else 400)
+    return jsonify({"job_id": job_id})
+
+
+@routes_bp.route('/filler_music/smooth', methods=['POST'])
+def filler_music_smooth():
+    """Save a loop-smoothed copy of an existing track (end crossfaded into the start)."""
+    name = (request.get_json(silent=True) or {}).get('name')
+    try:
+        job_id = filler_library.start_smooth_existing(current_app.kj_config, name)
+    except filler_library.FillerError as e:
+        return _filler_error(e, 409 if 'still running' in str(e) else 404 if 'not found' in str(e) else 400)
+    return jsonify({"job_id": job_id})
+
+
+@routes_bp.route('/filler_music/jobs/<job_id>', methods=['GET'])
+def filler_music_job(job_id):
+    job = filler_library.jobs.get(job_id)
+    if not job:
+        return jsonify({"error": "Unknown job"}), 404
+    return jsonify(job)
 
 
 @routes_bp.route('/status')

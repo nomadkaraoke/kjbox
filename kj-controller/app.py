@@ -9,6 +9,7 @@ import time
 
 from flask import Flask, g, request
 
+import filler_library
 from catalog import ExternalCatalog
 from catalog_mirror import CatalogMirror
 from song_identify import SongIdentifier, default_db_path as song_id_default_db_path
@@ -344,6 +345,7 @@ def create_app(config=None):
     _bootstrap_vapid_keys(cfg, CONFIG_FILE)
 
     flask_app.kj_config = cfg
+    filler_library.cleanup_stale_imports(cfg)  # temp dirs from an import cut off by a restart
     flask_app.secret_key = _get_secret_key(cfg)
     flask_app.media_library = MediaLibraryStore(cfg.get('media_db_path'))
     flask_app.stats = StatsStore(cfg.get('media_db_path'))

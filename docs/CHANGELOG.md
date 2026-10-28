@@ -2,6 +2,23 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-10-28 - KJ UI: "Manage Filler Music" modal (v0.140.0)
+
+- New **Manage** button beside System -> Media & Output -> Filler Music opens a modal to add, rename,
+  preview and delete filler tracks without SSH/scp (`filler_library.py`, routes under `/filler_music/*`).
+- **From YouTube**: paste a link (title/length pre-fill), optional start time + length (default 5:00,
+  blank = whole video, max 60 min), optional loudness evening (ffmpeg `loudnorm`). Section download
+  first, falls back to full audio + local trim. Runs as a background job with progress; one at a time.
+- **Upload a file**: any audio/video (<=100 MB, Cloudflare's request cap), converted to MP3 with the
+  same clip/loudness options.
+- **Smooth the loop** (on by default for new tracks) crossfades the last 3 s into the first 3 s so
+  the filler never hard-stops when VLC repeats it (output is 3 s shorter; tracks under 12 s get plain
+  fade in/out). Each existing track also has a **Smooth loop** button that saves a `<name> (loop)` copy.
+- Display names are stored in `<filler_music_dir>/.filler-labels.json`; filenames never change under
+  the player. The track playing now can't be deleted. Previews play in the browser, not the venue.
+- Output is written to a hidden `.import-*` temp dir and renamed in atomically; stale ones are removed
+  at startup. Imports that come out shorter than requested (YouTube cut-off) are rejected.
+
 ## 2026-10-27 - KJ UI: drag-resizable columns + wrapping rotation song titles (v0.139.0)
 
 - The line between the two KJ columns is now a drag handle (`#column-resizer`): drag to widen the
