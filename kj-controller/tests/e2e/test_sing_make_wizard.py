@@ -122,6 +122,17 @@ class TestMakeWizard:
         page.locator(".mk-undo").click()
         expect(page.locator(".mk-song-artist")).to_have_text("radiohed")
 
+    def test_undo_drops_a_recording_chosen_for_the_other_title(self, page, live_server, live_token):
+        _open_wizard(page, live_server, live_token, email="m@x.co", fast={
+            "kind": "cosmetic", "confident": True, "needs_ai": False, "engine": "catalog",
+            "canonical_artist": "Radiohead", "canonical_title": "Creep"})
+        page.locator('[data-testid="make-change-audio"]').click()
+        page.locator(".mk-select:not([disabled])").first.click()
+        expect(page.locator('[data-testid="make-pick"]')).to_contain_text("Your choice")
+        page.locator(".mk-undo").click()
+        expect(page.locator(".mk-song-artist")).to_have_text("radiohed")
+        expect(page.locator('[data-testid="make-pick"]')).not_to_contain_text("Your choice")
+
     def test_did_you_mean_re_searches(self, page, live_server, live_token):
         calls = _open_wizard(page, live_server, live_token, email="m@x.co",
                              fast={"kind": "none", "confident": False, "needs_ai": True},

@@ -390,6 +390,10 @@ export function createMakeFlow(deps) {
   function toggleCorrection() {
     const s = m();
     if (!s.appliedFrom || !s.verdict) return;
+    // A different song: a recording chosen for the old one no longer applies
+    // (the automatic pick is re-derived against the new title).
+    s.pick = null;
+    s.audioOpen = false;
     if (s.correctionActive) {
       s.artist = s.appliedFrom.artist; s.title = s.appliedFrom.title; s.correctionActive = false;
     } else {
