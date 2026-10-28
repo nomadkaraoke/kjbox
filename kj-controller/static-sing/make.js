@@ -195,6 +195,7 @@ export function createMakeFlow(deps) {
       s.fastJudge = api("check", { artist: s.artist, title: s.title, stage: "fast" })
         .then((v) => {
           if (seq === s.searchSeq && v.kind === "cosmetic" && v.confident && !v.needs_ai) {
+            if (s.gate) { offerVerdict(v); return v; }   // too late to change the song on screen
             s.verdict = v;
             applyCorrection(v.canonical_artist, v.canonical_title, false);
           }

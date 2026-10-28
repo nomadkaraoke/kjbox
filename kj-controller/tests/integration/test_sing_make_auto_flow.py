@@ -303,6 +303,17 @@ class TestSubmit:
         assert resp.status_code == 200
         assert gen.create_job_from_search.call_count == 2
 
+    def test_same_make_after_signing_in_as_someone_else_is_theirs(
+            self, client, sing_app, token, gen, signed_in):
+        meta = {"youtube_url": "https://youtu.be/abc"}
+        first = _submit(client, token, source_meta=meta).get_json()["request"]
+        sing_app.sing_store.set_gen_account(DEVICE, "joe@example.com", "sess-joe")   # "not you?"
+        gen.create_job_from_url.return_value = {"job_id": "job-joe", "status": "pending"}
+        second = _submit(client, token, source_meta=meta)
+        assert second.status_code == 200
+        assert second.get_json()["request"]["id"] != first["id"]
+        assert gen.create_job_from_url.call_args.args[0] == "sess-joe"
+
     def test_per_device_night_cap(self, client, sing_app, token, gen, signed_in):
         sing_app.kj_config["sing_make_max_per_device"] = 1
         sing_app.kj_config["sing_rate_limit_per_device"] = 100

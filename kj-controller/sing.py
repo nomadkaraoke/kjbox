@@ -8,6 +8,7 @@ Design doc: docs/archive/2026-04-18-public-request-form-design.md
 
 from urllib.parse import quote
 import contextlib
+import hashlib
 import ipaddress
 import json
 import os
@@ -1559,6 +1560,12 @@ def submit():
     gen_job_id = None
     with _make_submit_lock(device_id) if source_type == "make" else _NO_LOCK:
         if source_type == "make":
+            # Tag the make with the signed-in gen account (hashed), so after "not
+            # you?" + another sign-in the same song is that account's own make.
+            acct = store.get_gen_account(device_id) if device_id else None
+            if isinstance(source_meta, dict):
+                source_meta = {**source_meta, "gen_account": hashlib.sha256(
+                    (acct["email"] if acct else "").encode()).hexdigest()[:16]}
             existing = store.find_make_request(device_id, singer_name, song_artist, song_title,
                                                source_meta)
             if existing:
