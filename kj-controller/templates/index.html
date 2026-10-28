@@ -179,7 +179,10 @@
                     <div class="controls-row">
                         <div class="control-half">
                             <label for="filler-selector">Filler Music:</label>
-                            <select id="filler-selector" onchange="setFillerMusic(this.value)"></select>
+                            <div class="filler-select-row">
+                                <select id="filler-selector" onchange="setFillerMusic(this.value)"></select>
+                                <button class="system-btn" onclick="openFillerModal()" title="Add, rename, preview or delete filler music tracks">Manage</button>
+                            </div>
                         </div>
                         <div class="control-half" style="display:flex;align-items:flex-end;">
                             <button class="system-btn" onclick="openAvModal()">AV Output</button>
@@ -856,6 +859,60 @@
                 </div>
                 <div id="wallpaper-status"></div>
             </div>
+        </div>
+    </div>
+
+    <!-- Manage Filler Music Modal -->
+    <div id="filler-modal" class="modal-backdrop hidden" onclick="if(event.target===this) closeFillerModal()">
+        <div class="modal-content filler-modal-content" role="dialog" aria-modal="true" aria-labelledby="filler-modal-title">
+            <div class="modal-header">
+                <h3 id="filler-modal-title">Manage Filler Music</h3>
+                <button class="modal-close" onclick="closeFillerModal()" title="Close">&times;</button>
+            </div>
+
+            <div class="filler-section-label">Tracks <span id="filler-free-space" class="filler-muted"></span></div>
+            <div id="filler-track-list" class="filler-track-list"></div>
+            <audio id="filler-preview-audio" preload="none"></audio>
+
+            <div class="filler-section-label">Add a track</div>
+            <div class="filler-source-tabs">
+                <button id="filler-tab-youtube" class="filler-tab active" onclick="fillerSetSource('youtube')">From YouTube</button>
+                <button id="filler-tab-file" class="filler-tab" onclick="fillerSetSource('file')">Upload a file</button>
+            </div>
+            <div class="overlay-form-row" id="filler-youtube-row">
+                <label for="filler-yt-url">YouTube link</label>
+                <input type="url" id="filler-yt-url" placeholder="https://www.youtube.com/watch?v=..." onchange="fillerFetchInfo()" onpaste="setTimeout(fillerFetchInfo, 50)">
+                <div id="filler-yt-info" class="filler-muted"></div>
+            </div>
+            <div class="overlay-form-row hidden" id="filler-file-row">
+                <label for="filler-file">Audio or video file <span class="filler-muted">(any format; converted to MP3)</span></label>
+                <input type="file" id="filler-file" accept="audio/*,video/*,.mp3,.wav,.flac,.ogg,.m4a,.aac,.mp4,.mov,.mkv,.webm" onchange="fillerFileChosen(this)">
+            </div>
+            <div class="overlay-form-row">
+                <label for="filler-new-label">Name</label>
+                <input type="text" id="filler-new-label" maxlength="120" placeholder="Shown in the Filler Music list">
+            </div>
+            <div class="filler-clip-row">
+                <div class="overlay-form-row">
+                    <label for="filler-clip-start">Start at <span class="filler-muted">(optional)</span></label>
+                    <input type="text" id="filler-clip-start" placeholder="0:00" inputmode="numeric">
+                </div>
+                <div class="overlay-form-row">
+                    <label for="filler-clip-length">Length <span class="filler-muted">(blank = default)</span></label>
+                    <input type="text" id="filler-clip-length" placeholder="5:00" inputmode="numeric">
+                </div>
+            </div>
+            <label class="filler-check"><input type="checkbox" id="filler-normalize" checked> Even out loudness <span class="filler-muted">(so it matches your other tracks)</span></label>
+            <label class="filler-check"><input type="checkbox" id="filler-smooth-loop" checked> Smooth the loop <span class="filler-muted">(blend the last 3s into the start so it never hard-stops when it repeats)</span></label>
+            <div class="filler-actions">
+                <button class="system-btn" id="filler-add-btn" onclick="fillerAdd()">Add track</button>
+                <span id="filler-add-hint" class="filler-muted">YouTube downloads run about as fast as the clip plays, so shorter clips finish sooner.</span>
+            </div>
+            <div id="filler-job" class="filler-job hidden">
+                <div class="filler-job-stage" id="filler-job-stage"></div>
+                <div class="filler-job-bar"><div id="filler-job-fill" class="filler-job-fill"></div></div>
+            </div>
+            <div id="filler-status" class="filler-status"></div>
         </div>
     </div>
 
