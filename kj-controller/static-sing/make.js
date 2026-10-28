@@ -225,7 +225,11 @@ export function createMakeFlow(deps) {
   // and it lands before the singer can pick — no AI judge.
   async function openGateAfterFastJudge(seq) {
     const s = m();
-    await (s.fastJudge || Promise.resolve(null));
+    // Same time limit as the AI judge's gate: a stalled check never strands the buttons.
+    await Promise.race([
+      s.fastJudge || Promise.resolve(null),
+      new Promise((resolve) => setTimeout(resolve, judgeGateMs())),
+    ]);
     if (seq === s.searchSeq) { s.gate = true; rerender(); }
   }
 
@@ -259,6 +263,7 @@ export function createMakeFlow(deps) {
   // A correction shown as "Did you mean…?" instead of applied.
   function offerVerdict(v) {
     if (!v || !(v.kind === "cosmetic" || v.kind === "content")) return;
+    if (m().appliedFrom) return;   // keep an applied tidy and its undo intact
     m().verdict = { ...v, kind: "content", confident: false };
     rerender();
   }

@@ -393,7 +393,10 @@ class TestNoLateSwap:
             window.__sing_state.make.title = 'I Will Be Okay';
         }""")
         expect(page.locator('[data-testid="make-use"]')).to_be_enabled()   # gate opened by timeout
-        page.wait_for_function("() => true")
+        for _ in range(50):          # the full judge is asked after the fast one answers
+            if held:
+                break
+            page.wait_for_timeout(50)
         assert held, "the full judge was asked"
         held[0].fulfill(status=200, content_type="application/json", body=json.dumps(AI_YOU_WILL))
         expect(page.locator('[data-testid="make-didyoumean"]')).to_contain_text("You Will Be Okay — Helluva Boss")
