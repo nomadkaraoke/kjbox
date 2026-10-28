@@ -7,6 +7,7 @@ Design doc: docs/archive/2026-04-18-public-request-form-design.md
 """
 
 from urllib.parse import quote
+import contextlib
 import ipaddress
 import json
 import os
@@ -1452,6 +1453,18 @@ def _auto_approve_song(store, req):
     return True
 
 
+# One make submit at a time per device, so a repeat can't race the first
+# one's gen call (see submit).
+_make_submit_locks = defaultdict(threading.Lock)
+_make_submit_locks_guard = threading.Lock()
+_NO_LOCK = contextlib.nullcontext()
+
+
+def _make_submit_lock(device_id):
+    with _make_submit_locks_guard:
+        return _make_submit_locks[device_id or ""]
+
+
 @sing_bp.route("/submit", methods=["POST"])
 @require_token
 def submit():
@@ -1522,9 +1535,6 @@ def submit():
             return _reject("make_requests_disabled")
         if not (song_artist and song_title):
             return _reject("song_artist and song_title are required for make")
-        if _make_limit_reached(store, cfg, device_id):
-            _refund_device_rate_slot()
-            return jsonify({"error": "make_limit"}), 429
     if source_type == "kj_pick":
         err = _validate_kj_pick_payload(data)
         if err:
@@ -1543,31 +1553,45 @@ def submit():
     # Make-it: the singer's own karaoke-gen job is created right now, on their
     # verified gen account (see sing_make) — before the request row exists, so
     # a gen refusal (expired sign-in, stale search) leaves nothing behind.
+    # A repeat submit of the same audio choice from the same device (a double
+    # tap, a retry) returns the request it already made: gen's search session
+    # is single-use, so asking again would 409 after a success (live 2026-10-22).
     gen_job_id = None
-    if source_type == "make":
-        import sing_make
-        gen_job_id, make_err = sing_make.create_job(
-            current_app._get_current_object(), device_id, song_artist, song_title, source_meta)
-        if make_err:
-            _refund_device_rate_slot()
-            return make_err
+    with _make_submit_lock(device_id) if source_type == "make" else _NO_LOCK:
+        if source_type == "make":
+            existing = store.find_make_request(device_id, source_meta)
+            if existing:
+                _refund_device_rate_slot()
+                return jsonify({
+                    "request": {**_public_request_view(existing), "edit_token": existing.get("edit_token")},
+                    "auto_approved": existing.get("status") == "approved",
+                })
+            if _make_limit_reached(store, cfg, device_id):
+                _refund_device_rate_slot()
+                return jsonify({"error": "make_limit"}), 429
+            import sing_make
+            gen_job_id, make_err = sing_make.create_job(
+                current_app._get_current_object(), device_id, song_artist, song_title, source_meta)
+            if make_err:
+                _refund_device_rate_slot()
+                return make_err
 
-    req = store.create_request(
-        singer_name=singer_name,
-        phone=phone,
-        song_artist=song_artist,
-        song_title=song_title,
-        source_type=source_type,
-        source_ref=source_ref,
-        source_meta=source_meta,
-        notes=notes,
-        additional_singers=additional,
-        user_agent=request.headers.get("User-Agent", "")[:500],
-        device_id=device_id or None,
-    )
+        req = store.create_request(
+            singer_name=singer_name,
+            phone=phone,
+            song_artist=song_artist,
+            song_title=song_title,
+            source_type=source_type,
+            source_ref=source_ref,
+            source_meta=source_meta,
+            notes=notes,
+            additional_singers=additional,
+            user_agent=request.headers.get("User-Agent", "")[:500],
+            device_id=device_id or None,
+        )
 
-    if gen_job_id:
-        req = store.set_request_gen(req["id"], gen_job_id, "submitted")
+        if gen_job_id:
+            req = store.set_request_gen(req["id"], gen_job_id, "submitted")
 
     # Social-media photo consent rides along with each request (the device
     # remembers the singer's choice), recorded against the canonical name so

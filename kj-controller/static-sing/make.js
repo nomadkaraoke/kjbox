@@ -56,8 +56,19 @@ const CATEGORY_CLASS = {
 // --- Match-judge (ported from AudioSourceStep.tsx) ---------------------------
 
 const JUDGE_GATE_TIMEOUT_MS = 12000;
+// Overridable for deterministic tests (like window.__SING_ARM_MS in sing.js).
+const judgeGateMs = () => (typeof window.__SING_JUDGE_GATE_MS === "number"
+  ? window.__SING_JUDGE_GATE_MS : JUDGE_GATE_TIMEOUT_MS);
 const WEAK_TIER = 3;
 const isCatalogConfident = (v) => v && v.confident && v.engine === "catalog";
+
+// The last email this phone signed in with — pre-filled when a sign-in
+// expires (gen sessions lapse between weekly shows), so most never retype it.
+const EMAIL_KEY = "nk_make_email";
+const rememberedEmail = () => { try { return localStorage.getItem(EMAIL_KEY) || ""; } catch { return ""; } };
+const rememberEmail = (email) => {
+  try { if (email) localStorage.setItem(EMAIL_KEY, email); else localStorage.removeItem(EMAIL_KEY); } catch { /* private mode */ }
+};
 
 // --- Wizard ------------------------------------------------------------------
 
@@ -78,12 +89,15 @@ export function createMakeFlow(deps) {
     if (state.step === "make") render();
   }
 
-  // Entry point: the make card hands over what the singer typed.
-  async function start(artist, title) {
+  // Entry point: the make card hands over what the singer typed. `trusted`:
+  // artist/title are a confident on-device identification (or a candidate the
+  // singer tapped), so gen's AI judge mustn't overrule them — live 2026-10-22 it
+  // turned a correct "I Will Be Okay" into a different song, "You Will Be Okay".
+  async function start(artist, title, { trusted = false } = {}) {
     state.make = {
       stage: "loading",
       typed: { artist, title },
-      artist, title,
+      artist, title, trusted,
       email: "", code: "", err: "", busy: false,
       search: { status: "idle", results: [], sessionId: null },
       verdict: null, appliedFrom: null, correctionActive: false, gate: false,
@@ -94,10 +108,11 @@ export function createMakeFlow(deps) {
     render();
     try {
       const acct = await fetchJson(`${BASE}/make/account?device_id=${encodeURIComponent(getDeviceId())}`);
-      m().email = acct.email || "";
+      m().email = acct.email || rememberedEmail();
       onAccount?.(acct);
       if (acct.email) beginSearch(); else m().stage = "account";
     } catch {
+      m().email = rememberedEmail();
       m().stage = "account";
     }
     rerender();
@@ -117,7 +132,8 @@ export function createMakeFlow(deps) {
 
   function handleAuthLoss(e) {
     if (e?.data?.error === "signin_required") {
-      Object.assign(m(), { stage: "account", email: "", err: t("make.errSignedOut") });
+      // Keep the email: the singer only has to ask for a new code.
+      Object.assign(m(), { stage: "account", email: m().email || rememberedEmail(), err: t("make.errSignedOut") });
       rerender();
       return true;
     }
@@ -146,6 +162,7 @@ export function createMakeFlow(deps) {
     try {
       const d = await api("verify-code", { email: s.email.trim(), code });
       s.busy = false;
+      rememberEmail((d && d.email) || s.email.trim());
       onSignedIn?.((d && d.email) || s.email.trim());
       beginSearch();
     } catch (e) {
@@ -156,6 +173,7 @@ export function createMakeFlow(deps) {
 
   async function signOut() {
     try { await api("sign-out", {}); } catch { /* best effort */ }
+    rememberEmail("");   // "not you?" — don't offer this email to the next person
     onSignedOut?.();
     Object.assign(m(), { stage: "account", email: "", err: "" });
     rerender();
@@ -186,7 +204,9 @@ export function createMakeFlow(deps) {
       .then((data) => {
         if (seq !== s.searchSeq) return;
         s.search = { status: "done", results: data.results || [], sessionId: data.search_session_id };
-        if (judge) runFullJudge(seq); else s.gate = true;
+        if (judge && !s.trusted) runFullJudge(seq);
+        else if (judge) openGateAfterFastJudge(seq);
+        else s.gate = true;
         rerender();
       })
       .catch((e) => {
@@ -199,16 +219,28 @@ export function createMakeFlow(deps) {
     rerender();
   }
 
+  // Trusted identification: only the fast catalog tidy (formatting) may apply,
+  // and it lands before the singer can pick — no AI judge.
+  async function openGateAfterFastJudge(seq) {
+    const s = m();
+    await (s.fastJudge || Promise.resolve(null));
+    if (seq === s.searchSeq) { s.gate = true; rerender(); }
+  }
+
   async function runFullJudge(seq) {
     const s = m();
     const tier = getSearchConfidence(s.search.results, s.title, s.artist).tier;
-    const timer = setTimeout(() => { if (seq === s.searchSeq) { s.gate = true; rerender(); } }, JUDGE_GATE_TIMEOUT_MS);
+    const timer = setTimeout(() => { if (seq === s.searchSeq) { s.gate = true; rerender(); } }, judgeGateMs());
     const fast = await (s.fastJudge || Promise.resolve(null));
     const needFull = !fast || fast.needs_ai || (isCatalogConfident(fast) && tier >= WEAK_TIER);
     if (needFull) {
       try {
         const full = await api("check", { artist: s.artist, title: s.title, stage: "full", tier });
-        if (seq === s.searchSeq) applyFullVerdict(full, tier);
+        // Too late to change what's on screen: the singer may already be
+        // tapping "Use this audio". A late correction is only offered.
+        if (seq === s.searchSeq) {
+          if (s.gate) offerVerdict(full); else applyFullVerdict(full, tier);
+        }
       } catch (e) { handleAuthLoss(e); }
     }
     clearTimeout(timer);
@@ -220,6 +252,13 @@ export function createMakeFlow(deps) {
     s.verdict = v;
     if (v.kind === "cosmetic" && v.confident) applyCorrection(v.canonical_artist, v.canonical_title, false);
     else if (v.kind === "content" && v.confident) applyCorrection(v.canonical_artist, v.canonical_title, tier >= WEAK_TIER);
+  }
+
+  // A correction shown as "Did you mean…?" instead of applied.
+  function offerVerdict(v) {
+    if (!v || !(v.kind === "cosmetic" || v.kind === "content")) return;
+    m().verdict = { ...v, kind: "content", confident: false };
+    rerender();
   }
 
   function applyCorrection(artist, title, reSearch) {

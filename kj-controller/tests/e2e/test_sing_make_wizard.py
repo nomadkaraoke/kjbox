@@ -23,7 +23,8 @@ def _json(route, body, status=200):
     route.fulfill(status=status, content_type="application/json", body=json.dumps(body))
 
 
-def _open_wizard(page, live_server, live_token, *, email=None, results=None, fast=None, full=None):
+def _open_wizard(page, live_server, live_token, *, email=None, results=None, fast=None, full=None,
+                 held=None):
     page.add_init_script("window.__SING_ARM_MS = 0;")
     _login(page, live_server, live_token)
     calls = {"send": [], "verify": [], "search": [], "check": []}
@@ -31,6 +32,9 @@ def _open_wizard(page, live_server, live_token, *, email=None, results=None, fas
     def check(route):
         body = json.loads(route.request.post_data or "{}")
         calls["check"].append(body)
+        if held is not None and body.get("stage") == "full":
+            held.append(route)   # the test answers it later (a slow AI judge)
+            return
         verdict = (full if body.get("stage") == "full" else fast) or {"kind": "none", "confident": False}
         _json(route, verdict)
 
@@ -301,3 +305,127 @@ class TestMySongsQuickVersion:
         self._open(page, live_server, live_token, None)
         expect(page.locator(".song-card-status").first).to_contain_text("Being made")
         expect(page.locator('[data-testid="quick-offer"]')).to_have_count(0)
+
+
+# --- 2026-10-22 show: a correct identification overruled, a late swap -------
+
+I_WILL = {"index": 0, "provider": "Spotify", "title": "Helluva Boss: Season Two (Original Soundtrack)",
+          "artist": "Helluva Boss, Barrett Wilbert Weed", "is_lossless": False, "target_file": "I Will Be Okay",
+          "release_type": "Album", "year": 2025, "view_count": 610000}
+YOU_WILL = {"index": 1, "provider": "Spotify", "title": "You Will Be Okay",
+            "artist": "Helluva Boss, Bryce Pinkham, Sam Haft", "is_lossless": False, "target_file": "You Will Be Okay",
+            "release_type": "Single", "year": 2025, "view_count": 500000}
+AI_YOU_WILL = {"kind": "content", "confident": True, "engine": "ai", "needs_ai": False,
+               "canonical_artist": "Helluva Boss", "canonical_title": "You Will Be Okay", "alternatives": []}
+
+
+def _open_identified(page, live_server, live_token, *, full, events=None, email="anya@example.com"):
+    """Type a query the device identifies confidently, with no karaoke version, and
+    tap the empty-state "Generate it": the make form is pre-filled from the identification."""
+    page.add_init_script("window.__SING_ARM_MS = 0;")
+    _login(page, live_server, live_token)
+    calls = {"check": []}
+
+    def check(route):
+        body = json.loads(route.request.post_data or "{}")
+        calls["check"].append(body)
+        _json(route, full if body.get("stage") == "full" else
+              {"kind": "none", "confident": False, "needs_ai": True, "engine": "catalog"})
+
+    page.route("**/sing/search/identify*", lambda r: _json(r, {
+        "status": "confident", "kind": "cosmetic", "typed": "i will be okay helluva boss",
+        "song": {"artist": "Helluva Boss", "title": "I Will Be Okay", "karaoke": True},
+        "candidates": [{"artist": "Helluva Boss", "title": "You Will Be Okay", "karaoke": True}]}))
+    page.route("**/sing/search?*", lambda r: _json(r, {"songs": [], "make_requests_enabled": True,
+                                                      "simple_mode": False}))
+    page.route("**/sing/search/resolve*", lambda r: _json(r, {}))
+    if events is not None:
+        page.route("**/sing/search/event*", lambda r: (events.append(json.loads(r.request.post_data or "{}")),
+                                                       _json(r, {"ok": True})))
+    page.route("**/sing/make/account*", lambda r: _json(r, {"ready": True, "email": email}))
+    page.route("**/sing/make/check*", check)
+    page.route("**/sing/make/search*", lambda r: _json(r, {"search_session_id": "ss-1",
+                                                           "results": [I_WILL, YOU_WILL]}))
+    page.evaluate("""
+        window.__sing_state.makeRequestsEnabled = true;
+        window.__sing_state.step = 'search';
+        window.__sing_render();
+    """)
+    page.locator('input[type="search"]').fill("i will be okay helluva boss")
+    card = page.locator('[data-testid="make-card"]')
+    expect(card.locator("input").nth(1)).to_have_value("I Will Be Okay")
+    card.locator("button").click()
+    return calls
+
+
+class TestIdentifiedSongIsTrusted:
+    def test_ai_judge_cannot_overrule_a_confident_identification(self, page, live_server, live_token):
+        calls = _open_identified(page, live_server, live_token, full=AI_YOU_WILL)
+        pick = page.locator('[data-testid="make-pick"]')
+        expect(pick.locator(".mk-mono")).to_have_text("I Will Be Okay")
+        expect(page.locator('[data-testid="make-use"]')).to_be_enabled()
+        expect(page.locator(".mk-song-title")).to_have_text("I Will Be Okay")
+        assert [c["stage"] for c in calls["check"]] == ["fast"]       # no AI judge
+        expect(page.locator('[data-testid="make-correction"]')).to_have_count(0)
+
+    def test_typed_song_still_gets_the_judge(self, page, live_server, live_token):
+        # The singer edits the pre-filled title: their own text is not an
+        # identification, so gen's judge runs as before.
+        page.add_init_script("window.__SING_JUDGE_GATE_MS = 60000;")
+        calls = _open_wizard(page, live_server, live_token, email="m@x.co",
+                             fast={"kind": "none", "confident": False, "needs_ai": True},
+                             full={"kind": "none", "confident": True})
+        expect(page.locator('[data-testid="make-pick"]')).to_be_visible()
+        expect(page.locator('[data-testid="make-use"]')).to_be_enabled()
+        assert "full" in [c["stage"] for c in calls["check"]]
+
+
+class TestNoLateSwap:
+    def test_correction_after_the_button_is_live_is_only_offered(self, page, live_server, live_token):
+        # Live: the AI verdict landed ~20 s after the results, after the 12 s gate
+        # had opened, and swapped the title and the recommended audio.
+        page.add_init_script("window.__SING_JUDGE_GATE_MS = 50;")
+        held = []
+        _open_wizard(page, live_server, live_token, email="m@x.co", results=[I_WILL, YOU_WILL],
+                     fast={"kind": "none", "confident": False, "needs_ai": True}, held=held)
+        page.evaluate("""() => {
+            window.__sing_state.make.artist = 'Helluva Boss';
+            window.__sing_state.make.title = 'I Will Be Okay';
+        }""")
+        expect(page.locator('[data-testid="make-use"]')).to_be_enabled()   # gate opened by timeout
+        page.wait_for_function("() => true")
+        assert held, "the full judge was asked"
+        held[0].fulfill(status=200, content_type="application/json", body=json.dumps(AI_YOU_WILL))
+        expect(page.locator('[data-testid="make-didyoumean"]')).to_contain_text("You Will Be Okay — Helluva Boss")
+        expect(page.locator(".mk-song-title")).to_have_text("I Will Be Okay")
+        expect(page.locator('[data-testid="make-correction"]')).to_have_count(0)
+
+
+class TestRememberedEmail:
+    def test_expired_sign_in_keeps_the_email(self, page, live_server, live_token):
+        page.add_init_script("localStorage.setItem('nk_make_email', 'anya@example.com');")
+        _open_wizard(page, live_server, live_token, email=None)
+        expect(page.locator('[data-testid="make-email"]')).to_have_value("anya@example.com")
+
+    def test_verified_email_is_remembered_and_not_you_forgets_it(self, page, live_server, live_token):
+        _open_wizard(page, live_server, live_token)
+        page.locator('[data-testid="make-email"]').fill("mary@example.com")
+        page.locator('[data-testid="make-send-code"]').click()
+        page.locator('[data-testid="make-code"]').fill("123456")
+        expect(page.locator('[data-testid="make-pick"]')).to_be_visible()
+        assert page.evaluate("localStorage.getItem('nk_make_email')") == "mary@example.com"
+        page.route("**/sing/make/sign-out*", lambda r: _json(r, {}))
+        page.locator(".mk-signed-in button").click()
+        expect(page.locator('[data-testid="make-email"]')).to_have_value("")
+        assert page.evaluate("localStorage.getItem('nk_make_email')") is None
+
+
+class TestEmptyStateOfferLogged:
+    def test_shown_and_tap_are_logged(self, page, live_server, live_token):
+        events = []
+        _open_identified(page, live_server, live_token, full=AI_YOU_WILL, events=events)
+        expect(page.locator('[data-testid="make-step"]')).to_be_visible()
+        page.wait_for_timeout(300)
+        offers = [(e["action"], e["data"].get("where")) for e in events if e["action"].startswith("make_offer")]
+        assert ("make_offer_shown", "empty_state") in offers
+        assert ("make_offer_tap", "empty_state") in offers

@@ -1553,6 +1553,30 @@ class SingStore:
         ).fetchone()
         return row[0]
 
+    def find_make_request(self, device_id, source_meta):
+        """Tonight's live make request from this device for the same audio choice
+        (gen search session, or YouTube link), or None. A repeat submit returns it
+        instead of asking gen again: a search session is single-use there."""
+        meta = source_meta if isinstance(source_meta, dict) else {}
+        key = ("search_session_id", meta.get("search_session_id")) if meta.get("search_session_id") \
+            else ("youtube_url", meta.get("youtube_url"))
+        night_started = self.get_night_started_at()
+        if not (device_id and key[1] and night_started):
+            return None
+        rows = self._get_conn().execute(
+            "SELECT * FROM sing_requests WHERE source_type = 'make' AND device_id = ? "
+            "AND created_at >= ? AND status IN ('pending', 'approved') ORDER BY id DESC",
+            (device_id, night_started),
+        ).fetchall()
+        for row in rows:
+            try:
+                stored = json.loads(row["source_meta"] or "{}")
+            except (TypeError, ValueError):
+                continue
+            if isinstance(stored, dict) and stored.get(key[0]) == key[1]:
+                return self._row_to_dict(row)
+        return None
+
     def set_linked_entry(self, request_id, linked_entry_id):
         """Update the linked rotation entry id without changing status."""
         if self.get_request(request_id) is None:
