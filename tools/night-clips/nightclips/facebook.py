@@ -116,23 +116,35 @@ class FacebookPublisher:
         sw.click()
         p.wait_for_timeout(4000)
 
-    def open_composer(self) -> None:
+    def open_composer_and_upload(self, files: list[str]) -> None:
+        """Clicking Photo/video opens the OS file picker straight away, so the picker has to be
+        caught on that first click (a second click finds nothing). Falls back to a file input
+        or an 'Add photos/videos' button if Facebook's layout opens the composer dialog first."""
         p = self.page
-        self.click_any("composer", self.composer_button(), timeout_ms=SHORT)
-
-    def upload(self, files: list[str]) -> None:
-        p = self.page
-        # The Photo/video click already opened a file chooser in some layouts; handle both.
-        inputs = p.locator("div[role='dialog'] input[type='file']")
-        if inputs.count():
-            inputs.first.set_input_files(files)
-        else:
+        # A security check / checkpoint can sit in front of the Page; give Andrew time to clear it.
+        if self.first_visible(self.composer_button(), timeout_ms=5000) is None:
+            log("Photo/video button not showing yet. If Facebook is asking for a security check, "
+                "finish it in the window; waiting up to 3 minutes...")
+            p.goto(FB_PAGE_URL, wait_until="domcontentloaded")
+            self.switch_into_page()
+        btn = self.first_visible(self.composer_button(), timeout_ms=3 * 60_000)
+        if btn is None:
+            raise StepFailed("composer: couldn't find the Photo/video button")
+        try:
             with p.expect_file_chooser(timeout=SHORT) as fc_info:
-                self.click_any("add media", [
-                    p.get_by_role("button", name=re.compile(r"^Photo/video$", re.I)),
-                    p.get_by_role("dialog").get_by_text("Add photos/videos", exact=False),
-                ])
+                btn.click()
             fc_info.value.set_files(files)
+        except Exception:  # noqa: BLE001 — no picker: the composer dialog opened instead
+            inputs = p.locator("div[role='dialog'] input[type='file']")
+            if inputs.count():
+                inputs.first.set_input_files(files)
+            else:
+                with p.expect_file_chooser(timeout=SHORT) as fc_info:
+                    self.click_any("add media", [
+                        p.get_by_role("dialog").get_by_role("button", name=re.compile(r"Photo/video", re.I)),
+                        p.get_by_role("dialog").get_by_text("Add photos/videos", exact=False),
+                    ])
+                fc_info.value.set_files(files)
         log(f"Uploading {len(files)} file(s)...")
         ready = self.first_visible(
             [p.get_by_role("dialog").get_by_role("button", name=re.compile(r"^(Next|Post)$", re.I)),
@@ -204,8 +216,7 @@ class FacebookPublisher:
             raise StepFailed("caption: too long for Facebook")
         self.ensure_logged_in()
         self.switch_into_page()
-        self.open_composer()
-        self.upload(files)
+        self.open_composer_and_upload(files)
         self.fill_caption(caption)
         if location:
             self.add_location(location)
