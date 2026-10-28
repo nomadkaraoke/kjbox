@@ -108,13 +108,71 @@
     if (!grid.children.length) grid.append(h('p', { class: 'muted' }, 'No clips to show.'));
   }
 
+  const isLong = (c) => c.duration && c.duration > S.ig_max_s;
+  const cutEnd = (c) => (c.trim_start || 0) + S.ig_max_s;
+
+  // Plays only the part Instagram will get: starts at the chosen start, stops at start + 59s.
+  function previewVideo(c) {
+    const v = h('video', { src: `/media/${c.id}`, controls: true, autoplay: true, playsinline: true, preload: 'auto' });
+    if (isLong(c)) {
+      v.dataset.clip = c.id;
+      v.addEventListener('loadedmetadata', () => { v.currentTime = c.trim_start || 0; });
+      v.addEventListener('timeupdate', () => {
+        if (v.currentTime >= cutEnd(c)) { v.pause(); v.currentTime = c.trim_start || 0; }
+      });
+    }
+    return v;
+  }
+
+  function trimControl(c) {
+    const max = Math.max(0, c.duration - S.ig_max_s);
+    const label = h('span', { class: 'trim-lbl' });
+    const show = (s) => {
+      label.textContent = `Cut starts ${fmtDur(s)} · ends ${fmtDur(Math.min(c.duration, s + S.ig_max_s))} (of ${fmtDur(c.duration)})`;
+    };
+    show(c.trim_start || 0);
+    const range = h('input', {
+      type: 'range', min: 0, max: String(max), step: '0.5', value: String(c.trim_start || 0),
+      'aria-label': 'Where the 59 second cut starts',
+      oninput: (e) => {
+        const s = Number(e.target.value);
+        show(s);
+        c.trim_start = s;  // live, so the preview below follows
+        const v = document.querySelector(`video[data-clip="${c.id}"]`);
+        if (v) { v.currentTime = s; }
+      },
+      onchange: async (e) => {
+        const res = await api('/api/trim', { clip_id: c.id, start: Number(e.target.value) });
+        if (!res.ok) return setStatus((res.errors || ['trim failed']).join('\n'), 'err');
+        S.clips.find((x) => x.id === c.id).trim_start = res.state.clips.find((x) => x.id === c.id).trim_start;
+        renderPanel();
+      },
+    });
+    return h('div', { class: 'trim' }, label, range,
+      h('div', { class: 'muted' }, 'Press play to preview exactly this cut. The upload snaps to the nearest earlier keyframe, so it may start up to a second or so sooner.'));
+  }
+
+  function noteInput(c) {
+    return h('input', {
+      type: 'text', class: 'note', maxlength: '200', value: c.note || '',
+      placeholder: 'What is this? e.g. Costume contest winners 🏆',
+      'aria-label': 'Caption line for this clip',
+      onchange: async (e) => {
+        const res = await api('/api/note', { clip_id: c.id, note: e.target.value });
+        if (!res.ok) return setStatus((res.errors || ['failed']).join('\n'), 'err');
+        S.clips.find((x) => x.id === c.id).note = res.state.clips.find((x) => x.id === c.id).note;
+        selectionChanged();
+      },
+    });
+  }
+
   function card(c) {
     const song = songOf(c);
     const pos = selected.indexOf(c.id);
     const isSel = pos >= 0;
     const media = h('div', { class: 'media' });
     if (playing === c.id && c.local) {
-      media.append(h('video', { src: `/media/${c.id}`, controls: true, autoplay: true, playsinline: true, preload: 'auto' }));
+      media.append(previewVideo(c));
     } else {
       if (c.has_thumb) media.append(h('img', { src: `/thumbs/${c.id}.jpg`, alt: '', loading: 'lazy' }));
       else media.append(h('div', { class: 'noimg' }, c.error || 'no thumbnail'));
@@ -128,7 +186,7 @@
     if (isSel) media.append(h('span', { class: 'order-badge' }, pos + 1));
     if (c.duration) {
       const long = c.duration > S.ig_max_s;
-      media.append(h('span', { class: 'dur', title: long ? `Instagram allows up to a minute per video; the first ${fmtDur(S.ig_max_s)} is posted` : '' },
+      media.append(h('span', { class: 'dur', title: long ? `Instagram allows up to a minute per video; ${fmtDur(S.ig_max_s)} is posted (choose where it starts below)` : '' },
         long ? `${fmtDur(c.duration)} → ${fmtDur(S.ig_max_s)}` : fmtDur(c.duration)));
     }
 
@@ -136,19 +194,21 @@
       h('div', { class: 'time' }, `${hhmmss(c.start)}`,
         c.offset_s !== null && c.offset_s !== undefined && c.song_idx === c.auto_song_idx
           ? ` · ${c.offset_s}s into song` : ''),
-      h('div', { class: 'song' }, song ? song.song : 'No song matched'),
+      h('div', { class: 'song' }, song ? song.song : (c.custom ? (c.note || 'Other (add a label)') : 'No song matched')),
       song ? h('div', { class: 'performers' }, song.performers.map((p) => h('span', {
         class: `perf ${p.consent}`, title: `${p.consent.toUpperCase()}: ${REASONS[p.reason] || p.reason}`,
       }, { yes: '✓', no: '✗', unknown: '?' }[p.consent] || '?', ' ', p.name,
       p.instagram ? ` @${p.instagram}` : ''))) : null,
-      h('div', { class: 'muted' }, STATUS_LABEL[c.status] || c.status),
+      h('div', { class: 'muted' }, c.custom ? 'Custom clip (non-singing)' : (STATUS_LABEL[c.status] || c.status)),
     );
 
     if (c.flags.length && !c.reviewed) {
       info.append(h('div', { class: 'flag' }, '⚑ Check singer: ', c.flags.map((f) => FLAGS[f] || f).join('; ')));
     }
     if (c.reviewed) info.append(h('div', { class: 'reviewed' }, '✓ singer checked'));
-    if (c.flags.length || c.reviewed || c.song_idx === null) info.append(reassignSelect(c));
+    info.append(reassignSelect(c));
+    if (c.custom) info.append(noteInput(c));
+    if (isLong(c)) info.append(trimControl(c));
 
     const canSelect = c.local && (c.status === 'eligible' || c.status === 'unknown');
     const full = !isSel && selected.length >= S.max_clips;
@@ -167,12 +227,13 @@
       'aria-label': 'Which song is this clip?',
       onchange: async (e) => {
         const v = e.target.value;
-        const res = await api('/api/reassign', { clip_id: c.id, song_idx: v === '' ? null : Number(v) });
+        const res = await api('/api/reassign', { clip_id: c.id, song_idx: v === '' ? null : (v === 'custom' ? -1 : Number(v)) });
         if (!res.ok) return setStatus((res.errors || ['reassign failed']).join('\n'), 'err');
         applyState(res.state, { keepSelection: true });
       },
     });
-    sel.append(h('option', { value: '', selected: c.song_idx === null }, '— not a performance / unassigned —'));
+    sel.append(h('option', { value: '', selected: c.song_idx === null && !c.custom }, '— not a performance / unassigned —'));
+    sel.append(h('option', { value: 'custom', selected: !!c.custom }, '✎ Other (not singing): write my own label…'));
     for (const i of c.candidates) {
       const s = S.songs[i];
       const who = s.performers.map((p) => p.name).join(' & ');
@@ -195,7 +256,8 @@
         h('span', { class: 'n' }, i + 1),
         c.has_thumb ? h('img', { src: `/thumbs/${c.id}.jpg`, alt: '' }) : h('span'),
         h('span', { class: 'lbl', title: s ? `${s.singer} — ${s.song}` : c.filename },
-          `${hhmm(c.start)} ${s ? s.performers.map((p) => p.name).join(' & ') : '?'}`,
+          `${hhmm(c.start)} ${s ? s.performers.map((p) => p.name).join(' & ') : (c.note || '?')}`,
+          isLong(c) ? ` ✂${fmtDur(c.trim_start || 0)}` : '',
           c.status === 'unknown' ? ' (?)' : ''),
         h('span', { class: 'mv' },
           h('button', { type: 'button', 'aria-label': 'Move up', disabled: i === 0, onclick: () => move(i, i - 1) }, '↑'),
@@ -302,7 +364,7 @@
     const clips = byId();
     const unknown = selected.filter((id) => clips[id].status === 'unknown');
     const uncov = uncovered();
-    let msg = `Open Instagram and stage a ${selected.length}-item carousel?` +
+    let msg = `Open Instagram${$('facebook').checked ? ' and Facebook' : ''} and stage a ${selected.length}-item post?` +
       (S.auto_share ? '\n\n--auto-share is ON: it WILL click Share.' : '\n\nIt stops before Share so you can check it.');
     if (unknown.length) msg += `\n\n${unknown.length} clip(s) have UNKNOWN consent.`;
     if (uncov.length) msg += `\n\nNot covered: ${uncov.join(', ')}`;
@@ -312,12 +374,13 @@
       if (!confirm(`This night was already marked as posted (${S.posted.posted_at}). Post AGAIN?`)) return;
       force = true;
     }
-    setStatus('Starting publisher…');
+    setStatus($('facebook').checked ? 'Starting Instagram + Facebook publishers…' : 'Starting publisher…');
     const res = await api('/api/publish', {
-      selected, caption: $('caption').value, allow_unknown: unknown.length > 0, force,
+      selected, caption: $('caption').value, allow_unknown: unknown.length > 0, force, facebook: $('facebook').checked,
     });
     if (!res.ok) return setStatus((res.errors || ['publish failed']).join('\n'), 'err');
-    setStatus(res.message || 'Publisher started.', 'ok');
+    if (res.facebook && res.facebook.error) setStatus(`Instagram started. ${res.facebook.error}`, 'err');
+    else setStatus(res.message || 'Publisher started.', 'ok');
   }
 
   async function markPosted() {

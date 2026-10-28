@@ -39,8 +39,8 @@ What it does:
 1. **Fetches the night** from the kjbox with `ssh nomadpctunnel curl localhost:5001/history/night-media?night=…`.
    If the kjbox can't be reached it exits, because it never uses cached consent.
 2. **Finds the clips** in `~/AB Dropbox/Andrew Beveridge/Camera Uploads`. It picks the `.mp4`/`.mov`
-   files whose filename timestamp (the phone's local recording start) falls between 10 minutes
-   before the first song and 10 minutes after the last one.
+   files whose filename timestamp (the phone's local recording start) falls between 2 hours
+   before the first song and 2 hours after the last one (so arrivals, ceremonies and goodbyes are included).
 3. **Downloads only those clips** with `dbx-materialize -j 8 -q`. Any failures are listed and the
    rest carry on. Afterwards, free the space in Finder (Dropbox → Make Online-Only).
 4. **Probes and thumbnails** each clip. Thumbnails go into `~/.night-clips/<night>/thumbs/`.
@@ -63,12 +63,17 @@ On the review page:
   Carousel panel, or with ↑ ↓.
 - On a flagged clip, use the dropdown to reassign it to an adjacent song, or to "not a
   performance". Its consent is re-evaluated straight away.
+- **Other (not singing)**: the dropdown on any clip has "✎ Other…". Write a label (e.g. "Costume contest winners 🏆")
+  and the clip becomes selectable regardless of consent data (your call), with the label as its caption line.
+  Other clips are never pre-selected and must have a label to publish.
+- **Clips over a minute** get a start slider (0.5s steps). Play shows exactly the chosen 59s window. A cut from the start of the clip is a
+  quick stream copy; a cut from a later start is re-encoded (a few seconds per clip) so it matches the preview exactly.
 - **Singers not yet covered** lists the consenting singers who have a clip but none selected.
 - The **Caption** follows the selection until you edit it by hand. **Regenerate** resets it.
 - **Save draft** writes `~/.night-clips/<night>/draft.json`. A rerun restores it.
 - **Publish to Instagram…** saves the draft and launches the publisher (see below). Instagram
   refuses a multi-video post if any video is over a minute, so clips longer than 59s are posted as
-  their first 59s. The cut is a stream copy (no re-encode) saved to `~/.night-clips/<night>/trimmed/`,
+  a 59s cut (from the start you chose, default the beginning). The cut (stream copy from the start, re-encoded from a later start) is saved to `~/.night-clips/<night>/trimmed/`,
   and the original in Camera Uploads is left alone. The page shows these as `1:03 → 0:59`.
 - **Mark as posted** writes `posted.json`. If you then rerun or publish that night again, the tool
   warns you and asks you to confirm.
@@ -117,6 +122,24 @@ you select there is your own call.
   `nightclips/publish.py`. Each step tries the role/accessible name first and an aria-label or text
   fallback after that.
 
+## Publishing to Facebook (Playwright)
+
+The review page has an **Also stage on the Facebook Page** checkbox (on by default). Publish then
+opens a second Chromium window (its own profile at `~/.night-clips/fb-profile`) that stages the
+**same files, order and caption** on https://www.facebook.com/nomadkaraoke as a photo/video post.
+
+- **Login:** always manual, once. Log in to Facebook in that window. The session is saved in the profile.
+  If Facebook shows "Switch Now" for the Page, the tool clicks it so you post as the Page.
+- **Steps:** Photo/video -> upload -> caption -> optional location -> Next. It **stops before Post**;
+  check the audience, then click Post yourself. `--auto-share` also clicks Post.
+- **Location:** set `facebook_location = "The Babylon Kino"` (search text) in `config.toml` and it tries
+  "Check in", taking the first result. It is best-effort and never fatal; check the place it picked.
+- **Why not rely on Instagram's cross-posting?** Instagram posts made from the web don't reliably carry
+  the "also share to Facebook" setting (the Page's Aug-Sep carousels were cross-posted; the October ones weren't).
+- `@handles` in the caption are plain text on Facebook (they don't tag). Edit them on the Facebook post if you want tags.
+- Failures save `facebook-*.png` in the night's work dir and leave the browser open, like the Instagram step.
+- Because it is a normal Page post, it can be boosted straight from Facebook afterwards.
+
 ## Config: `~/.night-clips/config.toml`
 
 The tool creates this file with defaults on its first run:
@@ -125,6 +148,7 @@ The tool creates this file with defaults on its first run:
 camera_uploads = "~/AB Dropbox/Andrew Beveridge/Camera Uploads"
 kjbox_host = "nomadpctunnel"
 max_clips = 20
+facebook_location = ""   # search text for Facebook "Check in"; empty = skip
 
 [caption]
 header = "Thursday night karaoke 🎤 {date_pretty}"   # {date_pretty} {date} {weekday}
@@ -168,5 +192,6 @@ Modules:
 | `match.py` | clip → song matching and flags |
 | `select.py` | eligibility, pre-selection, caption |
 | `server.py` | review page and JSON API |
-| `publish.py` | Playwright publisher |
+| `publish.py` | Playwright publisher (Instagram) |
+| `facebook.py` | Playwright publisher (Facebook Page) |
 | `cli.py` | the `night-clips` command |

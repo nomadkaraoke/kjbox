@@ -17,6 +17,9 @@ camera_uploads = "~/AB Dropbox/Andrew Beveridge/Camera Uploads"
 # ssh host alias for the kjbox (NomadPC). Must reach localhost:5001 on the box.
 kjbox_host = "nomadpctunnel"
 
+# Optional: search text for the Facebook "Check in" location (e.g. "The Babylon Kino"). Empty = skip.
+facebook_location = ""
+
 # Instagram allows up to 20 items in one carousel.
 max_clips = 20
 

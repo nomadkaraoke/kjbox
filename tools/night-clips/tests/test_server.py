@@ -189,7 +189,7 @@ def test_publish_sends_trimmed_copies_of_long_clips(served):
     first, second = state.selected[:2]
     state.clips[first].duration = 63.2
     calls = []
-    state.trim = lambda path, dur, out_dir: (calls.append((path, dur, out_dir)) or
+    state.trim = lambda path, dur, out_dir, start=0.0: (calls.append((path, dur, out_dir)) or
                                              (str(out_dir / "cut.mp4") if dur > 59 else path))
     code, res = post(base + "/api/publish", {"selected": [first, second], "caption": "c"})
     assert code == 200 and res["ok"]
@@ -201,9 +201,90 @@ def test_publish_sends_trimmed_copies_of_long_clips(served):
 def test_publish_reports_trim_failure(served):
     base, state, published, _ = served
 
-    def fail(*a):
+    def fail(*a, **kw):
         raise RuntimeError("ffmpeg trim failed for x.mp4: boom")
     state.trim = fail
     code, res = post(base + "/api/publish", {"selected": state.selected[:1], "caption": "c"})
     assert code == 400 and "trim failed" in res["errors"][0]
     assert published == []
+
+
+def _unassigned(state):
+    return next(i for i in state.items if i["status"] == "unassigned")
+
+
+def test_other_label_makes_a_clip_selectable_and_a_caption_line(served):
+    base, state, published, _ = served
+    it = _unassigned(state)
+    code, res = post(base + "/api/draft", {"selected": [it["id"]], "caption": "c"})
+    assert code == 400  # still unassigned
+    code, res = post(base + "/api/reassign", {"clip_id": it["id"], "song_idx": -1})
+    assert code == 200
+    cur = next(c for c in res["state"]["clips"] if c["id"] == it["id"])
+    assert cur["custom"] and cur["status"] == "eligible" and cur["song_idx"] is None
+    # needs a label to publish
+    code, res = post(base + "/api/publish", {"selected": [it["id"]], "caption": "c"})
+    assert code == 400 and "label" in res["errors"][0]
+    post(base + "/api/note", {"clip_id": it["id"], "note": "  Costume   contest winners 🏆 "})
+    code, res = post(base + "/api/caption", {"selected": [it["id"]]})
+    assert "Costume contest winners 🏆" in res["caption"]
+    state.trim = lambda path, dur, out_dir, start=0.0: path  # fake clip isn't probeable
+    code, res = post(base + "/api/publish", {"selected": [it["id"]], "caption": "c"})
+    assert code == 200, res
+    assert published
+
+
+def test_other_is_never_preselected_and_survives_draft_reload(served):
+    base, state, _, _ = served
+    it = _unassigned(state)
+    assert it["id"] not in state.selected
+    post(base + "/api/reassign", {"clip_id": it["id"], "song_idx": -1})
+    post(base + "/api/note", {"clip_id": it["id"], "note": "Awards"})
+    post(base + "/api/trim", {"clip_id": it["id"], "start": 3})
+    post(base + "/api/draft", {"selected": [it["id"]], "caption": "mine"})
+    it.update(custom=False, note="", song_idx=None, trim_start=0.0)
+    state._restatus(it)
+    assert state.load_draft()
+    assert it["custom"] and it["note"] == "Awards" and it["status"] == "eligible"
+    assert state.selected == [it["id"]]
+
+
+def test_trim_start_is_clamped_and_passed_to_trim(served):
+    base, state, published, _ = served
+    cid = state.selected[0]
+    state.clips[cid].duration = state.by_id[cid]["duration"] = 100.0
+    code, res = post(base + "/api/trim", {"clip_id": cid, "start": 999})
+    assert state.by_id[cid]["trim_start"] == 41.0  # 100 - 59
+    post(base + "/api/trim", {"clip_id": cid, "start": -5})
+    assert state.by_id[cid]["trim_start"] == 0.0
+    post(base + "/api/trim", {"clip_id": cid, "start": 12.34})
+    calls = []
+    state.trim = lambda path, dur, out_dir, start=0.0: (calls.append(start) or path)
+    code, _ = post(base + "/api/publish", {"selected": [cid], "caption": "c"})
+    assert code == 200 and calls == [12.3]
+    assert post(base + "/api/trim", {"clip_id": "nope", "start": 1})[0] == 400
+
+
+def test_publish_stages_facebook_only_when_asked(served):
+    base, state, published, _ = served
+    fb = []
+    state.facebook_publisher = lambda files, cap: fb.append((files, cap)) or {"started": True}
+    state.trim = lambda path, dur, out_dir, start=0.0: path
+    ids = state.selected[:2]
+    code, res = post(base + "/api/publish", {"selected": ids, "caption": "c"})
+    assert code == 200 and "facebook" not in res and fb == []
+    code, res = post(base + "/api/publish", {"selected": ids, "caption": "c", "force": True, "facebook": True})
+    assert code == 200 and res["facebook"] == {"started": True}
+    assert fb == [(published[-1][0], "c")]  # same files, same caption, same order as Instagram
+
+
+def test_facebook_launch_failure_is_reported_without_failing_instagram(served):
+    base, state, published, _ = served
+
+    def boom(files, cap):
+        raise OSError("no chromium")
+    state.facebook_publisher = boom
+    state.trim = lambda path, dur, out_dir, start=0.0: path
+    code, res = post(base + "/api/publish", {"selected": state.selected[:1], "caption": "c", "facebook": True})
+    assert code == 200 and res["ok"] and len(published) == 1
+    assert res["facebook"]["started"] is False and "no chromium" in res["facebook"]["error"]

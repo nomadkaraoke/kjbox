@@ -1,5 +1,8 @@
 import datetime as dt
 import subprocess
+from pathlib import Path
+
+import pytest
 
 from nightclips import clips as C
 
@@ -19,19 +22,19 @@ def test_clip_ids_unique_and_url_safe():
     assert all(" " not in x and "/" not in x for x in (a, b, c))
 
 
-def test_night_window_pads_ten_minutes(songs_unknown):
+def test_night_window_pads_two_hours(songs_unknown):
     start, end = C.night_window(songs_unknown)
-    assert start == dt.datetime(2026, 10, 8, 20, 54, 32)
-    assert end == dt.datetime(2026, 10, 9, 2, 30, 17)
+    assert start == dt.datetime(2026, 10, 8, 19, 4, 32)
+    assert end == dt.datetime(2026, 10, 9, 4, 20, 17)
     assert C.night_window([]) is None
 
 
 def test_scan_clips_window_filter(tmp_path, clip_names, songs_unknown):
     names = clip_names + [
-        "2026-10-08 20.54.31.mp4",  # 1s before window
-        "2026-10-08 20.54.32.mov",  # exactly window start
-        "2026-10-09 02.30.17-1.mp4",  # exactly window end
-        "2026-10-09 02.30.18.mp4",  # 1s after
+        "2026-10-08 19.04.31.mp4",  # 1s before window
+        "2026-10-08 19.04.32.mov",  # exactly window start
+        "2026-10-09 04.20.17-1.mp4",  # exactly window end
+        "2026-10-09 04.20.18.mp4",  # 1s after
         "2026-10-08 22.00.00.jpg",  # photo
         "2026-10-01 22.00.00.mp4",  # last week
         "notes.txt",
@@ -42,8 +45,8 @@ def test_scan_clips_window_filter(tmp_path, clip_names, songs_unknown):
     found = C.scan_clips(tmp_path, start, end)
     got = [c.filename for c in found]
     assert len(got) == 25
-    assert "2026-10-08 20.54.32.mov" in got and "2026-10-09 02.30.17-1.mp4" in got
-    assert "2026-10-08 20.54.31.mp4" not in got and "2026-10-09 02.30.18.mp4" not in got
+    assert "2026-10-08 19.04.32.mov" in got and "2026-10-09 04.20.17-1.mp4" in got
+    assert "2026-10-08 19.04.31.mp4" not in got and "2026-10-09 04.20.18.mp4" not in got
     assert [c.start for c in found] == sorted(c.start for c in found)
 
 
@@ -185,3 +188,32 @@ def test_trim_failure_raises(tmp_path):
     src.write_bytes(b"x")
     with pytest.raises(RuntimeError, match="trim failed"):
         C.trim_for_instagram(str(src), 70.0, tmp_path / "t", runner=fail)
+
+
+def test_trim_from_chosen_start_cuts_a_named_copy(tmp_path):
+    src = tmp_path / "a.mp4"
+    src.write_bytes(b"x")
+    seen = []
+
+    def fake(cmd, **kw):
+        seen.append(cmd)
+        Path(cmd[-1]).write_bytes(b"cut")
+        return subprocess.CompletedProcess(cmd, 0, "", "")
+
+    out = C.trim_for_instagram(str(src), 100.0, tmp_path / "t", runner=fake, start=12.5)
+    assert out == str(tmp_path / "t" / "a@12.5s.mp4")
+    assert seen[0][seen[0].index("-ss") + 1] == "12.5" and seen[0].index("-ss") < seen[0].index("-i")
+    assert "libx264" in seen[0] and "copy" not in seen[0]  # accurate cut, not a keyframe-snapped copy
+
+
+def test_trim_short_clip_with_start_still_cuts(tmp_path):
+    src = tmp_path / "a.mp4"
+    src.write_bytes(b"x")
+
+    def fake(cmd, **kw):
+        Path(cmd[-1]).write_bytes(b"cut")
+        return subprocess.CompletedProcess(cmd, 0, "", "")
+
+    assert C.trim_for_instagram(str(src), 30.0, tmp_path / "t", runner=fake, start=5) == str(tmp_path / "t" / "a@5s.mp4")
+    with pytest.raises(RuntimeError, match="past the end"):
+        C.trim_for_instagram(str(src), 30.0, tmp_path / "t", runner=fake, start=30)

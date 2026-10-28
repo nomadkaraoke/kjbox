@@ -130,3 +130,9 @@ textarea:focus { border-color: var(--pink); outline: none; }
 .status { min-height: 1.2em; font-size: 0.85em; color: var(--muted); white-space: pre-wrap; }
 .status.err { color: #fca5a5; }
 .status.ok { color: #86efac; }
+
+/* custom label + trim picker */
+.card .note { width: 100%; box-sizing: border-box; margin-top: 6px; }
+.card .trim { margin-top: 8px; font-size: 12px; }
+.card .trim input[type=range] { width: 100%; }
+.card .trim .muted { font-size: 11px; margin-top: 2px; }

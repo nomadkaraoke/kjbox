@@ -25,7 +25,10 @@ def name_key(name: str) -> str:
     return " ".join((name or "").casefold().split())
 
 
-def song_status(song: dict | None) -> str:
+def song_status(song: dict | None, custom: bool = False) -> str:
+    """``custom`` = the user labelled the clip by hand (e.g. a non-singing moment): their call, so OK."""
+    if custom:
+        return ELIGIBLE
     if song is None:
         return UNASSIGNED
     perfs = song.get("performers") or []
@@ -54,7 +57,7 @@ def consenting_performers(items: list[dict], songs: list[dict]) -> dict[str, str
     """``{name_key: display name}`` for performers on eligible songs that have a clip, in show order."""
     seen: dict[str, str] = {}
     for it in sorted(items, key=lambda i: i["start"]):
-        if it["status"] != ELIGIBLE or not it.get("local"):
+        if it["status"] != ELIGIBLE or not it.get("local") or it.get("song_idx") is None:
             continue
         for p in songs[it["song_idx"]]["performers"]:
             seen.setdefault(name_key(p["name"]), p["name"])
@@ -80,7 +83,7 @@ def preselect(items: list[dict], songs: list[dict], max_clips: int = 20) -> list
     2. Fill remaining slots spread across the night, preferring songs not yet shown.
     """
     pool = sorted(
-        (i for i in items if is_selectable(i) and not i.get("flags")),
+        (i for i in items if is_selectable(i) and not i.get("flags") and i.get("song_idx") is not None),
         key=lambda i: i["start"],
     )
     chosen: list[dict] = []
@@ -143,7 +146,13 @@ def render_caption(night: str, selected_items: list[dict], songs: list[dict], ca
     lines, seen = [], set()
     for it in selected_items:
         idx = it.get("song_idx")
-        if idx is None or idx in seen:
+        if idx is None:
+            note = (it.get("note") or "").strip()
+            if it.get("custom") and note and note not in seen:
+                seen.add(note)
+                lines.append(note)
+            continue
+        if idx in seen:
             continue
         seen.add(idx)
         song = songs[idx]
