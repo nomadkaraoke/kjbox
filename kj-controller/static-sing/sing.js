@@ -593,6 +593,7 @@ window.addEventListener("popstate", () => {
 });
 
 function render() {
+  if (state.step !== "done") state.justSent = null;   // "You're on the list!" is for right after sending
   if (nowPlayingTimer && state.step !== "rotation") {
     clearInterval(nowPlayingTimer);
     nowPlayingTimer = null;
@@ -658,8 +659,11 @@ function back(to) {
 const makeFlow = createMakeFlow({
   el, fetchJson, state, render, BASE,
   getDeviceId: () => DEVICE_ID,
-  onPicked: (selected) => { state.selected = selected; state.step = "confirm"; render(); },
   onBack: () => { state.step = "search"; render(); },
+  // The make screen is its own confirm: it sends straight from there.
+  onSubmit: (selected) => { state.selected = selected; return submitSelection(); },
+  submitErrorText: (e) => submitErrorText(e),
+  extrasSlot: () => makeExtras(),
   // A make-it sign-in offers "Save tonight's songs" with one tap (A9-R1):
   // signing in never links by itself.
   onAccount: (acct) => {
@@ -673,8 +677,23 @@ const makeFlow = createMakeFlow({
     });
   },
   onSignedOut: () => { state.account = { ..._freshAccount(), loaded: true, ready: true }; },
-  saveSongsSlot: (variant) => saveSongsSlot(variant),
 });
+
+// What the confirm screen used to ask, on the make screen itself: photo consent
+// (once per device) and duet partners.
+function makeExtras() {
+  const wrap = el("div", { class: "mk-extras" });
+  if (!state.friend && askPhotoConsent() && !state.photoConsent) {
+    wrap.appendChild(photoConsentPicker((v) => { setPhotoConsentLocal(v); }));
+  }
+  wrap.appendChild(renderPartnersEditor(state.additional, {
+    selfName: state.name,
+    title: t("confirm.partnersTitle"),
+    onChange: render,
+    onPick: (p) => { if (state.additional.length < MAX_PARTNERS) { state.additional.push(p); render(); } },
+  }));
+  return wrap;
+}
 
 // Enter the identity form in "edit my name" mode: pre-filled with the current
 // name/phone, and on save it persistently renames the singer (keeping their
@@ -1948,6 +1967,8 @@ function renderEventFooter() {
 
 function renderSearch() {
   let results = { songs: [] };
+  // The YouTube / describe-it triage under a "no karaoke version yet" card.
+  let showOtherOptions = false;
   let loading = false;
   let err = "";
   // Auto-correct (gen's free-text resolver + job-flow tidy) for a search that
@@ -2015,6 +2036,7 @@ function renderSearch() {
   let searchGen = 0;
   const doSearch = (q) => {
     clearTimeout(debounceTimer);
+    showOtherOptions = false;   // a new search starts with just the song card
     // A changed query invalidates any in-flight search/auto-correct at once
     // (not only when the debounce fires) and drops the old correction.
     searchGen++;
@@ -2194,16 +2216,18 @@ function renderSearch() {
   // swapping an existing song (a make-it is a new gen job).
   const offerMake = () => state.makeRequestsEnabled && !state.simpleMode && !state.changeRequestId;
 
-  // We know which song the singer means, and there's no karaoke version of it:
-  // the rows (if any) are only other songs with similar names. Only while the
-  // rows are near-misses — with no rows at all the empty-state triage handles it.
-  // The song index's own "karaoke exists" flag vetoes it: then the rows most
+  // We know which song the singer means, and there's no karaoke version of it
+  // here: the rows (if any) are only other songs with similar names. With rows,
+  // the song index's own "karaoke exists" flag vetoes it: then the rows most
   // likely do hold the song under a name sameSong() can't match ("Killers" vs
-  // "The Killers"), and "no karaoke version yet" would be a lie.
+  // "The Killers"), and "no karaoke version yet" would be a lie. With NO rows
+  // there's nothing to mismatch, so it's the card too (live 2026-10-22: a
+  // confident "Helluva Boss — I Will Be Okay" got the long empty-state triage,
+  // under a green "Tidied to" tick the singer read as "done").
   function songMissing(rows) {
     const c = correction;
     return !!(c && c.corrected && c.active && !rowsHaveSong(c) && !c.fetching
-              && c.karaoke !== true && !loading && !resolving && !err && rows.length > 0);
+              && (c.karaoke !== true || rows.length === 0) && !loading && !resolving && !err);
   }
   // A karaoke row IS the identified song — typed-text rows or the corrected
   // search's own rows (which can be near-misses too, so check each one).
@@ -2253,6 +2277,11 @@ function renderSearch() {
       el("div", { class: "sing-missing-status" }, t("search.missingStatus")),
       offerMake() ? el("p", { class: "sing-missing-desc" }, t("search.missingMakeDesc")) : null,
       action,
+      // No rows at all: the YouTube link / describe-it triage is one tap away.
+      !(results.songs || []).length && !showOtherOptions ? el("button", {
+        class: "btn link sing-other-options", "data-testid": "song-other-options",
+        onclick: (e) => { e.stopPropagation(); showOtherOptions = true; logChoice("other_options"); update(); },
+      }, t("search.otherOptions")) : null,
       (keepMine || notItBtn) ? el("div", { class: "sing-songcard-actions" },
         keepMine, keepMine && notItBtn ? " · " : null, notItBtn) : null);
   }
@@ -2807,14 +2836,15 @@ function renderSearch() {
     }
     // Phase C — genuine empty-state (query was long enough to have searched).
     if (!loading && !resolving && !err && state.query?.trim().length >= 3 && songs.length === 0) {
-      container.appendChild(renderEmptyStateTriage());
+      if (!missing) container.appendChild(renderEmptyStateTriage());
+      else if (showOtherOptions) container.appendChild(renderEmptyStateTriage());
     }
 
     // The singer's song has no karaoke version: what's left are near-misses —
     // say so, and keep them short so they don't bury the make-it card.
     const SIMILAR_CAP = 3;
     let shownSongs = songs;
-    if (missing) {
+    if (missing && songs.length) {
       container.appendChild(el("h3", { class: "sing-results-heading", "data-testid": "similar-heading" },
         t("search.similarHeading")));
       if (!showAllSimilar) shownSongs = songs.slice(0, SIMILAR_CAP);
@@ -3234,6 +3264,101 @@ function renderPartnersEditor(partners, { selfName, title, onChange, onPick, onP
   return wrap;
 }
 
+// Send state.selected as a new request (the confirm screen and the one-screen
+// make-it both end here): partners + photo consent ride along, then "done".
+// Throws; submitErrorText(e) turns that into the singer-facing message.
+async function submitSelection() {
+  // Normalise partners — drop rows where the name is blank.
+  const cleaned = state.additional
+    .map((p) => ({
+      name: (p.name || "").trim(),
+      phone: (p.phone || "").trim(),
+    }))
+    .filter((p) => p.name.length > 0);
+
+  // Per-row phone format check — surface the first error inline.
+  for (let i = 0; i < cleaned.length; i++) {
+    const ph = cleaned[i].phone;
+    if (ph && !PHONE_RE.test(ph)) {
+      throw Object.assign(new Error("partner phone"),
+        { userMessage: t("confirm.partnerPhoneInvalid", { n: i + 1 }) });
+    }
+  }
+
+  const friend = state.friend;
+  const payload = {
+    singer_name: friend ? friend.name : state.name,
+    device_id: DEVICE_ID,
+    phone: friend ? friend.phone : state.phone,
+    song_artist: state.selected.song_artist || "",
+    song_title: state.selected.song_title || "",
+    source_type: state.selected.source_type,
+    source_ref: state.selected.source_ref,
+    source_meta: state.selected.source_meta || null,
+  };
+  if (cleaned.length > 0) payload.additional_singers = cleaned;
+  // A friend's song goes in under their name as typed — and the phone
+  // owner's photo consent is theirs alone, so it never rides along.
+  if (friend) payload.for_friend = true;
+  else if (askPhotoConsent() && state.photoConsent) {
+    payload.photo_consent = state.photoConsent;
+    if (state.photoConsent === "yes" && state.instagram) payload.instagram = state.instagram;
+  }
+
+  const data = await submit(payload);
+  state.request = data.request;
+  // Remember this request id + its edit_token on this device (per token) so
+  // the done screen's "your songs tonight" list survives reloads and can
+  // offer self-service cancel.
+  rememberRequestId(TOKEN, data.request.id, data.request.edit_token,
+    friend ? data.request.singer_name || friend.name : "");
+  state.friend = null;
+  // "You're on the list!" at the top of the done screen, so nobody wonders
+  // whether it went through (live 2026-10-22: repeat taps, re-searches).
+  state.justSent = {
+    song: `${data.request.song_title || ""} — ${data.request.song_artist || ""}`,
+    make: data.request.source_type === "make",
+    email: data.request.source_type === "make" ? (state.make && state.make.email) || "" : "",
+  };
+  state.step = "done";
+  state._navReplace = true;   // Back shouldn't land on the stale confirm
+  render();
+}
+
+function sentBanner() {
+  const j = state.justSent;
+  if (!j) return null;
+  const step = (cls, label) => el("li", { class: `sent-step ${cls}` }, el("span", { class: "sent-dot" }), label);
+  return el("div", { class: "sent-banner", "data-testid": "sent-banner", role: "status" },
+    el("div", { class: "sent-title" }, t("mySongs.sentTitle")),
+    el("div", { class: "sent-song" }, j.song),
+    j.make
+      ? el("ol", { class: "sent-tracker", "data-testid": "sent-tracker" },
+          step("done", t("mySongs.stepSent")), step("active", t("mySongs.stepMaking")),
+          step("", t("mySongs.stepReady")))
+      : el("p", { class: "hint" }, t("mySongs.sentHint")),
+    j.email ? el("p", { class: "hint", "data-testid": "sent-email" }, t("mySongs.sentEmail", { email: j.email })) : null);
+}
+
+function submitErrorText(e) {
+  if (e && e.userMessage) return e.userMessage;
+  const makeErr = {
+    make_limit: "confirm.makeLimit", signin_required: "make.errSignedOut",
+    search_expired: "make.errSearchExpired", no_credits: "make.errNoCredits",
+    gen_unavailable: "make.errUnavailable", gen_rejected: "make.errRejected",
+    youtube_blocked: "make.errYoutubeBlocked",
+  }[e.data?.error];
+  return makeErr
+    ? t(makeErr)
+    : e.status === 429
+    ? t("confirm.tooMany")
+    : e.data?.error === "simple_mode_disabled_source"
+      ? t("confirm.restricted")
+      : e.data?.error === "make_requests_disabled"
+        ? t("confirm.makeDisabled")
+        : t("confirm.failed");
+}
+
 function renderConfirm() {
   let submitting = false;
   let err = "";
@@ -3275,77 +3400,9 @@ function renderConfirm() {
         return;
       }
 
-      // Normalise partners — drop rows where the name is blank.
-      const cleaned = state.additional
-        .map((p) => ({
-          name: (p.name || "").trim(),
-          phone: (p.phone || "").trim(),
-        }))
-        .filter((p) => p.name.length > 0);
-
-      // Per-row phone format check — surface the first error inline.
-      for (let i = 0; i < cleaned.length; i++) {
-        const ph = cleaned[i].phone;
-        if (ph && !PHONE_RE.test(ph)) {
-          err = t("confirm.partnerPhoneInvalid", { n: i + 1 });
-          submitting = false;
-          if (submitBtn) {
-            submitBtn.disabled = false;
-            submitBtn.textContent = sendLabel();
-          }
-          const errEl = root.querySelector(".error");
-          if (errEl) errEl.textContent = err;
-          return;
-        }
-      }
-
-      const friend = state.friend;
-      const payload = {
-        singer_name: friend ? friend.name : state.name,
-        device_id: DEVICE_ID,
-        phone: friend ? friend.phone : state.phone,
-        song_artist: state.selected.song_artist || "",
-        song_title: state.selected.song_title || "",
-        source_type: state.selected.source_type,
-        source_ref: state.selected.source_ref,
-        source_meta: state.selected.source_meta || null,
-      };
-      if (cleaned.length > 0) payload.additional_singers = cleaned;
-      // A friend's song goes in under their name as typed — and the phone
-      // owner's photo consent is theirs alone, so it never rides along.
-      if (friend) payload.for_friend = true;
-      else if (askPhotoConsent() && state.photoConsent) {
-        payload.photo_consent = state.photoConsent;
-        if (state.photoConsent === "yes" && state.instagram) payload.instagram = state.instagram;
-      }
-
-      const data = await submit(payload);
-      state.request = data.request;
-      // Remember this request id + its edit_token on this device (per token) so
-      // the done screen's "your songs tonight" list survives reloads and can
-      // offer self-service cancel.
-      rememberRequestId(TOKEN, data.request.id, data.request.edit_token,
-        friend ? data.request.singer_name || friend.name : "");
-      state.friend = null;
-      state.step = "done";
-      state._navReplace = true;   // Back shouldn't land on the stale confirm
-      render();
+      await submitSelection();
     } catch (e) {
-      const makeErr = {
-        make_limit: "confirm.makeLimit", signin_required: "make.errSignedOut",
-        search_expired: "make.errSearchExpired", no_credits: "make.errNoCredits",
-        gen_unavailable: "make.errUnavailable", gen_rejected: "make.errRejected",
-        youtube_blocked: "make.errYoutubeBlocked",
-      }[e.data?.error];
-      err = makeErr
-        ? t(makeErr)
-        : e.status === 429
-        ? t("confirm.tooMany")
-        : e.data?.error === "simple_mode_disabled_source"
-          ? t("confirm.restricted")
-          : e.data?.error === "make_requests_disabled"
-            ? t("confirm.makeDisabled")
-            : t("confirm.failed");
+      err = submitErrorText(e);
       submitting = false;
       if (submitBtn) {
         submitBtn.disabled = false;
@@ -3936,6 +3993,7 @@ function renderDone() {
   // "How close am I?" is the shell's status tile (same component as every
   // other tab), not an in-card banner.
   const card = el("main", { class: "sing-card" },
+    sentBanner(),
     el("h2", {}, t("mySongs.title")),
     state.name ? el("p", { class: "hint done-identity" },
       t("mySongs.singingAs"), " ", el("strong", {}, state.name), " · ",
@@ -3964,6 +4022,7 @@ function renderDone() {
         state.makePrefill = { artist: "", title: "" };
         state.showMakeForm = false;
         state.additional = [];
+        state.justSent = null;
         state.step = "search";
         render();
       },

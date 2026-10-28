@@ -123,12 +123,13 @@
     "friendCancel": "Zrušit — je to pro mě",
     "missingStatus": "Zatím bez karaoke verze",
     "missingMakeDesc": "Můžeme ti ji vygenerovat — dnes večer zdarma, obvykle bývá hotová za ~30 minut.",
-    "missingMakeCta": "Vygenerovat na počkání →",
+    "missingMakeCta": "🎤 Vytvořit pro mě — dnes večer zdarma",
     "missingAskKj": "Zeptej se KJ — možná ji pro tebe dokáže sehnat.",
     "similarHeading": "Další písničky s podobným názvem",
     "similarMore": "Zobrazit dalších {count}",
     "makeBarText": "Nevidíš svoji písničku?",
-    "makeBarCta": "Vygenerovat"
+    "makeBarCta": "Vygenerovat",
+    "otherOptions": "Další možnosti: odkaz na YouTube nebo písničku popiš"
   },
   "versions": {
     "sectionLibrary": "V naší knihovně",
@@ -346,7 +347,28 @@
     "othersHelp": "Zkontroluj, jestli název souboru odpovídá tvé písničce. Vyšší dostupnost (zelená) = spolehlivější. Nejlepší výsledky mají verze ze studiových alb.",
     "limitedResults": "Výsledky hledání (nemusí odpovídat tvé písničce):",
     "moreCount": "+{count} dalších",
-    "showLess": "Zobrazit méně"
+    "showLess": "Zobrazit méně",
+    "screenTitle": "Vytvoř si karaoke video",
+    "songLabel": "Píseň",
+    "changeSong": "Není to tahle písnička? Změň ji",
+    "sendToTitle": "Kam ti máme video poslat?",
+    "sendToDesc": "Video ti zůstane. Až bude hotové, pošleme ti ho na e-mail.",
+    "continueGoogle": "Pokračovat přes Google",
+    "continueApple": "Pokračovat přes Apple",
+    "orEmail": "nebo použij e-mail",
+    "emailPlaceholder": "ty@priklad.cz",
+    "sendingTo": "Pošleme ti ho na {email}.",
+    "audioLabel": "Audio",
+    "audioAfterSignIn": "Jakmile se přihlásíš, najdeme pro tvoji písničku ten nejlepší zvuk.",
+    "yourChoice": "Tvoje volba",
+    "changeAudio": "Změnit zvuk",
+    "selected": "✓ Vybráno",
+    "pickTitle": "Vyber nahrávku, kterou chceš použít",
+    "submitCta": "🎤 Vytvořit a přidat mě na seznam",
+    "needSignIn": "Pro pokračování se výše přihlas",
+    "findingAudio": "Hledáme zvuk…",
+    "needAudio": "Vyber nahrávku výše",
+    "socialFailed": "Přihlášení se nepovedlo. Zkus to znovu, nebo použij e-mail."
   },
   "confirm": {
     "title": "Je to ta správná píseň?",
@@ -473,7 +495,13 @@
     "reviewFailed": "Tady se nepodařilo kontrolu otevřít – použij raději odkaz ve svém e-mailu.",
     "reviewOver": "Tato kontrola je už hotová – není potřeba nic dalšího dělat.",
     "requestForFriend": "🎤 Vybrat písničku pro kamaráda",
-    "forFriend": "Pro: {name}"
+    "forFriend": "Pro: {name}",
+    "sentTitle": "Jsi na seznamu! 🎤",
+    "sentHint": "Až na tebe přijde řada, moderátor tě vyvolá.",
+    "sentEmail": "Až bude video hotové, pošleme ti ho na {email}.",
+    "stepSent": "Odesláno",
+    "stepMaking": "Vytváří se (~30 min)",
+    "stepReady": "Připraveno ke zpěvu"
   },
   "notify": {
     "heading": "🔔 Až na tebe přijde řada",

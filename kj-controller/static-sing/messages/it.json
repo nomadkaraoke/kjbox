@@ -123,12 +123,13 @@
     "friendCancel": "Annulla — è per me",
     "missingStatus": "Nessuna versione karaoke per ora",
     "missingMakeDesc": "Possiamo crearne una per te: stasera è gratis, di solito è pronta in circa 30 minuti.",
-    "missingMakeCta": "Generala su richiesta →",
+    "missingMakeCta": "🎤 Creala per me — gratis stasera",
     "missingAskKj": "Chiedi al KJ: potrebbe riuscire a procurartela.",
     "similarHeading": "Altre canzoni con titoli simili",
     "similarMore": "Mostra altre {count}",
     "makeBarText": "Non trovi la tua canzone?",
-    "makeBarCta": "Generala"
+    "makeBarCta": "Generala",
+    "otherOptions": "Altre opzioni: un link YouTube o descrivi la canzone"
   },
   "versions": {
     "sectionLibrary": "Nella nostra libreria",
@@ -346,7 +347,28 @@
     "othersHelp": "Controlla che il nome del file corrisponda alla tua canzone. Maggiore disponibilità (verde) = più affidabile. Le versioni degli album in studio danno i risultati migliori.",
     "limitedResults": "Risultati di ricerca (potrebbero non corrispondere alla tua canzone):",
     "moreCount": "+ altri {count}",
-    "showLess": "Mostra meno"
+    "showLess": "Mostra meno",
+    "screenTitle": "Crea il tuo video karaoke",
+    "songLabel": "Canzone",
+    "changeSong": "Non è questa la canzone? Cambiala",
+    "sendToTitle": "Dove vuoi che ti inviamo il video?",
+    "sendToDesc": "Rimarrà tuo. Te lo invieremo via email quando sarà pronto.",
+    "continueGoogle": "Continua con Google",
+    "continueApple": "Continua con Apple",
+    "orEmail": "oppure usa la tua email",
+    "emailPlaceholder": "tu@esempio.com",
+    "sendingTo": "Lo invieremo a {email}.",
+    "audioLabel": "Audio",
+    "audioAfterSignIn": "Troveremo l'audio migliore per la tua canzone non appena avrai effettuato l'accesso.",
+    "yourChoice": "La tua scelta",
+    "changeAudio": "Cambia audio",
+    "selected": "✓ Selezionato",
+    "pickTitle": "Scegli la registrazione da usare",
+    "submitCta": "🎤 Crealo e aggiungimi alla lista",
+    "needSignIn": "Accedi qui sopra per continuare",
+    "findingAudio": "Ricerca dell'audio in corso…",
+    "needAudio": "Scegli una registrazione qui sopra",
+    "socialFailed": "Accesso non riuscito. Riprova o usa la tua email."
   },
   "confirm": {
     "title": "È la canzone giusta?",
@@ -473,7 +495,13 @@
     "reviewFailed": "Impossibile aprire la revisione qui — usa invece il link nella tua email.",
     "reviewOver": "Questa revisione è già finita — non c'è altro da fare.",
     "requestForFriend": "🎤 Prenota una canzone per un amico/a",
-    "forFriend": "Per {name}"
+    "forFriend": "Per {name}",
+    "sentTitle": "Sei in lista! 🎤",
+    "sentHint": "Il KJ chiamerà il tuo nome quando sarà il tuo turno.",
+    "sentEmail": "Invieremo il video a {email} quando sarà pronto.",
+    "stepSent": "Inviata",
+    "stepMaking": "In creazione (~30 min)",
+    "stepReady": "Pronta da cantare"
   },
   "notify": {
     "heading": "🔔 Quando tocca a te",

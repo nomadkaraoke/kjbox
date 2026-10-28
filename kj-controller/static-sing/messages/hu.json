@@ -123,12 +123,13 @@
     "friendCancel": "Mégse — magamnak kérem",
     "missingStatus": "Még nincs karaoke verzió",
     "missingMakeDesc": "El tudjuk készíteni neked – ma este ingyenes, és általában kb. 30 perc alatt elkészül.",
-    "missingMakeCta": "Generáltasd le azonnal →",
+    "missingMakeCta": "🎤 Készítsétek el nekem – ma este ingyenes",
     "missingAskKj": "Kérdezd a műsorvezetőt – lehet, hogy meg tudja szerezni neked.",
     "similarHeading": "További dalok hasonló címmel",
     "similarMore": "Még {count} megjelenítése",
     "makeBarText": "Nem találod a dalodat?",
-    "makeBarCta": "Generáld le"
+    "makeBarCta": "Generáld le",
+    "otherOptions": "Egyéb lehetőségek: YouTube-link, vagy írd le a dalt"
   },
   "versions": {
     "sectionLibrary": "A könyvtárunkban",
@@ -346,7 +347,28 @@
     "othersHelp": "Ellenőrizd, hogy a fájlnév egyezik-e a daloddal. A magasabb elérhetőség (zöld) = megbízhatóbb. A stúdióalbum-verziók adják a legjobb eredményt.",
     "limitedResults": "Keresési eredmények (lehet, hogy nem egyeznek a daloddal):",
     "moreCount": "+{count} további",
-    "showLess": "Kevesebb mutatása"
+    "showLess": "Kevesebb mutatása",
+    "screenTitle": "Készítsd el a karaoke videódat",
+    "songLabel": "Dal",
+    "changeSong": "Nem ez a dal? Válassz másikat",
+    "sendToTitle": "Hova küldjük a videódat?",
+    "sendToDesc": "A tiéd marad. E-mailben elküldjük, amint elkészül.",
+    "continueGoogle": "Folytatás Google-fiókkal",
+    "continueApple": "Folytatás Apple-fiókkal",
+    "orEmail": "vagy használd az e-mail-címedet",
+    "emailPlaceholder": "te@pelda.hu",
+    "sendingTo": "Erre a címre küldjük: {email}.",
+    "audioLabel": "Hang",
+    "audioAfterSignIn": "Amint bejelentkezel, megkeressük a legjobb alapot a dalodhoz.",
+    "yourChoice": "A te választásod",
+    "changeAudio": "Zenei alap módosítása",
+    "selected": "✓ Kiválasztva",
+    "pickTitle": "Válaszd ki a használni kívánt verziót",
+    "submitCta": "🎤 Készítsétek el, és tegyetek fel a listára",
+    "needSignIn": "A folytatáshoz jelentkezz be fent",
+    "findingAudio": "Zenei alap keresése…",
+    "needAudio": "Válassz ki fent egy verziót",
+    "socialFailed": "A bejelentkezés nem sikerült. Próbáld újra, vagy használd az e-mail-címedet."
   },
   "confirm": {
     "title": "Ez a megfelelő dal?",
@@ -473,7 +495,13 @@
     "reviewFailed": "Itt nem sikerült megnyitni az ellenőrzést — használd inkább az e-mailben kapott linket.",
     "reviewOver": "Ez az ellenőrzés már befejeződött — nincs más teendő.",
     "requestForFriend": "🎤 Dal kérése egy barátnak",
-    "forFriend": "Neki: {name}"
+    "forFriend": "Neki: {name}",
+    "sentTitle": "Fent vagy a listán! 🎤",
+    "sentHint": "A műsorvezető szólítani fog, amikor te következel.",
+    "sentEmail": "A videót elküldjük a(z) {email} címre, amint elkészül.",
+    "stepSent": "Elküldve",
+    "stepMaking": "Készül (~30 perc)",
+    "stepReady": "Éneklésre kész"
   },
   "notify": {
     "heading": "🔔 Amikor te jössz",

@@ -123,12 +123,13 @@
     "friendCancel": "Cancelar — a música é para mim",
     "missingStatus": "Ainda não há versão de karaokê",
     "missingMakeDesc": "Podemos gerar uma para você — grátis hoje, normalmente fica pronta em ~30 minutos.",
-    "missingMakeCta": "Gerar sob demanda →",
+    "missingMakeCta": "🎤 Criar para mim — grátis hoje à noite",
     "missingAskKj": "Fale com o KJ — talvez ele consiga arranjar para você.",
     "similarHeading": "Outras músicas com nomes parecidos",
     "similarMore": "Mostrar mais {count}",
     "makeBarText": "Não encontrou sua música?",
-    "makeBarCta": "Gerar"
+    "makeBarCta": "Gerar",
+    "otherOptions": "Outras opções: link do YouTube ou descreva a música"
   },
   "versions": {
     "sectionLibrary": "Na nossa biblioteca",
@@ -346,7 +347,28 @@
     "othersHelp": "Verifique se o nome do arquivo corresponde à sua música. Maior disponibilidade (verde) = mais confiável. Versões de álbum de estúdio produzem os melhores resultados.",
     "limitedResults": "Resultados da busca (podem não ser a sua música):",
     "moreCount": "+{count} mais",
-    "showLess": "Mostrar menos"
+    "showLess": "Mostrar menos",
+    "screenTitle": "Crie seu vídeo de karaokê",
+    "songLabel": "Música",
+    "changeSong": "Não é esta música? Trocar",
+    "sendToTitle": "Para onde devemos enviar o seu vídeo?",
+    "sendToDesc": "O vídeo é seu. Enviaremos por e-mail assim que estiver pronto.",
+    "continueGoogle": "Continuar com o Google",
+    "continueApple": "Continuar com a Apple",
+    "orEmail": "ou use seu e-mail",
+    "emailPlaceholder": "voce@exemplo.com",
+    "sendingTo": "Enviaremos para {email}.",
+    "audioLabel": "Áudio",
+    "audioAfterSignIn": "Vamos encontrar o melhor áudio para a sua música assim que você entrar.",
+    "yourChoice": "Sua escolha",
+    "changeAudio": "Alterar áudio",
+    "selected": "✓ Selecionado",
+    "pickTitle": "Escolha a gravação que quer usar",
+    "submitCta": "🎤 Criar e me colocar na lista",
+    "needSignIn": "Entre acima para continuar",
+    "findingAudio": "Procurando o áudio…",
+    "needAudio": "Escolha uma gravação acima",
+    "socialFailed": "Não foi possível entrar. Tente novamente ou use seu e-mail."
   },
   "confirm": {
     "title": "Esta é a música certa?",
@@ -473,7 +495,13 @@
     "reviewFailed": "Não foi possível abrir a revisão aqui — use o link no seu e-mail.",
     "reviewOver": "Essa revisão já terminou — não há mais nada a fazer.",
     "requestForFriend": "🎤 Pedir uma música para um(a) amigo(a)",
-    "forFriend": "Para {name}"
+    "forFriend": "Para {name}",
+    "sentTitle": "Você está na lista! 🎤",
+    "sentHint": "O apresentador vai chamar seu nome quando for a sua vez.",
+    "sentEmail": "Enviaremos o vídeo para {email} assim que estiver pronto.",
+    "stepSent": "Enviado",
+    "stepMaking": "Sendo criado (~30 min)",
+    "stepReady": "Pronto para cantar"
   },
   "notify": {
     "heading": "🔔 Quando for a sua vez",

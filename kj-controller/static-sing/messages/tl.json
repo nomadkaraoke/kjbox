@@ -123,12 +123,13 @@
     "friendCancel": "Kanselahin — para sa akin ito",
     "missingStatus": "Wala pang karaoke version",
     "missingMakeDesc": "Maaari kaming mag-generate para sa 'yo — libre ngayong gabi, karaniwang handa sa loob ng ~30 minuto.",
-    "missingMakeCta": "I-generate agad-agad →",
+    "missingMakeCta": "🎤 Gawin para sa akin — libre ngayong gabi",
     "missingAskKj": "Magtanong sa host — baka mahanap nila ito para sa 'yo.",
     "similarHeading": "Iba pang kantang may katulad na pamagat",
     "similarMore": "Ipakita ang {count} pa",
     "makeBarText": "Hindi makita ang kanta mo?",
-    "makeBarCta": "I-generate ito"
+    "makeBarCta": "I-generate ito",
+    "otherOptions": "Iba pang opsyon: YouTube link, o ilarawan ang kanta"
   },
   "versions": {
     "sectionLibrary": "Nasa library namin",
@@ -346,7 +347,28 @@
     "othersHelp": "I-check kung tugma ang filename sa kanta mo. Mas mataas na availability (berde) = mas maaasahan. Ang mga studio album version ang nagbibigay ng pinakamagandang resulta.",
     "limitedResults": "Mga resulta ng paghahanap (baka hindi tugma sa kanta mo):",
     "moreCount": "+{count} pa",
-    "showLess": "Ipakita ang mas kaunti"
+    "showLess": "Ipakita ang mas kaunti",
+    "screenTitle": "Gawin ang iyong karaoke video",
+    "songLabel": "Kanta",
+    "changeSong": "Hindi ito ang kanta? Palitan",
+    "sendToTitle": "Saan namin dapat ipadala ang iyong video?",
+    "sendToDesc": "Sa iyo na ito. Ie-email namin ito sa iyo kapag handa na.",
+    "continueGoogle": "Magpatuloy gamit ang Google",
+    "continueApple": "Magpatuloy gamit ang Apple",
+    "orEmail": "o gamitin ang iyong email",
+    "emailPlaceholder": "ikaw@example.com",
+    "sendingTo": "Ipapadala namin ito sa {email}.",
+    "audioLabel": "Audio",
+    "audioAfterSignIn": "Hahanapin namin ang pinakamagandang audio para sa kanta mo pagka-sign in mo.",
+    "yourChoice": "Napili mo",
+    "changeAudio": "Palitan ang audio",
+    "selected": "✓ Napili na",
+    "pickTitle": "Piliin ang recording na gagamitin",
+    "submitCta": "🎤 Gawin at isali ako sa listahan",
+    "needSignIn": "Mag-sign in sa itaas para magpatuloy",
+    "findingAudio": "Hinahanap ang audio…",
+    "needAudio": "Pumili ng recording sa itaas",
+    "socialFailed": "Hindi gumana ang pag-sign in. Subukan ulit, o gamitin ang iyong email."
   },
   "confirm": {
     "title": "Ito ba ang tamang kanta?",
@@ -473,7 +495,13 @@
     "reviewFailed": "Hindi mabuksan ang review dito — gamitin na lang ang link sa email mo.",
     "reviewOver": "Tapos na ang review na iyon — wala nang kailangang gawin.",
     "requestForFriend": "🎤 Mag-request ng kanta para sa isang kaibigan",
-    "forFriend": "Para kay {name}"
+    "forFriend": "Para kay {name}",
+    "sentTitle": "Nasa listahan ka na! 🎤",
+    "sentHint": "Tatawagin ng host ang pangalan mo kapag turn mo na kumanta.",
+    "sentEmail": "Ie-email namin ang video sa {email} kapag handa na.",
+    "stepSent": "Naipadala na",
+    "stepMaking": "Ginagawa na (~30 min)",
+    "stepReady": "Handa nang kantahin"
   },
   "notify": {
     "heading": "🔔 Kapag turn mo na",

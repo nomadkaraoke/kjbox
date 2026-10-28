@@ -123,12 +123,13 @@
     "friendCancel": "Avbryt – den är till mig",
     "missingStatus": "Ingen karaokeversion än",
     "missingMakeDesc": "Vi kan skapa en åt dig – gratis ikväll, oftast klar på ca 30 minuter.",
-    "missingMakeCta": "Skapa den direkt →",
+    "missingMakeCta": "🎤 Skapa den åt mig – gratis ikväll",
     "missingAskKj": "Fråga värden – hen kanske kan fixa den åt dig.",
     "similarHeading": "Andra låtar med liknande namn",
     "similarMore": "Visa {count} till",
     "makeBarText": "Hittar du inte din låt?",
-    "makeBarCta": "Skapa den"
+    "makeBarCta": "Skapa den",
+    "otherOptions": "Andra alternativ: en YouTube-länk eller beskriv låten"
   },
   "versions": {
     "sectionLibrary": "I vårt bibliotek",
@@ -346,7 +347,28 @@
     "othersHelp": "Kontrollera att filnamnet matchar din låt. Högre tillgänglighet (grönt) = mer pålitligt. Studioalbumversioner ger bäst resultat.",
     "limitedResults": "Sökresultat (kanske inte matchar din låt):",
     "moreCount": "+{count} till",
-    "showLess": "Visa mindre"
+    "showLess": "Visa mindre",
+    "screenTitle": "Skapa din karaokevideo",
+    "songLabel": "Låt",
+    "changeSong": "Inte den här låten? Byt låt",
+    "sendToTitle": "Vart ska vi skicka din video?",
+    "sendToDesc": "Den är din att behålla. Vi mejlar den till dig när den är klar.",
+    "continueGoogle": "Fortsätt med Google",
+    "continueApple": "Fortsätt med Apple",
+    "orEmail": "eller använd din e-postadress",
+    "emailPlaceholder": "du@exempel.se",
+    "sendingTo": "Vi skickar den till {email}.",
+    "audioLabel": "Ljud",
+    "audioAfterSignIn": "Vi letar fram det bästa ljudet till din låt så fort du har loggat in.",
+    "yourChoice": "Ditt val",
+    "changeAudio": "Byt ljudspår",
+    "selected": "✓ Vald",
+    "pickTitle": "Välj vilken inspelning som ska användas",
+    "submitCta": "🎤 Skapa den & sätt upp mig på listan",
+    "needSignIn": "Logga in ovan för att fortsätta",
+    "findingAudio": "Letar efter ljudspåret…",
+    "needAudio": "Välj en inspelning ovan",
+    "socialFailed": "Inloggningen fungerade inte. Försök igen eller använd din e-postadress."
   },
   "confirm": {
     "title": "Är detta rätt låt?",
@@ -473,7 +495,13 @@
     "reviewFailed": "Kunde inte öppna granskningen här – använd länken i ditt mejl istället.",
     "reviewOver": "Den granskningen är redan klar – inget mer att göra.",
     "requestForFriend": "🎤 Önska en låt åt en vän",
-    "forFriend": "För {name}"
+    "forFriend": "För {name}",
+    "sentTitle": "Du är på listan! 🎤",
+    "sentHint": "Värden ropar upp ditt namn när det är din tur.",
+    "sentEmail": "Vi mejlar videon till {email} när den är klar.",
+    "stepSent": "Skickad",
+    "stepMaking": "Skapas nu (~30 min)",
+    "stepReady": "Redo att sjungas"
   },
   "notify": {
     "heading": "🔔 När det är din tur",

@@ -123,12 +123,13 @@
     "friendCancel": "Cancel·la — és per a mi",
     "missingStatus": "Encara no hi ha cap versió de karaoke",
     "missingMakeDesc": "En podem generar una per a tu: aquesta nit és de franc i sol estar a punt en uns 30 minuts.",
-    "missingMakeCta": "Genera-la a la carta →",
+    "missingMakeCta": "🎤 Fes-me'l — de franc aquesta nit",
     "missingAskKj": "Pregunta a l'amfitrió; potser te la pot aconseguir.",
     "similarHeading": "Altres cançons amb títols similars",
     "similarMore": "Mostra'n {count} més",
     "makeBarText": "No trobes la teva cançó?",
-    "makeBarCta": "Genera-la"
+    "makeBarCta": "Genera-la",
+    "otherOptions": "Altres opcions: un enllaç de YouTube o descriu la cançó"
   },
   "versions": {
     "sectionLibrary": "A la nostra biblioteca",
@@ -346,7 +347,28 @@
     "othersHelp": "Comprova que el nom del fitxer coincideixi amb la teva cançó. Més disponibilitat (verd) = més fiable. Les versions d'àlbum d'estudi donen els millors resultats.",
     "limitedResults": "Resultats de la cerca (poden no coincidir amb la teva cançó):",
     "moreCount": "+{count} més",
-    "showLess": "Mostra menys"
+    "showLess": "Mostra menys",
+    "screenTitle": "Crea el teu vídeo de karaoke",
+    "songLabel": "Cançó",
+    "changeSong": "No és aquesta cançó? Canvia-la",
+    "sendToTitle": "On vols que t'enviem el vídeo?",
+    "sendToDesc": "Te'l pots quedar. Te l'enviarem per correu quan estigui a punt.",
+    "continueGoogle": "Continua amb Google",
+    "continueApple": "Continua amb Apple",
+    "orEmail": "o fes servir el teu correu",
+    "emailPlaceholder": "tu@exemple.com",
+    "sendingTo": "Te l'enviarem a {email}.",
+    "audioLabel": "Àudio",
+    "audioAfterSignIn": "Trobarem el millor àudio per a la teva cançó tan bon punt iniciïs sessió.",
+    "yourChoice": "La teva tria",
+    "changeAudio": "Canvia d'àudio",
+    "selected": "✓ Seleccionat",
+    "pickTitle": "Tria l'enregistrament que vulguis fer servir",
+    "submitCta": "🎤 Crea'l i apunta'm a la llista",
+    "needSignIn": "Inicia sessió a dalt per continuar",
+    "findingAudio": "Buscant l'àudio…",
+    "needAudio": "Tria un enregistrament de dalt",
+    "socialFailed": "No s'ha pogut iniciar sessió. Torna-ho a provar o fes servir el teu correu electrònic."
   },
   "confirm": {
     "title": "És aquesta la cançó correcta?",
@@ -473,7 +495,13 @@
     "reviewFailed": "No s'ha pogut obrir la revisió aquí — utilitza l'enllaç del teu correu electrònic.",
     "reviewOver": "Aquesta revisió ja ha acabat — no cal fer res més.",
     "requestForFriend": "🎤 Demana una cançó per a un amic o amiga",
-    "forFriend": "Per a {name}"
+    "forFriend": "Per a {name}",
+    "sentTitle": "Ja ets a la llista! 🎤",
+    "sentHint": "Qui porta el karaoke dirà el teu nom quan sigui el teu torn.",
+    "sentEmail": "T'enviarem el vídeo per correu a {email} quan estigui a punt.",
+    "stepSent": "Enviat",
+    "stepMaking": "S'està creant (~30 min)",
+    "stepReady": "A punt per cantar"
   },
   "notify": {
     "heading": "🔔 Quan et toqui",

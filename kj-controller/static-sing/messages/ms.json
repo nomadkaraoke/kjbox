@@ -123,12 +123,13 @@
     "friendCancel": "Batal — ini untuk saya",
     "missingStatus": "Belum ada versi karaoke",
     "missingMakeDesc": "Kami boleh hasilkannya untuk anda — percuma malam ini, biasanya siap dalam ~30 minit.",
-    "missingMakeCta": "Hasilkan atas permintaan →",
+    "missingMakeCta": "🎤 Buatkan untuk saya — percuma malam ini",
     "missingAskKj": "Tanya hos — mereka mungkin boleh dapatkannya untuk anda.",
     "similarHeading": "Lagu lain dengan tajuk yang serupa",
     "similarMore": "Tunjukkan {count} lagi",
     "makeBarText": "Lagu anda tiada dalam senarai?",
-    "makeBarCta": "Hasilkan lagu ini"
+    "makeBarCta": "Hasilkan lagu ini",
+    "otherOptions": "Pilihan lain: pautan YouTube, atau jelaskan tentang lagu tersebut"
   },
   "versions": {
     "sectionLibrary": "Dalam pustaka kami",
@@ -346,7 +347,28 @@
     "othersHelp": "Pastikan nama fail sepadan dengan lagu anda. Ketersediaan lebih tinggi (hijau) = muat turun lebih lancar. Versi album studio memberikan hasil terbaik.",
     "limitedResults": "Hasil carian (mungkin tidak sepadan dengan lagu anda):",
     "moreCount": "+{count} lagi",
-    "showLess": "Tunjuk kurang"
+    "showLess": "Tunjuk kurang",
+    "screenTitle": "Cipta video karaoke anda",
+    "songLabel": "Lagu",
+    "changeSong": "Bukan lagu ini? Tukar lagu",
+    "sendToTitle": "Di manakah patut kami hantarkan video anda?",
+    "sendToDesc": "Video ini milik anda selamanya. Kami akan e-melkan kepada anda apabila siap.",
+    "continueGoogle": "Teruskan dengan Google",
+    "continueApple": "Teruskan dengan Apple",
+    "orEmail": "atau gunakan e-mel anda",
+    "emailPlaceholder": "anda@example.com",
+    "sendingTo": "Kami akan hantarkannya ke {email}.",
+    "audioLabel": "Audio",
+    "audioAfterSignIn": "Kami akan mencari audio terbaik untuk lagu anda sebaik sahaja anda log masuk.",
+    "yourChoice": "Pilihan anda",
+    "changeAudio": "Tukar audio",
+    "selected": "✓ Dipilih",
+    "pickTitle": "Pilih rakaman yang ingin digunakan",
+    "submitCta": "🎤 Cipta & masukkan nama saya ke senarai",
+    "needSignIn": "Log masuk di atas untuk meneruskan",
+    "findingAudio": "Mencari audio…",
+    "needAudio": "Pilih rakaman di atas",
+    "socialFailed": "Log masuk tidak berjaya. Cuba lagi, atau gunakan e-mel anda."
   },
   "confirm": {
     "title": "Adakah ini lagu yang betul?",
@@ -473,7 +495,13 @@
     "reviewFailed": "Tidak dapat membuka semakan di sini — sila gunakan pautan dalam e-mel anda.",
     "reviewOver": "Semakan itu telah selesai — tiada apa-apa lagi yang perlu dilakukan.",
     "requestForFriend": "🎤 Minta lagu untuk rakan",
-    "forFriend": "Untuk {name}"
+    "forFriend": "Untuk {name}",
+    "sentTitle": "Nama anda sudah ada dalam senarai! 🎤",
+    "sentHint": "Hos akan memanggil nama anda apabila tiba giliran anda.",
+    "sentEmail": "Kami akan e-melkan video ini ke {email} apabila siap.",
+    "stepSent": "Dihantar",
+    "stepMaking": "Sedang disiapkan (~30 min)",
+    "stepReady": "Sedia untuk dinyanyikan"
   },
   "notify": {
     "heading": "🔔 Apabila tiba giliran anda",

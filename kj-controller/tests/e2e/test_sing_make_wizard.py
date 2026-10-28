@@ -6,6 +6,8 @@ real singer UI + the gen-ported categorisation / best-pick / correction logic.
 
 import json
 
+import pytest
+
 from playwright.sync_api import expect
 
 from tests.e2e.test_sing_i18n_footer import _login
@@ -24,7 +26,7 @@ def _json(route, body, status=200):
 
 
 def _open_wizard(page, live_server, live_token, *, email=None, results=None, fast=None, full=None,
-                 held=None):
+                 held=None, account=None):
     page.add_init_script("window.__SING_ARM_MS = 0;")
     _login(page, live_server, live_token)
     calls = {"send": [], "verify": [], "search": [], "check": []}
@@ -42,7 +44,7 @@ def _open_wizard(page, live_server, live_token, *, email=None, results=None, fas
         calls["search"].append(json.loads(route.request.post_data or "{}"))
         _json(route, {"search_session_id": "ss-1", "results": results if results is not None else [LOSSLESS, SPOTIFY, YOUTUBE]})
 
-    page.route("**/sing/make/account*", lambda r: _json(r, {"ready": True, "email": email}))
+    page.route("**/sing/make/account*", lambda r: _json(r, {"ready": True, "email": email, **(account or {})}))
     page.route("**/sing/make/send-code*", lambda r: (calls["send"].append(1), _json(r, {"status": "sent"})))
     page.route("**/sing/make/verify-code*", lambda r: (calls["verify"].append(json.loads(r.request.post_data)),
                                                      _json(r, {"email": "mary@example.com"})))
@@ -86,22 +88,26 @@ class TestMakeWizard:
         expect(pick.locator(".mk-avail-high")).to_have_text("High avail.")
         expect(pick).to_contain_text("[Album / 1993]")
         # Other options are one tap away, grouped like gen (with counts).
-        page.locator('[data-testid="make-others-toggle"]').click()
+        page.locator('[data-testid="make-change-audio"]').click()
         expect(page.locator(".mk-others-help")).to_contain_text("Check the filename matches your song")
-        expect(page.locator(".mk-cat-title").first).to_have_text("Spotify")
         expect(page.locator(".mk-cat-count").first).to_have_text("(1)")
-        expect(page.locator('[data-testid="make-others-toggle"]')).to_have_text("Hide other options")
-        page.locator('[data-testid="make-use"]').click()
-        expect(page.locator("h2")).to_have_text("Is this the right song?")
-        expect(page.locator('[data-testid="confirm-make-email"]')).to_contain_text(
-            "email you the finished video file and YouTube link (mary@example.com)")
-        expect(page.locator(".confirm-source")).to_contain_text("kept at the bottom until it's ready")
-        # The raw search text and the audio summary line are gone for make-its.
-        expect(page.locator(".confirm-searched")).to_have_count(0)
-        expect(page.locator(".confirm-make-audio")).to_have_count(0)
-        state = page.evaluate("window.__sing_state.selected")
-        assert state["song_artist"] == "Radiohead" and state["song_title"] == "Creep"
-        assert state["source_meta"] == {**state["source_meta"], "search_session_id": "ss-1", "selection_index": 0}
+        expect(page.locator('[data-testid="make-change-audio"]')).to_have_text("Hide other options")
+        # One screen, one send: no separate confirm step.
+        page.route("**/sing/submit*", lambda r: _json(r, {"auto_approved": True, "request": {
+            "id": 77, "edit_token": "et", "song_artist": "Radiohead", "song_title": "Creep",
+            "source_type": "make", "status": "approved", "singer_name": "Alice", "linked_entry_id": 5}}))
+        send = page.locator('[data-testid="make-submit"]')
+        expect(send).to_have_text("🎤 Make it & add me to the list")
+        with page.expect_request("**/sing/submit*") as req:
+            send.click()
+        body = json.loads(req.value.post_data)
+        assert body["song_artist"] == "Radiohead" and body["song_title"] == "Creep"
+        assert body["source_meta"] == {**body["source_meta"], "search_session_id": "ss-1", "selection_index": 0}
+        banner = page.locator('[data-testid="sent-banner"]')
+        expect(banner).to_contain_text("You're on the list!")
+        expect(banner).to_contain_text("Creep — Radiohead")
+        expect(page.locator('[data-testid="sent-tracker"]')).to_contain_text("Being made")
+        expect(page.locator('[data-testid="sent-email"]')).to_contain_text("mary@example.com")
 
     def test_signed_in_device_skips_straight_to_audio(self, page, live_server, live_token):
         calls = _open_wizard(page, live_server, live_token, email="mary@example.com")
@@ -131,9 +137,16 @@ class TestMakeWizard:
 
     def test_youtube_only_shows_guidance_and_link_first(self, page, live_server, live_token):
         _open_wizard(page, live_server, live_token, email="m@x.co", results=[YOUTUBE])
-        expect(page.locator('[data-testid="make-guidance"]')).to_contain_text("Limited sources found")
+        expect(page.locator('[data-testid="make-guidance"]')).to_contain_text("Pick the recording to use")
         expect(page.locator(".mk-fallback-first")).to_be_visible()
         expect(page.locator('[data-testid="make-result"]')).to_have_count(1)
+        # Not sure which recording: the singer picks one before the send unlocks.
+        send = page.locator('[data-testid="make-submit"]')
+        expect(send).to_be_disabled()
+        expect(send).to_have_text("Pick a recording above")
+        page.locator(".mk-select").first.click()
+        expect(send).to_be_enabled()
+        expect(page.locator('[data-testid="make-pick"]')).to_contain_text("Your choice")
 
     def test_spotify_title_match_is_recommended_and_youtube_collapsed(self, page, live_server, live_token):
         # Live 2026-10-01: a Spotify-only search showed "Limited sources found" with a
@@ -155,7 +168,7 @@ class TestMakeWizard:
         expect(pick).not_to_contain_text("No lossless sources")
         expect(page.locator('[data-testid="make-guidance"]')).to_have_count(0)
         expect(page.locator('[data-testid="make-fallback"]')).to_have_count(0)
-        page.locator('[data-testid="make-fallback-toggle"]').click()
+        page.locator('[data-testid="make-change-audio"]').click()
         expect(page.locator('[data-testid="make-fallback"]')).to_be_visible()
 
     def test_no_results(self, page, live_server, live_token):
@@ -176,12 +189,13 @@ class TestMakeWizard:
         wrong = {**LOSSLESS, "index": 3, "seeders": 60, "target_file": "Pablo Honey/03 - Anyone Can Play Guitar.flac"}
         right = {**LOSSLESS, "index": 4, "seeders": 55, "target_file": "Pablo Honey/02 - Creep.flac"}
         _open_wizard(page, live_server, live_token, email="m@x.co", results=[LOSSLESS, wrong, right])
-        page.locator('[data-testid="make-others-toggle"]').click()
+        page.locator('[data-testid="make-change-audio"]').click()
         rows = page.locator('.mk-cat[data-category="BEST CHOICE"] .mk-row')
-        expect(rows).to_have_count(2)
+        expect(rows).to_have_count(3)
         expect(rows.nth(0)).to_contain_text("02 - Creep.flac")
         expect(rows.nth(0).locator(".mk-tag-match")).to_have_text("Title match")
-        expect(rows.nth(1).locator(".mk-tag-warn")).to_have_text("Wrong track?")
+        expect(rows.nth(2).locator(".mk-tag-warn")).to_have_text("Wrong track?")
+        expect(rows.nth(0).locator(".mk-select")).to_have_text("✓ Selected")   # the auto-pick
 
 
 
@@ -352,9 +366,11 @@ def _open_identified(page, live_server, live_token, *, full, events=None, email=
         window.__sing_render();
     """)
     page.locator('input[type="search"]').fill("i will be okay helluva boss")
-    card = page.locator('[data-testid="make-card"]')
-    expect(card.locator("input").nth(1)).to_have_value("I Will Be Okay")
-    card.locator("button").click()
+    # Confident identification, nothing in the library: one card, one tap.
+    card = page.locator('[data-testid="song-missing"]')
+    expect(card).to_contain_text("I Will Be Okay")
+    expect(page.locator('[data-testid="make-card"]')).to_have_count(0)    # no long triage
+    card.locator('[data-testid="song-missing-make"]').click()
     return calls
 
 
@@ -363,7 +379,7 @@ class TestIdentifiedSongIsTrusted:
         calls = _open_identified(page, live_server, live_token, full=AI_YOU_WILL)
         pick = page.locator('[data-testid="make-pick"]')
         expect(pick.locator(".mk-mono")).to_have_text("I Will Be Okay")
-        expect(page.locator('[data-testid="make-use"]')).to_be_enabled()
+        expect(page.locator('[data-testid="make-submit"]')).to_be_enabled()
         expect(page.locator(".mk-song-title")).to_have_text("I Will Be Okay")
         assert [c["stage"] for c in calls["check"]] == ["fast"]       # no AI judge
         expect(page.locator('[data-testid="make-correction"]')).to_have_count(0)
@@ -376,7 +392,7 @@ class TestIdentifiedSongIsTrusted:
                              fast={"kind": "none", "confident": False, "needs_ai": True},
                              full={"kind": "none", "confident": True})
         expect(page.locator('[data-testid="make-pick"]')).to_be_visible()
-        expect(page.locator('[data-testid="make-use"]')).to_be_enabled()
+        expect(page.locator('[data-testid="make-submit"]')).to_be_enabled()
         assert "full" in [c["stage"] for c in calls["check"]]
 
 
@@ -392,7 +408,7 @@ class TestNoLateSwap:
             window.__sing_state.make.artist = 'Helluva Boss';
             window.__sing_state.make.title = 'I Will Be Okay';
         }""")
-        expect(page.locator('[data-testid="make-use"]')).to_be_enabled()   # gate opened by timeout
+        expect(page.locator('[data-testid="make-submit"]')).to_be_enabled()   # gate opened by timeout
         for _ in range(50):          # the full judge is asked after the fast one answers
             if held:
                 break
@@ -440,5 +456,65 @@ class TestEmptyStateOfferLogged:
         expect(page.locator('[data-testid="make-step"]')).to_be_visible()
         page.wait_for_timeout(300)
         offers = [(e["action"], e["data"].get("where")) for e in events if e["action"].startswith("make_offer")]
-        assert ("make_offer_shown", "empty_state") in offers
-        assert ("make_offer_tap", "empty_state") in offers
+        assert ("make_offer_shown", "top_card") in offers
+        assert ("make_offer_tap", "top_card") in offers
+
+
+SOCIAL_IDS = {"google_client_id": "g-client", "apple_client_id": "com.example.web"}
+
+
+class TestOneScreen:
+    def test_before_sign_in_the_send_says_what_is_missing(self, page, live_server, live_token):
+        _open_wizard(page, live_server, live_token)
+        send = page.locator('[data-testid="make-submit"]')
+        expect(send).to_be_disabled()
+        expect(send).to_have_text("Sign in above to continue")
+        expect(page.locator('[data-testid="make-audio-later"]')).to_be_visible()
+        # Email fallback is a real form the browser can autofill.
+        email = page.locator('[data-testid="make-email"]')
+        assert email.get_attribute("autocomplete") == "email" and email.get_attribute("name") == "email"
+        assert page.locator("form.mk-email-form").count() == 1
+
+    def test_social_buttons_hidden_off_the_public_host(self, page, live_server, live_token):
+        _open_wizard(page, live_server, live_token, account=SOCIAL_IDS)
+        expect(page.locator('[data-testid="make-email"]')).to_be_visible()
+        expect(page.locator(".mk-socials")).to_have_count(0)
+
+    @pytest.mark.parametrize("provider,label", [("google", "Continue with Google"), ("apple", "Continue with Apple")])
+    def test_one_tap_sign_in_then_audio_then_send(self, page, live_server, live_token, provider, label):
+        page.add_init_script("window.__SING_SOCIAL_STUB = {google: 'g-tok', apple: 'a-tok'};")
+        social = []
+        page.route("**/sing/make/social*", lambda r: (social.append(json.loads(r.request.post_data)),
+                                                      _json(r, {"email": "anya@example.com"})))
+        calls = _open_wizard(page, live_server, live_token, account=SOCIAL_IDS)
+        page.locator(".mk-social", has_text=label).click()
+        expect(page.locator('[data-testid="make-signed-in"]')).to_contain_text("anya@example.com")
+        assert social[0]["provider"] == provider
+        assert social[0]["id_token"] == ("g-tok" if provider == "google" else "a-tok")
+        assert calls["send"] == []                                          # no email code
+        expect(page.locator('[data-testid="make-pick"]')).to_be_visible()   # audio picked for them
+        expect(page.locator('[data-testid="make-submit"]')).to_be_enabled()
+
+    def test_apple_first_on_iphone(self, browser, live_server, live_token):
+        ctx = browser.new_context(user_agent="Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15")
+        page = ctx.new_page()
+        page.add_init_script("window.__SING_SOCIAL_STUB = {google: 'g-tok', apple: 'a-tok'};")
+        _open_wizard(page, live_server, live_token, account=SOCIAL_IDS)
+        expect(page.locator(".mk-social").first).to_contain_text("Continue with Apple")
+        ctx.close()
+
+    def test_social_failure_falls_back_to_email(self, page, live_server, live_token):
+        page.add_init_script("window.__SING_SOCIAL_STUB = {google: 'g-tok', apple: 'a-tok'};")
+        page.route("**/sing/make/social*", lambda r: _json(r, {"error": "social_failed"}, 400))
+        _open_wizard(page, live_server, live_token, account=SOCIAL_IDS)
+        page.locator(".mk-social", has_text="Continue with Google").click()
+        expect(page.locator('[data-testid="make-error"]')).to_contain_text("use your email")
+        expect(page.locator('[data-testid="make-email"]')).to_be_visible()
+
+    def test_send_failure_keeps_the_screen(self, page, live_server, live_token):
+        _open_wizard(page, live_server, live_token, email="m@x.co")
+        page.route("**/sing/submit*", lambda r: _json(r, {"error": "make_limit"}, 429))
+        page.locator('[data-testid="make-submit"]').click()
+        expect(page.locator('[data-testid="make-submit-error"]')).to_be_visible()
+        expect(page.locator('[data-testid="make-step"]')).to_be_visible()
+        expect(page.locator('[data-testid="make-submit"]')).to_be_enabled()

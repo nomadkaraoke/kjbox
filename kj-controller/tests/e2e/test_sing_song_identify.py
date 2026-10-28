@@ -76,6 +76,12 @@ def test_which_one_pick_prefills_make_form_and_is_logged(page, live_server, live
     expect(which).to_contain_text("Which song do you mean?")
     page.locator('[data-testid="song-candidate"]').nth(1).click()
     expect(page.locator('[data-testid="song-card-song"]')).to_have_text("Hallelujah — Leonard Cohen")
+    # No karaoke rows for the picked song: the one-tap "make it" card, the
+    # make-it form pre-filled behind it (the long triage is under "other options").
+    expect(page.locator('[data-testid="song-missing-make"]')).to_be_visible()
+    assert page.evaluate("[window.__sing_state.makeArtist, window.__sing_state.makeTitle]") == \
+        ["Leonard Cohen", "Hallelujah"]
+    page.locator('[data-testid="song-other-options"]').click()
     card = page.locator('[data-testid="make-card"]')
     expect(card.locator("input").nth(0)).to_have_value("Leonard Cohen")
     expect(card.locator("input").nth(1)).to_have_value("Hallelujah")

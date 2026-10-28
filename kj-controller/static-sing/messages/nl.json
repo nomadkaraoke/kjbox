@@ -123,12 +123,13 @@
     "friendCancel": "Annuleren — het is voor mij",
     "missingStatus": "Nog geen karaokeversie",
     "missingMakeDesc": "We kunnen er eentje voor je maken — vanavond gratis, meestal klaar binnen ~30 minuten.",
-    "missingMakeCta": "Direct laten maken →",
+    "missingMakeCta": "🎤 Maak hem voor mij — vanavond gratis",
     "missingAskKj": "Vraag het aan de host — misschien kan die het voor je regelen.",
     "similarHeading": "Andere nummers met vergelijkbare titels",
     "similarMore": "Toon er nog {count}",
     "makeBarText": "Staat je nummer er niet tussen?",
-    "makeBarCta": "Laat maken"
+    "makeBarCta": "Laat maken",
+    "otherOptions": "Andere opties: een YouTube-link of omschrijf het nummer"
   },
   "versions": {
     "sectionLibrary": "In onze bibliotheek",
@@ -346,7 +347,28 @@
     "othersHelp": "Controleer of de bestandsnaam overeenkomt met je nummer. Hoge beschikbaarheid (groen) = betrouwbaarder. Studio-albumversies geven de beste resultaten.",
     "limitedResults": "Zoekresultaten (komen mogelijk niet overeen met je nummer):",
     "moreCount": "+{count} meer",
-    "showLess": "Toon minder"
+    "showLess": "Toon minder",
+    "screenTitle": "Maak je karaokevideo",
+    "songLabel": "Nummer",
+    "changeSong": "Niet dit nummer? Kies een ander",
+    "sendToTitle": "Waar mogen we je video naartoe sturen?",
+    "sendToDesc": "Hij is helemaal voor jou. We mailen hem naar je zodra hij klaar is.",
+    "continueGoogle": "Doorgaan met Google",
+    "continueApple": "Doorgaan met Apple",
+    "orEmail": "of gebruik je e-mailadres",
+    "emailPlaceholder": "jij@voorbeeld.nl",
+    "sendingTo": "We sturen hem naar {email}.",
+    "audioLabel": "Audio",
+    "audioAfterSignIn": "We zoeken de beste audio voor je nummer zodra je bent ingelogd.",
+    "yourChoice": "Jouw keuze",
+    "changeAudio": "Audio wijzigen",
+    "selected": "✓ Geselecteerd",
+    "pickTitle": "Kies de opname die je wilt gebruiken",
+    "submitCta": "🎤 Maak hem & zet me op de lijst",
+    "needSignIn": "Log hierboven in om verder te gaan",
+    "findingAudio": "Audio zoeken…",
+    "needAudio": "Kies hierboven een opname",
+    "socialFailed": "Het inloggen is niet gelukt. Probeer het opnieuw of gebruik je e-mailadres."
   },
   "confirm": {
     "title": "Is dit het juiste nummer?",
@@ -473,7 +495,13 @@
     "reviewFailed": "Kon de controle hier niet openen — gebruik in plaats daarvan de link in je e-mail.",
     "reviewOver": "Die controle is al voltooid — je hoeft niets meer te doen.",
     "requestForFriend": "🎤 Vraag een nummer aan voor een vriend(in)",
-    "forFriend": "Voor {name}"
+    "forFriend": "Voor {name}",
+    "sentTitle": "Je staat op de lijst! 🎤",
+    "sentHint": "De host roept je naam om wanneer je aan de beurt bent.",
+    "sentEmail": "We mailen de video naar {email} zodra hij klaar is.",
+    "stepSent": "Verstuurd",
+    "stepMaking": "Wordt gemaakt (~30 min)",
+    "stepReady": "Klaar om te zingen"
   },
   "notify": {
     "heading": "🔔 Als je aan de beurt bent",

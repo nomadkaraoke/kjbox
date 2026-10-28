@@ -123,12 +123,13 @@
     "friendCancel": "Avbryt – den er til meg",
     "missingStatus": "Ingen karaokeversjon ennå",
     "missingMakeDesc": "Vi kan lage en til deg – gratis i kveld, vanligvis klar på ~30 minutter.",
-    "missingMakeCta": "Lag den på bestilling →",
+    "missingMakeCta": "🎤 Lag den for meg – gratis i kveld",
     "missingAskKj": "Spør verten – kanskje hen kan skaffe den til deg.",
     "similarHeading": "Andre sanger med lignende titler",
     "similarMore": "Vis {count} til",
     "makeBarText": "Finner du ikke sangen din?",
-    "makeBarCta": "Lag den"
+    "makeBarCta": "Lag den",
+    "otherOptions": "Andre alternativer: en YouTube-lenke, eller beskriv sangen"
   },
   "versions": {
     "sectionLibrary": "I biblioteket vårt",
@@ -346,7 +347,28 @@
     "othersHelp": "Sjekk at filnavnet stemmer overens med sangen din. Høyere tilgjengelighet (grønn) = mer pålitelig. Studioalbumversjoner gir de beste resultatene.",
     "limitedResults": "Søkeresultater (samsvarer kanskje ikke med sangen din):",
     "moreCount": "+{count} til",
-    "showLess": "Vis mindre"
+    "showLess": "Vis mindre",
+    "screenTitle": "Lag karaokevideoen din",
+    "songLabel": "Sang",
+    "changeSong": "Ikke denne sangen? Bytt sang",
+    "sendToTitle": "Hvor skal vi sende videoen din?",
+    "sendToDesc": "Den er din til odel og eie. Vi sender den på e-post når den er klar.",
+    "continueGoogle": "Fortsett med Google",
+    "continueApple": "Fortsett med Apple",
+    "orEmail": "eller bruk e-post",
+    "emailPlaceholder": "du@eksempel.no",
+    "sendingTo": "Vi sender den til {email}.",
+    "audioLabel": "Lyd",
+    "audioAfterSignIn": "Vi finner den beste lyden til sangen din så snart du har logget inn.",
+    "yourChoice": "Ditt valg",
+    "changeAudio": "Endre lydspor",
+    "selected": "✓ Valgt",
+    "pickTitle": "Velg opptaket som skal brukes",
+    "submitCta": "🎤 Lag den og sett meg på listen",
+    "needSignIn": "Logg inn ovenfor for å fortsette",
+    "findingAudio": "Finner lyden…",
+    "needAudio": "Velg et opptak ovenfor",
+    "socialFailed": "Innloggingen fungerte ikke. Prøv igjen, eller bruk e-post."
   },
   "confirm": {
     "title": "Er dette riktig sang?",
@@ -473,7 +495,13 @@
     "reviewFailed": "Kunne ikke åpne gjennomgangen her — bruk lenken i e-posten din i stedet.",
     "reviewOver": "Den gjennomgangen er allerede ferdig — ingenting mer å gjøre.",
     "requestForFriend": "🎤 Ønsk en sang for en venn",
-    "forFriend": "For {name}"
+    "forFriend": "For {name}",
+    "sentTitle": "Du er på listen! 🎤",
+    "sentHint": "Verten roper opp navnet ditt når det er din tur.",
+    "sentEmail": "Vi sender videoen på e-post til {email} når den er klar.",
+    "stepSent": "Sendt",
+    "stepMaking": "Lages nå (~30 min)",
+    "stepReady": "Klar til å synges"
   },
   "notify": {
     "heading": "🔔 Når det er din tur",

@@ -123,12 +123,13 @@
     "friendCancel": "Cancel — it's for me",
     "missingStatus": "No karaoke version yet",
     "missingMakeDesc": "We can generate one for you — free tonight, typically ready in ~30 minutes.",
-    "missingMakeCta": "Generate it on demand →",
+    "missingMakeCta": "🎤 Make it for me — free tonight",
     "missingAskKj": "Ask the host — they may be able to get it for you.",
     "similarHeading": "Other songs with similar names",
     "similarMore": "Show {count} more",
     "makeBarText": "Not seeing your song?",
-    "makeBarCta": "Generate it"
+    "makeBarCta": "Generate it",
+    "otherOptions": "Other options: a YouTube link, or describe the song"
   },
   "versions": {
     "sectionLibrary": "In our library",
@@ -346,7 +347,28 @@
     "othersHelp": "Check the filename matches your song. Higher availability (green) = more reliable. Studio album versions produce the best results.",
     "limitedResults": "Search results (may not match your song):",
     "moreCount": "+{count} more",
-    "showLess": "Show less"
+    "showLess": "Show less",
+    "screenTitle": "Make your karaoke video",
+    "songLabel": "Song",
+    "changeSong": "Not this song? Change it",
+    "sendToTitle": "Where should we send your video?",
+    "sendToDesc": "It's yours to keep. We'll email it to you when it's ready.",
+    "continueGoogle": "Continue with Google",
+    "continueApple": "Continue with Apple",
+    "orEmail": "or use your email",
+    "emailPlaceholder": "you@example.com",
+    "sendingTo": "We'll send it to {email}.",
+    "audioLabel": "Audio",
+    "audioAfterSignIn": "We'll find the best audio for your song as soon as you've signed in.",
+    "yourChoice": "Your choice",
+    "changeAudio": "Change audio",
+    "selected": "✓ Selected",
+    "pickTitle": "Pick the recording to use",
+    "submitCta": "🎤 Make it & add me to the list",
+    "needSignIn": "Sign in above to continue",
+    "findingAudio": "Finding the audio…",
+    "needAudio": "Pick a recording above",
+    "socialFailed": "That sign-in didn't work. Try again, or use your email."
   },
   "confirm": {
     "title": "Is this the right song?",
@@ -473,7 +495,13 @@
     "reviewFailed": "Couldn't open the review here — use the link in your email instead.",
     "reviewOver": "That review is already finished — nothing more to do.",
     "requestForFriend": "🎤 Request a song for a friend",
-    "forFriend": "For {name}"
+    "forFriend": "For {name}",
+    "sentTitle": "You're on the list! 🎤",
+    "sentHint": "The host will call your name when it's your turn.",
+    "sentEmail": "We'll email the video to {email} when it's ready.",
+    "stepSent": "Sent",
+    "stepMaking": "Being made (~30 min)",
+    "stepReady": "Ready to sing"
   },
   "notify": {
     "heading": "🔔 When you're up",

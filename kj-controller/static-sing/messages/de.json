@@ -123,12 +123,13 @@
     "friendCancel": "Abbrechen – er ist für mich",
     "missingStatus": "Noch keine Karaoke-Version verfügbar",
     "missingMakeDesc": "Wir können einen für dich erstellen – heute Abend kostenlos, meist in ca. 30 Minuten fertig.",
-    "missingMakeCta": "Auf Abruf erstellen →",
+    "missingMakeCta": "🎤 Für mich erstellen – heute Abend kostenlos",
     "missingAskKj": "Frag den Host – vielleicht kann er ihn für dich besorgen.",
     "similarHeading": "Andere Songs mit ähnlichen Titeln",
     "similarMore": "{count} weitere anzeigen",
     "makeBarText": "Dein Song ist nicht dabei?",
-    "makeBarCta": "Erstellen"
+    "makeBarCta": "Erstellen",
+    "otherOptions": "Weitere Optionen: ein YouTube-Link oder Song beschreiben"
   },
   "versions": {
     "sectionLibrary": "In unserer Bibliothek",
@@ -346,7 +347,28 @@
     "othersHelp": "Überprüfe, ob der Dateiname zu deinem Song passt. Höhere Verfügbarkeit (grün) = zuverlässiger. Studioalbum-Versionen liefern die besten Ergebnisse.",
     "limitedResults": "Suchergebnisse (passen vielleicht nicht zu deinem Song):",
     "moreCount": "+{count} weitere",
-    "showLess": "Weniger anzeigen"
+    "showLess": "Weniger anzeigen",
+    "screenTitle": "Erstelle dein Karaoke-Video",
+    "songLabel": "Song",
+    "changeSong": "Nicht dieser Song? Ändern",
+    "sendToTitle": "Wohin sollen wir dein Video schicken?",
+    "sendToDesc": "Das Video gehört dir! Wir mailen es dir, sobald es fertig ist.",
+    "continueGoogle": "Mit Google fortfahren",
+    "continueApple": "Mit Apple fortfahren",
+    "orEmail": "oder nutze deine E-Mail-Adresse",
+    "emailPlaceholder": "du@beispiel.de",
+    "sendingTo": "Wir schicken es an {email}.",
+    "audioLabel": "Audio",
+    "audioAfterSignIn": "Wir suchen die beste Audioversion für deinen Song, sobald du dich angemeldet hast.",
+    "yourChoice": "Deine Auswahl",
+    "changeAudio": "Audio ändern",
+    "selected": "✓ Ausgewählt",
+    "pickTitle": "Wähle die passende Aufnahme aus",
+    "submitCta": "🎤 Erstellen & mich auf die Liste setzen",
+    "needSignIn": "Melde dich oben an, um fortzufahren",
+    "findingAudio": "Audio wird gesucht…",
+    "needAudio": "Wähle oben eine Aufnahme aus",
+    "socialFailed": "Die Anmeldung hat leider nicht geklappt. Versuch es nochmal oder nutze deine E-Mail-Adresse."
   },
   "confirm": {
     "title": "Ist das der richtige Song?",
@@ -473,7 +495,13 @@
     "reviewFailed": "Die Überprüfung konnte hier nicht geöffnet werden – nutze stattdessen den Link in deiner E-Mail.",
     "reviewOver": "Diese Überprüfung ist bereits abgeschlossen – es gibt nichts mehr zu tun.",
     "requestForFriend": "🎤 Einen Song für eine(n) Freund/in wünschen",
-    "forFriend": "Für {name}"
+    "forFriend": "Für {name}",
+    "sentTitle": "Du stehst auf der Liste! 🎤",
+    "sentHint": "Der Host ruft dich auf, wenn du dran bist.",
+    "sentEmail": "Wir schicken das Video an {email}, sobald es fertig ist.",
+    "stepSent": "Gesendet",
+    "stepMaking": "Wird erstellt (~30 Min.)",
+    "stepReady": "Bereit zum Singen"
   },
   "notify": {
     "heading": "🔔 Wenn du dran bist",

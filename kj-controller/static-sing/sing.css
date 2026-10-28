@@ -1775,7 +1775,8 @@ button.sing-social-link { padding: 0; font: inherit; cursor: pointer; }
 .mk-didyoumean-title, .mk-guidance-title { font-weight: 700; }
 .mk-guidance ul { margin: 0.3rem 0 0; padding-left: 1.1rem; color: var(--nk-text-dim); }
 .mk-suggestion { text-align: left; }
-.mk-undo, .mk-others-toggle, .mk-code-actions .btn.link, .mk-signed-in .btn.link {
+.mk-undo, .mk-others-toggle, .mk-code-actions .btn.link, .mk-signed-in .btn.link,
+.mk-change-song, .mk-change-audio, .sing-other-options {
   background: none; border: none; color: var(--nk-accent); padding: 0; cursor: pointer; font: inherit;
   text-decoration: underline;
 }
@@ -1951,3 +1952,54 @@ body:has(#sing-tabs:not([hidden])) .sing-make-bar {
 .save-songs-form { display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.5rem; }
 .save-songs-actions { display: flex; gap: 1rem; flex-wrap: wrap; }
 .save-songs-offer { border-top: 1px solid var(--nk-border); padding-top: 0.75rem; }
+
+/* One-screen make-it (v0.142.0): song / where to send it / audio sections, one
+   pinned send button (checkout pattern), one-tap Google / Apple sign-in. */
+.mk-one { padding-bottom: 5.5rem; }
+.mk-section { display: flex; flex-direction: column; gap: 0.5rem; padding-top: 0.75rem; border-top: 1px solid var(--nk-border); }
+.mk-section-label { font-size: 0.75rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--nk-text-dim); }
+.mk-change-song, .mk-change-audio { align-self: flex-start; padding: 0; }
+.mk-socials { display: flex; flex-direction: column; gap: 0.5rem; }
+.mk-google { min-height: 44px; display: flex; justify-content: center; }
+.mk-google[hidden] { display: none; }
+.mk-social { width: 100%; min-height: 44px; border-radius: 999px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 0.4rem; }
+.mk-social-apple { background: #fff; color: #000; border: 1px solid #fff; }
+.mk-social-google { background: #131314; color: #e3e3e3; border: 1px solid #8e918f; }
+.mk-apple-logo { width: 1.05rem; height: 1.05rem; flex: none; }
+.mk-google-logo { width: 1.1rem; height: 1.1rem; flex: none; }
+.mk-or { display: flex; align-items: center; gap: 0.6rem; color: var(--nk-text-dim); font-size: 0.85rem; }
+.mk-or::before, .mk-or::after { content: ""; flex: 1; border-top: 1px solid var(--nk-border); }
+.mk-email-form { display: flex; gap: 0.5rem; }
+.mk-email-form .sing-empty-input { flex: 1; min-width: 0; margin: 0; }
+.mk-email-form .btn { flex: none; }
+.mk-signed-in { margin: 0; color: var(--nk-text); }
+.mk-row-chosen { border-color: var(--nk-good); }
+.mk-extras:empty { display: none; }
+.mk-submit-bar {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 35;
+  padding: 0.6rem 1rem calc(0.6rem + env(safe-area-inset-bottom, 0px));
+  background: rgba(20, 20, 20, 0.97); backdrop-filter: blur(8px);
+  border-top: 1px solid var(--nk-border);
+  display: flex; justify-content: center;
+}
+body:has(#sing-tabs:not([hidden])) .mk-submit-bar {
+  bottom: calc(3.6rem + env(safe-area-inset-bottom, 0px));
+  padding-bottom: 0.6rem;
+}
+.mk-submit { width: 100%; max-width: var(--nk-shell-w); min-height: 48px; font-size: 1.02rem; }
+.mk-submit-bar .btn.mk-submit[disabled] { opacity: 1; background: var(--nk-card-2); color: var(--nk-text-dim); border-color: var(--nk-border); }
+
+/* "You're on the list!" right after sending (order-placed pattern). */
+.sent-banner { border: 1px solid rgba(50, 213, 138, 0.45); background: rgba(50, 213, 138, 0.08); border-radius: var(--nk-radius-sm); padding: 0.9rem 1rem; margin-bottom: var(--nk-gap); }
+.sent-title { font-size: 1.25rem; font-weight: 800; }
+.sent-song { font-weight: 600; margin-top: 0.15rem; }
+.sent-tracker { list-style: none; display: flex; gap: 0.25rem; padding: 0; margin: 0.75rem 0 0.25rem; }
+.sent-step { flex: 1; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 0.3rem; font-size: 0.78rem; color: var(--nk-text-dim); position: relative; }
+.sent-step:not(:last-child)::after { content: ""; position: absolute; top: 0.4rem; left: calc(50% + 0.6rem); right: calc(-50% + 0.6rem); border-top: 2px solid var(--nk-border); }
+.sent-dot { width: 0.8rem; height: 0.8rem; border-radius: 50%; border: 2px solid var(--nk-border); background: var(--nk-bg); }
+.sent-step.done { color: var(--nk-good); }
+.sent-step.done .sent-dot { background: var(--nk-good); border-color: var(--nk-good); }
+.sent-step.done::after { border-color: var(--nk-good); }
+.sent-step.active { color: var(--nk-text); font-weight: 600; }
+.sent-step.active .sent-dot { border-color: var(--nk-accent); box-shadow: 0 0 0 3px rgba(255, 77, 207, 0.25); }
+.sing-other-options { align-self: flex-start; margin-top: 0.25rem; }

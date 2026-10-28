@@ -123,12 +123,13 @@
     "friendCancel": "キャンセル — 自分の曲です",
     "missingStatus": "まだカラオケ音源がありません",
     "missingMakeDesc": "今夜なら無料で作成できます！通常30分ほどで歌えるようになります。",
-    "missingMakeCta": "オンデマンドで作成する →",
+    "missingMakeCta": "🎤 作成をリクエスト — 今夜は無料！",
     "missingAskKj": "ホスト（KJ）に聞いてみてください。用意できるかもしれません！",
     "similarHeading": "曲名が似ている他の曲",
     "similarMore": "他{count}件を表示",
     "makeBarText": "歌いたい曲が見つかりませんか？",
-    "makeBarCta": "曲を作成する"
+    "makeBarCta": "曲を作成する",
+    "otherOptions": "その他の方法：YouTubeリンク、または曲の情報を入力"
   },
   "versions": {
     "sectionLibrary": "ライブラリ内",
@@ -346,7 +347,28 @@
     "othersHelp": "ファイル名が曲と一致しているか確認してください。取得しやすさ（緑色）が高いほど安定しています。スタジオアルバムのバージョンが最も良い結果になります。",
     "limitedResults": "検索結果（探している曲と一致しない場合があります）:",
     "moreCount": "さらに {count} 件",
-    "showLess": "少なく表示"
+    "showLess": "少なく表示",
+    "screenTitle": "カラオケ動画を作る",
+    "songLabel": "曲",
+    "changeSong": "曲が違いますか？変更はこちら",
+    "sendToTitle": "動画はどちらにお送りしますか？",
+    "sendToDesc": "完成した動画はプレゼント！準備ができ次第、メールでお届けします。",
+    "continueGoogle": "Googleで続ける",
+    "continueApple": "Appleで続ける",
+    "orEmail": "またはメールアドレスでログイン",
+    "emailPlaceholder": "you@example.com",
+    "sendingTo": "{email} 宛てにお送りします。",
+    "audioLabel": "オーディオ",
+    "audioAfterSignIn": "ログイン後、リクエスト曲にぴったりの音源をお探しします。",
+    "yourChoice": "あなたが選んだ音源",
+    "changeAudio": "音源を変更",
+    "selected": "✓ 選択中",
+    "pickTitle": "使用する音源を選んでください",
+    "submitCta": "🎤 作成して順番待ちリストに追加",
+    "needSignIn": "続けるには上でログインしてください",
+    "findingAudio": "音源を探しています…",
+    "needAudio": "上のリストから音源を選んでください",
+    "socialFailed": "ログインできませんでした。もう一度試すか、メールアドレスをご利用ください。"
   },
   "confirm": {
     "title": "この曲でいいですか？",
@@ -473,7 +495,13 @@
     "reviewFailed": "ここでは確認画面を開けませんでした。代わりにメールのリンクからお願いします。",
     "reviewOver": "その確認はすでに完了しています。これ以上必要な作業はありません。",
     "requestForFriend": "🎤 お友達のためにリクエストする",
-    "forFriend": "{name} さんへ"
+    "forFriend": "{name} さんへ",
+    "sentTitle": "リストに追加されました！🎤",
+    "sentHint": "順番が来たらホストがお名前をお呼びします。",
+    "sentEmail": "動画の準備ができ次第、{email} にメールでお送りします。",
+    "stepSent": "送信完了",
+    "stepMaking": "作成中（約30分）",
+    "stepReady": "いつでも歌えます"
   },
   "notify": {
     "heading": "🔔 あなたの番になったら",

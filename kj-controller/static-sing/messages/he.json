@@ -123,12 +123,13 @@
     "friendCancel": "ביטול — השיר מיועד עבורי",
     "missingStatus": "עדיין אין גרסת קריוקי",
     "missingMakeDesc": "אנחנו יכולים ליצור גרסה במיוחד בשבילכם — בחינם הערב, ובדרך כלל מוכן תוך כ-30 דקות.",
-    "missingMakeCta": "יצירה לפי דרישה ←",
+    "missingMakeCta": "🎤 הכינו לי — חינם הלילה",
     "missingAskKj": "שאלו את המנחה — אולי הוא יוכל להשיג אותו בשבילכם.",
     "similarHeading": "שירים נוספים עם שמות דומים",
     "similarMore": "הצגת עוד {count}",
     "makeBarText": "לא מוצאים את השיר שלכם?",
-    "makeBarCta": "צרו אותו עכשיו"
+    "makeBarCta": "צרו אותו עכשיו",
+    "otherOptions": "אפשרויות נוספות: קישור מ-YouTube, או תיאור של השיר"
   },
   "versions": {
     "sectionLibrary": "בספרייה שלנו",
@@ -346,7 +347,28 @@
     "othersHelp": "בדוק ששם הקובץ תואם לשיר שלך. זמינות גבוהה יותר (ירוק) = אמין יותר. גרסאות אלבום אולפן מפיקות את התוצאות הטובות ביותר.",
     "limitedResults": "תוצאות חיפוש (ייתכן שלא יתאימו לשיר שלך):",
     "moreCount": "{count}+ נוספים",
-    "showLess": "הצג פחות"
+    "showLess": "הצג פחות",
+    "screenTitle": "הכנת סרטון קריוקי",
+    "songLabel": "שיר",
+    "changeSong": "לא השיר הזה? אפשר להחליף",
+    "sendToTitle": "לאן לשלוח את הסרטון שלך?",
+    "sendToDesc": "הסרטון נשאר אצלך לתמיד. נשלח אותו למייל ברגע שיהיה מוכן.",
+    "continueGoogle": "המשך עם Google",
+    "continueApple": "המשך עם Apple",
+    "orEmail": "או באמצעות אימייל",
+    "emailPlaceholder": "you@example.com",
+    "sendingTo": "נשלח אותו אל {email}.",
+    "audioLabel": "אודיו",
+    "audioAfterSignIn": "נמצא את האודיו הכי מתאים לשיר שלך ברגע שתתחבר.",
+    "yourChoice": "הבחירה שלך",
+    "changeAudio": "החלפת אודיו",
+    "selected": "✓ נבחר",
+    "pickTitle": "איזו הקלטה תרצה לבחור?",
+    "submitCta": "🎤 הכינו לי והוסיפו אותי לרשימה",
+    "needSignIn": "יש להתחבר למעלה כדי להמשיך",
+    "findingAudio": "מחפשים את האודיו…",
+    "needAudio": "יש לבחור הקלטה למעלה",
+    "socialFailed": "ההתחברות לא הצליחה. כדאי לנסות שוב, או להשתמש באימייל."
   },
   "confirm": {
     "title": "האם זה השיר הנכון?",
@@ -473,7 +495,13 @@
     "reviewFailed": "לא הצלחנו לפתוח את הבדיקה כאן — השתמש בקישור שבאימייל שלך במקום.",
     "reviewOver": "הבדיקה הזו כבר הסתיימה — אין יותר מה לעשות.",
     "requestForFriend": "🎤 בקשת שיר לחבר/ה",
-    "forFriend": "עבור {name}"
+    "forFriend": "עבור {name}",
+    "sentTitle": "נכנסת לרשימה! 🎤",
+    "sentHint": "המנחה יקרא לך כשיגיע תורך לעלות.",
+    "sentEmail": "נשלח את הסרטון אל {email} ברגע שיהיה מוכן.",
+    "stepSent": "נשלח",
+    "stepMaking": "בהכנה (כ-30 דק')",
+    "stepReady": "מוכן לשירה"
   },
   "notify": {
     "heading": "🔔 כשיגיע תורכם",

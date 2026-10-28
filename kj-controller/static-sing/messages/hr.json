@@ -123,12 +123,13 @@
     "friendCancel": "Odustani — za mene je",
     "missingStatus": "Još nema karaoke verzije",
     "missingMakeDesc": "Možemo je generirati za tebe — večeras besplatno, obično je spremna za ~30 minuta.",
-    "missingMakeCta": "Generiraj na zahtjev →",
+    "missingMakeCta": "🎤 Izradi mi matricu — večeras besplatno",
     "missingAskKj": "Pitaj voditelja — možda je može nabaviti za tebe.",
     "similarHeading": "Druge pjesme sličnog naziva",
     "similarMore": "Prikaži još {count}",
     "makeBarText": "Ne vidiš svoju pjesmu?",
-    "makeBarCta": "Generiraj je"
+    "makeBarCta": "Generiraj je",
+    "otherOptions": "Ostale mogućnosti: YouTube poveznica ili opis pjesme"
   },
   "versions": {
     "sectionLibrary": "U našoj biblioteci",
@@ -346,7 +347,28 @@
     "othersHelp": "Provjeri odgovara li naziv datoteke tvojoj pjesmi. Veća dostupnost (zeleno) = pouzdanije. Verzije sa studijskih albuma daju najbolje rezultate.",
     "limitedResults": "Rezultati pretraživanja (možda ne odgovaraju tvojoj pjesmi):",
     "moreCount": "još +{count}",
-    "showLess": "Prikaži manje"
+    "showLess": "Prikaži manje",
+    "screenTitle": "Izradi svoj karaoke video",
+    "songLabel": "Pjesma",
+    "changeSong": "Nije ta pjesma? Promijeni je",
+    "sendToTitle": "Kamo da ti pošaljemo video?",
+    "sendToDesc": "Video ostaje tebi. Poslat ćemo ti ga e-poštom kad bude gotov.",
+    "continueGoogle": "Nastavi putem Googlea",
+    "continueApple": "Nastavi putem Applea",
+    "orEmail": "ili unesi svoju e-poštu",
+    "emailPlaceholder": "ti@primjer.com",
+    "sendingTo": "Šaljemo ga na {email}.",
+    "audioLabel": "Zvuk",
+    "audioAfterSignIn": "Pronaći ćemo najbolju snimku za tvoju pjesmu čim se prijaviš.",
+    "yourChoice": "Tvoj odabir",
+    "changeAudio": "Promijeni snimku",
+    "selected": "✓ Odabrano",
+    "pickTitle": "Odaberi snimku koju želiš koristiti",
+    "submitCta": "🎤 Izradi i dodaj me na popis",
+    "needSignIn": "Prijavi se iznad za nastavak",
+    "findingAudio": "Tražimo snimku…",
+    "needAudio": "Odaberi snimku iznad",
+    "socialFailed": "Prijava nije uspjela. Pokušaj ponovno ili unesi e-poštu."
   },
   "confirm": {
     "title": "Je li ovo prava pjesma?",
@@ -473,7 +495,13 @@
     "reviewFailed": "Nismo uspjeli otvoriti pregled ovdje — umjesto toga koristi link u svom e-mailu.",
     "reviewOver": "Taj pregled je već završen — sve je već riješeno.",
     "requestForFriend": "🎤 Naruči pjesmu za prijatelja",
-    "forFriend": "Za: {name}"
+    "forFriend": "Za: {name}",
+    "sentTitle": "Na popisu si! 🎤",
+    "sentHint": "Voditelj će te prozvati kad dođeš na red.",
+    "sentEmail": "Poslat ćemo video na {email} kad bude spreman.",
+    "stepSent": "Poslano",
+    "stepMaking": "U izradi (~30 min)",
+    "stepReady": "Spremno za pjevanje"
   },
   "notify": {
     "heading": "🔔 Kad si na redu",

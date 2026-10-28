@@ -123,12 +123,13 @@
     "friendCancel": "Batal — ini untuk saya",
     "missingStatus": "Belum ada versi karaoke",
     "missingMakeDesc": "Kami bisa buatkan untukmu — gratis malam ini, biasanya siap dalam ~30 menit.",
-    "missingMakeCta": "Buat lagu sekarang →",
+    "missingMakeCta": "🎤 Buatkan untukku — gratis malam ini",
     "missingAskKj": "Tanya ke host — mungkin bisa dicarikan untukmu.",
     "similarHeading": "Lagu lain dengan judul serupa",
     "similarMore": "Tampilkan {count} lainnya",
     "makeBarText": "Lagu kamu belum ada?",
-    "makeBarCta": "Buat lagunya"
+    "makeBarCta": "Buat lagunya",
+    "otherOptions": "Opsi lain: tautan YouTube, atau jelaskan lagunya"
   },
   "versions": {
     "sectionLibrary": "Di pustaka kami",
@@ -346,7 +347,28 @@
     "othersHelp": "Pastikan nama file cocok dengan lagumu. Ketersediaan lebih tinggi (hijau) = lebih lancar. Versi album studio memberikan hasil terbaik.",
     "limitedResults": "Hasil pencarian (mungkin tidak cocok dengan lagumu):",
     "moreCount": "+{count} lagi",
-    "showLess": "Tampilkan lebih sedikit"
+    "showLess": "Tampilkan lebih sedikit",
+    "screenTitle": "Buat video karaokemu",
+    "songLabel": "Lagu",
+    "changeSong": "Bukan lagu ini? Ganti",
+    "sendToTitle": "Ke mana kami harus kirim videomu?",
+    "sendToDesc": "Video ini jadi milikmu selamanya. Kami akan mengirimkannya via email setelah siap.",
+    "continueGoogle": "Lanjutkan dengan Google",
+    "continueApple": "Lanjutkan dengan Apple",
+    "orEmail": "atau pakai email",
+    "emailPlaceholder": "anda@contoh.com",
+    "sendingTo": "Kami akan mengirimkannya ke {email}.",
+    "audioLabel": "Audio",
+    "audioAfterSignIn": "Kami akan mencari audio terbaik untuk lagumu setelah kamu masuk.",
+    "yourChoice": "Pilihanmu",
+    "changeAudio": "Ganti audio",
+    "selected": "✓ Terpilih",
+    "pickTitle": "Pilih rekaman yang mau dipakai",
+    "submitCta": "🎤 Buatkan & masukkan aku ke antrean",
+    "needSignIn": "Masuk di atas untuk lanjut",
+    "findingAudio": "Mencari audio…",
+    "needAudio": "Pilih rekaman di atas",
+    "socialFailed": "Gagal masuk. Coba lagi, atau gunakan emailmu."
   },
   "confirm": {
     "title": "Apa ini lagu yang benar?",
@@ -473,7 +495,13 @@
     "reviewFailed": "Tidak bisa membuka ulasan di sini — gunakan tautan di emailmu saja.",
     "reviewOver": "Ulasan itu sudah selesai — tidak ada lagi yang perlu dilakukan.",
     "requestForFriend": "🎤 Minta lagu untuk teman",
-    "forFriend": "Untuk {name}"
+    "forFriend": "Untuk {name}",
+    "sentTitle": "Kamu sudah masuk antrean! 🎤",
+    "sentHint": "Host akan memanggil namamu saat giliranmu tiba.",
+    "sentEmail": "Kami akan mengirimkan videonya ke {email} setelah siap.",
+    "stepSent": "Terkirim",
+    "stepMaking": "Sedang dibuat (~30 mnt)",
+    "stepReady": "Siap dinyanyikan"
   },
   "notify": {
     "heading": "🔔 Saat giliranmu tiba",

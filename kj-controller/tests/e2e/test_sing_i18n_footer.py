@@ -181,24 +181,26 @@ class TestSearchDecisionLayer:
                 "typed": "rihanna push up on me", "songs": [],
                 "split": {"artist": "rihanna", "title": "push up on me"}})))
         page.locator('input[type="search"]').fill("rihanna push up on me")
+        # Tidied song + nothing in the library: the one-tap "make it" card, pre-filled.
+        missing = page.locator('[data-testid="song-missing"]')
+        expect(missing).to_contain_text("Push Up On Me")
+        prefill = "[window.__sing_state.makeArtist, window.__sing_state.makeTitle]"
+        assert page.evaluate(prefill) == ["Rihanna", "Push Up On Me"]
+        # "keep what I typed" → the long form with the typed text.
+        missing.locator('[data-testid="search-correction-toggle"]').click()
         notice = page.locator('[data-testid="search-correction"]')
-        expect(notice).to_contain_text("Tidied to Rihanna — Push Up On Me")
+        expect(notice).to_contain_text("Using what you typed")
         toggle = page.locator('[data-testid="search-correction-toggle"]')
-        expect(toggle).to_have_text("keep what I typed")
+        expect(toggle).to_have_text("use tidied version")
         card = page.locator('[data-testid="make-card"]')
         artist, title = card.locator("input").nth(0), card.locator("input").nth(1)
-        expect(artist).to_have_value("Rihanna")
-        expect(title).to_have_value("Push Up On Me")
-        toggle.click()
-        expect(notice).to_contain_text("Using what you typed")
-        expect(toggle).to_have_text("use tidied version")
         expect(artist).to_have_value("rihanna")
         expect(title).to_have_value("push up on me")
         # A singer's own edit is never overwritten — but the untouched field still follows.
         title.fill("Push Up On Me (Remix)")
         toggle.click()
-        expect(artist).to_have_value("Rihanna")
-        expect(title).to_have_value("Push Up On Me (Remix)")
+        expect(missing).to_be_visible()
+        assert page.evaluate(prefill) == ["Rihanna", "Push Up On Me (Remix)"]
 
     def test_single_version_song_gets_preview_pills_and_brand(self, page, live_server, live_token):
         self._search(page, live_server, live_token, [{
@@ -280,7 +282,7 @@ class TestSearchDecisionLayer:
             body=json.dumps({"ready": True, "email": None})))
         card.locator("button").click()
         # The make wizard starts by verifying the singer's email.
-        expect(page.locator('[data-testid="make-step"] h2')).to_have_text("Generate on demand")
+        expect(page.locator('[data-testid="make-step"] h2')).to_have_text("Make your karaoke video")
         expect(page.locator('[data-testid="make-email"]')).to_be_visible()
 
     def test_make_offer_under_results(self, page, live_server, live_token):
