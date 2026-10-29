@@ -3,7 +3,7 @@
   "info": {
     "title": "kjbox singer API",
     "version": "1.0",
-    "description": "App-facing singer API served by a kjbox (KJ controller) at a Nomad Karaoke night. Hand-maintained; kjbox's integration tests validate every v1 response against this file (kj-controller/tests/integration/v1_contract.py). Additive changes only within v1; every response carries api_version \"1.N\". Every call needs the bearer gen session token and the night's event code t (query string or JSON body). Errors are {error, message?, retry_after?} with the HTTP status; error codes are the closed ErrorCode enum. Every read and write is scoped to the current night: send the night_id you last saw and a 409 night_changed (carrying the new night_id) tells you the host started a new night."
+    "description": "App-facing singer API served by a kjbox (KJ controller) at a Nomad Karaoke night. Hand-maintained; kjbox's integration tests validate every v1 response against this file (kj-controller/tests/integration/v1_contract.py). Additive changes only within v1; every response carries api_version \"1.N\". Every call needs the bearer gen session token and the night's event code t (query string or JSON body). Errors are {error, message?, retry_after?} with the HTTP status; error codes are the closed ErrorCode enum. Every read and write is scoped to the current night: send the night_id you last saw and a 409 night_changed (carrying the new night_id) tells you the host started a new night. Exception: the past-night history routes (GET /history/suggestions, POST /history/claim) need only the bearer: no t, no night_id, and they work while the night is closed or no show is on (they never link the device to tonight)."
   },
   "servers": [
     {
@@ -1589,6 +1589,126 @@
           },
           "503": {
             "$ref": "#/components/responses/GenUnavailable"
+          },
+          "default": {
+            "$ref": "#/components/responses/Default"
+          }
+        }
+      }
+    },
+    "/history/suggestions": {
+      "get": {
+        "operationId": "getHistorySuggestions",
+        "summary": "Past Nomad nights with songs this account may have sung",
+        "description": "Songs from past nights at this box whose singer name loosely matches a name the account goes by (the first word of the gen display name, of names its devices used on requests, or of their aliases; at least 2 letters). Nothing is claimed until POST /history/claim. Only songs that are still claimable are listed: not already claimed by this account, not marked not mine, and with a free singer slot (one per singer on the song). Nights with no such song are left out; at most 20 nights, newest first, with more_nights counting the rest. Tonight's songs appear only once the host closes requests. No t, no night_id; works while the night is closed.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HistorySuggestions"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "429": {
+            "description": "rate_limited: this device is over the history budget (suggestions 30 per 10 min, claims 20 per 10 min) or this network over the sign-in check limit; retry after retry_after seconds (also the Retry-After header)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "gen_unavailable: kjbox couldn't verify the token with gen, or the box can't serve history right now; retry after retry_after seconds",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Default"
+          }
+        }
+      }
+    },
+    "/history/claim": {
+      "post": {
+        "operationId": "claimHistory",
+        "summary": "Save a past night's ticked songs as mine, the rest as not mine",
+        "description": "Every id must be a song of that night (from GET /history/suggestions) whose singer matches the account, or one it already holds; otherwise 400 invalid and nothing is written. mine songs are recorded to the account's karaoke log (first claimer wins per singer slot: a song someone else holds comes back in taken). Re-sending is idempotent (already_saved). not_mine songs are no longer suggested to this account; not_mine on a song it already holds is ignored (rejected counts only what was stored). No t, no night_id.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HistoryClaimRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HistoryClaimResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "invalid: a missing or malformed night_id / ids, both lists empty, an id in both lists, or an id that isn't one of this night's songs for this account",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "not_found: no such night with songs for this account",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "429": {
+            "description": "rate_limited: this device is over the history budget (suggestions 30 per 10 min, claims 20 per 10 min) or this network over the sign-in check limit; retry after retry_after seconds (also the Retry-After header)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "gen_unavailable: kjbox couldn't verify the token with gen, or the box can't serve history right now; retry after retry_after seconds",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           },
           "default": {
             "$ref": "#/components/responses/Default"
@@ -3856,6 +3976,191 @@
           "expo_push_token": {
             "type": "string",
             "pattern": "^Expo(nent)?PushToken\\[[^\\[\\]\\s]{1,200}\\]$"
+          }
+        }
+      },
+      "HistorySong": {
+        "type": "object",
+        "required": [
+          "entry_id",
+          "singer_name",
+          "members",
+          "artist",
+          "title",
+          "started_at",
+          "state"
+        ],
+        "properties": {
+          "entry_id": {
+            "type": "integer",
+            "description": "The song's id on that night (send it back in mine / not_mine)"
+          },
+          "singer_name": {
+            "type": "string",
+            "description": "The singer text as the venue screen showed it (duet partners included)"
+          },
+          "members": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Each person singing it"
+          },
+          "artist": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "started_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "When the song started playing (UTC); null when no play was recorded"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "sung",
+              "sung_unplayed"
+            ]
+          }
+        }
+      },
+      "HistoryNight": {
+        "type": "object",
+        "required": [
+          "night_id",
+          "date",
+          "venue",
+          "names",
+          "unmatched",
+          "songs"
+        ],
+        "properties": {
+          "night_id": {
+            "type": "string",
+            "description": "Send it back to POST /history/claim"
+          },
+          "date": {
+            "type": "string",
+            "format": "date",
+            "description": "The night (a show past midnight is one night)"
+          },
+          "venue": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The host's name, when set"
+          },
+          "names": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The singer names on these songs that matched the account"
+          },
+          "unmatched": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Songs that night under a matching name that can't be claimed (older nights the box can't link to a song)"
+          },
+          "songs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HistorySong"
+            }
+          }
+        }
+      },
+      "HistorySuggestions": {
+        "type": "object",
+        "required": [
+          "api_version",
+          "nights",
+          "more_nights"
+        ],
+        "properties": {
+          "api_version": {
+            "type": "string"
+          },
+          "nights": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HistoryNight"
+            }
+          },
+          "more_nights": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Nights with songs beyond the 20 listed"
+          }
+        }
+      },
+      "HistoryClaimRequest": {
+        "type": "object",
+        "required": [
+          "night_id"
+        ],
+        "description": "At least one of mine / not_mine must be non-empty, and no id may be in both.",
+        "properties": {
+          "night_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "mine": {
+            "type": "array",
+            "maxItems": 200,
+            "items": {
+              "type": "integer"
+            },
+            "description": "Songs the singer ticked"
+          },
+          "not_mine": {
+            "type": "array",
+            "maxItems": 200,
+            "items": {
+              "type": "integer"
+            },
+            "description": "Songs left unticked: never suggested to this account again"
+          }
+        }
+      },
+      "HistoryClaimResult": {
+        "type": "object",
+        "required": [
+          "api_version",
+          "saved",
+          "already_saved",
+          "taken",
+          "rejected"
+        ],
+        "properties": {
+          "api_version": {
+            "type": "string"
+          },
+          "saved": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "already_saved": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "taken": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
+            "description": "mine songs someone else already holds"
+          },
+          "rejected": {
+            "type": "integer",
+            "minimum": 0
           }
         }
       }
