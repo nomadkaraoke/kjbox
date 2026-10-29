@@ -209,7 +209,7 @@ export function createMakeFlow(deps) {
   // (kjbox POST /make/social), no email to type and no code to fetch.
   async function socialSignIn(provider, idToken) {
     const s = m();
-    if (!idToken) return;
+    if (!idToken || s.busy) return;   // a double tap must not sign in (and search) twice
     s.busy = true; s.err = ""; rerender();
     try {
       const d = await api("social", { provider, id_token: idToken });
