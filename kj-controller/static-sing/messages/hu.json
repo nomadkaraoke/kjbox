@@ -84,7 +84,27 @@
     "changingHint": "Válaszd ki az új dalt lent — a helyed a sorban megmarad.",
     "keepSong": "Megtartom a dalom",
     "requestCta": "Kérd ezt a dalt →",
+    "requestShort": "Kérés",
+    "chooseShort": "Választás",
+    "versionCount": {
+      "one": "{count} verzió",
+      "other": "{count} verzió"
+    },
+    "filterLabel": "Dalok szűrése",
+    "filterAll": "Összes",
+    "sortLabel": "Rendezés:",
+    "sortBest": "Legjobb találat",
+    "sortAz": "A–Z",
+    "othersShow": {
+      "one": "▸ {count} dal más előadóktól",
+      "other": "▸ {count} dal más előadóktól"
+    },
+    "othersHide": "▾ Más előadók dalainak elrejtése",
     "autoBest": "A legjobb verzió automatikusan kiválasztva",
+    "pickByFilter": {
+      "community": "Eredeti zenei verzió kiválasztva (a szűrőd alapján)",
+      "commercial": "Cover band verzió kiválasztva (a szűrőd alapján)"
+    },
     "versionsToggle": {
       "one": "Válassz {count} verzióból →",
       "other": "Válassz {count} verzióból →"
@@ -135,7 +155,7 @@
     "sectionLibrary": "A könyvtárunkban",
     "sectionCloud": "A felhőkönyvtárunkban",
     "sectionOnline": "Csak online (letöltés szükséges)",
-    "sectionCommunity": "Közösségi (MI énekeltávolítás)",
+    "sectionCommunity": "Eredeti zene (MI-vel eltávolított ének)",
     "moreOnline": {
       "one": "▸ Még {count} online verzió (letöltés szükséges)",
       "other": "▸ Még {count} online verzió (letöltés szükséges)"
@@ -149,32 +169,32 @@
     "sourceCloud": "Nagyon megbízható — a felhőkönyvtárunkból · {size}",
     "sourceCloudNoSize": "Nagyon megbízható — a felhőkönyvtárunkból",
     "sourceYouTube": "Szinte mindig működik — a YouTube letöltések néha sikertelenek",
-    "community": "Közösségi",
-    "commercial": "Kereskedelmi",
+    "community": "🎵 Eredeti",
+    "commercial": "🎸 Cover band",
     "classTitle": "Mit jelent ez?",
     "formatTitle": "Technikai részletek",
     "brandTitle": "Erről a producerről",
     "preview": "▶ Előnézet",
     "pick": "Válaszd ezt a verziót →",
-    "ccTitle": "ℹ️ Kereskedelmi vs Közösségi",
+    "ccTitle": "ℹ️ Eredeti vs Cover band",
     "ccCommercial": "egy profi karaoke dal: egy feldolgozásokat játszó zenekar rögzíti az alapot, a szöveg a képernyőn van, te énekled a főszólamot. Úgy hangzik, mint a karaoke.",
     "ccCommunity": "az eredeti felvétel, amiből az énekhangot mesterséges intelligencia távolította el. Úgy hangzik, mint az igazi dal.",
-    "ccHint": "A legtöbb énekes a kereskedelmit választja a klasszikusokhoz, és a közösségit az új vagy ritka dalokhoz.",
+    "ccHint": "A legtöbb énekes a klasszikusoknál a cover band sávokat, az újabb vagy rétegdaloknál pedig az eredeti zenét választja.",
     "gotIt": "Értem",
     "explainer": {
       "whatItIs": "Mi ez",
       "howItSounds": "Hogyan hangzik",
       "goodFor": "Erre jó:",
-      "communityTitle": "Közösségi dal",
-      "communityWhat": "A dal eredeti felvétele, amiből az énekhangot mesterséges intelligencia távolította el, a karaoke szöveget pedig egy hobbi producer adta hozzá.",
+      "communityTitle": "🎵 Eredeti zene",
+      "communityWhat": "A dal eredeti felvétele, amelyből mesterséges intelligenciával eltávolították a főéneket, a dalszöveget pedig egy hobbikészítő adta hozzá. A karaoke rajongók ezeket \"community\" sávoknak nevezik.",
       "communityHow": "Mint az igazi dal — ugyanazok a hangszerek, ugyanaz a háttérvokál, ugyanaz az energia.",
       "communityGood": "Új megjelenések, ritka dalok, és bárki, aki azt akarja, hogy pontosan úgy szóljon, mint a lemezen.",
-      "commercialTitle": "Kereskedelmi dal",
-      "commercialWhat": "Egy profi karaoke produkció: egy zenekar újra rögzíti a zenei alapot, egy cég pedig hozzáadja a dalszöveget.",
+      "commercialTitle": "🎸 Cover band zene",
+      "commercialWhat": "Professzionális karaoke felvétel: egy cover zenekar feljátssza a kíséretet, egy cég pedig hozzáadja a dalszöveget. A karaoke rajongók ezeket \"commercial\" sávoknak nevezik.",
       "commercialHow": "Mint a klasszikus karaoke — egy hű feldolgozás, de nem az eredeti felvétel.",
       "commercialGood": "Klasszikusok és jól ismert slágerek; a dalszöveg időzítése általában nagyon megbízható.",
-      "commercialSummary": "Összehasonlításképpen, a kereskedelmi számok karaokéhoz újra felvett feldolgozások — úgy szólnak, mint a karaoke.",
-      "communitySummary": "Összehasonlításképpen, a közösségi számok az eredeti dalt használják énekhang nélkül — úgy szólnak, mint az eredeti lemez."
+      "commercialSummary": "Összehasonlításképp: a cover band sávokat újra felveszik a karaokehoz — igazi karaoke hangzásuk van.",
+      "communitySummary": "Összehasonlításképp: az eredeti zenei sávok a dal saját felvételét használják az ének eltávolításával — pont úgy szólnak, mint az eredeti felvételen."
     },
     "brands": {
       "CC": "Az egyik legtermékenyebb közösségi producer — eredeti felvételek MI énekeltávolítással és tiszta, jól olvasható dalszövegekkel.",

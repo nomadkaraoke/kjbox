@@ -84,7 +84,27 @@
     "changingHint": "Wähle unten den neuen Song — du behältst deinen Platz in der Warteschlange.",
     "keepSong": "Meinen Song behalten",
     "requestCta": "Diesen Song wünschen →",
+    "requestShort": "Wünschen",
+    "chooseShort": "Auswählen",
+    "versionCount": {
+      "one": "{count} Version",
+      "other": "{count} Versionen"
+    },
+    "filterLabel": "Songs filtern",
+    "filterAll": "Alle",
+    "sortLabel": "Sortieren nach:",
+    "sortBest": "Bester Treffer",
+    "sortAz": "A–Z",
+    "othersShow": {
+      "one": "▸ {count} Song von anderen Künstlern",
+      "other": "▸ {count} Songs von anderen Künstlern"
+    },
+    "othersHide": "▾ Songs von anderen Künstlern ausblenden",
     "autoBest": "Beste Version automatisch ausgewählt",
+    "pickByFilter": {
+      "community": "Original-Audio-Version gewählt (dein Filter)",
+      "commercial": "Coverband-Version gewählt (dein Filter)"
+    },
     "versionsToggle": {
       "one": "Wähle aus {count} Version →",
       "other": "Wähle aus {count} Versionen →"
@@ -135,7 +155,7 @@
     "sectionLibrary": "In unserer Bibliothek",
     "sectionCloud": "In unserer Cloud-Bibliothek",
     "sectionOnline": "Nur online (Download erforderlich)",
-    "sectionCommunity": "Community (KI-Gesangsentfernung)",
+    "sectionCommunity": "Original-Audio (Gesang per KI entfernt)",
     "moreOnline": {
       "one": "▸ {count} weitere Online-Version (Download erforderlich)",
       "other": "▸ {count} weitere Online-Versionen (Download erforderlich)"
@@ -149,32 +169,32 @@
     "sourceCloud": "Sehr zuverlässig — aus unserer Cloud-Bibliothek · {size}",
     "sourceCloudNoSize": "Sehr zuverlässig — aus unserer Cloud-Bibliothek",
     "sourceYouTube": "Funktioniert fast immer — YouTube-Downloads schlagen gelegentlich fehl",
-    "community": "Community",
-    "commercial": "Kommerziell",
+    "community": "🎵 Original",
+    "commercial": "🎸 Coverband",
     "classTitle": "Was bedeutet das?",
     "formatTitle": "Technische Details",
     "brandTitle": "Über diesen Produzenten",
     "preview": "▶ Vorschau",
     "pick": "Diese Version wählen →",
-    "ccTitle": "ℹ️ Kommerziell vs. Community",
+    "ccTitle": "ℹ️ Original vs. Coverband",
     "ccCommercial": "ein professioneller Karaoke-Track: Eine Coverband nimmt die Begleitung auf, der Text ist auf dem Bildschirm, du singst die Hauptstimme. Klingt wie Karaoke.",
     "ccCommunity": "die Originalaufnahme, bei der die Hauptstimme durch KI entfernt wurde. Klingt wie der echte Song.",
-    "ccHint": "Die meisten Sänger wählen kommerziell für Klassiker und Community für aktuelle oder Nischen-Songs.",
+    "ccHint": "Die meisten Sänger wählen Coverband-Tracks für Klassiker und Original-Audio für neuere Songs oder Nischentitel.",
     "gotIt": "Verstanden",
     "explainer": {
       "whatItIs": "Was es ist",
       "howItSounds": "Wie es klingt",
       "goodFor": "Gut für",
-      "communityTitle": "Community-Track",
-      "communityWhat": "Die Originalaufnahme des Songs, bei der die Hauptstimme durch KI entfernt und Karaoke-Text von einem Hobby-Produzenten hinzugefügt wurde.",
+      "communityTitle": "🎵 Original-Audio",
+      "communityWhat": "Die Originalaufnahme des Songs, bei der die Hauptstimme per KI entfernt und der Karaoke-Text von Hobby-Produzenten hinzugefügt wurde. Karaoke-Fans nennen das „Community“-Tracks.",
       "communityHow": "Wie der echte Song — gleiche Instrumente, gleicher Hintergrundgesang, gleiche Energie.",
       "communityGood": "Aktuelle Veröffentlichungen, Nischen-Songs und alle, die wollen, dass es genau wie die Platte klingt.",
-      "commercialTitle": "Kommerzieller Track",
-      "commercialWhat": "Eine professionelle Karaoke-Produktion: Eine Coverband nimmt den Backing-Track neu auf und eine Firma fügt den Text hinzu.",
+      "commercialTitle": "🎸 Coverband-Audio",
+      "commercialWhat": "Eine professionelle Karaoke-Produktion: Eine Coverband nimmt den Backing-Track neu auf und ein Anbieter fügt den Songtext hinzu. Karaoke-Fans nennen das „kommerzielle“ Tracks.",
       "commercialHow": "Wie klassisches Karaoke — ein originalgetreues Cover, aber nicht die Originalaufnahme.",
       "commercialGood": "Klassiker und bekannte Hits; das Text-Timing ist meistens sehr zuverlässig.",
-      "commercialSummary": "Zum Vergleich: Kommerzielle Tracks sind Coverversionen, die für Karaoke neu aufgenommen wurden – sie klingen wie Karaoke.",
-      "communitySummary": "Zum Vergleich: Community-Tracks verwenden die Originalaufnahme des Songs ohne Gesang – sie klingen wie das Original."
+      "commercialSummary": "Zum Vergleich: Coverband-Tracks werden für Karaoke neu eingespielt – sie klingen typisch nach Karaoke.",
+      "communitySummary": "Zum Vergleich: Original-Audio-Tracks nutzen die Originalaufnahme des Songs ohne Gesang – sie klingen genau wie auf Platte."
     },
     "brands": {
       "CC": "Einer der produktivsten Community-Produzenten — Tracks aus Originalaufnahmen mit KI-Gesangsentfernung und sauberen, gut lesbaren Texten.",

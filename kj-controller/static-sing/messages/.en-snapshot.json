@@ -84,7 +84,27 @@
     "changingHint": "Pick the new song below — you keep your place in line.",
     "keepSong": "Keep my song",
     "requestCta": "Request this song →",
+    "requestShort": "Request",
+    "chooseShort": "Choose",
+    "versionCount": {
+      "one": "{count} version",
+      "other": "{count} versions"
+    },
+    "filterLabel": "Filter songs",
+    "filterAll": "All",
+    "sortLabel": "Sort:",
+    "sortBest": "Best match",
+    "sortAz": "A–Z",
+    "othersShow": {
+      "one": "▸ {count} song by other artists",
+      "other": "▸ {count} songs by other artists"
+    },
+    "othersHide": "▾ Hide songs by other artists",
     "autoBest": "Best version picked automatically",
+    "pickByFilter": {
+      "community": "Original audio version picked (your filter)",
+      "commercial": "Cover band version picked (your filter)"
+    },
     "versionsToggle": {
       "one": "Choose from {count} version →",
       "other": "Choose from {count} versions →"
@@ -135,7 +155,7 @@
     "sectionLibrary": "In our library",
     "sectionCloud": "In our cloud library",
     "sectionOnline": "Online only (download needed)",
-    "sectionCommunity": "Community (AI vocal removal)",
+    "sectionCommunity": "Original audio (AI vocal removal)",
     "moreOnline": {
       "one": "▸ {count} more online version (download needed)",
       "other": "▸ {count} more online versions (download needed)"
@@ -149,32 +169,32 @@
     "sourceCloud": "Very reliable — from our cloud library · {size}",
     "sourceCloudNoSize": "Very reliable — from our cloud library",
     "sourceYouTube": "Almost always works — YouTube downloads occasionally fail",
-    "community": "Community",
-    "commercial": "Commercial",
+    "community": "🎵 Original",
+    "commercial": "🎸 Cover band",
     "classTitle": "What does this mean?",
     "formatTitle": "Technical details",
     "brandTitle": "About this producer",
     "preview": "▶ Preview",
     "pick": "Pick this version →",
-    "ccTitle": "ℹ️ Commercial vs Community",
+    "ccTitle": "ℹ️ Original vs Cover band",
     "ccCommercial": "a professional karaoke track: a cover band records the backing, lyrics are on screen, you sing the lead. Sounds like karaoke.",
     "ccCommunity": "the original recording, with the lead vocal removed by AI. Sounds like the real song.",
-    "ccHint": "Most singers pick commercial for classics and community for recent or niche songs.",
+    "ccHint": "Most singers pick cover band tracks for classics and original audio for recent or niche songs.",
     "gotIt": "Got it",
     "explainer": {
       "whatItIs": "What it is",
       "howItSounds": "How it sounds",
       "goodFor": "Good for",
-      "communityTitle": "Community track",
-      "communityWhat": "The original recording of the song, with the lead vocal removed by AI and karaoke lyrics added by a hobbyist producer.",
+      "communityTitle": "🎵 Original audio",
+      "communityWhat": "The original recording of the song, with the lead vocal removed by AI and karaoke lyrics added by a hobbyist producer. Karaoke fans call these \"community\" tracks.",
       "communityHow": "Like the real song — same instruments, same backing vocals, same energy.",
       "communityGood": "Recent releases, niche songs, and anyone who wants it to sound exactly like the record.",
-      "commercialTitle": "Commercial track",
-      "commercialWhat": "A professional karaoke production: a cover band re-records the backing track and a company adds the lyrics.",
+      "commercialTitle": "🎸 Cover band audio",
+      "commercialWhat": "A professional karaoke production: a cover band re-records the backing track and a company adds the lyrics. Karaoke fans call these \"commercial\" tracks.",
       "commercialHow": "Like classic karaoke — a faithful cover, but not the original recording.",
       "commercialGood": "Classics and well-known hits; lyric timing is usually very reliable.",
-      "commercialSummary": "For comparison, commercial tracks are covers re-recorded for karaoke — they sound like karaoke.",
-      "communitySummary": "For comparison, community tracks use the original song's audio with the vocals removed — they sound like the record."
+      "commercialSummary": "For comparison, cover band tracks are re-recorded for karaoke — they sound like karaoke.",
+      "communitySummary": "For comparison, original audio tracks use the song's own recording with the vocals removed — they sound like the record."
     },
     "brands": {
       "CC": "One of the most prolific community producers — original-recording tracks with AI vocal removal and clean, readable lyrics.",

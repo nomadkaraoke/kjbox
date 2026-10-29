@@ -84,7 +84,27 @@
     "changingHint": "Alege noua piesă mai jos — îți păstrezi locul la rând.",
     "keepSong": "Păstrează piesa mea",
     "requestCta": "Cere această piesă →",
+    "requestShort": "Cere",
+    "chooseShort": "Alege",
+    "versionCount": {
+      "one": "{count} versiune",
+      "other": "{count} versiuni"
+    },
+    "filterLabel": "Filtrează melodiile",
+    "filterAll": "Toate",
+    "sortLabel": "Sortează:",
+    "sortBest": "Cea mai bună potrivire",
+    "sortAz": "A–Z",
+    "othersShow": {
+      "one": "▸ {count} piesă de la alți artiști",
+      "other": "▸ {count} piese de la alți artiști"
+    },
+    "othersHide": "▾ Ascunde piesele de la alți artiști",
     "autoBest": "Cea mai bună versiune aleasă automat",
+    "pickByFilter": {
+      "community": "Versiune audio originală selectată (filtrul tău)",
+      "commercial": "Versiune cover band selectată (filtrul tău)"
+    },
     "versionsToggle": {
       "one": "Alege din {count} versiune →",
       "other": "Alege din {count} versiuni →"
@@ -135,7 +155,7 @@
     "sectionLibrary": "În biblioteca noastră",
     "sectionCloud": "În biblioteca noastră cloud",
     "sectionOnline": "Doar online (necesită descărcare)",
-    "sectionCommunity": "Comunitate (eliminarea vocii prin AI)",
+    "sectionCommunity": "Audio original (voce eliminată prin AI)",
     "moreOnline": {
       "one": "▸ încă {count} versiune online (necesită descărcare)",
       "other": "▸ încă {count} versiuni online (necesită descărcare)"
@@ -149,32 +169,32 @@
     "sourceCloud": "Foarte de încredere — din biblioteca noastră cloud · {size}",
     "sourceCloudNoSize": "Foarte de încredere — din biblioteca noastră cloud",
     "sourceYouTube": "Aproape mereu funcționează — descărcările de pe YouTube eșuează uneori",
-    "community": "Comunitate",
-    "commercial": "Comercial",
+    "community": "🎵 Original",
+    "commercial": "🎸 Cover band",
     "classTitle": "Ce înseamnă asta?",
     "formatTitle": "Detalii tehnice",
     "brandTitle": "Despre acest producător",
     "preview": "▶ Ascultă",
     "pick": "Alege această versiune →",
-    "ccTitle": "ℹ️ Comercial vs Comunitate",
+    "ccTitle": "ℹ️ Original vs Cover band",
     "ccCommercial": "o piesă de karaoke profesională: o trupă cover înregistrează instrumentalul, versurile sunt pe ecran, tu cânți vocea principală. Sună a karaoke.",
     "ccCommunity": "înregistrarea originală, cu vocea principală eliminată de AI. Sună ca piesa reală.",
-    "ccHint": "Majoritatea cântăreților aleg comercial pentru clasice și comunitate pentru piese recente sau de nișă.",
+    "ccHint": "Majoritatea celor care cântă aleg piese cover band pentru cele clasice și audio original pentru piese recente sau de nișă.",
     "gotIt": "Am înțeles",
     "explainer": {
       "whatItIs": "Ce este",
       "howItSounds": "Cum sună",
       "goodFor": "Bun pentru",
-      "communityTitle": "Piesă din comunitate",
-      "communityWhat": "Înregistrarea originală a piesei, cu vocea principală eliminată de AI și versuri de karaoke adăugate de un producător amator.",
+      "communityTitle": "🎵 Audio original",
+      "communityWhat": "Înregistrarea originală a piesei, cu vocea principală eliminată prin AI și versurile adăugate de un creator independent. Fanii de karaoke le numesc piese „de comunitate”.",
       "communityHow": "Ca piesa reală — aceleași instrumente, aceleași voci de fundal, aceeași energie.",
       "communityGood": "Lansări recente, piese de nișă și oricine vrea să sune exact ca înregistrarea originală.",
-      "commercialTitle": "Piesă comercială",
-      "commercialWhat": "O producție profesională de karaoke: o trupă cover reînregistrează instrumentalul și o companie adaugă versurile.",
+      "commercialTitle": "🎸 Audio cover band",
+      "commercialWhat": "O producție profesionistă de karaoke: o trupă de coveruri reînregistrează negativul, iar o companie adaugă versurile. Fanii de karaoke le numesc piese „comerciale”.",
       "commercialHow": "Ca la karaoke clasic — un cover fidel, dar nu înregistrarea originală.",
       "commercialGood": "Clasice și hituri cunoscute; sincronizarea versurilor este de obicei foarte fiabilă.",
-      "commercialSummary": "Pentru comparație, piesele comerciale sunt coveruri reînregistrate pentru karaoke — sună a karaoke.",
-      "communitySummary": "Pentru comparație, piesele comunității folosesc sunetul melodiei originale cu vocea eliminată — sună ca originalul."
+      "commercialSummary": "Ca termen de comparație, piesele cover band sunt reînregistrate pentru karaoke — sună a karaoke clasic.",
+      "communitySummary": "Ca termen de comparație, piesele cu audio original folosesc chiar înregistrarea oficială a melodiei, cu vocea eliminată — sună exact ca pe album."
     },
     "brands": {
       "CC": "Unul dintre cei mai prolifici producători din comunitate — piese din înregistrări originale cu eliminarea vocii prin AI și versuri clare, ușor de citit.",

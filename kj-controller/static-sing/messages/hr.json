@@ -84,7 +84,27 @@
     "changingHint": "Odaberi novu pjesmu ispod — zadržavaš svoje mjesto u redu.",
     "keepSong": "Zadrži moju pjesmu",
     "requestCta": "Naruči ovu pjesmu →",
+    "requestShort": "Zatraži",
+    "chooseShort": "Odaberi",
+    "versionCount": {
+      "one": "{count} verzija",
+      "other": "{count} verzija"
+    },
+    "filterLabel": "Filtriraj pjesme",
+    "filterAll": "Sve",
+    "sortLabel": "Poredaj:",
+    "sortBest": "Najbolje podudaranje",
+    "sortAz": "A–Ž",
+    "othersShow": {
+      "one": "▸ {count} pjesma drugih izvođača",
+      "other": "▸ {count} pjesama drugih izvođača"
+    },
+    "othersHide": "▾ Sakrij pjesme drugih izvođača",
     "autoBest": "Najbolja verzija odabrana automatski",
+    "pickByFilter": {
+      "community": "Odabrana verzija s originalnim zvukom (tvoj filter)",
+      "commercial": "Odabrana verzija cover benda (tvoj filter)"
+    },
     "versionsToggle": {
       "one": "Odaberi iz {count} verzije →",
       "other": "Odaberi iz {count} verzija →"
@@ -135,7 +155,7 @@
     "sectionLibrary": "U našoj biblioteci",
     "sectionCloud": "U našoj cloud biblioteci",
     "sectionOnline": "Samo online (potrebno preuzimanje)",
-    "sectionCommunity": "Community (AI uklanjanje vokala)",
+    "sectionCommunity": "Originalni zvuk (vokali uklonjeni pomoću AI-ja)",
     "moreOnline": {
       "one": "▸ još {count} online verzija (potrebno preuzimanje)",
       "other": "▸ još {count} online verzija (potrebno preuzimanje)"
@@ -149,32 +169,32 @@
     "sourceCloud": "Vrlo pouzdano — iz naše cloud baze · {size}",
     "sourceCloudNoSize": "Vrlo pouzdano — iz naše cloud baze",
     "sourceYouTube": "Gotovo uvijek radi — YouTube preuzimanja ponekad ne uspiju",
-    "community": "Community",
-    "commercial": "Komercijalna",
+    "community": "🎵 Original",
+    "commercial": "🎸 Cover bend",
     "classTitle": "Što ovo znači?",
     "formatTitle": "Tehnički detalji",
     "brandTitle": "O ovom producentu",
     "preview": "▶ Pregled",
     "pick": "Odaberi ovu verziju →",
-    "ccTitle": "ℹ️ Komercijalne vs Community",
+    "ccTitle": "ℹ️ Original vs Cover bend",
     "ccCommercial": "profesionalna karaoke matrica: cover bend snima pozadinu, tekst je na ekranu, ti pjevaš glavni vokal. Zvuči kao karaoke.",
     "ccCommunity": "originalna snimka, s glavnim vokalom uklonjenim pomoću AI-ja. Zvuči kao prava pjesma.",
-    "ccHint": "Većina pjevača bira komercijalne za klasike, a community za novije ili rijetke pjesme.",
+    "ccHint": "Većina pjevača bira verzije cover bendova za klasike, a originalni zvuk za novije ili manje poznate pjesme.",
     "gotIt": "Razumijem",
     "explainer": {
       "whatItIs": "Što je to",
       "howItSounds": "Kako zvuči",
       "goodFor": "Dobro za",
-      "communityTitle": "Community matrica",
-      "communityWhat": "Originalna snimka pjesme, s glavnim vokalom uklonjenim pomoću AI-ja i karaoke tekstom koji je dodao producent iz hobija.",
+      "communityTitle": "🎵 Originalni zvuk",
+      "communityWhat": "Originalna snimka pjesme s koje je AI uklonio glavni vokal, a producent amater dodao tekst za karaoke. Ljubitelji karaoka ovo zovu \"community\" verzijama.",
       "communityHow": "Kao prava pjesma — isti instrumenti, isti prateći vokali, ista energija.",
       "communityGood": "Novija izdanja, rijetke pjesme i za svakoga tko želi da zvuči točno kao na ploči.",
-      "commercialTitle": "Komercijalna matrica",
-      "commercialWhat": "Profesionalna karaoke produkcija: cover bend ponovno snima matricu, a tvrtka dodaje tekst.",
+      "commercialTitle": "🎸 Zvuk cover benda",
+      "commercialWhat": "Profesionalna karaoke produkcija: cover bend ponovno snima instrumentalnu matricu, a studio dodaje tekst. Ljubitelji karaoka ovo zovu \"commercial\" verzijama.",
       "commercialHow": "Kao klasične karaoke — vjerna obrada, ali ne originalna snimka.",
       "commercialGood": "Klasici i poznati hitovi; tajming teksta je obično vrlo pouzdan.",
-      "commercialSummary": "Za usporedbu, komercijalne snimke su obrade ponovno snimljene za karaoke — zvuče kao karaoke.",
-      "communitySummary": "Za usporedbu, snimke iz zajednice koriste zvuk originalne pjesme s uklonjenim vokalima — zvuče kao original."
+      "commercialSummary": "Za usporedbu, pjesme cover bendova ponovno su snimljene za karaoke — zvuče baš kao karaoke.",
+      "communitySummary": "Za usporedbu, verzije s originalnim zvukom koriste samu snimku pjesme s uklonjenim vokalima — zvuče kao prava stvar."
     },
     "brands": {
       "CC": "Jedan od najplodnijih community producenata — matrice od originalnih snimki s AI uklanjanjem vokala i čistim, čitljivim tekstom.",

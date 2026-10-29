@@ -2,6 +2,25 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-10-29 - Singer search: compact rows, Original / Cover band, audio pills, other-artists group, sort (v0.143.0)
+
+- A singer browsing "lana del rey" got 83 songs at ~290px each (about 3 per phone screen) and no
+  way to show only songs with a community version. Each song is now a compact row: title; artist ·
+  N versions; **🎵 Original** or **🎸 Cover band** · brand of the version Request would get; Request
+  over ▶ Preview on the right. Tapping the row opens the familiar detail (pills, availability,
+  "Choose from N versions"); one or two results still open straight away. Page height for that
+  search: ~24,300px → ~8,700px (about 6½ songs per screen).
+- **Community / Commercial are now "Original" / "Cover band"** everywhere singers see them (row,
+  version pills, section heading, explainer, which still notes the community/commercial names).
+- Lists of 6+ songs get single-choice pills **All / 🎵 Original / 🎸 Cover band** (with counts; a pill
+  that would show nothing or everything is hidden) and **Sort: Best match / A–Z**. With a pill on,
+  rows show, preview and request the best version of that kind. For an artist search (the artist's
+  name is in the query), songs by other artists go into a collapsed **"▸ N songs by other artists"**
+  group at the end; featured/joint credits stay in the artist's group.
+- Why a sort: in the month's search log, 40% of searches returned 20+ songs, and 38 of 121 requests
+  after them were outside the top 3, nearly all artist searches hunting a known song (Bruno Mars →
+  Runaway Baby/Moonshine, Stevie Wonder → "As"/Sir Duke). Filter use is logged as `filter_toggle`.
+
 ## 2026-10-28 - KJ UI: "Manage Filler Music" modal (v0.140.0)
 
 - New **Manage** button beside System -> Media & Output -> Filler Music opens a modal to add, rename,

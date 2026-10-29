@@ -84,7 +84,27 @@
     "changingHint": "Escolha a nova música abaixo — você mantém seu lugar na fila.",
     "keepSong": "Manter minha música",
     "requestCta": "Pedir esta música →",
+    "requestShort": "Pedir",
+    "chooseShort": "Escolher",
+    "versionCount": {
+      "one": "{count} versão",
+      "other": "{count} versões"
+    },
+    "filterLabel": "Filtrar músicas",
+    "filterAll": "Todos",
+    "sortLabel": "Ordenar por:",
+    "sortBest": "Melhor correspondência",
+    "sortAz": "A–Z",
+    "othersShow": {
+      "one": "▸ {count} música de outros artistas",
+      "other": "▸ {count} músicas de outros artistas"
+    },
+    "othersHide": "▾ Ocultar músicas de outros artistas",
     "autoBest": "Melhor versão escolhida automaticamente",
+    "pickByFilter": {
+      "community": "Versão com áudio original selecionada (seu filtro)",
+      "commercial": "Versão de banda cover selecionada (seu filtro)"
+    },
     "versionsToggle": {
       "one": "Escolha entre {count} versão →",
       "other": "Escolha entre {count} versões →"
@@ -135,7 +155,7 @@
     "sectionLibrary": "Na nossa biblioteca",
     "sectionCloud": "Na nossa biblioteca na nuvem",
     "sectionOnline": "Apenas online (necessário baixar)",
-    "sectionCommunity": "Comunidade (remoção de vocal por IA)",
+    "sectionCommunity": "Áudio original (voz removida por IA)",
     "moreOnline": {
       "one": "▸ mais {count} versão online (necessário baixar)",
       "other": "▸ mais {count} versões online (necessário baixar)"
@@ -149,32 +169,32 @@
     "sourceCloud": "Muito confiável — da nossa biblioteca na nuvem · {size}",
     "sourceCloudNoSize": "Muito confiável — da nossa biblioteca na nuvem",
     "sourceYouTube": "Quase sempre funciona — downloads do YouTube falham ocasionalmente",
-    "community": "Comunidade",
-    "commercial": "Comercial",
+    "community": "🎵 Áudio original",
+    "commercial": "🎸 Banda cover",
     "classTitle": "O que isso significa?",
     "formatTitle": "Detalhes técnicos",
     "brandTitle": "Sobre este produtor",
     "preview": "▶ Prévia",
     "pick": "Escolher esta versão →",
-    "ccTitle": "ℹ️ Comercial vs Comunidade",
+    "ccTitle": "ℹ️ Áudio original vs. Banda cover",
     "ccCommercial": "uma faixa de karaokê profissional: uma banda cover grava o instrumental, as letras ficam na tela, você canta o vocal principal. Soa como karaokê.",
     "ccCommunity": "a gravação original, com o vocal principal removido por IA. Soa como a música real.",
-    "ccHint": "A maioria dos cantores escolhe comercial para clássicos e comunidade para músicas recentes ou de nicho.",
+    "ccHint": "A maioria dos cantores escolhe faixas de banda cover para clássicos e áudio original para músicas recentes ou de nicho.",
     "gotIt": "Entendi",
     "explainer": {
       "whatItIs": "O que é",
       "howItSounds": "Como soa",
       "goodFor": "Bom para",
-      "communityTitle": "Faixa da comunidade",
-      "communityWhat": "A gravação original da música, com o vocal principal removido por IA e letras de karaokê adicionadas por um produtor amador.",
+      "communityTitle": "🎵 Áudio original",
+      "communityWhat": "A gravação original da música, com a voz principal removida por IA e a letra sincronizada adicionada por um produtor independente. Os fãs de karaokê chamam essas faixas de \"da comunidade\".",
       "communityHow": "Como a música real — mesmos instrumentos, mesmos vocais de apoio, mesma energia.",
       "communityGood": "Lançamentos recentes, músicas de nicho e qualquer pessoa que queira que soe exatamente como a gravação original.",
-      "commercialTitle": "Faixa comercial",
-      "commercialWhat": "Uma produção de karaokê profissional: uma banda cover regrava a faixa instrumental e uma empresa adiciona as letras.",
+      "commercialTitle": "🎸 Áudio de banda cover",
+      "commercialWhat": "Uma produção profissional de karaokê: uma banda cover regrava a base instrumental e uma empresa adiciona a letra sincronizada. Os fãs de karaokê chamam essas faixas de \"comerciais\".",
       "commercialHow": "Como o karaokê clássico — um cover fiel, mas não a gravação original.",
       "commercialGood": "Clássicos e sucessos conhecidos; a sincronização das letras geralmente é muito confiável.",
-      "commercialSummary": "Para comparar, as faixas comerciais são covers regravados para karaokê — elas têm som de karaokê.",
-      "communitySummary": "Para comparar, as faixas da comunidade usam o áudio da música original com os vocais removidos — elas têm o som da gravação original."
+      "commercialSummary": "Para comparar: faixas de banda cover são regravadas para karaokê — elas têm aquela cara clássica de karaokê.",
+      "communitySummary": "Para comparar: faixas com áudio original usam a gravação oficial da música sem os vocais — elas soam exatamente como no disco."
     },
     "brands": {
       "CC": "Um dos produtores da comunidade mais prolíficos — faixas de gravação original com remoção de vocal por IA e letras limpas e legíveis.",

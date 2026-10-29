@@ -84,7 +84,27 @@
     "changingHint": "Vælg den nye sang nedenfor — du beholder din plads i køen.",
     "keepSong": "Behold min sang",
     "requestCta": "Anmod om denne sang →",
+    "requestShort": "Ønsk",
+    "chooseShort": "Vælg",
+    "versionCount": {
+      "one": "{count} version",
+      "other": "{count} versioner"
+    },
+    "filterLabel": "Filtrér sange",
+    "filterAll": "Alle",
+    "sortLabel": "Sortér:",
+    "sortBest": "Bedste match",
+    "sortAz": "A–Å",
+    "othersShow": {
+      "one": "▸ {count} sang med andre kunstnere",
+      "other": "▸ {count} sange med andre kunstnere"
+    },
+    "othersHide": "▾ Skjul sange med andre kunstnere",
     "autoBest": "Bedste version valgt automatisk",
+    "pickByFilter": {
+      "community": "Original lyd-version valgt (dit filter)",
+      "commercial": "Coverband-version valgt (dit filter)"
+    },
     "versionsToggle": {
       "one": "Vælg mellem {count} version →",
       "other": "Vælg mellem {count} versioner →"
@@ -135,7 +155,7 @@
     "sectionLibrary": "I vores bibliotek",
     "sectionCloud": "I vores cloud-bibliotek",
     "sectionOnline": "Kun online (download kræves)",
-    "sectionCommunity": "Fællesskab (AI-vokalfjernelse)",
+    "sectionCommunity": "Original lyd (vokal fjernet med AI)",
     "moreOnline": {
       "one": "▸ {count} yderligere online version (download kræves)",
       "other": "▸ {count} flere online versioner (download kræves)"
@@ -149,32 +169,32 @@
     "sourceCloud": "Meget pålideligt — fra vores cloud-bibliotek · {size}",
     "sourceCloudNoSize": "Meget pålideligt — fra vores cloud-bibliotek",
     "sourceYouTube": "Virker næsten altid — YouTube-downloads fejler af og til",
-    "community": "Fællesskab",
-    "commercial": "Kommerciel",
+    "community": "🎵 Original",
+    "commercial": "🎸 Coverband",
     "classTitle": "Hvad betyder dette?",
     "formatTitle": "Tekniske detaljer",
     "brandTitle": "Om denne producent",
     "preview": "▶ Smagsprøve",
     "pick": "Vælg denne version →",
-    "ccTitle": "ℹ️ Kommerciel vs Fællesskab",
+    "ccTitle": "ℹ️ Original vs. coverband",
     "ccCommercial": "et professionelt karaokespor: et coverband indspiller baggrundsmusikken, teksten er på skærmen, du synger hovedvokalen. Lyder som karaoke.",
     "ccCommunity": "den originale indspilning, hvor hovedvokalen er fjernet af AI. Lyder som den rigtige sang.",
-    "ccHint": "De fleste sangere vælger kommerciel til klassikere og fællesskab til nyere eller niche-sange.",
+    "ccHint": "De fleste sangere vælger coverband-numre til klassikere og original lyd til nyere sange eller nichenumre.",
     "gotIt": "Forstået",
     "explainer": {
       "whatItIs": "Hvad det er",
       "howItSounds": "Hvordan det lyder",
       "goodFor": "God til",
-      "communityTitle": "Fællesskabsspor",
-      "communityWhat": "Den originale indspilning af sangen, hvor hovedvokalen er fjernet af AI, og karaoketekster er tilføjet af en hobbyproducent.",
+      "communityTitle": "🎵 Original lyd",
+      "communityWhat": "Sangens originale indspilning, hvor forsangerens vokal er fjernet med AI, og karaoke-teksten er tilføjet af en hobbyproducer. Karaoke-fans kalder disse for \"community\"-numre.",
       "communityHow": "Som den rigtige sang — samme instrumenter, samme kor, samme energi.",
       "communityGood": "Nyere udgivelser, niche-sange og alle, der vil have det til at lyde præcis som pladen.",
-      "commercialTitle": "Kommercielt spor",
-      "commercialWhat": "En professionel karaokeproduktion: et coverband genindspiller baggrundssporet, og et firma tilføjer teksten.",
+      "commercialTitle": "🎸 Coverband-lyd",
+      "commercialWhat": "En professionel karaoke-produktion: et coverband genindspiller backingtracket, og et firma tilføjer teksten. Karaoke-fans kalder disse for \"kommercielle\" numre.",
       "commercialHow": "Som klassisk karaoke — et trofast cover, men ikke den originale indspilning.",
       "commercialGood": "Klassikere og velkendte hits; tekst-timingen er normalt meget pålidelig.",
-      "commercialSummary": "Til sammenligning er kommercielle numre coverversioner, der er genindspillet til karaoke — de lyder som karaoke.",
-      "communitySummary": "Til sammenligning bruger community-numre den originale sangs lyd uden vokal — de lyder som originalen."
+      "commercialSummary": "Til sammenligning er coverband-numre genindspillet til karaoke — de lyder som karaoke.",
+      "communitySummary": "Til sammenligning bruger numre med original lyd sangens egen indspilning, hvor vokalen er fjernet — de lyder som originalen."
     },
     "brands": {
       "CC": "CC Karaoke — en af de mest produktive fællesskabsproducenter — originale indspilningsspor med AI-vokalfjernelse og rene, læsbare tekster.",

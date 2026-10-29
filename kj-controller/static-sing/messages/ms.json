@@ -84,7 +84,27 @@
     "changingHint": "Pilih lagu baharu di bawah — anda kekal di tempat anda dalam giliran.",
     "keepSong": "Kekalkan lagu saya",
     "requestCta": "Minta lagu ini →",
+    "requestShort": "Minta",
+    "chooseShort": "Pilih",
+    "versionCount": {
+      "one": "{count} versi",
+      "other": "{count} versi"
+    },
+    "filterLabel": "Tapis lagu",
+    "filterAll": "Semua",
+    "sortLabel": "Susun:",
+    "sortBest": "Padanan terbaik",
+    "sortAz": "A–Z",
+    "othersShow": {
+      "one": "▸ {count} lagu artis lain",
+      "other": "▸ {count} lagu artis lain"
+    },
+    "othersHide": "▾ Sembunyikan lagu artis lain",
     "autoBest": "Versi terbaik dipilih secara automatik",
+    "pickByFilter": {
+      "community": "Versi audio asal dipilih (penapis anda)",
+      "commercial": "Versi kugiran 'cover' dipilih (penapis anda)"
+    },
     "versionsToggle": {
       "one": "Pilih daripada {count} versi →",
       "other": "Pilih daripada {count} versi →"
@@ -135,7 +155,7 @@
     "sectionLibrary": "Dalam pustaka kami",
     "sectionCloud": "Dalam pustaka awan kami",
     "sectionOnline": "Dalam talian sahaja (perlu dimuat turun)",
-    "sectionCommunity": "Komuniti (pembuangan vokal AI)",
+    "sectionCommunity": "Audio asal (vokal dialih keluar oleh AI)",
     "moreOnline": {
       "one": "▸ {count} lagi versi dalam talian (perlu dimuat turun)",
       "other": "▸ {count} lagi versi dalam talian (perlu dimuat turun)"
@@ -149,32 +169,32 @@
     "sourceCloud": "Sangat dipercayai — dari pustaka awan kami · {size}",
     "sourceCloudNoSize": "Sangat dipercayai — dari pustaka awan kami",
     "sourceYouTube": "Hampir pasti berfungsi — muat turun YouTube kadangkala gagal",
-    "community": "Komuniti",
-    "commercial": "Komersial",
+    "community": "🎵 Audio asal",
+    "commercial": "🎸 Kugiran 'cover'",
     "classTitle": "Apa maksudnya ini?",
     "formatTitle": "Butiran teknikal",
     "brandTitle": "Mengenai penerbit ini",
     "preview": "▶ Pratonton",
     "pick": "Pilih versi ini →",
-    "ccTitle": "ℹ️ Komersial vs Komuniti",
+    "ccTitle": "ℹ️ Audio Asal lwn Kugiran 'Cover'",
     "ccCommercial": "trek karaoke profesional: kugiran saduran merakam muzik latar, lirik ada di skrin, anda menyanyikan vokal utama. Bunyinya seperti karaoke.",
     "ccCommunity": "rakaman asal, dengan vokal utama dibuang oleh AI. Bunyinya seperti lagu sebenar.",
-    "ccHint": "Kebanyakan penyanyi memilih komersial untuk lagu klasik dan komuniti untuk lagu terkini atau jarang didengar.",
+    "ccHint": "Kebanyakan penyanyi memilih trek kugiran 'cover' untuk lagu malar segar dan audio asal untuk lagu baharu atau niche.",
     "gotIt": "Faham",
     "explainer": {
       "whatItIs": "Apa sebenarnya ini",
       "howItSounds": "Bagaimana bunyinya",
       "goodFor": "Sesuai untuk",
-      "communityTitle": "Trek komuniti",
-      "communityWhat": "Rakaman asal lagu, dengan vokal utama dibuang oleh AI dan lirik karaoke ditambah oleh penerbit hobi.",
+      "communityTitle": "🎵 Audio asal",
+      "communityWhat": "Rakaman asal lagu tersebut, dengan vokal utama dialih keluar menggunakan AI dan lirik karaoke ditambah oleh penerbit hobi. Peminat karaoke memanggilnya trek \"komuniti\".",
       "communityHow": "Seperti lagu sebenar — instrumen yang sama, vokal latar yang sama, tenaga yang sama.",
       "communityGood": "Keluaran terkini, lagu jarang didengar, dan sesiapa sahaja yang mahu ia berbunyi sama seperti rakaman asal.",
-      "commercialTitle": "Trek komersial",
-      "commercialWhat": "Produksi karaoke profesional: kugiran saduran merakam semula trek latar dan sebuah syarikat menambah lirik.",
+      "commercialTitle": "🎸 Audio kugiran 'cover'",
+      "commercialWhat": "Penerbitan karaoke profesional: sebuah kugiran 'cover' merakam semula muzik iringan dan sebuah syarikat memasukkan lirik. Peminat karaoke memanggilnya trek \"komersial\".",
       "commercialHow": "Seperti karaoke klasik — saduran yang setia, tetapi bukan rakaman asal.",
       "commercialGood": "Lagu klasik dan hit terkenal; pemasaan lirik biasanya sangat boleh dipercayai.",
-      "commercialSummary": "Sebagai perbandingan, trek komersial adalah lagu cover yang dirakam semula untuk karaoke — bunyinya seperti karaoke.",
-      "communitySummary": "Sebagai perbandingan, trek komuniti menggunakan audio lagu asal dengan vokal yang dibuang — bunyinya seperti rakaman asal."
+      "commercialSummary": "Sebagai perbandingan, trek kugiran 'cover' dirakam semula untuk karaoke — bunyinya memang gaya karaoke biasa.",
+      "communitySummary": "Sebagai perbandingan, trek audio asal menggunakan rakaman lagu sebenar dengan vokal dipadamkan — bunyinya persis rakaman asal."
     },
     "brands": {
       "CC": "Salah satu penerbit komuniti paling prolifik — trek rakaman asal dengan pembuangan vokal AI dan lirik yang jelas dan mudah dibaca.",

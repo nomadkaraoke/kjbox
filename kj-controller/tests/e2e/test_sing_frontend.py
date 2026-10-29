@@ -860,17 +860,18 @@ class TestVersionRowEnrichment:
         expect(yt).to_have_text("Almost always works — YouTube downloads occasionally fail")
         expect(yt).to_have_class(re.compile("sing-avail-likely"))
 
-    def test_cta_wording_is_request_this_song(self, page, live_server, live_token):
+    def test_cta_wording_is_request(self, page, live_server, live_token):
+        # Compact rows: the CTA sits inline beside ▶, so it's one word.
         self._open_versions(page, live_server, live_token)
-        expect(page.locator(".btn-primary-cta")).to_have_text("Request this song →")
+        expect(page.locator(".btn-primary-cta")).to_have_text("Request")
 
     def test_class_and_format_pills_render(self, page, live_server, live_token):
         self._open_versions(page, live_server, live_token)
         first = page.locator(".sing-version-card").nth(0)
-        expect(first.locator(".sing-pill-community")).to_have_text("Community")
+        expect(first.locator(".sing-pill-community")).to_have_text("🎵 Original")
         expect(first.locator(".sing-pill-format")).to_have_text("MP4")
         second = page.locator(".sing-version-card").nth(1)
-        expect(second.locator(".sing-pill-commercial")).to_have_text("Commercial")
+        expect(second.locator(".sing-pill-commercial")).to_have_text("🎸 Cover band")
         expect(second.locator(".sing-pill-format")).to_have_text("CDG+MP3")
 
     def test_brand_shows_full_display_name(self, page, live_server, live_token):
@@ -881,7 +882,7 @@ class TestVersionRowEnrichment:
     def test_class_pill_opens_explainer_modal(self, page, live_server, live_token):
         self._open_versions(page, live_server, live_token)
         page.locator(".sing-pill-community").first.click()
-        expect(page.locator(".sing-modal-title")).to_have_text("Community track")
+        expect(page.locator(".sing-modal-title")).to_have_text("🎵 Original audio")
         expect(page.locator(".sing-modal-body")).to_contain_text("vocal removed by AI")
         page.locator(".sing-modal-close").click()
         expect(page.locator("#sing-modal-backdrop")).to_have_count(0)

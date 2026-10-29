@@ -84,7 +84,27 @@
     "changingHint": "Vyber si novou píseň níže — tvé místo v řadě ti zůstane.",
     "keepSong": "Nechat mou píseň",
     "requestCta": "Požádat o tuhle píseň →",
+    "requestShort": "Objednat",
+    "chooseShort": "Vybrat",
+    "versionCount": {
+      "one": "{count} verze",
+      "other": "{count} verzí"
+    },
+    "filterLabel": "Filtrovat písně",
+    "filterAll": "Vše",
+    "sortLabel": "Seřadit:",
+    "sortBest": "Nejlepší shoda",
+    "sortAz": "A–Z",
+    "othersShow": {
+      "one": "▸ {count} písnička od jiných interpretů",
+      "other": "▸ {count} písniček od jiných interpretů"
+    },
+    "othersHide": "▾ Skrýt písničky od jiných interpretů",
     "autoBest": "Nejlepší verze vybrána automaticky",
+    "pickByFilter": {
+      "community": "Vybrána verze s původním audiem (tvůj filtr)",
+      "commercial": "Vybrána verze od revival kapely (tvůj filtr)"
+    },
     "versionsToggle": {
       "one": "Vyber si z {count} verze →",
       "other": "Vyber si z {count} verzí →"
@@ -135,7 +155,7 @@
     "sectionLibrary": "V naší knihovně",
     "sectionCloud": "V naší cloudové knihovně",
     "sectionOnline": "Pouze online (nutné stažení)",
-    "sectionCommunity": "Komunitní (odstranění vokálů pomocí AI)",
+    "sectionCommunity": "Původní audio (zpěv odstraněn pomocí AI)",
     "moreOnline": {
       "one": "▸ {count} další online verze (nutné stažení)",
       "other": "▸ {count} dalších online verzí (nutné stažení)"
@@ -149,32 +169,32 @@
     "sourceCloud": "Velmi spolehlivé — z naší cloudové knihovny · {size}",
     "sourceCloudNoSize": "Velmi spolehlivé — z naší cloudové knihovny",
     "sourceYouTube": "Skoro vždy funguje — stahování z YouTube občas selže",
-    "community": "Komunitní",
-    "commercial": "Komerční",
+    "community": "🎵 Původní",
+    "commercial": "🎸 Revival kapela",
     "classTitle": "Co to znamená?",
     "formatTitle": "Technické detaily",
     "brandTitle": "O tomhle producentovi",
     "preview": "▶ Ukázka",
     "pick": "Vybrat tuhle verzi →",
-    "ccTitle": "ℹ️ Komerční vs Komunitní",
+    "ccTitle": "ℹ️ Původní vs. revival kapela",
     "ccCommercial": "profesionální karaoke stopa: cover kapela nahraje podkres, text je na obrazovce, ty zpíváš hlavní vokál. Zní to jako karaoke.",
     "ccCommunity": "originální nahrávka s hlavním vokálem odstraněným pomocí AI. Zní to jako skutečná píseň.",
-    "ccHint": "Většina zpěváků volí komerční pro klasiky a komunitní pro novější nebo vzácné písně.",
+    "ccHint": "Většina zpěváků volí u klasik verze od revival kapel a u novějších či méně známých písniček původní audio.",
     "gotIt": "Rozumím",
     "explainer": {
       "whatItIs": "Co to je",
       "howItSounds": "Jak to zní",
       "goodFor": "Dobré pro",
-      "communityTitle": "Komunitní stopa",
-      "communityWhat": "Originální nahrávka písně s hlavním vokálem odstraněným pomocí AI a karaoke textem přidaným amatérským producentem.",
+      "communityTitle": "🎵 Původní audio",
+      "communityWhat": "Původní nahrávka písně, ze které byl hlavní zpěv odstraněn pomocí AI a text přidal amatérský tvůrce. Karaoke nadšenci těmto verzím říkají „komunitní“.",
       "communityHow": "Jako skutečná píseň — stejné nástroje, stejné doprovodné vokály, stejná energie.",
       "communityGood": "Nedávné novinky, vzácné písně a pro kohokoliv, kdo chce, aby to znělo přesně jako nahrávka.",
-      "commercialTitle": "Komerční stopa",
-      "commercialWhat": "Profesionální karaoke produkce: cover kapela znovu nahraje podkres a společnost přidá text.",
+      "commercialTitle": "🎸 Audio od revival kapely",
+      "commercialWhat": "Profesionální karaoke produkce: revival kapela znovu nahraje hudební podklad a firma přidá text. Karaoke nadšenci těmto verzím říkají „komerční“.",
       "commercialHow": "Jako klasické karaoke — věrný cover, ale ne originální nahrávka.",
       "commercialGood": "Klasiky a známé hity; časování textu je obvykle velmi spolehlivé.",
-      "commercialSummary": "Pro srovnání: komerční skladby jsou cover verze znovu nahrané pro karaoke — zní jako karaoke.",
-      "communitySummary": "Pro srovnání: komunitní skladby používají zvuk původní písně s odstraněným zpěvem — zní jako originální nahrávka."
+      "commercialSummary": "Pro srovnání: skladby od revival kapely jsou znovu nahrané pro karaoke – znějí jako klasické karaoke.",
+      "communitySummary": "Pro srovnání: skladby s původním audiem využívají originální nahrávku s odstraněným zpěvem – znějí přesně jako z desky."
     },
     "brands": {
       "CC": "Jeden z nejplodnějších komunitních producentů — stopy z originálních nahrávek s odstraněním vokálů pomocí AI a čistými, čitelnými texty.",

@@ -84,7 +84,27 @@
     "changingHint": "Scegli la nuova canzone qui sotto — manterrai il tuo posto in fila.",
     "keepSong": "Mantieni la mia canzone",
     "requestCta": "Richiedi questa canzone →",
+    "requestShort": "Richiedi",
+    "chooseShort": "Scegli",
+    "versionCount": {
+      "one": "{count} versione",
+      "other": "{count} versioni"
+    },
+    "filterLabel": "Filtra i brani",
+    "filterAll": "Tutti",
+    "sortLabel": "Ordina per:",
+    "sortBest": "Migliore corrispondenza",
+    "sortAz": "A–Z",
+    "othersShow": {
+      "one": "▸ {count} brano di altri artisti",
+      "other": "▸ {count} brani di altri artisti"
+    },
+    "othersHide": "▾ Nascondi brani di altri artisti",
     "autoBest": "Miglior versione scelta automaticamente",
+    "pickByFilter": {
+      "community": "Versione audio originale selezionata (in base al tuo filtro)",
+      "commercial": "Versione cover band selezionata (in base al tuo filtro)"
+    },
     "versionsToggle": {
       "one": "Scegli da {count} versione →",
       "other": "Scegli tra {count} versioni →"
@@ -135,7 +155,7 @@
     "sectionLibrary": "Nella nostra libreria",
     "sectionCloud": "Nella nostra libreria cloud",
     "sectionOnline": "Solo online (download necessario)",
-    "sectionCommunity": "Community (rimozione vocale IA)",
+    "sectionCommunity": "Audio originale (voce rimossa con IA)",
     "moreOnline": {
       "one": "▸ {count} altra versione online (download necessario)",
       "other": "▸ {count} altre versioni online (download necessario)"
@@ -149,32 +169,32 @@
     "sourceCloud": "Molto affidabile — dalla nostra libreria cloud · {size}",
     "sourceCloudNoSize": "Molto affidabile — dalla nostra libreria cloud",
     "sourceYouTube": "Funziona quasi sempre — i download da YouTube a volte falliscono",
-    "community": "Community",
-    "commercial": "Commerciale",
+    "community": "🎵 Originale",
+    "commercial": "🎸 Cover band",
     "classTitle": "Cosa significa questo?",
     "formatTitle": "Dettagli tecnici",
     "brandTitle": "Informazioni su questo produttore",
     "preview": "▶ Anteprima",
     "pick": "Scegli questa versione →",
-    "ccTitle": "ℹ️ Commerciale vs Community",
+    "ccTitle": "ℹ️ Originale vs Cover band",
     "ccCommercial": "una base karaoke professionale: una cover band registra la base, il testo è sullo schermo, tu canti la voce principale. Suona come un karaoke.",
     "ccCommunity": "la registrazione originale, con la voce principale rimossa dall'IA. Suona come la vera canzone.",
-    "ccHint": "La maggior parte dei cantanti sceglie commerciale per i classici e community per le canzoni recenti o di nicchia.",
+    "ccHint": "La maggior parte dei cantanti sceglie le tracce cover band per i classici e l'audio originale per i brani recenti o di nicchia.",
     "gotIt": "Capito",
     "explainer": {
       "whatItIs": "Cos'è",
       "howItSounds": "Come suona",
       "goodFor": "Ottimo per",
-      "communityTitle": "Base della community",
-      "communityWhat": "La registrazione originale della canzone, con la voce principale rimossa dall'IA e il testo del karaoke aggiunto da un produttore amatoriale.",
+      "communityTitle": "🎵 Audio originale",
+      "communityWhat": "La registrazione originale del brano, con la voce principale rimossa tramite IA e il testo per il karaoke aggiunto da un appassionato. Gli amanti del karaoke le chiamano basi \"community\".",
       "communityHow": "Come la vera canzone — stessi strumenti, stessi cori, stessa energia.",
       "communityGood": "Uscite recenti, canzoni di nicchia e chiunque voglia che suoni esattamente come il disco.",
-      "commercialTitle": "Base commerciale",
-      "commercialWhat": "Una produzione karaoke professionale: una cover band ri-registra la base musicale e un'azienda aggiunge il testo.",
+      "commercialTitle": "🎸 Audio cover band",
+      "commercialWhat": "Una produzione professionale per karaoke: una cover band ri-registra la base musicale e un'azienda aggiunge il testo sincronizzato. Gli appassionati di karaoke le chiamano basi \"commerciali\".",
       "commercialHow": "Come il karaoke classico — una cover fedele, ma non la registrazione originale.",
       "commercialGood": "Classici e successi famosi; il tempismo del testo è di solito molto affidabile.",
-      "commercialSummary": "Per fare un paragone, le tracce commerciali sono cover registrate di nuovo per il karaoke — suonano come un karaoke.",
-      "communitySummary": "Per fare un paragone, le tracce della community usano l'audio della canzone originale senza la voce — suonano come il disco."
+      "commercialSummary": "Per fare un confronto, le tracce cover band sono ri-registrate per il karaoke: hanno il classico suono da karaoke.",
+      "communitySummary": "Per fare un confronto, le tracce con audio originale usano l'incisione vera e propria del brano senza la voce: suonano proprio come il disco."
     },
     "brands": {
       "CC": "Uno dei produttori della community più prolifici — basi da registrazioni originali con rimozione vocale tramite IA e testi chiari e leggibili.",
