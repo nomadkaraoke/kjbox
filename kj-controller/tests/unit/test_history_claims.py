@@ -100,6 +100,41 @@ def test_account_names_email_matched_case_insensitively(store):
     assert got["words"] == {"quill"}
 
 
+def test_account_names_device_moved_to_another_account(store):
+    # dev-1 was A's phone on night 1, then B signed in on it on night 2.
+    a, b = "e2e-a@example.com", "e2e-b@example.com"
+    night1, night2 = "2026-09-03 19:00:00", "2026-09-10 19:00:00"
+    store.link_account("dev-1", a, "claimed", night1)
+    _req(store, "dev-1", "Quill", created_at="2026-09-03 21:00:00")
+    store.link_account("dev-1", b, "claimed", night2)
+    _req(store, "dev-1", "Juniper", created_at="2026-09-10 21:00:00")
+    store.set_alias("dev-1", "Juniper B", origin="kj")
+    conn = store._get_conn()
+    conn.execute("UPDATE singer_accounts SET linked_at=night_started_at")
+    conn.commit()
+
+    got_a = account_names(store, a, None, "app-dev-a")
+    assert got_a["words"] == {"quill"}  # not B's request, not B's alias
+    got_b = account_names(store, b, None, "app-dev-b")
+    assert got_b["words"] == {"juniper"}
+    assert set(got_b["names"]) == {"Juniper", "Juniper B"}
+
+
+def test_account_names_web_device_counts_only_linked_nights(store):
+    store.link_account("dev-w", EMAIL, "claimed", "2026-09-03 19:00:00")
+    _req(store, "dev-w", "Quill", created_at="2026-09-03 21:00:00")
+    _req(store, "dev-w", "Moss", created_at="2026-09-17 21:00:00")  # not linked that night
+    _req(store, "dev-w", "Earlier", created_at="2026-08-27 21:00:00")
+    assert account_names(store, EMAIL, None, "app-dev")["words"] == {"quill"}
+
+
+def test_account_names_app_device_needs_no_link(store):
+    # The app device is the HMAC of the verified email: every request is theirs.
+    _req(store, "app-dev", "Quill", created_at="2026-05-01 21:00:00")
+    store.set_alias("app-dev", "Sparrow")
+    assert account_names(store, EMAIL, None, "app-dev")["words"] == {"quill", "sparrow"}
+
+
 def test_account_names_no_email_fallback(store):
     got = account_names(store, "wren.bloggs@example.com", None, "app-device-1")
     assert got == {"words": set(), "names": []}

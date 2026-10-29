@@ -8,13 +8,17 @@ provides helpers for the short-lived event token that gates that form.
 import datetime
 import hashlib
 import json
+import logging
 import re
 import secrets
 import sqlite3
 import threading
 import time
 
+from history_ids import ENTRY_IDS_UNIQUE_SINCE
 from singer_names import fold_name
+
+logger = logging.getLogger(__name__)
 
 # Meta keys stored in rotation_meta (same table RotationStore uses)
 TOKEN_KEY = "request_token"
@@ -2216,7 +2220,61 @@ class SingStore:
         box (history claims, R35)."""
         return self._request_names(device_ids, since=None, songs_only=True)
 
-    def _request_names(self, device_ids, since=None, songs_only=False):
+    # A linked night's requests are those from its marker up to the next known
+    # marker, and never more than this long after it.
+    _NIGHT_WINDOW = datetime.timedelta(hours=24)
+
+    def _known_night_markers(self, conn):
+        markers = {r[0] for r in conn.execute(
+            "SELECT DISTINCT night_started_at FROM singer_accounts "
+            "UNION SELECT DISTINCT night_started_at FROM history_outbox "
+            "WHERE night_started_at NOT LIKE 'claim:%'") if r[0]}
+        current = self.get_night_started_at()
+        if current:
+            markers.add(current)
+        return sorted(markers)
+
+    def linked_request_names(self, gen_email):
+        """``request_names_any_night`` for the devices ``singer_accounts``
+        linked to ``gen_email``, counting each device's requests only on the
+        nights it was linked to this email (R49): a phone that later became
+        someone else's never lends their names."""
+        email = self._norm_email(gen_email)
+        if not email:
+            return []
+        conn = self._get_conn()
+        links = conn.execute(
+            "SELECT device_id, night_started_at FROM singer_accounts "
+            "WHERE lower(gen_email)=? ORDER BY night_started_at, device_id",
+            (email,)).fetchall()
+        if not links:
+            return []
+        markers = self._known_night_markers(conn)
+        names, seen = [], set()
+        for link in links:
+            start = link["night_started_at"]
+            t = self._parse_marker(start)
+            if t is None:
+                continue
+            end = (t + self._NIGHT_WINDOW).strftime("%Y-%m-%d %H:%M:%S")
+            later = [m for m in markers if m > start]
+            if later and later[0] < end:
+                end = later[0]
+            for n in self._request_names([link["device_id"]], since=start,
+                                         songs_only=True, until=end):
+                if n not in seen:
+                    seen.add(n)
+                    names.append(n)
+        return names
+
+    @staticmethod
+    def _parse_marker(marker):
+        try:
+            return datetime.datetime.strptime((marker or "")[:19], "%Y-%m-%d %H:%M:%S")
+        except ValueError:
+            return None
+
+    def _request_names(self, device_ids, since=None, songs_only=False, until=None):
         device_ids = [d for d in (device_ids or []) if d]
         if not device_ids:
             return []
@@ -2230,6 +2288,9 @@ class SingStore:
         if since is not None:
             sql += " AND r.created_at >= ?"
             params.append(since)
+        if until is not None:
+            sql += " AND r.created_at < ?"
+            params.append(until)
         if songs_only:
             sql += " AND r.source_type NOT IN ('reorder', 'tip')"
         rows = self._get_conn().execute(sql, params).fetchall()
@@ -2407,6 +2468,9 @@ class SingStore:
             (email_hash.lower(),))}
 
     def add_rejections(self, email_hash, night, entry_ids):
+        """Record "not mine" for ``entry_ids`` on ``night`` (INSERT OR IGNORE).
+        Entry ids must be numeric (ints or digit strings); ``int()`` raises
+        on anything else, so validate client input before calling."""
         ids = [int(e) for e in (entry_ids or []) if e is not None]
         if not email_hash or not night or not ids:
             return
@@ -2428,6 +2492,7 @@ class SingStore:
                 "SELECT json_extract(payload_json, '$.entry_id') AS eid, "
                 "       json_extract(payload_json, '$.gen_email') AS email "
                 "FROM history_outbox WHERE op='put' AND state IN ('pending','sent') "
+                "AND night_started_at NOT LIKE 'claim:%' "
                 f"AND CAST(json_extract(payload_json, '$.entry_id') AS TEXT) IN ({marks})",
                 ids):
             if not r["email"]:
@@ -2437,27 +2502,35 @@ class SingStore:
 
     def outbox_holders(self, entry_ids):
         """``{entry_id: {gen_email}}`` from live-night outbox puts (pending or
-        sent). Entry ids are monotonic since 2026-06-04 and the outbox began
-        2026-10-22, so the entry id alone identifies the entry."""
+        sent). Claim rows (night ``claim:...``) are left out: ``history_claims``
+        already counts them. Entry ids are monotonic since 2026-06-04 and the
+        outbox began 2026-10-22, so the entry id alone identifies the entry on
+        nights from 2026-06-04 on (``try_claim`` ignores these for older ones)."""
         return self._outbox_holders(self._get_conn(), entry_ids)
 
     def try_claim(self, night, entry_id, email, history_id, member, capacity):
         """Claim ``(night, entry_id)`` for ``email`` in one ``BEGIN IMMEDIATE``
         transaction: ``"already_mine"`` when this email already holds it (a
         claim or a live outbox record), ``"taken"`` when ``max(1, capacity)``
-        accounts hold it, else ``"claimed"``."""
+        accounts hold it, else ``"claimed"``. Live outbox records count as
+        holders only from ``ENTRY_IDS_UNIQUE_SINCE`` on (older nights recycled
+        entry ids, so today's entry 12 says nothing about theirs)."""
         email = self._norm_email(email)
         entry_id = int(entry_id)
         capacity = max(1, int(capacity or 0))
         conn = self._get_conn()
         if conn.in_transaction:
-            conn.commit()
+            # Someone left a write open on this connection: never commit it
+            # under a claim's name.
+            logger.warning("try_claim: rolling back a stray open transaction")
+            conn.rollback()
         conn.execute("BEGIN IMMEDIATE")
         try:
             holders = {self._norm_email(r[0]) for r in conn.execute(
                 "SELECT gen_email FROM history_claims WHERE night=? AND entry_id=?",
                 (night, entry_id))}
-            holders |= self._outbox_holders(conn, [entry_id]).get(entry_id, set())
+            if night >= ENTRY_IDS_UNIQUE_SINCE:
+                holders |= self._outbox_holders(conn, [entry_id]).get(entry_id, set())
             if email in holders:
                 result = "already_mine"
             elif len(holders) >= capacity:
@@ -2495,6 +2568,30 @@ class SingStore:
     # ------------------------------------------------------------------
 
     @staticmethod
+    def _latest_device_owners(conn):
+        """``{device_id: (timestamp, email)}``: each device's MOST RECENT link
+        across ``singer_accounts`` (linked_at) and ``sing_gen_accounts``
+        (verified_at). A device belongs to that email only."""
+        latest = {}
+        for r in conn.execute("SELECT device_id, gen_email AS email, linked_at AS ts "
+                              "FROM singer_accounts "
+                              "UNION ALL SELECT device_id, email, verified_at "
+                              "FROM sing_gen_accounts"):
+            cand = (r["ts"] or "", r["email"])
+            if r["device_id"] not in latest or cand[0] >= latest[r["device_id"]][0]:
+                latest[r["device_id"]] = cand
+        return latest
+
+    def latest_owner_emails(self, device_ids):
+        """``{device_id: email}`` (lowercased) for the devices' current owners."""
+        want = {d for d in (device_ids or []) if d}
+        if not want:
+            return {}
+        return {d: self._norm_email(e)
+                for d, (_, e) in self._latest_device_owners(self._get_conn()).items()
+                if d in want}
+
+    @staticmethod
     def email_hash(email):
         """sha256 hex of the lowercased email: the id gen uses for a deletion."""
         return hashlib.sha256((email or "").lower().encode("utf-8")).hexdigest()
@@ -2505,8 +2602,8 @@ class SingStore:
 
         Removes the device links (``singer_accounts``, ``sing_gen_accounts``),
         those devices' push subscriptions, aliases and request phone numbers,
-        the app's friend-request markers, pending/failed ``history_outbox``
-        rows for the email (unsent past-night claims included), the account's
+        the app's friend-request markers, every ``history_outbox`` row for the
+        email (pending, failed and sent; past-night claims included), the account's
         ``history_claims`` and ``history_rejections``, and the photo/song media
         consent rows keyed on the names those devices sang under. ``photo_consent_events`` is an
         append-only log, so its rows stay with the link (``request_id``) and
@@ -2530,27 +2627,17 @@ class SingStore:
         # A device is A's only if A is its MOST RECENT link across both tables;
         # device-wide data (push, alias, phones, requests) is erased only then.
         # A's own link rows are erased wherever they sit.
-        latest = {}  # device_id -> (timestamp, email)
-        a_rows = []  # singer_accounts keys that are A's
-        for r in conn.execute("SELECT device_id, gen_email, night_started_at, linked_at "
-                              "FROM singer_accounts"):
-            cand = (r["linked_at"] or "", r["gen_email"])
-            if r["device_id"] not in latest or cand[0] >= latest[r["device_id"]][0]:
-                latest[r["device_id"]] = cand
-            if matches(r["gen_email"]):
-                a_rows.append((r["device_id"], r["night_started_at"]))
-        gen_dev = []
-        for r in conn.execute("SELECT device_id, email, verified_at FROM sing_gen_accounts"):
-            cand = (r["verified_at"] or "", r["email"])
-            if r["device_id"] not in latest or cand[0] >= latest[r["device_id"]][0]:
-                latest[r["device_id"]] = cand
-            if matches(r["email"]):
-                gen_dev.append(r["device_id"])
+        latest = self._latest_device_owners(conn)  # device_id -> (timestamp, email)
+        a_rows = [(r["device_id"], r["night_started_at"]) for r in conn.execute(
+            "SELECT device_id, gen_email, night_started_at FROM singer_accounts")
+            if matches(r["gen_email"])]  # singer_accounts keys that are A's
+        gen_dev = [r["device_id"] for r in conn.execute(
+            "SELECT device_id, email FROM sing_gen_accounts") if matches(r["email"])]
         devices = {d for d, (_, e) in latest.items() if matches(e)}
         outbox_ids = []
-        for r in conn.execute(
-                "SELECT history_id, payload_json FROM history_outbox "
-                "WHERE state IN ('pending','failed')"):
+        # Every state, sent included (R50): decide removes its own copy on
+        # deletion, and outbox_holders must never return a deleted email.
+        for r in conn.execute("SELECT history_id, payload_json FROM history_outbox"):
             try:
                 email = (json.loads(r["payload_json"]) or {}).get("gen_email")
             except (TypeError, ValueError):

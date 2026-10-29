@@ -15,6 +15,10 @@ def history_id_for(box_id, entry_id, email):
 
 DEFAULT_BOX_ID = "nomadpc"
 
+# Rotation entry ids were recycled across nights before this Night Log night
+# (kjbox #100): an entry id alone only names one entry on nights from here on.
+ENTRY_IDS_UNIQUE_SINCE = "2026-06-04"
+
 
 def night_id_for_marker(box_id, night_started_at):
     """``sha256(f"{box_id}:{night_started_at}").hexdigest()[:16]``: the night's

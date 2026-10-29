@@ -442,3 +442,29 @@ def test_build_cached_invalidates_on_new_archive_row(dbs, monkeypatch):
     _log(store, stats).get_night("2026-10-20")
     _log(store, stats).list_nights(min_songs=0)
     assert len(calls) == 7
+
+
+def test_build_cached_returns_copies(dbs):
+    import night_log
+    store, _, stats = dbs
+    night_log.clear_build_cache()
+    _exact_archive(store, 8101, "Wren", "Hello - Adele", "2026-10-20 21:00:00",
+                   "2026-10-20 21:05:00")
+    first = _log(store, stats).build_cached()
+    first[0]["singer"] = "changed by a caller"
+    first.append({"entry_id": "junk"})
+    again = _log(store, stats).build_cached()
+    assert [e["singer"] for e in again] == ["Wren"]
+
+
+def test_build_cached_keeps_in_memory_stores_apart():
+    import night_log
+    night_log.clear_build_cache()
+    a, b = RotationStore(":memory:"), RotationStore(":memory:")
+    # Same state key on both (one archive row each, same rev, no media DB).
+    _exact_archive(a, 9001, "Wren", "Hello - Adele", "2026-10-20 21:00:00",
+                   "2026-10-20 21:05:00")
+    _exact_archive(b, 9002, "Juno", "Uprising - Muse", "2026-10-20 21:00:00",
+                   "2026-10-20 21:05:00")
+    assert [e["entry_id"] for e in NightLog(a).build_cached()] == [9001]
+    assert [e["entry_id"] for e in NightLog(b).build_cached()] == [9002]

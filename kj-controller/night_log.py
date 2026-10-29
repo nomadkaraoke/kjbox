@@ -20,6 +20,11 @@ that created that entry. Requests that still don't link are matched by time
 Nights roll at noon, matching action_recorder / night captures: a show that
 runs past midnight is one night. Each entry is placed by when it was sung,
 falling back to when it was added.
+
+**Not app-safe.** An entry is the KJ's view: it carries request ids, the
+singer's request name, notes, file paths and media details. The app's
+history-claim routes (Phase 4c E4/E6) must build their responses from an
+explicit allowlist of fields (R37), never by passing an entry through.
 """
 
 import bisect
@@ -356,19 +361,25 @@ class NightLog:
     def build_cached(self, ttl_s=300):
         """``_build()`` memoized for ``ttl_s`` seconds and while ``_state_key``
         is unchanged (R43), for the history-claim routes. The KJ modal
-        (``list_nights`` / ``get_night``) keeps building uncached. The entries
-        are shared between callers: treat them as read-only."""
-        store_key = getattr(self.rotation_store, "db_path", None) or id(self.rotation_store)
+        (``list_nights`` / ``get_night``) keeps building uncached.
+
+        The key sees new archive rows, rotation revisions and new live plays.
+        Anything else ``_build`` reads (``sing_requests`` links and approvals,
+        ``media_library`` rows) shows up only once the TTL expires. Each call
+        returns a new list of shallow entry copies; nested dicts (``added_by``,
+        ``media``, ``song_identity``, lists) are shared, so don't mutate them."""
+        db_path = getattr(self.rotation_store, "db_path", None)
+        store_key = db_path if db_path and db_path != ":memory:" else id(self.rotation_store)
         state = self._state_key()
         now = time.monotonic()
         with _BUILD_CACHE_LOCK:
             hit = _BUILD_CACHE.get(store_key)
             if hit and now - hit[0] < ttl_s and hit[1] == state:
-                return hit[2]
+                return [dict(e) for e in hit[2]]
         entries = self._build()
         with _BUILD_CACHE_LOCK:
             _BUILD_CACHE[store_key] = (now, state, entries)
-        return entries
+        return [dict(e) for e in entries]
 
     @staticmethod
     def _song_identity(r, play, req):
@@ -395,6 +406,8 @@ class NightLog:
 
     @staticmethod
     def _to_entry(r):
+        """One Night Log entry: the KJ's view, NOT app-safe (see the module
+        docstring). App responses must copy allowlisted fields only."""
         play = r.get("_play") or {}
         req = r.get("_req")
         lib = r.get("_lib")

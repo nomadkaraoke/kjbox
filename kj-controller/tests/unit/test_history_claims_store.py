@@ -2,6 +2,7 @@
 entry and per singer slot, rejections are kept by email hash only, and an
 account deletion erases both. Fixture emails/names are invented."""
 
+import logging
 import threading
 from types import SimpleNamespace
 
@@ -108,6 +109,42 @@ def test_try_claim_concurrent_threads_one_winner(db_path):
     check.close()
 
 
+def test_outbox_holders_ignores_claim_rows(store):
+    # A claimed song goes out through the outbox too (E5), under a "claim:" night;
+    # history_claims already counts it, so the outbox must not count it again.
+    store.outbox_enqueue("kj_claim", "put", {"gen_email": JUNO, "entry_id": "12"},
+                         "claim:2026-10-20")
+    store.outbox_enqueue("kj_live", "put", {"gen_email": QUILL, "entry_id": "12"}, MARKER)
+    assert store.outbox_holders([12]) == {12: {QUILL}}
+
+
+def test_try_claim_old_nights_skip_outbox_holders(store):
+    # Before 2026-06-04 entry ids were recycled: a live record of today's entry 12
+    # says nothing about entry 12 on an old night.
+    store.outbox_enqueue("kj_live", "put", {"gen_email": JUNO, "entry_id": "12"}, MARKER)
+    store.outbox_enqueue("kj_claim", "put", {"gen_email": QUILL, "entry_id": "12"},
+                         "claim:2026-05-01")
+    assert store.try_claim("2026-05-01", 12, WREN, "kj_a", "Wren", 1) == "claimed"
+    assert store.try_claim("2026-05-08", 12, WREN, "kj_b", "Wren", 1) == "claimed"
+    assert store.try_claim("2026-05-08", 12, JUNO, "kj_c", "Juno", 1) == "taken"
+    # From 2026-06-04 on the live record holds the entry.
+    assert store.try_claim("2026-06-04", 12, WREN, "kj_d", "Wren", 1) == "taken"
+    assert store.claims_for_nights(["2026-05-01", "2026-05-08", "2026-06-04"]) == {
+        ("2026-05-01", 12): [WREN], ("2026-05-08", 12): [WREN]}
+
+
+def test_try_claim_rolls_back_a_stray_open_transaction(store, caplog):
+    conn = store._get_conn()
+    conn.execute("INSERT INTO history_rejections (email_hash, night, entry_id) "
+                 "VALUES ('stray', ?, 1)", (NIGHT,))
+    assert conn.in_transaction
+    with caplog.at_level(logging.WARNING):
+        assert store.try_claim(NIGHT, 12, WREN, "kj_a", "Wren", 1) == "claimed"
+    assert _count(store, "history_rejections") == 0  # rolled back, not committed
+    assert _count(store, "history_claims") == 1
+    assert any("open transaction" in r.getMessage() for r in caplog.records)
+
+
 # --- rejections ------------------------------------------------------------------
 
 def test_rejections_by_hash_only(store):
@@ -145,12 +182,16 @@ def test_forget_gen_account_erases_claims_rejections_and_unsent_claim_rows(store
     # Claimed songs go out as ordinary outbox puts; Wren's are still unsent.
     store.outbox_enqueue("kj_w7", "put", {"gen_email": WREN, "entry_id": "7"}, NIGHT)
     store.outbox_enqueue("kj_j7", "put", {"gen_email": JUNO, "entry_id": "7"}, NIGHT)
+    # A live record already delivered to decide (R50: deleted too).
+    store.outbox_enqueue("kj_w20", "put", {"gen_email": WREN, "entry_id": "20"}, MARKER)
+    store.outbox_mark_sent("kj_w20")
 
     counts = store.forget_gen_account(SingStore.email_hash(WREN))
 
     assert counts["history_claims"] == 2
     assert counts["history_rejections"] == 1
-    assert counts["history_outbox"] == 1
+    assert counts["history_outbox"] == 2
+    assert store.outbox_holders([7, 20]) == {7: {JUNO}}
     assert store.claims_for_nights([NIGHT]) == {(NIGHT, 7): [JUNO]}
     assert store.rejections_for(SingStore.email_hash(WREN)) == set()
     assert store.rejections_for(SingStore.email_hash(JUNO)) == {(NIGHT, 9)}

@@ -44,19 +44,29 @@ def account_names(store, email, display_name, app_device):
     ``email`` goes by on this box and their matchable first words.
 
     Sources (R35), in order: the gen ``display_name``; the singer names on the
-    non-friend, non-meta requests of the account's devices across all nights;
-    those devices' aliases. The devices are ``app_device`` plus every device
+    non-friend, non-meta requests of the account's devices; those devices'
+    aliases. The devices are ``app_device`` plus every device
     ``singer_accounts`` ever linked to the email (app and claimed web devices).
+
+    Ownership (R49): ``app_device`` is the HMAC of the verified email, so all
+    of its requests and its alias count. Any other device's requests count only
+    on the nights it was linked to this email, and its alias only while this
+    email is its latest owner (the rule ``forget_gen_account`` uses), so a
+    phone that became someone else's never lends their names.
     """
-    devices = [d for d in [app_device] if d]
-    for d in store.devices_for_email_any_night(email):
-        if d not in devices:
-            devices.append(d)
+    me = (email or "").strip().lower()
+    others = [d for d in store.devices_for_email_any_night(email) if d and d != app_device]
+    owners = store.latest_owner_emails(others)
 
     candidates = [display_name]
-    candidates.extend(store.request_names_any_night(devices))
-    for d in devices:
-        candidates.append(store.get_alias(d))
+    if app_device:
+        candidates.extend(store.request_names_any_night([app_device]))
+    candidates.extend(store.linked_request_names(email))
+    if app_device:
+        candidates.append(store.get_alias(app_device))
+    for d in others:
+        if owners.get(d) == me:
+            candidates.append(store.get_alias(d))
 
     names, seen, words = [], set(), set()
     for raw in candidates:
