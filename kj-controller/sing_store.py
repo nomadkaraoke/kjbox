@@ -2520,6 +2520,29 @@ class SingStore:
         nights from 2026-06-04 on (``try_claim`` ignores these for older ones)."""
         return self._outbox_holders(self._get_conn(), entry_ids)
 
+    def outbox_has_put(self, history_id):
+        """True when ``history_id``'s outbox row is a put that isn't failed."""
+        row = self._get_conn().execute(
+            "SELECT 1 FROM history_outbox WHERE history_id=? AND op='put' "
+            "AND state IN ('pending','sent')", (history_id,)).fetchone()
+        return row is not None
+
+    def claim_holders(self, entry_ids):
+        """``{entry_id: {gen_email}}`` from ``history_claims`` on nights from
+        ``ENTRY_IDS_UNIQUE_SINCE`` on (where an entry id names one entry): the
+        live outbox's view of who already claimed tonight's entries (R47)."""
+        ids = sorted({int(e) for e in (entry_ids or []) if e is not None})
+        if not ids:
+            return {}
+        marks = ",".join("?" * len(ids))
+        out = {}
+        for r in self._get_conn().execute(
+                "SELECT entry_id, gen_email FROM history_claims "
+                f"WHERE night >= ? AND entry_id IN ({marks})",
+                (ENTRY_IDS_UNIQUE_SINCE, *ids)):
+            out.setdefault(r["entry_id"], set()).add(self._norm_email(r["gen_email"]))
+        return out
+
     def try_claim(self, night, entry_id, email, history_id, member, capacity):
         """Claim ``(night, entry_id)`` for ``email`` in one ``BEGIN IMMEDIATE``
         transaction: ``"already_mine"`` when this email already holds it (a

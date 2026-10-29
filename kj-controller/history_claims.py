@@ -23,9 +23,10 @@ import logging
 from history_ids import (
     DEFAULT_BOX_ID,
     ENTRY_IDS_UNIQUE_SINCE,
+    history_id_for,
     night_id_for_marker,
 )
-from history_outbox import _iso_z, _local_to_utc
+from history_outbox import _MAX_SINGER_LEN, _MAX_SINGERS, _brand_code, _iso_z, _local_to_utc
 from singer_names import fold_name
 
 logger = logging.getLogger(__name__)
@@ -285,3 +286,122 @@ def suggestions(night_log, store, cfg, names, email, now=None, only_night_id=Non
             "songs": [_song_view(c["entry"]) for c in open_songs],
         })
     return {"nights": out[:MAX_NIGHTS], "more_nights": max(0, len(out) - MAX_NIGHTS)}
+
+
+# --- claims (E5) ------------------------------------------------------------------
+
+class ClaimError(Exception):
+    """A claim that writes nothing: ``code`` is ``not_found`` (no such night
+    for this account) or ``invalid`` (an id that isn't one of its songs)."""
+
+    def __init__(self, code):
+        super().__init__(code)
+        self.code = code
+
+
+def claim_history_id(box_id, night, entry_id, email):
+    """R30: the live outbox's id from 2026-06-04 on (so a claim and a later
+    live record are one decide record); before that, entry ids were recycled,
+    so the id is namespaced by the night."""
+    if night >= ENTRY_IDS_UNIQUE_SINCE:
+        return history_id_for(box_id, entry_id, email)
+    return history_id_for(box_id, f"{night}:{entry_id}", email)
+
+
+def claim_payload(entry, night, night_id, email, hid, venue, box_id=DEFAULT_BOX_ID):
+    """The outbox's spec 5.5 record for a claimed Night Log entry, so decide
+    sees an ordinary ``kj_`` record. ``sung_at`` is the play start (never the
+    Done time, #284); no play gives ``sung_unplayed`` with ``sung_at`` null."""
+    ident = entry.get("song_identity") or {}
+    sung_at = _utc_z(entry.get("started_at"))
+    ended_at = _utc_z(entry.get("done_at"))
+    if sung_at and ended_at and ended_at < sung_at:
+        ended_at = sung_at  # DST fall-back hour, as the outbox clamps
+    media_in = entry.get("media") or {}
+    media = {"source_type": str((entry.get("added_by") or {}).get("source_type")
+                                or "rotation")}
+    brand = _brand_code(media_in.get("file_path"))
+    if brand:
+        media["brand_code"] = brand
+    if media_in.get("gen_job_id"):
+        media["gen_job_id"] = str(media_in["gen_job_id"])
+    members = entry.get("members") or [entry.get("singer") or ""]
+    return {
+        "history_id": hid,
+        "gen_email": email,
+        "source": "kjbox",
+        "box_id": str(box_id),
+        "night_id": night_id,
+        "night_date": night,
+        "entry_id": str(entry["entry_id"]),
+        "artist": ident.get("artist") or "",
+        "title": ident.get("title") or "",
+        "sung_at": sung_at,
+        "ended_at": ended_at,
+        "state": "sung" if sung_at else "sung_unplayed",
+        "singers": [str(m)[:_MAX_SINGER_LEN] for m in members][:_MAX_SINGERS],
+        "venue": {"kind": "nomad", "name": venue},
+        "media": media,
+    }
+
+
+def _entry_ids(values):
+    out = []
+    for v in values or []:
+        if isinstance(v, bool) or not isinstance(v, int):
+            raise ClaimError("invalid")
+        if v not in out:
+            out.append(v)
+    return out
+
+
+def claim(night_log, store, outbox, cfg, names, email, night_id, mine, not_mine, now=None):
+    """Save the ticked songs of one night as this account's (``mine``) and
+    remember the unticked ones (``not_mine``, R33). Every id must be a song of
+    that night that matches the account (or one it already holds), else
+    ``ClaimError("invalid")`` and nothing is written; an unknown night is
+    ``ClaimError("not_found")``. Returns ``{saved, already_saved, taken,
+    rejected}``. Claims are first-come per singer slot (``try_claim``) and go
+    to decide through the outbox under the night ``claim:<date>``, which
+    tonight's scan never compares or retracts."""
+    me = (email or "").strip().lower()
+    mine, not_mine = _entry_ids(mine), _entry_ids(not_mine)
+    if not me or (not mine and not not_mine) or set(mine) & set(not_mine):
+        raise ClaimError("invalid")
+    nights = night_candidates(night_log, store, names, me)
+    box_id = box_id_of(cfg)
+    markers = store_night_markers(store) if nights else {}
+    night = next((n for n in nights if claim_night_id(store, box_id, n, markers) == night_id),
+                 None)
+    if night is None:
+        raise ClaimError("not_found")
+    songs = {c["entry"]["entry_id"]: c for c in nights[night]["songs"]}
+    if any(eid not in songs for eid in mine + not_mine):
+        raise ClaimError("invalid")
+
+    venue = _venue_name(cfg, store) if mine else None
+    saved, already, taken = 0, 0, []
+    queued = False
+    for eid in mine:
+        c = songs[eid]
+        entry = c["entry"]
+        hid = claim_history_id(box_id, night, eid, me)
+        result = store.try_claim(night, eid, me, hid, c["matched"][0], capacity_of(entry))
+        if result == "taken":
+            taken.append(eid)
+            continue
+        if result == "already_mine":
+            already += 1
+            if store.outbox_has_put(hid):
+                continue  # queued or delivered already: idempotent
+        else:
+            saved += 1
+        payload = claim_payload(entry, night, night_id, me, hid, venue, box_id)
+        store.outbox_enqueue(hid, "put", payload, night_started_at="claim:" + night, now=now)
+        queued = True
+    if not_mine:
+        store.add_rejections(store.email_hash(me), night, not_mine)
+    if queued and outbox is not None:
+        outbox.notify_rotation_changed()
+    return {"saved": saved, "already_saved": already, "taken": taken,
+            "rejected": len(not_mine)}

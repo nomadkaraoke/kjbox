@@ -17,6 +17,11 @@ decide's partner API, so a record survives restarts and is never counted twice:
 - **When.** ``sung_at`` is the first live play start (A.96); ``ended_at`` is
   ``done_at``. Done without a play is ``sung_unplayed`` with ``sung_at`` null
   (A.97).
+- **Claims.** An entry someone claimed from the app (``history_claims``,
+  Phase 4c) keeps its claimers; live attribution only fills the singer slots
+  left, so a claimed solo entry is never re-attributed to another account
+  (R47). Claim rows themselves sit under the night ``claim:<date>``, so this
+  scan never compares or retracts them.
 - **Undo.** An entry that is no longer Done gets a delete for the same id. Only
   tonight's rows and entries are compared (A.15), so a New Rotation never
   retracts last night's songs.
@@ -101,6 +106,9 @@ class _NightContext:
                 continue
             self.requests.setdefault(r["linked_entry_id"], []).append(r)
         self.friend_ids = sing_store.friend_request_ids([r["id"] for r in rows])
+        # Accounts that claimed tonight's entries from the app after requests
+        # closed (R34): they hold the singer slots first (R47).
+        self.claims = sing_store.claim_holders([e["id"] for e in done_entries])
         self.identity = {email: self._identity(devs) for email, devs in accounts.items()}
         self._claimed = {}
 
@@ -210,6 +218,19 @@ class HistoryOutbox:
             matched = folds & ctx.identity.get(email, set())
             if matched and not any(ctx.claimed(f, email) for f in matched):
                 emails.append(email)
+        held = ctx.claims.get(entry["id"]) if getattr(ctx, "claims", None) else None
+        if held:
+            # R47: an entry claimed from the app keeps its claimers; other
+            # accounts only fill the singer slots left (a solo entry: none).
+            room = max(1, len(members)) - len(held)
+            kept = []
+            for email in emails:
+                if email.strip().lower() in held:
+                    kept.append(email)
+                elif room > 0:
+                    kept.append(email)
+                    room -= 1
+            emails = kept
         song_req = next((r for r in reversed(reqs) if r["id"] not in ctx.friend_ids),
                         reqs[-1] if reqs else None)
         return emails, members, song_req
