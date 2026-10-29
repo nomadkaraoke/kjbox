@@ -1989,6 +1989,242 @@ body:has(#sing-tabs:not([hidden])) .mk-submit-bar {
 .mk-submit { width: 100%; max-width: var(--nk-shell-w); min-height: 48px; font-size: 1.02rem; }
 .mk-submit-bar .btn.mk-submit[disabled] { opacity: 1; background: var(--nk-card-2); color: var(--nk-text-dim); border-color: var(--nk-border); }
 
+/* Make-it row: short status + ⓘ → progress details (tracker + full text). */
+.song-card-action-info { font-size: 1.05rem; }
+.song-card-action-info.is-open { color: var(--nk-accent); }
+.make-details { margin-top: 0.5rem; padding: 0.6rem 0.7rem; border-radius: var(--nk-radius-sm); background: var(--nk-card-2); border: 1px solid var(--nk-border); }
+.make-details .sent-tracker { margin-top: 0.1rem; }
+.make-details-text { font-size: 0.88rem; color: var(--nk-text-dim); margin-top: 0.4rem; }
+.sent-tracker { list-style: none; display: flex; gap: 0.25rem; padding: 0; margin: 0.75rem 0 0.25rem; }
+.sent-step { flex: 1; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 0.3rem; font-size: 0.78rem; color: var(--nk-text-dim); position: relative; }
+.sent-step:not(:last-child)::after { content: ""; position: absolute; top: 0.4rem; left: calc(50% + 0.6rem); right: calc(-50% + 0.6rem); border-top: 2px solid var(--nk-border); }
+.sent-dot { width: 0.8rem; height: 0.8rem; border-radius: 50%; border: 2px solid var(--nk-border); background: var(--nk-bg); }
+.sent-step.done { color: var(--nk-good); }
+.sent-step.done .sent-dot { background: var(--nk-good); border-color: var(--nk-good); }
+.sent-step.done::after { border-color: var(--nk-good); }
+.sent-step.active { color: var(--nk-text); font-weight: 600; }
+.sent-step.active .sent-dot { border-color: var(--nk-accent); box-shadow: 0 0 0 3px rgba(255, 77, 207, 0.25); }
+
+/* One-line "Sent" note right after sending; closes itself (sing.js sentBanner). */
+.sent-note { display: flex; align-items: center; gap: 0.5rem; padding: 0.55rem 0.75rem; margin-bottom: var(--nk-gap);
+  border: 1px solid rgba(50, 213, 138, 0.45); background: rgba(50, 213, 138, 0.08); border-radius: var(--nk-radius-sm);
+  font-size: 0.92rem; animation: sent-note-in 0.2s ease-out; }
+.sent-note-text { flex: 1; }
+.sent-note-close { background: none; border: 0; color: var(--nk-text-dim); font-size: 1.2rem; line-height: 1; padding: 0.15rem 0.35rem; cursor: pointer; }
+@keyframes sent-note-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+.sing-other-options {
+  background: none; border: none; color: var(--nk-accent); padding: 0; cursor: pointer; font: inherit;
+  text-decoration: underline;
+}
+/* Audio results — mirrors gen's Choose Audio step (PickCard / ResultRow). */
+.mk-pick { border: 1px solid rgba(50, 213, 138, 0.4); background: rgba(50, 213, 138, 0.05); border-radius: var(--nk-radius-sm); overflow: hidden; }
+.mk-pick-recommended { border-color: rgba(244, 168, 58, 0.4); background: rgba(244, 168, 58, 0.05); }
+.mk-pick-head { display: flex; align-items: center; flex-wrap: wrap; gap: 0.4rem; padding: 0.5rem 0.75rem; background: rgba(50, 213, 138, 0.1); }
+.mk-pick-recommended .mk-pick-head { background: rgba(244, 168, 58, 0.1); }
+.mk-pick-label { font-weight: 700; font-size: 0.95rem; color: var(--nk-good); }
+.mk-pick-recommended .mk-pick-label { color: var(--nk-warn); }
+.mk-pick-body { display: flex; flex-direction: column; gap: 0.35rem; padding: 0.65rem 0.75rem 0.75rem; }
+.mk-reason { margin: 0; color: var(--nk-text-dim); font-size: 0.82rem; }
+.mk-kv { display: flex; align-items: baseline; gap: 0.4rem; min-width: 0; }
+.mk-kv-label { flex-shrink: 0; color: var(--nk-text-dim); font-size: 0.78rem; }
+.mk-kv-value { font-weight: 600; overflow-wrap: anywhere; min-width: 0; }
+.mk-mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; word-break: break-all; }
+.mk-pick .mk-kv-value { font-size: 1rem; }
+.mk-tags, .mk-row-line1 { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem; }
+.mk-quality, .mk-meta { color: var(--nk-text-dim); font-size: 0.8rem; }
+.mk-tag { font-size: 0.68rem; font-weight: 600; padding: 0.1rem 0.35rem; border-radius: 4px; background: var(--nk-card-2); color: var(--nk-text-dim); white-space: nowrap; }
+.mk-tag-lossless, .mk-avail-high, .mk-tag-match { background: rgba(50, 213, 138, 0.18); color: var(--nk-good); }
+.mk-avail-medium, .mk-tag-warn { background: rgba(234, 179, 8, 0.18); color: #facc15; cursor: help; }
+.mk-avail-low, .mk-tag-yt { background: rgba(255, 0, 0, 0.15); color: #ff6b6b; }
+.mk-tag-sp { background: rgba(30, 215, 96, 0.15); color: #1ed760; }
+.mk-result-warn { color: #facc15; background: rgba(234, 179, 8, 0.1); border-radius: 6px; padding: 0.35rem 0.5rem; font-size: 0.8rem; }
+.mk-use-full { width: 100%; margin-top: 0.3rem; }
+.mk-use-full[disabled], .mk-select[disabled] { opacity: 0.5; cursor: wait; }
+.mk-others { display: flex; flex-direction: column; gap: 0.6rem; }
+.mk-others-help { margin: 0; font-size: 0.8rem; }
+.mk-cat { border: 1px solid var(--nk-border); border-radius: var(--nk-radius-sm); overflow: hidden; }
+.mk-cat-head { display: flex; align-items: center; gap: 0.4rem; padding: 0.4rem 0.75rem; background: var(--nk-card-2); }
+.mk-cat-title { font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; }
+.mk-cat-count { color: var(--nk-text-dim); font-size: 0.78rem; }
+.mk-cat-more { margin-left: auto; font-size: 0.78rem; }
+.mk-cat-best { color: #fbbf24; }
+.mk-cat-hires { color: #c084fc; }
+.mk-cat-studio { color: #60a5fa; }
+.mk-cat-singles { color: #22d3ee; }
+.mk-cat-live { color: #f472b6; }
+.mk-cat-comp { color: #2dd4bf; }
+.mk-cat-vinyl { color: #fb923c; }
+.mk-cat-spotify { color: #4ade80; }
+.mk-cat-youtube { color: #f87171; }
+.mk-cat-other { color: var(--nk-text-dim); }
+.mk-row { display: flex; align-items: center; gap: 0.6rem; padding: 0.55rem 0.75rem; border-top: 1px solid var(--nk-border); }
+.mk-row-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.15rem; }
+.mk-row-name { font-weight: 600; overflow-wrap: anywhere; }
+.mk-row .mk-kv { display: block; }
+.mk-row .mk-kv-value { font-weight: 400; font-size: 0.82rem; color: var(--nk-text-dim); }
+.mk-select { flex-shrink: 0; }
+.mk-fallback { display: flex; flex-direction: column; gap: 0.45rem; border-top: 1px dashed var(--nk-border); padding-top: var(--nk-gap); }
+.mk-fallback-first { border-top: none; padding-top: 0; }
+.mk-none h4 { margin-bottom: 0.3rem; }
+
+/* My songs: "Tap here" → the singer's own lyrics review on gen. */
+.song-card-review-link { color: var(--nk-accent); font-weight: 600; text-decoration: underline; }
+
+/* --- Search in progress: bouncing, colour-cycling notes ----------------------- */
+.sing-searching {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  padding: 0.9rem 0 0.6rem;
+  color: var(--nk-text);
+  font-weight: 600;
+}
+.sing-searching-notes { display: inline-flex; gap: 0.2rem; font-size: 1.35rem; line-height: 1; }
+.sing-note { display: inline-block; animation: sing-note-bounce 1s ease-in-out infinite, sing-note-hue 2.4s linear infinite; }
+.sing-note-0 { color: #ff4dcf; animation-delay: 0s, 0s; }
+.sing-note-1 { color: #ffb347; animation-delay: 0.15s, -0.6s; }
+.sing-note-2 { color: #32d58a; animation-delay: 0.3s, -1.2s; }
+.sing-note-3 { color: #5ab4ff; animation-delay: 0.45s, -1.8s; }
+.sing-searching-label {
+  background: linear-gradient(90deg, #ff4dcf, #ffb347, #32d58a, #5ab4ff, #ff4dcf);
+  background-size: 300% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: sing-label-shimmer 2.4s linear infinite;
+}
+@keyframes sing-note-bounce {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  30% { transform: translateY(-0.45rem) rotate(-10deg); }
+  60% { transform: translateY(0.1rem) rotate(6deg); }
+}
+@keyframes sing-note-hue { to { filter: hue-rotate(360deg); } }
+@keyframes sing-label-shimmer { to { background-position: 300% 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .sing-note, .sing-searching-label { animation: none; }
+  .sing-searching-label { color: var(--nk-text); background: none; }
+}
+
+/* --- Search auto-correct notice (gen's "Corrected to … — you typed …") ------ */
+.sing-correction {
+  margin: 0.5rem 0;
+  padding: 0.55rem 0.75rem;
+  border: 1px solid var(--nk-border);
+  border-radius: var(--nk-radius-sm);
+  background: var(--nk-card-2);
+  color: var(--nk-text-dim);
+  font-size: 0.88rem;
+}
+.sing-correction::before { content: "✓ "; color: var(--nk-good); }
+.sing-didyoumean::before { content: none; }
+.sing-correction-toggle { color: var(--nk-accent); text-decoration: underline; padding: 0; background: none; border: 0; font: inherit; cursor: pointer; }
+.sing-didyoumean { display: flex; flex-direction: column; gap: 0.4rem; }
+.sing-correction-title { font-weight: 700; color: var(--nk-text); }
+.sing-suggestion { text-align: left; }
+
+/* --- Song identification card (question 1: "which song do you mean?") -------
+   Deliberately a different shape from the karaoke result rows (question 2). */
+.sing-songcard {
+  margin: 0.6rem 0 0.9rem;
+  padding: 0.7rem 0.85rem;
+  border: 1px solid var(--nk-accent);
+  border-radius: var(--nk-radius-sm);
+  background: var(--nk-card-2);
+}
+.sing-songcard-label { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--nk-text-dim); }
+.sing-songcard-song { margin: 0.2rem 0 0.35rem; font-size: 1.05rem; }
+.sing-songcard-title { font-weight: 700; color: var(--nk-text); }
+.sing-songcard-artist { color: var(--nk-text-dim); }
+.sing-songcard-actions { font-size: 0.85rem; color: var(--nk-text-dim); }
+.sing-results-heading { margin: 0.4rem 0 0.3rem; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--nk-text-dim); }
+.sing-describe-link { display: block; margin: 0.35rem 0 0.6rem; color: var(--nk-accent); text-decoration: underline; background: none; border: 0; padding: 0; font: inherit; cursor: pointer; }
+.sing-describe { display: flex; gap: 0.5rem; margin: 0.35rem 0 0.8rem; }
+.sing-describe .sing-empty-input { flex: 1; }
+
+/* --- Song identified, no karaoke version: make-it up top ------------------- */
+.sing-songcard-missing { display: flex; flex-direction: column; gap: 0.35rem; }
+.sing-songcard-missing .sing-songcard-song { margin: 0; }
+.sing-missing-status { font-weight: 700; color: var(--nk-text); }
+.sing-missing-desc { margin: 0; font-size: 0.88rem; color: var(--nk-text-dim); }
+.sing-missing-make { width: 100%; margin-top: 0.2rem; }
+.sing-missing-ask { margin: 0; }
+.sing-similar-more { margin-top: 0.4rem; }
+
+/* Sticky "Not seeing your song? Make it" — only when identification isn't
+   confident; sits above the tab bar (when shown) and the iOS home indicator. */
+.results.has-make-bar { padding-bottom: 4.5rem; }
+.sing-make-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 35;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.55rem 1rem calc(0.55rem + env(safe-area-inset-bottom, 0px));
+  background: rgba(20, 20, 20, 0.97);
+  backdrop-filter: blur(8px);
+  border-top: 1px solid var(--nk-border);
+}
+body:has(#sing-tabs:not([hidden])) .sing-make-bar {
+  bottom: calc(3.6rem + env(safe-area-inset-bottom, 0px));
+  padding-bottom: 0.55rem;
+}
+.sing-make-bar-text { color: var(--nk-text); font-weight: 600; font-size: 0.92rem; }
+.sing-make-bar-btn { flex: none; padding: 0.5rem 1.1rem; }
+
+/* "Save tonight's songs to your Nomad Karaoke account" (spec 5.6) */
+.save-songs-slot[hidden] { display: none; }
+.save-songs-slot { margin: 0.75rem 0; }
+.save-songs-slot .btn.link {
+  background: none; border: none; color: var(--nk-accent); padding: 0; cursor: pointer; font: inherit;
+  text-decoration: underline; text-align: left;
+}
+.save-songs-slot .btn.link[disabled] { opacity: 0.5; cursor: default; }
+.save-songs-explainer, .save-songs-status { margin: 0.35rem 0 0; }
+.save-songs-form { display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.5rem; }
+.save-songs-actions { display: flex; gap: 1rem; flex-wrap: wrap; }
+.save-songs-offer { border-top: 1px solid var(--nk-border); padding-top: 0.75rem; }
+
+/* One-screen make-it (v0.142.0): song / where to send it / audio sections, one
+   pinned send button (checkout pattern), one-tap Google / Apple sign-in. */
+.mk-one { padding-bottom: 5.5rem; }
+.mk-section { display: flex; flex-direction: column; gap: 0.5rem; padding-top: 0.75rem; border-top: 1px solid var(--nk-border); }
+.mk-section-label { font-size: 0.75rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--nk-text-dim); }
+.mk-change-song, .mk-change-audio { align-self: flex-start; padding: 0; }
+.mk-socials { display: flex; flex-direction: column; gap: 0.5rem; }
+.mk-google { min-height: 44px; display: flex; justify-content: center; }
+.mk-google[hidden] { display: none; }
+.mk-social { width: 100%; min-height: 44px; border-radius: 999px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 0.4rem; }
+.mk-social-apple { background: #fff; color: #000; border: 1px solid #fff; }
+.mk-social-google { background: #131314; color: #e3e3e3; border: 1px solid #8e918f; }
+.mk-apple-logo { width: 1.05rem; height: 1.05rem; flex: none; }
+.mk-google-logo { width: 1.1rem; height: 1.1rem; flex: none; }
+.mk-or { display: flex; align-items: center; gap: 0.6rem; color: var(--nk-text-dim); font-size: 0.85rem; }
+.mk-or::before, .mk-or::after { content: ""; flex: 1; border-top: 1px solid var(--nk-border); }
+.mk-email-form { display: flex; gap: 0.5rem; }
+.mk-email-form .sing-empty-input { flex: 1; min-width: 0; margin: 0; }
+.mk-email-form .btn { flex: none; }
+.mk-signed-in { margin: 0; color: var(--nk-text); }
+.mk-row-chosen { border-color: var(--nk-good); }
+.mk-extras:empty { display: none; }
+.mk-submit-bar {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 35;
+  padding: 0.6rem 1rem calc(0.6rem + env(safe-area-inset-bottom, 0px));
+  background: rgba(20, 20, 20, 0.97); backdrop-filter: blur(8px);
+  border-top: 1px solid var(--nk-border);
+  display: flex; justify-content: center;
+}
+body:has(#sing-tabs:not([hidden])) .mk-submit-bar {
+  bottom: calc(3.6rem + env(safe-area-inset-bottom, 0px));
+  padding-bottom: 0.6rem;
+}
+.mk-submit { width: 100%; max-width: var(--nk-shell-w); min-height: 48px; font-size: 1.02rem; }
+.mk-submit-bar .btn.mk-submit[disabled] { opacity: 1; background: var(--nk-card-2); color: var(--nk-text-dim); border-color: var(--nk-border); }
+
 /* "You're on the list!" right after sending (order-placed pattern). */
 .sent-banner { border: 1px solid rgba(50, 213, 138, 0.45); background: rgba(50, 213, 138, 0.08); border-radius: var(--nk-radius-sm); padding: 0.9rem 1rem; margin-bottom: var(--nk-gap); }
 .sent-title { font-size: 1.25rem; font-weight: 800; }

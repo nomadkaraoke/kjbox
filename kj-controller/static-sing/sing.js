@@ -3318,28 +3318,35 @@ async function submitSelection() {
   // "You're on the list!" at the top of the done screen, so nobody wonders
   // whether it went through (live 2026-10-22: repeat taps, re-searches).
   state.justSent = {
-    song: `${data.request.song_title || ""} — ${data.request.song_artist || ""}`,
+    song: data.request.song_title || "",
     make: data.request.source_type === "make",
-    email: data.request.source_type === "make" ? (state.make && state.make.email) || "" : "",
   };
   state.step = "done";
   state._navReplace = true;   // Back shouldn't land on the stale confirm
   render();
 }
 
+// One line right after sending, so nobody wonders whether it went through
+// (live 2026-10-22: repeat taps, re-searches). It closes itself after a few
+// seconds or with ×: the song's own row below carries its status from then on.
+const SENT_NOTE_MS = 8000;
 function sentBanner() {
   const j = state.justSent;
   if (!j) return null;
-  const step = (cls, label) => el("li", { class: `sent-step ${cls}` }, el("span", { class: "sent-dot" }), label);
-  return el("div", { class: "sent-banner", "data-testid": "sent-banner", role: "status" },
-    el("div", { class: "sent-title" }, t("mySongs.sentTitle")),
-    el("div", { class: "sent-song" }, j.song),
-    j.make
-      ? el("ol", { class: "sent-tracker", "data-testid": "sent-tracker" },
-          step("done", t("mySongs.stepSent")), step("active", t("mySongs.stepMaking")),
-          step("", t("mySongs.stepReady")))
-      : el("p", { class: "hint" }, t("mySongs.sentHint")),
-    j.email ? el("p", { class: "hint", "data-testid": "sent-email" }, t("mySongs.sentEmail", { email: j.email })) : null);
+  const close = () => {
+    state.justSent = null;
+    const node = root.querySelector('[data-testid="sent-banner"]');
+    if (node) node.remove();
+  };
+  // Once per send: the done screen re-renders on every live refresh.
+  if (!j.closeTimer) {
+    j.closeTimer = setTimeout(close, typeof window.__SING_SENT_NOTE_MS === "number"
+      ? window.__SING_SENT_NOTE_MS : SENT_NOTE_MS);
+  }
+  return el("div", { class: "sent-note", "data-testid": "sent-banner", role: "status" },
+    el("span", { class: "sent-note-text" },
+      t(j.make ? "mySongs.sentNoteMake" : "mySongs.sentNote", { song: j.song })),
+    el("button", { class: "sent-note-close", "aria-label": t("common.close"), onclick: close }, "×"));
 }
 
 function submitErrorText(e) {
@@ -3650,14 +3657,48 @@ async function useQuickVersion(reqId, editToken, song, btn) {
   render();
 }
 
+// A make-it's row keeps one short line; the ⓘ button opens the progress
+// details (tracker + the full phase text, incl. the review link). Open rows
+// stay open across the live refreshes. Andrew (2026-10-29): don't let the
+// in-progress video occupy prominent space for ~30 min regardless of preference.
+const _makeOpen = new Set();
+
+function _makeShortStatus(item) {
+  const req = item.request;
+  switch (item.make) {
+    case "making":
+      return req.status === "pending" ? t("mySongs.makeShortWaitingHost", { host: _hostName() })
+        : t("mySongs.makeShortMaking");
+    case "needs_host": return t("mySongs.makeShortWaitingHost", { host: _hostName() });
+    case "review": case "review_host": return t("mySongs.makeShortReview");
+    case "review_self": return t("mySongs.makeShortReviewSelf");
+    case "rendering": return t("mySongs.makeShortRendering");
+    default: return null;
+  }
+}
+
+function _makeDetails(item, ctx) {
+  const rendering = item.make === "rendering";
+  const step = (cls, label) => el("li", { class: `sent-step ${cls}` }, el("span", { class: "sent-dot" }), label);
+  return el("div", { class: "make-details", "data-testid": "make-details" },
+    el("ol", { class: "sent-tracker", "data-testid": "make-tracker" },
+      step("done", t("mySongs.stepSent")),
+      step(rendering ? "done" : "active", t("mySongs.stepMaking")),
+      step(rendering ? "active" : "", t("mySongs.stepReady"))),
+    el("div", { class: "make-details-text" }, _statusNode(item, ctx.hasNowSinging)));
+}
+
 function _renderSongCard(item, ctx = {}) {
   const req = item.request;
   const song = _songLabel(req);
   const partners = req.additional_singers || [];
+  const makeShort = !item.performed && req.status !== "rejected" && req.status !== "cancelled"
+    && !item.removed ? _makeShortStatus(item) : null;
   const main = el("div", { class: "song-card-main" },
     el("div", { class: "song-card-title" }, song),
-    el("div", { class: "song-card-status" }, _statusNode(item, ctx.hasNowSinging)),
+    el("div", { class: "song-card-status" }, makeShort || _statusNode(item, ctx.hasNowSinging)),
   );
+  if (makeShort && _makeOpen.has(req.id)) main.appendChild(_makeDetails(item, ctx));
   if (req.status === "pending" && req.supersedes_request_id) {
     const old = _supersededLabel(req);
     if (old) {
@@ -3686,6 +3727,20 @@ function _renderSongCard(item, ctx = {}) {
     "data-status": req.status,
   }, main);
   const actions = el("div", { class: "song-card-actions" });
+  if (makeShort) {
+    const open = _makeOpen.has(req.id);
+    actions.appendChild(el("button", {
+      class: "song-card-action song-card-action-info" + (open ? " is-open" : ""),
+      "data-testid": "make-details-toggle", "aria-expanded": open ? "true" : "false",
+      title: t("mySongs.makeDetails"), "aria-label": t("mySongs.makeDetails"),
+      onclick: (e) => {
+        e.stopPropagation();
+        if (_makeOpen.has(req.id)) _makeOpen.delete(req.id); else _makeOpen.add(req.id);
+        const fresh = _renderSongCard(item, ctx);
+        card.replaceWith(fresh);
+      },
+    }, "ⓘ"));
+  }
   // ▶ Preview — any of the singer's own songs that's already on the box.
   if (item.previewable && req.linked_entry_id) {
     actions.appendChild(el("button", {

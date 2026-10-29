@@ -103,11 +103,10 @@ class TestMakeWizard:
         body = json.loads(req.value.post_data)
         assert body["song_artist"] == "Radiohead" and body["song_title"] == "Creep"
         assert body["source_meta"] == {**body["source_meta"], "search_session_id": "ss-1", "selection_index": 0}
-        banner = page.locator('[data-testid="sent-banner"]')
-        expect(banner).to_contain_text("You're on the list!")
-        expect(banner).to_contain_text("Creep — Radiohead")
-        expect(page.locator('[data-testid="sent-tracker"]')).to_contain_text("Being made")
-        expect(page.locator('[data-testid="sent-email"]')).to_contain_text("mary@example.com")
+        # One line, never "on the list" (a make-it joins the rotation when ready).
+        note = page.locator('[data-testid="sent-banner"]')
+        expect(note).to_contain_text("Sent! We're making Creep for you")
+        expect(note).not_to_contain_text("on the list")
 
     def test_signed_in_device_skips_straight_to_audio(self, page, live_server, live_token):
         calls = _open_wizard(page, live_server, live_token, email="mary@example.com")
@@ -227,16 +226,33 @@ class TestMySongsMakePhases:
         page.evaluate("window.__sing_state.step = 'done'; window.__sing_render();")
         return page.locator(".song-card-status").first
 
-    def test_wording_per_phase(self, page, live_server, live_token):
+    def test_row_is_one_short_line_until_opened(self, page, live_server, live_token):
         status = self._open(page, live_server, live_token, "making")
-        expect(status).to_have_text("✨ Being made for you — held off the rotation until it's ready.")
-        page.unroute("**/sing/my-requests*")
+        expect(status).to_have_text("✨ Being made (about 30 min)")
+        expect(page.locator('[data-testid="make-details"]')).to_have_count(0)
+        toggle = page.locator('[data-testid="make-details-toggle"]')
+        toggle.click()
+        details = page.locator('[data-testid="make-details"]')
+        expect(details).to_contain_text("held off the rotation until it's ready")
+        expect(page.locator('[data-testid="make-tracker"] .sent-step.active')).to_have_text("Being made")
+        assert toggle.get_attribute("aria-expanded") == "true"
+        page.locator('[data-testid="make-details-toggle"]').click()
+        expect(details).to_have_count(0)
+
+    def test_wording_per_phase(self, page, live_server, live_token):
         status = self._open(page, live_server, live_token, "rendering")
-        expect(status).to_contain_text("lyrics review completed, rendering")
-        expect(status).to_contain_text("~10 minutes")
+        expect(status).to_have_text("✨ Almost ready (about 10 min)")
+        page.locator('[data-testid="make-details-toggle"]').click()
+        details = page.locator('[data-testid="make-details"]')
+        expect(details).to_contain_text("lyrics review completed, rendering")
+        expect(details).to_contain_text("~10 minutes")
+        expect(page.locator('[data-testid="make-tracker"] .sent-step.active')).to_have_text("Ready to sing")
 
     def test_review_link_opens_signed_in_review(self, page, live_server, live_token):
         status = self._open(page, live_server, live_token, "review")
+        expect(status).to_have_text("✨ Being made · lyrics check needed")
+        page.locator('[data-testid="make-details-toggle"]').click()
+        status = page.locator('[data-testid="make-details"]')
         expect(status).to_contain_text("needs lyrics sync review")
         expect(status).to_contain_text("or the host will as soon as possible")
         target = f"{live_server}/sing/sw.js?review=ok"
@@ -253,12 +269,16 @@ class TestMySongsMakePhases:
         assert sent["edit_token"] == "tok31" and sent["device_id"]
 
     def test_host_already_reviewing(self, page, live_server, live_token):
-        status = self._open(page, live_server, live_token, "review_host")
+        self._open(page, live_server, live_token, "review_host")
+        page.locator('[data-testid="make-details-toggle"]').click()
+        status = page.locator('[data-testid="make-details"]')
         expect(status).to_contain_text("the host has already started the lyrics sync review")
         expect(status.locator('[data-testid="make-review-link"]')).to_have_text("Tap here")
 
     def test_review_over_is_explained(self, page, live_server, live_token):
-        status = self._open(page, live_server, live_token, "review_self")
+        self._open(page, live_server, live_token, "review_self")
+        page.locator('[data-testid="make-details-toggle"]').click()
+        status = page.locator('[data-testid="make-details"]')
         page.route("**/sing/make/review-link/31*", lambda r: _json(r, {"error": "not_in_review"}, 409))
         msgs = []
         page.on("dialog", lambda d: (msgs.append(d.message), d.dismiss()))
@@ -529,3 +549,26 @@ class TestOneScreen:
         expect(page.locator('[data-testid="make-submit-error"]')).to_be_visible()
         expect(page.locator('[data-testid="make-step"]')).to_be_visible()
         expect(page.locator('[data-testid="make-submit"]')).to_be_enabled()
+
+
+class TestSentNote:
+    def _send(self, page, live_server, live_token):
+        _open_wizard(page, live_server, live_token, email="m@x.co")
+        page.route("**/sing/submit*", lambda r: _json(r, {"auto_approved": True, "request": {
+            "id": 78, "edit_token": "et", "song_artist": "Radiohead", "song_title": "Creep",
+            "source_type": "make", "status": "approved", "singer_name": "Alice", "linked_entry_id": 6}}))
+        page.locator('[data-testid="make-submit"]').click()
+        return page.locator('[data-testid="sent-banner"]')
+
+    def test_closes_itself(self, page, live_server, live_token):
+        page.add_init_script("window.__SING_SENT_NOTE_MS = 400;")
+        note = self._send(page, live_server, live_token)
+        expect(note).to_be_visible()
+        page.evaluate("window.__sing_render()")      # a live refresh must not restart the clock
+        expect(note).to_have_count(0, timeout=5000)
+        assert page.evaluate("window.__sing_state.justSent") is None
+
+    def test_x_closes_it(self, page, live_server, live_token):
+        note = self._send(page, live_server, live_token)
+        note.locator(".sent-note-close").click()
+        expect(note).to_have_count(0)
