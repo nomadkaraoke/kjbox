@@ -2,6 +2,27 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-10-29 - Singer flow: one tap to request, quieter My songs (v0.145.0)
+
+Andrew tried the singer flow himself and found three screens repeating themselves:
+
+- **Search rows:** an open row no longer draws a second "Best" version card that repeated Original,
+  brand and ▶ Preview. The row's facts line adds the format (`🎵 Original · CC Karaoke · CDG+MP3`).
+  Only a YouTube-only version adds a reliability line ("Almost always works — YouTube downloads
+  occasionally fail"); "definitely available" is the default and goes unsaid. "Choose from N versions →"
+  still opens the full list with the Best badge, pills and per-version Pick.
+- **No "Is this the right song?" step:** Request sends straight away and lands on My songs. The
+  Sent note carries the two things that screen was for: **Undo** (cancels the request) and
+  **+ Add singer** (the 👥 Singers editor). The note stays 15 s (was 8 s). Change-song swaps and
+  YouTube links send the same way. A failed send stays on search with the reason. The one-time
+  photo/video question is asked on My songs (its section stays open until answered). The partner
+  editor lives on the make screen and in 👥 Singers. An old `#confirm` link opens search.
+- **My songs:** "Save tonight's songs to an account" moved from under the name to one quiet line at
+  the bottom of the card, with the explanation behind ⓘ.
+- Removed the duplicated ~210-line block in `sing.css` and 22 singer strings only the confirm screen
+  used; 4 new strings were translated by hand into all 32 locales (Gemini key unavailable; the next
+  `translate.py` run may polish them).
+
 ## 2026-10-29 - App: claim your songs from past Nomad nights (v0.144.0)
 
 - Signed-in singers can now see and claim the songs they sang at past Nomad nights from the app's

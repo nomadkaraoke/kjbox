@@ -117,7 +117,7 @@ class TestSearchDecisionLayer:
         page.evaluate("window.__sing_state.step = 'search'; window.__sing_render();")
         page.locator('input[type="search"]').fill("query text")
 
-    def test_multi_version_card_shows_best_version_with_preview(self, page, live_server, live_token):
+    def test_open_row_folds_best_version_into_facts(self, page, live_server, live_token):
         self._search(page, live_server, live_token, [{
             "key": "g:two", "artist": "The Strokes", "title": "The Adults Are Talking",
             "version_count": 2, "in_library": True,
@@ -129,15 +129,17 @@ class TestSearchDecisionLayer:
             ],
         }])
         row = page.locator(".result-row").first
-        best = row.locator(".sing-version-compact")
-        expect(best).to_have_count(1)
-        expect(best.locator(".sing-version-best")).to_have_text("Best")
-        expect(best.locator(".sing-pill-community")).to_have_text("🎵 Original")
-        expect(best.locator('[data-testid="version-preview"]')).to_be_visible()
-        # Opening the full list replaces the summary row (no duplicate "Best").
+        # The best version folds into the song row: no separate version card
+        # repeating Original / brand / Preview (Andrew, 2026-10-29).
+        expect(row.locator(".sing-version-card")).to_have_count(0)
+        expect(row.locator('[data-testid="song-audio-type"]')).to_have_text("🎵 Original")
+        expect(row.locator('[data-testid="song-format"]')).to_have_text("YouTube")
+        expect(row.locator('[data-testid="song-risk"]')).to_contain_text("YouTube downloads occasionally fail")
+        expect(row.locator('[data-testid="song-preview"]')).to_be_visible()
+        # The full list still has the per-version detail, Best badge included.
         row.locator(".sing-versions-toggle").click()
-        expect(row.locator(".sing-version-compact")).to_have_count(0)
         expect(row.locator(".sing-version-expander")).to_be_visible()
+        expect(row.locator(".sing-version-best")).to_have_count(1)
 
     def test_searching_shows_animated_notes(self, page, live_server, live_token):
         page.add_init_script("window.__SING_ARM_MS = 0;")
@@ -202,7 +204,7 @@ class TestSearchDecisionLayer:
         expect(missing).to_be_visible()
         assert page.evaluate(prefill) == ["Rihanna", "Push Up On Me (Remix)"]
 
-    def test_single_version_song_gets_preview_pills_and_brand(self, page, live_server, live_token):
+    def test_single_version_song_is_one_row(self, page, live_server, live_token):
         self._search(page, live_server, live_token, [{
             "key": "g:one", "artist": "Glow", "title": "Dancing Queen",
             "version_count": 1, "in_library": False,
@@ -213,16 +215,15 @@ class TestSearchDecisionLayer:
         }])
         row = page.locator(".result-row").first
         expect(row.locator(".btn-primary-cta")).to_have_text("Request")
-        compact = row.locator(".sing-version-compact")
-        expect(compact).to_be_visible()
-        expect(compact.locator(".sing-pill-community")).to_have_text("🎵 Original")
-        expect(compact.locator(".sing-pill-format")).to_have_text("YouTube")
-        expect(compact.locator('[data-testid="version-preview"]')).to_be_visible()
-        expect(compact.locator(".sing-version-pick")).to_have_count(0)
+        expect(row.locator('[data-testid="song-audio-type"]')).to_have_text("🎵 Original")
+        expect(row.locator('[data-testid="song-format"]')).to_have_text("YouTube")
+        expect(row.locator('[data-testid="song-risk"]')).to_be_visible()
+        expect(row.locator('[data-testid="song-preview"]')).to_be_visible()
+        expect(row.locator(".sing-version-card")).to_have_count(0)
         # No versions toggle for a single version.
         expect(row.locator(".sing-versions-toggle")).to_have_count(0)
 
-    def test_multi_version_song_says_best_version_auto_picked(self, page, live_server, live_token):
+    def test_multi_version_song_offers_the_versions_list(self, page, live_server, live_token):
         self._search(page, live_server, live_token, [{
             "key": "g:two", "artist": "ABBA", "title": "Dancing Queen",
             "version_count": 2, "in_library": True,
@@ -238,7 +239,9 @@ class TestSearchDecisionLayer:
         }])
         row = page.locator(".result-row").first
         expect(row.locator(".btn-primary-cta")).to_have_text("Request")
-        expect(row.locator(".sing-auto-hint")).to_have_text("Best version picked automatically")
+        expect(row.locator('[data-testid="song-format"]')).to_have_text("MP4")
+        # On the box: definitely available, so no reliability line at all.
+        expect(row.locator('[data-testid="song-risk"]')).to_have_count(0)
         expect(row.locator(".sing-versions-toggle")).to_have_text("Choose from 2 versions →")
 
     def test_unknown_brand_shows_library_file_not_disc_id_as_brand(self, page, live_server, live_token):
@@ -250,7 +253,9 @@ class TestSearchDecisionLayer:
                                     "format": "zip", "filename": "EEK-01507.zip",
                                     "artist": "X", "title": "Y"}}],
         }])
-        expect(page.locator(".sing-version-brand").first).to_have_text("Library file EEK-01507")
+        row = page.locator(".result-row").first
+        expect(row.locator('[data-testid="song-format"]')).to_have_text("CDG+MP3")
+        expect(row.locator(".sing-song-brand")).to_have_count(0)   # a disc id is not a brand
 
     def test_empty_state_numbering_follows_visible_cards(self, page, live_server, live_token):
         self._search(page, live_server, live_token, [], make_enabled=False)
@@ -313,7 +318,7 @@ class TestSearchDecisionLayer:
 
 
 class TestChangeSongMode:
-    def test_banner_confirm_copy_and_keep_song_exit(self, page, live_server, live_token):
+    def test_banner_and_request_swaps_directly(self, page, live_server, live_token):
         page.add_init_script("window.__SING_ARM_MS = 0;")
         _login(page, live_server, live_token)
         body = {"songs": [{
@@ -335,15 +340,31 @@ class TestChangeSongMode:
         """)
         banner = page.locator('[data-testid="change-banner"]')
         expect(banner).to_contain_text("Swapping out: Dancing Queen — Glow")
+        # Request swaps straight away (no confirm step): the change endpoint,
+        # never a new request.
+        changes = []
+        page.route("**/sing/requests/42/change*", lambda r: (
+            changes.append(json.loads(r.request.post_data)),
+            r.fulfill(status=200, content_type="application/json", body=json.dumps({
+                "success": True, "request": {"id": 43, "edit_token": "tok43", "status": "pending",
+                    "song_artist": "Oasis", "song_title": "Wonderwall"}}))))
         page.locator('input[type="search"]').fill("wonderwall")
         page.locator(".btn-primary-cta").first.click()
-        expect(page.locator("h2")).to_have_text("Swap to this song?")
-        expect(page.locator('[data-testid="confirm-change-hint"]')).to_contain_text("replaces Dancing Queen — Glow")
-        expect(page.locator(".submit-btn")).to_have_text("Yes — swap my song")
-        # Partners are not offered on a swap (they belong to the original request).
-        expect(page.locator('[data-testid="add-singer"]')).to_have_count(0)
-        page.go_back()
-        expect(banner).to_be_visible()
+        expect(page.locator("h2")).to_have_text("Your songs tonight")
+        assert changes[0]["edit_token"] == "tok"
+        assert changes[0]["song_title"] == "Wonderwall"
+        assert "additional_singers" not in changes[0]
+        assert page.evaluate("window.__sing_state.changeRequestId") is None
+
+    def test_keep_song_exits_change_mode(self, page, live_server, live_token):
+        _login(page, live_server, live_token)
+        page.evaluate("""
+            window.__sing_state.changeRequestId = 42;
+            window.__sing_state.changeEditToken = 'tok';
+            window.__sing_state.changeSongLabel = 'Dancing Queen — Glow';
+            window.__sing_state.step = 'search';
+            window.__sing_render();
+        """)
         page.locator('[data-testid="change-keep"]').click()
         expect(page.locator("h2")).to_have_text("Your songs tonight")
         assert page.evaluate("window.__sing_state.changeRequestId") is None

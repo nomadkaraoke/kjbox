@@ -100,11 +100,6 @@
       "other": "▸ 다른 아티스트의 곡 {count}개"
     },
     "othersHide": "▾ 다른 아티스트의 곡 숨기기",
-    "autoBest": "가장 좋은 버전이 자동으로 선택됨",
-    "pickByFilter": {
-      "community": "원곡 오디오 버전 선택됨 (설정한 필터)",
-      "commercial": "커버 밴드 버전 선택됨 (설정한 필터)"
-    },
     "versionsToggle": {
       "one": "{count}개 버전 중에서 선택 →",
       "other": "{count}개 버전 중에서 선택 →"
@@ -391,19 +386,6 @@
     "socialFailed": "로그인하지 못했습니다. 다시 시도하거나 이메일을 사용해 주세요."
   },
   "confirm": {
-    "title": "이 노래가 맞나요?",
-    "changeTitle": "이 노래로 변경할까요?",
-    "changeHint": "이 노래가 {song}을(를) 대체합니다. 대기 순서는 그대로 유지됩니다.",
-    "sourceLocal": "호스트 기기에 저장됨 — 확실히 이용 가능함",
-    "sourceCloud": "클라우드 라이브러리 제공 — 매우 안정적임",
-    "sourceOnline": "YouTube 제공 — 거의 항상 작동함",
-    "sourceYouTube": "YouTube 링크 제공 — 거의 항상 작동함",
-    "sourceMake": "저희 시스템이 이 노래의 가라오케 영상을 만들어 드릴게요. 부를 준비가 될 때까지 대기 명단 맨 아래에 순서가 유지되며, 보통 30분 정도 걸립니다.",
-    "sourceMakeQuick": "⚡ 스크롤 가사가 나오는 퀵 버전은 보통 몇 분 안에 준비돼요 — 준비되면 알려드릴 테니, 계속 기다리지 않고 바로 부르실 수도 있어요.",
-    "sourceAuto": "가장 좋은 버전을 선택해 드립니다",
-    "searched": "검색어: \"{query}\"",
-    "details": "내 정보: {name}",
-    "detailsWithPhone": "내 정보: {name} · {phone}",
     "partnersTitle": "다른 사람과 함께 부르시나요? (선택 사항)",
     "partnerName": "이름 (예: Sarah B.)",
     "partnerPhone": "전화번호 (선택 사항)",
@@ -421,16 +403,11 @@
     "partnerOnList": "오늘 밤 목록에 있음",
     "maxSingers": "최대 인원입니다. 총 {count}명.",
     "partnerPhoneInvalid": "가수 {n}: 전화번호가 올바르지 않은 것 같습니다.",
-    "back": "← 다른 노래 선택",
-    "send": "네 — 전송할게요",
-    "sendChange": "네 — 노래를 변경할게요",
     "tooMany": "신청을 너무 많이 하셨습니다. 몇 분 후에 다시 시도해 주세요.",
     "restricted": "현재 노래 신청이 제한되어 있습니다. 업데이트된 옵션을 보려면 이 페이지를 새로고침해 주세요.",
     "failed": "전송할 수 없습니다. 신청이 일시 중지되었는지 호스트에게 문의하세요.",
     "makeLimit": "오늘 밤 이미 여러 곡의 제작을 요청하셨어요. 목록에서 고르시거나 호스트에게 문의해 주세요.",
-    "makeDisabled": "현재 호스트가 노래 제작 요청을 받고 있지 않아요. 대신 목록에서 노래를 골라주세요.",
-    "makeEmail": "완성된 영상 파일과 YouTube 링크를 이메일({email})로도 보내드릴게요.",
-    "detailsFriend": "가수: {name} (회원님의 휴대폰으로 신청됨)"
+    "makeDisabled": "현재 호스트가 노래 제작 요청을 받고 있지 않아요. 대신 목록에서 노래를 골라주세요."
   },
   "mySongs": {
     "title": "오늘 밤 내 노래",
@@ -518,6 +495,8 @@
     "forFriend": "{name} 님을 위한 곡",
     "sentNote": "✓ 신청 완료: {song}",
     "sentNoteMake": "✓ 신청 완료! {song} 곡을 만들고 있어요(약 30분 소요). 준비되는 대로 노래 순서에 추가해 드릴게요.",
+    "undo": "실행 취소",
+    "addSinger": "+ 함께 부를 사람 추가",
     "makeShortMaking": "✨ 제작 중 (약 30분 소요)",
     "makeShortWaitingHost": "✨ 제작 중 · {host} 님 대기 중",
     "makeShortReview": "✨ 제작 중 · 가사 확인 필요",
@@ -676,7 +655,8 @@
     "socialUnset": "아직 답변 안 함"
   },
   "saveSongs": {
-    "link": "오늘 부른 곡을 Nomad Karaoke 계정에 저장하기",
+    "linkShort": "오늘 밤 부른 곡을 계정에 저장",
+    "whatIsThis": "이게 뭔가요?",
     "explainer": "오늘 부른 곡들을 Nomad Karaoke 계정에 저장해 드려요. 지난 노래 기록을 확인하고 어울리는 곡도 추천받을 수 있어요.",
     "saving": "오늘 부른 곡을 {email} 계정에 저장하는 중...",
     "stop": "저장 취소",

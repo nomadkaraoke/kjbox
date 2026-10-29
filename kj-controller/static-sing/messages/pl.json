@@ -100,11 +100,6 @@
       "other": "▸ {count} utworów innych wykonawców"
     },
     "othersHide": "▾ Ukryj utwory innych wykonawców",
-    "autoBest": "Najlepsza wersja wybrana automatycznie",
-    "pickByFilter": {
-      "community": "Wybrano wersję z oryginalnym audio (twój filtr)",
-      "commercial": "Wybrano wersję cover bandu (twój filtr)"
-    },
     "versionsToggle": {
       "one": "Wybierz z {count} wersji →",
       "other": "Wybierz z {count} wersji →"
@@ -391,19 +386,6 @@
     "socialFailed": "Logowanie się nie powiodło. Spróbuj ponownie lub użyj e-maila."
   },
   "confirm": {
-    "title": "Czy to ta piosenka?",
-    "changeTitle": "Zmienić na tę piosenkę?",
-    "changeHint": "To zastąpi {song}. Zachowasz swoje miejsce w kolejce.",
-    "sourceLocal": "Na komputerze prowadzącego — na pewno dostępne",
-    "sourceCloud": "Z naszej biblioteki w chmurze — bardzo niezawodne",
-    "sourceOnline": "Z YouTube — prawie zawsze działa",
-    "sourceYouTube": "Z linku YouTube — prawie zawsze działa",
-    "sourceMake": "Nasz system stworzy wideo karaoke do tej piosenki. Twoje miejsce w kolejce zostaje na samym końcu, dopóki utwór nie będzie gotowy do zaśpiewania — zazwyczaj trwa to ok. 30 minut.",
-    "sourceMakeQuick": "⚡ Szybka wersja z przewijanym tekstem jest zazwyczaj gotowa w ciągu kilku minut — damy Ci znać i możesz wybrać ją zamiast czekać.",
-    "sourceAuto": "Wybierzemy dla ciebie najlepszą wersję",
-    "searched": "Wyszukiwano: \"{query}\"",
-    "details": "Twoje dane: {name}",
-    "detailsWithPhone": "Twoje dane: {name} · {phone}",
     "partnersTitle": "Śpiewasz z kimś jeszcze? (opcjonalnie)",
     "partnerName": "Imię (np. Anna B.)",
     "partnerPhone": "Telefon (opcjonalnie)",
@@ -421,16 +403,11 @@
     "partnerOnList": "Na dzisiejszej liście",
     "maxSingers": "To już maksimum — łącznie {count} wykonawców.",
     "partnerPhoneInvalid": "Wykonawca {n}: ten numer telefonu wygląda na nieprawidłowy.",
-    "back": "← Wybierz inną piosenkę",
-    "send": "Tak — wyślij",
-    "sendChange": "Tak — zmień moją piosenkę",
     "tooMany": "Wysłałeś już dużo — poczekaj kilka minut.",
     "restricted": "Zamawianie piosenek jest obecnie ograniczone. Odśwież stronę, aby zobaczyć aktualne opcje.",
     "failed": "Nie udało się wysłać — zapytaj prowadzącego, czy zamówienia są wstrzymane.",
     "makeLimit": "Masz już dziś na koncie kilka próśb o stworzenie piosenki — wybierz coś z katalogu lub zapytaj KJ-a.",
-    "makeDisabled": "KJ nie przyjmuje teraz próśb o stworzenie piosenki — wybierz utwór z katalogu.",
-    "makeEmail": "Wyślemy ci również gotowy plik wideo i link do YouTube na adres e-mail ({email}).",
-    "detailsFriend": "Wokalista: {name} (zamówiono z Twojego telefonu)"
+    "makeDisabled": "KJ nie przyjmuje teraz próśb o stworzenie piosenki — wybierz utwór z katalogu."
   },
   "mySongs": {
     "title": "Twoje piosenki na dziś",
@@ -518,6 +495,8 @@
     "forFriend": "Dla: {name}",
     "sentNote": "✓ Wysłano: {song}",
     "sentNoteMake": "✓ Wysłano! Przygotowujemy dla Ciebie piosenkę {song} (około 30 min). Trafi do kolejki, gdy będzie gotowa.",
+    "undo": "Cofnij",
+    "addSinger": "+ Dodaj wokalistę",
     "makeShortMaking": "✨ Tworzy się (około 30 min)",
     "makeShortWaitingHost": "✨ Tworzy się · czeka na {host}",
     "makeShortReview": "✨ Tworzy się · wymagane sprawdzenie tekstu",
@@ -676,7 +655,8 @@
     "socialUnset": "Jeszcze nie wybrano"
   },
   "saveSongs": {
-    "link": "Zapisz dzisiejsze piosenki na koncie Nomad Karaoke",
+    "linkShort": "Zapisz dzisiejsze piosenki na koncie",
+    "whatIsThis": "Co to jest?",
     "explainer": "Zapiszemy piosenki, które dziś zaśpiewasz, na Twoim koncie Nomad Karaoke, żeby aplikacja mogła pokazywać Twoją historię i polecać piosenki.",
     "saving": "Zapisywanie dzisiejszych piosenek na koncie {email}",
     "stop": "Nie zapisuj",

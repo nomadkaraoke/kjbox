@@ -100,11 +100,6 @@
       "other": "▸ {count} låtar av andra artister"
     },
     "othersHide": "▾ Dölj låtar av andra artister",
-    "autoBest": "Bästa versionen väljs automatiskt",
-    "pickByFilter": {
-      "community": "Originalversion vald (ditt filter)",
-      "commercial": "Coverband-version vald (ditt filter)"
-    },
     "versionsToggle": {
       "one": "Välj bland {count} version →",
       "other": "Välj bland {count} versioner →"
@@ -391,19 +386,6 @@
     "socialFailed": "Inloggningen fungerade inte. Försök igen eller använd din e-postadress."
   },
   "confirm": {
-    "title": "Är detta rätt låt?",
-    "changeTitle": "Byt till den här låten?",
-    "changeHint": "Detta ersätter {song}. Du behåller din plats i kön.",
-    "sourceLocal": "På värdens dator — definitivt tillgänglig",
-    "sourceCloud": "Från vårt molnbibliotek — mycket pålitligt",
-    "sourceOnline": "Från YouTube — fungerar nästan alltid",
-    "sourceYouTube": "Från en YouTube-länk — fungerar nästan alltid",
-    "sourceMake": "Vårt system kommer att skapa en karaokevideo av den här låten. Din plats sparas längst ner i kön tills den är redo att sjungas – vanligtvis tar det cirka 30 minuter.",
-    "sourceMakeQuick": "⚡ En snabbversion med rullande text är oftast klar inom några minuter – vi säger till så kan du välja att sjunga den istället för att vänta.",
-    "sourceAuto": "Vi väljer den bästa versionen åt dig",
-    "searched": "Du sökte: \"{query}\"",
-    "details": "Dina uppgifter: {name}",
-    "detailsWithPhone": "Dina uppgifter: {name} · {phone}",
     "partnersTitle": "Sjunger du med någon annan? (valfritt)",
     "partnerName": "Namn (t.ex. Sarah B.)",
     "partnerPhone": "Telefon (valfritt)",
@@ -421,16 +403,11 @@
     "partnerOnList": "På kvällens lista",
     "maxSingers": "Det är maxantalet — totalt {count} sångare.",
     "partnerPhoneInvalid": "Sångare {n}: det där telefonnumret ser fel ut.",
-    "back": "← Välj en annan låt",
-    "send": "Ja — skicka in",
-    "sendChange": "Ja — byt min låt",
     "tooMany": "Du har skickat in mycket — vänta några minuter.",
     "restricted": "Låtförfrågningar är för närvarande begränsade. Uppdatera den här sidan för aktuella alternativ.",
     "failed": "Kunde inte skicka — fråga värden om förfrågningar är pausade.",
     "makeLimit": "Du har redan bett oss skapa några låtar ikväll — välj en från katalogen, eller fråga värden.",
-    "makeDisabled": "Värden tar inte emot önskemål om att skapa låtar just nu — välj en låt från katalogen istället.",
-    "makeEmail": "Vi mejlar också den färdiga videofilen och YouTube-länken till dig ({email}).",
-    "detailsFriend": "Sångare: {name} (önskad från din telefon)"
+    "makeDisabled": "Värden tar inte emot önskemål om att skapa låtar just nu — välj en låt från katalogen istället."
   },
   "mySongs": {
     "title": "Dina låtar ikväll",
@@ -518,6 +495,8 @@
     "forFriend": "För {name}",
     "sentNote": "✓ Skickat: {song}",
     "sentNoteMake": "✓ Skickat! Vi fixar {song} åt dig (tar cirka 30 min). Den läggs till i kön så fort den är klar.",
+    "undo": "Ångra",
+    "addSinger": "+ Lägg till sångare",
     "makeShortMaking": "✨ Skapas nu (ca 30 min)",
     "makeShortWaitingHost": "✨ Skapas nu · väntar på {host}",
     "makeShortReview": "✨ Skapas nu · textgranskning behövs",
@@ -676,7 +655,8 @@
     "socialUnset": "Inte besvarat ännu"
   },
   "saveSongs": {
-    "link": "Spara kvällens låtar på ditt Nomad Karaoke-konto",
+    "linkShort": "Spara kvällens låtar på ett konto",
+    "whatIsThis": "Vad är det här?",
     "explainer": "Vi sparar låtarna du sjunger ikväll på ditt Nomad Karaoke-konto, så att appen kan visa din historik och rekommendera låtar.",
     "saving": "Sparar kvällens låtar till {email}",
     "stop": "Sluta spara",

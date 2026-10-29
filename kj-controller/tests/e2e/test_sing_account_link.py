@@ -14,7 +14,7 @@ from tests.e2e.test_sing_i18n_footer import _login
 from tests.e2e.test_sing_make_wizard import _open_wizard
 
 EMAIL = "mary@example.com"
-LINK = "Save tonight's songs to your Nomad Karaoke account"
+LINK = "Save tonight's songs to an account"
 EXPLAINER = ("We'll save the songs you sing tonight to your Nomad Karaoke account, "
              "so the app can show your history and recommend songs.")
 
@@ -88,8 +88,18 @@ class TestSaveTonightsSongs:
         _open_your_songs(page, live_server, live_token)
         main = page.locator('[data-testid="save-songs-main"]')
         expect(main.locator('[data-testid="save-songs-link"]')).to_have_text(LINK)
-        expect(main.locator('[data-testid="save-songs-explainer"]')).to_have_text(EXPLAINER)
-        # The line shows once, under the name line, never again in Sung tonight (A9-R5).
+        # One quiet line at the bottom of the card: the explainer waits behind ⓘ,
+        # and the line sits below the buttons, not up by the name (2026-10-29).
+        explainer = main.locator('[data-testid="save-songs-explainer"]')
+        expect(explainer).to_be_hidden()
+        main.locator('[data-testid="save-songs-info"]').click()
+        expect(explainer).to_have_text(EXPLAINER)
+        assert page.evaluate("""() => {
+            const line = document.querySelector('[data-testid="save-songs-main"]');
+            const btn = document.querySelector('[data-testid="request-another"]');
+            return !!(btn.compareDocumentPosition(line) & Node.DOCUMENT_POSITION_FOLLOWING);
+        }""")
+        # The line shows once, never again in Sung tonight (A9-R5).
         page.locator(".sung-section summary").click()
         expect(page.locator('[data-testid="sung-section"]')).to_be_visible()
         expect(page.locator('[data-testid="save-songs-sung"]')).to_have_count(0)

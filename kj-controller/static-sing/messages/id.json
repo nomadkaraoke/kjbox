@@ -100,11 +100,6 @@
       "other": "▸ {count} lagu dari artis lain"
     },
     "othersHide": "▾ Sembunyikan lagu dari artis lain",
-    "autoBest": "Versi terbaik dipilih otomatis",
-    "pickByFilter": {
-      "community": "Versi audio asli dipilih (filter Anda)",
-      "commercial": "Versi cover band dipilih (filter Anda)"
-    },
     "versionsToggle": {
       "one": "Pilih dari {count} versi →",
       "other": "Pilih dari {count} versi →"
@@ -391,19 +386,6 @@
     "socialFailed": "Gagal masuk. Coba lagi, atau gunakan emailmu."
   },
   "confirm": {
-    "title": "Apa ini lagu yang benar?",
-    "changeTitle": "Ganti ke lagu ini?",
-    "changeHint": "Ini menggantikan {song}. Posisi antreanmu tetap sama.",
-    "sourceLocal": "Di perangkat host — pasti tersedia",
-    "sourceCloud": "Dari pustaka cloud kami — sangat andal",
-    "sourceOnline": "Dari YouTube — hampir selalu berhasil",
-    "sourceYouTube": "Dari tautan YouTube — hampir selalu berhasil",
-    "sourceMake": "Sistem kami akan membuat video karaoke untuk lagu ini. Posisimu di antrean akan ditaruh di bawah sampai lagunya siap dinyanyikan — biasanya sekitar 30 menit.",
-    "sourceMakeQuick": "⚡ Versi cepat dengan lirik bergulir biasanya siap dalam beberapa menit — kami akan memberi tahu kamu, dan kamu bisa memilih untuk menyanyikannya daripada menunggu.",
-    "sourceAuto": "Kami akan pilihkan versi terbaik untukmu",
-    "searched": "Kamu mencari: \"{query}\"",
-    "details": "Detailmu: {name}",
-    "detailsWithPhone": "Detailmu: {name} · {phone}",
     "partnersTitle": "Nyanyi bareng orang lain? (opsional)",
     "partnerName": "Nama (mis. Sarah B.)",
     "partnerPhone": "Nomor HP (opsional)",
@@ -421,16 +403,11 @@
     "partnerOnList": "Di daftar malam ini",
     "maxSingers": "Itu batas maksimalnya — total {count} penyanyi.",
     "partnerPhoneInvalid": "Penyanyi {n}: nomor HP itu sepertinya salah.",
-    "back": "← Pilih lagu lain",
-    "send": "Ya — kirimkan",
-    "sendChange": "Ya — ganti laguku",
     "tooMany": "Kamu sudah mengirim terlalu banyak — silakan tunggu beberapa menit.",
     "restricted": "Permintaan lagu saat ini dibatasi. Silakan muat ulang halaman ini untuk opsi terbaru.",
     "failed": "Tidak bisa mengirim — tanya host apakah permintaan lagu sedang dijeda.",
     "makeLimit": "Kamu sudah meminta kami membuatkan beberapa lagu malam ini — silakan pilih dari katalog, atau tanya ke host.",
-    "makeDisabled": "Host sedang tidak menerima request pembuatan lagu saat ini — silakan pilih lagu dari katalog.",
-    "makeEmail": "Kami juga akan mengirimkan file video yang sudah jadi dan tautan YouTube melalui email ({email}).",
-    "detailsFriend": "Penyanyi: {name} (diminta dari ponselmu)"
+    "makeDisabled": "Host sedang tidak menerima request pembuatan lagu saat ini — silakan pilih lagu dari katalog."
   },
   "mySongs": {
     "title": "Lagumu malam ini",
@@ -518,6 +495,8 @@
     "forFriend": "Untuk {name}",
     "sentNote": "✓ Terkirim: {song}",
     "sentNoteMake": "✓ Terkirim! Kami sedang menyiapkan {song} untukmu (sekitar 30 menit). Lagu akan masuk ke antrean setelah siap.",
+    "undo": "Urungkan",
+    "addSinger": "+ Tambah penyanyi",
     "makeShortMaking": "✨ Sedang dibuat (sekitar 30 mnt)",
     "makeShortWaitingHost": "✨ Sedang dibuat · menunggu {host}",
     "makeShortReview": "✨ Sedang dibuat · perlu cek lirik",
@@ -676,7 +655,8 @@
     "socialUnset": "Belum dijawab"
   },
   "saveSongs": {
-    "link": "Simpan lagu malam ini ke akun Nomad Karaoke kamu",
+    "linkShort": "Simpan lagu malam ini ke akun",
+    "whatIsThis": "Apa ini?",
     "explainer": "Kami akan menyimpan lagu-lagu yang kamu nyanyikan malam ini ke akun Nomad Karaoke kamu, agar aplikasi bisa menampilkan riwayat bernyanyimu dan merekomendasikan lagu.",
     "saving": "Menyimpan lagu malam ini ke {email}",
     "stop": "Berhenti menyimpan",

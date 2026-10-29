@@ -100,11 +100,6 @@
       "other": "▸ {count} na kanta ng ibang artist"
     },
     "othersHide": "▾ Itago ang mga kanta ng ibang artist",
-    "autoBest": "Kusang pinili ang pinakamagandang version",
-    "pickByFilter": {
-      "community": "Original audio version ang napili (iyong filter)",
-      "commercial": "Cover band version ang napili (iyong filter)"
-    },
     "versionsToggle": {
       "one": "Pumili mula sa {count} version →",
       "other": "Pumili mula sa {count} na version →"
@@ -391,19 +386,6 @@
     "socialFailed": "Hindi gumana ang pag-sign in. Subukan ulit, o gamitin ang iyong email."
   },
   "confirm": {
-    "title": "Ito ba ang tamang kanta?",
-    "changeTitle": "Palitan ng kantang ito?",
-    "changeHint": "Papalitan nito ang {song}. Mananatili ka sa pwesto mo sa pila.",
-    "sourceLocal": "Nasa computer ng host — siguradong available",
-    "sourceCloud": "Mula sa aming cloud library — talagang maaasahan",
-    "sourceOnline": "Mula sa YouTube — halos palaging gumagana",
-    "sourceYouTube": "Mula sa isang YouTube link — halos palaging gumagana",
-    "sourceMake": "Gagawa ang system namin ng karaoke video ng kantang ito. Mananatili sa ibaba ng listahan ang kanta mo hanggang sa ready na itong kantahin — karaniwang ~30 minuto.",
-    "sourceMakeQuick": "⚡ Karaniwang handa na ang quick version na may scrolling lyrics sa loob ng ilang minuto — sasabihan ka namin, at puwede mong piliing kantahin ito sa halip na maghintay.",
-    "sourceAuto": "Pipiliin namin ang pinakamagandang version para sa'yo",
-    "searched": "Hinanap mo: \"{query}\"",
-    "details": "Ang iyong detalye: {name}",
-    "detailsWithPhone": "Ang iyong detalye: {name} · {phone}",
     "partnersTitle": "May kasama ka bang iba? (optional)",
     "partnerName": "Pangalan (hal. Sarah B.)",
     "partnerPhone": "Phone (optional)",
@@ -421,16 +403,11 @@
     "partnerOnList": "Nasa listahan ngayong gabi",
     "maxSingers": "Maximum na 'yan — {count} na kakanta lahat.",
     "partnerPhoneInvalid": "Kakanta {n}: parang mali ang phone number na iyon.",
-    "back": "← Pumili ng ibang kanta",
-    "send": "Oo — ipadala na",
-    "sendChange": "Oo — palitan ang kanta ko",
     "tooMany": "Masyado ka nang maraming naipadala — maghintay ng ilang minuto.",
     "restricted": "Limitado ang mga song request ngayon. Paki-refresh ang page na ito para sa mga updated na option.",
     "failed": "Hindi maipadala — tanungin ang host kung naka-pause ang mga request.",
     "makeLimit": "Nakapagpagawa ka na ng ilang kanta ngayong gabi — pumili na lang mula sa catalogue, o magtanong sa host.",
-    "makeDisabled": "Hindi tumatanggap ang host ng make-it requests sa ngayon — pumili na lang ng kanta mula sa catalogue.",
-    "makeEmail": "I-e-email din namin sa'yo ang tapos na video file at YouTube link ({email}).",
-    "detailsFriend": "Kakanta: {name} (hiniling mula sa iyong telepono)"
+    "makeDisabled": "Hindi tumatanggap ang host ng make-it requests sa ngayon — pumili na lang ng kanta mula sa catalogue."
   },
   "mySongs": {
     "title": "Mga kanta mo ngayong gabi",
@@ -518,6 +495,8 @@
     "forFriend": "Para kay {name}",
     "sentNote": "✓ Naipadala na: {song}",
     "sentNoteMake": "✓ Naipadala na! Ginagawa na namin ang {song} para sa iyo (mga 30 minuto). Masasama ito sa rotation kapag handa na.",
+    "undo": "I-undo",
+    "addSinger": "+ Magdagdag ng kakanta",
     "makeShortMaking": "✨ Ginagawa pa (mga 30 min)",
     "makeShortWaitingHost": "✨ Ginagawa pa · naghihintay kay {host}",
     "makeShortReview": "✨ Ginagawa pa · kailangang i-check ang lyrics",
@@ -676,7 +655,8 @@
     "socialUnset": "Hindi pa nasasagutan"
   },
   "saveSongs": {
-    "link": "I-save ang mga kanta ngayong gabi sa iyong Nomad Karaoke account",
+    "linkShort": "I-save ang mga kanta ngayong gabi sa isang account",
+    "whatIsThis": "Ano ito?",
     "explainer": "Ise-save namin ang mga kantang kakantahin mo ngayong gabi sa iyong Nomad Karaoke account, para maipakita ng app ang history mo at makapag-rekomenda ng mga kanta.",
     "saving": "Sine-save ang mga kanta ngayong gabi sa {email}",
     "stop": "Itigil ang pag-save",

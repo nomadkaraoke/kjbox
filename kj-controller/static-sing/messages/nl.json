@@ -100,11 +100,6 @@
       "other": "▸ {count} nummers van andere artiesten"
     },
     "othersHide": "▾ Verberg nummers van andere artiesten",
-    "autoBest": "Beste versie automatisch gekozen",
-    "pickByFilter": {
-      "community": "Originele audioversie gekozen (jouw filter)",
-      "commercial": "Coverbandversie gekozen (jouw filter)"
-    },
     "versionsToggle": {
       "one": "Kies uit {count} versie →",
       "other": "Kies uit {count} versies →"
@@ -391,19 +386,6 @@
     "socialFailed": "Het inloggen is niet gelukt. Probeer het opnieuw of gebruik je e-mailadres."
   },
   "confirm": {
-    "title": "Is dit het juiste nummer?",
-    "changeTitle": "Wisselen naar dit nummer?",
-    "changeHint": "Dit vervangt {song}. Je behoudt je plek in de rij.",
-    "sourceLocal": "Op de computer van de KJ — zeker beschikbaar",
-    "sourceCloud": "Uit onze cloudbibliotheek — zeer betrouwbaar",
-    "sourceOnline": "Van YouTube — werkt bijna altijd",
-    "sourceYouTube": "Via een YouTube-link — werkt bijna altijd",
-    "sourceMake": "Ons systeem maakt een karaokevideo van dit nummer. Je plek in de wachtrij blijft onderaan bewaard totdat het klaar is om te zingen — meestal duurt dit ~30 minuten.",
-    "sourceMakeQuick": "⚡ Een snelle versie met scrollende songtekst is meestal binnen een paar minuten klaar — we laten het je weten, en je kunt ervoor kiezen om die te zingen in plaats van te wachten.",
-    "sourceAuto": "Wij kiezen de beste versie voor je",
-    "searched": "Je zocht op: \"{query}\"",
-    "details": "Jouw gegevens: {name}",
-    "detailsWithPhone": "Jouw gegevens: {name} · {phone}",
     "partnersTitle": "Zing je met iemand anders? (optioneel)",
     "partnerName": "Naam (bijv. Sarah B.)",
     "partnerPhone": "Telefoonnummer (optioneel)",
@@ -421,16 +403,11 @@
     "partnerOnList": "Op de lijst van vanavond",
     "maxSingers": "Dat is het maximum — {count} zangers in totaal.",
     "partnerPhoneInvalid": "Zanger {n}: dat telefoonnummer lijkt niet te kloppen.",
-    "back": "← Kies een ander nummer",
-    "send": "Ja — insturen",
-    "sendChange": "Ja — wissel mijn nummer",
     "tooMany": "Je hebt veel ingestuurd — wacht een paar minuten.",
     "restricted": "Verzoekjes zijn momenteel beperkt. Vernieuw deze pagina voor de bijgewerkte opties.",
     "failed": "Kon niet verzenden — vraag de host of verzoekjes gepauzeerd zijn.",
     "makeLimit": "Je hebt ons vanavond al gevraagd om een paar nummers te maken — kies er een uit de catalogus, of vraag het aan de host.",
-    "makeDisabled": "De host neemt momenteel geen verzoeken aan om nummers te maken — kies in plaats daarvan een nummer uit de catalogus.",
-    "makeEmail": "We mailen je ook het voltooide videobestand en de YouTube-link ({email}).",
-    "detailsFriend": "Zanger(es): {name} (aangevraagd vanaf jouw telefoon)"
+    "makeDisabled": "De host neemt momenteel geen verzoeken aan om nummers te maken — kies in plaats daarvan een nummer uit de catalogus."
   },
   "mySongs": {
     "title": "Jouw nummers vanavond",
@@ -518,6 +495,8 @@
     "forFriend": "Voor {name}",
     "sentNote": "✓ Verzonden: {song}",
     "sentNoteMake": "✓ Verzonden! We maken {song} voor je (ongeveer 30 min). Het nummer komt in de wachtrij zodra het klaar is.",
+    "undo": "Ongedaan maken",
+    "addSinger": "+ Zanger toevoegen",
     "makeShortMaking": "✨ Wordt gemaakt (ongeveer 30 min)",
     "makeShortWaitingHost": "✨ Wordt gemaakt · wachten op {host}",
     "makeShortReview": "✨ Wordt gemaakt · songtekstcontrole nodig",
@@ -676,7 +655,8 @@
     "socialUnset": "Nog niet beantwoord"
   },
   "saveSongs": {
-    "link": "Sla de nummers van vanavond op in je Nomad Karaoke-account",
+    "linkShort": "Sla de nummers van vanavond op in een account",
+    "whatIsThis": "Wat is dit?",
     "explainer": "We slaan de nummers die je vanavond zingt op in je Nomad Karaoke-account, zodat de app je geschiedenis kan tonen en nummers kan aanbevelen.",
     "saving": "Nummers van vanavond worden opgeslagen op {email}",
     "stop": "Stoppen met opslaan",

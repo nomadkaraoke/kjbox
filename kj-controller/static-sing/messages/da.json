@@ -100,11 +100,6 @@
       "other": "▸ {count} sange med andre kunstnere"
     },
     "othersHide": "▾ Skjul sange med andre kunstnere",
-    "autoBest": "Bedste version valgt automatisk",
-    "pickByFilter": {
-      "community": "Original lyd-version valgt (dit filter)",
-      "commercial": "Coverband-version valgt (dit filter)"
-    },
     "versionsToggle": {
       "one": "Vælg mellem {count} version →",
       "other": "Vælg mellem {count} versioner →"
@@ -391,19 +386,6 @@
     "socialFailed": "Login mislykkedes. Prøv igen, eller brug din e-mail."
   },
   "confirm": {
-    "title": "Er dette den rigtige sang?",
-    "changeTitle": "Skift til denne sang?",
-    "changeHint": "Dette erstatter {song}. Du beholder din plads i køen.",
-    "sourceLocal": "På værtens maskine — helt sikkert tilgængelig",
-    "sourceCloud": "Fra vores cloud-bibliotek — meget pålideligt",
-    "sourceOnline": "Fra YouTube — virker næsten altid",
-    "sourceYouTube": "Fra et YouTube-link — virker næsten altid",
-    "sourceMake": "Vores system vil lave en karaokevideo af denne sang. Din plads i køen holdes i bunden, indtil den er klar til at blive sunget — typisk ~30 minutter.",
-    "sourceMakeQuick": "⚡ En hurtigversion med rullende tekst er som regel klar inden for et par minutter – vi giver dig besked, og du kan vælge at synge den i stedet for at vente.",
-    "sourceAuto": "Vi vælger den bedste version til dig",
-    "searched": "Du søgte: \"{query}\"",
-    "details": "Dine oplysninger: {name}",
-    "detailsWithPhone": "Dine oplysninger: {name} · {phone}",
     "partnersTitle": "Synger du med andre? (valgfrit)",
     "partnerName": "Navn (f.eks. Sarah B.)",
     "partnerPhone": "Telefonnummer (valgfrit)",
@@ -421,16 +403,11 @@
     "partnerOnList": "På aftenens liste",
     "maxSingers": "Det er maksimum — {count} sangere i alt.",
     "partnerPhoneInvalid": "Sanger {n}: det telefonnummer ser forkert ud.",
-    "back": "← Vælg en anden sang",
-    "send": "Ja — send den ind",
-    "sendChange": "Ja — skift min sang",
     "tooMany": "Du har indsendt mange anmodninger — vent et par minutter.",
     "restricted": "Sanganmodninger er i øjeblikket begrænset. Opdater siden for at se de nyeste muligheder.",
     "failed": "Kunne ikke sende — spørg værten, om anmodninger er sat på pause.",
     "makeLimit": "Du har allerede bedt os om at lave et par sange i aften — vælg en fra kataloget, eller spørg værten.",
-    "makeDisabled": "Værten tager ikke imod ønsker om at få lavet sange lige nu — vælg i stedet en sang fra kataloget.",
-    "makeEmail": "Vi sender dig også den færdige videofil og et YouTube-link på e-mail ({email}).",
-    "detailsFriend": "Sanger: {name} (ønsket fra din telefon)"
+    "makeDisabled": "Værten tager ikke imod ønsker om at få lavet sange lige nu — vælg i stedet en sang fra kataloget."
   },
   "mySongs": {
     "title": "Dine sange i aften",
@@ -518,6 +495,8 @@
     "forFriend": "For {name}",
     "sentNote": "✓ Sendt: {song}",
     "sentNoteMake": "✓ Sendt! Vi laver {song} til dig (cirka 30 min.). Den kommer i køen, så snart den er klar.",
+    "undo": "Fortryd",
+    "addSinger": "+ Tilføj sanger",
     "makeShortMaking": "✨ Laves nu (ca. 30 min.)",
     "makeShortWaitingHost": "✨ Laves nu · venter på {host}",
     "makeShortReview": "✨ Laves nu · sangtekst skal tjekkes",
@@ -676,7 +655,8 @@
     "socialUnset": "Ikke besvaret endnu"
   },
   "saveSongs": {
-    "link": "Gem aftenens sange på din Nomad Karaoke-konto",
+    "linkShort": "Gem aftenens sange på en konto",
+    "whatIsThis": "Hvad er det?",
     "explainer": "Vi gemmer de sange, du synger i aften, på din Nomad Karaoke-konto, så appen kan vise din historik og anbefale sange.",
     "saving": "Gemmer aftenens sange på {email}",
     "stop": "Stop med at gemme",

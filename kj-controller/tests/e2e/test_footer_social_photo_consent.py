@@ -1,7 +1,7 @@
 """E2E: footer social links + singer social-media photo consent (v0.112.0).
 
-Singer side: icon row in the event footer, the consent question on the confirm
-step (sent with the request), and the change control on My songs. KJ side: the
+Singer side: icon row in the event footer, the consent question on My songs
+(its answer is sent with each request), and the change control there. KJ side: the
 📷 marker beside names in the rotation and its click-to-cycle.
 """
 
@@ -25,7 +25,8 @@ def _event_info(page, **extra):
         status=200, content_type="application/json", body=json.dumps(body)))
 
 
-def _to_confirm(page):
+def _send(page):
+    """Send a song the way a search-row Request does (no confirm step)."""
     page.wait_for_function("!!window.__sing_state")
     page.evaluate("""
         window.__sing_state.name = 'Alice';
@@ -33,9 +34,9 @@ def _to_confirm(page):
             song_artist: 'Oasis', song_title: 'Wonderwall', label: 'Wonderwall',
             source_type: 'youtube', source_ref: 'https://www.youtube.com/watch?v=abc',
         };
-        window.__sing_state.step = 'confirm';
-        window.__sing_render();
+        window.__sing_send();
     """)
+    page.wait_for_function("window.__sing_state.step === 'done'")
 
 
 class TestFooterSocialLinks:
@@ -108,55 +109,50 @@ class TestFooterSocialLinks:
         expect(page.locator(".sing-notice")).to_have_count(0)
 
 
-class TestConfirmStepConsent:
-    def test_asks_and_sends_choice_with_request(self, page, live_server, live_token):
+def _fake_submit(page, sent, rid=7):
+    def on_submit(route):
+        sent.update(json.loads(route.request.post_data))
+        route.fulfill(status=200, content_type="application/json", body=json.dumps(
+            {"request": {"id": rid, "status": "pending", "edit_token": f"t{rid}",
+                         "singer_name": "Alice", "song_artist": "Oasis",
+                         "song_title": "Wonderwall"}, "auto_approved": False}))
+    page.route("**/sing/submit*", on_submit)
+
+
+class TestSendConsent:
+    """Request sends straight away, so the one-time photo question is asked on
+    My songs (its section stays open until answered) and the saved answer rides
+    along with every later request."""
+
+    def test_saved_choice_rides_along(self, page, live_server, live_token):
         _event_info(page, ask_photo_consent=True)
         sent = {}
-
-        def on_submit(route):
-            sent.update(json.loads(route.request.post_data))
-            route.fulfill(status=200, content_type="application/json", body=json.dumps(
-                {"request": {"id": 7, "status": "pending", "edit_token": "t7",
-                             "singer_name": "Alice", "song_artist": "Oasis",
-                             "song_title": "Wonderwall"}, "auto_approved": False}))
-        page.route("**/sing/submit*", on_submit)
-        _login(page, live_server, live_token)
+        _fake_submit(page, sent)
+        _login(page, live_server, live_token, consent="no")
         page.reload()
-        _to_confirm(page)
-        picker = page.locator('[data-testid="photo-consent"]')
-        expect(picker).to_be_visible()
-        expect(picker).to_contain_text("social media")
-        page.locator('[data-testid="photo-consent-no"]').click()
-        expect(page.locator('[data-testid="photo-consent-no"]')).to_have_attribute("aria-pressed", "true")
-        assert page.evaluate("localStorage.getItem('sing_photo_consent')") == "no"
-        page.locator(".submit-btn").click()
-        page.wait_for_function("window.__sing_state.step === 'done'")
+        _send(page)
         assert sent["photo_consent"] == "no"
 
-    def test_not_asked_again_once_chosen(self, page, live_server, live_token):
+    def test_unanswered_is_asked_on_my_songs(self, page, live_server, live_token):
         _event_info(page, ask_photo_consent=True)
-        _login(page, live_server, live_token, consent="yes")
+        sent = {}
+        _fake_submit(page, sent)
+        _login(page, live_server, live_token)
         page.reload()
-        _to_confirm(page)
-        expect(page.locator(".submit-btn")).to_be_visible()
-        expect(page.locator('[data-testid="photo-consent"]')).to_have_count(0)
+        _send(page)
+        assert "photo_consent" not in sent
+        picker = page.locator('#push-optin [data-testid="photo-consent"]')
+        expect(picker).to_be_visible()
+        expect(picker).to_contain_text("social media")
 
-    def test_not_asked_when_host_has_it_off(self, page, live_server, live_token):
+    def test_not_sent_when_host_has_it_off(self, page, live_server, live_token):
         _event_info(page, ask_photo_consent=False)
         sent = {}
-
-        def on_submit(route):
-            sent.update(json.loads(route.request.post_data))
-            route.fulfill(status=200, content_type="application/json", body=json.dumps(
-                {"request": {"id": 8, "status": "pending", "edit_token": "t8",
-                             "singer_name": "Alice"}, "auto_approved": False}))
-        page.route("**/sing/submit*", on_submit)
+        _fake_submit(page, sent, rid=8)
         _login(page, live_server, live_token, consent="yes")
         page.reload()
-        _to_confirm(page)
+        _send(page)
         expect(page.locator('[data-testid="photo-consent"]')).to_have_count(0)
-        page.locator(".submit-btn").click()
-        page.wait_for_function("window.__sing_state.step === 'done'")
         assert "photo_consent" not in sent
 
 

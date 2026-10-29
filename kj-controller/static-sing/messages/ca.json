@@ -100,11 +100,6 @@
       "other": "▸ {count} cançons d'altres artistes"
     },
     "othersHide": "▾ Amaga les cançons d'altres artistes",
-    "autoBest": "La millor versió es tria automàticament",
-    "pickByFilter": {
-      "community": "S'ha triat la versió amb àudio original (pel teu filtre)",
-      "commercial": "S'ha triat la versió de banda de versions (pel teu filtre)"
-    },
     "versionsToggle": {
       "one": "Tria entre {count} versió →",
       "other": "Tria entre {count} versions →"
@@ -391,19 +386,6 @@
     "socialFailed": "No s'ha pogut iniciar sessió. Torna-ho a provar o fes servir el teu correu electrònic."
   },
   "confirm": {
-    "title": "És aquesta la cançó correcta?",
-    "changeTitle": "Vols canviar a aquesta cançó?",
-    "changeHint": "Això substitueix {song}. Mantens el teu lloc a la cua.",
-    "sourceLocal": "A l'equip del KJ — definitivament disponible",
-    "sourceCloud": "De la nostra biblioteca al núvol — molt fiable",
-    "sourceOnline": "De YouTube — gairebé sempre funciona",
-    "sourceYouTube": "D'un enllaç de YouTube — gairebé sempre funciona",
-    "sourceMake": "El nostre sistema crearà un vídeo de karaoke d'aquesta cançó. El teu torn a la llista es mantindrà al final fins que estigui a punt per cantar — normalment uns 30 minuts.",
-    "sourceMakeQuick": "⚡ Una versió ràpida amb lletra que es desplaça sol estar a punt en pocs minuts — t'avisarem i podràs triar cantar-la en comptes d'esperar.",
-    "sourceAuto": "Triarem la millor versió per a tu",
-    "searched": "Has cercat: \"{query}\"",
-    "details": "Les teves dades: {name}",
-    "detailsWithPhone": "Les teves dades: {name} · {phone}",
     "partnersTitle": "Cantes amb algú més? (opcional)",
     "partnerName": "Nom (p. ex. Sarah B.)",
     "partnerPhone": "Telèfon (opcional)",
@@ -421,16 +403,11 @@
     "partnerOnList": "A la llista d'aquesta nit",
     "maxSingers": "Aquest és el màxim — {count} cantants en total.",
     "partnerPhoneInvalid": "Cantant {n}: aquest número de telèfon sembla incorrecte.",
-    "back": "← Tria una altra cançó",
-    "send": "Sí — envia-ho",
-    "sendChange": "Sí — canvia la meva cançó",
     "tooMany": "Has enviat moltes peticions — si us plau, espera uns minuts.",
     "restricted": "Les peticions de cançons estan restringides actualment. Si us plau, actualitza aquesta pàgina per veure les opcions.",
     "failed": "No s'ha pogut enviar — pregunta a l'amfitrió si les peticions estan pausades.",
     "makeLimit": "Ja ens has demanat que creem unes quantes cançons aquesta nit — tria'n una del catàleg, o pregunta a l'amfitrió.",
-    "makeDisabled": "L'amfitrió no accepta peticions per crear cançons ara mateix — tria una cançó del catàleg.",
-    "makeEmail": "També t'enviarem per correu electrònic el fitxer de vídeo acabat i l'enllaç de YouTube ({email}).",
-    "detailsFriend": "Cantant: {name} (demanada des del teu telèfon)"
+    "makeDisabled": "L'amfitrió no accepta peticions per crear cançons ara mateix — tria una cançó del catàleg."
   },
   "mySongs": {
     "title": "Les teves cançons d'aquesta nit",
@@ -518,6 +495,8 @@
     "forFriend": "Per a {name}",
     "sentNote": "✓ Enviat: {song}",
     "sentNoteMake": "✓ Enviat! Estem preparant {song} per a tu (uns 30 min). S'afegirà a la rotació quan estigui a punt.",
+    "undo": "Desfer",
+    "addSinger": "+ Afegeix cantant",
     "makeShortMaking": "✨ S'està creant (uns 30 min)",
     "makeShortWaitingHost": "✨ S'està creant · esperant a {host}",
     "makeShortReview": "✨ S'està creant · cal revisar la lletra",
@@ -676,7 +655,8 @@
     "socialUnset": "Encara no s'ha respost"
   },
   "saveSongs": {
-    "link": "Desa les cançons d'aquesta nit al teu compte de Nomad Karaoke",
+    "linkShort": "Desa les cançons d'aquesta nit en un compte",
+    "whatIsThis": "Què és això?",
     "explainer": "Desarem les cançons que cantis aquesta nit al teu compte de Nomad Karaoke, perquè l'aplicació pugui mostrar el teu historial i recomanar-te cançons.",
     "saving": "Desant les cançons d'aquesta nit a {email}",
     "stop": "Deixa de desar",
