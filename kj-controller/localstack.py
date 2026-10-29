@@ -654,9 +654,9 @@ def seed_history(app, nights, identity=None):
                         history_claims.claim_history_id(box_id, date, eid, email),
                         singer, capacity)
     night_log.clear_build_cache()
-    markers = history_claims.store_night_markers(store)
+    ids = history_claims.NightIds(store, box_id)
     for night in out:
-        night["night_id"] = history_claims.claim_night_id(store, box_id, night["date"], markers)
+        night["night_id"] = ids.for_night(night["date"])
     return {"nights": out}
 
 

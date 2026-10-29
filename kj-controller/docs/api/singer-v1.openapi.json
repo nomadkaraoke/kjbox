@@ -1645,7 +1645,7 @@
       "post": {
         "operationId": "claimHistory",
         "summary": "Save a past night's ticked songs as mine, the rest as not mine",
-        "description": "Every id must be a song of that night (from GET /history/suggestions) whose singer matches the account, or one it already holds; otherwise 400 invalid and nothing is written. mine songs are recorded to the account's karaoke log (first claimer wins per singer slot: a song someone else holds comes back in taken). Re-sending is idempotent (already_saved). not_mine songs are no longer suggested to this account; not_mine on a song it already holds is ignored (rejected counts only what was stored). No t, no night_id.",
+        "description": "Every id must be a song of that night (from GET /history/suggestions) whose singer matches the account, or one it already holds; otherwise 400 invalid and nothing is written. mine songs are recorded to the account's karaoke log (first claimer wins per singer slot: a song someone else holds comes back in taken). Re-sending is idempotent (already_saved). not_mine songs are no longer suggested to this account; not_mine on a song it already holds is 400 invalid, and mine on a song it once marked not mine clears that. No t, no night_id.",
         "requestBody": {
           "required": true,
           "content": {
@@ -1668,7 +1668,7 @@
             }
           },
           "400": {
-            "description": "invalid: a missing or malformed night_id / ids, both lists empty, an id in both lists, or an id that isn't one of this night's songs for this account",
+            "description": "invalid: a missing or malformed night_id / ids, both lists empty, an id in both lists, an id that isn't one of this night's songs for this account, or not_mine on a song the account holds",
             "content": {
               "application/json": {
                 "schema": {

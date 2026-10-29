@@ -372,6 +372,18 @@ class HistoryOutbox:
                 wanted.update(hids)
                 if all((rows.get(h) or {}).get("op") == "put" for h in hids):
                     continue  # already queued/sent: steady state builds nothing
+                # R47: an app claim may have landed since the context was read.
+                # Re-read this entry's claimers right before enqueueing (only on
+                # this rare path). A claim in the moments between this read and
+                # the enqueue below can still let a solo entry be recorded for
+                # two accounts; try_claim counts outbox puts, so the reverse
+                # order is always caught.
+                fresh = store.claim_holders([entry["id"]]).get(entry["id"])
+                if fresh != ctx.claims.get(entry["id"]):
+                    ctx.claims[entry["id"]] = fresh
+                    emails, members, song_req = self._attribution(entry, ctx)
+                    hids = {history_id_for(self.box_id, entry["id"], e): e for e in emails}
+                    wanted.update(hids)
                 if venue is None:
                     venue = self._venue_name() or ""
                 base = self._payload(entry, night, song_req, members, venue or None)

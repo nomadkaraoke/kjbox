@@ -2055,8 +2055,9 @@ class SingStore:
             "  (device_id, gen_email, origin, night_started_at, linked_at) "
             "VALUES (?, ?, ?, ?, datetime('now', 'localtime')) "
             "ON CONFLICT(device_id, night_started_at) DO UPDATE SET "
-            "  gen_email=excluded.gen_email, origin=excluded.origin, "
-            "  linked_at=excluded.linked_at",
+            "  linked_at=CASE WHEN singer_accounts.gen_email = excluded.gen_email "
+            "    THEN singer_accounts.linked_at ELSE excluded.linked_at END, "
+            "  gen_email=excluded.gen_email, origin=excluded.origin",
             (device_id, gen_email, origin, night_started_at),
         )
         conn.commit()
@@ -2222,11 +2223,10 @@ class SingStore:
 
     @staticmethod
     def _night_window_end(marker_dt):
-        """Noon after the night a marker belongs to (the Night Log's noon roll):
-        a marker before 06:00 is a mid-show reset of the previous evening's
-        night, any later one starts the night of its own date."""
-        night = (marker_dt - datetime.timedelta(days=1)
-                 if marker_dt.hour < 6 else marker_dt).date()
+        """Noon after the night a marker belongs to (the Night Log's noon roll;
+        ``night_log.marker_night`` says which night that is)."""
+        from night_log import marker_night
+        night = datetime.date.fromisoformat(marker_night(marker_dt))
         return datetime.datetime.combine(night + datetime.timedelta(days=1),
                                          datetime.time(12, 0))
 
@@ -2520,6 +2520,41 @@ class SingStore:
         nights from 2026-06-04 on (``try_claim`` ignores these for older ones)."""
         return self._outbox_holders(self._get_conn(), entry_ids)
 
+    def claims_for_email(self, gen_email):
+        """``{(night, entry_id): member}`` this email holds."""
+        email = self._norm_email(gen_email)
+        if not email:
+            return {}
+        return {(r["night"], r["entry_id"]): r["member"] for r in self._get_conn().execute(
+            "SELECT night, entry_id, member FROM history_claims WHERE gen_email=?", (email,))}
+
+    def claim_night_ids(self):
+        """``{night_date: night_id}`` the claim records already carry (the most
+        common per night), so a night keeps its id once a claim went out."""
+        counts = {}
+        for r in self._get_conn().execute(
+                "SELECT night_started_at, json_extract(payload_json, '$.night_id') AS nid, "
+                "COUNT(*) AS n FROM history_outbox WHERE night_started_at LIKE 'claim:%' "
+                "GROUP BY night_started_at, nid"):
+            if not r["nid"]:
+                continue
+            night = r["night_started_at"][len("claim:"):]
+            best = counts.get(night)
+            if best is None or (r["n"], r["nid"]) > best:
+                counts[night] = (r["n"], r["nid"])
+        return {night: nid for night, (_, nid) in counts.items()}
+
+    def remove_rejections(self, email_hash, night, entry_ids):
+        """Forget "not mine" for ``entry_ids`` (the account claimed it after all)."""
+        ids = [int(e) for e in (entry_ids or []) if e is not None]
+        if not email_hash or not ids:
+            return
+        conn = self._get_conn()
+        conn.executemany(
+            "DELETE FROM history_rejections WHERE email_hash=? AND night=? AND entry_id=?",
+            [(email_hash.lower(), night, e) for e in ids])
+        conn.commit()
+
     def outbox_has_put(self, history_id):
         """True when ``history_id``'s outbox row is a put that isn't failed."""
         row = self._get_conn().execute(
@@ -2629,10 +2664,12 @@ class SingStore:
         return latest
 
     def alias_since_link(self, device_id, gen_email):
-        """The device's alias when it was set at or after ``gen_email``'s
-        latest link to the device (``singer_accounts.linked_at`` or
-        ``sing_gen_accounts.verified_at``), else None: on a phone that went
-        A -> B -> A, the alias B set never becomes A's."""
+        """The device's alias when it was set during ``gen_email``'s current
+        run of ownership: at or after the earliest link by this email that
+        follows the latest link by any other email (links are
+        ``singer_accounts.linked_at`` and ``sing_gen_accounts.verified_at``).
+        So re-linking the same phone keeps its alias, while on a phone that
+        went A -> B -> A, the alias B set never becomes A's."""
         email = self._norm_email(gen_email)
         if not device_id or not email:
             return None
@@ -2641,14 +2678,16 @@ class SingStore:
                            "WHERE device_id=?", (device_id,)).fetchone()
         if row is None:
             return None
-        link = conn.execute(
-            "SELECT MAX(ts) FROM ("
-            "  SELECT linked_at AS ts FROM singer_accounts "
-            "  WHERE device_id=? AND lower(gen_email)=? "
-            "  UNION ALL SELECT verified_at FROM sing_gen_accounts "
-            "  WHERE device_id=? AND lower(email)=?)",
-            (device_id, email, device_id, email)).fetchone()[0]
-        if link is None or (row["updated_at"] or "") < link:
+        links = conn.execute(
+            "SELECT linked_at AS ts, lower(gen_email) AS email FROM singer_accounts "
+            "WHERE device_id=? UNION ALL SELECT verified_at, lower(email) "
+            "FROM sing_gen_accounts WHERE device_id=?", (device_id, device_id)).fetchall()
+        others = [r["ts"] or "" for r in links if r["email"] != email]
+        after = max(others) if others else ""
+        mine = [r["ts"] or "" for r in links if r["email"] == email and (r["ts"] or "") > after]
+        if not mine:
+            return None
+        if (row["updated_at"] or "") < min(mine):
             return None
         return row["canonical_name"]
 

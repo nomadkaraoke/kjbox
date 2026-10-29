@@ -246,3 +246,10 @@ def test_public_host_allows_history_paths(mock_config, monkeypatch):
             _expect(resp, "claimHistory", 404, "not_found")
     finally:
         app.catalog.close()
+
+
+def test_claim_not_mine_on_held_song_invalid(client, app_token, past_night):
+    tok = app_token(WREN, "Wren B")
+    nid = _suggest(client, tok)["nights"][0]["night_id"]
+    _expect(_claim(client, tok, night_id=nid, mine=[5012]), "claimHistory", 200)
+    _expect(_claim(client, tok, night_id=nid, not_mine=[5012]), "claimHistory", 400, "invalid")

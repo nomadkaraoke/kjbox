@@ -96,9 +96,8 @@ def test_legacy_night_only_linked_entries_and_unmatched_count(env):
     _play(stats, "lib-hello1", 1477, "Wren", _utc_of_local("2026-10-08 20:30:00"))
     # Unlinked and matching: only counted.
     _legacy_archive(rot, "Wren B", "Uprising - Muse", None, "2026-10-08 21:00:00")
-    _play_less_night = "2026-10-01"
     # A legacy night with only unlinked matches is dropped (R38).
-    _legacy_archive(rot, "Wren", "Starlight - Muse", None, f"{_play_less_night} 21:00:00")
+    _legacy_archive(rot, "Wren", "Starlight - Muse", None, "2026-10-01 21:00:00")
     got = _sugg(env)
     [night] = got["nights"]
     assert night["date"] == "2026-10-08"
@@ -256,3 +255,12 @@ def test_response_has_no_private_fields(env):
             assert "@" not in x and "call me" not in x and "/opt/" not in x, x
 
     walk(got)
+
+
+def test_recycled_id_twice_in_one_night_counts_as_unmatched(env):
+    rot, _, _ = env
+    _done(rot, 12, "Wren", night="2026-05-14", hhmm="21:00")
+    _done(rot, 12, "Wren B", night="2026-05-14", hhmm="22:00", song="Uprising - Muse")
+    [night] = _sugg(env)["nights"]
+    assert _ids(night) == [12]
+    assert night["unmatched"] == 1

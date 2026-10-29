@@ -298,18 +298,93 @@ def test_live_attribution_fills_remaining_duet_slots(env):
     assert emails == {WREN, JUNO}
 
 
-def test_not_mine_on_own_claim_is_a_no_op(env):
-    # Rejections never undo your own claims: "not mine" on a song you hold
-    # keeps the claim and stores no rejection.
+def test_not_mine_on_own_claim_is_invalid(env):
+    # R51: "not mine" on a song the account holds rejects the whole request
+    # (a stored rejection would hide the song if a host undo later frees it).
     _done(env, 5001, "Wren B")
     _done(env, 5002, "Wren B", hhmm="21:30")
     nid = env.night_id()
     env.claim(nid, mine=[5001])
-    got = env.claim(nid, not_mine=[5001, 5002])
-    assert got == {"saved": 0, "already_saved": 0, "taken": [], "rejected": 1}
+    with pytest.raises(ClaimError) as err:
+        env.claim(nid, not_mine=[5001, 5002])
+    assert err.value.code == "invalid"
     assert env.ss.claims_for_nights([NIGHT]) == {(NIGHT, 5001): [WREN]}
+    assert env.ss.rejections_for(SingStore.email_hash(WREN)) == set()
+
+
+def test_mine_on_a_rejected_song_clears_the_rejection(env):
+    _done(env, 5001, "Wren B")
+    _done(env, 5002, "Wren B", hhmm="21:30")
+    nid = env.night_id()
+    env.claim(nid, mine=[5001], not_mine=[5002])
     assert env.ss.rejections_for(SingStore.email_hash(WREN)) == {(NIGHT, 5002)}
-    assert [r["op"] for r in env.outbox_rows()] == ["put"]
+    got = env.claim(nid, mine=[5002])
+    assert got["saved"] == 1
+    assert env.ss.rejections_for(SingStore.email_hash(WREN)) == set()
+
+
+def test_replay_after_names_change_still_accepted(env):
+    # Claimed as "Wren"; the account's names changed since, so 5001 no longer
+    # matches, but a replay of the same claim is still idempotent.
+    _done(env, 5001, "Wren B")
+    nid = env.night_id()
+    env.claim(nid, mine=[5001])
+    got = env.claim(nid, mine=[5001], words=("sparrow",))
+    assert got == {"saved": 0, "already_saved": 1, "taken": [], "rejected": 0}
+    # The repair path still has the entry to rebuild the payload from.
+    env.ss._get_conn().execute("DELETE FROM history_outbox")
+    env.ss._get_conn().commit()
+    env.claim(nid, mine=[5001], words=("sparrow",))
+    assert [r["history_id"] for r in env.outbox_rows()] == [history_id_for(BOX, 5001, WREN)]
+    # Still never suggested under names that don't match.
+    assert env.suggest(words=("sparrow",))["nights"] == []
+
+
+def test_night_id_stays_stable_when_its_marker_disappears(env):
+    marker = f"{NIGHT} 19:00:00"
+    env.ss.link_account("dev-j", JUNO, "app", marker)
+    _done(env, 5001, "Wren B")
+    _done(env, 5002, "Wren B", hhmm="21:30")
+    nid = env.night_id()
+    assert nid == night_id_for_marker(BOX, marker)
+    env.claim(nid, mine=[5001])
+    # Juno deletes their account: the only marker for that night goes with it.
+    env.ss.forget_gen_account(SingStore.email_hash(JUNO))
+    assert env.night_id() == nid  # reused from the night's claim records
+    assert env.claim(nid, mine=[5002])["saved"] == 1
+    assert env.payload(history_id_for(BOX, 5002, WREN))["night_id"] == nid
+
+
+def test_night_id_uses_the_current_marker(env):
+    marker = f"{NIGHT} 18:30:00"
+    env.ss._set_meta("night_started_at", marker)
+    _done(env, 5001, "Wren B")
+    assert env.night_id() == night_id_for_marker(BOX, marker)
+
+
+def test_claim_two_threads_one_winner(env):
+    import threading
+    _done(env, 5001, "Wren B")
+    nid = env.night_id()
+    results = {}
+    barrier = threading.Barrier(2)
+
+    def go(email):
+        barrier.wait()
+        try:
+            results[email] = env.claim(nid, mine=[5001], email=email)
+        finally:
+            env.ss.close()  # this thread's connection
+
+    threads = [threading.Thread(target=go, args=(e,)) for e in (WREN, JUNO)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert sorted(r["saved"] for r in results.values()) == [0, 1]
+    assert sorted(len(r["taken"]) for r in results.values()) == [0, 1]
+    assert len(env.ss.claims_for_nights([NIGHT])[(NIGHT, 5001)]) == 1
+    assert len(env.outbox_rows()) == 1
 
 
 # --- R52: the host un-Dones a claimed song from tonight ---------------------------------
@@ -331,3 +406,24 @@ def test_host_undone_live_entry_releases_claim_and_retracts(env):
     env.rs.update_status(e["id"], "Done")
     [again] = env.suggest()["nights"]
     assert [s["entry_id"] for s in again["songs"]] == [e["id"]]
+
+
+def test_scan_rechecks_claims_before_enqueueing(env, monkeypatch):
+    # A claim lands after the scan read its context but before it enqueues.
+    e = _live_closed_night(env)
+    [night] = env.suggest()["nights"]
+    real = SingStore.claim_holders
+    calls = []
+
+    def first_read_empty(self, ids):
+        calls.append(ids)
+        if len(calls) == 1:
+            out = real(self, ids)
+            env.claim(night["night_id"], mine=[e["id"]])  # lands mid-scan
+            return out
+        return real(self, ids)
+
+    monkeypatch.setattr(SingStore, "claim_holders", first_read_empty)
+    env.outbox().scan()
+    emails = {env.payload(r["history_id"])["gen_email"] for r in env.outbox_rows()}
+    assert emails == {WREN}

@@ -174,6 +174,35 @@ def test_account_names_alias_from_before_my_latest_link_ignored(store):
     assert account_names(store, a, None, "app-dev-a")["words"] == {"quill"}
 
 
+def test_account_names_relinking_keeps_my_alias(store):
+    # A links, sets an alias, then the phone links again (same night and a
+    # later night): still A's run of ownership, so the alias counts.
+    a = "e2e-a@example.com"
+    conn = store._get_conn()
+    store.link_account("dev-1", a, "claimed", "2026-09-03 19:00:00")
+    conn.execute("UPDATE singer_accounts SET linked_at='2026-09-03 19:00:00'")
+    conn.commit()
+    store.set_alias("dev-1", "Quill", origin="self")
+    conn.execute("UPDATE singer_aliases SET updated_at='2026-09-03 20:00:00'")
+    conn.commit()
+    store.link_account("dev-1", a, "claimed", "2026-09-03 19:00:00")  # same night again
+    store.link_account("dev-1", a, "claimed", "2026-09-10 19:00:00")  # a later night
+    assert "quill" in account_names(store, a, None, "app-dev-a")["words"]
+
+
+def test_link_account_same_email_keeps_linked_at(store):
+    store.link_account("dev-1", EMAIL, "claimed", OLD_NIGHT)
+    conn = store._get_conn()
+    conn.execute("UPDATE singer_accounts SET linked_at='2026-09-03 19:05:00'")
+    conn.commit()
+    store.link_account("dev-1", EMAIL, "app", OLD_NIGHT)
+    row = conn.execute("SELECT linked_at, origin FROM singer_accounts").fetchone()
+    assert tuple(row) == ("2026-09-03 19:05:00", "app")
+    store.link_account("dev-1", "e2e-other@example.com", "app", OLD_NIGHT)
+    assert conn.execute("SELECT linked_at FROM singer_accounts").fetchone()[0] != (
+        "2026-09-03 19:05:00")
+
+
 def test_account_names_app_device_needs_no_link(store):
     # The app device is the HMAC of the verified email: every request is theirs.
     _req(store, "app-dev", "Quill", created_at="2026-05-01 21:00:00")

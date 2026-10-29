@@ -115,31 +115,10 @@ def _venue_name(cfg, store):
         return None
 
 
-def _marker_night(marker):
-    """Night date a night marker starts (``NightLog._live_night``'s rule: a
-    reset before 06:00 is a mid-show reset of the previous evening)."""
-    try:
-        t = dt.datetime.strptime((marker or "")[:19], "%Y-%m-%d %H:%M:%S")
-    except ValueError:
-        return None
-    return (t - dt.timedelta(days=1) if t.hour < 6 else t).date().isoformat()
-
-
-def claim_night_id(store, box_id, night, _markers=None):
-    """R32: the night id decide already uses for that night's live records
-    (a ``history_outbox`` / ``singer_accounts`` marker mapping to ``night``),
-    else ``night_id_for_marker(box_id, "night:" + night)``. With several
-    markers, the one with the most outbox rows wins, then the latest."""
-    markers = _markers if _markers is not None else store_night_markers(store)
-    cands = markers.get(night) or []
-    if not cands:
-        return night_id_for_marker(box_id, "night:" + night)
-    best = max(cands, key=lambda m: (m[1], m[0]))
-    return night_id_for_marker(box_id, best[0])
-
-
 def store_night_markers(store):
-    """``{night_date: [(marker, outbox_rows)]}`` for every known live marker."""
+    """``{night_date: [(marker, outbox_rows)]}`` for every known live marker:
+    live outbox nights, ``singer_accounts`` nights and the current marker."""
+    from night_log import marker_night
     conn = store._get_conn()
     counts = {}
     for r in conn.execute(
@@ -148,12 +127,44 @@ def store_night_markers(store):
         counts[r[0]] = r[1]
     for r in conn.execute("SELECT DISTINCT night_started_at FROM singer_accounts"):
         counts.setdefault(r[0], 0)
+    current = store.get_night_started_at()
+    if current:
+        counts.setdefault(current, 0)
     out = {}
     for marker, n in counts.items():
-        night = _marker_night(marker)
+        night = marker_night(marker)
         if night:
             out.setdefault(night, []).append((marker, n))
     return out
+
+
+class NightIds:
+    """R32 night ids for claims, read once per call.
+
+    In order: the ``night_id`` this night's existing claim records already
+    carry (so a night keeps its id after its marker goes away, e.g. the only
+    linked account was deleted); else the marker decide already uses for that
+    night's live records (with several, the most outbox rows, then the
+    latest); else ``night_id_for_marker(box_id, "night:" + date)``."""
+
+    def __init__(self, store, box_id):
+        self.box_id = box_id
+        self.markers = store_night_markers(store)
+        self.claimed = store.claim_night_ids()
+
+    def for_night(self, night):
+        if night in self.claimed:
+            return self.claimed[night]
+        cands = self.markers.get(night) or []
+        if not cands:
+            return night_id_for_marker(self.box_id, "night:" + night)
+        best = max(cands, key=lambda m: (m[1], m[0]))
+        return night_id_for_marker(self.box_id, best[0])
+
+
+def claim_night_id(store, box_id, night):
+    """The R32 night id for one night (see ``NightIds``)."""
+    return NightIds(store, box_id).for_night(night)
 
 
 def _is_starter(entry):
@@ -176,12 +187,16 @@ def night_candidates(night_log, store, names, email):
     callers build responses from an allowlist (``_song_view``)."""
     words = (names or {}).get("words") or set()
     me = (email or "").strip().lower()
-    if not words or not me:
+    if not me:
+        return {}
+    held = store.claims_for_email(me)  # {(night, entry_id): member}
+    if not words and not held:
         return {}
     live_open = store.is_enabled()
     nights = {}
     seen = set()
-    for e in night_log.build_cached():
+    entries = night_log.build_cached()
+    for e in entries:
         night = e.get("night")
         if not e.get("sung") or not night:
             continue
@@ -198,9 +213,21 @@ def night_candidates(night_log, store, names, email):
             slot["unmatched"] += 1
             continue
         if (night, eid) in seen:
-            continue  # a recycled id twice in one night: keep the first
+            slot["unmatched"] += 1  # a recycled id twice in one night: keep the first
+            continue
         seen.add((night, eid))
         slot["songs"].append({"entry": e, "matched": matched, "status": "open"})
+    # Songs this account already holds stay valid for a replay even after its
+    # names changed (they are "mine", so never suggested again).
+    if held:
+        by_key = {(e.get("night"), e.get("entry_id")): e for e in entries
+                  if e.get("sung") and e.get("entry_id") is not None}
+        for key, member in held.items():
+            if key in seen or key not in by_key:
+                continue
+            seen.add(key)
+            nights.setdefault(key[0], {"songs": [], "unmatched": 0})["songs"].append(
+                {"entry": by_key[key], "matched": [member], "status": "open"})
     if not nights:
         return {}
 
@@ -247,28 +274,24 @@ def _song_order(e):
     return (e.get("started_at") or "~", e.get("added_at") or "")
 
 
-def suggestions(night_log, store, cfg, names, email, now=None, only_night_id=None):
+def suggestions(night_log, store, cfg, names, email, now=None):
     """``{"nights": [...], "more_nights": int}``: the past Nomad nights with
     songs the account might have sung and can still claim, newest first, at
     most ``MAX_NIGHTS``. Nothing here attributes anything (spec 6.10).
 
     Each night is ``{night_id, date, venue, names, unmatched, songs}`` and each
     song ``{entry_id, singer_name, members, artist, title, started_at, state}``,
-    built from an allowlist: no emails, devices, request ids, phones or notes.
-    ``only_night_id`` keeps just that night (claims revalidate with it)."""
+    built from an allowlist: no emails, devices, request ids, phones or notes."""
     del now  # reserved: the build is cached by state, not by clock
     nights = night_candidates(night_log, store, names, email)
-    box_id = box_id_of(cfg)
-    markers = store_night_markers(store) if nights else {}
+    ids = NightIds(store, box_id_of(cfg)) if nights else None
     venue = None
     out = []
     for night in sorted(nights, reverse=True):
         open_songs = [c for c in nights[night]["songs"] if c["status"] == "open"]
         if not open_songs:
             continue  # R38
-        night_id = claim_night_id(store, box_id, night, markers)
-        if only_night_id is not None and night_id != only_night_id:
-            continue
+        night_id = ids.for_night(night)
         if venue is None:
             venue = _venue_name(cfg, store) or ""
         open_songs.sort(key=lambda c: _song_order(c["entry"]))
@@ -361,7 +384,9 @@ def claim(night_log, store, outbox, cfg, names, email, night_id, mine, not_mine,
     that night that matches the account (or one it already holds), else
     ``ClaimError("invalid")`` and nothing is written; an unknown night is
     ``ClaimError("not_found")``. Returns ``{saved, already_saved, taken,
-    rejected}``. A ``not_mine`` id the account already holds is a no-op. Claims are first-come per singer slot (``try_claim``) and go
+    rejected}``. ``not_mine`` on a song the account holds is ``invalid`` (R51:
+    a stored rejection would hide it if a host undo later frees it); ``mine``
+    on a song it once marked not mine clears that rejection. Claims are first-come per singer slot (``try_claim``) and go
     to decide through the outbox under the night ``claim:<date>``, which
     tonight's scan never compares or retracts."""
     me = (email or "").strip().lower()
@@ -370,14 +395,15 @@ def claim(night_log, store, outbox, cfg, names, email, night_id, mine, not_mine,
         raise ClaimError("invalid")
     nights = night_candidates(night_log, store, names, me)
     box_id = box_id_of(cfg)
-    markers = store_night_markers(store) if nights else {}
-    night = next((n for n in nights if claim_night_id(store, box_id, n, markers) == night_id),
-                 None)
+    ids = NightIds(store, box_id) if nights else None
+    night = next((n for n in nights if ids.for_night(n) == night_id), None)
     if night is None:
         raise ClaimError("not_found")
     songs = {c["entry"]["entry_id"]: c for c in nights[night]["songs"]}
     if any(eid not in songs for eid in mine + not_mine):
         raise ClaimError("invalid")
+    if any(songs[eid]["status"] == "mine" for eid in not_mine):
+        raise ClaimError("invalid")  # R51
 
     venue = _venue_name(cfg, store) if mine else None
     saved, already, taken = 0, 0, []
@@ -390,6 +416,8 @@ def claim(night_log, store, outbox, cfg, names, email, night_id, mine, not_mine,
         if result == "taken":
             taken.append(eid)
             continue
+        if c["status"] == "rejected":
+            store.remove_rejections(store.email_hash(me), night, [eid])
         if result == "already_mine":
             already += 1
             if store.outbox_has_put(hid):
@@ -399,13 +427,9 @@ def claim(night_log, store, outbox, cfg, names, email, night_id, mine, not_mine,
         payload = claim_payload(entry, night, night_id, me, hid, venue, box_id)
         store.outbox_enqueue(hid, "put", payload, night_started_at="claim:" + night, now=now)
         queued = True
-    # Rejections never undo the account's own claims: "not mine" on a song it
-    # holds is a no-op (the claim stays, no rejection is stored or counted).
-    # The host undo (POST /history/claims/undo) is how a wrong claim goes away.
-    rejections = [eid for eid in not_mine if songs[eid]["status"] != "mine"]
-    if rejections:
-        store.add_rejections(store.email_hash(me), night, rejections)
+    if not_mine:
+        store.add_rejections(store.email_hash(me), night, not_mine)
     if queued and outbox is not None:
         outbox.notify_rotation_changed()
     return {"saved": saved, "already_saved": already, "taken": taken,
-            "rejected": len(rejections)}
+            "rejected": len(not_mine)}

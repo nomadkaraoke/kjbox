@@ -352,12 +352,9 @@ class NightLog:
                 "SELECT value FROM rotation_meta WHERE key='night_started_at'").fetchone()
         except Exception:
             return None
-        t = _parse_ts(row[0]) if row else None
-        if t is None:
-            return None
         # Reset in the small hours = mid-show reset of that night; any later
         # reset (e.g. the next morning) is prep for the coming night.
-        return (t - dt.timedelta(days=1) if t.hour < 6 else t).date().isoformat()
+        return marker_night(row[0]) if row else None
     # ------------------------------------------------------------------
     # Cached build (history claims)
     # ------------------------------------------------------------------
